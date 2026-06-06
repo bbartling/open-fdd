@@ -16,7 +16,8 @@ from openfdd_bridge.timeseries_api import (  # noqa: E402
 
 def test_plot_column_name_from_point_id():
     pt = {"id": "12035-analog-input-1", "external_id": "", "fdd_input": ""}
-    assert plot_column_name(pt) == "analog-input-1"
+    # Full point id keeps VAV zone temps unique when many devices share analog-input,1.
+    assert plot_column_name(pt) == "12035-analog-input-1"
 
 
 def test_build_plot_series_catalog_groups_by_equipment():

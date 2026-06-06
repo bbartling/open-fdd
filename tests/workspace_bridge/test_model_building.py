@@ -193,7 +193,8 @@ def test_gl36_import_enriches_site_and_external_id(client: TestClient):
     export = client.get("/api/model/export").json()
     pt = export["points"][0]
     assert pt["site_id"] == "acme"
-    assert pt["external_id"] == "analog-input-1106"
+    # external_id mirrors historian column (full point id when BACnet object suffix is ambiguous).
+    assert pt["external_id"] == "39-analog-input-1106"
 
 
 def test_model_health_skips_fdd_input_when_brick_type_set(client: TestClient):
