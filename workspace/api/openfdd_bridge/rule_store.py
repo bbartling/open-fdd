@@ -1,8 +1,7 @@
 """Durable store for saved Rule Lab Python rules (``data/rules_store.json``).
 
-Rules default to the Arrow backend (``apply_faults_arrow``). Legacy per-row
-``evaluate()`` rules are stored with ``backend: legacy_row`` when detected or
-explicitly set in Rule Lab.
+Rules use the Arrow backend (``apply_faults_arrow``) on PyArrow tables.
+``backend: arrow`` is detected from source; legacy ``evaluate()`` is not supported.
 """
 
 from __future__ import annotations

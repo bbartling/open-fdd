@@ -1,8 +1,6 @@
 # Open-FDD
 
-The Open-FDD runtime is now **Arrow-native by default**. Rules operate over Arrow Tables and return Arrow BooleanArrays or ChunkedArrays. This avoids Python row loops and enables columnar, threaded, batch-oriented execution for large HVAC histories.
 
-See [Arrow-native runtime](docs/developer/arrow-native-runtime.md).
 
 <p align="center">
   <a href="https://discord.gg/Ta48yQF8fC"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white" alt="Discord"></a>
@@ -18,6 +16,9 @@ See [Arrow-native runtime](docs/developer/arrow-native-runtime.md).
 
 <p align="center">
   <strong>Arrow-native</strong> rule-based HVAC fault detection — columnar Python rules in the dashboard, optional YAML via <code>open_fdd.engine</code>, summaries via <code>open_fdd.reports</code>
+The Open-FDD runtime is now **Arrow-native by default**. Rules operate over Arrow Tables and return Arrow BooleanArrays or ChunkedArrays. This avoids Python row loops and enables columnar, threaded, batch-oriented execution for large HVAC histories.
+
+See [Arrow-native runtime](docs/developer/arrow-native-runtime.md).
 </p>
 
 <p align="center">
@@ -34,20 +35,6 @@ See [Arrow-native runtime](docs/developer/arrow-native-runtime.md).
 
 ---
 
-Everything you need to run the **operator bridge**, BACnet commissioning, Rule Lab, feather historian, and edge deploy lives in the **[online documentation](https://bbartling.github.io/open-fdd/)** — start with [Getting started](https://bbartling.github.io/open-fdd/getting_started/).
-
-| Topic | Doc |
-|-------|-----|
-| Deploy checklist + AI can/cannot | [Getting started](https://bbartling.github.io/open-fdd/getting_started/) |
-| Docker containers + Acme flow | [Edge deploy (Docker)](https://bbartling.github.io/open-fdd/edge_deploy_docker/) |
-| Local Ollama (check-engine) | [Local Ollama](https://bbartling.github.io/open-fdd/local_ollama/) |
-| BACnet discover / read / write / poll | [BACnet capabilities](https://bbartling.github.io/open-fdd/bacnet/capabilities/) |
-| Bridge REST API | [Bridge API](https://bbartling.github.io/open-fdd/appendix/bridge_api/) |
-| Security / LAN hardening | [Security hardening](https://bbartling.github.io/open-fdd/security_hardening/) |
-
-**Distribution:** The **operator web app** (bridge + dashboard) runs from this repo via Docker/Ansible. **`pip install open-fdd`** provides the YAML engine, **`open_fdd.playground`** (`evaluate()` rules), and optional reports — see [PyPI docs](https://bbartling.github.io/open-fdd/open_fdd_playground_pypi.html).
-
----
 
 ## Develop locally
 

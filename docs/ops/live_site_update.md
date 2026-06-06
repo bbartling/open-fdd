@@ -73,7 +73,40 @@ echo "All images exist for ${NEW_TAG}"
 
 Replace `NEW_TAG` with the tag you intend to deploy.
 
-## 3. Update `docker-compose.yml` and recreate containers
+## 3. Update the React UI bundle (required for dashboard changes)
+
+{: .warning }
+> **Image pull alone does not update the browser UI.** The bridge serves
+> `workspace/api/static/app/` from the **bind mount first**, before anything baked
+> into the GHCR image (`static_dashboard_dir()` in the bridge). If that folder still
+> has an old `index-*.js` hash (e.g. `index-TRH4YIfA.js`), you will keep seeing the
+> old BACnet tree, Host Stats revisions panel, Model & assignments tab, etc.
+
+**From bensserver (control machine, full repo):**
+
+```bash
+cd /path/to/open-fdd
+./scripts/build_operator_dashboard.sh prod
+cd infra/ansible
+./deploy.sh ui --limit acme_vm_bbartling
+```
+
+Confirm the edge picked up the new hash:
+
+```bash
+curl -sf http://<edge-ip>/ | grep -o 'index-[^"]*\.js' | head -1
+# Should match bensserver: grep -o 'index-[^"]*\.js' workspace/api/static/app/index.html
+```
+
+**One command (recommended after CI publishes a new tag):**
+
+```bash
+OPENFDD_IMAGE_TAG=2026.06.08-edge ./scripts/upgrade_edge_full.sh --limit acme_vm_bbartling
+```
+
+That runs: dashboard build → `deploy.sh ui` → GHCR pull + `docker compose up -d --force-recreate` → `post_deploy_check.sh --full`.
+
+## 4. Update `docker-compose.yml` and recreate containers
 
 Edit image tags in `docker-compose.yml` (example: `2026.06.04-edge` → `2026.06.07-edge`):
 
@@ -92,7 +125,7 @@ docker compose ps
 
 Bind-mounted `workspace/` is unchanged; only container images restart.
 
-## 4. On-VM smoke checks
+## 5. On-VM smoke checks
 
 ```bash
 cd ~/open-fdd
@@ -132,20 +165,32 @@ docker compose logs --since 20m | grep -Ei "error|exception|traceback|critical|f
 
 ### Arrow / FDD rules (Open-FDD 3.0+)
 
-After upgrade, confirm how saved rules are authored:
+All saved rules use `apply_faults_arrow(table, cfg, context)` on PyArrow tables.
+
+From bensserver:
 
 ```bash
-grep -R "def evaluate" -n workspace/data/rules_py 2>/dev/null || true
-grep -R "apply_faults_arrow" -n workspace/data/rules_py 2>/dev/null || true
-grep -R "legacy_row\|OPEN_FDD_FDD_BACKEND" -n workspace 2>/dev/null || true
+./scripts/validate_fdd_backends.sh --docker   # must exit 0
 ```
 
-- **Default (3.0+):** `apply_faults_arrow(table, cfg, context)` on PyArrow tables.
-- **Legacy:** `evaluate(row, …)` still runs when detected or when `backend: legacy_row` is set on the rule.
+On the edge VM after upgrade:
 
-Spot-check one rule in **Rule Lab** in the browser after login.
+```bash
+grep -R "apply_faults_arrow" -n workspace/data/rules_py 2>/dev/null | wc -l
+docker compose exec bridge python3 -c "
+from openfdd_bridge.rule_store import RuleStore
+from open_fdd.arrow_runtime.rules import detect_rule_backend
+from openfdd_bridge.rule_source import read_source
+for r in RuleStore().list_rules():
+    if not r.get('enabled', True): continue
+    code = read_source(r.get('source_path','')) or r.get('code','')
+    print(r.get('name'), detect_rule_backend(code, r))
+"
+```
 
-## 5. Control-machine insurance check
+Spot-check **Rule Lab** quick-test shows `backend: arrow`.
+
+## 6. Control-machine insurance check
 
 From your laptop or bensserver (full repo clone, not on the edge VM):
 
@@ -163,15 +208,17 @@ This is the recommended **non-destructive** check: Caddy → React dashboard, `/
 {: .warning }
 > **Do not run on live commissioned sites:** `openfdd_edge_validate.sh --full` or `acme_operational_verify.sh` — those rediscover BACnet and reset bench model/rules.
 
-## 6. Browser validation
+## 7. Browser validation
 
 Open the site via **Caddy on port 80** (e.g. `http://<tailscale-or-lan-ip>/`), not only `127.0.0.1:8765`:
 
-1. Home / faults dashboard loads.
-2. Integrator login (`workspace/auth.env.local`).
-3. Rule Lab — quick-test a saved rule.
-4. Data Model → SPARQL (if using 3.0+ stack).
-5. BACnet — devices and recent poll time.
+1. View page source / Network — confirm **new** `index-*.js` hash (not the pre-upgrade bundle).
+2. Home / faults dashboard loads.
+3. Integrator login (`workspace/auth.env.local`).
+4. **Host stats** — container image tag / git sha (3.0+ bridge).
+5. **BACnet** — right-click point → **Refresh PV**, **Read priority array**.
+6. **Model & assignments** (`/model`) — commissioning JSON export (404 = bridge image + UI both stale).
+7. Rule Lab — quick-test a saved rule (`backend: arrow`).
 
 ## Rollback
 

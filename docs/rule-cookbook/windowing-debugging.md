@@ -1,41 +1,23 @@
 ---
-title: Windowing and debugging
+title: Windowing & debugging
 parent: Rule Cookbook
-nav_order: 3
+nav_order: 4
 ---
 
-# Windowing and debugging
+# Windowing & debugging
 
-## Rolling average
+## Rolling windows (Arrow)
 
-Rule Lab enriches rows with `temp_rolling_avg` / `degF_rolling_avg` before `evaluate()` (default 1, 5, or 10 minutes by `ts_ms`).
+Use `open_fdd.arrow_runtime.windows` for sample-based rolling min/max and consecutive-true streaks:
 
-Set `rolling_avg_minutes` in rule config or test API body.
+```python
+from open_fdd.arrow_runtime.windows import arrow_rolling_min, arrow_rolling_max, arrow_consecutive_true
+```
 
-## Window helpers
+Cookbook masks (`flatline_1h_mask`, `spread_1h_mask`, `oob_mask`) default to ~12 samples (~1 h at 5 min poll).
 
-| Helper | Purpose |
-|--------|---------|
-| `window_rows_1h(row, rows)` | Samples in trailing 60 minutes |
-| `hour_window_ready(window)` | True when window spans ≥ 95% of 1 h |
+Config keys: `flatline_window_samples`, `flatline_tolerance`, `max_spread`, `rolling_avg_minutes`, `bounds_low` / `bounds_high`.
 
-## Debug print
+## Rule Lab console
 
-`print()` inside `evaluate()` appears in Rule Lab event console **on fault hits** (or verbose test mode). Use sparingly in production rules.
-
-## Trace mode
-
-Enable **verbose** on test-rule API to see window spread diagnostics without firing the rule on every row.
-
-## Common false positives
-
-| Symptom | Mitigation |
-|---------|------------|
-| Warm-up transient | Gate on occupancy or minimum window fill |
-| Poll dropout | Require `samples_in_avg` minimum |
-| Unit mismatch | Set `temp_unit` in cfg; see `open_fdd.playground.temp_units` |
-| Single spike | Rolling avg + consecutive sample recipe |
-
-## Unit conversion
-
-Rules use `row["temp"]` in the rule's configured unit (imperial °F default). MQTT/historian rows include both `degF` and `degC`.
+Quick-test and batch responses include `backend: arrow`, `ms`, and flagged row counts. Arrow summary events appear in the event console on fault hits.

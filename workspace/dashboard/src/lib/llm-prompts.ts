@@ -44,9 +44,9 @@ Open-FDD /api/model/import requirements:
 - Keep external_id equal to the live column header (joined frames may suffix as metric_source).
 
 Fault detection:
-- Open-FDD uses Python evaluate() rules in Rule Lab, NOT YAML files.
-- Python rules read row keys from fdd_input / brick_type / external_id mappings in this model.
-- When adding points for fault rules, ensure fdd_input matches the Python rule's row.get("KEY") usage.
+- Open-FDD uses Arrow-native Python rules in Rule Lab (`apply_faults_arrow(table, cfg)`), NOT YAML files.
+- Rules read historian columns from fdd_input / brick_type / external_id mappings in this model.
+- When adding points for fault rules, ensure fdd_input matches the column name the rule reads from the PyArrow table.
 
 OUTPUT — return ONLY one JSON object with keys:
 - validation_notes (string)

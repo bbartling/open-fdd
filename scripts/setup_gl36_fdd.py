@@ -184,7 +184,8 @@ def save_rules(specs: list[dict[str, Any]], *, site_id: str) -> None:
     store = RuleStore()
     for spec in specs:
         code = _read(spec["code_file"])
-        lint = lint_python(code, require_evaluate=(spec.get("mode") or "rule") != "script")
+        is_script = (spec.get("mode") or "rule") == "script"
+        lint = lint_python(code, require_arrow_rule=not is_script)
         if not lint["ok"]:
             raise SystemExit(f"Lint failed {spec['id']}: {lint['issues']}")
         store.upsert(

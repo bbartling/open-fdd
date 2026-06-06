@@ -227,10 +227,15 @@ def _run_one(
                 "backend": "legacy_row",
             }
         if rule.get("mode") == "script":
-            df = frame.head(limit) if limit and len(frame) > limit else frame
+            import pyarrow as pa
+
+            if hasattr(frame, "num_rows"):
+                table = frame.slice(0, min(limit, frame.num_rows)) if limit else frame
+            else:
+                table = pa.Table.from_pandas(frame.head(limit) if limit and len(frame) > limit else frame)
             script_cfg = dict(rule.get("config") or {})
             script_cfg.setdefault("site_id", site_id)
-            result = playground.run_dataframe_script(code, df, cfg=script_cfg)
+            result = playground.run_arrow_script(code, table, cfg=script_cfg)
             if not result.get("ok"):
                 return {**base, "status": "error", "rows": int(len(df)), "flagged": 0, "error": result.get("error", "")}
             flag_cols = result.get("flag_columns") or []

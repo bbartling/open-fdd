@@ -23,14 +23,25 @@ cd infra/ansible
 
 ## Path B — Ansible from control machine (inventory)
 
-Pull a new GHCR tag **without** wiping feather data or BACnet config:
+{: .warning }
+> **Dashboard/UI changes need `deploy.sh ui` (or `upgrade_edge_full.sh`), not image pull alone.**
+> The edge bind-mount `workspace/api/static/app/` overrides image-baked React assets.
+
+**Full upgrade (UI + containers + post-deploy check):**
+
+```bash
+./scripts/build_operator_dashboard.sh prod   # if not already built
+OPENFDD_IMAGE_TAG=<new-tag> ./scripts/upgrade_edge_full.sh --limit <inventory_host>
+```
+
+**Image-only** (API/commission/MCP code from GHCR, **same old UI** unless you also ran `ui`):
 
 ```bash
 export OPENFDD_IMAGE_TAG=<new-tag>
 RUN_POST_CHECK=1 ./scripts/upgrade_edge_ghcr.sh --limit <inventory_host>
 ```
 
-This sets `openfdd_docker_sync_workspace_data=false` so bind-mounted `~/open-fdd/workspace/data/` is not replaced.
+Image-only sets `openfdd_docker_sync_workspace_data=false` so bind-mounted `~/open-fdd/workspace/data/` is not replaced.
 
 ## Full redeploy
 

@@ -1,5 +1,5 @@
-"""Shared cookbook helpers for bensserver bench FDD rules — re-exported from PyPI ``open_fdd.playground``."""
+"""Shared Arrow cookbook re-exports for bensserver bench FDD rules."""
 
-from open_fdd.playground.cookbook import ONE_HOUR_MS, hour_window_ready, window_rows_1h
+from open_fdd.arrow_runtime.cookbook import flatline_1h_mask, oob_mask, spread_1h_mask
 
-__all__ = ["ONE_HOUR_MS", "hour_window_ready", "window_rows_1h"]
+__all__ = ["flatline_1h_mask", "oob_mask", "spread_1h_mask"]

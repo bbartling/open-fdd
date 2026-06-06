@@ -37,9 +37,13 @@ def test_rule_source_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             del sys.modules[name]
     from openfdd_bridge.rule_source import read_source, write_source  # noqa: E402
 
-    path = write_source(rule_id="abc", name="SAT High", code="def evaluate(row, cfg, **kw):\n    return False\n")
+    path = write_source(
+        rule_id="abc",
+        name="SAT High",
+        code="import pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n    return pc.greater(table['SAT'], 50)\n",
+    )
     assert Path(path).is_file()
-    assert "evaluate" in read_source(path)
+    assert "apply_faults_arrow" in read_source(path)
 
 
 def test_read_source_resolves_stale_host_absolute_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -50,11 +54,15 @@ def test_read_source_resolves_stale_host_absolute_path(tmp_path: Path, monkeypat
             del sys.modules[name]
     from openfdd_bridge.rule_source import read_source, write_source  # noqa: E402
 
-    path = write_source(rule_id="abc", name="SAT High", code="def evaluate(row, cfg, **kw):\n    return True\n")
+    path = write_source(
+        rule_id="abc",
+        name="SAT High",
+        code="import pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n    return pc.greater(table['SAT'], 0)\n",
+    )
     stale = f"/home/ben/open-fdd/workspace/data/rules_py/{Path(path).name}"
     assert Path(path).is_file()
     assert not Path(stale).is_file()
-    assert "return True" in read_source(stale)
+    assert "apply_faults_arrow" in read_source(stale)
 
 
 def test_write_source_rejects_path_outside_rules_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -110,7 +118,7 @@ def test_rule_store_prune_bindings(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     store.upsert(
         {
             "name": "Bound",
-            "code": "def evaluate(row, cfg, **kw):\n    return False\n",
+            "code": "import pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n    return pc.greater(table['SAT'], 50)\n",
             "bindings": {
                 "point_ids": ["p1", "p2"],
                 "direct_point_ids": ["p1", "p2"],
@@ -140,7 +148,7 @@ def test_rule_store_prune_bindings_direct_only(tmp_path: Path, monkeypatch: pyte
     store.upsert(
         {
             "name": "Direct only",
-            "code": "def evaluate(row, cfg, **kw):\n    return False\n",
+            "code": "import pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n    return pc.greater(table['SAT'], 50)\n",
             "bindings": {
                 "point_ids": [],
                 "direct_point_ids": ["p-stale"],

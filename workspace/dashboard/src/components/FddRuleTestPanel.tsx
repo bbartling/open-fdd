@@ -72,7 +72,7 @@ export default function FddRuleTestPanel({ rules, disabled }: Props) {
       return;
     }
     if (activeRule.mode !== "rule") {
-      setConsoleText("Only per-row evaluate() rules can be tested here. Use Rule Lab for DataFrame scripts.");
+      setConsoleText("Only Arrow rule mode can be tested here. Use Rule Lab for script-mode analytics.");
       return;
     }
     if (!testSensorKey) {

@@ -5,7 +5,7 @@ import sys
 import time
 from pathlib import Path
 
-import pandas as pd
+import pyarrow as pa
 import pytest
 
 API_ROOT = Path(__file__).resolve().parents[2] / "workspace" / "api"
@@ -27,57 +27,55 @@ def subprocess_playground(monkeypatch: pytest.MonkeyPatch):
     _reload_playground()
 
 
-def test_subprocess_worker_runs_sweep(subprocess_playground):
-    from openfdd_bridge.playground import sweep_rule  # noqa: E402
+def test_subprocess_worker_runs_arrow(subprocess_playground):
+    from openfdd_bridge.playground import run_arrow_table  # noqa: E402
 
-    rows = [{"SAT": 80.0, "timestamp": "2025-01-01T00:00:00Z"}]
-    code = """def evaluate(row, cfg, prev_row=None, rows=None):
-    return float(row.get("SAT", 0)) > float(cfg.get("high", 75))
+    table = pa.table({"SAT": pa.array([80.0], type=pa.float64())})
+    code = """import pyarrow.compute as pc
+
+def apply_faults_arrow(table, cfg, context=None):
+    return pc.greater(pc.cast(table["SAT"], pa.float64()), float(cfg.get("high", 75)))
 """
-    flags, events = sweep_rule(code, {"high": 75}, rows, capture_print=False)
-    assert flags == [True]
-    assert any(e.get("type") == "summary" for e in events)
+    result = run_arrow_table(code, table, {"high": 75})
+    assert result["ok"] is True
+    assert result["flagged"] == 1
 
 
 def test_subprocess_infinite_loop_times_out(subprocess_playground):
-    from openfdd_bridge.playground import sweep_rule  # noqa: E402
+    from openfdd_bridge.playground import run_arrow_table  # noqa: E402
 
-    rows = [{"temp": 72.0, "timestamp": "2025-01-01T00:00:00Z"}]
-    code = "def evaluate(row, cfg, prev_row=None, rows=None):\n    while True:\n        pass\n    return False\n"
+    table = pa.table({"SAT": pa.array([72.0], type=pa.float64())})
+    code = "import pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n    while True:\n        pass\n    return pc.greater(table['SAT'], 0)\n"
     started = time.time()
-    flags, events = sweep_rule(code, {}, rows, capture_print=False)
+    result = run_arrow_table(code, table, {})
     elapsed = time.time() - started
     assert elapsed < 25.0
-    assert flags == [False]
-    assert any(
-        "timed out" in str(e.get("text", "")).lower() or "timed out" in str(e.get("message", "")).lower()
-        for e in events
-    )
+    assert result["ok"] is False
+    assert "timed out" in str(result.get("error", "")).lower()
 
 
 def test_subprocess_rejects_import_os(subprocess_playground):
-    from openfdd_bridge.playground import sweep_rule  # noqa: E402
+    from openfdd_bridge.playground import run_arrow_table  # noqa: E402
 
-    code = "import os\ndef evaluate(row, cfg, prev_row=None, rows=None):\n    return False\n"
-    flags, events = sweep_rule(code, {}, [{"x": 1}], capture_print=False)
-    assert flags == [False]
-    assert any(e.get("type") == "error" for e in events)
+    table = pa.table({"SAT": pa.array([1.0], type=pa.float64())})
+    code = "import os\nimport pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n    return False\n"
+    result = run_arrow_table(code, table, {})
+    assert result["ok"] is False
+    assert result.get("issues") or result.get("error")
 
 
 def test_subprocess_run_script(subprocess_playground, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("OFDD_PLAYGROUND_TIMEOUT_S", "15")
     _reload_playground()
-    from openfdd_bridge.playground import run_dataframe_script  # noqa: E402
+    from openfdd_bridge.playground import run_arrow_script  # noqa: E402
 
-    df = pd.DataFrame({"SAT": [70.0, 85.0]})
+    table = pa.table({"SAT": pa.array([70.0, 85.0], type=pa.float64())})
     code = """
-df = df.copy()
-df["hit"] = (df["SAT"] > 75).astype(int)
-out = {"df": df, "events": []}
+out = {"events": [{"type": "metrics", "metrics": {"rows": table.num_rows}}], "metrics": {"rows": table.num_rows}}
 """
-    result = run_dataframe_script(code, df)
+    result = run_arrow_script(code, table)
     assert result["ok"] is True, result.get("error") or result
-    assert "hit" in result.get("columns", [])
+    assert result["metrics"]["rows"] == 2
 
 
 def test_playground_exec_subprocess_disabled_via_env(monkeypatch: pytest.MonkeyPatch):

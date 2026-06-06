@@ -1,21 +1,18 @@
 ---
 title: Rule Cookbook
-nav_order: 7
-has_children: true
+nav_order: 4
 ---
 
 # Rule Cookbook
 
-Practical patterns for **Arrow-native Rule Lab** (`apply_faults_arrow`) and optional **YAML** engine rules (`pip install "open-fdd[engine]"`).
+Practical patterns for **Arrow-native Rule Lab** (`apply_faults_arrow`) on feather historian PyArrow tables.
 
-| Page | Audience |
+| Page | Use when |
 |------|----------|
-| [Arrow recipes](arrow-recipes) | **Default** — Operator Bridge Rule Lab (3.0+) |
-| [Python recipes](python-recipes) | Legacy row `evaluate()` rules (`backend: legacy_row`) |
-| [YAML recipes](yaml-recipes) | Offline pandas / PyPI engine |
-| [Windowing and debugging](windowing-debugging) | Tuning and false positives |
-
-## Rule anatomy (Arrow — default)
+| [Arrow recipes](arrow-recipes) | **Default** — thresholds, flatline, spread, OOB, fan/schedule faults |
+| [Python recipes](python-recipes) | Same Arrow patterns with shared `open_fdd.arrow_runtime.cookbook` imports |
+| [Windowing & debugging](windowing-debugging) | Rolling windows, batch runtime, Rule Lab console |
+| [YAML recipes](yaml-recipes) | Optional offline `open-fdd[engine]` workflows (no Operator Bridge) |
 
 ```python
 import pyarrow.compute as pc
@@ -23,13 +20,3 @@ import pyarrow.compute as pc
 def apply_faults_arrow(table, cfg, context=None):
     return pc.greater(table["zone_temp"], cfg["max_zone_temp"])
 ```
-
-- `table`: PyArrow Table from feather historian (BACnet columns + `timestamp`)
-- `cfg`: thresholds from Rule Lab config panel
-- Returns a boolean mask aligned to table rows
-
-Templates: `GET /api/playground/arrow-templates` or see [Arrow-native runtime](../developer/arrow-native-runtime.md).
-
-## Legacy row rules
-
-Per-row `evaluate(row, cfg, …)` is **not** the default in 3.0. Use only for migrated rules with `backend: legacy_row`. See [Python recipes](python-recipes).

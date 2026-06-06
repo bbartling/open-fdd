@@ -182,6 +182,16 @@ sys.exit(0 if d.get("root_status")==200 and not any("welcome page" in e or "Reac
 '; then
   asset="$(echo "$probe_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("asset_path",""))')"
   log_ok "Production React dashboard at ${BASE}/ ${asset:+($asset)}"
+  local_asset=""
+  if [[ -f "${ROOT}/workspace/api/static/app/index.html" ]]; then
+    local_asset="$(grep -oE 'index-[^"]+\.js' "${ROOT}/workspace/api/static/app/index.html" | head -1 || true)"
+  fi
+  if [[ -n "$local_asset" && -n "$asset" && "$asset" != "$local_asset" ]]; then
+    log_warn "Edge UI bundle ${asset} ≠ bensserver build ${local_asset} — run: OPENFDD_IMAGE_TAG=${EXPECTED_IMAGE_TAG:-<tag>} ${ROOT}/scripts/upgrade_edge_full.sh --limit ${LIMIT:-<host>}"
+  fi
+  if [[ "$asset" == *TRH4YIfA* ]]; then
+    log_warn "Known stale Acme UI (TRH4YIfA) — deploy UI: cd infra/ansible && ./deploy.sh ui --limit ${LIMIT:-acme_vm_bbartling}"
+  fi
 fi
 
 if echo "$probe_json" | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("stack_status")==200 else 1)'; then

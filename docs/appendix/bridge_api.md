@@ -62,7 +62,7 @@ REST API served by **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Produ
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/playground/lint` | AST lint Python rule |
-| POST | `/api/playground/test-rule` | Run `evaluate()` on feather window |
+| POST | `/api/playground/test-rule` | Run `apply_faults_arrow()` on feather PyArrow window |
 | POST | `/api/playground/run-script` | Execute script mode |
 | GET | `/api/playground/sample-frame` | Sample DataFrame for editor |
 

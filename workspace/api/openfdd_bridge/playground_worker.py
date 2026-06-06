@@ -33,6 +33,10 @@ def _load_job(work_dir: Path) -> dict[str, Any]:
         from .playground_exec import _read_df_ipc
 
         merged["df"] = _read_df_ipc(work_dir)
+    elif op == "run_arrow_table":
+        from .playground_exec import _read_table_ipc
+
+        merged["table"] = _read_table_ipc(work_dir)
     return merged
 
 
@@ -59,6 +63,20 @@ def execute_job(job: dict[str, Any]) -> dict[str, Any]:
 
         df = job["df"]
         return {"ok": True, "result": _run_dataframe_script_impl(job["code"], df, cfg=job.get("cfg") or {})}
+    if op == "run_arrow_table":
+        from .playground import _run_arrow_table_impl
+
+        return {
+            "ok": True,
+            "result": _run_arrow_table_impl(
+                job["code"],
+                job["table"],
+                job.get("cfg") or {},
+                rule_id=str(job.get("rule_id") or ""),
+                site_id=str(job.get("site_id") or ""),
+                limit=int(job.get("limit") or 0),
+            ),
+        }
     raise ValueError(f"unknown playground job op: {op!r}")
 
 

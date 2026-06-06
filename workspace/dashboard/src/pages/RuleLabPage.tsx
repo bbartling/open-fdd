@@ -427,9 +427,8 @@ export default function RuleLabPage() {
         title="Rule Lab"
         subtitle={
           <>
-            Arrow-native rules use <code>apply_faults_arrow(table, cfg, context)</code> over PyArrow columns
-            (default in 3.0). Legacy <code>evaluate(row, …)</code> requires{" "}
-            <code>backend: legacy_row</code> on save. Pin rules via{" "}
+            Rules use <code>apply_faults_arrow(table, cfg, context)</code> over PyArrow historian columns.
+            Pin rules via{" "}
             <a href="/model">Model & assignments</a> commissioning JSON.
           </>
         }

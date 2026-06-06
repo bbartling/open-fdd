@@ -21,7 +21,7 @@ This repository is **Arrow-native FDD first** (3.0+). The published PyPI wheel (
 
 ## FDD execution
 
-- Author Python rules in **Rule Lab** (`apply_faults_arrow(table, cfg, context)` default; legacy `evaluate(row, …)` only with `backend: legacy_row`); persist via `POST /api/rules/save` → **`workspace/data/rules_py/*.py`** + `rules_store.json`.
+- Author Python rules in **Rule Lab** (`apply_faults_arrow(table, cfg, context)` on PyArrow tables only); persist via `POST /api/rules/save` → **`workspace/data/rules_py/*.py`** + `rules_store.json`.
 - Humans and AI share the same `.py` files: browser save and `POST /openfdd-agent/tool` (`rules.save`) both call `RuleStore.upsert()`. Doc: [docs/operator-bridge/rule-lab.md](docs/operator-bridge/rule-lab.md).
 - Run batches with `POST /api/rules/batch` or `python -m openfdd_bridge.fdd_runner`; local/edge app stack: `./scripts/openfdd_stack.sh up` or `./deploy.sh docker`. Legacy Pi path: `./scripts/run_local.sh start` (host systemd app units).
 - Use `open_fdd.engine.column_map_from_model` (and playground sandbox) on the bridge — not a separate YAML rule runner in generated apps.

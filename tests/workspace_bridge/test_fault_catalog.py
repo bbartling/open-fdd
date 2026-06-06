@@ -14,9 +14,9 @@ if str(API_ROOT) not in sys.path:
 from openfdd_bridge import fault_catalog, fault_catalog_scope  # noqa: E402
 
 RULE_CODE = (
-    "def evaluate(row, cfg, prev_row=None, rows=None):\n"
-    "    sat = row.get('SAT') or row.get('temp')\n"
-    "    return sat is not None and float(sat) > float(cfg.get('high', 50))\n"
+    "import pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n"
+    "    high = float(cfg.get('high', 50))\n"
+    "    return pc.greater(table['SAT'], high)\n"
 )
 
 
@@ -203,7 +203,7 @@ def test_fault_code_groups_into_family_tree(client: TestClient):
         json={
             "name": "SAT high",
             "mode": "rule",
-            "backend": "legacy_row",
+            "backend": "arrow",
             "code": RULE_CODE,
             "config": {"high": 50},
             "severity": "critical",

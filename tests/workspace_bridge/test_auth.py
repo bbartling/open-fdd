@@ -68,7 +68,7 @@ def test_login_and_call(authed_client: TestClient):
     assert denied.status_code == 401
     forbidden = authed_client.post(
         "/api/playground/lint",
-        json={"code": "def evaluate(row, cfg, prev_row=None, rows=None):\n    return False\n"},
+        json={"code": "import pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n    return pc.greater(table['SAT'], 50)\n"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert forbidden.status_code == 403
@@ -79,7 +79,7 @@ def test_login_and_call(authed_client: TestClient):
     msi_token = msi.json()["token"]
     ok = authed_client.post(
         "/api/playground/lint",
-        json={"code": "def evaluate(row, cfg, prev_row=None, rows=None):\n    return False\n"},
+        json={"code": "import pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n    return pc.greater(table['SAT'], 50)\n"},
         headers={"Authorization": f"Bearer {msi_token}"},
     )
     assert ok.status_code == 200

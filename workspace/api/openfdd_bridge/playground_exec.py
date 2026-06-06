@@ -72,6 +72,24 @@ def _read_df_ipc(work_dir: Path) -> Any:
     return pd.read_json(json_path, orient="split")
 
 
+def _write_table_ipc(work_dir: Path, table: Any) -> None:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    if not isinstance(table, pa.Table):
+        raise TypeError("run_arrow_table job missing PyArrow Table")
+    pq.write_table(table, work_dir / "job.table.parquet")
+
+
+def _read_table_ipc(work_dir: Path) -> Any:
+    import pyarrow.parquet as pq
+
+    path = work_dir / "job.table.parquet"
+    if not path.is_file():
+        raise FileNotFoundError("job.table.parquet required for run_arrow_table")
+    return pq.read_table(path)
+
+
 def _write_job_bundle(work_dir: Path, job: dict[str, Any], *, timeout_s: float) -> None:
     """Write JSON metadata + optional parquet DataFrame (no pickle)."""
     import pandas as pd
@@ -93,6 +111,18 @@ def _write_job_bundle(work_dir: Path, job: dict[str, Any], *, timeout_s: float) 
         if not isinstance(df, pd.DataFrame):
             raise TypeError("run_script job missing DataFrame")
         _write_df_ipc(work_dir, df)
+    elif op == "run_arrow_table":
+        import pyarrow as pa
+
+        table = job.get("table")
+        if not isinstance(table, pa.Table):
+            raise TypeError("run_arrow_table job missing PyArrow Table")
+        if table.num_rows > _max_job_rows():
+            raise ValueError(f"row count {table.num_rows} exceeds OFDD_PLAYGROUND_MAX_ROWS ({_max_job_rows()})")
+        _write_table_ipc(work_dir, table)
+        body["rule_id"] = job.get("rule_id") or ""
+        body["site_id"] = job.get("site_id") or ""
+        body["limit"] = int(job.get("limit") or 0)
     else:
         raise ValueError(f"unknown playground job op: {op!r}")
 
