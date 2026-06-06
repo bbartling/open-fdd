@@ -31,7 +31,7 @@ COPY pyproject.toml README.md ./
 COPY open_fdd ./open_fdd
 COPY bacnet_toolshed ./bacnet_toolshed
 
-RUN pip install -e ".[engine]" \
+RUN pip install -e . \
     && pip install -r bacnet_toolshed/requirements.txt
 
 FROM python-base AS bridge
