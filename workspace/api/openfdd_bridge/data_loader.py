@@ -147,9 +147,11 @@ def column_map_for_rule(model: dict, site_id: str, rule: dict) -> dict[str, str]
     for pt in model.get("points") or []:
         if not isinstance(pt, dict) or str(pt.get("id") or "") not in point_ids:
             continue
-        if str(pt.get("site_id") or "") != str(site_id):
+        from .model_point_utils import point_historian_column, point_site_id
+
+        if point_site_id(pt, model) != str(site_id):
             continue
-        ext = str(pt.get("external_id") or "").strip()
+        ext = str(pt.get("external_id") or "").strip() or point_historian_column(pt)
         if not ext:
             continue
         for key in (str(pt.get("fdd_input") or "").strip(), str(pt.get("brick_type") or "").strip()):

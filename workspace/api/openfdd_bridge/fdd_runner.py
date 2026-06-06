@@ -52,16 +52,21 @@ def resolve_site_ids(model: dict[str, Any], rule: dict[str, Any]) -> list[str]:
     bound_brick = {str(x) for x in bindings.get("brick_types") or [] if str(x).strip()}
 
     if bound_points or bound_eq or bound_brick:
+        from .model_point_utils import point_site_id
+
         for pt in points:
             pid = str(pt.get("id") or "")
             eq_id = str(pt.get("equipment_id") or "")
             brick = str(pt.get("brick_type") or "")
-            if bound_points and pid in bound_points and pt.get("site_id"):
-                matched_site_ids.add(str(pt.get("site_id")))
-            elif bound_eq and eq_id in bound_eq and pt.get("site_id"):
-                matched_site_ids.add(str(pt.get("site_id")))
-            elif bound_brick and brick in bound_brick and pt.get("site_id"):
-                matched_site_ids.add(str(pt.get("site_id")))
+            sid = point_site_id(pt, model)
+            if not sid:
+                continue
+            if bound_points and pid in bound_points:
+                matched_site_ids.add(sid)
+            elif bound_eq and eq_id in bound_eq:
+                matched_site_ids.add(sid)
+            elif bound_brick and brick in bound_brick:
+                matched_site_ids.add(sid)
         if matched_site_ids:
             return sorted(matched_site_ids)
 
@@ -72,9 +77,12 @@ def resolve_site_ids(model: dict[str, Any], rule: dict[str, Any]) -> list[str]:
             if str(eq.get("equipment_type") or "") == eq_type and eq.get("site_id"):
                 matched_site_ids.add(str(eq.get("site_id")))
     if brick_type:
+        from .model_point_utils import point_site_id
+
         for pt in points:
-            if str(pt.get("brick_type") or "") == brick_type and pt.get("site_id"):
-                matched_site_ids.add(str(pt.get("site_id")))
+            sid = point_site_id(pt, model)
+            if str(pt.get("brick_type") or "") == brick_type and sid:
+                matched_site_ids.add(sid)
 
     if eq_type or brick_type:
         ids = sorted(matched_site_ids)

@@ -19,6 +19,7 @@ from open_fdd.playground.cookbook import (
 from open_fdd.playground.rows import timestamp_to_ts_ms
 
 from .data_loader import column_map_for_rule, enrich_rows_with_column_map
+from .model_point_utils import point_site_id
 from .timeseries_api import plot_column_name
 
 
@@ -37,7 +38,7 @@ def resolve_value_column(rule: dict[str, Any], model: dict[str, Any], site_id: s
     brick_types = {str(x) for x in bindings.get("brick_types") or [] if str(x).strip()}
 
     def _matches(pt: dict[str, Any]) -> bool:
-        if str(pt.get("site_id") or "") != str(site_id):
+        if point_site_id(pt, model) != str(site_id):
             return False
         eid = str(pt.get("equipment_id") or "").strip()
         if equipment_ids and eid not in equipment_ids:

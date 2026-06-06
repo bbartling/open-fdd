@@ -166,6 +166,55 @@ def test_dashboard_websocket(client: TestClient):
         assert payload["faults"]["model_configured"] is False
 
 
+def test_gl36_import_enriches_site_and_external_id(client: TestClient):
+    """Acme GL36 exports often omit point site_id / external_id — import should infer them."""
+    payload = {
+        "site_id": "acme",
+        "sites": [{"id": "acme", "name": "Acme Building"}],
+        "equipment": [
+            {
+                "id": "acme-vm-bbartling-jci-vav-39",
+                "name": "Jci Vav 39",
+                "brick_type": "VAV",
+                "site_id": "acme",
+            }
+        ],
+        "points": [
+            {
+                "id": "39-analog-input-1106",
+                "name": "ZN-T",
+                "brick_type": "Zone_Air_Temperature_Sensor",
+                "equipment_id": "acme-vm-bbartling-jci-vav-39",
+                "brick_tag": "ZN-T",
+            }
+        ],
+    }
+    client.post("/api/model/import", json={"payload": payload, "replace": True})
+    export = client.get("/api/model/export").json()
+    pt = export["points"][0]
+    assert pt["site_id"] == "acme"
+    assert pt["external_id"] == "analog-input-1106"
+
+
+def test_model_health_skips_fdd_input_when_brick_type_set(client: TestClient):
+    payload = {
+        "sites": [{"id": "acme", "name": "Acme"}],
+        "equipment": [{"id": "e1", "site_id": "acme", "name": "VAV-1", "brick_type": "VAV"}],
+        "points": [
+            {
+                "id": "p1",
+                "equipment_id": "e1",
+                "external_id": "zn-t",
+                "brick_type": "Zone_Air_Temperature_Sensor",
+            }
+        ],
+    }
+    client.post("/api/model/import", json={"payload": payload, "replace": True})
+    health = client.get("/api/model/health").json()
+    assert health["counts"]["missing_fdd_input"] == 0
+    assert health["counts"]["missing_brick_type"] == 0
+
+
 def test_building_alerts_put(client: TestClient):
     r = client.put(
         "/api/building/alerts",
