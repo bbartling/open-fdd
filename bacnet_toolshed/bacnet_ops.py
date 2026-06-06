@@ -255,6 +255,13 @@ async def point_discovery(
     }
 
     names_list = [str(name_map.get(normalize_oid(obj_id), "ERROR - Missing Data")) for obj_id in object_list]
+
+    def _is_commandable(oid: ObjectIdentifier) -> bool:
+        norm = normalize_oid(oid)
+        if norm in commandable_oids:
+            return True
+        return str(oid[0]).lower() in COMMANDABLE_TYPES
+
     return {
         "device_address": str(device_address_obj),
         "device_instance": instance_id,
@@ -262,7 +269,7 @@ async def point_discovery(
             {
                 "object_identifier": normalize_oid(oid),
                 "name": name,
-                "commandable": normalize_oid(oid) in commandable_oids,
+                "commandable": _is_commandable(oid),
             }
             for oid, name in zip(object_list, names_list)
         ],

@@ -4,7 +4,7 @@ import { formatApiError } from "../lib/formatApiError";
 import ActionButton from "../components/ActionButton";
 import BacnetPointsTree, { type DriverDevice, type DriverPoint } from "../components/BacnetPointsTree";
 import BacnetTreeLegend from "../components/BacnetTreeLegend";
-import { formatBacnetValue, type PrioritySlot } from "../lib/bacnetTreeMenu";
+import { formatBacnetValue, pointIsCommandable, type PrioritySlot } from "../lib/bacnetTreeMenu";
 import PageHeader from "../components/PageHeader";
 import Spinner from "../components/Spinner";
 import { TabDebugPanel } from "../components/TabDebugPanel";
@@ -503,7 +503,7 @@ export default function BacnetPage() {
   }
 
   async function readPriorityArray(device: DriverDevice, point: DriverPoint) {
-    if (!point.commandable) return;
+    if (!pointIsCommandable(point)) return;
     setActionError("");
     try {
       const res = await apiFetch<{ priority_array?: PrioritySlot[] }>("/api/bacnet/priority-array", {
