@@ -136,9 +136,11 @@ cd ~/open-fdd/docker && docker compose up -d
 ./scripts/openfdd_stack.sh down
 ```
 
-## Next
+## After first deploy
 
-→ [First login and health check](health-check)
+→ [First login and health check](health-check)  
+→ [Updating the stack](updating) — Ansible from control machine  
+→ [Live site update (SSH)](../ops/live_site_update) — tag bump on minimal `~/open-fdd/` folder
 
 
 # First login and health check
@@ -207,7 +209,8 @@ Run Open-FDD on a Linux edge host or VM using **published Docker images**. No lo
 |------|------|
 | 1 | [Run with Docker images](docker) |
 | 2 | [First login and health check](health-check) |
-| 3 | [Updating the stack](updating) |
+| 3 | [Updating the stack](updating) — Ansible or SSH paths |
+| — | [Live site update (SSH)](../ops/live_site_update) — minimal VM folder, no `git pull` |
 
 **Prerequisites:** Linux host with Docker and Docker Compose, network access to BACnet devices if polling OT equipment, and a safe lab or maintenance window for first BACnet discovery.
 
@@ -218,16 +221,41 @@ Run Open-FDD on a Linux edge host or VM using **published Docker images**. No lo
 
 # Updating the stack
 
-## Image-only upgrade (preserve historian)
+Two paths depending on how you manage the edge host.
 
-Pull a new GHCR tag **without** wiping feather data or BACnet config on the edge host:
+## Path A — SSH on the live VM (minimal deploy folder)
+
+Use when the host has only `~/open-fdd/{docker,docker-compose.yml,workspace}` and **no** full git checkout.
+
+→ **[Live site update (SSH)](../ops/live_site_update)** — backup with `sudo tar`, verify GHCR tags, edit `docker-compose.yml`, `docker compose pull` + `up -d --force-recreate`, smoke checks, rollback.
+
+Then run the control-machine insurance check:
+
+```bash
+cd infra/ansible
+./scripts/post_deploy_check.sh --limit <inventory_host>
+```
+
+## Path B — Ansible from control machine (inventory)
+
+> **Dashboard/UI changes need `deploy.sh ui` (or `upgrade_edge_full.sh`), not image pull alone.**
+> The edge bind-mount `workspace/api/static/app/` overrides image-baked React assets.
+
+**Full upgrade (UI + containers + post-deploy check):**
+
+```bash
+./scripts/build_operator_dashboard.sh prod   # if not already built
+OPENFDD_IMAGE_TAG=<new-tag> ./scripts/upgrade_edge_full.sh --limit <inventory_host>
+```
+
+**Image-only** (API/commission/MCP code from GHCR, **same old UI** unless you also ran `ui`):
 
 ```bash
 export OPENFDD_IMAGE_TAG=<new-tag>
 RUN_POST_CHECK=1 ./scripts/upgrade_edge_ghcr.sh --limit <inventory_host>
 ```
 
-This sets `openfdd_docker_sync_workspace_data=false` so bind-mounted `~/open-fdd/workspace/data/` is not replaced.
+Image-only sets `openfdd_docker_sync_workspace_data=false` so bind-mounted `~/open-fdd/workspace/data/` is not replaced.
 
 ## Full redeploy
 
@@ -239,15 +267,27 @@ OPENFDD_IMAGE_TAG=<tag> ./deploy.sh docker --limit <inventory_host>
 
 ## Verify after upgrade
 
+**Control machine:**
+
 ```bash
-./scripts/stack_health_check.sh <host>
-ls -la ~/open-fdd/workspace/data/feather_store/   # on edge — size should not drop to zero
-docker compose -f ~/open-fdd/docker/docker-compose.yml ps
+cd infra/ansible
+./scripts/post_deploy_check.sh --limit <inventory_host>
+```
+
+**On edge host:**
+
+```bash
+ls -la ~/open-fdd/workspace/data/feather_store/   # size should not drop to zero
+docker compose -f ~/open-fdd/docker-compose.yml ps
+curl -sf http://127.0.0.1:8765/health
 ```
 
 ## Rollback
 
-Re-deploy the previous known-good `OPENFDD_IMAGE_TAG`. Workspace data on the host survives image-only upgrades; keep backups of `workspace/data/` before major config changes.
+- **SSH path:** restore previous image tag in `docker-compose.yml` and recreate containers — see [rollback section](../ops/live_site_update#rollback).
+- **Ansible path:** re-deploy the previous known-good `OPENFDD_IMAGE_TAG`.
+
+Workspace data on the host survives image-only upgrades; keep backups of `workspace/` before major config changes.
 
 
 # Local development
@@ -443,6 +483,81 @@ Cursor/Claude contributors: read `AGENTS.md` and `skills/` for automation bounda
 `pip install "open-fdd[engine]"` runs the YAML/pandas engine; `pip install open-fdd` covers the playground sandbox **without** the Operator Bridge UI. Use for notebooks, CSV backfills, or cloud lambdas. See [Appendix — Python package](../appendix/python-package).
 
 
+# Arrow recipes
+
+# Arrow recipes (default)
+
+Open-FDD 3.0 Rule Lab rules use **`apply_faults_arrow(table, cfg, context)`** and **`pyarrow.compute`**.
+
+## Simple threshold
+
+```python
+import pyarrow.compute as pc
+
+def apply_faults_arrow(table, cfg, context=None):
+    return pc.greater(table["zone_temp"], cfg["max_zone_temp"])
+```
+
+## Supply air temp high
+
+```python
+import pyarrow.compute as pc
+
+def apply_faults_arrow(table, cfg, context=None):
+    col = str(cfg.get("column", "SAT"))
+    return pc.greater(table[col], float(cfg["high"]))
+```
+
+Config: `{"column": "SAT", "high": 75}`
+
+## Fan commanded but no airflow
+
+```python
+import pyarrow.compute as pc
+
+def apply_faults_arrow(table, cfg, context=None):
+    fan_on = pc.greater(table["fan_cmd"], cfg.get("fan_on_threshold", 0.5))
+    low_airflow = pc.less(table["airflow_cfm"], cfg["min_airflow_cfm"])
+    return pc.and_(fan_on, low_airflow)
+```
+
+## Economizer not opening
+
+```python
+import pyarrow.compute as pc
+
+def apply_faults_arrow(table, cfg, context=None):
+    oat_good = pc.less(table["outside_air_temp"], cfg["economizer_oat_limit"])
+    cooling = pc.greater(table["cooling_cmd"], cfg.get("cooling_threshold", 0.5))
+    damper_low = pc.less(table["oa_damper_cmd"], cfg["min_oa_damper_cmd"])
+    return pc.and_(pc.and_(oat_good, cooling), damper_low)
+```
+
+## Heating and cooling simultaneously
+
+```python
+import pyarrow.compute as pc
+
+def apply_faults_arrow(table, cfg, context=None):
+    heating = pc.greater(table["heat_cmd"], cfg.get("heat_threshold", 0.1))
+    cooling = pc.greater(table["cool_cmd"], cfg.get("cool_threshold", 0.1))
+    return pc.and_(heating, cooling)
+```
+
+## Sensor out of range
+
+```python
+import pyarrow.compute as pc
+
+def apply_faults_arrow(table, cfg, context=None):
+    too_low = pc.less(table["sensor_value"], cfg["min_value"])
+    too_high = pc.greater(table["sensor_value"], cfg["max_value"])
+    return pc.or_(too_low, too_high)
+```
+
+More templates ship in `open_fdd.playground.arrow_templates` and via `GET /api/playground/arrow-templates`.
+
+
 # Data flow
 
 # Data flow
@@ -468,6 +583,65 @@ Cursor/Claude contributors: read `AGENTS.md` and `skills/` for automation bounda
 ## Retention
 
 Feather files grow on disk; retention policies are configurable on the edge. Image upgrades should **not** delete `workspace/data/` when using `upgrade_edge_ghcr.sh`.
+
+
+# Python recipes (Arrow)
+
+# Python recipes (Arrow)
+
+All Rule Lab Python rules use **`apply_faults_arrow(table, cfg, context)`** on PyArrow tables with **`pyarrow.compute`**.
+
+See **[Arrow recipes](arrow-recipes)** for the canonical cookbook (flatline, spread, OOB, schedule faults).
+
+Shared helpers live in `open_fdd.arrow_runtime.cookbook` and `open_fdd.arrow_runtime.windows`.
+
+```python
+from open_fdd.arrow_runtime.cookbook import flatline_1h_mask
+
+def apply_faults_arrow(table, cfg, context=None):
+    return flatline_1h_mask(table, cfg)
+```
+
+
+# YAML recipes
+
+# YAML recipes
+
+For **offline** pandas workflows with `open_fdd.engine.RuleRunner` (no Operator Bridge).
+
+```bash
+pip install "open-fdd[engine]"
+```
+
+## Minimal rule file
+
+```yaml
+id: zone_high_temp
+type: threshold
+column: zone_temp
+params:
+  upper: 80
+  lower: 65
+```
+
+```python
+from open_fdd.engine import RuleRunner
+import pandas as pd
+
+df = pd.read_csv("telemetry.csv")
+runner = RuleRunner.from_yaml("rules/zone_high_temp.yaml")
+flags = runner.run(df)
+```
+
+## When to use YAML vs Python Rule Lab
+
+| YAML engine | Python Rule Lab |
+|-------------|-----------------|
+| CSV/backfill notebooks | Live edge + dashboard |
+| Fixed rule types in engine | Arbitrary `evaluate()` logic |
+| CI on historical extracts | BACnet-bound production rules |
+
+Rule type reference and column maps: [Appendix — Python package](../appendix/python-package).
 
 
 # Containers
@@ -497,6 +671,48 @@ High-level view of the Open-FDD edge stack.
 | [System overview](overview) | Components and responsibilities |
 | [Data flow](data-flow) | Telemetry → historian → FDD → dashboard |
 | [Containers](containers) | Docker services and host boundaries |
+
+
+# Rule Cookbook
+
+# Rule Cookbook
+
+Practical patterns for **Arrow-native Rule Lab** (`apply_faults_arrow`) on feather historian PyArrow tables.
+
+| Page | Use when |
+|------|----------|
+| [Arrow recipes](arrow-recipes) | **Default** — thresholds, flatline, spread, OOB, fan/schedule faults |
+| [Python recipes](python-recipes) | Same Arrow patterns with shared `open_fdd.arrow_runtime.cookbook` imports |
+| [Windowing & debugging](windowing-debugging) | Rolling windows, batch runtime, Rule Lab console |
+| [YAML recipes](yaml-recipes) | Optional offline `open-fdd[engine]` workflows (no Operator Bridge) |
+
+```python
+import pyarrow.compute as pc
+
+def apply_faults_arrow(table, cfg, context=None):
+    return pc.greater(table["zone_temp"], cfg["max_zone_temp"])
+```
+
+
+# Windowing & debugging
+
+# Windowing & debugging
+
+## Rolling windows (Arrow)
+
+Use `open_fdd.arrow_runtime.windows` for sample-based rolling min/max and consecutive-true streaks:
+
+```python
+from open_fdd.arrow_runtime.windows import arrow_rolling_min, arrow_rolling_max, arrow_consecutive_true
+```
+
+Cookbook masks (`flatline_1h_mask`, `spread_1h_mask`, `oob_mask`) default to ~12 samples (~1 h at 5 min poll).
+
+Config keys: `flatline_window_samples`, `flatline_tolerance`, `max_spread`, `rolling_avg_minutes`, `bounds_low` / `bounds_high`.
+
+## Rule Lab console
+
+Quick-test and batch responses include `backend: arrow`, `ms`, and flagged row counts. Arrow summary events appear in the event console on fault hits.
 
 
 # Dashboard overview
@@ -555,9 +771,7 @@ Full hardening: [Security](../security/).
 
 # Rule Lab
 
-Rule Lab is the in-browser editor for Python FDD rules. **Open-FDD 3.0** runs rules on **PyArrow Tables** by default — no per-row Python loops in the hot path.
-
-## Contract (default — Arrow-native)
+Rule Lab authors **Arrow-native** Python rules against the feather historian. Rules define:
 
 ```python
 import pyarrow.compute as pc
@@ -566,37 +780,13 @@ def apply_faults_arrow(table, cfg, context=None):
     return pc.greater(table["zone_temp"], cfg["max_zone_temp"])
 ```
 
-- Input: `pyarrow.Table` (feather historian columns)
-- Output: `pyarrow.BooleanArray` or `ChunkedArray` (same row count as input)
-- Execution: columnar `pyarrow.compute` kernels + optional RecordBatch chunking
+The bridge detects `apply_faults_arrow`, runs rules on **PyArrow tables** via `open_fdd.arrow_runtime`, and persists `.py` sources under `workspace/data/rules_py/`.
 
-See [Arrow-native runtime](../developer/arrow-native-runtime.md) for threading env vars and batch settings.
+- **Quick test** — `POST /api/playground/test-rule` (returns `backend: arrow`, `ms`, flagged count)
+- **Batch** — `POST /api/rules/batch` / `openfdd-fdd-loop` timer
+- **Templates** — `GET /api/playground/arrow-templates`
 
-## Legacy row rules (explicit opt-in)
-
-Old rules using `evaluate(row, cfg, …)` still work when saved with **`"backend": "legacy_row"`** or when `OPEN_FDD_FDD_BACKEND=legacy_row` is set. New rules should use `apply_faults_arrow`.
-
-## DataFrame scripts
-
-Script mode (`mode: script`) is unchanged — mutate `df` and set `out = {"df": …, "events": [...]}`.
-
-## Storage
-
-| Artifact | Path |
-|----------|------|
-| Rule source | `workspace/data/rules_py/<id>.py` |
-| Metadata | `workspace/data/rules_store.json` (includes `backend`) |
-| Bindings | Model `fdd_input` + FDD assignments |
-
-## Workflow
-
-1. **Lint** — `POST /api/playground/lint` (auto-detects Arrow vs legacy)
-2. **Test** — `POST /api/playground/test-rule` — returns row count, flagged count, backend, timing
-3. **Templates** — `GET /api/playground/arrow-templates`
-4. **Bind** — attach rule to a point in FDD assignments
-5. **Batch** — `POST /api/rules/batch` or `fdd_runner` scheduled loop
-
-Recipes: [Rule Cookbook](../rule-cookbook/). Fault codes: [Fault Codes](../fault-codes/).
+Pin points to rules via **Model & assignments** (`/model`) commissioning JSON or BACnet tree right-click.
 
 
 # Model workflow
@@ -755,402 +945,6 @@ Open-FDD integrates with field controllers via BACnet/IP (and bench MSTP overlay
 | [Write safety](write-safety) | Defaults and allowlists |
 
 
-# Arrow recipes
-
-# Arrow recipes (default)
-
-Open-FDD 3.0 Rule Lab rules use **`apply_faults_arrow(table, cfg, context)`** and **`pyarrow.compute`**.
-
-## Simple threshold
-
-```python
-import pyarrow.compute as pc
-
-def apply_faults_arrow(table, cfg, context=None):
-    return pc.greater(table["zone_temp"], cfg["max_zone_temp"])
-```
-
-## Supply air temp high
-
-```python
-import pyarrow.compute as pc
-
-def apply_faults_arrow(table, cfg, context=None):
-    col = str(cfg.get("column", "SAT"))
-    return pc.greater(table[col], float(cfg["high"]))
-```
-
-Config: `{"column": "SAT", "high": 75}`
-
-## Fan commanded but no airflow
-
-```python
-import pyarrow.compute as pc
-
-def apply_faults_arrow(table, cfg, context=None):
-    fan_on = pc.greater(table["fan_cmd"], cfg.get("fan_on_threshold", 0.5))
-    low_airflow = pc.less(table["airflow_cfm"], cfg["min_airflow_cfm"])
-    return pc.and_(fan_on, low_airflow)
-```
-
-## Economizer not opening
-
-```python
-import pyarrow.compute as pc
-
-def apply_faults_arrow(table, cfg, context=None):
-    oat_good = pc.less(table["outside_air_temp"], cfg["economizer_oat_limit"])
-    cooling = pc.greater(table["cooling_cmd"], cfg.get("cooling_threshold", 0.5))
-    damper_low = pc.less(table["oa_damper_cmd"], cfg["min_oa_damper_cmd"])
-    return pc.and_(pc.and_(oat_good, cooling), damper_low)
-```
-
-## Heating and cooling simultaneously
-
-```python
-import pyarrow.compute as pc
-
-def apply_faults_arrow(table, cfg, context=None):
-    heating = pc.greater(table["heat_cmd"], cfg.get("heat_threshold", 0.1))
-    cooling = pc.greater(table["cool_cmd"], cfg.get("cool_threshold", 0.1))
-    return pc.and_(heating, cooling)
-```
-
-## Sensor out of range
-
-```python
-import pyarrow.compute as pc
-
-def apply_faults_arrow(table, cfg, context=None):
-    too_low = pc.less(table["sensor_value"], cfg["min_value"])
-    too_high = pc.greater(table["sensor_value"], cfg["max_value"])
-    return pc.or_(too_low, too_high)
-```
-
-More templates ship in `open_fdd.playground.arrow_templates` and via `GET /api/playground/arrow-templates`.
-
-
-# Python recipes (legacy row)
-
-# Python recipes (legacy row)
-
-> **Open-FDD 3.0 default:** use [Arrow recipes](arrow-recipes) with `apply_faults_arrow`. These `evaluate(row, …)` patterns apply only when the rule is saved with **`backend: legacy_row`**.
-
-Each recipe: **use case → inputs → code → behavior → tuning → false positives**.
-
----
-
-## 1 — Flatline (1 hour window)
-
-**Use case:** Stuck sensor, failed thermistor, frozen BACnet value.
-
-**Inputs:** `temp` or `rh` in `row`; `rows` history ≥ 1 h span.
-
-```python
-from open_fdd.playground.cookbook import cfg_threshold, hour_window_ready, window_rows_1h
-
-def evaluate(row, cfg, prev_row=None, rows=None):
-    if not rows:
-        return False
-    window = window_rows_1h(row, rows)
-    if not hour_window_ready(window):
-        return False
-    vals = [r.get("temp") for r in window if r.get("temp") is not None]
-    if len(vals) < 2:
-        return False
-    spread = max(vals) - min(vals)
-    tol = cfg_threshold(cfg, "flatline_tolerance")
-    if spread < tol:
-        return True, window
-    return False
-```
-
-| Tuning | Start with `flatline_tolerance` 0.05–0.15 °F for zone temp |
-| False positives | Very tight spaces with real stable temp; increase tolerance or require longer window |
-
-**Fault codes:** `VAV-C`, `AHU-C`, `BLD-B` — [Fault Codes](../fault-codes/).
-
----
-
-## 2 — Spread / delta (1 hour)
-
-**Use case:** Poor delta-T, hunting, capacity issue.
-
-```python
-from open_fdd.playground.cookbook import cfg_threshold, hour_window_ready, window_rows_1h
-
-def evaluate(row, cfg, prev_row=None, rows=None):
-    window = window_rows_1h(row, rows or [])
-    if not hour_window_ready(window):
-        return False
-    vals = [r["temp"] for r in window if r.get("temp") is not None]
-    if len(vals) < 2:
-        return False
-    return (max(vals) - min(vals)) > cfg_threshold(cfg, "max_spread")
-```
-
-| Tuning | `max_spread` 2–6 °F depending on equipment |
-| False positives | Morning warm-up, large OAT swing |
-
----
-
-## 3 — Out-of-bounds (rolling avg)
-
-**Use case:** Comfort or equipment limit violations.
-
-```python
-from open_fdd.playground.cookbook import cfg_threshold
-
-def evaluate(row, cfg, prev_row=None, rows=None):
-    v = row.get("temp_rolling_avg") or row.get("temp")
-    if v is None:
-        return False
-    return v < cfg_threshold(cfg, "bounds_low") or v > cfg_threshold(cfg, "bounds_high")
-```
-
-| Tuning | Set bounds per zone type; use rolling avg to debounce spikes |
-| False positives | Unoccupied setback if schedule not gated — see recipe 7 |
-
----
-
-## 4 — Rate of change (per hour)
-
-**Use case:** Runaway heating/cooling, open door, coil valve stuck open.
-
-```python
-def evaluate(row, cfg, prev_row=None, rows=None):
-    if not prev_row or prev_row.get("temp") is None or row.get("temp") is None:
-        return False
-    dt_h = (row["ts_ms"] - prev_row["ts_ms"]) / 3_600_000
-    if dt_h <= 0:
-        return False
-    rate = abs(row["temp"] - prev_row["temp"]) / dt_h
-    return rate > float(cfg.get("max_temp_per_hour", 5))
-```
-
-| False positives | Single bad sample — pair with rolling avg or consecutive hits |
-
----
-
-## 5 — Deadband / hysteresis
-
-**Use case:** Chattering alarm near setpoint.
-
-```python
-def evaluate(row, cfg, prev_row=None, rows=None):
-    sp = float(cfg.get("setpoint", 72))
-    band = float(cfg.get("deadband", 2))
-    v = row.get("temp")
-    if v is None:
-        return False
-    if prev_row and prev_row.get("_latched"):
-        # clear inside tighter band
-        return abs(v - sp) > band * 1.5
-    return abs(v - sp) > band
-```
-
-Store latch in row dict only for retroactive paint; for production use cfg-backed state via consecutive sample recipe.
-
----
-
-## 6 — Setpoint vs measured
-
-**Use case:** VAV discharge temp far from SAT setpoint.
-
-```python
-def evaluate(row, cfg, prev_row=None, rows=None, series=None):
-    if not series:
-        return False
-    sat_sp = series.get("SAT_SP", {}).get("current")
-    sat = row.get("temp")
-    if sat_sp is None or sat is None:
-        return False
-    return abs(sat - sat_sp) > float(cfg.get("max_deviation", 3))
-```
-
-Requires `series_aliases` in rule config for cross-point rules.
-
----
-
-## 7 — Occupancy schedule gating
-
-**Use case:** Only evaluate during occupied hours.
-
-```python
-def evaluate(row, cfg, prev_row=None, rows=None):
-    if not cfg.get("occupied", True):  # set via binding metadata or static cfg
-        return False
-    # ... inner fault logic ...
-    return False
-```
-
-Prefer binding-level enable flags or schedule tables in `cfg`.
-
----
-
-## 8 — Consecutive true samples
-
-**Use case:** Debounce transient spikes.
-
-```python
-def evaluate(row, cfg, prev_row=None, rows=None):
-    need = int(cfg.get("consecutive", 3))
-    if not rows or row["row"] < need - 1:
-        return False
-    for r in rows[row["row"] - need + 1 : row["row"] + 1]:
-        if not _inner(r, cfg):
-            return False
-    return True
-
-def _inner(r, cfg):
-    v = r.get("temp")
-    return v is not None and v > float(cfg.get("high", 80))
-```
-
----
-
-## 9 — Mark entire lookback window
-
-Return `(True, window_rows)` so the sweep paints every row in the window (retroactive mode).
-
----
-
-## 10 — Missing data
-
-```python
-def evaluate(row, cfg, prev_row=None, rows=None):
-    if row.get("temp") is None or row.get("quality") == "bad":
-        return True
-    return False
-```
-
-Pair with comms fault codes — [Sensor quality](../fault-codes/sensor-quality).
-
----
-
-## Promotion checklist
-
-- [ ] Lint clean in Rule Lab
-- [ ] Tested on ≥ 48 h of real building data
-- [ ] Thresholds documented in rule `config`
-- [ ] Fault code assigned (`VAV-C`, etc.)
-- [ ] False positive review with operator
-- [ ] Enabled only after binding to correct `fdd_input`
-
-
-# YAML recipes
-
-# YAML recipes
-
-For **offline** pandas workflows with `open_fdd.engine.RuleRunner` (no Operator Bridge).
-
-```bash
-pip install "open-fdd[engine]"
-```
-
-## Minimal rule file
-
-```yaml
-id: zone_high_temp
-type: threshold
-column: zone_temp
-params:
-  upper: 80
-  lower: 65
-```
-
-```python
-from open_fdd.engine import RuleRunner
-import pandas as pd
-
-df = pd.read_csv("telemetry.csv")
-runner = RuleRunner.from_yaml("rules/zone_high_temp.yaml")
-flags = runner.run(df)
-```
-
-## When to use YAML vs Python Rule Lab
-
-| YAML engine | Python Rule Lab |
-|-------------|-----------------|
-| CSV/backfill notebooks | Live edge + dashboard |
-| Fixed rule types in engine | Arbitrary `evaluate()` logic |
-| CI on historical extracts | BACnet-bound production rules |
-
-Rule type reference and column maps: [Appendix — Python package](../appendix/python-package).
-
-
-# Windowing and debugging
-
-# Windowing and debugging
-
-## Rolling average
-
-Rule Lab enriches rows with `temp_rolling_avg` / `degF_rolling_avg` before `evaluate()` (default 1, 5, or 10 minutes by `ts_ms`).
-
-Set `rolling_avg_minutes` in rule config or test API body.
-
-## Window helpers
-
-| Helper | Purpose |
-|--------|---------|
-| `window_rows_1h(row, rows)` | Samples in trailing 60 minutes |
-| `hour_window_ready(window)` | True when window spans ≥ 95% of 1 h |
-
-## Debug print
-
-`print()` inside `evaluate()` appears in Rule Lab event console **on fault hits** (or verbose test mode). Use sparingly in production rules.
-
-## Trace mode
-
-Enable **verbose** on test-rule API to see window spread diagnostics without firing the rule on every row.
-
-## Common false positives
-
-| Symptom | Mitigation |
-|---------|------------|
-| Warm-up transient | Gate on occupancy or minimum window fill |
-| Poll dropout | Require `samples_in_avg` minimum |
-| Unit mismatch | Set `temp_unit` in cfg; see `open_fdd.playground.temp_units` |
-| Single spike | Rolling avg + consecutive sample recipe |
-
-## Unit conversion
-
-Rules use `row["temp"]` in the rule's configured unit (imperial °F default). MQTT/historian rows include both `degF` and `degC`.
-
-
-# Rule Cookbook
-
-# Rule Cookbook
-
-Practical patterns for **Arrow-native Rule Lab** (`apply_faults_arrow`) and optional **YAML** engine rules (`pip install "open-fdd[engine]"`).
-
-| Page | Audience |
-|------|----------|
-| [Arrow recipes](arrow-recipes) | **Default** — Operator Bridge Rule Lab (3.0+) |
-| [Python recipes](python-recipes) | Legacy row `evaluate()` rules (`backend: legacy_row`) |
-| [YAML recipes](yaml-recipes) | Offline pandas / PyPI engine |
-| [Windowing and debugging](windowing-debugging) | Tuning and false positives |
-
-## Rule anatomy (Arrow — default)
-
-```python
-import pyarrow.compute as pc
-
-def apply_faults_arrow(table, cfg, context=None):
-    return pc.greater(table["zone_temp"], cfg["max_zone_temp"])
-```
-
-- `table`: PyArrow Table from feather historian (BACnet columns + `timestamp`)
-- `cfg`: thresholds from Rule Lab config panel
-- Returns a boolean mask aligned to table rows
-
-Templates: `GET /api/playground/arrow-templates` or see [Arrow-native runtime](../developer/arrow-native-runtime.md).
-
-## Legacy row rules
-
-Per-row `evaluate(row, cfg, …)` is **not** the default in 3.0. Use only for migrated rules with `backend: legacy_row`. See [Python recipes](python-recipes).
-
-
 # Convention
 
 # Fault code convention
@@ -1274,6 +1068,255 @@ Open-FDD uses a **check-engine** model: one building-level status (green / yello
 Live catalog API: `GET /api/faults/catalog` on the Operator Bridge.
 
 
+# Live site update (SSH)
+
+# Live site update (SSH)
+
+Use this runbook when a **live edge VM** already has a minimal deploy folder and you are **not** doing `git pull` on the host.
+
+Typical layout (no full git checkout):
+
+```text
+/home/bbartling/open-fdd/
+  docker/
+  docker-compose.yml
+  workspace/
+```
+
+`workspace/` is the **live site state** — BACnet commissioning files, poll CSV, feather historian, BRICK model, FDD rules, MCP RAG index, and env files. Image upgrades must **preserve** it.
+
+## Concepts (plain language)
+
+| Term | Meaning |
+|------|---------|
+| **Container** | A running app instance (bridge, commission, mcp-rag). Recreated on upgrade. |
+| **Image** | Downloaded app package from GHCR (e.g. `openfdd-bridge:2026.06.07-edge`). |
+| **Docker volume** | Persistent data Docker manages separately. This minimal layout uses **bind mounts** into `workspace/` instead. |
+| **`workspace/`** | Open-FDD site state on disk. **This is what you must not lose.** |
+
+> **Never on live sites:** `docker compose down -v`, `docker volume prune`, `docker system prune -a --volumes`, or `docker rm -f $(docker ps -aq)`. Those can destroy data or leave the site down with no rollback path.
+
+## Before you start
+
+1. Maintenance window or low-traffic period (containers restart briefly).
+2. SSH access to the edge host.
+3. New GHCR tag published (check [GitHub Packages](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge)).
+4. Optional: control machine with the full `open-fdd` repo for [post-deploy check](#control-machine-insurance-check).
+
+## 1. Backup `workspace/`
+
+Container processes may write files as **`root:root`** with mode **`0600`**. A normal user `tar` can fail on those paths — use `sudo`:
+
+```bash
+cd /home/bbartling/open-fdd
+
+export BACKUP_ROOT="$HOME/openfdd-backups/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$BACKUP_ROOT"
+
+cp docker-compose.yml "$BACKUP_ROOT/docker-compose.yml.before"
+
+docker compose ps > "$BACKUP_ROOT/docker-compose-ps-before.txt"
+docker compose config --images > "$BACKUP_ROOT/docker-images-before.txt"
+
+sudo tar --xattrs --acls -czf "$BACKUP_ROOT/workspace-full.tgz" workspace
+sudo chown "$USER:$USER" "$BACKUP_ROOT/workspace-full.tgz"
+
+echo "Backup saved to: $BACKUP_ROOT"
+du -h "$BACKUP_ROOT/workspace-full.tgz"
+```
+
+## 2. Verify new images exist on GHCR
+
+```bash
+export NEW_TAG="2026.06.07-edge"
+
+docker manifest inspect ghcr.io/bbartling/openfdd-bridge:${NEW_TAG} >/dev/null &&
+docker manifest inspect ghcr.io/bbartling/openfdd-commission:${NEW_TAG} >/dev/null &&
+docker manifest inspect ghcr.io/bbartling/openfdd-mcp-rag:${NEW_TAG} >/dev/null &&
+echo "All images exist for ${NEW_TAG}"
+```
+
+Replace `NEW_TAG` with the tag you intend to deploy.
+
+## 3. Update the React UI bundle (required for dashboard changes)
+
+> **Image pull alone does not update the browser UI.** The bridge serves
+> `workspace/api/static/app/` from the **bind mount first**, before anything baked
+> into the GHCR image (`static_dashboard_dir()` in the bridge). If that folder still
+> has an old `index-*.js` hash (e.g. `index-TRH4YIfA.js`), you will keep seeing the
+> old BACnet tree, Host Stats revisions panel, Model & assignments tab, etc.
+
+**From bensserver (control machine, full repo):**
+
+```bash
+cd /path/to/open-fdd
+./scripts/build_operator_dashboard.sh prod
+cd infra/ansible
+./deploy.sh ui --limit acme_vm_bbartling
+```
+
+Confirm the edge picked up the new hash:
+
+```bash
+curl -sf http://<edge-ip>/ | grep -o 'index-[^"]*\.js' | head -1
+# Should match bensserver: grep -o 'index-[^"]*\.js' workspace/api/static/app/index.html
+```
+
+**One command (recommended after CI publishes a new tag):**
+
+```bash
+OPENFDD_IMAGE_TAG=2026.06.08-edge ./scripts/upgrade_edge_full.sh --limit acme_vm_bbartling
+```
+
+That runs: dashboard build → `deploy.sh ui` → GHCR pull + `docker compose up -d --force-recreate` → `post_deploy_check.sh --full`.
+
+## 4. Update `docker-compose.yml` and recreate containers
+
+Edit image tags in `docker-compose.yml` (example: `2026.06.04-edge` → `2026.06.07-edge`):
+
+```bash
+cd /home/bbartling/open-fdd
+
+cp docker-compose.yml "$BACKUP_ROOT/docker-compose.yml.before-tag-change"
+sed -i "s/2026\.06\.04-edge/${NEW_TAG}/g" docker-compose.yml
+
+docker compose config --images
+docker compose pull
+docker compose up -d --force-recreate
+
+docker compose ps
+```
+
+Bind-mounted `workspace/` is unchanged; only container images restart.
+
+## 5. On-VM smoke checks
+
+```bash
+cd ~/open-fdd
+
+echo "=== Stack ==="
+docker compose ps
+docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
+
+echo "=== Bridge health ==="
+curl -sf http://127.0.0.1:8765/health | jq . || curl -sf http://127.0.0.1:8765/health
+
+echo "=== Stack health (if available — may require auth) ==="
+curl -i http://127.0.0.1:8765/health/stack
+
+echo "=== MCP health from inside mcp-rag container ==="
+docker compose exec mcp-rag sh -lc 'curl -sf http://127.0.0.1:8090/health || wget -qO- http://127.0.0.1:8090/health || python - <<PY
+import urllib.request
+print(urllib.request.urlopen("http://127.0.0.1:8090/health", timeout=5).read().decode())
+PY'
+
+echo "=== BACnet samples still moving ==="
+ls -lah workspace/bacnet/polls/samples.csv
+tail -n 1 workspace/bacnet/polls/samples.csv
+
+echo "=== BACnet ingest state ==="
+sudo cat workspace/data/bacnet_ingest_state.json | jq . || sudo cat workspace/data/bacnet_ingest_state.json
+
+echo "=== Feather store retained and writing ==="
+du -sh workspace/data/feather_store
+find workspace/data/feather_store -type f -printf "%TY-%Tm-%Td %TH:%TM %p\n" | sort | tail -n 10
+
+echo "=== Recent log errors ==="
+docker compose logs --since 20m | grep -Ei "error|exception|traceback|critical|failed|permission|denied" || true
+```
+
+**`/health/stack` nuance:** `/health` should return `200` without auth. `/health/stack` may return `401`, `403`, `404`, or an empty body depending on auth settings — use `curl -i` (not `curl -sf`) so you see the status code. A failed silent `curl -sf` does not mean the stack is broken.
+
+### Arrow / FDD rules (Open-FDD 3.0+)
+
+All saved rules use `apply_faults_arrow(table, cfg, context)` on PyArrow tables.
+
+From bensserver:
+
+```bash
+./scripts/validate_fdd_backends.sh --docker   # must exit 0
+```
+
+On the edge VM after upgrade:
+
+```bash
+grep -R "apply_faults_arrow" -n workspace/data/rules_py 2>/dev/null | wc -l
+docker compose exec bridge python3 -c "
+from openfdd_bridge.rule_store import RuleStore
+from open_fdd.arrow_runtime.rules import detect_rule_backend
+from openfdd_bridge.rule_source import read_source
+for r in RuleStore().list_rules():
+    if not r.get('enabled', True): continue
+    code = read_source(r.get('source_path','')) or r.get('code','')
+    print(r.get('name'), detect_rule_backend(code, r))
+"
+```
+
+Spot-check **Rule Lab** quick-test shows `backend: arrow`.
+
+## 6. Control-machine insurance check
+
+From your laptop or bensserver (full repo clone, not on the edge VM):
+
+```bash
+cd /path/to/open-fdd/infra/ansible
+
+./scripts/post_deploy_check.sh --limit acme_vm_bbartling
+
+# Or explicitly:
+./scripts/post_deploy_check.sh --host 100.122.106.124 --ssh-user bbartling
+```
+
+This is the recommended **non-destructive** check: Caddy → React dashboard, `/health/stack`, MCP, BACnet tree, BRICK/SPARQL, Docker log scan.
+
+> **Do not run on live commissioned sites:** `openfdd_edge_validate.sh --full` or `acme_operational_verify.sh` — those rediscover BACnet and reset bench model/rules.
+
+## 7. Browser validation
+
+Open the site via **Caddy on port 80** (e.g. `http://<tailscale-or-lan-ip>/`), not only `127.0.0.1:8765`:
+
+1. View page source / Network — confirm **new** `index-*.js` hash (not the pre-upgrade bundle).
+2. Home / faults dashboard loads.
+3. Integrator login (`workspace/auth.env.local`).
+4. **Host stats** — container image tag / git sha (3.0+ bridge).
+5. **BACnet** — right-click point → **Refresh PV**, **Read priority array**.
+6. **Model & assignments** (`/model`) — commissioning JSON export (404 = bridge image + UI both stale).
+7. Rule Lab — quick-test a saved rule (`backend: arrow`).
+
+## Rollback
+
+If the new tag misbehaves, restore the previous tag in compose and recreate:
+
+```bash
+cd /home/bbartling/open-fdd
+
+# Example: roll back from 2026.06.07-edge to 2026.06.04-edge
+export NEW_TAG="2026.06.07-edge"
+export OLD_TAG="2026.06.04-edge"
+
+sed -i "s/${NEW_TAG}/${OLD_TAG}/g" docker-compose.yml
+
+docker compose pull
+docker compose up -d --force-recreate
+
+docker compose ps
+curl -sf http://127.0.0.1:8765/health | jq . || curl -sf http://127.0.0.1:8765/health
+```
+
+`workspace/` is unchanged by rollback. For data corruption, extract files from `$BACKUP_ROOT/workspace-full.tgz` selectively (model, rules, feather shards) — do not blindly overwrite a running site without stopping containers first.
+
+## Alternative: Ansible image-only upgrade
+
+If you have inventory and SSH from a control machine (no manual `sed` on the VM):
+
+```bash
+export OPENFDD_IMAGE_TAG=2026.06.07-edge
+RUN_POST_CHECK=1 ./scripts/upgrade_edge_ghcr.sh --limit acme_vm_bbartling
+```
+
+See also [Updating the stack](../quick-start/updating).
+
+
 # LAN hardening
 
 # LAN hardening
@@ -1349,6 +1392,19 @@ See operator guide: [BACnet write safety](../bacnet/write-safety).
 Never enable blanket write access for agent or integrator automation without human approval per site.
 
 
+# Operations
+
+# Operations
+
+Runbooks for live edge hosts after the initial deploy.
+
+| Page | When to use |
+|------|-------------|
+| [Live site update (SSH)](live_site_update) | Minimal `~/open-fdd/` folder on a VM — pull new GHCR tags, preserve `workspace/` |
+
+For first-time deploy from a control machine, see [Quick Start — Docker](../quick-start/docker).
+
+
 # Security
 
 # Security
@@ -1422,7 +1478,7 @@ REST API served by **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Produ
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/playground/lint` | AST lint Python rule |
-| POST | `/api/playground/test-rule` | Run `evaluate()` on feather window |
+| POST | `/api/playground/test-rule` | Run `apply_faults_arrow()` on feather PyArrow window |
 | POST | `/api/playground/run-script` | Execute script mode |
 | GET | `/api/playground/sample-frame` | Sample DataFrame for editor |
 
@@ -1636,7 +1692,7 @@ Full schema for YAML engine rules: `docs/config_schema.json`.
 | Term | Definition |
 |------|------------|
 | **Operator Bridge** | FastAPI service serving API + static dashboard |
-| **Rule Lab** | UI and APIs for Python `evaluate()` rules |
+| **Rule Lab** | UI and APIs for Arrow `apply_faults_arrow()` rules |
 | **Feather store** | On-disk columnar historian under `workspace/data/feather_store/` |
 | **fdd_input** | Brick tag linking a point to a rule binding role |
 | **Check-engine** | Building-level GREEN/YELLOW/RED fault summary |
@@ -1659,21 +1715,36 @@ Reference material for integrators and library users.
 | [Glossary](glossary) | Terms |
 
 
-# Arrow-native FDD runtime
+# Edge Docker deploy
 
-# Arrow-native FDD runtime
+# Edge Docker deploy
 
-Open-FDD 3.x runs rule-based HVAC fault detection on an **Arrow-native columnar execution engine** by default.
+Open-FDD edge hosts run three GHCR images (bridge, commission, mcp-rag) with `workspace/` bind-mounted for site state.
+
+| Phase | Doc |
+|-------|-----|
+| **First deploy** (Ansible or bootstrap) | [Quick Start — Run with Docker images](quick-start/docker) |
+| **Live site update** (SSH, minimal folder, no `git pull`) | [Operations — Live site update](ops/live_site_update) |
+| **Image-only upgrade** (control machine + inventory) | [Quick Start — Updating the stack](quick-start/updating) |
+| **Full upgrade** (UI static bundle + images) | `scripts/upgrade_edge_full.sh` — see [Live site update §3](ops/live_site_update#3-update-the-react-ui-bundle-required-for-dashboard-changes) |
+
+The live VM layout is only `docker/`, `docker-compose.yml`, and `workspace/` — not a full git checkout. Use the [live site update](ops/live_site_update) runbook for tag bumps on that layout.
+
+
+# Arrow-native runtime
+
+# Arrow-native runtime
+
+Open-FDD 3.0 executes Rule Lab rules on **PyArrow tables** end to end.
 
 ```
-Feather / Arrow IPC
-  → Arrow Table / RecordBatch stream
+feather_store.read_site_table()
+  → fdd_runner / playground.run_arrow_table()
   → apply_faults_arrow(table, cfg, context)
-  → Boolean fault mask
-  → summaries / events (JSON for UI)
+  → pyarrow.compute masks
 ```
 
-## Rule contract
+## Authoring contract
 
 ```python
 import pyarrow.compute as pc
@@ -1682,34 +1753,17 @@ def apply_faults_arrow(table, cfg, context=None):
     return pc.greater(table["zone_temp"], cfg["max_zone_temp"])
 ```
 
-Rules return a `pyarrow.BooleanArray` or `ChunkedArray` with the same row count as the input table.
+Cookbook helpers: `open_fdd.arrow_runtime.cookbook` (flatline, spread, OOB, after-hours fan).
 
-## Legacy row rules
+Script-mode analytics rules receive `table` (PyArrow) and `cfg` in the sandbox — not pandas DataFrames.
 
-Old `evaluate(row, cfg, …)` rules are supported only when:
+## Package layout
 
-- the rule sets `"backend": "legacy_row"`, or
-- `OPEN_FDD_FDD_BACKEND=legacy_row` is set.
-
-The Rule Lab shows a migration message for legacy rules.
-
-## Threading
-
-| Variable | Purpose |
-|----------|---------|
-| `OPEN_FDD_ARROW_THREADS` | Arrow CPU thread pool |
-| `OPEN_FDD_ARROW_IO_THREADS` | Arrow I/O threads (when supported) |
-| `OPEN_FDD_ARROW_BATCH_ROWS` | RecordBatch chunk size (default 50000) |
-| `OPEN_FDD_ARROW_PARALLEL_RULES` | Parallel rule batches |
-| `OPEN_FDD_ARROW_PARALLEL_SITES` | Parallel site jobs |
-
-Large jobs use Arrow projection/filtering, chunked batches, and job-level parallelism across sites/rules. Not every scalar kernel uses every core; throughput comes from batch scans plus parallel orchestration.
-
-## Benchmarks
-
-```bash
-python benchmarks/bench_arrow_native.py --rows 10000 100000 --repeats 3 --output .bench/arrow_native.json
-python benchmarks/bench_arrow_end_to_end.py --sites 1 --rows-per-site 100000 --repeats 2 --output .bench/arrow_end_to_end.json
-```
+| Module | Role |
+|--------|------|
+| `open_fdd.arrow_runtime.backend` | Execute rule code, batch chunks |
+| `open_fdd.arrow_runtime.cookbook` | Shared fault masks |
+| `open_fdd.arrow_runtime.windows` | Rolling min/max, consecutive-true |
+| `open_fdd.playground.arrow_templates` | Rule Lab starter templates |
 
 
