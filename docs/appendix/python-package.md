@@ -9,16 +9,18 @@ nav_order: 2
 Install from PyPI:
 
 ```bash
-pip install "open-fdd[engine]"   # YAML RuleRunner + pandas
-pip install open-fdd             # playground sandbox only
+pip install open-fdd                  # Arrow runtime + playground (default 3.0+)
+pip install "open-fdd[engine]"        # + YAML RuleRunner (pandas)
+pip install "open-fdd[legacy]"        # alias for pandas-backed legacy helpers
 ```
 
 ## Modules
 
 | Module | Purpose |
 |--------|---------|
-| `open_fdd.engine` | YAML `RuleRunner` on pandas DataFrames |
-| `open_fdd.playground` | `evaluate()` sandbox (Rule Lab parity, AWS lambda) |
+| `open_fdd.arrow_runtime` | **Default** — `apply_faults_arrow` on PyArrow Tables |
+| `open_fdd.playground` | Arrow templates + legacy `evaluate()` sandbox |
+| `open_fdd.engine` | Optional YAML `RuleRunner` on pandas DataFrames |
 | `open_fdd.reports` | Optional summary/plot helpers |
 
 ## When to use package-only

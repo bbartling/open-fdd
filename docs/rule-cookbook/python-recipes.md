@@ -1,10 +1,12 @@
 ---
-title: Python recipes
+title: Python recipes (legacy row)
 parent: Rule Cookbook
-nav_order: 1
+nav_order: 2
 ---
 
-# Python recipes
+# Python recipes (legacy row)
+
+> **Open-FDD 3.0 default:** use [Arrow recipes](arrow-recipes) with `apply_faults_arrow`. These `evaluate(row, …)` patterns apply only when the rule is saved with **`backend: legacy_row`**.
 
 Each recipe: **use case → inputs → code → behavior → tuning → false positives**.
 

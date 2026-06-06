@@ -1,4 +1,8 @@
-"""Lint, compile, and sweep ``evaluate(row, cfg, …)`` rules — edge, PyPI, and AWS lambda parity."""
+"""Legacy row-rule sandbox: lint, compile, and sweep ``evaluate(row, cfg, …)``.
+
+Open-FDD 3.0 default FDD path is Arrow-native (`open_fdd.arrow_runtime`). This module
+remains for ``backend: legacy_row`` rules, tests, and AWS lambda parity.
+"""
 
 from __future__ import annotations
 

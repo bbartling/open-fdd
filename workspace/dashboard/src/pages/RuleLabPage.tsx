@@ -16,14 +16,21 @@ import {
   type LintIssue,
 } from "../lib/rule-lab-console";
 
-const DEFAULT_RULE = `def evaluate(row, cfg, prev_row=None, rows=None):
-    """Flag when supply air temp exceeds cfg['high']. Use row keys from Data Model fdd_input."""
+const DEFAULT_RULE = `import pyarrow.compute as pc
+
+def apply_faults_arrow(table, cfg, context=None):
+    """Flag when supply air temp exceeds cfg['high']. Column defaults to SAT from feather historian."""
+    col = str(cfg.get("column", "SAT"))
     high = float(cfg.get("high", 75.0))
-    sat = row.get("SAT") or row.get("Supply_Air_Temperature_Sensor") or row.get("temp")
-    if sat is None:
-        return False
-    return float(sat) > high
+    return pc.greater(table[col], high)
 `;
+
+function ruleBackend(source: string, ruleMode: Mode): "arrow" | "legacy_row" | "script" {
+  if (ruleMode === "script") return "script";
+  if (source.includes("apply_faults_arrow")) return "arrow";
+  if (source.includes("def evaluate")) return "legacy_row";
+  return "arrow";
+}
 
 const DEFAULT_SCRIPT = `# df script — set out = {"df": df, "events": [...]}
 df = df.copy()
@@ -66,7 +73,7 @@ export default function RuleLabPage() {
   const [mode, setMode] = useState<Mode>("rule");
   const [code, setCode] = useState(DEFAULT_RULE);
   const [sourcePath, setSourcePath] = useState("");
-  const [cfg, setCfg] = useState<Record<string, string>>({ high: "75" });
+  const [cfg, setCfg] = useState<Record<string, string>>({ high: "75", column: "SAT" });
   const [consoleText, setConsoleText] = useState("");
   const [busy, setBusy] = useState(false);
   const [lintBusy, setLintBusy] = useState(false);
@@ -263,6 +270,10 @@ export default function RuleLabPage() {
           flagged: number;
           data_source?: string;
           value_column?: string;
+          backend?: string;
+          duration_ms?: number;
+          fully_arrow_native?: boolean;
+          migration_message?: string;
           events: { type: string; text?: string }[];
           trace?: string;
           error?: string;
@@ -282,6 +293,8 @@ export default function RuleLabPage() {
         setConsoleText(
           [
             `>>> Quick test (first bound point) rows=${res.rows} flagged=${res.flagged} · ${res.data_source}`,
+            res.backend ? `backend: ${res.backend}${res.duration_ms != null ? ` · ${res.duration_ms} ms` : ""}` : "",
+            res.migration_message || "",
             res.value_column ? `column: ${res.value_column}` : "",
             formatRuleTestEvents(res.events || [], { maxLines: 28 }),
             res.trace || res.error || "",
@@ -329,10 +342,12 @@ export default function RuleLabPage() {
           bindingsSource = saved.find((r) => r.id === activeRuleId)?.bindings;
         }
       }
+      const backend = ruleBackend(code, mode);
       const payload = {
         id: activeRuleId || undefined,
         name: ruleName,
         mode,
+        backend: backend === "script" ? "" : backend,
         code,
         config: configFromRecord(cfg),
         severity,
@@ -467,8 +482,10 @@ export default function RuleLabPage() {
         title="Rule Lab"
         subtitle={
           <>
-            Author and lint <code>.py</code> rules. Fault codes are inferred via local Ollama + BRICK-scoped
-            catalog on save/lint. Pin rules to points on <a href="/fdd-assignments">FDD assignments</a>.
+            Arrow-native rules use <code>apply_faults_arrow(table, cfg, context)</code> over PyArrow columns
+            (default in 3.0). Legacy <code>evaluate(row, …)</code> requires{" "}
+            <code>backend: legacy_row</code> on save. Pin rules on{" "}
+            <a href="/fdd-assignments">FDD assignments</a>.
           </>
         }
       />

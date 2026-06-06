@@ -6,22 +6,30 @@ has_children: true
 
 # Rule Cookbook
 
-Practical patterns for **Python Rule Lab** (`evaluate(row, cfg, …)`) and optional **YAML** engine rules (`pip install "open-fdd[engine]"`).
+Practical patterns for **Arrow-native Rule Lab** (`apply_faults_arrow`) and optional **YAML** engine rules (`pip install "open-fdd[engine]"`).
 
 | Page | Audience |
 |------|----------|
-| [Python recipes](python-recipes) | Operator Bridge Rule Lab |
+| [Arrow recipes](arrow-recipes) | **Default** — Operator Bridge Rule Lab (3.0+) |
+| [Python recipes](python-recipes) | Legacy row `evaluate()` rules (`backend: legacy_row`) |
 | [YAML recipes](yaml-recipes) | Offline pandas / PyPI engine |
 | [Windowing and debugging](windowing-debugging) | Tuning and false positives |
 
-## Rule anatomy (Python)
+## Rule anatomy (Arrow — default)
 
 ```python
-def evaluate(row, cfg, prev_row=None, rows=None):
-    # row: current sample (temp, ts_ms, rolling avg fields, …)
-    # cfg: thresholds from rule config in UI
-    # rows: full history in test window — use for lookbacks
-    return False  # or True, or (True, window_rows)
+import pyarrow.compute as pc
+
+def apply_faults_arrow(table, cfg, context=None):
+    return pc.greater(table["zone_temp"], cfg["max_zone_temp"])
 ```
 
-Import helpers from `open_fdd.playground.cookbook` in production rules, or use site `bench_fdd_common` shims where present.
+- `table`: PyArrow Table from feather historian (BACnet columns + `timestamp`)
+- `cfg`: thresholds from Rule Lab config panel
+- Returns a boolean mask aligned to table rows
+
+Templates: `GET /api/playground/arrow-templates` or see [Arrow-native runtime](../developer/arrow-native-runtime.md).
+
+## Legacy row rules
+
+Per-row `evaluate(row, cfg, …)` is **not** the default in 3.0. Use only for migrated rules with `backend: legacy_row`. See [Python recipes](python-recipes).

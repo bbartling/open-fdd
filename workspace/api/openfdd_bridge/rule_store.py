@@ -1,8 +1,8 @@
 """Durable store for saved Rule Lab Python rules (``data/rules_store.json``).
 
-A saved rule is a Python ``evaluate()`` rule or a DataFrame script that was
-validated in the browser Rule Lab and persisted so the scheduled FDD runner can
-apply it across every BRICK-modeled site.
+Rules default to the Arrow backend (``apply_faults_arrow``). Legacy per-row
+``evaluate()`` rules are stored with ``backend: legacy_row`` when detected or
+explicitly set in Rule Lab.
 """
 
 from __future__ import annotations
@@ -228,7 +228,14 @@ def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict
     fault_codes = _normalize_fault_codes(entry)
     backend = str(entry.get("backend") or "").strip()
     if backend not in {"arrow", "legacy_row"}:
-        backend = ""
+        try:
+            from open_fdd.arrow_runtime.rules import detect_rule_backend
+
+            backend = detect_rule_backend(code, {"mode": mode})
+            if backend == "script":
+                backend = ""
+        except Exception:
+            backend = ""
     return {
         "id": str(entry.get("id") or uuid4()),
         "name": str(entry.get("name") or "Untitled rule")[:200],
