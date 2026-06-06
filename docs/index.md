@@ -27,7 +27,7 @@ Open-FDD is an open-source platform for **fault detection**, **BACnet integratio
 | **Local historian** | Feather-based telemetry store on the edge host |
 | **Brick / RDF model** | Equipment and point semantics for bindings and analytics |
 | **Docker images** | Published on GHCR — pull and run without building from source |
-| **Python package** | `pip install open-fdd` for offline CSV/notebook and YAML engine use |
+| **Python package** | `pip install open-fdd` for offline Arrow rule lint/test (`arrow_runtime`) |
 
 ## Two paths
 
@@ -49,7 +49,7 @@ Clone the repo, create `workspace/auth.env.local`, build images, run tests, subm
 |---------|----------|
 | **GHCR images** `ghcr.io/bbartling/openfdd-*` | Production or trial edge deploy |
 | **This repository** | Custom builds, BACnet commissioning, Rule Lab development |
-| **PyPI** [`open-fdd`](https://pypi.org/project/open-fdd/) | Library-only pandas/YAML workflows (no full UI) |
+| **PyPI** [`open-fdd`](https://pypi.org/project/open-fdd/) | Arrow runtime + playground (no full UI); optional `[ml]` for graph experiments |
 
 ## License
 

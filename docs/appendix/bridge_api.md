@@ -176,9 +176,9 @@ Optional host Ollama for building insight — not required for core FDD. Configu
 
 ---
 
-## PyPI engine API (separate)
+## PyPI package (separate)
 
-Library-only HTTP is **not** bundled. See [Python package](python-package) for `RuleRunner` and `open_fdd.reports`.
+Library-only HTTP is **not** bundled. See [Python package](python-package) for `open_fdd.arrow_runtime` (Arrow rules offline).
 
 ---
 

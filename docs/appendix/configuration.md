@@ -29,4 +29,4 @@ nav_order: 3
 | `OPENFDD_IMAGE_TAG` | GHCR tag for Ansible deploy |
 | `openfdd_docker_pull_from_ghcr` | Ansible host_var |
 
-Full schema for YAML engine rules: `docs/config_schema.json`.
+Rule Lab Python rules use `rules_store.json` + `workspace/data/rules_py/*.py`. Legacy YAML schema (`docs/config_schema.json`) is archived — not used by Operator Bridge 3.0.1+.

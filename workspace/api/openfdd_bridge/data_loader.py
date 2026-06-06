@@ -134,7 +134,7 @@ def enrich_rows_with_column_map(rows: list[dict[str, Any]], column_map: dict[str
 
 
 def column_map_for_rule(model: dict, site_id: str, rule: dict) -> dict[str, str]:
-    from open_fdd.engine.column_map_from_model import build_column_map_from_model_points
+    from open_fdd.arrow_runtime.column_map_from_model import build_column_map_from_model_points
 
     base = build_column_map_from_model_points(model, site_id)
     extra = rule.get("column_map") if isinstance(rule.get("column_map"), dict) else {}

@@ -1,11 +1,10 @@
 """
-open-fdd — Fault Detection and Diagnostics for HVAC systems.
+open-fdd — Arrow-native HVAC fault detection and diagnostics.
 
-Config-driven, pandas-based. Define fault rules in YAML, run against DataFrames.
+PyArrow columnar rules via ``open_fdd.arrow_runtime`` and Rule Lab ``apply_faults_arrow``.
+Optional graph ML (sklearn / PyG) runs outside the rule sandbox — see GitHub issue #211.
 """
-
-from open_fdd.engine import RuleRunner
 
 __version__ = "3.0.1"
 
-__all__ = ["RuleRunner", "__version__"]
+__all__ = ["__version__"]

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Compile and smoke-sweep Acme expression rules via ``open_fdd.playground`` (PyPI parity)."""
+"""Compile and smoke-run Acme Arrow rules via ``open_fdd.arrow_runtime`` (PyPI parity)."""
 
 from __future__ import annotations
 
 import os
 import sys
 from pathlib import Path
+
+import pyarrow as pa
 
 REPO = Path(__file__).resolve().parents[1]
 RULES = REPO / "workspace" / "data" / "rules_py"
@@ -26,25 +28,27 @@ def _assert_wheel_import() -> None:
 def main() -> int:
     if os.environ.get("OFDD_WHEEL_SMOKE", "").strip().lower() in {"1", "true", "yes"}:
         _assert_wheel_import()
-    from open_fdd.playground.sandbox import compile_evaluate, lint_python, sweep_rule
+    from open_fdd.arrow_runtime import run_arrow_rule
+    from open_fdd.playground.sandbox import lint_python
 
     acme_files = sorted(RULES.glob("acme_*.py"))
     if not acme_files:
         print("no acme_*.py rules found", file=sys.stderr)
         return 1
 
-    rows = [
+    table = pa.table(
         {
-            "row": i,
-            "ts_ms": 1_700_000_000_000 + i * 60_000,
-            "ts": "2024-06-01 08:00:00",
-            "temp": 72.0,
-            "temp_rolling_avg": 72.0,
-            "value_kind": "temp",
-            "value_column": "test",
+            "ts": ["2024-06-01 08:00:00"] * 72,
+            "ts_ms": [1_700_000_000_000 + i * 60_000 for i in range(72)],
+            "temp": [72.0] * 72,
+            "temp_rolling_avg": [72.0] * 72,
+            "SAT": [72.0] * 72,
+            "RAT": [68.0] * 72,
+            "OAT": [55.0] * 72,
+            "value_kind": ["temp"] * 72,
+            "value_column": ["test"] * 72,
         }
-        for i in range(72)
-    ]
+    )
     cfg = {
         "bounds_low": 65,
         "bounds_high": 80,
@@ -55,14 +59,14 @@ def main() -> int:
     failed = 0
     for path in acme_files:
         code = path.read_text(encoding="utf-8")
-        lint = lint_python(code, require_evaluate=True, strict_imports=True)
+        lint = lint_python(code, require_evaluate=False, strict_imports=True)
         if not lint["ok"]:
-            only_missing_eval = all(
-                i.get("severity") == "error" and "evaluate" in str(i.get("message", ""))
+            only_no_arrow = all(
+                i.get("severity") == "error" and "apply_faults_arrow" in str(i.get("message", ""))
                 for i in lint.get("issues", [])
             )
-            if only_missing_eval and lint.get("issues"):
-                print(f"SKIP {path.name} (dataframe script, no evaluate)")
+            if only_no_arrow and lint.get("issues"):
+                print(f"SKIP {path.name} (script mode, no apply_faults_arrow)")
                 continue
             print(f"FAIL {path.name}: lint errors", file=sys.stderr)
             for issue in lint.get("issues", []):
@@ -71,8 +75,9 @@ def main() -> int:
             failed += 1
             continue
         try:
-            compile_evaluate(code)
-            sweep_rule(code, cfg, rows[-10:], capture_print=False)
+            result = run_arrow_rule(code, table, cfg, rule_id=path.stem)
+            if result.errors:
+                raise RuntimeError("; ".join(result.errors))
             print(f"OK  {path.name}")
         except Exception as exc:
             print(f"FAIL {path.name}: {exc}", file=sys.stderr)

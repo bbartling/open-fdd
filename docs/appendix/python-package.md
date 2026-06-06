@@ -9,26 +9,25 @@ nav_order: 2
 Install from PyPI:
 
 ```bash
-pip install open-fdd                  # Arrow runtime + playground (default 3.0+)
-pip install "open-fdd[engine]"        # + YAML RuleRunner (pandas)
-pip install "open-fdd[legacy]"        # alias for pandas-backed legacy helpers
+pip install open-fdd                  # Arrow runtime + playground (default 3.0.1+)
+pip install "open-fdd[ml]"            # optional numpy/sklearn for offline graph ML experiments
 ```
 
 ## Modules
 
 | Module | Purpose |
 |--------|---------|
-| `open_fdd.arrow_runtime` | **Default** — `apply_faults_arrow` on PyArrow Tables |
-| `open_fdd.playground` | Arrow templates + legacy `evaluate()` sandbox |
-| `open_fdd.engine` | Optional YAML `RuleRunner` on pandas DataFrames |
-| `open_fdd.reports` | Optional summary/plot helpers |
+| `open_fdd.arrow_runtime` | **Default** — `apply_faults_arrow` on PyArrow Tables, cookbook masks, column maps |
+| `open_fdd.playground` | Rule Lab lint/compile helpers for Arrow rules |
+
+Retired in 3.0.1+: `open_fdd.engine` (YAML/pandas `RuleRunner`) is **not** shipped on PyPI. Use Operator Bridge Rule Lab or import rules from `workspace/data/rules_py/`.
 
 ## When to use package-only
 
 | Scenario | Use |
 |----------|-----|
-| Notebook on CSV export | `engine` + YAML rules |
-| Cloud lambda (no UI) | `playground.rule_lab` |
+| Lint/test Arrow rules offline | `open_fdd.arrow_runtime` + `open_fdd.playground` |
+| Graph ML experiments (Layer B) | `open-fdd[ml]` in `experiments/` (see issue #211) |
 | Full building operator stack | **Docker** Operator Bridge |
 
 ## Versioning
@@ -40,15 +39,22 @@ import open_fdd
 print(open_fdd.__version__)
 ```
 
-## Offline example
+## Offline Arrow example
 
 ```python
-from open_fdd.engine import RuleRunner
-import pandas as pd
+import pyarrow as pa
+import pyarrow.compute as pc
+from open_fdd.arrow_runtime import run_arrow_rule
 
-df = pd.read_csv("ahu_telemetry.csv")
-runner = RuleRunner.from_yaml("rules/high_sat.yaml")
-result = runner.run(df)
+code = '''
+import pyarrow.compute as pc
+
+def apply_faults_arrow(table, cfg, context=None):
+    return pc.greater(table["SAT"], float(cfg["high"]))
+'''
+table = pa.table({"SAT": [70.0, 90.0, 88.0]})
+result = run_arrow_rule(code, table, {"high": 85})
+print(result.flagged_count)
 ```
 
-API surface: `open_fdd/engine` docstrings and `docs/config_schema.json` for YAML rule shapes.
+API surface: `open_fdd/arrow_runtime` docstrings and [Arrow recipes](../rule-cookbook/arrow-recipes).
