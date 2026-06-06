@@ -234,6 +234,8 @@ def build_zone_energy_research(
             }
         )
 
+    fan_schedule = zone_snapshot.get("fan_schedule") if isinstance(zone_snapshot.get("fan_schedule"), dict) else {}
+
     llm_tasks = _llm_research_tasks(
         site_median_recovery=site_median_recovery,
         site_flags=site_flags,
@@ -243,6 +245,7 @@ def build_zone_energy_research(
         opportunities=opportunities,
         near_zero_threshold=near_zero,
         min_setback=min_setback,
+        fan_schedule=fan_schedule,
     )
 
     return {
@@ -264,6 +267,7 @@ def build_zone_energy_research(
         "zones": per_zone[:24],
         "opportunities": opportunities,
         "llm_research_tasks": llm_tasks,
+        "fan_schedule": fan_schedule,
         "interpretation_guide": (
             "Use site_flags and per-zone flags with device_poll_health. "
             "Near-zero recovery with minimal setback usually means zones stay near occupied temperature overnight — "
@@ -283,8 +287,10 @@ def _llm_research_tasks(
     opportunities: list[dict[str, str]],
     near_zero_threshold: float,
     min_setback: float,
+    fan_schedule: dict[str, Any] | None = None,
 ) -> list[str]:
     tasks: list[str] = []
+    fan_schedule = fan_schedule or {}
     if site_median_recovery is not None and site_median_recovery < near_zero_threshold:
         tasks.append(
             f"Recovery rate ~{site_median_recovery:.2f}°F/min is below {near_zero_threshold}°F/min: "
@@ -305,6 +311,20 @@ def _llm_research_tasks(
             "Prioritize opportunities[] topics (energy_setback, sensor_integrity, overnight_load) "
             "in plain English with cautious wording (verify on site)."
         )
+    if fan_schedule:
+        wd = fan_schedule.get("weekday") or {}
+        we = fan_schedule.get("weekend") or {}
+        tasks.append(
+            "Report HVAC supply-fan on/off patterns from fan_schedule: typical weekday first/last fan-on "
+            f"hours (weekday {wd.get('typical_first_fan_on_hour')}–{wd.get('typical_last_fan_on_hour')} local), "
+            "contrast M–F vs weekend run minutes, and overnight cycling minutes per night when observed."
+        )
+        if fan_schedule.get("overnight_avg_fan_on_minutes_weeknight") is not None:
+            tasks.append(
+                f"Overnight fan-on averages ~{fan_schedule.get('overnight_avg_fan_on_minutes_weeknight')} min "
+                f"on weeknights vs ~{fan_schedule.get('overnight_avg_fan_on_minutes_weekend')} min on weekends — "
+                "comment on night setback / short cycling if fan runs while zones should be unoccupied."
+            )
     if not tasks:
         tasks.append(
             "Summarize zone comfort vs efficiency: setback spread, recovery, and any offline zone hardware."
@@ -322,6 +342,7 @@ def slim_research_for_llm(research: dict[str, Any]) -> dict[str, Any]:
         "minimal_setback_zones": (research.get("minimal_setback_zones") or [])[:6],
         "suspicious_sensors": (research.get("suspicious_sensors") or [])[:6],
         "opportunities": (research.get("opportunities") or [])[:4],
-        "llm_research_tasks": (research.get("llm_research_tasks") or [])[:5],
+        "llm_research_tasks": (research.get("llm_research_tasks") or [])[:6],
+        "fan_schedule": research.get("fan_schedule"),
         "interpretation_guide": str(research.get("interpretation_guide") or "")[:500],
     }

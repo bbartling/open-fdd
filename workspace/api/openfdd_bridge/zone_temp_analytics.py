@@ -22,7 +22,7 @@ from .operational_analytics import (
     trim_frame_to_lookback,
 )
 from .site_defaults import ensure_default_site
-from .timeseries_api import plot_column_name
+from .timeseries_api import historian_column_candidates, plot_column_name, resolve_historian_column
 from .ttl_service import TtlService
 
 _CACHE: dict[str, Any] = {"generated_at": 0.0, "next_refresh_at": 0.0, "payload": {}}
@@ -30,6 +30,15 @@ _CACHE: dict[str, Any] = {"generated_at": 0.0, "next_refresh_at": 0.0, "payload"
 ZONE_BRICK_MARKERS = ("zone_air_temperature", "zone temperature")
 FAN_BRICK_MARKERS = ("supply_fan", "fan_speed", "fan_command", "fan_status", "fan_start")
 DEFAULT_INTERVAL_S = 3600
+_GENERIC_ZONE_POINT_NAMES = frozenset(
+    {
+        "space temperature local",
+        "zone temperature",
+        "zone air temperature",
+        "space temperature",
+        "zone temp",
+    }
+)
 
 
 def refresh_interval_s() -> int:
@@ -128,12 +137,25 @@ def _feeds_map(model: dict[str, Any], site_id: str) -> dict[str, list[str]]:
     return children
 
 
+def zone_display_label(pt: dict[str, Any], eq: dict[str, Any]) -> str:
+    """Operator-facing label — prefer VAV/equipment name over generic BACnet object text."""
+    eq_name = str(eq.get("name") or pt.get("equipment_id") or "Zone").strip()
+    pt_name = str(pt.get("name") or pt.get("description") or "").strip()
+    tag = str(pt.get("brick_tag") or "").strip()
+    if not pt_name or pt_name.lower() in _GENERIC_ZONE_POINT_NAMES:
+        return f"{eq_name} ({tag})" if tag else eq_name
+    return f"{eq_name} — {pt_name}"
+
+
 def _zone_points_for_equipment(
     model: dict[str, Any],
     site_id: str,
     equipment_ids: set[str] | None = None,
+    *,
+    available_columns: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     eq_index = _equipment_index(model, site_id)
+    avail = available_columns or set()
     rows: list[dict[str, Any]] = []
     for pt in model.get("points") or []:
         if not isinstance(pt, dict) or str(pt.get("site_id") or "") not in {"", site_id}:
@@ -143,7 +165,7 @@ def _zone_points_for_equipment(
         eid = str(pt.get("equipment_id") or "").strip()
         if equipment_ids is not None and eid not in equipment_ids:
             continue
-        col = plot_column_name(pt)
+        col = resolve_historian_column(pt, avail) if avail else plot_column_name(pt)
         if not col:
             continue
         eq = eq_index.get(eid) or {}
@@ -153,7 +175,7 @@ def _zone_points_for_equipment(
                 "equipment_id": eid,
                 "equipment_name": str(eq.get("name") or eid),
                 "column": col,
-                "label": str(pt.get("name") or pt.get("description") or col),
+                "label": zone_display_label(pt, eq),
             }
         )
     return rows
@@ -190,10 +212,15 @@ def _fan_column_on_equipment(
     return None
 
 
-def discover_topology(model: dict[str, Any], site_id: str) -> dict[str, Any]:
+def discover_topology(
+    model: dict[str, Any],
+    site_id: str,
+    *,
+    available_columns: set[str] | None = None,
+) -> dict[str, Any]:
     """Resolve zone sensors and optional AHU→zone groupings from BRICK JSON + feeds."""
     eq_index = _equipment_index(model, site_id)
-    all_zones = _zone_points_for_equipment(model, site_id, None)
+    all_zones = _zone_points_for_equipment(model, site_id, None, available_columns=available_columns)
     feeds = _feeds_map(model, site_id)
     ahu_systems: list[dict[str, Any]] = []
     assigned_zone_cols: set[str] = set()
@@ -204,9 +231,9 @@ def discover_topology(model: dict[str, Any], site_id: str) -> dict[str, Any]:
         child_ids = set(feeds.get(ahu_id) or [])
         vav_ids = {cid for cid in child_ids if cid in eq_index and _is_vav(eq_index[cid])}
         zone_scope = vav_ids or child_ids or {ahu_id}
-        zones = _zone_points_for_equipment(model, site_id, zone_scope)
+        zones = _zone_points_for_equipment(model, site_id, zone_scope, available_columns=available_columns)
         if not zones:
-            zones = _zone_points_for_equipment(model, site_id, {ahu_id})
+            zones = _zone_points_for_equipment(model, site_id, {ahu_id}, available_columns=available_columns)
         if not zones:
             continue
         for z in zones:
@@ -299,6 +326,128 @@ def _recovery_rates(
     return {c: sum(v) / len(v) for c, v in rates.items() if v}
 
 
+def _fan_on_minutes_by_period(
+    df: pd.DataFrame,
+    fan_col: str,
+    *,
+    site_tz: str,
+) -> dict[str, Any]:
+    """Typical HVAC on/off pattern: weekday vs weekend and overnight cycling minutes."""
+    if fan_col not in df.columns or "timestamp" not in df.columns:
+        return {}
+    work = df.loc[:, ["timestamp", fan_col]].copy()
+    work["timestamp"] = pd.to_datetime(work["timestamp"], utc=True, errors="coerce")
+    work = work.dropna(subset=["timestamp"]).sort_values("timestamp")
+    if len(work) < 12:
+        return {}
+    fan_on = _fan_on_series(_column_series(work, fan_col))
+    work["fan_on"] = fan_on
+    local = work["timestamp"].dt.tz_convert(site_tz)
+    work["weekday"] = local.dt.weekday
+    work["hour"] = local.dt.hour
+    work["date"] = local.dt.date
+    if len(work) < 2:
+        return {}
+    deltas = work["timestamp"].diff().dt.total_seconds().fillna(0) / 60.0
+    work["minutes"] = deltas.clip(lower=0)
+
+    occ_start = _env_int("OFDD_OCCUPIED_START_HOUR", 8)
+    occ_end = _env_int("OFDD_OCCUPIED_END_HOUR", 17)
+    overnight = (work["hour"] < occ_start) | (work["hour"] >= occ_end)
+
+    def _summarize(mask: pd.Series) -> dict[str, Any]:
+        seg = work.loc[mask]
+        if seg.empty:
+            return {}
+        on_min = float(seg.loc[seg["fan_on"], "minutes"].sum())
+        total_min = float(seg["minutes"].sum()) or 1.0
+        starts = int((seg["fan_on"] & ~seg["fan_on"].shift(1, fill_value=False)).sum())
+        first_on = seg.loc[seg["fan_on"], "hour"]
+        last_on = seg.loc[seg["fan_on"], "hour"]
+        return {
+            "fan_on_minutes": round(on_min, 1),
+            "fan_on_pct": round(100.0 * on_min / total_min, 1),
+            "fan_start_events": starts,
+            "typical_first_fan_on_hour": int(first_on.median()) if not first_on.empty else None,
+            "typical_last_fan_on_hour": int(last_on.median()) if not last_on.empty else None,
+        }
+
+    weekday = work["weekday"] < 5
+    weekend = ~weekday
+    overnight_cycling: list[dict[str, Any]] = []
+    for date_val, day_df in work.groupby("date"):
+        wd = int(day_df["weekday"].iloc[0])
+        night = day_df.loc[overnight.reindex(day_df.index, fill_value=False)]
+        if night.empty:
+            continue
+        on_min = float(night.loc[night["fan_on"], "minutes"].sum())
+        if on_min < 1.0:
+            continue
+        starts = int((night["fan_on"] & ~night["fan_on"].shift(1, fill_value=False)).sum())
+        overnight_cycling.append(
+            {
+                "date": str(date_val),
+                "weekday": wd,
+                "overnight_fan_on_minutes": round(on_min, 1),
+                "overnight_fan_cycles": starts,
+            }
+        )
+    overnight_cycling.sort(key=lambda x: x["overnight_fan_on_minutes"], reverse=True)
+    weekday_nights = [x for x in overnight_cycling if x["weekday"] < 5]
+    weekend_nights = [x for x in overnight_cycling if x["weekday"] >= 5]
+    avg_weeknight = (
+        sum(x["overnight_fan_on_minutes"] for x in weekday_nights) / len(weekday_nights)
+        if weekday_nights
+        else None
+    )
+    avg_weekend_night = (
+        sum(x["overnight_fan_on_minutes"] for x in weekend_nights) / len(weekend_nights)
+        if weekend_nights
+        else None
+    )
+    return {
+        "fan_column": fan_col,
+        "occupied_hours_local": f"weekdays {occ_start:02d}:00–{occ_end:02d}:00",
+        "weekday": _summarize(weekday),
+        "weekend": _summarize(weekend),
+        "overnight_avg_fan_on_minutes_weeknight": round(avg_weeknight, 1) if avg_weeknight is not None else None,
+        "overnight_avg_fan_on_minutes_weekend": round(avg_weekend_night, 1) if avg_weekend_night is not None else None,
+        "worst_overnight_cycling_nights": overnight_cycling[:5],
+    }
+
+
+def _collapse_zones_by_column(zones: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One metrics row per historian column; preserve equipment names for operator labels."""
+    by_col: dict[str, dict[str, Any]] = {}
+    for z in zones:
+        col = str(z.get("column") or "")
+        if not col:
+            continue
+        name = str(z.get("equipment_name") or z.get("label") or "").strip()
+        if col not in by_col:
+            by_col[col] = {**z, "_equipment_names": [name] if name else []}
+            continue
+        entry = by_col[col]
+        if name and name not in entry["_equipment_names"]:
+            entry["_equipment_names"].append(name)
+    out: list[dict[str, Any]] = []
+    for col, z in by_col.items():
+        names: list[str] = z.pop("_equipment_names", [])
+        shared = len(names)
+        label = str(z.get("label") or col)
+        if shared > 1:
+            examples = ", ".join(names[:3])
+            extra = f" (+{shared - 3} more)" if shared > 3 else ""
+            z["label"] = f"{examples}{extra} — shared column {col}"
+            z["shared_column_zone_count"] = shared
+            z["example_equipment"] = names[:6]
+        elif names:
+            z["label"] = names[0]
+            z["equipment_name"] = names[0]
+        out.append(z)
+    return out
+
+
 def build_zone_dataframe(
     df: pd.DataFrame,
     topology: dict[str, Any],
@@ -359,9 +508,17 @@ def compute_zone_metrics(
                 **zp,
                 "day_avg_f": round(float(day.mean()), 2) if not day.empty else None,
                 "night_avg_f": round(float(night.mean()), 2) if not night.empty else None,
+                "setback_delta_f": round(float(day.mean() - night.mean()), 2)
+                if not day.empty and not night.empty
+                else None,
                 "samples": int(s.notna().sum()),
             }
         )
+
+    zones_out = _collapse_zones_by_column(zones_out)
+    unique_columns = {z.get("column") for z in zones_out if z.get("column")}
+    mapped_sensors = len(topology.get("zone_points") or [])
+    column_collision = mapped_sensors > len(unique_columns)
 
     systems_out: list[dict[str, Any]] = []
     struggling: list[dict[str, Any]] = []
@@ -386,6 +543,7 @@ def compute_zone_metrics(
                 "column": col,
                 "label": z.get("label") or col,
                 "equipment_id": z.get("equipment_id"),
+                "equipment_name": z.get("equipment_name"),
                 "day_avg_f": zrow.get("day_avg_f") if zrow else None,
                 "night_avg_f": zrow.get("night_avg_f") if zrow else None,
                 "recovery_f_per_min": round(rec, 4) if rec is not None else None,
@@ -416,8 +574,23 @@ def compute_zone_metrics(
             }
         )
 
-    worst_zones = _worst_zones(zones_out, systems_out, struggling)
-    sentence = _summary_sentence(zones_out, systems_out, struggling, topology.get("mode"))
+    fan_schedule: dict[str, Any] = {}
+    for sys in systems_out:
+        fan_col = sys.get("fan_column")
+        if fan_col and fan_col in available:
+            fan_schedule = _fan_on_minutes_by_period(df, str(fan_col), site_tz=tz_name)
+            if fan_schedule:
+                break
+
+    worst_zones = _worst_zones(zones_out, systems_out, struggling, column_collision=column_collision)
+    sentence = _summary_sentence(
+        zones_out,
+        systems_out,
+        struggling,
+        topology.get("mode"),
+        mapped_sensors=mapped_sensors,
+        column_collision=column_collision,
+    )
     preview = zone_df.tail(120).copy()
     for c in preview.columns:
         if c != "timestamp":
@@ -431,9 +604,27 @@ def compute_zone_metrics(
         "systems": systems_out,
         "struggling_zones": struggling,
         "worst_zones": worst_zones,
+        "site_aggregates": _site_aggregates(zones_out, mapped_sensors, len(unique_columns)),
+        "column_collision": column_collision,
+        "fan_schedule": fan_schedule,
         "dataframe_rows": len(zone_df),
         "dataframe_preview": preview.to_dict(orient="records"),
         "summary_sentence": sentence,
+    }
+
+
+def _site_aggregates(
+    zones_out: list[dict[str, Any]],
+    mapped_sensors: int,
+    unique_columns: int,
+) -> dict[str, Any]:
+    with_day = [z for z in zones_out if z.get("day_avg_f") is not None]
+    with_night = [z for z in zones_out if z.get("night_avg_f") is not None]
+    return {
+        "mapped_zone_sensors": mapped_sensors,
+        "unique_historian_columns": unique_columns,
+        "day_avg_f": round(sum(z["day_avg_f"] for z in with_day) / len(with_day), 2) if with_day else None,
+        "night_avg_f": round(sum(z["night_avg_f"] for z in with_night) / len(with_night), 2) if with_night else None,
     }
 
 
@@ -441,8 +632,10 @@ def _worst_zones(
     zones_out: list[dict[str, Any]],
     systems_out: list[dict[str, Any]],
     struggling: list[dict[str, Any]],
+    *,
+    column_collision: bool = False,
 ) -> list[dict[str, Any]]:
-    """Rank zones for operator/LLM focus (slow recovery, large day/night spread)."""
+    """Rank distinct historian columns for operator focus (slow recovery, weak setback)."""
     recovery_by_col: dict[str, float] = {}
     for sys in systems_out:
         for z in sys.get("zones") or []:
@@ -451,23 +644,60 @@ def _worst_zones(
             if col and rec is not None:
                 recovery_by_col[col] = float(rec)
     scored: list[tuple[float, dict[str, Any]]] = []
+    seen_cols: set[str] = set()
     for z in zones_out:
-        col = z.get("column")
+        col = str(z.get("column") or "")
+        if not col or col in seen_cols:
+            continue
+        seen_cols.add(col)
         score = 0.0
         day = z.get("day_avg_f")
         night = z.get("night_avg_f")
+        setback = z.get("setback_delta_f")
+        if setback is not None:
+            score += max(0.0, 1.5 - abs(float(setback)))
         if day is not None and night is not None:
-            score += abs(float(day) - float(night))
-        rec = recovery_by_col.get(col or "")
+            score += abs(float(day) - float(night)) * 0.5
+        rec = z.get("recovery_f_per_min")
+        if rec is None:
+            rec = recovery_by_col.get(col)
         if rec is not None and rec < 0.03:
             score += 5.0
         for s in struggling:
             if s.get("column") == col:
                 score += 10.0
-        if score > 0:
-            scored.append((score, {**z, "recovery_f_per_min": rec}))
+        if score <= 0 and not column_collision:
+            continue
+        row = {**z, "recovery_f_per_min": rec, "worst_reason": _worst_reason(z, rec, setback)}
+        scored.append((score, row))
     scored.sort(key=lambda x: x[0], reverse=True)
-    return [item for _, item in scored[:8]]
+    out = [item for _, item in scored[:6]]
+    if column_collision and len(out) <= 1 and zones_out:
+        z0 = zones_out[0]
+        shared = int(z0.get("shared_column_zone_count") or 0)
+        if shared > 1:
+            out = [
+                {
+                    **z0,
+                    "label": (
+                        f"{shared} zone sensors share historian column {z0.get('column')} "
+                        f"(site avg night {z0.get('night_avg_f')}°F / day {z0.get('day_avg_f')}°F)"
+                    ),
+                    "worst_reason": "shared_historian_column",
+                }
+            ]
+    return out
+
+
+def _worst_reason(z: dict[str, Any], rec: float | None, setback: float | None) -> str:
+    reasons: list[str] = []
+    if setback is not None and abs(float(setback)) < 1.5:
+        reasons.append("minimal_setback")
+    if rec is not None and float(rec) < 0.03:
+        reasons.append("slow_recovery")
+    if z.get("shared_column_zone_count"):
+        reasons.append("shared_column")
+    return ",".join(reasons) or "focus_zone"
 
 
 def _summary_sentence(
@@ -475,29 +705,38 @@ def _summary_sentence(
     systems: list[dict[str, Any]],
     struggling: list[dict[str, Any]],
     mode: str | None,
+    *,
+    mapped_sensors: int = 0,
+    column_collision: bool = False,
 ) -> str:
     if not zones:
         return "No BRICK zone temperature sensors in the model."
     with_day = [z for z in zones if z.get("day_avg_f") is not None]
     with_night = [z for z in zones if z.get("night_avg_f") is not None]
     parts: list[str] = []
+    sensor_n = mapped_sensors or len(zones)
     if with_night:
         night_avg = sum(z["night_avg_f"] for z in with_night) / len(with_night)
         parts.append(f"overnight zone temps average {night_avg:.1f}°F")
     if with_day:
         day_avg = sum(z["day_avg_f"] for z in with_day) / len(with_day)
-        parts.append(f"occupied daytime average {day_avg:.1f}°F across {len(with_day)} sensor(s)")
+        parts.append(f"occupied daytime average {day_avg:.1f}°F across {sensor_n} sensor(s)")
+    if column_collision:
+        parts.append(
+            f"historian uses {len(zones)} unique column(s) for {sensor_n} sensors — "
+            "per-VAV detail needs unique point columns (re-ingest after model column fix)"
+        )
     if systems and any(s.get("median_recovery_f_per_min") is not None for s in systems):
         medians = [s["median_recovery_f_per_min"] for s in systems if s.get("median_recovery_f_per_min") is not None]
         parts.append(f"typical warm-up rate ~{sum(medians)/len(medians):.2f}°F/min after fan start")
     if struggling:
-        labels = ", ".join(s["label"] for s in struggling[:3])
+        labels = ", ".join(str(s.get("label") or s.get("equipment_name") or "zone") for s in struggling[:3])
         extra = f" (+{len(struggling)-3} more)" if len(struggling) > 3 else ""
-        parts.append(f"slow zones under {struggling[0].get('ahu_name')}: {labels}{extra}")
+        parts.append(f"slow recovery vs {struggling[0].get('ahu_name')}: {labels}{extra}")
     elif mode == "sensors_only":
         parts.append("no AHU/feeds grouping — site-wide sensor average only")
     if not parts:
-        return f"{len(zones)} zone temperature sensor(s) mapped; insufficient trend samples for day/night split."
+        return f"{sensor_n} zone temperature sensor(s) mapped; insufficient trend samples for day/night split."
     return "Zone temps: " + "; ".join(parts) + "."
 
 
@@ -517,9 +756,10 @@ def get_zone_temp_snapshot(*, site_id: str | None = None, force: bool = False) -
     model_svc = ModelService()
     sid = (site_id or "").strip() or ensure_default_site(model_svc, TtlService())
     model = model_svc.load()
-    topology = discover_topology(model, sid)
     df, origin = load_frame_for_run(sid)
     df = trim_frame_to_lookback(df)
+    available = set(df.columns) if not df.empty else set()
+    topology = discover_topology(model, sid, available_columns=available)
 
     site_tz = _site_timezone(model, sid)
     metrics = compute_zone_metrics(df, topology, model, sid, site_tz=site_tz)
@@ -607,13 +847,17 @@ def slim_zone_for_llm(
         "worst_zones": [
             {
                 "label": z.get("label"),
+                "equipment_name": z.get("equipment_name"),
                 "day_avg_f": z.get("day_avg_f"),
                 "night_avg_f": z.get("night_avg_f"),
                 "recovery_f_per_min": z.get("recovery_f_per_min"),
+                "worst_reason": z.get("worst_reason"),
             }
             for z in (snapshot.get("worst_zones") or [])[:6]
             if isinstance(z, dict)
         ],
+        "site_aggregates": snapshot.get("site_aggregates"),
+        "fan_schedule": snapshot.get("fan_schedule"),
         "lookback_days": snapshot.get("lookback_days"),
         "research": _slim_research(snapshot.get("research")),
     }

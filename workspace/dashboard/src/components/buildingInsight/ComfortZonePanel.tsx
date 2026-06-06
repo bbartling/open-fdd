@@ -1,8 +1,10 @@
 type ZoneRow = {
   label?: string;
+  equipment_name?: string;
   day_avg_f?: number;
   night_avg_f?: number;
   recovery_f_per_min?: number;
+  worst_reason?: string;
 };
 
 type Opportunity = {
@@ -36,10 +38,14 @@ export default function ComfortZonePanel({
       {deviceSentence ? <p className="bis-muted-line">{deviceSentence}</p> : null}
       {zones.length ? (
         <div className="bis-zone-table-wrap">
+          <p className="bis-muted-line">
+            Site averages are in the summary above. Table lists worst-case zones (weak setback or slow recovery), not
+            every sensor.
+          </p>
           <table className="bis-zone-table">
             <thead>
               <tr>
-                <th>Zone / sensor</th>
+                <th>VAV / zone</th>
                 <th>Night avg</th>
                 <th>Day avg</th>
                 <th>Recovery</th>
@@ -47,8 +53,8 @@ export default function ComfortZonePanel({
             </thead>
             <tbody>
               {zones.map((z, i) => (
-                <tr key={`${z.label}-${i}`}>
-                  <td>{z.label || "—"}</td>
+                <tr key={`${z.equipment_name || z.label}-${i}`}>
+                  <td>{z.equipment_name || z.label || "—"}</td>
                   <td>{z.night_avg_f != null ? `${z.night_avg_f}°F` : "—"}</td>
                   <td>{z.day_avg_f != null ? `${z.day_avg_f}°F` : "—"}</td>
                   <td>
