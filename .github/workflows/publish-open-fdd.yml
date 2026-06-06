@@ -51,7 +51,7 @@ jobs:
           python -m venv /tmp/ofdd-wheel-smoke
           wheel="$(ls -1t dist/*.whl | head -n 1)"
           test -n "$wheel"
-          /tmp/ofdd-wheel-smoke/bin/pip install "$wheel"
+          /tmp/ofdd-wheel-smoke/bin/pip install "$wheel[engine]"
           /tmp/ofdd-wheel-smoke/bin/python -c "
           from open_fdd.engine import RuleRunner
           import open_fdd
