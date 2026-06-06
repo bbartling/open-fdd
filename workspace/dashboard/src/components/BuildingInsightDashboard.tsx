@@ -143,7 +143,7 @@ export default function BuildingInsightDashboard() {
           <h2>Building insight</h2>
           <p className="muted">No building model configured yet.</p>
           <p className="muted">
-            Import a BRICK model under <Link to="/data-model">Data Model</Link> to enable fault
+            Import a BRICK model under <Link to="/model">Model & assignments</Link> to enable fault
             detection and comfort analytics.
           </p>
         </div>

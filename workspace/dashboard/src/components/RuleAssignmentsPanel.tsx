@@ -64,7 +64,7 @@ export default function RuleAssignmentsPanel({ refreshKey = 0, showReadOnlyHint 
       <h3 className="panel-title">Assignment summary{showReadOnlyHint ? " (read-only)" : ""}</h3>
       {showReadOnlyHint ? (
         <p className="muted">
-          Pin or unpin rules in the device table below, on <a href="/data-model">Data Model</a>, or{" "}
+          Pin rules via <a href="/model">Model & assignments</a> commissioning JSON or{" "}
           <a href="/plot">Trend plot</a> (right-click). Rule Lab edits rule code only.
         </p>
       ) : (
