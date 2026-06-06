@@ -1,6 +1,25 @@
 import type { ContextMenuItem } from "../components/ContextMenu";
 import type { DriverDevice, DriverPoint } from "../components/BacnetPointsTree";
 
+/** BACnet object types that expose a priority array (matches bacnet_toolshed COMMANDABLE_TYPES). */
+export const COMMANDABLE_OBJECT_TYPES = new Set([
+  "analog-output",
+  "analog-value",
+  "binary-output",
+  "binary-value",
+  "multi-state-output",
+  "multi-state-value",
+  "integer-value",
+  "large-analog-value",
+  "positive-integer-value",
+]);
+
+export function pointIsCommandable(point: DriverPoint): boolean {
+  if (point.commandable) return true;
+  const type = point.object_identifier.split(",", 1)[0]?.trim().toLowerCase() ?? "";
+  return COMMANDABLE_OBJECT_TYPES.has(type);
+}
+
 export const POLL_OPTIONS = [
   { seconds: 60, label: "1 min" },
   { seconds: 300, label: "5 min" },
@@ -62,7 +81,7 @@ export function buildPointContextMenuItems(args: {
         {
           id: "read-priority-array",
           label: "Read priority array",
-          disabled: !point.commandable,
+          disabled: !pointIsCommandable(point),
           onClick: () => args.onReadPriorityArray?.(device, point),
         },
       ],

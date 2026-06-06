@@ -27,11 +27,26 @@ def rule_py_path(*, rule_id: str, name: str) -> Path:
     return rules_py_dir() / f"{slug_rule_name(name, rule_id)}.py"
 
 
-def read_source(path: str | Path) -> str:
+def resolve_source_path(path: str | Path) -> Path | None:
+    """Return a readable .py path (handles stale host-absolute paths in Docker)."""
+    if not path:
+        return None
     p = Path(path)
-    if not p.is_file():
+    if p.is_file():
+        return p
+    # rules_store may record a host path like /home/.../rules_py/foo.py while the
+    # bridge runs in a container mounted at /var/openfdd/workspace.
+    by_name = rules_py_dir() / p.name
+    if by_name.is_file():
+        return by_name
+    return None
+
+
+def read_source(path: str | Path) -> str:
+    resolved = resolve_source_path(path)
+    if resolved is None:
         return ""
-    return p.read_text(encoding="utf-8")
+    return resolved.read_text(encoding="utf-8")
 
 
 def write_source(*, rule_id: str, name: str, code: str, existing_path: str | None = None) -> str:

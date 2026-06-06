@@ -239,8 +239,7 @@ export default function FaultsPage() {
         <div className="panel">
           <p className="muted">
             No BRICK equipment found for this site. Import or model equipment on{" "}
-            <Link to="/data-model">Data Model</Link>, then assign rules on{" "}
-            <Link to="/fdd-assignments">FDD assignments</Link>.
+            <Link to="/model">Model & assignments</Link> commissioning JSON to pin rules to points.
           </p>
         </div>
       ) : null}
@@ -261,7 +260,7 @@ export default function FaultsPage() {
               {tree.assigned_rules.map((r) => (
                 <tr key={r.rule_id}>
                   <td>
-                    <Link to="/fdd-assignments">{r.rule_name}</Link>
+                    <Link to="/model">{r.rule_name}</Link>
                   </td>
                   <td>
                     <span className="badge code-badge">{r.fault_code}</span>

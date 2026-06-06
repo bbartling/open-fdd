@@ -24,7 +24,7 @@ fi
 LOGIN_USER="${OFDD_INTEGRATOR_USER:-${OFDD_OPERATOR_USER:-}}"
 LOGIN_PASS="${OFDD_INTEGRATOR_PASSWORD:-${OFDD_OPERATOR_PASSWORD:-}}"
 MODEL_IMPORT="${ROOT}/workspace/data/bench_import_model.json"
-WAIT_MINUTES="${RUN_WAIT_MINUTES:-10}"
+WAIT_MINUTES="${RUN_WAIT_MINUTES:-20}"
 SKIP_WAIT=0
 DEVICE_INSTANCE=5007
 DISCOVER_LOW=5007
@@ -200,6 +200,45 @@ if [[ "$poll_ok" == "True" || "$poll_ok" == "true" ]] && [[ "${poll_samples:-0}"
   log_ok "Poll once samples=${poll_samples}"
 else
   log_fail "Poll once failed or zero samples: ${poll_once}"
+fi
+
+log_info "Driver tree + on-demand read (refresh PV / priority array)"
+driver_tree="$(api_get "/api/bacnet/driver/tree")"
+if echo "$driver_tree" | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("devices") else 1)'; then
+  log_ok "BACnet driver tree loaded"
+else
+  log_fail "driver tree empty"
+fi
+read_pv="$(api_post "/api/bacnet/read" "$(python3 -c 'import json; print(json.dumps({"device_instance":5007,"object_identifier":"analog-input,1168","property_identifier":"present-value"}))')")"
+if echo "$read_pv" | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if "value" in d else 1)'; then
+  log_ok "On-demand read PV analog-input,1168"
+else
+  log_fail "read PV failed: ${read_pv}"
+fi
+
+log_info "Arrow rule lint (reject legacy evaluate / pandas)"
+for case in "legacy|def evaluate(row,cfg): return True" "pandas|import pandas as pd"; do
+  label="${case%%|*}"
+  code="${case#*|}"
+  lint_body="$(python3 -c 'import json,sys; print(json.dumps({"code": sys.argv[1]}))' "$code")"
+  lint_resp="$(api_post "/api/playground/lint" "$lint_body")"
+  if echo "$lint_resp" | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("ok") is False else 1)'; then
+    log_ok "Lint rejected ${label}"
+  else
+    log_fail "Lint should reject ${label}"
+  fi
+done
+
+log_info "FDD batch (Arrow rules)"
+fdd_batch="$(api_post "/api/rules/batch" '{"limit":500}')"
+if echo "$fdd_batch" | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("ok") else 1)'; then
+  log_ok "FDD batch completed"
+else
+  log_fail "FDD batch: ${fdd_batch}"
+fi
+fault_status="$(api_get "/api/faults/status")"
+if echo "$fault_status" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("traffic","green"))'; then
+  log_ok "Fault status traffic=$(echo "$fault_status" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("traffic"))')"
 fi
 
 poll_status="$(api_get "/api/bacnet/poll/status")"

@@ -1,12 +1,10 @@
 """
-Portable Python FDD rule sandbox — same ``evaluate(row, cfg, …)`` contract as Rule Lab,
-AWS ``fdd_lambda``, and edge batch runner.
+FDD rule authoring helpers.
 
-Use from any pandas/Lambda pipeline::
+**Default (3.0+):** Arrow-native rules via ``open_fdd.arrow_runtime`` and
+``apply_faults_arrow(table, cfg, context)``.
 
-    from open_fdd.playground.cookbook import cfg_threshold, window_rows_1h
-    from open_fdd.playground.sandbox import compile_evaluate, sweep_rule
-    from open_fdd.playground.rows import dataframe_to_evaluate_rows
+**Legacy:** per-row ``evaluate(row, cfg, …)`` via ``sandbox`` (``backend: legacy_row`` only).
 """
 
 from open_fdd.playground.cookbook import (
@@ -20,6 +18,7 @@ from open_fdd.playground.cookbook import (
     window_rows_1h,
 )
 from open_fdd.playground.rows import dataframe_to_evaluate_rows, readings_to_evaluate_rows
+from open_fdd.playground.arrow_templates import ARROW_TEMPLATES, DEFAULT_ARROW_RULE
 from open_fdd.playground.sandbox import compile_evaluate, lint_python, rule_globals, sweep_rule
 from open_fdd.playground.series import (
     build_series_context,
@@ -29,6 +28,8 @@ from open_fdd.playground.series import (
 )
 
 __all__ = [
+    "ARROW_TEMPLATES",
+    "DEFAULT_ARROW_RULE",
     "DEFAULT_THRESHOLDS_F",
     "ONE_HOUR_MS",
     "attach_rolling_avg",

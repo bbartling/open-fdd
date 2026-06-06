@@ -104,10 +104,29 @@ def _parse_oid(oid: str) -> tuple[str, str]:
     return parts[0].strip(), parts[1].strip()
 
 
+_COMMANDABLE_OBJECT_TYPES = frozenset(
+    {
+        "analog-output",
+        "analog-value",
+        "binary-output",
+        "binary-value",
+        "multi-state-output",
+        "multi-state-value",
+        "integer-value",
+        "large-analog-value",
+        "positive-integer-value",
+    }
+)
+
+
 def _commandable_str(value: Any) -> str:
     if isinstance(value, bool):
         return "1" if value else "0"
     return "1" if str(value or "").strip().lower() in ("1", "true", "yes", "y", "on") else "0"
+
+
+def _commandable_from_object_type(object_type: str) -> bool:
+    return str(object_type or "").strip().lower() in _COMMANDABLE_OBJECT_TYPES
 
 
 def _object_row(
@@ -250,8 +269,7 @@ def sync_discovery(
                     existing["device_address"] = device_address
                 if row.get("object_name"):
                     existing["object_name"] = row["object_name"]
-                if "commandable" in obj:
-                    existing["commandable"] = row["commandable"]
+                existing["commandable"] = row["commandable"]
             else:
                 rows.append(row)
                 by_pid[pid] = row
@@ -476,7 +494,7 @@ def driver_tree() -> dict[str, Any]:
             "1",
             "true",
             "yes",
-        }
+        } or _commandable_from_object_type(obj_type)
         okey = f"{inst}:{oid.lower()}" if oid else ""
         oinfo = override_idx.get(okey, {})
         dev["points"].append(

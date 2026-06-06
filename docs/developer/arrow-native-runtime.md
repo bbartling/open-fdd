@@ -1,21 +1,21 @@
 ---
-title: Arrow-native FDD runtime
+title: Arrow-native runtime
 parent: Developer
+nav_order: 3
 ---
 
-# Arrow-native FDD runtime
+# Arrow-native runtime
 
-Open-FDD 3.x runs rule-based HVAC fault detection on an **Arrow-native columnar execution engine** by default.
+Open-FDD 3.0 executes Rule Lab rules on **PyArrow tables** end to end.
 
 ```
-Feather / Arrow IPC
-  → Arrow Table / RecordBatch stream
+feather_store.read_site_table()
+  → fdd_runner / playground.run_arrow_table()
   → apply_faults_arrow(table, cfg, context)
-  → Boolean fault mask
-  → summaries / events (JSON for UI)
+  → pyarrow.compute masks
 ```
 
-## Rule contract
+## Authoring contract
 
 ```python
 import pyarrow.compute as pc
@@ -24,32 +24,15 @@ def apply_faults_arrow(table, cfg, context=None):
     return pc.greater(table["zone_temp"], cfg["max_zone_temp"])
 ```
 
-Rules return a `pyarrow.BooleanArray` or `ChunkedArray` with the same row count as the input table.
+Cookbook helpers: `open_fdd.arrow_runtime.cookbook` (flatline, spread, OOB, after-hours fan).
 
-## Legacy row rules
+Script-mode analytics rules receive `table` (PyArrow) and `cfg` in the sandbox — not pandas DataFrames.
 
-Old `evaluate(row, cfg, …)` rules are supported only when:
+## Package layout
 
-- the rule sets `"backend": "legacy_row"`, or
-- `OPEN_FDD_FDD_BACKEND=legacy_row` is set.
-
-The Rule Lab shows a migration message for legacy rules.
-
-## Threading
-
-| Variable | Purpose |
-|----------|---------|
-| `OPEN_FDD_ARROW_THREADS` | Arrow CPU thread pool |
-| `OPEN_FDD_ARROW_IO_THREADS` | Arrow I/O threads (when supported) |
-| `OPEN_FDD_ARROW_BATCH_ROWS` | RecordBatch chunk size (default 50000) |
-| `OPEN_FDD_ARROW_PARALLEL_RULES` | Parallel rule batches |
-| `OPEN_FDD_ARROW_PARALLEL_SITES` | Parallel site jobs |
-
-Large jobs use Arrow projection/filtering, chunked batches, and job-level parallelism across sites/rules. Not every scalar kernel uses every core; throughput comes from batch scans plus parallel orchestration.
-
-## Benchmarks
-
-```bash
-python benchmarks/bench_arrow_native.py --rows 10000 100000 --repeats 3 --output .bench/arrow_native.json
-python benchmarks/bench_arrow_end_to_end.py --sites 1 --rows-per-site 100000 --repeats 2 --output .bench/arrow_end_to_end.json
-```
+| Module | Role |
+|--------|------|
+| `open_fdd.arrow_runtime.backend` | Execute rule code, batch chunks |
+| `open_fdd.arrow_runtime.cookbook` | Shared fault masks |
+| `open_fdd.arrow_runtime.windows` | Rolling min/max, consecutive-true |
+| `open_fdd.playground.arrow_templates` | Rule Lab starter templates |

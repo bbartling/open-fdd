@@ -82,7 +82,7 @@ export default function FaultDetailModal({ fault, onClose }: Props) {
           ) : null}
           <div className="bis-modal-actions">
             {fault.source === "model_health" ? (
-              <Link to="/data-model" className="bis-btn bis-btn-primary" onClick={onClose}>
+              <Link to="/model" className="bis-btn bis-btn-primary" onClick={onClose}>
                 Open data model
               </Link>
             ) : fault.source === "poll_health" ? (
@@ -90,8 +90,8 @@ export default function FaultDetailModal({ fault, onClose }: Props) {
                 BACnet &amp; poll
               </Link>
             ) : (
-              <Link to="/fdd-assignments" className="bis-btn bis-btn-primary" onClick={onClose}>
-                FDD assignments
+              <Link to="/model" className="bis-btn bis-btn-primary" onClick={onClose}>
+                Model &amp; assignments
               </Link>
             )}
             <button type="button" className="bis-btn bis-btn-secondary" onClick={onClose}>

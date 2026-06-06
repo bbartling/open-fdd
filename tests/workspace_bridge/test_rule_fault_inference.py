@@ -13,7 +13,7 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 RULE = (
-    "def evaluate(row, cfg, prev_row=None, rows=None):\n"
+    "import pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n"
     "    spread = row.get('spread_1h')\n"
     "    return spread is not None and float(spread) < 0.1\n"
 )

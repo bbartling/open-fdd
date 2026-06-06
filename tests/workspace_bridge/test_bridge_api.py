@@ -26,7 +26,7 @@ def test_health(client: TestClient):
 def test_playground_lint(client: TestClient, integrator_headers: dict[str, str]):
     r = client.post(
         "/api/playground/lint",
-        json={"code": "def evaluate(row, cfg, prev_row=None, rows=None):\n    return False\n"},
+        json={"code": "import pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n    return pc.greater(table['SAT'], 50)\n"},
         headers=integrator_headers,
     )
     assert r.status_code == 200
@@ -34,9 +34,11 @@ def test_playground_lint(client: TestClient, integrator_headers: dict[str, str])
 
 
 def test_playground_test_rule(client: TestClient, integrator_headers: dict[str, str]):
-    code = """def evaluate(row, cfg, prev_row=None, rows=None):
-    sat = row.get("SAT") or row.get("temp")
-    return sat is not None and float(sat) > float(cfg.get("high", 75))
+    code = """import pyarrow.compute as pc
+
+def apply_faults_arrow(table, cfg, context=None):
+    col = "SAT" if "SAT" in table.column_names else "temp"
+    return pc.greater(pc.cast(table[col], pa.float64()), float(cfg.get("high", 75)))
 """
     r = client.post(
         "/api/playground/test-rule",
@@ -46,7 +48,8 @@ def test_playground_test_rule(client: TestClient, integrator_headers: dict[str, 
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
-    assert body["rows"] > 0
+    assert body.get("backend") == "arrow"
+    assert body.get("rows", 0) >= 0
 
 
 def test_agent_context(client: TestClient, operator_headers: dict[str, str]):

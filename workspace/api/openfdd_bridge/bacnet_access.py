@@ -22,6 +22,14 @@ def require_bacnet_discovery(user: dict = Depends(require_user)) -> dict:
     raise HTTPException(status_code=403, detail="forbidden")
 
 
+def require_bacnet_poll_config(user: dict = Depends(require_user)) -> dict:
+    """Enable/disable poll intervals on known points — any authenticated OT role."""
+    role = user.get("role")
+    if role in ("operator", "integrator", "agent"):
+        return user
+    raise HTTPException(status_code=403, detail="forbidden")
+
+
 def require_bacnet_mutation(request: Request, user: dict = Depends(require_user)) -> dict:
     role = user.get("role")
     allowed = False

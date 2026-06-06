@@ -9,7 +9,7 @@ nav_order: 4
 | Term | Definition |
 |------|------------|
 | **Operator Bridge** | FastAPI service serving API + static dashboard |
-| **Rule Lab** | UI and APIs for Python `evaluate()` rules |
+| **Rule Lab** | UI and APIs for Arrow `apply_faults_arrow()` rules |
 | **Feather store** | On-disk columnar historian under `workspace/data/feather_store/` |
 | **fdd_input** | Brick tag linking a point to a rule binding role |
 | **Check-engine** | Building-level GREEN/YELLOW/RED fault summary |

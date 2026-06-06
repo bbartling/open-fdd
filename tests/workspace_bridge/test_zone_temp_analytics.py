@@ -11,11 +11,16 @@ API_ROOT = REPO / "workspace" / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
+from openfdd_bridge.timeseries_api import historian_column_candidates, resolve_historian_column  # noqa: E402
 from openfdd_bridge.zone_temp_analytics import (  # noqa: E402
+    _collapse_zones_by_column,
+    _fan_on_minutes_by_period,
+    _worst_zones,
     _summary_sentence,
     compute_zone_metrics,
     discover_topology,
     get_zone_temp_snapshot,
+    zone_display_label,
 )
 
 
@@ -128,7 +133,120 @@ def test_summary_sentence_struggling():
         ],
         "ahu_systems",
     )
-    assert "slow zones" in text.lower()
+    assert "slow recovery" in text.lower()
+
+
+def test_acme_style_historian_columns_prefer_full_point_id():
+    pt_a = {"id": "12035-analog-input-1", "name": "Space Temperature Local"}
+    pt_b = {"id": "12023-analog-input-1", "name": "Space Temperature Local"}
+    avail = {"12035-analog-input-1", "12023-analog-input-1", "analog-input-1"}
+    assert resolve_historian_column(pt_a, avail) == "12035-analog-input-1"
+    assert resolve_historian_column(pt_b, avail) == "12023-analog-input-1"
+    assert historian_column_candidates(pt_a) == ["12035-analog-input-1", "analog-input-1"]
+
+
+def test_zone_display_label_uses_equipment_name():
+    pt = {"name": "Space Temperature Local", "brick_tag": "ZN-T"}
+    eq = {"name": "Trane Vav 12023"}
+    assert zone_display_label(pt, eq) == "Trane Vav 12023 (ZN-T)"
+
+
+def test_collapse_zones_by_column_dedupes_shared_historian():
+    zones = [
+        {"column": "analog-input-1", "label": "Space Temperature Local", "equipment_name": "Trane Vav 12023", "day_avg_f": 70.0},
+        {"column": "analog-input-1", "label": "Space Temperature Local", "equipment_name": "Trane Vav 12035", "day_avg_f": 70.0},
+        {"column": "12033-analog-input-1", "label": "Trane Vav 12033 (ZN-T)", "equipment_name": "Trane Vav 12033", "day_avg_f": 68.0},
+    ]
+    out = _collapse_zones_by_column(zones)
+    assert len(out) == 2
+    shared = next(z for z in out if z["column"] == "analog-input-1")
+    assert shared.get("shared_column_zone_count") == 2
+    assert "Trane Vav 12023" in shared["label"]
+
+
+def test_worst_zones_returns_distinct_columns_with_names():
+    zones = [
+        {
+            "column": "z-hot",
+            "label": "Trane Vav 12023 (ZN-T)",
+            "equipment_name": "Trane Vav 12023",
+            "day_avg_f": 74.0,
+            "night_avg_f": 73.8,
+            "setback_delta_f": 0.2,
+            "recovery_f_per_min": 0.01,
+        },
+        {
+            "column": "z-cool",
+            "label": "Jci Vav 39 (ZN-T)",
+            "equipment_name": "Jci Vav 39",
+            "day_avg_f": 70.0,
+            "night_avg_f": 65.0,
+            "setback_delta_f": 5.0,
+            "recovery_f_per_min": 0.12,
+        },
+    ]
+    worst = _worst_zones(zones, [], [])
+    assert len(worst) >= 1
+    labels = {w.get("equipment_name") or w.get("label") for w in worst}
+    assert "Trane Vav 12023" in labels
+
+
+def test_fan_schedule_weekday_vs_weekend():
+    ts = pd.date_range("2025-06-02 06:00:00", periods=96 * 3, freq="15min", tz="UTC")
+    fan = []
+    for t in ts:
+        wd = t.weekday()
+        hr = t.hour
+        if wd < 5 and 8 <= hr < 17:
+            fan.append(1.0)
+        elif wd >= 5:
+            fan.append(0.0)
+        else:
+            fan.append(0.0)
+    df = pd.DataFrame({"timestamp": ts, "fan-cmd": fan})
+    sched = _fan_on_minutes_by_period(df, "fan-cmd", site_tz="UTC")
+    assert sched.get("weekday", {}).get("fan_on_minutes", 0) > sched.get("weekend", {}).get("fan_on_minutes", 0)
+
+
+def test_compute_zone_metrics_per_vav_columns():
+    model = {
+        "sites": [{"id": "acme", "name": "Acme"}],
+        "equipment": [
+            {"id": "vav23", "site_id": "acme", "name": "Trane Vav 12023", "brick_type": "VAV"},
+            {"id": "vav39", "site_id": "acme", "name": "Jci Vav 39", "brick_type": "VAV"},
+        ],
+        "points": [
+            {
+                "id": "12023-analog-input-1",
+                "equipment_id": "vav23",
+                "brick_type": "Zone_Air_Temperature_Sensor",
+                "name": "Space Temperature Local",
+                "brick_tag": "ZN-T",
+            },
+            {
+                "id": "12039-analog-input-1",
+                "equipment_id": "vav39",
+                "brick_type": "Zone_Air_Temperature_Sensor",
+                "name": "Space Temperature Local",
+                "brick_tag": "ZN-T",
+            },
+        ],
+    }
+    n = 96
+    ts = pd.date_range("2025-06-02 08:00:00", periods=n, freq="15min", tz="UTC")
+    df = pd.DataFrame(
+        {
+            "timestamp": ts,
+            "12023-analog-input-1": [72.0 + (i % 4) * 0.2 for i in range(n)],
+            "12039-analog-input-1": [68.0 + (i % 4) * 0.1 for i in range(n)],
+        }
+    )
+    topo = discover_topology(model, "acme", available_columns=set(df.columns))
+    metrics = compute_zone_metrics(df, topo, model, "acme")
+    assert len(metrics["zones"]) == 2
+    assert metrics["zones"][0]["equipment_name"].startswith(("Trane", "Jci"))
+    assert metrics["worst_zones"]
+    assert metrics["worst_zones"][0].get("equipment_name")
 
 
 def test_compact_for_llm_large_snapshot_is_valid_json():

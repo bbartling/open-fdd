@@ -33,7 +33,7 @@ def test_missing_auth_does_not_grant_integrator(raw_client: TestClient, monkeypa
     c = _reload_and_client(monkeypatch, tmp_path, OFDD_BRIDGE_HOST="127.0.0.1")
     r = c.post(
         "/api/playground/lint",
-        json={"code": "def evaluate(row, cfg, prev_row=None, rows=None):\n    return False\n"},
+        json={"code": "import pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n    return pc.greater(table['SAT'], 50)\n"},
     )
     assert r.status_code == 503
 
@@ -179,7 +179,7 @@ def test_startup_public_bind_insecure_lan_dev_ok(monkeypatch: pytest.MonkeyPatch
 def test_integrator_route_rejects_operator(raw_client: TestClient, operator_headers: dict[str, str]):
     r = raw_client.post(
         "/api/playground/lint",
-        json={"code": "def evaluate(row, cfg, prev_row=None, rows=None):\n    return False\n"},
+        json={"code": "import pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n    return pc.greater(table['SAT'], 50)\n"},
         headers=operator_headers,
     )
     assert r.status_code == 403
@@ -312,7 +312,7 @@ def test_playground_rejects_import_os(client: TestClient, integrator_headers: di
     r = client.post(
         "/api/playground/test-rule",
         json={
-            "code": "import os\ndef evaluate(row, cfg, prev_row=None, rows=None):\n    return False\n",
+            "code": "import os\nimport pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n    return pc.greater(table['SAT'], 50)\n",
             "config": {},
             "limit": 5,
         },
@@ -322,22 +322,36 @@ def test_playground_rejects_import_os(client: TestClient, integrator_headers: di
     assert r.json()["ok"] is False
 
 
-def test_playground_row_timeout_returns_error_event():
-    from concurrent.futures import TimeoutError as FuturesTimeout
+def test_playground_row_timeout_returns_error_event(monkeypatch: pytest.MonkeyPatch):
+    import sys
+    import time
+
+    import pyarrow as pa
+
+    monkeypatch.delenv("OFDD_PLAYGROUND_INPROCESS", raising=False)
+    monkeypatch.setenv("OFDD_PLAYGROUND_SUBPROCESS", "1")
+    monkeypatch.setenv("OFDD_PLAYGROUND_TIMEOUT_S", "2")
+    for name in list(sys.modules):
+        if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
+            del sys.modules[name]
     from openfdd_bridge import playground  # noqa: E402
 
-    rows = [{"row": 0, "ts_ms": 1, "temp": 72.0, "ts": "2020-01-01"}]
-    code = "def evaluate(row, cfg, prev_row=None, rows=None):\n    return False\n"
-    with patch("openfdd_bridge.playground._call_with_timeout", side_effect=FuturesTimeout()):
-        _flags, events = playground.sweep_rule(code, {}, rows)
-    assert any("timed out" in str(e.get("message", "")).lower() for e in events)
+    table = pa.table({"SAT": pa.array([72.0], type=pa.float64())})
+    code = (
+        "import pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n"
+        "    while True:\n        pass\n    return pc.greater(table['SAT'], 0)\n"
+    )
+    started = time.time()
+    result = playground.run_arrow_table(code, table, {})
+    assert time.time() - started < 25.0
+    assert "timed out" in str(result.get("error", "")).lower()
 
 
 def test_playground_huge_print_truncated(client: TestClient, integrator_headers: dict[str, str]):
     r = client.post(
         "/api/playground/test-rule",
         json={
-            "code": 'def evaluate(row, cfg, prev_row=None, rows=None):\n    print("x" * 20000)\n    return False\n',
+            "code": "import pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n    print(\"x\" * 20000)\n    return pc.greater(table[\"SAT\"], 0)\n",
             "config": {},
             "limit": 2,
         },

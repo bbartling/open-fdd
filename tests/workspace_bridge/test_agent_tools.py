@@ -42,7 +42,7 @@ def test_tool_builds_model(agent_client: TestClient):
 
 def test_tool_save_rule_and_batch(agent_client: TestClient):
     code = (
-        "def evaluate(row, cfg, prev_row=None, rows=None):\n"
+        "import pyarrow.compute as pc\n\ndef apply_faults_arrow(table, cfg, context=None):\n"
         "    sat = row.get('SAT') or row.get('temp')\n"
         "    return sat is not None and float(sat) > 50\n"
     )

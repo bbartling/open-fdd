@@ -61,11 +61,18 @@ class ModelService:
         return target
 
     def normalize_import_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "sites": payload.get("sites", []) if isinstance(payload.get("sites"), list) else [],
-            "equipment": payload.get("equipment", []) if isinstance(payload.get("equipment"), list) else [],
-            "points": payload.get("points", []) if isinstance(payload.get("points"), list) else [],
-        }
+        from .model_point_utils import enrich_point_runtime_fields
+
+        sites = payload.get("sites", []) if isinstance(payload.get("sites"), list) else []
+        equipment = payload.get("equipment", []) if isinstance(payload.get("equipment"), list) else []
+        raw_points = payload.get("points", []) if isinstance(payload.get("points"), list) else []
+        skeleton = {"sites": sites, "equipment": equipment, "points": raw_points, "site_id": payload.get("site_id")}
+        points = [
+            enrich_point_runtime_fields(pt, skeleton)
+            for pt in raw_points
+            if isinstance(pt, dict)
+        ]
+        return {"sites": sites, "equipment": equipment, "points": points}
 
     def import_json(self, payload: dict[str, Any], *, replace: bool = True) -> dict[str, int]:
         normalized = self.normalize_import_payload(payload)

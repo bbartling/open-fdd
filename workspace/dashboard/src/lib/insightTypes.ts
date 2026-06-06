@@ -21,9 +21,11 @@ export type InsightResponse = {
   brick_model?: { feeds_chains?: string[]; equipment_count?: number };
   worst_zones?: {
     label?: string;
+    equipment_name?: string;
     day_avg_f?: number;
     night_avg_f?: number;
     recovery_f_per_min?: number;
+    worst_reason?: string;
   }[];
   zone_temps?: {
     topology_mode?: string;

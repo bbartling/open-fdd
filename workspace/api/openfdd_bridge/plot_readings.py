@@ -163,16 +163,24 @@ def evaluate_fault_plots(
         code = _rule_code(rule)
         if not code.strip():
             continue
-        rows = prepare_fdd_rows(df, rule, model, site_id, limit=len(df))
-        n = len(rows)
-        if n == 0:
+        import pyarrow as pa
+        from open_fdd.arrow_runtime.backend import run_arrow_rule
+        from open_fdd.arrow_runtime.rules import detect_rule_backend
+
+        table = pa.Table.from_pandas(df.reset_index(drop=True), preserve_index=False)
+        n = table.num_rows
+        if n == 0 or detect_rule_backend(code, rule) != "arrow":
             continue
-        flags, events = playground.sweep_rule(code, rule.get("config") or {}, rows, capture_print=False)
-        if any(e.get("type") == "error" for e in events):
+        cfg = dict(rule.get("config") or {})
+        cfg.setdefault("site_id", site_id)
+        try:
+            arrow_result = run_arrow_rule(code, table, cfg, rule_id=rid)
+        except Exception:
             continue
-        if len(flags) < n:
-            flags = flags + [False] * (n - len(flags))
-        flags = [1 if f else 0 for f in flags[:n]]
+        if arrow_result.errors:
+            continue
+        mask = arrow_result.fault_mask.to_pylist()
+        flags = [1 if bool(v) else 0 for v in mask[:n]]
         fault_plots[rid] = flags
         fault_totals[rid] = sum(flags)
         color = FAULT_COLORS[color_i % len(FAULT_COLORS)]

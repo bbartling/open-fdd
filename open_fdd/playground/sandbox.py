@@ -1,4 +1,8 @@
-"""Lint, compile, and sweep ``evaluate(row, cfg, …)`` rules — edge, PyPI, and AWS lambda parity."""
+"""Legacy row-rule sandbox: lint, compile, and sweep ``evaluate(row, cfg, …)``.
+
+Open-FDD 3.0 default FDD path is Arrow-native (`open_fdd.arrow_runtime`). This module
+remains for ``backend: legacy_row`` rules, tests, and AWS lambda parity.
+"""
 
 from __future__ import annotations
 
@@ -32,7 +36,7 @@ except ImportError:
     PANDAS_AVAILABLE = False
 
 ALLOWED_IMPORT_ROOTS = frozenset(
-    {"datetime", "math", "numpy", "pandas", "open_fdd", "openfdd"}
+    {"datetime", "math", "pyarrow", "open_fdd", "openfdd"}
 )
 
 DEFAULT_ROW_TIMEOUT_S = 2.0
@@ -43,7 +47,8 @@ MAX_STDOUT_CHARS = 8000
 def lint_python(
     code: str,
     *,
-    require_evaluate: bool = True,
+    require_evaluate: bool = False,
+    require_arrow_rule: bool = True,
     strict_imports: bool = False,
 ) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
@@ -92,16 +97,27 @@ def lint_python(
                     }
                 )
 
-    has_evaluate = any(
-        isinstance(node, ast.FunctionDef) and node.name == "evaluate" for node in ast.iter_child_nodes(tree)
+    has_arrow = any(
+        isinstance(node, ast.FunctionDef) and node.name == "apply_faults_arrow"
+        for node in ast.iter_child_nodes(tree)
     )
-    if require_evaluate and not has_evaluate:
+    if require_arrow_rule and not has_arrow:
         issues.append(
             {
                 "line": 1,
                 "col": 1,
                 "end_col": 1,
-                "message": "rule must define evaluate(row, cfg, prev_row=None, rows=None)",
+                "message": "rule must define apply_faults_arrow(table, cfg, context=None)",
+                "severity": "error",
+            }
+        )
+    if require_evaluate:
+        issues.append(
+            {
+                "line": 1,
+                "col": 1,
+                "end_col": 1,
+                "message": "legacy evaluate() rules are no longer supported",
                 "severity": "error",
             }
         )

@@ -1,27 +1,22 @@
 ---
 title: Rule Cookbook
-nav_order: 7
-has_children: true
+nav_order: 4
 ---
 
 # Rule Cookbook
 
-Practical patterns for **Python Rule Lab** (`evaluate(row, cfg, …)`) and optional **YAML** engine rules (`pip install "open-fdd[engine]"`).
+Practical patterns for **Arrow-native Rule Lab** (`apply_faults_arrow`) on feather historian PyArrow tables.
 
-| Page | Audience |
+| Page | Use when |
 |------|----------|
-| [Python recipes](python-recipes) | Operator Bridge Rule Lab |
-| [YAML recipes](yaml-recipes) | Offline pandas / PyPI engine |
-| [Windowing and debugging](windowing-debugging) | Tuning and false positives |
-
-## Rule anatomy (Python)
+| [Arrow recipes](arrow-recipes) | **Default** — thresholds, flatline, spread, OOB, fan/schedule faults |
+| [Python recipes](python-recipes) | Same Arrow patterns with shared `open_fdd.arrow_runtime.cookbook` imports |
+| [Windowing & debugging](windowing-debugging) | Rolling windows, batch runtime, Rule Lab console |
+| [YAML recipes](yaml-recipes) | Optional offline `open-fdd[engine]` workflows (no Operator Bridge) |
 
 ```python
-def evaluate(row, cfg, prev_row=None, rows=None):
-    # row: current sample (temp, ts_ms, rolling avg fields, …)
-    # cfg: thresholds from rule config in UI
-    # rows: full history in test window — use for lookbacks
-    return False  # or True, or (True, window_rows)
-```
+import pyarrow.compute as pc
 
-Import helpers from `open_fdd.playground.cookbook` in production rules, or use site `bench_fdd_common` shims where present.
+def apply_faults_arrow(table, cfg, context=None):
+    return pc.greater(table["zone_temp"], cfg["max_zone_temp"])
+```

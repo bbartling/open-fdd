@@ -62,6 +62,10 @@ def analytics_methodology() -> dict[str, Any]:
             "feed the building-insight LLM via zone_temps.research — the model must cross-check poll health before "
             "claiming energy savings or broken sensors."
         ),
+        "fan_schedule": (
+            "Supply-fan on/off minutes and typical start/stop hours (weekday vs weekend) from historian fan command; "
+            "overnight cycling minutes counted during unoccupied local hours."
+        ),
     }
 
 

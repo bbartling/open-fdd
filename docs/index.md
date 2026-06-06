@@ -23,7 +23,7 @@ Open-FDD is an open-source platform for **fault detection**, **BACnet integratio
 |-----------|---------|
 | **Operator Bridge** | Web API + dashboard (trends, faults, Rule Lab, model tools) |
 | **BACnet tools** | Discover, read, poll, optional supervised writes |
-| **Rule Lab** | Test Python `evaluate(row, cfg, …)` rules on live or historical data |
+| **Rule Lab** | Arrow-native `apply_faults_arrow(table, cfg)` rules on feather historian data |
 | **Local historian** | Feather-based telemetry store on the edge host |
 | **Brick / RDF model** | Equipment and point semantics for bindings and analytics |
 | **Docker images** | Published on GHCR — pull and run without building from source |

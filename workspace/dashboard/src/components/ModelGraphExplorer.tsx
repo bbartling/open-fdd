@@ -57,7 +57,7 @@ export default function ModelGraphExplorer({ siteId, onStatus, refreshKey = 0 }:
             <h3 className="panel-title">BRICK network</h3>
             <p className="muted dm-network-sub">
               Equipment <strong>feeds</strong> relationships and BACnet points on the model. Pin FDD rules per device on{" "}
-              <a href="/fdd-assignments">FDD assignments</a>.
+              <a href="/model">Model & assignments</a> commissioning JSON.
             </p>
           </div>
           <div className="dm-network-actions">

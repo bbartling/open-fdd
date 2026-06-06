@@ -22,8 +22,37 @@ def plot_column_name(point: dict[str, Any]) -> str:
     if fdd:
         return fdd
     pid = str(point.get("id") or "").strip()
-    parts = pid.split("-", 1)
-    return parts[1] if len(parts) == 2 else pid
+    # Full point id keeps VAV zone temps unique (many BACnet devices use analog-input,1).
+    return pid
+
+
+def historian_column_candidates(point: dict[str, Any]) -> list[str]:
+    """Preference order when matching a model point to feather historian columns."""
+    ext = str(point.get("external_id") or "").strip()
+    if ext:
+        return [ext]
+    fdd = str(point.get("fdd_input") or "").strip()
+    pid = str(point.get("id") or "").strip()
+    out: list[str] = []
+    if fdd:
+        out.append(fdd)
+    if pid:
+        out.append(pid)
+        if "-" in pid:
+            short = pid.split("-", 1)[1]
+            if short not in out:
+                out.append(short)
+    return out or [plot_column_name(point)]
+
+
+def resolve_historian_column(point: dict[str, Any], available_columns: set[str] | list[str]) -> str:
+    """Pick the feather column for ``point`` (full id preferred; short id for legacy shards)."""
+    avail = set(available_columns)
+    for col in historian_column_candidates(point):
+        if col in avail:
+            return col
+    candidates = historian_column_candidates(point)
+    return candidates[0] if candidates else plot_column_name(point)
 
 
 def _equipment_for_site(model: dict[str, Any], site_id: str) -> dict[str, dict[str, Any]]:

@@ -1,4 +1,4 @@
-"""Server-side Python playground: lint + execute on pandas DataFrames (Open-FDD)."""
+"""Server-side Python playground: lint + execute Arrow rules and scripts (Open-FDD)."""
 
 from __future__ import annotations
 
@@ -275,6 +275,70 @@ def run_dataframe_script(
     return _run_dataframe_script_impl(code, df, cfg=cfg)
 
 
+def run_arrow_script(
+    code: str,
+    table: Any,
+    *,
+    cfg: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Execute user script with PyArrow ``table``, optional ``cfg``, must set ``out`` dict."""
+    lint = lint_python(code, require_arrow_rule=False, strict_imports=True)
+    if not lint["ok"]:
+        return {
+            "ok": False,
+            "error": "disallowed import or syntax error",
+            "issues": lint.get("issues"),
+            "events": _lint_error_events(lint),
+        }
+
+    started = time.time()
+
+    def _run() -> dict[str, Any]:
+        g = _rule_sandbox()
+        g["table"] = table
+        g["cfg"] = cfg or {}
+        g["out"] = {"events": []}
+        stdout = _CappedStdout()
+        with redirect_stdout(stdout):
+            exec(code, g, g)  # noqa: S102  # nosemgrep: python.lang.security.audit.exec-detected.exec-detected
+        out = g.get("out")
+        if not isinstance(out, dict):
+            out = {"events": [{"type": "note", "text": "no out dict from script"}]}
+        return {"ok": True, "stdout": stdout.getvalue(), "out": out}
+
+    try:
+        inner = _call_with_timeout(_run, _exec_timeout_s())
+    except FuturesTimeout:
+        return {
+            "ok": False,
+            "error": "script execution timed out",
+            "stdout": "",
+            "ms": int((time.time() - started) * 1000),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": sanitize_traceback_text(str(exc)) or "script failed",
+            "trace": sanitize_traceback_text(traceback.format_exc(limit=8)),
+            "stdout": "",
+            "ms": int((time.time() - started) * 1000),
+        }
+    out = inner["out"]
+    metrics = out.get("metrics") if isinstance(out.get("metrics"), dict) else {}
+    rows = int(getattr(table, "num_rows", 0) or 0)
+    return {
+        "ok": True,
+        "stdout": _cap_text(str(inner.get("stdout") or ""), MAX_STDOUT_CHARS),
+        "ms": int((time.time() - started) * 1000),
+        "rows": rows,
+        "flag_columns": [],
+        "preview": [],
+        "events": sanitize_events(out.get("events") or []),
+        "metrics": metrics,
+        "backend": "arrow",
+    }
+
+
 def _run_dataframe_script_impl(
     code: str,
     df: pd.DataFrame,
@@ -422,7 +486,7 @@ def lint_arrow_python(code: str) -> dict[str, Any]:
     return lint_arrow_rule(code, strict_imports=True)
 
 
-def run_arrow_table(
+def _run_arrow_table_impl(
     code: str,
     table: Any,
     cfg: dict[str, Any] | None = None,
@@ -431,7 +495,7 @@ def run_arrow_table(
     site_id: str = "",
     limit: int = 0,
 ) -> dict[str, Any]:
-    """Execute Arrow-native rule against a PyArrow Table; JSON-safe response."""
+    """Execute Arrow-native rule in-process (also used by playground_worker)."""
     import pyarrow as pa
 
     from open_fdd.arrow_runtime.backend import run_arrow_rule, run_arrow_rule_chunked
@@ -486,6 +550,54 @@ def run_arrow_table(
             ]
         )
     return payload
+
+
+def run_arrow_table(
+    code: str,
+    table: Any,
+    cfg: dict[str, Any] | None = None,
+    *,
+    rule_id: str = "",
+    site_id: str = "",
+    limit: int = 0,
+) -> dict[str, Any]:
+    """Execute Arrow-native rule against a PyArrow Table; JSON-safe response."""
+    from .playground_exec import run_pickled_job, subprocess_enabled
+
+    if subprocess_enabled():
+        payload = run_pickled_job(
+            {
+                "op": "run_arrow_table",
+                "code": code,
+                "cfg": cfg or {},
+                "table": table,
+                "rule_id": rule_id,
+                "site_id": site_id,
+                "limit": limit,
+            },
+            timeout_s=_exec_timeout_s(),
+        )
+        if not payload.get("ok"):
+            err = payload.get("error") or "rule execution failed"
+            if payload.get("timed_out"):
+                err = "rule execution timed out"
+            return {
+                "ok": False,
+                "error": err,
+                "events": sanitize_events([{"type": "error", "text": err}]),
+            }
+        result = payload.get("result")
+        if isinstance(result, dict):
+            return result
+        return {"ok": False, "error": "invalid playground worker result"}
+    return _run_arrow_table_impl(
+        code,
+        table,
+        cfg,
+        rule_id=rule_id,
+        site_id=site_id,
+        limit=limit,
+    )
 
 
 def dataframe_from_records(records: list[dict[str, Any]]) -> pd.DataFrame:

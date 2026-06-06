@@ -61,6 +61,18 @@ describe("buildPointContextMenuItems", () => {
     const readPa = findChild(items, "read-priority-array");
     expect(readPa?.disabled).toBe(false);
   });
+
+  it("enables read priority array for analog-value even when commandable flag is false", () => {
+    const avPoint: DriverPoint = {
+      ...readOnlyPoint,
+      object_identifier: "analog-value,1168",
+      object_type: "analog-value",
+      commandable: false,
+    };
+    expect(pointIsCommandable(avPoint)).toBe(true);
+    const readPa = findChild(buildPointContextMenuItems({ device, point: avPoint }), "read-priority-array");
+    expect(readPa?.disabled).toBe(false);
+  });
 });
 
 describe("buildDeviceContextMenuItems", () => {

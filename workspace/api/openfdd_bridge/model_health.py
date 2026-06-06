@@ -58,7 +58,8 @@ def model_health_summary(model: dict[str, Any]) -> dict[str, Any]:
             orphan_points_equipment += 1
         if not str(pt.get("brick_type") or "").strip():
             missing_brick_type += 1
-        if not str(pt.get("fdd_input") or "").strip():
+        # fdd_input is only needed when rules use a key different from brick_type.
+        if not str(pt.get("fdd_input") or "").strip() and not str(pt.get("brick_type") or "").strip():
             missing_fdd_input += 1
         external_id = str(pt.get("external_id") or "").strip()
         if not external_id:

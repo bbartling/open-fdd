@@ -12,7 +12,8 @@ Run Open-FDD on a Linux edge host or VM using **published Docker images**. No lo
 |------|------|
 | 1 | [Run with Docker images](docker) |
 | 2 | [First login and health check](health-check) |
-| 3 | [Updating the stack](updating) |
+| 3 | [Updating the stack](updating) — Ansible or SSH paths |
+| — | [Live site update (SSH)](../ops/live_site_update) — minimal VM folder, no `git pull` |
 
 **Prerequisites:** Linux host with Docker and Docker Compose, network access to BACnet devices if polling OT equipment, and a safe lab or maintenance window for first BACnet discovery.
 

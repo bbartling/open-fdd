@@ -7,7 +7,6 @@ import { useTheme } from "../contexts/theme-context";
 import { apiFetch, fetchAuthMe } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import { displayRuleName, formatRuleLabel } from "../lib/ruleDisplay";
-import { formatFaultInferenceBlock, type FaultInference } from "../lib/ruleFaultInference";
 import { useActiveSiteId } from "../lib/useActiveSiteId";
 import {
   formatBatchSummary,
@@ -16,13 +15,13 @@ import {
   type LintIssue,
 } from "../lib/rule-lab-console";
 
-const DEFAULT_RULE = `def evaluate(row, cfg, prev_row=None, rows=None):
-    """Flag when supply air temp exceeds cfg['high']. Use row keys from Data Model fdd_input."""
+const DEFAULT_RULE = `import pyarrow.compute as pc
+
+def apply_faults_arrow(table, cfg, context=None):
+    """Flag when supply air temp exceeds cfg['high']. Column defaults to SAT from feather historian."""
+    col = str(cfg.get("column", "SAT"))
     high = float(cfg.get("high", 75.0))
-    sat = row.get("SAT") or row.get("Supply_Air_Temperature_Sensor") or row.get("temp")
-    if sat is None:
-        return False
-    return float(sat) > high
+    return pc.greater(table[col], high)
 `;
 
 const DEFAULT_SCRIPT = `# df script — set out = {"df": df, "events": [...]}
@@ -66,14 +65,13 @@ export default function RuleLabPage() {
   const [mode, setMode] = useState<Mode>("rule");
   const [code, setCode] = useState(DEFAULT_RULE);
   const [sourcePath, setSourcePath] = useState("");
-  const [cfg, setCfg] = useState<Record<string, string>>({ high: "75" });
+  const [cfg, setCfg] = useState<Record<string, string>>({ high: "75", column: "SAT" });
   const [consoleText, setConsoleText] = useState("");
   const [busy, setBusy] = useState(false);
   const [lintBusy, setLintBusy] = useState(false);
   const [syntaxOk, setSyntaxOk] = useState<boolean | null>(null);
   const [lintIssues, setLintIssues] = useState<LintIssue[]>([]);
   const [ruleName, setRuleName] = useState("Supply air temp high");
-  const [severity, setSeverity] = useState("warning");
   const [saved, setSaved] = useState<SavedRule[]>([]);
   const [activeRuleId, setActiveRuleId] = useState<string>("");
   const [creatingNew, setCreatingNew] = useState(false);
@@ -100,7 +98,6 @@ export default function RuleLabPage() {
     setActiveRuleId(rule.id);
     setRuleName(displayRuleName(rule.name));
     setMode(rule.mode);
-    setSeverity(rule.severity);
     setCfg(configToRecord(rule.config || {}));
     setDirty(false);
     try {
@@ -199,25 +196,6 @@ export default function RuleLabPage() {
     };
   }
 
-  async function analyzeFaultMapping(): Promise<FaultInference | null> {
-    try {
-      const res = await apiFetch<FaultInference>("/api/rules/infer-fault-codes", {
-        method: "POST",
-        body: JSON.stringify({
-          name: ruleName,
-          code,
-          mode,
-          config: configFromRecord(cfg),
-          severity,
-          site_id: activeSiteId || undefined,
-        }),
-      });
-      return res;
-    } catch {
-      return null;
-    }
-  }
-
   async function lintNow() {
     setBusy(true);
     try {
@@ -227,13 +205,7 @@ export default function RuleLabPage() {
       });
       setSyntaxOk(res.ok);
       setLintIssues(res.issues || []);
-      const parts = [formatLintIssues(res.issues || [])];
-      if (mode === "rule" && res.ok) {
-        const inf = await analyzeFaultMapping();
-        const block = formatFaultInferenceBlock(inf);
-        if (block) parts.push(block);
-      }
-      appendConsole(parts.filter(Boolean).join("\n\n"));
+      appendConsole(formatLintIssues(res.issues || []));
     } catch (e) {
       appendConsole(formatApiError(e));
     } finally {
@@ -250,7 +222,7 @@ export default function RuleLabPage() {
     const pointId = rule?.bindings?.point_ids?.[0];
     if (mode === "rule" && !pointId) {
       appendConsole(
-        "Quick test needs one bound point — pin this rule to a sensor on FDD assignments first.",
+        "Quick test needs one bound point — add this rule id to points[].fdd_rule_ids in Model & assignments JSON, then import.",
       );
       return;
     }
@@ -263,6 +235,9 @@ export default function RuleLabPage() {
           flagged: number;
           data_source?: string;
           value_column?: string;
+          backend?: string;
+          fully_arrow_native?: boolean;
+          migration_message?: string;
           events: { type: string; text?: string }[];
           trace?: string;
           error?: string;
@@ -282,6 +257,8 @@ export default function RuleLabPage() {
         setConsoleText(
           [
             `>>> Quick test (first bound point) rows=${res.rows} flagged=${res.flagged} · ${res.data_source}`,
+            res.backend ? `backend: ${res.backend}${res.ms != null ? ` · ${res.ms} ms` : ""}` : "",
+            res.migration_message || "",
             res.value_column ? `column: ${res.value_column}` : "",
             formatRuleTestEvents(res.events || [], { maxLines: 28 }),
             res.trace || res.error || "",
@@ -335,44 +312,27 @@ export default function RuleLabPage() {
         mode,
         code,
         config: configFromRecord(cfg),
-        severity,
+        severity: "warning",
         bindings: preservedBindings(bindingsSource),
       };
       if (activeRuleId) {
-        const saveRes = await apiFetch<{ rule: SavedRule; fault_inference?: FaultInference }>(
-          "/api/rules/save",
-          {
-            method: "POST",
-            body: JSON.stringify({ ...payload, id: activeRuleId }),
-          },
-        );
+        const saveRes = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
+          method: "POST",
+          body: JSON.stringify({ ...payload, id: activeRuleId }),
+        });
         setSourcePath(saveRes.rule.source_path || sourcePath);
-        const infBlock = formatFaultInferenceBlock(saveRes.fault_inference);
-        appendConsole(
-          [`>>> Updated rule .py — ${saveRes.rule.source_path || sourcePath}`, infBlock]
-            .filter(Boolean)
-            .join("\n\n"),
-        );
+        appendConsole(`>>> Updated rule .py — ${saveRes.rule.source_path || sourcePath}`);
       } else {
-        const res = await apiFetch<{ rule: SavedRule; fault_inference?: FaultInference }>(
-          "/api/rules/save",
-          {
-            method: "POST",
-            body: JSON.stringify(payload),
-          },
-        );
+        const res = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
         const newId = res.rule.id;
         setActiveRuleId(newId);
         setCreatingNew(false);
         setSourcePath(res.rule.source_path || "");
-        const infBlock = formatFaultInferenceBlock(res.fault_inference);
         appendConsole(
-          [
-            `>>> Created rule "${formatRuleLabel(res.rule.name)}". Assign points on FDD assignments.`,
-            infBlock,
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
+          `>>> Created rule "${formatRuleLabel(res.rule.name)}" (${newId}). Pin points via Model & assignments → Import / export JSON.`,
         );
         setDirty(false);
         const rules = await refreshSaved();
@@ -467,8 +427,9 @@ export default function RuleLabPage() {
         title="Rule Lab"
         subtitle={
           <>
-            Author and lint <code>.py</code> rules. Fault codes are inferred via local Ollama + BRICK-scoped
-            catalog on save/lint. Pin rules to points on <a href="/fdd-assignments">FDD assignments</a>.
+            Rules use <code>apply_faults_arrow(table, cfg, context)</code> over PyArrow historian columns.
+            Pin rules via{" "}
+            <a href="/model">Model & assignments</a> commissioning JSON.
           </>
         }
       />
@@ -555,18 +516,8 @@ export default function RuleLabPage() {
                 markDirty();
               }}
             >
-              <option value="rule">Per-row evaluate()</option>
+              <option value="rule">Arrow / Python rule</option>
               <option value="script">DataFrame script</option>
-            </select>
-          </div>
-          <div className="field">
-            <label className="field-label" htmlFor="rule-severity">
-              Severity
-            </label>
-            <select id="rule-severity" value={severity} onChange={(e) => setSeverity(e.target.value)}>
-              <option value="info">info</option>
-              <option value="warning">warning</option>
-              <option value="critical">critical</option>
             </select>
           </div>
         </div>
@@ -616,7 +567,7 @@ export default function RuleLabPage() {
 
       <RuleLabConsole
         lines={consoleLines}
-        placeholder="Lint, Ollama fault-code mapping, quick test, or batch output."
+        placeholder="Lint, quick test, batch output, or save status."
         footer={
           <button type="button" className="secondary small-btn" onClick={() => setConsoleText("")}>
             Clear

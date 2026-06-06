@@ -64,6 +64,43 @@ def export_model(_user: dict = Depends(require_user)) -> dict:
     return svc.load()
 
 
+@router.get("/commissioning-export")
+def commissioning_export(_user: dict = Depends(require_user)) -> dict:
+    """BRICK model + FDD rule bindings — single JSON for human/AI commissioning."""
+    from ..commissioning_bundle import build_commissioning_export
+    from ..rule_store import RuleStore
+
+    svc = _model()
+    ensure_default_site(svc, _ttl())
+    return build_commissioning_export(svc.load(), RuleStore().list_rules())
+
+
+class CommissioningImportBody(BaseModel):
+    payload: dict
+    replace: bool = True
+
+
+@router.post("/commissioning-import")
+def commissioning_import(body: CommissioningImportBody, user: dict = Depends(require_roles("integrator"))) -> dict:
+    """Import model and apply FDD bindings from fdd_rules / points[].fdd_rule_ids."""
+    from ..commissioning_bundle import apply_commissioning_import
+
+    svc = _model()
+    normalized = svc.normalize_import_payload(body.payload)
+    _require_site(normalized)
+    counts = apply_commissioning_import(body.payload, replace_model=body.replace)
+    _ttl().sync()
+    write_audit(
+        event_type="model.write",
+        action="commissioning_import",
+        outcome="success",
+        user=user,
+        resource_type="model",
+        detail={"rules_updated": counts.get("fdd_rules_updated", 0)},
+    )
+    return {"ok": True, **counts}
+
+
 @router.get("/sites")
 def list_sites(_user: dict = Depends(require_user)) -> dict:
     svc = _model()

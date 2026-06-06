@@ -12,9 +12,10 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 RULE_CODE = (
-    "def evaluate(row, cfg, prev_row=None, rows=None):\n"
-    "    sat = row.get('SAT') or row.get('temp')\n"
-    "    return sat is not None and float(sat) > float(cfg.get('high', 50))\n"
+    "import pyarrow.compute as pc\n\n"
+    "def apply_faults_arrow(table, cfg, context=None):\n"
+    "    col = 'SAT' if 'SAT' in table.column_names else 'temp'\n"
+    "    return pc.greater(pc.cast(table[col], pa.float64()), float(cfg.get('high', 50)))\n"
 )
 
 
@@ -57,7 +58,7 @@ def test_save_rule_with_multiple_fault_codes(client: TestClient):
 
     src = client.get(f"/api/rules/saved/{rule['id']}/source")
     assert src.status_code == 200
-    assert "def evaluate" in src.json()["code"]
+    assert "apply_faults_arrow" in src.json()["code"]
 
     client.delete(f"/api/rules/saved/{rule['id']}")
 
@@ -68,7 +69,7 @@ def test_batch_run_lights_check_engine(client: TestClient):
         json={
             "name": "SAT high",
             "mode": "rule",
-            "backend": "legacy_row",
+            "backend": "arrow",
             "code": RULE_CODE,
             "config": {"high": 50},
             "severity": "warning",
@@ -102,7 +103,7 @@ def test_playground_test_rule_uses_demo_frame(client: TestClient):
 
 
 def test_playground_test_rule_bad_indent_not_500(client: TestClient):
-    bad = "def evaluate(row, cfg, prev_row=None, rows=None):\nreturn False\n"
+    bad = "def apply_faults_arrow(table, cfg, context=None):\nreturn False\n"
     r = client.post(
         "/api/playground/test-rule",
         json={"code": bad, "config": {}, "limit": 10},

@@ -1,35 +1,24 @@
 ---
 title: Rule Lab
 parent: Operator Bridge
-nav_order: 3
+nav_order: 2
 ---
 
 # Rule Lab
 
-Rule Lab is the in-browser editor for Python FDD rules.
-
-## Contract
+Rule Lab authors **Arrow-native** Python rules against the feather historian. Rules define:
 
 ```python
-def evaluate(row, cfg, prev_row=None, rows=None):
-    """Return False, True, or (True, window_rows) for retroactive paint."""
+import pyarrow.compute as pc
+
+def apply_faults_arrow(table, cfg, context=None):
+    return pc.greater(table["zone_temp"], cfg["max_zone_temp"])
 ```
 
-## Storage
+The bridge detects `apply_faults_arrow`, runs rules on **PyArrow tables** via `open_fdd.arrow_runtime`, and persists `.py` sources under `workspace/data/rules_py/`.
 
-| Artifact | Path |
-|----------|------|
-| Rule source | `workspace/data/rules_py/<id>.py` |
-| Metadata | `workspace/data/rules_store.json` |
-| Bindings | Model `fdd_input` + `POST /api/rules/bind` |
+- **Quick test** — `POST /api/playground/test-rule` (returns `backend: arrow`, `ms`, flagged count)
+- **Batch** — `POST /api/rules/batch` / `openfdd-fdd-loop` timer
+- **Templates** — `GET /api/playground/arrow-templates`
 
-Saving in the UI or via API writes both metadata and `.py` file.
-
-## Workflow
-
-1. **Lint** — `POST /api/playground/lint`
-2. **Test** — `POST /api/playground/test-rule` on a building time window
-3. **Bind** — attach rule to a point in the model
-4. **Promote** — enable rule and run batch FDD
-
-Recipes and patterns: [Rule Cookbook](../rule-cookbook/). Tag rules with fault codes from [Fault Codes](../fault-codes/).
+Pin points to rules via **Model & assignments** (`/model`) commissioning JSON or BACnet tree right-click.
