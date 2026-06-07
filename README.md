@@ -36,10 +36,9 @@ git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
 ./scripts/docker_build.sh
 
 # or pull from GitHub Container Registry (tags on ghcr.io/bbartling/openfdd-bridge)
-export OPENFDD_IMAGE_TAG=2026.06.07-edge
-docker pull ghcr.io/bbartling/openfdd-bridge:${OPENFDD_IMAGE_TAG}
-docker pull ghcr.io/bbartling/openfdd-commission:${OPENFDD_IMAGE_TAG}
-docker pull ghcr.io/bbartling/openfdd-mcp-rag:${OPENFDD_IMAGE_TAG}
+docker pull ghcr.io/bbartling/openfdd-bridge:latest
+docker pull ghcr.io/bbartling/openfdd-commission:latest
+docker pull ghcr.io/bbartling/openfdd-mcp-rag:latest
 ./scripts/openfdd_stack.sh up
 ```
 

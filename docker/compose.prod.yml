@@ -1,12 +1,12 @@
 # Production GHCR images — baked-in bridge UI/API (no workspace/api bind-mount).
 # Use with bench overlay on bensserver:
-#   OPENFDD_IMAGE_TAG=2026.06.07-edge docker compose \
+#   docker compose \
 #     -f docker/compose.dev.yml -f docker/compose.bench.yml -f docker/compose.prod.yml up -d
 name: openfdd-dev
 
 services:
   bridge:
-    image: ghcr.io/bbartling/openfdd-bridge:${OPENFDD_IMAGE_TAG:-2026.06.07-edge}
+    image: ghcr.io/bbartling/openfdd-bridge:${OPENFDD_IMAGE_TAG:-latest}
     pull_policy: always
     build: !reset null
     volumes: !override
@@ -16,14 +16,14 @@ services:
       OFDD_CORS_ALLOW_PRIVATE_LAN: "1"
 
   commission:
-    image: ghcr.io/bbartling/openfdd-commission:${OPENFDD_IMAGE_TAG:-2026.06.07-edge}
+    image: ghcr.io/bbartling/openfdd-commission:${OPENFDD_IMAGE_TAG:-latest}
     pull_policy: always
     build: !reset null
     volumes: !override
       - ../workspace:/var/openfdd/workspace
 
   mcp-rag:
-    image: ghcr.io/bbartling/openfdd-mcp-rag:${OPENFDD_IMAGE_TAG:-2026.06.07-edge}
+    image: ghcr.io/bbartling/openfdd-mcp-rag:${OPENFDD_IMAGE_TAG:-latest}
     pull_policy: always
     build: !reset null
     volumes: !override

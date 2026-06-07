@@ -16,7 +16,7 @@ Open-FDD v3 edge sites run **three** GHCR containers plus optional **host** serv
 | `ghcr.io/bbartling/openfdd-commission` | `commission` | BACnet discover / read / write + **poll loop** |
 | `ghcr.io/bbartling/openfdd-mcp-rag` | `mcp-rag` | Doc-search sidecar for agent tools |
 
-Tags: [GitHub Packages](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge) (e.g. `2026.06.07-edge`).
+Tag: **`latest`** on [GitHub Packages](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge). Retired: `openfdd-bacnet-poll` (poll runs inside **commission**). GHCR retains only the **three newest** versions per image.
 
 Template: `docker/compose.edge.yml` → copy to `~/open-fdd/docker-compose.yml`.
 

@@ -18,13 +18,13 @@ Images: `openfdd-bridge`, `openfdd-commission`, `openfdd-mcp-rag`.
 
 ## Publish to GHCR (maintainers)
 
-GitHub Actions workflow **Publish Docker addons** — manual dispatch with a version tag.
+GitHub Actions workflow **Publish Docker addons** — manual dispatch; publishes **`:latest`** only and prunes GHCR (retired `openfdd-bacnet-poll` removed; keep 3 versions per image).
 
 Maintainer checklist:
 
 1. Green CI on `master`
-2. Run workflow with tag e.g. `2026.06.06-edge`
-3. Verify packages at `ghcr.io/bbartling/openfdd-*`
-4. Deploy to a demo edge with `OPENFDD_IMAGE_TAG=<tag>`
+2. Run **Publish Docker addons** workflow
+3. Verify `ghcr.io/bbartling/openfdd-{bridge,commission,mcp-rag}:latest`
+4. Edge hosts: `docker compose pull && docker compose up -d`
 
 Details live in `.github/workflows/` and `scripts/docker_build.sh` — not duplicated here.
