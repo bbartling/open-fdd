@@ -19,6 +19,10 @@ from .ttl_service import TtlService
 
 _LOCK = threading.RLock()
 _SAFE = re.compile(r"[^a-zA-Z0-9_-]+")
+# On-demand refresh values (shown when polling disabled until next sample).
+_ONDEMAND_VALUE: dict[str, str] = {}
+_POLL_LAST_RUN: dict[str, float] = {}
+_LAST_CYCLE: dict[str, Any] = {"at": "", "samples": 0, "error": ""}
 POLL_INTERVALS_S = (60, 300, 600, 900)
 POLL_LABELS = {60: "1 min", 300: "5 min", 600: "10 min", 900: "15 min"}
 SAMPLES_HEADER = (
@@ -81,6 +85,287 @@ def _save_registers(rows: list[dict[str, Any]]) -> None:
 
 def make_point_id(host: str, unit_id: int, address: int, function: str) -> str:
     return f"mb-{_slug(host)}-u{unit_id}-{function}-{_slug(str(address))}"
+
+
+def device_key(host: str, port: str | int, unit_id: str | int) -> str:
+    return f"{host}:{port}:u{unit_id}"
+
+
+def record_ondemand_value(*, point_id: str, value: str) -> None:
+    text = str(value or "").strip()
+    if not text:
+        return
+    with _LOCK:
+        _ONDEMAND_VALUE[point_id] = text
+
+
+def _latest_poll_values() -> dict[str, str]:
+    path = modbus_poll_csv()
+    if not path.is_file():
+        return {}
+    latest: dict[str, tuple[str, str]] = {}
+    with path.open(encoding="utf-8") as fh:
+        for line in fh:
+            if not line.strip() or line.startswith("timestamp_utc"):
+                continue
+            parts = line.strip().split(",")
+            if len(parts) < 9:
+                continue
+            pid, val, ts = parts[2], parts[8], parts[0]
+            prev = latest.get(pid)
+            if prev is None or ts >= prev[0]:
+                latest[pid] = (ts, val)
+    return {pid: val for pid, (_ts, val) in latest.items()}
+
+
+def _present_value_for_point(*, point_id: str, enabled: bool, latest: dict[str, str], last_value: str) -> str:
+    ondemand = _ONDEMAND_VALUE.get(point_id, "")
+    polled = latest.get(point_id) or last_value or ""
+    if enabled:
+        return polled or ondemand
+    return ondemand or polled
+
+
+def _row_read_spec(row: dict[str, Any]) -> dict[str, Any]:
+    scale = str(row.get("scale") or "").strip()
+    offset = str(row.get("offset") or "").strip()
+    decode = str(row.get("decode") or "uint16").strip() or "uint16"
+    return {
+        "host": str(row.get("host") or ""),
+        "port": int(row.get("port") or 502),
+        "unit_id": int(row.get("unit_id") or 1),
+        "timeout": 5.0,
+        "registers": [
+            {
+                "address": int(row.get("address") or 0),
+                "count": int(row.get("count") or 1),
+                "function": str(row.get("function") or "holding"),
+                "decode": None if decode == "raw" else decode,
+                "scale": float(scale) if scale else None,
+                "offset": float(offset) if offset else None,
+                "label": str(row.get("label") or ""),
+            }
+        ],
+    }
+
+
+def driver_tree() -> dict[str, Any]:
+    rows = _load_registers()
+    latest = _latest_poll_values()
+    devices: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        host = str(row.get("host") or "")
+        port = str(row.get("port") or "502")
+        unit = str(row.get("unit_id") or "1")
+        key = device_key(host, port, unit)
+        enabled = str(row.get("enabled", "")).lower() in {"1", "true", "yes"}
+        try:
+            interval = int(str(row.get("poll_interval_s") or "0"))
+        except ValueError:
+            interval = 0
+        if enabled and interval not in POLL_INTERVALS_S:
+            interval = 60
+        pid = str(row.get("point_id") or "")
+        fn = str(row.get("function") or "holding")
+        addr = str(row.get("address") or "0")
+        dev = devices.setdefault(
+            key,
+            {
+                "device_key": key,
+                "host": host,
+                "port": port,
+                "unit_id": unit,
+                "points": [],
+            },
+        )
+        dev["points"].append(
+            {
+                "point_id": pid,
+                "label": str(row.get("label") or f"reg_{addr}"),
+                "register_address": addr,
+                "function": fn,
+                "object_type": fn,
+                "object_identifier": f"{fn}@{addr}",
+                "object_name": str(row.get("label") or f"reg_{addr}"),
+                "enabled": enabled,
+                "poll_interval_s": interval if enabled else 0,
+                "poll_label": POLL_LABELS.get(interval, "") if enabled else "",
+                "present_value": _present_value_for_point(
+                    point_id=pid,
+                    enabled=enabled,
+                    latest=latest,
+                    last_value=str(row.get("last_value") or ""),
+                ),
+                "units": str(row.get("units") or ""),
+                "last_read_at": str(row.get("last_read_at") or ""),
+            }
+        )
+    device_list = sorted(devices.values(), key=lambda d: (d["host"], d["port"], d["unit_id"]))
+    for dev in device_list:
+        dev["point_count"] = len(dev["points"])
+        dev["poll_count"] = sum(1 for p in dev["points"] if p["enabled"])
+        dev["device_instance"] = dev["device_key"]
+        dev["device_address"] = f"{dev['host']}:{dev['port']} unit {dev['unit_id']}"
+    return {
+        "ok": True,
+        "devices": device_list,
+        "poll_intervals": [{"seconds": s, "label": POLL_LABELS[s]} for s in POLL_INTERVALS_S],
+        "registers_path": str(modbus_registers_path()),
+    }
+
+
+def delete_register(point_id: str) -> dict[str, Any]:
+    with _LOCK:
+        rows = _load_registers()
+        kept = [r for r in rows if str(r.get("point_id")) != point_id]
+        if len(kept) == len(rows):
+            raise ValueError(f"unknown point_id: {point_id}")
+        _save_registers(kept)
+        _ONDEMAND_VALUE.pop(point_id, None)
+    return {"ok": True, "point_id": point_id}
+
+
+def refresh_point(point_id: str, *, store: bool = False) -> dict[str, Any]:
+    from .modbus_service import execute_modbus_read_request
+
+    rows = _load_registers()
+    row = next((r for r in rows if str(r.get("point_id")) == point_id), None)
+    if not row:
+        raise ValueError(f"unknown point_id: {point_id}")
+    payload = _row_read_spec(row)
+    result = execute_modbus_read_request(payload)
+    reading = (result.get("readings") or [{}])[0]
+    if not reading.get("success"):
+        raise ValueError(str(reading.get("error") or "read_failed"))
+    decoded = reading.get("decoded")
+    if decoded is None and reading.get("words"):
+        decoded = (reading.get("words") or [None])[0]
+    formatted = "—" if decoded is None else str(decoded)
+    record_ondemand_value(point_id=point_id, value=formatted)
+    out: dict[str, Any] = {
+        "ok": True,
+        "point_id": point_id,
+        "value": decoded,
+        "present_value": formatted,
+    }
+    if store:
+        ingest = append_samples_and_ingest(
+            host=payload["host"],
+            unit_id=int(payload["unit_id"]),
+            readings=result.get("readings") or [],
+        )
+        out["ingest"] = ingest
+    return out
+
+
+def run_poll_cycle(*, force: bool = False) -> dict[str, Any]:
+    """Read all enabled registers whose poll interval has elapsed."""
+    import time as _time
+
+    from .modbus_service import execute_modbus_read_request
+
+    now = _time.monotonic()
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rows = _load_registers()
+    due: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("enabled", "")).lower() not in {"1", "true", "yes"}:
+            continue
+        pid = str(row.get("point_id") or "")
+        try:
+            interval = max(1, int(str(row.get("poll_interval_s") or "60")))
+        except ValueError:
+            interval = 60
+        last = _POLL_LAST_RUN.get(pid, 0.0)
+        if force or (now - last) >= interval:
+            due.append(row)
+    if not due:
+        _LAST_CYCLE.update({"at": ts, "samples": 0, "error": ""})
+        return {"ok": True, "polled": 0, "samples": 0, "at": ts}
+
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for row in due:
+        key = device_key(row.get("host", ""), row.get("port", "502"), row.get("unit_id", "1"))
+        groups.setdefault(key, []).append(row)
+
+    total_samples = 0
+    errors: list[str] = []
+    for _key, group in groups.items():
+        sample_row = group[0]
+        host = str(sample_row.get("host") or "")
+        port = int(sample_row.get("port") or 502)
+        unit_id = int(sample_row.get("unit_id") or 1)
+        reg_specs = []
+        for row in group:
+            scale = str(row.get("scale") or "").strip()
+            offset = str(row.get("offset") or "").strip()
+            decode = str(row.get("decode") or "uint16").strip() or "uint16"
+            reg_specs.append(
+                {
+                    "address": int(row.get("address") or 0),
+                    "count": int(row.get("count") or 1),
+                    "function": str(row.get("function") or "holding"),
+                    "decode": None if decode == "raw" else decode,
+                    "scale": float(scale) if scale else None,
+                    "offset": float(offset) if offset else None,
+                    "label": str(row.get("label") or ""),
+                }
+            )
+        try:
+            result = execute_modbus_read_request(
+                {
+                    "host": host,
+                    "port": port,
+                    "unit_id": unit_id,
+                    "timeout": 5.0,
+                    "registers": reg_specs,
+                }
+            )
+            ingest = append_samples_and_ingest(
+                host=host,
+                unit_id=unit_id,
+                readings=result.get("readings") or [],
+            )
+            if ingest.get("ok"):
+                total_samples += int(ingest.get("samples_appended") or 0)
+            for row in group:
+                _POLL_LAST_RUN[str(row.get("point_id") or "")] = now
+        except Exception as exc:
+            errors.append(str(exc))
+
+    err_text = "; ".join(errors[:3])
+    _LAST_CYCLE.update({"at": ts, "samples": total_samples, "error": err_text})
+    return {
+        "ok": not errors,
+        "polled": len(due),
+        "samples": total_samples,
+        "at": ts,
+        "error": err_text,
+    }
+
+
+def poll_status() -> dict[str, Any]:
+    rows = _load_registers()
+    enabled = [
+        r
+        for r in rows
+        if str(r.get("enabled", "")).lower() in {"1", "true", "yes"}
+    ]
+    intervals = []
+    for r in enabled:
+        try:
+            intervals.append(int(str(r.get("poll_interval_s") or "60")))
+        except ValueError:
+            intervals.append(60)
+    interval_s = min(intervals) if intervals else 0.0
+    return {
+        "ok": True,
+        "enabled_points": len(enabled),
+        "interval_s": float(interval_s),
+        "samples": int(_LAST_CYCLE.get("samples") or 0),
+        "at": str(_LAST_CYCLE.get("at") or ""),
+        "error": str(_LAST_CYCLE.get("error") or ""),
+    }
 
 
 def list_registers() -> dict[str, Any]:

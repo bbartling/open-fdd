@@ -20,6 +20,8 @@
 | **`gl36_mechanical_validate.py`** | Passive GL36 mechanical checks (VAV/AHU/HW) from `--host` or `--samples`. |
 | **`ahu_runtime_report.py`** | Fan/system run-hour metrics (`--site-id`, `--equipment-id`). |
 | **`push_ahu_setpoints.py`** | Merge BACnet setpoint rows into edge poll (`--host`, `--point-ids`). |
+| **`fake_modbus_temp_server.py`** | Local Modbus TCP fake zone-temp sensor (holding reg, default `127.0.0.1:5502`). |
+| **`validate_modbus_temp_e2e.py`** | E2E: fake server → read/store → feather (`source=modbus`) → flatline FDD. |
 
 Site packs live under `edge_backup/local/<site_id>/<building_id>/` (see `edge_site_backup.sh`). Scripts take `--site-id` and `--building-id` instead of hardcoding customer names.
 

@@ -12,7 +12,12 @@ from ..deps import require_roles
 from ..modbus_service import ModbusServiceError, execute_modbus_read_request
 from ..modbus_store import (
     append_samples_and_ingest,
+    delete_register,
+    driver_tree,
     list_registers,
+    poll_status,
+    refresh_point,
+    run_poll_cycle,
     set_register_poll,
     upsert_register,
 )
@@ -111,6 +116,44 @@ class ModbusRegisterPollBody(BaseModel):
     poll_interval_s: int = Field(default=0, ge=0)
 
 
+class ModbusRefreshBody(BaseModel):
+    point_id: str
+    store: bool = Field(default=False, description="Also append sample to historian")
+
+
+@router.get("/api/modbus/driver/tree", dependencies=[_READ])
+def modbus_driver_tree() -> dict:
+    return driver_tree()
+
+
+@router.get("/api/modbus/poll/status", dependencies=[_READ])
+def modbus_poll_status_route() -> dict:
+    return poll_status()
+
+
+@router.post("/api/modbus/poll/once", dependencies=[_POLL])
+async def modbus_poll_once() -> dict:
+    return await asyncio.to_thread(run_poll_cycle, force=True)
+
+
+@router.post("/api/modbus/refresh", dependencies=[_READ])
+async def modbus_refresh_register(body: ModbusRefreshBody) -> dict:
+    try:
+        return await asyncio.to_thread(refresh_point, body.point_id, store=body.store)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.delete("/api/modbus/register/{point_id}", dependencies=[_POLL])
+def modbus_delete_register(point_id: str) -> dict:
+    try:
+        return delete_register(point_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.get("/api/modbus/registers", dependencies=[_READ])
 def modbus_registers_list() -> dict:
     return list_registers()
@@ -169,7 +212,7 @@ async def modbus_read_and_store(body: ModbusReadStoreBody) -> dict:
                         "scale": spec.scale,
                         "offset": spec.offset,
                         "label": reading.get("label") or spec.label,
-                        "units": "",
+                        "units": "degF",
                         "last_value": str(reading.get("decoded") or ""),
                     }
                 )
