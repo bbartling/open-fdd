@@ -839,15 +839,17 @@ BACnet devices → commission (poll loop) → samples.csv → bridge (ingest) �
 
 ### JSON API (HTTP/HTTPS)
 
-1. Operator configures REST endpoints on the **JSON API** tab — GET/POST, Bearer or Basic auth, optional TLS verify off for self-signed OT gateways.
-2. Poll worker issues HTTP requests and extracts values via JSON dot-path.
+1. Operator configures REST endpoints on the **JSON API** tab — GET/POST, Bearer or Basic auth, `${ENV:VAR}` placeholders from `json_api.env.local`, optional TLS verify off for self-signed OT gateways.
+2. Poll worker issues HTTP requests (one GET can fan out to multiple JSON paths, e.g. OpenWeather `web-oat-t` / `web-rh` / `web-weather-desc`).
 3. Samples append to `workspace/json_api/polls/samples.csv` → `feather_store/json_api/`.
+4. FDD batch **merges** `json_api` columns with BACnet/Modbus on the same site (nearest timestamp, 30 min tolerance) for cross-source rules.
 
 ```
-OT REST device → bridge JSON API worker → samples.csv → feather_store/json_api
+OT REST / weather API → bridge JSON API worker → samples.csv → feather_store/json_api
+                                                      ↘ merged into FDD frame with bacnet/modbus
 ```
 
-Details: [Driver framework](../drivers/index), [BACnet polling](../bacnet/polling), [JSON API driver](../drivers/json-api), [Containers](containers).
+Showcase: [OpenWeatherMap bundle](../drivers/json-api#openweathermap-showcase-recommended-demo). Details: [Driver framework](../drivers/index), [BACnet polling](../bacnet/polling), [JSON API driver](../drivers/json-api), [Containers](containers).
 
 ## Rule evaluation
 
@@ -1481,9 +1483,9 @@ GL36 trim & respond and plant reset sequences will live on the **[Algorithms](al
 
 # JSON API driver
 
-Poll **HTTP or HTTPS** REST endpoints on the OT LAN (or a bench API such as [JSONPlaceholder](https://jsonplaceholder.typicode.com/)) and store extracted JSON values in the feather historian (`source=json_api`).
+Poll **HTTP or HTTPS** REST endpoints on the OT LAN (or public APIs such as [OpenWeatherMap](https://openweathermap.org/api)) and store extracted JSON values in the feather historian (`source=json_api`).
 
-Use this driver for gateways, micro-PLCs, IoT hubs, and vendor APIs that expose JSON over HTTP instead of BACnet or Modbus.
+Use this driver for gateways, micro-PLCs, IoT hubs, vendor APIs, and **web weather** when you want to cross-check shaky local outdoor-air sensors against a reference.
 
 ## Supported features
 
@@ -1492,18 +1494,80 @@ Use this driver for gateways, micro-PLCs, IoT hubs, and vendor APIs that expose 
 | Methods | `GET`, `POST` |
 | Transport | `http://` and `https://` |
 | TLS certificate verify | On by default; disable for self-signed OT gateways |
-| Authentication | None, **Bearer token**, **HTTP Basic** |
+| Authentication | None, **Bearer token**, **HTTP Basic**, or **query-string API keys via env** |
+| Env placeholders | `${ENV:VAR}` or `${VAR}` in URL, headers, body, bearer token |
 | Custom headers | Optional `headers` map (merged with auth headers) |
-| Value extraction | Dot-path into JSON body (`title`, `data.temp`, `items.0.value`) |
-| Polling | 1 / 5 / 10 / 15 minutes (same worker pattern as BACnet/Modbus) |
+| Value extraction | Dot-path into JSON body (`title`, `main.temp`, `weather.0.description`) |
+| Multi-extract poll | One HTTP request per URL group; fan-out to multiple `json_path` rows |
+| Polling | 1 / 5 / 10 / 15 / **20** minutes (same worker pattern as BACnet/Modbus) |
 | Historian | `workspace/json_api/polls/samples.csv` → `feather_store/json_api/` |
+| FDD merge | Scheduled FDD merges `bacnet` + `modbus` + `json_api` columns by nearest timestamp |
+
+## Secrets: `json_api.env.local`
+
+Copy `workspace/json_api.env.example` → `workspace/json_api.env.local` (gitignored). The bridge loads this file at startup and when `run_local.sh` starts the stack.
+
+Use placeholders in commissioning URLs so API keys never land in git:
+
+```text
+https://api.openweathermap.org/data/2.5/weather?q=${ENV:OPENWEATHER_CITY}&appid=${ENV:OPENWEATHER_API_KEY}&units=${ENV:OPENWEATHER_UNITS}
+```
+
+Check which vars are configured: `GET /api/json-api/env/status`.
+
+## OpenWeatherMap showcase (recommended demo)
+
+This is the flagship example of what the generic JSON API driver can do — **one URL, three historian columns**, env-based API key, browser tree like BACnet/Modbus.
+
+### 1. Configure env
+
+```bash
+cp workspace/json_api.env.example workspace/json_api.env.local
+# Edit: OPENWEATHER_API_KEY, OPENWEATHER_CITY, OPENWEATHER_UNITS (imperial = °F)
+```
+
+Restart the bridge (or `./scripts/run_local.sh restart`) so env vars load.
+
+### 2. Register from the UI
+
+1. Sign in as **integrator** → **JSON API** tab.
+2. Open the **OpenWeatherMap showcase** panel.
+3. Click **Register OpenWeather bundle (3 points, poll 20 min)**.
+
+Three endpoints appear under `api.openweathermap.org` in the commissioning tree:
+
+| Label | JSON path | Historian column | Units |
+|-------|-----------|------------------|-------|
+| web-oat-t | `main.temp` | `web-oat-t` | degF / degC |
+| web-rh | `main.humidity` | `web-rh` | % |
+| web-weather-desc | `weather.0.description` | `web-weather-desc` | text |
+
+Poll worker deduplicates: **one GET** serves all three extractions per cycle.
+
+### 3. Headless / script
+
+```bash
+# Standalone fetch (like the original playground tester)
+python3 scripts/openweather_json_api_example.py
+
+# Register via REST (integrator login)
+python3 scripts/openweather_json_api_example.py --register --base http://127.0.0.1:8000
+```
+
+### 4. FDD: local OA-T vs web weather
+
+With BACnet `oa-t` and JSON API `web-oat-t` in the same site, scheduled FDD merges both sources. Example rule:
+
+`workspace/data/rules_py/oat_vs_web_spread_1h.py` — flags when `|oa-t − web-oat-t| > 8 °F` (stuck or drifting outdoor-air sensor).
+
+Enable it in Rule Lab, bind to your OA-T BACnet point, and run **Update all records**.
 
 ## Commissioning (UI)
 
 1. Sign in → **JSON API** tab (below Modbus).
 2. Enter URL, method, JSON path, and label (historian column name).
 3. Set **Auth** if the device requires it:
-   - **Bearer token** — common for API keys and JWT gateways.
+   - **Bearer token** — common for API keys and JWT gateways (or use `${ENV:TOKEN}` in the field).
    - **HTTP Basic** — username/password for legacy OT web servers.
 4. **TLS verify** — leave checked for public HTTPS; uncheck for `https://192.168.x.x` with a self-signed certificate.
 5. Click **Request & store to historian** — endpoint is saved to `endpoints.csv` and a feather shard is written.
@@ -1515,6 +1579,18 @@ Use the **Todo title** preset against JSONPlaceholder to verify outbound HTTPS w
 
 ## Authentication examples
 
+### Query-string API key via env (OpenWeather)
+
+```json
+{
+  "url": "https://api.openweathermap.org/data/2.5/weather?q=${ENV:OPENWEATHER_CITY}&appid=${ENV:OPENWEATHER_API_KEY}&units=${ENV:OPENWEATHER_UNITS}",
+  "method": "GET",
+  "json_path": "main.temp",
+  "label": "web-oat-t",
+  "auth_type": "none"
+}
+```
+
 ### Bearer token (API key)
 
 ```json
@@ -1524,7 +1600,7 @@ Use the **Todo title** preset against JSONPlaceholder to verify outbound HTTPS w
   "json_path": "sensors.zone_temp",
   "label": "zone-temp",
   "auth_type": "bearer",
-  "bearer_token": "your-api-key-here",
+  "bearer_token": "${ENV:GATEWAY_API_KEY}",
   "verify_tls": false
 }
 ```
@@ -1557,17 +1633,19 @@ Use the **Todo title** preset against JSONPlaceholder to verify outbound HTTPS w
 }
 ```
 
-Credentials are stored in `workspace/json_api/commissioning/endpoints.csv` on the edge host (local OT commissioning model). Restrict filesystem access on production boxes.
+Credentials in `endpoints.csv` are redacted in API responses (`***`). Prefer `${ENV:…}` for production keys.
 
 ## REST API
 
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
+| GET | `/api/json-api/env/status` | operator+ | Which env vars are configured (no secret values) |
+| POST | `/api/json-api/presets/openweather` | integrator+ | Register 3-point OpenWeather bundle + optional poll |
 | GET | `/api/json-api/driver/tree` | operator+ | Commissioning tree grouped by host |
 | GET | `/api/json-api/poll/status` | operator+ | Poll worker status |
 | POST | `/api/json-api/poll/once` | integrator+ | Run one poll cycle |
 | POST | `/api/json-api/request` | operator+ | One-shot HTTP request (no store) |
-| POST | `/api/json-api/read_and_store` | operator+ | Request + CSV + feather ingest |
+| POST | `/api/json-api/read_and_store` | integrator+ | Request + CSV + feather ingest |
 | POST | `/api/json-api/refresh` | operator+ | Re-fetch one endpoint |
 | PATCH | `/api/json-api/endpoint/poll` | integrator+ | Enable/disable poll interval |
 | DELETE | `/api/json-api/endpoint/{point_id}` | integrator+ | Remove endpoint |
@@ -1578,6 +1656,7 @@ Full route list: [API routes](../appendix/bridge_api).
 
 | Device type | Example URL | Notes |
 |-------------|-------------|-------|
+| Web weather | `https://api.openweathermap.org/data/2.5/weather?...` | Env-based `appid`; 3 historian columns |
 | Gateway status | `http://192.168.1.50/api/status` | Often plain HTTP on LAN |
 | HTTPS BMS API | `https://10.0.0.12/rest/points/zone1` | May need `verify_tls: false` |
 | Local mock | `https://jsonplaceholder.typicode.com/todos/1` | Bench / CI only |
@@ -1585,8 +1664,20 @@ Full route list: [API routes](../appendix/bridge_api).
 ## Limitations
 
 - Response body must be **JSON** (not XML or plain text).
-- Extracted values are stored as **strings** in feather; numeric FDD rules should use BACnet or Modbus for float trends.
-- Outbound requests originate from the **bridge** container/host — ensure routing and firewall rules allow the edge box to reach the OT subnet.
+- Numeric paths (e.g. `main.temp`) are stored as strings in poll CSV; FDD rules cast with `pc.cast(..., "float64")`.
+- Outbound requests originate from the **bridge** container/host — ensure routing and firewall rules allow the edge box to reach the target (OT subnet or public internet for weather).
+
+## Disable polling (save API quota)
+
+Stop scheduled calls without deleting endpoints: JSON API tree → select OpenWeather points → **Stop polling**, or integrator API:
+
+```bash
+curl -X PATCH http://127.0.0.1:8765/api/json-api/endpoint/poll \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"point_id":"ja-api-openweathermap-org-get-web-oat-t","enabled":false,"poll_interval_s":0}'
+```
+
+API keys live in `json_api.env.local` (gitignored) — never committed; audit logs do not record expanded URLs with `appid=`. See [Logging and audit](../ops/logging).
 
 ## Smoke test
 
@@ -1754,7 +1845,7 @@ Open-FDD edge commissioning uses a **shared driver pattern** for OT data sources
 |--------|----------|------------------|-------------------|
 | [BACnet](../bacnet/index) | MS/TP / IP (`:47808`) | `bacnet` | BACnet |
 | Modbus | Modbus TCP | `modbus` | Modbus |
-| [JSON API](json-api) | HTTP/HTTPS REST | `json_api` | JSON API |
+| [JSON API](json-api) | HTTP/HTTPS REST (+ [OpenWeather showcase](json-api#openweathermap-showcase-recommended-demo)) | `json_api` | JSON API |
 
 All three drivers share the same operator workflow:
 
@@ -1784,7 +1875,7 @@ workspace/
 
 - **Plot tab** — numeric columns from `bacnet` and `modbus` sources (`GET /api/timeseries/plot?source=…`).
 - **String JSON fields** — stored in feather under `json_api`; use the JSON API tree or feather directly (plot is numeric-only).
-- **FDD batch** — `POST /api/rules/batch` loads feather via BRICK-bound `external_id` columns.
+- **FDD batch** — merges `bacnet` + `modbus` + `json_api` historian columns by nearest timestamp; rules use BRICK-bound `external_id` names (e.g. compare BACnet `oa-t` vs JSON API `web-oat-t` — see [JSON API](json-api)).
 - **BRICK model** — bind points in **Model & assignments** commissioning JSON; sync TTL for SPARQL scope.
 
 ## Rule Lab (Arrow upload/download)
@@ -2372,6 +2463,8 @@ Rule Lab executes **operator-authored Python** in a sandbox. Restrict integrator
 | File | Contents |
 |------|----------|
 | `workspace/auth.env.local` | JWT secret, role passwords |
+| `workspace/json_api.env.local` | REST API keys for JSON API `${ENV:VAR}` URLs (e.g. OpenWeather `OPENWEATHER_API_KEY`) |
+| `workspace/data.env.local` | Historian + **audit log retention** (`OFDD_LOG_*`, `OFDD_FEATHER_*`) |
 | `infra/ansible/secrets/<host>.env.local` | SSH deploy secrets (maintainers) |
 
 Copy from `*.example` templates only.
@@ -2391,6 +2484,8 @@ Use read-only registry credentials on edge if images are private; rotate tokens 
 ## Backup
 
 Back up `workspace/data/` and auth env in secure operator vault — not in git.
+
+Audit JSONL under `workspace/logs/` may contain client IPs and usernames — treat like security logs. See [Logging and audit](../ops/logging).
 
 
 # BACnet write allowlists
@@ -2413,6 +2508,278 @@ See operator guide: [BACnet write safety](../bacnet/write-safety).
 Never enable blanket write access for agent or integrator automation without human approval per site.
 
 
+# Logging and audit
+
+# Logging and audit
+
+Open-FDD uses a **two-tier logging model** familiar to IT and security teams: structured **audit/error JSONL** for forensics and compliance, plus **service stdout** for engineering troubleshooting. Defaults include **age pruning**, **size rotation in MB**, and **Docker log caps** — no operator cron required.
+
+## Log types
+
+| Tier | Location | Format | Who reads it |
+|------|----------|--------|--------------|
+| **Audit** | `workspace/logs/audit.jsonl` | JSON Lines | Security, MSI, integrator API |
+| **Errors** | `workspace/logs/error.jsonl` | JSON Lines | Support, integrator API |
+| **Service stdout** | Docker: `docker compose logs` · Dev: `workspace/.local-run/*.log` | Plain text (uvicorn, workers) | Engineering |
+| **Historian** | `workspace/data/feather_store/` | Feather | FDD, plots — separate retention (`data.env.local`) |
+
+Structured audit logs are **not** mixed into uvicorn access logs. That separation matches common practice: SIEM-friendly JSONL for auth and OT commands; unstructured stdout for stack traces and poll worker noise.
+
+## Audit record schema
+
+Each line in `audit.jsonl` / `error.jsonl` is one JSON object:
+
+| Field | Example | Notes |
+|-------|---------|-------|
+| `@timestamp` | `2026-06-07T19:57:21+00:00` | UTC ISO-8601 |
+| `event_id` | UUID | Unique per event |
+| `event_type` | `auth.login.failure` | Stable taxonomy (see below) |
+| `severity` | `warning` | `debug` … `critical` |
+| `outcome` | `failure` | `success`, `failure`, `denied`, … |
+| `service` | `openfdd-bridge` | |
+| `host` | hostname | |
+| `action` | `login` | Human-readable verb |
+| `actor` | `{username, role}` | After successful auth |
+| `client` | `{ip, user_agent}` | Respects `OFDD_TRUST_X_FORWARDED_FOR` behind Caddy |
+| `http` | method, path, status | When HTTP-triggered |
+| `resource` | BACnet object, model id, … | When applicable |
+| `detail` | Sanitized map | **Passwords, tokens, secrets stripped by key name** |
+| `request_id` | UUID | On audited HTTP paths |
+
+### Auth events (industry-standard login trail)
+
+| `event_type` | When |
+|--------------|------|
+| `auth.login.success` | Valid credentials |
+| `auth.login.failure` | Bad password (generic client message) |
+| `auth.login.lockout` | Rate limit exceeded (default 5 failures / 5 min) |
+
+Login rate limits and lockouts are **audited**; responses never reveal whether the username exists.
+
+### OT / commissioning events
+
+| `event_type` | When |
+|--------------|------|
+| `bacnet.command` | Supervisory write (allowed, denied, dry-run) |
+| `bacnet.discover` | Who-Is / point discovery |
+| `model.write` | BRICK model mutations |
+| `agent.tool` | Agent tool calls (prompts hashed/truncated) |
+| `api.access` | Sensitive POST/PUT/PATCH/DELETE (BACnet, ingest) |
+| `error.unhandled` | Unhandled exception (also in `error.jsonl`) |
+
+**Not audited:** routine GETs (dashboard reads, plot data, health). This reduces noise while keeping **auth and field commands** on the trail.
+
+### Secret redaction
+
+Never logged: passwords, bearer tokens, `OFDD_AUTH_SECRET`, private keys. Detail objects drop keys containing `password`, `token`, `secret`, `authorization`. Agent tool arguments use additional hashing for prompts and rule source.
+
+Opt-in full prompt logging (lab only): `OFDD_AUDIT_LOG_PROMPTS=1`.
+
+## Integrator API (read logs in the UI stack)
+
+| Method | Path | Role |
+|--------|------|------|
+| GET | `/api/audit/events?limit=100` | integrator |
+| GET | `/api/audit/errors?limit=100` | integrator |
+| GET | `/api/audit/summary` | integrator |
+
+Use these for post-incident review without shell access. Forward `workspace/logs/*.jsonl` to SIEM (rsyslog, Filebeat, Wazuh) on production edges.
+
+## Retention and rotation (defaults)
+
+Configured in `workspace/data.env.local` (copy from `data.env.example`):
+
+| Variable | Default | Behavior |
+|----------|---------|----------|
+| `OFDD_LOG_RETENTION_DAYS` | **90** | Drop audit/error JSONL lines older than N days; delete aged `.local-run` and archived `*.log` / `audit.*.jsonl` |
+| `OFDD_LOG_MAX_MB` | **50** | When `audit.jsonl` or `error.jsonl` exceeds N MB, archive to `audit.{UTC}.jsonl` and start fresh |
+| `OFDD_LOCAL_RUN_LOG_MAX_MB` | **25** | Rotate `workspace/.local-run/*.log` (bridge, Caddy, FDD loop, …) |
+| `OFDD_LOG_ROTATE_INTERVAL_HOURS` | **6** | Background retention while bridge is running (not only at restart) |
+
+Rotation runs at **bridge startup** and on the **scheduled interval**. No logrotate.d entry is required for audit JSONL.
+
+Optional path overrides:
+
+```bash
+OFDD_AUDIT_LOG_PATH=/var/log/openfdd/audit.jsonl
+OFDD_ERROR_LOG_PATH=/var/log/openfdd/error.jsonl
+```
+
+## Docker edge: json-file caps (not journald for app audit)
+
+Production stacks use **Docker Compose** (`docker/compose.edge.yml`). Container stdout uses the **`json-file` driver with size limits**:
+
+```yaml
+logging:
+  driver: json-file
+  options:
+    max-size: "25m"
+    max-file: "5"
+```
+
+That caps each service at roughly **125 MB** of rotated container logs on disk — the same pattern many teams use instead of unbounded `docker logs`.
+
+**Why audit JSONL stays on disk (not journald)?**
+
+- Append-only files under `workspace/logs/` survive container recreate and bind-mount to the host.
+- JSONL lines import cleanly into SIEM without journal field parsing.
+- OT incident response often needs **months** of auth/BACnet write history on the edge box.
+
+**When journald still applies:** native systemd units (Caddy, Ollama on bare metal) — use `journalctl -u <unit>` per your Linux runbook. Bridge audit remains in `workspace/logs/` even when uvicorn stdout goes to Docker or `.local-run/`.
+
+## Local dev (`run_local.sh`)
+
+| File | Service |
+|------|---------|
+| `workspace/.local-run/bridge.log` | Bridge / uvicorn |
+| `workspace/.local-run/commission.log` | BACnet commission agent |
+| `workspace/.local-run/caddy.log` | Caddy |
+| `workspace/.local-run/fdd_loop.log` | Scheduled FDD |
+| `workspace/.local-run/mcp_rag.log` | MCP RAG |
+| `workspace/.local-run/ollama.log` | Ollama |
+
+These are **engineering logs**. Structured audit still lands in `workspace/logs/audit.jsonl` when auth is enabled.
+
+## Quick checks
+
+```bash
+# Last auth failures
+grep 'auth.login' workspace/logs/audit.jsonl | tail -5
+
+# Integrator API (after login)
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8765/api/audit/summary | jq .
+
+# Docker edge
+docker compose logs bridge --tail 50
+```
+
+## Comparison to typical web apps
+
+| Practice | Open-FDD |
+|----------|----------|
+| Structured auth audit | Yes — JSONL with actor, IP, outcome |
+| Login rate limit + lockout audit | Yes |
+| Secret redaction in logs | Yes — key-based + agent sanitization |
+| Request correlation ID | Yes — on audited mutation paths |
+| Centralized stdout JSON | No — stdout is plain text; audit is JSONL |
+| Full HTTP access log | No — mutations and auth only (OT noise reduction) |
+| Log rotation / size caps | Yes — defaults above + Docker `max-size` |
+| SIEM-ready export | Yes — file tail / Filebeat on `workspace/logs/` |
+
+For BACnet write safety and credential generation, see [SECURITY.md](../../workspace/deploy/SECURITY.md) and [Secrets and auth](../security/secrets-auth).
+
+## Related
+
+- [JSON API driver](../drivers/json-api) — OpenWeatherMap showcase, env-based API keys (`json_api.env.local`)
+- [Live site update](live_site_update) — `docker compose logs` after upgrades
+- [Data flow](../architecture/data-flow) — historian retention (`OFDD_FEATHER_*`) is separate from audit logs
+
+
+# Acme GL36 FDD (vm-bbartling)
+
+# Acme GL36 FDD (vm-bbartling)
+
+Doc-only reference for **ASHRAE Guideline 36** supervisory monitoring on the Acme edge (`acme` / `vm-bbartling`). Rule code lives in `workspace/data/rules_py/`; commissioning uses **Arrow constants** (no `config.json`).
+
+Trim & respond Niagara reference: [README_TRIM_RESPOND](https://github.com/bbartling/niagara4-vibe-code-addict/blob/develop/README_TRIM_RESPOND.md).
+
+## BACnet poll scope
+
+Device filter (`infra/ansible/scripts/acme_trim_devices.sh`):
+
+| Range | Equipment |
+|-------|-----------|
+| 1–100 | JCI VMA/VAV |
+| 1100 | RTU-01 (AHU) |
+| 1002 | Hot water plant |
+| 11000–13000 | Trane UC210 VAV |
+
+Poll interval: **60 s**. Commission: `POLL_INTERVAL=60 ./infra/ansible/scripts/acme_commission_gl36.sh` → `edge_backup/local/acme/vm-bbartling/points.csv`.
+
+## Example FDD rules (Arrow constants)
+
+### Duct static pressure high (AHU)
+
+```python
+"""Acme AHU duct static high — GL36 trim advisory."""
+
+import pyarrow.compute as pc
+
+VALUE_COLUMN = "duct-static"
+HIGH_INWC = 1.20
+LOOKBACK_HOURS = 3
+
+
+def _kit_lookback_stats(table, *, hours=None):
+    h = hours if hours is not None else LOOKBACK_HOURS
+    ts = pc.cast(table["timestamp"], "timestamp[us, UTC]")
+    tmin, tmax = pc.min(ts).as_py(), pc.max(ts).as_py()
+    span_h = (tmax - tmin).total_seconds() / 3600.0 if tmin and tmax else 0.0
+    print(f"lookback={h}h rows={table.num_rows} start={tmin} stop={tmax} span={span_h:.2f}h")
+
+
+def apply_faults_arrow(table, cfg, context=None):
+    _kit_lookback_stats(table)
+    return pc.greater(pc.cast(table[VALUE_COLUMN], "float64"), HIGH_INWC)
+```
+
+### SAT too cold vs setpoint
+
+```python
+"""Acme AHU SAT too cold vs setpoint."""
+
+import pyarrow.compute as pc
+
+SAT_COLUMN = "sa-t"
+SP_COLUMN = "sa-t-sp"
+COLD_DELTA_F = 5.0
+
+
+def apply_faults_arrow(table, cfg, context=None):
+    sat = pc.cast(table[SAT_COLUMN], "float64")
+    sp = pc.cast(table[SP_COLUMN], "float64")
+    return pc.less(pc.subtract(sat, sp), -COLD_DELTA_F)
+```
+
+### Zone temp flatline (existing site rule)
+
+See `workspace/data/rules_py/bench_stat_zn-t_flatline_1h.py` — bind `ZN-T` per VAV in Model & assignments.
+
+### Duct static flatline (site rule stub)
+
+See `workspace/data/rules_py/acme_duct_static_flatline_1h_gl36_duct_t_r_input.py` — tune `VALUE_COLUMN` to historian column for RTU duct static.
+
+### Local OA-T vs web weather (JSON API)
+
+Cross-check a drifting outdoor-air sensor against [OpenWeatherMap](https://openweathermap.org/api) via the generic JSON API driver:
+
+1. Control machine: `workspace/json_api.env.local` with `OPENWEATHER_API_KEY` — synced on deploy (`deploy_sync_json_api_env`).
+2. JSON API tab → **Register OpenWeather bundle** (poll **20 min** — `web-oat-t`, `web-rh`, `web-weather-desc`).
+3. Bind BACnet **local OAT** in the model: **Tracer SC** device `10000` → `Facility Outdoor Air Temperature` (`fdd_input` **OAT**, historian `oa-t`). Hot-water plant `1002` has no outdoor-air point.
+4. Enable rule `workspace/data/rules_py/oat_vs_web_spread_1h.py` in Rule Lab — flags when `|oa-t − web-oat-t| > 8 °F`.
+
+Scheduled FDD merges BACnet and `json_api` historian columns by nearest timestamp (30 min tolerance).
+
+## Deploy / upgrade (GHCR only)
+
+```bash
+cd infra/ansible
+POLL_INTERVAL=60 ./scripts/acme_commission_gl36.sh
+OPENFDD_IMAGE_TAG=latest ./deploy.sh docker --limit acme_vm_bbartling -e enable_bacnet_poll_driver=true
+```
+
+Do **not** rsync dev `auth.env.local` to the edge (`deploy_sync_auth: false` in `host_vars/acme_vm_bbartling.yml`). Regenerate on-host if the bridge rejects example credentials.
+
+## AI-assisted data modeling
+
+1. BACnet poll running (340+ GL36 points @ 60 s).
+2. **Model & assignments** → copy prompt + commissioning JSON for LLM.
+3. Import returned JSON via commissioning import.
+4. Pin `fdd_rule_ids` on `ZN-T`, `DA-T`, `duct-static`, `OAT`, etc.
+
+Model seed: `workspace/data/acme_gl36_model.json`.
+
+
 # Operations
 
 # Operations
@@ -2421,7 +2788,9 @@ Runbooks for live edge hosts after the initial deploy.
 
 | Page | When to use |
 |------|-------------|
+| [Logging and audit](logging) | Audit JSONL, auth trail, rotation defaults, Docker log caps, SIEM export |
 | [Live site update (SSH)](live_site_update) | Minimal `~/open-fdd/` folder on a VM — pull new GHCR tags, preserve `workspace/` |
+| [Acme GL36 FDD](acme-gl36-fdd) | vm-bbartling poll scope, example Arrow rules, AI modeling workflow |
 
 For first-time deploy from a control machine, see [Quick Start — Docker](../quick-start/docker).
 
@@ -2437,6 +2806,7 @@ Concise deployment security for the Operator Bridge and BACnet tools.
 | [LAN hardening](lan-hardening) | Auth and bind modes |
 | [Secrets and auth](secrets-auth) | Env files |
 | [BACnet write allowlists](bacnet-writes) | Supervisory write gates |
+| [Logging and audit](../ops/logging) | Auth audit trail, rotation, SIEM |
 
 
 # API routes
@@ -2625,6 +2995,8 @@ See [Driver framework](../drivers/index).
 
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
+| GET | `/api/json-api/env/status` | operator+ | Env var configured flags (no secret values) |
+| POST | `/api/json-api/presets/openweather` | integrator+ | Register 3-point OpenWeather bundle + optional poll |
 | GET | `/api/json-api/driver/tree` | operator+ | Endpoints grouped by host |
 | GET | `/api/json-api/poll/status` | operator+ | Poll worker status |
 | POST | `/api/json-api/poll/once` | integrator+ | Force poll cycle |
