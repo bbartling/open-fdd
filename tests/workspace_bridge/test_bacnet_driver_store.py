@@ -121,6 +121,15 @@ def test_driver_tree_pv_only_for_enabled_poll_points(driver_tmp):
     idle2 = next(p for p in tree2["devices"][0]["points"] if p["object_identifier"] == "analog-input,2")
     assert polled2["present_value"] == "73.1"
     assert idle2["present_value"] == ""
+    store.record_ondemand_present_value(
+        device_instance=100,
+        object_identifier="analog-input,2",
+        present_value="69.2",
+    )
+    tree3 = store.driver_tree()
+    idle3 = next(p for p in tree3["devices"][0]["points"] if p["object_identifier"] == "analog-input,2")
+    assert idle3["present_value"] == "69.2"
+    assert idle3["enabled"] is False
 
 
 def test_set_point_poll_intervals(driver_tmp):

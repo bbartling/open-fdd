@@ -51,6 +51,10 @@ type Props = {
   devices: DriverDevice[];
   priorityByPointId?: Record<string, PrioritySlot[]>;
   expandedPriorityPoints?: Set<string>;
+  selectedPointIds?: Set<string>;
+  onTogglePointSelection?: (pointId: string, selected: boolean) => void;
+  onToggleDeviceSelection?: (device: DriverDevice, selected: boolean) => void;
+  onToggleTypeSelection?: (device: DriverDevice, typeName: string, points: DriverPoint[], selected: boolean) => void;
   onRefreshDevice?: (instance: number) => void;
   onRefreshPointPv?: (device: DriverDevice, point: DriverPoint) => void;
   onReadPriorityArray?: (device: DriverDevice, point: DriverPoint) => void;
@@ -82,10 +86,22 @@ function overrideSlotLabel(slot: OverrideSlot): string {
   return `${slot.type ?? "value"}: ${formatBacnetValue(val)}`;
 }
 
+function selectionState(ids: string[], selected: Set<string>): "none" | "some" | "all" {
+  if (!ids.length) return "none";
+  const n = ids.filter((id) => selected.has(id)).length;
+  if (n === 0) return "none";
+  if (n === ids.length) return "all";
+  return "some";
+}
+
 export default function BacnetPointsTree({
   devices,
   priorityByPointId = {},
   expandedPriorityPoints = new Set(),
+  selectedPointIds = new Set(),
+  onTogglePointSelection,
+  onToggleDeviceSelection,
+  onToggleTypeSelection,
   onRefreshDevice,
   onRefreshPointPv,
   onReadPriorityArray,
@@ -121,6 +137,22 @@ export default function BacnetPointsTree({
       else next.add(key);
       return next;
     });
+  }
+
+  function expandAll() {
+    setExpandedDevices(new Set(sorted.map((d) => d.device_instance)));
+    const typeKeys: string[] = [];
+    for (const dev of sorted) {
+      for (const typeName of groupPoints(dev.points).keys()) {
+        typeKeys.push(`${dev.device_instance}:${typeName}`);
+      }
+    }
+    setExpandedTypes(new Set(typeKeys));
+  }
+
+  function collapseAll() {
+    setExpandedDevices(new Set());
+    setExpandedTypes(new Set());
   }
 
   function openMenu(e: React.MouseEvent, target: ContextTarget) {
@@ -161,11 +193,23 @@ export default function BacnetPointsTree({
     );
   }
 
+  const selectionEnabled = Boolean(onTogglePointSelection);
+
   return (
     <div className="bacnet-tree">
+      <div className="bacnet-tree-toolbar">
+        <button type="button" className="secondary-btn" onClick={expandAll}>
+          Expand all
+        </button>
+        <button type="button" className="secondary-btn" onClick={collapseAll}>
+          Collapse all
+        </button>
+      </div>
       {sorted.map((dev) => {
         const devOpen = expandedDevices.has(dev.device_instance);
         const typeGroups = groupPoints(dev.points);
+        const devPointIds = dev.points.map((p) => p.point_id);
+        const devSel = selectionState(devPointIds, selectedPointIds);
         return (
           <div key={dev.device_instance} className="bacnet-tree-device">
             <button
@@ -174,6 +218,19 @@ export default function BacnetPointsTree({
               onClick={() => toggleDevice(dev.device_instance)}
               onContextMenu={(e) => openMenu(e, { kind: "device", device: dev })}
             >
+              {selectionEnabled ? (
+                <input
+                  type="checkbox"
+                  className="bacnet-tree-select"
+                  aria-label={`Select all points on device ${dev.device_instance}`}
+                  checked={devSel === "all"}
+                  ref={(el) => {
+                    if (el) el.indeterminate = devSel === "some";
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => onToggleDeviceSelection?.(dev, e.target.checked)}
+                />
+              ) : null}
               <span className="bacnet-tree-chevron">{devOpen ? "▾" : "▸"}</span>
               <span className="bacnet-tree-device-icon" aria-hidden>
                 📡
@@ -202,9 +259,26 @@ export default function BacnetPointsTree({
                 {[...typeGroups.entries()].map(([typeName, pts]) => {
                   const typeKey = `${dev.device_instance}:${typeName}`;
                   const typeOpen = expandedTypes.has(typeKey);
+                  const typeIds = pts.map((p) => p.point_id);
+                  const typeSel = selectionState(typeIds, selectedPointIds);
                   return (
                     <div key={typeKey} className="bacnet-tree-type">
                       <button type="button" className="bacnet-tree-type-head" onClick={() => toggleType(typeKey)}>
+                        {selectionEnabled ? (
+                          <input
+                            type="checkbox"
+                            className="bacnet-tree-select"
+                            aria-label={`Select all ${typeName} on device ${dev.device_instance}`}
+                            checked={typeSel === "all"}
+                            ref={(el) => {
+                              if (el) el.indeterminate = typeSel === "some";
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) =>
+                              onToggleTypeSelection?.(dev, typeName, pts, e.target.checked)
+                            }
+                          />
+                        ) : null}
                         <span className="bacnet-tree-chevron">{typeOpen ? "▾" : "▸"}</span>
                         <span className="bacnet-tree-type-label">{typeName}</span>
                         <span className="badge">{pts.length}</span>
@@ -216,14 +290,22 @@ export default function BacnetPointsTree({
                             const prioritySlots = priorityByPointId[p.point_id] ?? [];
                             const scanSlots = (p.override_slots ?? []) as OverrideSlot[];
                             const showOverrideTree = scanSlots.length > 0;
-                            const showPv =
-                              p.enabled && String(p.present_value ?? "") !== "";
+                            const showPv = String(p.present_value ?? "") !== "";
                             return (
                               <li key={p.point_id}>
                                 <div
-                                  className="bacnet-tree-point-row"
+                                  className={`bacnet-tree-point-row${selectedPointIds.has(p.point_id) ? " bacnet-tree-point-selected" : ""}`}
                                   onContextMenu={(e) => openMenu(e, { kind: "point", device: dev, point: p })}
                                 >
+                                  {selectionEnabled ? (
+                                    <input
+                                      type="checkbox"
+                                      className="bacnet-tree-select"
+                                      aria-label={`Select ${p.object_identifier}`}
+                                      checked={selectedPointIds.has(p.point_id)}
+                                      onChange={(e) => onTogglePointSelection?.(p.point_id, e.target.checked)}
+                                    />
+                                  ) : null}
                                   <code>{p.object_identifier}</code>
                                   <span className="bacnet-tree-point-name">{p.object_name}</span>
                                   {p.commandable ? (

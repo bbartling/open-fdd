@@ -10,10 +10,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from ..deps import require_roles
 from ..modbus_service import ModbusServiceError, execute_modbus_read_request
+from ..modbus_store import (
+    append_samples_and_ingest,
+    list_registers,
+    set_register_poll,
+    upsert_register,
+)
 
 router = APIRouter(tags=["modbus"])
 
 _READ = Depends(require_roles("operator", "integrator", "agent"))
+_POLL = Depends(require_roles("integrator", "agent"))
 
 DecodeLiteral = Literal["raw", "uint16", "int16", "uint32", "int32", "float32"]
 FunctionLiteral = Literal["holding", "input"]
@@ -73,11 +80,106 @@ class ModbusReadRequestBody(BaseModel):
         return text
 
 
+class ModbusReadStoreBody(ModbusReadRequestBody):
+    site_id: Optional[str] = Field(default=None, description="Site id for feather shard (default site).")
+    save_registers: bool = Field(
+        default=True,
+        description="Upsert each successful reading into modbus/commissioning/registers.csv.",
+    )
+
+
+class ModbusRegisterUpsertBody(BaseModel):
+    point_id: Optional[str] = None
+    host: str
+    port: int = Field(default=502, ge=1, le=65535)
+    unit_id: int = Field(default=1, ge=0, le=255)
+    address: int = Field(..., ge=0, le=65535)
+    function: FunctionLiteral = Field(default="holding")
+    count: int = Field(default=1, ge=1, le=125)
+    decode: Optional[DecodeLiteral] = Field(default="uint16")
+    scale: Optional[float] = None
+    offset: Optional[float] = None
+    label: Optional[str] = None
+    units: Optional[str] = None
+    enabled: bool = False
+    poll_interval_s: int = Field(default=0, ge=0)
+
+
+class ModbusRegisterPollBody(BaseModel):
+    point_id: str
+    enabled: bool
+    poll_interval_s: int = Field(default=0, ge=0)
+
+
+@router.get("/api/modbus/registers", dependencies=[_READ])
+def modbus_registers_list() -> dict:
+    return list_registers()
+
+
+@router.post("/api/modbus/registers", dependencies=[_POLL])
+def modbus_registers_upsert(body: ModbusRegisterUpsertBody) -> dict:
+    try:
+        return upsert_register(body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.patch("/api/modbus/register/poll", dependencies=[_POLL])
+def modbus_register_poll(body: ModbusRegisterPollBody) -> dict:
+    try:
+        return set_register_poll(
+            point_id=body.point_id,
+            enabled=body.enabled,
+            poll_interval_s=body.poll_interval_s,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post("/api/modbus/read_registers", dependencies=[_READ])
 async def modbus_read_registers(body: ModbusReadRequestBody) -> dict:
     try:
         payload = body.model_dump()
         return await asyncio.to_thread(execute_modbus_read_request, payload)
+    except ModbusServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"modbus_tcp_error: {exc}") from exc
+
+
+@router.post("/api/modbus/read_and_store", dependencies=[_READ])
+async def modbus_read_and_store(body: ModbusReadStoreBody) -> dict:
+    """Read Modbus TCP registers, append poll CSV, and write feather shard (source=modbus)."""
+    try:
+        payload = body.model_dump(exclude={"site_id", "save_registers"})
+        result = await asyncio.to_thread(execute_modbus_read_request, payload)
+        if body.save_registers:
+            for spec, reading in zip(body.registers, result.get("readings") or []):
+                if not reading.get("success"):
+                    continue
+                upsert_register(
+                    {
+                        "host": body.host,
+                        "port": body.port,
+                        "unit_id": body.unit_id,
+                        "address": spec.address,
+                        "function": spec.function,
+                        "count": spec.count,
+                        "decode": spec.decode or "uint16",
+                        "scale": spec.scale,
+                        "offset": spec.offset,
+                        "label": reading.get("label") or spec.label,
+                        "units": "",
+                        "last_value": str(reading.get("decoded") or ""),
+                    }
+                )
+        ingest = append_samples_and_ingest(
+            host=body.host,
+            unit_id=body.unit_id,
+            readings=result.get("readings") or [],
+            site_id=body.site_id,
+        )
+        return {**result, "ingest": ingest}
     except ModbusServiceError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:

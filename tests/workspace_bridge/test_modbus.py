@@ -130,3 +130,57 @@ def test_modbus_read_registers_route(authed_client: TestClient):
         )
     assert r.status_code == 200
     assert r.json()["readings"][0]["decoded"] == 10
+
+
+def test_modbus_read_and_store_ingest(authed_client: TestClient):
+    import openfdd_bridge.modbus_service as ms
+
+    class _StoreFakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def open(self):
+            return True
+
+        def close(self):
+            pass
+
+        def read_holding_registers(self, address, count):
+            return [42]
+
+    login = authed_client.post(
+        "/api/auth/login",
+        json={"username": "operator", "password": "changeme"},
+    )
+    token = login.json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    with patch.object(ms, "ModbusClient", _StoreFakeClient):
+        r = authed_client.post(
+            "/api/modbus/read_and_store",
+            json={
+                "host": "192.168.1.10",
+                "unit_id": 2,
+                "registers": [
+                    {
+                        "address": 100,
+                        "count": 1,
+                        "function": "holding",
+                        "decode": "uint16",
+                        "label": "test_reg",
+                    }
+                ],
+            },
+            headers=headers,
+        )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["readings"][0]["decoded"] == 42
+    assert body["ingest"]["ok"] is True
+    assert body["ingest"]["samples_appended"] == 1
+    assert body["ingest"]["feather_source"] == "modbus"
+
+    reg = authed_client.get("/api/modbus/registers", headers=headers)
+    assert reg.status_code == 200
+    rows = reg.json()["registers"]
+    assert len(rows) == 1
+    assert rows[0]["last_value"] == "42"
