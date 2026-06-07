@@ -146,6 +146,14 @@ if [[ -f "$AUTH_ENV" ]]; then
 fi
 LOGIN_USER="${OFDD_INTEGRATOR_USER:-${OFDD_OPERATOR_USER:-}}"
 LOGIN_PASS="${OFDD_INTEGRATOR_PASSWORD:-${OFDD_OPERATOR_PASSWORD:-}}"
+# Remote edge probes: secrets/acme.env.local (or host alias) wins over control-machine auth.env.local
+if [[ -n "${ACME_INTEGRATOR_USER:-}" && -n "${ACME_INTEGRATOR_PASSWORD:-}" ]]; then
+  LOGIN_USER="$ACME_INTEGRATOR_USER"
+  LOGIN_PASS="$ACME_INTEGRATOR_PASSWORD"
+fi
+if [[ -n "${ACME_SITE_ID:-}" ]]; then
+  PROBE_SITE_ID="$ACME_SITE_ID"
+fi
 
 mode_label="standard"
 [[ "$FULL_CHECK" == "1" ]] && mode_label="full (Acme long HTTP suite)"
