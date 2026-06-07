@@ -137,6 +137,24 @@ def _prune_local_run_logs(cutoff: datetime) -> int:
     return removed
 
 
+def _related_archive_paths(path: Path) -> list[Path]:
+    """Rotated siblings such as audit.20260101T120000Z.jsonl next to audit.jsonl."""
+    pattern = f"{path.stem}.*{path.suffix}"
+    return sorted(p for p in path.parent.glob(pattern) if p.is_file() and p != path)
+
+
+def _prune_log_family(path: Path, *, cutoff: datetime) -> int:
+    removed = 0
+    for candidate in [path, *_related_archive_paths(path)]:
+        removed += _prune_jsonl_by_age(candidate, cutoff=cutoff)
+        if candidate != path and candidate.is_file() and candidate.stat().st_size == 0:
+            try:
+                candidate.unlink()
+            except OSError:
+                pass
+    return removed
+
+
 def rotate_logs_on_startup() -> dict[str, int]:
     """Prune aged JSONL audit/error logs and stale .local-run captures."""
     days = _retention_days()
@@ -144,7 +162,7 @@ def rotate_logs_on_startup() -> dict[str, int]:
     stats = {"retention_days": days, "audit_pruned": 0, "error_pruned": 0, "local_run_removed": 0}
     for path, key in ((audit_log_path(), "audit_pruned"), (error_log_path(), "error_pruned")):
         _rotate_if_oversized(path)
-        stats[key] = _prune_jsonl_by_age(path, cutoff=cutoff)
+        stats[key] = _prune_log_family(path, cutoff=cutoff)
     stats["local_run_removed"] = _prune_local_run_logs(cutoff)
     if any(stats[k] for k in ("audit_pruned", "error_pruned", "local_run_removed")):
         _log.info("log rotation complete: %s", stats)

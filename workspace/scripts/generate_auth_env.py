@@ -31,7 +31,7 @@ def main() -> None:
     print(f"OFDD_AGENT_PASSWORD={_password()}")
     print()
     print("# Optional: hash passwords for production (preferred over plaintext):")
-    print("# python workspace/scripts/hash_password.py '<password>'")
+    print("# python workspace/scripts/hash_password.py")
     print("# OFDD_OPERATOR_PASSWORD_HASH=$2b$...")
     print()
     print("# Recommended token lifetime for OT dashboards (8 hours):")

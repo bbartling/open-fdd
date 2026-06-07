@@ -23,7 +23,7 @@ python workspace/scripts/generate_auth_env.py > workspace/auth.env.local
 Prefer bcrypt hashes over plaintext in production/LAN:
 
 ```bash
-python workspace/scripts/hash_password.py 'your-integrator-password'
+python workspace/scripts/hash_password.py   # prompts securely (no CLI password arg)
 # OFDD_INTEGRATOR_PASSWORD_HASH=$2b$12$...
 ```
 

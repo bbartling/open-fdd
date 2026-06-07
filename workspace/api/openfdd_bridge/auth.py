@@ -43,11 +43,21 @@ def _parse_token_ttl() -> int:
     except ValueError:
         return default
     value = max(1, value)
+    from .security import is_production_env
+
     allow_long = os.environ.get("OFDD_AUTH_TTL_ALLOW_LONG", "").strip().lower() in {
         "1",
         "true",
         "yes",
     }
+    if allow_long and is_production_env():
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "OFDD_AUTH_TTL_ALLOW_LONG is ignored when OFDD_ENV=production — capping at %ss",
+            _MAX_TOKEN_TTL_SEC,
+        )
+        allow_long = False
     cap = _DEV_MAX_TOKEN_TTL_SEC if allow_long else _MAX_TOKEN_TTL_SEC
     clamped = min(value, cap)
     if value > cap:

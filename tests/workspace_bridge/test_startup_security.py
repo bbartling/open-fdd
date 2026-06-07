@@ -157,6 +157,41 @@ def test_bacnet_write_dry_run_rejects(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert "dry-run" in exc.value.detail.lower()
 
 
+def test_token_ttl_allow_long_ignored_in_production(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    _reload_security(
+        monkeypatch,
+        tmp_path,
+        OFDD_ENV="production",
+        OFDD_AUTH_TTL_SEC=str(30 * 86400),
+        OFDD_AUTH_TTL_ALLOW_LONG="1",
+    )
+    from openfdd_bridge.auth import token_ttl_seconds  # noqa: E402
+
+    assert token_ttl_seconds() == 7 * 86400
+
+
+def test_log_rotation_prunes_archived_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    logs = tmp_path / "logs"
+    logs.mkdir(parents=True)
+    archive = logs / "audit.20200101T000000Z.jsonl"
+    archive.write_text(
+        '{"@timestamp":"2020-01-01T00:00:00+00:00","event_type":"old"}\n',
+        encoding="utf-8",
+    )
+    live = logs / "audit.jsonl"
+    live.write_text('{"@timestamp":"2099-01-01T00:00:00+00:00","event_type":"new"}\n', encoding="utf-8")
+    monkeypatch.setenv("OFDD_AUDIT_LOG_PATH", str(live))
+    monkeypatch.setenv("OFDD_LOG_RETENTION_DAYS", "90")
+    for name in list(sys.modules):
+        if name.startswith("openfdd_bridge.log_rotation") or name == "openfdd_bridge.log_rotation":
+            del sys.modules[name]
+    from openfdd_bridge.log_rotation import rotate_logs_on_startup  # noqa: E402
+
+    stats = rotate_logs_on_startup()
+    assert stats["audit_pruned"] == 1
+    assert not archive.exists()
+
+
 def test_log_rotation_prunes_old_lines(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     logs = tmp_path / "logs"
     logs.mkdir(parents=True)

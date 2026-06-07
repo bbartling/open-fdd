@@ -17,9 +17,12 @@ def main() -> int:
         )
         return 1
     if len(sys.argv) > 1:
-        password = sys.argv[1]
-    else:
-        password = getpass.getpass("Password: ")
+        print(
+            "Do not pass passwords on the command line (shell history / ps exposure).",
+            file=sys.stderr,
+        )
+        return 1
+    password = getpass.getpass("Password: ")
     if not password:
         print("empty password", file=sys.stderr)
         return 1

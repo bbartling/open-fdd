@@ -24,7 +24,7 @@ KNOWN_EXAMPLE_PASSWORDS: frozenset[str] = frozenset(
 
 _GENERATOR_HINT = (
     "Generate fresh secrets: python workspace/scripts/generate_auth_env.py\n"
-    "Hash passwords for production: python workspace/scripts/hash_password.py 'your-password'"
+    "Hash passwords for production: python workspace/scripts/hash_password.py"
 )
 
 
