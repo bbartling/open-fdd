@@ -37,10 +37,12 @@ sudo chown "$USER:$USER" "$BACKUP_ROOT/workspace-full.tgz"
 echo "Backup: $BACKUP_ROOT"
 ```
 
-## 2. Verify images on GHCR
+## 2. Verify images on GHCR (optional)
+
+Default upgrades pull **`:latest`**. To verify before pull:
 
 ```bash
-export NEW_TAG=2026.06.07-edge
+export NEW_TAG="${NEW_TAG:-latest}"
 
 docker manifest inspect ghcr.io/bbartling/openfdd-bridge:${NEW_TAG} >/dev/null &&
 docker manifest inspect ghcr.io/bbartling/openfdd-commission:${NEW_TAG} >/dev/null &&
@@ -48,18 +50,19 @@ docker manifest inspect ghcr.io/bbartling/openfdd-mcp-rag:${NEW_TAG} >/dev/null 
 echo "All images exist for ${NEW_TAG}"
 ```
 
+Pin a dated release: `export NEW_TAG=2026.06.07-edge`
+
 ## 3. Pull and recreate
 
 ```bash
 cd ~/open-fdd
-export NEW_TAG=2026.06.07-edge
 ./scripts/openfdd_site_update.sh
 ```
 
-**Manual steps:**
+**Manual steps** (same as the script — pulls `:latest` by default):
 
 ```bash
-export OPENFDD_IMAGE_TAG=2026.06.07-edge
+cd ~/open-fdd
 docker compose pull
 docker compose up -d --force-recreate
 docker compose ps

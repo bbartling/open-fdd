@@ -16,7 +16,7 @@ Deploy Open-FDD on a Linux edge host using **three published GHCR images**. No g
 | `ghcr.io/bbartling/openfdd-commission` | `commission` | BACnet discover/read/write **and poll loop** |
 | `ghcr.io/bbartling/openfdd-mcp-rag` | `mcp-rag` | Doc-search sidecar |
 
-Tags: [GitHub Packages — openfdd-bridge](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge) (e.g. `2026.06.07-edge`).
+Tags: [GitHub Packages — openfdd-bridge](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge). Compose defaults to **`latest`**; dated releases (e.g. `2026.06.07-edge`) are for pinned upgrades.
 
 BACnet field reads run inside **commission**. The bridge watches `samples.csv` and loads feather — see [Containers](../architecture/containers).
 
@@ -155,14 +155,24 @@ See [BACnet network setup](../bacnet/network-setup).
 
 ## 4. Pull and start (first deploy)
 
+`docker-compose.yml` defaults to **`ghcr.io/bbartling/openfdd-*:latest`** — no tag export needed:
+
 ```bash
 cd ~/open-fdd
-export OPENFDD_IMAGE_TAG=2026.06.07-edge
-
 docker compose pull
 docker compose up -d
 docker compose ps
 ```
+
+Pin a specific release instead of `latest` (recommended before production cutover):
+
+```bash
+export OPENFDD_IMAGE_TAG=2026.06.07-edge
+docker compose pull && docker compose up -d
+```
+
+{: .note }
+> If `docker compose pull` fails on `:latest`, the registry may not have been published yet — use a dated tag above, or run the maintainer **Publish Docker addons** workflow (it tags both the release and `latest`).
 
 Expected: **bridge**, **commission**, **mcp-rag** — all `Up`.
 

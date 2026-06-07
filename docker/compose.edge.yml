@@ -7,8 +7,8 @@
 #
 # Long-lived site (survives reboot when Docker is enabled):
 #   cd ~/open-fdd
-#   export OPENFDD_IMAGE_TAG=2026.06.07-edge
-#   docker compose pull && docker compose up -d
+#   docker compose pull && docker compose up -d   # :latest by default
+#   # Pin: export OPENFDD_IMAGE_TAG=2026.06.07-edge
 #   sudo systemctl enable docker
 #
 # See docs/quick-start/docker.md
@@ -17,7 +17,7 @@ name: openfdd-edge
 
 services:
   bridge:
-    image: ghcr.io/bbartling/openfdd-bridge:${OPENFDD_IMAGE_TAG:-2026.06.07-edge}
+    image: ghcr.io/bbartling/openfdd-bridge:${OPENFDD_IMAGE_TAG:-latest}
     pull_policy: always
     ports:
       - "127.0.0.1:8765:8765"
@@ -43,7 +43,7 @@ services:
     restart: unless-stopped
 
   commission:
-    image: ghcr.io/bbartling/openfdd-commission:${OPENFDD_IMAGE_TAG:-2026.06.07-edge}
+    image: ghcr.io/bbartling/openfdd-commission:${OPENFDD_IMAGE_TAG:-latest}
     pull_policy: always
     network_mode: host
     volumes:
@@ -55,7 +55,7 @@ services:
     restart: unless-stopped
 
   mcp-rag:
-    image: ghcr.io/bbartling/openfdd-mcp-rag:${OPENFDD_IMAGE_TAG:-2026.06.07-edge}
+    image: ghcr.io/bbartling/openfdd-mcp-rag:${OPENFDD_IMAGE_TAG:-latest}
     pull_policy: always
     volumes:
       - ./workspace:/var/openfdd/workspace

@@ -12,11 +12,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-NEW_TAG="${NEW_TAG:-${OPENFDD_IMAGE_TAG:-}}"
-if [[ -z "$NEW_TAG" ]]; then
-  echo "Set NEW_TAG or OPENFDD_IMAGE_TAG (e.g. export NEW_TAG=2026.06.07-edge)" >&2
-  exit 1
-fi
+NEW_TAG="${NEW_TAG:-${OPENFDD_IMAGE_TAG:-latest}}"
 
 COMPOSE_FILE="${COMPOSE_FILE:-}"
 if [[ -z "$COMPOSE_FILE" ]]; then
