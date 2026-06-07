@@ -6,80 +6,111 @@ nav_order: 1
 
 # Run with Docker images
 
-## Images (GHCR)
+Deploy Open-FDD on a Linux host using **published GHCR images**. No git clone or image build required on the edge host.
 
-| Image | Role |
-|-------|------|
-| `ghcr.io/bbartling/openfdd-bridge` | FastAPI + React dashboard |
-| `ghcr.io/bbartling/openfdd-commission` | BACnet discover / read / write agent |
-| `ghcr.io/bbartling/openfdd-bacnet-poll` | Historian poll driver (host network) |
-| `ghcr.io/bbartling/openfdd-mcp-rag` | Optional doc-search sidecar |
+## Images
 
-Check [GitHub Packages](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge) for current tags (e.g. `2026.06.07-edge`).
+| GHCR image | Running service | Required |
+|------------|-----------------|----------|
+| `ghcr.io/bbartling/openfdd-bridge` | `bridge` | Yes |
+| `ghcr.io/bbartling/openfdd-commission` | `commission` | Yes (BACnet + **default poll loop**) |
+| `ghcr.io/bbartling/openfdd-mcp-rag` | `mcp-rag` | Yes (doc search sidecar) |
+| `ghcr.io/bbartling/openfdd-bacnet-poll` | `bacnet-poll` | **No** — optional alternative poll driver |
 
-## Option A — Ansible deploy (edge VM)
+Current tags: [GitHub Packages — openfdd-bridge](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge) (e.g. `2026.06.07-edge`).
 
-From your **control machine** (laptop or CI runner with SSH to the edge host):
+{: .note }
+> **Why only 3 containers?** BACnet **reads** run inside **commission**. The bridge runs a background **ingest** worker (CSV → feather), not a separate BACnet poll container. See [Containers](../architecture/containers).
+
+## Host layout
+
+```text
+~/open-fdd/
+  docker-compose.yml      # copy from repo docker/compose.edge.yml
+  workspace/              # site state (bind-mounted — backup this!)
+    auth.env.local
+    bacnet/commissioning/commission.env
+    bacnet/commissioning/points.csv
+    data/feather_store/
+```
+
+## 1. Install Docker
+
+Docker Engine + Compose plugin on the edge host (Ubuntu 22.04+ or similar).
+
+## 2. Copy compose file
+
+From a machine that has the `open-fdd` repo (or download `docker/compose.edge.yml` from GitHub):
 
 ```bash
-git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
+mkdir -p ~/open-fdd/workspace
+cp docker/compose.edge.yml ~/open-fdd/docker-compose.yml
+```
 
-# One-time: build dashboard assets if not in the image tag you use
-./scripts/build_operator_dashboard.sh prod
+## 3. Configure auth
 
-# Set image tag from a published GHCR release
+Generate secrets (do **not** use `auth.env.example` values on a LAN):
+
+```bash
+# On any machine with Python:
+python open-fdd/workspace/scripts/generate_auth_env.py > ~/open-fdd/workspace/auth.env.local
+chmod 600 ~/open-fdd/workspace/auth.env.local
+```
+
+Commission BACnet bind — copy and edit:
+
+```bash
+mkdir -p ~/open-fdd/workspace/bacnet/commissioning
+# commission.env: BACNET_BIND, BACNET_INSTANCE, discover range, etc.
+```
+
+See [BACnet network setup](../bacnet/network-setup).
+
+## 4. Pull and start
+
+```bash
+cd ~/open-fdd
 export OPENFDD_IMAGE_TAG=2026.06.07-edge
 
-# Deploy (requires inventory + host_vars — see infra/ansible/inventory.example.yml)
-cd infra/ansible
-export SSHPASS='your-ssh-password'   # or use SSH keys
-./deploy.sh docker --limit <inventory_host>
+docker compose pull
+docker compose up -d
+docker compose ps
 ```
 
-Host vars should set `openfdd_docker_pull_from_ghcr: true`. Site BACnet bind, model, and rules sync from `infra/ansible` templates and `edge_backup/local/<site>/`.
+Expected services: **bridge**, **commission**, **mcp-rag**.
 
-**Bootstrap helper** (docker → Caddy → optional AI → ops check):
+## 5. LAN access (optional)
+
+Bridge listens on `127.0.0.1:8765` inside compose. For operator browsers on the building LAN, put **Caddy** (or nginx) on port 80 → `127.0.0.1:8765`, or expose 8765 through firewall:
 
 ```bash
-OPENFDD_IMAGE_TAG=2026.06.07-edge ./scripts/bootstrap_edge_ghcr.sh --limit <inventory_host>
+curl -sf http://127.0.0.1:8765/health
+# From another PC: http://<host-lan-ip>:8765/  (if firewall allows)
 ```
-
-## Option B — Local trial (compose on one machine)
-
-For a quick lab trial without Ansible:
-
-```bash
-git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
-cp workspace/auth.env.example workspace/auth.env.local   # edit passwords
-./scripts/docker_build.sh    # or pull GHCR tags into compose via env
-./scripts/openfdd_stack.sh up
-```
-
-Open `http://127.0.0.1:8765/` (bridge) or `http://127.0.0.1/` if Caddy is installed locally.
-
-## Required configuration
-
-| File | Purpose |
-|------|---------|
-| `workspace/auth.env.local` | Operator / integrator login and `OFDD_AUTH_SECRET` |
-| `workspace/bacnet/commissioning/commission.env` | BACnet bind IP, instance, discover range |
-| `workspace/data/` | Bind-mounted historian, rules, model (created on first run) |
-
-Copy from `*.example` files in the repo. Never commit real passwords.
 
 ## Start / stop
 
 ```bash
-# Ansible edge: re-run deploy or on host:
-cd ~/open-fdd/docker && docker compose up -d
-
-# Local dev:
-./scripts/openfdd_stack.sh up
-./scripts/openfdd_stack.sh down
+cd ~/open-fdd
+docker compose up -d
+docker compose stop
+docker compose restart bridge
 ```
 
-## After first deploy
+{: .warning }
+> Never run `docker compose down -v` or `docker volume prune` on a live site — `workspace/` is your historian and BACnet config.
+
+## Optional fourth container
+
+Only if you **turn off** commission’s poll loop and need a standalone driver:
+
+```bash
+docker compose --profile bacnet-poll up -d bacnet-poll
+```
+
+Do not enable while commission is also polling.
+
+## Next steps
 
 → [First login and health check](health-check)  
-→ [Updating the stack](updating) — Ansible from control machine  
-→ [Live site update (SSH)](../ops/live_site_update) — tag bump on minimal `~/open-fdd/` folder
+→ [Updating the stack](updating) — backup + `docker compose pull`

@@ -1,0 +1,80 @@
+# Production edge stack — pull from GHCR, bind-mount workspace/ for site state.
+#
+# First-time layout on the host:
+#   mkdir -p ~/open-fdd/workspace
+#   cp docker/compose.edge.yml ~/open-fdd/docker-compose.yml
+#   cp workspace/auth.env.example ~/open-fdd/workspace/auth.env.local   # then generate real secrets
+#
+# Start:
+#   cd ~/open-fdd
+#   export OPENFDD_IMAGE_TAG=2026.06.07-edge
+#   docker compose pull && docker compose up -d
+#
+# Optional dedicated BACnet poll driver (usually OFF — commission already polls):
+#   docker compose --profile bacnet-poll up -d
+#
+# See docs/quick-start/docker.md and docs/architecture/containers.md
+
+name: openfdd-edge
+
+services:
+  bridge:
+    image: ghcr.io/bbartling/openfdd-bridge:${OPENFDD_IMAGE_TAG:-2026.06.07-edge}
+    pull_policy: always
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - ./workspace:/var/openfdd/workspace
+    environment:
+      OPENFDD_BACNET_COMMISSION_URL: http://host.docker.internal:8767
+      OFDD_ALLOW_LAN_INTERNAL_INGEST: "1"
+      OFDD_MCP_REST_BASE: http://mcp-rag:8090
+      OFDD_BRIDGE_HOST: "0.0.0.0"
+    env_file:
+      - path: ./workspace/auth.env.local
+        required: false
+      - path: ./workspace/mcp.env.local
+        required: false
+      - path: ./workspace/data.env.local
+        required: false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - commission
+      - mcp-rag
+    restart: unless-stopped
+
+  commission:
+    image: ghcr.io/bbartling/openfdd-commission:${OPENFDD_IMAGE_TAG:-2026.06.07-edge}
+    pull_policy: always
+    network_mode: host
+    volumes:
+      - ./workspace:/var/openfdd/workspace
+    environment:
+      OPENFDD_WORKSPACE_DIR: /var/openfdd/workspace
+      OPENFDD_REPO_ROOT: /app
+      OPENFDD_BRIDGE_INGEST_URL: http://127.0.0.1:8765/internal/bacnet/ingest-samples
+    restart: unless-stopped
+
+  mcp-rag:
+    image: ghcr.io/bbartling/openfdd-mcp-rag:${OPENFDD_IMAGE_TAG:-2026.06.07-edge}
+    pull_policy: always
+    volumes:
+      - ./workspace:/var/openfdd/workspace
+    expose:
+      - "8090"
+    restart: unless-stopped
+
+  # Optional fourth image — only when commission poll loop is disabled.
+  # Do not run commission poll loop AND bacnet-poll (double BACnet bind on :47808).
+  bacnet-poll:
+    profiles: ["bacnet-poll"]
+    image: ghcr.io/bbartling/openfdd-bacnet-poll:${OPENFDD_IMAGE_TAG:-2026.06.07-edge}
+    pull_policy: always
+    network_mode: host
+    volumes:
+      - ./workspace:/var/openfdd/workspace
+    environment:
+      OPENFDD_WORKSPACE_DIR: /var/openfdd/workspace
+      OPENFDD_REPO_ROOT: /app
+    restart: unless-stopped

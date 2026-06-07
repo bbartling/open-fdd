@@ -6,16 +6,24 @@ has_children: true
 
 # Quick Start
 
-Run Open-FDD on a Linux edge host or VM using **published Docker images**. No local image build required.
+Run Open-FDD on a Linux edge host using **published GHCR Docker images**. No git clone on the host.
 
 | Step | Page |
 |------|------|
-| 1 | [Run with Docker images](docker) |
+| 1 | [Run with Docker images](docker) — pull `bridge`, `commission`, `mcp-rag` |
 | 2 | [First login and health check](health-check) |
-| 3 | [Updating the stack](updating) — Ansible or SSH paths |
-| — | [Live site update (SSH)](../ops/live_site_update) — minimal VM folder, no `git pull` |
+| 3 | [Updating the stack](updating) — backup + `docker compose pull` |
 
-**Prerequisites:** Linux host with Docker and Docker Compose, network access to BACnet devices if polling OT equipment, and a safe lab or maintenance window for first BACnet discovery.
+**Scripts on the edge host:**
+
+```bash
+./scripts/openfdd_site_backup.sh
+export NEW_TAG=2026.06.07-edge && ./scripts/openfdd_site_update.sh
+```
+
+**Prerequisites:** Linux, Docker Compose, BACnet LAN access if polling OT equipment.
 
 {: .warning }
-> **BACnet writes are disabled by default.** Do not enable write paths on live equipment without an allowlist and operator authorization. See [Write safety](../bacnet/write-safety).
+> **BACnet writes are disabled by default.** See [Write safety](../bacnet/write-safety).
+
+**Architecture:** Four GHCR images exist; standard sites run **three** containers because BACnet polling lives in **commission**. Details: [Containers](../architecture/containers).
