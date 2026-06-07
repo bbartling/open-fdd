@@ -119,6 +119,24 @@
         - deploy_sync_auth | default(true) | bool
         - control_auth_env.stat.exists | default(false)
 
+    - name: Stat workspace json_api.env.local on control machine
+      tags: [config]
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../../workspace/json_api.env.local"
+      delegate_to: localhost
+      become: false
+      register: control_json_api_env
+
+    - name: Sync json_api.env.local to edge (OpenWeather / REST API keys)
+      tags: [config]
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../workspace/json_api.env.local"
+        dest: "{{ openfdd_remote_dir }}/workspace/json_api.env.local"
+        mode: "0600"
+      when:
+        - deploy_sync_json_api_env | default(true) | bool
+        - control_json_api_env.stat.exists | default(false)
+
     - name: Ensure optional workspace env stubs exist
       tags: [config]
       ansible.builtin.copy:

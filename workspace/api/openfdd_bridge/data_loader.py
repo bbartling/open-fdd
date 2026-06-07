@@ -36,6 +36,9 @@ def load_demo_dataframe(site_id: str | None = None) -> pd.DataFrame:
     )
 
 
+DRIVER_SOURCES = ("bacnet", "modbus", "json_api")
+
+
 def load_site_frame(
     site_id: str,
     source: str = "bacnet",
@@ -47,6 +50,46 @@ def load_site_frame(
     return FeatherStore().read_site(site_id, source=source, columns=columns)
 
 
+def _merge_timeseries_frames(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
+    """Align irregular driver polls by nearest timestamp (30 min tolerance)."""
+    key_cols = {"timestamp", "site_id"}
+    extra = [c for c in right.columns if c not in left.columns and c not in key_cols]
+    if not extra:
+        return left
+    l = left.sort_values("timestamp").copy()
+    r = right.sort_values("timestamp")[["timestamp", *extra]].copy()
+    l["timestamp"] = pd.to_datetime(l["timestamp"], utc=True, errors="coerce")
+    r["timestamp"] = pd.to_datetime(r["timestamp"], utc=True, errors="coerce")
+    merged = pd.merge_asof(
+        l,
+        r,
+        on="timestamp",
+        direction="nearest",
+        tolerance=pd.Timedelta("30min"),
+    )
+    return merged.sort_values("timestamp").reset_index(drop=True)
+
+
+def load_merged_site_frame(
+    site_id: str,
+    *,
+    columns: list[str] | str | None = None,
+    sources: tuple[str, ...] = DRIVER_SOURCES,
+) -> pd.DataFrame | None:
+    """Merge historian columns from BACnet, Modbus, and JSON API for cross-source FDD."""
+    frames: list[pd.DataFrame] = []
+    for src in sources:
+        frame = load_site_frame(site_id, source=src, columns=columns)
+        if frame is not None and not frame.empty:
+            frames.append(frame)
+    if not frames:
+        return None
+    merged = frames[0]
+    for frame in frames[1:]:
+        merged = _merge_timeseries_frames(merged, frame)
+    return merged
+
+
 def load_arrow_table_for_run(
     site_id: str | None = None,
     *,
@@ -56,15 +99,22 @@ def load_arrow_table_for_run(
     """Arrow-native frame load for FDD execution (preferred path)."""
     import pyarrow as pa
 
-    from .feather_store import FeatherStore, _dedupe_sort
+    from .feather_store import _dedupe_sort
 
     if site_id:
-        table = FeatherStore().read_site_table(site_id, source=source, columns=columns)
-        if table is not None:
-            if hasattr(table, "num_rows") and table.num_rows > 0:
-                return table, "feather"
-            if hasattr(table, "empty") and not table.empty:
-                return pa.Table.from_pandas(_dedupe_sort(table)), "feather"
+        if source == "bacnet":
+            frame = load_merged_site_frame(site_id, columns=columns)
+            if frame is not None and not frame.empty:
+                return pa.Table.from_pandas(_dedupe_sort(frame)), "feather"
+        else:
+            from .feather_store import FeatherStore
+
+            table = FeatherStore().read_site_table(site_id, source=source, columns=columns)
+            if table is not None:
+                if hasattr(table, "num_rows") and table.num_rows > 0:
+                    return table, "feather"
+                if hasattr(table, "empty") and not table.empty:
+                    return pa.Table.from_pandas(_dedupe_sort(table)), "feather"
     demo = load_demo_dataframe(site_id)
     if demo.empty and site_id:
         demo = load_demo_dataframe(None)
@@ -83,7 +133,10 @@ def load_frame_for_run(
     batch runner and Rule Lab still work on a fresh edge box.
     """
     if site_id:
-        frame = load_site_frame(site_id, source=source, columns=columns)
+        if source == "bacnet":
+            frame = load_merged_site_frame(site_id, columns=columns)
+        else:
+            frame = load_site_frame(site_id, source=source, columns=columns)
         if frame is not None and not frame.empty:
             return frame, "feather"
     demo = load_demo_dataframe(site_id)

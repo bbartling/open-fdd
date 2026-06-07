@@ -11,7 +11,7 @@ openfdd_docker_stack: true
 
 # Pin to tag from GitHub Actions → Publish Docker addons (ghcr.io/bbartling/*)
 openfdd_docker_pull_from_ghcr: true
-openfdd_docker_image_tag: "2026.06.07-edge"
+openfdd_docker_image_tag: "latest"
 
 # BACnet Device instance (Who-Is / bind). Change only if the OT network requires a fixed ID.
 bacnet_instance_id: 3456791
@@ -24,8 +24,8 @@ bacnet_discover_low: 1
 bacnet_discover_high: 4194303
 bacnet_discover_timeout: 30
 
-# Poll via commission agent on host network (do not also enable bacnet-poll — double BACnet bind).
-enable_bacnet_poll_driver: false
+# GL36 poll set: JCI VAV 1–100, RTU 1100, boiler 1002, Trane VAV 11000–13000 (see acme_trim_devices.sh)
+enable_bacnet_poll_driver: true
 bacnet_poll_interval: 60
 
 # 4c / 16GB VM — local Ollama qwen3:4b + MCP RAG

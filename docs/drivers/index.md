@@ -14,7 +14,7 @@ Open-FDD edge commissioning uses a **shared driver pattern** for OT data sources
 |--------|----------|------------------|-------------------|
 | [BACnet](../bacnet/index) | MS/TP / IP (`:47808`) | `bacnet` | BACnet |
 | Modbus | Modbus TCP | `modbus` | Modbus |
-| [JSON API](json-api) | HTTP/HTTPS REST | `json_api` | JSON API |
+| [JSON API](json-api) | HTTP/HTTPS REST (+ [OpenWeather showcase](json-api#openweathermap-showcase-recommended-demo)) | `json_api` | JSON API |
 
 All three drivers share the same operator workflow:
 
@@ -44,7 +44,7 @@ workspace/
 
 - **Plot tab** — numeric columns from `bacnet` and `modbus` sources (`GET /api/timeseries/plot?source=…`).
 - **String JSON fields** — stored in feather under `json_api`; use the JSON API tree or feather directly (plot is numeric-only).
-- **FDD batch** — `POST /api/rules/batch` loads feather via BRICK-bound `external_id` columns.
+- **FDD batch** — merges `bacnet` + `modbus` + `json_api` historian columns by nearest timestamp; rules use BRICK-bound `external_id` names (e.g. compare BACnet `oa-t` vs JSON API `web-oat-t` — see [JSON API](json-api)).
 - **BRICK model** — bind points in **Model & assignments** commissioning JSON; sync TTL for SPARQL scope.
 
 ## Rule Lab (Arrow upload/download)

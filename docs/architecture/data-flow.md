@@ -28,15 +28,17 @@ BACnet devices → commission (poll loop) → samples.csv → bridge (ingest) �
 
 ### JSON API (HTTP/HTTPS)
 
-1. Operator configures REST endpoints on the **JSON API** tab — GET/POST, Bearer or Basic auth, optional TLS verify off for self-signed OT gateways.
-2. Poll worker issues HTTP requests and extracts values via JSON dot-path.
+1. Operator configures REST endpoints on the **JSON API** tab — GET/POST, Bearer or Basic auth, `${ENV:VAR}` placeholders from `json_api.env.local`, optional TLS verify off for self-signed OT gateways.
+2. Poll worker issues HTTP requests (one GET can fan out to multiple JSON paths, e.g. OpenWeather `web-oat-t` / `web-rh` / `web-weather-desc`).
 3. Samples append to `workspace/json_api/polls/samples.csv` → `feather_store/json_api/`.
+4. FDD batch **merges** `json_api` columns with BACnet/Modbus on the same site (nearest timestamp, 30 min tolerance) for cross-source rules.
 
 ```
-OT REST device → bridge JSON API worker → samples.csv → feather_store/json_api
+OT REST / weather API → bridge JSON API worker → samples.csv → feather_store/json_api
+                                                      ↘ merged into FDD frame with bacnet/modbus
 ```
 
-Details: [Driver framework](../drivers/index), [BACnet polling](../bacnet/polling), [JSON API driver](../drivers/json-api), [Containers](containers).
+Showcase: [OpenWeatherMap bundle](../drivers/json-api#openweathermap-showcase-recommended-demo). Details: [Driver framework](../drivers/index), [BACnet polling](../bacnet/polling), [JSON API driver](../drivers/json-api), [Containers](containers).
 
 ## Rule evaluation
 

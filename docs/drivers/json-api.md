@@ -6,9 +6,9 @@ nav_order: 3
 
 # JSON API driver
 
-Poll **HTTP or HTTPS** REST endpoints on the OT LAN (or a bench API such as [JSONPlaceholder](https://jsonplaceholder.typicode.com/)) and store extracted JSON values in the feather historian (`source=json_api`).
+Poll **HTTP or HTTPS** REST endpoints on the OT LAN (or public APIs such as [OpenWeatherMap](https://openweathermap.org/api)) and store extracted JSON values in the feather historian (`source=json_api`).
 
-Use this driver for gateways, micro-PLCs, IoT hubs, and vendor APIs that expose JSON over HTTP instead of BACnet or Modbus.
+Use this driver for gateways, micro-PLCs, IoT hubs, vendor APIs, and **web weather** when you want to cross-check shaky local outdoor-air sensors against a reference.
 
 ## Supported features
 
@@ -17,18 +17,80 @@ Use this driver for gateways, micro-PLCs, IoT hubs, and vendor APIs that expose 
 | Methods | `GET`, `POST` |
 | Transport | `http://` and `https://` |
 | TLS certificate verify | On by default; disable for self-signed OT gateways |
-| Authentication | None, **Bearer token**, **HTTP Basic** |
+| Authentication | None, **Bearer token**, **HTTP Basic**, or **query-string API keys via env** |
+| Env placeholders | `${ENV:VAR}` or `${VAR}` in URL, headers, body, bearer token |
 | Custom headers | Optional `headers` map (merged with auth headers) |
-| Value extraction | Dot-path into JSON body (`title`, `data.temp`, `items.0.value`) |
-| Polling | 1 / 5 / 10 / 15 minutes (same worker pattern as BACnet/Modbus) |
+| Value extraction | Dot-path into JSON body (`title`, `main.temp`, `weather.0.description`) |
+| Multi-extract poll | One HTTP request per URL group; fan-out to multiple `json_path` rows |
+| Polling | 1 / 5 / 10 / 15 / **20** minutes (same worker pattern as BACnet/Modbus) |
 | Historian | `workspace/json_api/polls/samples.csv` → `feather_store/json_api/` |
+| FDD merge | Scheduled FDD merges `bacnet` + `modbus` + `json_api` columns by nearest timestamp |
+
+## Secrets: `json_api.env.local`
+
+Copy `workspace/json_api.env.example` → `workspace/json_api.env.local` (gitignored). The bridge loads this file at startup and when `run_local.sh` starts the stack.
+
+Use placeholders in commissioning URLs so API keys never land in git:
+
+```text
+https://api.openweathermap.org/data/2.5/weather?q=${ENV:OPENWEATHER_CITY}&appid=${ENV:OPENWEATHER_API_KEY}&units=${ENV:OPENWEATHER_UNITS}
+```
+
+Check which vars are configured: `GET /api/json-api/env/status`.
+
+## OpenWeatherMap showcase (recommended demo)
+
+This is the flagship example of what the generic JSON API driver can do — **one URL, three historian columns**, env-based API key, browser tree like BACnet/Modbus.
+
+### 1. Configure env
+
+```bash
+cp workspace/json_api.env.example workspace/json_api.env.local
+# Edit: OPENWEATHER_API_KEY, OPENWEATHER_CITY, OPENWEATHER_UNITS (imperial = °F)
+```
+
+Restart the bridge (or `./scripts/run_local.sh restart`) so env vars load.
+
+### 2. Register from the UI
+
+1. Sign in as **integrator** → **JSON API** tab.
+2. Open the **OpenWeatherMap showcase** panel.
+3. Click **Register OpenWeather bundle (3 points, poll 20 min)**.
+
+Three endpoints appear under `api.openweathermap.org` in the commissioning tree:
+
+| Label | JSON path | Historian column | Units |
+|-------|-----------|------------------|-------|
+| web-oat-t | `main.temp` | `web-oat-t` | degF / degC |
+| web-rh | `main.humidity` | `web-rh` | % |
+| web-weather-desc | `weather.0.description` | `web-weather-desc` | text |
+
+Poll worker deduplicates: **one GET** serves all three extractions per cycle.
+
+### 3. Headless / script
+
+```bash
+# Standalone fetch (like the original playground tester)
+python3 scripts/openweather_json_api_example.py
+
+# Register via REST (integrator login)
+python3 scripts/openweather_json_api_example.py --register --base http://127.0.0.1:8000
+```
+
+### 4. FDD: local OA-T vs web weather
+
+With BACnet `oa-t` and JSON API `web-oat-t` in the same site, scheduled FDD merges both sources. Example rule:
+
+`workspace/data/rules_py/oat_vs_web_spread_1h.py` — flags when `|oa-t − web-oat-t| > 8 °F` (stuck or drifting outdoor-air sensor).
+
+Enable it in Rule Lab, bind to your OA-T BACnet point, and run **Update all records**.
 
 ## Commissioning (UI)
 
 1. Sign in → **JSON API** tab (below Modbus).
 2. Enter URL, method, JSON path, and label (historian column name).
 3. Set **Auth** if the device requires it:
-   - **Bearer token** — common for API keys and JWT gateways.
+   - **Bearer token** — common for API keys and JWT gateways (or use `${ENV:TOKEN}` in the field).
    - **HTTP Basic** — username/password for legacy OT web servers.
 4. **TLS verify** — leave checked for public HTTPS; uncheck for `https://192.168.x.x` with a self-signed certificate.
 5. Click **Request & store to historian** — endpoint is saved to `endpoints.csv` and a feather shard is written.
@@ -40,6 +102,18 @@ Use the **Todo title** preset against JSONPlaceholder to verify outbound HTTPS w
 
 ## Authentication examples
 
+### Query-string API key via env (OpenWeather)
+
+```json
+{
+  "url": "https://api.openweathermap.org/data/2.5/weather?q=${ENV:OPENWEATHER_CITY}&appid=${ENV:OPENWEATHER_API_KEY}&units=${ENV:OPENWEATHER_UNITS}",
+  "method": "GET",
+  "json_path": "main.temp",
+  "label": "web-oat-t",
+  "auth_type": "none"
+}
+```
+
 ### Bearer token (API key)
 
 ```json
@@ -49,7 +123,7 @@ Use the **Todo title** preset against JSONPlaceholder to verify outbound HTTPS w
   "json_path": "sensors.zone_temp",
   "label": "zone-temp",
   "auth_type": "bearer",
-  "bearer_token": "your-api-key-here",
+  "bearer_token": "${ENV:GATEWAY_API_KEY}",
   "verify_tls": false
 }
 ```
@@ -82,17 +156,19 @@ Use the **Todo title** preset against JSONPlaceholder to verify outbound HTTPS w
 }
 ```
 
-Credentials are stored in `workspace/json_api/commissioning/endpoints.csv` on the edge host (local OT commissioning model). Restrict filesystem access on production boxes.
+Credentials in `endpoints.csv` are redacted in API responses (`***`). Prefer `${ENV:…}` for production keys.
 
 ## REST API
 
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
+| GET | `/api/json-api/env/status` | operator+ | Which env vars are configured (no secret values) |
+| POST | `/api/json-api/presets/openweather` | integrator+ | Register 3-point OpenWeather bundle + optional poll |
 | GET | `/api/json-api/driver/tree` | operator+ | Commissioning tree grouped by host |
 | GET | `/api/json-api/poll/status` | operator+ | Poll worker status |
 | POST | `/api/json-api/poll/once` | integrator+ | Run one poll cycle |
 | POST | `/api/json-api/request` | operator+ | One-shot HTTP request (no store) |
-| POST | `/api/json-api/read_and_store` | operator+ | Request + CSV + feather ingest |
+| POST | `/api/json-api/read_and_store` | integrator+ | Request + CSV + feather ingest |
 | POST | `/api/json-api/refresh` | operator+ | Re-fetch one endpoint |
 | PATCH | `/api/json-api/endpoint/poll` | integrator+ | Enable/disable poll interval |
 | DELETE | `/api/json-api/endpoint/{point_id}` | integrator+ | Remove endpoint |
@@ -103,6 +179,7 @@ Full route list: [API routes](../appendix/bridge_api).
 
 | Device type | Example URL | Notes |
 |-------------|-------------|-------|
+| Web weather | `https://api.openweathermap.org/data/2.5/weather?...` | Env-based `appid`; 3 historian columns |
 | Gateway status | `http://192.168.1.50/api/status` | Often plain HTTP on LAN |
 | HTTPS BMS API | `https://10.0.0.12/rest/points/zone1` | May need `verify_tls: false` |
 | Local mock | `https://jsonplaceholder.typicode.com/todos/1` | Bench / CI only |
@@ -110,8 +187,20 @@ Full route list: [API routes](../appendix/bridge_api).
 ## Limitations
 
 - Response body must be **JSON** (not XML or plain text).
-- Extracted values are stored as **strings** in feather; numeric FDD rules should use BACnet or Modbus for float trends.
-- Outbound requests originate from the **bridge** container/host — ensure routing and firewall rules allow the edge box to reach the OT subnet.
+- Numeric paths (e.g. `main.temp`) are stored as strings in poll CSV; FDD rules cast with `pc.cast(..., "float64")`.
+- Outbound requests originate from the **bridge** container/host — ensure routing and firewall rules allow the edge box to reach the target (OT subnet or public internet for weather).
+
+## Disable polling (save API quota)
+
+Stop scheduled calls without deleting endpoints: JSON API tree → select OpenWeather points → **Stop polling**, or integrator API:
+
+```bash
+curl -X PATCH http://127.0.0.1:8765/api/json-api/endpoint/poll \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"point_id":"ja-api-openweathermap-org-get-web-oat-t","enabled":false,"poll_interval_s":0}'
+```
+
+API keys live in `json_api.env.local` (gitignored) — never committed; audit logs do not record expanded URLs with `appid=`. See [Logging and audit](../ops/logging).
 
 ## Smoke test
 

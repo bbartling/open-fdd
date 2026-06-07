@@ -10,13 +10,16 @@ from pydantic import BaseModel, Field, field_validator
 
 from ..deps import require_roles
 from ..json_api_service import JsonApiServiceError, execute_json_api_request
+from ..json_api_env import env_var_configured, json_api_env_path, load_json_api_env
 from ..json_api_store import (
+    OPENWEATHER_URL,
     append_reading_and_ingest,
     delete_endpoint,
     driver_tree,
     list_endpoints,
     poll_status,
     refresh_point,
+    register_openweather_bundle,
     run_poll_cycle,
     set_endpoint_poll,
     upsert_endpoint,
@@ -86,6 +89,43 @@ class JsonApiEndpointPollBody(BaseModel):
 class JsonApiRefreshBody(BaseModel):
     point_id: str
     store: bool = False
+
+
+class JsonApiOpenWeatherBody(BaseModel):
+    poll_interval_s: int = Field(default=1200, ge=0)
+    enabled: bool = True
+    poll_once: bool = Field(default=True, description="Run one poll cycle after registering")
+
+
+@router.get("/api/json-api/env/status", dependencies=[_READ])
+def json_api_env_status() -> dict:
+    load_json_api_env(reload=True)
+    path = json_api_env_path()
+    return {
+        "ok": True,
+        "env_file": str(path),
+        "env_file_exists": path.is_file(),
+        "variables": {
+            "OPENWEATHER_API_KEY": env_var_configured("OPENWEATHER_API_KEY"),
+            "OPENWEATHER_CITY": env_var_configured("OPENWEATHER_CITY"),
+            "OPENWEATHER_UNITS": env_var_configured("OPENWEATHER_UNITS"),
+        },
+        "openweather_url_template": OPENWEATHER_URL,
+    }
+
+
+@router.post("/api/json-api/presets/openweather", dependencies=[_POLL])
+def json_api_preset_openweather(body: JsonApiOpenWeatherBody) -> dict:
+    try:
+        out = register_openweather_bundle(
+            poll_interval_s=body.poll_interval_s,
+            enabled=body.enabled,
+        )
+        if body.poll_once and body.enabled:
+            out["poll"] = run_poll_cycle(force=True)
+        return out
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/api/json-api/driver/tree", dependencies=[_READ])
