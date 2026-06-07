@@ -8,16 +8,35 @@ nav_order: 2
 
 ## Telemetry ingest
 
+Open-FDD supports three commissioning drivers. Each appends long-format samples to workspace CSVs and writes **feather shards** tagged by `source` (`bacnet`, `modbus`, `json_api`).
+
+### BACnet
+
 1. **Commission poll loop** (inside the `commission` container) reads enabled BACnet points from `points.csv` on a schedule (host network, BACnet `:47808`).
-2. RPM results append to `workspace/bacnet/polls/samples.csv` (long format).
-3. **Bridge ingest worker** watches `samples.csv` and loads new rows into the **feather store** (`workspace/data/feather_store/`).
-4. Point registry (`points.csv`, discovered inventory) ties BACnet objects to `series_id`.
+2. RPM results append to `workspace/bacnet/polls/samples.csv`.
+3. **Bridge ingest worker** loads new rows into `feather_store/bacnet/`.
 
 ```
-BACnet devices → commission (poll loop) → samples.csv → bridge (ingest) → feather_store
+BACnet devices → commission (poll loop) → samples.csv → bridge (ingest) → feather_store/bacnet
 ```
 
-Details: [BACnet polling](../bacnet/polling), [Containers](containers).
+### Modbus TCP
+
+1. Operator configures registers on the **Modbus** tab (or `read_and_store` API).
+2. Poll worker reads holding/input registers via Modbus TCP.
+3. Samples append to `workspace/modbus/polls/samples.csv` → `feather_store/modbus/`.
+
+### JSON API (HTTP/HTTPS)
+
+1. Operator configures REST endpoints on the **JSON API** tab — GET/POST, Bearer or Basic auth, optional TLS verify off for self-signed OT gateways.
+2. Poll worker issues HTTP requests and extracts values via JSON dot-path.
+3. Samples append to `workspace/json_api/polls/samples.csv` → `feather_store/json_api/`.
+
+```
+OT REST device → bridge JSON API worker → samples.csv → feather_store/json_api
+```
+
+Details: [Driver framework](../drivers/index), [BACnet polling](../bacnet/polling), [JSON API driver](../drivers/json-api), [Containers](containers).
 
 ## Rule evaluation
 

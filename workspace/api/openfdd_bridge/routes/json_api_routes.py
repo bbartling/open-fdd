@@ -28,6 +28,7 @@ _READ = Depends(require_roles("operator", "integrator", "agent"))
 _POLL = Depends(require_roles("integrator", "agent"))
 
 MethodLiteral = Literal["GET", "POST"]
+AuthTypeLiteral = Literal["none", "bearer", "basic"]
 
 
 class JsonApiRequestBody(BaseModel):
@@ -37,6 +38,11 @@ class JsonApiRequestBody(BaseModel):
     label: Optional[str] = Field(default=None, description="Historian column name")
     headers: dict[str, str] = Field(default_factory=dict)
     body: Any = Field(default=None, description="JSON body for POST")
+    auth_type: AuthTypeLiteral = Field(default="none", description="Outbound auth: none, bearer, or basic")
+    bearer_token: Optional[str] = Field(default=None, description="Bearer/API token when auth_type=bearer")
+    basic_user: Optional[str] = Field(default=None, description="HTTP Basic username")
+    basic_password: Optional[str] = Field(default=None, description="HTTP Basic password")
+    verify_tls: bool = Field(default=True, description="Verify TLS certificates (disable for self-signed OT gateways)")
     timeout: float = Field(default=5.0, ge=0.5, le=60.0)
 
     @field_validator("url")
@@ -60,6 +66,11 @@ class JsonApiEndpointUpsertBody(BaseModel):
     json_path: str = Field(default="")
     headers_json: str = Field(default="")
     body_json: str = Field(default="")
+    auth_type: AuthTypeLiteral = Field(default="none")
+    bearer_token: Optional[str] = Field(default=None)
+    basic_user: Optional[str] = Field(default=None)
+    basic_password: Optional[str] = Field(default=None)
+    verify_tls: bool = Field(default=True)
     label: Optional[str] = None
     units: Optional[str] = None
     enabled: bool = False
@@ -160,6 +171,11 @@ async def json_api_read_and_store(body: JsonApiReadStoreBody) -> dict:
                     "label": reading.get("label") or body.label or body.json_path or "value",
                     "headers_json": _json.dumps(body.headers) if body.headers else "",
                     "body_json": _json.dumps(body.body) if body.body is not None else "",
+                    "auth_type": body.auth_type,
+                    "bearer_token": body.bearer_token or "",
+                    "basic_user": body.basic_user or "",
+                    "basic_password": body.basic_password or "",
+                    "verify_tls": "1" if body.verify_tls else "0",
                     "units": "",
                     "last_value": str(reading.get("present_value") or ""),
                 }

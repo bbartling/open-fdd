@@ -11,7 +11,8 @@ High-level view of the Open-FDD v3 edge stack: **three Docker containers** (`bri
 | Page | Topic |
 |------|-------|
 | [System overview](overview) | Components, diagram, deployment pointer |
-| [Data flow](data-flow) | Poll → CSV → feather → FDD → dashboard |
+| [Data flow](data-flow) | BACnet / Modbus / JSON API → feather → FDD → dashboard |
+| [Driver framework](../drivers/index) | Shared commissioning pattern for all OT sources |
 | [Containers](containers) | Images, networks, ports, persistence, reboot |
 
 **Operators:** deploy and upgrade via [Quick Start](../quick-start/docker) — no git clone on the edge host.

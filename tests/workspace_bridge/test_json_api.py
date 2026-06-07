@@ -38,6 +38,32 @@ def test_extract_json_path():
     assert _extract_json_path(data, "user.name") == "Leanne"
 
 
+def test_build_request_auth_bearer_and_basic():
+    from openfdd_bridge.json_api_service import _build_request_auth
+
+    headers, auth, verify = _build_request_auth(
+        {
+            "auth_type": "bearer",
+            "bearer_token": "secret-key",
+            "verify_tls": False,
+        }
+    )
+    assert headers["Authorization"] == "Bearer secret-key"
+    assert auth is None
+    assert verify is False
+
+    headers, auth, verify = _build_request_auth(
+        {
+            "auth_type": "basic",
+            "basic_user": "ot",
+            "basic_password": "pass",
+        }
+    )
+    assert headers["Authorization"].startswith("Basic ")
+    assert auth == ("ot", "pass")
+    assert verify is True
+
+
 def test_json_api_read_and_store_mocked(authed_client: TestClient, monkeypatch: pytest.MonkeyPatch):
     class _FakeResp:
         status_code = 200
@@ -57,9 +83,12 @@ def test_json_api_read_and_store_mocked(authed_client: TestClient, monkeypatch: 
             pass
 
         def get(self, url, headers=None):
+            self.last_headers = headers or {}
             return _FakeResp()
 
-    monkeypatch.setattr("openfdd_bridge.json_api_service.httpx.Client", _FakeClient)
+    fake_client = _FakeClient()
+
+    monkeypatch.setattr("openfdd_bridge.json_api_service.httpx.Client", lambda **kwargs: fake_client)
 
     login = authed_client.post(
         "/api/auth/login",
@@ -88,6 +117,21 @@ def test_json_api_read_and_store_mocked(authed_client: TestClient, monkeypatch: 
     )
     assert tree.status_code == 200
     assert len(tree.json()["devices"]) >= 1
+
+    r2 = authed_client.post(
+        "/api/json-api/request",
+        json={
+            "url": "https://example.local/status",
+            "method": "GET",
+            "json_path": "value",
+            "auth_type": "bearer",
+            "bearer_token": "bench-token",
+            "verify_tls": False,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r2.status_code == 200
+    assert fake_client.last_headers.get("Authorization") == "Bearer bench-token"
 
 
 def test_json_api_driver_tree(tmp_path, monkeypatch):

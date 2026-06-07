@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from typing import Any, Literal
-from urllib.parse import urlparse
 
 import httpx
+from urllib.parse import urlparse
 
 MethodLiteral = Literal["GET", "POST"]
+AuthTypeLiteral = Literal["none", "bearer", "basic"]
 MAX_BODY_BYTES = 64_000
 
 
@@ -46,6 +48,54 @@ def _format_value(value: Any) -> str:
     return str(value)
 
 
+def _truthy(value: Any, *, default: bool = True) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"0", "false", "no", "off"}:
+        return False
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    return default
+
+
+def _normalize_auth_type(value: Any) -> AuthTypeLiteral:
+    text = str(value or "none").strip().lower()
+    if text in {"bearer", "token", "api_key", "apikey"}:
+        return "bearer"
+    if text in {"basic", "http_basic"}:
+        return "basic"
+    return "none"
+
+
+def _build_request_auth(payload: dict[str, Any]) -> tuple[dict[str, str], Any, bool]:
+    """Return (headers, httpx_auth, verify_tls) for an outbound JSON API call."""
+    headers: dict[str, str] = {}
+    raw_headers = payload.get("headers")
+    if isinstance(raw_headers, dict):
+        headers = {str(k): str(v) for k, v in raw_headers.items()}
+
+    auth_type = _normalize_auth_type(payload.get("auth_type"))
+    bearer_token = str(payload.get("bearer_token") or payload.get("auth_token") or "").strip()
+    basic_user = str(payload.get("basic_user") or payload.get("auth_user") or "").strip()
+    basic_password = str(payload.get("basic_password") or payload.get("auth_password") or "")
+
+    if auth_type == "bearer" and bearer_token:
+        headers.setdefault("Authorization", f"Bearer {bearer_token}")
+    elif auth_type == "basic" and basic_user:
+        token = base64.b64encode(f"{basic_user}:{basic_password}".encode("utf-8")).decode("ascii")
+        headers.setdefault("Authorization", f"Basic {token}")
+
+    httpx_auth = None
+    if auth_type == "basic" and basic_user:
+        httpx_auth = (basic_user, basic_password)
+
+    verify_tls = _truthy(payload.get("verify_tls"), default=True)
+    return headers, httpx_auth, verify_tls
+
+
 def execute_json_api_request(payload: dict[str, Any]) -> dict[str, Any]:
     url = str(payload.get("url") or "").strip()
     if not url:
@@ -63,7 +113,7 @@ def execute_json_api_request(payload: dict[str, Any]) -> dict[str, Any]:
     timeout = float(payload.get("timeout") or 5.0)
     json_path = str(payload.get("json_path") or "").strip()
     label = str(payload.get("label") or "").strip() or None
-    headers = payload.get("headers") if isinstance(payload.get("headers"), dict) else {}
+    headers, httpx_auth, verify_tls = _build_request_auth(payload)
     body_raw = payload.get("body")
     body: dict[str, Any] | None = None
     if body_raw is not None and body_raw != "":
@@ -78,7 +128,12 @@ def execute_json_api_request(payload: dict[str, Any]) -> dict[str, Any]:
             raise JsonApiServiceError("request body too large")
 
     try:
-        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+        with httpx.Client(
+            timeout=timeout,
+            follow_redirects=True,
+            verify=verify_tls,
+            auth=httpx_auth,
+        ) as client:
             if method == "GET":
                 resp = client.get(url, headers=headers)
             else:

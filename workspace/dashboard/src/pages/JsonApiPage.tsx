@@ -41,12 +41,19 @@ const PRESETS = [
   },
 ];
 
+type AuthType = "none" | "bearer" | "basic";
+
 export default function JsonApiPage() {
   const [url, setUrl] = useState(PRESETS[0].url);
   const [method, setMethod] = useState<"GET" | "POST">("GET");
   const [jsonPath, setJsonPath] = useState("title");
   const [label, setLabel] = useState("todo-title");
   const [body, setBody] = useState("");
+  const [authType, setAuthType] = useState<AuthType>("none");
+  const [bearerToken, setBearerToken] = useState("");
+  const [basicUser, setBasicUser] = useState("");
+  const [basicPassword, setBasicPassword] = useState("");
+  const [verifyTls, setVerifyTls] = useState(true);
   const [pending, setPending] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
@@ -143,6 +150,11 @@ export default function JsonApiPage() {
           json_path: jsonPath,
           label,
           body: parsedBody,
+          auth_type: authType,
+          bearer_token: authType === "bearer" ? bearerToken : undefined,
+          basic_user: authType === "basic" ? basicUser : undefined,
+          basic_password: authType === "basic" ? basicPassword : undefined,
+          verify_tls: verifyTls,
           save_endpoint: store,
         }),
       });
@@ -292,7 +304,7 @@ export default function JsonApiPage() {
     <div className="page page-wide json-api-page">
       <PageHeader
         title="JSON API commissioning"
-        subtitle="Poll HTTP GET/POST endpoints like BACnet/Modbus — test with JSONPlaceholder or any OT LAN JSON device."
+        subtitle="Poll HTTP/HTTPS GET/POST endpoints with Bearer or Basic auth — same commissioning pattern as BACnet and Modbus."
       />
       <TabDebugPanel tab="json-api" />
 
@@ -375,6 +387,71 @@ export default function JsonApiPage() {
               </label>
               <textarea id="ja-body" rows={3} value={body} onChange={(e) => setBody(e.target.value)} />
             </div>
+          ) : null}
+          <div className="field">
+            <label className="field-label" htmlFor="ja-auth">
+              Auth
+            </label>
+            <select
+              id="ja-auth"
+              value={authType}
+              onChange={(e) => setAuthType(e.target.value as AuthType)}
+            >
+              <option value="none">None</option>
+              <option value="bearer">Bearer token</option>
+              <option value="basic">HTTP Basic</option>
+            </select>
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="ja-verify-tls">
+              TLS verify
+            </label>
+            <label className="checkbox-row" htmlFor="ja-verify-tls">
+              <input
+                id="ja-verify-tls"
+                type="checkbox"
+                checked={verifyTls}
+                onChange={(e) => setVerifyTls(e.target.checked)}
+              />
+              Verify certificate (uncheck for self-signed OT gateways)
+            </label>
+          </div>
+          {authType === "bearer" ? (
+            <div className="field" style={{ gridColumn: "1 / -1" }}>
+              <label className="field-label" htmlFor="ja-bearer">
+                Bearer token
+              </label>
+              <input
+                id="ja-bearer"
+                type="password"
+                autoComplete="off"
+                value={bearerToken}
+                onChange={(e) => setBearerToken(e.target.value)}
+                placeholder="API key or JWT"
+              />
+            </div>
+          ) : null}
+          {authType === "basic" ? (
+            <>
+              <div className="field">
+                <label className="field-label" htmlFor="ja-basic-user">
+                  Basic username
+                </label>
+                <input id="ja-basic-user" value={basicUser} onChange={(e) => setBasicUser(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="field-label" htmlFor="ja-basic-pass">
+                  Basic password
+                </label>
+                <input
+                  id="ja-basic-pass"
+                  type="password"
+                  autoComplete="off"
+                  value={basicPassword}
+                  onChange={(e) => setBasicPassword(e.target.value)}
+                />
+              </div>
+            </>
           ) : null}
         </div>
         <div className="form-row-actions">

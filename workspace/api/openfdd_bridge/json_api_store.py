@@ -35,6 +35,11 @@ REGISTRY_FIELDS = [
     "json_path",
     "headers_json",
     "body_json",
+    "auth_type",
+    "bearer_token",
+    "basic_user",
+    "basic_password",
+    "verify_tls",
     "label",
     "units",
     "enabled",
@@ -145,6 +150,7 @@ def upsert_endpoint(row: dict[str, Any]) -> dict[str, Any]:
     pid = str(row.get("point_id") or "").strip() or make_point_id(url, method, label)
     interval = int(row.get("poll_interval_s") or 0)
     enabled = str(row.get("enabled", "")).lower() in {"1", "true", "yes"} or interval > 0
+    verify_tls = str(row.get("verify_tls") or "1").strip().lower() not in {"0", "false", "no"}
     entry = {
         "point_id": pid,
         "url": url,
@@ -152,6 +158,11 @@ def upsert_endpoint(row: dict[str, Any]) -> dict[str, Any]:
         "json_path": str(row.get("json_path") or ""),
         "headers_json": str(row.get("headers_json") or ""),
         "body_json": str(row.get("body_json") or ""),
+        "auth_type": str(row.get("auth_type") or "none"),
+        "bearer_token": str(row.get("bearer_token") or ""),
+        "basic_user": str(row.get("basic_user") or ""),
+        "basic_password": str(row.get("basic_password") or ""),
+        "verify_tls": "1" if verify_tls else "0",
         "label": label,
         "units": str(row.get("units") or ""),
         "enabled": "1" if enabled else "0",
@@ -207,6 +218,7 @@ def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
         except _json.JSONDecodeError:
             pass
     body = str(row.get("body_json") or "").strip() or None
+    verify_tls = str(row.get("verify_tls") or "1").strip().lower() not in {"0", "false", "no"}
     return {
         "url": str(row.get("url") or ""),
         "method": str(row.get("method") or "GET"),
@@ -214,6 +226,11 @@ def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
         "label": str(row.get("label") or ""),
         "headers": headers,
         "body": body,
+        "auth_type": str(row.get("auth_type") or "none"),
+        "bearer_token": str(row.get("bearer_token") or ""),
+        "basic_user": str(row.get("basic_user") or ""),
+        "basic_password": str(row.get("basic_password") or ""),
+        "verify_tls": verify_tls,
         "timeout": 5.0,
     }
 
@@ -237,10 +254,18 @@ def driver_tree() -> dict[str, Any]:
         pid = str(row.get("point_id") or "")
         label = str(row.get("label") or "")
         jpath = str(row.get("json_path") or "")
+        scheme = urlparse(url).scheme or "http"
         dev = devices.setdefault(
             key,
-            {"device_key": key, "host": host, "base_url": f"https://{host}" if host else key, "points": []},
+            {
+                "device_key": key,
+                "host": host,
+                "base_url": f"{scheme}://{host}" if host else key,
+                "points": [],
+            },
         )
+        auth_type = str(row.get("auth_type") or "none")
+        verify_tls = str(row.get("verify_tls") or "1").strip().lower() not in {"0", "false", "no"}
         dev["points"].append(
             {
                 "point_id": pid,
@@ -248,6 +273,9 @@ def driver_tree() -> dict[str, Any]:
                 "url": url,
                 "method": method,
                 "json_path": jpath,
+                "auth_type": auth_type,
+                "verify_tls": verify_tls,
+                "auth_configured": auth_type != "none",
                 "object_type": method.lower(),
                 "object_identifier": f"{method} {url}",
                 "object_name": label,
