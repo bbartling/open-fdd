@@ -22,6 +22,7 @@ from .routes import (
     faults_routes,
     health,
     host_routes,
+    json_api_routes,
     modbus_routes,
     model_routes,
     playground_routes,
@@ -36,9 +37,13 @@ from .settings import cors_allow_headers, cors_allow_methods, cors_origins
 async def _lifespan(_app: FastAPI):
     from .bacnet_poll_worker import start_bacnet_poll_worker
     from .log_rotation import rotate_logs_on_startup
+    from .json_api_poll_worker import start_json_api_poll_worker
+    from .modbus_poll_worker import start_modbus_poll_worker
 
     rotate_logs_on_startup()
     start_bacnet_poll_worker()
+    start_modbus_poll_worker()
+    start_json_api_poll_worker()
     yield
 
 
@@ -74,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(sites_routes.router)
     app.include_router(bacnet_routes.router)
     app.include_router(modbus_routes.router)
+    app.include_router(json_api_routes.router)
     app.include_router(agent_routes.router)
     app.include_router(host_routes.router)
 

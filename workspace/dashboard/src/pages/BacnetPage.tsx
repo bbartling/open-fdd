@@ -96,6 +96,8 @@ export default function BacnetPage() {
     export_row_count?: number;
   } | null>(null);
   const [overrideScanPending, setOverrideScanPending] = useState(false);
+  const [selectedPointIds, setSelectedPointIds] = useState<Set<string>>(() => new Set());
+  const [bulkPollPending, setBulkPollPending] = useState(false);
 
   const loadDriverTree = useCallback(async () => {
     setTreeLoading(true);
@@ -364,6 +366,78 @@ export default function BacnetPage() {
     }
   }
 
+  function togglePointSelection(pointId: string, selected: boolean) {
+    setSelectedPointIds((prev) => {
+      const next = new Set(prev);
+      if (selected) next.add(pointId);
+      else next.delete(pointId);
+      return next;
+    });
+  }
+
+  function toggleDevicePointSelection(device: DriverDevice, selected: boolean) {
+    setSelectedPointIds((prev) => {
+      const next = new Set(prev);
+      for (const p of device.points) {
+        if (selected) next.add(p.point_id);
+        else next.delete(p.point_id);
+      }
+      return next;
+    });
+  }
+
+  function toggleTypePointSelection(
+    _device: DriverDevice,
+    _typeName: string,
+    points: DriverPoint[],
+    selected: boolean,
+  ) {
+    setSelectedPointIds((prev) => {
+      const next = new Set(prev);
+      for (const p of points) {
+        if (selected) next.add(p.point_id);
+        else next.delete(p.point_id);
+      }
+      return next;
+    });
+  }
+
+  function selectAllTreePoints() {
+    const next = new Set<string>();
+    for (const dev of driverDevices) {
+      for (const p of dev.points) next.add(p.point_id);
+    }
+    setSelectedPointIds(next);
+  }
+
+  function clearPointSelection() {
+    setSelectedPointIds(new Set());
+  }
+
+  async function batchSetPointPoll(pointIds: string[], enabled: boolean, intervalS: number) {
+    if (!pointIds.length) return;
+    setBulkPollPending(true);
+    setActionError("");
+    setLog(`Setting poll ${enabled ? `every ${intervalS}s` : "off"} for ${pointIds.length} point(s)…`);
+    let ok = 0;
+    for (const pointId of pointIds) {
+      try {
+        await apiFetch("/api/bacnet/driver/point", {
+          method: "PATCH",
+          body: JSON.stringify({ point_id: pointId, enabled, poll_interval_s: intervalS }),
+        });
+        ok += 1;
+      } catch (e) {
+        setActionError(formatApiError(e));
+        break;
+      }
+    }
+    await loadDriverTree();
+    setBulkPollPending(false);
+    setLog(`Poll update: ${ok}/${pointIds.length} point(s)${enabled ? ` @ ${intervalS}s` : " stopped"}.`);
+    if (ok === pointIds.length) setStatusMsg(`Updated polling on ${ok} point(s).`);
+  }
+
   async function setPointPoll(pointId: string, enabled: boolean, intervalS: number) {
     setActionError("");
     try {
@@ -550,15 +624,16 @@ export default function BacnetPage() {
 
   const agentOk = cfg?.commission_agent_ok === true;
   const mutationsEnabled = cfg?.discovery_mutations_enabled !== false;
-  const anyPending = whoisPending || addPending || batchPending;
+  const anyPending = whoisPending || addPending || batchPending || bulkPollPending;
   const selectedList = Array.from(selectedInstances).sort((a, b) => a - b);
+  const selectedPointsList = Array.from(selectedPointIds);
   const inTree = new Set(driverDevices.map((d) => d.device_instance));
 
   return (
     <div className="page page-wide bacnet-page">
       <PageHeader
         title="BACnet commissioning"
-        subtitle="Scan the network, add devices, then right-click in the tree to set poll rates (1 / 5 / 10 / 15 min)."
+        subtitle="Scan the network, add devices, then select points in the tree (or right-click) to set poll rates at scale."
       />
       <TabDebugPanel tab="bacnet" />
 
@@ -841,7 +916,8 @@ export default function BacnetPage() {
         <BacnetTreeLegend />
         <div className="row row-spread" style={{ marginTop: "0.65rem" }}>
           <p className="muted" style={{ flex: 1, margin: 0 }}>
-            Right-click for Actions (refresh PV, priority array) and Polling. Present value updates on demand or from poll.
+            Check boxes to multi-select points for bulk polling. Right-click for refresh PV (works with or without polling),
+            priority array, and per-point actions.
           </p>
           <button
             type="button"
@@ -852,6 +928,62 @@ export default function BacnetPage() {
             Clear all devices
           </button>
         </div>
+        {driverDevices.length > 0 ? (
+          <div className="bacnet-bulk-toolbar">
+            <span className="muted">{selectedPointsList.length} point(s) selected</span>
+            <button type="button" className="secondary-btn" onClick={selectAllTreePoints}>
+              Select all points
+            </button>
+            <button type="button" className="secondary-btn" onClick={clearPointSelection}>
+              Clear selection
+            </button>
+            <ActionButton
+              secondary
+              pending={bulkPollPending}
+              pendingLabel="Updating…"
+              disabled={anyPending || selectedPointsList.length === 0}
+              onClick={() => void batchSetPointPoll(selectedPointsList, true, 60)}
+            >
+              Poll 1 min ({selectedPointsList.length})
+            </ActionButton>
+            <ActionButton
+              secondary
+              pending={bulkPollPending}
+              pendingLabel="Updating…"
+              disabled={anyPending || selectedPointsList.length === 0}
+              onClick={() => void batchSetPointPoll(selectedPointsList, true, 300)}
+            >
+              Poll 5 min
+            </ActionButton>
+            <ActionButton
+              secondary
+              pending={bulkPollPending}
+              pendingLabel="Updating…"
+              disabled={anyPending || selectedPointsList.length === 0}
+              onClick={() => void batchSetPointPoll(selectedPointsList, true, 600)}
+            >
+              Poll 10 min
+            </ActionButton>
+            <ActionButton
+              secondary
+              pending={bulkPollPending}
+              pendingLabel="Updating…"
+              disabled={anyPending || selectedPointsList.length === 0}
+              onClick={() => void batchSetPointPoll(selectedPointsList, true, 900)}
+            >
+              Poll 15 min
+            </ActionButton>
+            <ActionButton
+              secondary
+              pending={bulkPollPending}
+              pendingLabel="Stopping…"
+              disabled={anyPending || selectedPointsList.length === 0}
+              onClick={() => void batchSetPointPoll(selectedPointsList, false, 0)}
+            >
+              Stop polling
+            </ActionButton>
+          </div>
+        ) : null}
         {treeLoading && driverDevices.length === 0 ? (
           <Spinner label="Loading BACnet driver tree (large sites may take 30–60s)…" />
         ) : (
@@ -859,6 +991,10 @@ export default function BacnetPage() {
             devices={driverDevices}
             priorityByPointId={priorityByPointId}
             expandedPriorityPoints={expandedPriorityPoints}
+            selectedPointIds={selectedPointIds}
+            onTogglePointSelection={togglePointSelection}
+            onToggleDeviceSelection={toggleDevicePointSelection}
+            onToggleTypeSelection={toggleTypePointSelection}
             onRefreshDevice={refreshDevicePoints}
             onRefreshPointPv={refreshPointPv}
             onReadPriorityArray={readPriorityArray}

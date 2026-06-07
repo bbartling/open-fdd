@@ -26,7 +26,7 @@ def record_ondemand_present_value(
     object_identifier: str,
     present_value: str,
 ) -> None:
-    """Cache a manual BACnet read for polled points (shown until next poll sample)."""
+    """Cache a manual BACnet read (shown until next poll sample or tree reload)."""
     from bacnet_toolshed.models import parse_object_identifier_parts
 
     obj_type, obj_inst = parse_object_identifier_parts(object_identifier)
@@ -39,10 +39,11 @@ def record_ondemand_present_value(
 
 
 def _present_value_for_point(*, point_id: str, enabled: bool, latest_pv: dict[str, str]) -> str:
-    """Poll samples + manual reads only for points enabled in points.csv."""
-    if not enabled:
-        return ""
-    return latest_pv.get(point_id) or _ONDEMAND_PV.get(point_id, "")
+    """Poll samples when enabled; on-demand Refresh PV always shown when cached."""
+    ondemand = _ONDEMAND_PV.get(point_id, "")
+    if enabled:
+        return latest_pv.get(point_id) or ondemand
+    return ondemand
 
 
 def _discovered_path() -> Path:

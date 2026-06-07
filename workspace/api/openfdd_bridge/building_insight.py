@@ -21,6 +21,7 @@ from .device_poll_health import get_device_poll_snapshot, slim_devices_for_llm
 from .operational_analytics import analytics_lookback_days, analytics_methodology, methodology_prompt_blurb
 from .brick_model_context import build_insight_brick_payload
 from .zone_temp_analytics import get_zone_temp_snapshot, slim_zone_for_llm
+from .root_cause_hints import build_root_cause_hints
 from .zone_energy_research import build_zone_energy_research, slim_research_for_llm
 
 _CACHE: dict[str, Any] = {
@@ -164,6 +165,12 @@ def _compact_context(
     payload["fault_catalog"] = brick.get("fault_catalog")
     payload["faults_linked"] = brick.get("faults_linked")
     payload["api_query_guide"] = brick.get("api_query_guide")
+    payload["root_cause_hints"] = build_root_cause_hints(
+        status.get("alerts") or [],
+        site_id=str(brick.get("brick_model", {}).get("site_id") or ""),
+        zone_snapshot=zone_snapshot,
+        brick_graph=brick.get("brick_model"),
+    )
     return json.dumps(payload, separators=(",", ":"))
 
 
@@ -189,6 +196,7 @@ def _ollama_sentence(context: str) -> tuple[str, str]:
         "(4) active faults: use fault_catalog (official meaning, causes, checks) and faults_linked "
         "(BRICK equipment names); quote the code (e.g. VAV-C) and what it implies for operators; "
         "(5) brick_model feeds_chains — describe HVAC hierarchy (plant/AHU/VAV/zone sensors) when present; "
+        "when root_cause_hints is present, cite its hints for multi-zone faults (trace feeds to AHU/chiller/boiler/pump); "
         "(6) device poll offline/flaky counts; "
         "(7) bacnet_overrides — operator P8 manual writes and other priority-array slots; "
         "call out stuck operator overrides vs supervisory BAS writes. Do not invent equipment IDs or passwords."
@@ -274,8 +282,9 @@ def get_building_insight(*, force: bool = False) -> dict[str, Any]:
         return out
 
     status = collect_status()
-    zone_snapshot = get_zone_temp_snapshot(force=force)
-    device_snapshot = get_device_poll_snapshot(force=force)
+    # Fresh pandas analytics each insight cycle (15 min) so sensor fixes show in Ollama context.
+    zone_snapshot = get_zone_temp_snapshot(force=True)
+    device_snapshot = get_device_poll_snapshot(force=True)
     fault_lines = fault_sentences_from_alerts(status.get("alerts") or [])
 
     sentence = ""
@@ -315,6 +324,12 @@ def get_building_insight(*, force: bool = False) -> dict[str, Any]:
     payload["fault_catalog"] = brick_extra.get("fault_catalog") or []
     payload["faults_linked"] = brick_extra.get("faults_linked") or []
     payload["brick_model"] = brick_extra.get("brick_model") or {}
+    payload["root_cause_hints"] = build_root_cause_hints(
+        status.get("alerts") or [],
+        site_id=str(brick_extra.get("brick_model", {}).get("site_id") or ""),
+        zone_snapshot=zone_snapshot,
+        brick_graph=brick_extra.get("brick_model"),
+    )
 
     _CACHE.update(
         {
@@ -351,6 +366,12 @@ def get_operational_brief(*, force: bool = False) -> dict[str, Any]:
         "zone_temps": zone_snapshot,
         "device_poll_health": device_snapshot,
         "fault_sentences": fault_sentences_from_alerts(status.get("alerts") or []),
+        "root_cause_hints": build_root_cause_hints(
+            status.get("alerts") or [],
+            site_id=str(brick_extra.get("brick_model", {}).get("site_id") or ""),
+            zone_snapshot=zone_snapshot,
+            brick_graph=brick_extra.get("brick_model"),
+        ),
         "data_pipeline": [
             "BACnet poll → feather_store/",
             "data_loader.load_frame_for_run()",

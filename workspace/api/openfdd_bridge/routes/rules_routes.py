@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from ..deps import require_roles, require_user
@@ -13,6 +14,7 @@ from ..fdd_runner import run_batch
 from ..paths import data_dir
 from ..rule_bindings import apply_bind_op, build_assignments_view
 from ..rule_store import RuleStore
+from ..rule_kit import RuleKitError, build_rule_kit_zip, ingest_uploaded_rule
 from ..rule_source import read_source, write_source
 from ..model_service import ModelService
 from ..site_defaults import ensure_default_site
@@ -85,6 +87,61 @@ class InferFaultCodesBody(BaseModel):
 @router.get("/saved")
 def list_saved_rules(_user: dict = Depends(require_user)) -> dict:
     return {"rules": RuleStore().list_rules()}
+
+
+@router.get("/export-kit")
+def export_rule_kit(
+    site_id: str | None = Query(default=None),
+    rule_id: str | None = Query(default=None),
+    lookback_hours: float = Query(default=3, ge=1, le=720),
+    point_id: str | None = Query(default=None),
+    limit: int = Query(default=5000, ge=1, le=20000),
+    _user: dict = Depends(require_roles("integrator", "agent", "operator")),
+) -> Response:
+    """Download zip: rule.py + data.py + sample.feather + column_map.json + README."""
+    point_keys = [point_id.strip()] if point_id and point_id.strip() else None
+    try:
+        payload, filename = build_rule_kit_zip(
+            site_id=site_id,
+            rule_id=rule_id,
+            lookback_hours=lookback_hours,
+            limit=limit,
+            point_keys=point_keys,
+        )
+    except RuleKitError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(
+        content=payload,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/upload")
+async def upload_rule_py(
+    file: UploadFile = File(...),
+    rule_id: str | None = Form(default=None),
+    user: dict = Depends(require_roles("integrator", "agent")),
+) -> dict:
+    """Upload rule.py — Arrow-only, validated, named from filename when new."""
+    raw_name = str(file.filename or "rule.py")
+    body = await file.read()
+    try:
+        code = body.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail="rule.py must be UTF-8 text") from exc
+    try:
+        entry = ingest_uploaded_rule(
+            code=code,
+            filename=raw_name,
+            rule_id=(rule_id or "").strip() or None,
+            saved_by=str(user.get("sub") or user.get("role") or "integrator"),
+        )
+    except RuleKitError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "rule": entry, "filename": raw_name}
 
 
 def _validate_fault_codes(codes_raw: list[str]) -> list[str]:

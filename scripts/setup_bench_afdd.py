@@ -26,10 +26,13 @@ if str(API) not in sys.path:
 os.environ.setdefault("OPENFDD_REPO_ROOT", str(REPO))
 os.environ.setdefault("OFDD_DESKTOP_DATA_DIR", str(REPO / "workspace" / "data"))
 
+import pyarrow as pa  # noqa: E402
+
+from open_fdd.arrow_runtime.backend import run_arrow_rule  # noqa: E402
+
 from openfdd_bridge.fdd_runner import run_batch  # noqa: E402
 from openfdd_bridge.model_service import ModelService  # noqa: E402
-from openfdd_bridge.playground import lint_python, sweep_rule  # noqa: E402
-from openfdd_bridge.fdd_row_prep import prepare_fdd_rows  # noqa: E402
+from openfdd_bridge.playground import lint_python  # noqa: E402
 from openfdd_bridge.data_loader import load_frame_for_run  # noqa: E402
 from openfdd_bridge.rule_store import RuleStore  # noqa: E402
 from openfdd_bridge.ttl_service import TtlService  # noqa: E402
@@ -40,20 +43,8 @@ RULES_PY = DATA / "rules_py"
 
 
 def _read_rule_code(name: str) -> str:
-    """Load rule source; inline bench_fdd_common when rules import it."""
-    import re
-
-    main = (RULES_PY / name).read_text(encoding="utf-8")
-    if "bench_fdd_common" not in main:
-        return main
-    common = (RULES_PY / "bench_fdd_common.py").read_text(encoding="utf-8")
-    stripped = re.sub(
-        r"^\s*(?:from\s+bench_fdd_common\s+import\s+.+|import\s+bench_fdd_common(?:\s+as\s+\w+)?)\s*$",
-        "",
-        main,
-        flags=re.MULTILINE,
-    ).strip()
-    return common + "\n\n" + stripped
+    """Load rule source from workspace/data/rules_py."""
+    return (RULES_PY / name).read_text(encoding="utf-8")
 
 
 BENCH_RULES: list[dict] = [
@@ -61,67 +52,56 @@ BENCH_RULES: list[dict] = [
         "id": "bench-oa-t-flatline-1h",
         "name": "Bench OA-T flatline 1h",
         "fault_code": "VAV-C",
-        "code_file": "flatline_1h.py",
-        "config": {"flatline_tolerance": 0.10, "temp_unit": "imperial", "rolling_avg_minutes": 1},
+        "code_file": "bench_oa-t_flatline_1h.py",
+        "config": {},
         "bindings": {"point_ids": ["5007-analog-input-1173"], "equipment_ids": [], "brick_types": []},
     },
     {
         "id": "bench-oa-t-oob",
         "name": "Bench OA-T out of bounds",
         "fault_code": "VAV-C",
-        "code_file": "oob_rolling.py",
-        "config": {"bounds_low": 65, "bounds_high": 85, "temp_unit": "imperial", "rolling_avg_minutes": 1},
+        "code_file": "bench_oa-t_out_of_bounds.py",
+        "config": {},
         "bindings": {"point_ids": ["5007-analog-input-1173"], "equipment_ids": [], "brick_types": []},
     },
     {
         "id": "bench-stat-zn-t-flatline-1h",
         "name": "Bench stat ZN-T flatline 1h",
         "fault_code": "VAV-C",
-        "code_file": "flatline_1h.py",
-        "config": {"flatline_tolerance": 0.10, "temp_unit": "imperial", "rolling_avg_minutes": 1},
+        "code_file": "bench_stat_zn-t_flatline_1h.py",
+        "config": {},
         "bindings": {"point_ids": ["5007-analog-input-10014"], "equipment_ids": [], "brick_types": []},
     },
     {
         "id": "duct-t-flatline-1h",
         "name": "Duct-T flatline 1h",
         "fault_code": "DC-C",
-        "code_file": "flatline_1h.py",
-        "config": {"flatline_tolerance": 0.10, "temp_unit": "imperial", "rolling_avg_minutes": 1},
+        "code_file": "duct-t_flatline_1h.py",
+        "config": {},
         "bindings": {"point_ids": ["5007-analog-input-1192"], "equipment_ids": [], "brick_types": []},
     },
     {
         "id": "duct-t-spread-1h",
         "name": "Duct-T spread 1h",
         "fault_code": "DC-C",
-        "code_file": "spread_1h.py",
-        "config": {"max_spread": 4.0, "temp_unit": "imperial", "rolling_avg_minutes": 1},
+        "code_file": "duct-t_spread_1h.py",
+        "config": {},
         "bindings": {"point_ids": ["5007-analog-input-1192"], "equipment_ids": [], "brick_types": []},
     },
     {
         "id": "bench-oa-h-flatline-1h",
         "name": "Bench humidity flatline 1h",
         "fault_code": "BLD-B",
-        "code_file": "flatline_1h.py",
-        "config": {
-            "flatline_tolerance_rh": 1.0,
-            "value_kind": "rh",
-            "temp_unit": "imperial",
-            "rolling_avg_minutes": 1,
-        },
+        "code_file": "bench_humidity_flatline_1h.py",
+        "config": {},
         "bindings": {"point_ids": ["5007-analog-input-1168"], "equipment_ids": [], "brick_types": []},
     },
     {
         "id": "bench-oa-h-oob",
         "name": "Bench humidity out of bounds",
         "fault_code": "BLD-B",
-        "code_file": "oob_rolling.py",
-        "config": {
-            "bounds_low_rh": 15,
-            "bounds_high_rh": 75,
-            "value_kind": "rh",
-            "temp_unit": "imperial",
-            "rolling_avg_minutes": 1,
-        },
+        "code_file": "bench_humidity_out_of_bounds.py",
+        "config": {},
         "bindings": {"point_ids": ["5007-analog-input-1168"], "equipment_ids": [], "brick_types": []},
     },
 ]
@@ -169,22 +149,22 @@ def test_rules_on_frame(model: dict) -> None:
     site_id = "demo"
     frame, origin = load_frame_for_run(site_id)
     print(f"Test frame: origin={origin} rows={len(frame)} cols={list(frame.columns)}")
+    if frame is None or frame.empty:
+        print("  skip (no historian frame)")
+        return
+    sample = frame.tail(min(len(frame), 500))
+    table = pa.Table.from_pandas(sample, preserve_index=False)
     for spec in BENCH_RULES:
         code = _read_rule_code(spec["code_file"])
-        rule = {
-            "config": spec["config"],
-            "bindings": spec["bindings"],
-        }
-        rows = prepare_fdd_rows(frame, rule, model, site_id, limit=min(len(frame), 500))
-        if not rows:
-            print(f"  {spec['id']}: skip (no rows with ts_ms)")
+        try:
+            result = run_arrow_rule(code, table, {}, rule_id=spec["id"])
+        except Exception as exc:
+            print(f"  {spec['id']}: ERROR {exc}")
             continue
-        flags, events = sweep_rule(code, spec["config"], rows, capture_print=False)
-        err = next((e for e in events if e.get("type") == "error"), None)
-        if err:
-            print(f"  {spec['id']}: ERROR {err.get('text')}")
+        if result.errors:
+            print(f"  {spec['id']}: ERROR {result.errors[0]}")
         else:
-            print(f"  {spec['id']}: rows={len(rows)} flagged={sum(flags)}")
+            print(f"  {spec['id']}: rows={result.row_count} flagged={result.true_count}")
 
 
 def main() -> int:

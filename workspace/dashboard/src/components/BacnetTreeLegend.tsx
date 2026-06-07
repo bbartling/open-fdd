@@ -5,7 +5,7 @@ export default function BacnetTreeLegend() {
       <span className="bacnet-tree-legend-title">Legend</span>
       <span className="bacnet-tree-legend-item">
         <span className="badge poll-badge">polling</span>
-        <span className="bacnet-tree-legend-desc">Point enabled in poll driver — present value from scheduled BACnet reads</span>
+        <span className="bacnet-tree-legend-desc">Present value from poll or on-demand Refresh PV</span>
       </span>
       <span className="bacnet-tree-legend-item">
         <span className="badge override-badge">⚠ ovrd</span>

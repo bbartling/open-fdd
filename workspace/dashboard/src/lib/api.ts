@@ -104,6 +104,44 @@ export async function apiFetch<T>(
   return res.json() as Promise<T>;
 }
 
+/** Download binary payloads (zip exports) with shared auth/base-url behavior. */
+export async function apiDownloadBlob(
+  path: string,
+  init?: RequestInit,
+): Promise<{ blob: Blob; filename: string }> {
+  const base = getBridgeBase();
+  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      ...authHeaders(),
+      ...(init?.headers || {}),
+    },
+  });
+  if (res.status === 401 && !path.startsWith("/api/auth/login")) {
+    sessionStorage.removeItem(TOKEN_KEY);
+    if (shouldRedirectLogin()) {
+      window.location.assign("/login");
+    }
+    throw new Error("unauthorized");
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    try {
+      const body = JSON.parse(text) as { detail?: string };
+      if (typeof body.detail === "string") throw new Error(body.detail);
+    } catch (e) {
+      if (e instanceof Error && e.message !== text) throw e;
+    }
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  const blob = await res.blob();
+  const dispo = res.headers.get("Content-Disposition") || "";
+  const match = /filename="?([^";]+)"?/i.exec(dispo);
+  const filename = match?.[1] || "download.zip";
+  return { blob, filename };
+}
+
 /** Fetch non-JSON responses (e.g. TTL) with shared auth/base-url behavior. */
 export async function apiFetchText(path: string, init?: RequestInit): Promise<string> {
   const base = getBridgeBase();

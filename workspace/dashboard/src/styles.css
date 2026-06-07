@@ -901,6 +901,34 @@ textarea {
   font-size: 0.9rem;
 }
 
+.bacnet-tree-toolbar,
+.bacnet-bulk-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.bacnet-bulk-toolbar {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+
+.bacnet-tree-select {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.bacnet-tree-point-selected {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 6px;
+}
+
 .bacnet-tree {
   display: grid;
   gap: 8px;
@@ -2589,6 +2617,58 @@ textarea {
   margin-top: auto;
 }
 
+.rule-lab-readonly-panel {
+  margin-top: 0.75rem;
+}
+
+.rule-readonly-editor .cm-editor {
+  border: 1px solid var(--border, #273043);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rule-readonly-editor .cm-scroller {
+  max-height: 480px;
+}
+
+.rule-readonly-code {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  max-height: 480px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre;
+  background: var(--panel-elevated, #0f1419);
+  border: 1px solid var(--border, #2a3441);
+  border-radius: 8px;
+  color: var(--text, #e8edf2);
+}
+
+[data-theme="light"] .rule-readonly-code {
+  background: #f6f8fa;
+  color: #1f2328;
+  border-color: #d0d7de;
+}
+
+.rule-lint-list {
+  margin: 0.75rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--danger, #f87171);
+  font-size: 0.85rem;
+}
+
+button.linkish {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent, #5eb3ff);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
 .rule-lab-editor-panel {
   padding: 0;
   overflow: hidden;
@@ -2798,6 +2878,23 @@ textarea {
 .dm-feed-arrow {
   color: var(--muted);
   font-size: 0.8rem;
+}
+
+.algorithms-coming-soon h2 {
+  margin-top: 0.5rem;
+}
+
+.algorithms-badge {
+  display: inline-block;
+  margin: 0 0 0.75rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
 }
 
 .dm-feed-badge {

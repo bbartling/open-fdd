@@ -130,3 +130,155 @@ def test_modbus_read_registers_route(authed_client: TestClient):
         )
     assert r.status_code == 200
     assert r.json()["readings"][0]["decoded"] == 10
+
+
+def test_modbus_read_and_store_ingest(authed_client: TestClient):
+    import openfdd_bridge.modbus_service as ms
+
+    class _StoreFakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def open(self):
+            return True
+
+        def close(self):
+            pass
+
+        def read_holding_registers(self, address, count):
+            return [42]
+
+    login = authed_client.post(
+        "/api/auth/login",
+        json={"username": "integrator", "password": "msi"},
+    )
+    token = login.json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    with patch.object(ms, "ModbusClient", _StoreFakeClient):
+        r = authed_client.post(
+            "/api/modbus/read_and_store",
+            json={
+                "host": "192.168.1.10",
+                "unit_id": 2,
+                "registers": [
+                    {
+                        "address": 100,
+                        "count": 1,
+                        "function": "holding",
+                        "decode": "uint16",
+                        "label": "test_reg",
+                    }
+                ],
+            },
+            headers=headers,
+        )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["readings"][0]["decoded"] == 42
+    assert body["ingest"]["ok"] is True
+    assert body["ingest"]["samples_appended"] == 1
+    assert body["ingest"]["feather_source"] == "modbus"
+
+    reg = authed_client.get("/api/modbus/registers", headers=headers)
+    assert reg.status_code == 200
+    rows = reg.json()["registers"]
+    assert len(rows) == 1
+    assert rows[0]["last_value"] == "42"
+
+
+def test_fake_modbus_server_read_and_ingest(monkeypatch, tmp_path):
+    """Integration: scripts/fake_modbus_temp_server.py + driver ingest + feather."""
+    import subprocess
+    import time
+
+    port = 15502
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            str(REPO / "scripts" / "fake_modbus_temp_server.py"),
+            "--port",
+            str(port),
+            "--flatline",
+            "70.0",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        time.sleep(0.5)
+        monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "data"))
+        for name in list(sys.modules):
+            if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
+                del sys.modules[name]
+        from openfdd_bridge.modbus_service import execute_modbus_read_request
+        from openfdd_bridge.modbus_store import append_samples_and_ingest
+        from openfdd_bridge.data_loader import load_site_frame
+
+        payload = {
+            "host": "127.0.0.1",
+            "port": port,
+            "unit_id": 1,
+            "timeout": 2.0,
+            "registers": [
+                {
+                    "address": 100,
+                    "count": 1,
+                    "function": "holding",
+                    "decode": "uint16",
+                    "scale": 0.1,
+                    "label": "fake-temp",
+                }
+            ],
+        }
+        for _ in range(3):
+            result = execute_modbus_read_request(payload)
+            assert result["readings"][0]["success"] is True
+            assert result["readings"][0]["decoded"] == pytest.approx(70.0)
+            ingest = append_samples_and_ingest(
+                host="127.0.0.1",
+                unit_id=1,
+                readings=result["readings"],
+                site_id="modbus-test",
+            )
+            assert ingest["ok"] is True
+            time.sleep(1.05)
+
+        df = load_site_frame("modbus-test", source="modbus", columns=["fake-temp"])
+        assert df is not None
+        assert len(df) >= 1
+        assert "fake-temp" in df.columns
+    finally:
+        proc.terminate()
+        proc.wait(timeout=3)
+
+
+def test_modbus_driver_tree_and_poll_status(monkeypatch, tmp_path):
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "data"))
+    for name in list(sys.modules):
+        if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
+            del sys.modules[name]
+    from openfdd_bridge.modbus_store import driver_tree, poll_status, upsert_register
+
+    upsert_register(
+        {
+            "host": "127.0.0.1",
+            "port": 5502,
+            "unit_id": 1,
+            "address": 100,
+            "function": "holding",
+            "decode": "uint16",
+            "scale": 0.1,
+            "label": "fake-temp",
+            "units": "degF",
+            "enabled": True,
+            "poll_interval_s": 60,
+            "last_value": "72.5",
+        }
+    )
+    tree = driver_tree()
+    assert tree["ok"] is True
+    assert len(tree["devices"]) == 1
+    assert tree["devices"][0]["poll_count"] == 1
+    assert tree["devices"][0]["points"][0]["present_value"] == "72.5"
+    status = poll_status()
+    assert status["enabled_points"] == 1

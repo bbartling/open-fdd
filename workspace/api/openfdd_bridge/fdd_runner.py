@@ -31,7 +31,7 @@ _log = logging.getLogger(__name__)
 
 DEFAULT_LIMIT = 1000
 DEFAULT_LOOKBACK_HOURS = float(__import__("os").environ.get("OFDD_FDD_LOOKBACK_HOURS", "1") or 1)
-DEFAULT_INTERVAL_MINUTES = float(__import__("os").environ.get("OFDD_FDD_INTERVAL_MINUTES", "10") or 10)
+DEFAULT_INTERVAL_MINUTES = float(__import__("os").environ.get("OFDD_FDD_INTERVAL_MINUTES", "60") or 60)
 
 
 def resolve_site_ids(model: dict[str, Any], rule: dict[str, Any]) -> list[str]:

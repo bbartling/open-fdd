@@ -170,9 +170,34 @@ Optional host Ollama for building insight — not required for core FDD. Configu
 
 ## Modbus
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/modbus/read_registers` | Read holding registers |
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/modbus/driver/tree` | operator+ | Commissioning tree |
+| GET | `/api/modbus/poll/status` | operator+ | Poll worker status |
+| POST | `/api/modbus/poll/once` | integrator+ | Force poll cycle |
+| POST | `/api/modbus/read_registers` | operator+ | One-shot register read |
+| POST | `/api/modbus/read_and_store` | operator+ | Read + CSV + feather (`source=modbus`) |
+| POST | `/api/modbus/refresh` | operator+ | Re-read one register |
+| PATCH | `/api/modbus/register/poll` | integrator+ | Enable poll interval |
+
+See [Driver framework](../drivers/index).
+
+---
+
+## JSON API (HTTP/HTTPS)
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/json-api/driver/tree` | operator+ | Endpoints grouped by host |
+| GET | `/api/json-api/poll/status` | operator+ | Poll worker status |
+| POST | `/api/json-api/poll/once` | integrator+ | Force poll cycle |
+| POST | `/api/json-api/request` | operator+ | One-shot GET/POST (no store) |
+| POST | `/api/json-api/read_and_store` | operator+ | Request + CSV + feather (`source=json_api`) |
+| POST | `/api/json-api/refresh` | operator+ | Re-fetch endpoint |
+| PATCH | `/api/json-api/endpoint/poll` | integrator+ | Enable poll interval |
+| DELETE | `/api/json-api/endpoint/{point_id}` | integrator+ | Remove endpoint |
+
+**Outbound auth:** `auth_type` = `none` \| `bearer` \| `basic`; optional `verify_tls` (default true). See [JSON API driver](../drivers/json-api).
 
 ---
 

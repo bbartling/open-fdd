@@ -48,7 +48,7 @@ export PYTHONPATH="${ROOT}/workspace/api:${ROOT}"
 export OFDD_BRIDGE_HOST="${OFDD_BRIDGE_HOST:-0.0.0.0}"
 export OFDD_BRIDGE_PORT="${OFDD_BRIDGE_PORT:-8765}"
 export OFDD_FDD_LOOKBACK_HOURS="${OFDD_FDD_LOOKBACK_HOURS:-1}"
-export OFDD_FDD_INTERVAL_MINUTES="${OFDD_FDD_INTERVAL_MINUTES:-10}"
+export OFDD_FDD_INTERVAL_MINUTES="${OFDD_FDD_INTERVAL_MINUTES:-60}"
 
 load_data_env() {
   local quiet="${1:-false}"
@@ -577,7 +577,7 @@ case "$CMD" in
     ;;
   status)
     if pid_running "$FDD_PID"; then
-      echo "fdd_loop: running pid=$(cat "$FDD_PID") (every ${OFDD_FDD_INTERVAL_MINUTES:-10}m, lookback ${OFDD_FDD_LOOKBACK_HOURS:-1}h)"
+      echo "fdd_loop: running pid=$(cat "$FDD_PID") (every ${OFDD_FDD_INTERVAL_MINUTES:-60}m, lookback ${OFDD_FDD_LOOKBACK_HOURS:-1}h)"
     elif pgrep -af "openfdd_bridge.fdd_runner" >/dev/null 2>&1; then
       echo "fdd_loop: running (orphan)"
     else
