@@ -6,7 +6,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-# Plotly + Vite SPA: hashed JS/CSS under /assets; inline styles from the bundle/CSS modules.
+# Plotly + Vite SPA: hashed JS/CSS under /assets.
+# TODO: remove style-src 'unsafe-inline' after migrating inline styles to hashed CSS
+# modules or nonce-based CSP (Vite/React style injection currently requires unsafe-inline).
 _CSP = (
     "default-src 'self'; "
     "base-uri 'self'; "

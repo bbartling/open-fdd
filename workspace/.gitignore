@@ -26,3 +26,5 @@ data/**/*.feather
 data/playground/draft_rules.json
 !deploy/
 !deploy/**
+!scripts/
+!scripts/**

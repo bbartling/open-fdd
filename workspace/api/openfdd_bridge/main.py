@@ -35,7 +35,9 @@ from .settings import cors_allow_headers, cors_allow_methods, cors_origins
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     from .bacnet_poll_worker import start_bacnet_poll_worker
+    from .log_rotation import rotate_logs_on_startup
 
+    rotate_logs_on_startup()
     start_bacnet_poll_worker()
     yield
 

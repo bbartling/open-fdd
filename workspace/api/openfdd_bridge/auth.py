@@ -23,40 +23,101 @@ _BEARER_TYP = "bearer"
 _BEARER_VER = 1
 _WS_TICKET_TYP = "ws"
 
+# Replay protection is in-process only — safe for single-worker uvicorn; multi-worker
+# deployments need shared ticket state (Redis/SQLite). See workspace/deploy/SECURITY.md.
 _used_ws_tickets: dict[str, float] = {}
+
+
+_DEFAULT_TOKEN_TTL_SEC = 8 * 3600  # 8h — safer default for OT operator dashboards
+_MAX_TOKEN_TTL_SEC = 7 * 86400
+_DEV_MAX_TOKEN_TTL_SEC = 365 * 86400
 
 
 def _parse_token_ttl() -> int:
     raw = os.environ.get("OFDD_AUTH_TTL_SEC", "").strip()
-    default = 7 * 86400
+    default = _DEFAULT_TOKEN_TTL_SEC
     if not raw:
         return default
     try:
         value = int(raw)
     except ValueError:
         return default
-    return max(1, min(value, 365 * 86400))
+    value = max(1, value)
+    allow_long = os.environ.get("OFDD_AUTH_TTL_ALLOW_LONG", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    cap = _DEV_MAX_TOKEN_TTL_SEC if allow_long else _MAX_TOKEN_TTL_SEC
+    clamped = min(value, cap)
+    if value > cap:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "OFDD_AUTH_TTL_SEC=%s exceeds cap (%ss); clamped to %ss. "
+            "Set OFDD_AUTH_TTL_ALLOW_LONG=1 only for local development.",
+            value,
+            cap,
+            clamped,
+        )
+    return clamped
+
+
+def token_ttl_seconds() -> int:
+    return _TOKEN_TTL_SEC
 
 
 _TOKEN_TTL_SEC = _parse_token_ttl()
 
 
+def _password_hash_keys(role: Role) -> tuple[str, str]:
+    if role == "operator":
+        return "OFDD_OPERATOR_PASSWORD_HASH", "OFDD_OPERATOR_PASSWORD"
+    if role == "integrator":
+        return "OFDD_INTEGRATOR_PASSWORD_HASH", "OFDD_INTEGRATOR_PASSWORD"
+    return "OFDD_AGENT_PASSWORD_HASH", "OFDD_AGENT_PASSWORD"
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    """Compare plaintext or bcrypt hash ($2a$ / $2b$)."""
+    if stored.startswith("$2a$") or stored.startswith("$2b$") or stored.startswith("$2y$"):
+        try:
+            import bcrypt
+        except ImportError:
+            return False
+        try:
+            return bcrypt.checkpw(password.encode("utf-8"), stored.encode("ascii"))
+        except (ValueError, TypeError):
+            return False
+    return hmac.compare_digest(password, stored)
+
+
 def _load_users() -> dict[str, tuple[str, Role]]:
-    """username -> (password, role). Legacy OFDD_WEB_* maps to operator."""
+    """username -> (password or bcrypt hash, role). Legacy OFDD_WEB_* maps to operator."""
     users: dict[str, tuple[str, Role]] = {}
 
-    def _add(role: Role, user_key: str, pass_key: str, legacy_user: str = "", legacy_pass: str = "") -> None:
+    def _add(
+        role: Role,
+        user_key: str,
+        pass_key: str,
+        *,
+        legacy_user: str = "",
+        legacy_pass: str = "",
+    ) -> None:
         user = os.environ.get(user_key, "").strip() or legacy_user.strip()
-        password = os.environ.get(pass_key, "").strip() or legacy_pass.strip()
-        if user and password:
-            users[user] = (password, role)
+        hash_key, plain_key = _password_hash_keys(role)
+        stored = os.environ.get(hash_key, "").strip()
+        if not stored:
+            stored = os.environ.get(pass_key, "").strip() or legacy_pass.strip()
+        if user and stored:
+            users[user] = (stored, role)
 
     _add(
         "operator",
         "OFDD_OPERATOR_USER",
         "OFDD_OPERATOR_PASSWORD",
-        os.environ.get("OFDD_WEB_USER", ""),
-        os.environ.get("OFDD_WEB_PASSWORD", ""),
+        legacy_user=os.environ.get("OFDD_WEB_USER", ""),
+        legacy_pass=os.environ.get("OFDD_WEB_PASSWORD", ""),
     )
     _add("integrator", "OFDD_INTEGRATOR_USER", "OFDD_INTEGRATOR_PASSWORD")
     _add("agent", "OFDD_AGENT_USER", "OFDD_AGENT_PASSWORD")
@@ -98,7 +159,7 @@ def check_credentials(username: str, password: str) -> Role | None:
     else:
         expected_password = _DUMMY_PASSWORD
         role = None
-    if not hmac.compare_digest(password, expected_password):
+    if not _verify_password(password, expected_password):
         return None
     return role
 

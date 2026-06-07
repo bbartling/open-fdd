@@ -144,7 +144,7 @@ def test_startup_public_bind_auth_disabled_without_insecure_flag_fails(
     )
     from openfdd_bridge.main import create_app  # noqa: E402
 
-    with pytest.raises(RuntimeError, match="cannot start"):
+    with pytest.raises(RuntimeError, match="OFDD_AUTH_DISABLED"):
         create_app()
 
 

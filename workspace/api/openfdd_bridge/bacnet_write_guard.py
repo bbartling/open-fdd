@@ -12,7 +12,7 @@ from fastapi import HTTPException, Request
 
 from .audit import write_audit
 from .paths import workspace_dir
-from .security import bacnet_write_allow_any, bacnet_writes_enabled
+from .security import bacnet_write_allow_any, bacnet_write_dry_run_enabled, bacnet_writes_enabled
 
 _log = logging.getLogger(__name__)
 
@@ -230,6 +230,21 @@ def validate_write_target(
         priority=priority,
         value=value,
     ) for entry in entries):
+        write_audit(
+            event_type="bacnet.command",
+            action="write allowed (allowlist)",
+            outcome="success",
+            severity="info",
+            request=request,
+            user=user,
+            resource_type="bacnet",
+            resource_id=oid,
+            detail={
+                "device_instance": device_instance,
+                "property_identifier": property_identifier,
+                "priority": priority,
+            },
+        )
         return
     write_audit(
         event_type="bacnet.command",
@@ -249,6 +264,41 @@ def validate_write_target(
     raise HTTPException(status_code=403, detail="write target not in allowlist")
 
 
+def is_dry_run_write() -> bool:
+    return bacnet_write_dry_run_enabled()
+
+
+def audit_write_attempt(
+    *,
+    action: str,
+    outcome: str,
+    request: Request | None,
+    user: dict | None,
+    body: dict[str, Any],
+    detail: dict[str, Any] | None = None,
+) -> None:
+    merged = {
+        "device_instance": body.get("device_instance"),
+        "object_identifier": body.get("object_identifier"),
+        "property_identifier": body.get("property_identifier"),
+        "priority": body.get("priority"),
+        "value": body.get("value"),
+    }
+    if detail:
+        merged.update(detail)
+    write_audit(
+        event_type="bacnet.command",
+        action=action,
+        outcome=outcome,
+        severity="warning" if outcome != "success" else "info",
+        request=request,
+        user=user,
+        resource_type="bacnet",
+        resource_id=str(body.get("object_identifier") or ""),
+        detail=merged,
+    )
+
+
 def ensure_writes_enabled(*, request: Request, user: dict | None, body: dict[str, Any]) -> None:
     if bacnet_writes_enabled():
         return
@@ -266,4 +316,27 @@ def ensure_writes_enabled(*, request: Request, user: dict | None, body: dict[str
     raise HTTPException(
         status_code=403,
         detail="BACnet writes are disabled — set OFDD_ENABLE_BACNET_WRITE=1 to enable",
+    )
+
+
+def reject_if_dry_run(
+    *,
+    request: Request | None,
+    user: dict | None,
+    body: dict[str, Any],
+) -> None:
+    """Log and reject the field write when dry-run mode is on (allowlist still enforced)."""
+    if not is_dry_run_write():
+        return
+    audit_write_attempt(
+        action="write dry-run (not sent to field)",
+        outcome="failure",
+        request=request,
+        user=user,
+        body=body,
+        detail={"reason": "OFDD_BACNET_WRITE_DRY_RUN=1"},
+    )
+    raise HTTPException(
+        status_code=403,
+        detail="BACnet write dry-run mode — command audited but not sent to field devices",
     )

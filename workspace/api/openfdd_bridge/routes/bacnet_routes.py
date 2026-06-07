@@ -54,6 +54,7 @@ from ..commission_client import (
 )
 from ..bacnet_write_guard import (
     ensure_writes_enabled,
+    reject_if_dry_run,
     validate_priority,
     validate_write_target,
 )
@@ -455,6 +456,7 @@ def bacnet_write_property(body: WritePropertyRequest, request: Request) -> dict:
         request=request,
         user=user,
     )
+    reject_if_dry_run(request=request, user=user, body=body_dump)
     status_code, payload = commission_write(
         body.device_instance,
         body.object_identifier,
