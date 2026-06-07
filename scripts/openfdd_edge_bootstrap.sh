@@ -7,7 +7,7 @@
 #
 # Options:
 #   --start          docker compose pull && up -d after bootstrap
-#   --image-tag TAG  default: latest (falls back to 2026.06.07-edge if latest missing)
+#   --image-tag TAG  default: latest
 #   --repo-ref REF   GitHub branch for compose.edge.yml (tries master, then this ref)
 #   --root PATH      default: ~/open-fdd
 #   --force-auth     regenerate workspace/auth.env.local
@@ -18,7 +18,6 @@ set -euo pipefail
 OPENFDD_ROOT="${OPENFDD_ROOT:-$HOME/open-fdd}"
 OPENFDD_REPO_REF="${OPENFDD_REPO_REF:-master}"
 OPENFDD_IMAGE_TAG="${OPENFDD_IMAGE_TAG:-latest}"
-OPENFDD_IMAGE_FALLBACK="${OPENFDD_IMAGE_FALLBACK:-2026.06.07-edge}"
 GITHUB_REPO="bbartling/open-fdd"
 DO_START=false
 FORCE_AUTH=false
@@ -275,15 +274,7 @@ _pull_and_start() {
   cd "$OPENFDD_ROOT"
   export OPENFDD_IMAGE_TAG
   echo "==> Pulling images (tag=${OPENFDD_IMAGE_TAG})"
-  if ! docker compose pull 2>/dev/null; then
-    if [[ "$OPENFDD_IMAGE_TAG" == "latest" ]]; then
-      echo "    latest not found — falling back to ${OPENFDD_IMAGE_FALLBACK}"
-      export OPENFDD_IMAGE_TAG="$OPENFDD_IMAGE_FALLBACK"
-      docker compose pull
-    else
-      return 1
-    fi
-  fi
+  docker compose pull
   docker compose up -d
   docker compose ps
   curl -sf http://127.0.0.1:8765/health && echo || echo "WARN: /health not ready yet"
@@ -365,7 +356,7 @@ echo ""
 echo "=== Bootstrap complete ==="
 echo "  Site root:     ${OPENFDD_ROOT}"
 echo "  Compose file:  ${COMPOSE_PATH}"
-echo "  Image tag:     ${OPENFDD_IMAGE_TAG} (fallback: ${OPENFDD_IMAGE_FALLBACK})"
+echo "  Image tag:     ${OPENFDD_IMAGE_TAG}"
 echo "  BACnet NIC:    ${BACNET_IFACE:-unknown}"
 echo "  BACnet bind:   ${BACNET_BIND}"
 echo "  Auth file:     ${AUTH_PATH}"

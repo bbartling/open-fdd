@@ -37,14 +37,6 @@ cd ~/open-fdd
 
 Pulls **`:latest`** by default, verifies all three images exist on GHCR, recreates containers, and hits `/health`.
 
-Pin a dated release:
-
-```bash
-export NEW_TAG=2026.06.07-edge
-./scripts/openfdd_site_backup.sh
-./scripts/openfdd_site_update.sh
-```
-
 ## Step by step
 
 ### 1. Backup site state
@@ -77,7 +69,6 @@ echo "All images exist for ${NEW_TAG}"
 
 ```bash
 cd ~/open-fdd
-export NEW_TAG="${NEW_TAG:-latest}"   # optional pin
 ./scripts/openfdd_site_update.sh
 ```
 
@@ -108,12 +99,7 @@ If the release changed the React UI, copy a new `workspace/api/static/app/` buil
 
 ## Rollback
 
-```bash
-cd ~/open-fdd
-export NEW_TAG=2026.06.06-edge          # previous known-good tag
-cp ~/openfdd-backups/<timestamp>/docker-compose.yml.snapshot docker-compose.yml
-./scripts/openfdd_site_update.sh
-```
+Restore `docker-compose.yml` from backup and pull again, or re-run bootstrap from a known-good `master` commit. GHCR keeps only the **three newest** versions per image; early sites should rely on **`latest`** plus `workspace/` backups.
 
 `workspace/` is untouched by image-only upgrades.
 

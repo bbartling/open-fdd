@@ -7,8 +7,7 @@
 #
 # Long-lived site (survives reboot when Docker is enabled):
 #   cd ~/open-fdd
-#   docker compose pull && docker compose up -d   # :latest by default
-#   # Pin: export OPENFDD_IMAGE_TAG=2026.06.07-edge
+#   docker compose pull && docker compose up -d   # :latest
 #   sudo systemctl enable docker
 #
 # See docs/quick-start/docker.md

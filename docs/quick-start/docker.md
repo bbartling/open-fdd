@@ -16,7 +16,7 @@ Deploy Open-FDD on a Linux edge host using **three published GHCR images**. No g
 | `ghcr.io/bbartling/openfdd-commission` | `commission` | BACnet discover/read/write **and poll loop** |
 | `ghcr.io/bbartling/openfdd-mcp-rag` | `mcp-rag` | Doc-search sidecar |
 
-Compose defaults to **`latest`**. Pin a dated tag with `export OPENFDD_IMAGE_TAG=2026.06.07-edge` when needed.
+Edge hosts pull **`latest`** from GHCR (three images: bridge, commission, mcp-rag). The retired **`openfdd-bacnet-poll`** image is no longer published.
 
 ## 1. Install and validate Docker
 
@@ -108,7 +108,7 @@ Options:
 | Flag | Purpose |
 |------|---------|
 | `--start` | `docker compose pull && up -d` after layout; curls `http://127.0.0.1:8765/health` |
-| `--image-tag TAG` | default `latest` (falls back to `2026.06.07-edge`) |
+| `--image-tag TAG` | default `latest` |
 | `--repo-ref BRANCH` | branch for `compose.edge.yml` if not on `master` yet |
 | `--force-auth` | regenerate `auth.env.local` (restarts bridge if stack is up) |
 | `--restart` | recreate bridge to reload `auth.env.local`; curls `/health` after |

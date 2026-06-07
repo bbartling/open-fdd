@@ -1,13 +1,13 @@
-# Manual GHCR publish for Open-FDD addon images (supervisor/apps layer).
-# Manual edge image publish — triggered when cutting a release.
+# Publish Open-FDD edge images to GHCR (:latest only; prune retired bacnet-poll + old versions).
 name: Publish Docker addons
 
 on:
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: "Image tag (e.g. 2026.05.30-edge)"
-        required: true
+      keep_versions:
+        description: "GHCR versions to retain per image (default 3)"
+        required: false
+        default: "3"
         type: string
 
 permissions:
@@ -38,11 +38,15 @@ jobs:
       - name: Build addon images
         run: |
           chmod +x scripts/docker_build.sh scripts/docker_publish.sh scripts/validate_supervisor_manifest.sh
-          OPENFDD_IMAGE_TAG="${{ inputs.image_tag }}" ./scripts/docker_build.sh
+          OPENFDD_IMAGE_TAG=latest ./scripts/docker_build.sh
           ./scripts/validate_supervisor_manifest.sh
 
-      - name: Publish to GHCR
+      - name: Publish to GHCR (:latest)
+        run: PUBLISH_LATEST_ONLY=1 OPENFDD_IMAGE_TAG=latest ./scripts/docker_publish.sh
+
+      - name: Prune GHCR (drop retired bacnet-poll; keep N versions)
         env:
-          OPENFDD_IMAGE_TAG: ${{ inputs.image_tag }}
-          PUBLISH_LATEST: "1"
-        run: ./scripts/docker_publish.sh
+          GHCR_KEEP_VERSIONS: ${{ inputs.keep_versions }}
+        run: |
+          chmod +x scripts/ghcr_prune_packages.sh
+          ./scripts/ghcr_prune_packages.sh --delete-retired --keep "${GHCR_KEEP_VERSIONS}"
