@@ -154,7 +154,7 @@ async def modbus_read_and_store(body: ModbusReadStoreBody) -> dict:
         payload = body.model_dump(exclude={"site_id", "save_registers"})
         result = await asyncio.to_thread(execute_modbus_read_request, payload)
         if body.save_registers:
-            for spec, reading in zip(body.registers, result.get("readings") or []):
+            for spec, reading in zip(body.registers, result.get("readings") or [], strict=True):
                 if not reading.get("success"):
                     continue
                 upsert_register(
