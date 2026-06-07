@@ -8,9 +8,16 @@ nav_order: 2
 
 ## Telemetry ingest
 
-1. **Poll driver** reads BACnet points on a schedule (host-network container).
-2. Samples land in the **feather store** (`workspace/data/feather_store/`).
-3. Point registry (`points.csv`, discovered inventory) ties BACnet objects to `series_id`.
+1. **Commission poll loop** (inside the `commission` container) reads enabled BACnet points from `points.csv` on a schedule (host network, BACnet `:47808`).
+2. RPM results append to `workspace/bacnet/polls/samples.csv` (long format).
+3. **Bridge ingest worker** watches `samples.csv` and loads new rows into the **feather store** (`workspace/data/feather_store/`).
+4. Point registry (`points.csv`, discovered inventory) ties BACnet objects to `series_id`.
+
+```
+BACnet devices → commission (poll loop) → samples.csv → bridge (ingest) → feather_store
+```
+
+Details: [BACnet polling](../bacnet/polling), [Containers](containers).
 
 ## Rule evaluation
 
@@ -26,4 +33,4 @@ nav_order: 2
 
 ## Retention
 
-Feather files grow on disk; retention policies are configurable on the edge. Image upgrades should **not** delete `workspace/data/` when using `upgrade_edge_ghcr.sh`.
+Feather files grow on disk; retention is configurable (`workspace/data.env.local`). Image upgrades must **preserve** `workspace/data/` — backup before `docker compose up -d --force-recreate`. See [Updating the stack](../quick-start/updating).
