@@ -2,6 +2,7 @@
 *
 !.gitignore
 !*.env.example
+!pentest.env.example
 !api/
 !api/**
 !mcp_rag/
