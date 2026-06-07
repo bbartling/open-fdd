@@ -41,6 +41,14 @@ def modbus_registers_path() -> Path:
     return workspace_dir() / "modbus" / "commissioning" / "registers.csv"
 
 
+def json_api_poll_csv() -> Path:
+    return workspace_dir() / "json_api" / "polls" / "samples.csv"
+
+
+def json_api_endpoints_path() -> Path:
+    return workspace_dir() / "json_api" / "commissioning" / "endpoints.csv"
+
+
 def commissioning_dir() -> Path:
     return workspace_dir() / "bacnet" / "commissioning"
 

@@ -8,6 +8,7 @@ const NAV = [
   { to: "/", end: true, icon: "🏠", label: "Building status" },
   { to: "/bacnet", icon: "📡", label: "BACnet", protected: true },
   { to: "/modbus", icon: "🔌", label: "Modbus", protected: true },
+  { to: "/json-api", icon: "🌐", label: "JSON API", protected: true },
   { to: "/rule-lab", icon: "🐍", label: "Rule Lab", protected: true },
   { to: "/model", icon: "🧱", label: "Model & assignments", protected: true },
   { to: "/faults", icon: "🚦", label: "Fault catalog" },
