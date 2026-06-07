@@ -96,10 +96,12 @@ def lint_arrow_rule(code: str, *, strict_imports: bool = True) -> dict[str, Any]
                         "severity": "error" if strict_imports else "warning",
                     }
                 )
-    has_fn = any(
-        isinstance(n, ast.FunctionDef) and n.name == "apply_faults_arrow" for n in ast.walk(tree)
-    )
-    if not has_fn:
+    entrypoint: ast.FunctionDef | None = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "apply_faults_arrow":
+            entrypoint = node
+            break
+    if entrypoint is None:
         issues.append(
             {
                 "line": 1,
@@ -107,6 +109,24 @@ def lint_arrow_rule(code: str, *, strict_imports: bool = True) -> dict[str, Any]
                 "severity": "error",
             }
         )
+    else:
+        arg_names = [a.arg for a in entrypoint.args.args]
+        if len(arg_names) < 2 or arg_names[0] != "table" or arg_names[1] != "cfg":
+            issues.append(
+                {
+                    "line": entrypoint.lineno,
+                    "message": "apply_faults_arrow must accept (table, cfg, context=None)",
+                    "severity": "error",
+                }
+            )
+        elif len(arg_names) > 2 and arg_names[2] != "context":
+            issues.append(
+                {
+                    "line": entrypoint.lineno,
+                    "message": "third parameter should be named context",
+                    "severity": "warning",
+                }
+            )
     return {"ok": not any(i["severity"] == "error" for i in issues), "issues": issues}
 
 

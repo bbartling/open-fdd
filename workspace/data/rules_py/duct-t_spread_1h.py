@@ -1,7 +1,26 @@
 """Duct-T spread 1h (Arrow)."""
 
-from open_fdd.arrow_runtime.cookbook import spread_1h_mask
+import pyarrow.compute as pc
+from open_fdd.arrow_runtime.windows import arrow_rolling_max, arrow_rolling_min
+
+VALUE_COLUMN = "duct-t"
+WINDOW_SAMPLES = 12
+MAX_SPREAD = 4.0
+
+
+def _kit_value_stats(table):
+    vals = pc.cast(table[VALUE_COLUMN], "float64")
+    print(
+        f"rows={table.num_rows} column={VALUE_COLUMN} "
+        f"min={pc.min(vals).as_py():.2f} max={pc.max(vals).as_py():.2f} "
+        f"mean={pc.mean(vals).as_py():.2f}"
+    )
 
 
 def apply_faults_arrow(table, cfg, context=None):
-    return spread_1h_mask(table, cfg)
+    _kit_value_stats(table)
+    vals = pc.cast(table[VALUE_COLUMN], "float64")
+    rmin = arrow_rolling_min(vals, WINDOW_SAMPLES)
+    rmax = arrow_rolling_max(vals, WINDOW_SAMPLES)
+    spread = pc.subtract(rmax, rmin)
+    return pc.greater(spread, MAX_SPREAD)

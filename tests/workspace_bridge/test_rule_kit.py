@@ -19,14 +19,21 @@ if str(API_ROOT) not in sys.path:
 ARROW_RULE = """import pyarrow as pa
 import pyarrow.compute as pc
 
+VALUE_COLUMN = "SAT"
+MAX_TEMP = 50.0
+
 def apply_faults_arrow(table, cfg, context=None):
-    col = "SAT" if "SAT" in table.column_names else list(table.column_names)[0]
-    return pc.greater(pc.cast(table[col], pa.float64()), float(cfg.get("high", 50)))
+    return pc.greater(pc.cast(table[VALUE_COLUMN], pa.float64()), MAX_TEMP)
 """
 
 LEGACY_RULE = """
 def evaluate(row, cfg):
     return row.get("SAT", 0) > cfg.get("high", 50)
+"""
+
+BAD_SIGNATURE = """
+def apply_faults_arrow(rows, settings):
+    return rows
 """
 
 
@@ -60,6 +67,13 @@ def test_validate_upload_rejects_legacy():
         validate_uploaded_rule(LEGACY_RULE)
 
 
+def test_validate_upload_rejects_bad_entrypoint_signature():
+    from openfdd_bridge.rule_kit import RuleKitError, validate_uploaded_rule
+
+    with pytest.raises(RuleKitError, match="apply_faults_arrow must accept"):
+        validate_uploaded_rule(BAD_SIGNATURE)
+
+
 def test_validate_upload_accepts_arrow():
     from openfdd_bridge.rule_kit import validate_uploaded_rule
 
@@ -71,23 +85,14 @@ def test_validate_upload_accepts_arrow():
 def test_augment_rule_injects_value_stats():
     from openfdd_bridge.rule_kit import augment_rule_code_for_kit_export
 
-    src = """from open_fdd.arrow_runtime.cookbook import oob_mask
+    src = """import pyarrow.compute as pc
 
 def apply_faults_arrow(table, cfg, context=None):
-    return oob_mask(table, cfg)
+    return pc.greater(table["oa-t"], 70)
 """
     out = augment_rule_code_for_kit_export(src)
     assert "_kit_value_stats" in out
-    assert "_kit_value_stats(table, cfg)" in out
-    assert "return oob_mask(table, cfg)" in out
-
-
-def test_infer_kit_config_oob_defaults():
-    from openfdd_bridge.rule_kit import infer_kit_config
-
-    cfg = infer_kit_config("return oob_mask(table, cfg)", {})
-    assert cfg["bounds_low"] == 65
-    assert cfg["bounds_high"] == 85
+    assert "_kit_value_stats(table)" in out
 
 
 def test_build_rule_kit_zip_contains_expected_files(tmp_path, monkeypatch):
@@ -106,20 +111,18 @@ def test_build_rule_kit_zip_contains_expected_files(tmp_path, monkeypatch):
         "data.py",
         "sample.feather",
         "run_test.py",
+        "requirements.txt",
         "column_map.json",
-        "config.json",
-        "config_keys.json",
         "README.md",
     } <= names
+    assert "config.json" not in names
     assert "python run_test.py" in zf.read("README.md").decode()
     rule_py = zf.read("rule.py").decode()
     assert "apply_faults_arrow" in rule_py
     assert "_kit_value_stats" in rule_py
-    assert json.loads(zf.read("config.json"))["max_zone_temp"] == 75
+    assert "open-fdd>=3.0.1" in zf.read("requirements.txt").decode()
     run_test = zf.read("run_test.py").decode()
-    assert "{{" not in run_test
-    assert 'context={"site_id": data.SITE_ID}' in run_test
-    assert "site={data.SITE_ID}" in run_test
+    assert 'apply_faults_arrow(table, {}, context={"site_id": data.SITE_ID})' in run_test
 
 
 def test_export_kit_route(authed_integrator: TestClient):

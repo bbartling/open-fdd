@@ -31,79 +31,43 @@ class RuleKitError(ValueError):
     """Invalid rule upload or kit export request."""
 
 
-KIT_VALUE_STATS_HELPER = '''def _kit_value_stats(table, cfg):
-    """Dev kit helper — min/max/mean for the rule value column (remove before upload if desired)."""
-    import pyarrow.compute as pc
-    from open_fdd.arrow_runtime.cookbook import value_column
+KIT_VALUE_STATS_HELPER = '''_META_COLS = frozenset({"timestamp", "site_id", "building_id", "system_id"})
 
-    try:
-        name = value_column(table, cfg)
-        vals = pc.cast(table[name], "float64")
-        print(
-            f"rows={table.num_rows} column={name} "
-            f"min={pc.min(vals).as_py():.2f} max={pc.max(vals).as_py():.2f} "
-            f"mean={pc.mean(vals).as_py():.2f}"
-        )
-    except Exception as exc:
-        print(f"value stats skipped: {exc}")
+
+def _kit_value_stats(table):
+    """Dev kit helper — min/max/mean (remove before upload if desired)."""
+    name = next((c for c in table.column_names if c not in _META_COLS), table.column_names[0])
+    vals = pc.cast(table[name], "float64")
+    print(
+        f"rows={table.num_rows} column={name} "
+        f"min={pc.min(vals).as_py():.2f} max={pc.max(vals).as_py():.2f} "
+        f"mean={pc.mean(vals).as_py():.2f}"
+    )
 '''
 
-COOKBOOK_KIT_DEFAULTS: dict[str, dict[str, Any]] = {
-    "oob_mask": {
-        "bounds_low": 65,
-        "bounds_high": 85,
-        "temp_unit": "imperial",
-        "rolling_avg_minutes": 1,
-    },
-    "flatline_1h_mask": {
-        "flatline_tolerance": 0.1,
-        "flatline_window_samples": 12,
-        "temp_unit": "imperial",
-    },
-    "spread_1h_mask": {
-        "max_spread": 4.0,
-        "flatline_window_samples": 12,
-        "temp_unit": "imperial",
-    },
-}
+REQUIREMENTS_TXT = "open-fdd>=3.0.1\npyarrow\n"
 
-CONFIG_KEYS_GUIDE: dict[str, Any] = {
-    "oob_mask": {
-        "description": "Outside bounds — flags when value is below bounds_low or above bounds_high.",
-        "keys": {
-            "bounds_low": "Lower limit (°F imperial, °C metric)",
-            "bounds_high": "Upper limit",
-            "rolling_avg_minutes": "Smoothing window in samples (1 = none)",
-            "value_column": "Optional feather column name (default: first data column)",
-            "value_kind": "Set to rh for humidity bounds_low_rh / bounds_high_rh",
-        },
-    },
-    "flatline_1h_mask": {
-        "description": "Flatline — flags when rolling min-max spread is within flatline_tolerance.",
-        "keys": {
-            "flatline_tolerance": "Max spread in window to count as stuck sensor",
-            "flatline_window_samples": "Rolling window length (~12 ≈ 1 h at 5 min poll)",
-            "value_column": "Optional feather column name",
-        },
-    },
-    "spread_1h_mask": {
-        "description": "Spread — flags when rolling max-min exceeds max_spread.",
-        "keys": {
-            "max_spread": "Fault when rolling spread is greater than this",
-            "flatline_window_samples": "Rolling window length",
-            "value_column": "Optional feather column name",
-        },
-    },
-}
+
+def _has_pc_import(tree: ast.Module) -> bool:
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            if any(alias.name == "pyarrow.compute" or alias.name.startswith("pyarrow") for alias in node.names):
+                return True
+        if isinstance(node, ast.ImportFrom) and node.module == "pyarrow.compute":
+            return True
+    return False
 
 
 def augment_rule_code_for_kit_export(code: str) -> str:
-    """Inject local dev value stats into exported rule.py (not stored on server)."""
+    """Inject local dev value stats when exported rule.py lacks _kit_value_stats."""
     text = str(code or "").strip()
     if not text or "_kit_value_stats" in text:
-        return text
+        return text + ("\n" if text and not text.endswith("\n") else "")
 
     tree = ast.parse(text)
+    if not _has_pc_import(tree):
+        tree.body.insert(0, ast.parse("import pyarrow.compute as pc").body[0])
+
     target_idx: int | None = None
     for idx, node in enumerate(tree.body):
         if isinstance(node, ast.FunctionDef) and node.name == "apply_faults_arrow":
@@ -115,26 +79,14 @@ def augment_rule_code_for_kit_export(code: str) -> str:
                 and isinstance(node.body[0].value.func, ast.Name)
                 and node.body[0].value.func.id == "_kit_value_stats"
             ):
-                node.body.insert(0, ast.parse("_kit_value_stats(table, cfg)").body[0])
+                node.body.insert(0, ast.parse("_kit_value_stats(table)").body[0])
             break
 
-    helper_fn = ast.parse(KIT_VALUE_STATS_HELPER.strip()).body[0]
-    if target_idx is not None:
-        tree.body.insert(target_idx, helper_fn)
-        return ast.unparse(tree).strip() + "\n"
-    return f"{KIT_VALUE_STATS_HELPER.strip()}\n\n{text}\n"
-
-
-def infer_kit_config(rule_code: str, config: dict[str, Any] | None) -> dict[str, Any]:
-    """Ensure exported config.json includes cookbook defaults for the bundled algorithm."""
-    out = dict(config) if isinstance(config, dict) else {}
-    for marker, defaults in COOKBOOK_KIT_DEFAULTS.items():
-        if marker in rule_code:
-            for key, value in defaults.items():
-                out.setdefault(key, value)
-            return out
-    out.setdefault("max_zone_temp", 75)
-    return out
+    helper_nodes = ast.parse(KIT_VALUE_STATS_HELPER.strip()).body
+    insert_at = target_idx if target_idx is not None else len(tree.body)
+    for offset, helper_node in enumerate(helper_nodes):
+        tree.body.insert(insert_at + offset, helper_node)
+    return ast.unparse(tree).strip() + "\n"
 
 
 def name_from_filename(filename: str) -> str:
@@ -259,10 +211,6 @@ RUN_TEST_PY = '''#!/usr/bin/env python3
 """Run the bundled rule against sample.feather (local dev kit)."""
 from __future__ import annotations
 
-import json
-import sys
-from pathlib import Path
-
 import pyarrow.compute as pc
 
 import data
@@ -271,14 +219,12 @@ import rule
 
 def main() -> int:
     table = data.load_table()
-    cfg_path = Path(__file__).resolve().parent / "config.json"
-    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
     print(f"site={data.SITE_ID} lookback_h={data.LOOKBACK_HOURS} rows={table.num_rows}")
     if table.num_rows == 0:
         print("No rows in sample.feather — re-download kit after historian has data.")
         return 1
     print("columns:", list(table.column_names))
-    mask = rule.apply_faults_arrow(table, cfg, context={"site_id": data.SITE_ID})
+    mask = rule.apply_faults_arrow(table, {}, context={"site_id": data.SITE_ID})
     flagged = int(pc.sum(mask).as_py()) if mask is not None else 0
     print(f"flagged={flagged}")
     return 0
@@ -306,8 +252,12 @@ pip install "open-fdd>=3.0.1" pyarrow
 pip install "open-fdd>=3.0.1" pyarrow
 ```
 
+```bash
+pip install -r requirements.txt
+```
+
 `rule.py` is a library module — running `python rule.py` directly does nothing.
-Use `run_test.py` (below) or the Python snippet.
+Tune thresholds by editing **constants at the top of `rule.py`** (`VALUE_COLUMN`, `OAT_LOW`, etc.).
 
 ## 2. Run the bundled test
 
@@ -331,58 +281,36 @@ Expected output: row count, column names, and `flagged=N`.
 
 | File | Purpose |
 |------|---------|
-| `rule.py` | Your Arrow rule — `apply_faults_arrow(table, cfg, context=None)` |
+| `rule.py` | Arrow rule + **constants** at top (`VALUE_COLUMN`, limits, tolerances) |
 | `data.py` | Metadata + `load_table()` helper |
 | `sample.feather` | **Full historian window** ({row_count} rows, ~{lookback_hours}h) from site `{site_id}` |
 | `run_test.py` | One-command local test |
+| `requirements.txt` | `open-fdd>=3.0.1`, `pyarrow` |
 | `column_map.json` | BRICK logical keys → feather column names |
-| `config.json` | Suggested rule config (edit to match your rule) |
 | `kit_meta.json` | Export metadata (site, columns, row count) |
 
 `data.py` `ROWS` is only a **12-row preview**. All real data is in `sample.feather`.
 
-Edit **`config.json`** to tune the algorithm (bounds, tolerances, window size). See **`config_keys.json`** in this zip for key descriptions.
+## 4. Rule style (PyArrow constants — no config.json)
 
-Exported `rule.py` includes a **`_kit_value_stats`** helper that prints min/max/mean when you run `run_test.py`. Remove that helper before upload if you do not want it on the server.
-
-## 4. Config-driven algorithms (PyArrow, no pandas)
-
-Rules read **`config.json`** at test time. Cookbook masks use **PyArrow compute** on columnar arrays — no pandas in the hot path.
-
-**Out of bounds (`oob_mask`)** — pure PyArrow sketch:
+Edit constants at the top of `rule.py`:
 
 ```python
 import pyarrow.compute as pc
 
-vals = pc.cast(table["oa-t"], "float64")
-low, high = float(cfg["bounds_low"]), float(cfg["bounds_high"])
-too_low = pc.less(vals, low)
-too_high = pc.greater(vals, high)
-mask = pc.or_(too_low, too_high)  # boolean array, one flag per row
+VALUE_COLUMN = "oa-t"
+OAT_LOW = 68.0
+OAT_HIGH = 88.0
+
+def apply_faults_arrow(table, cfg, context=None):
+    vals = pc.cast(table[VALUE_COLUMN], "float64")
+    return pc.or_(pc.less(vals, OAT_LOW), pc.greater(vals, OAT_HIGH))
 ```
-
-**Flatline** — rolling min/max spread via `arrow_rolling_min` / `arrow_rolling_max`, flag when spread ≤ tolerance.
-
-**Spread** — same rolling window, flag when (max − min) > `max_spread`.
 
 `apply_faults_arrow` must return a **boolean PyArrow array** (same length as `table.num_rows`).
+`cfg` is kept for API compatibility but bench rules use module constants.
 
-## 5. Interactive Python (optional)
-
-```python
-import json
-from pathlib import Path
-import pyarrow.compute as pc
-import data
-import rule
-
-table = data.load_table()
-cfg = json.loads(Path("config.json").read_text(encoding="utf-8"))
-mask = rule.apply_faults_arrow(table, cfg, context={{"site_id": data.SITE_ID}})
-print("rows", table.num_rows, "flagged", int(pc.sum(mask).as_py()))
-```
-
-## 6. Upload to Open-FDD
+## 5. Upload to Open-FDD
 
 When satisfied, upload **only** `rule.py` on the **Rule Lab** tab (integrator login).
 Helper functions in the same file are fine; `apply_faults_arrow` is the required entrypoint.
@@ -405,7 +333,6 @@ def build_rule_kit_zip(
 
     rule_code = DEFAULT_ARROW_RULE
     rule_name = "new_rule"
-    config: dict[str, Any] = {}
     column_map = build_column_map_from_model_points(model, sid)
 
     if rule_id:
@@ -416,9 +343,6 @@ def build_rule_kit_zip(
         path = str(rule.get("source_path") or "")
         disk = read_source(path) if path else ""
         rule_code = disk.strip() or str(rule.get("code") or "").strip() or DEFAULT_ARROW_RULE
-        cfg_raw = rule.get("config")
-        if isinstance(cfg_raw, dict) and cfg_raw:
-            config = dict(cfg_raw)
         cm = rule.get("column_map")
         if isinstance(cm, dict) and cm:
             column_map = dict(cm)
@@ -435,7 +359,6 @@ def build_rule_kit_zip(
     if frame is None:
         frame = pd.DataFrame()
 
-    config = infer_kit_config(rule_code, config)
     export_rule_code = augment_rule_code_for_kit_export(rule_code)
 
     scoped, data_cols = _scope_frame(frame, model, sid, point_keys=keys or None)
@@ -485,9 +408,8 @@ def build_rule_kit_zip(
         zf.writestr("data.py", data_py)
         zf.writestr("sample.feather", feather_bytes)
         zf.writestr("column_map.json", json.dumps(column_map, indent=2))
-        zf.writestr("config.json", json.dumps(config, indent=2))
-        zf.writestr("config_keys.json", json.dumps(CONFIG_KEYS_GUIDE, indent=2))
         zf.writestr("kit_meta.json", json.dumps(meta, indent=2))
+        zf.writestr("requirements.txt", REQUIREMENTS_TXT)
         zf.writestr("run_test.py", RUN_TEST_PY)
         zf.writestr("README.md", readme)
     return out.getvalue(), zip_name

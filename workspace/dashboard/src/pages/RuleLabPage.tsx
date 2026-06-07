@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import PythonCodeEditor from "../components/PythonCodeEditor";
-import RuleConfigPanel, { configFromRecord, configToRecord } from "../components/RuleConfigPanel";
 import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
 import { apiDownloadBlob, apiFetch, fetchAuthMe, getBridgeBase } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
@@ -46,7 +45,6 @@ export default function RuleLabPage() {
   const activeSiteId = useActiveSiteId();
   const [code, setCode] = useState("");
   const [sourcePath, setSourcePath] = useState("");
-  const [cfg, setCfg] = useState<Record<string, string>>({});
   const [consoleText, setConsoleText] = useState("");
   const [busy, setBusy] = useState(false);
   const [lintBusy, setLintBusy] = useState(false);
@@ -79,7 +77,6 @@ export default function RuleLabPage() {
     setCreatingNew(false);
     setActiveRuleId(rule.id);
     setRuleName(displayRuleName(rule.name));
-    setCfg(configToRecord(rule.config || {}));
     setMetaDirty(false);
     try {
       const res = await apiFetch<{ code: string; path: string }>(`/api/rules/saved/${rule.id}/source`);
@@ -214,7 +211,7 @@ export default function RuleLabPage() {
         method: "POST",
         body: JSON.stringify({
           code,
-          config: configFromRecord(cfg),
+          config: {},
           site_id: activeSiteId || undefined,
           point_keys: [pointId],
           lookback_hours: 3,
@@ -257,13 +254,13 @@ export default function RuleLabPage() {
           name: ruleName,
           mode: "rule",
           code,
-          config: configFromRecord(cfg),
+          config: {},
           severity: "warning",
           bindings: preservedBindings(bindingsSource),
         }),
       });
       setMetaDirty(false);
-      appendConsole(`>>> Saved name/config for ${res.rule.id}`);
+      appendConsole(`>>> Saved name for ${res.rule.id}`);
       await refreshSaved();
     } catch (e) {
       appendConsole(formatApiError(e));
@@ -364,7 +361,6 @@ export default function RuleLabPage() {
     setActiveRuleId("");
     setRuleName("New rule");
     setCode("");
-    setCfg({});
     setSourcePath("");
     setMetaDirty(false);
     appendConsole("Download a blank kit or upload rule.py to create a new Arrow rule.");
@@ -496,13 +492,10 @@ export default function RuleLabPage() {
           </div>
         </div>
 
-        <RuleConfigPanel
-          config={cfg}
-          onChange={(next) => {
-            setCfg(next);
-            setMetaDirty(true);
-          }}
-        />
+        <p className="muted rule-lab-hint">
+          Tune thresholds in <code>rule.py</code> constants (<code>VALUE_COLUMN</code>, limits) — download kit, edit locally,
+          upload.
+        </p>
 
         <div className="toolbar rule-lab-actions">
           <button type="button" className="secondary" disabled={busy} onClick={() => void downloadKit()}>
@@ -534,7 +527,7 @@ export default function RuleLabPage() {
             disabled={busy || authRole === "operator" || creatingNew || !metaDirty}
             onClick={() => void saveMetadata()}
           >
-            Save name/config
+            Save name
           </button>
           <button
             type="button"
@@ -544,7 +537,7 @@ export default function RuleLabPage() {
           >
             Update all records
           </button>
-          {metaDirty ? <span className="muted dirty-hint">Unsaved name/config</span> : null}
+          {metaDirty ? <span className="muted dirty-hint">Unsaved name</span> : null}
         </div>
       </div>
 

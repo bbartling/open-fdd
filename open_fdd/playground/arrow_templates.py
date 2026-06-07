@@ -7,11 +7,28 @@ ARROW_RULE_HEADER = """import pyarrow.compute as pc
 def apply_faults_arrow(table, cfg, context=None):
 """
 
-DEFAULT_ARROW_RULE = """import pyarrow.compute as pc
+DEFAULT_ARROW_RULE = '''"""Simple threshold — edit VALUE_COLUMN and MAX_TEMP constants."""
+
+import pyarrow.compute as pc
+
+VALUE_COLUMN = "zone_temp"
+MAX_TEMP = 75.0
+
+
+def _kit_value_stats(table):
+    vals = pc.cast(table[VALUE_COLUMN], "float64")
+    print(
+        f"rows={table.num_rows} column={VALUE_COLUMN} "
+        f"min={pc.min(vals).as_py():.2f} max={pc.max(vals).as_py():.2f} "
+        f"mean={pc.mean(vals).as_py():.2f}"
+    )
+
 
 def apply_faults_arrow(table, cfg, context=None):
-    return pc.greater(table["zone_temp"], cfg["max_zone_temp"])
-"""
+    _kit_value_stats(table)
+    vals = pc.cast(table[VALUE_COLUMN], "float64")
+    return pc.greater(vals, MAX_TEMP)
+'''
 
 ARROW_TEMPLATES: list[dict[str, str]] = [
     {
