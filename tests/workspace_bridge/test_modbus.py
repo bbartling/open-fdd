@@ -150,7 +150,7 @@ def test_modbus_read_and_store_ingest(authed_client: TestClient):
 
     login = authed_client.post(
         "/api/auth/login",
-        json={"username": "operator", "password": "changeme"},
+        json={"username": "integrator", "password": "msi"},
     )
     token = login.json()["token"]
     headers = {"Authorization": f"Bearer {token}"}

@@ -94,7 +94,7 @@ def test_json_api_read_and_store_mocked(authed_client: TestClient, monkeypatch: 
 
     login = authed_client.post(
         "/api/auth/login",
-        json={"username": "operator", "password": "changeme"},
+        json={"username": "integrator", "password": "msi"},
     )
     token = login.json()["token"]
     r = authed_client.post(
