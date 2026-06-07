@@ -166,14 +166,14 @@ def main() -> int:
     table = data.load_table()
     cfg_path = Path(__file__).resolve().parent / "config.json"
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-    print(f"site={{data.SITE_ID}} lookback_h={{data.LOOKBACK_HOURS}} rows={{table.num_rows}}")
+    print(f"site={data.SITE_ID} lookback_h={data.LOOKBACK_HOURS} rows={table.num_rows}")
     if table.num_rows == 0:
         print("No rows in sample.feather — re-download kit after historian has data.")
         return 1
     print("columns:", list(table.column_names))
-    mask = rule.apply_faults_arrow(table, cfg, context={{"site_id": data.SITE_ID}})
+    mask = rule.apply_faults_arrow(table, cfg, context={"site_id": data.SITE_ID})
     flagged = int(pc.sum(mask).as_py()) if mask is not None else 0
-    print(f"flagged={{flagged}}")
+    print(f"flagged={flagged}")
     return 0
 
 
@@ -204,15 +204,17 @@ Use `run_test.py` (below) or the Python snippet.
 
 ## 2. Run the bundled test
 
-From this folder (where you unzipped the kit):
+Unzip the kit, then **cd into that folder** (e.g. `openfdd-rule-kit-bench_oa-t_flatline_1h`) before running:
 
 ```bash
+cd openfdd-rule-kit-*
 python run_test.py
 ```
 
 PowerShell:
 
 ```powershell
+cd .\\openfdd-rule-kit-*
 python .\\run_test.py
 ```
 

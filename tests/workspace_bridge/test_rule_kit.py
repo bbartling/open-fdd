@@ -82,6 +82,10 @@ def test_build_rule_kit_zip_contains_expected_files(tmp_path, monkeypatch):
     assert {"rule.py", "data.py", "sample.feather", "run_test.py", "column_map.json", "config.json", "README.md"} <= names
     assert "python run_test.py" in zf.read("README.md").decode()
     assert "apply_faults_arrow" in zf.read("rule.py").decode()
+    run_test = zf.read("run_test.py").decode()
+    assert "{{" not in run_test
+    assert 'context={"site_id": data.SITE_ID}' in run_test
+    assert "site={data.SITE_ID}" in run_test
 
 
 def test_export_kit_route(authed_integrator: TestClient):

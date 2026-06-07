@@ -2621,6 +2621,16 @@ textarea {
   margin-top: 0.75rem;
 }
 
+.rule-readonly-editor .cm-editor {
+  border: 1px solid var(--border, #273043);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rule-readonly-editor .cm-scroller {
+  max-height: 480px;
+}
+
 .rule-readonly-code {
   margin: 0;
   padding: 1rem 1.1rem;

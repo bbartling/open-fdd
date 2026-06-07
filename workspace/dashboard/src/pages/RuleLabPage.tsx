@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/PageHeader";
+import PythonCodeEditor from "../components/PythonCodeEditor";
 import RuleConfigPanel, { configFromRecord, configToRecord } from "../components/RuleConfigPanel";
 import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
 import { apiDownloadBlob, apiFetch, fetchAuthMe, getBridgeBase } from "../lib/api";
@@ -565,7 +566,15 @@ export default function RuleLabPage() {
       <div className="panel rule-lab-readonly-panel">
         <h3 className="panel-title">rule.py (read-only)</h3>
         {code.trim() ? (
-          <pre className="rule-readonly-code">{code}</pre>
+          <div className="rule-readonly-editor">
+            <PythonCodeEditor
+              value={code}
+              onChange={() => undefined}
+              readOnly
+              height="320px"
+              lintIssues={lintIssues}
+            />
+          </div>
         ) : (
           <p className="muted">
             No rule loaded. Download a dev kit with real feather sample data, edit <code>rule.py</code> locally with{" "}
