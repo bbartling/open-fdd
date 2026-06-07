@@ -21,6 +21,9 @@ OUT_CSV="${LOCAL_DIR}/points.csv"
 
 [[ -d "$PDIR" ]] || { echo "Missing ${PDIR}" >&2; exit 1; }
 
+echo "=== Trim device list (JCI 1–100, plant 1100/1002, Trane 11000–13000) ==="
+"${DIR}/acme_trim_devices.sh"
+
 PY="${VIBE_ROOT}/.venv/bin/python"
 [[ -x "$PY" ]] || PY="$(command -v python3)"
 export PYTHONPATH="${VIBE_ROOT}${PYTHONPATH:+:$PYTHONPATH}"
