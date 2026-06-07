@@ -68,6 +68,28 @@ def test_validate_upload_accepts_arrow():
     assert out["ok"] is True
 
 
+def test_augment_rule_injects_value_stats():
+    from openfdd_bridge.rule_kit import augment_rule_code_for_kit_export
+
+    src = """from open_fdd.arrow_runtime.cookbook import oob_mask
+
+def apply_faults_arrow(table, cfg, context=None):
+    return oob_mask(table, cfg)
+"""
+    out = augment_rule_code_for_kit_export(src)
+    assert "_kit_value_stats" in out
+    assert "_kit_value_stats(table, cfg)" in out
+    assert "return oob_mask(table, cfg)" in out
+
+
+def test_infer_kit_config_oob_defaults():
+    from openfdd_bridge.rule_kit import infer_kit_config
+
+    cfg = infer_kit_config("return oob_mask(table, cfg)", {})
+    assert cfg["bounds_low"] == 65
+    assert cfg["bounds_high"] == 85
+
+
 def test_build_rule_kit_zip_contains_expected_files(tmp_path, monkeypatch):
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "data"))
     for name in list(sys.modules):
@@ -79,9 +101,21 @@ def test_build_rule_kit_zip_contains_expected_files(tmp_path, monkeypatch):
     assert name.endswith(".zip")
     zf = zipfile.ZipFile(io.BytesIO(payload))
     names = set(zf.namelist())
-    assert {"rule.py", "data.py", "sample.feather", "run_test.py", "column_map.json", "config.json", "README.md"} <= names
+    assert {
+        "rule.py",
+        "data.py",
+        "sample.feather",
+        "run_test.py",
+        "column_map.json",
+        "config.json",
+        "config_keys.json",
+        "README.md",
+    } <= names
     assert "python run_test.py" in zf.read("README.md").decode()
-    assert "apply_faults_arrow" in zf.read("rule.py").decode()
+    rule_py = zf.read("rule.py").decode()
+    assert "apply_faults_arrow" in rule_py
+    assert "_kit_value_stats" in rule_py
+    assert json.loads(zf.read("config.json"))["max_zone_temp"] == 75
     run_test = zf.read("run_test.py").decode()
     assert "{{" not in run_test
     assert 'context={"site_id": data.SITE_ID}' in run_test

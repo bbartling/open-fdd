@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import io
 import json
 import zipfile
@@ -28,6 +29,112 @@ from .ttl_service import TtlService
 
 class RuleKitError(ValueError):
     """Invalid rule upload or kit export request."""
+
+
+KIT_VALUE_STATS_HELPER = '''def _kit_value_stats(table, cfg):
+    """Dev kit helper — min/max/mean for the rule value column (remove before upload if desired)."""
+    import pyarrow.compute as pc
+    from open_fdd.arrow_runtime.cookbook import value_column
+
+    try:
+        name = value_column(table, cfg)
+        vals = pc.cast(table[name], "float64")
+        print(
+            f"rows={table.num_rows} column={name} "
+            f"min={pc.min(vals).as_py():.2f} max={pc.max(vals).as_py():.2f} "
+            f"mean={pc.mean(vals).as_py():.2f}"
+        )
+    except Exception as exc:
+        print(f"value stats skipped: {exc}")
+'''
+
+COOKBOOK_KIT_DEFAULTS: dict[str, dict[str, Any]] = {
+    "oob_mask": {
+        "bounds_low": 65,
+        "bounds_high": 85,
+        "temp_unit": "imperial",
+        "rolling_avg_minutes": 1,
+    },
+    "flatline_1h_mask": {
+        "flatline_tolerance": 0.1,
+        "flatline_window_samples": 12,
+        "temp_unit": "imperial",
+    },
+    "spread_1h_mask": {
+        "max_spread": 4.0,
+        "flatline_window_samples": 12,
+        "temp_unit": "imperial",
+    },
+}
+
+CONFIG_KEYS_GUIDE: dict[str, Any] = {
+    "oob_mask": {
+        "description": "Outside bounds — flags when value is below bounds_low or above bounds_high.",
+        "keys": {
+            "bounds_low": "Lower limit (°F imperial, °C metric)",
+            "bounds_high": "Upper limit",
+            "rolling_avg_minutes": "Smoothing window in samples (1 = none)",
+            "value_column": "Optional feather column name (default: first data column)",
+            "value_kind": "Set to rh for humidity bounds_low_rh / bounds_high_rh",
+        },
+    },
+    "flatline_1h_mask": {
+        "description": "Flatline — flags when rolling min-max spread is within flatline_tolerance.",
+        "keys": {
+            "flatline_tolerance": "Max spread in window to count as stuck sensor",
+            "flatline_window_samples": "Rolling window length (~12 ≈ 1 h at 5 min poll)",
+            "value_column": "Optional feather column name",
+        },
+    },
+    "spread_1h_mask": {
+        "description": "Spread — flags when rolling max-min exceeds max_spread.",
+        "keys": {
+            "max_spread": "Fault when rolling spread is greater than this",
+            "flatline_window_samples": "Rolling window length",
+            "value_column": "Optional feather column name",
+        },
+    },
+}
+
+
+def augment_rule_code_for_kit_export(code: str) -> str:
+    """Inject local dev value stats into exported rule.py (not stored on server)."""
+    text = str(code or "").strip()
+    if not text or "_kit_value_stats" in text:
+        return text
+
+    tree = ast.parse(text)
+    target_idx: int | None = None
+    for idx, node in enumerate(tree.body):
+        if isinstance(node, ast.FunctionDef) and node.name == "apply_faults_arrow":
+            target_idx = idx
+            if not (
+                node.body
+                and isinstance(node.body[0], ast.Expr)
+                and isinstance(node.body[0].value, ast.Call)
+                and isinstance(node.body[0].value.func, ast.Name)
+                and node.body[0].value.func.id == "_kit_value_stats"
+            ):
+                node.body.insert(0, ast.parse("_kit_value_stats(table, cfg)").body[0])
+            break
+
+    helper_fn = ast.parse(KIT_VALUE_STATS_HELPER.strip()).body[0]
+    if target_idx is not None:
+        tree.body.insert(target_idx, helper_fn)
+        return ast.unparse(tree).strip() + "\n"
+    return f"{KIT_VALUE_STATS_HELPER.strip()}\n\n{text}\n"
+
+
+def infer_kit_config(rule_code: str, config: dict[str, Any] | None) -> dict[str, Any]:
+    """Ensure exported config.json includes cookbook defaults for the bundled algorithm."""
+    out = dict(config) if isinstance(config, dict) else {}
+    for marker, defaults in COOKBOOK_KIT_DEFAULTS.items():
+        if marker in rule_code:
+            for key, value in defaults.items():
+                out.setdefault(key, value)
+            return out
+    out.setdefault("max_zone_temp", 75)
+    return out
 
 
 def name_from_filename(filename: str) -> str:
@@ -234,7 +341,33 @@ Expected output: row count, column names, and `flagged=N`.
 
 `data.py` `ROWS` is only a **12-row preview**. All real data is in `sample.feather`.
 
-## 4. Interactive Python (optional)
+Edit **`config.json`** to tune the algorithm (bounds, tolerances, window size). See **`config_keys.json`** in this zip for key descriptions.
+
+Exported `rule.py` includes a **`_kit_value_stats`** helper that prints min/max/mean when you run `run_test.py`. Remove that helper before upload if you do not want it on the server.
+
+## 4. Config-driven algorithms (PyArrow, no pandas)
+
+Rules read **`config.json`** at test time. Cookbook masks use **PyArrow compute** on columnar arrays — no pandas in the hot path.
+
+**Out of bounds (`oob_mask`)** — pure PyArrow sketch:
+
+```python
+import pyarrow.compute as pc
+
+vals = pc.cast(table["oa-t"], "float64")
+low, high = float(cfg["bounds_low"]), float(cfg["bounds_high"])
+too_low = pc.less(vals, low)
+too_high = pc.greater(vals, high)
+mask = pc.or_(too_low, too_high)  # boolean array, one flag per row
+```
+
+**Flatline** — rolling min/max spread via `arrow_rolling_min` / `arrow_rolling_max`, flag when spread ≤ tolerance.
+
+**Spread** — same rolling window, flag when (max − min) > `max_spread`.
+
+`apply_faults_arrow` must return a **boolean PyArrow array** (same length as `table.num_rows`).
+
+## 5. Interactive Python (optional)
 
 ```python
 import json
@@ -249,7 +382,7 @@ mask = rule.apply_faults_arrow(table, cfg, context={{"site_id": data.SITE_ID}})
 print("rows", table.num_rows, "flagged", int(pc.sum(mask).as_py()))
 ```
 
-## 5. Upload to Open-FDD
+## 6. Upload to Open-FDD
 
 When satisfied, upload **only** `rule.py` on the **Rule Lab** tab (integrator login).
 Helper functions in the same file are fine; `apply_faults_arrow` is the required entrypoint.
@@ -272,7 +405,7 @@ def build_rule_kit_zip(
 
     rule_code = DEFAULT_ARROW_RULE
     rule_name = "new_rule"
-    config: dict[str, Any] = {"max_zone_temp": 75}
+    config: dict[str, Any] = {}
     column_map = build_column_map_from_model_points(model, sid)
 
     if rule_id:
@@ -301,6 +434,9 @@ def build_rule_kit_zip(
         frame, origin = load_frame_for_run(sid, columns=None)
     if frame is None:
         frame = pd.DataFrame()
+
+    config = infer_kit_config(rule_code, config)
+    export_rule_code = augment_rule_code_for_kit_export(rule_code)
 
     scoped, data_cols = _scope_frame(frame, model, sid, point_keys=keys or None)
     table = _frame_to_kit_table(scoped, lookback_hours=lookback_hours, limit=limit)
@@ -345,11 +481,12 @@ def build_rule_kit_zip(
 
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("rule.py", rule_code)
+        zf.writestr("rule.py", export_rule_code)
         zf.writestr("data.py", data_py)
         zf.writestr("sample.feather", feather_bytes)
         zf.writestr("column_map.json", json.dumps(column_map, indent=2))
         zf.writestr("config.json", json.dumps(config, indent=2))
+        zf.writestr("config_keys.json", json.dumps(CONFIG_KEYS_GUIDE, indent=2))
         zf.writestr("kit_meta.json", json.dumps(meta, indent=2))
         zf.writestr("run_test.py", RUN_TEST_PY)
         zf.writestr("README.md", readme)
