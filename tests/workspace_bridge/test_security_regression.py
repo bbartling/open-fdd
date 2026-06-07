@@ -169,9 +169,19 @@ def test_operator_cannot_bacnet_mutate(raw_client: TestClient, operator_headers:
     assert r.status_code == 403
 
 
-def test_integrator_bacnet_mutate_requires_flag(raw_client: TestClient, integrator_headers: dict[str, str]):
+def test_integrator_bacnet_mutate_allowed_by_default(raw_client: TestClient, integrator_headers: dict[str, str]):
+    r = raw_client.delete("/api/bacnet/driver/registry", headers=integrator_headers)
+    assert r.status_code == 200
+
+
+def test_integrator_bacnet_mutate_blocked_when_disabled(
+    raw_client: TestClient, integrator_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("OFDD_DISABLE_BACNET_DISCOVERY_MUTATIONS", "1")
     r = raw_client.delete("/api/bacnet/driver/registry", headers=integrator_headers)
     assert r.status_code == 403
+    detail = r.json()["detail"]
+    assert detail["code"] == "bacnet_mutations_disabled"
 
 
 def test_operator_cannot_delete_model_point(raw_client: TestClient, operator_headers: dict[str, str]):

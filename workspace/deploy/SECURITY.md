@@ -79,6 +79,12 @@ Lab LAN demo (insecure): add `OFDD_INSECURE_LAN_DEV=1` — never use on producti
 
 Keep BACnet writes disabled unless you are deliberately commissioning with an allowlist.
 
+## BACnet driver registry (Add device)
+
+- **Enabled by default** for integrator commissioning (add/sync/delete devices in the driver tree).
+- Read-only monitor sites: set **`OFDD_DISABLE_BACNET_DISCOVERY_MUTATIONS=1`** on the bridge.
+- After changing bridge env files, run **`docker compose up -d --force-recreate bridge`** — `docker compose restart` does not reload `env_file` values.
+
 ## WebSocket tickets
 
 Short-lived tickets (`OFDD_WS_TICKET_TTL_SEC`, default 120s) upgrade Bearer sessions to `/ws/dashboard`. Replay protection is **in-process only** — safe for single-worker uvicorn. Multi-worker deployments need shared ticket state (Redis/SQLite); otherwise tickets may be replayed across workers.

@@ -176,7 +176,13 @@ def agent_can_bacnet_mutate() -> bool:
 
 
 def bacnet_discovery_mutations_enabled() -> bool:
-    return _env_flag("OFDD_ENABLE_BACNET_DISCOVERY_MUTATIONS")
+    """Edge commissioning default: integrator can add devices unless explicitly disabled."""
+    if _env_flag("OFDD_DISABLE_BACNET_DISCOVERY_MUTATIONS"):
+        return False
+    raw = os.environ.get("OFDD_ENABLE_BACNET_DISCOVERY_MUTATIONS", "").strip().lower()
+    if raw in {"0", "false", "no"}:
+        return False
+    return True
 
 
 def operator_can_edit_model() -> bool:
