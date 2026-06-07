@@ -6,71 +6,127 @@ nav_order: 3
 
 # Updating the stack
 
-Two paths depending on how you manage the edge host.
+Upgrade GHCR images on the edge host: **backup `workspace/`, pull new tags, recreate containers**. No git pull on the host.
 
-## Path A — SSH on the live VM (minimal deploy folder)
+## Before you start
 
-Use when the host has only `~/open-fdd/{docker,docker-compose.yml,workspace}` and **no** full git checkout.
+1. SSH to the edge host (`cd ~/open-fdd`).
+2. Pick a tag from [GitHub Packages](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge) — default is **`latest`**.
+3. Short maintenance window (containers restart briefly; `restart: unless-stopped` brings them back after reboot).
 
-→ **[Live site update (SSH)](../ops/live_site_update)** — backup with `sudo tar`, verify GHCR tags, edit `docker-compose.yml`, `docker compose pull` + `up -d --force-recreate`, smoke checks, rollback.
+## Fetch helper scripts (no git clone)
 
-Then run the control-machine insurance check:
-
-```bash
-cd infra/ansible
-./scripts/post_deploy_check.sh --limit <inventory_host>
-```
-
-## Path B — Ansible from control machine (inventory)
-
-{: .warning }
-> **Dashboard/UI changes need `deploy.sh ui` (or `upgrade_edge_full.sh`), not image pull alone.**
-> The edge bind-mount `workspace/api/static/app/` overrides image-baked React assets.
-
-**Full upgrade (UI + containers + post-deploy check):**
+If you bootstrapped with `openfdd_edge_bootstrap.sh`, scripts are already under `~/open-fdd/scripts/`. Otherwise:
 
 ```bash
-./scripts/build_operator_dashboard.sh prod   # if not already built
-OPENFDD_IMAGE_TAG=<new-tag> ./scripts/upgrade_edge_full.sh --limit <inventory_host>
+mkdir -p ~/open-fdd/scripts
+curl -fsSL -o ~/open-fdd/scripts/openfdd_site_backup.sh \
+  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_site_backup.sh
+curl -fsSL -o ~/open-fdd/scripts/openfdd_site_update.sh \
+  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_site_update.sh
+chmod +x ~/open-fdd/scripts/openfdd_site_*.sh
 ```
 
-**Image-only** (API/commission/MCP code from GHCR, **same old UI** unless you also ran `ui`):
+## One-command upgrade (recommended)
 
 ```bash
-export OPENFDD_IMAGE_TAG=<new-tag>
-RUN_POST_CHECK=1 ./scripts/upgrade_edge_ghcr.sh --limit <inventory_host>
+cd ~/open-fdd
+./scripts/openfdd_site_backup.sh
+./scripts/openfdd_site_update.sh
 ```
 
-Image-only sets `openfdd_docker_sync_workspace_data=false` so bind-mounted `~/open-fdd/workspace/data/` is not replaced.
+Pulls **`:latest`** by default, verifies all three images exist on GHCR, recreates containers, and hits `/health`.
 
-## Full redeploy
-
-When you need to sync site model, rules, or commission files from Ansible backups:
+Pin a dated release:
 
 ```bash
-OPENFDD_IMAGE_TAG=<tag> ./deploy.sh docker --limit <inventory_host>
+export NEW_TAG=2026.06.07-edge
+./scripts/openfdd_site_backup.sh
+./scripts/openfdd_site_update.sh
 ```
 
-## Verify after upgrade
+## Step by step
 
-**Control machine:**
+### 1. Backup site state
 
 ```bash
-cd infra/ansible
-./scripts/post_deploy_check.sh --limit <inventory_host>
+cd ~/open-fdd
+./scripts/openfdd_site_backup.sh
 ```
 
-**On edge host:**
+Archives `workspace/` (feather, BACnet CSVs, model, auth) under `~/openfdd-backups/<timestamp>/`.
+
+Custom backup location:
 
 ```bash
-ls -la ~/open-fdd/workspace/data/feather_store/   # size should not drop to zero
-docker compose -f ~/open-fdd/docker-compose.yml ps
-curl -sf http://127.0.0.1:8765/health
+BACKUP_ROOT=~/openfdd-backups/manual ./scripts/openfdd_site_backup.sh
 ```
+
+### 2. Verify images (optional)
+
+```bash
+export NEW_TAG="${NEW_TAG:-latest}"
+
+docker manifest inspect ghcr.io/bbartling/openfdd-bridge:${NEW_TAG} >/dev/null &&
+docker manifest inspect ghcr.io/bbartling/openfdd-commission:${NEW_TAG} >/dev/null &&
+docker manifest inspect ghcr.io/bbartling/openfdd-mcp-rag:${NEW_TAG} >/dev/null &&
+echo "All images exist for ${NEW_TAG}"
+```
+
+### 3. Pull and recreate
+
+```bash
+cd ~/open-fdd
+export NEW_TAG="${NEW_TAG:-latest}"   # optional pin
+./scripts/openfdd_site_update.sh
+```
+
+**Manual equivalent** (same as the script):
+
+```bash
+cd ~/open-fdd
+docker compose pull
+docker compose up -d --force-recreate
+docker compose ps
+curl -sf http://127.0.0.1:8765/health && echo
+```
+
+### 4. Verify
+
+```bash
+docker compose ps
+curl -sf http://127.0.0.1:8765/health | jq .
+tail -1 workspace/bacnet/polls/samples.csv
+ls -lah workspace/data/feather_store/
+```
+
+→ [Health check](health-check)
+
+## Dashboard UI updates
+
+If the release changed the React UI, copy a new `workspace/api/static/app/` build onto the host before or after the image pull. Image pull alone may not change the browser bundle hash.
 
 ## Rollback
 
-- **SSH path:** restore previous image tag in `docker-compose.yml` and recreate containers — see [rollback section](../ops/live_site_update#rollback).
-- **Ansible path:** re-deploy the previous known-good `OPENFDD_IMAGE_TAG`.
+```bash
+cd ~/open-fdd
+export NEW_TAG=2026.06.06-edge          # previous known-good tag
+cp ~/openfdd-backups/<timestamp>/docker-compose.yml.snapshot docker-compose.yml
+./scripts/openfdd_site_update.sh
+```
 
-Workspace data on the host survives image-only upgrades; keep backups of `workspace/` before major config changes.
+`workspace/` is untouched by image-only upgrades.
+
+## Safe cleanup
+
+```bash
+docker image prune -f
+```
+
+{: .warning }
+> Never run `docker compose down -v`, `docker volume prune`, or delete `workspace/` on a live site.
+
+## Next steps
+
+→ [Run with Docker images](docker) — bootstrap a new host  
+→ [Health check](health-check)

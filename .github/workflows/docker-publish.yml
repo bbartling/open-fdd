@@ -44,4 +44,5 @@ jobs:
       - name: Publish to GHCR
         env:
           OPENFDD_IMAGE_TAG: ${{ inputs.image_tag }}
+          PUBLISH_LATEST: "1"
         run: ./scripts/docker_publish.sh

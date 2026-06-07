@@ -6,6 +6,9 @@ nav_order: 1
 
 # Live site update (SSH)
 
+{: .note }
+> **IT operators:** prefer [Quick Start — Updating the stack](../quick-start/updating) and the helper scripts `openfdd_site_backup.sh` / `openfdd_site_update.sh`. This page is the detailed SSH runbook with manual commands.
+
 Use this runbook when a **live edge VM** already has a minimal deploy folder and you are **not** doing `git pull` on the host.
 
 Typical layout (no full git checkout):

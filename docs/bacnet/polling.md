@@ -6,19 +6,35 @@ nav_order: 3
 
 # Polling
 
-The **bacnet-poll** container runs scheduled reads defined in `device_poll_profiles.csv` and enabled points in `points.csv`.
+BACnet polling has two stages:
+
+1. **Field reads** — commission poll loop → `workspace/bacnet/polls/samples.csv`
+2. **Historian ingest** — bridge background worker → `workspace/data/feather_store/`
+
+## Commission poll loop (default)
+
+The **commission** container runs the poll loop at startup. It reads enabled rows from `points.csv` and appends BACnet RPM results to `samples.csv`.
 
 | Setting | Location |
 |---------|----------|
-| Poll profiles | `workspace/bacnet/polls/` |
-| Enabled points | `workspace/data/points.csv` |
-| Output | `workspace/data/feather_store/` |
+| BACnet bind | `workspace/bacnet/commissioning/commission.env` |
+| Enabled points | `workspace/bacnet/commissioning/points.csv` |
+| Poll output | `workspace/bacnet/polls/samples.csv` |
+| Historian | `workspace/data/feather_store/` |
 
-## Enable on edge
+Check activity:
 
-Host var `enable_bacnet_poll_driver: true` in Ansible (or compose profile). Driver requires host networking on Linux.
+```bash
+tail -1 workspace/bacnet/polls/samples.csv
+docker compose logs --since 5m commission | grep -i poll
+```
+
+## Bridge ingest worker
+
+Inside **bridge**, a background thread watches `samples.csv` and ingests new rows into feather. Disable only for debugging: `OFDD_DISABLE_POLL_WORKER=1`.
 
 ## Health
 
-- Dashboard poll status shows last cycle time.
-- Stale points trigger data-quality fault patterns — see [Sensor quality faults](../fault-codes/sensor-quality).
+Dashboard stack health (`GET /health/stack`) reports `bacnet_poll` status from the commission agent — not a separate container.
+
+Stale points trigger data-quality fault patterns — see [Sensor quality faults](../fault-codes/sensor-quality).

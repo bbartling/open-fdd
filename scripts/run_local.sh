@@ -73,7 +73,20 @@ load_data_env() {
 
 load_env_files() {
   local quiet="${1:-false}"
-  if [[ -f "${ROOT}/workspace/auth.env.local" ]]; then
+  if [[ -f "${ROOT}/workspace/pentest.env.local" ]] && [[ "${OFDD_PENTEST_MODE:-0}" == "1" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "${ROOT}/workspace/pentest.env.local"
+    set +a
+    [[ "$quiet" == false ]] && echo "Loaded workspace/pentest.env.local (pentest / production-like mode)" || true
+  fi
+  if [[ "${OFDD_PENTEST_MODE:-0}" == "1" && -f "${ROOT}/workspace/auth.pentest.local" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "${ROOT}/workspace/auth.pentest.local"
+    set +a
+    [[ "$quiet" == false ]] && echo "Loaded workspace/auth.pentest.local (pentest credentials — not auth.env.example)" || true
+  elif [[ -f "${ROOT}/workspace/auth.env.local" ]]; then
     set -a
     # shellcheck disable=SC1091
     source "${ROOT}/workspace/auth.env.local"

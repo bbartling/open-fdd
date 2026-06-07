@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build Open-FDD edge Docker images (bridge, commission, bacnet-poll, mcp-rag).
+# Build Open-FDD edge Docker images (bridge, commission, mcp-rag).
 #
 #   ./scripts/docker_build.sh              # tag: local
 #   OPENFDD_IMAGE_TAG=2026.06.01 ./scripts/docker_build.sh
@@ -47,14 +47,12 @@ build_one() {
 
 build_one bridge openfdd-bridge
 build_one commission openfdd-commission
-build_one bacnet-poll openfdd-bacnet-poll
 build_one mcp-rag openfdd-mcp-rag
 
 echo ""
 echo "Built:"
 echo "  openfdd-bridge:${TAG}"
 echo "  openfdd-commission:${TAG}"
-echo "  openfdd-bacnet-poll:${TAG}"
 echo "  openfdd-mcp-rag:${TAG}"
 
 if [[ "$SAVE" == true ]]; then
@@ -64,7 +62,6 @@ if [[ "$SAVE" == true ]]; then
   docker save \
     "openfdd-bridge:${TAG}" \
     "openfdd-commission:${TAG}" \
-    "openfdd-bacnet-poll:${TAG}" \
     "openfdd-mcp-rag:${TAG}" \
     | gzip -c > "$OUT"
   echo "Saved image bundle: $OUT"

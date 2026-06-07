@@ -18,6 +18,15 @@ def _env_flag(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes"}
 
 
+def is_production_env() -> bool:
+    return os.environ.get("OFDD_ENV", "").strip().lower() == "production"
+
+
+def strict_deployment_mode() -> bool:
+    """LAN/production/write-enabled modes require non-example credentials."""
+    return is_production_env() or bridge_bind_is_public() or bacnet_writes_enabled()
+
+
 def bridge_bind_is_localhost_only() -> bool:
     return bridge_host() in _LOCAL_BIND_HOSTS
 
@@ -46,8 +55,32 @@ def auth_strict_configured() -> bool:
     return auth.credentials_configured()
 
 
+def auth_bypass_refusal_reason() -> str | None:
+    """Return why OFDD_AUTH_DISABLED cannot be used, or None if bypass is allowed."""
+    if not _env_flag("OFDD_AUTH_DISABLED"):
+        return None
+    if is_production_env():
+        return "OFDD_AUTH_DISABLED is not allowed when OFDD_ENV=production"
+    if bacnet_writes_enabled():
+        return (
+            "OFDD_AUTH_DISABLED is not allowed when OFDD_ENABLE_BACNET_WRITE=1 — "
+            "OT writes require authenticated integrator sessions"
+        )
+    if bridge_bind_is_public():
+        if insecure_lan_dev_allowed():
+            return None
+        host = bridge_host()
+        return (
+            f"OFDD_AUTH_DISABLED is not allowed on LAN-facing bind ({host}) without "
+            "OFDD_INSECURE_LAN_DEV=1 (lab-only, never production)"
+        )
+    return None
+
+
 def auth_dev_bypass_enabled() -> bool:
     """Explicit dev-only open mode — never implied by missing env vars."""
+    if auth_bypass_refusal_reason() is not None:
+        return False
     if not _env_flag("OFDD_AUTH_DISABLED"):
         return False
     if insecure_lan_dev_allowed():
@@ -77,6 +110,10 @@ def public_dashboard_ws_allowed() -> bool:
 
 def bacnet_writes_enabled() -> bool:
     return _env_flag("OFDD_ENABLE_BACNET_WRITE")
+
+
+def bacnet_write_dry_run_enabled() -> bool:
+    return _env_flag("OFDD_BACNET_WRITE_DRY_RUN")
 
 
 def startup_auth_error_message() -> str:
@@ -156,7 +193,17 @@ def audit_log_prompts_enabled() -> bool:
 
 def validate_startup_auth() -> None:
     """Fail closed when a LAN-facing bridge has no auth configured."""
+    from .startup_credentials import validate_startup_credentials
+
     validate_auth_secret_strength()
+    bypass_refusal = auth_bypass_refusal_reason()
+    if bypass_refusal and _env_flag("OFDD_AUTH_DISABLED"):
+        raise RuntimeError(
+            f"{bypass_refusal}\n"
+            "Configure OFDD_AUTH_SECRET and role passwords instead — "
+            "run: python workspace/scripts/generate_auth_env.py"
+        )
+    validate_startup_credentials()
     if auth_strict_configured():
         return
     if auth_dev_bypass_enabled():

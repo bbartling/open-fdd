@@ -12,6 +12,7 @@ Clone, build, test, and contribute to Open-FDD.
 |-------|------|
 | Local setup | [Local development](local-setup) |
 | Docker builds | [Build Docker images](docker-build) |
+| Health checks | [Health checks (developer)](health-check) |
 | Tests & CI | [Tests and CI](tests-ci) |
 | PRs | [Contributing](contributing) |
 

@@ -318,13 +318,12 @@ elif [[ "$INVENTORY_DOCKER_STACK" == "1" ]]; then
     else
       log_warn "Feather store check skipped (SSH to ${SSH_USER}@${HOST} failed — set SSHPASS in secrets/acme.env.local)"
     fi
-    for svc in bridge commission mcp-rag bacnet-poll; do
+    for svc in bridge commission mcp-rag; do
       if ! cid="$(ssh_remote "docker ps -q -f name=${svc} 2>/dev/null | head -1")"; then
         log_warn "Docker ${svc}: SSH unavailable (skipped log scan)"
         break
       fi
       if [[ -z "$cid" ]]; then
-        [[ "$svc" == "bacnet-poll" ]] && continue
         log_fail "Docker service ${svc}: no running container"
         continue
       fi

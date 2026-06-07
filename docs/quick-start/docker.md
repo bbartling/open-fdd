@@ -6,80 +6,108 @@ nav_order: 1
 
 # Run with Docker images
 
-## Images (GHCR)
+Deploy Open-FDD on a Linux edge host using **three published GHCR images**. No git clone required.
 
-| Image | Role |
-|-------|------|
-| `ghcr.io/bbartling/openfdd-bridge` | FastAPI + React dashboard |
-| `ghcr.io/bbartling/openfdd-commission` | BACnet discover / read / write agent |
-| `ghcr.io/bbartling/openfdd-bacnet-poll` | Historian poll driver (host network) |
-| `ghcr.io/bbartling/openfdd-mcp-rag` | Optional doc-search sidecar |
+## Images
 
-Check [GitHub Packages](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge) for current tags (e.g. `2026.06.07-edge`).
+| GHCR image | Service | Role |
+|------------|---------|------|
+| `ghcr.io/bbartling/openfdd-bridge` | `bridge` | Operator API, dashboard, historian ingest |
+| `ghcr.io/bbartling/openfdd-commission` | `commission` | BACnet discover/read/write **and poll loop** |
+| `ghcr.io/bbartling/openfdd-mcp-rag` | `mcp-rag` | Doc-search sidecar |
 
-## Option A — Ansible deploy (edge VM)
+Compose defaults to **`latest`**. Pin a dated tag with `export OPENFDD_IMAGE_TAG=2026.06.07-edge` when needed.
 
-From your **control machine** (laptop or CI runner with SSH to the edge host):
-
-```bash
-git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
-
-# One-time: build dashboard assets if not in the image tag you use
-./scripts/build_operator_dashboard.sh prod
-
-# Set image tag from a published GHCR release
-export OPENFDD_IMAGE_TAG=2026.06.07-edge
-
-# Deploy (requires inventory + host_vars — see infra/ansible/inventory.example.yml)
-cd infra/ansible
-export SSHPASS='your-ssh-password'   # or use SSH keys
-./deploy.sh docker --limit <inventory_host>
-```
-
-Host vars should set `openfdd_docker_pull_from_ghcr: true`. Site BACnet bind, model, and rules sync from `infra/ansible` templates and `edge_backup/local/<site>/`.
-
-**Bootstrap helper** (docker → Caddy → optional AI → ops check):
+## 1. Install and validate Docker
 
 ```bash
-OPENFDD_IMAGE_TAG=2026.06.07-edge ./scripts/bootstrap_edge_ghcr.sh --limit <inventory_host>
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+newgrp docker   # or log out/in
+
+docker --version
+docker compose version
+docker ps
+docker run --rm hello-world
 ```
 
-## Option B — Local trial (compose on one machine)
+Expect: `active` / `enabled` for docker, `docker` in `groups`, hello-world succeeds.
 
-For a quick lab trial without Ansible:
+## 2. Bootstrap the site (one script)
+
+Downloads `docker-compose.yml`, creates `workspace/`, generates `auth.env.local`, and sets `BACNET_BIND` from the host LAN NIC (e.g. `ens192` → `10.200.200.185/24:47808`):
 
 ```bash
-git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
-cp workspace/auth.env.example workspace/auth.env.local   # edit passwords
-./scripts/docker_build.sh    # or pull GHCR tags into compose via env
-./scripts/openfdd_stack.sh up
+curl -fsSL -o /tmp/openfdd_edge_bootstrap.sh \
+  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_edge_bootstrap.sh
+bash /tmp/openfdd_edge_bootstrap.sh
 ```
 
-Open `http://127.0.0.1:8765/` (bridge) or `http://127.0.0.1/` if Caddy is installed locally.
+Bootstrap + pull + start in one go:
 
-## Required configuration
+```bash
+bash /tmp/openfdd_edge_bootstrap.sh --start
+```
 
-| File | Purpose |
+Options:
+
+| Flag | Purpose |
 |------|---------|
-| `workspace/auth.env.local` | Operator / integrator login and `OFDD_AUTH_SECRET` |
-| `workspace/bacnet/commissioning/commission.env` | BACnet bind IP, instance, discover range |
-| `workspace/data/` | Bind-mounted historian, rules, model (created on first run) |
+| `--start` | `docker compose pull && up -d` after layout |
+| `--image-tag TAG` | default `latest` (falls back to `2026.06.07-edge`) |
+| `--repo-ref BRANCH` | branch for `compose.edge.yml` if not on `master` yet |
+| `--force-auth` | regenerate `auth.env.local` |
+| `--show-secrets` | print passwords at end (lab only) |
 
-Copy from `*.example` files in the repo. Never commit real passwords.
+From a repo checkout: `./scripts/openfdd_edge_bootstrap.sh --start`
 
-## Start / stop
+The script prints **BACnet NIC**, **BACNET_BIND**, and file paths — **validate** `commission.env` before polling OT devices:
 
 ```bash
-# Ansible edge: re-run deploy or on host:
-cd ~/open-fdd/docker && docker compose up -d
-
-# Local dev:
-./scripts/openfdd_stack.sh up
-./scripts/openfdd_stack.sh down
+nano ~/open-fdd/workspace/bacnet/commissioning/commission.env
 ```
 
-## After first deploy
+## 3. Start stack (if you skipped `--start`)
+
+```bash
+cd ~/open-fdd
+docker compose pull
+docker compose up -d
+docker compose ps
+curl -sf http://127.0.0.1:8765/health
+```
+
+Expected: **bridge**, **commission**, **mcp-rag** — all `Up`.
+
+## Long-term operation
+
+### Survive power cycles
+
+All services use `restart: unless-stopped`. After reboot:
+
+```bash
+cd ~/open-fdd && docker compose ps
+curl -sf http://127.0.0.1:8765/health
+```
+
+### Start / stop / restart
+
+```bash
+cd ~/open-fdd
+docker compose up -d          # idempotent
+docker compose stop
+docker compose restart commission
+docker compose logs -f --tail 100 commission
+```
+
+{: .warning }
+> Never run `docker compose down -v` or delete `workspace/` on a live site.
+
+### LAN access
+
+Put **Caddy** (or nginx) on port 80 → `127.0.0.1:8765`, or expose 8765 through the firewall.
+
+## Next steps
 
 → [First login and health check](health-check)  
-→ [Updating the stack](updating) — Ansible from control machine  
-→ [Live site update (SSH)](../ops/live_site_update) — tag bump on minimal `~/open-fdd/` folder
+→ [Updating the stack](updating) — `./scripts/openfdd_site_update.sh`

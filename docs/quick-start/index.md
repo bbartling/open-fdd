@@ -6,16 +6,25 @@ has_children: true
 
 # Quick Start
 
-Run Open-FDD on a Linux edge host or VM using **published Docker images**. No local image build required.
+Run Open-FDD on a Linux edge host using **three GHCR Docker images**. No git clone on the host.
 
 | Step | Page |
 |------|------|
-| 1 | [Run with Docker images](docker) |
+| 1 | [Run with Docker images](docker) — bootstrap script + `docker compose up` |
 | 2 | [First login and health check](health-check) |
-| 3 | [Updating the stack](updating) — Ansible or SSH paths |
-| — | [Live site update (SSH)](../ops/live_site_update) — minimal VM folder, no `git pull` |
+| 3 | [Updating the stack](updating) — backup + pull |
 
-**Prerequisites:** Linux host with Docker and Docker Compose, network access to BACnet devices if polling OT equipment, and a safe lab or maintenance window for first BACnet discovery.
+**One-liner bootstrap** (edge host):
+
+```bash
+curl -fsSL -o /tmp/openfdd_edge_bootstrap.sh \
+  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_edge_bootstrap.sh
+bash /tmp/openfdd_edge_bootstrap.sh --start
+```
+
+**Prerequisites:** Linux, Docker enabled on boot, BACnet LAN if polling OT equipment.
 
 {: .warning }
-> **BACnet writes are disabled by default.** Do not enable write paths on live equipment without an allowlist and operator authorization. See [Write safety](../bacnet/write-safety).
+> **BACnet writes are disabled by default.** See [Write safety](../bacnet/write-safety).
+
+**Stack:** `bridge` + `commission` (BACnet + poll) + `mcp-rag`. Details: [Containers](../architecture/containers).

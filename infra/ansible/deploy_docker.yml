@@ -353,7 +353,6 @@
       loop:
         - openfdd-bridge
         - openfdd-mcp-rag
-        - openfdd-bacnet-poll
         - openfdd-bacnet-commission
       when: openfdd_docker_disable_systemd | default(true) | bool
 

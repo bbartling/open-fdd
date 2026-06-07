@@ -2,6 +2,7 @@
 *
 !.gitignore
 !*.env.example
+!pentest.env.example
 !api/
 !api/**
 !mcp_rag/
@@ -26,3 +27,5 @@ data/**/*.feather
 data/playground/draft_rules.json
 !deploy/
 !deploy/**
+!scripts/
+!scripts/**

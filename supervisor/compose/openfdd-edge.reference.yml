@@ -1,5 +1,4 @@
-# Reference edge stack — rendered on hosts via infra/ansible/templates/docker-compose.edge.yml.j2
-# Keep in sync with supervisor/manifest.yaml when adding addons.
+# Reference edge stack — keep in sync with docker/compose.edge.yml
 # Host workspace path (production): /var/openfdd/workspace
 
 name: openfdd-edge
@@ -24,21 +23,13 @@ services:
 
   commission:
     image: openfdd-commission:local
+    network_mode: host
     volumes:
       - /var/openfdd/workspace:/var/openfdd/workspace
     restart: unless-stopped
 
   mcp-rag:
     image: openfdd-mcp-rag:local
-    volumes:
-      - /var/openfdd/workspace:/var/openfdd/workspace
-    restart: unless-stopped
-
-  # Opt-in: docker compose --profile bacnet up (requires host OT NIC; uses host network)
-  bacnet-poll:
-    profiles: ["bacnet"]
-    image: openfdd-bacnet-poll:local
-    network_mode: host
     volumes:
       - /var/openfdd/workspace:/var/openfdd/workspace
     restart: unless-stopped
