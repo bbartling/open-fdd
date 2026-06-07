@@ -16,12 +16,14 @@ if str(API_ROOT) not in sys.path:
 
 
 @pytest.fixture
-def authed_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def authed_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("OFDD_AUTH_SECRET", "test-secret-key-32chars-minimum!!")
     monkeypatch.setenv("OFDD_OPERATOR_USER", "operator")
     monkeypatch.setenv("OFDD_OPERATOR_PASSWORD", "changeme")
     monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
-    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(REPO / "workspace" / "data"))
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data_dir))
     for name in list(sys.modules):
         if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
             del sys.modules[name]
@@ -155,3 +157,26 @@ def test_json_api_driver_tree(tmp_path, monkeypatch):
     tree = driver_tree()
     assert tree["devices"][0]["host"] == "jsonplaceholder.typicode.com"
     assert tree["devices"][0]["points"][0]["present_value"] == "hello"
+
+
+def test_list_endpoints_redacts_credentials(tmp_path, monkeypatch):
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "data"))
+    for name in list(sys.modules):
+        if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
+            del sys.modules[name]
+    from openfdd_bridge.json_api_store import list_endpoints, upsert_endpoint
+
+    upsert_endpoint(
+        {
+            "url": "https://gw.local/status",
+            "method": "GET",
+            "json_path": "value",
+            "label": "status",
+            "auth_type": "bearer",
+            "bearer_token": "secret-token",
+            "basic_password": "ignored",
+        }
+    )
+    row = list_endpoints()["endpoints"][0]
+    assert row["bearer_token"] == "***"
+    assert row["basic_password"] == "***"

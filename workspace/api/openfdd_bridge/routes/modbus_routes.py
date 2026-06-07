@@ -212,7 +212,7 @@ async def modbus_read_and_store(body: ModbusReadStoreBody) -> dict:
                         "scale": spec.scale,
                         "offset": spec.offset,
                         "label": reading.get("label") or spec.label,
-                        "units": "degF",
+                        "units": "",
                         "last_value": str(reading.get("decoded") or ""),
                     }
                 )

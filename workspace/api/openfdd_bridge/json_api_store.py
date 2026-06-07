@@ -100,8 +100,18 @@ def _save_endpoints(rows: list[dict[str, Any]]) -> None:
             writer.writerow({k: row.get(k, "") for k in REGISTRY_FIELDS})
 
 
+def _public_endpoint_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Strip outbound credentials from API responses."""
+    out = {k: row.get(k, "") for k in REGISTRY_FIELDS}
+    if out.get("bearer_token"):
+        out["bearer_token"] = "***"
+    if out.get("basic_password"):
+        out["basic_password"] = "***"
+    return out
+
+
 def list_endpoints() -> dict[str, Any]:
-    rows = _load_endpoints()
+    rows = [_public_endpoint_row(r) for r in _load_endpoints()]
     enabled = sum(1 for r in rows if str(r.get("enabled", "")).lower() in {"1", "true", "yes"})
     return {"ok": True, "endpoints": rows, "count": len(rows), "enabled_count": enabled}
 
@@ -119,14 +129,13 @@ def _latest_poll_values() -> dict[str, str]:
     if not path.is_file():
         return {}
     latest: dict[str, tuple[str, str]] = {}
-    with path.open(encoding="utf-8") as fh:
-        for line in fh:
-            if not line.strip() or line.startswith("timestamp_utc"):
+    with path.open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            pid = str(row.get("point_id") or "")
+            val = str(row.get("value") or "")
+            ts = str(row.get("timestamp_utc") or "")
+            if not pid:
                 continue
-            parts = line.strip().split(",")
-            if len(parts) < 10:
-                continue
-            pid, val, ts = parts[2], parts[9], parts[0]
             prev = latest.get(pid)
             if prev is None or ts >= prev[0]:
                 latest[pid] = (ts, val)
@@ -343,10 +352,9 @@ def append_reading_and_ingest(*, reading: dict[str, Any], site_id: str | None = 
     col = _slug(label)
     val_text = str(value)
 
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(
-            f"{ts},{sid},{pid},{host},{method},\"{url}\",{reading.get('json_path','')},"
-            f"\"{label}\",{val_text},{''}\n"
+    with path.open("a", newline="", encoding="utf-8") as fh:
+        csv.writer(fh).writerow(
+            [ts, sid, pid, host, method, url, reading.get("json_path", ""), label, val_text, ""]
         )
 
     store = FeatherStore()
@@ -398,43 +406,44 @@ def refresh_point(point_id: str, *, store: bool = False) -> dict[str, Any]:
 def run_poll_cycle(*, force: bool = False) -> dict[str, Any]:
     import time as _time
 
-    now = _time.monotonic()
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    rows = _load_endpoints()
-    due = []
-    for row in rows:
-        if str(row.get("enabled", "")).lower() not in {"1", "true", "yes"}:
-            continue
-        pid = str(row.get("point_id") or "")
-        try:
-            interval = max(1, int(str(row.get("poll_interval_s") or "60")))
-        except ValueError:
-            interval = 60
-        last = _POLL_LAST_RUN.get(pid, 0.0)
-        if force or (now - last) >= interval:
-            due.append(row)
-    if not due:
-        _LAST_CYCLE.update({"at": ts, "samples": 0, "error": ""})
-        return {"ok": True, "polled": 0, "samples": 0, "at": ts}
+    with _LOCK:
+        now = _time.monotonic()
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        rows = _load_endpoints()
+        due = []
+        for row in rows:
+            if str(row.get("enabled", "")).lower() not in {"1", "true", "yes"}:
+                continue
+            pid = str(row.get("point_id") or "")
+            try:
+                interval = max(1, int(str(row.get("poll_interval_s") or "60")))
+            except ValueError:
+                interval = 60
+            last = _POLL_LAST_RUN.get(pid, 0.0)
+            if force or (now - last) >= interval:
+                due.append(row)
+        if not due:
+            _LAST_CYCLE.update({"at": ts, "samples": 0, "error": ""})
+            return {"ok": True, "polled": 0, "samples": 0, "at": ts}
 
-    total = 0
-    errors: list[str] = []
-    for row in due:
-        pid = str(row.get("point_id") or "")
-        try:
-            reading = execute_json_api_request(_row_to_payload(row))
-            if reading.get("success"):
-                ingest = append_reading_and_ingest(reading=reading)
-                if ingest.get("ok"):
-                    total += 1
-            else:
-                errors.append(str(reading.get("error") or pid))
-            _POLL_LAST_RUN[pid] = now
-        except Exception as exc:
-            errors.append(str(exc))
-    err_text = "; ".join(errors[:3])
-    _LAST_CYCLE.update({"at": ts, "samples": total, "error": err_text})
-    return {"ok": not errors, "polled": len(due), "samples": total, "at": ts, "error": err_text}
+        total = 0
+        errors: list[str] = []
+        for row in due:
+            pid = str(row.get("point_id") or "")
+            try:
+                reading = execute_json_api_request(_row_to_payload(row))
+                if reading.get("success"):
+                    ingest = append_reading_and_ingest(reading=reading)
+                    if ingest.get("ok"):
+                        total += 1
+                else:
+                    errors.append(str(reading.get("error") or pid))
+                _POLL_LAST_RUN[pid] = now
+            except Exception as exc:
+                errors.append(str(exc))
+        err_text = "; ".join(errors[:3])
+        _LAST_CYCLE.update({"at": ts, "samples": total, "error": err_text})
+        return {"ok": not errors, "polled": len(due), "samples": total, "at": ts, "error": err_text}
 
 
 def poll_status() -> dict[str, Any]:

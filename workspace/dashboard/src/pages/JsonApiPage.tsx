@@ -215,16 +215,26 @@ export default function JsonApiPage() {
 
   async function deletePoint(pointId: string) {
     if (!window.confirm("Remove this endpoint?")) return;
-    await apiFetch(`/api/json-api/endpoint/${encodeURIComponent(pointId)}`, { method: "DELETE" });
-    await loadDriverTree();
+    setActionError("");
+    try {
+      await apiFetch(`/api/json-api/endpoint/${encodeURIComponent(pointId)}`, { method: "DELETE" });
+      await loadDriverTree();
+    } catch (e) {
+      setActionError(formatApiError(e));
+    }
   }
 
   async function deleteDevice(device: JsonApiDevice) {
     if (!window.confirm(`Remove all endpoints on ${device.host}?`)) return;
-    for (const p of device.points) {
-      await apiFetch(`/api/json-api/endpoint/${encodeURIComponent(p.point_id)}`, { method: "DELETE" });
+    setActionError("");
+    try {
+      for (const p of device.points) {
+        await apiFetch(`/api/json-api/endpoint/${encodeURIComponent(p.point_id)}`, { method: "DELETE" });
+      }
+      await loadDriverTree();
+    } catch (e) {
+      setActionError(formatApiError(e));
     }
-    await loadDriverTree();
   }
 
   async function setDevicePoll(device: JsonApiDevice, enabled: boolean, intervalS: number) {
@@ -273,14 +283,20 @@ export default function JsonApiPage() {
   async function batchSetPointPoll(pointIds: string[], enabled: boolean, intervalS: number) {
     if (!pointIds.length) return;
     setBulkPollPending(true);
-    for (const pointId of pointIds) {
-      await apiFetch("/api/json-api/endpoint/poll", {
-        method: "PATCH",
-        body: JSON.stringify({ point_id: pointId, enabled, poll_interval_s: intervalS }),
-      });
+    setActionError("");
+    try {
+      for (const pointId of pointIds) {
+        await apiFetch("/api/json-api/endpoint/poll", {
+          method: "PATCH",
+          body: JSON.stringify({ point_id: pointId, enabled, poll_interval_s: intervalS }),
+        });
+      }
+      await loadDriverTree();
+    } catch (e) {
+      setActionError(formatApiError(e));
+    } finally {
+      setBulkPollPending(false);
     }
-    await loadDriverTree();
-    setBulkPollPending(false);
   }
 
   async function runPollOnce() {

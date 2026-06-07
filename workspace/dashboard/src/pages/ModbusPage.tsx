@@ -92,6 +92,25 @@ export default function ModbusPage() {
   async function runRead(store: boolean) {
     setPending(true);
     setActionError("");
+    if (
+      !Number.isInteger(port) ||
+      port < 1 ||
+      port > 65535 ||
+      !Number.isInteger(unitId) ||
+      unitId < 0 ||
+      unitId > 255 ||
+      !Number.isInteger(address) ||
+      address < 0 ||
+      address > 65535 ||
+      !Number.isInteger(count) ||
+      count < 1
+    ) {
+      const msg = "Invalid Modbus parameters — check port (1–65535), unit (0–255), address, and count.";
+      setActionError(msg);
+      setLog(msg);
+      setPending(false);
+      return;
+    }
     setLog(`Reading ${functionKind} @ ${address} from ${host}:${port} (unit ${unitId})…`);
     try {
       const path = store ? "/api/modbus/read_and_store" : "/api/modbus/read_registers";
@@ -185,12 +204,7 @@ export default function ModbusPage() {
     setActionError("");
     setLog(`Refreshing ${device.points.length} register(s) on ${device.host}:${device.port}…`);
     for (const p of device.points) {
-      try {
-        await refreshPoint(device, p);
-      } catch (e) {
-        setActionError(formatApiError(e));
-        break;
-      }
+      await refreshPoint(device, p);
     }
     await loadDriverTree();
   }
@@ -208,10 +222,15 @@ export default function ModbusPage() {
 
   async function deleteDevice(device: ModbusDevice) {
     if (!window.confirm(`Remove all registers on ${device.host}:${device.port}?`)) return;
-    for (const p of device.points) {
-      await apiFetch(`/api/modbus/register/${encodeURIComponent(p.point_id)}`, { method: "DELETE" });
+    setActionError("");
+    try {
+      for (const p of device.points) {
+        await apiFetch(`/api/modbus/register/${encodeURIComponent(p.point_id)}`, { method: "DELETE" });
+      }
+      await loadDriverTree();
+    } catch (e) {
+      setActionError(formatApiError(e));
     }
-    await loadDriverTree();
   }
 
   async function setDevicePoll(device: ModbusDevice, enabled: boolean, intervalS: number) {

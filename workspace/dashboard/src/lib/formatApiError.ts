@@ -36,7 +36,7 @@ export function formatApiError(error: unknown): string {
     /* not JSON */
   }
   if (raw.includes("commission agent unreachable")) {
-    return "BACnet commission agent is down — run ./scripts/run_local.sh restart";
+    return "Field commission service is unreachable — run ./scripts/run_local.sh restart";
   }
   return mapForbidden(raw);
 }

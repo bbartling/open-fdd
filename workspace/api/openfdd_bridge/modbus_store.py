@@ -260,9 +260,14 @@ def refresh_point(point_id: str, *, store: bool = False) -> dict[str, Any]:
 
 def run_poll_cycle(*, force: bool = False) -> dict[str, Any]:
     """Read all enabled registers whose poll interval has elapsed."""
-    import time as _time
-
     from .modbus_service import execute_modbus_read_request
+
+    with _LOCK:
+        return _run_poll_cycle_locked(execute_modbus_read_request, force=force)
+
+
+def _run_poll_cycle_locked(execute_modbus_read_request, *, force: bool = False) -> dict[str, Any]:
+    import time as _time
 
     now = _time.monotonic()
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

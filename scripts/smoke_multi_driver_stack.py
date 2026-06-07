@@ -89,6 +89,8 @@ def _fetch(
             return exc.code, json.loads(raw)
         except json.JSONDecodeError:
             return exc.code, raw
+    except (urllib.error.URLError, OSError, TimeoutError) as exc:
+        return 0, {"error": str(exc)}
 
 
 def login(user: str, password: str) -> str:
@@ -374,38 +376,39 @@ def main() -> int:
     _driver_tree(token_op, "/api/json-api/driver/tree", "JSON API")
 
     modbus_proc = None
-    if not args.skip_modbus_server:
-        print("\n==> Modbus fake OT device")
-        modbus_proc = _start_modbus_server()
+    try:
+        if not args.skip_modbus_server:
+            print("\n==> Modbus fake OT device")
+            modbus_proc = _start_modbus_server()
 
-    print("\n==> Live ingest (all three sources)")
-    _bacnet_driver_live(token_op)
-    if modbus_proc is not None or not args.skip_modbus_server:
-        _ingest_modbus(token_op)
-    _ingest_json_api(token_op)
+        print("\n==> Live ingest (all three sources)")
+        _bacnet_driver_live(token_op)
+        if modbus_proc is not None or not args.skip_modbus_server:
+            _ingest_modbus(token_op)
+        _ingest_json_api(token_op)
 
-    print("\n==> Feather historian (source isolation)")
-    _feather_source("bacnet", "demo", "stat_zn-t")
-    _feather_source("modbus", "demo", "fake-temp")
-    _feather_source("json_api", "demo", "todo-title")
+        print("\n==> Feather historian (source isolation)")
+        _feather_source("bacnet", "demo", "stat_zn-t")
+        _feather_source("modbus", "demo", "fake-temp")
+        _feather_source("json_api", "demo", "todo-title")
 
-    print("\n==> Timeseries plot API (per source)")
-    _plot_source(token_op, "bacnet", "demo", "stat_zn-t")
-    _plot_source(token_op, "modbus", "demo", "fake-temp")
-    _plot_source(token_op, "json_api", "demo", "todo-title")
+        print("\n==> Timeseries plot API (per source)")
+        _plot_source(token_op, "bacnet", "demo", "stat_zn-t")
+        _plot_source(token_op, "modbus", "demo", "fake-temp")
+        _plot_source(token_op, "json_api", "demo", "todo-title")
 
-    print("\n==> BRICK + browser setup views (TTL, commissioning JSON, rule .py)")
-    _brick_and_setup_views(token_op)
-    _rule_source_view(token_op)
+        print("\n==> BRICK + browser setup views (TTL, commissioning JSON, rule .py)")
+        _brick_and_setup_views(token_op)
+        _rule_source_view(token_op)
 
-    print("\n==> AI agent assistance (integrator context + read-only tools)")
-    _agent_assist(token_op, token_int)
+        print("\n==> AI agent assistance (integrator context + read-only tools)")
+        _agent_assist(token_op, token_int)
 
-    print("\n==> FDD equations (batch on BRICK-bound rules + feather data)")
-    _fdd_batch(token_int)
-
-    if modbus_proc is not None:
-        modbus_proc.terminate()
+        print("\n==> FDD equations (batch on BRICK-bound rules + feather data)")
+        _fdd_batch(token_int)
+    finally:
+        if modbus_proc is not None and modbus_proc.poll() is None:
+            modbus_proc.terminate()
 
     print("")
     if FAILURES:
