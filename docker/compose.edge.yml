@@ -28,7 +28,6 @@ services:
       OFDD_ALLOW_LAN_INTERNAL_INGEST: "1"
       OFDD_MCP_REST_BASE: http://mcp-rag:8090
       OFDD_BRIDGE_HOST: "0.0.0.0"
-      OFDD_ENABLE_BACNET_DISCOVERY_MUTATIONS: "1"
     env_file:
       - path: ./workspace/auth.env.local
         required: false

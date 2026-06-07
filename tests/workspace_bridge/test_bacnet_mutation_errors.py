@@ -25,6 +25,7 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
     monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
     monkeypatch.setenv("OPENFDD_WORKSPACE_DIR", str(workspace))
     monkeypatch.delenv("OFDD_ENABLE_BACNET_DISCOVERY_MUTATIONS", raising=False)
+    monkeypatch.delenv("OFDD_DISABLE_BACNET_DISCOVERY_MUTATIONS", raising=False)
     for name in list(sys.modules):
         if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
             del sys.modules[name]

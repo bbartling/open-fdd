@@ -84,10 +84,10 @@ Sign in as **integrator** with the password from that file → [First login and 
 | `nano auth.env.local` + `--restart` | Uses **your** edited passwords |
 | `--force-auth` | **Regenerates** random passwords (opt-in only) |
 
-The **bridge** container reads `auth.env.local` at startup only. After you change passwords (manual edit or `--force-auth`), restart bridge:
+The **bridge** container reads `auth.env.local` at startup only. After you change passwords (manual edit or `--force-auth`), recreate bridge (env files are not reloaded by `restart` alone):
 
 ```bash
-cd ~/open-fdd && docker compose restart bridge
+cd ~/open-fdd && docker compose up -d --force-recreate bridge
 ```
 
 Regenerate passwords and reload (stack already running):
@@ -111,7 +111,7 @@ Options:
 | `--image-tag TAG` | default `latest` (falls back to `2026.06.07-edge`) |
 | `--repo-ref BRANCH` | branch for `compose.edge.yml` if not on `master` yet |
 | `--force-auth` | regenerate `auth.env.local` (restarts bridge if stack is up) |
-| `--restart` | restart bridge to reload `auth.env.local`; curls `/health` after restart |
+| `--restart` | recreate bridge to reload `auth.env.local`; curls `/health` after |
 | `--show-secrets` | print passwords at end (lab only) |
 
 From a repo checkout: `./scripts/openfdd_edge_bootstrap.sh --start`
