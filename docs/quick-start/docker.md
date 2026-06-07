@@ -6,21 +6,19 @@ nav_order: 1
 
 # Run with Docker images
 
-Deploy Open-FDD on a Linux host using **published GHCR images**. No git clone or image build required on the edge host.
+Deploy Open-FDD on a Linux edge host using **three published GHCR images**. No git clone or local image build on the host.
 
 ## Images
 
-| GHCR image | Running service | Required |
-|------------|-----------------|----------|
-| `ghcr.io/bbartling/openfdd-bridge` | `bridge` | Yes |
-| `ghcr.io/bbartling/openfdd-commission` | `commission` | Yes (BACnet + **default poll loop**) |
-| `ghcr.io/bbartling/openfdd-mcp-rag` | `mcp-rag` | Yes (doc search sidecar) |
-| `ghcr.io/bbartling/openfdd-bacnet-poll` | `bacnet-poll` | **No** — optional alternative poll driver |
+| GHCR image | Service | Role |
+|------------|---------|------|
+| `ghcr.io/bbartling/openfdd-bridge` | `bridge` | Operator API, dashboard, historian ingest |
+| `ghcr.io/bbartling/openfdd-commission` | `commission` | BACnet discover/read/write **and poll loop** |
+| `ghcr.io/bbartling/openfdd-mcp-rag` | `mcp-rag` | Doc-search sidecar |
 
-Current tags: [GitHub Packages — openfdd-bridge](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge) (e.g. `2026.06.07-edge`).
+Tags: [GitHub Packages — openfdd-bridge](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge) (e.g. `2026.06.07-edge`).
 
-{: .note }
-> **Why only 3 containers?** BACnet **reads** run inside **commission**. The bridge runs a background **ingest** worker (CSV → feather), not a separate BACnet poll container. See [Containers](../architecture/containers).
+BACnet field reads run inside **commission**. The bridge watches `samples.csv` and loads feather — see [Containers](../architecture/containers).
 
 ## Host layout
 
@@ -36,37 +34,42 @@ Current tags: [GitHub Packages — openfdd-bridge](https://github.com/bbartling/
 
 ## 1. Install Docker
 
-Docker Engine + Compose plugin on the edge host (Ubuntu 22.04+ or similar).
+Docker Engine + Compose plugin (Ubuntu 22.04+ or similar).
+
+Enable Docker on boot (required for power-cycle recovery):
+
+```bash
+sudo systemctl enable docker
+sudo systemctl start docker
+```
 
 ## 2. Copy compose file
 
-From a machine that has the `open-fdd` repo (or download `docker/compose.edge.yml` from GitHub):
+Download `docker/compose.edge.yml` from the repo (or copy from a build machine):
 
 ```bash
 mkdir -p ~/open-fdd/workspace
 cp docker/compose.edge.yml ~/open-fdd/docker-compose.yml
 ```
 
-## 3. Configure auth
+All services use `restart: unless-stopped` — they come back automatically when the host reboots **if Docker is enabled**.
 
-Generate secrets (do **not** use `auth.env.example` values on a LAN):
+## 3. Configure auth and BACnet
 
 ```bash
-# On any machine with Python:
-python open-fdd/workspace/scripts/generate_auth_env.py > ~/open-fdd/workspace/auth.env.local
+python3 -c "import secrets; print(secrets.token_urlsafe(48))"  # or use generate_auth_env.py from repo
+# Write workspace/auth.env.local with OFDD_AUTH_SECRET and role passwords
 chmod 600 ~/open-fdd/workspace/auth.env.local
 ```
 
-Commission BACnet bind — copy and edit:
-
 ```bash
 mkdir -p ~/open-fdd/workspace/bacnet/commissioning
-# commission.env: BACNET_BIND, BACNET_INSTANCE, discover range, etc.
+# Edit commission.env: BACNET_BIND, BACNET_INSTANCE, discover range
 ```
 
 See [BACnet network setup](../bacnet/network-setup).
 
-## 4. Pull and start
+## 4. Pull and start (first deploy)
 
 ```bash
 cd ~/open-fdd
@@ -77,38 +80,57 @@ docker compose up -d
 docker compose ps
 ```
 
-Expected services: **bridge**, **commission**, **mcp-rag**.
-
-## 5. LAN access (optional)
-
-Bridge listens on `127.0.0.1:8765` inside compose. For operator browsers on the building LAN, put **Caddy** (or nginx) on port 80 → `127.0.0.1:8765`, or expose 8765 through firewall:
+Expected: **bridge**, **commission**, **mcp-rag** — all `Up`.
 
 ```bash
 curl -sf http://127.0.0.1:8765/health
-# From another PC: http://<host-lan-ip>:8765/  (if firewall allows)
 ```
 
-## Start / stop
+## Long-term operation
+
+### Survive power cycles
+
+Compose sets `restart: unless-stopped` on every service. After a reboot:
+
+```bash
+sudo systemctl status docker    # active
+cd ~/open-fdd && docker compose ps
+curl -sf http://127.0.0.1:8765/health
+```
+
+If containers are not up (Docker was disabled or compose file moved):
 
 ```bash
 cd ~/open-fdd
 docker compose up -d
+```
+
+### Start / stop / restart (maintenance)
+
+```bash
+cd ~/open-fdd
+
+# Idempotent — safe to run anytime; starts missing containers
+docker compose up -d
+
+# Stop stack (maintenance window; data in workspace/ is kept)
 docker compose stop
+
+# Restart one service after config change
+docker compose restart commission
 docker compose restart bridge
+
+# Logs
+docker compose logs -f --tail 100 commission
+docker compose logs --since 30m bridge
 ```
 
 {: .warning }
-> Never run `docker compose down -v` or `docker volume prune` on a live site — `workspace/` is your historian and BACnet config.
+> Never run `docker compose down -v`, `docker volume prune`, or delete `workspace/` on a live site.
 
-## Optional fourth container
+### LAN access
 
-Only if you **turn off** commission’s poll loop and need a standalone driver:
-
-```bash
-docker compose --profile bacnet-poll up -d bacnet-poll
-```
-
-Do not enable while commission is also polling.
+Bridge listens on `127.0.0.1:8765` in compose. For operator browsers on the building LAN, run **Caddy** (or nginx) on port 80 → `127.0.0.1:8765`, or expose 8765 through the host firewall.
 
 ## Next steps
 

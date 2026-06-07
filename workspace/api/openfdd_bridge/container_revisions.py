@@ -68,15 +68,6 @@ def stack_revisions(*, include_image_ids: bool = False) -> dict[str, Any]:
             "git_sha": git_sha,
             "built_at": built_at,
         },
-        {
-            "id": "bacnet_poll",
-            "label": "BACnet poll (profile)",
-            "image": f"openfdd-bacnet-poll:{tag}",
-            "image_tag": tag,
-            "git_sha": git_sha,
-            "built_at": built_at,
-            "note": "Optional compose profile; poll loop usually runs inside commission",
-        },
     ]
 
     code, payload = commission_health(timeout=2.0)

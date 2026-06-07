@@ -58,12 +58,6 @@ docker compose logs --since 10m commission | grep -i poll
 docker compose logs --since 10m bridge | grep -i ingest
 ```
 
-Optional dedicated poll container (profile):
-
-```bash
-docker compose -f docker/compose.dev.yml --profile bacnet ps
-```
-
 ## pytest (bridge security / BACnet)
 
 ```bash

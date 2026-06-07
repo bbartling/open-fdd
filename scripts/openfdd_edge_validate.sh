@@ -134,7 +134,6 @@ if ! "${COMPOSE[@]}" up -d bridge commission mcp-rag ollama; then
   echo "error: failed to start bench overlay stack (compose.dev.yml + compose.bench.yml)" >&2
   exit 1
 fi
-docker compose -f docker/compose.dev.yml -f docker/compose.bench.yml --profile bacnet stop bacnet-poll 2>/dev/null || true
 sleep 8
 ./scripts/fix_workspace_permissions.sh 2>/dev/null || true
 

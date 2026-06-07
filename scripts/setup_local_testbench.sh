@@ -56,7 +56,7 @@ find "${ROOT}/workspace/data/feather_store" -name 'latest.*' -delete 2>/dev/null
 
 if [[ "$SKIP_DISCOVER" == 0 ]]; then
   echo "==> BACnet Who-Is smoke (device ${DISCOVER_LOW:-5007})"
-  "${COMPOSE[@]}" stop commission bacnet-poll 2>/dev/null || true
+  "${COMPOSE[@]}" stop commission 2>/dev/null || true
   sleep 2
   if ! "${VENV}/bin/python" -m bacnet_toolshed.smoke_whois --low 5007 --high 5007; then
     echo "Who-Is failed — check ${COMMISSION_ENV} (bind, ROUTER_IP, MSTP_NET)" >&2
@@ -135,9 +135,8 @@ chmod 644 "${ROOT}/workspace/data/model.json" 2>/dev/null || true
 
 if [[ "$NO_DOCKER" == 0 ]]; then
   echo "==> Restart Docker stack (bench overlay: host network)"
-  # Poll loop runs inside commission (host network); skip bacnet-poll to avoid duplicate polls / ingest 403.
+  # Poll loop runs inside commission (host network).
   "${COMPOSE[@]}" up -d --build bridge commission mcp-rag
-  docker compose -f docker/compose.dev.yml -f docker/compose.bench.yml --profile bacnet stop bacnet-poll 2>/dev/null || true
   sleep 8
   ./scripts/openfdd_stack.sh health || true
   if [[ -x "${ROOT}/scripts/stack_health_check.sh" ]]; then

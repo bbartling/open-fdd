@@ -66,31 +66,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 ENTRYPOINT ["/usr/local/bin/bridge-entrypoint.sh"]
 
-FROM python-base AS bacnet
-
-ENV OPENFDD_REPO_ROOT=/app \
-    PYTHONPATH=/app \
-    COMMISSION_ENV=/var/openfdd/workspace/bacnet/commissioning/commission.env \
-    POINTS_CSV=/var/openfdd/workspace/bacnet/commissioning/points.csv \
-    POLLS_CSV=/var/openfdd/workspace/bacnet/polls/samples.csv \
-    BACNET_POLL_INTERVAL=60
-
-COPY docker/bacnet-poll-entrypoint.sh /usr/local/bin/bacnet-poll-entrypoint.sh
-COPY docker/bacnet-commission-entrypoint.sh /usr/local/bin/bacnet-commission-entrypoint.sh
-RUN chmod +x /usr/local/bin/bacnet-poll-entrypoint.sh /usr/local/bin/bacnet-commission-entrypoint.sh
-
-FROM bacnet AS bacnet-poll
-
-ARG OPENFDD_IMAGE_TAG=local
-ARG OPENFDD_BUILD_GIT_SHA=unknown
-ARG OPENFDD_BUILD_TIME=
-ENV OPENFDD_IMAGE_TAG=${OPENFDD_IMAGE_TAG} \
-    OPENFDD_BUILD_GIT_SHA=${OPENFDD_BUILD_GIT_SHA} \
-    OPENFDD_BUILD_TIME=${OPENFDD_BUILD_TIME}
-
-ENTRYPOINT ["/usr/local/bin/bacnet-poll-entrypoint.sh"]
-
-FROM bacnet AS commission
+FROM python-base AS commission
 
 ARG OPENFDD_IMAGE_TAG=local
 ARG OPENFDD_BUILD_GIT_SHA=unknown
@@ -101,6 +77,10 @@ ENV OPENFDD_IMAGE_TAG=${OPENFDD_IMAGE_TAG} \
 
 ENV OPENFDD_BACNET_COMMISSION_BIND=0.0.0.0 \
     OPENFDD_BACNET_COMMISSION_PORT=8767
+
+COPY docker/bacnet-commission-entrypoint.sh /usr/local/bin/bacnet-commission-entrypoint.sh
+RUN chmod +x /usr/local/bin/bacnet-commission-entrypoint.sh
+
 ENTRYPOINT ["/usr/local/bin/bacnet-commission-entrypoint.sh"]
 
 FROM python-base AS mcp-rag

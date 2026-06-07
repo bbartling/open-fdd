@@ -13,14 +13,6 @@
   gather_facts: true
 
   handlers:
-    - name: Restart BACnet poll driver
-      ansible.builtin.systemd:
-        name: openfdd-bacnet-poll
-        state: restarted
-        daemon_reload: true
-      become: true
-      when: enable_bacnet_poll_driver | default(false) | bool
-
     - name: Restart Open-FDD bridge
       ansible.builtin.systemd:
         name: openfdd-bridge
@@ -266,16 +258,6 @@
       when: install_openfdd_bridge | default(true) | bool
       notify: Restart Open-FDD bridge
 
-    - name: Install openfdd-bacnet-poll systemd unit
-      tags: [systemd, drivers]
-      ansible.builtin.template:
-        src: templates/openfdd-bacnet-poll.service.j2
-        dest: /etc/systemd/system/openfdd-bacnet-poll.service
-        mode: "0644"
-      become: true
-      when: install_bacnet_poll_unit | default(true) | bool
-      notify: Restart BACnet poll driver
-
     - name: Install openfdd-bacnet-commission systemd unit
       tags: [systemd, drivers]
       ansible.builtin.template:
@@ -328,16 +310,6 @@
         daemon_reload: true
       become: true
       when: install_bacnet_commission_unit | default(true) | bool
-
-    - name: Enable and start openfdd-bacnet-poll
-      tags: [systemd, drivers]
-      ansible.builtin.systemd:
-        name: openfdd-bacnet-poll
-        enabled: "{{ enable_bacnet_poll_driver | default(false) | bool }}"
-        state: "{{ 'started' if (enable_bacnet_poll_driver | default(false) | bool) else 'stopped' }}"
-        daemon_reload: true
-      become: true
-      when: install_bacnet_poll_unit | default(true) | bool
 
     - name: Enable and start openfdd-fdd-loop timer
       tags: [systemd, backend]

@@ -120,20 +120,6 @@
     - enable_bacnet_commission_agent | default(true) | bool
     - not (openfdd_docker_stack | default(false) | bool)
 
-- name: Ensure BACnet poll driver state matches config
-  ansible.builtin.systemd:
-    name: openfdd-bacnet-poll
-  register: poll_svc
-  become: true
-  failed_when: >-
-    (enable_bacnet_poll_driver | default(false) | bool
-     and poll_svc.status.ActiveState | default('inactive') != 'active')
-    or (not (enable_bacnet_poll_driver | default(false) | bool)
-        and poll_svc.status.ActiveState | default('inactive') not in ['inactive', 'failed'])
-  when:
-    - install_bacnet_poll_unit | default(true) | bool
-    - not (openfdd_docker_stack | default(false) | bool)
-
 - name: Wait for bridge health on loopback
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ openfdd_bridge_port }}/health"

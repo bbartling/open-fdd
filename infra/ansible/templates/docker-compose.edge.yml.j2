@@ -62,18 +62,6 @@ services:
     restart: unless-stopped
 {% endif %}
 
-{% if enable_bacnet_poll_driver | default(false) | bool %}
-  bacnet-poll:
-    image: {{ ofdd_image('openfdd-bacnet-poll') }}
-    network_mode: host
-    volumes:
-      - {{ openfdd_remote_dir }}/workspace:/var/openfdd/workspace
-    environment:
-      OPENFDD_WORKSPACE_DIR: /var/openfdd/workspace
-      OPENFDD_REPO_ROOT: /app
-    restart: unless-stopped
-{% endif %}
-
 {% if enable_ollama | default(false) | bool and openfdd_docker_ollama | default(true) | bool %}
   ollama:
     image: ollama/ollama:{{ ollama_docker_image_tag | default('latest') }}

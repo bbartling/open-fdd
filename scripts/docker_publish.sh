@@ -20,7 +20,7 @@ if [[ "$TAG" == "local" ]]; then
   exit 1
 fi
 
-IMAGES=(openfdd-bridge openfdd-commission openfdd-bacnet-poll openfdd-mcp-rag)
+IMAGES=(openfdd-bridge openfdd-commission openfdd-mcp-rag)
 
 for img in "${IMAGES[@]}"; do
   src="${img}:${TAG}"

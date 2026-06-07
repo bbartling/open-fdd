@@ -6,7 +6,7 @@ nav_order: 2
 
 # First login and health check
 
-Quick checks after `docker compose up -d` on the edge host.
+Quick checks after `docker compose up -d` on the edge host. Services use `restart: unless-stopped` — after a reboot, run `docker compose ps` once Docker is up (see [Run with Docker](docker#survive-power-cycles)).
 
 ## Public health
 

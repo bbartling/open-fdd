@@ -14,7 +14,7 @@ nav_order: 2
 ./scripts/docker_build.sh --save
 ```
 
-Images: `openfdd-bridge`, `openfdd-commission`, `openfdd-bacnet-poll`, `openfdd-mcp-rag`.
+Images: `openfdd-bridge`, `openfdd-commission`, `openfdd-mcp-rag`.
 
 ## Publish to GHCR (maintainers)
 

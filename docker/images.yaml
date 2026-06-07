@@ -1,7 +1,6 @@
 # Published Open-FDD container images (addons).
 # Build: ./scripts/docker_build.sh
 # Publish: ./scripts/docker_publish.sh
-# Deploy: OPENFDD_IMAGE_TAG=tag ./infra/ansible/deploy.sh docker (GHCR pull) or tar with OPENFDD_DOCKER_PULL_FROM_GHCR=0
 
 registry: ghcr.io
 org: bbartling
@@ -10,17 +9,14 @@ default_tag: local
 images:
   - name: openfdd-bridge
     build_target: bridge
-    description: FastAPI operator bridge + React SPA
+    description: FastAPI operator bridge + React SPA + historian ingest
   - name: openfdd-commission
     build_target: commission
-    description: BACnet commission HTTP agent
-  - name: openfdd-bacnet-poll
-    build_target: bacnet-poll
-    description: BACnet RPM poll driver (host network)
+    description: BACnet commission agent (discover, read, write, poll loop)
   - name: openfdd-mcp-rag
     build_target: mcp-rag
     description: MCP document search sidecar
 
 external:
   - name: ollama/ollama
-    description: Optional LLM runtime (use host systemd on production edges when possible)
+    description: Optional LLM runtime (host systemd or compose profile ai)
