@@ -11,6 +11,7 @@
 #   --repo-ref REF   GitHub branch for compose.edge.yml (tries master, then this ref)
 #   --root PATH      default: ~/open-fdd
 #   --force-auth     regenerate workspace/auth.env.local
+#   --restart        restart bridge so it reloads auth.env.local (after edit or --force-auth)
 #   --show-secrets   print role passwords at end (lab only)
 set -euo pipefail
 
@@ -21,6 +22,7 @@ OPENFDD_IMAGE_FALLBACK="${OPENFDD_IMAGE_FALLBACK:-2026.06.07-edge}"
 GITHUB_REPO="bbartling/open-fdd"
 DO_START=false
 FORCE_AUTH=false
+DO_RESTART=false
 SHOW_SECRETS=false
 
 while [[ $# -gt 0 ]]; do
@@ -30,6 +32,7 @@ while [[ $# -gt 0 ]]; do
     --repo-ref) OPENFDD_REPO_REF="$2"; shift 2 ;;
     --root) OPENFDD_ROOT="$2"; shift 2 ;;
     --force-auth) FORCE_AUTH=true; shift ;;
+    --restart) DO_RESTART=true; shift ;;
     --show-secrets) SHOW_SECRETS=true; shift ;;
     -h|--help)
       sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
@@ -93,6 +96,8 @@ services:
       OFDD_BRIDGE_HOST: "0.0.0.0"
     env_file:
       - path: ./workspace/auth.env.local
+        required: false
+      - path: ./workspace/data.env.local
         required: false
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -214,6 +219,27 @@ PY
   echo "    commission.env → BACNET_BIND=${bind} (interface: ${iface:-auto})"
 }
 
+_ensure_data_env() {
+  local dest="$1"
+  if [[ ! -f "$dest" ]]; then
+    cat >"$dest" <<'DATA'
+# Bridge env (feather caps + BACnet commissioning). Loaded by docker compose.
+OFDD_FEATHER_MAX_GIB=5
+OFDD_FEATHER_RETENTION_DAYS=90
+OFDD_FEATHER_TRIM_CHUNK_HOURS=24
+OFDD_ENABLE_BACNET_DISCOVERY_MUTATIONS=1
+DATA
+    echo "    Created ${dest} (commissioning mutations enabled)"
+    return 0
+  fi
+  if ! grep -q '^OFDD_ENABLE_BACNET_DISCOVERY_MUTATIONS=' "$dest" 2>/dev/null; then
+    printf '\n# BACnet Add device / driver registry updates\nOFDD_ENABLE_BACNET_DISCOVERY_MUTATIONS=1\n' >>"$dest"
+    echo "    Appended OFDD_ENABLE_BACNET_DISCOVERY_MUTATIONS=1 to ${dest}"
+  else
+    echo "    Keeping ${dest}"
+  fi
+}
+
 _write_auth_env() {
   local dest="$1"
   python3 <<'PY' >"$dest"
@@ -263,6 +289,29 @@ _pull_and_start() {
   curl -sf http://127.0.0.1:8765/health && echo || echo "WARN: /health not ready yet"
 }
 
+_restart_bridge() {
+  local compose_path="$1"
+  if [[ ! -f "$compose_path" ]]; then
+    echo "WARN: no compose file — skip bridge restart" >&2
+    return 0
+  fi
+  cd "$OPENFDD_ROOT"
+  if docker compose ps -q bridge 2>/dev/null | grep -q .; then
+    echo "==> Recreating bridge (reload env files — restart alone does not)"
+    docker compose up -d --force-recreate bridge
+    sleep 2
+    curl -sf http://127.0.0.1:8765/health && echo || echo "WARN: /health not ready yet"
+  else
+    echo "WARN: bridge not running — start stack: cd ${OPENFDD_ROOT} && docker compose up -d" >&2
+  fi
+}
+
+if [[ "$DO_RESTART" == true && "$FORCE_AUTH" != true && "$DO_START" != true ]]; then
+  echo "=== Open-FDD bridge restart (reload auth.env.local) ==="
+  _restart_bridge "${OPENFDD_ROOT}/docker-compose.yml"
+  exit 0
+fi
+
 echo "=== Open-FDD edge bootstrap ==="
 echo "Site root: ${OPENFDD_ROOT}"
 _check_docker
@@ -281,6 +330,10 @@ _download_compose "$COMPOSE_PATH"
 
 echo "==> Downloading backup/update scripts"
 _download_helper_scripts "${OPENFDD_ROOT}/scripts"
+
+DATA_ENV_PATH="${OPENFDD_ROOT}/workspace/data.env.local"
+echo "==> Ensuring ${DATA_ENV_PATH}"
+_ensure_data_env "$DATA_ENV_PATH"
 
 AUTH_PATH="${OPENFDD_ROOT}/workspace/auth.env.local"
 if [[ ! -f "$AUTH_PATH" || "$FORCE_AUTH" == true ]]; then
@@ -304,6 +357,8 @@ _write_commission_env "$COMMISSION_PATH" "$BACNET_BIND" "$BACNET_IFACE"
 
 if [[ "$DO_START" == true ]]; then
   _pull_and_start
+elif [[ "$DO_RESTART" == true || "$FORCE_AUTH" == true ]]; then
+  _restart_bridge "$COMPOSE_PATH"
 fi
 
 echo ""

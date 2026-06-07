@@ -59,6 +59,7 @@ from ..bacnet_write_guard import (
     validate_write_target,
 )
 from ..bacnet_access import require_bacnet_discovery, require_bacnet_mutation, require_bacnet_poll_config
+from ..security import bacnet_discovery_mutations_enabled
 from ..deps import require_roles
 from ..bacnet_poll_ingest import ingest_poll_samples_to_feather
 
@@ -196,6 +197,7 @@ def bacnet_config() -> dict:
         "commission_agent_ok": commission_ok,
         "commission_agent": commission_detail,
         "openfdd_server_points": server_pts,
+        "discovery_mutations_enabled": bacnet_discovery_mutations_enabled(),
     }
 
 

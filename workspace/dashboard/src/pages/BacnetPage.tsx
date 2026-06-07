@@ -19,6 +19,7 @@ import { formatPollSampleAt } from "../lib/formatPollTime";
 
 type BacnetConfig = {
   commission_agent_ok: boolean;
+  discovery_mutations_enabled?: boolean;
 };
 
 type CommissionStatus = {
@@ -263,9 +264,16 @@ export default function BacnetPage() {
         String((job.result as { device_address?: string } | undefined)?.device_address ?? "");
       let synced = 0;
       if (job.status === "ok" && objects.length) {
-        const sync = await syncDiscoveryToDriver(instance, syncAddr, objects);
-        synced = sync.rows_added ?? objects.length;
-        await loadDriverTree();
+        try {
+          const sync = await syncDiscoveryToDriver(instance, syncAddr, objects);
+          synced = sync.rows_added ?? objects.length;
+          await loadDriverTree();
+        } catch (syncErr) {
+          const msg = formatApiError(syncErr);
+          const err = `Discovered ${objects.length} point(s) but could not save to driver — ${msg}`;
+          setActionError(err);
+          return { instance, ok: false, objectCount: objects.length, error: err };
+        }
       }
       setDiscoveryPreview(objects);
       if (job.status !== "ok") {
@@ -541,6 +549,7 @@ export default function BacnetPage() {
   }
 
   const agentOk = cfg?.commission_agent_ok === true;
+  const mutationsEnabled = cfg?.discovery_mutations_enabled !== false;
   const anyPending = whoisPending || addPending || batchPending;
   const selectedList = Array.from(selectedInstances).sort((a, b) => a - b);
   const inTree = new Set(driverDevices.map((d) => d.device_instance));
@@ -586,6 +595,16 @@ export default function BacnetPage() {
       {anyPending ? (
         <div className="bacnet-active-banner" role="status">
           <Spinner label={activeJobLabel || "BACnet operation in progress…"} />
+        </div>
+      ) : null}
+
+      {cfg && !mutationsEnabled ? (
+        <div className="panel panel-warn" role="alert">
+          <p className="error" style={{ margin: 0 }}>
+            <strong>Add device is blocked:</strong> point discovery works, but saving devices to the driver
+            registry is disabled on this bridge (read-only monitor mode). Ask your integrator to recreate the
+            bridge after removing <code>OFDD_DISABLE_BACNET_DISCOVERY_MUTATIONS</code> from site config.
+          </p>
         </div>
       ) : null}
 
@@ -736,16 +755,42 @@ export default function BacnetPage() {
 
         {batchSummary?.length ? (
           <ul className="batch-summary">
-            {batchSummary.map((r) => (
-              <li key={r.instance}>
-                Device {r.instance}:{" "}
-                {r.ok ? (
-                  <span className="ok">{r.objectCount ?? 0} points</span>
-                ) : (
-                  <span className="error">{r.error ?? "failed"}</span>
-                )}
-              </li>
-            ))}
+            {(() => {
+              const failed = batchSummary.filter((r) => !r.ok);
+              const errorGroups = new Map<string, number[]>();
+              for (const row of failed) {
+                const key = row.error ?? "failed";
+                const list = errorGroups.get(key) ?? [];
+                list.push(row.instance);
+                errorGroups.set(key, list);
+              }
+              const shownErrors = new Set<string>();
+              return batchSummary.flatMap((r) => {
+                if (r.ok) {
+                  return [
+                    <li key={r.instance}>
+                      Device {r.instance}: <span className="ok">{r.objectCount ?? 0} points</span>
+                    </li>,
+                  ];
+                }
+                const key = r.error ?? "failed";
+                const peers = errorGroups.get(key) ?? [r.instance];
+                if (shownErrors.has(key)) return [];
+                shownErrors.add(key);
+                if (peers.length > 1) {
+                  return [
+                    <li key={`err-${peers[0]}`}>
+                      Devices {peers.join(", ")}: <span className="error">{key}</span>
+                    </li>,
+                  ];
+                }
+                return [
+                  <li key={r.instance}>
+                    Device {r.instance}: <span className="error">{key}</span>
+                  </li>,
+                ];
+              });
+            })()}
           </ul>
         ) : null}
       </div>
