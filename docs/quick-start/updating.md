@@ -6,15 +6,48 @@ nav_order: 3
 
 # Updating the stack
 
-Image upgrades on the edge host: **backup `workspace/`, pull new GHCR tags, recreate containers**. No git pull on the host.
+Upgrade GHCR images on the edge host: **backup `workspace/`, pull new tags, recreate containers**. No git pull on the host.
 
 ## Before you start
 
-1. Pick a tag from [GitHub Packages](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge).
-2. Short maintenance window (containers restart briefly; `restart: unless-stopped` brings them back).
-3. SSH to the edge host.
+1. SSH to the edge host (`cd ~/open-fdd`).
+2. Pick a tag from [GitHub Packages](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge) — default is **`latest`**.
+3. Short maintenance window (containers restart briefly; `restart: unless-stopped` brings them back after reboot).
 
-## 1. Backup site state
+## Fetch helper scripts (no git clone)
+
+If you bootstrapped with `openfdd_edge_bootstrap.sh`, scripts are already under `~/open-fdd/scripts/`. Otherwise:
+
+```bash
+mkdir -p ~/open-fdd/scripts
+curl -fsSL -o ~/open-fdd/scripts/openfdd_site_backup.sh \
+  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_site_backup.sh
+curl -fsSL -o ~/open-fdd/scripts/openfdd_site_update.sh \
+  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_site_update.sh
+chmod +x ~/open-fdd/scripts/openfdd_site_*.sh
+```
+
+## One-command upgrade (recommended)
+
+```bash
+cd ~/open-fdd
+./scripts/openfdd_site_backup.sh
+./scripts/openfdd_site_update.sh
+```
+
+Pulls **`:latest`** by default, verifies all three images exist on GHCR, recreates containers, and hits `/health`.
+
+Pin a dated release:
+
+```bash
+export NEW_TAG=2026.06.07-edge
+./scripts/openfdd_site_backup.sh
+./scripts/openfdd_site_update.sh
+```
+
+## Step by step
+
+### 1. Backup site state
 
 ```bash
 cd ~/open-fdd
@@ -23,23 +56,13 @@ cd ~/open-fdd
 
 Archives `workspace/` (feather, BACnet CSVs, model, auth) under `~/openfdd-backups/<timestamp>/`.
 
-**Manual equivalent:**
+Custom backup location:
 
 ```bash
-cd ~/open-fdd
-export BACKUP_ROOT="$HOME/openfdd-backups/$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$BACKUP_ROOT"
-cp docker-compose.yml "$BACKUP_ROOT/docker-compose.yml.before"
-docker compose ps > "$BACKUP_ROOT/docker-compose-ps-before.txt"
-docker compose config --images > "$BACKUP_ROOT/docker-images-before.txt"
-sudo tar --xattrs --acls -czf "$BACKUP_ROOT/workspace-full.tgz" workspace
-sudo chown "$USER:$USER" "$BACKUP_ROOT/workspace-full.tgz"
-echo "Backup: $BACKUP_ROOT"
+BACKUP_ROOT=~/openfdd-backups/manual ./scripts/openfdd_site_backup.sh
 ```
 
-## 2. Verify images on GHCR (optional)
-
-Default upgrades pull **`:latest`**. To verify before pull:
+### 2. Verify images (optional)
 
 ```bash
 export NEW_TAG="${NEW_TAG:-latest}"
@@ -50,16 +73,15 @@ docker manifest inspect ghcr.io/bbartling/openfdd-mcp-rag:${NEW_TAG} >/dev/null 
 echo "All images exist for ${NEW_TAG}"
 ```
 
-Pin a dated release: `export NEW_TAG=2026.06.07-edge`
-
-## 3. Pull and recreate
+### 3. Pull and recreate
 
 ```bash
 cd ~/open-fdd
+export NEW_TAG="${NEW_TAG:-latest}"   # optional pin
 ./scripts/openfdd_site_update.sh
 ```
 
-**Manual steps** (same as the script — pulls `:latest` by default):
+**Manual equivalent** (same as the script):
 
 ```bash
 cd ~/open-fdd
@@ -69,9 +91,7 @@ docker compose ps
 curl -sf http://127.0.0.1:8765/health && echo
 ```
 
-Services keep `restart: unless-stopped` — no extra step after upgrade for reboot survival.
-
-## 4. Verify
+### 4. Verify
 
 ```bash
 docker compose ps
@@ -88,9 +108,12 @@ If the release changed the React UI, copy a new `workspace/api/static/app/` buil
 
 ## Rollback
 
-1. Restore `docker-compose.yml` from backup.
-2. `export OPENFDD_IMAGE_TAG=<previous-tag>`
-3. `docker compose pull && docker compose up -d --force-recreate`
+```bash
+cd ~/open-fdd
+export NEW_TAG=2026.06.06-edge          # previous known-good tag
+cp ~/openfdd-backups/<timestamp>/docker-compose.yml.snapshot docker-compose.yml
+./scripts/openfdd_site_update.sh
+```
 
 `workspace/` is untouched by image-only upgrades.
 
@@ -100,4 +123,10 @@ If the release changed the React UI, copy a new `workspace/api/static/app/` buil
 docker image prune -f
 ```
 
-Never: `docker compose down -v`, `docker volume prune`, or deleting `workspace/`.
+{: .warning }
+> Never run `docker compose down -v`, `docker volume prune`, or delete `workspace/` on a live site.
+
+## Next steps
+
+→ [Run with Docker images](docker) — bootstrap a new host  
+→ [Health check](health-check)

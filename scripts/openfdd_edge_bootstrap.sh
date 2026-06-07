@@ -44,6 +44,23 @@ _github_raw() {
   curl -fsSL -o "$dest" "https://github.com/${GITHUB_REPO}/raw/refs/heads/${ref}/${path}"
 }
 
+_download_helper_scripts() {
+  local scripts_dir="$1"
+  mkdir -p "$scripts_dir"
+  local refs=(master "${OPENFDD_REPO_REF}" fix/security-hardening-log-rotation)
+  local name ref dest
+  for name in openfdd_site_backup.sh openfdd_site_update.sh; do
+    dest="${scripts_dir}/${name}"
+    for ref in "${refs[@]}"; do
+      if _github_raw "$ref" "scripts/${name}" "$dest" && [[ -s "$dest" ]]; then
+        chmod +x "$dest"
+        echo "    OK scripts/${name} from ${ref}"
+        break
+      fi
+    done
+  done
+}
+
 _download_compose() {
   local dest="$1"
   local refs=(master "${OPENFDD_REPO_REF}" fix/security-hardening-log-rotation)
@@ -262,6 +279,9 @@ touch "${OPENFDD_ROOT}/workspace/bacnet/commissioning/points.csv"
 COMPOSE_PATH="${OPENFDD_ROOT}/docker-compose.yml"
 _download_compose "$COMPOSE_PATH"
 
+echo "==> Downloading backup/update scripts"
+_download_helper_scripts "${OPENFDD_ROOT}/scripts"
+
 AUTH_PATH="${OPENFDD_ROOT}/workspace/auth.env.local"
 if [[ ! -f "$AUTH_PATH" || "$FORCE_AUTH" == true ]]; then
   echo "==> Generating ${AUTH_PATH}"
@@ -313,3 +333,6 @@ if [[ "$DO_START" != true ]]; then
   echo "  cd ${OPENFDD_ROOT} && docker compose pull && docker compose up -d"
   echo "Or re-run: bash $0 --start"
 fi
+echo ""
+echo "Upgrade later:"
+echo "  cd ${OPENFDD_ROOT} && ./scripts/openfdd_site_backup.sh && ./scripts/openfdd_site_update.sh"
