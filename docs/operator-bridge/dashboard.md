@@ -13,8 +13,9 @@ nav_order: 1
 | **Home / Building insight** | Check-engine status (green/yellow/red), active fault summary |
 | **Trends** | Point history from feather store |
 | **Faults** | Rule hits grouped by equipment family |
-| **Rule Lab** | Edit, lint, and test Python rules |
-| **Data model** | Equipment tree, point bindings, import health |
+| **Rule Lab** | Edit, lint, and test Python FDD rules (PyArrow kit zip) |
+| **Algorithms** | Supervisory GL36 trim & respond (coming soon) |
+| **Model & assignments** | Equipment tree, FDD rule pins, commissioning JSON |
 | **BACnet** | Discovery, reads, commission workflows |
 | **Settings / health** | Stack status, auth mode |
 

@@ -1,9 +1,9 @@
 [Unit]
-Description=Run Open-FDD batch FDD every {{ fdd_loop_interval_hours | default(3) }}h
+Description=Run Open-FDD batch FDD every {{ fdd_loop_interval_hours | default(1) }}h
 
 [Timer]
 OnBootSec=5min
-OnUnitActiveSec={{ fdd_loop_interval_hours | default(3) }}h
+OnUnitActiveSec={{ fdd_loop_interval_hours | default(1) }}h
 Persistent=true
 Unit=openfdd-fdd-loop.service
 

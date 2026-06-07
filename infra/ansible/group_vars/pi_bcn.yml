@@ -47,7 +47,7 @@ enable_poll_ingest_timer: false
 # Scheduled FDD batch run (saved Rule Lab rules across the BRICK model -> check-engine light)
 install_fdd_loop_timer: true
 enable_fdd_loop_timer: true
-fdd_loop_interval_hours: 3
+fdd_loop_interval_hours: 1
 
 # Feather store retention/compaction (drop rows older than N days, enforce GiB cap daily)
 install_feather_retention_timer: true

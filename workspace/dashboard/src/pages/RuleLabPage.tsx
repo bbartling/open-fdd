@@ -346,7 +346,7 @@ export default function RuleLabPage() {
         runs?: { rule_name?: string; site_id?: string; flagged?: number; status?: string }[];
       }>("/api/rules/batch", {
         method: "POST",
-        body: JSON.stringify({ limit: 50000, chunk_hours: 0, lookback_hours: 1, use_chunks: false }),
+        body: JSON.stringify({ limit: 50000, chunk_hours: 6, lookback_hours: 24, use_chunks: true }),
       });
       setConsoleText(formatBatchSummary(res));
     } catch (e) {

@@ -2880,6 +2880,23 @@ button.linkish {
   font-size: 0.8rem;
 }
 
+.algorithms-coming-soon h2 {
+  margin-top: 0.5rem;
+}
+
+.algorithms-badge {
+  display: inline-block;
+  margin: 0 0 0.75rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
 .dm-feed-badge {
   margin-left: 0.35rem;
   font-size: 0.72rem;
