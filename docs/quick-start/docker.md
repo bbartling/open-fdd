@@ -20,18 +20,6 @@ Tags: [GitHub Packages — openfdd-bridge](https://github.com/bbartling/open-fdd
 
 BACnet field reads run inside **commission**. The bridge watches `samples.csv` and loads feather — see [Containers](../architecture/containers).
 
-## Host layout
-
-```text
-~/open-fdd/
-  docker-compose.yml      # copy from repo docker/compose.edge.yml
-  workspace/              # site state (bind-mounted — backup this!)
-    auth.env.local
-    bacnet/commissioning/commission.env
-    bacnet/commissioning/points.csv
-    data/feather_store/
-```
-
 ## 1. Install Docker
 
 Docker Engine + Compose plugin (Ubuntu 22.04+ or similar).
@@ -43,29 +31,125 @@ sudo systemctl enable docker
 sudo systemctl start docker
 ```
 
-## 2. Copy compose file
+### Validate Docker, Compose, and your user
 
-Download `docker/compose.edge.yml` from the repo (or copy from a build machine):
+Run on the edge host **before** pulling Open-FDD images:
 
 ```bash
-mkdir -p ~/open-fdd/workspace
-cp docker/compose.edge.yml ~/open-fdd/docker-compose.yml
+# Engine + Compose plugin (v2 — "docker compose", not legacy "docker-compose")
+docker --version
+docker compose version
+
+# Daemon running and enabled on boot
+systemctl is-active docker    # expect: active
+systemctl is-enabled docker   # expect: enabled
+
+# Your login user in the docker group (run docker without sudo)
+groups
+id
+# expect "docker" in the group list
+
+# Non-root smoke test
+docker ps
+docker run --rm hello-world
 ```
+
+If `docker ps` says *permission denied*, add your user to the `docker` group and **log out/in** (or `newgrp docker`):
+
+```bash
+sudo usermod -aG docker "$USER"
+newgrp docker   # or SSH logout/login
+docker ps       # should work without sudo
+```
+
+Pull a public image to confirm registry access (GHCR pulls use the same path):
+
+```bash
+docker pull hello-world
+```
+
+## 2. Create site layout and compose file
+
+One-time setup on the edge host — creates `~/open-fdd/` and downloads `docker-compose.yml` (no git clone).
+
+```bash
+set -euo pipefail
+export OPENFDD_ROOT="${OPENFDD_ROOT:-$HOME/open-fdd}"
+# compose.edge.yml: use master after release merge; until then use the docs branch:
+export OPENFDD_REPO_REF="${OPENFDD_REPO_REF:-fix/security-hardening-log-rotation}"
+export OPENFDD_RAW="https://raw.githubusercontent.com/bbartling/open-fdd/${OPENFDD_REPO_REF}"
+
+# Directory tree (bind-mounted site state — backup this folder before upgrades)
+mkdir -p "${OPENFDD_ROOT}/workspace/bacnet/commissioning"
+mkdir -p "${OPENFDD_ROOT}/workspace/bacnet/polls"
+mkdir -p "${OPENFDD_ROOT}/workspace/data/feather_store"
+mkdir -p "${OPENFDD_ROOT}/workspace/data/playground"
+mkdir -p "${OPENFDD_ROOT}/workspace/logs"
+mkdir -p "${OPENFDD_ROOT}/workspace/api/static/app"
+
+# Compose file (-f fails loudly on 404)
+curl -fsSL -o "${OPENFDD_ROOT}/docker-compose.yml" \
+  "${OPENFDD_RAW}/docker/compose.edge.yml"
+test -s "${OPENFDD_ROOT}/docker-compose.yml"
+
+# BACnet starter config (commission.env.example is on master — use master for this file)
+curl -fsSL -o "${OPENFDD_ROOT}/workspace/bacnet/commissioning/commission.env" \
+  "https://raw.githubusercontent.com/bbartling/open-fdd/master/bacnet_toolshed/commission.env.example"
+
+# Empty poll output + points registry (fill points.csv after commissioning)
+touch "${OPENFDD_ROOT}/workspace/bacnet/polls/samples.csv"
+touch "${OPENFDD_ROOT}/workspace/bacnet/commissioning/points.csv"
+
+cd "${OPENFDD_ROOT}"
+tree -L 4 2>/dev/null || find . -maxdepth 4 -type d | sort
+ls -la docker-compose.yml workspace/bacnet/commissioning/commission.env
+```
+
+Expected layout:
+
+```text
+~/open-fdd/
+  docker-compose.yml
+  workspace/
+    auth.env.local              # step 3 — you create this
+    bacnet/commissioning/
+      commission.env            # downloaded — edit BACnet bind
+      points.csv                # empty — add enabled poll rows
+    bacnet/polls/
+      samples.csv               # created empty — commission appends here
+    data/feather_store/         # historian (grows at runtime)
+    logs/                       # audit/error JSONL (optional)
+```
+
+If `curl` returns **404** for `compose.edge.yml`, the file is not on `master` yet — set `OPENFDD_REPO_REF=fix/security-hardening-log-rotation` (or your release branch) and re-run only the compose `curl` line.
 
 All services use `restart: unless-stopped` — they come back automatically when the host reboots **if Docker is enabled**.
 
 ## 3. Configure auth and BACnet
 
-```bash
-python3 -c "import secrets; print(secrets.token_urlsafe(48))"  # or use generate_auth_env.py from repo
-# Write workspace/auth.env.local with OFDD_AUTH_SECRET and role passwords
-chmod 600 ~/open-fdd/workspace/auth.env.local
-```
+Create `auth.env.local` (do not skip — `chmod` alone will fail if the file does not exist):
 
 ```bash
-mkdir -p ~/open-fdd/workspace/bacnet/commissioning
-# Edit commission.env: BACNET_BIND, BACNET_INSTANCE, discover range
+export OPENFDD_ROOT="${OPENFDD_ROOT:-$HOME/open-fdd}"
+python3 <<'PY' > "${OPENFDD_ROOT}/workspace/auth.env.local"
+import secrets, string
+alpha = string.ascii_letters + string.digits + "!@#$%^&*-_"
+def pw(n=24):
+    import random
+    return "".join(secrets.choice(alpha) for _ in range(n))
+print(f"OFDD_AUTH_SECRET={secrets.token_urlsafe(48)}")
+print("OFDD_OPERATOR_USER=operator")
+print(f"OFDD_OPERATOR_PASSWORD={pw()}")
+print("OFDD_INTEGRATOR_USER=integrator")
+print(f"OFDD_INTEGRATOR_PASSWORD={pw()}")
+print("OFDD_AGENT_USER=agent")
+print(f"OFDD_AGENT_PASSWORD={pw()}")
+PY
+chmod 600 "${OPENFDD_ROOT}/workspace/auth.env.local"
+echo "Wrote ${OPENFDD_ROOT}/workspace/auth.env.local (store securely; not in git)"
 ```
+
+Edit `~/open-fdd/workspace/bacnet/commissioning/commission.env` (`BACNET_BIND`, `BACNET_INSTANCE`, discover range) and add enabled rows to `points.csv`.
 
 See [BACnet network setup](../bacnet/network-setup).
 
