@@ -12,7 +12,12 @@ from urllib.parse import urlparse
 import pandas as pd
 
 from .feather_store import FeatherStore
-from .json_api_service import execute_json_api_request
+from .json_api_env import expand_env_string, missing_env_vars
+from .json_api_service import (
+    _extract_json_path,
+    _format_value,
+    execute_json_api_request,
+)
 from .paths import json_api_endpoints_path, json_api_poll_csv, workspace_dir
 from .site_defaults import ensure_default_site
 from .model_service import ModelService
@@ -23,8 +28,17 @@ _SAFE = re.compile(r"[^a-zA-Z0-9_-]+")
 _ONDEMAND_VALUE: dict[str, str] = {}
 _POLL_LAST_RUN: dict[str, float] = {}
 _LAST_CYCLE: dict[str, Any] = {"at": "", "samples": 0, "error": ""}
-POLL_INTERVALS_S = (60, 300, 600, 900)
-POLL_LABELS = {60: "1 min", 300: "5 min", 600: "10 min", 900: "15 min"}
+POLL_INTERVALS_S = (60, 300, 600, 900, 1200)
+POLL_LABELS = {60: "1 min", 300: "5 min", 600: "10 min", 900: "15 min", 1200: "20 min"}
+OPENWEATHER_URL = (
+    "https://api.openweathermap.org/data/2.5/weather"
+    "?q=${ENV:OPENWEATHER_CITY}&appid=${ENV:OPENWEATHER_API_KEY}&units=${ENV:OPENWEATHER_UNITS}"
+)
+OPENWEATHER_POINTS = (
+    {"json_path": "main.temp", "label": "web-oat-t"},
+    {"json_path": "main.humidity", "label": "web-rh"},
+    {"json_path": "weather.0.description", "label": "web-weather-desc"},
+)
 SAMPLES_HEADER = (
     "timestamp_utc,site_id,point_id,host,method,url,json_path,label,value,units\n"
 )
@@ -214,6 +228,77 @@ def delete_endpoint(point_id: str) -> dict[str, Any]:
     return {"ok": True, "point_id": point_id}
 
 
+def _openweather_temp_units() -> str:
+    import os
+
+    units = str(os.environ.get("OPENWEATHER_UNITS") or "imperial").strip().lower()
+    if units == "metric":
+        return "degC"
+    if units == "standard":
+        return "K"
+    return "degF"
+
+
+def _poll_group_key(row: dict[str, Any]) -> tuple[str, ...]:
+    return (
+        expand_env_string(str(row.get("url") or "")),
+        str(row.get("method") or "GET").upper(),
+        str(row.get("headers_json") or ""),
+        str(row.get("body_json") or ""),
+        str(row.get("auth_type") or "none"),
+        str(row.get("bearer_token") or ""),
+        str(row.get("basic_user") or ""),
+        str(row.get("basic_password") or ""),
+        str(row.get("verify_tls") or "1"),
+    )
+
+
+def _reading_from_row(*, row: dict[str, Any], base: dict[str, Any]) -> dict[str, Any]:
+    raw = base.get("raw_json")
+    jpath = str(row.get("json_path") or "")
+    label = str(row.get("label") or "")
+    extracted = _extract_json_path(raw, jpath)
+    return {
+        **base,
+        "json_path": jpath,
+        "label": label,
+        "decoded": extracted,
+        "present_value": _format_value(extracted),
+    }
+
+
+def register_openweather_bundle(
+    *,
+    poll_interval_s: int = 1200,
+    enabled: bool = True,
+) -> dict[str, Any]:
+    """Register three OpenWeatherMap historian columns from one shared URL."""
+    missing = missing_env_vars(["OPENWEATHER_API_KEY"])
+    if missing:
+        raise ValueError(
+            "missing OPENWEATHER_API_KEY — copy workspace/json_api.env.example to json_api.env.local"
+        )
+    temp_units = _openweather_temp_units()
+    created: list[dict[str, Any]] = []
+    for spec in OPENWEATHER_POINTS:
+        units = temp_units if spec["label"] == "web-oat-t" else "%" if spec["label"] == "web-rh" else ""
+        out = upsert_endpoint(
+            {
+                "url": OPENWEATHER_URL,
+                "method": "GET",
+                "json_path": spec["json_path"],
+                "label": spec["label"],
+                "units": units,
+                "auth_type": "none",
+                "verify_tls": "1",
+                "enabled": enabled,
+                "poll_interval_s": poll_interval_s if enabled else 0,
+            }
+        )
+        created.append(out["endpoint"])
+    return {"ok": True, "endpoints": created, "count": len(created), "url_template": OPENWEATHER_URL}
+
+
 def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
     import json as _json
 
@@ -351,10 +436,15 @@ def append_reading_and_ingest(*, reading: dict[str, Any], site_id: str | None = 
         return {"ok": False, "reason": "no value extracted"}
     col = _slug(label)
     val_text = str(value)
+    units = ""
+    for row in _load_endpoints():
+        if str(row.get("point_id")) == pid:
+            units = str(row.get("units") or "")
+            break
 
     with path.open("a", newline="", encoding="utf-8") as fh:
         csv.writer(fh).writerow(
-            [ts, sid, pid, host, method, url, reading.get("json_path", ""), label, val_text, ""]
+            [ts, sid, pid, host, method, url, reading.get("json_path", ""), label, val_text, units]
         )
 
     store = FeatherStore()
@@ -428,19 +518,30 @@ def run_poll_cycle(*, force: bool = False) -> dict[str, Any]:
 
         total = 0
         errors: list[str] = []
+        groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
         for row in due:
-            pid = str(row.get("point_id") or "")
+            groups.setdefault(_poll_group_key(row), []).append(row)
+        for _key, rows in groups.items():
+            lead = rows[0]
+            pids = [str(r.get("point_id") or "") for r in rows]
             try:
-                reading = execute_json_api_request(_row_to_payload(row))
-                if reading.get("success"):
+                base = execute_json_api_request(_row_to_payload(lead))
+                if not base.get("success"):
+                    errors.append(str(base.get("error") or pids[0]))
+                    for pid in pids:
+                        _POLL_LAST_RUN[pid] = now
+                    continue
+                for row in rows:
+                    pid = str(row.get("point_id") or "")
+                    reading = _reading_from_row(row=row, base=base)
                     ingest = append_reading_and_ingest(reading=reading)
                     if ingest.get("ok"):
                         total += 1
-                else:
-                    errors.append(str(reading.get("error") or pid))
-                _POLL_LAST_RUN[pid] = now
+                    _POLL_LAST_RUN[pid] = now
             except Exception as exc:
                 errors.append(str(exc))
+                for pid in pids:
+                    _POLL_LAST_RUN[pid] = now
         err_text = "; ".join(errors[:3])
         _LAST_CYCLE.update({"at": ts, "samples": total, "error": err_text})
         return {"ok": not errors, "polled": len(due), "samples": total, "at": ts, "error": err_text}

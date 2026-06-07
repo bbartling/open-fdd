@@ -32,6 +32,27 @@ def authed_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient
     return TestClient(create_app())
 
 
+def test_expand_env_string(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    env_file = tmp_path / "workspace" / "json_api.env.local"
+    env_file.parent.mkdir(parents=True, exist_ok=True)
+    env_file.write_text("OPENWEATHER_API_KEY=secret-key\nOPENWEATHER_CITY=Madison,WI,US\n", encoding="utf-8")
+    monkeypatch.setenv("OPENFDD_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("OPENFDD_WORKSPACE_DIR", str(env_file.parent))
+    monkeypatch.delenv("OPENWEATHER_API_KEY", raising=False)
+    for name in list(sys.modules):
+        if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
+            del sys.modules[name]
+    from openfdd_bridge.json_api_env import expand_env_string, load_json_api_env
+
+    load_json_api_env(reload=True)
+    url = expand_env_string(
+        "https://api.openweathermap.org/data/2.5/weather?q=${ENV:OPENWEATHER_CITY}&appid=${ENV:OPENWEATHER_API_KEY}"
+    )
+    assert "secret-key" in url
+    assert "Madison" in url
+    assert "${" not in url
+
+
 def test_extract_json_path():
     from openfdd_bridge.json_api_service import _extract_json_path
 
@@ -157,6 +178,79 @@ def test_json_api_driver_tree(tmp_path, monkeypatch):
     tree = driver_tree()
     assert tree["devices"][0]["host"] == "jsonplaceholder.typicode.com"
     assert tree["devices"][0]["points"][0]["present_value"] == "hello"
+
+
+def test_openweather_preset_mocked(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    ws = tmp_path / "workspace"
+    ws.mkdir(parents=True, exist_ok=True)
+    (ws / "json_api.env.local").write_text(
+        "OPENWEATHER_API_KEY=bench-key\nOPENWEATHER_CITY=Madison,WI,US\nOPENWEATHER_UNITS=imperial\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("OPENWEATHER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENWEATHER_CITY", raising=False)
+    monkeypatch.delenv("OPENWEATHER_UNITS", raising=False)
+    monkeypatch.setenv("OFDD_AUTH_SECRET", "test-secret-key-32chars-minimum!!")
+    monkeypatch.setenv("OFDD_OPERATOR_USER", "operator")
+    monkeypatch.setenv("OFDD_OPERATOR_PASSWORD", "changeme")
+    monkeypatch.setenv("OFDD_INTEGRATOR_USER", "integrator")
+    monkeypatch.setenv("OFDD_INTEGRATOR_PASSWORD", "msi")
+    monkeypatch.setenv("OPENFDD_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("OPENFDD_WORKSPACE_DIR", str(ws))
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data_dir))
+    for name in list(sys.modules):
+        if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
+            del sys.modules[name]
+    from openfdd_bridge.main import create_app
+
+    client = TestClient(create_app())
+
+    class _FakeResp:
+        status_code = 200
+        is_success = True
+
+        def json(self):
+            return {
+                "main": {"temp": 42.5, "humidity": 55},
+                "weather": [{"description": "clear sky"}],
+            }
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            self.last_url = ""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None):
+            self.last_url = url
+            return _FakeResp()
+
+    fake = _FakeClient()
+    monkeypatch.setattr("openfdd_bridge.json_api_service.httpx.Client", lambda **kwargs: fake)
+
+    login = client.post("/api/auth/login", json={"username": "integrator", "password": "msi"})
+    token = login.json()["token"]
+    r = client.post(
+        "/api/json-api/presets/openweather",
+        json={"poll_interval_s": 300, "enabled": True, "poll_once": True},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] == 3
+    assert "bench-key" in fake.last_url
+    tree = client.get(
+        "/api/json-api/driver/tree",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    labels = {p["label"] for d in tree.json()["devices"] for p in d["points"]}
+    assert {"web-oat-t", "web-rh", "web-weather-desc"} <= labels
 
 
 def test_list_endpoints_redacts_credentials(tmp_path, monkeypatch):

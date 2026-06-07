@@ -93,6 +93,13 @@ load_env_files() {
     set +a
     [[ "$quiet" == false ]] && echo "Loaded workspace/auth.env.local (auth enabled if OFDD_AUTH_SECRET set)" || true
   fi
+  if [[ -f "${ROOT}/workspace/json_api.env.local" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "${ROOT}/workspace/json_api.env.local"
+    set +a
+    [[ "$quiet" == false ]] && echo "Loaded workspace/json_api.env.local (JSON API env placeholders)" || true
+  fi
   if [[ -f "${ROOT}/workspace/ollama.env.local" ]]; then
     set -a
     # shellcheck disable=SC1091

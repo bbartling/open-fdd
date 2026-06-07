@@ -192,6 +192,27 @@ def test_log_rotation_prunes_archived_files(tmp_path: Path, monkeypatch: pytest.
     assert not archive.exists()
 
 
+def test_log_rotation_rotates_oversized_local_run_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    run_dir = tmp_path / "workspace" / ".local-run"
+    run_dir.mkdir(parents=True)
+    bridge_log = run_dir / "bridge.log"
+    bridge_log.write_text("x" * (2 * 1024 * 1024), encoding="utf-8")
+    monkeypatch.setenv("OPENFDD_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("OPENFDD_WORKSPACE_DIR", str(tmp_path / "workspace"))
+    monkeypatch.setenv("OFDD_LOCAL_RUN_LOG_MAX_MB", "1")
+    monkeypatch.setenv("OFDD_LOG_RETENTION_DAYS", "90")
+    for name in list(sys.modules):
+        if name.startswith("openfdd_bridge.log_rotation") or name == "openfdd_bridge.log_rotation":
+            del sys.modules[name]
+    from openfdd_bridge.log_rotation import rotate_logs_on_startup  # noqa: E402
+
+    stats = rotate_logs_on_startup()
+    assert stats["local_run_rotated"] == 1
+    assert bridge_log.stat().st_size == 0
+    archives = list(run_dir.glob("bridge.*.log"))
+    assert len(archives) == 1
+
+
 def test_log_rotation_prunes_old_lines(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     logs = tmp_path / "logs"
     logs.mkdir(parents=True)

@@ -34,11 +34,18 @@ services:
         required: false
       - path: ./workspace/data.env.local
         required: false
+      - path: ./workspace/json_api.env.local
+        required: false
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
       - commission
       - mcp-rag
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "5"
     restart: unless-stopped
 
   commission:
@@ -51,6 +58,11 @@ services:
       OPENFDD_WORKSPACE_DIR: /var/openfdd/workspace
       OPENFDD_REPO_ROOT: /app
       OPENFDD_BRIDGE_INGEST_URL: http://127.0.0.1:8765/internal/bacnet/ingest-samples
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "5"
     restart: unless-stopped
 
   mcp-rag:
@@ -60,4 +72,9 @@ services:
       - ./workspace:/var/openfdd/workspace
     expose:
       - "8090"
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "5"
     restart: unless-stopped

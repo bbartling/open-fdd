@@ -188,6 +188,8 @@ See [Driver framework](../drivers/index).
 
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
+| GET | `/api/json-api/env/status` | operator+ | Env var configured flags (no secret values) |
+| POST | `/api/json-api/presets/openweather` | integrator+ | Register 3-point OpenWeather bundle + optional poll |
 | GET | `/api/json-api/driver/tree` | operator+ | Endpoints grouped by host |
 | GET | `/api/json-api/poll/status` | operator+ | Poll worker status |
 | POST | `/api/json-api/poll/once` | integrator+ | Force poll cycle |

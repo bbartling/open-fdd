@@ -14,7 +14,11 @@ const POLL_INTERVALS = [
   { s: 300, label: "5 min" },
   { s: 600, label: "10 min" },
   { s: 900, label: "15 min" },
+  { s: 1200, label: "20 min" },
 ] as const;
+
+const OPENWEATHER_URL =
+  "https://api.openweathermap.org/data/2.5/weather?q=${ENV:OPENWEATHER_CITY}&appid=${ENV:OPENWEATHER_API_KEY}&units=${ENV:OPENWEATHER_UNITS}";
 
 const PRESETS = [
   {
@@ -70,6 +74,12 @@ export default function JsonApiPage() {
   const [selectedPointIds, setSelectedPointIds] = useState<Set<string>>(() => new Set());
   const [bulkPollPending, setBulkPollPending] = useState(false);
   const [pollOncePending, setPollOncePending] = useState(false);
+  const [envStatus, setEnvStatus] = useState<{
+    env_file?: string;
+    env_file_exists?: boolean;
+    variables?: Record<string, boolean>;
+  } | null>(null);
+  const [owmPending, setOwmPending] = useState(false);
 
   const loadDriverTree = useCallback(async () => {
     setTreeLoading(true);
@@ -92,10 +102,20 @@ export default function JsonApiPage() {
     }
   }, []);
 
+  const refreshEnvStatus = useCallback(async () => {
+    try {
+      const st = await apiFetch<typeof envStatus>("/api/json-api/env/status");
+      setEnvStatus(st);
+    } catch {
+      /* optional */
+    }
+  }, []);
+
   useEffect(() => {
     loadDriverTree().catch((e) => setLoadError(String(e)));
     refreshPollStatus().catch(() => undefined);
-  }, [loadDriverTree, refreshPollStatus]);
+    refreshEnvStatus().catch(() => undefined);
+  }, [loadDriverTree, refreshPollStatus, refreshEnvStatus]);
 
   useEffect(() => {
     const tick = window.setInterval(() => {
@@ -299,6 +319,40 @@ export default function JsonApiPage() {
     }
   }
 
+  async function registerOpenWeatherBundle() {
+    setOwmPending(true);
+    setActionError("");
+    try {
+      const res = await apiFetch<{
+        count?: number;
+        poll?: { polled?: number; samples?: number };
+      }>("/api/json-api/presets/openweather", {
+        method: "POST",
+        body: JSON.stringify({ poll_interval_s: 1200, enabled: true, poll_once: true }),
+      });
+      setLog(
+        `OpenWeather: registered ${res.count ?? 3} point(s)` +
+          (res.poll ? ` — poll once: ${res.poll.samples ?? 0} sample(s)` : ""),
+      );
+      await loadDriverTree();
+      await refreshPollStatus();
+      await refreshEnvStatus();
+    } catch (e) {
+      setActionError(formatApiError(e));
+    } finally {
+      setOwmPending(false);
+    }
+  }
+
+  function applyOpenWeatherPreset() {
+    setUrl(OPENWEATHER_URL);
+    setMethod("GET");
+    setJsonPath("main.temp");
+    setLabel("web-oat-t");
+    setBody("");
+    setAuthType("none");
+  }
+
   async function runPollOnce() {
     setPollOncePending(true);
     try {
@@ -314,7 +368,8 @@ export default function JsonApiPage() {
   }
 
   const selectedPointsList = Array.from(selectedPointIds);
-  const anyPending = pending || bulkPollPending || pollOncePending;
+  const anyPending = pending || bulkPollPending || pollOncePending || owmPending;
+  const owmKeyReady = envStatus?.variables?.OPENWEATHER_API_KEY === true;
 
   return (
     <div className="page page-wide json-api-page">
@@ -351,6 +406,45 @@ export default function JsonApiPage() {
           </div>
         </div>
       ) : null}
+
+      <div className="panel">
+        <h3 className="panel-title">OpenWeatherMap showcase</h3>
+        <p className="muted">
+          Compare BACnet <code>oa-t</code> against web weather via historian columns{" "}
+          <code>web-oat-t</code>, <code>web-rh</code>, and <code>web-weather-desc</code>. Copy{" "}
+          <code>workspace/json_api.env.example</code> → <code>json_api.env.local</code> and set{" "}
+          <code>OPENWEATHER_API_KEY</code> (gitignored). URLs use <code>${"{ENV:VAR}"}</code> placeholders
+          — no API keys in <code>endpoints.csv</code>.
+        </p>
+        <p className="muted" style={{ marginTop: "0.5rem" }}>
+          Env file: <code>{envStatus?.env_file ?? "workspace/json_api.env.local"}</code>
+          {envStatus?.env_file_exists ? " (loaded)" : " (missing — copy from example)"}
+          {envStatus?.variables ? (
+            <>
+              {" "}
+              — key{" "}
+              {owmKeyReady ? (
+                <span className="badge">OPENWEATHER_API_KEY set</span>
+              ) : (
+                <span className="badge">OPENWEATHER_API_KEY not set</span>
+              )}
+            </>
+          ) : null}
+        </p>
+        <div className="row" style={{ marginTop: "0.65rem", gap: "0.5rem", flexWrap: "wrap" }}>
+          <ActionButton
+            pending={owmPending}
+            pendingLabel="Registering…"
+            disabled={anyPending || !owmKeyReady}
+            onClick={() => void registerOpenWeatherBundle()}
+          >
+            Register OpenWeather bundle (3 points, poll 20 min)
+          </ActionButton>
+          <button type="button" className="secondary-btn" onClick={applyOpenWeatherPreset}>
+            Fill single-point form (web-oat-t)
+          </button>
+        </div>
+      </div>
 
       <div className="panel">
         <h3 className="panel-title">Add endpoint</h3>

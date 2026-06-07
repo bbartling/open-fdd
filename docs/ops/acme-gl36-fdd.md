@@ -76,6 +76,17 @@ See `workspace/data/rules_py/bench_stat_zn-t_flatline_1h.py` — bind `ZN-T` per
 
 See `workspace/data/rules_py/acme_duct_static_flatline_1h_gl36_duct_t_r_input.py` — tune `VALUE_COLUMN` to historian column for RTU duct static.
 
+### Local OA-T vs web weather (JSON API)
+
+Cross-check a drifting outdoor-air sensor against [OpenWeatherMap](https://openweathermap.org/api) via the generic JSON API driver:
+
+1. Control machine: `workspace/json_api.env.local` with `OPENWEATHER_API_KEY` — synced on deploy (`deploy_sync_json_api_env`).
+2. JSON API tab → **Register OpenWeather bundle** (poll **20 min** — `web-oat-t`, `web-rh`, `web-weather-desc`).
+3. Bind BACnet **local OAT** in the model: **Tracer SC** device `10000` → `Facility Outdoor Air Temperature` (`fdd_input` **OAT**, historian `oa-t`). Hot-water plant `1002` has no outdoor-air point.
+4. Enable rule `workspace/data/rules_py/oat_vs_web_spread_1h.py` in Rule Lab — flags when `|oa-t − web-oat-t| > 8 °F`.
+
+Scheduled FDD merges BACnet and `json_api` historian columns by nearest timestamp (30 min tolerance).
+
 ## Deploy / upgrade (GHCR only)
 
 ```bash

@@ -36,11 +36,14 @@ from .settings import cors_allow_headers, cors_allow_methods, cors_origins
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     from .bacnet_poll_worker import start_bacnet_poll_worker
-    from .log_rotation import rotate_logs_on_startup
+    from .json_api_env import load_json_api_env
     from .json_api_poll_worker import start_json_api_poll_worker
+    from .log_rotation import rotate_logs_on_startup, start_log_rotation_worker
     from .modbus_poll_worker import start_modbus_poll_worker
 
     rotate_logs_on_startup()
+    start_log_rotation_worker()
+    load_json_api_env()
     start_bacnet_poll_worker()
     start_modbus_poll_worker()
     start_json_api_poll_worker()

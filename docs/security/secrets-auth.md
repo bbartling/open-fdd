@@ -11,6 +11,8 @@ nav_order: 2
 | File | Contents |
 |------|----------|
 | `workspace/auth.env.local` | JWT secret, role passwords |
+| `workspace/json_api.env.local` | REST API keys for JSON API `${ENV:VAR}` URLs (e.g. OpenWeather `OPENWEATHER_API_KEY`) |
+| `workspace/data.env.local` | Historian + **audit log retention** (`OFDD_LOG_*`, `OFDD_FEATHER_*`) |
 | `infra/ansible/secrets/<host>.env.local` | SSH deploy secrets (maintainers) |
 
 Copy from `*.example` templates only.
@@ -30,3 +32,5 @@ Use read-only registry credentials on edge if images are private; rotate tokens 
 ## Backup
 
 Back up `workspace/data/` and auth env in secure operator vault — not in git.
+
+Audit JSONL under `workspace/logs/` may contain client IPs and usernames — treat like security logs. See [Logging and audit](../ops/logging).

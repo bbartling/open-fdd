@@ -9,6 +9,8 @@ from typing import Any, Literal
 import httpx
 from urllib.parse import urlparse
 
+from .json_api_env import expand_env_string
+
 MethodLiteral = Literal["GET", "POST"]
 AuthTypeLiteral = Literal["none", "bearer", "basic"]
 MAX_BODY_BYTES = 64_000
@@ -75,12 +77,14 @@ def _build_request_auth(payload: dict[str, Any]) -> tuple[dict[str, str], Any, b
     headers: dict[str, str] = {}
     raw_headers = payload.get("headers")
     if isinstance(raw_headers, dict):
-        headers = {str(k): str(v) for k, v in raw_headers.items()}
+        headers = {str(k): expand_env_string(str(v)) for k, v in raw_headers.items()}
 
     auth_type = _normalize_auth_type(payload.get("auth_type"))
-    bearer_token = str(payload.get("bearer_token") or payload.get("auth_token") or "").strip()
-    basic_user = str(payload.get("basic_user") or payload.get("auth_user") or "").strip()
-    basic_password = str(payload.get("basic_password") or payload.get("auth_password") or "")
+    bearer_token = expand_env_string(
+        str(payload.get("bearer_token") or payload.get("auth_token") or "").strip()
+    )
+    basic_user = expand_env_string(str(payload.get("basic_user") or payload.get("auth_user") or "").strip())
+    basic_password = expand_env_string(str(payload.get("basic_password") or payload.get("auth_password") or ""))
 
     if auth_type == "bearer" and bearer_token:
         headers.setdefault("Authorization", f"Bearer {bearer_token}")
@@ -97,9 +101,11 @@ def _build_request_auth(payload: dict[str, Any]) -> tuple[dict[str, str], Any, b
 
 
 def execute_json_api_request(payload: dict[str, Any]) -> dict[str, Any]:
-    url = str(payload.get("url") or "").strip()
+    url = expand_env_string(str(payload.get("url") or "").strip())
     if not url:
         raise JsonApiServiceError("url required")
+    if "${" in url:
+        raise JsonApiServiceError("url contains unresolved ${ENV:...} placeholders — set vars in workspace/json_api.env.local")
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"}:
         raise JsonApiServiceError("url must use http or https")
@@ -121,7 +127,7 @@ def execute_json_api_request(payload: dict[str, Any]) -> dict[str, Any]:
             body = body_raw
         else:
             try:
-                body = json.loads(str(body_raw))
+                body = json.loads(expand_env_string(str(body_raw)))
             except json.JSONDecodeError as exc:
                 raise JsonApiServiceError(f"invalid JSON body: {exc}") from exc
         if len(json.dumps(body, default=str)) > MAX_BODY_BYTES:

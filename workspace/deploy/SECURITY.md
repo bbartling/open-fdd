@@ -132,13 +132,20 @@ Each record includes: `@timestamp`, `event_id`, `event_type`, `severity`, `outco
 
 ### Automatic log rotation
 
-On bridge startup (no operator action required):
+On bridge startup and every **`OFDD_LOG_ROTATE_INTERVAL_HOURS`** (default **6**) while the process runs:
 
-- Prune `audit.jsonl` and `error.jsonl` records older than **`OFDD_LOG_RETENTION_DAYS`** (default **90**).
-- Archive oversized logs when **`OFDD_LOG_MAX_MB`** (default **50**) is exceeded.
-- Remove stale `workspace/.local-run/*.log` files past the retention window.
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `OFDD_LOG_RETENTION_DAYS` | 90 | Prune aged lines in `audit.jsonl` / `error.jsonl` and delete old archives |
+| `OFDD_LOG_MAX_MB` | 50 | Rotate oversized audit/error files to `audit.{UTC}.jsonl` |
+| `OFDD_LOCAL_RUN_LOG_MAX_MB` | 25 | Rotate `workspace/.local-run/*.log` (local dev stdout) |
+| `OFDD_LOG_ROTATE_INTERVAL_HOURS` | 6 | Background retention (not only at restart) |
 
-Forward logs to SIEM (rsyslog/filebeat) in production; retain per incident response policy.
+Set these in `workspace/data.env.local` (see `data.env.example`). Docker edge stacks also cap container stdout via `json-file` `max-size` / `max-file` in `docker/compose.edge.yml` (~125 MB per service).
+
+Full runbook: [Logging and audit](../../docs/ops/logging.md) — auth event types, integrator API, journald vs JSONL, SIEM forward.
+
+Forward `workspace/logs/*.jsonl` to SIEM (rsyslog/filebeat) in production; retain per incident response policy.
 
 **Never logged:** passwords, bearer tokens, private keys.
 
