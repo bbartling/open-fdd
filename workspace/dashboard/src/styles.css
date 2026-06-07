@@ -2617,6 +2617,48 @@ textarea {
   margin-top: auto;
 }
 
+.rule-lab-readonly-panel {
+  margin-top: 0.75rem;
+}
+
+.rule-readonly-code {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  max-height: 480px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre;
+  background: var(--panel-elevated, #0f1419);
+  border: 1px solid var(--border, #2a3441);
+  border-radius: 8px;
+  color: var(--text, #e8edf2);
+}
+
+[data-theme="light"] .rule-readonly-code {
+  background: #f6f8fa;
+  color: #1f2328;
+  border-color: #d0d7de;
+}
+
+.rule-lint-list {
+  margin: 0.75rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--danger, #f87171);
+  font-size: 0.85rem;
+}
+
+button.linkish {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent, #5eb3ff);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
 .rule-lab-editor-panel {
   padding: 0;
   overflow: hidden;

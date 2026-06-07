@@ -47,6 +47,15 @@ workspace/
 - **FDD batch** — `POST /api/rules/batch` loads feather via BRICK-bound `external_id` columns.
 - **BRICK model** — bind points in **Model & assignments** commissioning JSON; sync TTL for SPARQL scope.
 
+## Rule Lab (Arrow upload/download)
+
+1. **Download kit** — zip with `rule.py`, `data.py`, `sample.feather`, `column_map.json`, `README.md` (real feather window).
+2. Edit locally: `pip install "open-fdd>=3.0.1" pyarrow`.
+3. **Upload rule.py** — Arrow-only; must define `apply_faults_arrow(table, cfg, context=None)`.
+4. Browser shows **read-only** source; use Quick test + Update all records.
+
+API: `GET /api/rules/export-kit`, `POST /api/rules/upload`.
+
 ## Smoke validation
 
 From repo root on a running stack (`http://127.0.0.1:8765`):
