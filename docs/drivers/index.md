@@ -49,8 +49,8 @@ workspace/
 
 ## Rule Lab (Arrow upload/download)
 
-1. **Download kit** — zip with `rule.py`, `data.py`, `sample.feather`, `column_map.json`, `README.md` (real feather window).
-2. Edit locally: `pip install "open-fdd>=3.0.1" pyarrow`.
+1. **Download kit** — zip with `rule.py`, `data.py`, `sample.feather` (~3h window), `run_test.py`, `README.md`.
+2. Local test: `pip install "open-fdd>=3.0.1" pyarrow` then `python run_test.py` (do not run `rule.py` alone).
 3. **Upload rule.py** — Arrow-only; must define `apply_faults_arrow(table, cfg, context=None)`.
 4. Browser shows **read-only** source; use Quick test + Update all records.
 

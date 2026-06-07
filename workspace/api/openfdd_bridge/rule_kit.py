@@ -91,10 +91,19 @@ def _scope_frame(
     return df[keep], data_kept
 
 
-def _frame_to_kit_table(df: pd.DataFrame, *, limit: int = 500) -> pa.Table:
+def _apply_lookback(df: pd.DataFrame, hours: float) -> pd.DataFrame:
+    if df is None or df.empty or "timestamp" not in df.columns or hours <= 0:
+        return df
+    out = df.copy()
+    out["timestamp"] = pd.to_datetime(out["timestamp"], utc=True, errors="coerce")
+    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=max(0.1, hours))
+    return out[out["timestamp"] >= cutoff]
+
+
+def _frame_to_kit_table(df: pd.DataFrame, *, lookback_hours: float, limit: int = 5000) -> pa.Table:
     if df is None or df.empty:
         return pa.table({"timestamp": pa.array([], type=pa.timestamp("us", tz="UTC"))})
-    sample = df.copy()
+    sample = _apply_lookback(df, lookback_hours)
     if "timestamp" in sample.columns:
         sample = sample.sort_values("timestamp")
     if limit and len(sample) > limit:
@@ -102,12 +111,20 @@ def _frame_to_kit_table(df: pd.DataFrame, *, limit: int = 500) -> pa.Table:
     return pa.Table.from_pandas(sample, preserve_index=False)
 
 
-def _data_py_content(*, site_id: str, lookback_hours: float, columns: list[str], preview_rows: list[dict]) -> str:
+def _data_py_content(
+    *,
+    site_id: str,
+    lookback_hours: float,
+    columns: list[str],
+    preview_rows: list[dict],
+    row_count: int,
+) -> str:
     preview_json = json.dumps(preview_rows[:12], indent=2, default=str)
     cols_json = json.dumps(columns, indent=2)
     return f'''"""Open-FDD Rule Lab sample data — generated from feather historian.
 
-Edit rule.py locally. Use data.load_table() for the full sample.feather snapshot.
+Full lookback window lives in sample.feather ({row_count} rows, {lookback_hours}h).
+ROWS below is a tiny preview only — use data.load_table() for rule development.
 """
 from __future__ import annotations
 
@@ -115,14 +132,15 @@ from pathlib import Path
 
 SITE_ID = {site_id!r}
 LOOKBACK_HOURS = {lookback_hours}
+ROW_COUNT = {row_count}
 COLUMNS = {cols_json}
 
-# First rows preview (full window is in sample.feather):
+# Preview only (first rows) — full historian window is in sample.feather:
 ROWS = {preview_json}
 
 
 def load_table():
-    """Load PyArrow table from bundled sample.feather."""
+    """Load PyArrow table from bundled sample.feather (all rows in the lookback window)."""
     import pyarrow.feather as feather
 
     path = Path(__file__).resolve().parent / "sample.feather"
@@ -130,45 +148,109 @@ def load_table():
 '''
 
 
-def _readme_content(*, site_id: str, rule_name: str) -> str:
-    return f"""# Open-FDD Rule Lab kit — {rule_name}
+RUN_TEST_PY = '''#!/usr/bin/env python3
+"""Run the bundled rule against sample.feather (local dev kit)."""
+from __future__ import annotations
 
-## Setup
-
-```bash
-pip install "open-fdd>=3.0.1" pyarrow
-```
-
-## Files
-
-| File | Purpose |
-|------|---------|
-| `rule.py` | Arrow rule — must define `apply_faults_arrow(table, cfg, context=None)` |
-| `data.py` | Sample metadata + `load_table()` helper |
-| `sample.feather` | Historian snapshot from site `{site_id}` |
-| `column_map.json` | BRICK logical keys → feather column names |
-| `config.json` | Suggested rule config for quick test |
-
-## Local quick test
-
-```python
-from pathlib import Path
 import json
+import sys
+from pathlib import Path
+
 import pyarrow.compute as pc
 
 import data
 import rule
 
+
+def main() -> int:
+    table = data.load_table()
+    cfg_path = Path(__file__).resolve().parent / "config.json"
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    print(f"site={{data.SITE_ID}} lookback_h={{data.LOOKBACK_HOURS}} rows={{table.num_rows}}")
+    if table.num_rows == 0:
+        print("No rows in sample.feather — re-download kit after historian has data.")
+        return 1
+    print("columns:", list(table.column_names))
+    mask = rule.apply_faults_arrow(table, cfg, context={{"site_id": data.SITE_ID}})
+    flagged = int(pc.sum(mask).as_py()) if mask is not None else 0
+    print(f"flagged={{flagged}}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+'''
+
+
+def _readme_content(*, site_id: str, rule_name: str, lookback_hours: float, row_count: int) -> str:
+    return f"""# Open-FDD Rule Lab kit — {rule_name}
+
+## 1. Install (once per machine)
+
+**Linux / macOS**
+
+```bash
+pip install "open-fdd>=3.0.1" pyarrow
+```
+
+**Windows (PowerShell)**
+
+```powershell
+pip install "open-fdd>=3.0.1" pyarrow
+```
+
+`rule.py` is a library module — running `python rule.py` directly does nothing.
+Use `run_test.py` (below) or the Python snippet.
+
+## 2. Run the bundled test
+
+From this folder (where you unzipped the kit):
+
+```bash
+python run_test.py
+```
+
+PowerShell:
+
+```powershell
+python .\\run_test.py
+```
+
+Expected output: row count, column names, and `flagged=N`.
+
+## 3. Files
+
+| File | Purpose |
+|------|---------|
+| `rule.py` | Your Arrow rule — `apply_faults_arrow(table, cfg, context=None)` |
+| `data.py` | Metadata + `load_table()` helper |
+| `sample.feather` | **Full historian window** ({row_count} rows, ~{lookback_hours}h) from site `{site_id}` |
+| `run_test.py` | One-command local test |
+| `column_map.json` | BRICK logical keys → feather column names |
+| `config.json` | Suggested rule config (edit to match your rule) |
+| `kit_meta.json` | Export metadata (site, columns, row count) |
+
+`data.py` `ROWS` is only a **12-row preview**. All real data is in `sample.feather`.
+
+## 4. Interactive Python (optional)
+
+```python
+import json
+from pathlib import Path
+import pyarrow.compute as pc
+import data
+import rule
+
 table = data.load_table()
-cfg = json.loads(Path("config.json").read_text())
+cfg = json.loads(Path("config.json").read_text(encoding="utf-8"))
 mask = rule.apply_faults_arrow(table, cfg, context={{"site_id": data.SITE_ID}})
 print("rows", table.num_rows, "flagged", int(pc.sum(mask).as_py()))
 ```
 
-## Upload
+## 5. Upload to Open-FDD
 
-When ready, upload **only** `rule.py` on the Rule Lab tab (integrator login).
-Extra helper functions in the file are fine; `apply_faults_arrow` is the entrypoint.
+When satisfied, upload **only** `rule.py` on the **Rule Lab** tab (integrator login).
+Helper functions in the same file are fine; `apply_faults_arrow` is the required entrypoint.
 """
 
 
@@ -176,8 +258,8 @@ def build_rule_kit_zip(
     *,
     site_id: str | None = None,
     rule_id: str | None = None,
-    lookback_hours: float = 24,
-    limit: int = 500,
+    lookback_hours: float = 3,
+    limit: int = 5000,
     point_keys: list[str] | None = None,
 ) -> tuple[bytes, str]:
     """Return (zip_bytes, download_filename)."""
@@ -219,7 +301,7 @@ def build_rule_kit_zip(
         frame = pd.DataFrame()
 
     scoped, data_cols = _scope_frame(frame, model, sid, point_keys=keys or None)
-    table = _frame_to_kit_table(scoped, limit=limit)
+    table = _frame_to_kit_table(scoped, lookback_hours=lookback_hours, limit=limit)
 
     buf = io.BytesIO()
     feather.write_feather(table, buf)
@@ -235,12 +317,19 @@ def build_rule_kit_zip(
     slug = Path(rule_name).name.replace(" ", "_").lower()[:40] or "rule"
     zip_name = f"openfdd-rule-kit-{slug}.zip"
 
-    readme = _readme_content(site_id=sid, rule_name=rule_name)
+    row_count = int(table.num_rows)
+    readme = _readme_content(
+        site_id=sid,
+        rule_name=rule_name,
+        lookback_hours=lookback_hours,
+        row_count=row_count,
+    )
     data_py = _data_py_content(
         site_id=sid,
         lookback_hours=lookback_hours,
         columns=data_cols,
         preview_rows=preview,
+        row_count=row_count,
     )
     meta = {
         "site_id": sid,
@@ -260,6 +349,7 @@ def build_rule_kit_zip(
         zf.writestr("column_map.json", json.dumps(column_map, indent=2))
         zf.writestr("config.json", json.dumps(config, indent=2))
         zf.writestr("kit_meta.json", json.dumps(meta, indent=2))
+        zf.writestr("run_test.py", RUN_TEST_PY)
         zf.writestr("README.md", readme)
     return out.getvalue(), zip_name
 

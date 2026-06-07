@@ -12,7 +12,7 @@ from typing import Any
 import pandas as pd
 
 from .feather_store import FeatherStore
-from .paths import modbus_poll_csv, modbus_registers_path, workspace_dir
+from .paths import modbus_poll_csv, modbus_registers_path, repo_root, workspace_dir
 from .site_defaults import ensure_default_site
 from .model_service import ModelService
 from .ttl_service import TtlService
@@ -149,6 +149,11 @@ def _row_read_spec(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def modbus_bench_hint_available() -> bool:
+    """True when local dev fake Modbus server script is present (hide on production edge images)."""
+    return (repo_root() / "scripts" / "fake_modbus_temp_server.py").is_file()
+
+
 def driver_tree() -> dict[str, Any]:
     rows = _load_registers()
     latest = _latest_poll_values()
@@ -211,6 +216,7 @@ def driver_tree() -> dict[str, Any]:
         "devices": device_list,
         "poll_intervals": [{"seconds": s, "label": POLL_LABELS[s]} for s in POLL_INTERVALS_S],
         "registers_path": str(modbus_registers_path()),
+        "bench_hint_available": modbus_bench_hint_available(),
     }
 
 

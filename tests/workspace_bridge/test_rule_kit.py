@@ -79,7 +79,8 @@ def test_build_rule_kit_zip_contains_expected_files(tmp_path, monkeypatch):
     assert name.endswith(".zip")
     zf = zipfile.ZipFile(io.BytesIO(payload))
     names = set(zf.namelist())
-    assert {"rule.py", "data.py", "sample.feather", "column_map.json", "config.json", "README.md"} <= names
+    assert {"rule.py", "data.py", "sample.feather", "run_test.py", "column_map.json", "config.json", "README.md"} <= names
+    assert "python run_test.py" in zf.read("README.md").decode()
     assert "apply_faults_arrow" in zf.read("rule.py").decode()
 
 

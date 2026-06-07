@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import { formatPollSampleAt } from "../lib/formatPollTime";
@@ -17,16 +17,18 @@ const POLL_INTERVALS = [
 ] as const;
 
 export default function ModbusPage() {
-  const [host, setHost] = useState("127.0.0.1");
-  const [port, setPort] = useState(5502);
+  const [benchHintAvailable, setBenchHintAvailable] = useState(false);
+  const benchDefaultsApplied = useRef(false);
+  const [host, setHost] = useState("");
+  const [port, setPort] = useState(502);
   const [unitId, setUnitId] = useState(1);
-  const [address, setAddress] = useState(100);
+  const [address, setAddress] = useState(0);
   const [functionKind, setFunctionKind] = useState<"holding" | "input">("holding");
   const [decode, setDecode] = useState<"uint16" | "int16" | "uint32" | "int32" | "float32" | "raw">("uint16");
-  const [scale, setScale] = useState(0.1);
+  const [scale, setScale] = useState(1);
   const [count, setCount] = useState(1);
-  const [label, setLabel] = useState("fake-temp");
-  const [units, setUnits] = useState("degF");
+  const [label, setLabel] = useState("register");
+  const [units, setUnits] = useState("");
   const [pending, setPending] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
@@ -47,8 +49,11 @@ export default function ModbusPage() {
   const loadDriverTree = useCallback(async () => {
     setTreeLoading(true);
     try {
-      const res = await apiFetch<{ devices: ModbusDevice[] }>("/api/modbus/driver/tree");
+      const res = await apiFetch<{ devices: ModbusDevice[]; bench_hint_available?: boolean }>(
+        "/api/modbus/driver/tree",
+      );
       setDriverDevices(res.devices ?? []);
+      setBenchHintAvailable(Boolean(res.bench_hint_available));
     } catch (e) {
       setActionError(formatApiError(e));
     } finally {
@@ -69,6 +74,17 @@ export default function ModbusPage() {
     loadDriverTree().catch((e) => setLoadError(String(e)));
     refreshPollStatus().catch(() => undefined);
   }, [loadDriverTree, refreshPollStatus]);
+
+  useEffect(() => {
+    if (!benchHintAvailable || benchDefaultsApplied.current) return;
+    benchDefaultsApplied.current = true;
+    setHost("127.0.0.1");
+    setPort(5502);
+    setAddress(100);
+    setScale(0.1);
+    setLabel("fake-temp");
+    setUnits("degF");
+  }, [benchHintAvailable]);
 
   useEffect(() => {
     const tick = window.setInterval(() => {
@@ -362,10 +378,13 @@ export default function ModbusPage() {
 
       <div className="panel">
         <h3 className="panel-title">Add register</h3>
-        <p className="muted">
-          Local fake sensor: <code>./scripts/fake_modbus_temp_server.py --port 5502 --flatline 72.5</code> then use
-          defaults below (addr 100, scale 0.1).
-        </p>
+        {benchHintAvailable ? (
+          <p className="muted modbus-bench-hint">
+            Local dev: start{" "}
+            <code>./scripts/fake_modbus_temp_server.py --port 5502 --flatline 72.5</code> then use defaults below
+            (addr 100, scale 0.1).
+          </p>
+        ) : null}
         <div className="form-grid">
           <div className="field">
             <label className="field-label" htmlFor="mb-host">

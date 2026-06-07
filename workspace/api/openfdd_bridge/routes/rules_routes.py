@@ -93,9 +93,9 @@ def list_saved_rules(_user: dict = Depends(require_user)) -> dict:
 def export_rule_kit(
     site_id: str | None = Query(default=None),
     rule_id: str | None = Query(default=None),
-    lookback_hours: float = Query(default=24, ge=1, le=720),
+    lookback_hours: float = Query(default=3, ge=1, le=720),
     point_id: str | None = Query(default=None),
-    limit: int = Query(default=500, ge=1, le=5000),
+    limit: int = Query(default=5000, ge=1, le=20000),
     _user: dict = Depends(require_roles("integrator", "agent", "operator")),
 ) -> Response:
     """Download zip: rule.py + data.py + sample.feather + column_map.json + README."""

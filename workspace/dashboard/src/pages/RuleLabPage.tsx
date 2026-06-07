@@ -216,7 +216,7 @@ export default function RuleLabPage() {
           config: configFromRecord(cfg),
           site_id: activeSiteId || undefined,
           point_keys: [pointId],
-          lookback_hours: 24,
+          lookback_hours: 3,
           limit: 120,
           chunk_hours: 0,
         }),
@@ -277,7 +277,7 @@ export default function RuleLabPage() {
       const params = new URLSearchParams();
       if (activeSiteId) params.set("site_id", activeSiteId);
       if (activeRuleId && !creatingNew) params.set("rule_id", activeRuleId);
-      params.set("lookback_hours", "24");
+      params.set("lookback_hours", "3");
       const rule = saved.find((r) => r.id === activeRuleId);
       const pointId = rule?.bindings?.point_ids?.[0];
       if (pointId) params.set("point_id", pointId);
