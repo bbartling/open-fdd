@@ -201,8 +201,7 @@ export default function ModbusPage() {
     }
   }
 
-  async function refreshPoint(device: ModbusDevice, point: ModbusPoint) {
-    setActionError("");
+  async function refreshPoint(device: ModbusDevice, point: ModbusPoint): Promise<boolean> {
     try {
       const res = await apiFetch<{ present_value?: string; value?: unknown }>("/api/modbus/refresh", {
         method: "POST",
@@ -211,8 +210,10 @@ export default function ModbusPage() {
       const formatted = String(res.present_value ?? res.value ?? "—");
       patchPointValue(point.point_id, formatted);
       setLog(`Refresh ${point.label} @ ${device.host}:${device.port}: ${formatted}`);
+      return true;
     } catch (e) {
       setActionError(formatApiError(e));
+      return false;
     }
   }
 
@@ -220,7 +221,11 @@ export default function ModbusPage() {
     setActionError("");
     setLog(`Refreshing ${device.points.length} register(s) on ${device.host}:${device.port}…`);
     for (const p of device.points) {
-      await refreshPoint(device, p);
+      const ok = await refreshPoint(device, p);
+      if (!ok) {
+        setLog(`Refresh stopped — error on ${p.label}`);
+        return;
+      }
     }
     await loadDriverTree();
   }

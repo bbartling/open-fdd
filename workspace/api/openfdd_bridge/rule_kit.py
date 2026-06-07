@@ -34,14 +34,19 @@ class RuleKitError(ValueError):
 KIT_VALUE_STATS_HELPER = '''_META_COLS = frozenset({"timestamp", "site_id", "building_id", "system_id"})
 
 
+def _kit_fmt(scalar):
+    v = scalar.as_py() if scalar is not None else None
+    return "nan" if v is None else f"{v:.2f}"
+
+
 def _kit_value_stats(table):
     """Dev kit helper — min/max/mean (remove before upload if desired)."""
     name = next((c for c in table.column_names if c not in _META_COLS), table.column_names[0])
     vals = pc.cast(table[name], "float64")
     print(
         f"rows={table.num_rows} column={name} "
-        f"min={pc.min(vals).as_py():.2f} max={pc.max(vals).as_py():.2f} "
-        f"mean={pc.mean(vals).as_py():.2f}"
+        f"min={_kit_fmt(pc.min(vals))} max={_kit_fmt(pc.max(vals))} "
+        f"mean={_kit_fmt(pc.mean(vals))}"
     )
 '''
 

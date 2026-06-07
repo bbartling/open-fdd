@@ -190,7 +190,7 @@ async def modbus_read_registers(body: ModbusReadRequestBody) -> dict:
         raise HTTPException(status_code=502, detail=f"modbus_tcp_error: {exc}") from exc
 
 
-@router.post("/api/modbus/read_and_store", dependencies=[_READ])
+@router.post("/api/modbus/read_and_store", dependencies=[_POLL])
 async def modbus_read_and_store(body: ModbusReadStoreBody) -> dict:
     """Read Modbus TCP registers, append poll CSV, and write feather shard (source=modbus)."""
     try:
@@ -212,7 +212,7 @@ async def modbus_read_and_store(body: ModbusReadStoreBody) -> dict:
                         "scale": spec.scale,
                         "offset": spec.offset,
                         "label": reading.get("label") or spec.label,
-                        "units": "",
+                        "units": spec.units or "",
                         "last_value": str(reading.get("decoded") or ""),
                     }
                 )

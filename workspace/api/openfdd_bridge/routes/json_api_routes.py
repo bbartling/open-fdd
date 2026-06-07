@@ -155,7 +155,7 @@ async def json_api_request(body: JsonApiRequestBody) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/api/json-api/read_and_store", dependencies=[_READ])
+@router.post("/api/json-api/read_and_store", dependencies=[_POLL])
 async def json_api_read_and_store(body: JsonApiReadStoreBody) -> dict:
     try:
         payload = body.model_dump(exclude={"site_id", "save_endpoint"})

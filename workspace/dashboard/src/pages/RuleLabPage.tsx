@@ -237,13 +237,14 @@ export default function RuleLabPage() {
     }
   }
 
-  async function saveMetadata() {
+  async function saveMetadata(opts?: { manageBusy?: boolean }) {
     if (!activeRuleId || creatingNew) {
       appendConsole("Upload rule.py first to create a rule.");
       return;
     }
     if (!code.trim()) return;
-    setBusy(true);
+    const manageBusy = opts?.manageBusy !== false;
+    if (manageBusy) setBusy(true);
     try {
       const fresh = await apiFetch<{ rules: SavedRule[] }>("/api/rules/saved");
       const bindingsSource = fresh.rules?.find((r) => r.id === activeRuleId)?.bindings;
@@ -265,7 +266,7 @@ export default function RuleLabPage() {
     } catch (e) {
       appendConsole(formatApiError(e));
     } finally {
-      setBusy(false);
+      if (manageBusy) setBusy(false);
     }
   }
 
@@ -339,7 +340,7 @@ export default function RuleLabPage() {
   async function updateAllRecords() {
     setBusy(true);
     try {
-      if (metaDirty && activeRuleId) await saveMetadata();
+      if (metaDirty && activeRuleId) await saveMetadata({ manageBusy: false });
       const res = await apiFetch<{
         rules_run?: number;
         flagged_runs?: number;
