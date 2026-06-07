@@ -77,7 +77,7 @@ set -euo pipefail
 export OPENFDD_ROOT="${OPENFDD_ROOT:-$HOME/open-fdd}"
 # compose.edge.yml: use master after release merge; until then use the docs branch:
 export OPENFDD_REPO_REF="${OPENFDD_REPO_REF:-fix/security-hardening-log-rotation}"
-export OPENFDD_RAW="https://raw.githubusercontent.com/bbartling/open-fdd/${OPENFDD_REPO_REF}"
+export OPENFDD_GITHUB_RAW="https://github.com/bbartling/open-fdd/raw/refs/heads/${OPENFDD_REPO_REF}"
 
 # Directory tree (bind-mounted site state — backup this folder before upgrades)
 mkdir -p "${OPENFDD_ROOT}/workspace/bacnet/commissioning"
@@ -89,7 +89,7 @@ mkdir -p "${OPENFDD_ROOT}/workspace/api/static/app"
 
 # Compose file (-f fails loudly on 404)
 curl -fsSL -o "${OPENFDD_ROOT}/docker-compose.yml" \
-  "${OPENFDD_RAW}/docker/compose.edge.yml"
+  "${OPENFDD_GITHUB_RAW}/docker/compose.edge.yml"
 test -s "${OPENFDD_ROOT}/docker-compose.yml"
 
 # BACnet starter config (commission.env.example is on master — use master for this file)
