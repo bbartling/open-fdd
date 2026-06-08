@@ -140,15 +140,18 @@ def test_brick_type_binding_scopes_zone_temp_not_oa_temp(bench_env: Path):
     from openfdd_bridge.model_service import ModelService as MS  # noqa: E402
     from openfdd_bridge.plot_readings import evaluate_fault_plots  # noqa: E402
     from openfdd_bridge.rule_store import RuleStore  # noqa: E402
+    from openfdd_bridge.rule_source import read_source  # noqa: E402
 
     store = RuleStore()
+    zn_rule = next(r for r in store.list_rules() if r.get("id") == "bench-stat-zn-t-flatline-1h")
+    code = read_source(str(zn_rule.get("source_path") or "")) or str(zn_rule.get("code") or "")
     store.upsert(
         {
             "id": "bench-class-zn-flatline",
             "name": "Zone temp class flatline",
             "mode": "rule",
             "backend": "arrow",
-            "code": store.list_rules()[0]["code"],
+            "code": code,
             "bindings": {"brick_types": ["Zone_Air_Temperature_Sensor"]},
             "enabled": True,
         },
@@ -156,8 +159,13 @@ def test_brick_type_binding_scopes_zone_temp_not_oa_temp(bench_env: Path):
     )
     model = MS().load()
     df = _bench_frame()
-    oa_scope, _, _ = evaluate_fault_plots(df, "demo", model, scope_columns=["oa-t"])
-    zn_scope, panels_zn, _ = evaluate_fault_plots(df, "demo", model, scope_columns=["stat_zn-t"])
+    rid = {"bench-class-zn-flatline"}
+    oa_scope, _, _ = evaluate_fault_plots(
+        df, "demo", model, scope_columns=["oa-t"], rule_ids=rid
+    )
+    zn_scope, panels_zn, _ = evaluate_fault_plots(
+        df, "demo", model, scope_columns=["stat_zn-t"], rule_ids=rid
+    )
     assert "bench-class-zn-flatline" not in oa_scope
     assert "bench-class-zn-flatline" in zn_scope
     assert panels_zn
