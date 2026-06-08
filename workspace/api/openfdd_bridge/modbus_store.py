@@ -16,6 +16,7 @@ from .paths import modbus_poll_csv, modbus_registers_path, repo_root, workspace_
 from .site_defaults import ensure_default_site
 from .model_service import ModelService
 from .ttl_service import TtlService
+from .poll_intervals import POLL_INTERVALS_S, POLL_LABELS, snap_poll_interval
 
 _LOCK = threading.RLock()
 _SAFE = re.compile(r"[^a-zA-Z0-9_-]+")
@@ -23,8 +24,6 @@ _SAFE = re.compile(r"[^a-zA-Z0-9_-]+")
 _ONDEMAND_VALUE: dict[str, str] = {}
 _POLL_LAST_RUN: dict[str, float] = {}
 _LAST_CYCLE: dict[str, Any] = {"at": "", "samples": 0, "error": ""}
-POLL_INTERVALS_S = (60, 300, 600, 900)
-POLL_LABELS = {60: "1 min", 300: "5 min", 600: "10 min", 900: "15 min"}
 SAMPLES_HEADER = (
     "timestamp_utc,site_id,point_id,host,unit_id,address,function,label,value,units\n"
 )
@@ -168,8 +167,8 @@ def driver_tree() -> dict[str, Any]:
             interval = int(str(row.get("poll_interval_s") or "0"))
         except ValueError:
             interval = 0
-        if enabled and interval not in POLL_INTERVALS_S:
-            interval = 60
+        if enabled:
+            interval = snap_poll_interval(interval)
         pid = str(row.get("point_id") or "")
         fn = str(row.get("function") or "holding")
         addr = str(row.get("address") or "0")
@@ -422,6 +421,7 @@ def upsert_register(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def set_register_poll(*, point_id: str, enabled: bool, poll_interval_s: int) -> dict[str, Any]:
+    interval = snap_poll_interval(poll_interval_s) if enabled else 0
     with _LOCK:
         rows = _load_registers()
         found = False
@@ -430,11 +430,11 @@ def set_register_poll(*, point_id: str, enabled: bool, poll_interval_s: int) -> 
                 continue
             found = True
             row["enabled"] = "1" if enabled else "0"
-            row["poll_interval_s"] = str(poll_interval_s if enabled else 0)
+            row["poll_interval_s"] = str(interval)
         if not found:
             raise ValueError(f"unknown point_id: {point_id}")
         _save_registers(rows)
-    return {"ok": True, "point_id": point_id, "enabled": enabled, "poll_interval_s": poll_interval_s}
+    return {"ok": True, "point_id": point_id, "enabled": enabled, "poll_interval_s": interval}
 
 
 def append_samples_and_ingest(

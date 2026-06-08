@@ -65,11 +65,25 @@ Runtime evaluation: `fdd_runner.py` (batch FDD) and `plot_readings.evaluate_faul
 
 Export: `GET /api/model/commissioning-export`. Import accepts `import_ready_json` wrappers (see `commissioningImport.ts`).
 
+### Rule names vs ids (Rule Lab alignment)
+
+Rule Lab shows **human names** (`Bench OA-T flatline 1h`). Saved rules use stable **ids** (`bench-oa-t-flatline-1h` from setup scripts, or a UUID for uploaded custom rules). Commissioning export includes both so you never have to cross-reference sections by hand:
+
+| Field | Direction | Purpose |
+|-------|-----------|---------|
+| `points[].fdd_rule_ids` | import + export | Assignment surface — array of rule ids |
+| `points[].fdd_rules_linked` | **export only** | `[{id, name}]` — Rule Lab names beside each point |
+| `fdd_rules[].id` | import + export | Stable rule key (matches Rule Lab / `rules_store.json`) |
+| `fdd_rules[].name` | import + export | Same label as Rule Lab dropdown |
+| `fdd_rules[].source_file` | export | Basename of deployed `.py` when present (e.g. `bench_oa-t_flatline_1h.py`) |
+
+On import, `fdd_rules_linked` is stripped (like `fdd_rule_ids` — not stored in `model.json`). Use the **Point → FDD rule pins** table on Model & assignments to read names without parsing JSON.
+
 Minimum fields integrators/AI should produce:
 
 - `sites`, `equipment[]` with `id`, `equipment_type`, optional `feeds[]`
-- `points[]` with `site_id`, `equipment_id`, `brick_type`, `fdd_input`, BACnet IDs
-- `fdd_rules[]` with `id`, `source_path` or `code`, `bindings`, `enabled`
+- `points[]` with `site_id`, `equipment_id`, `brick_type`, `fdd_input`, BACnet IDs, optional `fdd_rule_ids`
+- `fdd_rules[]` with `id`, `name`, `bindings`, `enabled` (optional `source_file` on export)
 
 After import, verify in **Trend plot** with `?fdd=1` — fault lanes appear on the right-hand 0/1 axis for bound rules.
 

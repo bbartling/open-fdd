@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 from ..deps import require_roles
 from ..json_api_service import JsonApiServiceError, execute_json_api_request
 from ..json_api_env import env_var_configured, json_api_env_path, load_json_api_env
+from ..json_api_presets import list_rest_presets, preset_by_id
 from ..json_api_store import (
     OPENWEATHER_URL,
     append_reading_and_ingest,
@@ -20,10 +21,12 @@ from ..json_api_store import (
     poll_status,
     refresh_point,
     register_openweather_bundle,
+    register_rest_bundle,
     run_poll_cycle,
     set_endpoint_poll,
     upsert_endpoint,
 )
+from ..poll_intervals import snap_poll_interval
 
 router = APIRouter(tags=["json_api"])
 
@@ -91,10 +94,123 @@ class JsonApiRefreshBody(BaseModel):
     store: bool = False
 
 
+class RestSensorSpec(BaseModel):
+    json_path: str = Field(default="", description="Dot path into JSON (HA value_json_path)")
+    label: str = Field(default="", description="Historian column name")
+    units: str = Field(default="")
+
+
+class JsonApiRegisterBundleBody(BaseModel):
+    resource: str = Field(..., description="HTTP(S) URL — HA resource")
+    method: MethodLiteral = Field(default="GET")
+    sensors: list[RestSensorSpec] = Field(..., min_length=1)
+    headers: dict[str, str] = Field(default_factory=dict)
+    body: Any = Field(default=None)
+    auth_type: AuthTypeLiteral = Field(default="none")
+    bearer_token: Optional[str] = None
+    basic_user: Optional[str] = None
+    basic_password: Optional[str] = None
+    verify_tls: bool = True
+    poll_interval_s: int = Field(default=900, ge=0)
+    enabled: bool = True
+    poll_once: bool = Field(default=False, description="Run poll cycle after registering")
+
+
+class JsonApiTestBody(JsonApiRequestBody):
+    sensors: list[RestSensorSpec] = Field(default_factory=list, description="Multi-value probe (HA style)")
+
+
+class JsonApiPresetRegisterBody(BaseModel):
+    preset_id: str
+    poll_interval_s: int = Field(default=900, ge=0)
+    enabled: bool = True
+    poll_once: bool = True
+
+
 class JsonApiOpenWeatherBody(BaseModel):
-    poll_interval_s: int = Field(default=1200, ge=0)
+    poll_interval_s: int = Field(default=1800, ge=0)
     enabled: bool = True
     poll_once: bool = Field(default=True, description="Run one poll cycle after registering")
+
+
+@router.get("/api/json-api/presets", dependencies=[_READ])
+def json_api_presets_catalog() -> dict:
+    return list_rest_presets()
+
+
+@router.post("/api/json-api/presets/{preset_id}/register", dependencies=[_POLL])
+def json_api_preset_register(preset_id: str, body: JsonApiPresetRegisterBody) -> dict:
+    preset = preset_by_id(preset_id)
+    if preset is None:
+        raise HTTPException(status_code=404, detail=f"unknown preset: {preset_id}")
+    required = preset.get("requires_env") or []
+    if required:
+        missing = [v for v in required if not env_var_configured(str(v))]
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"missing env vars: {', '.join(missing)} — see workspace/json_api.env.local",
+            )
+    import json as _json
+
+    try:
+        out = register_rest_bundle(
+            resource=str(preset.get("resource") or ""),
+            method=str(preset.get("method") or "GET"),
+            sensors=list(preset.get("sensors") or []),
+            headers_json=(
+                _json.dumps(preset["headers_json"])
+                if isinstance(preset.get("headers_json"), dict)
+                else str(preset.get("headers_json") or "")
+            ),
+            body_json=str(preset.get("body_json") or ""),
+            poll_interval_s=snap_poll_interval(body.poll_interval_s) if body.enabled else 0,
+            enabled=body.enabled,
+        )
+        if body.poll_once and body.enabled:
+            out["poll"] = run_poll_cycle(force=True)
+        out["preset_id"] = preset_id
+        return out
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/api/json-api/register-bundle", dependencies=[_POLL])
+def json_api_register_bundle(body: JsonApiRegisterBundleBody) -> dict:
+    import json as _json
+
+    try:
+        out = register_rest_bundle(
+            resource=body.resource,
+            method=body.method,
+            sensors=[s.model_dump() for s in body.sensors],
+            headers_json=_json.dumps(body.headers) if body.headers else "",
+            body_json=_json.dumps(body.body) if body.body is not None else "",
+            auth_type=body.auth_type,
+            bearer_token=body.bearer_token or "",
+            basic_user=body.basic_user or "",
+            basic_password=body.basic_password or "",
+            verify_tls=body.verify_tls,
+            poll_interval_s=snap_poll_interval(body.poll_interval_s) if body.enabled else 0,
+            enabled=body.enabled,
+        )
+        if body.poll_once and body.enabled:
+            out["poll"] = run_poll_cycle(force=True)
+        return out
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/api/json-api/test", dependencies=[_READ])
+async def json_api_test(body: JsonApiTestBody) -> dict:
+    """Probe a REST resource without saving — Home Assistant sensor.rest test."""
+    try:
+        payload = body.model_dump()
+        if body.sensors:
+            payload["sensors"] = [s.model_dump() for s in body.sensors]
+        return await asyncio.to_thread(execute_json_api_request, payload)
+    except JsonApiServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/api/json-api/env/status", dependencies=[_READ])

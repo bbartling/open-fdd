@@ -23,4 +23,4 @@ nav_order: 4
 
 AI Agent and commissioning JSON import can bulk-apply steps 2–4; integrator should review model health before production FDD. See [FDD and assignments](fdd-assignments) and [Ollama and analytics](ollama-analytics).
 
-Export: `GET /api/model/export` (TTL/JSON). Commissioning bundle: `GET /api/model/commissioning-export`. API detail in [Appendix](../appendix/bridge_api).
+Export: `GET /api/model/export` (TTL/JSON). Commissioning bundle: `GET /api/model/commissioning-export` — includes per-point `fdd_rules_linked` (Rule Lab names) plus `fdd_rules[]` catalog. Use **Import / export** tab preview table or **Point → FDD rule pins** before editing raw JSON. API detail in [Appendix](../appendix/bridge_api).

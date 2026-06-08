@@ -20,12 +20,9 @@ export function pointIsCommandable(point: DriverPoint): boolean {
   return COMMANDABLE_OBJECT_TYPES.has(type);
 }
 
-export const POLL_OPTIONS = [
-  { seconds: 60, label: "1 min" },
-  { seconds: 300, label: "5 min" },
-  { seconds: 600, label: "10 min" },
-  { seconds: 900, label: "15 min" },
-] as const;
+import { POLL_OPTIONS } from "./pollIntervals";
+
+export { POLL_OPTIONS };
 
 export type PrioritySlot = {
   priority_level: number;

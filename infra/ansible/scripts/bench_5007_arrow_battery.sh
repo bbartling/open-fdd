@@ -33,11 +33,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-log_info "=== Pytest: bench 5007 Arrow FDD ==="
-if python3 -m pytest tests/workspace_bridge/test_bench_5007_arrow_fdd.py -q --tb=short; then
-  log_ok "bench 5007 Arrow FDD pytest"
+log_info "=== Pytest: bench 5007 Arrow FDD + commissioning ==="
+if python3 -m pytest tests/workspace_bridge/test_bench_5007_arrow_fdd.py tests/workspace_bridge/test_commissioning_bundle.py tests/workspace_bridge/test_poll_intervals.py -q --tb=short; then
+  log_ok "bench 5007 + commissioning + poll intervals pytest"
 else
-  log_fail "bench 5007 Arrow FDD pytest"
+  log_fail "bench 5007 + commissioning + poll intervals pytest"
 fi
 
 if [[ "$GHCR_ONLY" == "1" ]]; then

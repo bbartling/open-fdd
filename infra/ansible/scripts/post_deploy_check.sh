@@ -272,7 +272,11 @@ sys.exit(0 if f.get("rules_assignments_status")==200 else 1)
     cpts="$(echo "$probe_json" | python3 -c 'import json,sys; f=json.load(sys.stdin).get("fdd_operational",{}); print(f.get("commissioning_point_count",0))')"
     crules="$(echo "$probe_json" | python3 -c 'import json,sys; f=json.load(sys.stdin).get("fdd_operational",{}); print(f.get("commissioning_fdd_rules_count",0))')"
     tagged="$(echo "$probe_json" | python3 -c 'import json,sys; f=json.load(sys.stdin).get("fdd_operational",{}); print(f.get("commissioning_points_with_rules",0))')"
-    log_ok "Commissioning export (${cpts} points, ${crules} rules, ${tagged} points tagged)"
+    linked="$(echo "$probe_json" | python3 -c 'import json,sys; f=json.load(sys.stdin).get("fdd_operational",{}); print(f.get("commissioning_points_with_linked_names",0))')"
+    log_ok "Commissioning export (${cpts} points, ${crules} rules, ${tagged} tagged, ${linked} with Rule Lab names)"
+    if [[ "${tagged:-0}" -gt 0 && "${linked:-0}" -lt "${tagged:-0}" ]]; then
+      log_warn "Some pinned points lack fdd_rules_linked — upgrade bridge for readable export"
+    fi
   elif [[ "$comm_status" == "404" ]]; then
     log_warn "Commissioning export HTTP 404 — upgrade bridge image for Model & assignments bundle"
   fi

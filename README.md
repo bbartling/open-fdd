@@ -13,9 +13,9 @@
 </p>
 
 <p align="center">
-  Open-source <strong>supervisory fault detection</strong> for BACnet buildings — poll field points into a historian,
-  model equipment with BRICK, author <strong>Arrow-native</strong> Python rules in Rule Lab, and operate commissioning,
-  trend plots, and live diagnostics from the Operator Bridge.
+  Open-source <strong>supervisory fault detection</strong> that runs <strong>locally on the edge</strong> — BACnet polling,
+  <strong>BRICK</strong> equipment and point modeling, and <strong>AI-assisted</strong> commissioning, rule assignment, and diagnostics.
+  Author <strong>Arrow-native</strong> Python rules in Rule Lab; trend plots and live operations from the Operator Bridge.
 </p>
 
 <p align="center">

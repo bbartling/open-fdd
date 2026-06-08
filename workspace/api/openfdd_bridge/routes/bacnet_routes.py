@@ -143,13 +143,13 @@ class MergeCommissionRowsBody(BaseModel):
 class PointPollBody(BaseModel):
     point_id: str
     enabled: bool = True
-    poll_interval_s: Literal[60, 300, 600, 900] = 60
+    poll_interval_s: Literal[60, 300, 900, 1800, 3600] = 60
 
 
 class DevicePollBody(BaseModel):
     device_instance: int = Field(ge=0, le=4194303)
     enabled: bool = True
-    poll_interval_s: Literal[60, 300, 600, 900] = 60
+    poll_interval_s: Literal[60, 300, 900, 1800, 3600] = 60
 
 
 class RemapDeviceBody(BaseModel):

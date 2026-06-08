@@ -34,6 +34,7 @@ def test_build_commissioning_export_includes_point_rule_ids():
             "id": "rule-a",
             "name": "Zone OOB",
             "enabled": True,
+            "source_path": "/data/rules_py/zone_oob.py",
             "bindings": {"point_ids": ["p1"], "direct_point_ids": ["p1"]},
         }
     ]
@@ -41,8 +42,10 @@ def test_build_commissioning_export_includes_point_rule_ids():
     p1 = next(p for p in out["points"] if p["id"] == "p1")
     p2 = next(p for p in out["points"] if p["id"] == "p2")
     assert p1["fdd_rule_ids"] == ["rule-a"]
+    assert p1["fdd_rules_linked"] == [{"id": "rule-a", "name": "Zone OOB"}]
     assert "fdd_rule_ids" not in p2
     assert out["fdd_rules"][0]["id"] == "rule-a"
+    assert out["fdd_rules"][0]["source_file"] == "zone_oob.py"
 
 
 def test_apply_commissioning_import_from_point_rule_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -103,4 +106,6 @@ def test_apply_commissioning_import_strips_fdd_rule_ids_from_model(tmp_path: Pat
     }
     apply_commissioning_import(payload)
     model = ModelService().load()
-    assert "fdd_rule_ids" not in (model.get("points") or [{}])[0]
+    pt = (model.get("points") or [{}])[0]
+    assert "fdd_rule_ids" not in pt
+    assert "fdd_rules_linked" not in pt

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import { formatPollSampleAt } from "../lib/formatPollTime";
+import { DEFAULT_POLL_INTERVAL_S, STANDARD_POLL_INTERVALS } from "../lib/pollIntervals";
 import ActionButton from "../components/ActionButton";
 import JsonApiPointsTree, { type JsonApiDevice, type JsonApiPoint } from "../components/JsonApiPointsTree";
 import JsonApiTreeLegend from "../components/JsonApiTreeLegend";
@@ -9,60 +10,63 @@ import PageHeader from "../components/PageHeader";
 import Spinner from "../components/Spinner";
 import { TabDebugPanel } from "../components/TabDebugPanel";
 
-const POLL_INTERVALS = [
-  { s: 60, label: "1 min" },
-  { s: 300, label: "5 min" },
-  { s: 600, label: "10 min" },
-  { s: 900, label: "15 min" },
-  { s: 1200, label: "20 min" },
-] as const;
-
-const OPENWEATHER_URL =
-  "https://api.openweathermap.org/data/2.5/weather?q=${ENV:OPENWEATHER_CITY}&appid=${ENV:OPENWEATHER_API_KEY}&units=${ENV:OPENWEATHER_UNITS}";
-
-const PRESETS = [
-  {
-    name: "Todo title",
-    url: "https://jsonplaceholder.typicode.com/todos/1",
-    method: "GET" as const,
-    json_path: "title",
-    label: "todo-title",
-  },
-  {
-    name: "User name",
-    url: "https://jsonplaceholder.typicode.com/users/1",
-    method: "GET" as const,
-    json_path: "name",
-    label: "user-name",
-  },
-  {
-    name: "POST todo",
-    url: "https://jsonplaceholder.typicode.com/todos",
-    method: "POST" as const,
-    json_path: "title",
-    label: "post-title",
-    body: '{"title": "OT bench poll", "userId": 1, "completed": false}',
-  },
-];
-
 type AuthType = "none" | "bearer" | "basic";
 
+type RestSensorRow = {
+  json_path: string;
+  label: string;
+  units: string;
+};
+
+type RestPreset = {
+  id: string;
+  name: string;
+  category: string;
+  description?: string;
+  resource: string;
+  method?: string;
+  headers_json?: string;
+  body_json?: string;
+  sensors: RestSensorRow[];
+  requires_env?: string[];
+  env_note?: string;
+};
+
+type TestResult = {
+  success?: boolean;
+  status_code?: number;
+  present_value?: string;
+  error?: string;
+  sensors?: Array<{ label: string; json_path: string; present_value?: string; units?: string }>;
+  raw_json?: unknown;
+};
+
+const EMPTY_SENSOR: RestSensorRow = { json_path: "", label: "value", units: "" };
+
 export default function JsonApiPage() {
-  const [url, setUrl] = useState(PRESETS[0].url);
+  const [resource, setResource] = useState("https://jsonplaceholder.typicode.com/todos/1");
   const [method, setMethod] = useState<"GET" | "POST">("GET");
-  const [jsonPath, setJsonPath] = useState("title");
-  const [label, setLabel] = useState("todo-title");
-  const [body, setBody] = useState("");
+  const [headersJson, setHeadersJson] = useState("");
+  const [bodyJson, setBodyJson] = useState("");
+  const [sensors, setSensors] = useState<RestSensorRow[]>([
+    { json_path: "title", label: "todo-title", units: "" },
+  ]);
   const [authType, setAuthType] = useState<AuthType>("none");
   const [bearerToken, setBearerToken] = useState("");
   const [basicUser, setBasicUser] = useState("");
   const [basicPassword, setBasicPassword] = useState("");
   const [verifyTls, setVerifyTls] = useState(true);
-  const [pending, setPending] = useState(false);
+  const [pollIntervalS, setPollIntervalS] = useState(DEFAULT_POLL_INTERVAL_S);
+  const [presets, setPresets] = useState<RestPreset[]>([]);
+  const [presetCategories, setPresetCategories] = useState<string[]>([]);
+  const [testPending, setTestPending] = useState(false);
+  const [registerPending, setRegisterPending] = useState(false);
+  const [presetPending, setPresetPending] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [rawPreview, setRawPreview] = useState("");
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
   const [log, setLog] = useState("");
-  const [lastReading, setLastReading] = useState<{ present_value?: string; status_code?: number } | null>(null);
   const [driverDevices, setDriverDevices] = useState<JsonApiDevice[]>([]);
   const [treeLoading, setTreeLoading] = useState(true);
   const [pollStatus, setPollStatus] = useState<{
@@ -79,7 +83,17 @@ export default function JsonApiPage() {
     env_file_exists?: boolean;
     variables?: Record<string, boolean>;
   } | null>(null);
-  const [owmPending, setOwmPending] = useState(false);
+
+  const presetsByCategory = useMemo(() => {
+    const map = new Map<string, RestPreset[]>();
+    for (const p of presets) {
+      const cat = p.category || "other";
+      const list = map.get(cat) ?? [];
+      list.push(p);
+      map.set(cat, list);
+    }
+    return map;
+  }, [presets]);
 
   const loadDriverTree = useCallback(async () => {
     setTreeLoading(true);
@@ -111,11 +125,22 @@ export default function JsonApiPage() {
     }
   }, []);
 
+  const loadPresets = useCallback(async () => {
+    try {
+      const res = await apiFetch<{ presets?: RestPreset[]; categories?: string[] }>("/api/json-api/presets");
+      setPresets(res.presets ?? []);
+      setPresetCategories(res.categories ?? []);
+    } catch (e) {
+      setLoadError(formatApiError(e));
+    }
+  }, []);
+
   useEffect(() => {
-    loadDriverTree().catch((e) => setLoadError(String(e)));
-    refreshPollStatus().catch(() => undefined);
-    refreshEnvStatus().catch(() => undefined);
-  }, [loadDriverTree, refreshPollStatus, refreshEnvStatus]);
+    void loadDriverTree();
+    void refreshPollStatus();
+    void refreshEnvStatus();
+    void loadPresets();
+  }, [loadDriverTree, refreshPollStatus, refreshEnvStatus, loadPresets]);
 
   useEffect(() => {
     const tick = window.setInterval(() => {
@@ -125,13 +150,163 @@ export default function JsonApiPage() {
     return () => window.clearInterval(tick);
   }, [loadDriverTree, refreshPollStatus]);
 
-  function applyPreset(idx: number) {
-    const p = PRESETS[idx];
-    setUrl(p.url);
-    setMethod(p.method);
-    setJsonPath(p.json_path);
-    setLabel(p.label);
-    setBody("body" in p ? p.body : "");
+  function applyPreset(preset: RestPreset) {
+    setResource(preset.resource);
+    setMethod((preset.method ?? "GET").toUpperCase() === "POST" ? "POST" : "GET");
+    setHeadersJson(preset.headers_json ?? "");
+    setBodyJson(preset.body_json ?? "");
+    setSensors(
+      preset.sensors.length
+        ? preset.sensors.map((s) => ({ ...s }))
+        : [{ ...EMPTY_SENSOR }],
+    );
+    setTestResult(null);
+    setRawPreview("");
+    setLog(`Loaded preset: ${preset.name}`);
+  }
+
+  function updateSensor(idx: number, patch: Partial<RestSensorRow>) {
+    setSensors((prev) => prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
+  }
+
+  function addSensorRow() {
+    setSensors((prev) => [...prev, { ...EMPTY_SENSOR, label: `sensor-${prev.length + 1}` }]);
+  }
+
+  function removeSensorRow(idx: number) {
+    setSensors((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
+  }
+
+  function buildRequestPayload() {
+    let headers: Record<string, string> = {};
+    if (headersJson.trim()) {
+      headers = JSON.parse(headersJson) as Record<string, string>;
+    }
+    let body: unknown = undefined;
+    if (method === "POST" && bodyJson.trim()) {
+      body = JSON.parse(bodyJson);
+    }
+    const cleanedSensors = sensors
+      .filter((s) => s.json_path.trim() || s.label.trim())
+      .map((s) => ({
+        json_path: s.json_path.trim(),
+        label: s.label.trim() || s.json_path.trim() || "value",
+        units: s.units.trim(),
+      }));
+    return {
+      url: resource.trim(),
+      method,
+      json_path: cleanedSensors[0]?.json_path ?? "",
+      label: cleanedSensors[0]?.label ?? "value",
+      headers,
+      body,
+      sensors: cleanedSensors,
+      auth_type: authType,
+      bearer_token: authType === "bearer" ? bearerToken : undefined,
+      basic_user: authType === "basic" ? basicUser : undefined,
+      basic_password: authType === "basic" ? basicPassword : undefined,
+      verify_tls: verifyTls,
+    };
+  }
+
+  async function runTest() {
+    setTestPending(true);
+    setActionError("");
+    setTestResult(null);
+    setRawPreview("");
+    setLog(`Test GET/POST ${resource}…`);
+    try {
+      const payload = buildRequestPayload();
+      const res = await apiFetch<TestResult>("/api/json-api/test", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setTestResult(res);
+      if (res.raw_json != null) {
+        setRawPreview(JSON.stringify(res.raw_json, null, 2).slice(0, 4000));
+      }
+      if (!res.success) {
+        throw new Error(res.error || "test failed");
+      }
+      const parts =
+        res.sensors?.map((s) => `${s.label}=${s.present_value ?? "—"}`).join(", ") ??
+        res.present_value ??
+        "";
+      setLog(`Test OK HTTP ${res.status_code} → ${parts}`);
+    } catch (e) {
+      const msg = formatApiError(e);
+      setActionError(msg);
+      setLog(msg);
+    } finally {
+      setTestPending(false);
+    }
+  }
+
+  async function registerBundle(pollOnce: boolean) {
+    setRegisterPending(true);
+    setActionError("");
+    try {
+      const payload = buildRequestPayload();
+      const res = await apiFetch<{ count?: number; poll?: { samples?: number } }>(
+        "/api/json-api/register-bundle",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            resource: payload.url,
+            method: payload.method,
+            sensors: payload.sensors,
+            headers: payload.headers,
+            body: payload.body,
+            auth_type: payload.auth_type,
+            bearer_token: payload.bearer_token,
+            basic_user: payload.basic_user,
+            basic_password: payload.basic_password,
+            verify_tls: payload.verify_tls,
+            poll_interval_s: pollIntervalS,
+            enabled: true,
+            poll_once: pollOnce,
+          }),
+        },
+      );
+      setLog(
+        `Registered ${res.count ?? payload.sensors.length} sensor(s) @ poll ${pollIntervalS}s` +
+          (res.poll ? ` — first poll: ${res.poll.samples ?? 0} sample(s)` : ""),
+      );
+      await loadDriverTree();
+      await refreshPollStatus();
+    } catch (e) {
+      setActionError(formatApiError(e));
+    } finally {
+      setRegisterPending(false);
+    }
+  }
+
+  async function registerPreset(preset: RestPreset) {
+    setPresetPending(preset.id);
+    setActionError("");
+    try {
+      const res = await apiFetch<{ count?: number; poll?: { samples?: number } }>(
+        `/api/json-api/presets/${encodeURIComponent(preset.id)}/register`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            poll_interval_s: pollIntervalS,
+            enabled: true,
+            poll_once: true,
+          }),
+        },
+      );
+      setLog(
+        `${preset.name}: registered ${res.count ?? preset.sensors.length} sensor(s)` +
+          (res.poll ? ` — poll: ${res.poll.samples ?? 0} sample(s)` : ""),
+      );
+      await loadDriverTree();
+      await refreshPollStatus();
+    } catch (e) {
+      setActionError(formatApiError(e));
+    } finally {
+      setPresetPending(null);
+    }
   }
 
   function patchPointValue(pointId: string, presentValue: string) {
@@ -145,58 +320,6 @@ export default function JsonApiPage() {
     );
   }
 
-  async function runRequest(store: boolean) {
-    setPending(true);
-    setActionError("");
-    setLastReading(null);
-    setLog(`${method} ${url} (path=${jsonPath || "root"})…`);
-    try {
-      const path = store ? "/api/json-api/read_and_store" : "/api/json-api/request";
-      let parsedBody: unknown = undefined;
-      if (method === "POST" && body.trim()) {
-        parsedBody = JSON.parse(body);
-      }
-      const res = await apiFetch<{
-        success?: boolean;
-        present_value?: string;
-        status_code?: number;
-        error?: string;
-        ingest?: { samples_appended?: number; feather_source?: string };
-      }>(path, {
-        method: "POST",
-        body: JSON.stringify({
-          url,
-          method,
-          json_path: jsonPath,
-          label,
-          body: parsedBody,
-          auth_type: authType,
-          bearer_token: authType === "bearer" ? bearerToken : undefined,
-          basic_user: authType === "basic" ? basicUser : undefined,
-          basic_password: authType === "basic" ? basicPassword : undefined,
-          verify_tls: verifyTls,
-          save_endpoint: store,
-        }),
-      });
-      setLastReading(res);
-      if (!res.success) {
-        throw new Error(res.error || "request failed");
-      }
-      setLog(
-        store
-          ? `OK ${res.status_code} → ${res.present_value} (historian source=${res.ingest?.feather_source ?? "json_api"})`
-          : `OK ${res.status_code} → ${res.present_value}`,
-      );
-      if (store) await loadDriverTree();
-    } catch (e) {
-      const msg = formatApiError(e);
-      setActionError(msg);
-      setLog(msg);
-    } finally {
-      setPending(false);
-    }
-  }
-
   async function setPointPoll(pointId: string, enabled: boolean, intervalS: number) {
     setActionError("");
     try {
@@ -205,7 +328,6 @@ export default function JsonApiPage() {
         body: JSON.stringify({ point_id: pointId, enabled, poll_interval_s: intervalS }),
       });
       await loadDriverTree();
-      setLog(`Poll ${enabled ? `every ${intervalS}s` : "stopped"} for ${pointId}`);
     } catch (e) {
       setActionError(formatApiError(e));
     }
@@ -218,24 +340,20 @@ export default function JsonApiPage() {
         method: "POST",
         body: JSON.stringify({ point_id: point.point_id, store: false }),
       });
-      const formatted = String(res.present_value ?? "—");
-      patchPointValue(point.point_id, formatted);
-      setLog(`Refresh ${point.label} @ ${device.host}: ${formatted}`);
+      patchPointValue(point.point_id, String(res.present_value ?? "—"));
+      setLog(`Refresh ${point.label} @ ${device.host}: ${res.present_value ?? "—"}`);
     } catch (e) {
       setActionError(formatApiError(e));
     }
   }
 
   async function refreshDevice(device: JsonApiDevice) {
-    for (const p of device.points) {
-      await refreshPoint(device, p);
-    }
+    for (const p of device.points) await refreshPoint(device, p);
     await loadDriverTree();
   }
 
   async function deletePoint(pointId: string) {
-    if (!window.confirm("Remove this endpoint?")) return;
-    setActionError("");
+    if (!window.confirm("Remove this sensor?")) return;
     try {
       await apiFetch(`/api/json-api/endpoint/${encodeURIComponent(pointId)}`, { method: "DELETE" });
       await loadDriverTree();
@@ -245,8 +363,7 @@ export default function JsonApiPage() {
   }
 
   async function deleteDevice(device: JsonApiDevice) {
-    if (!window.confirm(`Remove all endpoints on ${device.host}?`)) return;
-    setActionError("");
+    if (!window.confirm(`Remove all sensors on ${device.host}?`)) return;
     try {
       for (const p of device.points) {
         await apiFetch(`/api/json-api/endpoint/${encodeURIComponent(p.point_id)}`, { method: "DELETE" });
@@ -303,7 +420,6 @@ export default function JsonApiPage() {
   async function batchSetPointPoll(pointIds: string[], enabled: boolean, intervalS: number) {
     if (!pointIds.length) return;
     setBulkPollPending(true);
-    setActionError("");
     try {
       for (const pointId of pointIds) {
         await apiFetch("/api/json-api/endpoint/poll", {
@@ -319,45 +435,11 @@ export default function JsonApiPage() {
     }
   }
 
-  async function registerOpenWeatherBundle() {
-    setOwmPending(true);
-    setActionError("");
-    try {
-      const res = await apiFetch<{
-        count?: number;
-        poll?: { polled?: number; samples?: number };
-      }>("/api/json-api/presets/openweather", {
-        method: "POST",
-        body: JSON.stringify({ poll_interval_s: 1200, enabled: true, poll_once: true }),
-      });
-      setLog(
-        `OpenWeather: registered ${res.count ?? 3} point(s)` +
-          (res.poll ? ` — poll once: ${res.poll.samples ?? 0} sample(s)` : ""),
-      );
-      await loadDriverTree();
-      await refreshPollStatus();
-      await refreshEnvStatus();
-    } catch (e) {
-      setActionError(formatApiError(e));
-    } finally {
-      setOwmPending(false);
-    }
-  }
-
-  function applyOpenWeatherPreset() {
-    setUrl(OPENWEATHER_URL);
-    setMethod("GET");
-    setJsonPath("main.temp");
-    setLabel("web-oat-t");
-    setBody("");
-    setAuthType("none");
-  }
-
   async function runPollOnce() {
     setPollOncePending(true);
     try {
       const res = await apiFetch<{ polled?: number; samples?: number }>("/api/json-api/poll/once", { method: "POST" });
-      setLog(`Poll once: ${res.polled ?? 0} endpoint(s), ${res.samples ?? 0} sample(s).`);
+      setLog(`Poll once: ${res.polled ?? 0} resource(s), ${res.samples ?? 0} sample(s).`);
       await loadDriverTree();
       await refreshPollStatus();
     } catch (e) {
@@ -368,14 +450,15 @@ export default function JsonApiPage() {
   }
 
   const selectedPointsList = Array.from(selectedPointIds);
-  const anyPending = pending || bulkPollPending || pollOncePending || owmPending;
+  const anyPending =
+    testPending || registerPending || bulkPollPending || pollOncePending || presetPending != null;
   const owmKeyReady = envStatus?.variables?.OPENWEATHER_API_KEY === true;
 
   return (
     <div className="page page-wide json-api-page">
       <PageHeader
-        title="JSON API commissioning"
-        subtitle="Poll HTTP/HTTPS GET/POST endpoints with Bearer or Basic auth — same commissioning pattern as BACnet and Modbus."
+        title="RESTful sensor (JSON API)"
+        subtitle="Home Assistant sensor.rest style — one HTTP resource, dot-path extractions, test then register. Poll intervals match BACnet and Modbus (1 / 5 / 15 / 30 min or 1 hour)."
       />
       <TabDebugPanel tab="json-api" />
 
@@ -383,7 +466,7 @@ export default function JsonApiPage() {
         <div className="panel">
           <h3 className="panel-title">Poll worker</h3>
           <div className="row row-spread" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-            <span className="badge poll-badge">{pollStatus.enabled_points ?? 0} endpoint(s) polling</span>
+            <span className="badge poll-badge">{pollStatus.enabled_points ?? 0} sensor(s) polling</span>
             {pollStatus.at ? (
               <span className="muted">
                 Last cycle: {formatPollSampleAt(pollStatus) ?? pollStatus.at}
@@ -408,66 +491,72 @@ export default function JsonApiPage() {
       ) : null}
 
       <div className="panel">
-        <h3 className="panel-title">OpenWeatherMap showcase</h3>
+        <h3 className="panel-title">Quick start presets</h3>
         <p className="muted">
-          Compare BACnet <code>oa-t</code> against web weather via historian columns{" "}
-          <code>web-oat-t</code>, <code>web-rh</code>, and <code>web-weather-desc</code>. Copy{" "}
-          <code>workspace/json_api.env.example</code> → <code>json_api.env.local</code> and set{" "}
-          <code>OPENWEATHER_API_KEY</code> (gitignored). URLs use <code>${"{ENV:VAR}"}</code> placeholders
-          — no API keys in <code>endpoints.csv</code>.
+          Click a preset to fill the form, or <strong>Register preset</strong> to add sensors immediately.
+          Inspired by{" "}
+          <a href="https://www.home-assistant.io/integrations/sensor.rest/" target="_blank" rel="noreferrer">
+            Home Assistant RESTful Sensor
+          </a>
+          .
         </p>
-        <p className="muted" style={{ marginTop: "0.5rem" }}>
-          Env file: <code>{envStatus?.env_file ?? "workspace/json_api.env.local"}</code>
-          {envStatus?.env_file_exists ? " (loaded)" : " (missing — copy from example)"}
-          {envStatus?.variables ? (
-            <>
-              {" "}
-              — key{" "}
-              {owmKeyReady ? (
-                <span className="badge">OPENWEATHER_API_KEY set</span>
-              ) : (
-                <span className="badge">OPENWEATHER_API_KEY not set</span>
-              )}
-            </>
-          ) : null}
-        </p>
-        <div className="row" style={{ marginTop: "0.65rem", gap: "0.5rem", flexWrap: "wrap" }}>
-          <ActionButton
-            pending={owmPending}
-            pendingLabel="Registering…"
-            disabled={anyPending || !owmKeyReady}
-            onClick={() => void registerOpenWeatherBundle()}
-          >
-            Register OpenWeather bundle (3 points, poll 20 min)
-          </ActionButton>
-          <button type="button" className="secondary-btn" onClick={applyOpenWeatherPreset}>
-            Fill single-point form (web-oat-t)
-          </button>
-        </div>
+        {presetCategories.map((cat) => (
+          <div key={cat} style={{ marginTop: "0.75rem" }}>
+            <h4 className="panel-subtitle" style={{ textTransform: "capitalize", marginBottom: "0.35rem" }}>
+              {cat}
+            </h4>
+            <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+              {(presetsByCategory.get(cat) ?? []).map((preset) => {
+                const needsEnv = (preset.requires_env ?? []).some(
+                  (v) => envStatus?.variables?.[v] !== true,
+                );
+                return (
+                  <div key={preset.id} className="json-api-preset-card" style={{ display: "flex", gap: "0.35rem" }}>
+                    <button type="button" className="secondary-btn" onClick={() => applyPreset(preset)} title={preset.description}>
+                      {preset.name}
+                    </button>
+                    <ActionButton
+                      secondary
+                      pending={presetPending === preset.id}
+                      pendingLabel="…"
+                      disabled={anyPending || needsEnv}
+                      onClick={() => void registerPreset(preset)}
+                    >
+                      Register
+                    </ActionButton>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+        {envStatus ? (
+          <p className="muted" style={{ marginTop: "0.75rem" }}>
+            Env: <code>{envStatus.env_file ?? "workspace/json_api.env.local"}</code>
+            {envStatus.env_file_exists ? " (loaded)" : " (missing)"}
+            {" — "}
+            OpenWeather key {owmKeyReady ? "set" : "not set"}
+          </p>
+        ) : null}
       </div>
 
       <div className="panel">
-        <h3 className="panel-title">Add endpoint</h3>
+        <h3 className="panel-title">REST resource</h3>
         <p className="muted">
-          Demo API:{" "}
-          <a href="https://jsonplaceholder.typicode.com/" target="_blank" rel="noreferrer">
-            JSONPlaceholder
-          </a>{" "}
-          — free fake REST for testing.
+          <code>resource</code> is the full URL. Use <code>${"{ENV:VAR}"}</code> in URLs for secrets (see{" "}
+          <code>json_api.env.local</code>). One HTTP request per unique resource; multiple sensors share the poll.
         </p>
-        <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
-          {PRESETS.map((p, i) => (
-            <button key={p.name} type="button" className="secondary-btn" onClick={() => applyPreset(i)}>
-              {p.name}
-            </button>
-          ))}
-        </div>
         <div className="form-grid">
           <div className="field" style={{ gridColumn: "1 / -1" }}>
-            <label className="field-label" htmlFor="ja-url">
-              URL
+            <label className="field-label" htmlFor="ja-resource">
+              Resource URL
             </label>
-            <input id="ja-url" value={url} onChange={(e) => setUrl(e.target.value)} />
+            <input
+              id="ja-resource"
+              value={resource}
+              onChange={(e) => setResource(e.target.value)}
+              placeholder="https://api.example.com/status"
+            />
           </div>
           <div className="field">
             <label className="field-label" htmlFor="ja-method">
@@ -479,42 +568,54 @@ export default function JsonApiPage() {
             </select>
           </div>
           <div className="field">
-            <label className="field-label" htmlFor="ja-path">
-              JSON path
+            <label className="field-label" htmlFor="ja-poll">
+              Poll interval (when registered)
             </label>
-            <input id="ja-path" value={jsonPath} onChange={(e) => setJsonPath(e.target.value)} placeholder="title" />
+            <select
+              id="ja-poll"
+              value={pollIntervalS}
+              onChange={(e) => setPollIntervalS(Number(e.target.value))}
+            >
+              {STANDARD_POLL_INTERVALS.map((p) => (
+                <option key={p.seconds} value={p.seconds}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
           </div>
-          <div className="field">
-            <label className="field-label" htmlFor="ja-label">
-              Label (historian column)
+          <div className="field" style={{ gridColumn: "1 / -1" }}>
+            <label className="field-label" htmlFor="ja-headers">
+              Headers (JSON object)
             </label>
-            <input id="ja-label" value={label} onChange={(e) => setLabel(e.target.value)} />
+            <textarea
+              id="ja-headers"
+              rows={2}
+              value={headersJson}
+              onChange={(e) => setHeadersJson(e.target.value)}
+              placeholder='{"Accept": "application/json"}'
+            />
           </div>
           {method === "POST" ? (
             <div className="field" style={{ gridColumn: "1 / -1" }}>
               <label className="field-label" htmlFor="ja-body">
-                POST body (JSON)
+                POST payload (JSON)
               </label>
-              <textarea id="ja-body" rows={3} value={body} onChange={(e) => setBody(e.target.value)} />
+              <textarea id="ja-body" rows={3} value={bodyJson} onChange={(e) => setBodyJson(e.target.value)} />
             </div>
           ) : null}
           <div className="field">
             <label className="field-label" htmlFor="ja-auth">
               Auth
             </label>
-            <select
-              id="ja-auth"
-              value={authType}
-              onChange={(e) => setAuthType(e.target.value as AuthType)}
-            >
+            <select id="ja-auth" value={authType} onChange={(e) => setAuthType(e.target.value as AuthType)}>
               <option value="none">None</option>
-              <option value="bearer">Bearer token</option>
+              <option value="bearer">Bearer</option>
               <option value="basic">HTTP Basic</option>
             </select>
           </div>
           <div className="field">
             <label className="field-label" htmlFor="ja-verify-tls">
-              TLS verify
+              TLS
             </label>
             <label className="checkbox-row" htmlFor="ja-verify-tls">
               <input
@@ -523,7 +624,7 @@ export default function JsonApiPage() {
                 checked={verifyTls}
                 onChange={(e) => setVerifyTls(e.target.checked)}
               />
-              Verify certificate (uncheck for self-signed OT gateways)
+              Verify certificate
             </label>
           </div>
           {authType === "bearer" ? (
@@ -537,7 +638,6 @@ export default function JsonApiPage() {
                 autoComplete="off"
                 value={bearerToken}
                 onChange={(e) => setBearerToken(e.target.value)}
-                placeholder="API key or JWT"
               />
             </div>
           ) : null}
@@ -545,13 +645,13 @@ export default function JsonApiPage() {
             <>
               <div className="field">
                 <label className="field-label" htmlFor="ja-basic-user">
-                  Basic username
+                  Username
                 </label>
                 <input id="ja-basic-user" value={basicUser} onChange={(e) => setBasicUser(e.target.value)} />
               </div>
               <div className="field">
                 <label className="field-label" htmlFor="ja-basic-pass">
-                  Basic password
+                  Password
                 </label>
                 <input
                   id="ja-basic-pass"
@@ -564,23 +664,111 @@ export default function JsonApiPage() {
             </>
           ) : null}
         </div>
-        <div className="form-row-actions">
-          <ActionButton pending={pending} pendingLabel="Requesting…" disabled={anyPending} onClick={() => void runRequest(false)}>
-            Request once
+
+        <h4 className="panel-subtitle" style={{ marginTop: "1rem" }}>
+          Sensors (value_json_path)
+        </h4>
+        <p className="muted">
+          Each row is one historian column — dot notation like <code>main.temp</code> or <code>weather.0.description</code>.
+          Multiple rows = one HTTP GET, many values (like HA <code>json_attributes</code>).
+        </p>
+        <table className="data-table" style={{ width: "100%", marginTop: "0.5rem" }}>
+          <thead>
+            <tr>
+              <th>JSON path</th>
+              <th>Label (column)</th>
+              <th>Units</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {sensors.map((row, idx) => (
+              <tr key={idx}>
+                <td>
+                  <input
+                    value={row.json_path}
+                    onChange={(e) => updateSensor(idx, { json_path: e.target.value })}
+                    placeholder="title"
+                  />
+                </td>
+                <td>
+                  <input
+                    value={row.label}
+                    onChange={(e) => updateSensor(idx, { label: e.target.value })}
+                    placeholder="todo-title"
+                  />
+                </td>
+                <td>
+                  <input
+                    value={row.units}
+                    onChange={(e) => updateSensor(idx, { units: e.target.value })}
+                    placeholder="degF"
+                  />
+                </td>
+                <td>
+                  <button type="button" className="secondary-btn" onClick={() => removeSensorRow(idx)}>
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <button type="button" className="secondary-btn" style={{ marginTop: "0.5rem" }} onClick={addSensorRow}>
+          + Add sensor from same resource
+        </button>
+
+        <div className="form-row-actions" style={{ marginTop: "1rem" }}>
+          <ActionButton pending={testPending} pendingLabel="Testing…" disabled={anyPending} onClick={() => void runTest()}>
+            Test resource
           </ActionButton>
-          <ActionButton pending={pending} pendingLabel="Requesting…" disabled={anyPending} onClick={() => void runRequest(true)}>
-            Request &amp; store to historian
+          <ActionButton
+            pending={registerPending}
+            pendingLabel="Registering…"
+            disabled={anyPending}
+            onClick={() => void registerBundle(true)}
+          >
+            Register &amp; poll
+          </ActionButton>
+          <ActionButton
+            secondary
+            pending={registerPending}
+            disabled={anyPending}
+            onClick={() => void registerBundle(false)}
+          >
+            Register only
           </ActionButton>
         </div>
-        {lastReading?.present_value ? (
+
+        {testResult?.sensors?.length ? (
+          <div style={{ marginTop: "0.75rem" }}>
+            <p className="muted">Extracted values (HTTP {testResult.status_code}):</p>
+            <ul>
+              {testResult.sensors.map((s) => (
+                <li key={s.label}>
+                  <code>{s.label}</code> [{s.json_path}] → <code>{s.present_value ?? "—"}</code>
+                  {s.units ? ` ${s.units}` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : testResult?.present_value ? (
           <p className="muted" style={{ marginTop: "0.75rem" }}>
-            Last: HTTP {lastReading.status_code} → <code>{lastReading.present_value}</code>
+            Test OK → <code>{testResult.present_value}</code>
           </p>
+        ) : null}
+        {rawPreview ? (
+          <details style={{ marginTop: "0.75rem" }}>
+            <summary className="muted">Raw JSON preview</summary>
+            <pre className="console" style={{ maxHeight: "12rem", overflow: "auto" }}>
+              {rawPreview}
+            </pre>
+          </details>
         ) : null}
       </div>
 
       <div className="panel">
-        <h3 className="panel-title">Hosts &amp; endpoints</h3>
+        <h3 className="panel-title">Commissioning tree</h3>
         <JsonApiTreeLegend />
         {driverDevices.length > 0 ? (
           <div className="bacnet-bulk-toolbar">
@@ -591,13 +779,13 @@ export default function JsonApiPage() {
             <button type="button" className="secondary-btn" onClick={() => setSelectedPointIds(new Set())}>
               Clear
             </button>
-            {POLL_INTERVALS.map((p) => (
+            {STANDARD_POLL_INTERVALS.map((p) => (
               <ActionButton
-                key={p.s}
+                key={p.seconds}
                 secondary
                 pending={bulkPollPending}
                 disabled={anyPending || selectedPointsList.length === 0}
-                onClick={() => void batchSetPointPoll(selectedPointsList, true, p.s)}
+                onClick={() => void batchSetPointPoll(selectedPointsList, true, p.seconds)}
               >
                 Poll {p.label}
               </ActionButton>
@@ -613,7 +801,7 @@ export default function JsonApiPage() {
           </div>
         ) : null}
         {treeLoading && driverDevices.length === 0 ? (
-          <Spinner label="Loading JSON API tree…" />
+          <Spinner label="Loading REST sensors…" />
         ) : (
           <JsonApiPointsTree
             devices={driverDevices}
@@ -636,7 +824,7 @@ export default function JsonApiPage() {
         <h3>Activity</h3>
         {loadError ? <p className="error">{loadError}</p> : null}
         {actionError ? <p className="error">{actionError}</p> : null}
-        <pre className="console">{log || "Ready."}</pre>
+        <pre className="console">{log || "Ready — pick a preset or enter a resource URL, then Test."}</pre>
       </div>
     </div>
   );

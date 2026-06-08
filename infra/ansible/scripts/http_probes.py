@@ -878,6 +878,29 @@ def check_fdd_operational(
                 if isinstance(p, dict) and p.get("fdd_rule_ids")
             )
             out["commissioning_points_with_rules"] = tagged
+            linked_ok = 0
+            for p in bundle.get("points") or []:
+                if not isinstance(p, dict):
+                    continue
+                ids = p.get("fdd_rule_ids") or []
+                linked = p.get("fdd_rules_linked") or []
+                if not ids:
+                    continue
+                names = {str(x.get("id")): str(x.get("name") or "") for x in linked if isinstance(x, dict)}
+                if all(rid in names and names[rid] for rid in ids):
+                    linked_ok += 1
+            out["commissioning_points_with_linked_names"] = linked_ok
+            rules_with_source = sum(
+                1
+                for r in (bundle.get("fdd_rules") or [])
+                if isinstance(r, dict) and r.get("source_file")
+            )
+            out["commissioning_rules_with_source_file"] = rules_with_source
+            if tagged and linked_ok < tagged:
+                out["warnings"].append(
+                    f"commissioning-export: {tagged - linked_ok} pinned point(s) missing fdd_rules_linked names "
+                    "(upgrade bridge image)"
+                )
         except json.JSONDecodeError:
             out["warnings"].append("commissioning-export not JSON")
 

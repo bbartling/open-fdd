@@ -199,6 +199,21 @@ def test_equipment_binding_covers_bench_ambient_points(bench_env: Path):
     assert "bench-1" not in eq_duct
 
 
+def test_commissioning_export_links_rule_names_on_points(bench_env: Path):
+    from openfdd_bridge.commissioning_bundle import build_commissioning_export  # noqa: E402
+    from openfdd_bridge.model_service import ModelService  # noqa: E402
+    from openfdd_bridge.rule_store import RuleStore  # noqa: E402
+
+    model = ModelService().load()
+    out = build_commissioning_export(model, RuleStore().list_rules())
+    oat = next(p for p in out["points"] if p.get("external_id") == "oa-t")
+    assert "bench-oa-t-flatline-1h" in oat.get("fdd_rule_ids", [])
+    linked = {x["id"]: x["name"] for x in oat.get("fdd_rules_linked", [])}
+    assert linked.get("bench-oa-t-flatline-1h") == "Bench OA-T flatline 1h"
+    rule_row = next(r for r in out["fdd_rules"] if r["id"] == "bench-oa-t-flatline-1h")
+    assert rule_row.get("source_file", "").endswith(".py")
+
+
 def test_commissioning_import_assigns_rules_at_scale(bench_env: Path):
     from openfdd_bridge.commissioning_bundle import apply_commissioning_import  # noqa: E402
     from openfdd_bridge.rule_store import RuleStore  # noqa: E402

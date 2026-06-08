@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from pathlib import Path
 from typing import Any
 
 from .rule_bindings import normalize_bindings
@@ -12,7 +13,13 @@ from .rule_store import RuleStore
 def _strip_point_assignment_fields(pt: dict[str, Any]) -> dict[str, Any]:
     row = dict(pt)
     row.pop("fdd_rule_ids", None)
+    row.pop("fdd_rules_linked", None)
     return row
+
+
+def _rule_source_file(rule: dict[str, Any]) -> str:
+    raw = str(rule.get("source_path") or "").strip()
+    return Path(raw).name if raw else ""
 
 
 def _rules_by_point(rules: list[dict[str, Any]]) -> dict[str, list[str]]:
@@ -32,8 +39,13 @@ def _rules_by_point(rules: list[dict[str, Any]]) -> dict[str, list[str]]:
 
 
 def build_commissioning_export(model: dict[str, Any], rules: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    """Export sites, equipment, points (with fdd_rule_ids) and rule binding summary."""
+    """Export sites, equipment, points (with fdd_rule_ids + names) and rule binding summary."""
     rules = rules if rules is not None else RuleStore().list_rules()
+    rule_name_by_id = {
+        str(rule.get("id") or "").strip(): str(rule.get("name") or rule.get("id") or "")
+        for rule in rules
+        if isinstance(rule, dict) and str(rule.get("id") or "").strip()
+    }
     by_point = _rules_by_point(rules)
     points: list[dict[str, Any]] = []
     for pt in model.get("points") or []:
@@ -44,6 +56,9 @@ def build_commissioning_export(model: dict[str, Any], rules: list[dict[str, Any]
         bound = sorted(by_point.get(pid, []))
         if bound:
             row["fdd_rule_ids"] = bound
+            row["fdd_rules_linked"] = [
+                {"id": rid, "name": rule_name_by_id.get(rid, rid)} for rid in bound
+            ]
         points.append(row)
 
     fdd_rules: list[dict[str, Any]] = []
@@ -53,14 +68,16 @@ def build_commissioning_export(model: dict[str, Any], rules: list[dict[str, Any]
         rid = str(rule.get("id") or "").strip()
         if not rid:
             continue
-        fdd_rules.append(
-            {
-                "id": rid,
-                "name": str(rule.get("name") or rid),
-                "enabled": rule.get("enabled") is not False,
-                "bindings": normalize_bindings(rule.get("bindings")),
-            }
-        )
+        entry: dict[str, Any] = {
+            "id": rid,
+            "name": str(rule.get("name") or rid),
+            "enabled": rule.get("enabled") is not False,
+            "bindings": normalize_bindings(rule.get("bindings")),
+        }
+        source_file = _rule_source_file(rule)
+        if source_file:
+            entry["source_file"] = source_file
+        fdd_rules.append(entry)
     fdd_rules.sort(key=lambda r: str(r.get("name") or "").lower())
 
     return {

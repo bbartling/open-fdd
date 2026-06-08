@@ -9,12 +9,9 @@ import PageHeader from "../components/PageHeader";
 import Spinner from "../components/Spinner";
 import { TabDebugPanel } from "../components/TabDebugPanel";
 
-const POLL_INTERVALS = [
-  { s: 60, label: "1 min" },
-  { s: 300, label: "5 min" },
-  { s: 600, label: "10 min" },
-  { s: 900, label: "15 min" },
-] as const;
+import { STANDARD_POLL_INTERVALS } from "../lib/pollIntervals";
+
+const POLL_INTERVALS = STANDARD_POLL_INTERVALS.map((p) => ({ s: p.seconds, label: p.label }));
 
 export default function ModbusPage() {
   const [benchHintAvailable, setBenchHintAvailable] = useState(false);

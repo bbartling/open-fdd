@@ -100,6 +100,28 @@ def _build_request_auth(payload: dict[str, Any]) -> tuple[dict[str, str], Any, b
     return headers, httpx_auth, verify_tls
 
 
+def extract_sensor_values(
+    data: Any,
+    sensors: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Extract multiple dot-path values from one JSON payload (HA json_attributes style)."""
+    out: list[dict[str, Any]] = []
+    for spec in sensors:
+        jpath = str(spec.get("json_path") or "").strip()
+        label = str(spec.get("label") or spec.get("name") or jpath or "value").strip()
+        extracted = _extract_json_path(data, jpath)
+        out.append(
+            {
+                "json_path": jpath,
+                "label": label,
+                "units": str(spec.get("units") or ""),
+                "decoded": extracted,
+                "present_value": _format_value(extracted),
+            }
+        )
+    return out
+
+
 def execute_json_api_request(payload: dict[str, Any]) -> dict[str, Any]:
     url = expand_env_string(str(payload.get("url") or "").strip())
     if not url:
@@ -170,6 +192,25 @@ def execute_json_api_request(payload: dict[str, Any]) -> dict[str, Any]:
             "raw_json": None,
             "label": label,
             "error": "response_not_json",
+        }
+
+    sensors = payload.get("sensors")
+    if isinstance(sensors, list) and sensors:
+        sensor_values = extract_sensor_values(data, sensors)
+        primary = sensor_values[0] if sensor_values else {}
+        return {
+            "ok": resp.is_success,
+            "url": url,
+            "method": method,
+            "success": resp.is_success,
+            "status_code": resp.status_code,
+            "decoded": primary.get("decoded"),
+            "present_value": primary.get("present_value", ""),
+            "raw_json": data,
+            "json_path": primary.get("json_path", ""),
+            "label": primary.get("label") or label,
+            "sensors": sensor_values,
+            "error": None if resp.is_success else f"http_status_{resp.status_code}",
         }
 
     extracted = _extract_json_path(data, json_path)

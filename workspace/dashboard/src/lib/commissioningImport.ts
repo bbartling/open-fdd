@@ -12,10 +12,14 @@ export type FddRuleBinding = {
   };
 };
 
+export type FddRuleLink = { id: string; name: string };
+
 export type CommissioningPayload = ModelPayload & {
   version?: number;
   fdd_rules?: FddRuleBinding[];
-  points: Array<Record<string, unknown> & { fdd_rule_ids?: string[] }>;
+  points: Array<
+    Record<string, unknown> & { fdd_rule_ids?: string[]; fdd_rules_linked?: FddRuleLink[] }
+  >;
 };
 
 export function parseCommissioningPayload(input: string): CommissioningPayload {
@@ -42,6 +46,39 @@ export function parseCommissioningPayload(input: string): CommissioningPayload {
   const obj = parsed as Record<string, unknown>;
   const fdd_rules = Array.isArray(obj.fdd_rules) ? (obj.fdd_rules as FddRuleBinding[]) : [];
   return { ...base, version: typeof obj.version === "number" ? obj.version : 1, fdd_rules };
+}
+
+export function pointRulePinRows(payload: CommissioningPayload): Array<{
+  pointId: string;
+  label: string;
+  rules: FddRuleLink[];
+}> {
+  const catalog = new Map(
+    (payload.fdd_rules ?? []).map((r) => [r.id, String(r.name || r.id)] as const),
+  );
+  const rows: Array<{ pointId: string; label: string; rules: FddRuleLink[] }> = [];
+  for (const pt of payload.points || []) {
+    const linked = pt.fdd_rules_linked;
+    const ids = pt.fdd_rule_ids;
+    let rules: FddRuleLink[] = [];
+    if (Array.isArray(linked) && linked.length) {
+      rules = linked.map((r) => ({
+        id: String(r.id),
+        name: String(r.name || catalog.get(String(r.id)) || r.id),
+      }));
+    } else if (Array.isArray(ids) && ids.length) {
+      rules = ids.map((id) => ({
+        id: String(id),
+        name: catalog.get(String(id)) || String(id),
+      }));
+    }
+    if (!rules.length) continue;
+    const pointId = String(pt.id || "");
+    const label = String(pt.description || pt.external_id || pt.fdd_input || pointId);
+    rows.push({ pointId, label, rules });
+  }
+  rows.sort((a, b) => a.label.localeCompare(b.label));
+  return rows;
 }
 
 export function assignmentSummary(payload: CommissioningPayload): {
