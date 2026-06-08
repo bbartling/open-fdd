@@ -48,7 +48,7 @@ Same shape as an Acme edge deploy: **prod React UI**, **Caddy on :80**, bridge o
 
 Credentials: `workspace/auth.pentest.local` (generated on first start). ZAP target is usually `http://<lan-ip>/` (benserver example: `http://192.168.204.18/`). If LAN clients cannot reach :80, run `sudo ./scripts/open_lan_port.sh 80`.
 
-See also [Health checks (developer)](health-check) for probe details.
+See also [Health checks (developer)](health-check) for probe details and [ZAP baseline expectations](../security/zap-baseline) for accepted Medium/Low findings.
 
 ## Docs preview
 

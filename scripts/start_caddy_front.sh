@@ -44,22 +44,20 @@ if [[ "$OFDD_CADDY_MODE" == "tls" ]]; then
 	tls ${cert_dir}/cert.pem ${cert_dir}/key.pem
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		X-Content-Type-Options nosniff
-		X-Frame-Options SAMEORIGIN
-		Referrer-Policy strict-origin-when-cross-origin
 	}
-	reverse_proxy 127.0.0.1:${OFDD_BRIDGE_PORT}
+	reverse_proxy 127.0.0.1:${OFDD_BRIDGE_PORT} {
+		header_down -Server
+	}
+	header -Server
 }
 EOF
 else
   cat >"$CFG" <<EOF
 :${OFDD_CADDY_HTTP_PORT} {
-	header {
-		X-Content-Type-Options nosniff
-		X-Frame-Options SAMEORIGIN
-		Referrer-Policy strict-origin-when-cross-origin
+	reverse_proxy 127.0.0.1:${OFDD_BRIDGE_PORT} {
+		header_down -Server
 	}
-	reverse_proxy 127.0.0.1:${OFDD_BRIDGE_PORT}
+	header -Server
 }
 EOF
 fi

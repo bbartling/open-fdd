@@ -1,4 +1,9 @@
-"""HTTP security headers for the operator SPA."""
+"""HTTP security headers for the operator SPA.
+
+Caddy (reverse proxy) must NOT set overlapping headers — bridge middleware owns
+Referrer-Policy, X-Frame-Options, CSP, COOP, CORP, and Permissions-Policy.
+Caddy TLS mode may add Strict-Transport-Security only.
+"""
 
 from __future__ import annotations
 
@@ -22,12 +27,24 @@ _CSP = (
     "object-src 'none'"
 )
 
+# COEP omitted — require-corp breaks third-party/static embeds; add only after asset audit.
+_SECURITY_HEADERS: dict[str, str] = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": _CSP,
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
+}
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> object:
         response: Response = await call_next(request)
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Content-Security-Policy", _CSP)
+        for key, value in _SECURITY_HEADERS.items():
+            response.headers[key] = value
+        # Avoid stacking uvicorn/Caddy Server banners on the wire.
+        if "server" in response.headers:
+            del response.headers["server"]
         return response

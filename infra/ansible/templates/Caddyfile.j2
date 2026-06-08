@@ -7,21 +7,20 @@
 :443 {
 	tls /etc/openfdd/caddy/cert.pem /etc/openfdd/caddy/key.pem
 
+	# HSTS only — app headers from bridge SecurityHeadersMiddleware
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		X-Content-Type-Options nosniff
-		X-Frame-Options SAMEORIGIN
-		Referrer-Policy strict-origin-when-cross-origin
 	}
-	reverse_proxy 127.0.0.1:{{ openfdd_bridge_port }}
+	reverse_proxy 127.0.0.1:{{ openfdd_bridge_port }} {
+		header_down -Server
+	}
+	header -Server
 }
 {% else %}
 :80 {
-	header {
-		X-Content-Type-Options nosniff
-		X-Frame-Options SAMEORIGIN
-		Referrer-Policy strict-origin-when-cross-origin
+	reverse_proxy 127.0.0.1:{{ openfdd_bridge_port }} {
+		header_down -Server
 	}
-	reverse_proxy 127.0.0.1:{{ openfdd_bridge_port }}
+	header -Server
 }
 {% endif %}
