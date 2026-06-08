@@ -17,10 +17,23 @@ usage() {
   exit "${1:-0}"
 }
 
+sudo_cmd() {
+  if [[ -n "${SUDO_PASSWORD:-}" ]]; then
+    echo "$SUDO_PASSWORD" | sudo -S "$@"
+  else
+    sudo "$@"
+  fi
+}
+
 run_cmd() {
   echo "+ $*"
   if [[ "$APPLY" == "1" ]]; then
-    "$@"
+    if [[ "$1" == "sudo" ]]; then
+      shift
+      sudo_cmd "$@"
+    else
+      "$@"
+    fi
   fi
 }
 
