@@ -3,6 +3,7 @@ import {
   buildDeviceContextMenuItems,
   buildPointContextMenuItems,
   formatBacnetValue,
+  pointIsCommandable,
 } from "./bacnetTreeMenu";
 import type { DriverDevice, DriverPoint } from "../components/BacnetPointsTree";
 

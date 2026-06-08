@@ -6,7 +6,9 @@ nav_order: 3
 
 # Containers
 
-Open-FDD v3 edge sites run **three** GHCR containers plus optional **host** services (Caddy, Ollama). There is no separate BACnet poll container — polling is part of **commission**.
+Open-FDD v3 edge sites run **three** GHCR containers plus optional **host** services (Caddy, Ollama). There is no separate BACnet poll container — **field BACnet polling lives in commission**.
+
+**Quick answer:** Who binds BACnet UDP 47808? **`openfdd-commission`**. Bridge only ingests `samples.csv` into the feather historian.
 
 ## GHCR images
 
@@ -48,7 +50,7 @@ Template: `docker/compose.edge.yml` → copy to `~/open-fdd/docker-compose.yml`.
 |---------|-----------|
 | BACnet Who-Is / read / write | **commission** |
 | BACnet scheduled RPM reads | **commission** (`bacnet_poll_loop`) |
-| CSV → feather historian | **bridge** (`bacnet_poll_worker` thread) |
+| CSV → feather historian | **bridge** (feather ingest worker — `bacnet_poll_worker` module name is historical) |
 | Operator login, Rule Lab, faults UI | **bridge** |
 | Agent doc search | **mcp-rag** |
 

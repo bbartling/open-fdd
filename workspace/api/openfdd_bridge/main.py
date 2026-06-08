@@ -41,9 +41,12 @@ async def _lifespan(_app: FastAPI):
     from .log_rotation import rotate_logs_on_startup, start_log_rotation_worker
     from .modbus_poll_worker import start_modbus_poll_worker
 
+    from .deployment_roles import log_bridge_deployment_roles
+
     rotate_logs_on_startup()
     start_log_rotation_worker()
     load_json_api_env()
+    log_bridge_deployment_roles()
     start_bacnet_poll_worker()
     start_modbus_poll_worker()
     start_json_api_poll_worker()

@@ -321,6 +321,10 @@ if [[ "$HTTP_ONLY" == "1" ]]; then
 elif [[ "$INVENTORY_DOCKER_STACK" == "1" ]]; then
   log_ok "systemd units skipped (openfdd_docker_stack=true — health via /health/stack)"
   if command -v ssh >/dev/null 2>&1; then
+    legacy_poll="$(ssh_remote "systemctl is-active openfdd-bacnet-poll 2>/dev/null || true")" || legacy_poll=""
+    if [[ "$legacy_poll" == "active" ]]; then
+      log_warn "Legacy openfdd-bacnet-poll systemd unit is active while Docker commission runs — disable it to avoid double BACnet polling"
+    fi
     if feather_b="$(ssh_remote "du -sb ~/open-fdd/workspace/data/feather_store 2>/dev/null | awk '{print \$1}' || echo 0")"; then
       log_ok "Feather store on edge: ${feather_b:-0} bytes"
     else
