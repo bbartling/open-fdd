@@ -161,14 +161,33 @@ function Get-FirstLines {
     }
 }
 
+function Test-SafeReportDir {
+    param([string]$Dir)
+    if ([string]::IsNullOrWhiteSpace($Dir)) { return $false }
+    $leaf = [System.IO.Path]::GetFileName($Dir.TrimEnd('\', '/'))
+    if ($leaf -ne "openfdd-security-report") { return $false }
+    try {
+        $resolved = [System.IO.Path]::GetFullPath($Dir)
+    } catch {
+        return $false
+    }
+    if ($resolved -match '^[A-Za-z]:\\$' -or $resolved -eq '/') { return $false }
+    return $true
+}
+
 $BaseDir = if ([System.IO.Path]::IsPathRooted($ReportDir)) {
     $ReportDir
 } else {
     Join-Path (Get-Location).Path $ReportDir
 }
 
+if (-not (Test-SafeReportDir -Dir $BaseDir)) {
+    Write-Error "Report directory must be named openfdd-security-report (got: $ReportDir)"
+    exit 1
+}
+
 if ((Test-Path $BaseDir) -and (-not $KeepExisting)) {
-    Remove-Item -Path $BaseDir -Recurse -Force
+    Remove-Item -LiteralPath $BaseDir -Recurse -Force
 }
 
 New-Item -ItemType Directory -Force -Path $BaseDir | Out-Null

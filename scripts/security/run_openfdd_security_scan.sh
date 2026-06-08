@@ -50,8 +50,19 @@ else
   BASE_DIR="$REPORT_DIR"
 fi
 
+# Only delete the default report folder name under cwd (not arbitrary paths).
+_report_leaf="$(basename "$BASE_DIR")"
+if [[ -z "$BASE_DIR" || "$BASE_DIR" == "/" || "$BASE_DIR" == "." || "$BASE_DIR" == ".." ]]; then
+  echo "Unsafe report directory: $BASE_DIR" >&2
+  exit 1
+fi
+if [[ "$_report_leaf" != "openfdd-security-report" ]]; then
+  echo "Report directory must be named openfdd-security-report (got: $_report_leaf)" >&2
+  exit 1
+fi
+
 if [[ -d "$BASE_DIR" && "$KEEP_EXISTING" == "0" ]]; then
-  rm -rf "$BASE_DIR"
+  rm -rf -- "$BASE_DIR"
 fi
 mkdir -p "$BASE_DIR"
 
@@ -203,7 +214,8 @@ Generated: $(date '+%Y-%m-%d %H:%M:%S')
 Target: $TARGET_URL
 EOF
 if [[ -f "${BASE_DIR}/${ZAP_MD}" ]]; then
-  grep -iE 'WARN|FAIL|High|Medium|Low|CSP|X-Frame|Header' "${BASE_DIR}/${ZAP_MD}" >>"$ZAP_FINDINGS" 2>/dev/null | head -80 || true
+  grep -iE 'WARN|FAIL|High|Medium|Low|CSP|X-Frame|Header' "${BASE_DIR}/${ZAP_MD}" 2>/dev/null |
+    head -80 >>"$ZAP_FINDINGS" || true
 fi
 
 cat >"$QUICK" <<EOF
@@ -220,7 +232,8 @@ fi
 if [[ -f "${BASE_DIR}/${ZAP_MD}" ]]; then
   echo "" >>"$QUICK"
   echo "ZAP snippets:" >>"$QUICK"
-  grep -iE 'WARN|FAIL|High|Medium|Low|CSP|X-Frame|Header' "${BASE_DIR}/${ZAP_MD}" >>"$QUICK" 2>/dev/null | head -40 || true
+  grep -iE 'WARN|FAIL|High|Medium|Low|CSP|X-Frame|Header' "${BASE_DIR}/${ZAP_MD}" 2>/dev/null |
+    head -40 >>"$QUICK" || true
 fi
 
 cat >"$CHECKLIST" <<EOF

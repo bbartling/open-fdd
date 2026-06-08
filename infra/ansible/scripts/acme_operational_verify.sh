@@ -61,6 +61,19 @@ api_post() {
     -d "$body" "${BASE}${path}"
 }
 
+# Returns HTTP status on stdout; response body in $API_POST_BODY.
+api_post_status() {
+  local path="$1" body="${2:-{}}"
+  local tmp code
+  tmp="$(mktemp)"
+  code="$(curl -sS --connect-timeout 15 --max-time 300 -o "$tmp" -w "%{http_code}" \
+    -X POST -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
+    -d "$body" "${BASE}${path}" 2>/dev/null)" || code="000"
+  API_POST_BODY="$(cat "$tmp")"
+  rm -f "$tmp"
+  echo "$code"
+}
+
 wait_job() {
   local job_id="$1" label="$2" max="${3:-120}"
   local i=0
@@ -139,10 +152,14 @@ print(json.dumps({
 }))
 ")"
 if [[ "$import_body" != "{}" ]]; then
-  if imp="$(api_post "/api/bacnet/import-to-model" "$import_body" 2>/dev/null)"; then
+  import_code="$(api_post_status "/api/bacnet/import-to-model" "$import_body")"
+  imp="$API_POST_BODY"
+  if [[ "$import_code" == "200" ]]; then
     log_ok "import-to-model: $(echo "$imp" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("equipment_id", d.get("ok", d)))' 2>/dev/null || echo ok)"
+  elif [[ "$import_code" == "422" ]]; then
+    log_info "import-to-model skipped (422 validation — model already commissioned)"
   else
-    log_info "import-to-model skipped (422/validation — model already commissioned)"
+    log_fail "import-to-model HTTP ${import_code}: ${imp:0:200}"
   fi
 fi
 

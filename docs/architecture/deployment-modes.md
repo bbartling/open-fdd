@@ -49,7 +49,7 @@ Details: [TLS and certificates](../security/tls-and-certs). Security headers are
 
 ## BACnet data path
 
-```
+```text
 OT devices ──UDP 47808──▶ commission (poll loop) ──▶ samples.csv
                                               │
                                               ▼
