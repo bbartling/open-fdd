@@ -36,6 +36,10 @@ function normalizeRollingMinutes(v: string | number): number {
   return (ROLLING_ALLOWED as readonly number[]).includes(m) ? m : 5;
 }
 
+function setSignature(keys: Iterable<string>): string {
+  return [...keys].sort().join(",");
+}
+
 export default function PlotPage() {
   const chartRef = useRef<HTMLDivElement>(null);
   const fetchGen = useRef(0);
@@ -126,14 +130,18 @@ export default function PlotPage() {
         }
       }
     }
-    return [...ids];
+    return [...ids].sort();
   }, [includeFaults, savedRules, selected, equipmentId, activeGroup, optionByKey, visibleOptions]);
+
+  const selectedSig = setSignature(selected);
+  const scopedRuleIdsSig = scopedRuleIds.join(",");
 
   useEffect(() => {
     if (!equipmentId || catalog.seriesOptions.length === 0) return;
     const keys = defaultKeysForEquipment(catalog.seriesOptions, equipmentId, 6);
+    const nextSig = setSignature(keys);
     PLOT_LOG("default selection", equipmentId, keys);
-    setSelected(new Set(keys));
+    setSelected((prev) => (setSignature(prev) === nextSig ? prev : new Set(keys)));
   }, [equipmentId, catalog.seriesOptions.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const renderChart = useCallback(
@@ -179,14 +187,14 @@ export default function PlotPage() {
   }, [plotData, renderChart]);
 
   const refreshChart = useCallback(async () => {
-    if (!siteId || !selected.size) {
+    if (!siteId || !selectedSig) {
       PLOT_LOG("refresh skipped", { siteId, selected: selected.size });
       return;
     }
     const gen = ++fetchGen.current;
     setChartLoading(true);
     setError("");
-    const keys = [...selected];
+    const keys = selectedSig ? selectedSig.split(",") : [];
     const cols = [...new Set(keys.map((k) => optionByKey.get(k)?.column ?? k))];
     PLOT_LOG("fetch readings", { siteId, keys: keys.length, cols, hours, includeFaults });
     const t0 = performance.now();
@@ -220,9 +228,13 @@ export default function PlotPage() {
       }
       setFaultPanels(res.fault_panels ?? []);
       const panelKeys = (res.fault_panels ?? []).map((p) => p.key);
-      setEnabledFaults(
-        new Set(panelKeys.filter((k) => !userDisabledFaults.current.has(k))),
-      );
+      setEnabledFaults((prev) => {
+        const next = new Set(panelKeys.filter((k) => !userDisabledFaults.current.has(k)));
+        if (prev.size === next.size && [...next].every((k) => prev.has(k))) {
+          return prev;
+        }
+        return next;
+      });
       setPlotData(res);
       const faultCount = Object.values(res.fault_totals ?? {}).reduce((a, b) => a + b, 0);
       const trunc = res.chart_truncated ? ` (downsampled ×${res.chart_stride})` : "";
@@ -241,10 +253,10 @@ export default function PlotPage() {
       window.clearTimeout(timer);
       if (gen === fetchGen.current) setChartLoading(false);
     }
-  }, [siteId, selected, hours, includeFaults, rollingAvgMinutes, showRollingAvg, optionByKey, scopedRuleIds]);
+  }, [siteId, selectedSig, hours, includeFaults, rollingAvgMinutes, showRollingAvg, optionByKey, scopedRuleIdsSig]);
 
   useEffect(() => {
-    if (!selected.size || !siteId) return;
+    if (!selectedSig || !siteId) return;
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
       void refreshChart();
@@ -252,7 +264,7 @@ export default function PlotPage() {
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
-  }, [siteId, hours, includeFaults, rollingAvgMinutes, showRollingAvg, selected, refreshChart]);
+  }, [siteId, hours, includeFaults, rollingAvgMinutes, showRollingAvg, selectedSig, scopedRuleIdsSig, refreshChart]);
 
   useEffect(() => {
     return () => {

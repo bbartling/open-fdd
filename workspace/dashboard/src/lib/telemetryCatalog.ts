@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "./api";
 import { formatApiError } from "./formatApiError";
 
@@ -108,12 +108,18 @@ export function useTelemetryCatalog(initialSiteId?: string): TelemetryCatalog {
     if (siteId) void loadCatalog(siteId);
   }, [siteId, loadCatalog]);
 
-  const visibleOptions =
-    !equipmentId || equipmentId === "__all__"
-      ? seriesOptions
-      : seriesOptions.filter((o) => o.equipment_id === equipmentId);
+  const visibleOptions = useMemo(
+    () =>
+      !equipmentId || equipmentId === "__all__"
+        ? seriesOptions
+        : seriesOptions.filter((o) => o.equipment_id === equipmentId),
+    [equipmentId, seriesOptions],
+  );
 
-  const activeGroup = equipmentGroups.find((g) => g.equipment_id === equipmentId);
+  const activeGroup = useMemo(
+    () => equipmentGroups.find((g) => g.equipment_id === equipmentId),
+    [equipmentGroups, equipmentId],
+  );
 
   return {
     sites,

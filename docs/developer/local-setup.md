@@ -35,6 +35,21 @@ docker compose -f docker/compose.dev.yml -f docker/compose.bench.yml up -d
 # commission.env — set BACNET_BIND to your OT interface
 ```
 
+## Production-like local stack (Caddy, LAN scans)
+
+Same shape as an Acme edge deploy: **prod React UI**, **Caddy on :80**, bridge on loopback **8765**, auth enabled. Use for OWASP ZAP or nmap from another machine on the LAN.
+
+```bash
+./scripts/pentest_production_stack.sh start    # build prod UI + Caddy + auth.pentest.local
+./scripts/pentest_production_stack.sh status   # bridge, commission, caddy, mcp-rag
+./scripts/pentest_production_stack.sh verify   # LAN IP, /health, ZAP target URL
+./scripts/pentest_production_stack.sh stop     # when done
+```
+
+Credentials: `workspace/auth.pentest.local` (generated on first start). ZAP target is usually `http://<lan-ip>/` (benserver example: `http://192.168.204.18/`). If LAN clients cannot reach :80, run `sudo ./scripts/open_lan_port.sh 80`.
+
+See also [Health checks (developer)](health-check) for probe details.
+
 ## Docs preview
 
 ```bash
