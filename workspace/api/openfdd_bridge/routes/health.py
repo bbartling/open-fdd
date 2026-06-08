@@ -36,12 +36,23 @@ def _ws_interval_sec() -> float:
 @router.get("/health")
 def health() -> dict:
     """Minimal liveness probe for Docker/Caddy (no paths, poll samples, or stack detail)."""
-    return {
+    try:
+        from open_fdd import __version__ as openfdd_version
+    except ImportError:
+        openfdd_version = "unknown"
+    import os
+
+    git_sha = os.environ.get("OPENFDD_BUILD_GIT_SHA", "").strip() or None
+    payload: dict = {
         "ok": True,
         "service": "openfdd-bridge",
         "version": bridge_version,
+        "openfdd_version": openfdd_version,
         "auth_required": clients_must_authenticate(),
     }
+    if git_sha:
+        payload["git_sha"] = git_sha
+    return payload
 
 
 @router.get("/health/stack")

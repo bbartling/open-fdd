@@ -252,6 +252,7 @@ def test_health_minimal_public(raw_client: TestClient):
     assert body["ok"] is True
     assert body["service"] == "openfdd-bridge"
     assert "version" in body
+    assert body.get("openfdd_version") == "3.0.3"
     assert "auth_required" in body
     assert "bacnet_poll" not in body
     assert "repo_root" not in body

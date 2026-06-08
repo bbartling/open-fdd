@@ -37,7 +37,7 @@ describe("plot-chart", () => {
     );
     expect(traces).toHaveLength(2);
     expect(traces[1].yaxis).toBe("y2");
-    expect(layout.yaxis2).toMatchObject({ range: [0, 1] });
+    expect(layout.yaxis2).toMatchObject({ range: [-0.08, 1.08], title: "Faults (0/1)", automargin: true });
   });
 
   it("adds fault lane on y3 when humidity and faults both present", () => {
@@ -54,6 +54,6 @@ describe("plot-chart", () => {
     );
     expect(traces).toHaveLength(3);
     expect(traces[2].yaxis).toBe("y3");
-    expect(layout.yaxis3).toMatchObject({ range: [0, 1] });
+    expect(layout.yaxis3).toMatchObject({ range: [-0.08, 1.08], title: "Faults (0/1)", automargin: true });
   });
 });

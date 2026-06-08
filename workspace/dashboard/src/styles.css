@@ -488,6 +488,13 @@ textarea {
   margin: 0.75rem 0;
 }
 
+.openfdd-rev {
+  font-size: 0.72rem;
+  margin: 0 0 0.5rem;
+  padding: 0 0.15rem;
+  letter-spacing: 0.02em;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;

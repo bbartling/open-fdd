@@ -112,21 +112,54 @@ def _rule_code(rule: dict[str, Any]) -> str:
     return str(rule.get("code") or "")
 
 
-def _brick_types_for_columns(model: dict[str, Any], site_id: str, columns: list[str]) -> set[str]:
+def _plot_scope_for_columns(
+    model: dict[str, Any], site_id: str, columns: list[str]
+) -> tuple[set[str], set[str], set[str]]:
+    """Return (brick_types, point_ids, equipment_ids) for plotted telemetry columns."""
     from .timeseries_api import _equipment_for_site, _point_on_site, plot_column_name
 
     col_set = set(columns)
     bricks: set[str] = set()
+    point_ids: set[str] = set()
+    equipment_ids: set[str] = set()
     site_eq = _equipment_for_site(model, site_id)
     for pt in model.get("points") or []:
         if not isinstance(pt, dict) or not _point_on_site(pt, site_id, site_eq):
             continue
         if plot_column_name(pt) not in col_set:
             continue
+        pid = str(pt.get("id") or pt.get("series_id") or "").strip()
+        if pid:
+            point_ids.add(pid)
         bt = str(pt.get("brick_type") or "").strip()
         if bt:
             bricks.add(bt)
-    return bricks
+        eq_id = str(pt.get("equipment_id") or "").strip()
+        if eq_id:
+            equipment_ids.add(eq_id)
+    return bricks, point_ids, equipment_ids
+
+
+def _rule_matches_plot_scope(
+    rule: dict[str, Any],
+    *,
+    scope_bricks: set[str],
+    scope_point_ids: set[str],
+    scope_equipment_ids: set[str],
+) -> bool:
+    bindings = rule.get("bindings") if isinstance(rule.get("bindings"), dict) else {}
+    point_ids = {str(x) for x in bindings.get("point_ids") or [] if str(x).strip()}
+    equipment_ids = {str(x) for x in bindings.get("equipment_ids") or [] if str(x).strip()}
+    rule_bricks = {str(x) for x in bindings.get("brick_types") or [] if str(x).strip()}
+    if not point_ids and not equipment_ids and not rule_bricks:
+        return True
+    if scope_point_ids and point_ids and (point_ids & scope_point_ids):
+        return True
+    if scope_equipment_ids and equipment_ids and (equipment_ids & scope_equipment_ids):
+        return True
+    if scope_bricks and rule_bricks and (rule_bricks & scope_bricks):
+        return True
+    return False
 
 
 def evaluate_fault_plots(
@@ -142,9 +175,13 @@ def evaluate_fault_plots(
     fault_panels: list[dict[str, str]] = []
     fault_totals: dict[str, int] = {}
     rules = [r for r in RuleStore().list_rules() if isinstance(r, dict) and r.get("enabled", True)]
-    scope_bricks: set[str] | None = None
+    scope_bricks: set[str] = set()
+    scope_point_ids: set[str] = set()
+    scope_equipment_ids: set[str] = set()
     if scope_columns:
-        scope_bricks = _brick_types_for_columns(model, site_id, scope_columns)
+        scope_bricks, scope_point_ids, scope_equipment_ids = _plot_scope_for_columns(
+            model, site_id, scope_columns
+        )
     color_i = 0
     evaluated = 0
     for rule in rules:
@@ -155,11 +192,13 @@ def evaluate_fault_plots(
             continue
         if rule.get("mode") != "rule":
             continue
-        if scope_bricks is not None:
-            bindings = rule.get("bindings") if isinstance(rule.get("bindings"), dict) else {}
-            rule_bricks = {str(x) for x in bindings.get("brick_types") or [] if str(x).strip()}
-            if rule_bricks and not (rule_bricks & scope_bricks):
-                continue
+        if scope_columns and not _rule_matches_plot_scope(
+            rule,
+            scope_bricks=scope_bricks,
+            scope_point_ids=scope_point_ids,
+            scope_equipment_ids=scope_equipment_ids,
+        ):
+            continue
         code = _rule_code(rule)
         if not code.strip():
             continue

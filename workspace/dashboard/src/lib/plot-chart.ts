@@ -127,14 +127,15 @@ export function buildPlotTraces(
     paper_bgcolor: paper,
     plot_bgcolor: plotBg,
     font: { color: font },
-    margin: { t: 48, r: showFaultAxis ? 72 : 48, b: 48, l: 56 },
+    margin: { t: 48, r: showFaultAxis ? 88 : 48, b: 48, l: 56 },
     hovermode: "x unified",
     legend: { orientation: "h", y: 1.14 },
-    xaxis: { title: "Time (UTC)", gridcolor: grid },
+    xaxis: { title: "Time (UTC)", gridcolor: grid, automargin: true },
     yaxis: {
       title: hasTemp ? "Temperature" : "Value",
       side: "left",
       gridcolor: grid,
+      automargin: true,
     },
   };
 
@@ -144,17 +145,20 @@ export function buildPlotTraces(
       side: "right",
       overlaying: "y",
       gridcolor: grid,
+      automargin: true,
     };
   }
 
   if (showFaultAxis) {
     const faultLayout: Partial<Plotly.LayoutAxis> = {
-      side: hasRh ? "right" : "right",
+      title: "Faults (0/1)",
+      side: "right",
       overlaying: "y",
-      range: [0, 1],
+      range: [-0.08, 1.08],
       tickvals: [0, 1],
       ticktext: ["OK", "FAULT"],
       showgrid: false,
+      automargin: true,
     };
     if (hasRh) {
       layout.yaxis3 = { ...faultLayout, position: 0.98 };

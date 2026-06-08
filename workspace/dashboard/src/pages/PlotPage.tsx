@@ -9,6 +9,12 @@ import { apiFetch, getBridgeBase } from "../lib/api";
 import { copyToClipboard } from "../lib/clipboard";
 import { formatApiError } from "../lib/formatApiError";
 import { buildPlotTraces, type PlotReadingsResponse } from "../lib/plot-chart";
+import { parsePlotSearch } from "../lib/plot-url";
+import {
+  fetchSavedRules,
+  rulesBoundToTarget,
+  type SavedRule,
+} from "../lib/ruleBindings";
 import {
   defaultKeysForEquipment,
   useTelemetryCatalog,
@@ -34,15 +40,14 @@ export default function PlotPage() {
   const chartRef = useRef<HTMLDivElement>(null);
   const fetchGen = useRef(0);
   const debounceRef = useRef<number | null>(null);
+  const userDisabledFaults = useRef<Set<string>>(new Set());
   const { theme } = useTheme();
   const catalog = useTelemetryCatalog();
+  const urlState = useMemo(() => parsePlotSearch(window.location.search), []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const site = params.get("site");
-    const device = params.get("device");
-    if (site) catalog.setSiteId(site);
-    if (device) catalog.setEquipmentId(device);
+    if (urlState.siteId) catalog.setSiteId(urlState.siteId);
+    if (urlState.deviceId) catalog.setEquipmentId(urlState.deviceId);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const {
     sites,
@@ -70,7 +75,8 @@ export default function PlotPage() {
     () => localStorage.getItem("ofdd_plot_show_rolling_avg") !== "0",
   );
   const [showBounds, setShowBounds] = useState(true);
-  const [includeFaults, setIncludeFaults] = useState(false);
+  const [includeFaults, setIncludeFaults] = useState(() => urlState.autoFddOverlay === true);
+  const [savedRules, setSavedRules] = useState<SavedRule[]>([]);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [chartLoading, setChartLoading] = useState(false);
@@ -82,6 +88,46 @@ export default function PlotPage() {
     for (const o of catalog.seriesOptions) m.set(o.key, o);
     return m;
   }, [catalog.seriesOptions]);
+
+  useEffect(() => {
+    fetchSavedRules()
+      .then(setSavedRules)
+      .catch(() => setSavedRules([]));
+  }, []);
+
+  const scopedRuleIds = useMemo(() => {
+    if (!includeFaults || !savedRules.length) return [] as string[];
+    const ids = new Set<string>();
+    for (const key of selected) {
+      const opt = optionByKey.get(key);
+      const label = opt?.label ?? key;
+      for (const rule of rulesBoundToTarget(savedRules, { kind: "point", id: key, label })) {
+        ids.add(rule.id);
+      }
+    }
+    if (equipmentId && equipmentId !== "__all__" && activeGroup) {
+      const pointIds = visibleOptions.map((o) => o.key);
+      for (const rule of rulesBoundToTarget(savedRules, {
+        kind: "equipment",
+        id: equipmentId,
+        label: activeGroup.name,
+        pointIds,
+      })) {
+        ids.add(rule.id);
+      }
+      const brick = activeGroup.brick_type?.trim();
+      if (brick) {
+        for (const rule of rulesBoundToTarget(savedRules, {
+          kind: "brick_type",
+          id: brick,
+          label: brick,
+        })) {
+          ids.add(rule.id);
+        }
+      }
+    }
+    return [...ids];
+  }, [includeFaults, savedRules, selected, equipmentId, activeGroup, optionByKey, visibleOptions]);
 
   useEffect(() => {
     if (!equipmentId || catalog.seriesOptions.length === 0) return;
@@ -155,6 +201,9 @@ export default function PlotPage() {
         rolling_avg_minutes: String(normalizeRollingMinutes(rollingAvgMinutes)),
         show_rolling_avg: String(showRollingAvg),
       });
+      if (includeFaults && scopedRuleIds.length) {
+        qs.set("fault_rules", scopedRuleIds.join(","));
+      }
       const res = await apiFetch<PlotReadingsResponse>(`/api/timeseries/readings?${qs}`, {
         signal: controller.signal,
       });
@@ -170,7 +219,10 @@ export default function PlotPage() {
         return;
       }
       setFaultPanels(res.fault_panels ?? []);
-      setEnabledFaults(new Set((res.fault_panels ?? []).map((p) => p.key)));
+      const panelKeys = (res.fault_panels ?? []).map((p) => p.key);
+      setEnabledFaults(
+        new Set(panelKeys.filter((k) => !userDisabledFaults.current.has(k))),
+      );
       setPlotData(res);
       const faultCount = Object.values(res.fault_totals ?? {}).reduce((a, b) => a + b, 0);
       const trunc = res.chart_truncated ? ` (downsampled ×${res.chart_stride})` : "";
@@ -189,7 +241,7 @@ export default function PlotPage() {
       window.clearTimeout(timer);
       if (gen === fetchGen.current) setChartLoading(false);
     }
-  }, [siteId, selected, hours, includeFaults, rollingAvgMinutes, showRollingAvg, optionByKey]);
+  }, [siteId, selected, hours, includeFaults, rollingAvgMinutes, showRollingAvg, optionByKey, scopedRuleIds]);
 
   useEffect(() => {
     if (!selected.size || !siteId) return;
@@ -234,8 +286,13 @@ export default function PlotPage() {
   function toggleFault(key: string) {
     setEnabledFaults((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      if (next.has(key)) {
+        next.delete(key);
+        userDisabledFaults.current.add(key);
+      } else {
+        next.add(key);
+        userDisabledFaults.current.delete(key);
+      }
       return next;
     });
   }
@@ -297,8 +354,9 @@ export default function PlotPage() {
         title="Trend plot"
         subtitle={
           <>
-            Feather telemetry with optional FDD overlays. Pick a device, select points, then refresh. Right-click a
-            series chip to pin an FDD rule. Enable debug:{" "}
+            Feather telemetry with optional FDD overlays on a right-hand 0/1 axis (desktop-ui parity). Pick a device,
+            select points, enable FDD overlays or use <code>?fdd=1</code> in the URL. Right-click a series chip to pin
+            an FDD rule. Enable debug:{" "}
             <code>localStorage.ofdd_debug_plot=1</code>
           </>
         }
@@ -329,9 +387,13 @@ export default function PlotPage() {
               <option value={168}>7 d</option>
             </select>
           </div>
-          <label className="checkbox-inline" title="Evaluates all saved rules — slow on large sites">
+          <label
+            className="checkbox-inline"
+            title="Evaluates rules bound to selected points, device, or BRICK class — unbound rules also run site-wide"
+          >
             <input type="checkbox" checked={includeFaults} onChange={(e) => setIncludeFaults(e.target.checked)} />
-            FDD overlays (slow)
+            FDD overlays
+            {scopedRuleIds.length ? ` (${scopedRuleIds.length} bound)` : ""}
           </label>
           <div className="field">
             <label className="field-label" htmlFor="plot-rolling-min">

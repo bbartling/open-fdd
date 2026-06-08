@@ -13,4 +13,5 @@ Reference material for integrators and library users.
 | [API routes](bridge_api) | Operator Bridge REST/WebSocket |
 | [Python package](python-package) | PyPI `open-fdd` |
 | [Configuration reference](configuration) | Key env variables |
+| [Workspace env files](workspace-env-files) | `workspace/*.env.local` inventory |
 | [Glossary](glossary) | Terms |

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearToken, fetchAuthMe, fetchAuthStatus, hasToken } from "../lib/api";
 import { useTheme } from "../contexts/theme-context";
+import OpenFddVersion from "./OpenFddVersion";
 import StackStatusStrip from "./StackStatusStrip";
 
 const NAV = [
@@ -77,6 +78,7 @@ export default function AppLayout() {
           ) : null}
         </div>
         <StackStatusStrip />
+        <OpenFddVersion />
         <nav className="sidebar-nav">
           {NAV.map((item) => (
             <NavLink
