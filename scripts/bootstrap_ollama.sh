@@ -120,9 +120,9 @@ fi
 if systemctl is-active --quiet ollama 2>/dev/null || pgrep -x ollama >/dev/null; then
   echo "Ollama already running"
 else
-  echo "==> Starting ollama serve (background)…"
+  echo "==> Starting ollama serve (background, loopback only)…"
   mkdir -p "${ROOT}/workspace/.local-run"
-  nohup "$OLLAMA_BIN" serve >"${ROOT}/workspace/.local-run/ollama.log" 2>&1 &
+  OLLAMA_HOST=127.0.0.1:11434 nohup "$OLLAMA_BIN" serve >"${ROOT}/workspace/.local-run/ollama.log" 2>&1 &
   sleep 3
 fi
 

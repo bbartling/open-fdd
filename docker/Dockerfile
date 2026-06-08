@@ -30,8 +30,10 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY open_fdd ./open_fdd
 COPY bacnet_toolshed ./bacnet_toolshed
+COPY docker/python-security-constraints.txt /tmp/python-security-constraints.txt
 
-RUN pip install -e . \
+RUN pip install --upgrade -r /tmp/python-security-constraints.txt \
+    && pip install -e . \
     && pip install -r bacnet_toolshed/requirements.txt
 
 FROM python-base AS bridge

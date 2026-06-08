@@ -14,6 +14,10 @@ Official docs:
 |--------|----------|--------|
 | `Run-OpenFddSecurityScan.ps1` | Windows PowerShell | `./openfdd-security-report/` |
 | `run_openfdd_security_scan.sh` | macOS / Linux bash | `./openfdd-security-report/` |
+| `check_host_security.sh` | Edge VM (Linux) | `05-host-security-check.txt` |
+| `check_openfdd_exposure.sh` | Edge VM (Linux) | `06-openfdd-exposure-check.txt` |
+| `remediate_ubuntu_host.sh` | Edge VM (Linux) | stdout (dry-run default) |
+| `run_maintainer_audits.sh` | Maintainer workstation | CI parity audits |
 
 Each run (by default) **deletes and recreates** `openfdd-security-report/` with:
 
@@ -130,8 +134,23 @@ Part of every **patch release** before Acme deploy:
 
 See [Developer: security testing cycle](../../docs/developer/security-testing.md).
 
+## Tenable / Nessus (IT scan follow-up)
+
+After an IT vulnerability scan on an edge VM:
+
+```bash
+# On the edge host (SSH)
+./check_host_security.sh
+./check_openfdd_exposure.sh --edge-ip <lan-ip>
+./remediate_ubuntu_host.sh              # dry-run
+./remediate_ubuntu_host.sh --apply      # apt full-upgrade (maintenance window)
+```
+
+Docs: [Tenable remediation](../../docs/security/tenable-remediation.md), [Linux host hardening](../../docs/security/linux-host-hardening.md).
+
 ## Safety
 
 - **Baseline only** — passive ZAP, not full active scan
 - **One host** — do not scan OT BACnet subnets or controllers
 - **Bench / fake sites** — authenticated deep scans only on test stacks with approval
+- **Host remediation** — `remediate_ubuntu_host.sh` does not change firewall rules; reboot only with `--reboot-if-needed`

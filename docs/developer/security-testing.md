@@ -8,7 +8,7 @@ nav_order: 6
 
 How Open-FDD validates each **patch revision** before it ships to the live Acme HVAC bench — local automation, AI-assisted PR review, LAN passive scans, and edge post-deploy checks.
 
-Related security docs: [ZAP baseline](../security/zap-baseline), [TLS and certificates](../security/tls-and-certs), [LAN hardening](../security/lan-hardening), [Authenticated scanning (roadmap)](../security/authenticated-scanning).
+Related security docs: [ZAP baseline](../security/zap-baseline), [TLS and certificates](../security/tls-and-certs), [LAN hardening](../security/lan-hardening), [Linux host hardening](../security/linux-host-hardening), [Tenable remediation](../security/tenable-remediation), [Authenticated scanning (roadmap)](../security/authenticated-scanning).
 
 ## Who owns what
 
@@ -55,7 +55,18 @@ infra/ansible/scripts/bench_5007_arrow_battery.sh   # when FDD/Arrow paths chang
 
 Confirms Caddy `:80` fronts the bridge, auth is enabled, BACnet writes disabled, and security headers are singular (no Caddy duplicates). Details: [Health checks — pentest](health-check#pentest-production-stack-lan-zap).
 
-### 3. LAN security scan (from laptop)
+### 3. Host + exposure checks (on edge VM)
+
+After IT Nessus scans or before Acme deploy sign-off:
+
+```bash
+./scripts/security/check_host_security.sh
+./scripts/security/check_openfdd_exposure.sh --edge-ip <lan-ip>
+```
+
+Host remediation (dry-run first): `./scripts/security/remediate_ubuntu_host.sh`
+
+### 4. LAN security scan (from laptop)
 
 Use the packaged scripts — do not hand-roll one-off docker/nmap commands unless debugging:
 
@@ -70,7 +81,7 @@ Target URL is usually **`http://<lan-ip>/`** (Caddy), not `:8765`.
 
 Review `openfdd-security-report/90-quick-findings-summary.txt` and compare against [ZAP baseline expectations](../security/zap-baseline).
 
-### 4. Pull request + automated review
+### 5. Pull request + automated review
 
 - Open PR against `master`
 - **GitHub Actions** (`ci.yml`): pytest, bridge security audit, dashboard build, Jekyll docs
@@ -78,7 +89,7 @@ Review `openfdd-security-report/90-quick-findings-summary.txt` and compare again
 
 Do not merge with failing CI or unresolved duplicate-header regressions.
 
-### 5. Release
+### 6. Release
 
 ```bash
 git tag open-fdd-v3.0.4   # example
@@ -87,7 +98,7 @@ git push origin open-fdd-v3.0.4
 
 Tag triggers GHCR `:latest` and PyPI publish workflows.
 
-### 6. Lab edge validation
+### 7. Lab edge validation
 
 After pulling new images on a live bench VM:
 
@@ -98,7 +109,7 @@ infra/ansible/scripts/post_deploy_check.sh --limit <inventory_host> --full
 
 Re-run LAN ZAP + Nmap against the edge LAN IP if Caddy or auth behavior changed. Site-specific example: [GL36 lab note](../examples/acme-gl36-lab).
 
-### 7. Next cycle
+### 8. Next cycle
 
 Bump patch version locally (`pyproject.toml`, `open_fdd/__init__.py`) on `master` for the next development round — do not tag until the next release is ready.
 

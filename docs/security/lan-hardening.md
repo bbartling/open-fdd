@@ -37,4 +37,9 @@ Rule Lab runs **operator-authored Python** in a sandbox. Restrict integrator acc
 |-------|------|
 | Certificates (self-signed / site CA) | [TLS and certificates](tls-and-certs) |
 | ZAP + Nmap bench smoke | [ZAP baseline](zap-baseline) · `scripts/security/` |
+| Ubuntu host + Tenable/Nessus | [Linux host hardening](linux-host-hardening) · [Tenable remediation](tenable-remediation) |
 | Release test cycle (maintainers) | [Security testing](../developer/security-testing) |
+
+## Ollama on the edge
+
+Ollama has **no built-in auth**. Bind `OLLAMA_HOST=127.0.0.1:11434` on the host; never expose `:11434` on the OT LAN. Open-FDD bridge reaches Ollama server-side only. Validation: `scripts/security/check_openfdd_exposure.sh`.

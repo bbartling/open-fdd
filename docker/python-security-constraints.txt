@@ -1,0 +1,7 @@
+# Pinned during image build and CI pip-audit — addresses Tenable/pyOpenSSL and pip toolchain findings.
+# See docs/security/tenable-remediation.md
+pip>=26.0
+setuptools>=75.0
+wheel>=0.45
+pyOpenSSL>=26.0.0
+cryptography>=44.0.0

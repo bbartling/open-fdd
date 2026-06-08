@@ -313,6 +313,18 @@ else
   log_ok "Ollama skipped (not supported on Pi 3 armv7l — use bensserver or Pi 4/5 64-bit)"
 fi
 
+# Ollama has no built-in auth — must not listen on 0.0.0.0 (Tenable CRITICAL).
+if [[ "$HTTP_ONLY" != "1" ]] && command -v ssh >/dev/null 2>&1; then
+  ollama_bind="$(ssh_remote "ss -tulpn 2>/dev/null | grep ':11434 ' || true")" || ollama_bind=""
+  if echo "$ollama_bind" | grep -qE '0\.0\.0\.0:11434|\[::\]:11434'; then
+    log_fail "Ollama listening on all interfaces — set OLLAMA_HOST=127.0.0.1:11434 (see docs/security/tenable-remediation.md)"
+  elif echo "$ollama_bind" | grep -q '127.0.0.1:11434'; then
+    log_ok "Ollama bound to loopback only"
+  elif [[ -n "$ollama_bind" ]]; then
+    log_warn "Ollama port 11434 bind: ${ollama_bind} — verify not reachable from OT LAN"
+  fi
+fi
+
 if [[ -n "$LOGIN_USER" && -n "$LOGIN_PASS" ]]; then
   if echo "$probe_json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get("login",{}); sys.exit(0 if d.get("login_status")==200 and not d.get("errors") else 1)'; then
     log_ok "Auth POST /api/auth/login for user ${LOGIN_USER}"

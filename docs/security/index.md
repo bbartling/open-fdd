@@ -13,6 +13,8 @@ LAN deployment security for the Operator Bridge and BACnet write guard. Open-FDD
 | [LAN hardening](lan-hardening) | Auth and bind modes |
 | [ZAP baseline (local bench)](zap-baseline) | Pentest stack, expected warnings |
 | [TLS and certificates](tls-and-certs) | Cert ownership, bench TLS mode |
+| [Linux host hardening](linux-host-hardening) | Ubuntu edge VM, SSH, kernel, Ollama bind |
+| [Tenable / Nessus remediation](tenable-remediation) | IT scan findings, operator runbook |
 | [Authenticated scanning (roadmap)](authenticated-scanning) | Deep ZAP / protected API |
 | [Secrets and auth](secrets-auth) | Env files |
 | [BACnet write allowlists](bacnet-writes) | Supervisory write gates |
