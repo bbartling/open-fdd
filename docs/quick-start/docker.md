@@ -167,6 +167,16 @@ docker compose logs -f --tail 100 commission
 
 Put **Caddy** (or nginx) on port 80 → `127.0.0.1:8765`, or expose 8765 through the firewall.
 
+## Deployment choices
+
+| Mode | Compose services | When to use |
+|------|------------------|-------------|
+| **Standard OT / BACnet** | `bridge` + `commission` + `mcp-rag` | Real buildings — commission polls BACnet into `samples.csv`; bridge ingests to feather |
+| **Non-BACnet / demo** | `bridge` + `mcp-rag` (omit `commission`) | JSON API, Modbus-only, or lab without field BACnet — see [Driver framework](../drivers/index) |
+| **TLS on OT LAN** | Same stack + **host Caddy** `OFDD_CADDY_MODE=tls` | Encrypt browser↔edge; trust self-signed CA on operator PCs — not for public internet |
+
+Do **not** run the retired `openfdd-bacnet-poll` image or legacy `openfdd-bacnet-poll` systemd unit alongside Docker **commission** — that double-polls BACnet.
+
 ## Next steps
 
 → [First login and health check](health-check)  

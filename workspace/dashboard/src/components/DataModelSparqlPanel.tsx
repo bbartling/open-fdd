@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../lib/api";
 
 type PredefinedQuery = {
   id: string;
   label: string;
   short_label: string;
-  category?: "hvac" | "engineering";
+  category?: "hvac" | "relationships";
   query: string;
   query_with_bacnet?: string;
 };
@@ -28,7 +28,6 @@ type Props = {
 export default function DataModelSparqlPanel({ onStatus }: Props) {
   const [catalog, setCatalog] = useState<PredefinedResponse | null>(null);
   const [catalogError, setCatalogError] = useState("");
-  const [queryCategory, setQueryCategory] = useState<"hvac" | "engineering">("hvac");
   const [includeBacnetRefs, setIncludeBacnetRefs] = useState(false);
   const [sparqlQuery, setSparqlQuery] = useState("");
   const [running, setRunning] = useState(false);
@@ -46,6 +45,16 @@ export default function DataModelSparqlPanel({ onStatus }: Props) {
       })
       .catch((e) => setCatalogError(e instanceof Error ? e.message : String(e)));
   }, []);
+
+  const relationshipQueries = useMemo(
+    () => catalog?.queries.filter((q) => q.category === "relationships") ?? [],
+    [catalog],
+  );
+
+  const hvacQueries = useMemo(
+    () => catalog?.queries.filter((q) => (q.category ?? "hvac") === "hvac") ?? [],
+    [catalog],
+  );
 
   const runQuery = useCallback(
     async (query: string) => {
@@ -88,23 +97,39 @@ export default function DataModelSparqlPanel({ onStatus }: Props) {
       ? Array.from(new Set(bindings.flatMap((row) => Object.keys(row)))).sort()
       : [];
 
-  const filteredQueries =
-    catalog?.queries.filter((q) => (q.category ?? "hvac") === queryCategory) ?? [];
-
   return (
     <div className="dm-sparql panel">
       <p className="muted">
-        Run predefined summary queries or paste your own SPARQL against the synced BRICK + BACnet graph (
-        <code>data_model.ttl</code>). Read-only SELECT queries only.
+        Query the synced BRICK + BACnet graph (<code>data_model.ttl</code>). Read-only SELECT queries only.
       </p>
 
       {catalogError ? <p className="dm-sparql-error">{catalogError}</p> : null}
 
       <section className="dm-sparql-presets">
-        <h3>Summarize your HVAC</h3>
+        <h3>BRICK relationships</h3>
         <p className="muted">
-          Click a button to run a predefined SPARQL query. Results appear in the custom section below.
+          Trace mechanical hierarchy — <strong>feeds</strong> (AHU → VAV) and <strong>fed by</strong> (child ←
+          parent). Set <code>equipment[].feeds</code> in commissioning JSON, then sync TTL.
         </p>
+        <div className="dm-sparql-buttons">
+          {relationshipQueries.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              title={item.label}
+              disabled={running}
+              onClick={() => runPredefined(item)}
+            >
+              {item.short_label}
+            </button>
+          ))}
+          {running ? <span className="dm-sparql-running">Running SPARQL…</span> : null}
+        </div>
+      </section>
+
+      <section className="dm-sparql-presets">
+        <h3>Summarize HVAC</h3>
+        <p className="muted">Predefined counts and equipment lists. Results appear in the custom section below.</p>
         <label className="dm-sparql-bacnet-toggle">
           <input
             type="checkbox"
@@ -113,24 +138,8 @@ export default function DataModelSparqlPanel({ onStatus }: Props) {
           />
           <span>Include BACnet device and point IDs (for telemetry and algorithms)</span>
         </label>
-        <div className="dm-sparql-categories row">
-          <button
-            type="button"
-            className={queryCategory === "hvac" ? "" : "secondary-btn"}
-            onClick={() => setQueryCategory("hvac")}
-          >
-            HVAC
-          </button>
-          <button
-            type="button"
-            className={queryCategory === "engineering" ? "" : "secondary-btn"}
-            onClick={() => setQueryCategory("engineering")}
-          >
-            Engineering
-          </button>
-        </div>
         <div className="dm-sparql-buttons">
-          {filteredQueries.map((item) => (
+          {hvacQueries.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -142,7 +151,6 @@ export default function DataModelSparqlPanel({ onStatus }: Props) {
               {item.short_label}
             </button>
           ))}
-          {running ? <span className="dm-sparql-running">Running SPARQL…</span> : null}
         </div>
       </section>
 

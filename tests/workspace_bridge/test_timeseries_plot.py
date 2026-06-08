@@ -97,6 +97,22 @@ def test_downsample_aligned_plot():
     assert stride >= 1
 
 
+def test_evaluate_fault_plots_scopes_by_point_binding(plot_env: Path):
+    _reload_bridge()
+    from openfdd_bridge.feather_store import FeatherStore as FS  # noqa: E402
+    from openfdd_bridge.model_service import ModelService as MS  # noqa: E402
+    from openfdd_bridge.plot_readings import evaluate_fault_plots as eval_faults  # noqa: E402
+
+    model = MS().load()
+    df = FS().read_site("demo", source="bacnet")
+    assert df is not None
+    scoped_duct, _panels_duct, _ = eval_faults(df, "demo", model, scope_columns=["duct-t"])
+    assert "bench-oa-t-flatline-1h" not in scoped_duct
+    scoped_oa, panels_oa, _ = eval_faults(df, "demo", model, scope_columns=["oa-t"])
+    assert "bench-oa-t-flatline-1h" in scoped_oa
+    assert panels_oa
+
+
 def test_evaluate_fault_plots_flatline(plot_env: Path):
     _reload_bridge()
     from openfdd_bridge.feather_store import FeatherStore as FS  # noqa: E402

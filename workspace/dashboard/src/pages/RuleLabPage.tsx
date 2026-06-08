@@ -190,7 +190,7 @@ export default function RuleLabPage() {
     const pointId = rule?.bindings?.point_ids?.[0];
     if (!pointId) {
       appendConsole(
-        "Quick test needs one bound point — add this rule id to points[].fdd_rule_ids in Model & assignments JSON, then import.",
+        `Quick test needs one bound point — pin "${displayRuleName(rule?.name ?? "")}" (${activeRuleId}) on a point in Model & assignments (fdd_rule_ids), then import.`,
       );
       return;
     }

@@ -1,7 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { assignmentSummary, parseCommissioningPayload } from "./commissioningImport";
+import { assignmentSummary, parseCommissioningPayload, pointRulePinRows } from "./commissioningImport";
 
 describe("parseCommissioningPayload", () => {
+  it("builds point rule pin rows from fdd_rules_linked", () => {
+    const payload = parseCommissioningPayload(
+      JSON.stringify({
+        sites: [],
+        equipment: [],
+        points: [
+          {
+            id: "p1",
+            description: "OA-T",
+            fdd_rule_ids: ["rule-a"],
+            fdd_rules_linked: [{ id: "rule-a", name: "Bench OA-T flatline 1h" }],
+          },
+        ],
+        fdd_rules: [{ id: "rule-a", name: "Bench OA-T flatline 1h", bindings: { point_ids: ["p1"] } }],
+      }),
+    );
+    const rows = pointRulePinRows(payload);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].rules[0].name).toBe("Bench OA-T flatline 1h");
+  });
+
   it("parses commissioning bundle with fdd_rules", () => {
     const payload = parseCommissioningPayload(
       JSON.stringify({

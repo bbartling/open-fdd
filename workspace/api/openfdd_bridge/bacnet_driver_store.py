@@ -12,10 +12,9 @@ from bacnet_toolshed.config import CSV_FIELDNAMES, normalize_row
 from bacnet_toolshed.point_id import make_point_id, make_series_id
 
 from .paths import workspace_dir
+from .poll_intervals import POLL_INTERVALS_S, POLL_LABELS, snap_poll_interval
 
 _DRIVER_LOCK = threading.RLock()
-POLL_INTERVALS_S = (60, 300, 600, 900)
-POLL_LABELS = {60: "1 min", 300: "5 min", 600: "10 min", 900: "15 min"}
 # Last on-demand present-value read per point (Refresh PV) until poll sample arrives.
 _ONDEMAND_PV: dict[str, str] = {}
 
@@ -543,9 +542,12 @@ def driver_tree() -> dict[str, Any]:
 
 
 def _ensure_poll_interval(interval_s: int) -> int:
-    if interval_s not in POLL_LABELS:
+    if interval_s <= 0:
+        return 0
+    snapped = snap_poll_interval(interval_s)
+    if snapped not in POLL_LABELS:
         raise ValueError(f"poll_interval_s must be one of {list(POLL_LABELS)}")
-    return interval_s
+    return snapped
 
 
 def _apply_point_poll_row(*, point_id: str, enabled: bool, poll_interval_s: int) -> None:

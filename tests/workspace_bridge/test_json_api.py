@@ -253,6 +253,71 @@ def test_openweather_preset_mocked(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     assert {"web-oat-t", "web-rh", "web-weather-desc"} <= labels
 
 
+def test_json_api_presets_catalog(authed_client: TestClient):
+    login = authed_client.post(
+        "/api/auth/login",
+        json={"username": "integrator", "password": "msi"},
+    )
+    token = login.json()["token"]
+    r = authed_client.get(
+        "/api/json-api/presets",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    ids = {p["id"] for p in body["presets"]}
+    assert "jsonplaceholder-todo" in ids
+    assert "open-meteo-bundle" in ids
+    assert body["poll_intervals"][-1]["label"] == "1 hour"
+
+
+def test_json_api_test_multi_sensor_mocked(authed_client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    class _FakeResp:
+        status_code = 200
+        is_success = True
+
+        def json(self):
+            return {"main": {"temp": 72.1, "humidity": 44}, "weather": [{"description": "clear"}]}
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None):
+            return _FakeResp()
+
+    monkeypatch.setattr("openfdd_bridge.json_api_service.httpx.Client", lambda **kwargs: _FakeClient())
+
+    login = authed_client.post(
+        "/api/auth/login",
+        json={"username": "integrator", "password": "msi"},
+    )
+    token = login.json()["token"]
+    r = authed_client.post(
+        "/api/json-api/test",
+        json={
+            "url": "https://example.com/weather",
+            "method": "GET",
+            "sensors": [
+                {"json_path": "main.temp", "label": "oat"},
+                {"json_path": "main.humidity", "label": "rh"},
+            ],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["success"] is True
+    assert len(body["sensors"]) == 2
+    assert body["sensors"][0]["present_value"] == "72.1"
+
+
 def test_list_endpoints_redacts_credentials(tmp_path, monkeypatch):
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "data"))
     for name in list(sys.modules):

@@ -1,4 +1,9 @@
-"""Background poll ingest worker — triggers commission poll + feather ingest."""
+"""Background feather ingest worker — samples.csv → historian (not BACnet field polling).
+
+BACnet RPM reads run in the commission container (`bacnet_poll_loop`). This thread only
+ingests new rows from workspace/bacnet/polls/samples.csv. Commission also POSTs
+/internal/bacnet/ingest-samples after each poll cycle; this worker is a backup watcher.
+"""
 
 from __future__ import annotations
 
@@ -48,7 +53,7 @@ def _loop() -> None:
                     else:
                         _log.warning("feather ingest skipped: %s", result.get("reason"))
         except Exception as exc:
-            _log.warning("poll ingest worker failed: %s", exc)
+            _log.warning("feather ingest worker failed: %s", exc)
         time.sleep(max(10.0, sleep_s))
 
 
@@ -59,6 +64,6 @@ def start_bacnet_poll_worker() -> None:
     if os.environ.get("OFDD_DISABLE_POLL_WORKER", "").strip().lower() in {"1", "true", "yes"}:
         return
     _started = True
-    _worker = threading.Thread(target=_loop, name="bacnet-poll-worker", daemon=True)
+    _worker = threading.Thread(target=_loop, name="feather-ingest-worker", daemon=True)
     _worker.start()
-    _log.info("BACnet poll worker started (commission agent + feather ingest)")
+    _log.info("Feather ingest worker started (samples.csv → historian; BACnet poll is in commission)")

@@ -13,36 +13,44 @@
 </p>
 
 <p align="center">
-  <strong>Arrow-native</strong> HVAC fault detection — PyArrow columnar rules in Rule Lab, optional graph ML sidecar (sklearn / PyG).
+  Open-source <strong>supervisory fault detection</strong> that runs <strong>locally on the edge</strong> — BACnet polling,
+  <strong>BRICK</strong> equipment and point modeling, and <strong>AI-assisted</strong> commissioning, rule assignment, and diagnostics.
+  Author <strong>Arrow-native</strong> Python rules in Rule Lab; trend plots and live operations from the Operator Bridge.
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/open-fdd/"><strong>PyPI open-fdd</strong></a>
+  <a href="https://bbartling.github.io/open-fdd/"><img src="https://img.shields.io/badge/Documentation-read_online-2563EB?style=for-the-badge" alt="Documentation"></a>
 </p>
+
+
 
 ---
 
-## Develop locally
+## Get started
+
+**Docker (Operator Bridge)** — published on [GitHub Container Registry](https://github.com/bbartling?tab=packages). Pull the three edge images (default tag `latest`):
+
+| Image | Role |
+|-------|------|
+| [`ghcr.io/bbartling/openfdd-bridge`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge) | API, dashboard, historian |
+| [`ghcr.io/bbartling/openfdd-commission`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-commission) | BACnet discover, read, poll |
+| [`ghcr.io/bbartling/openfdd-mcp-rag`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp-rag) | Doc-search sidecar |
 
 ```bash
-git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
-
-./scripts/build_and_test.sh
-```
-
-**Docker** — build images locally or pull published tags from GHCR:
-
-```bash
-./scripts/docker_build.sh
-
-# or pull from GitHub Container Registry (tags on ghcr.io/bbartling/openfdd-bridge)
 docker pull ghcr.io/bbartling/openfdd-bridge:latest
 docker pull ghcr.io/bbartling/openfdd-commission:latest
 docker pull ghcr.io/bbartling/openfdd-mcp-rag:latest
-./scripts/openfdd_stack.sh up
 ```
 
-Documentation: [bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/) — Docker, edge deploy, Rule Lab, and contributor layout (`AGENTS.md`).
+Edge bootstrap (compose, `workspace/`, auth): [Run with Docker images](https://bbartling.github.io/open-fdd/quick-start/).
+
+**Python (`open-fdd`)** — [PyPI](https://pypi.org/project/open-fdd/) package for Arrow-native rule linting and offline Rule Lab work:
+
+```bash
+pip install open-fdd
+```
+
+Full operator stack (BACnet polling, UI, assignments): use the Docker images above. Local clone, tests, and contributor layout: `AGENTS.md` and [developer docs](https://bbartling.github.io/open-fdd/developer/).
 
 ---
 

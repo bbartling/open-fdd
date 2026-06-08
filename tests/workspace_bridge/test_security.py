@@ -223,7 +223,24 @@ def test_security_headers_on_health(client: TestClient):
     r = client.get("/health")
     assert r.headers.get("X-Content-Type-Options") == "nosniff"
     assert r.headers.get("X-Frame-Options") == "DENY"
-    assert r.headers.get("Content-Security-Policy")
+    csp = r.headers.get("Content-Security-Policy") or ""
+    assert "frame-ancestors 'none'" in csp
+    assert r.headers.get("Permissions-Policy") == (
+        "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    )
+    assert r.headers.get("Cross-Origin-Opener-Policy") == "same-origin"
+    assert r.headers.get("Cross-Origin-Resource-Policy") == "same-origin"
+    assert r.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+    # Single value per header (no Caddy + bridge duplication).
+    raw = r.headers.raw
+    for name in (
+        b"x-content-type-options",
+        b"x-frame-options",
+        b"referrer-policy",
+        b"content-security-policy",
+    ):
+        matches = [pair for pair in raw if pair[0].lower() == name]
+        assert len(matches) == 1, f"duplicate header {name.decode()}"
 
 
 def test_anonymous_cannot_read_host_stats(raw_client: TestClient):
@@ -252,6 +269,9 @@ def test_health_minimal_public(raw_client: TestClient):
     assert body["ok"] is True
     assert body["service"] == "openfdd-bridge"
     assert "version" in body
+    import open_fdd
+
+    assert body.get("openfdd_version") == open_fdd.__version__
     assert "auth_required" in body
     assert "bacnet_poll" not in body
     assert "repo_root" not in body

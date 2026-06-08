@@ -22,14 +22,13 @@ from .paths import json_api_endpoints_path, json_api_poll_csv, workspace_dir
 from .site_defaults import ensure_default_site
 from .model_service import ModelService
 from .ttl_service import TtlService
+from .poll_intervals import POLL_INTERVALS_S, POLL_LABELS, snap_poll_interval
 
 _LOCK = threading.RLock()
 _SAFE = re.compile(r"[^a-zA-Z0-9_-]+")
 _ONDEMAND_VALUE: dict[str, str] = {}
 _POLL_LAST_RUN: dict[str, float] = {}
 _LAST_CYCLE: dict[str, Any] = {"at": "", "samples": 0, "error": ""}
-POLL_INTERVALS_S = (60, 300, 600, 900, 1200)
-POLL_LABELS = {60: "1 min", 300: "5 min", 600: "10 min", 900: "15 min", 1200: "20 min"}
 OPENWEATHER_URL = (
     "https://api.openweathermap.org/data/2.5/weather"
     "?q=${ENV:OPENWEATHER_CITY}&appid=${ENV:OPENWEATHER_API_KEY}&units=${ENV:OPENWEATHER_UNITS}"
@@ -171,7 +170,7 @@ def upsert_endpoint(row: dict[str, Any]) -> dict[str, Any]:
     method = str(row.get("method") or "GET").strip().upper() or "GET"
     label = str(row.get("label") or "").strip() or str(row.get("json_path") or "value")
     pid = str(row.get("point_id") or "").strip() or make_point_id(url, method, label)
-    interval = int(row.get("poll_interval_s") or 0)
+    interval = snap_poll_interval(int(row.get("poll_interval_s") or 0))
     enabled = str(row.get("enabled", "")).lower() in {"1", "true", "yes"} or interval > 0
     verify_tls = str(row.get("verify_tls") or "1").strip().lower() not in {"0", "false", "no"}
     entry = {
@@ -202,6 +201,7 @@ def upsert_endpoint(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def set_endpoint_poll(*, point_id: str, enabled: bool, poll_interval_s: int) -> dict[str, Any]:
+    interval = snap_poll_interval(poll_interval_s) if enabled else 0
     with _LOCK:
         rows = _load_endpoints()
         found = False
@@ -210,11 +210,11 @@ def set_endpoint_poll(*, point_id: str, enabled: bool, poll_interval_s: int) -> 
                 continue
             found = True
             row["enabled"] = "1" if enabled else "0"
-            row["poll_interval_s"] = str(poll_interval_s if enabled else 0)
+            row["poll_interval_s"] = str(interval)
         if not found:
             raise ValueError(f"unknown point_id: {point_id}")
         _save_endpoints(rows)
-    return {"ok": True, "point_id": point_id, "enabled": enabled, "poll_interval_s": poll_interval_s}
+    return {"ok": True, "point_id": point_id, "enabled": enabled, "poll_interval_s": interval}
 
 
 def delete_endpoint(point_id: str) -> dict[str, Any]:
@@ -267,9 +267,64 @@ def _reading_from_row(*, row: dict[str, Any], base: dict[str, Any]) -> dict[str,
     }
 
 
+def register_rest_bundle(
+    *,
+    resource: str,
+    method: str = "GET",
+    sensors: list[dict[str, Any]],
+    headers_json: str = "",
+    body_json: str = "",
+    auth_type: str = "none",
+    bearer_token: str = "",
+    basic_user: str = "",
+    basic_password: str = "",
+    verify_tls: bool = True,
+    poll_interval_s: int = 900,
+    enabled: bool = True,
+) -> dict[str, Any]:
+    """Register one HTTP resource with multiple historian sensors (HA sensor.rest style)."""
+    url = str(resource or "").strip()
+    if not url:
+        raise ValueError("resource url required")
+    if not sensors:
+        raise ValueError("at least one sensor required")
+    interval = snap_poll_interval(poll_interval_s) if enabled else 0
+    created: list[dict[str, Any]] = []
+    for spec in sensors:
+        label = str(spec.get("label") or spec.get("name") or spec.get("json_path") or "value").strip()
+        if not label:
+            raise ValueError("each sensor needs label or json_path")
+        out = upsert_endpoint(
+            {
+                "url": url,
+                "method": str(method or "GET").upper(),
+                "json_path": str(spec.get("json_path") or ""),
+                "label": label,
+                "units": str(spec.get("units") or ""),
+                "headers_json": headers_json,
+                "body_json": body_json,
+                "auth_type": auth_type,
+                "bearer_token": bearer_token,
+                "basic_user": basic_user,
+                "basic_password": basic_password,
+                "verify_tls": "1" if verify_tls else "0",
+                "enabled": enabled,
+                "poll_interval_s": interval,
+            }
+        )
+        created.append(out["endpoint"])
+    return {
+        "ok": True,
+        "endpoints": created,
+        "count": len(created),
+        "resource": url,
+        "poll_interval_s": interval,
+    }
+
+
 def register_openweather_bundle(
     *,
-    poll_interval_s: int = 1200,
+    poll_interval_s: int = 1800,
     enabled: bool = True,
 ) -> dict[str, Any]:
     """Register three OpenWeatherMap historian columns from one shared URL."""
@@ -279,24 +334,19 @@ def register_openweather_bundle(
             "missing OPENWEATHER_API_KEY — copy workspace/json_api.env.example to json_api.env.local"
         )
     temp_units = _openweather_temp_units()
-    created: list[dict[str, Any]] = []
+    sensors = []
     for spec in OPENWEATHER_POINTS:
         units = temp_units if spec["label"] == "web-oat-t" else "%" if spec["label"] == "web-rh" else ""
-        out = upsert_endpoint(
-            {
-                "url": OPENWEATHER_URL,
-                "method": "GET",
-                "json_path": spec["json_path"],
-                "label": spec["label"],
-                "units": units,
-                "auth_type": "none",
-                "verify_tls": "1",
-                "enabled": enabled,
-                "poll_interval_s": poll_interval_s if enabled else 0,
-            }
-        )
-        created.append(out["endpoint"])
-    return {"ok": True, "endpoints": created, "count": len(created), "url_template": OPENWEATHER_URL}
+        sensors.append({"json_path": spec["json_path"], "label": spec["label"], "units": units})
+    out = register_rest_bundle(
+        resource=OPENWEATHER_URL,
+        method="GET",
+        sensors=sensors,
+        poll_interval_s=poll_interval_s,
+        enabled=enabled,
+    )
+    out["url_template"] = OPENWEATHER_URL
+    return out
 
 
 def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
@@ -343,8 +393,8 @@ def driver_tree() -> dict[str, Any]:
             interval = int(str(row.get("poll_interval_s") or "0"))
         except ValueError:
             interval = 0
-        if enabled and interval not in POLL_INTERVALS_S:
-            interval = 60
+        if enabled:
+            interval = snap_poll_interval(interval)
         pid = str(row.get("point_id") or "")
         label = str(row.get("label") or "")
         jpath = str(row.get("json_path") or "")

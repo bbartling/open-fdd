@@ -177,36 +177,40 @@ SELECT ?ahu ?ahu_label ?vav ?vav_label ?point ?point_label ?bacnet_device_id ?ob
 ORDER BY ?ahu ?vav ?point""",
     },
     {
-        "id": "equipment_feeds_topology",
-        "label": "Equipment feeds and fed-by (Brick topology)",
-        "short_label": "Feed topology",
-        "category": "hvac",
+        "id": "brick_feeds",
+        "label": "BRICK feeds (parent → child)",
+        "short_label": "feeds →",
+        "category": "relationships",
         "query": f"""PREFIX brick: <{BRICK}>
 PREFIX rdfs: <{RDFS}>
-SELECT ?site_label ?from_label ?relationship ?to_label WHERE {{
-  {{
-    ?from brick:feeds ?to .
-    BIND("feeds" AS ?relationship)
-    OPTIONAL {{
-      ?from brick:isPartOf ?site .
-      OPTIONAL {{ ?site rdfs:label ?site_label . }}
-    }}
-    OPTIONAL {{ ?from rdfs:label ?from_label . }}
-    OPTIONAL {{ ?to rdfs:label ?to_label . }}
+SELECT ?site_label ?from_label ?to_label WHERE {{
+  ?from brick:feeds ?to .
+  OPTIONAL {{
+    ?from brick:isPartOf ?site .
+    OPTIONAL {{ ?site rdfs:label ?site_label . }}
   }}
-  UNION
-  {{
-    ?from brick:isFedBy ?to .
-    BIND("fed_by" AS ?relationship)
-    OPTIONAL {{
-      ?from brick:isPartOf ?site .
-      OPTIONAL {{ ?site rdfs:label ?site_label . }}
-    }}
-    OPTIONAL {{ ?from rdfs:label ?from_label . }}
-    OPTIONAL {{ ?to rdfs:label ?to_label . }}
-  }}
+  OPTIONAL {{ ?from rdfs:label ?from_label . }}
+  OPTIONAL {{ ?to rdfs:label ?to_label . }}
 }}
-ORDER BY ?site_label ?from_label ?relationship ?to_label""",
+ORDER BY ?site_label ?from_label ?to_label""",
+    },
+    {
+        "id": "brick_fed_by",
+        "label": "BRICK fed-by (child ← parent)",
+        "short_label": "← fed by",
+        "category": "relationships",
+        "query": f"""PREFIX brick: <{BRICK}>
+PREFIX rdfs: <{RDFS}>
+SELECT ?site_label ?from_label ?to_label WHERE {{
+  ?from brick:isFedBy ?to .
+  OPTIONAL {{
+    ?from brick:isPartOf ?site .
+    OPTIONAL {{ ?site rdfs:label ?site_label . }}
+  }}
+  OPTIONAL {{ ?from rdfs:label ?from_label . }}
+  OPTIONAL {{ ?to rdfs:label ?to_label . }}
+}}
+ORDER BY ?site_label ?from_label ?to_label""",
     },
     {
         "id": "count-chillers",
@@ -351,127 +355,6 @@ SELECT ?point ?point_label ?type ?bacnet_device_id ?object_identifier WHERE {{
 }}
 ORDER BY ?type ?point
 LIMIT 500""",
-    },
-    {
-        "id": "engineering_ahu_design_cfm",
-        "label": "AHUs and design CFM (engineering)",
-        "short_label": "AHU design CFM",
-        "category": "engineering",
-        "query": f"""PREFIX brick: <{BRICK}>
-PREFIX rdfs: <{RDFS}>
-PREFIX ofdd: <{OFDD}>
-SELECT ?ahu ?ahu_label ?design_cfm WHERE {{
-  ?ahu a brick:Air_Handling_Unit .
-  OPTIONAL {{ ?ahu rdfs:label ?ahu_label . }}
-  OPTIONAL {{ ?ahu ofdd:designCFM ?design_cfm . }}
-}}
-ORDER BY ?ahu_label""",
-    },
-    {
-        "id": "engineering_by_panel",
-        "label": "Equipment electrically served by panel",
-        "short_label": "By panel",
-        "category": "engineering",
-        "query": f"""PREFIX rdfs: <{RDFS}>
-PREFIX ofdd: <{OFDD}>
-SELECT ?equipment ?equipment_label ?panel ?breaker WHERE {{
-  ?equipment ofdd:feederPanel ?panel .
-  OPTIONAL {{ ?equipment rdfs:label ?equipment_label . }}
-  OPTIONAL {{ ?equipment ofdd:feederBreaker ?breaker . }}
-}}
-ORDER BY ?panel ?equipment_label""",
-    },
-    {
-        "id": "engineering_control_vendor",
-        "label": "AHUs with control vendor metadata",
-        "short_label": "AHU vendor",
-        "category": "engineering",
-        "query": f"""PREFIX brick: <{BRICK}>
-PREFIX rdfs: <{RDFS}>
-PREFIX ofdd: <{OFDD}>
-SELECT ?ahu ?ahu_label ?vendor WHERE {{
-  ?ahu a brick:Air_Handling_Unit .
-  OPTIONAL {{ ?ahu rdfs:label ?ahu_label . }}
-  ?ahu ofdd:controlVendor ?vendor .
-}}
-ORDER BY ?ahu_label""",
-    },
-    {
-        "id": "engineering_capacity_missing_bacnet_points",
-        "label": "Design capacity but missing BACnet refs",
-        "short_label": "Cap no BACnet",
-        "category": "engineering",
-        "query": f"""PREFIX brick: <{BRICK}>
-PREFIX ofdd: <{OFDD}>
-SELECT ?equipment ?capacity WHERE {{
-  ?equipment a brick:Equipment .
-  {{ ?equipment ofdd:coolingCapacityTons ?capacity . }}
-  UNION
-  {{ ?equipment ofdd:heatingCapacityMBH ?capacity . }}
-  FILTER NOT EXISTS {{
-    ?point brick:isPointOf ?equipment .
-    ?point ofdd:bacnetDeviceId ?dev .
-    ?point ofdd:objectIdentifier ?oid .
-  }}
-}}
-ORDER BY ?equipment""",
-    },
-    {
-        "id": "engineering_source_sheet",
-        "label": "Engineering values sourced from PDF sheet",
-        "short_label": "Source sheet",
-        "category": "engineering",
-        "query": f"""PREFIX rdfs: <{RDFS}>
-PREFIX ofdd: <{OFDD}>
-SELECT ?equipment ?equipment_label ?doc ?sheet WHERE {{
-  ?equipment ofdd:sourceDocumentName ?doc .
-  ?equipment ofdd:sourceSheet ?sheet .
-  OPTIONAL {{ ?equipment rdfs:label ?equipment_label . }}
-}}
-ORDER BY ?doc ?sheet ?equipment_label""",
-    },
-    {
-        "id": "engineering_pumps_head_flow",
-        "label": "Pumps with head and flow",
-        "short_label": "Pump head/flow",
-        "category": "engineering",
-        "query": f"""PREFIX brick: <{BRICK}>
-PREFIX rdfs: <{RDFS}>
-PREFIX ofdd: <{OFDD}>
-SELECT ?pump ?pump_label ?flow ?head WHERE {{
-  ?pump a brick:Water_Pump .
-  OPTIONAL {{ ?pump rdfs:label ?pump_label . }}
-  OPTIONAL {{ ?pump ofdd:pumpFlowGPM ?flow . }}
-  OPTIONAL {{ ?pump ofdd:pumpHeadFT ?head . }}
-}}
-ORDER BY ?pump_label""",
-    },
-    {
-        "id": "engineering_voltage_fla",
-        "label": "Equipment with electrical voltage and FLA",
-        "short_label": "Voltage/FLA",
-        "category": "engineering",
-        "query": f"""PREFIX rdfs: <{RDFS}>
-PREFIX ofdd: <{OFDD}>
-SELECT ?equipment ?equipment_label ?voltage ?fla WHERE {{
-  ?equipment ofdd:electricalSystemVoltage ?voltage .
-  OPTIONAL {{ ?equipment ofdd:fla ?fla . }}
-  OPTIONAL {{ ?equipment rdfs:label ?equipment_label . }}
-}}
-ORDER BY ?equipment_label""",
-    },
-    {
-        "id": "engineering_s223_topology",
-        "label": "s223 connection points and conduits",
-        "short_label": "s223 topology",
-        "category": "engineering",
-        "query": f"""PREFIX rdfs: <{RDFS}>
-PREFIX s223: <http://data.ashrae.org/standard223#>
-SELECT ?equipment ?cp ?cnx WHERE {{
-  ?equipment s223:hasConnectionPoint ?cp .
-  OPTIONAL {{ ?equipment s223:cnx ?cnx . }}
-}}
-ORDER BY ?equipment ?cp""",
     },
 ]
 

@@ -22,7 +22,7 @@ Use this driver for gateways, micro-PLCs, IoT hubs, vendor APIs, and **web weath
 | Custom headers | Optional `headers` map (merged with auth headers) |
 | Value extraction | Dot-path into JSON body (`title`, `main.temp`, `weather.0.description`) |
 | Multi-extract poll | One HTTP request per URL group; fan-out to multiple `json_path` rows |
-| Polling | 1 / 5 / 10 / 15 / **20** minutes (same worker pattern as BACnet/Modbus) |
+| Polling | **1 / 5 / 15 / 30 min** or **1 hour** (shared with BACnet/Modbus) |
 | Historian | `workspace/json_api/polls/samples.csv` → `feather_store/json_api/` |
 | FDD merge | Scheduled FDD merges `bacnet` + `modbus` + `json_api` columns by nearest timestamp |
 
@@ -55,7 +55,7 @@ Restart the bridge (or `./scripts/run_local.sh restart`) so env vars load.
 
 1. Sign in as **integrator** → **JSON API** tab.
 2. Open the **OpenWeatherMap showcase** panel.
-3. Click **Register OpenWeather bundle (3 points, poll 20 min)**.
+3. Use the **OpenWeatherMap** preset → **Register** (default poll 30 min; choose interval in the form).
 
 Three endpoints appear under `api.openweathermap.org` in the commissioning tree:
 
@@ -87,18 +87,27 @@ Enable it in Rule Lab, bind to your OA-T BACnet point, and run **Update all reco
 
 ## Commissioning (UI)
 
-1. Sign in → **JSON API** tab (below Modbus).
-2. Enter URL, method, JSON path, and label (historian column name).
-3. Set **Auth** if the device requires it:
-   - **Bearer token** — common for API keys and JWT gateways (or use `${ENV:TOKEN}` in the field).
-   - **HTTP Basic** — username/password for legacy OT web servers.
-4. **TLS verify** — leave checked for public HTTPS; uncheck for `https://192.168.x.x` with a self-signed certificate.
-5. Click **Request & store to historian** — endpoint is saved to `endpoints.csv` and a feather shard is written.
-6. In the tree, right-click or bulk-select → **Poll 1 min** (etc.).
+The **JSON API** tab follows [Home Assistant `sensor.rest`](https://www.home-assistant.io/integrations/sensor.rest/):
+
+1. Sign in → **RESTful sensor (JSON API)** tab.
+2. Pick a **preset** (JSONPlaceholder, DummyJSON, httpbin, Open-Meteo, OpenAQ, OpenWeather) or enter a **resource URL**.
+3. Add one or more **sensors** — each row is a `value_json_path` + historian **label** (multi-value from one GET, like HA `json_attributes`).
+4. Click **Test resource** — probes without saving; shows extracted values and raw JSON.
+5. Click **Register & poll** — writes `endpoints.csv`, enables polling at the selected interval.
+6. Poll choices match BACnet/Modbus: **1 / 5 / 15 / 30 min** or **1 hour**.
+
+### API for agents
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/json-api/presets` | Full preset catalog + poll intervals (human + AI readable) |
+| `POST /api/json-api/test` | Probe resource + multi-sensor extraction |
+| `POST /api/json-api/register-bundle` | Register one resource with many sensors |
+| `POST /api/json-api/presets/{id}/register` | One-click preset registration |
 
 ### Bench preset
 
-Use the **Todo title** preset against JSONPlaceholder to verify outbound HTTPS without field hardware.
+Use **JSONPlaceholder — todo title** → **Test resource** to verify outbound HTTPS without field hardware.
 
 ## Authentication examples
 

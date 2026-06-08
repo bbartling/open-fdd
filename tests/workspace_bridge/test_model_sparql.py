@@ -10,6 +10,9 @@ def test_sparql_predefined_catalog(client):
     assert "queries" in body
     assert len(body["queries"]) >= 5
     assert any(q["id"] == "sites" for q in body["queries"])
+    assert any(q["id"] == "brick_feeds" for q in body["queries"])
+    assert any(q["id"] == "brick_fed_by" for q in body["queries"])
+    assert not any(q.get("category") == "engineering" for q in body["queries"])
 
 
 def test_sparql_run_select(client):

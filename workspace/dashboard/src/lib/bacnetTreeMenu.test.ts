@@ -3,6 +3,7 @@ import {
   buildDeviceContextMenuItems,
   buildPointContextMenuItems,
   formatBacnetValue,
+  pointIsCommandable,
 } from "./bacnetTreeMenu";
 import type { DriverDevice, DriverPoint } from "../components/BacnetPointsTree";
 
@@ -47,7 +48,7 @@ describe("buildPointContextMenuItems", () => {
       "refresh-pv",
       "read-priority-array",
     ]);
-    expect(items.find((i) => i.id === "polling")?.children).toHaveLength(4);
+    expect(items.find((i) => i.id === "polling")?.children).toHaveLength(5);
   });
 
   it("disables read priority array when point is not commandable", () => {
@@ -82,8 +83,9 @@ describe("buildDeviceContextMenuItems", () => {
     expect(polling?.children?.map((c) => c.id)).toEqual([
       "dev-poll-60",
       "dev-poll-300",
-      "dev-poll-600",
       "dev-poll-900",
+      "dev-poll-1800",
+      "dev-poll-3600",
       "poll-off-all",
     ]);
   });

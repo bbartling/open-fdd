@@ -59,9 +59,9 @@ The bridge runs rules on **PyArrow tables** via `open_fdd.arrow_runtime`, and pe
 - **Update all records** — 24 h lookback, 6 h chunks (`use_chunks: true`)
 - **Templates** — `GET /api/playground/arrow-templates`
 
-Pin points to rules via **Model & assignments** (`/model`) commissioning JSON or BACnet tree right-click.
+Pin points to rules via **Model & assignments** (`/model`) commissioning JSON or BACnet tree right-click. Export shows Rule Lab **names** on each point (`fdd_rules_linked`); import uses rule **ids** (`fdd_rule_ids`).
 
-Bench seed: `python scripts/setup_bench_afdd.py`
+Bench seed: `python3 scripts/setup_bench_afdd.py` — imports `bench_import_model.json` and bench cookbook rules with matching id/name pairs.
 
 ## Dev kit zip (download)
 

@@ -7,6 +7,7 @@ import { MODEL_COMMISSIONING_PROMPT } from "../lib/llm-prompts";
 import { assignmentSummary, parseCommissioningPayload } from "../lib/commissioningImport";
 import DataModelSparqlPanel from "../components/DataModelSparqlPanel";
 import CommissioningImportExportPanel from "../components/CommissioningImportExportPanel";
+import PointRulePinsPanel from "../components/PointRulePinsPanel";
 import ModelSyncBar from "../components/ModelSyncBar";
 import PageHeader from "../components/PageHeader";
 import { apiFetch } from "../lib/api";
@@ -137,20 +138,24 @@ export default function DataModelPage() {
       </div>
 
       {activeTab === "import" ? (
-        <CommissioningImportExportPanel
-          onStatus={setOut}
-          onImported={() => void refreshMeta()}
-        />
+        <>
+          <PointRulePinsPanel refreshKey={refreshKey} />
+          <CommissioningImportExportPanel
+            onStatus={setOut}
+            onImported={() => void refreshMeta()}
+          />
+        </>
       ) : null}
 
       {activeTab === "explorer" ? (
         <>
           <ModelSyncBar refreshKey={refreshKey} onStatus={setOut} />
+          <PointRulePinsPanel refreshKey={refreshKey} />
           <p className="muted panel">
             BACnet poll → model sync keeps <code>model.json</code> aligned with live polling. Pin FDD rules by editing{" "}
-            <code>points[].fdd_rule_ids</code> in the <strong>Import / export</strong> tab (or ask your AI agent to
-            return commissioning JSON). Rule Lab edits Python only — assignments live in this JSON workflow. Trend
-            context: <a href="/plot">Trend plot</a>.
+            <code>points[].fdd_rule_ids</code> in <strong>Import / export</strong> (export also includes{" "}
+            <code>fdd_rules_linked</code> with Rule Lab names). Rule Lab edits Python only — assignments live here.
+            Trend context: <a href="/plot">Trend plot</a>.
           </p>
         </>
       ) : null}

@@ -16,6 +16,7 @@ import {
   type WhoisDeviceRow,
 } from "../lib/bacnet-discovery-parse";
 import { formatPollSampleAt } from "../lib/formatPollTime";
+import { STANDARD_POLL_INTERVALS } from "../lib/pollIntervals";
 
 type BacnetConfig = {
   commission_agent_ok: boolean;
@@ -937,42 +938,19 @@ export default function BacnetPage() {
             <button type="button" className="secondary-btn" onClick={clearPointSelection}>
               Clear selection
             </button>
-            <ActionButton
-              secondary
-              pending={bulkPollPending}
-              pendingLabel="Updating…"
-              disabled={anyPending || selectedPointsList.length === 0}
-              onClick={() => void batchSetPointPoll(selectedPointsList, true, 60)}
-            >
-              Poll 1 min ({selectedPointsList.length})
-            </ActionButton>
-            <ActionButton
-              secondary
-              pending={bulkPollPending}
-              pendingLabel="Updating…"
-              disabled={anyPending || selectedPointsList.length === 0}
-              onClick={() => void batchSetPointPoll(selectedPointsList, true, 300)}
-            >
-              Poll 5 min
-            </ActionButton>
-            <ActionButton
-              secondary
-              pending={bulkPollPending}
-              pendingLabel="Updating…"
-              disabled={anyPending || selectedPointsList.length === 0}
-              onClick={() => void batchSetPointPoll(selectedPointsList, true, 600)}
-            >
-              Poll 10 min
-            </ActionButton>
-            <ActionButton
-              secondary
-              pending={bulkPollPending}
-              pendingLabel="Updating…"
-              disabled={anyPending || selectedPointsList.length === 0}
-              onClick={() => void batchSetPointPoll(selectedPointsList, true, 900)}
-            >
-              Poll 15 min
-            </ActionButton>
+            {STANDARD_POLL_INTERVALS.map((p, idx) => (
+              <ActionButton
+                key={p.seconds}
+                secondary
+                pending={bulkPollPending}
+                pendingLabel="Updating…"
+                disabled={anyPending || selectedPointsList.length === 0}
+                onClick={() => void batchSetPointPoll(selectedPointsList, true, p.seconds)}
+              >
+                Poll {p.label}
+                {idx === 0 ? ` (${selectedPointsList.length})` : ""}
+              </ActionButton>
+            ))}
             <ActionButton
               secondary
               pending={bulkPollPending}

@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
 import {
   assignmentSummary,
+  pointRulePinRows,
   type CommissioningPayload,
   parseCommissioningPayload,
 } from "../lib/commissioningImport";
+import { formatRuleLabel } from "../lib/ruleDisplay";
 
 type Props = {
   onStatus: (msg: string) => void;
@@ -39,6 +41,15 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
       return assignmentSummary(parseCommissioningPayload(exportText));
     } catch {
       return null;
+    }
+  }, [exportText]);
+
+  const pinRows = useMemo(() => {
+    if (!exportText.trim()) return [];
+    try {
+      return pointRulePinRows(parseCommissioningPayload(exportText));
+    } catch {
+      return [];
     }
   }, [exportText]);
 
@@ -119,16 +130,49 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
           </div>
         </header>
         <p className="muted">
-          Includes <code>sites</code>, <code>equipment</code>, <code>points</code> (with optional{" "}
-          <code>fdd_rule_ids</code> per point), and <code>fdd_rules[]</code> binding summary. Paste into your AI
-          session or edit by hand — then import the same file to apply BRICK + assignments together.
+          Each pinned point includes <code>fdd_rules_linked</code> (id + Rule Lab name) for humans/AI, plus{" "}
+          <code>fdd_rule_ids</code> for import. The <code>fdd_rules[]</code> section lists every saved rule with{" "}
+          <code>source_file</code> when deployed from Rule Lab Python.
         </p>
         {exportSummary ? (
           <p className="muted">
             <strong>{exportSummary.ruleCount}</strong> saved rules · <strong>{exportSummary.boundPointCount}</strong>{" "}
-            points with pins · <strong>{exportSummary.pointsWithRules}</strong> points tagged via{" "}
-            <code>fdd_rule_ids</code>
+            points with pins · <strong>{exportSummary.pointsWithRules}</strong> points tagged
           </p>
+        ) : null}
+        {pinRows.length ? (
+          <details className="dm-pin-preview" open>
+            <summary>Point → rule names (from export)</summary>
+            <table className="data-table point-rule-pins-table">
+              <thead>
+                <tr>
+                  <th>Point</th>
+                  <th>FDD rules</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pinRows.map((row) => (
+                  <tr key={row.pointId}>
+                    <td>
+                      <code>{row.pointId}</code>
+                      <div className="muted">{row.label}</div>
+                    </td>
+                    <td>
+                      {row.rules.map((r) => (
+                        <div key={r.id}>
+                          <strong>{formatRuleLabel(r.name)}</strong>
+                          <span className="muted">
+                            {" "}
+                            · <code>{r.id}</code>
+                          </span>
+                        </div>
+                      ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
         ) : null}
         <textarea
           readOnly
@@ -155,9 +199,8 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
           </label>
         </header>
         <p className="muted">
-          Edit assignments by setting <code>points[].fdd_rule_ids</code> (rule ids from Rule Lab) and/or updating{" "}
-          <code>fdd_rules[].bindings.point_ids</code>. Supports <code>import_ready_json</code> wrappers and fenced{" "}
-          <code>```json</code> blocks.
+          Edit assignments with <code>points[].fdd_rule_ids</code> — use ids from <code>fdd_rules[].id</code> (names are
+          in <code>fdd_rules_linked</code> on export for readability). Supports <code>import_ready_json</code> wrappers.
         </p>
         <textarea
           className="dm-json-editor"

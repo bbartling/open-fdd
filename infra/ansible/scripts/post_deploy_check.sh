@@ -146,6 +146,14 @@ if [[ -f "$AUTH_ENV" ]]; then
 fi
 LOGIN_USER="${OFDD_INTEGRATOR_USER:-${OFDD_OPERATOR_USER:-}}"
 LOGIN_PASS="${OFDD_INTEGRATOR_PASSWORD:-${OFDD_OPERATOR_PASSWORD:-}}"
+# Remote edge probes: secrets/acme.env.local (or host alias) wins over control-machine auth.env.local
+if [[ -n "${ACME_INTEGRATOR_USER:-}" && -n "${ACME_INTEGRATOR_PASSWORD:-}" ]]; then
+  LOGIN_USER="$ACME_INTEGRATOR_USER"
+  LOGIN_PASS="$ACME_INTEGRATOR_PASSWORD"
+fi
+if [[ -n "${ACME_SITE_ID:-}" ]]; then
+  PROBE_SITE_ID="$ACME_SITE_ID"
+fi
 
 mode_label="standard"
 [[ "$FULL_CHECK" == "1" ]] && mode_label="full (Acme long HTTP suite)"
@@ -264,7 +272,11 @@ sys.exit(0 if f.get("rules_assignments_status")==200 else 1)
     cpts="$(echo "$probe_json" | python3 -c 'import json,sys; f=json.load(sys.stdin).get("fdd_operational",{}); print(f.get("commissioning_point_count",0))')"
     crules="$(echo "$probe_json" | python3 -c 'import json,sys; f=json.load(sys.stdin).get("fdd_operational",{}); print(f.get("commissioning_fdd_rules_count",0))')"
     tagged="$(echo "$probe_json" | python3 -c 'import json,sys; f=json.load(sys.stdin).get("fdd_operational",{}); print(f.get("commissioning_points_with_rules",0))')"
-    log_ok "Commissioning export (${cpts} points, ${crules} rules, ${tagged} points tagged)"
+    linked="$(echo "$probe_json" | python3 -c 'import json,sys; f=json.load(sys.stdin).get("fdd_operational",{}); print(f.get("commissioning_points_with_linked_names",0))')"
+    log_ok "Commissioning export (${cpts} points, ${crules} rules, ${tagged} tagged, ${linked} with Rule Lab names)"
+    if [[ "${tagged:-0}" -gt 0 && "${linked:-0}" -lt "${tagged:-0}" ]]; then
+      log_warn "Some pinned points lack fdd_rules_linked — upgrade bridge for readable export"
+    fi
   elif [[ "$comm_status" == "404" ]]; then
     log_warn "Commissioning export HTTP 404 — upgrade bridge image for Model & assignments bundle"
   fi
@@ -313,6 +325,10 @@ if [[ "$HTTP_ONLY" == "1" ]]; then
 elif [[ "$INVENTORY_DOCKER_STACK" == "1" ]]; then
   log_ok "systemd units skipped (openfdd_docker_stack=true — health via /health/stack)"
   if command -v ssh >/dev/null 2>&1; then
+    legacy_poll="$(ssh_remote "systemctl is-active openfdd-bacnet-poll 2>/dev/null || true")" || legacy_poll=""
+    if [[ "$legacy_poll" == "active" ]]; then
+      log_warn "Legacy openfdd-bacnet-poll systemd unit is active while Docker commission runs — disable it to avoid double BACnet polling"
+    fi
     if feather_b="$(ssh_remote "du -sb ~/open-fdd/workspace/data/feather_store 2>/dev/null | awk '{print \$1}' || echo 0")"; then
       log_ok "Feather store on edge: ${feather_b:-0} bytes"
     else

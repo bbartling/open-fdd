@@ -154,8 +154,10 @@ def test_set_point_poll_intervals(driver_tmp):
     assert rows[0]["enabled"] == "1"
     assert rows[0]["poll_interval_s"] == "300"
 
-    with pytest.raises(ValueError, match="poll_interval_s"):
-        store.set_point_poll(point_id=pid, enabled=True, poll_interval_s=120)
+    # Legacy/non-standard intervals snap to nearest standard (120s → 60s).
+    store.set_point_poll(point_id=pid, enabled=True, poll_interval_s=120)
+    tree3 = store.driver_tree()
+    assert tree3["devices"][0]["points"][0]["poll_interval_s"] == 60
 
 
 def test_remap_device_address_and_instance(driver_tmp):

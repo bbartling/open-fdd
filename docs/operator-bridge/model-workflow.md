@@ -15,9 +15,12 @@ nav_order: 4
 ## Typical integrator flow
 
 1. Import or sync BACnet point registry.
-2. Map equipment classes (AHU, VAV, …) in the model UI.
+2. Map equipment classes (AHU, VAV, …) in the model UI — set `brick_type` on points and `feeds` on equipment (AHU→VAV).
 3. Tag points with `fdd_input` roles (zone temp, SAT, damper cmd, …).
-4. Bind Rule Lab rules to those inputs.
+4. Bind Rule Lab rules to points, equipment, or BRICK classes (`bindings` in `rules_store.json`).
 5. Run `POST /api/model/sync-ttl` after bulk imports.
+6. Validate on **Trend plot** with FDD overlays (`?fdd=1`) — faults render on a right-hand 0/1 axis per device scope.
 
-Export: `GET /api/model/export` (TTL/JSON). API detail in [Appendix](../appendix/bridge_api).
+AI Agent and commissioning JSON import can bulk-apply steps 2–4; integrator should review model health before production FDD. See [FDD and assignments](fdd-assignments) and [Ollama and analytics](ollama-analytics).
+
+Export: `GET /api/model/export` (TTL/JSON). Commissioning bundle: `GET /api/model/commissioning-export` — includes per-point `fdd_rules_linked` (Rule Lab names) plus `fdd_rules[]` catalog. Use **Import / export** tab preview table or **Point → FDD rule pins** before editing raw JSON. API detail in [Appendix](../appendix/bridge_api).

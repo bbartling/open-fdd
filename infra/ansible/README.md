@@ -85,9 +85,8 @@ make os HOST=acme_vm_bbartling
 
 | Runtime | Role |
 |---------|------|
-| **compose: bridge** | FastAPI Rule Lab + FDD + ingest (:8765) |
-| **compose: commission** | BACnet discover/write HTTP (:8767) + poll loop |
-| **compose: bacnet-poll** | Optional dedicated poll container (`network_mode: host`) |
+| **compose: bridge** | FastAPI Rule Lab + FDD + CSV→feather ingest (:8765) |
+| **compose: commission** | BACnet discover/write HTTP (:8767) + **poll loop** (UDP 47808) |
 | **compose: mcp-rag** | Doc search (:8090) |
 | **host: caddy** | LAN **:80** → loopback bridge |
 | **host: openfdd-fdd-loop.timer** | Scheduled FDD batch (`docker compose exec bridge …`) |
@@ -100,8 +99,7 @@ Logs: `docker compose -f ~/open-fdd/docker-compose.yml logs -f bridge commission
 | Unit | Role |
 |------|------|
 | `openfdd-bridge` | FastAPI (:8765) |
-| `openfdd-bacnet-commission` | Commission agent (:8767) |
-| `openfdd-bacnet-poll` | RPM → `samples.csv` |
+| `openfdd-bacnet-commission` | Commission agent (:8767) + BACnet poll loop → `samples.csv` |
 | `openfdd-fdd-loop.timer` | Scheduled FDD batch (host `.venv`) |
 | `openfdd-feather-retention.timer` | Feather prune |
 | `caddy` | LAN entry **:80** → bridge |
@@ -166,7 +164,7 @@ Services use `Restart=always` and `WantedBy=multi-user.target` so they come back
 | vibe12 | open-fdd |
 |--------|----------|
 | MQTT → AWS IoT | Local CSV → `POST /ingest/bacnet` → feather |
-| `vibe12-bacnet-read` | `openfdd-bacnet-poll` |
+| `vibe12-bacnet-read` | `openfdd-bacnet-commission` poll loop |
 | Cloud Lambda dashboard | Edge bridge + optional Caddy |
 | `commissioning_web` on bensserver | Bridge `/bacnet` + commission agent |
 

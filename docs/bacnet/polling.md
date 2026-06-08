@@ -6,6 +6,8 @@ nav_order: 3
 
 # Polling
 
+**BACnet field reads run in the `commission` container** (or legacy `openfdd-bacnet-commission` systemd unit). The bridge does not bind UDP 47808.
+
 BACnet polling has two stages:
 
 1. **Field reads** — commission poll loop → `workspace/bacnet/polls/samples.csv`
