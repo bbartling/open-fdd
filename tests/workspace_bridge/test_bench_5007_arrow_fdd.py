@@ -194,8 +194,9 @@ def test_equipment_binding_covers_bench_ambient_points(bench_env: Path):
     bricks, points, eq = _plot_scope_for_columns(model, "demo", ["oa-t", "stat_zn-t", "oa-h"])
     assert "bench-1" in eq
     assert _rule_matches_plot_scope(rule, scope_bricks=bricks, scope_point_ids=points, scope_equipment_ids=eq)
-    _, points_duct, eq_duct = _plot_scope_for_columns(model, "demo", ["duct-t"])
-    assert "bench-1" not in eq_duct or "duct-1" in eq_duct
+    _, _points_duct, eq_duct = _plot_scope_for_columns(model, "demo", ["duct-t"])
+    assert "duct-1" in eq_duct
+    assert "bench-1" not in eq_duct
 
 
 def test_commissioning_import_assigns_rules_at_scale(bench_env: Path):
