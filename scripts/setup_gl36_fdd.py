@@ -206,6 +206,28 @@ def save_rules(specs: list[dict[str, Any]], *, site_id: str) -> None:
         print(f"Saved rule {spec['id']}")
 
 
+def _save_rule_payload(rule: dict[str, Any]) -> dict[str, Any]:
+    """Map rules_store entry to POST /api/rules/save body."""
+    out: dict[str, Any] = {
+        "id": rule.get("id"),
+        "name": rule.get("name") or "Untitled rule",
+        "description": rule.get("description") or "",
+        "mode": rule.get("mode") or "rule",
+        "code": rule.get("code") or "",
+        "fault_code": rule.get("fault_code") or "",
+        "fault_codes": rule.get("fault_codes") or [],
+        "config": rule.get("config") if isinstance(rule.get("config"), dict) else {},
+        "bindings": rule.get("bindings") if isinstance(rule.get("bindings"), dict) else {},
+        "severity": rule.get("severity") or "warning",
+        "enabled": rule.get("enabled") is not False,
+    }
+    if isinstance(rule.get("applies_to"), dict):
+        out["applies_to"] = rule["applies_to"]
+    if isinstance(rule.get("column_map"), dict):
+        out["column_map"] = rule["column_map"]
+    return out
+
+
 def push_rules_to_edge(base: str, token: str, *, site_id: str, rule_ids: set[str]) -> None:
     store_path = REPO / "workspace" / "data" / "rules_store.json"
     if not store_path.is_file():
@@ -215,9 +237,12 @@ def push_rules_to_edge(base: str, token: str, *, site_id: str, rule_ids: set[str
         rid = str(rule.get("id") or "")
         if rid not in rule_ids:
             continue
-        body = json.dumps(rule).encode()
+        if not str(rule.get("code") or "").strip():
+            print(f"Note: skip push {rid} — no inline code in rules_store")
+            continue
+        body = json.dumps(_save_rule_payload(rule)).encode()
         req = urllib.request.Request(
-            f"{base.rstrip('/')}/api/rules/saved",
+            f"{base.rstrip('/')}/api/rules/save",
             data=body,
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             method="POST",

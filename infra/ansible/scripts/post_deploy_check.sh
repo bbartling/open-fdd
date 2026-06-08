@@ -255,8 +255,8 @@ f=json.load(sys.stdin).get("fdd_operational",{})
 sys.exit(0 if f.get("rules_saved_status")==200 and not f.get("errors") else 1)
 '; then
     rules="$(echo "$probe_json" | python3 -c 'import json,sys; f=json.load(sys.stdin).get("fdd_operational",{}); print(f.get("rules_enabled_count",0))')"
-    bound="$(echo "$probe_json" | python3 -c 'import json,sys; f=json.load(sys.stdin).get("fdd_operational",{}); print(f.get("rules_bound_point_refs",0))')"
-    log_ok "FDD saved rules (${rules} enabled, ${bound} bound point refs)"
+    bound="$(echo "$probe_json" | python3 -c 'import json,sys; f=json.load(sys.stdin).get("fdd_operational",{}); print(f.get("rules_binding_refs", f.get("rules_bound_point_refs",0)))')"
+    log_ok "FDD saved rules (${rules} enabled, ${bound} binding refs)"
   fi
 
   if echo "$probe_json" | python3 -c '
