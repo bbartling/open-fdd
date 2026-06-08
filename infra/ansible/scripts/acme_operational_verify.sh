@@ -61,17 +61,16 @@ api_post() {
     -d "$body" "${BASE}${path}"
 }
 
-# Returns HTTP status on stdout; response body in $API_POST_BODY.
+# Sets API_POST_STATUS and API_POST_BODY (do not call inside $() — subshell drops globals).
 api_post_status() {
   local path="$1" body="${2:-{}}"
-  local tmp code
+  local tmp
   tmp="$(mktemp)"
-  code="$(curl -sS --connect-timeout 15 --max-time 300 -o "$tmp" -w "%{http_code}" \
+  API_POST_STATUS="$(curl -sS --connect-timeout 15 --max-time 300 -o "$tmp" -w "%{http_code}" \
     -X POST -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
-    -d "$body" "${BASE}${path}" 2>/dev/null)" || code="000"
+    -d "$body" "${BASE}${path}" 2>/dev/null)" || API_POST_STATUS="000"
   API_POST_BODY="$(cat "$tmp")"
   rm -f "$tmp"
-  echo "$code"
 }
 
 wait_job() {
@@ -152,8 +151,9 @@ print(json.dumps({
 }))
 ")"
 if [[ "$import_body" != "{}" ]]; then
-  import_code="$(api_post_status "/api/bacnet/import-to-model" "$import_body")"
-  imp="$API_POST_BODY"
+  api_post_status "/api/bacnet/import-to-model" "$import_body"
+  import_code="${API_POST_STATUS}"
+  imp="${API_POST_BODY}"
   if [[ "$import_code" == "200" ]]; then
     log_ok "import-to-model: $(echo "$imp" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("equipment_id", d.get("ok", d)))' 2>/dev/null || echo ok)"
   elif [[ "$import_code" == "422" ]]; then

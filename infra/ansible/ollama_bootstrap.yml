@@ -84,6 +84,21 @@
       become: true
       notify: Reload systemd
 
+    - name: Ensure Ollama listen drop-in directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/system/ollama.service.d
+        state: directory
+        mode: "0755"
+      become: true
+
+    - name: Install Ollama loopback listen drop-in (replaces legacy 0.0.0.0 listen.conf)
+      ansible.builtin.template:
+        src: templates/ollama-listen.conf.j2
+        dest: /etc/systemd/system/ollama.service.d/listen.conf
+        mode: "0644"
+      become: true
+      notify: Reload systemd
+
     - name: Ensure ollama service enabled and running
       ansible.builtin.systemd:
         name: ollama
