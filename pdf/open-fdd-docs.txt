@@ -10,50 +10,47 @@
 
 # Open-FDD
 
-Open-FDD is an open-source platform for **fault detection**, **BACnet integration**, and **operator analytics** at the building edge. It combines a React dashboard, FastAPI Operator Bridge, Python Rule Lab, local feather historian, and optional Brick/RDF modeling.
+Open-FDD is an open-source **building edge platform** for BACnet integration, feather historian storage, Arrow-native fault detection, and operator dashboards — designed for **trusted LAN / OT edge** deployment behind Caddy, not direct public internet exposure.
 
-**Who it is for**
+## Who it is for
 
-| Audience | Start here |
-|----------|------------|
-| IT / controls engineer trying the stack | [Quick Start — Docker](quick-start/) |
-| Developer contributing or customizing | [Developer Guide](developer/) |
-| Integrator wiring APIs | [Appendix — API routes](appendix/bridge_api) |
-| Analyst authoring FDD rules | [Rule Cookbook](rule-cookbook/) · [Fault Codes](fault-codes/) |
+| Role | What you get |
+|------|----------------|
+| **IT / controls engineer** | Pull three GHCR images, log in, poll BACnet, view faults |
+| **Commissioning integrator** | Discover points, bind BRICK model, pin FDD rules in Rule Lab |
+| **Developer / maintainer** | Extend the Operator Bridge, publish images, run CI and LAN security scans |
 
-## What you get
+## Start here
 
-| Component | Purpose |
-|-----------|---------|
-| **Operator Bridge** | Web API + dashboard (trends, faults, Rule Lab, model tools) |
-| **BACnet tools** | Discover, read, poll, optional supervised writes |
-| **Rule Lab** | Arrow-native `apply_faults_arrow(table, cfg)` rules on feather historian data |
-| **Local historian** | Feather-based telemetry store on the edge host |
-| **Brick / RDF model** | Equipment and point semantics for bindings and analytics |
-| **Docker images** | Published on GHCR — pull and run without building from source |
-| **Python package** | `pip install open-fdd` for offline Arrow rule lint/test (`arrow_runtime`) |
+| Path | Go to |
+|------|-------|
+| **Try it** | [Quick Start — Run with Docker](quick-start/docker) |
+| **Operate it** | [Updating the stack](quick-start/updating) · [Operations](ops/) |
+| **Develop it** | [Developer Guide](developer/) · [Architecture](architecture/) |
 
-## Two paths
+## v3 edge stack
 
-### Try it with Docker (recommended)
+Three primary containers on a Linux edge host:
 
-Pull published images from `ghcr.io/bbartling/`, configure auth and BACnet env files, start the stack, open the dashboard.
+| Container | Role |
+|-----------|------|
+| **openfdd-bridge** | Operator Bridge — API, dashboard, feather **ingest** |
+| **openfdd-commission** | BACnet discover/read/write + **poll loop** |
+| **openfdd-mcp-rag** | Doc-search sidecar for agent tools |
 
-→ [Quick Start](quick-start/)
+Host **Caddy** on `:80` or `:443` is the normal LAN front door. BACnet UDP `:47808` is bound by **commission** only — the bridge ingests `samples.csv` into the feather historian.
 
-### Develop locally
+Details: [Containers](architecture/containers) · [Deployment modes](architecture/deployment-modes)
 
-Clone the repo, create `workspace/auth.env.local`, build images, run tests, submit a PR.
-
-→ [Developer Guide](developer/)
+> **LAN / OT edge only.** Do not expose the Operator Bridge to the public internet without TLS, strong auth, and site review. BACnet writes are disabled by default — see [BACnet write guard](security/bacnet-writes).
 
 ## Distribution
 
 | Channel | Use when |
 |---------|----------|
-| **GHCR images** `ghcr.io/bbartling/openfdd-*` | Production or trial edge deploy |
-| **This repository** | Custom builds, BACnet commissioning, Rule Lab development |
-| **PyPI** [`open-fdd`](https://pypi.org/project/open-fdd/) | Arrow runtime + playground (no full UI); optional `[ml]` for graph experiments |
+| **GHCR** `ghcr.io/bbartling/openfdd-*` | Production or trial edge deploy |
+| **This repository** | Custom builds, commissioning, Rule Lab development |
+| **PyPI** [`open-fdd`](https://pypi.org/project/open-fdd/) | Arrow runtime lint/test without full UI |
 
 ## License
 
@@ -543,6 +540,7 @@ Clone, build, test, and contribute to Open-FDD.
 | Docker builds | [Build Docker images](docker-build) |
 | Health checks | [Health checks (developer)](health-check) |
 | Tests & CI | [Tests and CI](tests-ci) |
+| Security testing | [Release & LAN scan cycle](security-testing) |
 | PRs | [Contributing](contributing) |
 
 AI-assisted contributors: see repository `AGENTS.md` for workspace layout, skill routing, and agent policy (one paragraph in public docs; details stay internal).
@@ -577,6 +575,10 @@ cd docs && bundle exec jekyll build -d /tmp/open-fdd-site
 
 Fix any template or link errors before opening a PR that touches `docs/`.
 
+## Security-related CI
+
+`ci.yml` includes bridge security tests (`tests/workspace_bridge/test_security.py`). That complements — but does not replace — LAN [ZAP + Nmap scans](../security/zap-baseline) on each patch revision. See [Security testing cycle](security-testing).
+
 
 # Contributing
 
@@ -595,6 +597,7 @@ Fix any template or link errors before opening a PR that touches `docs/`.
 - [ ] Docs updated if user-facing behavior changed
 - [ ] `docs/` Jekyll build succeeds
 - [ ] No credentials in diff
+- [ ] Auth/Caddy/header changes: re-run [pentest verify + LAN ZAP](security-testing) and update [ZAP baseline](../security/zap-baseline) if expectations changed
 
 ## Repository layout (short)
 
@@ -622,7 +625,7 @@ Cursor/Claude contributors: read `AGENTS.md` and `skills/` for automation bounda
 
 Extended validation for engineers with a **full git checkout** — CI, compose overlays, and pre-release gates.
 
-IT operators on edge hosts should use [Quick Start — health check](../quick-start/health-check) instead.
+IT operators on edge hosts should use [Quick Start — health check](../quick-start/health-check) and [Deployment validation](../ops/deployment-validation) instead.
 
 ## Clone and local stack
 
@@ -685,11 +688,144 @@ PYTHONPATH=workspace/api pytest tests/workspace_bridge/test_security.py -q
 ./scripts/pentest_production_stack.sh verify
 ```
 
-See `workspace/deploy/PENTEST.md`.
+Then from a **LAN workstation**, run the packaged scan:
+
+- Windows: `scripts/security/Run-OpenFddSecurityScan.ps1`
+- macOS/Linux: `scripts/security/run_openfdd_security_scan.sh`
+
+See [scripts/security/README.md](../../scripts/security/README.md), [Security — ZAP baseline](../security/zap-baseline), and the full [security testing cycle](security-testing). Host-side notes: `workspace/deploy/PENTEST.md`.
 
 ## Post-deploy insurance (inventory hosts)
 
 For automated checks against named inventory hosts, see `infra/ansible/scripts/post_deploy_check.sh` (maintainer tooling — not required for IT docker-pull sites).
+
+
+# Security testing cycle
+
+# Security testing cycle
+
+How Open-FDD validates each **patch revision** before it ships to the live Acme HVAC bench — local automation, AI-assisted PR review, LAN passive scans, and edge post-deploy checks.
+
+Related security docs: [ZAP baseline](../security/zap-baseline), [TLS and certificates](../security/tls-and-certs), [LAN hardening](../security/lan-hardening), [Linux host hardening](../security/linux-host-hardening), [Tenable remediation](../security/tenable-remediation), [Authenticated scanning (roadmap)](../security/authenticated-scanning).
+
+## Who owns what
+
+| Concern | Owner | Where |
+|---------|-------|-------|
+| HTTP security headers (CSP, X-Frame, COOP, …) | **Bridge** middleware | `workspace/api/openfdd_bridge/security_headers.py` |
+| TLS termination + HSTS | **Caddy** | `workspace/deploy/caddy/`, Ansible `Caddyfile.j2` |
+| OT LAN TLS certificates | **Site integrator / maintainer** | `./scripts/setup_caddy_certs.sh` → `workspace/deploy/caddy/certs/`; Ansible `/etc/openfdd/caddy/` on edge |
+| Pentest credentials | Generated per stack | `workspace/auth.pentest.local` (never commit) |
+| LAN ZAP + Nmap scans | **Developer workstation** on test LAN | `scripts/security/` |
+
+See [TLS and certificate ownership](../security/tls-and-certs) for cert lifecycle.
+
+## Per-revision workflow
+
+Typical cycle on a **control machine** (local dev) through a **lab edge host** (live bench):
+
+```mermaid
+flowchart LR
+  A[Local dev + pytest] --> B[Pentest stack verify]
+  B --> C[LAN ZAP + Nmap]
+  C --> D[PR + GitHub CI]
+  D --> E[CodeRabbit AI review]
+  E --> F[Merge + tag open-fdd-vX.Y.Z]
+  F --> G[GHCR + PyPI publish]
+  G --> H[Acme upgrade + post_deploy_check --full]
+  H --> I[Bump next patch locally]
+```
+
+### 1. Local functional tests
+
+```bash
+./scripts/build_and_test.sh
+PYTHONPATH=workspace/api pytest tests/workspace_bridge/test_security.py -q
+infra/ansible/scripts/bench_5007_arrow_battery.sh   # when FDD/Arrow paths change
+```
+
+### 2. Pentest production stack (on Open-FDD host)
+
+```bash
+./scripts/pentest_production_stack.sh start
+./scripts/pentest_production_stack.sh verify
+```
+
+Confirms Caddy `:80` fronts the bridge, auth is enabled, BACnet writes disabled, and security headers are singular (no Caddy duplicates). Details: [Health checks — pentest](health-check#pentest-production-stack-lan-zap).
+
+### 3. Host + exposure checks (on edge VM)
+
+After IT Nessus scans or before Acme deploy sign-off:
+
+```bash
+./scripts/security/check_host_security.sh
+./scripts/security/check_openfdd_exposure.sh --edge-ip <lan-ip>
+```
+
+Host remediation (dry-run first): `./scripts/security/remediate_ubuntu_host.sh`
+
+### 4. LAN security scan (from laptop)
+
+Use the packaged scripts — do not hand-roll one-off docker/nmap commands unless debugging:
+
+| Platform | Command |
+|----------|---------|
+| Windows | `.\scripts\security\Run-OpenFddSecurityScan.ps1` |
+| macOS / Linux | `./scripts/security/run_openfdd_security_scan.sh` |
+
+Setup (Docker Desktop, Nmap): [scripts/security/README.md](../../scripts/security/README.md).
+
+Target URL is usually **`http://<lan-ip>/`** (Caddy), not `:8765`.
+
+Review `openfdd-security-report/90-quick-findings-summary.txt` and compare against [ZAP baseline expectations](../security/zap-baseline).
+
+### 5. Pull request + automated review
+
+- Open PR against `master`
+- **GitHub Actions** (`ci.yml`): pytest, bridge security audit, dashboard build, Jekyll docs
+- **CodeRabbit** (or similar AI PR review): style, security footguns, missing tests/docs
+
+Do not merge with failing CI or unresolved duplicate-header regressions.
+
+### 6. Release
+
+```bash
+git tag open-fdd-v3.0.4   # example
+git push origin open-fdd-v3.0.4
+```
+
+Tag triggers GHCR `:latest` and PyPI publish workflows.
+
+### 7. Lab edge validation
+
+After pulling new images on a live bench VM:
+
+```bash
+OPENFDD_IMAGE_TAG=latest ./scripts/upgrade_edge_full.sh --limit <inventory_host>
+infra/ansible/scripts/post_deploy_check.sh --limit <inventory_host> --full
+```
+
+Re-run LAN ZAP + Nmap against the edge LAN IP if Caddy or auth behavior changed. Site-specific example: [GL36 lab note](../examples/acme-gl36-lab).
+
+### 8. Next cycle
+
+Bump patch version locally (`pyproject.toml`, `open_fdd/__init__.py`) on `master` for the next development round — do not tag until the next release is ready.
+
+## What each scan layer covers
+
+| Layer | Tool | Depth |
+|-------|------|-------|
+| Unit / integration | pytest, `test_security.py` | Header middleware, auth gates |
+| Stack smoke | `pentest_production_stack.sh verify` | Live headers, health, auth file |
+| Passive web | ZAP baseline | Public routes, CSP, cookies, CORS |
+| Port exposure | Nmap scoped | One host, known service ports |
+| Authenticated API/dashboard | ZAP full + login | **Roadmap** — [Authenticated scanning](../security/authenticated-scanning) |
+
+Baseline ZAP does **not** exercise integrator login or protected `/api/*` routes deeply.
+
+## Open-source contributors
+
+The `scripts/security/` folder is part of the public repo so any fork can run the same LAN smoke against their bench. PRs that change Caddy, auth, or `security_headers.py` should update [ZAP baseline](../security/zap-baseline) and re-run the scan scripts.
 
 
 # System overview
@@ -743,7 +879,7 @@ BACnet **polling** is not a separate container — it runs inside **commission**
 
 ## Deployment
 
-IT operators: [Quick Start — Docker](../quick-start/docker) (`docker compose pull`, `restart: unless-stopped`, Docker enabled on boot).
+IT operators: [Quick Start — Docker](../quick-start/docker). Modes and Caddy: [Deployment modes](deployment-modes).
 
 ## Optional PyPI-only path
 
@@ -838,59 +974,75 @@ Bench examples: `workspace/data/rules_py/bench_*.py`.
 Dev kit zip layout: [Rule Lab — dev kit zip](../operator-bridge/rule-lab.md#dev-kit-zip-download).
 
 
-# Data flow
+# Deployment modes
 
-# Data flow
+# Deployment modes
 
-## Telemetry ingest
+How Open-FDD is typically run: local development, lab LAN trials, and production edge on a trusted OT/IT network. Open-FDD is designed for **building LAN or OT edge** deployment — not direct exposure to the public internet.
 
-Open-FDD supports three commissioning drivers. Each appends long-format samples to workspace CSVs and writes **feather shards** tagged by `source` (`bacnet`, `modbus`, `json_api`).
+## Mode summary
 
-### BACnet
+| Mode | Stack | BACnet | Front door | Auth |
+|------|-------|--------|------------|------|
+| **Local dev** | Compose on control machine | Optional bench simulator | `127.0.0.1:8765` | `OFDD_AUTH_DISABLED=1` optional on loopback |
+| **Lab LAN** | Three GHCR containers | Real or simulator VLAN | Caddy `:80` or direct `:8765` | Required unless explicit insecure lab flags |
+| **Edge production** | Three GHCR containers + host Caddy | OT NIC via **commission** | **Caddy** `:80` or `:443` → loopback bridge | **Required** — `workspace/auth.env.local` |
 
-1. **Commission poll loop** (inside the `commission` container) reads enabled BACnet points from `points.csv` on a schedule (host network, BACnet `:47808`).
-2. RPM results append to `workspace/bacnet/polls/samples.csv`.
-3. **Bridge ingest worker** loads new rows into `feather_store/bacnet/`.
+## v3 container stack (all edge modes)
 
+| Image | Role |
+|-------|------|
+| `openfdd-bridge` | Operator Bridge API, dashboard, **feather historian ingest** |
+| `openfdd-commission` | BACnet discover/read/write + **poll loop** |
+| `openfdd-mcp-rag` | Doc-search sidecar for agent tools |
+
+> **`openfdd-bacnet-poll` is retired.** BACnet polling runs inside **commission** only. Do not run the legacy poll container or `openfdd-bacnet-poll` systemd unit alongside Docker commission — that double-polls the OT network.
+
+See [Containers](containers) for ports, networks, and persistence.
+
+## Caddy HTTP (typical edge)
+
+- Caddy listens on building LAN `:80`
+- Reverse-proxies to bridge at `127.0.0.1:8765`
+- Bridge stays loopback-only; operators bookmark `http://<edge-ip>/`
+
+Bootstrap and compose: [Quick Start — Docker](../quick-start/docker).
+
+## Caddy TLS (OT LAN)
+
+For HTTPS on the edge LAN (self-signed or site CA):
+
+1. Generate certs: `./scripts/setup_caddy_certs.sh` (control machine) or site PKI
+2. Start with `OFDD_CADDY_MODE=tls`
+3. Trust the CA on operator PCs
+
+Details: [TLS and certificates](../security/tls-and-certs). Security headers are set by the **Operator Bridge**; Caddy adds **HSTS** only in TLS mode.
+
+## BACnet data path
+
+```text
+OT devices ──UDP 47808──▶ commission (poll loop) ──▶ samples.csv
+                                              │
+                                              ▼
+                                    bridge (ingest) ──▶ feather historian
 ```
-BACnet devices → commission (poll loop) → samples.csv → bridge (ingest) → feather_store/bacnet
-```
 
-### Modbus TCP
+The bridge thread named `bacnet_poll_worker` is **ingest only** — it does not bind BACnet.
 
-1. Operator configures registers on the **Modbus** tab (or `read_and_store` API).
-2. Poll worker reads holding/input registers via Modbus TCP.
-3. Samples append to `workspace/modbus/polls/samples.csv` → `feather_store/modbus/`.
+## What not to do on production edges
 
-### JSON API (HTTP/HTTPS)
+- Port-forward `:8765` to the public internet without TLS and strong auth
+- Run `docker compose down -v` or delete `workspace/` on a live site
+- Deploy the retired `openfdd-bacnet-poll` image alongside commission
 
-1. Operator configures REST endpoints on the **JSON API** tab — GET/POST, Bearer or Basic auth, `${ENV:VAR}` placeholders from `json_api.env.local`, optional TLS verify off for self-signed OT gateways.
-2. Poll worker issues HTTP requests (one GET can fan out to multiple JSON paths, e.g. OpenWeather `web-oat-t` / `web-rh` / `web-weather-desc`).
-3. Samples append to `workspace/json_api/polls/samples.csv` → `feather_store/json_api/`.
-4. FDD batch **merges** `json_api` columns with BACnet/Modbus on the same site (nearest timestamp, 30 min tolerance) for cross-source rules.
+## Related
 
-```
-OT REST / weather API → bridge JSON API worker → samples.csv → feather_store/json_api
-                                                      ↘ merged into FDD frame with bacnet/modbus
-```
-
-Showcase: [OpenWeatherMap bundle](../drivers/json-api#openweathermap-showcase-recommended-demo). Details: [Driver framework](../drivers/index), [BACnet polling](../bacnet/polling), [JSON API driver](../drivers/json-api), [Containers](containers).
-
-## Rule evaluation
-
-1. Rules are Python files in `workspace/data/rules_py/` with metadata in `rules_store.json`.
-2. **Bindings** map rules to points via the Brick model (`fdd_input` tags).
-3. Batch runner (`POST /api/rules/batch` or host timer) produces `fdd_results.json`.
-4. Dashboard **faults** view and check-engine status read aggregated results.
-
-## Model sync
-
-- Commissioning imports update `model.json` / TTL graph.
-- `POST /api/model/sync-ttl` refreshes SPARQL-backed tree used by the UI.
-
-## Retention
-
-Feather files grow on disk; retention is configurable (`workspace/data.env.local`). Image upgrades must **preserve** `workspace/data/` — backup before `docker compose up -d --force-recreate`. See [Updating the stack](../quick-start/updating).
+| Topic | Page |
+|-------|------|
+| First deploy | [Quick Start — Docker](../quick-start/docker) |
+| Upgrade | [Updating the stack](../quick-start/updating) |
+| LAN security | [LAN hardening](../security/lan-hardening) |
+| Lab example site | [Examples — GL36 lab note](../examples/acme-gl36-lab) |
 
 
 # Python recipes (Arrow)
@@ -1094,22 +1246,78 @@ Always call `_kit_lookback_stats(table)` first so operators can confirm the tabl
 See [Windowing & debugging](windowing-debugging.md) for `arrow_rolling_min` / `arrow_consecutive_true`.
 
 
-# Architecture
+# Data flow
+
+# Data flow
+
+## Telemetry ingest
+
+Open-FDD supports three commissioning drivers. Each appends long-format samples to workspace CSVs and writes **feather shards** tagged by `source` (`bacnet`, `modbus`, `json_api`).
+
+### BACnet
+
+1. **Commission poll loop** (inside the `commission` container) reads enabled BACnet points from `points.csv` on a schedule (host network, BACnet `:47808`).
+2. RPM results append to `workspace/bacnet/polls/samples.csv`.
+3. **Bridge ingest worker** loads new rows into `feather_store/bacnet/`.
+
+```
+BACnet devices → commission (poll loop) → samples.csv → bridge (ingest) → feather_store/bacnet
+```
+
+### Modbus TCP
+
+1. Operator configures registers on the **Modbus** tab (or `read_and_store` API).
+2. Poll worker reads holding/input registers via Modbus TCP.
+3. Samples append to `workspace/modbus/polls/samples.csv` → `feather_store/modbus/`.
+
+### JSON API (HTTP/HTTPS)
+
+1. Operator configures REST endpoints on the **JSON API** tab — GET/POST, Bearer or Basic auth, `${ENV:VAR}` placeholders from `json_api.env.local`, optional TLS verify off for self-signed OT gateways.
+2. Poll worker issues HTTP requests (one GET can fan out to multiple JSON paths, e.g. OpenWeather `web-oat-t` / `web-rh` / `web-weather-desc`).
+3. Samples append to `workspace/json_api/polls/samples.csv` → `feather_store/json_api/`.
+4. FDD batch **merges** `json_api` columns with BACnet/Modbus on the same site (nearest timestamp, 30 min tolerance) for cross-source rules.
+
+```
+OT REST / weather API → bridge JSON API worker → samples.csv → feather_store/json_api
+                                                      ↘ merged into FDD frame with bacnet/modbus
+```
+
+Showcase: [OpenWeatherMap bundle](../drivers/json-api#openweathermap-showcase-recommended-demo). Details: [Driver framework](../drivers/index), [BACnet polling](../bacnet/polling), [JSON API driver](../drivers/json-api), [Containers](containers).
+
+## Rule evaluation
+
+1. Rules are Python files in `workspace/data/rules_py/` with metadata in `rules_store.json`.
+2. **Bindings** map rules to points via the Brick model (`fdd_input` tags).
+3. Batch runner (`POST /api/rules/batch` or host timer) produces `fdd_results.json`.
+4. Dashboard **faults** view and check-engine status read aggregated results.
+
+## Model sync
+
+- Commissioning imports update `model.json` / TTL graph.
+- `POST /api/model/sync-ttl` refreshes SPARQL-backed tree used by the UI.
+
+## Retention
+
+Feather files grow on disk; retention is configurable (`workspace/data.env.local`). Image upgrades must **preserve** `workspace/data/` — backup before `docker compose up -d --force-recreate`. See [Updating the stack](../quick-start/updating).
+
 
 # Architecture
 
-High-level view of the Open-FDD v3 edge stack: **three Docker containers** (`bridge`, `commission`, `mcp-rag`), BACnet polling inside **commission**, historian ingest in **bridge**.
+# Architecture
+
+Open-FDD v3 edge: **three Docker containers** (`bridge`, `commission`, `mcp-rag`), BACnet polling in **commission**, feather ingest in **bridge**, optional host Caddy and Ollama.
 
 | Page | Topic |
 |------|-------|
-| [System overview](overview) | Components, diagram, deployment pointer |
+| [System overview](overview) | Components and diagram |
+| [Deployment modes](deployment-modes) | Local dev, lab LAN, edge production, Caddy HTTP/TLS |
 | [Data flow](data-flow) | BACnet / Modbus / JSON API → feather → FDD → dashboard |
-| [Driver framework](../drivers/index) | Shared commissioning pattern for all OT sources |
-| [Containers](containers) | Images, networks, ports, persistence, reboot |
+| [Containers](containers) | GHCR images, ports, persistence, retired poll image |
+| [Driver framework](../drivers/index) | Shared commissioning pattern for OT sources |
 
-**Operators:** deploy and upgrade via [Quick Start](../quick-start/docker) — no git clone on the edge host.
+**Operators:** [Quick Start — Docker](../quick-start/docker) — no git clone on the edge host.
 
-**BACnet polling:** [Polling](../bacnet/polling) — commission loop only (no separate poll container).
+**BACnet polling:** [Polling](../bacnet/polling) — commission container only.
 
 
 # Rule Cookbook
@@ -2190,7 +2398,9 @@ Exported inventory feeds `points_discovered.csv` and the Brick point registry.
 
 # Polling
 
-**BACnet field reads run in the `commission` container** (or legacy `openfdd-bacnet-commission` systemd unit). The bridge does not bind UDP 47808.
+**BACnet field reads run in the `openfdd-commission` container.** The Operator Bridge does not bind UDP 47808.
+
+> **Retired:** `openfdd-bacnet-poll` image and `openfdd-bacnet-poll` systemd unit. Poll loop lives in **commission** only — do not run both.
 
 BACnet polling has two stages:
 
@@ -2302,6 +2512,110 @@ In Rule Lab, set `fault_code` on the rule metadata. Batch FDD aggregates hits in
 Each catalog entry lists `cookbook_patterns` (e.g. `flatline_1h`) — see [Rule Cookbook](../rule-cookbook/).
 
 
+# Live site update
+
+# Live site update
+
+Upgrade GHCR images on a **live edge host** that already has `~/open-fdd/` — no `git pull` on the host.
+
+> **IT operators:** prefer [Quick Start — Updating the stack](../quick-start/updating) and `openfdd_site_backup.sh` / `openfdd_site_update.sh` on the edge host. This page adds control-machine UI deploy and Ansible paths.
+
+## Layout on the edge host
+
+```text
+~/open-fdd/
+  docker-compose.yml
+  workspace/          # site state — backup first
+```
+
+`workspace/` holds BACnet commissioning, poll CSV, feather historian, BRICK model, FDD rules, and `auth.env.local`. Image upgrades must **preserve** it.
+
+See [Backup and restore](backup-restore) before any upgrade.
+
+## Concepts
+
+| Term | Meaning |
+|------|---------|
+| **Container** | Running instance (`bridge`, `commission`, `mcp-rag`) — recreated on upgrade |
+| **Image** | GHCR package (tag `latest` or dated tag) |
+| **`workspace/`** | Open-FDD site state on disk — **do not delete** |
+
+## 1. Verify new images on GHCR
+
+Three images must exist for every tag:
+
+```bash
+export NEW_TAG="${NEW_TAG:-latest}"
+
+docker manifest inspect ghcr.io/bbartling/openfdd-bridge:${NEW_TAG} >/dev/null &&
+docker manifest inspect ghcr.io/bbartling/openfdd-commission:${NEW_TAG} >/dev/null &&
+docker manifest inspect ghcr.io/bbartling/openfdd-mcp-rag:${NEW_TAG} >/dev/null &&
+echo "All three images exist for ${NEW_TAG}"
+```
+
+## 2. Update dashboard UI (when release changed React)
+
+> **Image pull alone does not update the browser UI.** The Operator Bridge serves `workspace/api/static/app/` from the bind mount **before** image-baked assets.
+
+**From control machine (full repo):**
+
+```bash
+cd /path/to/open-fdd
+./scripts/build_operator_dashboard.sh prod
+cd infra/ansible
+RUN_POST_CHECK=0 ./deploy.sh ui --limit <inventory_host>
+```
+
+Confirm hash on edge:
+
+```bash
+curl -sf http://<edge-ip>/ | grep -o 'index-[^"]*\.js' | head -1
+```
+
+**One command (UI + images + insurance check):**
+
+```bash
+OPENFDD_IMAGE_TAG=latest ./scripts/upgrade_edge_full.sh --limit <inventory_host>
+```
+
+## 3. Pull and recreate (edge host)
+
+```bash
+cd ~/open-fdd
+./scripts/openfdd_site_backup.sh
+./scripts/openfdd_site_update.sh
+```
+
+Manual equivalent:
+
+```bash
+cd ~/open-fdd
+docker compose pull
+docker compose up -d --force-recreate
+docker compose ps
+curl -sf http://127.0.0.1:8765/health
+```
+
+## 4. Ansible image-only (control machine)
+
+```bash
+OPENFDD_IMAGE_TAG=latest RUN_POST_CHECK=1 ./scripts/upgrade_edge_ghcr.sh --limit <inventory_host>
+```
+
+## 5. Validate
+
+→ [Deployment validation](deployment-validation)
+
+## Rollback
+
+Restore `docker-compose.yml` from backup, pull previous tag, `docker compose up -d --force-recreate`. `workspace/` is unchanged. Details: [Backup and restore](backup-restore).
+
+## Related
+
+- [Updating the stack](../quick-start/updating) — edge-host helper scripts
+- [Containers](../architecture/containers) — three-image architecture
+
+
 # AHU faults
 
 # AHU faults
@@ -2318,6 +2632,80 @@ Air handling unit codes (sample from catalog).
 | **AHU-F** | Damper command vs feedback mismatch | warning | Cmd ≠ feedback | Stuck actuator, linkage | Compare cmd/feedback trends |
 
 **Example rule:** `flatline_1h` on SAT → tag **AHU-C**. Recipe: [Python recipes](../rule-cookbook/python-recipes).
+
+
+# Backup and restore
+
+# Backup and restore
+
+`workspace/` on the edge host is the **live site state** — feather historian, BACnet commissioning files, BRICK model, FDD rules, auth, and dashboard static bundle. Container images are replaceable; **backup `workspace/` before every upgrade.**
+
+## Quick backup (edge host)
+
+```bash
+cd ~/open-fdd
+./scripts/openfdd_site_backup.sh
+```
+
+Archives land under `~/openfdd-backups/<timestamp>/`.
+
+Custom location:
+
+```bash
+BACKUP_ROOT=~/openfdd-backups/manual ./scripts/openfdd_site_backup.sh
+```
+
+## Manual backup (SSH)
+
+Container processes may write files as **`root:root`** with mode **`0600`**. Use `sudo` for a full archive:
+
+```bash
+cd ~/open-fdd
+
+export BACKUP_ROOT="$HOME/openfdd-backups/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$BACKUP_ROOT"
+
+cp docker-compose.yml "$BACKUP_ROOT/docker-compose.yml.before"
+docker compose ps > "$BACKUP_ROOT/docker-compose-ps-before.txt"
+docker compose config --images > "$BACKUP_ROOT/docker-images-before.txt"
+
+sudo tar --xattrs --acls -czf "$BACKUP_ROOT/workspace-full.tgz" workspace
+sudo chown "$USER:$USER" "$BACKUP_ROOT/workspace-full.tgz"
+
+du -h "$BACKUP_ROOT/workspace-full.tgz"
+```
+
+## What to protect
+
+| Path | Contents |
+|------|----------|
+| `workspace/data/feather_store/` | Feather historian |
+| `workspace/bacnet/commissioning/` | `points.csv`, `commission.env` |
+| `workspace/bacnet/polls/samples.csv` | Poll output |
+| `workspace/data/*.json` | Model, rules store, FDD results |
+| `workspace/auth.env.local` | Login secrets |
+| `workspace/api/static/app/` | Dashboard bundle (if deployed separately) |
+
+## Restore after a bad upgrade
+
+1. Stop containers: `docker compose stop` (do **not** use `down -v`)
+2. Restore `docker-compose.yml` from backup
+3. If data corruption: extract selective files from `workspace-full.tgz` — model, rules, feather shards
+4. `docker compose pull && docker compose up -d --force-recreate`
+5. Verify: [Deployment validation](deployment-validation)
+
+## Safe cleanup
+
+```bash
+docker image prune -f
+```
+
+> **Never on live sites:** `docker compose down -v`, `docker volume prune`, `docker system prune -a --volumes`, or deleting `workspace/`.
+
+## Related
+
+- [Updating the stack](../quick-start/updating)
+- [Live site update](live_site_update)
 
 
 # VAV faults
@@ -2353,6 +2741,90 @@ Packaged rooftop unit codes (sample).
 Bind rules to packaged unit `fdd_input` points (SAT, OAT, compressor cmd, …).
 
 
+# Deployment validation
+
+# Deployment validation
+
+Non-destructive checks after deploy or image upgrade. Run from the **edge host** (smoke) or from a **control machine** with the full repo (insurance suite).
+
+## Edge host smoke (5 minutes)
+
+```bash
+cd ~/open-fdd
+
+docker compose ps
+curl -sf http://127.0.0.1:8765/health | jq . || curl -sf http://127.0.0.1:8765/health
+
+tail -1 workspace/bacnet/polls/samples.csv
+du -sh workspace/data/feather_store/
+
+docker compose logs --since 20m | grep -Ei "error|exception|traceback|critical" | tail -20 || true
+```
+
+Via Caddy (building LAN):
+
+```bash
+curl -sf http://<edge-ip>/health
+curl -sf http://<edge-ip>/ | grep -o 'index-[^"]*\.js' | head -1
+```
+
+## Browser checklist
+
+1. Open `http://<edge-ip>/` (Caddy `:80`, not only loopback `:8765`)
+2. Integrator login (`workspace/auth.env.local` on the edge host)
+3. **Host stats** — container image tag / git SHA
+4. **BACnet** — driver tree shows devices; last poll timestamp recent
+5. **Model & assignments** — commissioning export returns JSON
+6. **Rule Lab** — quick-test a saved rule (`backend: arrow`)
+
+## Control-machine insurance check
+
+From a machine with the full `open-fdd` repo and Ansible inventory:
+
+```bash
+cd infra/ansible/scripts
+./post_deploy_check.sh --limit <inventory_host> --full
+```
+
+Or by IP:
+
+```bash
+./post_deploy_check.sh --host <edge-ip> --ssh-user <deploy-user> --full
+```
+
+Checks include: Caddy → React dashboard, `/health/stack`, MCP RAG, BACnet tree, BRICK/SPARQL, Docker log scan.
+
+> **Do not run on live commissioned sites without approval:** `acme_operational_verify.sh` with BACnet rediscover — use `--skip-discover` for smoke only. See [Examples — GL36 lab](../examples/acme-gl36-lab).
+
+## LAN security smoke (optional)
+
+From a workstation on the same LAN as the edge:
+
+- Windows: `scripts/security/Run-OpenFddSecurityScan.ps1`
+- macOS/Linux: `scripts/security/run_openfdd_security_scan.sh`
+
+Expected findings: [ZAP baseline](../security/zap-baseline).
+
+## Arrow / FDD rules (3.0+)
+
+On control machine:
+
+```bash
+./scripts/validate_fdd_backends.sh --docker
+```
+
+On edge after upgrade:
+
+```bash
+grep -R "apply_faults_arrow" workspace/data/rules_py | wc -l
+```
+
+## Related
+
+- [Health check](../quick-start/health-check)
+- [Security testing cycle](../developer/security-testing) (maintainers)
+
+
 # Sensor and data quality
 
 # Sensor and data quality
@@ -2372,400 +2844,6 @@ Bind rules to packaged unit `fdd_input` points (SAT, OAT, compressor cmd, …).
 ## Alarm console quality
 
 When integrating with BMS alarms (future/external), map Open-FDD codes to operator work orders — Open-FDD itself is **analytics-first**, not a dial-out alarm server.
-
-
-# Fault Codes
-
-# Fault Codes
-
-Open-FDD uses a **check-engine** model: one building-level status (green / yellow / red) with a catalog of fixed fault codes per equipment family.
-
-| Page | Content |
-|------|---------|
-| [Convention](convention) | Naming, severity, categories |
-| [AHU faults](ahu) | Air handling units |
-| [VAV faults](vav) | Terminal units |
-| [RTU faults](rtu) | Packaged rooftops |
-| [Sensor & data quality](sensor-quality) | Stale, flatline, comms |
-
-Live catalog API: `GET /api/faults/catalog` on the Operator Bridge.
-
-
-# Live site update (SSH)
-
-# Live site update (SSH)
-
-> **IT operators:** prefer [Quick Start — Updating the stack](../quick-start/updating) and the helper scripts `openfdd_site_backup.sh` / `openfdd_site_update.sh`. This page is the detailed SSH runbook with manual commands.
-
-Use this runbook when a **live edge VM** already has a minimal deploy folder and you are **not** doing `git pull` on the host.
-
-Typical layout (no full git checkout):
-
-```text
-/home/bbartling/open-fdd/
-  docker/
-  docker-compose.yml
-  workspace/
-```
-
-`workspace/` is the **live site state** — BACnet commissioning files, poll CSV, feather historian, BRICK model, FDD rules, MCP RAG index, and env files. Image upgrades must **preserve** it.
-
-## Concepts (plain language)
-
-| Term | Meaning |
-|------|---------|
-| **Container** | A running app instance (bridge, commission, mcp-rag). Recreated on upgrade. |
-| **Image** | Downloaded app package from GHCR (e.g. `openfdd-bridge:2026.06.07-edge`). |
-| **Docker volume** | Persistent data Docker manages separately. This minimal layout uses **bind mounts** into `workspace/` instead. |
-| **`workspace/`** | Open-FDD site state on disk. **This is what you must not lose.** |
-
-> **Never on live sites:** `docker compose down -v`, `docker volume prune`, `docker system prune -a --volumes`, or `docker rm -f $(docker ps -aq)`. Those can destroy data or leave the site down with no rollback path.
-
-## Before you start
-
-1. Maintenance window or low-traffic period (containers restart briefly).
-2. SSH access to the edge host.
-3. New GHCR tag published (check [GitHub Packages](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge)).
-4. Optional: control machine with the full `open-fdd` repo for [post-deploy check](#control-machine-insurance-check).
-
-## 1. Backup `workspace/`
-
-Container processes may write files as **`root:root`** with mode **`0600`**. A normal user `tar` can fail on those paths — use `sudo`:
-
-```bash
-cd /home/bbartling/open-fdd
-
-export BACKUP_ROOT="$HOME/openfdd-backups/$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$BACKUP_ROOT"
-
-cp docker-compose.yml "$BACKUP_ROOT/docker-compose.yml.before"
-
-docker compose ps > "$BACKUP_ROOT/docker-compose-ps-before.txt"
-docker compose config --images > "$BACKUP_ROOT/docker-images-before.txt"
-
-sudo tar --xattrs --acls -czf "$BACKUP_ROOT/workspace-full.tgz" workspace
-sudo chown "$USER:$USER" "$BACKUP_ROOT/workspace-full.tgz"
-
-echo "Backup saved to: $BACKUP_ROOT"
-du -h "$BACKUP_ROOT/workspace-full.tgz"
-```
-
-## 2. Verify new images exist on GHCR
-
-```bash
-export NEW_TAG="2026.06.07-edge"
-
-docker manifest inspect ghcr.io/bbartling/openfdd-bridge:${NEW_TAG} >/dev/null &&
-docker manifest inspect ghcr.io/bbartling/openfdd-commission:${NEW_TAG} >/dev/null &&
-docker manifest inspect ghcr.io/bbartling/openfdd-mcp-rag:${NEW_TAG} >/dev/null &&
-echo "All images exist for ${NEW_TAG}"
-```
-
-Replace `NEW_TAG` with the tag you intend to deploy.
-
-## 3. Update the React UI bundle (required for dashboard changes)
-
-> **Image pull alone does not update the browser UI.** The bridge serves
-> `workspace/api/static/app/` from the **bind mount first**, before anything baked
-> into the GHCR image (`static_dashboard_dir()` in the bridge). If that folder still
-> has an old `index-*.js` hash (e.g. `index-TRH4YIfA.js`), you will keep seeing the
-> old BACnet tree, Host Stats revisions panel, Model & assignments tab, etc.
-
-**From bensserver (control machine, full repo):**
-
-```bash
-cd /path/to/open-fdd
-./scripts/build_operator_dashboard.sh prod
-cd infra/ansible
-./deploy.sh ui --limit acme_vm_bbartling
-```
-
-Confirm the edge picked up the new hash:
-
-```bash
-curl -sf http://<edge-ip>/ | grep -o 'index-[^"]*\.js' | head -1
-# Should match bensserver: grep -o 'index-[^"]*\.js' workspace/api/static/app/index.html
-```
-
-**One command (recommended after CI publishes a new tag):**
-
-```bash
-OPENFDD_IMAGE_TAG=2026.06.08-edge ./scripts/upgrade_edge_full.sh --limit acme_vm_bbartling
-```
-
-That runs: dashboard build → `deploy.sh ui` → GHCR pull + `docker compose up -d --force-recreate` → `post_deploy_check.sh --full`.
-
-## 4. Update `docker-compose.yml` and recreate containers
-
-Edit image tags in `docker-compose.yml` (example: `2026.06.04-edge` → `2026.06.07-edge`):
-
-```bash
-cd /home/bbartling/open-fdd
-
-cp docker-compose.yml "$BACKUP_ROOT/docker-compose.yml.before-tag-change"
-sed -i "s/2026\.06\.04-edge/${NEW_TAG}/g" docker-compose.yml
-
-docker compose config --images
-docker compose pull
-docker compose up -d --force-recreate
-
-docker compose ps
-```
-
-Bind-mounted `workspace/` is unchanged; only container images restart.
-
-## 5. On-VM smoke checks
-
-```bash
-cd ~/open-fdd
-
-echo "=== Stack ==="
-docker compose ps
-docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
-
-echo "=== Bridge health ==="
-curl -sf http://127.0.0.1:8765/health | jq . || curl -sf http://127.0.0.1:8765/health
-
-echo "=== Stack health (if available — may require auth) ==="
-curl -i http://127.0.0.1:8765/health/stack
-
-echo "=== MCP health from inside mcp-rag container ==="
-docker compose exec mcp-rag sh -lc 'curl -sf http://127.0.0.1:8090/health || wget -qO- http://127.0.0.1:8090/health || python - <<PY
-import urllib.request
-print(urllib.request.urlopen("http://127.0.0.1:8090/health", timeout=5).read().decode())
-PY'
-
-echo "=== BACnet samples still moving ==="
-ls -lah workspace/bacnet/polls/samples.csv
-tail -n 1 workspace/bacnet/polls/samples.csv
-
-echo "=== BACnet ingest state ==="
-sudo cat workspace/data/bacnet_ingest_state.json | jq . || sudo cat workspace/data/bacnet_ingest_state.json
-
-echo "=== Feather store retained and writing ==="
-du -sh workspace/data/feather_store
-find workspace/data/feather_store -type f -printf "%TY-%Tm-%Td %TH:%TM %p\n" | sort | tail -n 10
-
-echo "=== Recent log errors ==="
-docker compose logs --since 20m | grep -Ei "error|exception|traceback|critical|failed|permission|denied" || true
-```
-
-**`/health/stack` nuance:** `/health` should return `200` without auth. `/health/stack` may return `401`, `403`, `404`, or an empty body depending on auth settings — use `curl -i` (not `curl -sf`) so you see the status code. A failed silent `curl -sf` does not mean the stack is broken.
-
-### Arrow / FDD rules (Open-FDD 3.0+)
-
-All saved rules use `apply_faults_arrow(table, cfg, context)` on PyArrow tables.
-
-From bensserver:
-
-```bash
-./scripts/validate_fdd_backends.sh --docker   # must exit 0
-```
-
-On the edge VM after upgrade:
-
-```bash
-grep -R "apply_faults_arrow" -n workspace/data/rules_py 2>/dev/null | wc -l
-docker compose exec bridge python3 -c "
-from openfdd_bridge.rule_store import RuleStore
-from open_fdd.arrow_runtime.rules import detect_rule_backend
-from openfdd_bridge.rule_source import read_source
-for r in RuleStore().list_rules():
-    if not r.get('enabled', True): continue
-    code = read_source(r.get('source_path','')) or r.get('code','')
-    print(r.get('name'), detect_rule_backend(code, r))
-"
-```
-
-Spot-check **Rule Lab** quick-test shows `backend: arrow`.
-
-## 6. Control-machine insurance check
-
-From your laptop or bensserver (full repo clone, not on the edge VM):
-
-```bash
-cd /path/to/open-fdd/infra/ansible
-
-./scripts/post_deploy_check.sh --limit acme_vm_bbartling
-
-# Or explicitly:
-./scripts/post_deploy_check.sh --host 100.122.106.124 --ssh-user bbartling
-```
-
-This is the recommended **non-destructive** check: Caddy → React dashboard, `/health/stack`, MCP, BACnet tree, BRICK/SPARQL, Docker log scan.
-
-> **Do not run on live commissioned sites:** `openfdd_edge_validate.sh --full` or `acme_operational_verify.sh` — those rediscover BACnet and reset bench model/rules.
-
-## 7. Browser validation
-
-Open the site via **Caddy on port 80** (e.g. `http://<tailscale-or-lan-ip>/`), not only `127.0.0.1:8765`:
-
-1. View page source / Network — confirm **new** `index-*.js` hash (not the pre-upgrade bundle).
-2. Home / faults dashboard loads.
-3. Integrator login (`workspace/auth.env.local`).
-4. **Host stats** — container image tag / git sha (3.0+ bridge).
-5. **BACnet** — right-click point → **Refresh PV**, **Read priority array**.
-6. **Model & assignments** (`/model`) — commissioning JSON export (404 = bridge image + UI both stale).
-7. Rule Lab — quick-test a saved rule (`backend: arrow`).
-
-## Rollback
-
-If the new tag misbehaves, restore the previous tag in compose and recreate:
-
-```bash
-cd /home/bbartling/open-fdd
-
-# Example: roll back from 2026.06.07-edge to 2026.06.04-edge
-export NEW_TAG="2026.06.07-edge"
-export OLD_TAG="2026.06.04-edge"
-
-sed -i "s/${NEW_TAG}/${OLD_TAG}/g" docker-compose.yml
-
-docker compose pull
-docker compose up -d --force-recreate
-
-docker compose ps
-curl -sf http://127.0.0.1:8765/health | jq . || curl -sf http://127.0.0.1:8765/health
-```
-
-`workspace/` is unchanged by rollback. For data corruption, extract files from `$BACKUP_ROOT/workspace-full.tgz` selectively (model, rules, feather shards) — do not blindly overwrite a running site without stopping containers first.
-
-## Alternative: Ansible image-only upgrade
-
-If you have inventory and SSH from a control machine (no manual `sed` on the VM):
-
-```bash
-export OPENFDD_IMAGE_TAG=2026.06.07-edge
-RUN_POST_CHECK=1 ./scripts/upgrade_edge_ghcr.sh --limit acme_vm_bbartling
-```
-
-See also [Updating the stack](../quick-start/updating).
-
-
-# LAN hardening
-
-# LAN hardening
-
-## Deployment modes
-
-| Mode | Bind | Auth |
-|------|------|------|
-| Local dev | `127.0.0.1` | Optional `OFDD_AUTH_DISABLED=1` |
-| Lab LAN (insecure) | `0.0.0.0` | Requires explicit insecure dev flags — **not production** |
-| Edge production | `0.0.0.0` behind Caddy | **Required** credentials + `OFDD_AUTH_SECRET` |
-
-Startup **fails** on non-loopback bind without credentials (unless insecure lab flags are explicitly set).
-
-## Network exposure
-
-- Do not port-forward the bridge to the public internet without TLS and strong auth.
-- Keep BACnet on OT VLANs; bridge management on IT VLAN with firewall rules.
-- Prefer Caddy on `:80`/`443` rather than exposing `:8765` directly.
-
-## Rule Lab caution
-
-Rule Lab executes **operator-authored Python** in a sandbox. Restrict integrator accounts; review rules before enable on production sites.
-
-
-# Secrets and auth
-
-# Secrets and auth
-
-## Files (gitignored)
-
-| File | Contents |
-|------|----------|
-| `workspace/auth.env.local` | JWT secret, role passwords |
-| `workspace/json_api.env.local` | REST API keys for JSON API `${ENV:VAR}` URLs (e.g. OpenWeather `OPENWEATHER_API_KEY`) |
-| `workspace/data.env.local` | Historian + **audit log retention** (`OFDD_LOG_*`, `OFDD_FEATHER_*`) |
-| `workspace/ollama.env.local` | Ollama URL, model, RAM tier, GPU mode |
-| `workspace/mcp.env.local` | MCP RAG sidecar |
-| `workspace/caddy.env.local` | Reverse proxy TLS/HTTP mode |
-| `workspace/pentest.env.local` | LAN security scan stack |
-| `infra/ansible/secrets/<host>.env.local` | SSH deploy secrets (maintainers) |
-
-Copy from `*.example` templates only. Full inventory: [Workspace env files](../appendix/workspace-env-files).
-
-## Required variables (production)
-
-| Variable | Purpose |
-|----------|---------|
-| `OFDD_AUTH_SECRET` | HMAC signing (32+ chars) |
-| `OFDD_INTEGRATOR_USER` / `PASSWORD` | Rule Lab, bindings |
-| `OFDD_OPERATOR_USER` / `PASSWORD` | Operations |
-
-## GHCR pulls
-
-Use read-only registry credentials on edge if images are private; rotate tokens periodically.
-
-## Backup
-
-Back up `workspace/data/` and auth env in secure operator vault — not in git.
-
-Audit JSONL under `workspace/logs/` may contain client IPs and usernames — treat like security logs. See [Logging and audit](../ops/logging).
-
-
-# ZAP baseline (local bench)
-
-# ZAP baseline (local bench)
-
-Passive [OWASP ZAP baseline](https://www.zaproxy.org/docs/docker/baseline-scan/) against the **pentest production stack** on benserver is the standard LAN security smoke before Acme edge deploys.
-
-## Run
-
-```bash
-./scripts/pentest_production_stack.sh start
-./scripts/pentest_production_stack.sh verify
-```
-
-ZAP target (example): `http://192.168.204.18/` — Caddy on `:80` only; bridge `:8765` stays loopback.
-
-## Expected results (HTTP bench mode)
-
-| Finding | Severity | Status |
-|---------|----------|--------|
-| CSP `style-src 'unsafe-inline'` | Medium | **Accepted** — Vite/React inline styles; TODO to nonce/hash |
-| Missing COEP | Low | **Accepted** — `require-corp` not enabled (breaks some assets) |
-| Port 80 open (Caddy) | Info | **Expected** — intentional LAN entry |
-| Ports 8765, 5173, 8000, 8080 closed | — | **Good** |
-| Port 443 filtered | — | **Expected** in HTTP mode; use `OFDD_CADDY_MODE=tls` for HTTPS bench |
-| Duplicate `Referrer-Policy` / `X-Frame-Options` | Low | **Fixed** — bridge owns headers; Caddy does not duplicate |
-
-## Header ownership
-
-| Layer | Sets |
-|-------|------|
-| **Bridge** (`security_headers.py`) | CSP, `X-Frame-Options: DENY`, `frame-ancestors 'none'`, COOP, CORP, Permissions-Policy, Referrer-Policy, `X-Content-Type-Options` |
-| **Caddy HTTP** | Reverse proxy only; strips `Server` banners |
-| **Caddy TLS** | Adds `Strict-Transport-Security` only |
-
-## Authenticated scan (later)
-
-Baseline scan hits ~4 public endpoints (`/health`, public agent insight routes). Deep API/dashboard coverage requires ZAP with integrator login — schedule separately before production OT LAN sign-off.
-
-## After fixes
-
-Re-run verify, then remote PowerShell ZAP from the LAN PC. Confirm response headers show **one** `X-Frame-Options: DENY` and no duplicate `Referrer-Policy`.
-
-
-# BACnet write allowlists
-
-# BACnet write allowlists
-
-Supervisory writes require:
-
-1. **Feature flag** enabled in environment (off by default).
-2. **Allowlist** file at `workspace/bacnet/write_allowlist.json` (copy from [`write_allowlist.example.json`](write_allowlist.example.json)). If the flag is on but the allowlist is missing, writes are **denied**.
-3. **Integrator** role on API calls.
-4. **Audit** log review after commissioning sessions.
-
-Allowlist entries support `device_instance`, `object_identifier`, `property_identifier`, optional `priority_min`/`priority_max`, `value_min`/`value_max`, and `allowed_values` for binary/multistate targets.
-
-Lab-only override: `OFDD_BACNET_WRITE_ALLOW_ANY=1` (audited; not for production edges).
-
-See operator guide: [BACnet write safety](../bacnet/write-safety).
-
-Never enable blanket write access for agent or integrator automation without human approval per site.
 
 
 # Logging and audit
@@ -2935,138 +3013,666 @@ For BACnet write safety and credential generation, see [SECURITY.md](../../works
 - [Data flow](../architecture/data-flow) — historian retention (`OFDD_FEATHER_*`) is separate from audit logs
 
 
-# Acme GL36 FDD (vm-bbartling)
+# Fault Codes
 
-# Acme GL36 FDD (vm-bbartling)
+# Fault Codes
 
-Doc-only reference for **ASHRAE Guideline 36** supervisory monitoring on the Acme edge (`acme` / `vm-bbartling`). Rule code lives in `workspace/data/rules_py/`; commissioning uses **Arrow constants** (no `config.json`).
+Open-FDD uses a **check-engine** model: one building-level status (green / yellow / red) with a catalog of fixed fault codes per equipment family.
 
-Trim & respond Niagara reference: [README_TRIM_RESPOND](https://github.com/bbartling/niagara4-vibe-code-addict/blob/develop/README_TRIM_RESPOND.md).
+| Page | Content |
+|------|---------|
+| [Convention](convention) | Naming, severity, categories |
+| [AHU faults](ahu) | Air handling units |
+| [VAV faults](vav) | Terminal units |
+| [RTU faults](rtu) | Packaged rooftops |
+| [Sensor & data quality](sensor-quality) | Stale, flatline, comms |
 
-## BACnet poll scope
-
-Device filter (`infra/ansible/scripts/acme_trim_devices.sh`):
-
-| Range | Equipment |
-|-------|-----------|
-| 1–100 | JCI VMA/VAV |
-| 1100 | RTU-01 (AHU) |
-| 1002 | Hot water plant |
-| 11000–13000 | Trane UC210 VAV |
-
-Poll interval: **60 s**. Commission: `POLL_INTERVAL=60 ./infra/ansible/scripts/acme_commission_gl36.sh` → `edge_backup/local/acme/vm-bbartling/points.csv`.
-
-## Example FDD rules (Arrow constants)
-
-### Duct static pressure high (AHU)
-
-```python
-"""Acme AHU duct static high — GL36 trim advisory."""
-
-import pyarrow.compute as pc
-
-VALUE_COLUMN = "duct-static"
-HIGH_INWC = 1.20
-LOOKBACK_HOURS = 3
-
-
-def _kit_lookback_stats(table, *, hours=None):
-    h = hours if hours is not None else LOOKBACK_HOURS
-    ts = pc.cast(table["timestamp"], "timestamp[us, UTC]")
-    tmin, tmax = pc.min(ts).as_py(), pc.max(ts).as_py()
-    span_h = (tmax - tmin).total_seconds() / 3600.0 if tmin and tmax else 0.0
-    print(f"lookback={h}h rows={table.num_rows} start={tmin} stop={tmax} span={span_h:.2f}h")
-
-
-def apply_faults_arrow(table, cfg, context=None):
-    _kit_lookback_stats(table)
-    return pc.greater(pc.cast(table[VALUE_COLUMN], "float64"), HIGH_INWC)
-```
-
-### SAT too cold vs setpoint
-
-```python
-"""Acme AHU SAT too cold vs setpoint."""
-
-import pyarrow.compute as pc
-
-SAT_COLUMN = "sa-t"
-SP_COLUMN = "sa-t-sp"
-COLD_DELTA_F = 5.0
-
-
-def apply_faults_arrow(table, cfg, context=None):
-    sat = pc.cast(table[SAT_COLUMN], "float64")
-    sp = pc.cast(table[SP_COLUMN], "float64")
-    return pc.less(pc.subtract(sat, sp), -COLD_DELTA_F)
-```
-
-### Zone temp flatline (existing site rule)
-
-See `workspace/data/rules_py/bench_stat_zn-t_flatline_1h.py` — bind `ZN-T` per VAV in Model & assignments.
-
-### Duct static flatline (site rule stub)
-
-See `workspace/data/rules_py/acme_duct_static_flatline_1h_gl36_duct_t_r_input.py` — tune `VALUE_COLUMN` to historian column for RTU duct static.
-
-### Local OA-T vs web weather (JSON API)
-
-Cross-check a drifting outdoor-air sensor against [OpenWeatherMap](https://openweathermap.org/api) via the generic JSON API driver:
-
-1. Control machine: `workspace/json_api.env.local` with `OPENWEATHER_API_KEY` — synced on deploy (`deploy_sync_json_api_env`).
-2. JSON API tab → **OpenWeatherMap** preset → **Register** (default poll **30 min** — `web-oat-t`, `web-rh`, `web-weather-desc`).
-3. Bind BACnet **local OAT** in the model: **Tracer SC** device `10000` → `Facility Outdoor Air Temperature` (`fdd_input` **OAT**, historian `oa-t`). Hot-water plant `1002` has no outdoor-air point.
-4. Enable rule `workspace/data/rules_py/oat_vs_web_spread_1h.py` in Rule Lab — flags when `|oa-t − web-oat-t| > 8 °F`.
-
-Scheduled FDD merges BACnet and `json_api` historian columns by nearest timestamp (30 min tolerance).
-
-## Deploy / upgrade (GHCR only)
-
-```bash
-cd infra/ansible
-POLL_INTERVAL=60 ./scripts/acme_commission_gl36.sh
-OPENFDD_IMAGE_TAG=latest ./deploy.sh docker --limit acme_vm_bbartling -e enable_bacnet_poll_driver=true
-```
-
-Do **not** rsync dev `auth.env.local` to the edge (`deploy_sync_auth: false` in `host_vars/acme_vm_bbartling.yml`). Regenerate on-host if the bridge rejects example credentials.
-
-## AI-assisted data modeling
-
-1. BACnet poll running (340+ GL36 points @ 60 s).
-2. **Model & assignments** → copy prompt + commissioning JSON for LLM.
-3. Import returned JSON via commissioning import.
-4. Pin `fdd_rule_ids` on `ZN-T`, `DA-T`, `duct-static`, `OAT`, etc. (export shows Rule Lab names in `fdd_rules_linked` on each point).
-
-Model seed: `workspace/data/acme_gl36_model.json`.
+Live catalog API: `GET /api/faults/catalog` on the Operator Bridge.
 
 
 # Operations
 
 # Operations
 
-Runbooks for live edge hosts after the initial deploy.
+Runbooks for live edge hosts after the initial [Quick Start](../quick-start/) deploy.
 
 | Page | When to use |
 |------|-------------|
-| [Logging and audit](logging) | Audit JSONL, auth trail, rotation defaults, Docker log caps, SIEM export |
-| [Live site update (SSH)](live_site_update) | Minimal `~/open-fdd/` folder on a VM — pull new GHCR tags, preserve `workspace/` |
-| [Acme GL36 FDD](acme-gl36-fdd) | vm-bbartling poll scope, example Arrow rules, AI modeling workflow |
+| [Live site update](live_site_update) | Pull new GHCR tags, preserve `workspace/` |
+| [Backup and restore](backup-restore) | Archive `workspace/` before upgrades |
+| [Logging and audit](logging) | Auth audit trail, rotation, Docker log caps |
+| [Deployment validation](deployment-validation) | Post-upgrade smoke and insurance checks |
 
-For first-time deploy from a control machine, see [Quick Start — Docker](../quick-start/docker).
+Site-specific lab notes (example BACnet scope, GL36 rules): [Examples & lab notes](../examples/).
+
+For first-time deploy: [Quick Start — Docker](../quick-start/docker).
+
+
+# LAN hardening
+
+# LAN hardening
+
+Open-FDD targets **trusted building LAN / OT edge** deployment. The Operator Bridge is not intended for direct public internet exposure.
+
+Full mode matrix: [Deployment modes](../architecture/deployment-modes).
+
+## Auth and bind
+
+| Mode | Bridge bind | Auth |
+|------|-------------|------|
+| Local dev | `127.0.0.1` | Optional `OFDD_AUTH_DISABLED=1` on loopback |
+| Lab LAN | `0.0.0.0` | Required unless explicit insecure lab flags |
+| Edge production | Loopback + **Caddy** on LAN | **Required** — `OFDD_AUTH_SECRET` + role passwords |
+
+Startup **fails** on non-loopback bind without credentials (unless insecure lab flags are set).
+
+## Network exposure
+
+- Put **Caddy** on `:80` / `:443`; keep bridge `:8765` on loopback when possible.
+- Do not port-forward the Operator Bridge to the public internet without TLS and strong auth.
+- Keep BACnet on OT VLANs; management UI on IT VLAN with firewall rules.
+- BACnet **writes** are gated by default — [BACnet write guard](bacnet-writes).
+
+## Rule Lab
+
+Rule Lab runs **operator-authored Python** in a sandbox. Restrict integrator accounts; review rules before enable on production sites.
+
+## TLS and LAN security scans
+
+| Topic | Page |
+|-------|------|
+| Certificates (self-signed / site CA) | [TLS and certificates](tls-and-certs) |
+| ZAP + Nmap bench smoke | [ZAP baseline](zap-baseline) · `scripts/security/` |
+| Ubuntu host + Tenable/Nessus | [Linux host hardening](linux-host-hardening) · [Tenable remediation](tenable-remediation) |
+| Release test cycle (maintainers) | [Security testing](../developer/security-testing) |
+
+## Ollama on the edge
+
+Ollama has **no built-in auth**. Bind `OLLAMA_HOST=127.0.0.1:11434` on the host; never expose `:11434` on the OT LAN. Open-FDD bridge reaches Ollama server-side only. Validation: `scripts/security/check_openfdd_exposure.sh`.
+
+
+# ZAP baseline (local bench)
+
+# ZAP baseline (local bench)
+
+Passive [OWASP ZAP baseline](https://www.zaproxy.org/docs/docker/baseline-scan/) against the **pentest production stack** on benserver is the standard LAN security smoke before Acme edge deploys.
+
+Full per-revision workflow (pytest → PR → GHCR → Acme): [Developer — security testing cycle](../developer/security-testing).
+
+Packaged scan scripts (Windows + Mac/Linux): [scripts/security/README.md](../../scripts/security/README.md).
+
+## Run
+
+**On the Open-FDD host:**
+
+```bash
+./scripts/pentest_production_stack.sh start
+./scripts/pentest_production_stack.sh verify
+```
+
+**From a LAN workstation** (after verify passes):
+
+```powershell
+# Windows
+.\scripts\security\Run-OpenFddSecurityScan.ps1
+```
+
+```bash
+# macOS / Linux
+./scripts/security/run_openfdd_security_scan.sh --url http://192.168.204.18
+```
+
+ZAP target (example): `http://192.168.204.18/` — Caddy on `:80` only; bridge `:8765` stays loopback. TLS bench: see [TLS and certificates](tls-and-certs).
+
+## Expected results (HTTP bench mode)
+
+| Finding | Severity | Status |
+|---------|----------|--------|
+| CSP `style-src 'unsafe-inline'` | Medium | **Accepted** — Vite/React inline styles; TODO to nonce/hash |
+| Missing COEP | Low | **Accepted** — `require-corp` not enabled (breaks some assets) |
+| Port 80 open (Caddy) | Info | **Expected** — intentional LAN entry |
+| Ports 8765, 5173, 8000, 8080 closed | — | **Good** |
+| Port 443 filtered | — | **Expected** in HTTP mode; use `OFDD_CADDY_MODE=tls` for HTTPS bench |
+| Duplicate `Referrer-Policy` / `X-Frame-Options` | Low | **Fixed** — bridge owns headers; Caddy does not duplicate |
+
+## Header ownership
+
+| Layer | Sets |
+|-------|------|
+| **Bridge** (`security_headers.py`) | CSP, `X-Frame-Options: DENY`, `frame-ancestors 'none'`, COOP, CORP, Permissions-Policy, Referrer-Policy, `X-Content-Type-Options` |
+| **Caddy HTTP** | Reverse proxy only; strips `Server` banners |
+| **Caddy TLS** | Adds `Strict-Transport-Security` only |
+
+## Authenticated scan (later)
+
+Baseline scan hits ~4 public endpoints (`/health`, public agent insight routes). Deep API/dashboard coverage requires ZAP with integrator login — see [Authenticated scanning (roadmap)](authenticated-scanning).
+
+## After fixes
+
+Re-run `pentest_production_stack.sh verify`, then the packaged LAN scan from `scripts/security/`. Confirm response headers show **one** `X-Frame-Options: DENY` and no duplicate `Referrer-Policy`.
+
+
+# TLS and certificates
+
+# TLS and certificates
+
+Who generates, stores, and renews TLS material for Open-FDD on OT LANs — and how that ties into ZAP/Nmap bench testing.
+
+Developer release cycle: [Security testing cycle](../developer/security-testing).
+
+## Ownership
+
+| Environment | Who owns certs | Storage |
+|-------------|----------------|---------|
+| Local / benserver bench | Developer / maintainer | `workspace/deploy/caddy/certs/` (`cert.pem`, `key.pem`) |
+| Ansible edge (Acme, customer sites) | Site integrator | `/etc/openfdd/caddy/` on the VM (playbook-managed or manual) |
+| Public internet | **Not in scope** | Open-FDD targets OT LAN; use site PKI or self-signed |
+
+Open-FDD does **not** ship Let's Encrypt or public CA automation. OT benches use **self-signed** or customer-provided certs.
+
+## Generate bench certs (local)
+
+```bash
+./scripts/setup_caddy_certs.sh
+# or: ./scripts/setup_caddy_certs.sh --cn openfdd.local --out workspace/deploy/caddy/certs
+```
+
+Then start with TLS mode:
+
+```bash
+OFDD_CADDY_MODE=tls ./scripts/run_local.sh
+# or pentest stack with OFDD_CADDY_MODE=tls
+```
+
+Caddy serves `:443` and redirects `:80` → HTTPS. Caddy adds **`Strict-Transport-Security`** only; all other security headers remain on the **bridge** ([ZAP baseline](zap-baseline#header-ownership)).
+
+## ZAP / Nmap with TLS bench
+
+When `OFDD_CADDY_MODE=tls`:
+
+- Nmap: expect **443 open**, 80 may redirect
+- ZAP: use `https://<lan-ip>/` (add `-k` trust or import `cert.pem` on the scan workstation)
+- PowerShell: `.\Run-OpenFddSecurityScan.ps1 -TargetUrl "https://192.168.204.18"`
+- Bash: `./run_openfdd_security_scan.sh --url https://192.168.204.18`
+
+Self-signed certs produce ZAP TLS warnings — expected on OT LAN.
+
+## Renewal
+
+Self-signed certs from `setup_caddy_certs.sh` default to **365 days**. Re-run the script before expiry or bake renewal into site runbooks.
+
+Edge Ansible deploys should document whether the integrator rotates certs manually or via site PKI.
+
+## Enterprise CA on Caddy (edge)
+
+When IT requires **clean Nessus SSL plugins** (no self-signed / untrusted chain), install a site-provided certificate on the edge VM instead of `setup_caddy_certs.sh` output.
+
+Typical layout (Ansible / manual):
+
+```text
+/etc/openfdd/caddy/cert.pem   # full chain (leaf + intermediates)
+/etc/openfdd/caddy/key.pem    # private key (0600, root or caddy user)
+```
+
+Ansible TLS mode (`caddy_mode: tls`) already points Caddy at those paths — see `infra/ansible/templates/Caddyfile.j2`.
+
+**Internal enterprise CA workflow:**
+
+1. Generate CSR on the edge host or request cert from site PKI for the operator hostname (e.g. `openfdd.acme.local`).
+2. Install `cert.pem` + `key.pem` under `/etc/openfdd/caddy/`.
+3. Distribute the **CA root** to admin laptops (trust store) so browsers and ZAP scans validate the chain.
+4. Monitor expiry:
+
+```bash
+openssl x509 -in /etc/openfdd/caddy/cert.pem -noout -dates
+```
+
+**Caddyfile snippet (TLS, enterprise cert):**
+
+```text
+:443 {
+    tls /etc/openfdd/caddy/cert.pem /etc/openfdd/caddy/key.pem
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    }
+    reverse_proxy 127.0.0.1:8765
+}
+```
+
+Lab/self-signed mode still produces expected **Medium** Tenable findings — document as accepted risk or switch to enterprise CA. See [Tenable remediation](tenable-remediation).
+
+## Caddy internal CA mode (lab)
+
+`./scripts/setup_caddy_certs.sh` generates a **self-signed** pair for bench TLS. Trust `cert.pem` on scan workstations (`-k` curl, ZAP import) or accept browser warnings. Not suitable when IT mandates trusted chains.
+
+## Secrets
+
+- **Never commit** `key.pem` or production cert bundles
+- `workspace/deploy/caddy/certs/` is for local bench only unless your `.gitignore` already excludes generated keys (verify before push)
+
+
+# Authenticated scanning (roadmap)
+
+# Authenticated scanning (roadmap)
+
+[ZAP baseline](zap-baseline) is **unauthenticated** — it checks public pages, response headers, and a handful of routes reachable without login. That is the right default for every docker image / patch revision smoke on a test LAN.
+
+For **deep** coverage of integrator dashboards, `/api/*` routes, WebSocket sessions, and role-gated writes, plan a separate **authenticated** scan — only on fake/bench stacks with explicit approval.
+
+Release context: [Security testing cycle](../developer/security-testing).
+
+## Current state (3.0.x)
+
+| Capability | Status |
+|------------|--------|
+| ZAP baseline via `scripts/security/` | **Shipped** |
+| Pentest creds in `workspace/auth.pentest.local` | **Shipped** (host-local, not in git) |
+| ZAP full / active scan automation | **Not shipped** — manual only |
+| ZAP authenticated context (login script + session) | **Roadmap** |
+| CI running ZAP against PR previews | **Not planned** (LAN bench only) |
+
+## Why baseline is not enough
+
+After login, the bridge exposes model editing, BACnet/JSON API configuration, Rule Lab, commissioning export, and write-gated commands. Baseline ZAP never exercises:
+
+- Session cookies / JWT persistence
+- CSRF or auth bypass on mutating endpoints
+- IDOR on site-scoped resources
+- Rate limits and audit logging on failed auth
+
+## Planned approach (contributors welcome)
+
+1. **Bench-only target** — same pentest stack; never point active scans at live OT controllers
+2. **Login hook** — ZAP `zap-full-scan.py` or Automation Framework with:
+   - `POST /api/auth/login` using integrator creds from env (not committed)
+   - Regex or JSON extractor for session token / cookie
+3. **Scope file** — include `/api/model/*`, `/api/commissioning/*`, dashboard static assets; exclude BACnet UDP and unrelated LAN hosts
+4. **Report parity** — extend `scripts/security/` with opt-in `-Authenticated` / `--zap-full` flags and separate report prefix (`22-zap-authenticated-*`)
+5. **Gate** — document accepted findings; fail release only on High/Critical regressions
+
+## Manual authenticated ZAP today
+
+1. Start pentest stack; note creds in `workspace/auth.pentest.local`
+2. Open ZAP desktop or docker with API port exposed
+3. Configure **Context** → **Authentication** → script or form-based login to `/api/auth/login`
+4. Run **Spider** then **Active Scan** on `http://<lan-ip>/` only
+5. Compare with baseline report in `openfdd-security-report/`
+
+Do **not** run active scans against production Acme without a maintenance window and BACnet write lock.
+
+## Related
+
+- [scripts/security/README.md](../../scripts/security/README.md) — baseline setup
+- [Secrets and auth](secrets-auth) — env file layout
+- [LAN hardening](lan-hardening) — bind and auth modes
+
+
+# Secrets and auth
+
+# Secrets and auth
+
+## Files (gitignored)
+
+| File | Contents |
+|------|----------|
+| `workspace/auth.env.local` | JWT secret, role passwords |
+| `workspace/json_api.env.local` | REST API keys for JSON API `${ENV:VAR}` URLs (e.g. OpenWeather `OPENWEATHER_API_KEY`) |
+| `workspace/data.env.local` | Historian + **audit log retention** (`OFDD_LOG_*`, `OFDD_FEATHER_*`) |
+| `workspace/ollama.env.local` | Ollama URL, model, RAM tier, GPU mode |
+| `workspace/mcp.env.local` | MCP RAG sidecar |
+| `workspace/caddy.env.local` | Reverse proxy TLS/HTTP mode |
+| `workspace/pentest.env.local` | LAN security scan stack |
+| `infra/ansible/secrets/<host>.env.local` | SSH deploy secrets (maintainers) |
+
+Copy from `*.example` templates only. Full inventory: [Workspace env files](../appendix/workspace-env-files).
+
+## Required variables (production)
+
+| Variable | Purpose |
+|----------|---------|
+| `OFDD_AUTH_SECRET` | HMAC signing (32+ chars) |
+| `OFDD_INTEGRATOR_USER` / `PASSWORD` | Rule Lab, bindings |
+| `OFDD_OPERATOR_USER` / `PASSWORD` | Operations |
+
+## GHCR pulls
+
+Use read-only registry credentials on edge if images are private; rotate tokens periodically.
+
+## Backup
+
+Back up `workspace/data/` and auth env in secure operator vault — not in git.
+
+Audit JSONL under `workspace/logs/` may contain client IPs and usernames — treat like security logs. See [Logging and audit](../ops/logging).
+
+
+# BACnet write allowlists
+
+# BACnet write allowlists
+
+Supervisory writes require:
+
+1. **Feature flag** enabled in environment (off by default).
+2. **Allowlist** file at `workspace/bacnet/write_allowlist.json` (copy from [`write_allowlist.example.json`](write_allowlist.example.json)). If the flag is on but the allowlist is missing, writes are **denied**.
+3. **Integrator** role on API calls.
+4. **Audit** log review after commissioning sessions.
+
+Allowlist entries support `device_instance`, `object_identifier`, `property_identifier`, optional `priority_min`/`priority_max`, `value_min`/`value_max`, and `allowed_values` for binary/multistate targets.
+
+Lab-only override: `OFDD_BACNET_WRITE_ALLOW_ANY=1` (audited; not for production edges).
+
+See operator guide: [BACnet write safety](../bacnet/write-safety).
+
+Never enable blanket write access for agent or integrator automation without human approval per site.
+
+
+# Linux host hardening
+
+# Linux host hardening
+
+Generic **Ubuntu edge VM** guidance for Open-FDD deployments scanned by IT tools (Tenable/Nessus, Qualys, etc.). This complements application-level [LAN hardening](lan-hardening) and [TLS](tls-and-certs).
+
+Nessus-specific finding tables: [Tenable remediation](tenable-remediation).
+
+## Scope
+
+| Layer | Owner | Repo support |
+|-------|-------|--------------|
+| Ubuntu kernel, OpenSSH, apt packages | **Site IT / integrator** | `scripts/security/remediate_ubuntu_host.sh` |
+| Docker engine, compose, Caddy | **Integrator** | Ansible + `check_openfdd_exposure.sh` |
+| Open-FDD containers (pip/pyOpenSSL) | **Open-FDD maintainers** | `docker/python-security-constraints.txt`, GHCR images |
+| Self-signed TLS on OT LAN | **Expected lab finding** | Enterprise CA path in [TLS](tls-and-certs) |
+
+## Quick operator workflow
+
+On the edge VM (SSH):
+
+```bash
+cd ~/open-fdd
+./scripts/security/check_host_security.sh
+./scripts/security/check_openfdd_exposure.sh --edge-ip "$(hostname -I | awk '{print $1}')"
+```
+
+Remediate host OS (maintenance window):
+
+```bash
+./scripts/security/remediate_ubuntu_host.sh          # dry-run
+sudo ./scripts/security/remediate_ubuntu_host.sh --apply
+# if /var/run/reboot-required exists:
+sudo reboot
+./scripts/security/check_host_security.sh
+```
+
+Pull new Open-FDD images after a release that pins container pip/pyOpenSSL:
+
+```bash
+OPENFDD_IMAGE_TAG=latest ./scripts/upgrade_edge_ghcr.sh --limit <inventory_host>
+```
+
+## Ubuntu version and EOL
+
+Supported targets: **Ubuntu 22.04 LTS** or **24.04 LTS** (64-bit). Rebuild hosts still on **16.04** or **18.04** — `apt upgrade` cannot clear an SEoL finding.
+
+Validate a surprising 16.04 Nessus hit:
+
+```bash
+lsb_release -a
+cat /etc/os-release
+# Scan credential / stale DNS / container banner mismatch?
+```
+
+## Kernel and package updates
+
+```bash
+sudo apt update
+sudo apt full-upgrade -y
+uname -r
+test -f /var/run/reboot-required && echo "reboot required"
+sudo reboot   # maintenance window
+```
+
+Optional status tools:
+
+```bash
+ubuntu-security-status    # or: pro status
+apt list --upgradable | grep -i security
+```
+
+## Host Python (pip, wheel, pyOpenSSL)
+
+Tenable often reports **host** `pip`, `wheel`, and `pyOpenSSL` versions installed by Ubuntu packages or admin `pip install`. Prefer **apt** on the host:
+
+```bash
+python3 -m pip show pip setuptools wheel pyOpenSSL
+sudo apt install --only-upgrade python3-pip python3-openssl python3-wheel
+```
+
+Open-FDD **containers** pin toolchain versions at image build — see `docker/python-security-constraints.txt`. Rescan after `docker compose pull`.
+
+## Ollama — no LAN exposure
+
+Ollama has **no built-in authentication** in typical deployments. Treat LAN exposure as **Critical**.
+
+| Rule | Implementation |
+|------|----------------|
+| Bind loopback only | `OLLAMA_HOST=127.0.0.1:11434` in systemd (`ollama.service`) or dev bootstrap |
+| Bridge calls server-side | `OFDD_OLLAMA_BASE_URL=http://127.0.0.1:11434` or `host.docker.internal:11434` from containers |
+| Never publish `:11434` on `0.0.0.0` | Compose uses `127.0.0.1:11434:11434` when Docker Ollama is enabled |
+
+Validation:
+
+```bash
+ss -tulpn | grep 11434
+curl -sf http://127.0.0.1:11434/api/tags | head
+curl -sf --max-time 3 http://<edge-lan-ip>:11434/api/tags   # must FAIL from another host
+```
+
+Firewall (if management host needs GPU Ollama — rare):
+
+```bash
+# Example: block LAN → 11434; allow loopback only (adjust interface names)
+sudo ufw deny 11434/tcp
+sudo ufw allow from 127.0.0.0/8 to any port 11434 proto tcp
+```
+
+## OpenSSH Terrapin (CVE-2023-48795)
+
+Apply Ubuntu security updates first (`openssh-server`, `openssh-client`). Verify:
+
+```bash
+ssh -V
+sudo sshd -T | grep -Ei '^(ciphers|macs|kexalgorithms)'
+```
+
+Manual algorithm hardening is **optional** and can lock out clients — document rollback (`sshd_config.bak`) before changes. Do not automate cipher stripping in repo scripts.
+
+## ICMP timestamp (Low)
+
+Nessus may report ICMP timestamp disclosure. Optional hardening at host firewall or upstream network — low priority for isolated OT VLANs.
+
+Example (nftables — site-specific):
+
+```bash
+# Block ICMP timestamp / type 13 — verify with IT before applying
+sudo nft add rule inet filter input icmp type timestamp-request drop
+```
+
+## TLS and certificate scans
+
+Self-signed or internal CA certificates produce **Medium** Nessus SSL findings (untrusted, self-signed, expiry). That is **expected** for lab/OT encryption-in-transit. For clean SSL plugin results, install a **site enterprise CA** certificate on Caddy — [TLS and certificates](tls-and-certs#enterprise-ca-production).
+
+## Maintainer security audits (CI parity)
+
+```bash
+./scripts/security/run_maintainer_audits.sh
+```
+
+Matches GitHub Actions `operator-bridge-security` job where possible.
+
+
+# Tenable / Nessus remediation
+
+# Tenable / Nessus remediation
+
+Remediation plan for **IT/Tenable.io Nessus** findings on an Open-FDD **OT/LAN edge** deployment (e.g. Acme GL36 lab VM). Open-FDD runs behind a building firewall on Ubuntu with Docker Compose, Caddy, and optional host Ollama.
+
+Related: [Linux host hardening](linux-host-hardening), [TLS and certificates](tls-and-certs), [LAN hardening](lan-hardening), [Security testing cycle](../developer/security-testing).
+
+## Prioritized action plan
+
+| Priority | Action | Owner |
+|----------|--------|-------|
+| **P0** | Confirm Ubuntu is **not** 16.04/18.04; rebuild if EOL | IT / integrator |
+| **P0** | Bind Ollama to **127.0.0.1** only; verify LAN cannot reach `:11434` | Integrator |
+| **P0** | `apt full-upgrade` + **reboot** for kernel USNs (8254, 8278, 8373) | IT / integrator |
+| **P1** | Upgrade host `pip`/`wheel`/`pyOpenSSL` via apt or documented pip path | IT / integrator |
+| **P1** | Pull GHCR images built with `docker/python-security-constraints.txt` | Integrator |
+| **P2** | OpenSSH packages current; review Terrapin after patch | IT |
+| **P2** | TLS: accept self-signed findings **or** install enterprise CA cert | IT decision |
+| **P3** | ICMP timestamp: optional firewall rule | Network / IT |
+
+## Finding classification table
+
+| Nessus finding | Severity | Class | Remediation |
+|----------------|----------|-------|-------------|
+| Canonical Ubuntu Linux SEoL (16.04.x) | Critical | Host OS / **false positive?** | `lsb_release -a` — rebuild VM on 24.04 LTS if truly 16.04; if host is 22.04/24.04, check scan target IP, credentials, stale asset record |
+| Ollama Unauthenticated Access | Critical | Deployment config | `OLLAMA_HOST=127.0.0.1:11434`; no `0.0.0.0:11434`; firewall deny; see [Ollama](#ollama-unauthenticated-access-critical) |
+| Ubuntu kernel USN-8254-1 | Critical | Host OS | `sudo apt update && sudo apt full-upgrade -y && sudo reboot` |
+| pyOpenSSL 22.0.x &lt; 26.0.0 Buffer Overflow | Critical | Host pip **and** container | Host: `apt upgrade python3-openssl` or pip ≥26; Container: GHCR image with constraints file |
+| Ubuntu pip USN-8344-1 | High | Host OS + container build | `apt full-upgrade`; image build upgrades `pip>=26` |
+| SSL Certificate Cannot Be Trusted | Medium | **Accepted risk** (lab) / deployment | Self-signed Caddy — use enterprise CA for clean scan |
+| SSL Self-Signed Certificate | Medium | **Accepted risk** (lab) | Same as above |
+| SSL Certificate Expiry | Medium | Deployment / monitoring | `openssl x509 -dates`; renew `setup_caddy_certs.sh` or site PKI |
+| SSH Terrapin (CVE-2023-48795) | Medium | Host OS | Upgrade `openssh-server`; validate `ssh -V` |
+| Ubuntu wheel USN-8221-1 | Medium | Host OS | `apt full-upgrade` |
+| Ubuntu kernel USN-8278-1, USN-8373-1 | Medium | Host OS | `apt full-upgrade` + reboot |
+| pyOpenSSL 0.14.x Security Bypass | Medium | Host + container | Same as pyOpenSSL Critical — upgrade to ≥26 |
+| ICMP Timestamp Request | Low | Network / optional host | Firewall drop; often accepted on isolated OT VLAN |
+
+**Class legend:** (1) repo-owned fix · (2) Docker base/image · (3) host OS · (4) deployment/config · (5) accepted risk · (6) validate false positive
+
+## Operator commands (edge VM)
+
+### Validate (read-only)
+
+```bash
+cd ~/open-fdd
+./scripts/security/check_host_security.sh
+./scripts/security/check_openfdd_exposure.sh --edge-ip "$(hostname -I | awk '{print $1}')"
+lsb_release -a
+uname -r
+test -f /var/run/reboot-required && cat /var/run/reboot-required.pkgs
+python3 -m pip show pip setuptools wheel pyOpenSSL 2>/dev/null | grep -E '^(Name|Version):'
+ss -tulpn | grep -E ':80|:443|:8765|:11434'
+curl -sf http://127.0.0.1:11434/api/tags | head -3
+```
+
+From a **different LAN workstation** (must fail):
+
+```bash
+curl -sf --max-time 3 http://<edge-ip>:11434/api/tags
+```
+
+### Remediate host (maintenance window)
+
+```bash
+./scripts/security/remediate_ubuntu_host.sh              # dry-run
+./scripts/security/remediate_ubuntu_host.sh --apply
+sudo reboot    # if reboot-required
+./scripts/security/check_host_security.sh
+```
+
+### Remediate Open-FDD containers
+
+```bash
+OPENFDD_IMAGE_TAG=latest ./scripts/upgrade_edge_ghcr.sh --limit <inventory_host>
+docker compose pull && docker compose up -d
+```
+
+### Rescan
+
+After reboot and image pull, request IT **Nessus rescan** of the edge IP. Compare plugin output to the table above.
+
+## Ollama unauthenticated access (Critical)
+
+**Not an Open-FDD code bug** — Ollama’s API is unauthenticated by design. Risk is **network exposure**.
+
+Repo defaults (3.0.5+):
+
+- Systemd: `Environment=OLLAMA_HOST=127.0.0.1:11434` in `infra/ansible/templates/ollama.service.j2`
+- Compose Ollama (optional profile): `127.0.0.1:11434:11434` only
+- Acme-style edge: host Ollama + bridge via `host.docker.internal:11434` (container → host loopback path)
+- `post_deploy_check.sh` warns if `:11434` listens on `0.0.0.0`
+
+Re-apply Ansible Ollama unit after upgrade:
+
+```bash
+ansible-playbook -i inventory.yml ollama_bootstrap.yml --limit <host> -e enable_ollama=true
+```
+
+## pyOpenSSL and pip in containers
+
+Docker build installs `docker/python-security-constraints.txt` before application requirements:
+
+- `pip>=26.0`, `setuptools>=75.0`, `wheel>=0.45`
+- `pyOpenSSL>=26.0.0`, `cryptography>=44.0.0`
+
+CI `pip-audit` runs against bridge + bacnet requirements with the same constraints.
+
+## TLS — expected vs production
+
+| Mode | Nessus SSL plugins | When to use |
+|------|-------------------|-------------|
+| Caddy HTTP `:80` | No TLS plugins | Dev / HTTP-only VLAN |
+| Caddy self-signed `:443` | Medium: untrusted, self-signed, expiry | OT LAN encryption, lab |
+| Enterprise CA cert on Caddy | Clean SSL plugins (if chain trusted) | IT mandates clean Nessus |
+
+See [TLS — enterprise CA](tls-and-certs#enterprise-ca-on-caddy-edge).
+
+## Residual findings after remediation
+
+Even with a patched host and loopback-only Ollama, IT may still see:
+
+- **SSL** Medium on self-signed TLS (accepted for lab; document in risk register)
+- **ICMP** Low (optional network block)
+- **Container** plugins if Nessus scans Docker overlay networks — clarify scan scope with IT
+
+## Notes for IT / security team
+
+1. Scan the **edge VM IP**, not individual container IPs, unless container CVE correlation is required.
+2. Open-FDD **bridge :8765** should be **loopback-only**; LAN entry is **Caddy :80/:443**.
+3. **BACnet UDP 47808** on commission is expected OT traffic — out of scope for web/plugin remediation.
+4. Do not expose Ollama **11434** to the building LAN; agent chat is server-side only.
+5. Kernel CVEs require **host reboot** — schedule with operations.
+6. For authenticated web/API depth, see roadmap [Authenticated scanning](authenticated-scanning).
+
+## Repo-owned fixes (this document’s release)
+
+| Item | Location |
+|------|----------|
+| Container pip/pyOpenSSL pins | `docker/python-security-constraints.txt`, `docker/Dockerfile` |
+| Ollama loopback systemd | `infra/ansible/templates/ollama.service.j2` |
+| Host/exposure check scripts | `scripts/security/check_*.sh`, `remediate_ubuntu_host.sh` |
+| Post-deploy Ollama bind warn | `infra/ansible/scripts/post_deploy_check.sh` |
+| CI pip-audit + constraints | `.github/workflows/ci.yml` |
 
 
 # Security
 
 # Security
 
-Concise deployment security for the Operator Bridge and BACnet tools.
+LAN deployment security for the Operator Bridge and BACnet write guard. Open-FDD is for **trusted edge / OT LAN** — not direct public internet exposure.
 
 | Page | Topic |
 |------|-------|
 | [LAN hardening](lan-hardening) | Auth and bind modes |
 | [ZAP baseline (local bench)](zap-baseline) | Pentest stack, expected warnings |
+| [TLS and certificates](tls-and-certs) | Cert ownership, bench TLS mode |
+| [Linux host hardening](linux-host-hardening) | Ubuntu edge VM, SSH, kernel, Ollama bind |
+| [Tenable / Nessus remediation](tenable-remediation) | IT scan findings, operator runbook |
+| [Authenticated scanning (roadmap)](authenticated-scanning) | Deep ZAP / protected API |
 | [Secrets and auth](secrets-auth) | Env files |
 | [BACnet write allowlists](bacnet-writes) | Supervisory write gates |
+| [Release & LAN scan cycle](../developer/security-testing) | Per-revision ZAP + CI workflow |
 | [Logging and audit](../ops/logging) | Auth audit trail, rotation, SIEM |
 
 
@@ -3431,28 +4037,133 @@ Reference material for integrators and library users.
 | [Glossary](glossary) | Terms |
 
 
-# Edge Docker deploy
+# GL36 lab site (Acme)
 
-# Edge Docker deploy
+# GL36 lab site (Acme)
 
-Open-FDD edge hosts run **three** GHCR containers (`bridge`, `commission`, `mcp-rag`) with `workspace/` bind-mounted for site state.
+> **Lab note only.** This documents a maintainer **example edge host** (site `acme`, building `vm-bbartling`) used for Guideline 36 supervisory FDD development. Replace inventory host names, IPs, and BACnet ranges for your site.
 
-| Task | Doc |
-|------|-----|
-| First deploy | [Quick Start — Run with Docker images](quick-start/docker) |
-| Backup + image upgrade | [Quick Start — Updating the stack](quick-start/updating) |
-| Container architecture | [Architecture — Containers](architecture/containers) |
-| BACnet polling | [BACnet — Polling](bacnet/polling) |
+Reference for **ASHRAE Guideline 36** supervisory monitoring on a live lab edge. Rule code lives in `workspace/data/rules_py/`; commissioning uses **Arrow constants** (no `config.json`).
 
-Typical host layout:
+Trim & respond Niagara reference: [README_TRIM_RESPOND](https://github.com/bbartling/niagara4-vibe-code-addict/blob/develop/README_TRIM_RESPOND.md).
 
-```text
-~/open-fdd/
-  docker-compose.yml    # from docker/compose.edge.yml
-  workspace/            # historian, BACnet, auth — backup before upgrades
+## BACnet poll scope
+
+Device filter (`infra/ansible/scripts/acme_trim_devices.sh`):
+
+| Range | Equipment |
+|-------|-----------|
+| 1–100 | JCI VMA/VAV |
+| 1100 | RTU-01 (AHU) |
+| 1002 | Hot water plant |
+| 11000–13000 | Trane UC210 VAV |
+
+Poll interval: **60 s**. Commission from control machine:
+
+```bash
+cd infra/ansible
+POLL_INTERVAL=60 ./scripts/acme_commission_gl36.sh
 ```
 
-Compose template: `docker/compose.edge.yml` in the repo.
+Points land in `edge_backup/local/acme/vm-bbartling/points.csv` for Ansible sync.
+
+## Example FDD rules (Arrow)
+
+### Duct static pressure high (AHU)
+
+```python
+"""AHU duct static high — GL36 trim advisory."""
+
+import pyarrow.compute as pc
+
+VALUE_COLUMN = "duct-static"
+HIGH_INWC = 1.20
+LOOKBACK_HOURS = 3
+
+
+def _kit_lookback_stats(table, *, hours=None):
+    h = hours if hours is not None else LOOKBACK_HOURS
+    ts = pc.cast(table["timestamp"], "timestamp[us, UTC]")
+    tmin, tmax = pc.min(ts).as_py(), pc.max(ts).as_py()
+    span_h = (tmax - tmin).total_seconds() / 3600.0 if tmin and tmax else 0.0
+    print(f"lookback={h}h rows={table.num_rows} start={tmin} stop={tmax} span={span_h:.2f}h")
+
+
+def apply_faults_arrow(table, cfg, context=None):
+    _kit_lookback_stats(table)
+    return pc.greater(pc.cast(table[VALUE_COLUMN], "float64"), HIGH_INWC)
+```
+
+### SAT too cold vs setpoint
+
+```python
+"""AHU SAT too cold vs setpoint."""
+
+import pyarrow.compute as pc
+
+SAT_COLUMN = "sa-t"
+SP_COLUMN = "sa-t-sp"
+COLD_DELTA_F = 5.0
+
+
+def apply_faults_arrow(table, cfg, context=None):
+    sat = pc.cast(table[SAT_COLUMN], "float64")
+    sp = pc.cast(table[SP_COLUMN], "float64")
+    return pc.less(pc.subtract(sat, sp), -COLD_DELTA_F)
+```
+
+### Site rule stubs in the repo
+
+| Rule file | Use |
+|-----------|-----|
+| `bench_stat_zn-t_flatline_1h.py` | Zone temp flatline — bind `ZN-T` per VAV |
+| `acme_duct_static_flatline_1h_gl36_duct_t_r_input.py` | RTU duct static flatline |
+| `oat_vs_web_spread_1h.py` | Local OAT vs OpenWeather JSON API |
+
+### Local OA-T vs web weather (JSON API)
+
+1. Control machine: `workspace/json_api.env.local` with `OPENWEATHER_API_KEY`
+2. JSON API tab → **OpenWeatherMap** preset → **Register** (default poll **30 min**)
+3. Bind BACnet local OAT in the model (`oa-t` historian column)
+4. Enable `oat_vs_web_spread_1h.py` in Rule Lab — flags when `|oa-t − web-oat-t| > 8 °F`
+
+## Deploy / upgrade (Ansible, this lab only)
+
+```bash
+cd infra/ansible
+OPENFDD_IMAGE_TAG=latest ./deploy.sh docker --limit <inventory_host> -e enable_bacnet_poll_driver=true
+```
+
+Full UI + image upgrade from control machine:
+
+```bash
+OPENFDD_IMAGE_TAG=latest ./scripts/upgrade_edge_full.sh --limit <inventory_host>
+infra/ansible/scripts/post_deploy_check.sh --limit <inventory_host> --full
+```
+
+Do **not** rsync dev `auth.env.local` to the edge (`deploy_sync_auth: false` in private host_vars). Regenerate credentials on the edge host if login fails after upgrade.
+
+## AI-assisted data modeling (lab workflow)
+
+1. BACnet poll running (~340 GL36 points @ 60 s on this lab host).
+2. **Model & assignments** → export commissioning JSON for LLM-assisted binding.
+3. Import returned JSON via commissioning import.
+4. Pin FDD rules on `ZN-T`, `DA-T`, `duct-static`, `OAT`, etc. — export shows readable names in `fdd_rules_linked`.
+
+Model seed: `workspace/data/acme_gl36_model.json`.
+
+
+# Examples & lab notes
+
+# Examples & lab notes
+
+Site-specific commissioning notes, GL36 examples, and maintainer lab workflows. These pages are **not** required for a generic edge deployment.
+
+| Page | Description |
+|------|-------------|
+| [GL36 lab site (Acme)](acme-gl36-lab) | Example real-building poll scope, Arrow rule stubs, Ansible deploy commands |
+
+For production IT operators, start with [Quick Start](../quick-start/) and [Operations](../ops/).
 
 
 # Arrow-native runtime
