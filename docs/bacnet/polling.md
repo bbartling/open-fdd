@@ -6,7 +6,10 @@ nav_order: 3
 
 # Polling
 
-**BACnet field reads run in the `commission` container** (or legacy `openfdd-bacnet-commission` systemd unit). The bridge does not bind UDP 47808.
+**BACnet field reads run in the `openfdd-commission` container.** The Operator Bridge does not bind UDP 47808.
+
+{: .note }
+> **Retired:** `openfdd-bacnet-poll` image and `openfdd-bacnet-poll` systemd unit. Poll loop lives in **commission** only — do not run both.
 
 BACnet polling has two stages:
 

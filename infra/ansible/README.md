@@ -30,7 +30,7 @@ Use **`./deploy.sh <component> --limit <host>`** or **`make <component> HOST=<ho
 
 | Component | What it updates |
 |-----------|-----------------|
-| **`docker`** | **Primary.** Image bundle + compose + workspace state — [edge_deploy_docker.md](../../docs/edge_deploy_docker.md) |
+| **`docker`** | **Primary.** Image bundle + compose + workspace state — [Quick Start — Docker](../../docs/quick-start/docker.md) |
 | **`all`** | Legacy full stack (rsync + systemd app units) |
 | **`ui`** / **`web`** | Built React dashboard → `workspace/api/static/app/` (baked into Docker image for `docker` path) |
 | **`backend`** | Bridge API rsync + **legacy** `openfdd-bridge` systemd |

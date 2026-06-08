@@ -6,7 +6,7 @@ has_children: true
 
 # Security
 
-Concise deployment security for the Operator Bridge and BACnet tools.
+LAN deployment security for the Operator Bridge and BACnet write guard. Open-FDD is for **trusted edge / OT LAN** — not direct public internet exposure.
 
 | Page | Topic |
 |------|-------|

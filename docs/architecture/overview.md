@@ -53,7 +53,7 @@ BACnet **polling** is not a separate container — it runs inside **commission**
 
 ## Deployment
 
-IT operators: [Quick Start — Docker](../quick-start/docker) (`docker compose pull`, `restart: unless-stopped`, Docker enabled on boot).
+IT operators: [Quick Start — Docker](../quick-start/docker). Modes and Caddy: [Deployment modes](deployment-modes).
 
 ## Optional PyPI-only path
 

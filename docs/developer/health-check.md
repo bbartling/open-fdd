@@ -8,7 +8,7 @@ nav_order: 5
 
 Extended validation for engineers with a **full git checkout** — CI, compose overlays, and pre-release gates.
 
-IT operators on edge hosts should use [Quick Start — health check](../quick-start/health-check) instead.
+IT operators on edge hosts should use [Quick Start — health check](../quick-start/health-check) and [Deployment validation](../ops/deployment-validation) instead.
 
 ## Clone and local stack
 

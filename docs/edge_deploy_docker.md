@@ -1,25 +1,15 @@
 ---
 title: Edge Docker deploy
-nav_order: 10
+nav_exclude: true
 ---
 
 # Edge Docker deploy
 
-Open-FDD edge hosts run **three** GHCR containers (`bridge`, `commission`, `mcp-rag`) with `workspace/` bind-mounted for site state.
+This page has moved.
 
 | Task | Doc |
 |------|-----|
-| First deploy | [Quick Start — Run with Docker images](quick-start/docker) |
-| Backup + image upgrade | [Quick Start — Updating the stack](quick-start/updating) |
-| Container architecture | [Architecture — Containers](architecture/containers) |
-| BACnet polling | [BACnet — Polling](bacnet/polling) |
-
-Typical host layout:
-
-```text
-~/open-fdd/
-  docker-compose.yml    # from docker/compose.edge.yml
-  workspace/            # historian, BACnet, auth — backup before upgrades
-```
-
-Compose template: `docker/compose.edge.yml` in the repo.
+| First deploy | [Quick Start — Run with Docker](quick-start/docker) |
+| Upgrade | [Quick Start — Updating the stack](quick-start/updating) |
+| Architecture | [Containers](architecture/containers) |
+| Deployment modes | [Deployment modes](architecture/deployment-modes) |

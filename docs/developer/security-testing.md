@@ -24,7 +24,7 @@ See [TLS and certificate ownership](../security/tls-and-certs) for cert lifecycl
 
 ## Per-revision workflow
 
-Typical cycle on **benserver** (local dev) through **Acme** (live bench):
+Typical cycle on a **control machine** (local dev) through a **lab edge host** (live bench):
 
 ```mermaid
 flowchart LR
@@ -87,16 +87,16 @@ git push origin open-fdd-v3.0.4
 
 Tag triggers GHCR `:latest` and PyPI publish workflows.
 
-### 6. Acme edge validation
+### 6. Lab edge validation
 
-After pulling new images on the live bench VM:
+After pulling new images on a live bench VM:
 
 ```bash
-infra/ansible/scripts/upgrade_edge_full.sh          # maintainer
-infra/ansible/scripts/post_deploy_check.sh --limit acme_vm_bbartling --full
+OPENFDD_IMAGE_TAG=latest ./scripts/upgrade_edge_full.sh --limit <inventory_host>
+infra/ansible/scripts/post_deploy_check.sh --limit <inventory_host> --full
 ```
 
-Re-run LAN ZAP + Nmap against the Acme LAN IP if Caddy or auth behavior changed.
+Re-run LAN ZAP + Nmap against the edge LAN IP if Caddy or auth behavior changed. Site-specific example: [GL36 lab note](../examples/acme-gl36-lab).
 
 ### 7. Next cycle
 
