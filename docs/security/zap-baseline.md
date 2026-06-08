@@ -8,14 +8,32 @@ nav_order: 2
 
 Passive [OWASP ZAP baseline](https://www.zaproxy.org/docs/docker/baseline-scan/) against the **pentest production stack** on benserver is the standard LAN security smoke before Acme edge deploys.
 
+Full per-revision workflow (pytest → PR → GHCR → Acme): [Developer — security testing cycle](../developer/security-testing).
+
+Packaged scan scripts (Windows + Mac/Linux): [scripts/security/README.md](../../scripts/security/README.md).
+
 ## Run
+
+**On the Open-FDD host:**
 
 ```bash
 ./scripts/pentest_production_stack.sh start
 ./scripts/pentest_production_stack.sh verify
 ```
 
-ZAP target (example): `http://192.168.204.18/` — Caddy on `:80` only; bridge `:8765` stays loopback.
+**From a LAN workstation** (after verify passes):
+
+```powershell
+# Windows
+.\scripts\security\Run-OpenFddSecurityScan.ps1
+```
+
+```bash
+# macOS / Linux
+./scripts/security/run_openfdd_security_scan.sh --url http://192.168.204.18
+```
+
+ZAP target (example): `http://192.168.204.18/` — Caddy on `:80` only; bridge `:8765` stays loopback. TLS bench: see [TLS and certificates](tls-and-certs).
 
 ## Expected results (HTTP bench mode)
 
@@ -38,8 +56,8 @@ ZAP target (example): `http://192.168.204.18/` — Caddy on `:80` only; bridge `
 
 ## Authenticated scan (later)
 
-Baseline scan hits ~4 public endpoints (`/health`, public agent insight routes). Deep API/dashboard coverage requires ZAP with integrator login — schedule separately before production OT LAN sign-off.
+Baseline scan hits ~4 public endpoints (`/health`, public agent insight routes). Deep API/dashboard coverage requires ZAP with integrator login — see [Authenticated scanning (roadmap)](authenticated-scanning).
 
 ## After fixes
 
-Re-run verify, then remote PowerShell ZAP from the LAN PC. Confirm response headers show **one** `X-Frame-Options: DENY` and no duplicate `Referrer-Policy`.
+Re-run `pentest_production_stack.sh verify`, then the packaged LAN scan from `scripts/security/`. Confirm response headers show **one** `X-Frame-Options: DENY` and no duplicate `Referrer-Policy`.

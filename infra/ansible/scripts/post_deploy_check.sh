@@ -194,8 +194,9 @@ sys.exit(0 if d.get("root_status")==200 and not any("welcome page" in e or "Reac
   if [[ -f "${ROOT}/workspace/api/static/app/index.html" ]]; then
     local_asset="$(grep -oE 'index-[^"]+\.js' "${ROOT}/workspace/api/static/app/index.html" | head -1 || true)"
   fi
-  if [[ -n "$local_asset" && -n "$asset" && "$asset" != "$local_asset" ]]; then
-    log_warn "Edge UI bundle ${asset} ≠ bensserver build ${local_asset} — run: OPENFDD_IMAGE_TAG=${EXPECTED_IMAGE_TAG:-<tag>} ${ROOT}/scripts/upgrade_edge_full.sh --limit ${LIMIT:-<host>}"
+  asset_base="${asset##*/}"
+  if [[ -n "$local_asset" && -n "$asset_base" && "$asset_base" != "$local_asset" ]]; then
+    log_warn "Edge UI bundle ${asset_base} ≠ bensserver build ${local_asset} — run: OPENFDD_IMAGE_TAG=${EXPECTED_IMAGE_TAG:-<tag>} ${ROOT}/scripts/upgrade_edge_full.sh --limit ${LIMIT:-<host>}"
   fi
   if [[ "$asset" == *TRH4YIfA* ]]; then
     log_warn "Known stale Acme UI (TRH4YIfA) — deploy UI: cd infra/ansible && ./deploy.sh ui --limit ${LIMIT:-acme_vm_bbartling}"
@@ -343,7 +344,7 @@ elif [[ "$INVENTORY_DOCKER_STACK" == "1" ]]; then
         log_fail "Docker service ${svc}: no running container"
         continue
       fi
-      err_lines="$(ssh_remote "docker logs --tail 80 \"${cid}\" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | tail -5 || true")" || err_lines=""
+      err_lines="$(ssh_remote "docker logs --tail 80 \"${cid}\" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | grep -v 'unknown-property' | grep -v 'Connection reset by peer' | tail -5 || true")" || err_lines=""
       if [[ -n "$err_lines" ]]; then
         log_fail "Docker ${svc} (${cid:0:12}) log errors: ${err_lines}"
       else

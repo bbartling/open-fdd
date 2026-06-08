@@ -19,6 +19,7 @@ nav_order: 4
 - [ ] Docs updated if user-facing behavior changed
 - [ ] `docs/` Jekyll build succeeds
 - [ ] No credentials in diff
+- [ ] Auth/Caddy/header changes: re-run [pentest verify + LAN ZAP](security-testing) and update [ZAP baseline](../security/zap-baseline) if expectations changed
 
 ## Repository layout (short)
 

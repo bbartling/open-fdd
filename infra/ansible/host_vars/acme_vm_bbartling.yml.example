@@ -13,6 +13,14 @@ openfdd_docker_stack: true
 openfdd_docker_pull_from_ghcr: true
 openfdd_docker_image_tag: "latest"
 
+# post_deploy_check.sh --limit acme_vm_bbartling --full
+post_check_full: true
+post_check_min_model_points: 300
+post_check_min_bacnet_devices: 30
+post_check_min_bacnet_points: 340
+post_check_min_saved_rules: 1
+post_check_min_bound_points: 10
+
 # BACnet Device instance (Who-Is / bind). Change only if the OT network requires a fixed ID.
 bacnet_instance_id: 3456791
 bacnet_device_name: OpenFDD

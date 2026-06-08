@@ -71,7 +71,12 @@ PYTHONPATH=workspace/api pytest tests/workspace_bridge/test_security.py -q
 ./scripts/pentest_production_stack.sh verify
 ```
 
-See `workspace/deploy/PENTEST.md`.
+Then from a **LAN workstation**, run the packaged scan:
+
+- Windows: `scripts/security/Run-OpenFddSecurityScan.ps1`
+- macOS/Linux: `scripts/security/run_openfdd_security_scan.sh`
+
+See [scripts/security/README.md](../../scripts/security/README.md), [Security — ZAP baseline](../security/zap-baseline), and the full [security testing cycle](security-testing). Host-side notes: `workspace/deploy/PENTEST.md`.
 
 ## Post-deploy insurance (inventory hosts)
 

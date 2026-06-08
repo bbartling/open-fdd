@@ -63,7 +63,8 @@ fi
 if [[ "$SKIP_UI_DEPLOY" == "0" ]]; then
   echo "==> Deploy UI static bundle to edge (workspace/api/static/app/)"
   cd "${ROOT}/infra/ansible"
-  ./deploy.sh ui --limit "$LIMIT" "${EXTRA[@]}"
+  # UI deploy runs Ansible only; defer insurance check until GHCR pull completes.
+  RUN_POST_CHECK=0 ./deploy.sh ui --limit "$LIMIT" "${EXTRA[@]}"
   cd "$ROOT"
 else
   echo "==> Skipping UI deploy (--skip-ui-deploy)"

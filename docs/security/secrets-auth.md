@@ -1,7 +1,7 @@
 ---
 title: Secrets and auth
 parent: Security
-nav_order: 2
+nav_order: 5
 ---
 
 # Secrets and auth

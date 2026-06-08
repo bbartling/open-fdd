@@ -25,3 +25,8 @@ Startup **fails** on non-loopback bind without credentials (unless insecure lab 
 ## Rule Lab caution
 
 Rule Lab executes **operator-authored Python** in a sandbox. Restrict integrator accounts; review rules before enable on production sites.
+
+## TLS and scanning
+
+- Certificate generation and renewal: [TLS and certificates](tls-and-certs)
+- Per-revision ZAP + Nmap from a LAN PC: [Security testing cycle](../developer/security-testing) and [ZAP baseline](zap-baseline)
