@@ -202,7 +202,8 @@ for path in \
   "/api/analytics/poll-throughput?window_minutes=30" \
   "/api/fdd/results?limit=5" \
   "/api/ops/logs?tail=40&include_docker=false" \
-  "/api/building-agent/status"; do
+  "/api/building-agent/status" \
+  "/api/building-agent/tuning-brief?window_minutes=30"; do
   code="$(curl -sS --connect-timeout 15 --max-time 120 -o /dev/null -w "%{http_code}" \
     -H "Authorization: Bearer ${TOKEN}" "${BASE}${path}" 2>/dev/null || echo 000)"
   if [[ "$code" == "200" ]]; then
@@ -213,7 +214,8 @@ for path in \
 done
 
 log_info "Building agent check-in (no FDD batch — smoke)"
-api_post_status "/api/building-agent/checkin" '{"run_fdd_batch":false,"write_memory":true,"window_minutes":30}'
+CHECKIN_BODY="$(python3 -c 'import json; print(json.dumps({"run_fdd_batch": False, "write_memory": True, "window_minutes": 30, "site_id": "acme"}))')"
+api_post_status "/api/building-agent/checkin" "$CHECKIN_BODY"
 if [[ "${API_POST_STATUS:-000}" == "200" ]]; then
   log_ok "POST /api/building-agent/checkin HTTP 200"
 else

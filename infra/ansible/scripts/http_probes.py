@@ -249,6 +249,7 @@ def check_building_agent_api(base: str, token: str, *, site_id: str = "demo") ->
         ("/api/fdd/results?limit=5", "fdd_results_status"),
         ("/api/ops/logs?tail=30&include_docker=false", "ops_logs_status"),
         ("/api/building-agent/status", "building_agent_status"),
+        ("/api/building-agent/tuning-brief?window_minutes=30", "building_agent_tuning_brief"),
     ):
         url = f"{root}{path}"
         try:
@@ -895,7 +896,15 @@ def check_fdd_operational(
         try:
             payload = json.loads(body)
             out["assignment_point_rows"] = len(payload.get("points") or [])
+            out["assignment_rule_rows"] = len(payload.get("assignment_rows") or [])
             out["assignment_device_count"] = len(payload.get("devices") or [])
+            bound_pts = sum(1 for p in (payload.get("points") or []) if (p.get("bound_rules") or []))
+            out["assignment_bound_point_rows"] = bound_pts
+            if out.get("rules_binding_refs", 0) > 0 and bound_pts == 0 and out["assignment_point_rows"] == 0:
+                out["warnings"].append(
+                    "assignments API returned 0 point rows but rules have bindings — "
+                    "check model point site_id inference"
+                )
         except json.JSONDecodeError:
             out["warnings"].append("/api/rules/assignments not JSON")
 

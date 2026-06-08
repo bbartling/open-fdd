@@ -6,6 +6,10 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from ..building_agent import get_checkin_status, run_checkin
+from ..fdd_tuning import build_tuning_brief
+from ..site_defaults import ensure_default_site
+from ..model_service import ModelService
+from ..ttl_service import TtlService
 from ..deps import require_roles
 
 router = APIRouter(prefix="/api/building-agent", tags=["building-agent"])
@@ -29,6 +33,17 @@ def building_agent_checkin(body: CheckinBody, _user: dict = _AGENT) -> dict:
         write_memory=body.write_memory,
         window_minutes=body.window_minutes,
     )
+
+
+@router.get("/tuning-brief")
+def building_agent_tuning_brief(
+    site_id: str | None = Query(default=None),
+    window_minutes: int = Query(default=60, ge=5, le=180),
+    _user: dict = _AGENT,
+) -> dict:
+    """Structured FDD tuning queue — errors first, threshold reviews poll-gated."""
+    sid = (site_id or "").strip() or ensure_default_site(ModelService(), TtlService())
+    return build_tuning_brief(site_id=sid, window_minutes=window_minutes)
 
 
 @router.get("/status")

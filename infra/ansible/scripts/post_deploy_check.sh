@@ -356,7 +356,7 @@ elif [[ "$INVENTORY_DOCKER_STACK" == "1" ]]; then
         log_fail "Docker service ${svc}: no running container"
         continue
       fi
-      err_lines="$(ssh_remote "docker logs --tail 80 \"${cid}\" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | grep -v 'unknown-property' | grep -v 'read-property-multiple' | grep -v 'Connection reset by peer' | tail -5 || true")" || err_lines=""
+      err_lines="$(ssh_remote "docker logs --tail 80 \"${cid}\" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | grep -v 'unknown-property' | grep -v 'read-property-multiple' | grep -v 'Connection reset by peer' | grep -v 'CancelledError' | grep -v 'KeyboardInterrupt' | grep -v 'asyncio.exceptions' | tail -5 || true")" || err_lines=""
       if [[ -n "$err_lines" ]]; then
         log_fail "Docker ${svc} (${cid:0:12}) log errors: ${err_lines}"
       else

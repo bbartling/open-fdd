@@ -12,6 +12,7 @@ from .building_status import collect_status
 from .device_poll_health import get_device_poll_snapshot
 from .fdd_results import load_results
 from .fdd_runner import run_batch
+from .fdd_tuning import build_tuning_brief
 from .ops_logs import collect_ops_logs
 from .poll_throughput import compute_poll_throughput
 from .site_defaults import ensure_default_site
@@ -151,6 +152,7 @@ def run_checkin(
     poll_health = get_device_poll_snapshot(site_id=sid, force=True)
     ops = collect_ops_logs(tail=100, include_docker=True)
     fdd = _fdd_summary(site_id=sid)
+    tuning = build_tuning_brief(site_id=sid, window_minutes=window_minutes)
     memory = get_site_memory(site_id=sid, kind="memory")
 
     actions = _actions_from_snapshot(
@@ -174,7 +176,13 @@ def run_checkin(
     detail_lines = []
     for act in actions[:8]:
         detail_lines.append(f"- [{act.get('severity')}] {act.get('kind')}: {act.get('detail')}")
-    if fdd.get("tuning_candidates"):
+    if tuning.get("recommendations"):
+        detail_lines.append("\n**FDD tuning brief:**")
+        for rec in tuning["recommendations"][:6]:
+            detail_lines.append(
+                f"- [{rec.get('priority')}] {rec.get('rule_name') or rec.get('kind')}: {rec.get('detail')}"
+            )
+    elif fdd.get("tuning_candidates"):
         detail_lines.append("\n**Tuning candidates (human review):**")
         for c in fdd["tuning_candidates"][:5]:
             detail_lines.append(f"- {c.get('rule_name')} ({c.get('flagged_pct')}% flagged)")
@@ -221,6 +229,7 @@ def run_checkin(
             "flaky": (poll_health.get("flaky_equipment") or [])[:6],
         },
         "fdd": fdd,
+        "tuning_brief": tuning,
         "ops_logs_summary": ops.get("summary"),
         "actions": actions,
         "batch": batch_result,
