@@ -92,6 +92,6 @@ Use **either** `docker` **or** `ops`, not both. Prefer **`ops`** when you want T
 
 ## Docs
 
-- [docs/edge_deploy_docker.md](../docs/edge_deploy_docker.md)
+- [Quick Start — Docker](../docs/quick-start/docker.md) · [Deployment modes](../docs/architecture/deployment-modes.md)
 - [docs/edge_deploy.md](../docs/edge_deploy.md)
 - [ansible/secrets/README.md](ansible/secrets/README.md)

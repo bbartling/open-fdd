@@ -14,6 +14,7 @@ SKIP_DISCOVER=0
 SKIP_WAIT=1
 WAIT_MINUTES="${RUN_WAIT_MINUTES:-3}"
 AUTH_ENV="${ROOT}/workspace/auth.env.local"
+ACME_SECRETS="${ANSIBLE_DIR}/secrets/acme.env.local"
 TRIM_DEVICES="${ROOT}/edge_backup/local/acme/vm-bbartling/devices_discovered.trim.csv"
 FAILURES=0
 
@@ -21,8 +22,12 @@ if [[ -f "$AUTH_ENV" ]]; then
   # shellcheck disable=SC1090
   set -a && source "$AUTH_ENV" && set +a
 fi
-LOGIN_USER="${OFDD_INTEGRATOR_USER:-${OFDD_OPERATOR_USER:-operator}}"
-LOGIN_PASS="${OFDD_INTEGRATOR_PASSWORD:-${OFDD_OPERATOR_PASSWORD:-}}"
+if [[ -f "$ACME_SECRETS" ]]; then
+  # shellcheck disable=SC1090
+  set -a && source "$ACME_SECRETS" && set +a
+fi
+LOGIN_USER="${ACME_INTEGRATOR_USER:-${OFDD_INTEGRATOR_USER:-${OFDD_OPERATOR_USER:-operator}}}"
+LOGIN_PASS="${ACME_INTEGRATOR_PASSWORD:-${OFDD_INTEGRATOR_PASSWORD:-${OFDD_OPERATOR_PASSWORD:-}}}"
 
 log_ok() { printf '  OK   %s\n' "$*"; }
 log_fail() { printf '  FAIL %s\n' "$*" >&2; FAILURES=$((FAILURES + 1)); }
@@ -54,6 +59,19 @@ api_post() {
   local path="$1" body="${2:-{}}"
   "${CURL[@]}" -X POST -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
     -d "$body" "${BASE}${path}"
+}
+
+# Returns HTTP status on stdout; response body in $API_POST_BODY.
+api_post_status() {
+  local path="$1" body="${2:-{}}"
+  local tmp code
+  tmp="$(mktemp)"
+  code="$(curl -sS --connect-timeout 15 --max-time 300 -o "$tmp" -w "%{http_code}" \
+    -X POST -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
+    -d "$body" "${BASE}${path}" 2>/dev/null)" || code="000"
+  API_POST_BODY="$(cat "$tmp")"
+  rm -f "$tmp"
+  echo "$code"
 }
 
 wait_job() {
@@ -110,31 +128,39 @@ fi
 
 log_info "Import-to-model (AI data modeling path)"
 # Use first discovered device with points for smoke import
-import_body="$(echo "$inv" | python3 - <<'PY'
+import_body="$(echo "$inv" | python3 -c "
 import json, sys
 inv = json.load(sys.stdin)
-devices = inv.get("devices") or []
+devices = inv.get('devices') or []
 if not devices:
-    print("{}")
+    print('{}')
     sys.exit(0)
 d = devices[0]
 objs = []
-for p in (d.get("points") or [])[:50]:
+for p in (d.get('points') or [])[:50]:
+    ot = p.get('object_type', '')
+    oi = p.get('object_instance', '')
     objs.append({
-        "object_identifier": f"{p.get('object_type','')},{p.get('object_instance','')}",
-        "name": p.get("object_name") or p.get("point_id"),
-        "commandable": False,
+        'object_identifier': f'{ot},{oi}',
+        'name': p.get('object_name') or p.get('point_id'),
+        'commandable': False,
     })
 print(json.dumps({
-    "device_instance": int(d.get("device_instance") or 0),
-    "device_address": d.get("device_address") or "",
-    "objects": objs,
+    'device_instance': int(d.get('device_instance') or 0),
+    'device_address': d.get('device_address') or '',
+    'objects': objs,
 }))
-PY
-)"
+")"
 if [[ "$import_body" != "{}" ]]; then
-  imp="$(api_post "/api/bacnet/import-to-model" "$import_body")"
-  log_ok "import-to-model: $(echo "$imp" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("equipment_id", d.get("ok", d)))' 2>/dev/null || echo ok)"
+  import_code="$(api_post_status "/api/bacnet/import-to-model" "$import_body")"
+  imp="$API_POST_BODY"
+  if [[ "$import_code" == "200" ]]; then
+    log_ok "import-to-model: $(echo "$imp" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("equipment_id", d.get("ok", d)))' 2>/dev/null || echo ok)"
+  elif [[ "$import_code" == "422" ]]; then
+    log_info "import-to-model skipped (422 validation — model already commissioned)"
+  else
+    log_fail "import-to-model HTTP ${import_code}: ${imp:0:200}"
+  fi
 fi
 
 sync="$(api_post "/api/model/bacnet-sync" "{}")"

@@ -1,17 +1,20 @@
 ---
 title: Operations
-nav_order: 9
+nav_order: 8
 has_children: true
 ---
 
 # Operations
 
-Runbooks for live edge hosts after the initial deploy.
+Runbooks for live edge hosts after the initial [Quick Start](../quick-start/) deploy.
 
 | Page | When to use |
 |------|-------------|
-| [Logging and audit](logging) | Audit JSONL, auth trail, rotation defaults, Docker log caps, SIEM export |
-| [Live site update (SSH)](live_site_update) | Minimal `~/open-fdd/` folder on a VM — pull new GHCR tags, preserve `workspace/` |
-| [Acme GL36 FDD](acme-gl36-fdd) | vm-bbartling poll scope, example Arrow rules, AI modeling workflow |
+| [Live site update](live_site_update) | Pull new GHCR tags, preserve `workspace/` |
+| [Backup and restore](backup-restore) | Archive `workspace/` before upgrades |
+| [Logging and audit](logging) | Auth audit trail, rotation, Docker log caps |
+| [Deployment validation](deployment-validation) | Post-upgrade smoke and insurance checks |
 
-For first-time deploy from a control machine, see [Quick Start — Docker](../quick-start/docker).
+Site-specific lab notes (example BACnet scope, GL36 rules): [Examples & lab notes](../examples/).
+
+For first-time deploy: [Quick Start — Docker](../quick-start/docker).

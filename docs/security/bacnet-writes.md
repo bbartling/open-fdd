@@ -1,7 +1,7 @@
 ---
 title: BACnet write allowlists
 parent: Security
-nav_order: 3
+nav_order: 6
 ---
 
 # BACnet write allowlists

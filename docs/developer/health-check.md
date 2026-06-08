@@ -8,7 +8,7 @@ nav_order: 5
 
 Extended validation for engineers with a **full git checkout** — CI, compose overlays, and pre-release gates.
 
-IT operators on edge hosts should use [Quick Start — health check](../quick-start/health-check) instead.
+IT operators on edge hosts should use [Quick Start — health check](../quick-start/health-check) and [Deployment validation](../ops/deployment-validation) instead.
 
 ## Clone and local stack
 
@@ -71,7 +71,12 @@ PYTHONPATH=workspace/api pytest tests/workspace_bridge/test_security.py -q
 ./scripts/pentest_production_stack.sh verify
 ```
 
-See `workspace/deploy/PENTEST.md`.
+Then from a **LAN workstation**, run the packaged scan:
+
+- Windows: `scripts/security/Run-OpenFddSecurityScan.ps1`
+- macOS/Linux: `scripts/security/run_openfdd_security_scan.sh`
+
+See [scripts/security/README.md](../../scripts/security/README.md), [Security — ZAP baseline](../security/zap-baseline), and the full [security testing cycle](security-testing). Host-side notes: `workspace/deploy/PENTEST.md`.
 
 ## Post-deploy insurance (inventory hosts)
 

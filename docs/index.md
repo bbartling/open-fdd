@@ -6,50 +6,48 @@ description: "Open-FDD — open-source HVAC fault detection and building data pl
 
 # Open-FDD
 
-Open-FDD is an open-source platform for **fault detection**, **BACnet integration**, and **operator analytics** at the building edge. It combines a React dashboard, FastAPI Operator Bridge, Python Rule Lab, local feather historian, and optional Brick/RDF modeling.
+Open-FDD is an open-source **building edge platform** for BACnet integration, feather historian storage, Arrow-native fault detection, and operator dashboards — designed for **trusted LAN / OT edge** deployment behind Caddy, not direct public internet exposure.
 
-**Who it is for**
+## Who it is for
 
-| Audience | Start here |
-|----------|------------|
-| IT / controls engineer trying the stack | [Quick Start — Docker](quick-start/) |
-| Developer contributing or customizing | [Developer Guide](developer/) |
-| Integrator wiring APIs | [Appendix — API routes](appendix/bridge_api) |
-| Analyst authoring FDD rules | [Rule Cookbook](rule-cookbook/) · [Fault Codes](fault-codes/) |
+| Role | What you get |
+|------|----------------|
+| **IT / controls engineer** | Pull three GHCR images, log in, poll BACnet, view faults |
+| **Commissioning integrator** | Discover points, bind BRICK model, pin FDD rules in Rule Lab |
+| **Developer / maintainer** | Extend the Operator Bridge, publish images, run CI and LAN security scans |
 
-## What you get
+## Start here
 
-| Component | Purpose |
-|-----------|---------|
-| **Operator Bridge** | Web API + dashboard (trends, faults, Rule Lab, model tools) |
-| **BACnet tools** | Discover, read, poll, optional supervised writes |
-| **Rule Lab** | Arrow-native `apply_faults_arrow(table, cfg)` rules on feather historian data |
-| **Local historian** | Feather-based telemetry store on the edge host |
-| **Brick / RDF model** | Equipment and point semantics for bindings and analytics |
-| **Docker images** | Published on GHCR — pull and run without building from source |
-| **Python package** | `pip install open-fdd` for offline Arrow rule lint/test (`arrow_runtime`) |
+| Path | Go to |
+|------|-------|
+| **Try it** | [Quick Start — Run with Docker](quick-start/docker) |
+| **Operate it** | [Updating the stack](quick-start/updating) · [Operations](ops/) |
+| **Develop it** | [Developer Guide](developer/) · [Architecture](architecture/) |
 
-## Two paths
+## v3 edge stack
 
-### Try it with Docker (recommended)
+Three primary containers on a Linux edge host:
 
-Pull published images from `ghcr.io/bbartling/`, configure auth and BACnet env files, start the stack, open the dashboard.
+| Container | Role |
+|-----------|------|
+| **openfdd-bridge** | Operator Bridge — API, dashboard, feather **ingest** |
+| **openfdd-commission** | BACnet discover/read/write + **poll loop** |
+| **openfdd-mcp-rag** | Doc-search sidecar for agent tools |
 
-→ [Quick Start](quick-start/)
+Host **Caddy** on `:80` or `:443` is the normal LAN front door. BACnet UDP `:47808` is bound by **commission** only — the bridge ingests `samples.csv` into the feather historian.
 
-### Develop locally
+Details: [Containers](architecture/containers) · [Deployment modes](architecture/deployment-modes)
 
-Clone the repo, create `workspace/auth.env.local`, build images, run tests, submit a PR.
-
-→ [Developer Guide](developer/)
+{: .warning }
+> **LAN / OT edge only.** Do not expose the Operator Bridge to the public internet without TLS, strong auth, and site review. BACnet writes are disabled by default — see [BACnet write guard](security/bacnet-writes).
 
 ## Distribution
 
 | Channel | Use when |
 |---------|----------|
-| **GHCR images** `ghcr.io/bbartling/openfdd-*` | Production or trial edge deploy |
-| **This repository** | Custom builds, BACnet commissioning, Rule Lab development |
-| **PyPI** [`open-fdd`](https://pypi.org/project/open-fdd/) | Arrow runtime + playground (no full UI); optional `[ml]` for graph experiments |
+| **GHCR** `ghcr.io/bbartling/openfdd-*` | Production or trial edge deploy |
+| **This repository** | Custom builds, commissioning, Rule Lab development |
+| **PyPI** [`open-fdd`](https://pypi.org/project/open-fdd/) | Arrow runtime lint/test without full UI |
 
 ## License
 

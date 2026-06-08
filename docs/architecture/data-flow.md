@@ -1,7 +1,7 @@
 ---
 title: Data flow
 parent: Architecture
-nav_order: 2
+nav_order: 4
 ---
 
 # Data flow

@@ -7,6 +7,8 @@ Wants=network-online.target
 ExecStart=/usr/local/bin/ollama serve
 Restart=always
 RestartSec=5
+# Ollama has no built-in auth — never bind 0.0.0.0 on OT LAN (Tenable CRITICAL).
+Environment=OLLAMA_HOST=127.0.0.1:11434
 Environment=HOME=/usr/share/ollama
 
 [Install]

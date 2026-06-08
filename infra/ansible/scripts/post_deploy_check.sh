@@ -194,8 +194,9 @@ sys.exit(0 if d.get("root_status")==200 and not any("welcome page" in e or "Reac
   if [[ -f "${ROOT}/workspace/api/static/app/index.html" ]]; then
     local_asset="$(grep -oE 'index-[^"]+\.js' "${ROOT}/workspace/api/static/app/index.html" | head -1 || true)"
   fi
-  if [[ -n "$local_asset" && -n "$asset" && "$asset" != "$local_asset" ]]; then
-    log_warn "Edge UI bundle ${asset} ≠ bensserver build ${local_asset} — run: OPENFDD_IMAGE_TAG=${EXPECTED_IMAGE_TAG:-<tag>} ${ROOT}/scripts/upgrade_edge_full.sh --limit ${LIMIT:-<host>}"
+  asset_base="${asset##*/}"
+  if [[ -n "$local_asset" && -n "$asset_base" && "$asset_base" != "$local_asset" ]]; then
+    log_warn "Edge UI bundle ${asset_base} ≠ bensserver build ${local_asset} — run: OPENFDD_IMAGE_TAG=${EXPECTED_IMAGE_TAG:-<tag>} ${ROOT}/scripts/upgrade_edge_full.sh --limit ${LIMIT:-<host>}"
   fi
   if [[ "$asset" == *TRH4YIfA* ]]; then
     log_warn "Known stale Acme UI (TRH4YIfA) — deploy UI: cd infra/ansible && ./deploy.sh ui --limit ${LIMIT:-acme_vm_bbartling}"
@@ -312,6 +313,18 @@ else
   log_ok "Ollama skipped (not supported on Pi 3 armv7l — use bensserver or Pi 4/5 64-bit)"
 fi
 
+# Ollama has no built-in auth — must not listen on 0.0.0.0 (Tenable CRITICAL).
+if [[ "$HTTP_ONLY" != "1" ]] && command -v ssh >/dev/null 2>&1; then
+  ollama_bind="$(ssh_remote "ss -tulpn 2>/dev/null | grep ':11434 ' || true")" || ollama_bind=""
+  if echo "$ollama_bind" | grep -qE '0\.0\.0\.0:11434|\[::\]:11434'; then
+    log_fail "Ollama listening on all interfaces — set OLLAMA_HOST=127.0.0.1:11434 (see docs/security/tenable-remediation.md)"
+  elif echo "$ollama_bind" | grep -q '127.0.0.1:11434'; then
+    log_ok "Ollama bound to loopback only"
+  elif [[ -n "$ollama_bind" ]]; then
+    log_warn "Ollama port 11434 bind: ${ollama_bind} — verify not reachable from OT LAN"
+  fi
+fi
+
 if [[ -n "$LOGIN_USER" && -n "$LOGIN_PASS" ]]; then
   if echo "$probe_json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get("login",{}); sys.exit(0 if d.get("login_status")==200 and not d.get("errors") else 1)'; then
     log_ok "Auth POST /api/auth/login for user ${LOGIN_USER}"
@@ -343,7 +356,7 @@ elif [[ "$INVENTORY_DOCKER_STACK" == "1" ]]; then
         log_fail "Docker service ${svc}: no running container"
         continue
       fi
-      err_lines="$(ssh_remote "docker logs --tail 80 \"${cid}\" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | tail -5 || true")" || err_lines=""
+      err_lines="$(ssh_remote "docker logs --tail 80 \"${cid}\" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | grep -v 'unknown-property' | grep -v 'Connection reset by peer' | tail -5 || true")" || err_lines=""
       if [[ -n "$err_lines" ]]; then
         log_fail "Docker ${svc} (${cid:0:12}) log errors: ${err_lines}"
       else

@@ -6,15 +6,16 @@ has_children: true
 
 # Architecture
 
-High-level view of the Open-FDD v3 edge stack: **three Docker containers** (`bridge`, `commission`, `mcp-rag`), BACnet polling inside **commission**, historian ingest in **bridge**.
+Open-FDD v3 edge: **three Docker containers** (`bridge`, `commission`, `mcp-rag`), BACnet polling in **commission**, feather ingest in **bridge**, optional host Caddy and Ollama.
 
 | Page | Topic |
 |------|-------|
-| [System overview](overview) | Components, diagram, deployment pointer |
+| [System overview](overview) | Components and diagram |
+| [Deployment modes](deployment-modes) | Local dev, lab LAN, edge production, Caddy HTTP/TLS |
 | [Data flow](data-flow) | BACnet / Modbus / JSON API → feather → FDD → dashboard |
-| [Driver framework](../drivers/index) | Shared commissioning pattern for all OT sources |
-| [Containers](containers) | Images, networks, ports, persistence, reboot |
+| [Containers](containers) | GHCR images, ports, persistence, retired poll image |
+| [Driver framework](../drivers/index) | Shared commissioning pattern for OT sources |
 
-**Operators:** deploy and upgrade via [Quick Start](../quick-start/docker) — no git clone on the edge host.
+**Operators:** [Quick Start — Docker](../quick-start/docker) — no git clone on the edge host.
 
-**BACnet polling:** [Polling](../bacnet/polling) — commission loop only (no separate poll container).
+**BACnet polling:** [Polling](../bacnet/polling) — commission container only.
