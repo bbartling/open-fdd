@@ -79,16 +79,18 @@ if command -v ss >/dev/null 2>&1; then
       echo "  :${port} ${line}"
       case "$port" in
         8765|8090)
-          if echo "$line" | grep -qE '0\.0\.0\.0|\[::\]'; then
+          bind_addr="$(echo "$line" | awk '{print $5}' | sed 's/%.*//')"
+          if echo "$bind_addr" | grep -qE '^0\.0\.0\.0$|^\*$|^\[::\]$'; then
             log_fail "Port ${port} listening on all interfaces — should be loopback or internal only"
           else
-            log_ok "Port ${port} not on 0.0.0.0"
+            log_ok "Port ${port} bind ${bind_addr} (not 0.0.0.0)"
           fi
           ;;
         11434)
-          if echo "$line" | grep -qE '0\.0\.0\.0:11434|\[::\]:11434'; then
+          bind_addr="$(echo "$line" | awk '{print $5}')"
+          if echo "$bind_addr" | grep -qE '^0\.0\.0\.0:11434$|^\*:11434$|^\[::\]:11434$'; then
             log_fail "Ollama on 0.0.0.0:11434 — CRITICAL: no auth; set OLLAMA_HOST=127.0.0.1:11434"
-          elif echo "$line" | grep -q '127.0.0.1:11434'; then
+          elif echo "$bind_addr" | grep -q '127.0.0.1:11434'; then
             log_ok "Ollama loopback only (127.0.0.1:11434)"
           else
             log_warn "Ollama bind: ${line}"

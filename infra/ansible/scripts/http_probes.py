@@ -497,6 +497,15 @@ def check_bacnet_driver(
     return out
 
 
+def _rule_binding_ref_count(bindings: dict[str, Any] | None) -> tuple[int, int, int, int]:
+    """Return (point_ids, equipment_ids, brick_types, total_refs) for one rule bindings dict."""
+    b = bindings if isinstance(bindings, dict) else {}
+    points = len(b.get("point_ids") or [])
+    equipment = len(b.get("equipment_ids") or [])
+    bricks = len(b.get("brick_types") or [])
+    return points, equipment, bricks, points + equipment + bricks
+
+
 def check_model_sparql_health(base: str, token: str) -> dict[str, Any]:
     """BRICK data model health: JSON summary + SPARQL tree/graph over synced TTL."""
     out: dict[str, Any] = {"errors": [], "warnings": []}
@@ -564,7 +573,7 @@ def check_model_sparql_health(base: str, token: str) -> dict[str, Any]:
             out["errors"].append("/api/model/health not JSON")
 
     tree_url = f"{root}/api/model/tree"
-    status, body, _ = fetch(tree_url, headers=headers)
+    status, body, _ = fetch(tree_url, headers=headers, timeout=60.0)
     out["model_tree_status"] = status
     if status != 200:
         detail = ""
@@ -599,7 +608,7 @@ def check_model_sparql_health(base: str, token: str) -> dict[str, Any]:
     if site_id:
         graph_qs = urllib.parse.urlencode({"site_id": site_id})
         graph_url = f"{root}/api/model/graph?{graph_qs}"
-        status, body, _ = fetch(graph_url, headers=headers)
+        status, body, _ = fetch(graph_url, headers=headers, timeout=60.0)
         out["model_graph_status"] = status
         if status != 200:
             detail = ""
@@ -805,20 +814,24 @@ def check_fdd_operational(
         try:
             rules = json.loads(body).get("rules") or []
             enabled = [r for r in rules if isinstance(r, dict) and r.get("enabled") is not False]
-            bound = 0
+            point_refs = 0
+            binding_refs = 0
             for r in enabled:
-                b = r.get("bindings") if isinstance(r.get("bindings"), dict) else {}
-                bound += len(b.get("point_ids") or [])
+                _p, _e, _b, total = _rule_binding_ref_count(r.get("bindings"))
+                point_refs += _p
+                binding_refs += total
             out["rules_saved_count"] = len(rules)
             out["rules_enabled_count"] = len(enabled)
-            out["rules_bound_point_refs"] = bound
+            out["rules_bound_point_refs"] = point_refs
+            out["rules_binding_refs"] = binding_refs
             if len(enabled) < min_saved_rules:
                 out["errors"].append(
                     f"only {len(enabled)} enabled saved rule(s) (need >={min_saved_rules})"
                 )
-            if min_bound_points > 0 and bound < min_bound_points:
+            if min_bound_points > 0 and binding_refs < min_bound_points:
                 out["warnings"].append(
-                    f"FDD bindings cover {bound} point ref(s) (expected >={min_bound_points} on Acme)"
+                    f"FDD bindings cover {binding_refs} ref(s) "
+                    f"({point_refs} explicit points; expected >={min_bound_points} on Acme)"
                 )
         except json.JSONDecodeError:
             out["errors"].append("/api/rules/saved not JSON")

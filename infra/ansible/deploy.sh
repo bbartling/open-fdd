@@ -163,7 +163,7 @@ require_ui_build() {
 is_component() {
   case "$1" in
     help|-h|--help) return 0 ;;
-    all|ui|web|backend|core|drivers|data|config|caddy|systemd|pip|commission|mcp|ai|os|check|docker|maintain|ops) return 0 ;;
+    all|ui|web|backend|core|drivers|data|config|caddy|systemd|pip|commission|mcp|ai|ollama|os|check|docker|maintain|ops) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -284,6 +284,11 @@ run_playbook() {
 
 echo "==> Deploy component: ${COMPONENT}${TAGS:+ (tags: ${TAGS})}"
 
+if [[ "$COMPONENT" == "ollama" ]]; then
+  run_playbook ollama_bootstrap.yml "${ANSIBLE_EXTRA[@]}"
+  PLAYBOOK=""
+fi
+
 if [[ "$COMPONENT" == "ai" ]]; then
   run_playbook ollama_bootstrap.yml "${ANSIBLE_EXTRA[@]}"
   run_playbook edge_ai_stack.yml "${ANSIBLE_EXTRA[@]}"
@@ -295,7 +300,7 @@ if [[ -n "$PLAYBOOK" ]]; then
 fi
 
 case "$COMPONENT" in
-  all|ui|web|backend|core|drivers|ai|docker|maintain|ops) ;;
+  all|ui|web|backend|core|drivers|ai|ollama|docker|maintain|ops) ;;
   *) RUN_POST_CHECK=0 ;;
 esac
 
