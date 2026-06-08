@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import os
 import shlex
 import subprocess
 from typing import Any
@@ -196,6 +197,46 @@ class CronScheduler:
             if result.locked:
                 return f"wake locked log={result.log_path.name}"
             return f"wake ok log={result.log_path.name} minis={result.mini_runs}"
+        if job.service == "health_building_agent":
+            import json
+            import urllib.error
+            import urllib.request
+
+            base = str(payload.get("base_url") or "http://127.0.0.1:8765").rstrip("/")
+            token = str(payload.get("token") or os.environ.get("OFDD_AGENT_TOKEN") or "").strip()
+            if not token:
+                user = str(payload.get("user") or os.environ.get("OFDD_AGENT_USER") or "agent")
+                password = str(payload.get("password") or os.environ.get("OFDD_AGENT_PASSWORD") or "")
+                if not password:
+                    raise ValueError("health_building_agent requires token or agent password")
+                login_body = json.dumps({"username": user, "password": password}).encode("utf-8")
+                req = urllib.request.Request(
+                    f"{base}/api/auth/login",
+                    data=login_body,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    token = str(json.loads(resp.read().decode("utf-8")).get("token") or "")
+            checkin = {
+                "site_id": payload.get("site_id"),
+                "run_fdd_batch": bool(payload.get("run_fdd_batch", False)),
+                "write_memory": bool(payload.get("write_memory", True)),
+                "window_minutes": int(payload.get("window_minutes") or 60),
+            }
+            data = json.dumps(checkin).encode("utf-8")
+            req = urllib.request.Request(
+                f"{base}/api/building-agent/checkin",
+                data=data,
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=600) as resp:
+                    result = json.loads(resp.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                raise RuntimeError(exc.read().decode("utf-8", errors="replace")[:300]) from exc
+            return str(result.get("summary") or "building agent checkin ok")[:500]
         if job.service in {"fdd_batch", "health_bridge", "health_hvac", "webhook"}:
             target = payload.get("url") or payload.get("endpoint") or payload.get("script")
             return f"queued {job.service} target={target or 'workspace'}"

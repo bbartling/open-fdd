@@ -14,6 +14,7 @@ ServiceKind = Literal[
     "fdd_batch",
     "health_bridge",
     "health_hvac",
+    "health_building_agent",
     "webhook",
 ]
 
