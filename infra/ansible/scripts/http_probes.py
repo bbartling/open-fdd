@@ -238,6 +238,55 @@ def check_building_dashboard_health(
     return out
 
 
+def check_building_agent_api(base: str, token: str, *, site_id: str = "demo") -> dict[str, Any]:
+    """Building agent REST surface — poll throughput, FDD results, ops logs, check-in status."""
+    out: dict[str, Any] = {"errors": [], "warnings": [], "site_id": site_id}
+    headers = auth_headers(token)
+    root = base.rstrip("/")
+
+    for path, key in (
+        ("/api/analytics/poll-throughput?window_minutes=30", "poll_throughput_status"),
+        ("/api/fdd/results?limit=5", "fdd_results_status"),
+        ("/api/ops/logs?tail=30&include_docker=false", "ops_logs_status"),
+        ("/api/building-agent/status", "building_agent_status"),
+    ):
+        url = f"{root}{path}"
+        try:
+            status, body, _ = fetch(url, headers=headers, timeout=60.0)
+        except RuntimeError as exc:
+            out["errors"].append(f"{path} unreachable: {exc}")
+            continue
+        out[key] = status
+        if status != 200:
+            out["errors"].append(f"{path} HTTP {status}: {body[:200]}")
+            continue
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            out["errors"].append(f"{path} not JSON")
+            continue
+        if path.startswith("/api/analytics"):
+            out["poll_keepup_ratio"] = payload.get("keepup_ratio")
+            out["poll_throughput_status_label"] = payload.get("status")
+            if payload.get("status") in {"lagging", "error"}:
+                out["warnings"].append(
+                    f"poll throughput {payload.get('status')} keepup={payload.get('keepup_ratio')}"
+                )
+        if path.startswith("/api/ops") and (payload.get("summary") or {}).get("has_bridge_errors"):
+            out["warnings"].append("bridge error log has recent severity errors")
+
+    mem_url = f"{root}/api/sites/{site_id}/memory?kind=memory"
+    try:
+        m_status, m_body, _ = fetch(mem_url, headers=headers, timeout=30.0)
+        out["site_memory_status"] = m_status
+        if m_status != 200:
+            out["warnings"].append(f"/api/sites/{{id}}/memory HTTP {m_status}")
+    except RuntimeError as exc:
+        out["warnings"].append(f"site memory probe: {exc}")
+
+    return out
+
+
 def check_public_check_engine(base: str) -> dict[str, Any]:
     """Anonymous read probes for home / faults traffic-light UI (no Bearer token)."""
     out: dict[str, Any] = {"errors": [], "warnings": [], "endpoints": {}}
@@ -1118,6 +1167,15 @@ def main() -> int:
                     result["fdd_operational"] = fdd
                     result["errors"].extend(fdd.get("errors", []))
                     result["warnings"].extend(fdd.get("warnings", []))
+                    agent_api = _run_probe(
+                        "building_agent_api",
+                        lambda: check_building_agent_api(
+                            base, login["token"], site_id=probe_site
+                        ),
+                    )
+                    result["building_agent_api"] = agent_api
+                    result["errors"].extend(agent_api.get("errors", []))
+                    result["warnings"].extend(agent_api.get("warnings", []))
         else:
             result = check_entry(base, require_mcp=require_mcp, require_ollama=require_ollama)
         print(json.dumps(result, indent=2))

@@ -197,6 +197,29 @@ if [[ "$SKIP_WAIT" -eq 0 ]]; then
     "wc -l ~/open-fdd/workspace/bacnet/polls/samples.csv 2>/dev/null || true" || true
 fi
 
+log_info "Building agent API (poll throughput, FDD results, ops logs)"
+for path in \
+  "/api/analytics/poll-throughput?window_minutes=30" \
+  "/api/fdd/results?limit=5" \
+  "/api/ops/logs?tail=40&include_docker=false" \
+  "/api/building-agent/status"; do
+  code="$(curl -sS --connect-timeout 15 --max-time 120 -o /dev/null -w "%{http_code}" \
+    -H "Authorization: Bearer ${TOKEN}" "${BASE}${path}" 2>/dev/null || echo 000)"
+  if [[ "$code" == "200" ]]; then
+    log_ok "GET ${path} HTTP 200"
+  else
+    log_fail "GET ${path} HTTP ${code}"
+  fi
+done
+
+log_info "Building agent check-in (no FDD batch — smoke)"
+api_post_status "/api/building-agent/checkin" '{"run_fdd_batch":false,"write_memory":true,"window_minutes":30}'
+if [[ "${API_POST_STATUS:-000}" == "200" ]]; then
+  log_ok "POST /api/building-agent/checkin HTTP 200"
+else
+  log_fail "POST /api/building-agent/checkin HTTP ${API_POST_STATUS:-000}: ${API_POST_BODY:-}"
+fi
+
 echo "---"
 if [[ "$FAILURES" -eq 0 ]]; then
   echo "Acme operational verify PASSED"

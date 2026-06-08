@@ -34,7 +34,12 @@ from .brick_model_context import (
 )
 from .fault_catalog import all_codes, catalog_graph, entry_for_code, is_valid_code
 from .fault_catalog_scope import build_applicable_payload, validate_scope_with_ollama
+from .building_agent import run_checkin
+from .fdd_results import load_results
 from .fdd_runner import run_batch
+from .ops_logs import collect_ops_logs
+from .poll_throughput import compute_poll_throughput
+from .site_memory import get_site_memory, put_site_memory
 from .model_health import model_health_summary
 from .model_service import ModelService
 from .model_store import ModelStore
@@ -342,6 +347,78 @@ def _tool_app_edit_file(args: dict[str, Any]) -> dict[str, Any]:
     return {"path": str(target), "existed": existed, "bytes": len(content.encode("utf-8"))}
 
 
+def _tool_analytics_poll_throughput(args: dict[str, Any]) -> dict[str, Any]:
+    window = args.get("window_minutes")
+    try:
+        window_i = int(window) if window is not None else 60
+    except (TypeError, ValueError) as exc:
+        raise ToolError(f"invalid window_minutes: {window!r}") from exc
+    return compute_poll_throughput(window_minutes=window_i)
+
+
+def _tool_fdd_results(args: dict[str, Any]) -> dict[str, Any]:
+    doc = load_results()
+    site_id = str(args.get("site_id") or "").strip() or None
+    limit = args.get("limit")
+    try:
+        lim = int(limit) if limit is not None else 50
+    except (TypeError, ValueError) as exc:
+        raise ToolError(f"invalid limit: {limit!r}") from exc
+    runs = [r for r in doc.get("runs", []) if isinstance(r, dict)]
+    if site_id:
+        runs = [r for r in runs if str(r.get("site_id") or "") in {"", site_id}]
+    runs = runs[-max(1, min(lim, 200)) :]
+    return {"generated_at": doc.get("generated_at"), "runs": runs, "count": len(runs)}
+
+
+def _tool_ops_logs(args: dict[str, Any]) -> dict[str, Any]:
+    tail = args.get("tail")
+    try:
+        tail_i = int(tail) if tail is not None else 80
+    except (TypeError, ValueError) as exc:
+        raise ToolError(f"invalid tail: {tail!r}") from exc
+    return collect_ops_logs(
+        tail=tail_i,
+        service=str(args.get("service") or "bridge"),
+        include_docker=str(args.get("include_docker") or "true").strip().lower() not in {"0", "false", "no"},
+    )
+
+
+def _tool_site_memory_get(args: dict[str, Any]) -> dict[str, Any]:
+    site_id = str(args.get("site_id") or "").strip() or ensure_default_site(ModelService(), TtlService())
+    kind = str(args.get("kind") or "memory").strip().lower()
+    return get_site_memory(site_id=site_id, kind=kind)
+
+
+def _tool_site_memory_put(args: dict[str, Any]) -> dict[str, Any]:
+    _require(args, "site_id", "content")
+    kind = str(args.get("kind") or "memory").strip().lower()
+    mode = str(args.get("mode") or "replace").strip().lower()
+    return put_site_memory(
+        site_id=str(args["site_id"]),
+        content=str(args["content"]),
+        kind=kind,
+        mode=mode,
+    )
+
+
+def _tool_building_checkin(args: dict[str, Any]) -> dict[str, Any]:
+    site_id = str(args.get("site_id") or "").strip() or None
+    run_batch_flag = str(args.get("run_fdd_batch") or "true").strip().lower() in {"1", "true", "yes"}
+    write_memory = str(args.get("write_memory") or "true").strip().lower() not in {"0", "false", "no"}
+    window = args.get("window_minutes")
+    try:
+        window_i = int(window) if window is not None else 60
+    except (TypeError, ValueError) as exc:
+        raise ToolError(f"invalid window_minutes: {window!r}") from exc
+    return run_checkin(
+        site_id=site_id,
+        run_fdd_batch=run_batch_flag,
+        write_memory=write_memory,
+        window_minutes=window_i,
+    )
+
+
 def _tool_app_rebuild_dashboard(_args: dict[str, Any]) -> dict[str, Any]:
     if not app_edit_enabled():
         raise ToolError("app rebuild disabled — set OFDD_AGENT_ALLOW_APP_EDIT=1 to enable")
@@ -377,6 +454,10 @@ _READ_ONLY_TOOLS = frozenset(
         "building.zone_temps",
         "building.device_health",
         "building.operational_brief",
+        "analytics.poll_throughput",
+        "fdd.results",
+        "ops.logs",
+        "site.memory_get",
     }
 )
 
@@ -389,6 +470,8 @@ _WRITE_TOOLS = frozenset(
         "rules.bind",
         "rules.run_batch",
         "building.set_alerts",
+        "building.checkin",
+        "site.memory_put",
         "app.edit_file",
         "app.rebuild_dashboard",
     }
@@ -412,6 +495,12 @@ _TOOLS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "building.zone_temps": _tool_building_zone_temps,
     "building.device_health": _tool_building_device_health,
     "building.operational_brief": _tool_building_operational_brief,
+    "building.checkin": _tool_building_checkin,
+    "analytics.poll_throughput": _tool_analytics_poll_throughput,
+    "fdd.results": _tool_fdd_results,
+    "ops.logs": _tool_ops_logs,
+    "site.memory_get": _tool_site_memory_get,
+    "site.memory_put": _tool_site_memory_put,
     "app.edit_file": _tool_app_edit_file,
     "app.rebuild_dashboard": _tool_app_rebuild_dashboard,
 }
@@ -516,6 +605,32 @@ def tool_specs() -> list[dict[str, Any]]:
             "name": "building.operational_brief",
             "args": ["force?"],
             "writes": "read-only — zone temps + device health + fault sentences JSON",
+        },
+        {
+            "name": "building.checkin",
+            "args": ["site_id?", "run_fdd_batch?", "write_memory?", "window_minutes?"],
+            "writes": "building_agent_checkin.json + site MEMORY.md append",
+        },
+        {
+            "name": "analytics.poll_throughput",
+            "args": ["window_minutes?"],
+            "writes": "read-only — expected vs observed BACnet samples/min",
+        },
+        {"name": "fdd.results", "args": ["site_id?", "limit?"], "writes": "read-only — fdd_results.json runs"},
+        {
+            "name": "ops.logs",
+            "args": ["tail?", "service?", "include_docker?"],
+            "writes": "read-only — bridge error/audit + optional docker compose tail",
+        },
+        {
+            "name": "site.memory_get",
+            "args": ["site_id?", "kind?"],
+            "writes": "read-only — workspace/memory/sites/<id>.md or SKILLS.md",
+        },
+        {
+            "name": "site.memory_put",
+            "args": ["site_id", "content", "kind?", "mode?"],
+            "writes": "workspace/memory/sites/",
         },
         {
             "name": "model.graph",

@@ -15,16 +15,20 @@ from .security_headers import SecurityHeadersMiddleware
 from .static_files import CachedStaticFiles
 from .routes import (
     agent_routes,
+    analytics_routes,
     audit_routes,
     auth_routes,
     bacnet_routes,
+    building_agent_routes,
     building_routes,
+    fdd_routes,
     faults_routes,
     health,
     host_routes,
     json_api_routes,
     modbus_routes,
     model_routes,
+    ops_routes,
     playground_routes,
     rules_routes,
     sites_routes,
@@ -81,6 +85,10 @@ def create_app() -> FastAPI:
     app.include_router(model_routes.router)
     app.include_router(timeseries_routes.router)
     app.include_router(building_routes.router)
+    app.include_router(building_agent_routes.router)
+    app.include_router(analytics_routes.router)
+    app.include_router(fdd_routes.router)
+    app.include_router(ops_routes.router)
     app.include_router(faults_routes.router)
     app.include_router(sites_routes.router)
     app.include_router(bacnet_routes.router)
