@@ -202,7 +202,8 @@ for path in \
   "/api/analytics/poll-throughput?window_minutes=30" \
   "/api/fdd/results?limit=5" \
   "/api/ops/logs?tail=40&include_docker=false" \
-  "/api/building-agent/status"; do
+  "/api/building-agent/status" \
+  "/api/building-agent/tuning-brief?window_minutes=30"; do
   code="$(curl -sS --connect-timeout 15 --max-time 120 -o /dev/null -w "%{http_code}" \
     -H "Authorization: Bearer ${TOKEN}" "${BASE}${path}" 2>/dev/null || echo 000)"
   if [[ "$code" == "200" ]]; then

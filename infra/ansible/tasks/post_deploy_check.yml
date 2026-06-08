@@ -92,6 +92,8 @@
         | grep -v 'unknown-property' \
         | grep -v 'read-property-multiple' \
         | grep -v 'CancelledError' \
+        | grep -v 'KeyboardInterrupt' \
+        | grep -v 'asyncio.exceptions' \
         | grep -v 'Cannot assign requested address' \
         | grep -v "has no attribute 'server'" \
         | tail -5 || true)"

@@ -35,6 +35,7 @@ from .brick_model_context import (
 from .fault_catalog import all_codes, catalog_graph, entry_for_code, is_valid_code
 from .fault_catalog_scope import build_applicable_payload, validate_scope_with_ollama
 from .building_agent import run_checkin
+from .fdd_tuning import build_tuning_brief
 from .fdd_results import load_results
 from .fdd_runner import run_batch
 from .ops_logs import collect_ops_logs
@@ -402,6 +403,16 @@ def _tool_site_memory_put(args: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _tool_building_tuning_brief(args: dict[str, Any]) -> dict[str, Any]:
+    site_id = str(args.get("site_id") or "").strip() or ensure_default_site(ModelService(), TtlService())
+    window = args.get("window_minutes")
+    try:
+        window_i = int(window) if window is not None else 60
+    except (TypeError, ValueError) as exc:
+        raise ToolError(f"invalid window_minutes: {window!r}") from exc
+    return build_tuning_brief(site_id=site_id, window_minutes=window_i)
+
+
 def _tool_building_checkin(args: dict[str, Any]) -> dict[str, Any]:
     site_id = str(args.get("site_id") or "").strip() or None
     run_batch_flag = str(args.get("run_fdd_batch") or "true").strip().lower() in {"1", "true", "yes"}
@@ -454,6 +465,7 @@ _READ_ONLY_TOOLS = frozenset(
         "building.zone_temps",
         "building.device_health",
         "building.operational_brief",
+        "building.tuning_brief",
         "analytics.poll_throughput",
         "fdd.results",
         "ops.logs",
@@ -471,6 +483,7 @@ _WRITE_TOOLS = frozenset(
         "rules.run_batch",
         "building.set_alerts",
         "building.checkin",
+        "building.tuning_brief",
         "site.memory_put",
         "app.edit_file",
         "app.rebuild_dashboard",
@@ -496,6 +509,7 @@ _TOOLS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "building.device_health": _tool_building_device_health,
     "building.operational_brief": _tool_building_operational_brief,
     "building.checkin": _tool_building_checkin,
+    "building.tuning_brief": _tool_building_tuning_brief,
     "analytics.poll_throughput": _tool_analytics_poll_throughput,
     "fdd.results": _tool_fdd_results,
     "ops.logs": _tool_ops_logs,
@@ -610,6 +624,11 @@ def tool_specs() -> list[dict[str, Any]]:
             "name": "building.checkin",
             "args": ["site_id?", "run_fdd_batch?", "write_memory?", "window_minutes?"],
             "writes": "building_agent_checkin.json + site MEMORY.md append",
+        },
+        {
+            "name": "building.tuning_brief",
+            "args": ["site_id?", "window_minutes?"],
+            "writes": "read-only — FDD tuning queue (errors + threshold reviews)",
         },
         {
             "name": "analytics.poll_throughput",

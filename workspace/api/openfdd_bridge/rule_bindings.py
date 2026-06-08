@@ -137,12 +137,18 @@ def _equipment_label(eq: dict[str, Any]) -> str:
 
 def build_assignments_view(model: dict[str, Any], rules: list[dict[str, Any]], *, site_id: str | None = None) -> dict[str, Any]:
     """Enriched assignments payload for UI and agent context."""
+    from .model_point_utils import point_site_id
+
     sid = str(site_id or "").strip()
     equipment = [e for e in model.get("equipment") or [] if isinstance(e, dict)]
     points = [p for p in model.get("points") or [] if isinstance(p, dict)]
     if sid:
-        equipment = [e for e in equipment if str(e.get("site_id") or "") == sid]
-        points = [p for p in points if str(p.get("site_id") or "") == sid]
+        equipment = [
+            e
+            for e in equipment
+            if str(e.get("site_id") or "").strip() in {"", sid}
+        ]
+        points = [p for p in points if point_site_id(p, model) == sid]
 
     eq_by_id = {str(e.get("id") or ""): e for e in equipment if str(e.get("id") or "")}
 

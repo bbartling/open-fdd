@@ -237,7 +237,14 @@ def _run_one(
             script_cfg.setdefault("site_id", site_id)
             result = playground.run_arrow_script(code, table, cfg=script_cfg)
             if not result.get("ok"):
-                return {**base, "status": "error", "rows": int(len(df)), "flagged": 0, "error": result.get("error", "")}
+                row_n = int(table.num_rows) if hasattr(table, "num_rows") else int(result.get("rows") or 0)
+                return {
+                    **base,
+                    "status": "error",
+                    "rows": row_n,
+                    "flagged": 0,
+                    "error": str(result.get("error") or ""),
+                }
             flag_cols = result.get("flag_columns") or []
             flagged = 0
             for row in result.get("preview", []):
