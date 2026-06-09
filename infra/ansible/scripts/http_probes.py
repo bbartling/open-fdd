@@ -47,6 +47,14 @@ def _agent_fetch_timeout_s() -> float:
         return 45.0
 
 
+def _public_fetch_timeout_s() -> float:
+    raw = os.environ.get("OPENFDD_PROBE_PUBLIC_TIMEOUT_S", "45").strip()
+    try:
+        return max(10.0, float(raw))
+    except ValueError:
+        return 45.0
+
+
 def post_json(url: str, payload: dict[str, Any], *, timeout: float = 20.0, headers: dict[str, str] | None = None) -> tuple[int, str]:
     data = json.dumps(payload).encode("utf-8")
     hdrs = {"Content-Type": "application/json", **(headers or {})}
@@ -314,9 +322,16 @@ def check_public_check_engine(base: str) -> dict[str, Any]:
     """Anonymous read probes for home / faults traffic-light UI (no Bearer token)."""
     out: dict[str, Any] = {"errors": [], "warnings": [], "endpoints": {}}
     root = base.rstrip("/")
+    default_timeout = _public_fetch_timeout_s()
     for path in PUBLIC_CHECK_ENGINE_PATHS:
         url = f"{root}{path}"
-        status, body, _ = fetch(url)
+        timeout = 90.0 if path == "/openfdd-agent/building-insight" else default_timeout
+        try:
+            status, body, _ = fetch(url, timeout=timeout)
+        except RuntimeError as exc:
+            out["errors"].append(f"{path} unreachable: {exc}")
+            out["endpoints"][path] = 0
+            continue
         out["endpoints"][path] = status
         if status == 401:
             out["errors"].append(f"{path} HTTP 401 — check-engine dashboard must not require login")

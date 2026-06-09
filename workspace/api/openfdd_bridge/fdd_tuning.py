@@ -56,10 +56,11 @@ def propose_bounds_patch(
     *,
     run: dict[str, Any],
     rule: dict[str, Any] | None,
+    min_flagged_pct: float = 85.0,
 ) -> dict[str, Any] | None:
     """AI-assisted bounds proposal from fault analytics (human or API applies)."""
     pct = _flagged_pct(run)
-    if pct is None or pct < 85.0:
+    if pct is None or pct < float(min_flagged_pct):
         return None
     analytics = run.get("analytics") if isinstance(run.get("analytics"), dict) else {}
     cfg = (rule or {}).get("config") if isinstance((rule or {}).get("config"), dict) else {}
@@ -120,8 +121,9 @@ def collect_tuning_patches(
     *,
     site_id: str,
     rule_ids: list[str] | None = None,
+    min_flagged_pct: float = 70.0,
 ) -> list[dict[str, Any]]:
-    """Collect AI-proposed config patches for high flag-rate rules."""
+    """Collect AI-proposed config patches for elevated flag-rate rules."""
     store = RuleStore()
     rules_by_id = {str(r.get("id")): r for r in store.list_rules() if isinstance(r, dict)}
     allow = {str(x).strip() for x in (rule_ids or []) if str(x).strip()} or None
@@ -140,7 +142,11 @@ def collect_tuning_patches(
             continue
         if allow is not None and rid not in allow:
             continue
-        patch = propose_bounds_patch(run=run, rule=rules_by_id.get(rid))
+        patch = propose_bounds_patch(
+            run=run,
+            rule=rules_by_id.get(rid),
+            min_flagged_pct=min_flagged_pct,
+        )
         if patch:
             patches.append(patch)
             seen.add(rid)
@@ -160,7 +166,11 @@ def apply_tuning_patches(
     poll_ready = _poll_ready(throughput)
     auto_tune_env = os.environ.get("OFDD_AGENT_AUTO_TUNE", "").strip().lower() in {"1", "true", "yes"}
 
-    patches = collect_tuning_patches(site_id=site_id, rule_ids=rule_ids)
+    patches = collect_tuning_patches(
+        site_id=site_id,
+        rule_ids=rule_ids,
+        min_flagged_pct=85.0,
+    )
     if not poll_ready:
         return {
             "ok": True,
@@ -275,8 +285,12 @@ def build_tuning_brief(
         rid = str(run.get("rule_id") or "")
         rname = str(run.get("rule_name") or rid)
         patch = (
-            propose_bounds_patch(run=run, rule=rules_by_id.get(rid))
-            if include_patches and poll_ready
+            propose_bounds_patch(
+                run=run,
+                rule=rules_by_id.get(rid),
+                min_flagged_pct=85.0,
+            )
+            if include_patches and poll_ready and pct is not None and pct >= 85.0
             else None
         )
         if pct >= 85.0:

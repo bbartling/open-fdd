@@ -32,8 +32,8 @@ def _dt_hours(table, ts_col, max_gap_hours):
     ts = pc.cast(table[ts_col], pa.timestamp("us", tz="UTC"))
     prev = arrow_shift(ts, 1)
     delta = pc.subtract(ts, prev)
-    secs = pc.cast(delta, pa.int64()) / 1_000_000
-    hours = pc.cast(secs, pa.float64()) / 3600.0
+    secs = pc.divide(pc.cast(delta, pa.int64()), 1_000_000)
+    hours = pc.divide(pc.cast(secs, pa.float64()), 3600.0)
     py_hours = hours.to_pylist()
     valid = [h for h in py_hours[1:] if h is not None and h > 0]
     typical = sorted(valid)[len(valid) // 2] if valid else (1.0 / 60.0)

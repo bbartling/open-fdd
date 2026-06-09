@@ -419,6 +419,28 @@
       become: true
       when: install_fdd_loop_timer | default(true) | bool
 
+    - name: Install openfdd-building-agent systemd unit and timer
+      tags: [docker, systemd]
+      ansible.builtin.template:
+        src: "templates/{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ item }}"
+        mode: "0644"
+      loop:
+        - openfdd-building-agent.service
+        - openfdd-building-agent.timer
+      become: true
+      when: install_building_agent_timer | default(false) | bool
+
+    - name: Enable openfdd-building-agent timer on edge
+      tags: [docker, systemd]
+      ansible.builtin.systemd:
+        name: openfdd-building-agent.timer
+        enabled: "{{ enable_building_agent_timer | default(false) | bool }}"
+        state: "{{ 'started' if (enable_building_agent_timer | default(false) | bool) else 'stopped' }}"
+        daemon_reload: true
+      become: true
+      when: install_building_agent_timer | default(false) | bool
+
     - name: Run post-deploy insurance checks
       tags: [verify, check]
       ansible.builtin.include_tasks: tasks/post_deploy_check.yml

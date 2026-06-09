@@ -114,6 +114,52 @@ def test_tuning_brief_endpoint(agent_client, monkeypatch: pytest.MonkeyPatch, tm
     assert "threshold_review" in kinds
 
 
+def test_collect_tuning_patches_at_70_percent(monkeypatch: pytest.MonkeyPatch):
+    import os
+
+    from openfdd_bridge import fdd_results as fr
+    from openfdd_bridge.fdd_tuning import collect_tuning_patches
+
+    runs_doc = {
+        "version": 1,
+        "runs": [
+            {
+                "rule_id": "acme-zn-t-oob-occupied",
+                "rule_name": "Zone OOB",
+                "site_id": "acme",
+                "status": "ok",
+                "rows": 20,
+                "flagged": 15,
+                "analytics": {
+                    "min_value_fault": 79.0,
+                    "max_value_fault": 82.5,
+                    "avg_value_fault": 80.2,
+                    "bounds_low": 65.0,
+                    "bounds_high": 78.0,
+                    "value_unit": "°F",
+                },
+            }
+        ],
+    }
+    path = Path(os.environ["OFDD_DESKTOP_DATA_DIR"]) / "fdd_results.json"
+    path.write_text(json.dumps(runs_doc), encoding="utf-8")
+
+    class _Store:
+        def list_rules(self):
+            return [
+                {
+                    "id": "acme-zn-t-oob-occupied",
+                    "name": "Zone OOB",
+                    "config": {"bounds_low": 65, "bounds_high": 78},
+                }
+            ]
+
+    monkeypatch.setattr(fr, "fdd_results_path", lambda: path)
+    monkeypatch.setattr("openfdd_bridge.fdd_tuning.RuleStore", _Store)
+    patches = collect_tuning_patches(site_id="acme", min_flagged_pct=70.0)
+    assert len(patches) == 1
+
+
 def test_propose_bounds_patch_widens_high():
     from openfdd_bridge.fdd_tuning import propose_bounds_patch
 
