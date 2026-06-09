@@ -61,21 +61,27 @@ login() {
 
 api_get() { "${CURL[@]}" -H "Authorization: Bearer ${TOKEN}" "${BASE}$1"; }
 api_post() {
-  local path="$1" body="${2:-{}}"
+  local path="$1" body="${2:-\{\}}"
+  local tmp
+  tmp="$(mktemp)"
+  printf '%s' "$body" >"$tmp"
   "${CURL[@]}" -X POST -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
-    -d "$body" "${BASE}${path}"
+    --data-binary "@${tmp}" "${BASE}${path}"
+  rm -f "$tmp"
 }
 
 # Sets API_POST_STATUS and API_POST_BODY (do not call inside $() — subshell drops globals).
 api_post_status() {
-  local path="$1" body="${2:-{}}"
-  local tmp
+  local path="$1" body="${2:-\{\}}"
+  local tmp resp
   tmp="$(mktemp)"
-  API_POST_STATUS="$(curl -sS --connect-timeout 15 --max-time 300 -o "$tmp" -w "%{http_code}" \
+  resp="$(mktemp)"
+  printf '%s' "$body" >"$tmp"
+  API_POST_STATUS="$(curl -sS --connect-timeout 15 --max-time 300 -o "$resp" -w "%{http_code}" \
     -X POST -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
-    -d "$body" "${BASE}${path}" 2>/dev/null)" || API_POST_STATUS="000"
-  API_POST_BODY="$(cat "$tmp")"
-  rm -f "$tmp"
+    --data-binary "@${tmp}" "${BASE}${path}" 2>/dev/null)" || API_POST_STATUS="000"
+  API_POST_BODY="$(cat "$resp")"
+  rm -f "$tmp" "$resp"
 }
 
 wait_job() {
