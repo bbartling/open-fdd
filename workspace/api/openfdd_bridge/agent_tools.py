@@ -35,7 +35,7 @@ from .brick_model_context import (
 from .fault_catalog import all_codes, catalog_graph, entry_for_code, is_valid_code
 from .fault_catalog_scope import build_applicable_payload, validate_scope_with_ollama
 from .building_agent import run_checkin
-from .fdd_tuning import build_tuning_brief
+from .fdd_tuning import apply_tuning_patches, build_tuning_brief
 from .fdd_results import load_results
 from .fdd_runner import run_batch
 from .ops_logs import collect_ops_logs
@@ -413,6 +413,23 @@ def _tool_building_tuning_brief(args: dict[str, Any]) -> dict[str, Any]:
     return build_tuning_brief(site_id=site_id, window_minutes=window_i)
 
 
+def _tool_building_apply_tuning(args: dict[str, Any]) -> dict[str, Any]:
+    site_id = str(args.get("site_id") or "").strip() or ensure_default_site(ModelService(), TtlService())
+    apply_flag = str(args.get("apply") or "false").strip().lower() in {"1", "true", "yes"}
+    run_batch_flag = str(args.get("run_fdd_batch") or "true").strip().lower() not in {"0", "false", "no"}
+    rule_ids = args.get("rule_ids")
+    ids: list[str] | None = None
+    if isinstance(rule_ids, list):
+        ids = [str(x).strip() for x in rule_ids if str(x).strip()]
+    return apply_tuning_patches(
+        site_id=site_id,
+        apply=apply_flag,
+        rule_ids=ids,
+        run_fdd_batch=run_batch_flag,
+        saved_by="agent",
+    )
+
+
 def _tool_building_checkin(args: dict[str, Any]) -> dict[str, Any]:
     site_id = str(args.get("site_id") or "").strip() or None
     run_batch_flag = str(args.get("run_fdd_batch") or "true").strip().lower() in {"1", "true", "yes"}
@@ -484,6 +501,7 @@ _WRITE_TOOLS = frozenset(
         "building.set_alerts",
         "building.checkin",
         "building.tuning_brief",
+        "building.apply_tuning",
         "site.memory_put",
         "app.edit_file",
         "app.rebuild_dashboard",
@@ -510,6 +528,7 @@ _TOOLS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "building.operational_brief": _tool_building_operational_brief,
     "building.checkin": _tool_building_checkin,
     "building.tuning_brief": _tool_building_tuning_brief,
+    "building.apply_tuning": _tool_building_apply_tuning,
     "analytics.poll_throughput": _tool_analytics_poll_throughput,
     "fdd.results": _tool_fdd_results,
     "ops.logs": _tool_ops_logs,
@@ -628,7 +647,12 @@ def tool_specs() -> list[dict[str, Any]]:
         {
             "name": "building.tuning_brief",
             "args": ["site_id?", "window_minutes?"],
-            "writes": "read-only — FDD tuning queue (errors + threshold reviews)",
+            "writes": "read-only — FDD tuning queue (errors + threshold reviews + AI patches)",
+        },
+        {
+            "name": "building.apply_tuning",
+            "args": ["site_id?", "apply?", "rule_ids?", "run_fdd_batch?"],
+            "writes": "rules_store.json config (bounds) when apply=true",
         },
         {
             "name": "analytics.poll_throughput",

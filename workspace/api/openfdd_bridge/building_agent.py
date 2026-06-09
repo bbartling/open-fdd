@@ -182,6 +182,12 @@ def run_checkin(
             detail_lines.append(
                 f"- [{rec.get('priority')}] {rec.get('rule_name') or rec.get('kind')}: {rec.get('detail')}"
             )
+    if tuning.get("patches"):
+        detail_lines.append("\n**AI bounds patches (dry-run via POST /api/building-agent/apply-tuning):**")
+        for patch in tuning["patches"][:4]:
+            detail_lines.append(
+                f"- {patch.get('rule_name')}: {patch.get('rationale')}"
+            )
     elif fdd.get("tuning_candidates"):
         detail_lines.append("\n**Tuning candidates (human review):**")
         for c in fdd["tuning_candidates"][:5]:

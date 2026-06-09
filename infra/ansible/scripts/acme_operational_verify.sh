@@ -33,6 +33,11 @@ log_ok() { printf '  OK   %s\n' "$*"; }
 log_fail() { printf '  FAIL %s\n' "$*" >&2; FAILURES=$((FAILURES + 1)); }
 log_info() { printf '  ..   %s\n' "$*"; }
 
+# print(json.dumps(...)) adds a trailing newline — FastAPI rejects it as extra JSON.
+json_compact() {
+  python3 -c 'import json,sys; print(json.dumps(json.loads(sys.argv[1])), end="")' "$1"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --host) HOST="$2"; shift 2 ;;
@@ -213,8 +218,17 @@ for path in \
   fi
 done
 
+log_info "Building agent apply-tuning (dry-run — AI bounds proposals)"
+TUNING_BODY="$(json_compact '{"apply": false, "run_fdd_batch": false, "site_id": "acme"}')"
+api_post_status "/api/building-agent/apply-tuning" "$TUNING_BODY"
+if [[ "${API_POST_STATUS:-000}" == "200" ]]; then
+  log_ok "POST /api/building-agent/apply-tuning HTTP 200 (dry_run)"
+else
+  log_fail "POST /api/building-agent/apply-tuning HTTP ${API_POST_STATUS:-000}: ${API_POST_BODY:-}"
+fi
+
 log_info "Building agent check-in (no FDD batch — smoke)"
-CHECKIN_BODY="$(python3 -c 'import json; print(json.dumps({"run_fdd_batch": False, "write_memory": True, "window_minutes": 30, "site_id": "acme"}))')"
+CHECKIN_BODY="$(json_compact '{"run_fdd_batch": false, "write_memory": true, "window_minutes": 30, "site_id": "acme"}')"
 api_post_status "/api/building-agent/checkin" "$CHECKIN_BODY"
 if [[ "${API_POST_STATUS:-000}" == "200" ]]; then
   log_ok "POST /api/building-agent/checkin HTTP 200"

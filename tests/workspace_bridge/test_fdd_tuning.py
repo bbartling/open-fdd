@@ -112,3 +112,102 @@ def test_tuning_brief_endpoint(agent_client, monkeypatch: pytest.MonkeyPatch, tm
     kinds = {x["kind"] for x in body["recommendations"]}
     assert "rule_error" in kinds
     assert "threshold_review" in kinds
+
+
+def test_propose_bounds_patch_widens_high():
+    from openfdd_bridge.fdd_tuning import propose_bounds_patch
+
+    run = {
+        "rule_id": "acme-zn-t-oob-occupied",
+        "rule_name": "Zone OOB",
+        "status": "ok",
+        "rows": 20,
+        "flagged": 18,
+        "analytics": {
+            "min_value_fault": 79.0,
+            "max_value_fault": 82.5,
+            "avg_value_fault": 80.2,
+            "bounds_low": 65.0,
+            "bounds_high": 78.0,
+            "value_unit": "°F",
+        },
+    }
+    rule = {
+        "id": "acme-zn-t-oob-occupied",
+        "name": "Zone OOB",
+        "config": {"bounds_low": 65, "bounds_high": 78},
+    }
+    patch = propose_bounds_patch(run=run, rule=rule)
+    assert patch is not None
+    assert patch["proposed_config"]["bounds_high"] > 78
+    assert "widen high" in patch["rationale"]
+
+
+def test_apply_tuning_dry_run(agent_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    import os
+
+    from openfdd_bridge import fdd_results as fr
+
+    doc = {
+        "version": 1,
+        "runs": [
+            {
+                "rule_id": "acme-zn-t-oob-occupied",
+                "rule_name": "Zone OOB",
+                "site_id": "acme",
+                "status": "ok",
+                "rows": 20,
+                "flagged": 18,
+                "analytics": {
+                    "min_value_fault": 79.0,
+                    "max_value_fault": 82.5,
+                    "avg_value_fault": 80.2,
+                    "bounds_low": 65.0,
+                    "bounds_high": 78.0,
+                    "value_unit": "°F",
+                },
+            }
+        ],
+    }
+    path = Path(os.environ["OFDD_DESKTOP_DATA_DIR"]) / "fdd_results.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    monkeypatch.setattr(fr, "fdd_results_path", lambda: path)
+    monkeypatch.setattr(
+        "openfdd_bridge.fdd_tuning.compute_poll_throughput",
+        lambda **_: {"ok": True, "status": "healthy", "keepup_ratio": 0.95, "enabled_points": 10},
+    )
+    monkeypatch.setattr(
+        "openfdd_bridge.fdd_tuning.RuleStore",
+        lambda: type(
+            "RS",
+            (),
+            {
+                "list_rules": lambda self: [
+                    {
+                        "id": "acme-zn-t-oob-occupied",
+                        "name": "Zone OOB",
+                        "config": {"bounds_low": 65, "bounds_high": 78},
+                        "code": "def apply_faults_arrow(t,c,cx=None): return {}",
+                        "mode": "rule",
+                    }
+                ],
+                "get": lambda self, rid: {
+                    "id": rid,
+                    "name": "Zone OOB",
+                    "config": {"bounds_low": 65, "bounds_high": 78},
+                    "code": "def apply_faults_arrow(t,c,cx=None): return {}",
+                    "mode": "rule",
+                },
+                "upsert": lambda self, entry, saved_by="x": entry,
+            },
+        )(),
+    )
+    r = agent_client.post(
+        "/api/building-agent/apply-tuning",
+        json={"apply": False, "site_id": "acme", "run_fdd_batch": False},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["dry_run"] is True
+    assert body["applied"] is False
+    assert len(body["patches"]) >= 1
