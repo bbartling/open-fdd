@@ -1,0 +1,105 @@
+# Grade-A AHU faults (starter set — expand per gap audit)
+faults:
+  - code: AHU-ECON-001
+    canonical_id: ahu.economizer.not_using_free_cooling
+    family: AHU
+    system_type: air_handling_unit
+    subsystem: economizer
+    component: outdoor_air_damper
+    fault_mode: missed_free_cooling
+    symptom: Free cooling available but mechanical cooling or minimum OA persists
+    title: Economizer not economizing
+    severity_default: medium
+    category: energy
+    required_point_roles: [outside_air_temperature, cooling_valve_command, damper_position_command]
+    optional_point_roles: [supply_air_temperature_setpoint, mixed_air_temperature]
+    rule_template_id: economizer_free_cooling_available
+    rule_doc_path: docs/rule-cookbook/expression-cookbook.md
+    legacy_aliases: [AHU-E]
+    standards_crosswalk:
+      ashrae_g36_reference_type: economizer_enable
+      ashrae_207_reference_type: economizer_fault
+      brick_classes: [Outside_Air_Damper, Cooling_Valve]
+    tuning_params:
+      thresholds:
+        free_cooling_margin_f: 2.0
+        damper_low_open_max: 0.5
+        cooling_cmd_on_min: 0.1
+      persistence_minutes: 60
+      occupancy_applicability: occupied
+    evidence_fields: [oat, sat_sp, damper_cmd, valve_cmd, duration_minutes]
+    related_faults: [AHU-SHC-001]
+    operator_guidance:
+      plain_english_summary: Outdoor air is cool enough for free cooling but the AHU is still using mechanical cooling.
+      why_it_matters: Energy impact proxy — unnecessary chiller/compressor load.
+      engineer_roi_notes: Check economizer lockout, damper minimums, and SAT reset.
+
+  - code: AHU-SHC-001
+    canonical_id: ahu.coils.simultaneous_heating_cooling
+    family: AHU
+    system_type: air_handling_unit
+    subsystem: coils
+    component: heating_cooling_valves
+    fault_mode: simultaneous_heat_cool
+    symptom: Heating and cooling outputs active together
+    title: Simultaneous heating and cooling
+    severity_default: critical
+    category: energy
+    required_point_roles: [heating_valve_command, cooling_valve_command]
+    optional_point_roles: [supply_air_temperature, supply_fan_status]
+    rule_template_id: simultaneous_heat_cool_mask
+    rule_doc_path: docs/rule-cookbook/expression-cookbook.md
+    legacy_aliases: [AHU-B]
+    standards_crosswalk:
+      ashrae_g36_reference_type: coil_sequencing
+      brick_classes: [Heating_Valve, Cooling_Valve]
+    tuning_params:
+      thresholds:
+        valve_on_min: 0.1
+      persistence_minutes: 15
+    evidence_fields: [heating_cmd, cooling_cmd, duration_minutes]
+    operator_guidance:
+      plain_english_summary: The AHU is heating and cooling at the same time.
+      why_it_matters: Direct energy waste and comfort fighting.
+
+  - code: AHU-SAT-001
+    canonical_id: ahu.supply_air.temperature_setpoint_not_met
+    family: AHU
+    system_type: air_handling_unit
+    subsystem: supply_air
+    component: temperature_control
+    fault_mode: setpoint_tracking_failure
+    symptom: SAT outside deadband of setpoint while fan and plant active
+    title: SAT setpoint not met
+    severity_default: medium
+    category: comfort
+    required_point_roles: [supply_air_temperature, supply_air_temperature_setpoint, supply_fan_status]
+    rule_template_id: setpoint_tracking_error
+    rule_doc_path: docs/rule-cookbook/expression-cookbook.md
+    legacy_aliases: [AHU-C]
+    tuning_params:
+      deadbands:
+        sat_deadband_f: 2.0
+      persistence_minutes: 45
+    evidence_fields: [sat, sat_sp, error, duration_minutes]
+
+  - code: AHU-MAT-001
+    canonical_id: ahu.mixed_air.inconsistent_with_oat_rat
+    family: AHU
+    system_type: air_handling_unit
+    subsystem: mixed_air
+    component: temperature_sensor
+    fault_mode: mixing_envelope_violation
+    symptom: MAT outside envelope bounded by OAT and RAT
+    title: Mixed air inconsistent with OAT/RAT
+    severity_default: medium
+    category: data_quality
+    required_point_roles: [mixed_air_temperature, outside_air_temperature, return_air_temperature, supply_fan_status]
+    rule_template_id: mixing_envelope_mask
+    rule_doc_path: docs/rule-cookbook/expression-cookbook.md
+    legacy_aliases: [AHU-D]
+    tuning_params:
+      thresholds:
+        mixing_tol_f: 1.15
+      persistence_minutes: 30
+    evidence_fields: [mat, oat, rat, mixing_tol]

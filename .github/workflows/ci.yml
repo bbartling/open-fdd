@@ -47,6 +47,8 @@ jobs:
           python -m pytest open_fdd/tests/arrow_runtime -q
           python -m pytest open_fdd/tests/playground -q
           # Separate invocations — both dirs have test_cookbook.py
+          python -m pytest open_fdd/tests/faults -q
+          python -m pytest tests/test_no_pandas_edge_fdd.py -q
 
       - name: Arrow benchmark smoke
         run: |
