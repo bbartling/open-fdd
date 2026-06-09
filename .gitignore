@@ -207,6 +207,12 @@ edge_backup/local/acme/vm-bbartling/*
 # Local build/scratch (Acme model experiments)
 .build_acme_data/
 
+# Central portfolio analytics (analyst clone — not edge)
+portfolio/data/
+portfolio/sites.json
+portfolio/agent/MEMORY.md
+portfolio/agent/SKILLS.md
+
 # Runtime audit / error logs (forensics — do not commit)
 workspace/logs/
 

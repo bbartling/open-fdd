@@ -1,0 +1,71 @@
+# Portfolio agent skills (copy to SKILLS.md — do not commit live file)
+
+## Skill: portfolio-collect
+
+Poll every site in `portfolio/sites.json`, append CSV history, save latest JSON per site.
+
+```bash
+cd /path/to/open-fdd
+export OFDD_AGENT_PASSWORD=...  # or per-site in sites.json
+python scripts/portfolio_collect.py --json
+```
+
+Success: `sites_ok == sites_polled`. On failure, read `error` per site and `portfolio/data/checkins.csv` last row.
+
+## Skill: edge-health-check
+
+For one site (`BASE_URL`, agent token):
+
+1. `GET /api/health`
+2. `GET /api/building/portfolio-rollup?site_id=SITE`
+3. Confirm `building.traffic`, `poll.summary_sentence`, `fdd_batch.error_runs == 0`
+4. If `operator_override_points` jumped, inspect `overrides.points` in rollup JSON
+
+## Skill: building-agent-checkin
+
+Trigger edge agent loop (integrator/agent role):
+
+```bash
+python scripts/building_agent_checkin.py --base-url "$BASE" --site-id acme --run-batch
+```
+
+Use `--run-batch` only when faults need refresh or tuning preview is stale.
+
+## Skill: fdd-tuning-assist
+
+1. `GET /api/building-agent/tuning-brief?site_id=SITE`
+2. Discuss proposals with human operator
+3. `POST /api/building-agent/apply-tuning` with `{"apply": false}` first (preview)
+4. Apply only after human confirms: `{"apply": true, "rule_ids": [...]}`
+
+## Skill: override-analytics
+
+P8 operator overrides only (BACnet priority-array scan). Rollup field:
+`overrides.operator_override_points` and `overrides.points[]`.
+
+Central trend: `portfolio/data/checkins.csv` column `operator_overrides`.
+Detail: `portfolio/data/overrides_daily.csv` — group by `object_name` / `device_instance`.
+
+## Skill: fault-trend-analytics
+
+Rollup: `faults.active_by_code` and `fdd_batch.flagged_samples_by_code`.
+Central: `portfolio/data/faults_daily.csv` — plot `active_count` by `fault_code` over `collected_at`.
+
+Compare to catalog severity at https://bbartling.github.io/open-fdd/fault-codes/
+
+## Skill: run-hour-analytics
+
+Rollup: `runtime_metrics.{equipment_id}.fan_run_hours` / `system_run_hours`.
+Central Dash shows stock-style line + delta bars (green = hours down, red = up).
+
+Goal-setting: month-over-month fan hours per site; flag August panic-month spikes.
+
+## Skill: dash-refresh
+
+After collect, open Dash or wait for 2-minute auto-refresh:
+
+```bash
+./scripts/run_portfolio_dash.sh
+```
+
+Human chat context: cite site traffic color, top fault code delta, P8 override count.

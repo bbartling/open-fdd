@@ -150,7 +150,9 @@ jobs:
           OPENFDD_REPO_ROOT: ${{ github.workspace }}
           OFDD_DESKTOP_DATA_DIR: ${{ github.workspace }}/workspace/data
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/workspace/api
-        run: python -m pytest tests/workspace_bridge -q
+        run: |
+          python -m pytest tests/workspace_bridge -q
+          python -m pytest tests/portfolio -q
 
   docs:
     runs-on: ubuntu-latest

@@ -43,6 +43,8 @@ COOKBOOK_PATTERNS: dict[str, str] = {
     "flatline_1h": "Rolling 1h spread below tolerance (sensor stuck)",
     "spread_1h": "Rolling 1h max−min above threshold (performance / delta)",
     "oob_rolling": "Sample outside cfg low/high band",
+    "rate_of_change": "Step-to-step |Δ| exceeds physical limit (spike / bad sample)",
+    "mixing_envelope": "MAT outside OAT–RAT band while fan on (AHU-D)",
     "duct_spread_1h": "Duct delta-T spread over 1h (AHU/VAV duct rules)",
     "custom_arrow": "Site-specific apply_faults_arrow logic in rules_py",
     "schedule_compare": "Runtime vs occupancy schedule",
@@ -106,7 +108,7 @@ FAULT_CATALOG: dict[str, dict[str, Any]] = {
                 "MAT falls outside the range bounded by outdoor and return air temperatures.",
                 ["MAT sensor fault", "Stratification", "OAT or RAT sensor fault"],
                 ["Verify MAT between OAT and RAT", "Check damper position", "Cross-check OAT source"],
-                cookbook_patterns=["custom_arrow", "oob_rolling"],
+                cookbook_patterns=["mixing_envelope", "custom_arrow", "oob_rolling"],
             ),
             _code(
                 "AHU-E", "performance_degradation", "Economizer not economizing", "warning",
@@ -345,7 +347,7 @@ FAULT_CATALOG: dict[str, dict[str, Any]] = {
                 "Shared OAT sensor flatlined, sun-baked, or out of range (drives many sequences).",
                 ["Sensor in sun", "Failed sensor", "Calibration drift"],
                 ["Compare OAT to weather service", "Inspect sensor shielding", "Field verify"],
-                cookbook_patterns=["flatline_1h", "oob_rolling"],
+                cookbook_patterns=["flatline_1h", "oob_rolling", "rate_of_change"],
             ),
             _code(
                 "BLD-C", "performance_degradation", "Equipment running outside occupancy schedule", "warning",
