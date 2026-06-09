@@ -1,6 +1,22 @@
 #!/usr/bin/env python3
 """Install default GL36 FDD rules for a site (brick-scoped flatline + OOB + optional AHU scripts).
 
+Brick-bound rules (``Zone_Air_Temperature_Sensor``, etc.) use one equation config for every
+matched point; the FDD runner sweeps all binding-matched historian columns and OR-combines
+fault masks (see ``historian_columns_for_rule``).
+
+Acme bench device map (BACnet device instance → units at wire):
+
+- **JCI VAV** — instances **1–100** (imperial °F at BACnet; rules use ``temp_unit: imperial``)
+- **RTU AHU** — instance **1100** (imperial)
+- **Boiler** — instance **1002** (imperial)
+- **Trane VAV** — instances **11000–13000** (~6–8 boxes; BACnet temps are °C)
+
+Trane °C is converted to °F before feather ingest via
+``edge_config/acme/vm-bbartling/device_poll_profiles.csv`` (``metric_temp_f``). All zone-temp
+rules therefore share imperial bounds (65–78 °F occupied OOB) after poll conversion. If a Trane
+box is added without a poll profile, add a profile row or split a metric-only rule variant.
+
 Example:
   python3 scripts/setup_gl36_fdd.py --site-id acme --building-id vm-bbartling \\
     --ahu-equipment-id acme-vm-bbartling-rtu-01 --ahu-system-id rtu-01 \\

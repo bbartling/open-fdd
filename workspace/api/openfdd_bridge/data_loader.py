@@ -186,6 +186,43 @@ def enrich_rows_with_column_map(rows: list[dict[str, Any]], column_map: dict[str
     return out
 
 
+def historian_columns_for_rule(model: dict, site_id: str, rule: dict) -> list[str]:
+    """Historian column names for all points matched by rule bindings (brick / equipment / point)."""
+    from .model_point_utils import point_site_id
+    from .timeseries_api import plot_column_name
+
+    bindings = rule.get("bindings") if isinstance(rule.get("bindings"), dict) else {}
+    point_ids = {str(x) for x in bindings.get("point_ids") or [] if str(x).strip()}
+    equipment_ids = {str(x) for x in bindings.get("equipment_ids") or [] if str(x).strip()}
+    brick_types = {str(x) for x in bindings.get("brick_types") or [] if str(x).strip()}
+    if not point_ids and not equipment_ids and not brick_types:
+        return []
+
+    cols: list[str] = []
+    sid = str(site_id or "").strip()
+    for pt in model.get("points") or []:
+        if not isinstance(pt, dict):
+            continue
+        if point_site_id(pt, model) != sid:
+            continue
+        pid = str(pt.get("id") or "").strip()
+        eq_id = str(pt.get("equipment_id") or "").strip()
+        brick = str(pt.get("brick_type") or "").strip()
+        matched = False
+        if point_ids and pid in point_ids:
+            matched = True
+        elif equipment_ids and eq_id in equipment_ids:
+            matched = True
+        elif brick_types and brick in brick_types:
+            matched = True
+        if not matched:
+            continue
+        col = plot_column_name(pt)
+        if col:
+            cols.append(col)
+    return sorted(set(cols))
+
+
 def column_map_for_rule(model: dict, site_id: str, rule: dict) -> dict[str, str]:
     from open_fdd.arrow_runtime.column_map_from_model import build_column_map_from_model_points
 

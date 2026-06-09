@@ -53,6 +53,8 @@ Assign via:
 
 Runtime evaluation: `fdd_runner.py` (batch FDD) and `plot_readings.evaluate_fault_plots()` (trend overlays). Plot scope filters rules to those bound to **selected telemetry** (point, equipment, or BRICK class); unbound rules still evaluate site-wide.
 
+**Brick bindings (3.0.20+):** when a rule binds `brick_types` (or `equipment_ids` / `point_ids`), the batch runner resolves **every** matching historian column via `historian_columns_for_rule`, runs the Arrow rule per column with `value_column` set, and OR-combines fault masks. One rule config therefore applies consistently to all zone temps, discharge temps, etc.
+
 ### CLASS vs device
 
 - **BRICK class** (`brick_type` on points, or `brick_types` on rule bindings) — template-style assignment (“all `Zone_Air_Temperature_Sensor`”).

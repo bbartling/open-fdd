@@ -54,6 +54,13 @@ Never invent codes; use `/api/faults/catalog` on the edge.
 3. **P8 operator overrides** — supervisory BAS overrides only (not P1–P7 logic)
 4. **Fault code trends** — active count up/down vs prior check-in
 
+## Acme FDD bench (copy into live MEMORY.md)
+
+- **Devices:** JCI VAV 1–100 (imperial °F); AHU **1100**; boiler **1002**; Trane VAV 11000–13000 (metric °C → `metric_temp_f` poll profile)
+- **Rules:** 8× `acme-*` GL36 templates; one equation per BRICK class; runner sweeps all bound columns (3.0.20+)
+- **Cadence:** Full patch cycle when verify fails; **6 h** tuning wakes when stable
+- **Stop:** Do not iterate patch cycle past deadline in live MEMORY.md
+
 ## Last session notes
 
 - (append after each portfolio collect or tuning session)

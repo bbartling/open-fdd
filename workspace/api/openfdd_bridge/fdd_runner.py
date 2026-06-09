@@ -17,7 +17,7 @@ import time
 from typing import Any
 
 from . import playground
-from .data_loader import column_map_for_rule, load_frame_for_run
+from .data_loader import column_map_for_rule, historian_columns_for_rule, load_frame_for_run
 from .fdd_row_prep import prepare_fdd_rows
 from .fault_catalog import family_for_code
 from .feather_store import FeatherStore
@@ -109,13 +109,73 @@ def _columns_for_site_rules(model: dict[str, Any], site_id: str, rules: list[dic
     """Union of feather columns needed by all rules on one site (prunes wide BACnet frames)."""
     wanted: set[str] = {"timestamp", "site_id"}
     for rule in rules:
-        cmap = column_map_for_rule(model, site_id, rule)
-        # Historian columns are point external_id / fdd_input names — not BRICK class strings.
-        wanted.update(str(v) for v in cmap.values() if str(v).strip())
+        bound = historian_columns_for_rule(model, site_id, rule)
+        if bound:
+            wanted.update(bound)
+        else:
+            cmap = column_map_for_rule(model, site_id, rule)
+            wanted.update(str(v) for v in cmap.values() if str(v).strip())
+        cfg = rule.get("config") if isinstance(rule.get("config"), dict) else {}
+        for key in (
+            "fan_speed_col",
+            "fan_binary_col",
+            "value_column",
+            "column",
+            "zone_avg_cols",
+        ):
+            raw = cfg.get(key)
+            if isinstance(raw, str) and raw.strip():
+                wanted.add(raw.strip())
+            elif isinstance(raw, list):
+                wanted.update(str(x).strip() for x in raw if str(x).strip())
     extra = [c for c in wanted if c not in {"timestamp", "site_id"}]
     if not extra:
         return None
     return ["timestamp", *sorted(extra)]
+
+
+def _run_arrow_bound_columns(
+    code: str,
+    table: Any,
+    cfg: dict[str, Any],
+    *,
+    bound_cols: list[str],
+    site_id: str,
+    rule_id: str,
+) -> dict[str, Any] | None:
+    """OR-combine fault masks across all binding-matched historian columns."""
+    import pyarrow as pa
+    import pyarrow.compute as pc
+
+    from open_fdd.arrow_runtime.backend import compile_apply_faults_arrow, normalize_fault_mask
+
+    fn = compile_apply_faults_arrow(code)
+    combined = pa.array([False] * table.num_rows, type=pa.bool_())
+    cols_run = 0
+    ctx_base = {"site_id": site_id, "bound_columns": bound_cols}
+    for col in bound_cols:
+        if col not in table.column_names:
+            continue
+        sub_cfg = {**cfg, "value_column": col}
+        try:
+            raw = fn(table, sub_cfg, {**ctx_base, "bound_column": col})
+            mask = normalize_fault_mask(raw, expected_len=table.num_rows)
+            combined = pc.or_(combined, mask)
+            cols_run += 1
+        except Exception:
+            continue
+    if cols_run == 0:
+        return None
+    from open_fdd.arrow_runtime.events import count_mask_values
+
+    counts = count_mask_values(combined)
+    return {
+        "ok": True,
+        "rows": table.num_rows,
+        "flagged": int(counts.get("true_count") or 0),
+        "backend": "arrow",
+        "bound_columns": cols_run,
+    }
 
 
 def _trim_lookback(frame: Any, lookback_hours: float) -> Any:
@@ -190,6 +250,45 @@ def _run_one(
                 table = table.slice(max(0, table.num_rows - limit), min(limit, table.num_rows))
             cfg = dict(rule.get("config") or {})
             cfg.setdefault("site_id", site_id)
+            bound_cols = historian_columns_for_rule(model, site_id, rule)
+            if bound_cols:
+                if len(bound_cols) == 1:
+                    cfg.setdefault("value_column", bound_cols[0])
+                    arrow_result = playground.run_arrow_table(
+                        code,
+                        table,
+                        cfg,
+                        rule_id=str(rule.get("id") or ""),
+                        site_id=site_id,
+                    )
+                    if arrow_result.get("ok"):
+                        return {
+                            **base,
+                            "status": "ok",
+                            "rows": int(arrow_result.get("rows") or 0),
+                            "flagged": int(arrow_result.get("flagged") or 0),
+                            "backend": "arrow",
+                            "bound_columns": 1,
+                            "duration_ms": arrow_result.get("summary", {}).get("duration_ms"),
+                        }
+                else:
+                    swept = _run_arrow_bound_columns(
+                        code,
+                        table,
+                        cfg,
+                        bound_cols=bound_cols,
+                        site_id=site_id,
+                        rule_id=str(rule.get("id") or ""),
+                    )
+                    if swept is not None:
+                        return {
+                            **base,
+                            "status": "ok",
+                            "rows": int(swept.get("rows") or 0),
+                            "flagged": int(swept.get("flagged") or 0),
+                            "backend": "arrow",
+                            "bound_columns": swept.get("bound_columns"),
+                        }
             arrow_result = playground.run_arrow_table(
                 code,
                 table,

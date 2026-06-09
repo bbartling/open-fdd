@@ -31,6 +31,15 @@ python scripts/building_agent_checkin.py --base-url "$BASE" --site-id acme --run
 
 Use `--run-batch` only when faults need refresh or tuning preview is stale.
 
+## Skill: acme-smoke-gate
+
+```bash
+source infra/ansible/secrets/acme.env.local
+./infra/ansible/scripts/acme_operational_verify.sh --host "${ACME_SSH_HOST}"
+```
+
+Must PASS before Acme tuning. See live `SKILLS.md` for JCI/Trane unit checks and rule-hygiene.
+
 ## Skill: fdd-tuning-assist
 
 1. `GET /api/building-agent/tuning-brief?site_id=SITE`
