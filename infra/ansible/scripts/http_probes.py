@@ -276,6 +276,28 @@ def check_building_agent_api(base: str, token: str, *, site_id: str = "demo") ->
         if path.startswith("/api/ops") and (payload.get("summary") or {}).get("has_bridge_errors"):
             out["warnings"].append("bridge error log has recent severity errors")
 
+    apply_url = f"{root}/api/building-agent/apply-tuning"
+    try:
+        a_status, a_body = post_json(
+            apply_url,
+            {"apply": False, "run_fdd_batch": False, "site_id": site_id},
+            headers=headers,
+            timeout=60.0,
+        )
+    except RuntimeError as exc:
+        out["errors"].append(f"/api/building-agent/apply-tuning unreachable: {exc}")
+    else:
+        out["building_agent_apply_tuning"] = a_status
+        if a_status != 200:
+            out["errors"].append(f"/api/building-agent/apply-tuning HTTP {a_status}: {a_body[:200]}")
+        else:
+            try:
+                apply_payload = json.loads(a_body)
+                if apply_payload.get("dry_run") is not True:
+                    out["warnings"].append("apply-tuning probe expected dry_run=true")
+            except json.JSONDecodeError:
+                out["errors"].append("/api/building-agent/apply-tuning not JSON")
+
     mem_url = f"{root}/api/sites/{site_id}/memory?kind=memory"
     try:
         m_status, m_body, _ = fetch(mem_url, headers=headers, timeout=30.0)

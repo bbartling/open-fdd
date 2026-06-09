@@ -86,8 +86,8 @@
       set -eu
       cid="{{ item.split('=')[1] | trim }}"
       svc="{{ item.split('=')[0] | trim }}"
-      err="$(docker logs --since 3m "$cid" 2>&1 \
-        | grep -Ei 'ERROR|Traceback|CRITICAL' \
+      err="$(docker logs --since 15m "$cid" 2>&1 \
+        | grep -Ei 'ERROR|CRITICAL|Exception:|Error:' \
         | grep -v '404 Not Found' \
         | grep -v 'unknown-property' \
         | grep -v 'read-property-multiple' \
@@ -96,6 +96,8 @@
         | grep -v 'asyncio.exceptions' \
         | grep -v 'Cannot assign requested address' \
         | grep -v "has no attribute 'server'" \
+        | grep -v 'most recent call last' \
+        | grep -v 'During handling' \
         | tail -5 || true)"
       if [[ -n "$err" ]]; then
         echo "FAIL ${svc}: ${err}"
