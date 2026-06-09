@@ -9,7 +9,12 @@ import pyarrow.compute as pc
 
 from open_fdd.playground.cookbook import cfg_threshold
 
-from .windows import arrow_consecutive_true, arrow_rolling_max, arrow_rolling_min
+from .windows import (
+    arrow_abs_diff,
+    arrow_consecutive_true,
+    arrow_rolling_max,
+    arrow_rolling_min,
+)
 
 _SKIP_META = frozenset({"timestamp", "ts", "site_id", "equipment_id", "ts_ms"})
 
@@ -179,6 +184,70 @@ def _unoccupied_mask(table: pa.Table, cfg: dict[str, Any]) -> pa.ChunkedArray:
             continue
         out.append(local.hour < start or local.hour >= end)
     return pa.array(out, type=pa.bool_())
+
+
+def rate_of_change_mask(
+    table: pa.Table,
+    cfg: dict[str, Any],
+    *,
+    col: str | None = None,
+    periods: int = 1,
+) -> pa.ChunkedArray:
+    """True when |Δvalue| between consecutive samples exceeds cfg max (per-step)."""
+    name = value_column(table, cfg, col)
+    vals = pc.cast(table[name], pa.float64())
+    delta = arrow_abs_diff(vals, periods)
+    limit = cfg_threshold(cfg, "max_per_sample")
+    if "max_per_15min" in cfg and cfg.get("max_per_15min") is not None:
+        limit = cfg_threshold(cfg, "max_per_15min")
+    elif "max_per_hour" in cfg and cfg.get("max_per_hour") is not None:
+        samples_per_hour = max(1, int(cfg.get("samples_per_hour") or 12))
+        limit = cfg_threshold(cfg, "max_per_hour") / float(samples_per_hour)
+    return pc.greater(delta, limit)
+
+
+def mixing_envelope_mask(
+    table: pa.Table,
+    cfg: dict[str, Any],
+    *,
+    mat_col: str = "mixed_air_temp",
+    oat_col: str = "outside_air_temp",
+    rat_col: str = "return_air_temp",
+    fan_col: str | None = "supply_fan_speed_command",
+) -> pa.ChunkedArray:
+    """True when MAT is outside OAT–RAT envelope (± tolerance) while fan is on."""
+    tol = float(cfg.get("mixing_tol") or cfg.get("blend_tol") or 1.15)
+    fan_thresh = float(cfg.get("fan_on_threshold") or 0.01)
+    mat = pc.cast(table[mat_col], pa.float64())
+    oat = pc.cast(table[oat_col], pa.float64())
+    rat = pc.cast(table[rat_col], pa.float64())
+    oat_rat_lo = pc.if_else(pc.less(oat, rat), oat, rat)
+    oat_rat_hi = pc.if_else(pc.greater(oat, rat), oat, rat)
+    lo = pc.subtract(oat_rat_lo, tol)
+    hi = pc.add(oat_rat_hi, tol)
+    outside = pc.or_(pc.less(mat, lo), pc.greater(mat, hi))
+    if fan_col and fan_col in table.column_names:
+        fan = pc.cast(table[fan_col], pa.float64())
+        if float(cfg.get("normalize_cmd_percent") or 0):
+            fan = pc.if_else(pc.greater(fan, 1.0), pc.divide(fan, 100.0), fan)
+        return pc.and_(outside, pc.greater(fan, fan_thresh))
+    return outside
+
+
+def sensor_bounds_mask(table: pa.Table, kind: str, cfg: dict[str, Any] | None = None) -> pa.ChunkedArray:
+    """OOB mask using :mod:`sensor_catalog` defaults merged with ``cfg``."""
+    from .sensor_catalog import cfg_from_profile
+
+    merged = cfg_from_profile(kind, cfg)
+    return oob_mask(table, merged)
+
+
+def sensor_flatline_mask(table: pa.Table, kind: str, cfg: dict[str, Any] | None = None) -> pa.ChunkedArray:
+    """Flatline mask using :mod:`sensor_catalog` defaults merged with ``cfg``."""
+    from .sensor_catalog import cfg_from_profile
+
+    merged = cfg_from_profile(kind, cfg)
+    return flatline_1h_mask(table, merged)
 
 
 def after_hours_fan_satisfied_mask(table: pa.Table, cfg: dict[str, Any]) -> pa.ChunkedArray:

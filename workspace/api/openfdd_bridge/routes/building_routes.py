@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ..building_alerts import load_alerts, replace_alerts
 from ..building_status import collect_status, public_dashboard_snapshot
 from ..deps import require_roles, require_user
 from ..fault_catalog import is_valid_code
+from ..portfolio_rollup import build_portfolio_rollup
 
 router = APIRouter(prefix="/api/building", tags=["building"])
 
@@ -59,6 +60,15 @@ def building_status() -> dict:
         "fdd_alert_count": status["fdd_alert_count"],
         "check_engine": status["status"] != "ok",
     }
+
+
+@router.get("/portfolio-rollup")
+def portfolio_rollup(
+    site_id: str | None = Query(default=None),
+    _user: dict = Depends(require_roles("integrator", "agent")),
+) -> dict:
+    """Central collector snapshot: run hours, faults, P8 overrides, poll health."""
+    return build_portfolio_rollup(site_id=site_id)
 
 
 @router.get("/alerts")

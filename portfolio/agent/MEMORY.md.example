@@ -1,0 +1,59 @@
+# Portfolio agent memory (copy to MEMORY.md — do not commit live file)
+
+## Role
+
+You operate the **central** Open-FDD portfolio desk on benserver (or an analyst clone).
+Edge sites run FDD + BACnet ingest; you poll them on an interval, validate health, and
+help humans tune fault rules over time.
+
+## Sites registry
+
+- Live registry: `portfolio/sites.json` (gitignored)
+- Template: `portfolio/sites.json.example`
+- Credentials: `OFDD_AGENT_USER` / `OFDD_AGENT_PASSWORD` from `workspace/auth.env.local` unless overridden per site
+
+## Collection cadence
+
+| Site health | Interval | Actions |
+|-------------|----------|---------|
+| Green, faults stable | 6–12 h | `GET /api/building/portfolio-rollup` only |
+| Yellow | 2–4 h | Rollup + optional `POST /api/building-agent/checkin` (no batch) |
+| Red or rising fault trend | 1 h | Check-in with `run_fdd_batch: true`, review tuning-brief |
+
+Collector command:
+
+```bash
+python scripts/portfolio_collect.py
+```
+
+Dash (central analytics):
+
+```bash
+./scripts/run_portfolio_dash.sh
+# http://0.0.0.0:8050
+```
+
+## CSV history (central only)
+
+| File | Purpose |
+|------|---------|
+| `portfolio/data/checkins.csv` | Traffic, alert counts, P8 override totals |
+| `portfolio/data/run_hours_daily.csv` | Fan/system run hours per equipment |
+| `portfolio/data/faults_daily.csv` | Active + flagged samples by fault code |
+| `portfolio/data/overrides_daily.csv` | P8 operator override point detail |
+
+## Fault catalog
+
+Fixed codes only — see https://bbartling.github.io/open-fdd/fault-codes/
+Never invent codes; use `/api/faults/catalog` on the edge.
+
+## Analyst KPIs (from article)
+
+1. **Daily fan run hours** per AHU/RTU — reduction goals during shoulder season
+2. **System/mechanical cooling hours** — track unoccupied runtime
+3. **P8 operator overrides** — supervisory BAS overrides only (not P1–P7 logic)
+4. **Fault code trends** — active count up/down vs prior check-in
+
+## Last session notes
+
+- (append after each portfolio collect or tuning session)

@@ -8,6 +8,8 @@ nav_order: 1
 
 Open-FDD 3.0 Rule Lab rules use **`apply_faults_arrow(table, cfg, context)`**, **`pyarrow.compute`**, and **module constants** (no `config.json`).
 
+For the full legacy pandas/YAML → Arrow translation, sensor bound tables, and GL36 fault-code mapping, see **[Expression cookbook (Arrow-native)](expression-cookbook)**.
+
 ## Simple threshold
 
 ```python
@@ -68,20 +70,30 @@ def apply_faults_arrow(table, cfg, context=None):
     return pc.less_equal(pc.abs(spread), FLATLINE_TOLERANCE)
 ```
 
-## Sensor out of range
+## Sensor out of range (catalog defaults)
 
 ```python
-import pyarrow.compute as pc
-
-VALUE_COLUMN = "oa-t"
-MIN_VALUE = -40.0
-MAX_VALUE = 130.0
-
+from open_fdd.arrow_runtime.cookbook import sensor_bounds_mask
 
 def apply_faults_arrow(table, cfg, context=None):
-    vals = pc.cast(table[VALUE_COLUMN], "float64")
-    return pc.or_(pc.less(vals, MIN_VALUE), pc.greater(vals, MAX_VALUE))
+    return sensor_bounds_mask(table, "outdoor_air_temp", cfg)  # fault_code: BLD-B
 ```
+
+## Sensor flatline + spike (catalog)
+
+```python
+from open_fdd.arrow_runtime.cookbook import sensor_flatline_mask, rate_of_change_mask
+from open_fdd.arrow_runtime.sensor_catalog import cfg_from_profile
+
+def apply_faults_arrow(table, cfg, context=None):
+    merged = cfg_from_profile("zone_temp", cfg)
+    merged["samples_per_hour"] = 12
+    flat = sensor_flatline_mask(table, "zone_temp", cfg)
+    spike = rate_of_change_mask(table, merged, col="stat_zn-t")
+    return pc.or_(flat, spike)  # import pyarrow.compute as pc
+```
+
+Bounds table: [Expression cookbook — sensor validation](expression-cookbook#sensor-validation-bounds-flatline-rate-of-change).
 
 More templates ship in `open_fdd.playground.arrow_templates` and via `GET /api/playground/arrow-templates`.
 

@@ -1,0 +1,20 @@
+{
+  "sites": [
+    {
+      "site_id": "acme",
+      "name": "Acme GL36 Lab",
+      "base_url": "http://127.0.0.1:8765",
+      "username": "agent",
+      "password": "agent-local",
+      "run_checkin": false,
+      "checkin_run_batch": false
+    },
+    {
+      "site_id": "berry-es",
+      "name": "Berry Elementary",
+      "base_url": "http://100.122.106.124",
+      "run_checkin": true,
+      "checkin_run_batch": false
+    }
+  ]
+}
