@@ -48,7 +48,15 @@ def load_sites_config(path: Path | None = None) -> list[SiteConfig]:
         if not site_id or not base_url:
             continue
         user = str(item.get("username") or os.environ.get("OFDD_AGENT_USER") or "agent")
-        password = str(item.get("password") or os.environ.get("OFDD_AGENT_PASSWORD") or "")
+        password = str(item.get("password") or "")
+        if not password:
+            acme_user = os.environ.get("ACME_INTEGRATOR_USER", "integrator")
+            if user == acme_user:
+                password = str(os.environ.get("ACME_INTEGRATOR_PASSWORD") or "")
+            elif user == os.environ.get("OFDD_AGENT_USER", "agent"):
+                password = str(os.environ.get("OFDD_AGENT_PASSWORD") or "")
+            else:
+                password = str(os.environ.get("OFDD_INTEGRATOR_PASSWORD") or "")
         out.append(
             SiteConfig(
                 site_id=site_id,

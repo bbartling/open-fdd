@@ -10,8 +10,10 @@ from typing import Any, Iterable
 
 
 def portfolio_data_dir(root: Path | None = None) -> Path:
-    base = root or Path(__file__).resolve().parents[1]
-    path = base / "data"
+    if root is not None:
+        path = root
+    else:
+        path = Path(__file__).resolve().parents[1] / "data"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
