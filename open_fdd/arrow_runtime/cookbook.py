@@ -172,6 +172,8 @@ def _unoccupied_mask(table: pa.Table, cfg: dict[str, Any]) -> pa.ChunkedArray:
         if val is None:
             out.append(False)
             continue
+        if hasattr(val, "to_pydatetime"):
+            val = val.to_pydatetime()
         if isinstance(val, datetime):
             utc = val if val.tzinfo else val.replace(tzinfo=timezone.utc)
         else:

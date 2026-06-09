@@ -250,7 +250,14 @@ def _run_one(
                 table = table.slice(max(0, table.num_rows - limit), min(limit, table.num_rows))
             cfg = dict(rule.get("config") or {})
             cfg.setdefault("site_id", site_id)
-            bound_cols = historian_columns_for_rule(model, site_id, rule)
+            avail_cols = (
+                set(table.column_names)
+                if hasattr(table, "column_names")
+                else set(getattr(frame, "columns", []))
+            )
+            bound_cols = historian_columns_for_rule(
+                model, site_id, rule, available_columns=avail_cols
+            )
             if bound_cols:
                 if len(bound_cols) == 1:
                     cfg.setdefault("value_column", bound_cols[0])
