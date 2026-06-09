@@ -29,7 +29,7 @@ def _system_on_mask(table, cfg, fan_on):
 def _dt_hours(table, ts_col, max_gap_hours):
     from open_fdd.arrow_runtime.windows import arrow_shift
 
-    ts = pc.cast(table[ts_col], pa.timestamp("us", tz="UTC"))
+    ts = pc.cast(table[ts_col], pa.timestamp("us"))
     prev = arrow_shift(ts, 1)
     delta = pc.subtract(ts, prev)
     secs = pc.divide(pc.cast(delta, pa.int64()), 1_000_000)
