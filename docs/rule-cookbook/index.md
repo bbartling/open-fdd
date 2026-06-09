@@ -9,7 +9,8 @@ Practical patterns for **Arrow-native Rule Lab** (`apply_faults_arrow`) on feath
 
 | Page | Use when |
 |------|----------|
-| [**Expression cookbook (Arrow-native)**](expression-cookbook) | **Full reference** — legacy YAML/pandas translation, sensor bounds, GL36, fault codes |
+| [**Python recipes (full Arrow library)**](python-recipes-arrow) | **Copy-paste GL36 A–M, VAV, plant, economizer, weather** — replaces legacy YAML cookbook |
+| [**Expression cookbook (Arrow-native)**](expression-cookbook) | Sensor bounds, legacy→Arrow map, commissioning checklist |
 | [Arrow recipes](arrow-recipes) | Short templates — threshold, flatline, OOB, fan/schedule |
 | [Python recipes](python-recipes) | Shared `open_fdd.arrow_runtime.cookbook` imports |
 | [Lookback window helper](lookback-window) | `_kit_lookback_stats` — print start/stop timestamps and span |

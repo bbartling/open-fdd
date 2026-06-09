@@ -60,11 +60,21 @@ def _traffic_color(traffic: str, theme: dict[str, str]) -> str:
     return base.get(str(traffic or "").lower(), theme["muted"])
 
 
-def _delta_parts(current: float, prior: float, theme: dict[str, str]) -> tuple[str, str]:
+def _delta_parts(
+    current: float,
+    prior: float,
+    theme: dict[str, str],
+    *,
+    up_is_bad: bool = True,
+) -> tuple[str, str]:
     delta = current - prior
     sign = "+" if delta >= 0 else ""
-    # Stock convention: up hours = red (bad), down hours = green (good) for energy KPIs
-    color = theme["down"] if delta > 0 else theme["up"] if delta < 0 else theme["muted"]
+    if delta == 0:
+        color = theme["muted"]
+    elif up_is_bad:
+        color = theme["down"] if delta > 0 else theme["up"]
+    else:
+        color = theme["up"] if delta > 0 else theme["down"]
     return f"{sign}{delta:.1f}", color
 
 
@@ -277,6 +287,59 @@ def _stock_style_figure(
     return _figure_layout(fig, theme, f"{title}  ·  green ▼ red ▲")
 
 
+def _site_fault_total_figure(site_id: str, theme: dict[str, str]) -> go.Figure:
+    """Total active faults per site over portfolio collects (stock-style line + Δ bars)."""
+    checkins = _read_csv("checkins.csv")
+    fig = go.Figure()
+    if checkins.empty or not site_id:
+        return _figure_layout(fig, theme, "Site fault total — no data")
+
+    sub = checkins[checkins["site_id"] == site_id].copy()
+    sub["collected_at"] = pd.to_datetime(sub["collected_at"], errors="coerce")
+    sub = sub.sort_values("collected_at")
+    y = pd.to_numeric(sub["alert_count"], errors="coerce").fillna(0)
+
+    fig.add_trace(
+        go.Scatter(
+            x=sub["collected_at"],
+            y=y,
+            mode="lines+markers",
+            name="Active faults (total)",
+            line={"color": theme["warn"], "width": 2.5},
+        )
+    )
+    if len(y) >= 2:
+        delta = y.diff().fillna(0)
+        colors = [theme["down"] if d > 0 else theme["up"] if d < 0 else theme["muted"] for d in delta]
+        fig.add_trace(
+            go.Bar(
+                x=sub["collected_at"],
+                y=delta,
+                marker_color=colors,
+                opacity=0.35,
+                showlegend=False,
+                name="Δ faults",
+            )
+        )
+        _annotate_last_delta(fig, sub["collected_at"].iloc[-1], float(y.iloc[-1]), float(delta.iloc[-1]), theme)
+
+    if "agent_checkin" in sub.columns:
+        agent_rows = sub[sub["agent_checkin"].astype(str).str.lower().isin({"true", "1", "yes"})]
+        if not agent_rows.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=agent_rows["collected_at"],
+                    y=pd.to_numeric(agent_rows["alert_count"], errors="coerce").fillna(0),
+                    mode="markers",
+                    name="AI agent check-in",
+                    marker={"symbol": "star", "size": 14, "color": theme["accent"], "line": {"width": 1, "color": theme["text"]}},
+                )
+            )
+
+    fig.update_layout(xaxis_title="Collection time", yaxis_title="Active faults (site total)")
+    return _figure_layout(fig, theme, f"Site fault total (+/−) — {site_id}")
+
+
 def _fault_figure(site_id: str, theme: dict[str, str]) -> go.Figure:
     df = _read_csv("faults_daily.csv")
     fig = go.Figure()
@@ -306,7 +369,7 @@ def _fault_figure(site_id: str, theme: dict[str, str]) -> go.Figure:
             )
 
     fig.update_layout(xaxis_title="Collection time", yaxis_title="Active alerts")
-    return _figure_layout(fig, theme, f"Fault code trends (+/−) — {site_id}")
+    return _figure_layout(fig, theme, f"Fault codes by type (+/−) — {site_id}")
 
 
 def _override_figure(site_id: str, theme: dict[str, str]) -> go.Figure:
@@ -400,6 +463,7 @@ app.layout = html.Div(
                 dcc.Graph(id="run-hours-chart"),
             ],
         ),
+        dcc.Graph(id="site-fault-total-chart", style={"marginTop": "16px"}),
         dcc.Graph(id="fault-trend-chart", style={"marginTop": "16px"}),
         dcc.Graph(id="override-chart", style={"marginTop": "16px"}),
     ],
@@ -428,7 +492,7 @@ def render_header(theme_key: str):
                 children=[
                     html.H1("Open-FDD Portfolio", style={"margin": 0, "color": theme["text"]}),
                     html.P(
-                        "Stock-style run-hour rollups with +/− deltas · faults · BACnet P8 overrides",
+                        "Stock-style fault & run-hour trends · per-code breakdown · AI agent check-ins · P8 overrides",
                         style={"color": theme["muted"], "margin": "4px 0 0"},
                     ),
                 ]
@@ -545,6 +609,7 @@ def run_collect(n_clicks: int):
 
 @app.callback(
     Output("run-hours-chart", "figure"),
+    Output("site-fault-total-chart", "figure"),
     Output("fault-trend-chart", "figure"),
     Output("override-chart", "figure"),
     Input("site-select", "value"),
@@ -569,7 +634,13 @@ def update_charts(
         f"Equipment run hours — {site_id or '—'}",
         theme,
     )
-    return run_fig, _fault_figure(site_id or "", theme), _override_figure(site_id or "", theme)
+    sid = site_id or ""
+    return (
+        run_fig,
+        _site_fault_total_figure(sid, theme),
+        _fault_figure(sid, theme),
+        _override_figure(sid, theme),
+    )
 
 
 def main() -> None:

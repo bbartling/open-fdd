@@ -151,8 +151,8 @@ post_merge_release() {
   fi
 
   if [[ "$SKIP_DOCKER" != true ]]; then
-    echo "==> Dispatch Publish Docker addons (image_tag=${IMAGE_TAG})"
-    run gh workflow run docker-publish.yml -f "image_tag=${IMAGE_TAG}"
+    echo "==> Dispatch Publish Docker addons (:latest)"
+    run gh workflow run docker-publish.yml
     echo "    gh run list --workflow=docker-publish.yml --limit 3"
   fi
 
