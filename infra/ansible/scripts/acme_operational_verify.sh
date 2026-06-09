@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# Acme operational verify: discover → learn devices → model import → FDD rules → poll check.
+# Acme operational verify: BACnet IP smoke → inventory → model → FDD → poll → building-agent.
+#
+# Default discover is **trim BACnet/IP devices only** (RTU-01 1100, hot-water 1002) — not a
+# full OT Who-Is. Use --full-discover only during initial commissioning.
 #
 #   ./scripts/acme_operational_verify.sh --host <tailscale-or-lan-ip>
+#   ./scripts/acme_operational_verify.sh --host <ip> --learn-all-trim   # point-learn all trim VAVs too
+#   ./scripts/acme_operational_verify.sh --host <ip> --full-discover    # legacy full Who-Is (slow)
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -11,11 +16,15 @@ VIBE_ROOT="${VIBE12_ROOT:-$HOME/py-bacnet-stacks-playground/vibe_code_apps_12}"
 
 HOST=""
 SKIP_DISCOVER=0
+FULL_DISCOVER=0
+LEARN_ALL_TRIM=0
 SKIP_WAIT=1
 WAIT_MINUTES="${RUN_WAIT_MINUTES:-3}"
 AUTH_ENV="${ROOT}/workspace/auth.env.local"
 ACME_SECRETS="${ANSIBLE_DIR}/secrets/acme.env.local"
-TRIM_DEVICES="${ROOT}/edge_backup/local/acme/vm-bbartling/devices_discovered.trim.csv"
+TRIM_DEVICES="${ACME_TRIM_DEVICES:-${ROOT}/edge_backup/local/acme/vm-bbartling/devices_discovered.trim.csv}"
+# BACnet/IP plant anchors on Acme (RTU AHU + hot-water boiler) — always smoke-tested.
+PLANT_INSTANCES="${ACME_PLANT_INSTANCES:-1100,1002}"
 FAILURES=0
 
 if [[ -f "$AUTH_ENV" ]]; then
@@ -42,6 +51,9 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --host) HOST="$2"; shift 2 ;;
     --skip-discover) SKIP_DISCOVER=1; shift ;;
+    --full-discover) FULL_DISCOVER=1; shift ;;
+    --learn-all-trim) LEARN_ALL_TRIM=1; shift ;;
+    --trim-devices) TRIM_DEVICES="$2"; shift 2 ;;
     --wait-minutes) WAIT_MINUTES="$2"; SKIP_WAIT=0; shift 2 ;;
     --skip-wait) SKIP_WAIT=1; shift ;;
     *) echo "Unknown: $1" >&2; exit 1 ;;
@@ -99,31 +111,93 @@ wait_job() {
   return 1
 }
 
+is_bacnet_ip_address() {
+  # IPv4 BACnet/IP (e.g. 10.200.200.27) — not MSTP router forms like 12:23.
+  [[ "$1" == *.* && "$1" != *:* ]]
+}
+
+run_point_discovery_row() {
+  local inst="$1" addr="$2" label="${3:-dev ${inst}}"
+  local body pd pj
+  body="$(python3 -c 'import json,sys; print(json.dumps({"device_instance":int(sys.argv[1]),"device_address":sys.argv[2]}))' "$inst" "$addr")"
+  pd="$(api_post "/api/bacnet/point-discovery" "$body")"
+  pj="$(echo "$pd" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("job_id",""))' 2>/dev/null || true)"
+  if [[ -n "$pj" ]]; then
+    wait_job "$pj" "Point learn ${label}" 240
+    return $?
+  fi
+  log_fail "Point discovery dev ${inst}: ${pd}"
+  return 1
+}
+
+run_trim_point_discovery() {
+  local scope="$1"  # ip | all
+  [[ -f "$TRIM_DEVICES" ]] || { log_fail "Missing trim devices CSV: ${TRIM_DEVICES}"; return 1; }
+
+  local ip_count=0 plant_ok=0
+  local -a plant_need=()
+  IFS=',' read -r -a plant_need <<< "$PLANT_INSTANCES"
+
+  if [[ "$scope" == "ip" ]]; then
+    log_info "BACnet/IP point-discovery smoke (AHU/boiler from trim CSV)"
+  else
+    log_info "Point discovery on all trim devices (AHU/VAV/boiler/tracer — skip 5xxx)"
+  fi
+
+  while IFS= read -r line; do
+    [[ "$line" == device_instance* ]] && continue
+    inst="$(echo "$line" | cut -d, -f1)"
+    addr="$(echo "$line" | cut -d, -f2)"
+    name="$(echo "$line" | cut -d, -f3)"
+    [[ -n "$inst" && -n "$addr" ]] || continue
+
+    if [[ "$scope" == "ip" ]] && ! is_bacnet_ip_address "$addr"; then
+      continue
+    fi
+    ip_count=$((ip_count + 1))
+    label="${name:-dev ${inst}} (${inst}@${addr})"
+    if run_point_discovery_row "$inst" "$addr" "$label"; then
+      for need in "${plant_need[@]}"; do
+        if [[ "$inst" == "$need" ]]; then
+          plant_ok=$((plant_ok + 1))
+        fi
+      done
+    fi
+  done < "$TRIM_DEVICES"
+
+  if [[ "$scope" == "ip" ]]; then
+    if [[ "$ip_count" -eq 0 ]]; then
+      log_fail "No BACnet/IP rows in ${TRIM_DEVICES}"
+      return 1
+    fi
+    local need_count="${#plant_need[@]}"
+    if [[ "$plant_ok" -lt "$need_count" ]]; then
+      log_fail "Plant BACnet/IP smoke incomplete (${plant_ok}/${need_count} of ${PLANT_INSTANCES} ok)"
+      return 1
+    fi
+    log_ok "BACnet/IP plant devices ok (${plant_ok}/${need_count}: ${PLANT_INSTANCES})"
+  fi
+  return 0
+}
+
 echo "Acme operational verify → ${HOST}"
 [[ -n "$LOGIN_PASS" ]] || { log_fail "No credentials in ${AUTH_ENV}"; exit 1; }
 TOKEN="$(login)"
 log_ok "Authenticated as ${LOGIN_USER}"
 
 if [[ "$SKIP_DISCOVER" -eq 0 ]]; then
-  log_info "BACnet Who-Is discover (full OT range)"
-  disc="$(api_post "/api/bacnet/discover" '{"range_low":1,"range_high":4194303}')"
-  job_id="$(echo "$disc" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("job_id",""))')"
-  [[ -n "$job_id" ]] && wait_job "$job_id" "Discover" 180 || log_fail "discover: $disc"
+  if [[ "$FULL_DISCOVER" -eq 1 ]]; then
+    log_info "BACnet Who-Is discover (full OT range — commissioning only)"
+    disc="$(api_post "/api/bacnet/discover" '{"range_low":1,"range_high":4194303}')"
+    job_id="$(echo "$disc" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("job_id",""))')"
+    [[ -n "$job_id" ]] && wait_job "$job_id" "Discover" 180 || log_fail "discover: $disc"
+    LEARN_ALL_TRIM=1
+  fi
 
-  if [[ -f "$TRIM_DEVICES" ]]; then
-    log_info "Point discovery on trim devices (AHU/VAV/boiler/tracer — skip 5xxx)"
-    while IFS= read -r line; do
-      [[ "$line" == device_instance* ]] && continue
-      inst="$(echo "$line" | cut -d, -f1)"
-      addr="$(echo "$line" | cut -d, -f2)"
-      [[ -n "$inst" && -n "$addr" ]] || continue
-      body="$(python3 -c 'import json,sys; print(json.dumps({"device_instance":int(sys.argv[1]),"device_address":sys.argv[2]}))' "$inst" "$addr")"
-      pd="$(api_post "/api/bacnet/point-discovery" "$body")"
-      pj="$(echo "$pd" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("job_id",""))' 2>/dev/null || true)"
-      if [[ -n "$pj" ]]; then
-        wait_job "$pj" "Point learn dev ${inst}" 240 || true
-      fi
-    done < "$TRIM_DEVICES"
+  if [[ "$LEARN_ALL_TRIM" -eq 1 ]]; then
+    run_trim_point_discovery all || true
+  else
+    run_trim_point_discovery ip || true
   fi
 fi
 

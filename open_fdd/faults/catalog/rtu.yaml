@@ -1,0 +1,50 @@
+faults:
+  - code: RTU-ECON-001
+    canonical_id: rtu.economizer.not_using_free_cooling
+    family: RTU
+    system_type: packaged
+    subsystem: economizer
+    component: outdoor_air_damper
+    fault_mode: economizer_inactive
+    symptom: OA conditions favorable but economizer not providing free cooling
+    title: RTU economizer not using free cooling
+    severity_default: medium
+    category: energy
+    required_point_roles: [outdoor_air_temp, return_air_temp, mixed_air_temp, economizer_command]
+    rule_template_id: mixing_envelope_mask
+    rule_doc_path: docs/rule-cookbook/economizer-ashrae-207.md
+    legacy_aliases: [RTU-E]
+    standards_crosswalk:
+      ashrae_207_reference_type: economizer_fault_detection
+      ornl_lbnl_taxonomy: rtu/economizer
+    tuning_params:
+      thresholds:
+        oa_cooling_delta_f: 5
+      persistence_minutes: 30
+    evidence_fields: [outdoor_air_temp, mixed_air_temp, economizer_command]
+    operator_guidance:
+      plain_english_summary: Outdoor air is cool enough to help but the economizer is not doing its job.
+      engineer_roi_notes: Common summer shoulder-season savings opportunity.
+
+  - code: RTU-COMP-001
+    canonical_id: rtu.compressor.short_cycling
+    family: RTU
+    system_type: packaged
+    subsystem: refrigeration
+    component: compressor
+    fault_mode: short_cycle
+    symptom: Compressor on/off cycles faster than minimum runtime
+    title: Compressor short cycling
+    severity_default: high
+    category: reliability
+    required_point_roles: [compressor_command]
+    rule_template_id: short_cycle_mask
+    rule_doc_path: docs/rule-cookbook/python-recipes-arrow.md
+    tuning_params:
+      minimum_runtime_minutes: 5
+      thresholds:
+        min_cycle_minutes: 3
+    evidence_fields: [cycle_count, runtime_minutes, duration_minutes]
+    operator_guidance:
+      plain_english_summary: Compressor is turning on and off too quickly.
+      why_it_matters: Reduces equipment life and may indicate refrigerant or control issues.

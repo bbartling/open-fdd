@@ -1,0 +1,89 @@
+faults:
+  - code: VAV-FLOW-001
+    canonical_id: vav.airflow.low_at_max_damper
+    family: VAV
+    system_type: terminal
+    subsystem: airflow
+    component: damper
+    fault_mode: low_flow_at_max
+    symptom: Damper at max command but airflow below minimum expected
+    title: Low airflow at max damper
+    severity_default: medium
+    category: comfort
+    required_point_roles: [damper_command, zone_airflow]
+    optional_point_roles: [zone_temp, zone_temp_setpoint]
+    rule_template_id: threshold_mask
+    rule_doc_path: docs/rule-cookbook/python-recipes-arrow.md
+    legacy_aliases: [VAV-A]
+    standards_crosswalk:
+      ornl_lbnl_taxonomy: terminal/airflow/low
+      ashrae_g36_reference_type: zone_airflow_request
+      brick_classes: [brick:Terminal_Unit, brick:Damper]
+    tuning_params:
+      thresholds:
+        min_flow_cfm: 50
+        max_damper_pct: 95
+      persistence_minutes: 30
+    evidence_fields: [damper_command, zone_airflow, duration_minutes]
+    likely_causes:
+      - Clogged filter or obstruction
+      - Incorrect max flow calibration
+      - Duct leakage upstream
+    operator_guidance:
+      plain_english_summary: Zone damper is wide open but not getting expected airflow.
+      why_it_matters: Comfort complaints and reheat/cooling waste.
+      technician_checks:
+        - Verify airflow sensor calibration
+        - Inspect damper linkage
+
+  - code: VAV-SHC-001
+    canonical_id: vav.reheat.simultaneous_cooling_and_reheat
+    family: VAV
+    system_type: terminal
+    subsystem: reheat
+    component: reheat_valve
+    fault_mode: simultaneous_heat_cool
+    symptom: Cooling and reheat active together
+    title: Simultaneous cooling and reheat
+    severity_default: high
+    category: energy
+    required_point_roles: [cooling_valve, reheat_valve]
+    optional_point_roles: [zone_temp, discharge_air_temp]
+    rule_template_id: simultaneous_heat_cool_mask
+    rule_doc_path: docs/rule-cookbook/python-recipes-arrow.md
+    legacy_aliases: [VAV-B]
+    tuning_params:
+      thresholds:
+        valve_on_min: 5
+      persistence_minutes: 15
+    evidence_fields: [cooling_valve, reheat_valve, percent_time_active]
+    likely_causes:
+      - SAT too low for zone
+      - Reheat valve leaking
+      - Poor minimum airflow setting
+    operator_guidance:
+      plain_english_summary: Zone is being cooled and reheated at the same time.
+      why_it_matters: Classic energy waste; often fixable by SAT reset or valve service.
+      engineer_roi_notes: High ROI when widespread across floor.
+
+  - code: VAV-ZONE-001
+    canonical_id: vav.zone.temperature_not_met
+    family: VAV
+    system_type: terminal
+    subsystem: zone
+    component: zone_temp
+    fault_mode: setpoint_not_met
+    symptom: Zone temperature outside deadband from setpoint for extended period
+    title: Zone temperature not meeting setpoint
+    severity_default: medium
+    category: comfort
+    required_point_roles: [zone_temp, zone_temp_setpoint]
+    rule_template_id: setpoint_tracking_error
+    rule_doc_path: docs/rule-cookbook/python-recipes-arrow.md
+    tuning_params:
+      deadbands:
+        tracking_deadband: 2.0
+      persistence_minutes: 60
+    evidence_fields: [zone_temp, zone_temp_setpoint, delta, duration_minutes]
+    operator_guidance:
+      plain_english_summary: Room is too hot or too cold versus its setpoint for an extended time.

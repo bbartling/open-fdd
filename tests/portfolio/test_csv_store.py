@@ -44,7 +44,7 @@ def test_rows_from_rollup_and_append(tmp_path: Path):
 
     counts = append_rollup(rollup, site_name="Acme", base_url="http://127.0.0.1:8765", data_dir=tmp_path)
     assert counts["checkins"] == 1
-    csv_path = tmp_path / "data" / "checkins.csv"
+    csv_path = tmp_path / "checkins.csv"
     assert csv_path.is_file()
     text = csv_path.read_text(encoding="utf-8")
     assert "acme" in text

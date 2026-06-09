@@ -19,6 +19,7 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
 API = REPO / "workspace" / "api"
+sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(API))
 sys.path.insert(0, str(REPO / "scripts"))
 

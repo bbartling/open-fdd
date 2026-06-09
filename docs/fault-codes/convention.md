@@ -6,26 +6,45 @@ nav_order: 1
 
 # Fault code convention
 
-## Format
+## Format (Grade-A, 3.0.18+)
 
-`FAMILY-SUFFIX` — suffix is **1–3 letters** (e.g. `VAV-C`, `AHU-B`). Numeric suffixes like `VAV-03` are avoided (collision with physical equipment names).
+**Short stable code:** `FAMILY-SUBSYSTEM-NNN` — e.g. `AHU-ECON-001`, `CHW-DT-001`, `DATA-STAL-001`.
 
-## Categories
+**Semantic ID:** dotted `canonical_id` — e.g. `ahu.economizer.not_using_free_cooling`.
+
+**Legacy letter codes** (`AHU-E`, `VAV-C`) remain **aliases** in `open_fdd/faults/catalog/*.yaml` until bridge sync completes.
+
+| Field | Example |
+|-------|---------|
+| `code` | `AHU-ECON-001` |
+| `canonical_id` | `ahu.economizer.not_using_free_cooling` |
+| `family` | `AHU`, `VAV`, `CHW`, `DATA`, `CRS`, … |
+| `rule_doc_path` | Link to rule cookbook recipe |
+
+Full schema: `open_fdd/faults/schema.py`. Catalog loader: `open_fdd/faults/catalog.py`.
+
+## Categories (Grade-A)
 
 | Category | Meaning |
 |----------|---------|
-| `performance_degradation` | Efficiency or capacity drift |
-| `simultaneous_heat_cool` | Heating and cooling fighting |
-| `sensor_fault` | Flatline, OOB, inconsistent readings |
-| `io_fault` | Command vs feedback mismatch |
+| `energy` | Waste, reset stuck, plant inefficiency |
+| `comfort` | Setpoint not met, poor zone performance |
+| `reliability` | Short cycling, staging, equipment stress |
+| `maintenance` | Leaking valves, filters, fouling proxies |
+| `indoor_air_quality` | Ventilation shortfall, humidity |
+| `healthcare_risk` | Pressure, isolation, critical-space excursions |
+| `data_quality` | Stale, flatline, OOB, missing historian |
+| `controls_integrity` | Overrides, chatter, schedule violations |
 
 ## Severity
 
 | Level | Operator response |
 |-------|-------------------|
 | `info` | Log; trend for maintenance window |
-| `warning` | Investigate within days |
-| `critical` | Prompt attention; may affect comfort/energy significantly |
+| `low` | Review in routine rounds |
+| `medium` | Investigate within days |
+| `high` | Prompt attention; comfort/energy impact likely |
+| `critical` | Immediate operational risk (especially `healthcare_risk`) |
 
 ## Linking rules
 

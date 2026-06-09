@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "3.0.16"
+version = "3.0.18"
 description = "Open-FDD: Arrow-native rule-based HVAC fault detection on a columnar execution engine."
 readme = "README.md"
 license = { text = "MIT" }
@@ -73,7 +73,11 @@ include = [
     "open_fdd.schema*",
     "open_fdd.playground*",
     "open_fdd.arrow_runtime*",
+    "open_fdd.faults*",
 ]
+
+[tool.setuptools.package-data]
+"open_fdd.faults" = ["catalog/*.yaml"]
 
 [tool.black]
 line-length = 88
