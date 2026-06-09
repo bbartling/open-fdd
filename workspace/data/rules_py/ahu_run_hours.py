@@ -32,9 +32,12 @@ def _dt_hours(table, ts_col, max_gap_hours):
     def _to_utc(val):
         if val is None:
             return None
+        if hasattr(val, "to_pydatetime"):
+            val = val.to_pydatetime()
         if isinstance(val, datetime):
             return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
-        return datetime.fromisoformat(str(val).replace("Z", "+00:00")).replace(tzinfo=timezone.utc)
+        parsed = datetime.fromisoformat(str(val).replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
     ts_list = [_to_utc(v) for v in table[ts_col].to_pylist()]
     capped = float(max_gap_hours or 2.0)
@@ -73,11 +76,6 @@ if ts_col is None:
         "metrics": {},
     }
 else:
-    ts_type = table[ts_col].type
-    if pa.types.is_timestamp(ts_type) and ts_type.tz is not None:
-        ts_naive = pc.cast(pc.cast(table[ts_col], pa.int64()), pa.timestamp("us"))
-        col_idx = table.column_names.index(ts_col)
-        table = table.set_column(col_idx, ts_col, ts_naive)
     fan_on = _fan_on_mask(table, cfg)
     system_on = _system_on_mask(table, cfg, fan_on)
     dt = _dt_hours(table, ts_col, cfg.get("max_gap_hours", 2.0))

@@ -186,7 +186,13 @@ def enrich_rows_with_column_map(rows: list[dict[str, Any]], column_map: dict[str
     return out
 
 
-def historian_columns_for_rule(model: dict, site_id: str, rule: dict) -> list[str]:
+def historian_columns_for_rule(
+    model: dict,
+    site_id: str,
+    rule: dict,
+    *,
+    available_columns: set[str] | list[str] | None = None,
+) -> list[str]:
     """Historian column names for all points matched by rule bindings (brick / equipment / point)."""
     from .model_point_utils import point_site_id
     from .timeseries_api import plot_column_name
@@ -200,6 +206,7 @@ def historian_columns_for_rule(model: dict, site_id: str, rule: dict) -> list[st
 
     cols: list[str] = []
     sid = str(site_id or "").strip()
+    available = set(available_columns) if available_columns is not None else None
     for pt in model.get("points") or []:
         if not isinstance(pt, dict):
             continue
@@ -217,10 +224,32 @@ def historian_columns_for_rule(model: dict, site_id: str, rule: dict) -> list[st
             matched = True
         if not matched:
             continue
-        col = plot_column_name(pt)
+        from .timeseries_api import historian_column_candidates, resolve_historian_column
+
+        if available is not None:
+            col = resolve_historian_column(pt, available)
+            if col not in available:
+                continue
+        else:
+            col = plot_column_name(pt)
         if col:
             cols.append(col)
     return sorted(set(cols))
+
+
+def historian_columns_for_rule_resolved(
+    model: dict,
+    site_id: str,
+    rule: dict,
+    available_columns: set[str] | list[str],
+) -> list[str]:
+    """Binding-matched historian columns that exist in a loaded frame."""
+    return historian_columns_for_rule(
+        model,
+        site_id,
+        rule,
+        available_columns=available_columns,
+    )
 
 
 def column_map_for_rule(model: dict, site_id: str, rule: dict) -> dict[str, str]:
