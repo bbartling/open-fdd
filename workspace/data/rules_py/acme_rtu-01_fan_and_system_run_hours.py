@@ -27,23 +27,37 @@ def _system_on_mask(table, cfg, fan_on):
 
 
 def _dt_hours(table, ts_col, max_gap_hours):
-    from open_fdd.arrow_runtime.windows import arrow_shift
+    from datetime import datetime, timezone
 
-    ts = pc.cast(table[ts_col], pa.timestamp("us"))
-    prev = arrow_shift(ts, 1)
-    delta = pc.subtract(ts, prev)
-    secs = pc.divide(pc.cast(delta, pa.int64()), 1_000_000)
-    hours = pc.divide(pc.cast(secs, pa.float64()), 3600.0)
-    py_hours = hours.to_pylist()
-    valid = [h for h in py_hours[1:] if h is not None and h > 0]
-    typical = sorted(valid)[len(valid) // 2] if valid else (1.0 / 60.0)
+    def _to_utc(val):
+        if val is None:
+            return None
+        if isinstance(val, datetime):
+            return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+        return datetime.fromisoformat(str(val).replace("Z", "+00:00")).replace(tzinfo=timezone.utc)
+
+    ts_list = [_to_utc(v) for v in table[ts_col].to_pylist()]
     capped = float(max_gap_hours or 2.0)
+    gaps: list[float] = []
+    for i in range(1, len(ts_list)):
+        cur, prev = ts_list[i], ts_list[i - 1]
+        if cur is None or prev is None:
+            continue
+        gap_h = max(0.0, (cur - prev).total_seconds() / 3600.0)
+        if gap_h > 0:
+            gaps.append(min(gap_h, capped))
+    typical = sorted(gaps)[len(gaps) // 2] if gaps else (1.0 / 60.0)
     out = [typical]
-    for h in py_hours[1:]:
-        if h is None or h <= 0:
+    for i in range(1, len(ts_list)):
+        cur, prev = ts_list[i], ts_list[i - 1]
+        if cur is None or prev is None:
+            out.append(typical)
+            continue
+        gap_h = max(0.0, (cur - prev).total_seconds() / 3600.0)
+        if gap_h <= 0:
             out.append(typical)
         else:
-            out.append(min(float(h), capped))
+            out.append(min(gap_h, capped))
     return pa.array(out, type=pa.float64())
 
 
