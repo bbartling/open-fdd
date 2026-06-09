@@ -1,0 +1,19 @@
+[Unit]
+Description=Open-FDD building agent check-in (poll/FDD/memory via bridge API)
+After=network-online.target{% if openfdd_docker_stack | default(false) | bool %} docker.service{% endif %}
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User={{ ansible_user }}
+{% if openfdd_docker_stack | default(false) | bool %}
+WorkingDirectory={{ openfdd_remote_dir }}
+ExecStart=/usr/bin/docker compose -f {{ openfdd_remote_dir }}/docker-compose.yml exec -T bridge python -c "from openfdd_bridge.building_agent import run_checkin; import json; print(json.dumps(run_checkin(site_id='{{ site_id | default('acme') }}', run_fdd_batch={{ building_agent_run_fdd_batch | default(false) | lower }}, write_memory=True, window_minutes={{ building_agent_window_minutes | default(60) }})))"
+{% else %}
+WorkingDirectory={{ openfdd_remote_dir }}/workspace/api
+Environment=OPENFDD_REPO_ROOT={{ openfdd_remote_dir }}
+Environment=OPENFDD_WORKSPACE_DIR={{ openfdd_remote_dir }}/workspace
+Environment=OFDD_DESKTOP_DATA_DIR={{ openfdd_remote_dir }}/workspace/data
+Environment=PYTHONPATH={{ openfdd_remote_dir }}/workspace/api:{{ openfdd_remote_dir }}
+ExecStart={{ openfdd_remote_dir }}/.venv/bin/python -c "from openfdd_bridge.building_agent import run_checkin; import json; print(json.dumps(run_checkin(site_id='{{ site_id | default('acme') }}', run_fdd_batch={{ building_agent_run_fdd_batch | default(false) | lower }}, write_memory=True, window_minutes={{ building_agent_window_minutes | default(60) }})))"
+{% endif %}

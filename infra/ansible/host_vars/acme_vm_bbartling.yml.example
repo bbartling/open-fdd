@@ -49,3 +49,10 @@ openfdd_docker_ollama: true
 # ~125 GiB feather cap ≈ 1 year at 1-min temp polling scale
 feather_max_gib: 125
 feather_retention_days: 365
+
+# Building agent check-in timer (poll/FDD/memory append every 6h — no FDD batch by default)
+install_building_agent_timer: true
+enable_building_agent_timer: true
+building_agent_interval_hours: 6
+building_agent_run_fdd_batch: false
+building_agent_window_minutes: 60
