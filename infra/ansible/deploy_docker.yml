@@ -220,10 +220,41 @@
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
 
+    - name: Regenerate GL36 FDD rules_store on control machine
+      tags: [data]
+      ansible.builtin.command:
+        argv:
+          - python3
+          - scripts/setup_gl36_fdd.py
+          - --site-id
+          - "{{ site_id }}"
+          - --building-id
+          - "{{ building_id }}"
+          - --ahu-equipment-id
+          - "{{ gl36_ahu_equipment_id | default(site_id + '-vm-' + building_id + '-rtu-01') }}"
+          - --fan-point-id
+          - "{{ gl36_fan_point_id | default('1100-analog-output-1') }}"
+        chdir: "{{ playbook_dir }}/../.."
+      delegate_to: localhost
+      become: false
+      register: gl36_rules_gen
+      changed_when: true
+      when: regenerate_gl36_rules_on_deploy | default(false) | bool
+
+    - name: Resolve site rules_store source on control machine
+      tags: [data]
+      ansible.builtin.set_fact:
+        site_rules_store_src: >-
+          {{
+            (playbook_dir + '/../../workspace/data/rules_store.json')
+            if (regenerate_gl36_rules_on_deploy | default(false) | bool)
+            else (edge_backup_dir + '/' + site_id + '/' + building_id + '/rules_store.json')
+          }}
+
     - name: Stat site rules_store on control machine
       tags: [data]
       ansible.builtin.stat:
-        path: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/rules_store.json"
+        path: "{{ site_rules_store_src }}"
       delegate_to: localhost
       become: false
       register: local_site_rules
@@ -231,7 +262,7 @@
     - name: Push site rules_store.json (no cross-site rules from dev workspace)
       tags: [data]
       ansible.builtin.copy:
-        src: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/rules_store.json"
+        src: "{{ site_rules_store_src }}"
         dest: "{{ openfdd_remote_dir }}/workspace/data/rules_store.json"
         mode: "0644"
         owner: "{{ ansible_user }}"

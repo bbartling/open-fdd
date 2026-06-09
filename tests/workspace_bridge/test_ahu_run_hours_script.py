@@ -29,11 +29,11 @@ def test_dt_hours_chunked_array_divide_does_not_raise():
     from open_fdd.arrow_runtime.windows import arrow_shift
 
     base = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
-    ts = pa.array([base + timedelta(minutes=i) for i in range(4)], type=pa.timestamp("us", tz="UTC"))
+    ts = pa.array([base + timedelta(minutes=i) for i in range(4)], type=pa.timestamp("us"))
     table = pa.table({"timestamp": ts})
     ts_col = "timestamp"
     prev = arrow_shift(table[ts_col], 1)
-    delta = pc.subtract(pc.cast(table[ts_col], pa.timestamp("us", tz="UTC")), prev)
+    delta = pc.subtract(pc.cast(table[ts_col], pa.timestamp("us")), prev)
     secs = pc.divide(pc.cast(delta, pa.int64()), 1_000_000)
     hours = pc.divide(pc.cast(secs, pa.float64()), 3600.0)
     assert len(hours) == 4
