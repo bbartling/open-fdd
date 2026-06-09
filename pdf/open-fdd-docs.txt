@@ -1867,6 +1867,47 @@ def apply_faults_arrow(table, cfg, context=None):
 Reference implementation (Niagara Java): [README_TRIM_RESPOND.md](https://github.com/bbartling/niagara4-vibe-code-addict/blob/develop/README_TRIM_RESPOND.md).
 
 
+# Central plants (CHW / CTW / BLR)
+
+# Central plant Arrow recipes
+
+Chiller plant, condenser water, cooling tower, boiler, and hot-water distribution faults use the same Arrow-native primitives as air-side rules.
+
+## Starter fault codes
+
+| Code | Primitive | Recipe |
+|------|-----------|--------|
+| `CHW-DT-001` | `low_delta_t_mask` | Low chilled-water ΔT syndrome |
+| `CHW-DP-001` | `reset_stuck_mask` | CHW differential pressure reset stuck high |
+
+## Required point roles (CHW)
+
+- `chw_supply_temp`, `chw_return_temp` — ΔT rules
+- `chw_dp`, `chw_dp_setpoint` — reset stuck rules
+- `pump_command`, `pump_feedback` — command/feedback mismatch
+
+## Synthetic test pattern
+
+```python
+import pyarrow as pa
+from open_fdd.arrow_runtime.primitives import low_delta_t_mask
+
+table = pa.table({
+    "chw_supply_temp": [44.0] * 10,
+    "chw_return_temp": [44.5] * 10,
+})
+mask = low_delta_t_mask(
+    table,
+    {"min_delta_t": 4.0},
+    supply_col="chw_supply_temp",
+    return_col="chw_return_temp",
+)
+assert mask.to_pylist()[-1] is True
+```
+
+See [Fault codes — chiller plant](../fault-codes/chiller-plant.md) (expanded in 3.0.19).
+
+
 # Dashboard overview
 
 # Dashboard overview
@@ -2801,26 +2842,45 @@ Open-FDD integrates with field controllers via BACnet/IP (and bench MSTP overlay
 
 # Fault code convention
 
-## Format
+## Format (Grade-A, 3.0.18+)
 
-`FAMILY-SUFFIX` — suffix is **1–3 letters** (e.g. `VAV-C`, `AHU-B`). Numeric suffixes like `VAV-03` are avoided (collision with physical equipment names).
+**Short stable code:** `FAMILY-SUBSYSTEM-NNN` — e.g. `AHU-ECON-001`, `CHW-DT-001`, `DATA-STAL-001`.
 
-## Categories
+**Semantic ID:** dotted `canonical_id` — e.g. `ahu.economizer.not_using_free_cooling`.
+
+**Legacy letter codes** (`AHU-E`, `VAV-C`) remain **aliases** in `open_fdd/faults/catalog/*.yaml` until bridge sync completes.
+
+| Field | Example |
+|-------|---------|
+| `code` | `AHU-ECON-001` |
+| `canonical_id` | `ahu.economizer.not_using_free_cooling` |
+| `family` | `AHU`, `VAV`, `CHW`, `DATA`, `CRS`, … |
+| `rule_doc_path` | Link to rule cookbook recipe |
+
+Full schema: `open_fdd/faults/schema.py`. Catalog loader: `open_fdd/faults/catalog.py`.
+
+## Categories (Grade-A)
 
 | Category | Meaning |
 |----------|---------|
-| `performance_degradation` | Efficiency or capacity drift |
-| `simultaneous_heat_cool` | Heating and cooling fighting |
-| `sensor_fault` | Flatline, OOB, inconsistent readings |
-| `io_fault` | Command vs feedback mismatch |
+| `energy` | Waste, reset stuck, plant inefficiency |
+| `comfort` | Setpoint not met, poor zone performance |
+| `reliability` | Short cycling, staging, equipment stress |
+| `maintenance` | Leaking valves, filters, fouling proxies |
+| `indoor_air_quality` | Ventilation shortfall, humidity |
+| `healthcare_risk` | Pressure, isolation, critical-space excursions |
+| `data_quality` | Stale, flatline, OOB, missing historian |
+| `controls_integrity` | Overrides, chatter, schedule violations |
 
 ## Severity
 
 | Level | Operator response |
 |-------|-------------------|
 | `info` | Log; trend for maintenance window |
-| `warning` | Investigate within days |
-| `critical` | Prompt attention; may affect comfort/energy significantly |
+| `low` | Review in routine rounds |
+| `medium` | Investigate within days |
+| `high` | Prompt attention; comfort/energy impact likely |
+| `critical` | Immediate operational risk (especially `healthcare_risk`) |
 
 ## Linking rules
 
@@ -2953,6 +3013,34 @@ Air handling unit codes (sample from catalog).
 | **AHU-F** | Damper command vs feedback mismatch | warning | Cmd ≠ feedback | Stuck actuator, linkage | Compare cmd/feedback trends |
 
 **Example rule:** `flatline_1h` on SAT → tag **AHU-C**. Recipe: [Python recipes](../rule-cookbook/python-recipes).
+
+
+# Standards crosswalk
+
+# Standards crosswalk
+
+Grade-A fault definitions carry a `standards_crosswalk` block in `open_fdd/faults/catalog/*.yaml`.
+
+| Field | Source | Use in Open-FDD |
+|-------|--------|-----------------|
+| `ornl_lbnl_taxonomy` | ORNL/LBNL unified HVAC fault taxonomy | Canonical ontology backbone |
+| `ashrae_g36_reference_type` | ASHRAE Guideline 36 | Trim-and-respond, plant requests, supervisory sequences |
+| `ashrae_207_reference_type` | ASHRAE Standard 207 | Economizer FDD test categories |
+| `brick_classes` | [Brick Schema](https://brickschema.org/) | Equipment/point semantic roles |
+| `haystack_tags` | Project Haystack (optional) | Interoperability tags |
+
+## Example
+
+```yaml
+standards_crosswalk:
+  ornl_lbnl_taxonomy: ahu/economizer/free_cooling
+  ashrae_g36_reference_type: supply_air_temp_reset
+  ashrae_207_reference_type: economizer_fault_detection
+  brick_classes: [brick:Air_Handler_Unit, brick:Economizer]
+  haystack_tags: [equip, ahu, econ]
+```
+
+Export full catalog: `python3 -c "from open_fdd.faults.catalog import catalog_export; import json; print(json.dumps(catalog_export(), indent=2))"`
 
 
 # Backup and restore
@@ -4513,6 +4601,41 @@ Site-specific commissioning notes, GL36 examples, and maintainer lab workflows. 
 | [GL36 lab site (Acme)](acme-gl36-lab) | Example real-building poll scope, Arrow rule stubs, Ansible deploy commands |
 
 For production IT operators, start with [Quick Start](../quick-start/) and [Operations](../ops/).
+
+
+# Central collection
+
+# Portfolio central collection
+
+Edge Open-FDD sites emit **interval summaries** (not raw historian by default). Central portfolio ingests, stores, and aggregates for Dash and the AI tuning agent.
+
+## Interval summary schema
+
+Defined in `portfolio/store/interval_schema.py` as `FaultIntervalSummary`:
+
+- Identity: `site_id`, `building_id`, `equipment_id`, `equipment_family`
+- Window: `timestamp_start`, `timestamp_end`
+- Fault: `fault_code`, `canonical_id`, `severity`, `confidence`
+- Activity: `active_minutes`, `percent_active`, `occurrence_count`
+- Evidence: `evidence_json` (summarized, not full trend)
+- Tuning: `tuning_version`, `tuning_params_hash`
+- Operator: `operator_status` (`new` | `acknowledged` | `resolved` | `false_positive` | …)
+
+## Edge export formats
+
+- JSONL (append-only events)
+- Parquet / Feather (batch intervals)
+
+## Collect today (rollup API)
+
+```bash
+source infra/ansible/secrets/acme.env.local
+python3 scripts/portfolio_collect.py
+```
+
+## Tuning proposals
+
+Human-reviewable proposals use `TuningProposal` in the same module. The AI agent **never** auto-writes BACnet points — see `docs/portfolio/ai-agent-tuning.md` (3.0.19).
 
 
 # Arrow-native runtime
