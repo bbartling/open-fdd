@@ -1,14 +1,14 @@
 ---
 title: Arrow recipes
 parent: Rule Cookbook
-nav_order: 1
+nav_order: 2
 ---
 
 # Arrow recipes (default)
 
 Open-FDD 3.0 Rule Lab rules use **`apply_faults_arrow(table, cfg, context)`**, **`pyarrow.compute`**, and **module constants** (no `config.json`).
 
-For the full legacy pandas/YAML → Arrow translation, sensor bound tables, and GL36 fault-code mapping, see **[Expression cookbook (Arrow-native)](expression-cookbook)**.
+For **full GL36 A–M and plant recipes**, see **[Python recipes (full Arrow library)](python-recipes-arrow)**. Sensor tables: **[Expression cookbook](expression-cookbook)**.
 
 ## Simple threshold
 

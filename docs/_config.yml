@@ -19,6 +19,7 @@ plugins:
   - jekyll-remote-theme
   - jekyll-include-cache
   - jekyll-seo-tag
+  - jekyll-redirect-from
 
 aux_links:
   "GitHub": "https://github.com/bbartling/open-fdd"

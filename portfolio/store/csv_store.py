@@ -46,6 +46,7 @@ CHECKIN_FIELDS = [
     "alert_count",
     "fdd_alert_count",
     "operator_overrides",
+    "agent_checkin",
     "checkin_ok",
     "poll_summary",
     "error",
@@ -91,6 +92,7 @@ def rows_from_rollup(
     base_url: str,
     collected_at: str | None = None,
     error: str = "",
+    agent_checkin: bool = False,
 ) -> dict[str, list[dict[str, Any]]]:
     ts = collected_at or datetime.now(timezone.utc).isoformat()
     day = _day_key(ts)
@@ -112,6 +114,7 @@ def rows_from_rollup(
         "alert_count": building.get("alert_count"),
         "fdd_alert_count": building.get("fdd_alert_count"),
         "operator_overrides": overrides.get("operator_override_points"),
+        "agent_checkin": agent_checkin,
         "checkin_ok": agent.get("last_checkin_ok"),
         "poll_summary": poll.get("summary_sentence"),
         "error": error,
@@ -185,9 +188,16 @@ def append_rollup(
     base_url: str,
     data_dir: Path | None = None,
     error: str = "",
+    agent_checkin: bool = False,
 ) -> dict[str, int]:
     root = portfolio_data_dir(data_dir)
-    rows = rows_from_rollup(rollup, site_name=site_name, base_url=base_url, error=error)
+    rows = rows_from_rollup(
+        rollup,
+        site_name=site_name,
+        base_url=base_url,
+        error=error,
+        agent_checkin=agent_checkin,
+    )
     return {
         "checkins": _append_rows(root / "checkins.csv", CHECKIN_FIELDS, rows["checkins"]),
         "run_hours": _append_rows(root / "run_hours_daily.csv", RUN_HOURS_FIELDS, rows["run_hours"]),

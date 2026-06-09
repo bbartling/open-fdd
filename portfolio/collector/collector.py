@@ -94,6 +94,7 @@ def collect_site(site: SiteConfig, *, data_dir: Path | None = None) -> dict[str,
         site_name=site.name,
         base_url=site.base_url,
         data_dir=data_dir,
+        agent_checkin=site.run_checkin,
     )
     return {"ok": True, "site_id": site.site_id, "rollup": rollup, "csv_rows": counts}
 
