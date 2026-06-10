@@ -4,6 +4,9 @@ docs/_site/
 # Docker image bundles (build with scripts/docker_build.sh --save)
 docker/dist/
 
+# Cursor IDE local rules (not shared via git)
+.cursor/
+
 .DS_Store
 /data
 /tmp

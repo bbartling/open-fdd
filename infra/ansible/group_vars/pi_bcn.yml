@@ -85,7 +85,11 @@ openfdd_docker_image_tag: "local"
 openfdd_docker_disable_systemd: true
 openfdd_docker_ollama: true
 openfdd_docker_bridge_secret: true
-openfdd_docker_sync_workspace_data: true
+# Image-only deploys must not tar-sync workspace/data from the control machine (use API import for models/rules).
+openfdd_docker_sync_workspace_data: false
+# Site pack push (model.json, rules_store, points.csv) is deprecated — use HTTPS API commissioning import.
+openfdd_push_site_pack: false
+openfdd_push_bacnet_config: false
 ollama_docker_image_tag: "latest"
 
 # Docker disk maintenance (deploy_docker.yml + ./deploy.sh maintain)
