@@ -32,10 +32,14 @@ def _dt_hours(table, ts_col, max_gap_hours):
     def _to_utc(val):
         if val is None:
             return None
-        if hasattr(val, "to_pydatetime"):
-            val = val.to_pydatetime()
         if isinstance(val, datetime):
             return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+        try:
+            val = val.to_pydatetime()
+            if isinstance(val, datetime):
+                return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+        except AttributeError:
+            pass
         parsed = datetime.fromisoformat(str(val).replace("Z", "+00:00"))
         return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
