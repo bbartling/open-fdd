@@ -48,9 +48,28 @@ from lib.site_pack_paths import equipment_id, rule_id_prefix  # noqa: E402
 
 RULES_PY = REPO / "workspace" / "data" / "rules_py"
 
+# Acme BACnet poll loop is 60 s; 1 h flatline = 60 samples (not legacy 5-min × 12).
+ACME_POLL_CFG: dict[str, Any] = {
+    "poll_interval_s": 60,
+    "flatline_minutes": 60,
+    "temp_unit": "imperial",
+    "occupied_start_hour": 8,
+    "occupied_end_hour": 17,
+    "tz_offset_hours": -6,
+}
+
 
 def _read(name: str) -> str:
     return (RULES_PY / name).read_text(encoding="utf-8")
+
+
+def _cfg(*, extra: dict[str, Any] | None = None, occupied: bool = False) -> dict[str, Any]:
+    out = dict(ACME_POLL_CFG)
+    if occupied:
+        out["occupied_only"] = True
+    if extra:
+        out.update(extra)
+    return out
 
 
 def gl36_rule_specs(
@@ -71,33 +90,69 @@ def gl36_rule_specs(
         "brick_types": [],
     }
     return [
+        # Phase 0 — data quality (low noise)
+        {
+            "id": f"{p}-oat-bounds",
+            "name": "Outdoor air temp bounds",
+            "fault_code": "BLD-B",
+            "code_file": "oat_sensor_bounds.py",
+            "config": _cfg(extra={"rolling_avg_minutes": 5}),
+            "bindings": {
+                "point_ids": [],
+                "equipment_ids": [],
+                "brick_types": ["Outside_Air_Temperature_Sensor"],
+            },
+        },
+        {
+            "id": f"{p}-oat-flatline-1h",
+            "name": "Outdoor air temp flatline 1h",
+            "fault_code": "BLD-B",
+            "code_file": "oat_sensor_flatline.py",
+            "config": _cfg(),
+            "bindings": {
+                "point_ids": [],
+                "equipment_ids": [],
+                "brick_types": ["Outside_Air_Temperature_Sensor"],
+            },
+        },
+        {
+            "id": f"{p}-oat-spike",
+            "name": "Outdoor air temp spike",
+            "fault_code": "BLD-B",
+            "code_file": "oat_sensor_spike.py",
+            "config": _cfg(),
+            "bindings": {
+                "point_ids": [],
+                "equipment_ids": [],
+                "brick_types": ["Outside_Air_Temperature_Sensor"],
+            },
+            "enabled": False,
+        },
         {
             "id": f"{p}-zn-t-flatline-1h",
-            "name": "Zone temp flatline 1h",
+            "name": "Zone temp flatline 1h occupied",
             "fault_code": "VAV-C",
-            "code_file": "flatline_1h.py",
-            "config": {"flatline_tolerance": 0.15, "temp_unit": "imperial", "rolling_avg_minutes": 1},
+            "code_file": "vav_zone_temp_flatline_occupied.py",
+            "config": _cfg(extra={"flatline_tolerance": 0.10}, occupied=True),
             "bindings": {"point_ids": [], "equipment_ids": [], "brick_types": ["Zone_Air_Temperature_Sensor"]},
         },
         {
             "id": f"{p}-zn-t-oob-occupied",
-            "name": "Zone temp out of bounds",
+            "name": "Zone temp out of bounds occupied",
             "fault_code": "VAV-C",
-            "code_file": "oob_rolling.py",
-            "config": {
-                "bounds_low": 65,
-                "bounds_high": 78,
-                "temp_unit": "imperial",
-                "rolling_avg_minutes": 5,
-            },
+            "code_file": "vav_zone_temp_bounds_occupied.py",
+            "config": _cfg(
+                extra={"bounds_low": 65, "bounds_high": 78, "rolling_avg_minutes": 5},
+                occupied=True,
+            ),
             "bindings": {"point_ids": [], "equipment_ids": [], "brick_types": ["Zone_Air_Temperature_Sensor"]},
         },
         {
             "id": f"{p}-da-t-flatline-1h",
             "name": "Discharge temp flatline 1h",
-            "fault_code": "VAV-D",
+            "fault_code": "VAV-E",
             "code_file": "flatline_1h.py",
-            "config": {"flatline_tolerance": 0.15, "temp_unit": "imperial", "rolling_avg_minutes": 1},
+            "config": _cfg(extra={"flatline_tolerance": 0.15}),
             "bindings": {
                 "point_ids": [],
                 "equipment_ids": [],
@@ -109,7 +164,7 @@ def gl36_rule_specs(
             "name": "AHU SAT flatline 1h",
             "fault_code": "AHU-C",
             "code_file": "flatline_1h.py",
-            "config": {"flatline_tolerance": 0.15, "temp_unit": "imperial", "rolling_avg_minutes": 1},
+            "config": _cfg(extra={"flatline_tolerance": 0.15}),
             "bindings": {
                 "point_ids": [],
                 "equipment_ids": [],
@@ -119,26 +174,22 @@ def gl36_rule_specs(
         {
             "id": f"{p}-mat-oob-economizer",
             "name": "Mixed air temp OOB",
-            "fault_code": "AHU-E",
+            "fault_code": "AHU-D",
             "code_file": "oob_rolling.py",
-            "config": {
-                "bounds_low": 40,
-                "bounds_high": 110,
-                "temp_unit": "imperial",
-                "rolling_avg_minutes": 5,
-            },
+            "config": _cfg(extra={"bounds_low": 40, "bounds_high": 110, "rolling_avg_minutes": 5}),
             "bindings": {
                 "point_ids": [],
                 "equipment_ids": [],
                 "brick_types": ["Mixed_Air_Temperature_Sensor"],
             },
+            "enabled": False,
         },
         {
             "id": f"{p}-sap-flatline-1h",
             "name": "Duct static flatline 1h",
             "fault_code": "AHU-F",
             "code_file": "flatline_1h.py",
-            "config": {"flatline_tolerance": 0.02, "temp_unit": "imperial", "rolling_avg_minutes": 1},
+            "config": _cfg(extra={"flatline_tolerance": 0.02}),
             "bindings": {
                 "point_ids": [],
                 "equipment_ids": [],
@@ -151,9 +202,7 @@ def gl36_rule_specs(
             "fault_code": "BLD-C",
             "code_file": "ahu_afterhours_runtime.py",
             "config": {
-                "occupied_start_hour": 8,
-                "occupied_end_hour": 17,
-                "tz_offset_hours": -6,
+                **_cfg(),
                 "fan_on_threshold": 5.0,
                 "zone_satisfied_low": 68.0,
                 "zone_satisfied_high": 76.0,
@@ -162,7 +211,6 @@ def gl36_rule_specs(
                 "fan_binary_col": "supply-fan-start-stop-command",
                 "zone_avg_cols": zone_avg_cols,
                 "column_map": column_map,
-                "temp_unit": "imperial",
                 "rolling_avg_minutes": 1,
             },
             "bindings": ahu_bindings,
@@ -199,7 +247,7 @@ def gl36_rule_specs(
             "name": "VAV damper stuck open",
             "fault_code": "VAV-D",
             "code_file": "vav_damper_stuck_flatline.py",
-            "config": {"flatline_tolerance": 0.02, "temp_unit": "imperial", "rolling_avg_minutes": 60, "damper_open_min": 0.975},
+            "config": _cfg(extra={"flatline_tolerance": 0.02, "damper_open_min": 0.975}),
             "bindings": {
                 "point_ids": [],
                 "equipment_ids": [],
@@ -209,7 +257,7 @@ def gl36_rule_specs(
         {
             "id": f"{p}-vav-airflow-low",
             "name": "VAV airflow low with damper open",
-            "fault_code": "VAV-B",
+            "fault_code": "VAV-D",
             "code_file": "vav_airflow_low.py",
             "config": {"min_airflow_cfm": 50, "damper_open_min": 0.15, "damper_column": "damper-position-command"},
             "bindings": {
@@ -229,6 +277,20 @@ def gl36_rule_specs(
                 "equipment_ids": [],
                 "brick_types": ["Discharge_Air_Temperature_Sensor"],
             },
+            "enabled": False,
+        },
+        {
+            "id": f"{p}-vav-reheat-warm-ambient",
+            "name": "VAV reheat during warm ambient",
+            "fault_code": "VAV-A",
+            "code_file": "zone_reheat_warm_ambient.py",
+            "config": _cfg(extra={"t_amb_cutoff": 78.0, "reheat_open_min": 0.52}),
+            "bindings": {
+                "point_ids": [],
+                "equipment_ids": [],
+                "brick_types": ["Heating_Valve_Command"],
+            },
+            "enabled": False,
         },
     ]
 
@@ -251,7 +313,7 @@ def save_rules(specs: list[dict[str, Any]], *, site_id: str) -> None:
                 "config": spec["config"],
                 "bindings": spec["bindings"],
                 "severity": "warning",
-                "enabled": True,
+                "enabled": spec.get("enabled", True),
                 **({"applies_to": spec["applies_to"]} if spec.get("applies_to") else {}),
             },
             saved_by=f"setup_gl36_fdd:{site_id}",
