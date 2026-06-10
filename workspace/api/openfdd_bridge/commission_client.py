@@ -106,7 +106,7 @@ def commission_override_status() -> tuple[int, Any]:
 
 
 def commission_override_scan_once() -> tuple[int, Any]:
-    return _request("POST", "/api/bacnet/overrides/scan-once", {}, timeout=900.0)
+    return _request("POST", "/api/bacnet/overrides/scan-once", {}, timeout=60.0)
 
 
 def bacnet_write(

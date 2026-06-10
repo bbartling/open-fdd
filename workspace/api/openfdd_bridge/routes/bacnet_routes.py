@@ -536,7 +536,7 @@ def bacnet_override_export() -> Response:
 @router.post("/api/bacnet/overrides/scan-once", dependencies=[_READ])
 def bacnet_override_scan_once() -> dict:
     code, payload = commission_override_scan_once()
-    if code != 200:
+    if code not in (200, 202):
         raise _proxy_error(code, payload)
     return payload  # type: ignore[return-value]
 
