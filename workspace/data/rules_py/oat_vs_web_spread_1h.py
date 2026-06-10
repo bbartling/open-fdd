@@ -1,8 +1,8 @@
-"""Local OA-T vs OpenWeather web-oat-t spread (Arrow).
+"""Local OA-T vs OpenWeather web-oat-t spread (Arrow, BLD-B).
 
-Requires BACnet historian column ``oa-t`` and JSON API column ``web-oat-t``
-(register via JSON API tab → OpenWeather bundle). Flags stuck or drifting
-outdoor-air sensors when local readings diverge from the weather service.
+Requires BACnet historian ``oa-t`` (or ``local_oat_column`` in cfg) and JSON API
+``web-oat-t``. Register OpenWeather via JSON API tab; bind RTU/boiler OAT in model
+with ``external_id: oa-t`` or set ``local_oat_column`` to the BACnet feather column.
 """
 
 import pyarrow as pa
@@ -13,33 +13,22 @@ WEB_OAT = "web-oat-t"
 MAX_SPREAD_F = 8.0
 
 
-def _kit_fmt(scalar):
-    v = scalar.as_py() if scalar is not None else None
-    return "nan" if v is None else f"{v:.2f}"
+def _false_mask(table):
+    return pa.array([False] * table.num_rows, type=pa.bool_())
 
 
-def _kit_value_stats(table):
-    if LOCAL_OAT not in table.column_names or WEB_OAT not in table.column_names:
-        print(
-            f"rows={table.num_rows} missing columns "
-            f"(need {LOCAL_OAT} + {WEB_OAT}); available={table.column_names}"
-        )
-        return
-    local = pc.cast(table[LOCAL_OAT], "float64")
-    web = pc.cast(table[WEB_OAT], "float64")
-    spread = pc.abs(pc.subtract(local, web))
-    print(
-        f"rows={table.num_rows} spread "
-        f"min={_kit_fmt(pc.min(spread))} max={_kit_fmt(pc.max(spread))} "
-        f"mean={_kit_fmt(pc.mean(spread))} threshold={MAX_SPREAD_F}"
-    )
+def _col_names(cfg):
+    local = str(cfg.get("local_oat_column") or cfg.get("value_column") or LOCAL_OAT)
+    web = str(cfg.get("web_oat_column") or WEB_OAT)
+    spread = float(cfg.get("max_spread_f") or cfg.get("max_spread") or MAX_SPREAD_F)
+    return local, web, spread
 
 
 def apply_faults_arrow(table, cfg, context=None):
-    _kit_value_stats(table)
-    if LOCAL_OAT not in table.column_names or WEB_OAT not in table.column_names:
-        return pa.array([False] * table.num_rows)
-    local = pc.cast(table[LOCAL_OAT], "float64")
-    web = pc.cast(table[WEB_OAT], "float64")
+    local_col, web_col, max_spread = _col_names(cfg)
+    if local_col not in table.column_names or web_col not in table.column_names:
+        return _false_mask(table)
+    local = pc.cast(table[local_col], pa.float64())
+    web = pc.cast(table[web_col], pa.float64())
     spread = pc.abs(pc.subtract(local, web))
-    return pc.greater(spread, MAX_SPREAD_F)
+    return pc.greater(spread, max_spread)

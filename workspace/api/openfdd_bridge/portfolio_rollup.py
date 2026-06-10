@@ -17,7 +17,7 @@ try:
     from bacnet_toolshed.override_registry import (
         load_registry,
         operator_override_priority,
-        override_status,
+        scan_status as override_status,
     )
 except ImportError:
 

@@ -321,6 +321,11 @@ def _run_bacnet_background(coro_factory, timeout: float = 180.0) -> Any:
     return _run_bacnet_sync(coro_factory, priority=BacnetPriority.BACKGROUND, timeout=timeout)
 
 
+def _run_bacnet_override_scan(coro_factory, timeout: float = 900.0) -> Any:
+    """Supervisory override scans may read many priority arrays — allow up to 15 min."""
+    return _run_bacnet_sync(coro_factory, priority=BacnetPriority.BACKGROUND, timeout=timeout)
+
+
 def _run_async_bacnet_job(job_id: str, kind: str, coro_factory) -> None:
     log_file = _log_path(job_id)
     meta = {
@@ -674,7 +679,7 @@ class CommissionAgentHandler(BaseHTTPRequestHandler):
             return _json_response(self, 200, {"ok": bool(result.get("ok")), **result})
 
         if path == "/api/bacnet/overrides/scan-once":
-            result = run_override_scan_cycle(_run_bacnet_background)
+            result = run_override_scan_cycle(_run_bacnet_override_scan)
             return _json_response(self, 200, result)
 
         if path == "/api/bacnet/whois":
@@ -741,7 +746,7 @@ def main() -> int:
         flush=True,
     )
     start_poll_loop(_run_bacnet_background)
-    start_override_scan_loop(_run_bacnet_background)
+    start_override_scan_loop(_run_bacnet_override_scan)
     print(
         f"BACnet poll loop started (enabled points={enabled_point_count()}, interval={poll_interval_s()}s)",
         flush=True,
