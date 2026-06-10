@@ -508,6 +508,10 @@ def _unauthorized(handler: BaseHTTPRequestHandler) -> None:
     _json_response(handler, 401, {"error": "missing or invalid X-Commission-Token"})
 
 
+_override_scan_once_lock = threading.Lock()
+_override_scan_once_running = False
+
+
 class CommissionAgentHandler(BaseHTTPRequestHandler):
     server_version = "OpenFDD-BacnetToolshed/1.0"
 
@@ -679,8 +683,32 @@ class CommissionAgentHandler(BaseHTTPRequestHandler):
             return _json_response(self, 200, {"ok": bool(result.get("ok")), **result})
 
         if path == "/api/bacnet/overrides/scan-once":
-            result = run_override_scan_cycle(_run_bacnet_override_scan)
-            return _json_response(self, 200, result)
+            global _override_scan_once_running
+            with _override_scan_once_lock:
+                if _override_scan_once_running:
+                    return _json_response(
+                        self,
+                        409,
+                        {"ok": False, "error": "override scan already running", **override_scan_status()},
+                    )
+                _override_scan_once_running = True
+
+            def _bg_scan() -> None:
+                global _override_scan_once_running
+                try:
+                    run_override_scan_cycle(_run_bacnet_override_scan)
+                except Exception as exc:
+                    print(f"override scan-once failed: {exc}", file=sys.stderr)
+                finally:
+                    with _override_scan_once_lock:
+                        _override_scan_once_running = False
+
+            threading.Thread(target=_bg_scan, daemon=True, name="override-scan-once").start()
+            return _json_response(
+                self,
+                202,
+                {"ok": True, "started": True, **override_scan_status()},
+            )
 
         if path == "/api/bacnet/whois":
             low = int(body.get("range_low", _cfg().get("DISCOVER_LOW", 1)))
