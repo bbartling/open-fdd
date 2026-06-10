@@ -34,6 +34,8 @@ This repository is **Arrow-native FDD only** (3.0.1+). The published PyPI wheel 
 
 **Docker GHCR:** Images at `ghcr.io/bbartling/openfdd-*`. Doc: [docs/quick-start/docker.md](docs/quick-start/docker.md).
 
+**Acme patch cycles + FDD tuning:** [skills/openfdd-edge-deploy-tune/SKILL.md](skills/openfdd-edge-deploy-tune/SKILL.md) — GHCR upgrade, `setup_gl36_fdd.py`, tuning brief/apply via Tailscale API, operational verify. Halt state: [docs/development/patch_cycle_3.0.28_halt.md](docs/development/patch_cycle_3.0.28_halt.md).
+
 ## Skill routing
 
 | Operator intent | Start with |
@@ -46,6 +48,7 @@ This repository is **Arrow-native FDD only** (3.0.1+). The published PyPI wheel 
 | Local feather storage | [skills/feather-local-storage/SKILL.md](skills/feather-local-storage/SKILL.md) |
 | BACnet single-stack | [skills/bacnet-single-stack/SKILL.md](skills/bacnet-single-stack/SKILL.md) |
 | Building check-engine | [skills/building-check-engine/SKILL.md](skills/building-check-engine/SKILL.md) |
+| **Edge deploy / Acme tune** | [skills/openfdd-edge-deploy-tune/SKILL.md](skills/openfdd-edge-deploy-tune/SKILL.md) |
 | BRICK TTL model | [skills/brick-ttl-data-model/SKILL.md](skills/brick-ttl-data-model/SKILL.md) |
 
 Load each selected skill's `SKILL.md` and follow linked `references/REFERENCE.md` for route tables and env catalogs.
