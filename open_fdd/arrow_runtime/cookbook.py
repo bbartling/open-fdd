@@ -32,8 +32,21 @@ def value_column(table: pa.Table, cfg: dict[str, Any], explicit: str | None = No
     raise KeyError("no historian value column in table")
 
 
+def flatline_window_samples(cfg: dict[str, Any]) -> int:
+    """Rolling window in samples for ~flatline_minutes at poll_interval_s (Acme 60s poll → 60 samples/h)."""
+    if cfg.get("flatline_window_samples") is not None:
+        return max(2, int(cfg["flatline_window_samples"]))
+    if cfg.get("poll_interval_s") or cfg.get("median_poll_interval_s"):
+        interval_s = max(30, int(cfg.get("poll_interval_s") or cfg.get("median_poll_interval_s") or 60))
+        minutes = float(cfg.get("flatline_minutes") if cfg.get("flatline_minutes") is not None else 60)
+        return max(2, int(round(minutes * 60.0 / interval_s)))
+    if cfg.get("window_samples") is not None:
+        return max(2, int(cfg["window_samples"]))
+    return 12
+
+
 def _window_samples(cfg: dict[str, Any]) -> int:
-    return max(2, int(cfg.get("flatline_window_samples") or cfg.get("window_samples") or 12))
+    return flatline_window_samples(cfg)
 
 
 def arrow_rolling_mean(array: pa.Array | pa.ChunkedArray, window: int) -> pa.ChunkedArray:
@@ -203,7 +216,11 @@ def rate_of_change_mask(
     if "max_per_15min" in cfg and cfg.get("max_per_15min") is not None:
         limit = cfg_threshold(cfg, "max_per_15min")
     elif "max_per_hour" in cfg and cfg.get("max_per_hour") is not None:
-        samples_per_hour = max(1, int(cfg.get("samples_per_hour") or 12))
+        if cfg.get("samples_per_hour"):
+            samples_per_hour = max(1, int(cfg["samples_per_hour"]))
+        else:
+            interval_s = max(30, int(cfg.get("poll_interval_s") or cfg.get("median_poll_interval_s") or 60))
+            samples_per_hour = max(1, int(round(3600.0 / interval_s)))
         limit = cfg_threshold(cfg, "max_per_hour") / float(samples_per_hour)
     return pc.greater(delta, limit)
 
