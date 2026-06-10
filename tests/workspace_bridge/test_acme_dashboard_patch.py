@@ -43,7 +43,48 @@ def test_dedupe_equipment_by_bacnet_device():
     assert len(snap["equipment"]) == 2
 
 
-def test_fdd_issues_use_equipment_names(monkeypatch, tmp_path):
+def test_dedupe_fdd_alias_columns():
+    """Model fdd_input alias + full id for same point must not double-count poll health."""
+    model = {
+        "sites": [{"id": "s1"}],
+        "equipment": [
+            {"id": "vav1", "site_id": "s1", "name": "VAV-1", "bacnet_device_id": 10},
+        ],
+        "points": [
+            {
+                "id": "10-analog-input-1106",
+                "site_id": "s1",
+                "equipment_id": "vav1",
+                "external_id": "10-analog-input-1106",
+                "fdd_input": "zn-t",
+                "brick_type": "Zone_Air_Temperature_Sensor",
+            },
+            {
+                "id": "10-analog-input-1106",
+                "site_id": "s1",
+                "equipment_id": "vav1",
+                "external_id": "zn-t",
+                "brick_type": "Zone_Air_Temperature_Sensor",
+            },
+        ],
+    }
+    end = pd.Timestamp.now(tz="UTC")
+    ts = pd.date_range(end=end, periods=60, freq="5min")
+    df = pd.DataFrame({"timestamp": ts, "10-analog-input-1106": [72.0] * 60})
+    snap = compute_device_poll_health(
+        model,
+        "s1",
+        df,
+        poll_csv_fresh_override=True,
+        live_poll_age_s_override=30.0,
+    )
+    vav = snap["equipment"][0]
+    assert vav["points_polled"] == 1
+    assert vav["status"] == "healthy"
+    assert snap["healthy_count"] == 1
+
+
+def test_fdd_issues_use_equipment_names(monkeypatch):
     from openfdd_bridge import fdd_results as fr
 
     model = {
@@ -59,21 +100,25 @@ def test_fdd_issues_use_equipment_names(monkeypatch, tmp_path):
         ],
     }
     monkeypatch.setattr(fr, "_model_for_fdd", lambda: model)
-    monkeypatch.setattr(fr, "load_results", lambda: {
-        "runs": [
-            {
-                "rule_id": "acme-zn-t-flatline-1h",
-                "rule_name": "Zone temp flatline 1h",
-                "site_id": "acme",
-                "status": "ok",
-                "flagged": 3,
-                "rows": 100,
-                "fault_code": "VAV-C",
-                "equipment_family": "VAV-C",
-                "analytics": {"flagged_columns": ["stat_zn-t"]},
-            }
-        ]
-    })
+    monkeypatch.setattr(
+        fr,
+        "load_results",
+        lambda: {
+            "runs": [
+                {
+                    "rule_id": "acme-zn-t-flatline-1h",
+                    "rule_name": "Zone temp flatline 1h",
+                    "site_id": "acme",
+                    "status": "ok",
+                    "flagged": 3,
+                    "rows": 100,
+                    "fault_code": "VAV-C",
+                    "equipment_family": "VAV-C",
+                    "analytics": {"flagged_columns": ["stat_zn-t"]},
+                }
+            ]
+        },
+    )
     issues = fr.fdd_issues()
     assert issues
     assert "Trane Vav 12035" in issues[0]["title"]
