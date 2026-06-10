@@ -210,7 +210,8 @@ export function buildDisplayFaults(families: FaultFamily[]): DisplayFault[] {
       const key = String(a.id || a.title);
       if (used.has(key)) continue;
       if (isHistorianLag(a) || isModelFddInput(a) || isBacnetOperatorOverride(a)) continue;
-      cards.push(alertToDisplay(a, eqLabel));
+      const eqFromAlert = String(a.equipment_name || "").trim();
+      cards.push(alertToDisplay(a, eqFromAlert || eqLabel));
     }
   }
 

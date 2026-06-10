@@ -645,11 +645,17 @@ def _worst_zones(
                 recovery_by_col[col] = float(rec)
     scored: list[tuple[float, dict[str, Any]]] = []
     seen_cols: set[str] = set()
+    seen_names: set[str] = set()
     for z in zones_out:
         col = str(z.get("column") or "")
         if not col or col in seen_cols:
             continue
+        eq_name = str(z.get("equipment_name") or z.get("label") or "").strip()
+        if eq_name and eq_name in seen_names and not z.get("shared_column_zone_count"):
+            continue
         seen_cols.add(col)
+        if eq_name:
+            seen_names.add(eq_name)
         score = 0.0
         day = z.get("day_avg_f")
         night = z.get("night_avg_f")

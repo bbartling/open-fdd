@@ -362,6 +362,27 @@
   font-weight: 600;
 }
 
+.bis-zone-tree-wrap {
+  margin-top: 14px;
+}
+
+.bis-zone-tree-ahu {
+  margin-bottom: 8px;
+  border: 1px solid var(--bis-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.bis-zone-tree-ahu summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.bis-zone-table-nested {
+  margin-top: 8px;
+}
+
 .bis-opp-list {
   margin: 12px 0 0;
   padding: 0;
