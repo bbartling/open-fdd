@@ -32,24 +32,21 @@ log_ok() { printf '  OK   %s\n' "$*"; }
 log_fail() { printf '  FAIL %s\n' "$*" >&2; FAILURES=$((FAILURES + 1)); }
 log_warn() { printf '  WARN %s\n' "$*"; }
 
+# shellcheck source=scripts/docker_container_gate.sh
+source "${ROOT}/scripts/docker_container_gate.sh"
+docker_gate_reset_failures
+
 echo "Open-FDD stack health → ${BASE}"
 
 echo "==> Docker containers"
-for svc in bridge commission mcp-rag; do
-  cid="$("${COMPOSE[@]}" ps -q "$svc" 2>/dev/null || true)"
-  if [[ -n "$cid" ]] && docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null | grep -q true; then
-    log_ok "container ${svc} running"
-  else
-    log_fail "container ${svc} not running"
-  fi
-done
+docker_gate_check_compose docker/compose.dev.yml bridge commission mcp-rag
+FAILURES=$((FAILURES + DOCKER_GATE_FAILURES))
+
 ollama_cid="$("${COMPOSE[@]}" --profile ai ps -q ollama 2>/dev/null || true)"
 if [[ -n "$ollama_cid" ]]; then
-  if docker inspect -f '{{.State.Running}}' "$ollama_cid" 2>/dev/null | grep -q true; then
-    log_ok "container ollama running"
-  else
-    log_warn "ollama profile present but not running"
-  fi
+  docker_gate_check_cid ollama "$ollama_cid"
+  FAILURES=$((FAILURES + DOCKER_GATE_FAILURES))
+  docker_gate_reset_failures
 elif [[ "$REQUIRE_OLLAMA" == 1 ]]; then
   log_fail "ollama container required but not started (use: docker compose --profile ai up -d)"
 fi

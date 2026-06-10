@@ -68,7 +68,7 @@ jobs:
           wheel="$(ls -1t dist/*.whl | head -n 1)"
           test -n "$wheel"
           /tmp/ofdd-wheel-smoke/bin/pip install "$wheel"
-          /tmp/ofdd-wheel-smoke/bin/python -c "from open_fdd.arrow_runtime import run_arrow_rule; import open_fdd; assert open_fdd.__version__"
+          /tmp/ofdd-wheel-smoke/bin/python -c "from open_fdd.arrow_runtime import run_arrow_rule; from open_fdd.arrow_runtime.column_map_from_model import build_column_map_from_model_points; import open_fdd; assert open_fdd.__version__"
 
   agent-shell:
     runs-on: ubuntu-latest
