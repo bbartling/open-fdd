@@ -129,6 +129,21 @@ def gl36_rule_specs(
             "enabled": False,
         },
         {
+            "id": f"{p}-oat-vs-web-spread",
+            "name": "Local OAT vs OpenWeather spread",
+            "fault_code": "BLD-B",
+            "code_file": "oat_vs_web_spread_1h.py",
+            "config": _cfg(
+                extra={
+                    "local_oat_column": "oa-t",
+                    "web_oat_column": "web-oat-t",
+                    "max_spread_f": 8.0,
+                }
+            ),
+            "bindings": {"point_ids": [], "equipment_ids": [], "brick_types": []},
+            "applies_to": applies,
+        },
+        {
             "id": f"{p}-zn-t-flatline-1h",
             "name": "Zone temp flatline 1h occupied",
             "fault_code": "VAV-C",

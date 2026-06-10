@@ -256,8 +256,36 @@ model_pts="$(echo "$tree" | python3 -c 'import json,sys; print(len(json.load(sys
 zat="$(echo "$tree" | python3 -c 'import json,sys; print(sum(1 for p in json.load(sys.stdin).get("points",[]) if p.get("brick_type")=="Zone_Air_Temperature_Sensor"))')"
 log_ok "Model tree points=${model_pts} zone_temp=${zat}"
 
-log_info "Setup default zone-temp FDD rules (brick-scoped)"
+log_info "JSON API OpenWeather scrape"
+json_env="$(api_get "/api/json-api/env/status")"
+if echo "$json_env" | python3 -c 'import json,sys; d=json.load(sys.stdin); v=d.get("variables") or {}; sys.exit(0 if v.get("OPENWEATHER_API_KEY") else 1)' 2>/dev/null; then
+  log_ok "OpenWeather env configured"
+else
+  log_fail "OpenWeather API key missing in json_api.env.local"
+fi
+json_eps="$(api_get "/api/json-api/endpoints")"
+web_oat="$(echo "$json_eps" | python3 -c 'import json,sys; d=json.load(sys.stdin); eps=d.get("endpoints") or []; w=[e for e in eps if e.get("label")=="web-oat-t"]; print(w[0].get("last_value","") if w else "")' 2>/dev/null || true)"
+if [[ -n "${web_oat}" ]]; then
+  log_ok "JSON API web-oat-t last_value=${web_oat}"
+else
+  log_fail "JSON API web-oat-t not polling (register OpenWeather bundle)"
+fi
+
+log_info "BACnet operator override scan status"
+ov="$(api_get "/api/bacnet/overrides/status")"
+ov_dev="$(echo "$ov" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("device_count",0))' 2>/dev/null || echo 0)"
+ov_last="$(echo "$ov" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("last_scan_at",""))' 2>/dev/null || true)"
+if [[ "${ov_dev:-0}" -ge 5 ]]; then
+  log_ok "Override scan devices=${ov_dev} last_scan=${ov_last:-—}"
+else
+  log_fail "Override scan device_count=${ov_dev}"
+fi
+
+log_info "Setup GL36 FDD rules + OAT alias"
 export OFDD_DESKTOP_DATA_DIR="${ROOT}/workspace/data"
+python3 "${ROOT}/scripts/acme_patch_oat_column.py" \
+  --point-id "${OAT_POINT_ID:-1100-unknown-2}" \
+  --host "$HOST" --token "$TOKEN" || log_fail "OAT column patch"
 python3 "${ROOT}/scripts/setup_gl36_fdd.py" \
   --site-id "${SITE_ID:-acme}" \
   --building-id "${BUILDING_ID:-vm-bbartling}" \

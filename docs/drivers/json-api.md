@@ -79,11 +79,28 @@ python3 scripts/openweather_json_api_example.py --register --base http://127.0.0
 
 ### 4. FDD: local OA-T vs web weather
 
-With BACnet `oa-t` and JSON API `web-oat-t` in the same site, scheduled FDD merges both sources. Example rule:
+With BACnet `oa-t` and JSON API `web-oat-t` in the merged site frame, scheduled FDD compares local outdoor air to the weather service.
 
-`workspace/data/rules_py/oat_vs_web_spread_1h.py` — flags when `|oa-t − web-oat-t| > 8 °F` (stuck or drifting outdoor-air sensor).
+| Item | Detail |
+|------|--------|
+| Rule module | `oat_vs_web_spread_1h.py` |
+| Fault code | **BLD-B** (outdoor air sensor fault) |
+| Default threshold | `|oa-t − web-oat-t| > 8 °F` (`max_spread_f` in rule cfg) |
+| Acme rule id | `acme-oat-vs-web-spread` (via `setup_gl36_fdd.py`) |
+| Local OAT source | RTU `1100-unknown-2` (Outdoor Air Temperature Local) — same value as boiler/AHU networked OAT |
+| Web column | `web-oat-t` from OpenWeather bundle |
 
-Enable it in Rule Lab, bind to your OA-T BACnet point, and run **Update all records**.
+**Model alias:** local BACnet historian column must be `oa-t`:
+
+```bash
+python3 scripts/acme_patch_oat_column.py --point-id 1100-unknown-2 --host "$ACME_HOST" --token "$TOKEN"
+```
+
+Or set `external_id` / `fdd_input` to `oa-t` on the chosen `Outside_Air_Temperature_Sensor` in the model.
+
+**Units:** keep `OPENWEATHER_UNITS=imperial` when BACnet OAT is °F.
+
+Enable the rule in Rule Lab (or `setup_gl36_fdd.py` push) and run an FDD batch. Missing either column → rule returns all-false (no crash).
 
 ## Commissioning (UI)
 

@@ -96,6 +96,26 @@ def test_vav_zone_bounds_occupied_gates_unoccupied():
     assert True in mask.to_pylist()
 
 
+def test_oat_vs_web_spread_flags_divergence():
+    mod = _load_rule("oat_vs_web_spread_1h.py")
+    table = pa.table(
+        {
+            "timestamp": _ts(3),
+            "oa-t": [70.0, 70.0, 90.0],
+            "web-oat-t": [71.0, 72.0, 70.0],
+        }
+    )
+    mask = mod.apply_faults_arrow(table, {})
+    assert mask.to_pylist() == [False, False, True]
+
+
+def test_oat_vs_web_spread_missing_column_safe():
+    mod = _load_rule("oat_vs_web_spread_1h.py")
+    table = pa.table({"timestamp": _ts(2), "oa-t": [70.0, 71.0]})
+    mask = mod.apply_faults_arrow(table, {})
+    assert mask.to_pylist() == [False, False]
+
+
 def test_flatline_1h_occupied_only_flag():
     mod = _load_rule("flatline_1h.py")
     table = pa.table({"timestamp": _ts(4), "zone_temp": [70.0, 70.0, 70.0, 70.0]})

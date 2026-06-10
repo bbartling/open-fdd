@@ -72,7 +72,10 @@ def _override_scan_loop(run_bacnet_sync: Callable[..., Any]) -> None:
     while True:
         interval = scan_interval_s()
         if list_devices_for_scan():
-            run_override_scan_cycle(run_bacnet_sync)
+            try:
+                run_override_scan_cycle(run_bacnet_sync)
+            except Exception as exc:
+                print(f"BACnet override scan loop error: {exc}", file=sys.stderr)
         time.sleep(interval)
 
 

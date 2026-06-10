@@ -42,6 +42,7 @@ Poll interval: Acme BACnet poll loop is **60 s**. Flatline windows use `poll_int
 | 0 | 1 | `oat-bounds` | `oat_sensor_bounds.py` | BLD-B | Building | OAT | — | — | OAT sensor stuck high/low | Extreme weather; sensor in sun/wind |
 | 0 | 2 | `oat-flatline-1h` | `oat_sensor_flatline.py` | BLD-B | Building | OAT | — | 1 h @ 60 s poll | OAT not updating | Equipment powered off (rare for OAT) |
 | 0 | 3 | `oat-spike` | `oat_sensor_spike.py` | BLD-B | Building | OAT | — | **Disabled** — enable after spike tuning | Bad OAT spike | Fast legitimate weather fronts |
+| 0 | 3b | `oat-vs-web-spread` | `oat_vs_web_spread_1h.py` | BLD-B | Building | `oa-t` + `web-oat-t` | OpenWeather JSON API | Enabled when both columns present | Local OAT diverges from weather | Microclimate; wrong city in `OPENWEATHER_CITY` |
 | 0 | 4 | `zn-t-oob-occupied` | `vav_zone_temp_bounds_occupied.py` | VAV-C | VAV | ZN-T | schedule | Occupied 8–17 | Zone too hot/cold when occupied | Wide default bounds (65–78 °F); tune per site |
 | 0 | 5 | `zn-t-flatline-1h` | `vav_zone_temp_flatline_occupied.py` | VAV-C | VAV | ZN-T | schedule | Occupied + 1 h flatline | Zone sensor failed | Long steady occupied periods |
 | 0 | 6 | `da-t-flatline-1h` | `flatline_1h.py` | VAV-E | VAV | DA-T | — | 1 h flatline | DAT sensor stuck | Box off / no airflow |
@@ -84,6 +85,16 @@ Before enabling more rules:
 - **`acme-zn-t-oob-occupied`**: if flag rate &gt; ~70%, use tuning brief / bounds auto-tune (needs ≥85% flagged + analytics on Arrow sweep).
 - Disable noisy rules via `enabled: false` in `setup_gl36_fdd.py` rather than deleting modules.
 - Economizer and reheat-leak rules stay off until OAT/MAT/SAT columns are confirmed on the 7-day feather window.
+
+## JSON API weather + BACnet OAT
+
+- OpenWeather registered on edge JSON API tab (`web-oat-t`, `web-rh`, ~20–30 min poll).
+- Local OAT: bind **`1100-unknown-2`** (RTU outdoor air local) with `external_id: oa-t` — `scripts/acme_patch_oat_column.py`.
+- Rule `acme-oat-vs-web-spread` flags when local vs web spread exceeds 8 °F.
+
+## BACnet override scans
+
+Commission agent rotates **one device/hour** through P8 priority-array reads. Status: `GET /api/bacnet/overrides/status`. See [Operator override scans](../bacnet/override-scans).
 
 ## Docker backup / recovery
 

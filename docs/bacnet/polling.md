@@ -43,3 +43,31 @@ Inside **bridge**, a background thread watches `samples.csv` and ingests new row
 Dashboard stack health (`GET /health/stack`) reports `bacnet_poll` status from the commission agent — not a separate container.
 
 Stale points trigger data-quality fault patterns — see [Sensor quality faults](../fault-codes/sensor-quality).
+
+## Poll strategy (edge)
+
+Open-FDD intentionally keeps BACnet field traffic **minimal**:
+
+- **One enabled row per object** in `points.csv` — poll only what the model/FDD needs.
+- **Uniform cycle** — every enabled point is RPM-polled each cycle; the loop sleeps `max(15, min(poll_interval_s))` (typically **60 s** on Acme).
+- Per-point `poll_interval_s` in the UI is the **commissioned target**; throughput analytics compare configured vs observed samples.
+- **Unit conversion** (e.g. Trane °C → °F) uses `device_poll_profiles.csv` at ingest — not a poll-rate file.
+
+Acme ships ~**340 points / 60 s** ≈ one full plant read per minute. Disable unneeded objects in BACnet commissioning rather than raising global poll rates.
+
+## Async driver and single-stack I/O
+
+| Layer | Behavior |
+|-------|----------|
+| Dedicated `bacnet-io` thread | One asyncio loop + serial lock for all field I/O |
+| RPM batching | Present-value reads chunked (25 objects) to cut APDUs |
+| Poll loop | Sequential per-device RPM when `interruptible=True` so operator UI can preempt |
+| Operator UI | **INTERACTIVE** priority — cancels in-flight background work |
+| Override scans | **BACKGROUND**, 15 min timeout — see [Operator override scans](override-scans) |
+| Bridge ingest | Async notify after each poll cycle → feather historian |
+
+Do **not** run a second BACnet bind on 47808 (no parallel `openfdd-bacnet-poll` container). See [Containers](../architecture/containers).
+
+## Operator override scans
+
+Hourly P8 supervisory scans rotate one device at a time. Documented in [Operator override scans](override-scans).
