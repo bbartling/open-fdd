@@ -20,7 +20,7 @@ from .operational_analytics import (
 )
 from .rule_store import RuleStore
 from .site_defaults import ensure_default_site
-from .timeseries_api import plot_column_name
+from .timeseries_api import plot_column_name, resolve_historian_column
 from .ttl_service import TtlService
 
 _CACHE: dict[str, Any] = {"generated_at": 0.0, "payload": {}}
@@ -160,17 +160,30 @@ def _equipment_for_site(model: dict[str, Any], site_id: str) -> dict[str, dict[s
     return index
 
 
-def _points_by_equipment(model: dict[str, Any], site_id: str) -> dict[str, list[dict[str, Any]]]:
-    buckets: dict[str, list[dict[str, Any]]] = {}
+def _points_by_equipment(
+    model: dict[str, Any],
+    site_id: str,
+    *,
+    available_columns: set[str] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    """One poll-health row per model point id — prefer feather column over stale fdd alias."""
+    avail = set(available_columns or [])
+    buckets: dict[str, dict[str, dict[str, Any]]] = {}
     for pt in model.get("points") or []:
         if not isinstance(pt, dict) or str(pt.get("site_id") or "") not in {"", site_id}:
             continue
-        col = plot_column_name(pt)
-        if not col:
+        pid = str(pt.get("id") or "").strip()
+        if avail:
+            col = resolve_historian_column(pt, avail)
+            if col not in avail:
+                continue
+        else:
+            col = plot_column_name(pt)
+        if not col or not pid:
             continue
         eid = str(pt.get("equipment_id") or "").strip() or "__unassigned__"
-        buckets.setdefault(eid, []).append({**pt, "column": col})
-    return buckets
+        buckets.setdefault(eid, {})[pid] = {**pt, "column": col}
+    return {eid: list(pts.values()) for eid, pts in buckets.items()}
 
 
 def _bacnet_device_key(eq: dict[str, Any], points: list[dict[str, Any]], eid: str) -> str:
@@ -224,7 +237,8 @@ def compute_device_poll_health(
     lookback_days = analytics_lookback_days()
     fdd_by_point = fdd_by_point if fdd_by_point is not None else _fdd_points_by_point_id()
     eq_index = _equipment_for_site(model, site_id)
-    by_eq = _points_by_equipment(model, site_id)
+    avail_cols = set(frame.columns) if not frame.empty else set()
+    by_eq = _points_by_equipment(model, site_id, available_columns=avail_cols)
     interval_s = _median_interval_sec(frame["timestamp"]) if not frame.empty else float(DEFAULT_INTERVAL_S)
     stale_after_s = STALE_MULTIPLIER * interval_s
     poll_csv_fresh = (

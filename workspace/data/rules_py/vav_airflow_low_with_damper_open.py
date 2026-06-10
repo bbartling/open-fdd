@@ -1,16 +1,11 @@
 """VAV airflow chronically below minimum when damper is open (Arrow, VAV-B)."""
 
-import pyarrow as pa
-import pyarrow.compute as pc
+import pyarrow as pc
 
 
 def _norm_cmd(col):
-    c = pc.cast(col, pa.float64())
+    c = pc.cast(col, __import__("pyarrow").float64())
     return pc.if_else(pc.greater(c, 1.0), pc.divide(c, 100.0), c)
-
-
-def _false_mask(table):
-    return pa.array([False] * table.num_rows, type=pa.bool_())
 
 
 def apply_faults_arrow(table, cfg, context=None):
@@ -19,8 +14,11 @@ def apply_faults_arrow(table, cfg, context=None):
     min_flow = float(cfg.get("min_airflow_cfm", 50))
     damper_min = float(cfg.get("damper_open_min", 0.15))
     if flow_col not in table.column_names:
-        return _false_mask(table)
-    flow = pc.cast(table[flow_col], pa.float64())
+        return pc.fill_null(
+            pc.cast(table[table.column_names[0]], __import__("pyarrow").bool_()),
+            False,
+        )
+    flow = pc.cast(table[flow_col], __import__("pyarrow").float64())
     low = pc.less(flow, min_flow)
     if damper_col in table.column_names:
         damper = _norm_cmd(table[damper_col])
