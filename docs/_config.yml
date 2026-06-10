@@ -29,6 +29,10 @@ footer_content: "MIT · <a href=\"https://github.com/bbartling/open-fdd\">open-f
 
 heading_anchors: true
 
+# Internal maintainer notes — not published to GitHub Pages or PDF bundle.
+exclude:
+  - development/
+
 search_enabled: true
 search:
   heading_level: 2

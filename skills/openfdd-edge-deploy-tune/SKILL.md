@@ -47,9 +47,7 @@ python3 scripts/setup_gl36_fdd.py --site-id acme --building-id vm-bbartling \
 python3 scripts/acme_validate_fdd_bundle.py
 ```
 
-9. **Doc**: `docs/development/patch_cycle_3.0.N_acme.md`
-
-**Halt rule:** If deploy or CI blocked, open a GitHub issue with exact state — do not leave branch ambiguous.
+9. **Halt rule:** If deploy or CI blocked, open a GitHub issue with exact state — do not leave branch ambiguous. Do not add internal patch-cycle notes under `docs/` (they publish to GitHub Pages and the PDF bundle).
 
 ## FDD tuning via API (Tailscale)
 

@@ -34,7 +34,7 @@ This repository is **Arrow-native FDD only** (3.0.1+). The published PyPI wheel 
 
 **Docker GHCR:** Images at `ghcr.io/bbartling/openfdd-*`. Doc: [docs/quick-start/docker.md](docs/quick-start/docker.md).
 
-**Acme patch cycles + FDD tuning:** [skills/openfdd-edge-deploy-tune/SKILL.md](skills/openfdd-edge-deploy-tune/SKILL.md) — GHCR upgrade, `setup_gl36_fdd.py`, tuning brief/apply via Tailscale API, operational verify. Halt state: [docs/development/patch_cycle_3.0.28_halt.md](docs/development/patch_cycle_3.0.28_halt.md).
+**Acme patch cycles + FDD tuning:** [skills/openfdd-edge-deploy-tune/SKILL.md](skills/openfdd-edge-deploy-tune/SKILL.md) — GHCR upgrade, `setup_gl36_fdd.py`, tuning brief/apply via Tailscale API, operational verify.
 
 ## Skill routing
 
