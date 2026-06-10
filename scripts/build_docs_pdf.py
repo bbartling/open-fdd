@@ -85,12 +85,14 @@ def strip_kramdown_ial(text: str) -> str:
 
 
 def collect_md_files(docs_dir: Path) -> list[Path]:
-    """All .md files under docs/, excluding 404 and _build."""
+    """All .md files under docs/, excluding 404, _build, and development/."""
     out: list[Path] = []
     for f in sorted(docs_dir.rglob("*.md")):
         if f.name == "404.md":
             continue
         if "_build" in f.parts:
+            continue
+        if "development" in f.parts:
             continue
         out.append(f)
     return out

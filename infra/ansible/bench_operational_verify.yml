@@ -2,9 +2,7 @@
 # Full bench operational verification (discover → model → poll → wait → data check).
 #   ansible-playbook -i inventory.yml bench_operational_verify.yml --limit bacnet_pi
 #   RUN_WAIT_MINUTES=0 ansible-playbook ...  # skip 10m wait
-
-- name: Sync bench data and BACnet fixes before verify
-  ansible.builtin.import_playbook: legacy/bench_edge_data_sync.yml
+# Bench model/rules: import via HTTPS API (commissioning-import), not Ansible file sync.
 
 - name: Bench operational verification
   hosts: pi_bcn

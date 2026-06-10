@@ -83,7 +83,7 @@ openfdd_docker_registry: ghcr.io
 openfdd_docker_registry_org: bbartling
 openfdd_docker_image_tag: "local"
 openfdd_docker_disable_systemd: true
-openfdd_docker_ollama: true
+openfdd_docker_ollama: false
 openfdd_docker_bridge_secret: true
 # Image-only deploys must not tar-sync workspace/data from the control machine (use API import for models/rules).
 openfdd_docker_sync_workspace_data: false

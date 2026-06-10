@@ -348,19 +348,40 @@ elif [[ "$INVENTORY_DOCKER_STACK" == "1" ]]; then
       log_warn "Feather store check skipped (SSH to ${SSH_USER}@${HOST} failed — set SSHPASS in secrets/acme.env.local)"
     fi
     for svc in bridge commission mcp-rag; do
+      if ! remote_state="$(ssh_remote "cid=\$(docker ps -aq -f name=${svc} 2>/dev/null | head -1); if [[ -z \"\$cid\" ]]; then echo missing; else docker inspect -f '{{.State.Status}} {{.RestartCount}}' \"\$cid\" 2>/dev/null || echo missing; fi")"; then
+        log_warn "Docker ${svc}: SSH unavailable (skipped container gate)"
+        break
+      fi
+      if [[ "$remote_state" == "missing" ]]; then
+        log_fail "Docker service ${svc}: no container"
+        continue
+      fi
+      read -r remote_status remote_restarts <<<"$remote_state"
+      if [[ "$remote_status" == "restarting" ]]; then
+        log_fail "Docker ${svc}: crash loop (status=restarting, RestartCount=${remote_restarts:-?})"
+      elif [[ "$remote_status" != "running" ]]; then
+        log_fail "Docker ${svc}: not running (status=${remote_status}, RestartCount=${remote_restarts:-?})"
+      elif [[ "${remote_restarts:-0}" -gt 5 ]]; then
+        log_fail "Docker ${svc}: high restart count (${remote_restarts} > 5)"
+      else
+        log_ok "Docker ${svc} running (RestartCount=${remote_restarts:-0})"
+      fi
       if ! cid="$(ssh_remote "docker ps -q -f name=${svc} 2>/dev/null | head -1")"; then
         log_warn "Docker ${svc}: SSH unavailable (skipped log scan)"
         break
       fi
-      if [[ -z "$cid" ]]; then
-        log_fail "Docker service ${svc}: no running container"
-        continue
-      fi
-      err_lines="$(ssh_remote "docker logs --since 15m \"${cid}\" 2>&1 | grep -Ei 'ERROR|CRITICAL|Exception:|Error:' | grep -v '404 Not Found' | grep -v 'unknown-property' | grep -v 'read-property-multiple' | grep -v 'Connection reset by peer' | grep -v 'CancelledError' | grep -v 'KeyboardInterrupt' | grep -v 'asyncio.exceptions' | grep -v 'most recent call last' | grep -v 'During handling' | tail -5 || true")" || err_lines=""
+      err_lines="$(ssh_remote "docker logs --since 15m \"${cid}\" 2>&1 | grep -Ei 'ModuleNotFoundError|ImportError:|No module named|Application startup failed|ERROR|CRITICAL|Exception:|Error:' | grep -v '404 Not Found' | grep -v 'unknown-property' | grep -v 'read-property-multiple' | grep -v 'Connection reset by peer' | grep -v 'CancelledError' | grep -v 'KeyboardInterrupt' | grep -v 'asyncio.exceptions' | grep -v 'most recent call last' | grep -v 'During handling' | tail -5 || true")" || err_lines=""
       if [[ -n "$err_lines" ]]; then
         log_fail "Docker ${svc} (${cid:0:12}) log errors: ${err_lines}"
       else
-        log_ok "Docker ${svc} logs clean (last 80 lines, cid ${cid:0:12})"
+        log_ok "Docker ${svc} logs clean (last 15m, cid ${cid:0:12})"
+      fi
+      if [[ "$svc" == "bridge" && -n "$cid" ]]; then
+        if ssh_remote "docker exec \"${cid}\" python3 -c 'from open_fdd.arrow_runtime.column_map_from_model import build_column_map_from_model_points' >/dev/null 2>&1"; then
+          log_ok "Docker bridge image has open_fdd.arrow_runtime.column_map_from_model"
+        else
+          log_fail "Docker bridge missing open_fdd.arrow_runtime.column_map_from_model — pull newer GHCR image"
+        fi
       fi
     done
   fi

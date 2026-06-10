@@ -1,9 +1,9 @@
 # Local dev stack on bensserver — bind-mounts workspace/ (state + config).
-# Caddy + Ollama stay on host by default (see docs/edge_deploy_docker.md).
+# Ollama is off by default; enable with --profile ai and OFDD_OLLAMA_ENABLED=1 in ollama.env.local.
 #
 #   ./scripts/docker_build.sh
 #   docker compose -f docker/compose.dev.yml up -d
-#   docker compose -f docker/compose.dev.yml --profile ai up -d
+#   docker compose -f docker/compose.dev.yml --profile ai up -d   # optional in-compose Ollama
 
 name: openfdd-dev
 
@@ -23,13 +23,8 @@ services:
       OFDD_ALLOW_LAN_INTERNAL_INGEST: "1"
       OPENFDD_BACNET_COMMISSION_URL: http://commission:8767
       OFDD_MCP_REST_BASE: http://mcp-rag:8090
-      # Prefer in-compose Ollama (--profile ai); fall back to host Ollama via host-gateway.
-      OFDD_OLLAMA_BASE_URL: http://ollama:11434
-      OFDD_OLLAMA_FALLBACK_URLS: http://host.docker.internal:11434,http://127.0.0.1:11434
-      # Dev bench: smallest local model — override in workspace/ollama.env.local if needed.
-      OFDD_OLLAMA_MODEL: tinyllama
-      OFDD_OLLAMA_GPU_MODE: cpu
-      OFDD_OLLAMA_NUM_GPU: "0"
+      # Ollama off by default — set OFDD_OLLAMA_ENABLED=1 in workspace/ollama.env.local with --profile ai.
+      OFDD_OLLAMA_ENABLED: "0"
     env_file:
       - path: ../workspace/auth.env.local
         required: false
@@ -46,9 +41,6 @@ services:
         condition: service_started
       mcp-rag:
         condition: service_started
-      ollama:
-        condition: service_started
-        required: false
     restart: unless-stopped
 
   commission:

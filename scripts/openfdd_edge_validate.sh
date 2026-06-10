@@ -239,24 +239,11 @@ else
 fi
 
 log_step "stack_health_check"
-if OPENFDD_BASE_URL="$BASE" ./scripts/stack_health_check.sh --require-ollama; then
+if OPENFDD_BASE_URL="$BASE" ./scripts/stack_health_check.sh; then
   log_ok "stack_health_check"
 else
   log_fail "stack_health_check"
 fi
-
-log_step "Docker error scan (last 20m)"
-for svc in bridge commission mcp-rag ollama; do
-  cid="$(docker compose -f docker/compose.dev.yml ps -q "$svc" 2>/dev/null || true)"
-  [[ -n "$cid" ]] || continue
-  n="$(docker logs --since 20m "$cid" 2>&1 | grep -ciE 'ModuleNotFoundError|Traceback|CRITICAL' || true)"
-  if [[ "${n:-0}" -eq 0 ]]; then
-    log_ok "${svc} logs clean"
-  else
-    log_fail "${svc} has ${n} critical log lines"
-    docker logs --tail 8 "$cid" 2>&1 | sed 's/^/    /' || true
-  fi
-done
 
 echo ""
 if [[ "$FAILURES" -gt 0 ]]; then

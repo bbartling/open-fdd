@@ -26,14 +26,19 @@ echo "=== 2/4 Deploy Open-FDD edge stack ==="
 "${DIR}/deploy.sh" all --limit "$LIMIT" "${EXTRA[@]}"
 
 echo ""
-echo "=== 3/4 Ollama + MCP sidecar ==="
+echo "=== 3/4 MCP sidecar (Ollama skipped — set ACME_ENABLE_OLLAMA=1 to bootstrap) ==="
+if [[ "${ACME_ENABLE_OLLAMA:-}" == "1" ]]; then
+  if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null; then
+    sshpass -e ansible-playbook -i inventory.yml ollama_bootstrap.yml --limit "$LIMIT" \
+      -e enable_ollama=true -e ollama_ram_tier=16gb "${EXTRA[@]}"
+  else
+    ansible-playbook -i inventory.yml ollama_bootstrap.yml --limit "$LIMIT" \
+      -e enable_ollama=true -e ollama_ram_tier=16gb "${EXTRA[@]}"
+  fi
+fi
 if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null; then
-  sshpass -e ansible-playbook -i inventory.yml ollama_bootstrap.yml --limit "$LIMIT" \
-    -e enable_ollama=true -e ollama_ram_tier=16gb "${EXTRA[@]}"
   sshpass -e ansible-playbook -i inventory.yml edge_ai_stack.yml --limit "$LIMIT" "${EXTRA[@]}"
 else
-  ansible-playbook -i inventory.yml ollama_bootstrap.yml --limit "$LIMIT" \
-    -e enable_ollama=true -e ollama_ram_tier=16gb "${EXTRA[@]}"
   ansible-playbook -i inventory.yml edge_ai_stack.yml --limit "$LIMIT" "${EXTRA[@]}"
 fi
 
