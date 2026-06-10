@@ -40,18 +40,23 @@ export default function StackStatusStrip() {
 
   return (
     <div className="stack-strip">
-      {stack.services.map((svc) => (
-        <StatusDot
-          key={svc.id}
-          status={svc.status}
-          label={svc.label}
-          title={
-            typeof svc.detail === "string"
-              ? svc.detail
-              : JSON.stringify(svc.detail)
-          }
-        />
-      ))}
+      {stack.services.map((svc) => {
+        const optionalGray = svc.id === "ollama" && svc.status === "gray";
+        return (
+          <StatusDot
+            key={svc.id}
+            status={svc.status}
+            label={optionalGray ? "Ollama" : svc.label}
+            title={
+              optionalGray
+                ? undefined
+                : typeof svc.detail === "string"
+                  ? svc.detail
+                  : JSON.stringify(svc.detail)
+            }
+          />
+        );
+      })}
     </div>
   );
 }

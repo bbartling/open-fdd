@@ -66,6 +66,13 @@ def collect_status() -> dict[str, Any]:
 
 def _family_of(alert: dict[str, Any]) -> str:
     source = str(alert.get("source") or "").strip()
+    if source == "fdd":
+        eid = str(alert.get("equipment_id") or "").strip()
+        ename = str(alert.get("equipment_name") or "").strip()
+        if eid:
+            return f"EQ:{eid}"
+        if ename:
+            return f"EQ:{ename}"
     if source == "poll_health":
         eid = str(alert.get("equipment_id") or "").strip()
         if eid:
@@ -85,6 +92,12 @@ def _family_of(alert: dict[str, Any]) -> str:
 
 
 def _family_group_label(family: str, alerts: list[dict[str, Any]]) -> str:
+    if family.startswith("EQ:"):
+        for alert in alerts:
+            name = str(alert.get("equipment_name") or "").strip()
+            if name:
+                return name
+        return family.split(":", 1)[-1] or "Equipment"
     if family.startswith("POLL:"):
         for alert in alerts:
             name = str(alert.get("equipment_name") or "").strip()

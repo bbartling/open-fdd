@@ -39,9 +39,11 @@ fi
 export OPENFDD_IMAGE_TAG="$TAG"
 export RUN_POST_CHECK="${RUN_POST_CHECK:-1}"
 
-echo "==> Image-only Docker upgrade (feather + BACnet config preserved on edge host)"
+echo "==> Image-only Docker upgrade (GHCR pull — no workstation file sync)"
 ./deploy.sh docker --limit "$LIMIT" \
   -e openfdd_docker_sync_workspace_data=false \
+  -e openfdd_push_site_pack=false \
+  -e openfdd_push_bacnet_config=false \
   "${EXTRA[@]}"
 
 echo "Done. Feather and poll data remain under ~/open-fdd/workspace/data on the edge VM."

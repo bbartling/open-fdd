@@ -204,6 +204,7 @@ export default function BuildingInsightDashboard() {
           zoneSentence={insight?.zone_sentence}
           deviceSentence={insight?.device_sentence}
           worstZones={insight?.worst_zones}
+          zoneSystems={insight?.zone_systems}
           opportunities={insight?.zone_temps?.research?.opportunities}
           lookbackDays={days}
         />
@@ -261,10 +262,17 @@ export default function BuildingInsightDashboard() {
           ) : null}
           {insight?.faults_linked?.length ? (
             <ul className="bis-linked-faults">
-              {insight.faults_linked.slice(0, 6).map((f) => (
-                <li key={`${f.code}-${f.equipment_name}`}>
-                  <span className="bis-code">{f.code}</span> {f.title}
-                  {f.equipment_name ? ` · ${f.equipment_name}` : ""}
+              {insight.faults_linked.slice(0, 6).map((f, i) => (
+                <li key={`${f.code}-${f.equipment_name}-${i}`}>
+                  {f.equipment_name ? (
+                    <>
+                      <strong>{f.equipment_name}</strong>
+                      {f.code ? <> · <span className="bis-code">{f.code}</span></> : null}
+                    </>
+                  ) : (
+                    f.code ? <span className="bis-code">{f.code}</span> : null
+                  )}
+                  {f.title ? ` · ${String(f.title).replace(/^[A-Z0-9-]+ · /, "")}` : ""}
                 </li>
               ))}
             </ul>
@@ -276,9 +284,6 @@ export default function BuildingInsightDashboard() {
               ? ` · every ${Math.round(insight.refresh_interval_s / 60)} min`
               : ""}
           </p>
-          {insight?.error && !insight.ollama_ok ? (
-            <p className="muted">Ollama offline — deterministic summary. Chat on Agent tab.</p>
-          ) : null}
           {insightError ? <p className="error">{insightError}</p> : null}
         </div>
       </div>

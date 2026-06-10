@@ -152,6 +152,7 @@ def _run_arrow_bound_columns(
     fn = compile_apply_faults_arrow(code)
     combined = pa.array([False] * table.num_rows, type=pa.bool_())
     cols_run = 0
+    flagged_cols: list[str] = []
     ctx_base = {"site_id": site_id, "bound_columns": bound_cols}
     for col in bound_cols:
         if col not in table.column_names:
@@ -162,6 +163,11 @@ def _run_arrow_bound_columns(
             mask = normalize_fault_mask(raw, expected_len=table.num_rows)
             combined = pc.or_(combined, mask)
             cols_run += 1
+            from open_fdd.arrow_runtime.events import count_mask_values
+
+            col_counts = count_mask_values(mask)
+            if int(col_counts.get("true_count") or 0) > 0:
+                flagged_cols.append(col)
         except Exception:
             continue
     if cols_run == 0:
@@ -169,13 +175,16 @@ def _run_arrow_bound_columns(
     from open_fdd.arrow_runtime.events import count_mask_values
 
     counts = count_mask_values(combined)
-    return {
+    out: dict[str, Any] = {
         "ok": True,
         "rows": table.num_rows,
         "flagged": int(counts.get("true_count") or 0),
         "backend": "arrow",
         "bound_columns": cols_run,
     }
+    if flagged_cols:
+        out["flagged_columns"] = flagged_cols
+    return out
 
 
 def _trim_lookback(frame: Any, lookback_hours: float) -> Any:
@@ -288,7 +297,7 @@ def _run_one(
                         rule_id=str(rule.get("id") or ""),
                     )
                     if swept is not None:
-                        return {
+                        run = {
                             **base,
                             "status": "ok",
                             "rows": int(swept.get("rows") or 0),
@@ -296,6 +305,13 @@ def _run_one(
                             "backend": "arrow",
                             "bound_columns": swept.get("bound_columns"),
                         }
+                        flagged_n = int(swept.get("flagged") or 0)
+                        if flagged_n > 0:
+                            fc = swept.get("flagged_columns") or []
+                            if fc:
+                                run["analytics"] = {"flagged_columns": fc, "value_columns": fc}
+                                run["detail"] = format_fault_detail(run["analytics"], source=origin)
+                        return run
             arrow_result = playground.run_arrow_table(
                 code,
                 table,

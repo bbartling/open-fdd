@@ -27,6 +27,20 @@ export type InsightResponse = {
     recovery_f_per_min?: number;
     worst_reason?: string;
   }[];
+  zone_systems?: {
+    ahu_id?: string;
+    ahu_name?: string;
+    fan_column?: string | null;
+    median_recovery_f_per_min?: number | null;
+    zones?: {
+      label?: string;
+      equipment_name?: string;
+      column?: string;
+      day_avg_f?: number;
+      night_avg_f?: number;
+      recovery_f_per_min?: number;
+    }[];
+  }[];
   zone_temps?: {
     topology_mode?: string;
     zone_sensor_count?: number;

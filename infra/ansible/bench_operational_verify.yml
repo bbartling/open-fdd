@@ -4,7 +4,7 @@
 #   RUN_WAIT_MINUTES=0 ansible-playbook ...  # skip 10m wait
 
 - name: Sync bench data and BACnet fixes before verify
-  ansible.builtin.import_playbook: bench_edge_data_sync.yml
+  ansible.builtin.import_playbook: legacy/bench_edge_data_sync.yml
 
 - name: Bench operational verification
   hosts: pi_bcn

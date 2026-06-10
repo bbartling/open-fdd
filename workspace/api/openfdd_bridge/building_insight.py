@@ -57,8 +57,13 @@ def fault_sentences_from_alerts(alerts: list[dict[str, Any]], *, limit: int = 12
             continue
         sev = str(alert.get("severity") or "info")
         detail = str(alert.get("detail") or "").strip()
-        prefix = f"{code}: " if code else ""
-        line = f"{prefix}{title}"
+        ename = str(alert.get("equipment_name") or "").strip()
+        if ename and ename not in title:
+            line = f"{ename} · {title}"
+        elif code and code not in title:
+            line = f"{code}: {title}"
+        else:
+            line = title
         if detail:
             line += f" — {detail[:160]}"
         line += f" ({sev})."
@@ -237,6 +242,17 @@ def _response_payload(
         "lookback_days": analytics_lookback_days(),
         "fault_sentences": fault_sentences_from_alerts(status.get("alerts") or []),
         "worst_zones": zone_snapshot.get("worst_zones") or [],
+        "zone_systems": [
+            {
+                "ahu_id": s.get("ahu_id"),
+                "ahu_name": s.get("ahu_name"),
+                "fan_column": s.get("fan_column"),
+                "median_recovery_f_per_min": s.get("median_recovery_f_per_min"),
+                "zones": s.get("zones") or [],
+            }
+            for s in (zone_snapshot.get("systems") or [])
+            if isinstance(s, dict)
+        ],
         "zone_temps": {
             "topology_mode": zone_snapshot.get("topology_mode"),
             "zone_sensor_count": zone_snapshot.get("zone_sensor_count"),
@@ -303,7 +319,9 @@ def get_building_insight(*, force: bool = False) -> dict[str, Any]:
             sentence = _fallback_sentence(status, zone_snapshot, device_snapshot)
             source = "deterministic"
     else:
-        if not ollama_ok:
+        from .stack_health import _ollama_optional_cpu
+
+        if not ollama_ok and not _ollama_optional_cpu():
             error = str(health.get("error") or "ollama unreachable")[:200]
         sentence = _fallback_sentence(status, zone_snapshot, device_snapshot)
 

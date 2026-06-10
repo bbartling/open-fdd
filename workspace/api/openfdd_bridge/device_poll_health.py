@@ -173,6 +173,45 @@ def _points_by_equipment(model: dict[str, Any], site_id: str) -> dict[str, list[
     return buckets
 
 
+def _bacnet_device_key(eq: dict[str, Any], points: list[dict[str, Any]], eid: str) -> str:
+    inst = eq.get("bacnet_device_instance")
+    if inst is None:
+        inst = eq.get("bacnet_device_id")
+    if inst is not None and str(inst).strip():
+        return f"dev:{inst}"
+    for pt in points:
+        dev = pt.get("bacnet_device_id")
+        if dev is not None and str(dev).strip():
+            return f"dev:{dev}"
+    return f"eq:{eid}"
+
+
+def _merge_equipment_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Merge duplicate BRICK equipment rows that share one BACnet device instance."""
+    if not rows:
+        return {}
+    status_rank = {"offline": 0, "historian_lag": 1, "flaky": 2, "degraded": 3, "healthy": 4, "unknown": 5}
+    merged = rows[0]
+    for row in rows[1:]:
+        merged["points_polled"] += row.get("points_polled") or 0
+        merged["points_stale"] += row.get("points_stale") or 0
+        merged["points_fdd"] += row.get("points_fdd") or 0
+        merged["max_flips_per_day"] = max(
+            float(merged.get("max_flips_per_day") or 0),
+            float(row.get("max_flips_per_day") or 0),
+        )
+        merged["points"] = (merged.get("points") or []) + (row.get("points") or [])
+        if status_rank.get(str(row.get("status")), 5) < status_rank.get(str(merged.get("status")), 5):
+            merged["status"] = row["status"]
+        alt_ids = merged.setdefault("_merged_equipment_ids", [merged.get("equipment_id")])
+        alt = row.get("equipment_id")
+        if alt and alt not in alt_ids:
+            alt_ids.append(alt)
+    merged["points"] = merged.get("points") or []
+    merged["points"] = merged["points"][:24]
+    return merged
+
+
 def compute_device_poll_health(
     model: dict[str, Any],
     site_id: str,
@@ -200,6 +239,7 @@ def compute_device_poll_health(
     )
     live_poll_fresh = live_poll_age_s is not None and live_poll_age_s <= stale_after_s
     equipment_rows: list[dict[str, Any]] = []
+    by_device: dict[str, list[dict[str, Any]]] = {}
 
     for eid, points in sorted(by_eq.items()):
         if not points:
@@ -240,20 +280,23 @@ def compute_device_poll_health(
         if flaky_n > 0 and status != "offline":
             status = "flaky"
         max_flips = max((p["flips_per_day"] for p in point_rows), default=0.0)
-        equipment_rows.append(
-            {
-                "equipment_id": eid,
-                "equipment_name": name,
-                "equipment_family": eq_family,
-                "status": status,
-                "points_polled": polled,
-                "points_stale": stale_n,
-                "points_fdd": fdd_n,
-                "max_flips_per_day": max_flips,
-                "median_poll_interval_s": round(interval_s, 1),
-                "points": point_rows[:24],
-            }
-        )
+        row = {
+            "equipment_id": eid,
+            "equipment_name": name,
+            "equipment_family": eq_family,
+            "status": status,
+            "points_polled": polled,
+            "points_stale": stale_n,
+            "points_fdd": fdd_n,
+            "max_flips_per_day": max_flips,
+            "median_poll_interval_s": round(interval_s, 1),
+            "points": point_rows[:24],
+            "bacnet_device_key": _bacnet_device_key(eq, points, eid),
+        }
+        by_device.setdefault(row["bacnet_device_key"], []).append(row)
+
+    for group in by_device.values():
+        equipment_rows.append(_merge_equipment_rows(group))
 
     offline = [e for e in equipment_rows if e["status"] == "offline"]
     historian_lag = [e for e in equipment_rows if e["status"] == "historian_lag"]
@@ -267,6 +310,8 @@ def compute_device_poll_health(
         "methodology": analytics_methodology(),
         "median_poll_interval_s": round(interval_s, 1),
         "equipment": equipment_rows,
+        "equipment_row_count": len(by_eq),
+        "physical_device_count": len(equipment_rows),
         "offline_equipment": offline[:12],
         "historian_lag_equipment": historian_lag[:12],
         "flaky_equipment": flaky[:12],

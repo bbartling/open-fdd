@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# Deploy Open-FDD edge stack — component targets or full stack.
+# Open-FDD edge orchestration — container pull + health checks (no application file deploy).
 #
 #   ./deploy.sh help
-#   ./deploy.sh ui --limit acme_vm_bbartling
-#   ./deploy.sh backend --limit bacnet_pi
-#   ./deploy.sh all --limit acme_vm_bbartling -v
-#   export SSHPASS='...' && ./deploy.sh drivers --limit acme_vm_bbartling
+#   OPENFDD_IMAGE_TAG=latest ./deploy.sh docker --limit acme_vm_bbartling
+#   ./deploy.sh check --limit acme_vm_bbartling
 #
-# Legacy (full deploy): ./deploy.sh --limit bacnet_pi
+# Application code ships in GHCR images. Ansible does not rsync Python, React, rules, or models.
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../.." && pwd)"
@@ -16,7 +14,6 @@ cd "$DIR"
 INV="${ANSIBLE_INVENTORY:-${DIR}/inventory.yml}"
 SECRETS_DIR="${DIR}/secrets"
 
-# Map inventory --limit host → secrets/<alias>.env.local (gitignored).
 load_edge_secrets() {
   local limit="${1:-}"
   local secrets_file=""
@@ -69,57 +66,53 @@ fi
 
 NO_ASK_PASS=false
 COMPONENT=""
-PLAYBOOK="deploy.yml"
+PLAYBOOK="deploy_docker.yml"
 TAGS=""
-NEEDS_UI=false
 RUN_POST_CHECK="${RUN_POST_CHECK:-1}"
 ANSIBLE_EXTRA=()
+
+LEGACY_COMPONENTS="all ui web backend core drivers data config caddy systemd pip commission mcp ai ollama"
 
 usage() {
   cat <<'EOF'
 Open-FDD edge deploy (infra/ansible)
 
+Open-FDD deployment is container-based. Ansible does not deploy application files.
+Ansible orchestrates GHCR image pull, docker compose up, host Caddy/timers, and health checks.
+
 Usage:
   ./deploy.sh <component> [--limit HOST] [-v] [-e key=val ...]
-  ./deploy.sh --limit HOST              # same as: all --limit HOST
 
-Components:
-  all         Full stack (code, UI, drivers, systemd, Caddy, MCP, verify)
-  ui | web    Built React dashboard only (workspace/api/static/app)
-  backend     Bridge API (workspace/api) + bridge systemd + pip deps
-  core        open_fdd Python package + editable install
-  drivers     BACnet toolshed, poll/commission units, points.csv, commission.env
-  data        workspace/data (models, rules store paths — not live historian)
-  config      auth.env.local, bridge secrets, Caddyfile
-  caddy       Caddy install + TLS + reverse proxy only
-  systemd     Legacy only: reload openfdd-* app units (not used with deploy.sh docker)
-  pip         Re-run venv + pip installs only
-  commission  Push points.csv from edge_backup only
-  mcp | ai    MCP RAG sidecar (+ edge_ai_stack.yml); ai also runs Ollama bootstrap
-  os          apt update + safe upgrade (os_update.yml; -e os_upgrade_reboot=true)
-  check       Post-deploy insurance probes only (no file sync)
-  docker      Docker Compose (default: pull ghcr.io/bbartling/* — set OPENFDD_IMAGE_TAG)
-  maintain    Safe Docker prune on edge only (images/networks/containers; never volumes)
-  ops         Full Docker deploy + maintenance + TTL sync + SPARQL/feather/log health (edge_operational_sync.yml)
+Primary commands:
+  docker      Pull ghcr.io/bbartling/* and docker compose up -d (default path)
+  check       Post-deploy health probes only (no mutations)
+  maintain    Safe Docker prune on edge (never volumes)
+  ops         docker + maintenance + API TTL sync probes (edge_operational_sync.yml)
+  os          apt update + safe upgrade (os_update.yml)
+  logs        (use: docker compose logs on edge, or scripts/post_deploy_check.sh)
+  help        This message
 
 Examples:
-  OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh docker --limit acme_vm_bbartling
-  ./scripts/build_and_test.sh && ./deploy.sh ui --limit acme_vm_bbartling
-  ./deploy.sh backend --limit acme_vm_bbartling
-  ./deploy.sh drivers --limit acme_vm_bbartling -e enable_bacnet_poll_driver=true
-  export SSHPASS='...' && ./deploy.sh all --limit acme_vm_bbartling -v
-  ./deploy.sh os --limit acme_vm_bbartling -e os_upgrade_reboot=true
+  OPENFDD_IMAGE_TAG=latest ./deploy.sh docker --limit acme_vm_bbartling
+  OPENFDD_IMAGE_TAG=latest ./scripts/upgrade_edge_ghcr.sh --limit acme_vm_bbartling
+  ./deploy.sh check --limit acme_vm_bbartling
   ./deploy.sh maintain --limit acme_vm_bbartling
-  ./deploy.sh ops --limit acme_vm_bbartling
+
+Optional one-time bootstrap (deprecated file push — prefer API import):
+  ./deploy.sh docker --limit acme_vm_bbartling \
+    -e openfdd_push_site_pack=true \
+    -e openfdd_push_bacnet_config=true
+
+Legacy workstation rsync (lab Pi only): see legacy/README.md
+  export OPENFDD_ALLOW_LEGACY_DEPLOY=1
 
 Env:
-  SSHPASS              Password for sshpass (optional; or set in secrets/<host>.env.local)
-  ANSIBLE_INVENTORY    Default: infra/ansible/inventory.yml
-  RUN_POST_CHECK=0     Skip post_deploy_check.sh after deploy
+  OPENFDD_IMAGE_TAG     GHCR tag (default in host_vars: latest)
+  SSHPASS               From secrets/<host>.env.local when using --limit
+  RUN_POST_CHECK=0      Skip post_deploy_check.sh after deploy
+  ANSIBLE_INVENTORY     Default: infra/ansible/inventory.yml
 
-Secrets (gitignored): infra/ansible/secrets/README.md
-  acme_vm_bbartling → secrets/acme.env.local
-  bacnet_pi         → secrets/bacnet_pi.env.local
+Secrets: infra/ansible/secrets/README.md
 EOF
 }
 
@@ -132,10 +125,7 @@ require_docker_deploy() {
   esac
   if [[ "$pull" == "1" ]]; then
     if [[ -z "$tag" || "$tag" == "local" ]]; then
-      echo "GHCR deploy: set OPENFDD_IMAGE_TAG to the tag published by GitHub Actions." >&2
-      echo "  Example: OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh docker --limit acme_vm_bbartling" >&2
-      echo "Legacy tar path: OPENFDD_DOCKER_PULL_FROM_GHCR=0 ./scripts/docker_build.sh --save" >&2
-      exit 1
+      tag="${tag:-latest}"
     fi
     ANSIBLE_EXTRA+=(-e "openfdd_docker_pull_from_ghcr=true" -e "openfdd_docker_image_tag=${tag}")
     return 0
@@ -145,47 +135,39 @@ require_docker_deploy() {
   local tar="${ROOT}/docker/dist/openfdd-images-${tag}.tar.gz"
   if [[ ! -f "$tar" ]]; then
     echo "Missing Docker image bundle: $tar" >&2
-    echo "Run: OPENFDD_IMAGE_TAG=${tag} ./scripts/docker_build.sh --save" >&2
-    echo "Or GHCR: OPENFDD_IMAGE_TAG=yourtag ./deploy.sh docker --limit <host>" >&2
+    echo "Prefer GHCR: OPENFDD_IMAGE_TAG=latest ./deploy.sh docker --limit <host>" >&2
     exit 1
   fi
 }
 
-require_ui_build() {
-  if [[ ! -f "${ROOT}/workspace/api/static/app/index.html" ]]; then
-    echo "Missing compiled dashboard — run one of:" >&2
-    echo "  ${ROOT}/scripts/build_operator_dashboard.sh prod" >&2
-    echo "  ${ROOT}/scripts/build_and_test.sh" >&2
-    exit 1
-  fi
+legacy_blocked() {
+  echo "Component '$1' uses legacy workstation file deploy (removed from default path)." >&2
+  echo "  Production: OPENFDD_IMAGE_TAG=latest ./deploy.sh docker --limit <host>" >&2
+  echo "  Lab only:   OPENFDD_ALLOW_LEGACY_DEPLOY=1 ansible-playbook legacy/deploy.yml ..." >&2
+  echo "  See: infra/ansible/legacy/README.md" >&2
+  exit 1
 }
 
 is_component() {
   case "$1" in
-    help|-h|--help) return 0 ;;
-    all|ui|web|backend|core|drivers|data|config|caddy|systemd|pip|commission|mcp|ai|ollama|os|check|docker|maintain|ops) return 0 ;;
+    help|-h|--help|docker|check|maintain|ops|os|logs) return 0 ;;
+    all|ui|web|backend|core|drivers|data|config|caddy|systemd|pip|commission|mcp|ai|ollama) return 0 ;;
     *) return 1 ;;
   esac
 }
 
 parse_component() {
   if [[ $# -eq 0 ]]; then
-    COMPONENT="all"
-    NEEDS_UI=true
+    COMPONENT="docker"
     return
   fi
   if is_component "$1"; then
     COMPONENT="$1"
     shift
-    case "$COMPONENT" in
-      help|-h|--help) usage; exit 0 ;;
-      ui|web|all) NEEDS_UI=true ;;
-    esac
     return
   fi
   if [[ "$1" == --* ]]; then
-    COMPONENT="all"
-    NEEDS_UI=true
+    COMPONENT="docker"
     return
   fi
   echo "Unknown component: $1" >&2
@@ -194,7 +176,6 @@ parse_component() {
 }
 
 parse_component "$@"
-# parse_component shifts only inside the function; drop component from caller "$@" too.
 if [[ $# -gt 0 ]] && [[ "$1" == "$COMPONENT" ]]; then
   shift
 fi
@@ -213,53 +194,46 @@ if [[ -n "$DEPLOY_LIMIT" ]]; then
 fi
 
 case "$COMPONENT" in
-  all) TAGS="" ;;
-  ui|web) TAGS="preflight,ui" ;;
-  backend) TAGS="preflight,backend,pip,systemd" ;;
-  core) TAGS="preflight,core,pip" ;;
-  drivers) TAGS="preflight,drivers,pip,systemd" ;;
-  data) TAGS="preflight,data" ;;
-  config) TAGS="preflight,config,caddy" ;;
-  caddy) TAGS="caddy,systemd" ;;
-  systemd) TAGS="systemd" ;;
-  pip) TAGS="preflight,pip" ;;
-  commission) TAGS="preflight,commission" ;;
-  mcp) TAGS="mcp"; PLAYBOOK="edge_ai_stack.yml" ;;
-  ai)
-    TAGS=""
-    PLAYBOOK=""
+  help|-h|--help) usage; exit 0 ;;
+  logs)
+    echo "On edge: docker compose -f ~/open-fdd/docker-compose.yml logs -f bridge commission"
+    exit 0
     ;;
-  os)
-    TAGS=""
-    PLAYBOOK="os_update.yml"
-    RUN_POST_CHECK=0
+  docker) PLAYBOOK="deploy_docker.yml"; TAGS="" ;;
+  check) PLAYBOOK="post_deploy_check.yml"; TAGS="verify"; RUN_POST_CHECK=0 ;;
+  maintain) PLAYBOOK="edge_docker_maintenance.yml"; TAGS=""; RUN_POST_CHECK=0 ;;
+  ops) PLAYBOOK="edge_operational_sync.yml"; TAGS="" ;;
+  os) PLAYBOOK="os_update.yml"; TAGS=""; RUN_POST_CHECK=0 ;;
+  all|ui|web|backend|core|drivers|data|config|caddy|systemd|pip|commission|mcp|ai|ollama)
+    if [[ "${OPENFDD_ALLOW_LEGACY_DEPLOY:-}" != "1" ]]; then
+      legacy_blocked "$COMPONENT"
+    fi
+    PLAYBOOK="legacy/deploy.yml"
+    case "$COMPONENT" in
+      ui|web) TAGS="preflight,ui" ;;
+      backend) TAGS="preflight,backend,pip,systemd" ;;
+      core) TAGS="preflight,core,pip" ;;
+      drivers) TAGS="preflight,drivers,pip,systemd" ;;
+      data) TAGS="preflight,data" ;;
+      config) TAGS="preflight,config,caddy" ;;
+      caddy) TAGS="caddy,systemd" ;;
+      systemd) TAGS="systemd" ;;
+      pip) TAGS="preflight,pip" ;;
+      commission) TAGS="preflight,commission" ;;
+      mcp) PLAYBOOK="edge_ai_stack.yml"; TAGS="mcp" ;;
+      ai) PLAYBOOK=""; TAGS="" ;;
+      ollama) PLAYBOOK="ollama_bootstrap.yml"; TAGS="" ;;
+      *) TAGS="" ;;
+    esac
     ;;
-  check)
-    TAGS="verify"
-    PLAYBOOK="post_deploy_check.yml"
-    RUN_POST_CHECK=0
-    ;;
-  docker)
-    PLAYBOOK="deploy_docker.yml"
-    TAGS=""
-    ;;
-  maintain)
-    PLAYBOOK="edge_docker_maintenance.yml"
-    TAGS=""
-    RUN_POST_CHECK=0
-    ;;
-  ops)
-    PLAYBOOK="edge_operational_sync.yml"
-    TAGS=""
+  *)
+    echo "Unknown component: $COMPONENT" >&2
+    exit 1
     ;;
 esac
 
 if [[ "$COMPONENT" == "docker" || "$COMPONENT" == "ops" ]]; then
   require_docker_deploy
-fi
-
-if [[ "$NEEDS_UI" == true ]]; then
-  require_ui_build
 fi
 
 run_playbook() {
@@ -284,12 +258,7 @@ run_playbook() {
 
 echo "==> Deploy component: ${COMPONENT}${TAGS:+ (tags: ${TAGS})}"
 
-if [[ "$COMPONENT" == "ollama" ]]; then
-  run_playbook ollama_bootstrap.yml "${ANSIBLE_EXTRA[@]}"
-  PLAYBOOK=""
-fi
-
-if [[ "$COMPONENT" == "ai" ]]; then
+if [[ "$COMPONENT" == "ai" && "${OPENFDD_ALLOW_LEGACY_DEPLOY:-}" == "1" ]]; then
   run_playbook ollama_bootstrap.yml "${ANSIBLE_EXTRA[@]}"
   run_playbook edge_ai_stack.yml "${ANSIBLE_EXTRA[@]}"
   PLAYBOOK=""
@@ -300,7 +269,7 @@ if [[ -n "$PLAYBOOK" ]]; then
 fi
 
 case "$COMPONENT" in
-  all|ui|web|backend|core|drivers|ai|ollama|docker|maintain|ops) ;;
+  docker|maintain|ops) ;;
   *) RUN_POST_CHECK=0 ;;
 esac
 

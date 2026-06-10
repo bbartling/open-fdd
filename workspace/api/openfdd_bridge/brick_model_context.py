@@ -179,13 +179,14 @@ def link_faults_to_brick(
             continue
         eid = str(alert.get("equipment_id") or "").strip()
         eq = eq_index.get(eid) or {}
+        ename = str(alert.get("equipment_name") or "").strip() or (eq.get("name") if eid else None)
         linked.append(
             {
                 "code": alert.get("code"),
                 "title": alert.get("title"),
                 "severity": alert.get("severity"),
                 "equipment_id": eid or None,
-                "equipment_name": eq.get("name") if eid else None,
+                "equipment_name": ename,
                 "equipment_type": eq.get("equipment_type") if eid else None,
             }
         )

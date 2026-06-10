@@ -63,17 +63,38 @@ def _ollama_configured() -> bool:
     return flag not in {"0", "false", "no"}
 
 
+def _ollama_optional_cpu() -> bool:
+    """CPU-only hosts skip insight/chat — gray indicator, not a fault."""
+    if not _ollama_configured():
+        return True
+    if os.environ.get("OFDD_INSIGHT_USE_OLLAMA_WITHOUT_GPU", "").strip().lower() in {"1", "true", "yes"}:
+        return False
+    if os.environ.get("OFDD_AGENT_CHAT_WITHOUT_GPU", "").strip().lower() in {"1", "true", "yes"}:
+        return False
+    gpu_mode = os.environ.get("OFDD_OLLAMA_GPU_MODE", "cpu").strip().lower() or "cpu"
+    if gpu_mode == "cpu":
+        return True
+    try:
+        from . import ollama_client
+
+        return not ollama_client.gpu_available()
+    except Exception:
+        return gpu_mode == "cpu"
+
+
 def _ollama_service() -> dict[str, Any]:
     from . import ollama_client
 
+    optional = _ollama_optional_cpu()
     configured = _ollama_configured()
-    if not configured:
+    if not configured or optional:
         return {
             "id": "ollama",
             "label": "Ollama",
             "status": "gray",
             "configured": False,
-            "detail": "not enabled (set OFDD_OLLAMA_ENABLED=1 or OFDD_OLLAMA_BASE_URL)",
+            "optional": True,
+            "detail": "optional (CPU-only — insight uses rule-based summary)",
         }
 
     try:

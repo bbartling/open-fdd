@@ -194,6 +194,42 @@ def gl36_rule_specs(
             "bindings": ahu_bindings,
             "applies_to": applies,
         },
+        {
+            "id": f"{p}-vav-damper-stuck",
+            "name": "VAV damper stuck open",
+            "fault_code": "VAV-D",
+            "code_file": "vav_damper_stuck_flatline.py",
+            "config": {"flatline_tolerance": 0.02, "temp_unit": "imperial", "rolling_avg_minutes": 60, "damper_open_min": 0.975},
+            "bindings": {
+                "point_ids": [],
+                "equipment_ids": [],
+                "brick_types": ["Damper_Position_Command", "Damper_Position_Sensor"],
+            },
+        },
+        {
+            "id": f"{p}-vav-airflow-low",
+            "name": "VAV airflow low with damper open",
+            "fault_code": "VAV-B",
+            "code_file": "vav_airflow_low.py",
+            "config": {"min_airflow_cfm": 50, "damper_open_min": 0.15, "damper_column": "damper-position-command"},
+            "bindings": {
+                "point_ids": [],
+                "equipment_ids": [],
+                "brick_types": ["Air_Flow_Sensor", "Supply_Air_Flow_Sensor"],
+            },
+        },
+        {
+            "id": f"{p}-vav-reheat-leak",
+            "name": "VAV reheat leak (DAT vs AHU SAT)",
+            "fault_code": "VAV-A",
+            "code_file": "vav_reheat_dat_vs_sat.py",
+            "config": {"reference_sat_column": "sa-t", "reheat_delta_f": 8.0},
+            "bindings": {
+                "point_ids": [],
+                "equipment_ids": [],
+                "brick_types": ["Discharge_Air_Temperature_Sensor"],
+            },
+        },
     ]
 
 
