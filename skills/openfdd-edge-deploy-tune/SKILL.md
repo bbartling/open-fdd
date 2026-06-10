@@ -126,6 +126,10 @@ Expect: version matches merged tag, keepup ≥ 0.85, poll health 33/33, fresh `w
 - [bacnet-single-stack](../bacnet-single-stack/SKILL.md) — one UDP 47808 stack
 - [ansible-linux-bench-deploy](../ansible-linux-bench-deploy/SKILL.md) — Ansible entry (legacy bench)
 
+## Future: central agent on benserver (not edge)
+
+MCP RAG stays on edge today for doc retrieval. Long-term: a **benserver** agent (OpenClaw / Claude CLI) calls the same bridge APIs (`checkin`, `tuning-brief`, `operational-brief`, portfolio rollup) over Tailscale and feeds the dashboard — no Ollama on edge by default (`enable_ollama: false`).
+
 ## Known bugs (check issues before next cycle)
 
 - [#260](https://github.com/bbartling/open-fdd/issues/260) — intermittent GHCR commission push `unknown blob`

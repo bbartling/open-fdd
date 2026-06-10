@@ -141,10 +141,9 @@ require_docker_deploy() {
 }
 
 legacy_blocked() {
-  echo "Component '$1' uses legacy workstation file deploy (removed from default path)." >&2
-  echo "  Production: OPENFDD_IMAGE_TAG=latest ./deploy.sh docker --limit <host>" >&2
-  echo "  Lab only:   OPENFDD_ALLOW_LEGACY_DEPLOY=1 ansible-playbook legacy/deploy.yml ..." >&2
-  echo "  See: infra/ansible/legacy/README.md" >&2
+  echo "Component '$1' uses removed workstation file deploy." >&2
+  echo "  Use: OPENFDD_IMAGE_TAG=latest ./deploy.sh docker --limit <host>" >&2
+  echo "  Models/rules: HTTPS API (commissioning-import, rules/save) — not rsync." >&2
   exit 1
 }
 
@@ -205,26 +204,7 @@ case "$COMPONENT" in
   ops) PLAYBOOK="edge_operational_sync.yml"; TAGS="" ;;
   os) PLAYBOOK="os_update.yml"; TAGS=""; RUN_POST_CHECK=0 ;;
   all|ui|web|backend|core|drivers|data|config|caddy|systemd|pip|commission|mcp|ai|ollama)
-    if [[ "${OPENFDD_ALLOW_LEGACY_DEPLOY:-}" != "1" ]]; then
-      legacy_blocked "$COMPONENT"
-    fi
-    PLAYBOOK="legacy/deploy.yml"
-    case "$COMPONENT" in
-      ui|web) TAGS="preflight,ui" ;;
-      backend) TAGS="preflight,backend,pip,systemd" ;;
-      core) TAGS="preflight,core,pip" ;;
-      drivers) TAGS="preflight,drivers,pip,systemd" ;;
-      data) TAGS="preflight,data" ;;
-      config) TAGS="preflight,config,caddy" ;;
-      caddy) TAGS="caddy,systemd" ;;
-      systemd) TAGS="systemd" ;;
-      pip) TAGS="preflight,pip" ;;
-      commission) TAGS="preflight,commission" ;;
-      mcp) PLAYBOOK="edge_ai_stack.yml"; TAGS="mcp" ;;
-      ai) PLAYBOOK=""; TAGS="" ;;
-      ollama) PLAYBOOK="ollama_bootstrap.yml"; TAGS="" ;;
-      *) TAGS="" ;;
-    esac
+    legacy_blocked "$COMPONENT"
     ;;
   *)
     echo "Unknown component: $COMPONENT" >&2
