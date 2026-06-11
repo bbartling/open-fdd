@@ -93,6 +93,12 @@ if [[ -z "$BASE" && -z "$LIMIT" ]]; then
 fi
 
 TAG="${OPENFDD_IMAGE_TAG:-}"
+if [[ -n "$TAG" ]]; then
+  # shellcheck source=scripts/openfdd_normalize_image_tag.sh
+  source "${ROOT}/scripts/openfdd_normalize_image_tag.sh"
+  TAG="$(normalize_openfdd_image_tag "$TAG")"
+  export OPENFDD_IMAGE_TAG="$TAG"
+fi
 if [[ -z "$TAG" ]]; then
   echo "warn: OPENFDD_IMAGE_TAG not set — Docker image tag checks are best-effort" >&2
 fi

@@ -36,9 +36,13 @@ done
 
 TAG="${OPENFDD_IMAGE_TAG:-}"
 if [[ -z "$TAG" || "$TAG" == "local" ]]; then
-  echo "Set OPENFDD_IMAGE_TAG to the GHCR tag published by CI (e.g. 2026.06.08-edge)." >&2
+  echo "Set OPENFDD_IMAGE_TAG to the GHCR tag published by CI (e.g. 3.0.32 or latest)." >&2
   exit 1
 fi
+# shellcheck source=scripts/openfdd_normalize_image_tag.sh
+source "${ROOT}/scripts/openfdd_normalize_image_tag.sh"
+TAG="$(normalize_openfdd_image_tag "$TAG")"
+export OPENFDD_IMAGE_TAG="$TAG"
 
 LOCAL_ASSET=""
 if [[ -f workspace/api/static/app/index.html ]]; then
@@ -61,11 +65,8 @@ else
 fi
 
 if [[ "$SKIP_UI_DEPLOY" == "0" ]]; then
-  echo "==> Deploy UI static bundle to edge (workspace/api/static/app/)"
-  cd "${ROOT}/infra/ansible"
-  # UI deploy runs Ansible only; defer insurance check until GHCR pull completes.
-  RUN_POST_CHECK=0 ./deploy.sh ui --limit "$LIMIT" "${EXTRA[@]}"
-  cd "$ROOT"
+  echo "==> Sync UI static bundle to edge (workspace/api/static/app/ bind mount)"
+  "${ROOT}/scripts/edge_sync_ui_static.sh" --limit "$LIMIT"
 else
   echo "==> Skipping UI deploy (--skip-ui-deploy)"
 fi

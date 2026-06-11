@@ -21,7 +21,9 @@ export OPENFDD_IMAGE_TAG=v3.0.32
   --json-out reports/acme-live-validate.json
 ```
 
-Use **`upgrade_edge_full.sh`**, not `upgrade_edge_ghcr.sh` alone, when the Operator Bridge UI changed — the edge bind-mount serves `workspace/api/static/app/` **before** image-baked assets.
+Use **`upgrade_edge_full.sh`**, not `upgrade_edge_ghcr.sh` alone, when the Operator Bridge UI changed — the edge bind-mount serves `workspace/api/static/app/` **before** image-baked assets (`edge_sync_ui_static.sh` rsyncs the bundle; `deploy.sh ui` was removed).
+
+GHCR SemVer tags omit the leading `v` (`3.0.32`, not `v3.0.32`). `upgrade_edge_ghcr.sh` normalizes `OPENFDD_IMAGE_TAG` automatically.
 
 ## Modes
 

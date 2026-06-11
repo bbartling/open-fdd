@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -39,8 +40,25 @@ def _patch_local(model: dict, point_id: str, alias: str) -> bool:
     return changed
 
 
+def _api_base(host: str) -> str:
+    host = host.strip()
+    if host.startswith("http://") or host.startswith("https://"):
+        return host.rstrip("/")
+    return f"http://{host}".rstrip("/")
+
+
+def _fetch_model(base: str, token: str) -> dict:
+    req = urllib.request.Request(
+        f"{base}/api/model/export",
+        headers={"Authorization": f"Bearer {token}"},
+        method="GET",
+    )
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return json.loads(resp.read().decode())
+
+
 def _push_model(base: str, token: str, model: dict) -> None:
-    body = json.dumps({"payload": model, "replace": False}).encode()
+    body = json.dumps({"payload": model, "replace": True}).encode()
     req = urllib.request.Request(
         f"{base.rstrip('/')}/api/model/import",
         data=body,
@@ -59,6 +77,24 @@ def main() -> int:
     parser.add_argument("--token", default="")
     args = parser.parse_args()
 
+    if args.host and args.token:
+        base = _api_base(args.host)
+        try:
+            model = _fetch_model(base, args.token)
+        except urllib.error.HTTPError as exc:
+            print(f"Model export failed: HTTP {exc.code}", file=sys.stderr)
+            return 1
+        if not _patch_local(model, args.point_id, args.alias):
+            print(f"No change needed for {args.point_id} on edge (already {args.alias})")
+            return 0
+        try:
+            _push_model(base, args.token, model)
+        except urllib.error.HTTPError as exc:
+            print(f"Model import failed: HTTP {exc.code}", file=sys.stderr)
+            return 1
+        print(f"Patched edge model: {args.point_id} → external_id/fdd_input={args.alias}")
+        return 0
+
     from openfdd_bridge.model_service import ModelService  # noqa: E402
 
     svc = ModelService()
@@ -68,8 +104,6 @@ def main() -> int:
         return 0
     svc.import_json(model, replace=True)
     print(f"Patched local model: {args.point_id} → external_id/fdd_input={args.alias}")
-    if args.host and args.token:
-        _push_model(f"http://{args.host}", args.token, model)
     return 0
 
 
