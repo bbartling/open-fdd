@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "open-fdd"
 version = "3.0.30"
-description = "Open-FDD: Arrow-native rule-based HVAC fault detection on a columnar execution engine."
+description = "Arrow-native HVAC fault detection runtime — lint, test, and run apply_faults_arrow rules on columnar telemetry (PyPI). Use GHCR Docker images for the full edge operator stack."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
@@ -26,19 +26,31 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
 ]
-keywords = ["hvac", "fdd", "fault-detection", "building-automation", "pyarrow", "arrow", "bacnet"]
-
+keywords = ["hvac", "fdd", "fault-detection", "building-automation", "pyarrow", "arrow"]
 dependencies = [
     "pyarrow>=17.0.0",
     "pyyaml",
     "pydantic>=2.4,<3",
 ]
 
+[project.scripts]
+open-fdd = "open_fdd.cli:main"
+
 [project.optional-dependencies]
 # Future graph ML (Layer B/C) — not used in Rule Lab sandbox.
 ml = [
     "numpy>=1.26.0",
     "scikit-learn>=1.4.0",
+]
+analytics = [
+    "numpy>=1.26.0",
+]
+pandas = [
+    "pandas>=2.0.0",
+]
+release = [
+    "build>=1.2.0",
+    "twine>=6.0.0",
 ]
 test = [
     "pytest>=7.0",
@@ -51,6 +63,8 @@ dev = [
     "pydantic>=2.4,<3",
     "black[jupyter]>=25.11.0",
     "pre-commit",
+    "build>=1.2.0",
+    "twine>=6.0.0",
 ]
 docs = [
     "pyyaml",

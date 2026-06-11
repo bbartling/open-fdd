@@ -20,8 +20,8 @@ cd workspace/dashboard && npm test    # dashboard unit tests (if configured)
 |----------|---------|--------|
 | `ci.yml` | PR / push | pytest, bridge security audit, dashboard build, Jekyll docs |
 | `docs-pages.yml` | push `master` | GitHub Pages site |
-| `publish-open-fdd.yml` | tag `open-fdd-v*` | PyPI wheel |
-| `publish-docker-addons.yml` | manual | GHCR images |
+| `publish-open-fdd.yml` | tag `v*` / `open-fdd-v*` | PyPI wheel (Trusted Publishing) |
+| `docker-publish.yml` | tag `v*` / manual | GHCR bridge, commission, mcp-rag |
 
 ## Docs build (same as CI)
 
