@@ -133,7 +133,8 @@ merge_pr() {
 post_merge_release() {
   local ver tag
   ver="$(pkg_version)"
-  tag="open-fdd-v${ver}"
+  tag="v${ver}"
+  legacy_tag="open-fdd-v${ver}"
   IMAGE_TAG="${IMAGE_TAG:-$(date -u +%Y.%m.%d)-edge}"
 
   git fetch origin master
@@ -147,18 +148,23 @@ post_merge_release() {
   else
     run git tag -a "$tag" -m "open-fdd ${ver}"
     run git push origin "$tag"
-    echo "==> Pushed ${tag} (triggers Publish open-fdd → PyPI)"
+    echo "==> Pushed ${tag} (triggers PyPI + GHCR publish workflows)"
+  fi
+
+  if git rev-parse "$legacy_tag" >/dev/null 2>&1; then
+    echo "Legacy tag ${legacy_tag} already exists."
+  elif [[ "${PUSH_LEGACY_TAG:-}" == "1" ]]; then
+    run git tag -a "$legacy_tag" -m "open-fdd ${ver} (legacy tag)"
+    run git push origin "$legacy_tag"
   fi
 
   if [[ "$SKIP_DOCKER" != true ]]; then
-    echo "==> Dispatch Publish Docker addons (:latest)"
-    run gh workflow run docker-publish.yml
-    echo "    gh run list --workflow=docker-publish.yml --limit 3"
+    echo "==> GHCR: tag ${tag} triggers docker-publish.yml (${ver}, ${ver%.*}, latest)"
   fi
 
   echo ""
   echo "Post-merge automation:"
-  echo "  • PyPI: tag ${tag} → publish-open-fdd.yml"
+  echo "  • PyPI + GHCR: tag ${tag} → publish-open-fdd.yml + docker-publish.yml"
   echo "  • Docs site: docs-pages.yml on master push"
   echo "  • PDF: docs-pdf.yml if docs/** changed (opens chore/docs-pdf-refresh PR)"
   echo "  • Edge upgrade: OPENFDD_IMAGE_TAG=${IMAGE_TAG} ./scripts/upgrade_edge_ghcr.sh --limit <host>"

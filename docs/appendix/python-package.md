@@ -6,11 +6,12 @@ nav_order: 2
 
 # Python package (`open-fdd`)
 
-Install from PyPI:
+Install from PyPI (embeddable FDD runtime — not the Docker edge stack):
 
 ```bash
-pip install open-fdd                  # Arrow runtime + playground (default 3.0.1+)
-pip install "open-fdd[ml]"            # optional numpy/sklearn for offline graph ML experiments
+pip install open-fdd
+pip install "open-fdd[analytics]"     # optional NumPy helpers
+pip install "open-fdd[ml]"            # optional sklearn for offline experiments
 ```
 
 ## Modules
@@ -32,7 +33,7 @@ Retired in 3.0.1+: `open_fdd.engine` (YAML/pandas `RuleRunner`) is **not** shipp
 
 ## Versioning
 
-Publish: git tag `open-fdd-vX.Y.Z` → GitHub Actions **Publish open-fdd**.
+Publish: git tag `vX.Y.Z` (or legacy `open-fdd-vX.Y.Z`) → GitHub Actions **Publish open-fdd to PyPI**. See [Release process]({% link developer/release-process.md %}).
 
 ```python
 import open_fdd

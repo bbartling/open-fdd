@@ -19,7 +19,7 @@ Acme edge runs **without** MCP (`enable_mcp: false`, `post_check_require_mcp: fa
 2. **Bump** `open_fdd/__init__.py` + `pyproject.toml` version
 3. **Tests**: `pytest open_fdd/tests/arrow_runtime tests/workspace_bridge/test_acme_* -q`
 4. **PR** → CI green → merge
-5. **GHCR**: `gh workflow run "Publish Docker addons" --ref master` (`docker_publish.sh` retries push + manifest verify per image)
+5. **Release tag** `v3.0.N` on `master` → PyPI + GHCR publish workflows (or manual `docker-publish.yml` for `:latest` only)
 6. **Deploy** (image-only; preserves feather/model on edge):
 
 ```bash

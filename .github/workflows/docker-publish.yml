@@ -1,14 +1,25 @@
-# Publish Open-FDD edge images to GHCR (:latest only; prune retired bacnet-poll + old versions).
-name: Publish Docker addons
+# Publish Open-FDD edge images to GHCR.
+# Tags: vX.Y.Z / open-fdd-vX.Y.Z → versioned + minor + latest
+# workflow_dispatch → latest (maintainer manual)
+# Ordinary branch pushes do NOT publish.
+
+name: Publish Docker images to GHCR
 
 on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "open-fdd-v*"
   workflow_dispatch:
     inputs:
+      image_tag:
+        description: "Local build tag before push (default latest)"
+        required: false
+        default: "latest"
       keep_versions:
-        description: "GHCR versions to retain per image (default 3)"
+        description: "GHCR versions to retain per image"
         required: false
         default: "3"
-        type: string
 
 permissions:
   contents: read
@@ -16,49 +27,114 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  REGISTRY: ghcr.io
+  OWNER: bbartling
 
 jobs:
-  publish:
+  resolve-tag:
     runs-on: ubuntu-latest
+    outputs:
+      build_tag: ${{ steps.meta.outputs.build_tag }}
+      publish_release_tags: ${{ steps.meta.outputs.publish_release_tags }}
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - id: meta
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            ver="${GITHUB_REF_NAME#v}"
+            echo "build_tag=${ver}" >> "$GITHUB_OUTPUT"
+            echo "publish_release_tags=1" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref }}" == refs/tags/open-fdd-v* ]]; then
+            ver="${GITHUB_REF_NAME#open-fdd-v}"
+            echo "build_tag=${ver}" >> "$GITHUB_OUTPUT"
+            echo "publish_release_tags=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_tag=${{ inputs.image_tag || 'latest' }}" >> "$GITHUB_OUTPUT"
+            echo "publish_release_tags=0" >> "$GITHUB_OUTPUT"
+          fi
+
+  docker:
+    needs: resolve-tag
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: openfdd-bridge
+            target: bridge
+            description: Open-FDD Operator Bridge API, dashboard, historian
+          - image: openfdd-commission
+            target: commission
+            description: Open-FDD BACnet commissioning and poll worker
+          - image: openfdd-mcp-rag
+            target: mcp-rag
+            description: Open-FDD MCP and doc-search sidecar
+    steps:
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+      - uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build addon images
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}
+          tags: |
+            type=raw,value=${{ needs.resolve-tag.outputs.build_tag }}
+            type=raw,value=latest,enable=${{ needs.resolve-tag.outputs.publish_release_tags == '1' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: ${{ matrix.target }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            OPENFDD_IMAGE_TAG=${{ needs.resolve-tag.outputs.build_tag }}
+            OPENFDD_BUILD_GIT_SHA=${{ github.sha }}
+            OPENFDD_BUILD_TIME=${{ github.event.head_commit.timestamp }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Tag minor release alias
+        if: needs.resolve-tag.outputs.publish_release_tags == '1'
         run: |
-          chmod +x scripts/docker_build.sh scripts/docker_publish.sh scripts/validate_supervisor_manifest.sh
-          OPENFDD_IMAGE_TAG=latest ./scripts/docker_build.sh
-          ./scripts/validate_supervisor_manifest.sh
+          ver="${{ needs.resolve-tag.outputs.build_tag }}"
+          minor="${ver%.*}"
+          src="${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:${ver}"
+          dst="${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:${minor}"
+          docker buildx imagetools create -t "$dst" "$src"
 
-      - name: Publish to GHCR (:latest)
+      - name: Verify manifest
+        run: docker manifest inspect "${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:${{ needs.resolve-tag.outputs.build_tag }}"
+
+  prune:
+    needs: docker
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prune old GHCR versions
         env:
-          DOCKER_PUSH_RETRY_MAX: "5"
-          DOCKER_PUSH_RETRY_BASE_S: "10"
-        run: PUBLISH_LATEST_ONLY=1 OPENFDD_IMAGE_TAG=latest ./scripts/docker_publish.sh
-
-      - name: Verify GHCR manifests (all three edge images)
-        run: |
-          set -euo pipefail
-          for img in openfdd-bridge openfdd-commission openfdd-mcp-rag; do
-            ref="ghcr.io/bbartling/${img}:latest"
-            echo "==> manifest inspect ${ref}"
-            docker manifest inspect "${ref}" >/dev/null
-          done
-
-      - name: Prune GHCR (drop retired bacnet-poll; keep N versions)
-        env:
-          GHCR_KEEP_VERSIONS: ${{ inputs.keep_versions }}
+          GHCR_KEEP_VERSIONS: ${{ inputs.keep_versions || '3' }}
         run: |
           chmod +x scripts/ghcr_prune_packages.sh
           ./scripts/ghcr_prune_packages.sh --delete-retired --keep "${GHCR_KEEP_VERSIONS}"

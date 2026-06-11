@@ -13,9 +13,9 @@
 </p>
 
 <p align="center">
-  Open-source <strong>supervisory fault detection</strong> that runs <strong>locally on the edge</strong> — BACnet polling,
-  <strong>BRICK</strong> equipment and point modeling, and <strong>AI-assisted</strong> commissioning, rule assignment, and diagnostics.
-  Author <strong>Arrow-native</strong> Python rules in Rule Lab; trend plots and live operations from the Operator Bridge.
+  Open-source <strong>supervisory fault detection</strong> for buildings — Arrow-native rules,
+  optional <strong>PyPI</strong> embeddable runtime, and a full <strong>Docker/GHCR</strong> edge operator stack
+  (BACnet, bridge API, dashboard, MCP).
 </p>
 
 <p align="center">
@@ -23,35 +23,72 @@
   <a href="https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf"><img src="https://img.shields.io/badge/Docs-PDF_download-DC2626?style=for-the-badge" alt="PDF documentation"></a>
 </p>
 
-
-
 ---
 
-## Get started
+## Install / run
 
-**Docker (Operator Bridge)** — published on [GitHub Container Registry](https://github.com/bbartling?tab=packages). Pull the three edge images (default tag `latest`):
+### Full Open-FDD edge stack (Docker / GHCR)
+
+Use GHCR for BACnet polling, Operator Bridge API, React dashboard, historian, and MCP sidecar.
 
 | Image | Role |
 |-------|------|
 | [`ghcr.io/bbartling/openfdd-bridge`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge) | API, dashboard, historian |
 | [`ghcr.io/bbartling/openfdd-commission`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-commission) | BACnet discover, read, poll |
-| [`ghcr.io/bbartling/openfdd-mcp-rag`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp-rag) | Doc-search sidecar |
+| [`ghcr.io/bbartling/openfdd-mcp-rag`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp-rag) | MCP + doc-search |
+
+**Prefer pinned release tags in production** (not floating `latest`):
 
 ```bash
-docker pull ghcr.io/bbartling/openfdd-bridge:latest
-docker pull ghcr.io/bbartling/openfdd-commission:latest
-docker pull ghcr.io/bbartling/openfdd-mcp-rag:latest
+export OPENFDD_IMAGE_TAG=3.0.30   # match your release
+docker pull ghcr.io/bbartling/openfdd-bridge:${OPENFDD_IMAGE_TAG}
+docker pull ghcr.io/bbartling/openfdd-commission:${OPENFDD_IMAGE_TAG}
+docker pull ghcr.io/bbartling/openfdd-mcp-rag:${OPENFDD_IMAGE_TAG}
 ```
 
-Edge bootstrap (compose, `workspace/`, auth): [Run with Docker images](https://bbartling.github.io/open-fdd/quick-start/).
+Edge bootstrap: [Run with Docker images](https://bbartling.github.io/open-fdd/quick-start/docker/).
 
-**Python (`open-fdd`)** — [PyPI](https://pypi.org/project/open-fdd/) package for Arrow-native rule linting and offline Rule Lab work:
+### Python package (PyPI)
+
+Use PyPI when you only need the **embeddable Arrow-native FDD runtime** — lint, test, and run rules in your own pipelines (cloud, IoT, notebooks) **without** Docker.
 
 ```bash
 pip install open-fdd
 ```
 
-Full operator stack (BACnet polling, UI, assignments): use the Docker images above. Local clone, tests, and contributor layout: `AGENTS.md` and [developer docs](https://bbartling.github.io/open-fdd/developer/).
+```python
+import pyarrow as pa
+from open_fdd.arrow_runtime import run_arrow_rule
+
+code = '''
+import pyarrow.compute as pc
+def apply_faults_arrow(table, cfg, context=None):
+    return pc.greater(table["SAT"], float(cfg["high"]))
+'''
+result = run_arrow_rule(code, pa.table({"SAT": [70.0, 90.0]}), {"high": 85})
+print(result.true_count)
+```
+
+| Need | Use |
+|------|-----|
+| Run FDD in your Python / cloud pipeline | **PyPI** `open-fdd` |
+| BACnet + UI + bridge on an edge host | **GHCR** Docker images |
+| Portfolio / MCP agent over Tailscale | Docker stack + [portfolio docs](https://bbartling.github.io/open-fdd/portfolio/) |
+
+Examples: [`examples/`](examples/). Release: [developer/release-process](https://bbartling.github.io/open-fdd/developer/release-process/).
+
+---
+
+## Develop
+
+```bash
+git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[test,dev,analytics]"
+pytest open_fdd/tests -q
+```
+
+Contributor layout: `AGENTS.md` and [developer docs](https://bbartling.github.io/open-fdd/developer/).
 
 ---
 
