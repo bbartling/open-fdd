@@ -546,7 +546,14 @@ class AcmeLiveValidator:
                     if alert.get("source") != "fdd":
                         continue
                     ctx = alert.get("model_context") or {}
-                    if not (ctx.get("equipment") or alert.get("equipment_name")):
+                    eq = ctx.get("equipment") if isinstance(ctx.get("equipment"), dict) else {}
+                    eq_name = str(
+                        ctx.get("equipment_name")
+                        or alert.get("equipment_name")
+                        or eq.get("name")
+                        or ""
+                    ).strip()
+                    if not eq_name:
                         fdd_without_equipment += 1
                     if not (ctx.get("point") or ctx.get("historian_column") or alert.get("point_id")):
                         missing_ctx += 1

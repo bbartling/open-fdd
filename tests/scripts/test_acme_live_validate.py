@@ -105,6 +105,7 @@ def test_building_status_missing_context_fails():
                                 "source": "fdd",
                                 "title": "Fault only code",
                                 "code": "acme-test",
+                                "model_context": {"equipment": {"id": "", "name": ""}},
                             }
                         ]
                     }
