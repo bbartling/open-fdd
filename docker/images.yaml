@@ -16,6 +16,9 @@ images:
   - name: openfdd-mcp-rag
     build_target: mcp-rag
     description: MCP document search sidecar
+  - name: openfdd-cloud-exporter
+    build_target: cloud-exporter
+    description: Generic Open-FDD API polling and cloud POST exporter sidecar
 
 external:
   - name: ollama/ollama

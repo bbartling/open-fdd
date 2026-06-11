@@ -48,12 +48,14 @@ build_one() {
 build_one bridge openfdd-bridge
 build_one commission openfdd-commission
 build_one mcp-rag openfdd-mcp-rag
+build_one cloud-exporter openfdd-cloud-exporter
 
 echo ""
 echo "Built:"
 echo "  openfdd-bridge:${TAG}"
 echo "  openfdd-commission:${TAG}"
 echo "  openfdd-mcp-rag:${TAG}"
+echo "  openfdd-cloud-exporter:${TAG}"
 
 if [[ "$SAVE" == true ]]; then
   mkdir -p docker/dist
@@ -63,6 +65,7 @@ if [[ "$SAVE" == true ]]; then
     "openfdd-bridge:${TAG}" \
     "openfdd-commission:${TAG}" \
     "openfdd-mcp-rag:${TAG}" \
+    "openfdd-cloud-exporter:${TAG}" \
     | gzip -c > "$OUT"
   echo "Saved image bundle: $OUT"
   echo "Deploy: cd infra/ansible && ./deploy.sh docker --limit <inventory_host> -e openfdd_docker_image_tag=${TAG}"

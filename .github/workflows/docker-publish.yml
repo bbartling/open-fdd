@@ -68,6 +68,9 @@ jobs:
           - image: openfdd-mcp-rag
             target: mcp-rag
             description: Open-FDD MCP and doc-search sidecar
+          - image: openfdd-cloud-exporter
+            target: cloud-exporter
+            description: Open-FDD generic cloud POST exporter sidecar
     steps:
       - uses: actions/checkout@v5
         with:

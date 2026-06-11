@@ -26,7 +26,7 @@ if [[ "$TAG" == "local" ]]; then
   exit 1
 fi
 
-IMAGES=(openfdd-bridge openfdd-commission openfdd-mcp-rag)
+IMAGES=(openfdd-bridge openfdd-commission openfdd-mcp-rag openfdd-cloud-exporter)
 
 publish_tag="${TAG}"
 if [[ "${PUBLISH_LATEST_ONLY:-}" == "1" ]]; then

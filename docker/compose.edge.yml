@@ -79,3 +79,26 @@ services:
         max-size: "25m"
         max-file: "5"
     restart: unless-stopped
+
+  cloud-exporter:
+    profiles: ["cloud-export"]
+    image: ghcr.io/bbartling/openfdd-cloud-exporter:${OPENFDD_IMAGE_TAG:-latest}
+    pull_policy: always
+    depends_on:
+      - bridge
+    environment:
+      OPENFDD_BRIDGE_BASE_URL: http://bridge:8765
+      OPENFDD_EXPORT_ENDPOINT: ${OPENFDD_EXPORT_ENDPOINT:-}
+      OPENFDD_EXPORT_INTERVAL_SECONDS: ${OPENFDD_EXPORT_INTERVAL_SECONDS:-300}
+      OPENFDD_EXPORT_DRY_RUN: ${OPENFDD_EXPORT_DRY_RUN:-1}
+      OPENFDD_EXPORT_SITE_ID: ${OPENFDD_EXPORT_SITE_ID:-}
+      OPENFDD_EXPORT_INCLUDE_READINGS: ${OPENFDD_EXPORT_INCLUDE_READINGS:-1}
+      OPENFDD_EXPORT_INCLUDE_FAULTS: ${OPENFDD_EXPORT_INCLUDE_FAULTS:-1}
+      OPENFDD_EXPORT_INCLUDE_MODEL_SUMMARY: ${OPENFDD_EXPORT_INCLUDE_MODEL_SUMMARY:-0}
+      OPENFDD_EXPORT_MAX_POINTS: ${OPENFDD_EXPORT_MAX_POINTS:-100}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped

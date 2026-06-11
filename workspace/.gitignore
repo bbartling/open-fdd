@@ -9,6 +9,8 @@
 !mcp_rag/**
 !mcp_server/
 !mcp_server/**
+!cloud_exporter/
+!cloud_exporter/**
 !MEMORY.md.example
 !memory/
 !memory/**
@@ -18,6 +20,8 @@
 **/mcp_rag/**/*.py[cod]
 **/api/**/__pycache__/
 **/api/**/*.py[cod]
+**/cloud_exporter/**/__pycache__/
+**/cloud_exporter/**/*.py[cod]
 !dashboard/
 !dashboard/**
 !data/

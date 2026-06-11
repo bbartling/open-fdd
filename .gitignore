@@ -234,6 +234,8 @@ workspace/logs/
 !/workspace/mcp_rag/**
 !/workspace/mcp_server/
 !/workspace/mcp_server/**
+!/workspace/cloud_exporter/
+!/workspace/cloud_exporter/**
 !/workspace/MEMORY.md.example
 !/workspace/memory/
 !/workspace/memory/**
