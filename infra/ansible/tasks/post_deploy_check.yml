@@ -61,7 +61,8 @@
   ansible.builtin.shell:
     cmd: |
       set -eu
-      for svc in bridge commission mcp-rag; do
+      services="$(docker compose -f "{{ openfdd_remote_dir }}/docker-compose.yml" config --services)"
+      for svc in $services; do
         cid="$(docker ps -q -f "name=${svc}" 2>/dev/null | head -1 || true)"
         echo "${svc}=${cid}"
       done
