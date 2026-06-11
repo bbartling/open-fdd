@@ -490,15 +490,16 @@ export default function JsonApiPage() {
         </div>
       ) : null}
 
-      <div className="panel">
-        <h3 className="panel-title">Quick start presets</h3>
+      <details className="panel json-api-presets-advanced">
+        <summary className="panel-title" style={{ cursor: "pointer", listStyle: "none" }}>
+          Show example presets (developer)
+        </summary>
         <p className="muted">
-          Click a preset to fill the form, or <strong>Register preset</strong> to add sensors immediately.
-          Inspired by{" "}
+          Optional demos inspired by{" "}
           <a href="https://www.home-assistant.io/integrations/sensor.rest/" target="_blank" rel="noreferrer">
             Home Assistant RESTful Sensor
           </a>
-          .
+          . Register real JSON API sources in the form below for production use.
         </p>
         {presetCategories.map((cat) => (
           <div key={cat} style={{ marginTop: "0.75rem" }}>
@@ -538,7 +539,7 @@ export default function JsonApiPage() {
             OpenWeather key {owmKeyReady ? "set" : "not set"}
           </p>
         ) : null}
-      </div>
+      </details>
 
       <div className="panel">
         <h3 className="panel-title">REST resource</h3>
