@@ -146,8 +146,9 @@ if ! "${PY_ARGS[@]}"; then
   FAIL=1
 fi
 
-if [[ "$MODE" != "quick" && "$FAIL" == "0" && -f "${ROOT}/scripts/stack_health_check.sh" ]]; then
-  echo "==> stack_health_check.sh (supplemental)"
+# stack_health_check.sh targets local compose.dev.yml and requires MCP — skip on remote edge (--limit).
+if [[ "$MODE" != "quick" && "$FAIL" == "0" && -z "$LIMIT" && -f "${ROOT}/scripts/stack_health_check.sh" ]]; then
+  echo "==> stack_health_check.sh (supplemental, local dev stack only)"
   RESOLVED_BASE="$BASE"
   if [[ -z "$RESOLVED_BASE" && -n "$LIMIT" ]]; then
     RESOLVED_BASE="$(python3 -c "
