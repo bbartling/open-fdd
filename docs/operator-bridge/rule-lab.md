@@ -6,7 +6,12 @@ nav_order: 2
 
 # Rule Lab
 
-Rule Lab authors **Arrow-native** Python FDD rules against the feather historian. Bench rules use **module constants** at the top of `rule.py` — no browser config panel, no `config.json` in the dev kit zip.
+Rule Lab authors **Arrow-native** Python FDD rules against the feather historian.
+
+## Export all rules
+
+Integrators can download **Export all rules** — one zip with per-rule kits, `manifest.json`,
+catalog snapshots, and model TTL. API: `GET /api/rules/export-all-kit`. Bench rules use **module constants** at the top of `rule.py` — no browser config panel, no `config.json` in the dev kit zip.
 
 ```python
 """Bench OA-T out of bounds (Arrow)."""

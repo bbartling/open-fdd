@@ -270,6 +270,28 @@ export default function RuleLabPage() {
     }
   }
 
+  async function downloadAllRulesKit() {
+    setBusy(true);
+    try {
+      const params = new URLSearchParams();
+      if (activeSiteId) params.set("site_id", activeSiteId);
+      params.set("lookback_hours", "3");
+      appendConsole(">>> Building export-all rules zip…");
+      const { blob, filename } = await apiDownloadBlob(`/api/rules/export-all-kit?${params.toString()}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      appendConsole(`>>> Downloaded ${filename} (all rules bundle)`);
+    } catch (e) {
+      appendConsole(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function downloadKit() {
     setBusy(true);
     try {
@@ -501,6 +523,14 @@ export default function RuleLabPage() {
         <div className="toolbar rule-lab-actions">
           <button type="button" className="secondary" disabled={busy} onClick={() => void downloadKit()}>
             Download kit (.zip)
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy || authRole === "operator"}
+            onClick={() => void downloadAllRulesKit()}
+          >
+            Export all rules
           </button>
           <button
             type="button"
