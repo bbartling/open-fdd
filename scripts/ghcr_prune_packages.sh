@@ -1,91 +1,58 @@
 #!/usr/bin/env bash
-# Prune GHCR container packages for Open-FDD edge images.
+# Safe GHCR container package retention cleanup (dry-run by default).
 #
-#   ./scripts/ghcr_prune_packages.sh              # keep 3 versions per active package
-#   ./scripts/ghcr_prune_packages.sh --keep 3
-#   ./scripts/ghcr_prune_packages.sh --delete-retired   # remove openfdd-bacnet-poll entirely
+#   ./scripts/ghcr_prune_packages.sh --dry-run
+#   ./scripts/ghcr_prune_packages.sh --all-images --dry-run --json-out reports/ghcr-prune-plan.json
+#   ./scripts/ghcr_prune_packages.sh --confirm-delete --current-acme-tag v3.0.31
 #
-# Requires: gh auth login with read:packages and delete:packages (or repo admin).
+# Legacy (docker-publish.yml post-release prune):
+#   ./scripts/ghcr_prune_packages.sh --delete-retired --keep-releases 3 --confirm-delete
 set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PY="${ROOT}/scripts/ghcr_prune_packages.py"
 
-OWNER="${GHCR_OWNER:-bbartling}"
-KEEP="${GHCR_KEEP_VERSIONS:-3}"
 DELETE_RETIRED=false
-ACTIVE=(openfdd-bridge openfdd-commission openfdd-mcp-rag)
-RETIRED=openfdd-bacnet-poll
-
+LEGACY_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --keep) KEEP="$2"; shift 2 ;;
-    --delete-retired) DELETE_RETIRED=true; shift ;;
+    --delete-retired)
+      DELETE_RETIRED=true
+      shift
+      ;;
+    --keep)
+      LEGACY_ARGS+=(--keep-releases "$2")
+      shift 2
+      ;;
     -h|--help)
-      sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+      python3 "$PY" --help
       exit 0
       ;;
-    *) echo "Unknown option: $1" >&2; exit 1 ;;
+    *)
+      LEGACY_ARGS+=("$1")
+      shift
+      ;;
   esac
 done
 
-_api() {
-  gh api "$@" 2>&1
-}
-
-_delete_version() {
-  local pkg="$1" id="$2"
-  echo "    delete version id=${id}"
-  _api -X DELETE "users/${OWNER}/packages/container/${pkg}/versions/${id}" >/dev/null
-}
-
-_prune_package() {
-  local pkg="$1"
-  echo "==> ${pkg} (keep ${KEEP} newest)"
-  local versions_json
-  if ! versions_json="$(_api "users/${OWNER}/packages/container/${pkg}/versions?per_page=100")"; then
-    echo "WARN: cannot list ${pkg} — ${versions_json}" >&2
-    return 0
-  fi
-  local ids
-  ids="$(echo "$versions_json" | python3 -c "
-import json, sys
-rows = json.load(sys.stdin)
-rows.sort(key=lambda r: r.get('updated_at') or r.get('created_at') or '', reverse=True)
-for r in rows[${KEEP}:]:
-    print(r['id'])
-")"
-  if [[ -z "$ids" ]]; then
-    echo "    nothing to prune"
-    return 0
-  fi
-  while IFS= read -r id; do
-    [[ -n "$id" ]] && _delete_version "$pkg" "$id"
-  done <<<"$ids"
-}
-
-_delete_retired_package() {
-  echo "==> Delete retired package: ${RETIRED}"
-  if _api -X DELETE "users/${OWNER}/packages/container/${RETIRED}" >/dev/null 2>&1; then
-    echo "    removed ${RETIRED}"
-    return 0
-  fi
-  echo "    package not found or already deleted — pruning versions if any"
-  local versions_json
-  if versions_json="$(_api "users/${OWNER}/packages/container/${RETIRED}/versions?per_page=100" 2>/dev/null)"; then
-    echo "$versions_json" | python3 -c "
-import json, sys
-for r in json.load(sys.stdin):
-    print(r['id'])
-" | while IFS= read -r id; do
-      [[ -n "$id" ]] && _delete_version "$RETIRED" "$id"
-    done
-    _api -X DELETE "users/${OWNER}/packages/container/${RETIRED}" >/dev/null 2>&1 || true
-  fi
-}
-
-echo "=== GHCR prune (owner=${OWNER}) ==="
-if [[ "$DELETE_RETIRED" == true ]]; then
-  _delete_retired_package
+if [[ ${#LEGACY_ARGS[@]} -eq 0 ]]; then
+  LEGACY_ARGS=(--all-images --dry-run)
 fi
-for pkg in "${ACTIVE[@]}"; do
-  _prune_package "$pkg"
-done
-echo "Done."
+
+# Default dry-run when neither --confirm-delete nor --dry-run passed
+if [[ " ${LEGACY_ARGS[*]} " != *" --confirm-delete "* && " ${LEGACY_ARGS[*]} " != *" --dry-run "* ]]; then
+  LEGACY_ARGS=(--dry-run "${LEGACY_ARGS[@]}")
+fi
+
+python3 "$PY" "${LEGACY_ARGS[@]}"
+status=$?
+
+if [[ "$DELETE_RETIRED" == true ]]; then
+  echo "==> Delete retired package: openfdd-bacnet-poll (legacy)"
+  if command -v gh >/dev/null 2>&1; then
+    gh api -X DELETE "users/${GHCR_OWNER:-bbartling}/packages/container/openfdd-bacnet-poll" 2>/dev/null || \
+      echo "    (package not found or already deleted)"
+  fi
+fi
+
+exit "$status"

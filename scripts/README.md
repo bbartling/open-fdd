@@ -11,6 +11,7 @@
 | **`upgrade_edge_full.sh`** | Build UI + `deploy.sh ui` + GHCR image upgrade + post-deploy check (fixes stale `static/app` on edge). |
 | **`acme_post_deploy_validate.sh`** | **Live Acme** read-only validation after GHCR updates — image tag, UI bundle, duplicates, BACnet, trends, FDD, Rule Lab, logs. `--quick` \| `--full`. |
 | **`acme_live_validate.py`** | Python API probe engine used by `acme_post_deploy_validate.sh`; JSON/JUnit/Markdown reports. |
+| **`ghcr_prune_packages.sh`** | Safe GHCR retention cleanup (dry-run default). See `docs/ops/ghcr-retention.md`. |
 | **`daily_release.sh`** | Daily easy button: merge PR → tag `open-fdd-v*` (PyPI) → GHCR publish → prune branches → `--prep-next 3.0.1` for next cycle. |
 | **`validate_fdd_backends.sh`** | Verify all enabled rules use `apply_faults_arrow` (`--docker` uses bridge container). |
 | **`edge_site_backup.sh`** / **`edge_site_apply.sh`** | Site data backup/restore for remote updates (preserves model, BACnet bind, trends). |

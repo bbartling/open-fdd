@@ -1,0 +1,78 @@
+# Manual GHCR retention cleanup — dry-run by default.
+
+name: Prune old GHCR images
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run only"
+        required: true
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+      keep_releases:
+        description: "Number of release tags to keep per image"
+        required: true
+        default: "5"
+      delete_untagged_older_than_days:
+        description: "Delete untagged versions older than N days"
+        required: true
+        default: "7"
+      delete_sha_older_than_days:
+        description: "Delete sha/dev versions older than N days"
+        required: true
+        default: "30"
+      current_acme_tag:
+        description: "Current Acme deployed tag to protect"
+        required: false
+        default: ""
+      previous_acme_tag:
+        description: "Previous Acme rollback tag to protect"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run GHCR prune planner
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p reports
+          ARGS=(
+            --all-images
+            --keep-releases "${{ inputs.keep_releases }}"
+            --delete-untagged-older-than-days "${{ inputs.delete_untagged_older_than_days }}"
+            --delete-sha-older-than-days "${{ inputs.delete_sha_older_than_days }}"
+            --protected-tags-file scripts/ghcr-retention-protected-tags.txt
+            --current-acme-tag "${{ inputs.current_acme_tag }}"
+            --previous-acme-tag "${{ inputs.previous_acme_tag }}"
+            --json-out reports/ghcr-prune-plan.json
+            --markdown-out reports/ghcr-prune-plan.md
+          )
+
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS+=(--dry-run)
+          else
+            ARGS+=(--confirm-delete)
+          fi
+
+          chmod +x scripts/ghcr_prune_packages.sh
+          ./scripts/ghcr_prune_packages.sh "${ARGS[@]}"
+
+      - name: Upload prune report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghcr-prune-report
+          path: reports/*

@@ -1,0 +1,11 @@
+# One tag per line. Comments and blank lines are ignored.
+# These tags are never deleted by scripts/ghcr_prune_packages.sh.
+latest
+edge
+
+# Add Acme known-good release tags before running cleanup.
+v3.0.31
+v3.0.30
+
+# v3.0.29
+# v3.0.28
