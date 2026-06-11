@@ -146,14 +146,16 @@ jobs:
           pip install -e ".[dev]"
           pip install -r workspace/api/requirements.txt
           pip install -r bacnet_toolshed/requirements.txt
+          pip install -r workspace/mcp_server/requirements.txt
           pip install httpx
       - name: Test operator bridge
         env:
           OPENFDD_REPO_ROOT: ${{ github.workspace }}
           OFDD_DESKTOP_DATA_DIR: ${{ github.workspace }}/workspace/data
-          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/workspace/api
+          PYTHONPATH: ${{ github.workspace }}/workspace:${{ github.workspace }}/workspace/api:${{ github.workspace }}
         run: |
           python -m pytest tests/workspace_bridge -q
+          python -m pytest tests/workspace_mcp -q
           python -m pytest tests/portfolio -q
 
   docs:
