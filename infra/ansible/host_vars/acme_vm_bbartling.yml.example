@@ -36,8 +36,9 @@ bacnet_discover_timeout: 30
 enable_bacnet_poll_driver: true
 bacnet_poll_interval: 60
 
-# MCP RAG on edge; Ollama off by default (future: central agent on benserver)
-enable_mcp: true
+# No MCP on Acme edge — central portfolio MCP over Tailscale; Ollama off by default
+enable_mcp: false
+post_check_require_mcp: false
 enable_ollama: false
 ollama_required: false
 ollama_ram_tier: "16gb"

@@ -62,7 +62,7 @@ deferred:
     title: Open-FDD Dashboard (static nginx)
     image: openfdd-dashboard
     reason: "SPA stays in bridge core until independent UI releases justify split"
-    adr: docs/architecture/adr-001-core-addon-spa.md
+    note: "See docs/architecture/containers.md — bridge image includes static SPA"
 
 legacy_systemd:
   - openfdd-bridge

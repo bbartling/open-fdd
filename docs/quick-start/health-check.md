@@ -6,7 +6,7 @@ nav_order: 2
 
 # First login and health check
 
-Quick checks after `docker compose up -d` on the edge host. Services use `restart: unless-stopped` — after a reboot, run `docker compose ps` once Docker is up (see [Run with Docker](docker#survive-power-cycles)).
+Quick checks after `docker compose up -d` on the edge host. Services use `restart: unless-stopped` — after a reboot, run `docker compose ps` once Docker is up (see [Run with Docker]({% link quick-start/docker.md %}#survive-power-cycles)).
 
 ## Public health
 
@@ -61,8 +61,8 @@ Look for `bacnet_poll` green/yellow in the services list.
 | Symptom | Fix |
 |---------|-----|
 | 401 everywhere | Configure `workspace/auth.env.local` |
-| Empty BACnet discover | Fix `BACNET_BIND` in `commission.env` — [network setup](../bacnet/network-setup) |
+| Empty BACnet discover | Fix `BACNET_BIND` in `commission.env` — [network setup]({% link bacnet/network-setup.md %}) |
 | No poll rows | Commission container running? `points.csv` has enabled rows? |
 | LAN browser timeout | Open firewall port 80 or 8765 |
 
-Advanced probes (model graph, Rule Lab, compose profiles): [Developer health check](../developer/health-check).
+Advanced probes (model graph, Rule Lab, compose profiles): [Developer health check]({% link developer/health-check.md %}).

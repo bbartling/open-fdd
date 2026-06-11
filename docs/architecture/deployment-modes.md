@@ -27,7 +27,7 @@ How Open-FDD is typically run: local development, lab LAN trials, and production
 {: .note }
 > **`openfdd-bacnet-poll` is retired.** BACnet polling runs inside **commission** only. Do not run the legacy poll container or `openfdd-bacnet-poll` systemd unit alongside Docker commission — that double-polls the OT network.
 
-See [Containers](containers) for ports, networks, and persistence.
+See [Containers]({% link architecture/containers.md %}) for ports, networks, and persistence.
 
 ## Caddy HTTP (typical edge)
 
@@ -35,7 +35,7 @@ See [Containers](containers) for ports, networks, and persistence.
 - Reverse-proxies to bridge at `127.0.0.1:8765`
 - Bridge stays loopback-only; operators bookmark `http://<edge-ip>/`
 
-Bootstrap and compose: [Quick Start — Docker](../quick-start/docker).
+Bootstrap and compose: [Quick Start — Docker]({% link quick-start/docker.md %}).
 
 ## Caddy TLS (OT LAN)
 
@@ -45,7 +45,7 @@ For HTTPS on the edge LAN (self-signed or site CA):
 2. Start with `OFDD_CADDY_MODE=tls`
 3. Trust the CA on operator PCs
 
-Details: [TLS and certificates](../security/tls-and-certs). Security headers are set by the **Operator Bridge**; Caddy adds **HSTS** only in TLS mode.
+Details: [TLS and certificates]({% link security/tls-and-certs.md %}). Security headers are set by the **Operator Bridge**; Caddy adds **HSTS** only in TLS mode.
 
 ## BACnet data path
 
@@ -68,7 +68,7 @@ The bridge thread named `bacnet_poll_worker` is **ingest only** — it does not 
 
 | Topic | Page |
 |-------|------|
-| First deploy | [Quick Start — Docker](../quick-start/docker) |
-| Upgrade | [Updating the stack](../quick-start/updating) |
-| LAN security | [LAN hardening](../security/lan-hardening) |
-| Lab example site | [Examples — GL36 lab note](../examples/acme-gl36-lab) |
+| First deploy | [Quick Start — Docker]({% link quick-start/docker.md %}) |
+| Upgrade | [Updating the stack]({% link quick-start/updating.md %}) |
+| LAN security | [LAN hardening]({% link security/lan-hardening.md %}) |
+| Lab example site | [Examples — GL36 lab note]({% link examples/acme-gl36-lab.md %}) |

@@ -14,8 +14,6 @@ GitHub (source) → Actions → ghcr.io/bbartling/openfdd-* → edge docker comp
 |------|---------|
 | **[ansible/](ansible/README.md)** | Inventory, `deploy.sh`, Docker compose template, health probes |
 | **ansible/scripts/** | `post_deploy_check.sh`, `acme_operational_verify.sh`, `http_probes.py` |
-| **ansible/legacy/** | Obsolete rsync/systemd playbooks (lab Pi only) |
-
 ## Deploy (any org, VPN/Tailscale)
 
 ```bash
@@ -55,4 +53,4 @@ OPENFDD_IMAGE_TAG=latest ~/open-fdd/scripts/update-open-fdd-edge.sh
 2. `portfolio_collect.py` — central Dash history  
 3. `GET /api/building-agent/tuning-brief` — tune bounds via API  
 
-See [ansible/README.md](ansible/README.md) and [docs/development/ansible_refactor_audit.md](../docs/development/ansible_refactor_audit.md).
+See [ansible/README.md](ansible/README.md).

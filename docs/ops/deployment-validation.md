@@ -56,7 +56,7 @@ Or by IP:
 Checks include: Caddy → React dashboard, `/health/stack`, MCP RAG, BACnet tree, BRICK/SPARQL, Docker log scan.
 
 {: .warning }
-> **Do not run on live commissioned sites without approval:** `acme_operational_verify.sh` with BACnet rediscover — use `--skip-discover` for smoke only. See [Examples — GL36 lab](../examples/acme-gl36-lab).
+> **Do not run on live commissioned sites without approval:** `acme_operational_verify.sh` with BACnet rediscover — use `--skip-discover` for smoke only. See [Examples — GL36 lab]({% link examples/acme-gl36-lab.md %}).
 
 ## LAN security smoke (optional)
 
@@ -65,7 +65,7 @@ From a workstation on the same LAN as the edge:
 - Windows: `scripts/security/Run-OpenFddSecurityScan.ps1`
 - macOS/Linux: `scripts/security/run_openfdd_security_scan.sh`
 
-Expected findings: [ZAP baseline](../security/zap-baseline).
+Expected findings: [ZAP baseline]({% link security/zap-baseline.md %}).
 
 ## Arrow / FDD rules (3.0+)
 
@@ -83,5 +83,5 @@ grep -R "apply_faults_arrow" workspace/data/rules_py | wc -l
 
 ## Related
 
-- [Health check](../quick-start/health-check)
-- [Security testing cycle](../developer/security-testing) (maintainers)
+- [Health check]({% link quick-start/health-check.md %})
+- [Security testing cycle]({% link developer/security-testing.md %}) (maintainers)

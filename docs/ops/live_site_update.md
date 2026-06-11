@@ -9,7 +9,7 @@ nav_order: 1
 Upgrade GHCR images on a **live edge host** that already has `~/open-fdd/` — no `git pull` on the host.
 
 {: .note }
-> **IT operators:** prefer [Quick Start — Updating the stack](../quick-start/updating) and `openfdd_site_backup.sh` / `openfdd_site_update.sh` on the edge host. This page adds control-machine UI deploy and Ansible paths.
+> **IT operators:** prefer [Quick Start — Updating the stack]({% link quick-start/updating.md %}) and `openfdd_site_backup.sh` / `openfdd_site_update.sh` on the edge host. This page adds control-machine UI deploy and Ansible paths.
 
 ## Layout on the edge host
 
@@ -21,7 +21,7 @@ Upgrade GHCR images on a **live edge host** that already has `~/open-fdd/` — n
 
 `workspace/` holds BACnet commissioning, poll CSV, feather historian, BRICK model, FDD rules, and `auth.env.local`. Image upgrades must **preserve** it.
 
-See [Backup and restore](backup-restore) before any upgrade.
+See [Backup and restore]({% link ops/backup-restore.md %}) before any upgrade.
 
 ## Concepts
 
@@ -96,13 +96,13 @@ OPENFDD_IMAGE_TAG=latest RUN_POST_CHECK=1 ./scripts/upgrade_edge_ghcr.sh --limit
 
 ## 5. Validate
 
-→ [Deployment validation](deployment-validation)
+→ [Deployment validation]({% link ops/deployment-validation.md %})
 
 ## Rollback
 
-Restore `docker-compose.yml` from backup, pull previous tag, `docker compose up -d --force-recreate`. `workspace/` is unchanged. Details: [Backup and restore](backup-restore).
+Restore `docker-compose.yml` from backup, pull previous tag, `docker compose up -d --force-recreate`. `workspace/` is unchanged. Details: [Backup and restore]({% link ops/backup-restore.md %}).
 
 ## Related
 
-- [Updating the stack](../quick-start/updating) — edge-host helper scripts
-- [Containers](../architecture/containers) — three-image architecture
+- [Updating the stack]({% link quick-start/updating.md %}) — edge-host helper scripts
+- [Containers]({% link architecture/containers.md %}) — three-image architecture

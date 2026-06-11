@@ -19,7 +19,7 @@ nav_order: 4
 
 ## Enable writes (commission role)
 
-1. Set env flag documented in [Security](../security/) (`OFDD_BACNET_WRITE_ENABLED` or site equivalent).
+1. Set env flag documented in [Security]({% link security/index.md %}) (`OFDD_BACNET_WRITE_ENABLED` or site equivalent).
 2. Populate write allowlist CSV / config with explicit object IDs.
 3. Use **commission** role JWT; every write should include reason/note where API supports it.
 4. Test on bench hardware before production OT.

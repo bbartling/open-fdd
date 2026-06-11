@@ -41,6 +41,9 @@ jobs:
           JEKYLL_ENV: production
           JEKYLL_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check internal docs links (built HTML)
+        run: python3 scripts/check_docs_internal_links.py --site _site
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

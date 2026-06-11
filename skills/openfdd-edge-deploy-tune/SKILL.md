@@ -13,11 +13,13 @@ Triggers: patch cycle, GHCR upgrade, `setup_gl36_fdd.py`, tuning brief, operatio
 
 ## Turnkey patch cycle (required order)
 
+Acme edge runs **without** MCP (`enable_mcp: false`, `post_check_require_mcp: false`). Portfolio MCP on bensserver calls Acme over Tailscale.
+
 1. **Branch** from `master`: `fix/3.0.N-<topic>`
 2. **Bump** `open_fdd/__init__.py` + `pyproject.toml` version
 3. **Tests**: `pytest open_fdd/tests/arrow_runtime tests/workspace_bridge/test_acme_* -q`
 4. **PR** → CI green → merge
-5. **GHCR**: `gh workflow run "Publish Docker addons" --ref master` (retry if commission push `unknown blob` — see [#260](https://github.com/bbartling/open-fdd/issues/260))
+5. **GHCR**: `gh workflow run "Publish Docker addons" --ref master` (`docker_publish.sh` retries push + manifest verify per image)
 6. **Deploy** (image-only; preserves feather/model on edge):
 
 ```bash
@@ -128,8 +130,18 @@ Expect: version matches merged tag, keepup ≥ 0.85, poll health 33/33, fresh `w
 
 MCP RAG stays on edge today for doc retrieval. Long-term: a **benserver** agent (OpenClaw / Claude CLI) calls the same bridge APIs (`checkin`, `tuning-brief`, `operational-brief`, portfolio rollup) over Tailscale and feeds the dashboard — no Ollama on edge by default (`enable_ollama: false`).
 
+## 3.0.29 patch backlog (from Acme @ 3.0.28)
+
+| Priority | Finding | Notes |
+|----------|---------|-------|
+| P1 | Recovery rates UI shows `—` for RTU fan | `zone_temp_analytics._fan_column_on_equipment` not resolving fan column on `acme-vm-bbartling-rtu-01` |
+| P1 | `acme-zn-t-oob-occupied` high flag rate | Needs bounds tuning or Arrow sweep analytics (≥85% keepup gate) |
+| P2 | Override `last_scan_at` stale on long MSTP scans | Async `scan-once` (3.0.27+); monitor `GET /api/bacnet/overrides/status` |
+| P2 | Post-deploy WARN: bridge severity log lines on Acme | Triage `docker logs bridge --since 15m` — filter BACnet noise vs real faults |
+| P3 | Dev bench: stale bridge image → import crash | `ModuleNotFoundError: open_fdd.arrow_runtime.column_map_from_model` — rebuild `./scripts/docker_build.sh`; gated in `docker_container_gate.sh` |
+| P3 | Dev bench: example `auth.env.local` → HTTP 500 | Regenerate with `workspace/scripts/generate_auth_env.py` when LAN ingest enabled |
+| P3 | Do not commit duplicate `workspace/data/rules_py/*` stubs | Canonical rules live in repo `open_fdd/` / API push only |
+
 ## Known bugs (check issues before next cycle)
 
-- [#260](https://github.com/bbartling/open-fdd/issues/260) — intermittent GHCR commission push `unknown blob`
-- Override `last_scan_at` may lag if MSTP device scan slow — use async `scan-once` (3.0.27+) and poll status hourly
-- `acme-zn-t-oob-occupied` may flag high until bounds auto-tune has Arrow sweep analytics
+- Override `last_scan_at` may lag on slow MSTP scans — monitor `GET /api/bacnet/overrides/status`

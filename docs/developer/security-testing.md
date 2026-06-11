@@ -8,7 +8,7 @@ nav_order: 6
 
 How Open-FDD validates each **patch revision** before it ships to the live Acme HVAC bench — local automation, AI-assisted PR review, LAN passive scans, and edge post-deploy checks.
 
-Related security docs: [ZAP baseline](../security/zap-baseline), [TLS and certificates](../security/tls-and-certs), [LAN hardening](../security/lan-hardening), [Linux host hardening](../security/linux-host-hardening), [Tenable remediation](../security/tenable-remediation), [Authenticated scanning (roadmap)](../security/authenticated-scanning).
+Related security docs: [ZAP baseline]({% link security/zap-baseline.md %}), [TLS and certificates]({% link security/tls-and-certs.md %}), [LAN hardening]({% link security/lan-hardening.md %}), [Linux host hardening]({% link security/linux-host-hardening.md %}), [Tenable remediation]({% link security/tenable-remediation.md %}), [Authenticated scanning (roadmap)]({% link security/authenticated-scanning.md %}).
 
 ## Who owns what
 
@@ -20,7 +20,7 @@ Related security docs: [ZAP baseline](../security/zap-baseline), [TLS and certif
 | Pentest credentials | Generated per stack | `workspace/auth.pentest.local` (never commit) |
 | LAN ZAP + Nmap scans | **Developer workstation** on test LAN | `scripts/security/` |
 
-See [TLS and certificate ownership](../security/tls-and-certs) for cert lifecycle.
+See [TLS and certificate ownership]({% link security/tls-and-certs.md %}) for cert lifecycle.
 
 ## Per-revision workflow
 
@@ -53,7 +53,7 @@ infra/ansible/scripts/bench_5007_arrow_battery.sh   # when FDD/Arrow paths chang
 ./scripts/pentest_production_stack.sh verify
 ```
 
-Confirms Caddy `:80` fronts the bridge, auth is enabled, BACnet writes disabled, and security headers are singular (no Caddy duplicates). Details: [Health checks — pentest](health-check#pentest-production-stack-lan-zap).
+Confirms Caddy `:80` fronts the bridge, auth is enabled, BACnet writes disabled, and security headers are singular (no Caddy duplicates). Details: [Health checks — pentest]({% link developer/health-check.md %}#pentest-production-stack-lan-zap).
 
 ### 3. Host + exposure checks (on edge VM)
 
@@ -75,11 +75,11 @@ Use the packaged scripts — do not hand-roll one-off docker/nmap commands unles
 | Windows | `.\scripts\security\Run-OpenFddSecurityScan.ps1` |
 | macOS / Linux | `./scripts/security/run_openfdd_security_scan.sh` |
 
-Setup (Docker Desktop, Nmap): [scripts/security/README.md](../../scripts/security/README.md).
+Setup (Docker Desktop, Nmap): [scripts/security/README.md](https://github.com/bbartling/open-fdd/blob/master/scripts/security/README.md).
 
 Target URL is usually **`http://<lan-ip>/`** (Caddy), not `:8765`.
 
-Review `openfdd-security-report/90-quick-findings-summary.txt` and compare against [ZAP baseline expectations](../security/zap-baseline).
+Review `openfdd-security-report/90-quick-findings-summary.txt` and compare against [ZAP baseline expectations]({% link security/zap-baseline.md %}).
 
 ### 5. Pull request + automated review
 
@@ -107,7 +107,7 @@ OPENFDD_IMAGE_TAG=latest ./scripts/upgrade_edge_full.sh --limit <inventory_host>
 infra/ansible/scripts/post_deploy_check.sh --limit <inventory_host> --full
 ```
 
-Re-run LAN ZAP + Nmap against the edge LAN IP if Caddy or auth behavior changed. Site-specific example: [GL36 lab note](../examples/acme-gl36-lab).
+Re-run LAN ZAP + Nmap against the edge LAN IP if Caddy or auth behavior changed. Site-specific example: [GL36 lab note]({% link examples/acme-gl36-lab.md %}).
 
 ### 8. Next cycle
 
@@ -121,10 +121,10 @@ Bump patch version locally (`pyproject.toml`, `open_fdd/__init__.py`) on `master
 | Stack smoke | `pentest_production_stack.sh verify` | Live headers, health, auth file |
 | Passive web | ZAP baseline | Public routes, CSP, cookies, CORS |
 | Port exposure | Nmap scoped | One host, known service ports |
-| Authenticated API/dashboard | ZAP full + login | **Roadmap** — [Authenticated scanning](../security/authenticated-scanning) |
+| Authenticated API/dashboard | ZAP full + login | **Roadmap** — [Authenticated scanning]({% link security/authenticated-scanning.md %}) |
 
 Baseline ZAP does **not** exercise integrator login or protected `/api/*` routes deeply.
 
 ## Open-source contributors
 
-The `scripts/security/` folder is part of the public repo so any fork can run the same LAN smoke against their bench. PRs that change Caddy, auth, or `security_headers.py` should update [ZAP baseline](../security/zap-baseline) and re-run the scan scripts.
+The `scripts/security/` folder is part of the public repo so any fork can run the same LAN smoke against their bench. PRs that change Caddy, auth, or `security_headers.py` should update [ZAP baseline]({% link security/zap-baseline.md %}) and re-run the scan scripts.

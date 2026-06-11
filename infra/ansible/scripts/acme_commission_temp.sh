@@ -10,8 +10,6 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ANSIBLE_DIR="$(cd "$DIR/.." && pwd)"
 ROOT="$(cd "$ANSIBLE_DIR/../.." && pwd)"
-VIBE_ROOT="${VIBE12_ROOT:-$HOME/py-bacnet-stacks-playground/vibe_code_apps_12}"
-
 LOCAL_DIR="${ROOT}/edge_backup/local/acme/vm-bbartling"
 PDIR="${LOCAL_DIR}/points_per_device"
 DEVICES="${LOCAL_DIR}/devices_discovered.trim.csv"
@@ -20,22 +18,12 @@ POLL_INTERVAL="${POLL_INTERVAL:-60}"
 [[ -d "$PDIR" ]] || { echo "Missing ${PDIR} — sync edge_backup first" >&2; exit 1; }
 [[ -f "$DEVICES" ]] || { echo "Missing ${DEVICES}" >&2; exit 1; }
 
-PY="${VIBE_ROOT}/.venv/bin/python"
-[[ -x "$PY" ]] || PY="$(command -v python3)"
-export PYTHONPATH="${VIBE_ROOT}${PYTHONPATH:+:$PYTHONPATH}"
+PY="$(command -v python3)"
+export PYTHONPATH="${ROOT}${PYTHONPATH:+:$PYTHONPATH}"
 
-echo "=== Commission enable (${POLL_INTERVAL}s, BRICK tags, trim devices) ==="
-"$PY" -m edge_bacnet.commission_enable \
-  --dir "$PDIR" \
-  --devices-csv "$DEVICES" \
-  --only-in-devices-csv \
-  --poll-interval "$POLL_INTERVAL" \
-  --site-id acme \
-  --building-id vm-bbartling
-
-echo "=== Merge all enabled rows (full backup copy) ==="
+echo "=== Merge all enabled rows (bacnet_toolshed) ==="
 FULL_CSV="${LOCAL_DIR}/points.all_enabled.csv"
-"$PY" -m edge_bacnet.merge_points_csv \
+"$PY" -m bacnet_toolshed.merge_points_csv \
   --input-dir "$PDIR" \
   -o "$FULL_CSV" \
   --enabled-only

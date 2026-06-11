@@ -34,4 +34,4 @@ python3 scripts/portfolio_collect.py
 
 ## Tuning proposals
 
-Human-reviewable proposals use `TuningProposal` in the same module. The AI agent **never** auto-writes BACnet points — see `docs/portfolio/ai-agent-tuning.md` (3.0.19).
+Human-reviewable proposals use `TuningProposal` in the same module. The AI agent **never** auto-writes BACnet points on edge — use `GET /api/building-agent/tuning-brief` and `POST /api/building-agent/apply-tuning` with `apply: false` first. Maintainer workflow: `skills/openfdd-edge-deploy-tune/SKILL.md`.

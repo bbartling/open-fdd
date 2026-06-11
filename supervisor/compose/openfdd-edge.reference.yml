@@ -13,7 +13,7 @@ services:
     environment:
       OPENFDD_BACNET_COMMISSION_URL: http://commission:8767
       OFDD_MCP_REST_BASE: http://mcp-rag:8090
-      OFDD_OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OFDD_OLLAMA_ENABLED: "0"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

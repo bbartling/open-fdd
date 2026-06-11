@@ -42,7 +42,7 @@ Inside **bridge**, a background thread watches `samples.csv` and ingests new row
 
 Dashboard stack health (`GET /health/stack`) reports `bacnet_poll` status from the commission agent — not a separate container.
 
-Stale points trigger data-quality fault patterns — see [Sensor quality faults](../fault-codes/sensor-quality).
+Stale points trigger data-quality fault patterns — see [Sensor quality faults]({% link fault-codes/sensor-quality.md %}).
 
 ## Poll strategy (edge)
 
@@ -63,11 +63,11 @@ Acme ships ~**340 points / 60 s** ≈ one full plant read per minute. Disable un
 | RPM batching | Present-value reads chunked (25 objects) to cut APDUs |
 | Poll loop | Sequential per-device RPM when `interruptible=True` so operator UI can preempt |
 | Operator UI | **INTERACTIVE** priority — cancels in-flight background work |
-| Override scans | **BACKGROUND**, 15 min timeout — see [Operator override scans](override-scans) |
+| Override scans | **BACKGROUND**, 15 min timeout — see [Operator override scans]({% link bacnet/override-scans.md %}) |
 | Bridge ingest | Async notify after each poll cycle → feather historian |
 
-Do **not** run a second BACnet bind on 47808 (no parallel `openfdd-bacnet-poll` container). See [Containers](../architecture/containers).
+Do **not** run a second BACnet bind on 47808 (no parallel `openfdd-bacnet-poll` container). See [Containers]({% link architecture/containers.md %}).
 
 ## Operator override scans
 
-Hourly P8 supervisory scans rotate one device at a time. Documented in [Operator override scans](override-scans).
+Hourly P8 supervisory scans rotate one device at a time. Documented in [Operator override scans]({% link bacnet/override-scans.md %}).

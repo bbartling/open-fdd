@@ -10,10 +10,10 @@ Open-FDD uses a **check-engine** model: one building-level status (green / yello
 
 | Page | Content |
 |------|---------|
-| [Convention](convention) | Naming, severity, categories |
-| [AHU faults](ahu) | Air handling units |
-| [VAV faults](vav) | Terminal units |
-| [RTU faults](rtu) | Packaged rooftops |
-| [Sensor & data quality](sensor-quality) | Stale, flatline, comms |
+| [Convention]({% link fault-codes/convention.md %}) | Naming, severity, categories |
+| [AHU faults]({% link fault-codes/ahu.md %}) | Air handling units |
+| [VAV faults]({% link fault-codes/vav.md %}) | Terminal units |
+| [RTU faults]({% link fault-codes/rtu.md %}) | Packaged rooftops |
+| [Sensor & data quality]({% link fault-codes/sensor-quality.md %}) | Stale, flatline, comms |
 
 Live catalog API: `GET /api/faults/catalog` on the Operator Bridge.

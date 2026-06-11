@@ -42,7 +42,19 @@ jobs:
           ./scripts/validate_supervisor_manifest.sh
 
       - name: Publish to GHCR (:latest)
+        env:
+          DOCKER_PUSH_RETRY_MAX: "5"
+          DOCKER_PUSH_RETRY_BASE_S: "10"
         run: PUBLISH_LATEST_ONLY=1 OPENFDD_IMAGE_TAG=latest ./scripts/docker_publish.sh
+
+      - name: Verify GHCR manifests (all three edge images)
+        run: |
+          set -euo pipefail
+          for img in openfdd-bridge openfdd-commission openfdd-mcp-rag; do
+            ref="ghcr.io/bbartling/${img}:latest"
+            echo "==> manifest inspect ${ref}"
+            docker manifest inspect "${ref}" >/dev/null
+          done
 
       - name: Prune GHCR (drop retired bacnet-poll; keep N versions)
         env:

@@ -58,4 +58,4 @@ Expect `device_count` > 0, `last_scan_at` within the last few hours on a healthy
 | `workspace/bacnet/overrides/registry.json` | Per-device last scan + override points |
 | `workspace/bacnet/overrides/overrides_export.csv` | Flat export for spreadsheets |
 
-Preserved across Docker upgrades when `workspace/` is on the edge volume — see [Backup & restore](../ops/backup-restore).
+Preserved across Docker upgrades when `workspace/` is on the edge volume — see [Backup & restore]({% link ops/backup-restore.md %}).

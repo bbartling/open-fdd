@@ -98,6 +98,9 @@ COPY workspace/api/requirements.txt /tmp/mcp-requirements.txt
 RUN pip install -r /tmp/mcp-requirements.txt
 
 COPY workspace/mcp_rag ./workspace/mcp_rag
+COPY workspace/mcp_server ./workspace/mcp_server
+
+RUN pip install -r workspace/mcp_server/requirements.txt
 
 WORKDIR /app/workspace
 
@@ -106,11 +109,13 @@ ENV OPENFDD_REPO_ROOT=/app \
     PYTHONPATH=/app/workspace:/app/workspace/api:/app \
     OFDD_MCP_RAG_INDEX_PATH=/var/openfdd/workspace/data/mcp/rag_index.json \
     OFDD_MCP_LISTEN_HOST=0.0.0.0 \
-    OFDD_MCP_LISTEN_PORT=8090
+    OFDD_MCP_LISTEN_PORT=8090 \
+    OFDD_MCP_TRANSPORT=streamable-http \
+    OFDD_MCP_MODE=edge
 
 EXPOSE 8090
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')" || exit 1
 
-CMD ["uvicorn", "mcp_rag.app:app", "--host", "0.0.0.0", "--port", "8090"]
+CMD ["uvicorn", "mcp_server.asgi:create_app", "--factory", "--host", "0.0.0.0", "--port", "8090"]

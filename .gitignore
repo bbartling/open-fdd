@@ -230,6 +230,13 @@ workspace/logs/
 !/workspace/data/**
 !/workspace/deploy/
 !/workspace/deploy/**
+!/workspace/mcp_rag/
+!/workspace/mcp_rag/**
+!/workspace/mcp_server/
+!/workspace/mcp_server/**
+!/workspace/MEMORY.md.example
+!/workspace/memory/
+!/workspace/memory/**
 
 # Runtime state written by the bridge / FDD loop (not committed)
 /workspace/data/fdd_results.json

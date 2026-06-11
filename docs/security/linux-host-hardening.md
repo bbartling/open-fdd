@@ -6,9 +6,9 @@ nav_order: 7
 
 # Linux host hardening
 
-Generic **Ubuntu edge VM** guidance for Open-FDD deployments scanned by IT tools (Tenable/Nessus, Qualys, etc.). This complements application-level [LAN hardening](lan-hardening) and [TLS](tls-and-certs).
+Generic **Ubuntu edge VM** guidance for Open-FDD deployments scanned by IT tools (Tenable/Nessus, Qualys, etc.). This complements application-level [LAN hardening]({% link security/lan-hardening.md %}) and [TLS]({% link security/tls-and-certs.md %}).
 
-Nessus-specific finding tables: [Tenable remediation](tenable-remediation).
+Nessus-specific finding tables: [Tenable remediation]({% link security/tenable-remediation.md %}).
 
 ## Scope
 
@@ -17,7 +17,7 @@ Nessus-specific finding tables: [Tenable remediation](tenable-remediation).
 | Ubuntu kernel, OpenSSH, apt packages | **Site IT / integrator** | `scripts/security/remediate_ubuntu_host.sh` |
 | Docker engine, compose, Caddy | **Integrator** | Ansible + `check_openfdd_exposure.sh` |
 | Open-FDD containers (pip/pyOpenSSL) | **Open-FDD maintainers** | `docker/python-security-constraints.txt`, GHCR images |
-| Self-signed TLS on OT LAN | **Expected lab finding** | Enterprise CA path in [TLS](tls-and-certs) |
+| Self-signed TLS on OT LAN | **Expected lab finding** | Enterprise CA path in [TLS]({% link security/tls-and-certs.md %}) |
 
 ## Quick operator workflow
 
@@ -135,7 +135,7 @@ sudo nft add rule inet filter input icmp type timestamp-request drop
 
 ## TLS and certificate scans
 
-Self-signed or internal CA certificates produce **Medium** Nessus SSL findings (untrusted, self-signed, expiry). That is **expected** for lab/OT encryption-in-transit. For clean SSL plugin results, install a **site enterprise CA** certificate on Caddy — [TLS and certificates](tls-and-certs#enterprise-ca-production).
+Self-signed or internal CA certificates produce **Medium** Nessus SSL findings (untrusted, self-signed, expiry). That is **expected** for lab/OT encryption-in-transit. For clean SSL plugin results, install a **site enterprise CA** certificate on Caddy — [TLS and certificates]({% link security/tls-and-certs.md %}#enterprise-ca-production).
 
 ## Maintainer security audits (CI parity)
 

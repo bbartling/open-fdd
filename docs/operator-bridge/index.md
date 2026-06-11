@@ -10,12 +10,12 @@ The Operator Bridge is the FastAPI service and React dashboard operators use dai
 
 | Page | Topic |
 |------|-------|
-| [Dashboard overview](dashboard) | Main UI areas |
-| [Auth and roles](auth-roles) | Login and permissions |
-| [Rule Lab](rule-lab) | Python FDD rule authoring (PyArrow kit zip) |
-| [Algorithms](algorithms) | Supervisory GL36 sequences (coming soon) |
-| [Model workflow](model-workflow) | Brick bindings and imports |
-| [FDD and assignments](fdd-assignments) | Rule bindings, BRICK classes, commissioning JSON |
-| [Ollama and analytics](ollama-analytics) | Home briefing, zone levers, model RAM tiers |
+| [Dashboard overview]({% link operator-bridge/dashboard.md %}) | Main UI areas |
+| [Auth and roles]({% link operator-bridge/auth-roles.md %}) | Login and permissions |
+| [Rule Lab]({% link operator-bridge/rule-lab.md %}) | Python FDD rule authoring (PyArrow kit zip) |
+| [Algorithms]({% link operator-bridge/algorithms.md %}) | Supervisory GL36 sequences (coming soon) |
+| [Model workflow]({% link operator-bridge/model-workflow.md %}) | Brick bindings and imports |
+| [FDD and assignments]({% link operator-bridge/fdd-assignments.md %}) | Rule bindings, BRICK classes, commissioning JSON |
+| [Ollama and analytics]({% link operator-bridge/ollama-analytics.md %}) | Home briefing, zone levers, model RAM tiers |
 
-REST details: [Appendix — API routes](../appendix/bridge_api). Env files: [Workspace env files](../appendix/workspace-env-files).
+REST details: [Appendix — API routes]({% link appendix/bridge_api.md %}). Env files: [Workspace env files]({% link appendix/workspace-env-files.md %}).

@@ -103,9 +103,6 @@ Optional one-time bootstrap (deprecated file push — prefer API import):
     -e openfdd_push_site_pack=true \
     -e openfdd_push_bacnet_config=true
 
-Legacy workstation rsync (lab Pi only): see legacy/README.md
-  export OPENFDD_ALLOW_LEGACY_DEPLOY=1
-
 Env:
   OPENFDD_IMAGE_TAG     GHCR tag (default in host_vars: latest)
   SSHPASS               From secrets/<host>.env.local when using --limit

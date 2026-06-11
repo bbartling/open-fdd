@@ -10,8 +10,8 @@ Open-FDD integrates with field controllers via BACnet/IP (and bench MSTP overlay
 
 | Page | Topic |
 |------|-------|
-| [Network setup](network-setup) | Bind address and NIC |
-| [Discover and read](discover-read) | Commission agent |
-| [Polling](polling) | Historian driver |
-| [Operator override scans](override-scans) | Hourly P8 supervisory rotation |
-| [Write safety](write-safety) | Defaults and allowlists |
+| [Network setup]({% link bacnet/network-setup.md %}) | Bind address and NIC |
+| [Discover and read]({% link bacnet/discover-read.md %}) | Commission agent |
+| [Polling]({% link bacnet/polling.md %}) | Historian driver |
+| [Operator override scans]({% link bacnet/override-scans.md %}) | Hourly P8 supervisory rotation |
+| [Write safety]({% link bacnet/write-safety.md %}) | Defaults and allowlists |

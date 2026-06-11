@@ -9,7 +9,7 @@ description: "Manages saved Python FDD rules from Rule Lab and runs batched jobs
 
 Use when operators author Python rules in Rule Lab, persist them, and run scheduled or on-demand batch FDD.
 
-For one-shot notebooks with the **library** YAML `RuleRunner`, use [engine-pandas-fdd](../engine-pandas-fdd/SKILL.md) instead (not the operator bridge).
+Arrow-native rules use `apply_faults_arrow` via the operator bridge Rule Lab — see [openfdd-rule-authoring-agent](../openfdd-rule-authoring-agent/SKILL.md).
 
 ## Prerequisites
 

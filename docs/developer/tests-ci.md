@@ -33,4 +33,4 @@ Fix any template or link errors before opening a PR that touches `docs/`.
 
 ## Security-related CI
 
-`ci.yml` includes bridge security tests (`tests/workspace_bridge/test_security.py`). That complements — but does not replace — LAN [ZAP + Nmap scans](../security/zap-baseline) on each patch revision. See [Security testing cycle](security-testing).
+`ci.yml` includes bridge security tests (`tests/workspace_bridge/test_security.py`). That complements — but does not replace — LAN [ZAP + Nmap scans]({% link security/zap-baseline.md %}) on each patch revision. See [Security testing cycle]({% link developer/security-testing.md %}).

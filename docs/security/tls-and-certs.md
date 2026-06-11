@@ -8,7 +8,7 @@ nav_order: 3
 
 Who generates, stores, and renews TLS material for Open-FDD on OT LANs — and how that ties into ZAP/Nmap bench testing.
 
-Developer release cycle: [Security testing cycle](../developer/security-testing).
+Developer release cycle: [Security testing cycle]({% link developer/security-testing.md %}).
 
 ## Ownership
 
@@ -34,7 +34,7 @@ OFDD_CADDY_MODE=tls ./scripts/run_local.sh
 # or pentest stack with OFDD_CADDY_MODE=tls
 ```
 
-Caddy serves `:443` and redirects `:80` → HTTPS. Caddy adds **`Strict-Transport-Security`** only; all other security headers remain on the **bridge** ([ZAP baseline](zap-baseline#header-ownership)).
+Caddy serves `:443` and redirects `:80` → HTTPS. Caddy adds **`Strict-Transport-Security`** only; all other security headers remain on the **bridge** ([ZAP baseline]({% link security/zap-baseline.md %}#header-ownership)).
 
 ## ZAP / Nmap with TLS bench
 
@@ -89,7 +89,7 @@ openssl x509 -in /etc/openfdd/caddy/cert.pem -noout -dates
 }
 ```
 
-Lab/self-signed mode still produces expected **Medium** Tenable findings — document as accepted risk or switch to enterprise CA. See [Tenable remediation](tenable-remediation).
+Lab/self-signed mode still produces expected **Medium** Tenable findings — document as accepted risk or switch to enterprise CA. See [Tenable remediation]({% link security/tenable-remediation.md %}).
 
 ## Caddy internal CA mode (lab)
 
