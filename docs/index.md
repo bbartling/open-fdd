@@ -20,9 +20,9 @@ Open-FDD is an open-source **building edge platform** for BACnet integration, fe
 
 | Path | Go to |
 |------|-------|
-| **Try it** | [Quick Start — Run with Docker](quick-start/docker) |
-| **Operate it** | [Updating the stack](quick-start/updating) · [Operations](ops/) |
-| **Develop it** | [Developer Guide](developer/) · [Architecture](architecture/) |
+| **Try it** | [Quick Start — Run with Docker]({% link quick-start/docker.md %}) |
+| **Operate it** | [Updating the stack]({% link quick-start/updating.md %}) · [Operations]({% link ops/index.md %}) |
+| **Develop it** | [Developer Guide]({% link developer/index.md %}) · [Architecture]({% link architecture/index.md %}) |
 
 ## v3 edge stack
 
@@ -36,10 +36,10 @@ Three primary containers on a Linux edge host:
 
 Host **Caddy** on `:80` or `:443` is the normal LAN front door. BACnet UDP `:47808` is bound by **commission** only — the bridge ingests `samples.csv` into the feather historian.
 
-Details: [Containers](architecture/containers) · [Deployment modes](architecture/deployment-modes)
+Details: [Containers]({% link architecture/containers.md %}) · [Deployment modes]({% link architecture/deployment-modes.md %})
 
 {: .warning }
-> **LAN / OT edge only.** Do not expose the Operator Bridge to the public internet without TLS, strong auth, and site review. BACnet writes are disabled by default — see [BACnet write guard](security/bacnet-writes).
+> **LAN / OT edge only.** Do not expose the Operator Bridge to the public internet without TLS, strong auth, and site review. BACnet writes are disabled by default — see [BACnet write guard]({% link security/bacnet-writes.md %}).
 
 ## Distribution
 

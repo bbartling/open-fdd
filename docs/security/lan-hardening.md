@@ -8,7 +8,7 @@ nav_order: 1
 
 Open-FDD targets **trusted building LAN / OT edge** deployment. The Operator Bridge is not intended for direct public internet exposure.
 
-Full mode matrix: [Deployment modes](../architecture/deployment-modes).
+Full mode matrix: [Deployment modes]({% link architecture/deployment-modes.md %}).
 
 ## Auth and bind
 
@@ -25,7 +25,7 @@ Startup **fails** on non-loopback bind without credentials (unless insecure lab 
 - Put **Caddy** on `:80` / `:443`; keep bridge `:8765` on loopback when possible.
 - Do not port-forward the Operator Bridge to the public internet without TLS and strong auth.
 - Keep BACnet on OT VLANs; management UI on IT VLAN with firewall rules.
-- BACnet **writes** are gated by default — [BACnet write guard](bacnet-writes).
+- BACnet **writes** are gated by default — [BACnet write guard]({% link security/bacnet-writes.md %}).
 
 ## Rule Lab
 
@@ -35,10 +35,10 @@ Rule Lab runs **operator-authored Python** in a sandbox. Restrict integrator acc
 
 | Topic | Page |
 |-------|------|
-| Certificates (self-signed / site CA) | [TLS and certificates](tls-and-certs) |
-| ZAP + Nmap bench smoke | [ZAP baseline](zap-baseline) · `scripts/security/` |
-| Ubuntu host + Tenable/Nessus | [Linux host hardening](linux-host-hardening) · [Tenable remediation](tenable-remediation) |
-| Release test cycle (maintainers) | [Security testing](../developer/security-testing) |
+| Certificates (self-signed / site CA) | [TLS and certificates]({% link security/tls-and-certs.md %}) |
+| ZAP + Nmap bench smoke | [ZAP baseline]({% link security/zap-baseline.md %}) · `scripts/security/` |
+| Ubuntu host + Tenable/Nessus | [Linux host hardening]({% link security/linux-host-hardening.md %}) · [Tenable remediation]({% link security/tenable-remediation.md %}) |
+| Release test cycle (maintainers) | [Security testing]({% link developer/security-testing.md %}) |
 
 ## Ollama on the edge
 

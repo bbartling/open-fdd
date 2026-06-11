@@ -10,6 +10,6 @@ Site-specific commissioning notes, GL36 examples, and maintainer lab workflows. 
 
 | Page | Description |
 |------|-------------|
-| [GL36 lab site (Acme)](acme-gl36-lab) | Example real-building poll scope, Arrow rule stubs, Ansible deploy commands |
+| [GL36 lab site (Acme)]({% link examples/acme-gl36-lab.md %}) | Example real-building poll scope, Arrow rule stubs, Ansible deploy commands |
 
-For production IT operators, start with [Quick Start](../quick-start/) and [Operations](../ops/).
+For production IT operators, start with [Quick Start]({% link quick-start/index.md %}) and [Operations]({% link ops/index.md %}).

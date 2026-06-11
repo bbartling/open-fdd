@@ -8,7 +8,7 @@ nav_order: 2
 
 Open-FDD 3.0 Rule Lab rules use **`apply_faults_arrow(table, cfg, context)`**, **`pyarrow.compute`**, and **module constants** (no `config.json`).
 
-For **full GL36 A–M and plant recipes**, see **[Python recipes (full Arrow library)](python-recipes-arrow)**. Sensor tables: **[Expression cookbook](expression-cookbook)**.
+For **full GL36 A–M and plant recipes**, see **[Python recipes (full Arrow library)]({% link rule-cookbook/python-recipes-arrow.md %})**. Sensor tables: **[Expression cookbook]({% link rule-cookbook/expression-cookbook.md %})**.
 
 ## Simple threshold
 
@@ -93,10 +93,10 @@ def apply_faults_arrow(table, cfg, context=None):
     return pc.or_(flat, spike)  # import pyarrow.compute as pc
 ```
 
-Bounds table: [Expression cookbook — sensor validation](expression-cookbook#sensor-validation-bounds-flatline-rate-of-change).
+Bounds table: [Expression cookbook — sensor validation]({% link rule-cookbook/expression-cookbook.md %}#sensor-validation-bounds-flatline-rate-of-change).
 
 More templates ship in `open_fdd.playground.arrow_templates` and via `GET /api/playground/arrow-templates`.
 
 Bench examples: `workspace/data/rules_py/bench_*.py`.
 
-Dev kit zip layout: [Rule Lab — dev kit zip](../operator-bridge/rule-lab.md#dev-kit-zip-download).
+Dev kit zip layout: [Rule Lab — dev kit zip]({% link operator-bridge/rule-lab.md %}#dev-kit-zip-download).

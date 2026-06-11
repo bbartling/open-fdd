@@ -9,13 +9,13 @@ Practical patterns for **Arrow-native Rule Lab** (`apply_faults_arrow`) on feath
 
 | Page | Use when |
 |------|----------|
-| [**Python recipes (full Arrow library)**](python-recipes-arrow) | **Copy-paste GL36 A–M, VAV, plant, economizer, weather** — replaces legacy YAML cookbook |
-| [**Expression cookbook (Arrow-native)**](expression-cookbook) | Sensor bounds, legacy→Arrow map, commissioning checklist |
-| [Arrow recipes](arrow-recipes) | Short templates — threshold, flatline, OOB, fan/schedule |
-| [Python recipes](python-recipes) | Shared `open_fdd.arrow_runtime.cookbook` imports |
-| [Lookback window helper](lookback-window) | `_kit_lookback_stats` — print start/stop timestamps and span |
-| [Windowing & debugging](windowing-debugging) | Rolling windows, batch runtime, Rule Lab console |
-| [GL36 algorithm stubs](gl36-algorithm-stubs) | Doc-only supervisory patterns (trim & respond, plant resets) |
+| [**Python recipes (full Arrow library)**]({% link rule-cookbook/python-recipes-arrow.md %}) | **Copy-paste GL36 A–M, VAV, plant, economizer, weather** — replaces legacy YAML cookbook |
+| [**Expression cookbook (Arrow-native)**]({% link rule-cookbook/expression-cookbook.md %}) | Sensor bounds, legacy→Arrow map, commissioning checklist |
+| [Arrow recipes]({% link rule-cookbook/arrow-recipes.md %}) | Short templates — threshold, flatline, OOB, fan/schedule |
+| [Python recipes]({% link rule-cookbook/python-recipes.md %}) | Shared `open_fdd.arrow_runtime.cookbook` imports |
+| [Lookback window helper]({% link rule-cookbook/lookback-window.md %}) | `_kit_lookback_stats` — print start/stop timestamps and span |
+| [Windowing & debugging]({% link rule-cookbook/windowing-debugging.md %}) | Rolling windows, batch runtime, Rule Lab console |
+| [GL36 algorithm stubs]({% link rule-cookbook/gl36-algorithm-stubs.md %}) | Doc-only supervisory patterns (trim & respond, plant resets) |
 
 Programmatic sensor defaults: `open_fdd.arrow_runtime.sensor_catalog.SENSOR_PROFILES`.
 

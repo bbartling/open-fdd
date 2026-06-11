@@ -94,7 +94,7 @@ Before enabling more rules:
 
 ## BACnet override scans
 
-Commission agent rotates **one device/hour** through P8 priority-array reads. Status: `GET /api/bacnet/overrides/status`. See [Operator override scans](../bacnet/override-scans).
+Commission agent rotates **one device/hour** through P8 priority-array reads. Status: `GET /api/bacnet/overrides/status`. See [Operator override scans]({% link bacnet/override-scans.md %}).
 
 ## Docker backup / recovery
 

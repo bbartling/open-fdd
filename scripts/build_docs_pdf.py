@@ -42,6 +42,11 @@ from pathlib import Path
 
 # Kramdown / Jekyll inline attribute lists (Just the Docs), e.g. {: .fs-6 .fw-400 }
 _KRAMDOWN_IAL_RE = re.compile(r"\{:[^}\n]*\}\s*")
+# Jekyll {% link path/to/page.md %}#anchor — PDF bundle reads raw Markdown, not rendered HTML.
+_JEKYLL_LINK_RE = re.compile(
+    r"\{%\s*link\s+([^\s%]+?\.md)\s*%\}(#[\w%.\-]+)?",
+    re.IGNORECASE,
+)
 
 try:
     import yaml
@@ -82,6 +87,21 @@ def parse_front_matter(path: Path) -> tuple[dict, str]:
 def strip_kramdown_ial(text: str) -> str:
     """Remove Kramdown/Jekyll `{: ... }` blocks; Pandoc and plain text keep them as junk."""
     return _KRAMDOWN_IAL_RE.sub("", text)
+
+
+def strip_jekyll_link_tags(text: str) -> str:
+    """Turn {% link docs/foo.md %}#anchor into /foo/ for PDF/plain-text bundles."""
+
+    def _repl(m: re.Match[str]) -> str:
+        path = m.group(1).strip().replace("\\", "/")
+        if path.endswith("/index.md"):
+            path = path[: -len("/index.md")]
+        elif path.endswith(".md"):
+            path = path[: -len(".md")]
+        anchor = m.group(2) or ""
+        return f"/{path}/{anchor}"
+
+    return _JEKYLL_LINK_RE.sub(_repl, text)
 
 
 def collect_md_files(docs_dir: Path) -> list[Path]:
@@ -199,7 +219,7 @@ def main() -> int:
             continue
         # One top-level heading per page so TOC is clean
         parts.append(f"# {title}\n\n")
-        parts.append(strip_kramdown_ial(body))
+        parts.append(strip_jekyll_link_tags(strip_kramdown_ial(body)))
         if not body.endswith("\n"):
             parts.append("\n")
         parts.append("\n\n")

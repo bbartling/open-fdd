@@ -10,13 +10,13 @@ LAN deployment security for the Operator Bridge and BACnet write guard. Open-FDD
 
 | Page | Topic |
 |------|-------|
-| [LAN hardening](lan-hardening) | Auth and bind modes |
-| [ZAP baseline (local bench)](zap-baseline) | Pentest stack, expected warnings |
-| [TLS and certificates](tls-and-certs) | Cert ownership, bench TLS mode |
-| [Linux host hardening](linux-host-hardening) | Ubuntu edge VM, SSH, kernel, Ollama bind |
-| [Tenable / Nessus remediation](tenable-remediation) | IT scan findings, operator runbook |
-| [Authenticated scanning (roadmap)](authenticated-scanning) | Deep ZAP / protected API |
-| [Secrets and auth](secrets-auth) | Env files |
-| [BACnet write allowlists](bacnet-writes) | Supervisory write gates |
-| [Release & LAN scan cycle](../developer/security-testing) | Per-revision ZAP + CI workflow |
-| [Logging and audit](../ops/logging) | Auth audit trail, rotation, SIEM |
+| [LAN hardening]({% link security/lan-hardening.md %}) | Auth and bind modes |
+| [ZAP baseline (local bench)]({% link security/zap-baseline.md %}) | Pentest stack, expected warnings |
+| [TLS and certificates]({% link security/tls-and-certs.md %}) | Cert ownership, bench TLS mode |
+| [Linux host hardening]({% link security/linux-host-hardening.md %}) | Ubuntu edge VM, SSH, kernel, Ollama bind |
+| [Tenable / Nessus remediation]({% link security/tenable-remediation.md %}) | IT scan findings, operator runbook |
+| [Authenticated scanning (roadmap)]({% link security/authenticated-scanning.md %}) | Deep ZAP / protected API |
+| [Secrets and auth]({% link security/secrets-auth.md %}) | Env files |
+| [BACnet write allowlists]({% link security/bacnet-writes.md %}) | Supervisory write gates |
+| [Release & LAN scan cycle]({% link developer/security-testing.md %}) | Per-revision ZAP + CI workflow |
+| [Logging and audit]({% link ops/logging.md %}) | Auth audit trail, rotation, SIEM |

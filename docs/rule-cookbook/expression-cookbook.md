@@ -11,15 +11,15 @@ redirect_from:
 
 Reference for **Open-FDD 3.x Rule Lab**: every rule is a Python module with **`apply_faults_arrow(table, cfg, context)`** using **`pyarrow.compute`** — **no pandas**, **no YAML expression files**, **no NumPy DataFrames on the IoT edge**.
 
-This is the **only** expression cookbook for Open-FDD 3.x. The old pandas/YAML page is [retired](../legacy/retired-pandas-yaml-engine). Legacy GL36-style recipes map to **fixed [fault codes](../fault-codes/)** and Arrow patterns below.
+This is the **only** expression cookbook for Open-FDD 3.x. The old pandas/YAML page is [retired]({% link legacy/retired-pandas-yaml-engine.md %}). Legacy GL36-style recipes map to **fixed [fault codes]({% link fault-codes/index.md %})** and Arrow patterns below.
 
 | Topic | Page |
 |-------|------|
-| **Full copy-paste library (GL36 A–M, VAV, plant)** | **[Python recipes (full Arrow library)](python-recipes-arrow)** |
-| Quick templates | [Arrow recipes](arrow-recipes) |
-| Shared imports | [Python recipes](python-recipes) |
-| Console window stats | [Lookback window](lookback-window) |
-| Fault code catalog | [Fault codes](../fault-codes/) |
+| **Full copy-paste library (GL36 A–M, VAV, plant)** | **[Python recipes (full Arrow library)]({% link rule-cookbook/python-recipes-arrow.md %})** |
+| Quick templates | [Arrow recipes]({% link rule-cookbook/arrow-recipes.md %}) |
+| Shared imports | [Python recipes]({% link rule-cookbook/python-recipes.md %}) |
+| Console window stats | [Lookback window]({% link rule-cookbook/lookback-window.md %}) |
+| Fault code catalog | [Fault codes]({% link fault-codes/index.md %}) |
 | Programmatic defaults | `open_fdd.arrow_runtime.sensor_catalog` |
 
 ---
@@ -155,21 +155,21 @@ ASHRAE Guideline 36-style rules from the old YAML cookbook, translated to Arrow.
 
 | Legacy rule | Summary | Code | Full Arrow module |
 |-------------|---------|------|-------------------|
-| Rule A — duct static low @ full fan | SP below SP setpoint at high VFD | **AHU-A** | [Rule A](python-recipes-arrow#rule-a--duct-static-low-at-full-fan-speed-ahu-a) |
-| Rule B — blend below band | MAT below OAT/RAT envelope | **AHU-D** | [Rules B & C](python-recipes-arrow#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
-| Rule C — blend above band | MAT above OAT/RAT envelope | **AHU-D** | [Rules B & C](python-recipes-arrow#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
-| Rule D — discharge cold when heating | SAT low vs MAT, heat valve open | **AHU-B** | [Rule D](python-recipes-arrow#rule-d--discharge-cold-when-heating-commanded-ahu-b) |
-| Rule E — SAT low, full heating | SAT below SP, valve > 90% | **AHU-C** | [Rule E](python-recipes-arrow#rule-e--sat-too-low-with-full-heating-ahu-c) |
-| Rule F — SAT/MAT mismatch econ | Econ mode, SAT ≠ MAT | **AHU-E** | [Rule F](python-recipes-arrow#rule-f--satmat-mismatch-in-economizer-mode-ahu-e) |
-| Rule G — ambient warm free cool | OAT > SAT SP, econ open, cool off | **AHU-E** | [Rule G](python-recipes-arrow#rule-g--ambient-too-warm-for-free-cooling-ahu-e) |
-| Rule H — OAT/MAT mismatch econ+mech | Mech + econ, MAT ≠ OAT | **AHU-E** | [Rule H](python-recipes-arrow#rule-h--oatmat-mismatch-econ--mech-cooling-ahu-e) |
-| Rule I — OAT/MAT mismatch econ-only | Econ only, MAT ≠ OAT | **AHU-E** | [Rule I](python-recipes-arrow#rule-i--oatmat-mismatch-economizer-only-ahu-e) |
-| Rule J — discharge above blend cooling | SAT > MAT in cooling | **AHU-B** | [Rule J](python-recipes-arrow#rule-j--discharge-above-blended-in-cooling-ahu-b) |
-| Rule K — discharge above SP full cool | SAT > SP, full cooling | **AHU-C** | [Rule K](python-recipes-arrow#rule-k--discharge-above-setpoint-in-full-cooling-ahu-c) |
-| Rule L — cooling coil ΔT when off | CHW drop when valves closed | **CH-C** | [Rule L](python-recipes-arrow#rule-l--cooling-coil-δt-when-inactive-ch-c) |
-| Rule M — heating coil ΔT when off | HW rise when valves closed | **AHU-B** | [Rule M](python-recipes-arrow#rule-m--heating-coil-δt-when-inactive-ahu-b) |
+| Rule A — duct static low @ full fan | SP below SP setpoint at high VFD | **AHU-A** | [Rule A]({% link rule-cookbook/python-recipes-arrow.md %}#rule-a--duct-static-low-at-full-fan-speed-ahu-a) |
+| Rule B — blend below band | MAT below OAT/RAT envelope | **AHU-D** | [Rules B & C]({% link rule-cookbook/python-recipes-arrow.md %}#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
+| Rule C — blend above band | MAT above OAT/RAT envelope | **AHU-D** | [Rules B & C]({% link rule-cookbook/python-recipes-arrow.md %}#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
+| Rule D — discharge cold when heating | SAT low vs MAT, heat valve open | **AHU-B** | [Rule D]({% link rule-cookbook/python-recipes-arrow.md %}#rule-d--discharge-cold-when-heating-commanded-ahu-b) |
+| Rule E — SAT low, full heating | SAT below SP, valve > 90% | **AHU-C** | [Rule E]({% link rule-cookbook/python-recipes-arrow.md %}#rule-e--sat-too-low-with-full-heating-ahu-c) |
+| Rule F — SAT/MAT mismatch econ | Econ mode, SAT ≠ MAT | **AHU-E** | [Rule F]({% link rule-cookbook/python-recipes-arrow.md %}#rule-f--satmat-mismatch-in-economizer-mode-ahu-e) |
+| Rule G — ambient warm free cool | OAT > SAT SP, econ open, cool off | **AHU-E** | [Rule G]({% link rule-cookbook/python-recipes-arrow.md %}#rule-g--ambient-too-warm-for-free-cooling-ahu-e) |
+| Rule H — OAT/MAT mismatch econ+mech | Mech + econ, MAT ≠ OAT | **AHU-E** | [Rule H]({% link rule-cookbook/python-recipes-arrow.md %}#rule-h--oatmat-mismatch-econ--mech-cooling-ahu-e) |
+| Rule I — OAT/MAT mismatch econ-only | Econ only, MAT ≠ OAT | **AHU-E** | [Rule I]({% link rule-cookbook/python-recipes-arrow.md %}#rule-i--oatmat-mismatch-economizer-only-ahu-e) |
+| Rule J — discharge above blend cooling | SAT > MAT in cooling | **AHU-B** | [Rule J]({% link rule-cookbook/python-recipes-arrow.md %}#rule-j--discharge-above-blended-in-cooling-ahu-b) |
+| Rule K — discharge above SP full cool | SAT > SP, full cooling | **AHU-C** | [Rule K]({% link rule-cookbook/python-recipes-arrow.md %}#rule-k--discharge-above-setpoint-in-full-cooling-ahu-c) |
+| Rule L — cooling coil ΔT when off | CHW drop when valves closed | **CH-C** | [Rule L]({% link rule-cookbook/python-recipes-arrow.md %}#rule-l--cooling-coil-δt-when-inactive-ch-c) |
+| Rule M — heating coil ΔT when off | HW rise when valves closed | **AHU-B** | [Rule M]({% link rule-cookbook/python-recipes-arrow.md %}#rule-m--heating-coil-δt-when-inactive-ahu-b) |
 
-All rules A–M have **full `apply_faults_arrow` modules** in [Python recipes (full Arrow library)](python-recipes-arrow).
+All rules A–M have **full `apply_faults_arrow` modules** in [Python recipes (full Arrow library)]({% link rule-cookbook/python-recipes-arrow.md %}).
 
 ---
 
@@ -183,19 +183,19 @@ Maps to legacy YAML starter filenames; use as first deploy bundle.
 | `02_vav_zone_temp_flatline_occupied` | `sensor_flatline_mask(..., "zone_temp")` + occupied | **VAV-C** |
 | `03_vav_damper_command_extreme_flatline` | `flatline_1h_mask` on damper cmd column | **VAV-D** |
 | `04_ahu_runtime_outside_schedule` | `after_hours_fan_satisfied_mask` / run-hours script | **BLD-C** |
-| `05_ahu_duct_static_pressure_not_maintained` | [Rule A](python-recipes-arrow#rule-a--duct-static-low-at-full-fan-speed-ahu-a) | **AHU-A** |
+| `05_ahu_duct_static_pressure_not_maintained` | [Rule A]({% link rule-cookbook/python-recipes-arrow.md %}#rule-a--duct-static-low-at-full-fan-speed-ahu-a) | **AHU-A** |
 | `06_ahu_internal_temp_sensor_bounds` | `sensor_bounds_mask` on SAT/MAT | **AHU-C** |
 | `07_ahu_internal_temp_sensor_flatline` | `sensor_flatline_mask` on SAT | **AHU-C** |
 
 ### Economizer starters
 
-Full modules: [economizer section](python-recipes-arrow#economizer-starters) (`ahu_econ_100oa_temp_tracking_fault`, `ahu_mech_cooling_when_free_cooling_available`, `ahu_oa_damper_excess_open_extreme_ambient`).
+Full modules: [economizer section]({% link rule-cookbook/python-recipes-arrow.md %}#economizer-starters) (`ahu_econ_100oa_temp_tracking_fault`, `ahu_mech_cooling_when_free_cooling_available`, `ahu_oa_damper_excess_open_extreme_ambient`).
 
 ---
 
 ## VAV, central plant, heat pump
 
-Full modules: [VAV](python-recipes-arrow#vav-zones) · [Central plant](python-recipes-arrow#central-plant) · [Heat pumps](python-recipes-arrow#heat-pumps).
+Full modules: [VAV]({% link rule-cookbook/python-recipes-arrow.md %}#vav-zones) · [Central plant]({% link rule-cookbook/python-recipes-arrow.md %}#central-plant) · [Heat pumps]({% link rule-cookbook/python-recipes-arrow.md %}#heat-pumps).
 
 Rolling persistence: `arrow_rolling_min` + `pc.and_` (replaces pandas `.rolling(n).min()`).
 
@@ -203,7 +203,7 @@ Rolling persistence: `arrow_rolling_min` + `pc.and_` (replaces pandas `.rolling(
 
 ## Opportunistic / ventilation
 
-Full modules: [Opportunistic section](python-recipes-arrow#opportunistic--ventilation) · [Weather](python-recipes-arrow#weather-station).
+Full modules: [Opportunistic section]({% link rule-cookbook/python-recipes-arrow.md %}#opportunistic--ventilation) · [Weather]({% link rule-cookbook/python-recipes-arrow.md %}#weather-station).
 
 ---
 
@@ -217,7 +217,7 @@ Full modules: [Opportunistic section](python-recipes-arrow#opportunistic--ventil
 | No new samples | `stale_points` | **BLD-D** | Equipment fault |
 | MAT ∉ [OAT, RAT] | `mixing_envelope` | **AHU-D** | Stratification during startup |
 
-Always gate sensor faults with **fan on**, **valve open**, or **occupied** where appropriate — see [Sensor & data quality](../fault-codes/sensor-quality).
+Always gate sensor faults with **fan on**, **valve open**, or **occupied** where appropriate — see [Sensor & data quality]({% link fault-codes/sensor-quality.md %}).
 
 ---
 
@@ -240,7 +240,7 @@ Set `cfg["temp_unit"] = "metric"` in Rule Lab or scale constants:
 
 ## Binding rules to the fault catalog
 
-1. Pick a **letter code** from [Fault codes](../fault-codes/) — never invent suffixes.
+1. Pick a **letter code** from [Fault codes]({% link fault-codes/index.md %}) — never invent suffixes.
 2. In Rule Lab, set **fault_code** on the rule row.
 3. Batch FDD aggregates into `GET /api/faults/status` and portfolio rollup.
 4. Legacy numeric codes (`AHU-03`) migrate via `LEGACY_CODE_MAP` in the bridge.
@@ -260,4 +260,4 @@ curl -s http://127.0.0.1:8765/api/faults/catalog | jq '.families[].codes[] | sel
 - [ ] Apply sensor_catalog defaults; tune bounds for site climate
 - [ ] Enable building-agent check-in; verify faults in portfolio rollup
 
-**Next:** [Python recipes (full Arrow library)](python-recipes-arrow) · [Arrow recipes](arrow-recipes) · [Fault codes](../fault-codes/) · [Rule Lab](../operator-bridge/rule-lab)
+**Next:** [Python recipes (full Arrow library)]({% link rule-cookbook/python-recipes-arrow.md %}) · [Arrow recipes]({% link rule-cookbook/arrow-recipes.md %}) · [Fault codes]({% link fault-codes/index.md %}) · [Rule Lab]({% link operator-bridge/rule-lab.md %})

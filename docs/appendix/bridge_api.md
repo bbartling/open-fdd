@@ -10,7 +10,7 @@ REST API served by **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Produ
 
 **OpenAPI:** `GET /docs` and `GET /redoc` when the bridge runs.
 
-**Auth:** JWT via `POST /api/auth/login`. Most routes require `Authorization: Bearer <token>`. Roles: `viewer`, `operator`, `integrator`, `commission`, `agent`, `admin`. BACnet writes require commission role + [write safety](../bacnet/write-safety). Dev: `OFDD_AUTH_DISABLED` on loopback only.
+**Auth:** JWT via `POST /api/auth/login`. Most routes require `Authorization: Bearer <token>`. Roles: `viewer`, `operator`, `integrator`, `commission`, `agent`, `admin`. BACnet writes require commission role + [write safety]({% link bacnet/write-safety.md %}). Dev: `OFDD_AUTH_DISABLED` on loopback only.
 
 **WebSocket:** `WS /ws/dashboard` — `POST /api/auth/ws-ticket`, then pass the ticket via `Sec-WebSocket-Protocol: ofdd.ws, <ticket>`. Query `?ticket=` is dev-only when `OFDD_WS_ALLOW_QUERY_TICKET=1`. Tickets are short-lived and not interchangeable with the Bearer token.
 
@@ -105,7 +105,7 @@ REST API served by **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Produ
 | GET | `/api/bacnet/poll/status` | read | Poll worker status |
 | POST | `/ingest/bacnet` | read | Ingest samples into feather |
 
-Bind address: `BACNET_BIND` in commission env — see [BACnet network setup](../bacnet/network-setup). Operator guide: [Discover and read](../bacnet/discover-read).
+Bind address: `BACNET_BIND` in commission env — see [BACnet network setup]({% link bacnet/network-setup.md %}). Operator guide: [Discover and read]({% link bacnet/discover-read.md %}).
 
 | PATCH | `/api/bacnet/driver/point` | commission | Enable poll + interval on point |
 | PATCH | `/api/bacnet/driver/device` | commission | Enable poll for all points on device |
@@ -164,7 +164,7 @@ Prefix **`/openfdd-agent`**. Role **`agent`** for tool execution.
 | GET | `/openfdd-agent/zone-temps` | Zone temperature insight |
 | POST | `/openfdd-agent/chat` | Chat completion (catalog-bound) |
 
-Optional host Ollama for building insight — not required for core FDD. Configure via compose profile or host service; see [Architecture overview](../architecture/overview).
+Optional host Ollama for building insight — not required for core FDD. Configure via compose profile or host service; see [Architecture overview]({% link architecture/overview.md %}).
 
 ---
 
@@ -180,7 +180,7 @@ Optional host Ollama for building insight — not required for core FDD. Configu
 | POST | `/api/modbus/refresh` | operator+ | Re-read one register |
 | PATCH | `/api/modbus/register/poll` | integrator+ | Enable poll interval |
 
-See [Driver framework](../drivers/index).
+See [Driver framework]({% link drivers/index.md %}).
 
 ---
 
@@ -199,16 +199,16 @@ See [Driver framework](../drivers/index).
 | PATCH | `/api/json-api/endpoint/poll` | integrator+ | Enable poll interval |
 | DELETE | `/api/json-api/endpoint/{point_id}` | integrator+ | Remove endpoint |
 
-**Outbound auth:** `auth_type` = `none` \| `bearer` \| `basic`; optional `verify_tls` (default true). See [JSON API driver](../drivers/json-api).
+**Outbound auth:** `auth_type` = `none` \| `bearer` \| `basic`; optional `verify_tls` (default true). See [JSON API driver]({% link drivers/json-api.md %}).
 
 ---
 
 ## PyPI package (separate)
 
-Library-only HTTP is **not** bundled. See [Python package](python-package) for `open_fdd.arrow_runtime` (Arrow rules offline).
+Library-only HTTP is **not** bundled. See [Python package]({% link appendix/python-package.md %}) for `open_fdd.arrow_runtime` (Arrow rules offline).
 
 ---
 
 ## Errors
 
-JSON error bodies; stack traces hidden unless `OFDD_DEBUG_TRACEBACKS=1`. See [LAN hardening](../security/lan-hardening).
+JSON error bodies; stack traces hidden unless `OFDD_DEBUG_TRACEBACKS=1`. See [LAN hardening]({% link security/lan-hardening.md %}).

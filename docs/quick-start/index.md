@@ -10,9 +10,9 @@ Run Open-FDD on a Linux edge host using **three GHCR Docker images**. No git clo
 
 | Step | Page |
 |------|------|
-| 1 | [Run with Docker images](docker) — bootstrap script + `docker compose up` |
-| 2 | [First login and health check](health-check) |
-| 3 | [Updating the stack](updating) — backup + pull |
+| 1 | [Run with Docker images]({% link quick-start/docker.md %}) — bootstrap script + `docker compose up` |
+| 2 | [First login and health check]({% link quick-start/health-check.md %}) |
+| 3 | [Updating the stack]({% link quick-start/updating.md %}) — backup + pull |
 
 **One-liner bootstrap** (edge host):
 
@@ -25,6 +25,6 @@ bash /tmp/openfdd_edge_bootstrap.sh --start
 **Prerequisites:** Linux, Docker enabled on boot, BACnet LAN if polling OT equipment.
 
 {: .warning }
-> **BACnet writes are disabled by default.** See [Write safety](../bacnet/write-safety).
+> **BACnet writes are disabled by default.** See [Write safety]({% link bacnet/write-safety.md %}).
 
-**Stack:** `bridge` + `commission` (BACnet + poll) + `mcp-rag`. Details: [Containers](../architecture/containers).
+**Stack:** `bridge` + `commission` (BACnet + poll) + `mcp-rag`. Details: [Containers]({% link architecture/containers.md %}).

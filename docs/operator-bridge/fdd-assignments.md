@@ -91,6 +91,6 @@ After import, verify in **Trend plot** with `?fdd=1` — fault lanes appear on t
 
 ## Related
 
-- [Model workflow](model-workflow)
-- [Rule Lab](rule-lab)
-- [Trend plot / fault overlays](dashboard#trend-plot)
+- [Model workflow]({% link operator-bridge/model-workflow.md %})
+- [Rule Lab]({% link operator-bridge/rule-lab.md %})
+- [Trend plot / fault overlays]({% link operator-bridge/dashboard.md %}#trend-plot)

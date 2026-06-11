@@ -19,8 +19,8 @@ Open-FDD **3.x** edge FDD does **not** use:
 | YAML `expression:` strings | `apply_faults_arrow()` in `workspace/data/rules_py/` |
 | `np.maximum`, `.rolling()` on Series | `pyarrow.compute`, `open_fdd.arrow_runtime.windows` |
 | `params` in YAML | Module constants + Rule Lab `cfg` + building-agent tuning |
-| `flag: rule_a_flag` | `fault_code` metadata → [Fault codes](../fault-codes/) |
+| `flag: rule_a_flag` | `fault_code` metadata → [Fault codes]({% link fault-codes/index.md %}) |
 
-**Cookbook:** [Rule cookbook](../rule-cookbook/) — start at [Expression cookbook (Arrow-native)](../rule-cookbook/expression-cookbook).
+**Cookbook:** [Rule cookbook]({% link rule-cookbook/index.md %}) — start at [Expression cookbook (Arrow-native)]({% link rule-cookbook/expression-cookbook.md %}).
 
 **Package:** PyPI `open-fdd` ships `arrow_runtime` + `playground` only. Portfolio Dash may use pandas for CSV analytics.

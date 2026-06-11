@@ -91,7 +91,7 @@ tail -1 workspace/bacnet/polls/samples.csv
 ls -lah workspace/data/feather_store/
 ```
 
-→ [Health check](health-check)
+→ [Health check]({% link quick-start/health-check.md %})
 
 ## Dashboard UI updates
 
@@ -114,5 +114,5 @@ docker image prune -f
 
 ## Next steps
 
-→ [Run with Docker images](docker) — bootstrap a new host  
-→ [Health check](health-check)
+→ [Run with Docker images]({% link quick-start/docker.md %}) — bootstrap a new host  
+→ [Health check]({% link quick-start/health-check.md %})

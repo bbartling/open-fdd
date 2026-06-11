@@ -9,7 +9,7 @@ This page has moved.
 
 | Task | Doc |
 |------|-----|
-| First deploy | [Quick Start — Run with Docker](quick-start/docker) |
-| Upgrade | [Quick Start — Updating the stack](quick-start/updating) |
-| Architecture | [Containers](architecture/containers) |
-| Deployment modes | [Deployment modes](architecture/deployment-modes) |
+| First deploy | [Quick Start — Run with Docker]({% link quick-start/docker.md %}) |
+| Upgrade | [Quick Start — Updating the stack]({% link quick-start/updating.md %}) |
+| Architecture | [Containers]({% link architecture/containers.md %}) |
+| Deployment modes | [Deployment modes]({% link architecture/deployment-modes.md %}) |

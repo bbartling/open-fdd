@@ -57,4 +57,4 @@ result = run_arrow_rule(code, table, {"high": 85})
 print(result.flagged_count)
 ```
 
-API surface: `open_fdd/arrow_runtime` docstrings and [Arrow recipes](../rule-cookbook/arrow-recipes).
+API surface: `open_fdd/arrow_runtime` docstrings and [Arrow recipes]({% link rule-cookbook/arrow-recipes.md %}).

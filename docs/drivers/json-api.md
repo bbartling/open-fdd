@@ -199,7 +199,7 @@ Credentials in `endpoints.csv` are redacted in API responses (`***`). Prefer `${
 | PATCH | `/api/json-api/endpoint/poll` | integrator+ | Enable/disable poll interval |
 | DELETE | `/api/json-api/endpoint/{point_id}` | integrator+ | Remove endpoint |
 
-Full route list: [API routes](../appendix/bridge_api).
+Full route list: [API routes]({% link appendix/bridge_api.md %}).
 
 ## Typical OT URLs
 
@@ -226,7 +226,7 @@ curl -X PATCH http://127.0.0.1:8765/api/json-api/endpoint/poll \
   -d '{"point_id":"ja-api-openweathermap-org-get-web-oat-t","enabled":false,"poll_interval_s":0}'
 ```
 
-API keys live in `json_api.env.local` (gitignored) — never committed; audit logs do not record expanded URLs with `appid=`. See [Logging and audit](../ops/logging).
+API keys live in `json_api.env.local` (gitignored) — never committed; audit logs do not record expanded URLs with `appid=`. See [Logging and audit]({% link ops/logging.md %}).
 
 ## Smoke test
 

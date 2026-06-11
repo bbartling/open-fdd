@@ -6,11 +6,11 @@ nav_order: 4
 
 # Authenticated scanning (roadmap)
 
-[ZAP baseline](zap-baseline) is **unauthenticated** — it checks public pages, response headers, and a handful of routes reachable without login. That is the right default for every docker image / patch revision smoke on a test LAN.
+[ZAP baseline]({% link security/zap-baseline.md %}) is **unauthenticated** — it checks public pages, response headers, and a handful of routes reachable without login. That is the right default for every docker image / patch revision smoke on a test LAN.
 
 For **deep** coverage of integrator dashboards, `/api/*` routes, WebSocket sessions, and role-gated writes, plan a separate **authenticated** scan — only on fake/bench stacks with explicit approval.
 
-Release context: [Security testing cycle](../developer/security-testing).
+Release context: [Security testing cycle]({% link developer/security-testing.md %}).
 
 ## Current state (3.0.x)
 
@@ -53,6 +53,6 @@ Do **not** run active scans against production Acme without a maintenance window
 
 ## Related
 
-- [scripts/security/README.md](../../scripts/security/README.md) — baseline setup
-- [Secrets and auth](secrets-auth) — env file layout
-- [LAN hardening](lan-hardening) — bind and auth modes
+- [scripts/security/README.md](https://github.com/bbartling/open-fdd/blob/master/scripts/security/README.md) — baseline setup
+- [Secrets and auth]({% link security/secrets-auth.md %}) — env file layout
+- [LAN hardening]({% link security/lan-hardening.md %}) — bind and auth modes

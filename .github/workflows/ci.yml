@@ -169,10 +169,12 @@ jobs:
           bundler-cache: true
           working-directory: docs
 
-      # Jekyll build only (no HTMLProofer — false failures with pretty permalinks + relative hrefs).
       - name: Build Jekyll site (Just the Docs)
         working-directory: docs
         run: bundle install && bundle exec jekyll build -d "${{ github.workspace }}/_site"
         env:
           JEKYLL_ENV: production
           JEKYLL_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check internal docs links (built HTML)
+        run: python3 scripts/check_docs_internal_links.py --site _site

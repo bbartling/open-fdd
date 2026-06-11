@@ -17,6 +17,6 @@ Allowlist entries support `device_instance`, `object_identifier`, `property_iden
 
 Lab-only override: `OFDD_BACNET_WRITE_ALLOW_ANY=1` (audited; not for production edges).
 
-See operator guide: [BACnet write safety](../bacnet/write-safety).
+See operator guide: [BACnet write safety]({% link bacnet/write-safety.md %}).
 
 Never enable blanket write access for agent or integrator automation without human approval per site.
