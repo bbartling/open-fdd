@@ -583,3 +583,195 @@ def ingest_uploaded_rule(
     if not existing:
         payload["name"] = name_from_filename(filename)
     return store.upsert(payload, saved_by=saved_by)
+
+
+def _equipment_point_ids(model: dict[str, Any], site_id: str, equipment_id: str) -> list[str]:
+    eid = str(equipment_id or "").strip()
+    if not eid:
+        return []
+    out: list[str] = []
+    for pt in model.get("points") or []:
+        if not isinstance(pt, dict):
+            continue
+        if str(pt.get("site_id") or "") not in {"", site_id}:
+            continue
+        if str(pt.get("equipment_id") or "") == eid:
+            pid = str(pt.get("id") or "").strip()
+            if pid:
+                out.append(pid)
+    return out
+
+
+def _rules_for_equipment(
+    rules: list[dict[str, Any]],
+    *,
+    equipment_id: str,
+    point_ids: list[str],
+    brick_types: list[str],
+) -> list[dict[str, Any]]:
+    from .rule_bindings import normalize_bindings, rule_binds_target
+
+    eid = str(equipment_id or "").strip()
+    pts = set(point_ids)
+    bricks = set(brick_types)
+    out: list[dict[str, Any]] = []
+    for rule in rules:
+        if rule.get("enabled") is False:
+            continue
+        b = normalize_bindings(rule.get("bindings"))
+        if eid and eid in b["equipment_ids"]:
+            out.append(rule)
+            continue
+        if pts and pts.intersection(b["point_ids"]):
+            out.append(rule)
+            continue
+        if bricks and bricks.intersection(b["brick_types"]):
+            out.append(rule)
+            continue
+        for bt in bricks:
+            if rule_binds_target(rule, kind="brick_type", target_id=bt):
+                out.append(rule)
+                break
+    seen: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for rule in out:
+        rid = str(rule.get("id") or "")
+        if rid and rid not in seen:
+            seen.add(rid)
+            deduped.append(rule)
+    return deduped
+
+
+def build_equipment_rule_kit_zip(
+    *,
+    site_id: str | None = None,
+    equipment_id: str,
+    lookback_hours: float = 3,
+    limit: int = 5000,
+    rule_id: str | None = None,
+) -> tuple[bytes, str]:
+    """Zip kit for one equipment: manifest, points, per-rule kits, commissioning export."""
+    from datetime import datetime, timezone
+
+    from .commissioning_bundle import build_commissioning_export
+    from .rule_bindings import normalize_bindings
+
+    if not str(equipment_id or "").strip():
+        raise RuleKitError("equipment_id required")
+
+    svc = ModelService()
+    ttl = TtlService()
+    sid = (site_id or "").strip() or ensure_default_site(svc, ttl)
+    model = svc.load()
+    eq_index = {str(e.get("id")): e for e in model.get("equipment") or [] if isinstance(e, dict)}
+    eq = eq_index.get(str(equipment_id))
+    if not eq:
+        raise RuleKitError(f"equipment not found: {equipment_id}")
+
+    point_ids = _equipment_point_ids(model, sid, equipment_id)
+    brick_types = sorted(
+        {
+            str(pt.get("brick_type") or "").strip()
+            for pt in model.get("points") or []
+            if isinstance(pt, dict)
+            and str(pt.get("equipment_id") or "") == equipment_id
+            and str(pt.get("brick_type") or "").strip()
+        }
+    )
+    rules = RuleStore().list_rules()
+    applicable = _rules_for_equipment(
+        rules,
+        equipment_id=equipment_id,
+        point_ids=point_ids,
+        brick_types=brick_types,
+    )
+    if rule_id:
+        applicable = [r for r in applicable if str(r.get("id")) == rule_id]
+    if not applicable:
+        raise RuleKitError("no applicable rules for this equipment — pin rules on Data Model first")
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    slug = str(eq.get("name") or equipment_id).replace(" ", "-")[:32]
+    zip_name = f"openfdd-equipment-rule-kit-{slug}-{stamp}.zip"
+
+    commissioning = build_commissioning_export(model, rules)
+    eq_points = [
+        pt for pt in commissioning.get("points") or [] if str(pt.get("equipment_id") or "") == equipment_id
+    ]
+
+    out = io.BytesIO()
+    manifest_rules: list[dict[str, Any]] = []
+    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for rule in applicable:
+            rid = str(rule.get("id") or "")
+            b = normalize_bindings(rule.get("bindings"))
+            kit_points = [p for p in b["point_ids"] if p in point_ids] or point_ids[:1]
+            try:
+                payload, _ = build_rule_kit_zip(
+                    site_id=sid,
+                    rule_id=rid,
+                    lookback_hours=lookback_hours,
+                    limit=limit,
+                    point_keys=kit_points,
+                )
+                sub = zipfile.ZipFile(io.BytesIO(payload))
+                prefix = f"rules/{rid}/"
+                for member in sub.namelist():
+                    zf.writestr(prefix + member, sub.read(member))
+                from .rule_source_expanded import expand_rule_source
+
+                expanded = expand_rule_source(rule_id=rid)
+                if expanded.get("ok"):
+                    zf.writestr(
+                        f"{prefix}expanded_source.py",
+                        "\n\n".join(
+                            i.get("source", "")
+                            for i in expanded.get("imports", [])
+                            if i.get("source")
+                        )
+                        or expanded.get("rule_source", ""),
+                    )
+                manifest_rules.append(
+                    {
+                        "rule_id": rid,
+                        "rule_name": rule.get("name"),
+                        "point_ids": kit_points,
+                        "status": "ok",
+                    }
+                )
+            except Exception as exc:
+                manifest_rules.append(
+                    {"rule_id": rid, "rule_name": rule.get("name"), "status": "error", "error": str(exc)}
+                )
+                zf.writestr(f"rules/{rid}/errors.txt", str(exc) + "\n")
+
+        manifest = {
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "site_id": sid,
+            "equipment_id": equipment_id,
+            "equipment_name": eq.get("name"),
+            "equipment_type": eq.get("equipment_type") or eq.get("brick_type"),
+            "point_ids": point_ids,
+            "lookback_hours": lookback_hours,
+            "rules": manifest_rules,
+        }
+        zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+        zf.writestr("equipment.json", json.dumps(eq, indent=2))
+        zf.writestr("points.json", json.dumps(eq_points, indent=2))
+        zf.writestr(
+            "model/commissioning-export.json",
+            json.dumps(
+                {
+                    "sites": commissioning.get("sites"),
+                    "equipment": [eq],
+                    "points": eq_points,
+                    "fdd_rules": commissioning.get("fdd_rules"),
+                },
+                indent=2,
+            ),
+        )
+        zf.writestr(
+            "model/equipment-context.json",
+            json.dumps({"equipment": eq, "points": eq_points, "applicable_rule_ids": [r["rule_id"] for r in manifest_rules]}, indent=2),
+        )
+    return out.getvalue(), zip_name

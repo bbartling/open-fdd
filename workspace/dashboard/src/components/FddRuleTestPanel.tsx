@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ModelScopePicker from "./ModelScopePicker";
 import RuleLabConsole, { consoleTextToLines } from "./RuleLabConsole";
 import Spinner from "./Spinner";
-import { apiFetch } from "../lib/api";
+import { apiDownloadBlob, apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import { useActiveSiteId } from "../lib/useActiveSiteId";
 import { useModelScope } from "../lib/useModelScope";
@@ -127,14 +127,97 @@ export default function FddRuleTestPanel({ rules, disabled }: Props) {
     }
   }
 
+  async function downloadEquipmentKit(allRules: boolean) {
+    if (!scope.equipmentId) {
+      setConsoleText("Select equipment first.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const params = new URLSearchParams({
+        equipment_id: scope.equipmentId,
+        lookback_hours: String(clampInt(lookbackHours, 3, 1, 168)),
+      });
+      if (scope.siteId) params.set("site_id", scope.siteId);
+      if (!allRules && ruleId) params.set("rule_id", ruleId);
+      const { blob, filename } = await apiDownloadBlob(`/api/rules/export-equipment-kit?${params.toString()}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      setConsoleText(`>>> Downloaded ${filename}`);
+    } catch (e) {
+      setConsoleText(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testAllForEquipment() {
+    if (!scope.equipmentId) {
+      setConsoleText("Select equipment first.");
+      return;
+    }
+    const applicable = rules.filter((r) => {
+      if (r.mode !== "rule" || r.enabled === false) return false;
+      const b = r.bindings || {};
+      const pts = new Set(b.point_ids || []);
+      const onEq = scope.sensors.some((s) => pts.has(s.point_id));
+      const onEquip = (b.equipment_ids || []).includes(scope.equipmentId);
+      const brick = scope.activeEquipment?.equipment_type || "";
+      const onBrick = brick && (b.brick_types || []).includes(brick);
+      return onEq || onEquip || onBrick;
+    });
+    if (!applicable.length) {
+      setConsoleText("No rules bound to this equipment — pin rules on Data Model first.");
+      return;
+    }
+    setBusy(true);
+    const chunks: string[] = [];
+    try {
+      for (const rule of applicable) {
+        const code = await loadRuleSource(rule.id);
+        const lookback = clampInt(lookbackHours, 24, 1, 168);
+        const limit = clampInt(testLimit, 120, 1, 10_000);
+        const res = await apiFetch<{
+          rows: number;
+          flagged: number;
+          events: { type: string; text?: string }[];
+          error?: string;
+        }>("/api/playground/test-rule", {
+          method: "POST",
+          body: JSON.stringify({
+            code,
+            config: configFromRecord(configToRecord((rule.config || {}) as Record<string, unknown>)),
+            site_id: scope.siteId || undefined,
+            equipment_id: scope.equipmentId,
+            point_keys: testSensorKey ? [testSensorKey] : [],
+            lookback_hours: lookback,
+            limit,
+            chunk_hours: 0,
+          }),
+        });
+        chunks.push(
+          `>>> ${formatRuleLabel(rule.name)} — rows=${res.rows} flagged=${res.flagged}${res.error ? ` · ${res.error}` : ""}`,
+        );
+      }
+      setConsoleText(chunks.join("\n"));
+    } catch (e) {
+      setConsoleText(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const consoleLines = useMemo(() => consoleTextToLines(consoleText), [consoleText]);
 
   return (
     <section className="panel fdd-rule-test-panel">
-      <h3 className="panel-title">Test rule against one sensor</h3>
+      <h3 className="panel-title">Equipment-scoped test &amp; export</h3>
       <p className="muted">
-        Run a saved rule against live feather data for one BACnet point. Edit rule Python on{" "}
-        <a href="/rule-lab">Rule Lab</a>.
+        Select equipment and sensor, then test one rule or export a kit zip with samples, config, and helper source.
       </p>
       <div className="form-grid">
         <div className="field form-grid-span">
@@ -210,7 +293,26 @@ export default function FddRuleTestPanel({ rules, disabled }: Props) {
       ) : null}
       <div className="toolbar">
         <button type="button" disabled={busy || disabled} onClick={() => void runTest()}>
-          {busy ? "Testing…" : "Test rule"}
+          {busy ? "Testing…" : "Test selected rule"}
+        </button>
+        <button type="button" className="secondary-btn" disabled={busy || disabled} onClick={() => void testAllForEquipment()}>
+          Test all for equipment
+        </button>
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={busy || disabled}
+          onClick={() => void downloadEquipmentKit(false)}
+        >
+          Download equipment kit (rule)
+        </button>
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={busy || disabled}
+          onClick={() => void downloadEquipmentKit(true)}
+        >
+          Download equipment kit (all rules)
         </button>
       </div>
       <RuleLabConsole lines={consoleLines} placeholder="Test output appears here." />
