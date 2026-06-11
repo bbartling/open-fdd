@@ -143,7 +143,9 @@ BASE="${scheme}://${HOST}"
 
 if [[ -f "$AUTH_ENV" ]]; then
   # shellcheck disable=SC1090
+  set +u
   set -a && source "$AUTH_ENV" && set +a
+  set -u
 fi
 LOGIN_USER="${OFDD_INTEGRATOR_USER:-${OFDD_OPERATOR_USER:-}}"
 LOGIN_PASS="${OFDD_INTEGRATOR_PASSWORD:-${OFDD_OPERATOR_PASSWORD:-}}"

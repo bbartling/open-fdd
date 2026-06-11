@@ -29,7 +29,9 @@ FAILURES=0
 
 if [[ -f "$AUTH_ENV" ]]; then
   # shellcheck disable=SC1090
+  set +u
   set -a && source "$AUTH_ENV" && set +a
+  set -u
 fi
 if [[ -f "$ACME_SECRETS" ]]; then
   # shellcheck disable=SC1090

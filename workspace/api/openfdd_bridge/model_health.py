@@ -27,6 +27,7 @@ def model_health_summary(model: dict[str, Any]) -> dict[str, Any]:
                 "missing_fdd_input": 0,
                 "duplicate_external_ids": 0,
                 "duplicate_bacnet_device_instances": 0,
+                "duplicate_point_ids": 0,
             },
             "issues": [],
             "summary": "",
@@ -73,13 +74,21 @@ def model_health_summary(model: dict[str, Any]) -> dict[str, Any]:
         duplicate_map[key] = duplicate_map.get(key, 0) + 1
     duplicate_external_ids = sum(1 for count in duplicate_map.values() if count > 1)
 
-    from .bacnet_poll_model_sync import duplicate_bacnet_equipment_report
+    from .bacnet_poll_model_sync import duplicate_bacnet_equipment_report, duplicate_point_id_report
 
     dup_bacnet = duplicate_bacnet_equipment_report(model)
     duplicate_bacnet_device_instances = int(dup_bacnet.get("duplicate_device_instances") or 0)
+    dup_points = duplicate_point_id_report(model)
+    duplicate_point_ids = int(dup_points.get("duplicate_point_ids") or 0)
 
     critical = orphan_equipment + orphan_points_site + orphan_points_equipment
-    warning = missing_brick_type + missing_fdd_input + duplicate_external_ids + duplicate_bacnet_device_instances
+    warning = (
+        missing_brick_type
+        + missing_fdd_input
+        + duplicate_external_ids
+        + duplicate_bacnet_device_instances
+        + duplicate_point_ids
+    )
     score = max(0, 100 - (critical * 10) - (warning * 2))
 
     issues: list[dict[str, str]] = []
@@ -139,6 +148,14 @@ def model_health_summary(model: dict[str, Any]) -> dict[str, Any]:
                 "detail": "Often bacnet-{instance} stubs duplicate GL36 equipment — run POST /api/model/bacnet-sync or repair.",
             }
         )
+    if duplicate_point_ids:
+        issues.append(
+            {
+                "severity": "warning",
+                "title": f"{duplicate_point_ids} duplicate point id(s) in model",
+                "detail": "Run POST /api/model/bacnet-sync to prune duplicate BACnet poll rows.",
+            }
+        )
 
     status = "ok"
     if critical:
@@ -161,6 +178,7 @@ def model_health_summary(model: dict[str, Any]) -> dict[str, Any]:
             "missing_fdd_input": missing_fdd_input,
             "duplicate_external_ids": duplicate_external_ids,
             "duplicate_bacnet_device_instances": duplicate_bacnet_device_instances,
+            "duplicate_point_ids": duplicate_point_ids,
         },
         "issues": issues,
         "summary": (
