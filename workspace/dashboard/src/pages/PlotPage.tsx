@@ -558,6 +558,19 @@ export default function PlotPage() {
       {status ? <p className="ok">{status}</p> : null}
       {pinStatus ? <p className="ok">{pinStatus}</p> : null}
       {(error || catalogError) ? <p className="error">{error || catalogError}</p> : null}
+      <TabDebugPanel
+        title="Trend plot debug"
+        rows={[
+          { label: "Endpoint", value: "/api/timeseries/readings" },
+          { label: "Site", value: siteId || "—" },
+          { label: "Equipment", value: equipmentId || "—" },
+          { label: "Selected keys", value: selected.size ? [...selected].join(", ") : "—" },
+          { label: "Hours", value: String(hours) },
+          { label: "Series returned", value: plotData ? String(Object.keys(plotData.series ?? {}).length) : "0" },
+          { label: "Timestamps", value: plotData ? String(plotData.timestamps?.length ?? 0) : "0" },
+          { label: "Last error", value: error || catalogError || "—" },
+        ]}
+      />
     </div>
   );
 }
