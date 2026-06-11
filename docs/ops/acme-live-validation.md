@@ -30,20 +30,25 @@ GHCR SemVer tags omit the leading `v` (`3.0.32`, not `v3.0.32`). `upgrade_edge_g
 | Flag | What runs |
 |------|-----------|
 | `--quick` | Health, auth, UI bundle, Docker tag, model health, **duplicate device/point checks**, BACnet poll, trends, FDD summary |
-| `--full` | Quick + SPARQL presets, Rule Lab export, local bundle/PyPI rule smoke, `stack_health_check.sh` |
+| `--full` | Quick + **all critical SPARQL presets**, **equipment rule kit zip** (live model discovery), chartable trend probe, **strict PyPI rule smoke**, local bundle validator |
 | `--long` | Same depth as `--full` (reserved for extended soak hooks) |
+
+`--strict-fdd` (default in `--full`) fails when `validate_acme_rules_pypi.py` errors. Use `--no-strict-fdd` to downgrade to WARN on live edge.
+
+`--limit acme_vm_bbartling` also runs the SSH remote host probe (container tags, restarts, disk). Key-based SSH from bensserver is preferred; password fallback via `acme.env.local`.
 
 ## What counts as pass
 
 - Bridge `/health` OK and reports expected `openfdd_version`
-- Running GHCR image tag matches `OPENFDD_IMAGE_TAG` (when set)
+- Running GHCR image tag matches `OPENFDD_IMAGE_TAG` on **bridge and commission** (and optional services if running)
 - Dashboard serves current `index-*.js` bundle (matches control machine build when available)
 - **No duplicate BACnet device instances** in model (`duplicate_bacnet_device_instances == 0`)
 - **No duplicate point IDs** in commissioning export
 - Model equipment/point counts above profile thresholds (default ≥10 / ≥50)
 - BACnet poll heartbeat recent; enabled point count above threshold
-- Historian/trend API returns chartable data (or explicit warm-up warning)
-- FDD rules saved and lint-clean; Building Status faults include equipment/point context
+- Historian/trend API returns chartable data for a **real model point** (≥3 samples, not all-null)
+- FDD rules saved and lint-clean; Building Status faults include equipment/point context (schema validated when no active faults)
+- Rule Lab **equipment kit** zip includes manifest, rule sources, config, and result summary for equipment discovered from commissioning export (prefers AHU/VAV)
 - Recent ops logs free of `Traceback` / fatal import errors
 - Host disk/memory within thresholds (when Ansible remote probe succeeds)
 
@@ -97,4 +102,36 @@ JSON reports redact tokens and private hostnames. Example fields:
 - `summary.ok`, `summary.failed`, `summary.warnings`
 - `checks[].id`, `checks[].category`, `checks[].status`, `checks[].message`
 
-On failure, the console output lists suggested next steps (re-run full upgrade, check static bind mount, run `stack_health_check.sh`).
+On failure, the console output lists suggested next steps (re-run full upgrade, check static bind mount).
+
+### Report outputs
+
+```bash
+mkdir -p reports
+export OPENFDD_IMAGE_TAG=3.0.33
+./scripts/acme_post_deploy_validate.sh --limit acme_vm_bbartling --full \
+  --profile scripts/acme_validation_profile.example.json \
+  --json-out reports/acme-live-validate.json \
+  --junit-out reports/acme-live-validate.xml \
+  --markdown-out reports/acme-live-validate.md
+```
+
+- **JSON** — machine-readable checks + redacted target metadata
+- **JUnit XML** — CI gate (`failures` count)
+- **Markdown** — human summary for patch-cycle notes
+
+## Manual checklist after every GHCR update
+
+```bash
+export OPENFDD_IMAGE_TAG=<tag>   # SemVer without leading v, e.g. 3.0.33
+./scripts/upgrade_edge_full.sh --limit acme_vm_bbartling
+./scripts/acme_post_deploy_validate.sh --limit acme_vm_bbartling --full \
+  --profile scripts/acme_validation_profile.example.json
+```
+
+## Intentionally not tested
+
+- BACnet writes / setpoint overrides
+- Easy Pooge destructive reset (preview-only safety check runs)
+- MCP/Ollama chat quality (disabled on Acme edge by design)
+- Full OT BACnet Who-Is discovery (use `acme_operational_verify.sh` separately)

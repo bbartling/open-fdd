@@ -25,6 +25,7 @@ SKIP_RULELAB=0
 SKIP_LOGS=0
 NO_ANSIBLE=0
 FAIL_FAST=0
+STRICT_FDD=""
 ALLOW_WRITE=0
 TIMEOUT_SECONDS="${ACME_VALIDATE_TIMEOUT:-600}"
 EXTRA_PY=()
@@ -46,6 +47,8 @@ Options:
   --skip-ui | --skip-bacnet | --skip-fdd | --skip-rulelab | --skip-logs
   --no-ansible               Skip remote host/container probes
   --fail-fast                Stop Python validator on first failure
+  --strict-fdd               Fail on PyPI/rule smoke in --full (default when --full)
+  --no-strict-fdd            Allow PyPI rule smoke to warn in --full
   --timeout-seconds <n>      Remote probe timeout (default 600)
   --allow-write              Not supported (validation is read-only)
 
@@ -75,6 +78,8 @@ while [[ $# -gt 0 ]]; do
     --skip-logs) SKIP_LOGS=1; shift ;;
     --no-ansible) NO_ANSIBLE=1; shift ;;
     --fail-fast) FAIL_FAST=1; shift ;;
+    --strict-fdd) STRICT_FDD=1; shift ;;
+    --no-strict-fdd) STRICT_FDD=0; shift ;;
     --timeout-seconds) TIMEOUT_SECONDS="$2"; shift 2 ;;
     --allow-write) ALLOW_WRITE=1; shift ;;
     -h|--help) usage 0 ;;
@@ -139,6 +144,8 @@ PY_ARGS=(
 [[ "$SKIP_RULELAB" == "1" ]] && PY_ARGS+=(--skip-rulelab)
 [[ "$SKIP_LOGS" == "1" ]] && PY_ARGS+=(--skip-logs)
 [[ "$FAIL_FAST" == "1" ]] && PY_ARGS+=(--fail-fast)
+[[ "$STRICT_FDD" == "1" ]] && PY_ARGS+=(--strict-fdd)
+[[ "$STRICT_FDD" == "0" ]] && PY_ARGS+=(--no-strict-fdd)
 
 echo "==> Acme live API validation (${MODE})"
 FAIL=0

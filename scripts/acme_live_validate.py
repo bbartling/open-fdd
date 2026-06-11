@@ -51,7 +51,192 @@ DEFAULT_PROFILE = {
     "required_rule_id_patterns": ["ahu", "vav"],
     "max_duplicate_bacnet_devices": 0,
     "max_duplicate_point_ids": 0,
+    "critical_sparql_presets": [
+        "rules_to_equipment",
+        "rules_to_sensors",
+        "rules_to_bacnet_devices",
+        "equipment_to_points",
+        "missing_rule_bindings",
+        "orphan_points",
+        "points_by_bacnet_device",
+    ],
+    "min_trend_samples": 3,
+    "strict_fdd_in_full": True,
 }
+
+CRITICAL_SPARQL_PRESETS = DEFAULT_PROFILE["critical_sparql_presets"]
+EQUIPMENT_TYPE_PRIORITY = ("ahu", "rtu", "vav", "boiler")
+
+
+def normalize_image_tag(tag: str) -> str:
+    return str(tag or "").removeprefix("v").strip()
+
+
+def parse_container_image_tag(image: str) -> str:
+    image = str(image or "").strip()
+    if not image:
+        return ""
+    if "@" in image:
+        image = image.split("@", 1)[0]
+    if ":" in image:
+        return image.rsplit(":", 1)[-1]
+    return image
+
+
+def normalize_service_name(name: str) -> str:
+    raw = str(name or "").lower()
+    for key in ("bridge", "commission", "mcp-rag", "mcp_rag", "cloud-exporter", "cloud_exporter"):
+        if key.replace("-", "_") in raw.replace("-", "_") or raw == key:
+            return key.replace("_", "-")
+    return raw
+
+
+def pick_equipment_for_rule_kit(bundle: dict[str, Any]) -> tuple[str | None, str]:
+    """Choose equipment with rule bindings; prefer AHU/VAV/RTU from live model."""
+    equipment = [e for e in bundle.get("equipment") or [] if isinstance(e, dict)]
+    points = [p for p in bundle.get("points") or [] if isinstance(p, dict)]
+    rule_ids = {str(r.get("id")) for r in bundle.get("fdd_rules") or [] if r.get("id")}
+    bindings: Counter[str] = Counter()
+    for pt in points:
+        eq_id = str(pt.get("equipment_id") or "")
+        if not eq_id:
+            continue
+        for rid in pt.get("fdd_rule_ids") or []:
+            if str(rid) in rule_ids:
+                bindings[eq_id] += 1
+    candidates: list[tuple[int, int, str, str]] = []
+    for eq in equipment:
+        eq_id = str(eq.get("id") or "")
+        if not eq_id or bindings[eq_id] <= 0:
+            continue
+        etype = str(eq.get("equipment_type") or eq.get("brick_type") or eq.get("name") or "").lower()
+        prio = next((i for i, k in enumerate(EQUIPMENT_TYPE_PRIORITY) if k in etype), 99)
+        candidates.append((prio, -bindings[eq_id], eq_id, etype or "equipment"))
+    if not candidates:
+        return None, "no equipment with fdd_rule_ids bindings"
+    candidates.sort()
+    best = candidates[0]
+    return best[2], f"{best[3]} ({-best[1]} rule bindings)"
+
+
+def validate_equipment_kit_zip(blob: bytes, equipment_id: str) -> tuple[list[str], dict[str, Any]]:
+    """Return (errors, details) for equipment rule kit zip structure."""
+    errors: list[str] = []
+    details: dict[str, Any] = {"equipment_id": equipment_id}
+    if not blob or blob[:2] != b"PK":
+        return ["equipment kit response is not a zip"], details
+    with zipfile.ZipFile(BytesIO(blob)) as zf:
+        names = zf.namelist()
+        details["zip_entries"] = names[:20]
+        if "manifest.json" not in names:
+            errors.append("manifest.json missing from equipment kit zip")
+            return errors, details
+        manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+        details["manifest"] = {
+            "equipment_id": manifest.get("equipment_id"),
+            "rules": len(manifest.get("rules") or []),
+        }
+        if str(manifest.get("equipment_id") or "") != equipment_id:
+            errors.append(f"manifest equipment_id {manifest.get('equipment_id')!r} != {equipment_id!r}")
+        rules = manifest.get("rules") or []
+        if not rules:
+            errors.append("equipment kit manifest has no rules")
+        ok_rules = [r for r in rules if isinstance(r, dict) and r.get("status") == "ok"]
+        if not ok_rules:
+            errors.append("no rule with status=ok in equipment kit manifest")
+        rule_prefixes = [n for n in names if n.startswith("rules/") and n.endswith(".py")]
+        if not rule_prefixes:
+            errors.append("no rule .py sources in equipment kit zip")
+        has_config = any("column_map" in n or "config" in n.lower() for n in names)
+        has_sample = any("sample" in n or ".feather" in n or "data.py" in n for n in names)
+        has_result = any("result" in n.lower() for n in names) or bool(ok_rules)
+        if not has_config:
+            errors.append("equipment kit missing config/column_map artifact")
+        if not has_sample:
+            details["sample_warning"] = "no sample.feather/data.py — may be no historian data"
+        if not has_result:
+            errors.append("equipment kit missing result summary")
+        expanded = [n for n in names if "expanded_source" in n]
+        details["has_expanded_source"] = bool(expanded)
+    return errors, details
+
+
+def validate_trend_payload(payload: dict[str, Any], *, min_samples: int) -> tuple[list[str], list[str], dict[str, Any]]:
+    """Return (errors, warnings, details) for /api/timeseries/readings JSON."""
+    errors: list[str] = []
+    warnings: list[str] = []
+    details: dict[str, Any] = {}
+
+    row_count = int(payload.get("row_count") or 0)
+    timestamps = payload.get("timestamps") or []
+    if isinstance(timestamps, list) and timestamps:
+        total_points = len(timestamps)
+        details["point_count"] = total_points
+        details["format"] = "timestamps+series"
+        if total_points < min_samples:
+            errors.append(f"trend returned {total_points} samples < min {min_samples}")
+        series = payload.get("series")
+        if isinstance(series, dict):
+            non_null = 0
+            for vals in series.values():
+                if not isinstance(vals, list):
+                    continue
+                for val in vals:
+                    if val is not None and val != "":
+                        try:
+                            float(val)
+                            non_null += 1
+                        except (TypeError, ValueError):
+                            errors.append(f"non-numeric trend value: {val!r}")
+                            return errors, warnings, details
+            details["non_null_values"] = non_null
+            if non_null == 0:
+                errors.append("trend series are all null")
+        return errors, warnings, details
+
+    if row_count >= min_samples:
+        details["point_count"] = row_count
+        details["format"] = "row_count"
+        return errors, warnings, details
+
+    series = payload.get("series") or payload.get("columns") or payload.get("readings") or []
+    if isinstance(payload.get("data"), list):
+        series = payload["data"]
+    details["series_count"] = len(series) if isinstance(series, list) else 0
+    if not series:
+        errors.append("trend response has no series/data")
+        return errors, warnings, details
+    total_points = 0
+    all_null = True
+    for item in series if isinstance(series, list) else []:
+        if not isinstance(item, dict):
+            continue
+        pts = item.get("points") or item.get("values") or []
+        for pt in pts if isinstance(pts, list) else []:
+            if not isinstance(pt, dict):
+                continue
+            total_points += 1
+            ts = pt.get("ts") or pt.get("timestamp") or pt.get("t")
+            val = pt.get("value") if "value" in pt else pt.get("v")
+            if ts is None:
+                errors.append("trend point missing timestamp")
+                break
+            if val is not None:
+                all_null = False
+                try:
+                    float(val)
+                except (TypeError, ValueError):
+                    if val not in (None, ""):
+                        errors.append(f"non-numeric trend value: {val!r}")
+                        break
+        if errors:
+            break
+    details["point_count"] = total_points
+    if total_points < min_samples:
+        errors.append(f"trend returned {total_points} samples < min {min_samples}")
+    if total_points and all_null:
+        errors.append("trend series are all null")
+    return errors, warnings, details
 
 
 def load_env_file(path: Path) -> dict[str, str]:
@@ -171,6 +356,7 @@ class AcmeLiveValidator:
         skip_rulelab: bool = False,
         skip_logs: bool = False,
         fail_fast: bool = False,
+        strict_fdd: bool | None = None,
         local_ui_index: Path | None = None,
         remote_host_json: dict[str, Any] | None = None,
     ) -> None:
@@ -188,6 +374,9 @@ class AcmeLiveValidator:
         self.skip_rulelab = skip_rulelab
         self.skip_logs = skip_logs
         self.fail_fast = fail_fast
+        if strict_fdd is None:
+            strict_fdd = mode in {"full", "long"} and bool(self.profile.get("strict_fdd_in_full", True))
+        self.strict_fdd = strict_fdd
         self.local_ui_index = local_ui_index or (REPO / "workspace/api/static/app/index.html")
         self.remote_host_json = remote_host_json or {}
         self.token: str | None = None
@@ -356,8 +545,8 @@ class AcmeLiveValidator:
         details = {"image_tag": tag, "git_sha": rev.get("git_sha")}
         expected = self.expected_image_tag
         if expected and expected != "latest":
-            norm_expected = expected.removeprefix("v").strip()
-            norm_tag = tag.removeprefix("v").strip()
+            norm_expected = normalize_image_tag(expected)
+            norm_tag = normalize_image_tag(tag)
             if tag and norm_tag and norm_tag != norm_expected:
                 return "fail", f"Running tag {tag!r} != expected {expected!r}", details
         if rev.get("errors"):
@@ -369,19 +558,45 @@ class AcmeLiveValidator:
     def _check_remote_host(self) -> tuple[str, str, dict[str, Any]]:
         data = self.remote_host_json
         services = data.get("compose_services") or data.get("services") or []
-        required = set(self.profile.get("required_services") or [])
-        running = {str(s.get("service") or s.get("name") or "") for s in services if isinstance(s, dict)}
-        missing = [s for s in required if s not in running and not any(s in r for r in running)]
+        required = {normalize_service_name(s) for s in (self.profile.get("required_services") or [])}
+        optional = {normalize_service_name(s) for s in (self.profile.get("optional_services") or [])}
+        running: dict[str, dict[str, Any]] = {}
+        for svc in services:
+            if not isinstance(svc, dict):
+                continue
+            name = normalize_service_name(str(svc.get("service") or svc.get("name") or ""))
+            if name:
+                running[name] = svc
+        missing = [s for s in required if s not in running]
         restarts = int(data.get("max_restart_count") or 0)
         max_restarts = int(self.profile.get("max_container_restarts", 2))
+        tag_details: dict[str, str] = {}
+        tag_errors: list[str] = []
+        expected_norm = normalize_image_tag(self.expected_image_tag)
+        if expected_norm and expected_norm != "latest":
+            for svc_name, row in running.items():
+                image = str(row.get("image") or "")
+                tag = normalize_image_tag(parse_container_image_tag(image))
+                if tag:
+                    tag_details[svc_name] = tag
+                if svc_name in required and tag and tag != expected_norm:
+                    tag_errors.append(f"{svc_name} tag {tag!r} != expected {expected_norm!r}")
+                if svc_name in optional and tag and tag != expected_norm:
+                    tag_errors.append(f"optional {svc_name} running with wrong tag {tag!r}")
+        data = {**data, "service_image_tags": tag_details}
         if missing:
             return "fail", f"Missing services: {missing}", data
+        if tag_errors:
+            return "fail", "; ".join(tag_errors), data
         if restarts > max_restarts:
             return "fail", f"Container restarts {restarts} > {max_restarts}", data
         disk_pct = data.get("disk_usage_percent")
         if disk_pct is not None and float(disk_pct) > float(self.profile.get("max_disk_usage_percent", 85)):
             return "warn", f"Disk usage {disk_pct}% high", data
-        return "pass", f"Remote host OK ({len(services)} services)", data
+        msg = f"Remote host OK ({len(running)} services)"
+        if tag_details:
+            msg += f" tags={tag_details}"
+        return "pass", msg, data
 
     def _check_model_health(self) -> tuple[str, str, dict[str, Any]]:
         status, data, ms = self.client.get_json("/api/model/health")
@@ -468,18 +683,32 @@ class AcmeLiveValidator:
     def _check_sparql(self) -> tuple[str, str, dict[str, Any]]:
         status, presets, _ = self.client.get_json("/api/model/fdd-query-presets")
         if status != 200:
-            return "warn", f"fdd-query-presets HTTP {status}", {}
+            return "fail", f"fdd-query-presets HTTP {status}", {}
         preset_list = presets if isinstance(presets, list) else presets.get("presets") or []
-        if not preset_list:
-            return "warn", "No FDD SPARQL presets returned", {}
-        pid = str(preset_list[0].get("id") or preset_list[0].get("preset_id") or "")
-        if not pid:
-            return "warn", "Could not run SPARQL preset probe", {}
-        st, result, _ = self.client.get_json(f"/api/model/fdd-query-presets/{urllib.parse.quote(pid)}")
-        if st != 200:
-            return "fail", f"SPARQL preset {pid} HTTP {st}", {}
-        rows = len(result.get("rows") or result.get("results") or [])
-        return "pass", f"SPARQL preset {pid} returned {rows} row(s)", {"preset_id": pid, "rows": rows}
+        available = {str(p.get("preset_id") or p.get("id") or "") for p in preset_list if isinstance(p, dict)}
+        critical = [str(p) for p in (self.profile.get("critical_sparql_presets") or CRITICAL_SPARQL_PRESETS)]
+        missing = [p for p in critical if p not in available]
+        if missing:
+            return "fail", f"Missing critical SPARQL presets: {missing}", {"available": sorted(available)}
+        results: dict[str, Any] = {}
+        errors: list[str] = []
+        empty_warn: list[str] = []
+        for pid in critical:
+            st, result, _ = self.client.get_json(f"/api/model/fdd-query-presets/{urllib.parse.quote(pid)}")
+            if st != 200:
+                errors.append(f"{pid} HTTP {st}")
+                continue
+            rows = result.get("rows") or result.get("results") or []
+            row_count = len(rows) if isinstance(rows, list) else 0
+            results[pid] = row_count
+            if row_count == 0 and pid not in {"orphan_points", "missing_rule_bindings"}:
+                empty_warn.append(pid)
+        details = {"preset_rows": results, "empty_presets": empty_warn}
+        if errors:
+            return "fail", "; ".join(errors), details
+        if empty_warn and self.mode in {"full", "long"}:
+            return "warn", f"SPARQL presets returned 0 rows: {empty_warn}", details
+        return "pass", f"All {len(critical)} critical SPARQL presets OK", details
 
     def _check_bacnet_poll(self) -> tuple[str, str, dict[str, Any]]:
         from http_probes import check_bacnet_driver  # type: ignore[import-untyped]
@@ -497,11 +726,50 @@ class AcmeLiveValidator:
         from http_probes import check_integrator_ui_api  # type: ignore[import-untyped]
 
         ui = check_integrator_ui_api(self.base, self.token or "", site_id=self.site_id)
+        details: dict[str, Any] = dict(ui)
         if ui.get("errors"):
-            return "fail", "; ".join(ui["errors"]), ui
-        if ui.get("warnings"):
-            return "warn", "; ".join(ui["warnings"]), ui
-        return "pass", "Historian/trend API OK", ui
+            return "fail", "; ".join(ui["errors"]), details
+
+        st, bundle, _ = self.client.get_json("/api/model/commissioning-export")
+        trend_col = ""
+        trend_point = ""
+        if st == 200:
+            for pt in bundle.get("points") or []:
+                if not isinstance(pt, dict):
+                    continue
+                col = str(pt.get("external_id") or pt.get("fdd_input") or pt.get("id") or "").strip()
+                if col and pt.get("enabled", True) is not False:
+                    trend_col = col
+                    trend_point = str(pt.get("id") or col)
+                    break
+        if not trend_col:
+            if ui.get("warnings"):
+                return "warn", "; ".join(ui["warnings"]), details
+            return "warn", "No model point for trend probe (commissioning export empty?)", details
+
+        hours = 24
+        url = (
+            f"/api/timeseries/readings?site_id={urllib.parse.quote(self.site_id)}"
+            f"&columns={urllib.parse.quote(trend_col)}"
+            f"&hours={hours}&include_faults=false&rolling_avg_minutes=5&show_rolling_avg=true"
+        )
+        t_status, trend_payload, _ = self.client.get_json(url)
+        details["trend_point_id"] = trend_point
+        details["trend_column"] = trend_col
+        details["trend_hours"] = hours
+        if t_status == 404:
+            return "warn", f"No historian data for {trend_col} (poll warming up?)", details
+        if t_status != 200:
+            return "fail", f"/api/timeseries/readings HTTP {t_status} for {trend_col}", details
+        min_samples = int(self.profile.get("min_trend_samples", 3))
+        terr, twarn, tdet = validate_trend_payload(trend_payload, min_samples=min_samples)
+        details.update(tdet)
+        if terr:
+            return "fail", "; ".join(terr), details
+        warns = list(ui.get("warnings") or []) + twarn
+        if warns:
+            return "warn", "; ".join(warns), details
+        return "pass", f"Trend data OK for {trend_col} ({tdet.get('point_count', 0)} samples)", details
 
     def _check_fdd(self) -> tuple[str, str, dict[str, Any]]:
         from http_probes import check_fdd_operational  # type: ignore[import-untyped]
@@ -540,18 +808,33 @@ class AcmeLiveValidator:
         st, faults, _ = self.client.get_json("/api/faults/status")
         missing_ctx = 0
         fdd_without_equipment = 0
+        fdd_count = 0
         if st == 200:
             for fam in faults.get("families") or []:
                 for alert in fam.get("faults") or []:
                     if alert.get("source") != "fdd":
                         continue
+                    fdd_count += 1
                     ctx = alert.get("model_context") or {}
-                    if not (ctx.get("equipment") or alert.get("equipment_name")):
+                    if not (ctx.get("equipment") or alert.get("equipment_name") or alert.get("equipment_id")):
                         fdd_without_equipment += 1
-                    if not (ctx.get("point") or ctx.get("historian_column") or alert.get("point_id")):
+                    has_point = bool(
+                        ctx.get("point")
+                        or ctx.get("historian_column")
+                        or alert.get("point_id")
+                        or alert.get("external_id")
+                        or alert.get("fdd_input")
+                    )
+                    if not has_point:
                         missing_ctx += 1
+        dash["fdd_alert_count"] = fdd_count
         dash["fdd_missing_equipment_context"] = fdd_without_equipment
         dash["fdd_missing_point_context"] = missing_ctx
+        if fdd_count == 0 and self.mode in {"full", "long"}:
+            if st != 200:
+                return "fail", f"/api/faults/status HTTP {st}", dash
+            if "families" not in faults:
+                return "fail", "faults/status missing families schema", dash
         if fdd_without_equipment or missing_ctx:
             return (
                 "fail",
@@ -572,37 +855,51 @@ class AcmeLiveValidator:
         )
         if st != 200:
             return "fail", f"playground lint HTTP {st}", {}
+        st, bundle, _ = self.client.get_json("/api/model/commissioning-export")
+        if st != 200:
+            return "fail", f"commissioning-export HTTP {st} (equipment discovery)", {}
+        eq_id, pick_reason = pick_equipment_for_rule_kit(bundle)
+        details: dict[str, Any] = {"equipment_pick": pick_reason}
+        if not eq_id:
+            if self.mode == "quick":
+                return "warn", pick_reason, details
+            return "fail", pick_reason, details
+        details["equipment_id"] = eq_id
         st, saved, _ = self.client.get_json("/api/rules/saved")
         rules = (saved.get("rules") or []) if st == 200 else []
         enabled = [r for r in rules if isinstance(r, dict) and r.get("enabled") is not False]
-        if not enabled:
-            return "warn", "No enabled rules for Rule Lab export probe", {}
-        rid = str(enabled[0].get("id") or "")
-        details: dict[str, Any] = {"rule_id": rid}
-        st2, body, _ = self.client.request(
-            "GET",
-            f"/api/playground/rules/{urllib.parse.quote(rid)}/source-expanded",
+        if enabled:
+            rid = str(enabled[0].get("id") or "")
+            details["rule_id"] = rid
+            st2, body, _ = self.client.request(
+                "GET",
+                f"/api/playground/rules/{urllib.parse.quote(rid)}/source-expanded",
+            )
+            if st2 == 200:
+                try:
+                    expanded = json.loads(body)
+                    if expanded.get("source") or expanded.get("expanded_source") or expanded.get("rule_source"):
+                        details["source_expanded"] = True
+                except json.JSONDecodeError:
+                    pass
+        url = (
+            f"{self.base}/api/rules/export-equipment-kit?"
+            f"equipment_id={urllib.parse.quote(eq_id)}&site_id={urllib.parse.quote(self.site_id)}"
         )
-        if st2 == 200:
-            try:
-                expanded = json.loads(body)
-                if expanded.get("source") or expanded.get("expanded_source"):
-                    details["source_expanded"] = True
-            except json.JSONDecodeError:
-                pass
-        eq_id = f"{self.site_id}-{self.building_id}-rtu-01".replace("_", "-")
-        url = f"{self.base}/api/rules/export-equipment-kit?equipment_id={urllib.parse.quote(eq_id)}"
         req = urllib.request.Request(url, headers=self.client._headers())
         try:
-            with urllib.request.urlopen(req, timeout=self.client.timeout) as resp:
+            with urllib.request.urlopen(req, timeout=max(self.client.timeout, 60)) as resp:
                 blob = resp.read()
-                if resp.status == 200 and blob[:2] == b"PK":
-                    with zipfile.ZipFile(BytesIO(blob)) as zf:
-                        details["zip_entries"] = zf.namelist()[:10]
-                    return "pass", "Equipment rule kit zip export OK", details
         except urllib.error.HTTPError as exc:
             details["export_http"] = exc.code
-        return "warn", "Rule Lab export probe incomplete (lint OK)", details
+            return "fail", f"equipment kit export HTTP {exc.code} for {eq_id}", details
+        kit_errors, kit_details = validate_equipment_kit_zip(blob, eq_id)
+        details.update(kit_details)
+        if kit_errors:
+            return "fail", "; ".join(kit_errors), details
+        if details.get("sample_warning"):
+            return "warn", f"Equipment kit OK for {eq_id} ({details['sample_warning']})", details
+        return "pass", f"Equipment rule kit zip OK for {eq_id}", details
 
     def _check_host_resources(self) -> tuple[str, str, dict[str, Any]]:
         st, stats, _ = self.client.get_json("/api/host/stats")
@@ -673,27 +970,34 @@ class AcmeLiveValidator:
             import open_fdd.arrow_runtime  # noqa: F401
         except ModuleNotFoundError:
             proc = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-q", "-e", str(REPO)],
+                [sys.executable, "-m", "pip", "install", "-q", "-e", f"{REPO}[dev,test]"],
                 capture_output=True,
                 text=True,
                 timeout=180,
                 check=False,
             )
             if proc.returncode != 0:
-                return "warn", "PyPI rule smoke skipped (open-fdd package not installed)", {}
+                msg = "PyPI rule smoke skipped (open-fdd package not installed)"
+                details = {"stderr": proc.stderr[:400]}
+                if self.strict_fdd and not self.skip_fdd:
+                    return "fail", msg, details
+                return "warn", msg, details
+        env = {**os.environ, "PYTHONPATH": f"{REPO}:{REPO / 'workspace' / 'api'}"}
         proc = subprocess.run(
             [sys.executable, str(script)],
             capture_output=True,
             text=True,
             cwd=str(REPO),
-            env={**os.environ, "PYTHONPATH": ""},
+            env=env,
             timeout=120,
             check=False,
         )
         if proc.returncode != 0:
-            return "warn", "PyPI-style rule smoke failed (non-blocking on live edge)", {
-                "stderr": proc.stderr[:400]
-            }
+            msg = "PyPI-style rule smoke failed"
+            details = {"stderr": proc.stderr[:400], "stdout": proc.stdout[:400]}
+            if self.strict_fdd and not self.skip_fdd:
+                return "fail", msg, details
+            return "warn", f"{msg} (non-blocking in quick mode)", details
         return "pass", "PyPI-style Acme rule smoke OK", {}
 
 
@@ -748,6 +1052,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--skip-rulelab", action="store_true")
     parser.add_argument("--skip-logs", action="store_true")
     parser.add_argument("--fail-fast", action="store_true")
+    parser.add_argument("--strict-fdd", action="store_true", help="Fail on PyPI/rule smoke errors (default in --full)")
+    parser.add_argument("--no-strict-fdd", action="store_true", help="Allow PyPI rule smoke to warn even in --full")
     parser.add_argument("--allow-write", action="store_true")
     args = parser.parse_args(argv)
 
@@ -773,6 +1079,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.remote_host_json:
         remote_host = json.loads(Path(args.remote_host_json).read_text(encoding="utf-8"))
 
+    strict_fdd: bool | None = None
+    if args.strict_fdd:
+        strict_fdd = True
+    elif args.no_strict_fdd:
+        strict_fdd = False
+
     t0 = time.perf_counter()
     validator = AcmeLiveValidator(
         base=base,
@@ -789,6 +1101,7 @@ def main(argv: list[str] | None = None) -> int:
         skip_rulelab=args.skip_rulelab,
         skip_logs=args.skip_logs,
         fail_fast=args.fail_fast,
+        strict_fdd=strict_fdd,
         remote_host_json=remote_host,
     )
     report = validator.validate_all()

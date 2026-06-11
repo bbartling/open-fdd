@@ -14,6 +14,17 @@
   "required_services": ["bridge", "commission"],
   "optional_services": ["mcp-rag", "cloud-exporter"],
   "required_rule_id_patterns": ["ahu", "vav"],
+  "critical_sparql_presets": [
+    "rules_to_equipment",
+    "rules_to_sensors",
+    "rules_to_bacnet_devices",
+    "equipment_to_points",
+    "missing_rule_bindings",
+    "orphan_points",
+    "points_by_bacnet_device"
+  ],
+  "min_trend_samples": 3,
+  "strict_fdd_in_full": true,
   "required_pages": [
     "/",
     "/building-status",

@@ -10,8 +10,9 @@
 | **`docker_maintenance.sh`** | Safe prune/rebuild; never prunes bind-mounted workspace volumes. |
 | **`upgrade_edge_full.sh`** | Build UI + `edge_sync_ui_static.sh` + GHCR image upgrade + post-deploy check (fixes stale `static/app` on edge). |
 | **`edge_sync_ui_static.sh`** | Rsync `workspace/api/static/app/` to edge bind mount via inventory SSH. |
-| **`acme_post_deploy_validate.sh`** | **Live Acme** read-only validation after GHCR updates — image tag, UI bundle, duplicates, BACnet, trends, FDD, Rule Lab, logs. `--quick` \| `--full`. |
-| **`acme_live_validate.py`** | Python API probe engine used by `acme_post_deploy_validate.sh`; JSON/JUnit/Markdown reports. |
+| **`acme_post_deploy_validate.sh`** | **Live Acme** read-only validation after GHCR updates — bridge+commission image tags, UI bundle, duplicates, all critical SPARQL presets, chartable trends, equipment rule kit zip, strict PyPI smoke in `--full`. |
+| **`acme_live_validate.py`** | Python API probe engine; `--profile`, `--strict-fdd`, JSON/JUnit/Markdown reports. |
+| **`acme_validation_profile.example.json`** | Thresholds: min points/equipment, critical SPARQL presets, required Docker services, trend sample minimum. |
 | **`daily_release.sh`** | Daily easy button: merge PR → tag `open-fdd-v*` (PyPI) → GHCR publish → prune branches → `--prep-next 3.0.1` for next cycle. |
 | **`validate_fdd_backends.sh`** | Verify all enabled rules use `apply_faults_arrow` (`--docker` uses bridge container). |
 | **`edge_site_backup.sh`** / **`edge_site_apply.sh`** | Site data backup/restore for remote updates (preserves model, BACnet bind, trends). |
