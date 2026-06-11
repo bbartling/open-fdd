@@ -1,7 +1,5 @@
-# Site notes (example)
-
-## acme / vm-bbartling
+# Site memory (example)
 
 - Edge: no local MCP (`enable_mcp: false`)
-- Poll interval: 60s BACnet commission container
-- Primary AHU binding: `acme-vm-bbartling-rtu-01`
+- **BACnet poll:** FDD-minimal only (~76 points for current Acme rules). Never bulk-enable all discovered objects.
+- Commission script: `infra/ansible/scripts/acme_commission_fdd_minimal.sh`

@@ -26,7 +26,11 @@ mcp = FastMCP(
     instructions=(
         "Open-FDD MCP server — query buildings, BRICK models, FDD diagnostics, and rule cookbooks. "
         "Writes, tuning, batch runs, and rule saves require human_approved=true. "
-        "Never invent fault codes; use list_fault_catalog."
+        "Never invent fault codes; use list_fault_catalog. "
+        "BACnet polling policy: NEVER enable poll on every discovered BACnet object. "
+        "Poll only the minimum points required by enabled FDD rules (brick_types, point_ids, rule config columns). "
+        "Use FDD-minimal poll filters (bacnet_toolshed.fdd_minimal_poll / acme_commission_fdd_minimal.sh). "
+        "Do not bulk-enable all points in points.csv or use enable_points --all."
     ),
 )
 

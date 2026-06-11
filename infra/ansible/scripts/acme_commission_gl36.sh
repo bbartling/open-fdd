@@ -2,6 +2,9 @@
 # Commission Acme trim devices for GL36 / economizer FDD passive polling (60s).
 # Keeps originals: points_per_device/*.csv, points.all_enabled.csv, points.temp_only.csv
 #
+# NOTE: Prefer FDD-minimal poll (rules-bound only):
+#   ./scripts/acme_commission_fdd_minimal.sh
+# This script writes the broader GL36 brick/tag set (~340 points) — avoid on production edge.
 #   ./scripts/acme_commission_gl36.sh
 #   POLL_INTERVAL=60 ./scripts/acme_commission_gl36.sh
 set -euo pipefail

@@ -53,7 +53,10 @@ Open-FDD intentionally keeps BACnet field traffic **minimal**:
 - Per-point `poll_interval_s` in the UI is the **commissioned target**; throughput analytics compare configured vs observed samples.
 - **Unit conversion** (e.g. Trane °C → °F) uses `device_poll_profiles.csv` at ingest — not a poll-rate file.
 
-Acme ships ~**340 points / 60 s** ≈ one full plant read per minute. Disable unneeded objects in BACnet commissioning rather than raising global poll rates.
+Acme ships **FDD-minimal polling** (~76 points on a typical GL36 lab when 8 rules are enabled), not the full discovery tree (~340+ GL36 objects or 566 discovered objects). Disable unneeded objects in BACnet commissioning rather than raising global poll rates.
+
+{: .warning }
+> **AI agents / MCP:** Never enable BACnet polling for every discovered object. Poll **only** historian columns bound to **enabled** FDD rules (`rules_store.json` brick_types, point_ids, and rule config column hints). Use `bacnet_toolshed.fdd_minimal_poll` or `acme_commission_fdd_minimal.sh` — not bulk `--all` enable scripts.
 
 ## Async driver and single-stack I/O
 

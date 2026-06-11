@@ -774,6 +774,11 @@ def model_context() -> dict[str, Any]:
     return {
         "analytics_methodology": analytics_methodology(),
         "methodology_blurb": methodology_prompt_blurb(),
+        "bacnet_poll_policy": (
+            "NEVER poll every BACnet discovered object. Poll only historian columns bound to "
+            "enabled FDD rules (rules_store brick_types, point_ids, config column hints). "
+            "Use bacnet_toolshed.fdd_minimal_poll or acme_commission_fdd_minimal.sh — not bulk enable-all."
+        ),
         "data_pipeline": [
             "BACnet poll → feather_store/",
             "load_frame_for_run → zone_temp_analytics + zone_energy_research + device_poll_health",

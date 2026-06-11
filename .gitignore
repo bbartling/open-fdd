@@ -206,6 +206,8 @@ edge_backup/local/acme/*
 !edge_backup/local/acme/vm-bbartling/
 edge_backup/local/acme/vm-bbartling/*
 !edge_backup/local/acme/vm-bbartling/device_poll_profiles.csv
+!edge_backup/local/acme/vm-bbartling/points.csv
+!edge_backup/local/acme/vm-bbartling/fdd_minimal_poll.manifest.json
 
 # Local build/scratch (Acme model experiments)
 .build_acme_data/
