@@ -166,10 +166,9 @@ def test_sync_does_not_duplicate_gl36_equipment(model_env, monkeypatch):
     import shutil
 
     shutil.copy(acme_csv, comm / "points.csv")
-    shutil.copy(
-        repo / "edge_backup/local/acme/vm-bbartling/points_discovered.csv",
-        comm / "points_discovered.csv",
-    )
+    discovered = repo / "edge_backup/local/acme/vm-bbartling/points_discovered.csv"
+    if discovered.is_file():
+        shutil.copy(discovered, comm / "points_discovered.csv")
     shutil.copy(repo / "workspace/data/acme_gl36_model.json", data / "model.json")
 
     from openfdd_bridge.bacnet_poll_model_sync import sync_enabled_polling_to_model  # noqa: E402
