@@ -35,6 +35,25 @@ def _column_to_point(model: dict[str, Any], site_id: str) -> dict[str, dict[str,
     return mapping
 
 
+def _equipment_label_from_title(title: str) -> str:
+    """GL36-style titles: ``AHU-C · AHU SAT flatline 1h: …``."""
+    head = str(title or "").split(":", 1)[0].strip()
+    if " · " in head:
+        return head.split(" · ", 1)[0].strip()
+    return ""
+
+
+def _equipment_type_from_fault_code(fault_code: str) -> str:
+    fc = str(fault_code or "").strip().upper()
+    if fc.startswith("AHU") or fc.startswith("RTU"):
+        return "AHU"
+    if fc.startswith("VAV"):
+        return "VAV"
+    if fc.startswith("BLD"):
+        return "Building"
+    return ""
+
+
 def _equipment_type_label(eq: dict[str, Any]) -> str:
     for key in ("equipment_type", "brick_type", "type"):
         val = str(eq.get(key) or "").strip()
@@ -85,6 +104,18 @@ def resolve_fault_model_context(
 
     eid = str(equipment_id or "").strip()
     ename = str(equipment_name or "").strip()
+    eq_type = ""
+    if not ename and fault_code:
+        fc_upper = fault_code.strip().upper()
+        for eq_id, eq in eq_index.items():
+            eq_name = str(eq.get("name") or "").strip()
+            if eq_name.upper() == fc_upper:
+                eid = eid or eq_id
+                ename = eq_name
+                break
+    if not ename and fault_code:
+        ename = fault_code.strip()
+        eq_type = _equipment_type_from_fault_code(fault_code)
     if not eid and cols:
         eid = str((col_map.get(cols[0]) or {}).get("equipment_id") or "")
     if not ename and eid:
@@ -94,7 +125,10 @@ def resolve_fault_model_context(
         ename = names[0] if names else ""
 
     eq = eq_index.get(eid) if eid else None
-    eq_type = _equipment_type_label(eq) if eq else ""
+    if eq:
+        eq_type = _equipment_type_label(eq)
+    elif not eq_type and fault_code:
+        eq_type = _equipment_type_from_fault_code(fault_code)
 
     point_ctx = _point_context(pt) if pt else None
     bacnet_line = ""
@@ -150,6 +184,8 @@ def enrich_fault_alert(alert: dict[str, Any], model: dict[str, Any]) -> dict[str
         if not site_id and model.get("sites"):
             site_id = str((model["sites"][0] or {}).get("id") or "")
 
+    title_label = _equipment_label_from_title(title)
+    eq_name_in = str(alert.get("equipment_name") or title_label or "").strip()
     ctx = resolve_fault_model_context(
         model=model,
         site_id=site_id,
@@ -157,7 +193,7 @@ def enrich_fault_alert(alert: dict[str, Any], model: dict[str, Any]) -> dict[str
         rule_name=str(alert.get("rule_name") or ""),
         fault_code=str(alert.get("code") or ""),
         equipment_id=str(alert.get("equipment_id") or ""),
-        equipment_name=str(alert.get("equipment_name") or ""),
+        equipment_name=eq_name_in,
         flagged_columns=list(cols) if isinstance(cols, list) else [],
     )
     ctx["severity"] = str(alert.get("severity") or "warning")
