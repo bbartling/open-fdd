@@ -142,6 +142,71 @@ def resolve_bacnet_bind(raw: str | None = None, *, default_port: int = _DEFAULT_
     return f"0.0.0.0/24:{default_port}"
 
 
+def _iface_name_from_ip_addr_line(line: str) -> str:
+    parts = line.split()
+    if len(parts) >= 2:
+        return parts[1].rstrip(":")
+    return ""
+
+
+def list_host_interfaces() -> list[dict[str, str | bool]]:
+    """List IPv4 interfaces for BACnet bind UI (host-side, read-only)."""
+    rows: list[dict[str, str | bool]] = []
+    seen: set[str] = set()
+    try:
+        out = subprocess.check_output(
+            ["ip", "-4", "-o", "addr", "show"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        out = ""
+    for line in out.splitlines():
+        iface = _iface_name_from_ip_addr_line(line)
+        for token in line.split():
+            if "/" not in token or token.count(".") != 3:
+                continue
+            ip_part, _, prefix = token.partition("/")
+            try:
+                addr = ipaddress.IPv4Address(ip_part)
+            except ValueError:
+                continue
+            key = f"{iface}:{ip_part}"
+            if key in seen:
+                continue
+            seen.add(key)
+            kind = "lan"
+            if addr.is_loopback:
+                kind = "loopback"
+            elif str(ip_part).startswith("100."):
+                kind = "tailscale"
+            elif iface.startswith("docker") or iface.startswith("br-"):
+                kind = "docker"
+            label = iface or "interface"
+            if kind == "tailscale":
+                label = f"Tailscale — {ip_part}"
+            elif kind == "loopback":
+                label = f"Loopback — {ip_part}"
+            elif kind == "docker":
+                label = f"Docker — {iface} ({ip_part})"
+            else:
+                label = f"{iface} — {ip_part}"
+            rows.append(
+                {
+                    "interface": iface,
+                    "ipv4": ip_part,
+                    "prefix_len": prefix,
+                    "cidr": f"{ip_part}/{prefix}",
+                    "kind": kind,
+                    "label": label,
+                    "is_private": str(addr.is_private).lower(),
+                }
+            )
+    rows.sort(key=lambda r: (str(r.get("kind")), str(r.get("interface"))))
+    return rows
+
+
 def resolve_commission_cfg(cfg: dict[str, str]) -> dict[str, str]:
     """Apply bind + name defaults in-place on a commission config dict."""
     out = dict(cfg)
