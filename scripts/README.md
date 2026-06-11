@@ -9,6 +9,8 @@
 | **`openfdd_edge_validate.sh`** | Bensserver / edge gate: backup → BACnet+model reset → bench setup → stack → **public check-engine (no auth)** → SPARQL/http probes → operational verify → pytest → health → log scan. `--quick` (no resets), `--full` / `--long` (full bench), `--pre-update-backup`, `--rebuild`. |
 | **`docker_maintenance.sh`** | Safe prune/rebuild; never prunes bind-mounted workspace volumes. |
 | **`upgrade_edge_full.sh`** | Build UI + `deploy.sh ui` + GHCR image upgrade + post-deploy check (fixes stale `static/app` on edge). |
+| **`acme_post_deploy_validate.sh`** | **Live Acme** read-only validation after GHCR updates — image tag, UI bundle, duplicates, BACnet, trends, FDD, Rule Lab, logs. `--quick` \| `--full`. |
+| **`acme_live_validate.py`** | Python API probe engine used by `acme_post_deploy_validate.sh`; JSON/JUnit/Markdown reports. |
 | **`daily_release.sh`** | Daily easy button: merge PR → tag `open-fdd-v*` (PyPI) → GHCR publish → prune branches → `--prep-next 3.0.1` for next cycle. |
 | **`validate_fdd_backends.sh`** | Verify all enabled rules use `apply_faults_arrow` (`--docker` uses bridge container). |
 | **`edge_site_backup.sh`** / **`edge_site_apply.sh`** | Site data backup/restore for remote updates (preserves model, BACnet bind, trends). |

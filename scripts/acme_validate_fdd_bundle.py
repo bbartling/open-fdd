@@ -90,14 +90,21 @@ def main() -> int:
     parser.add_argument("--building-id", default="vm-bbartling")
     parser.add_argument("--model", default=str(REPO / "edge_config/acme/vm-bbartling/model.json"))
     parser.add_argument("--profiles", default=str(REPO / "edge_config/acme/vm-bbartling/device_poll_profiles.csv"))
+    parser.add_argument("--json-out", default="", help="Write report JSON to path (- for stdout only)")
     args = parser.parse_args()
 
     report = {
+        "site_id": args.site_id,
+        "building_id": args.building_id,
         "model": audit_model(Path(args.model)),
         "poll_profiles": audit_poll_profiles(Path(args.profiles)),
         "rules": lint_bundle(args.site_id, args.building_id),
     }
-    print(json.dumps(report, indent=2))
+    text = json.dumps(report, indent=2)
+    if args.json_out and args.json_out != "-":
+        Path(args.json_out).write_text(text + "\n", encoding="utf-8")
+    else:
+        print(text)
     ok = report["model"]["ok"] and report["poll_profiles"]["ok"] and report["rules"]["lint_ok"]
     return 0 if ok else 1
 
