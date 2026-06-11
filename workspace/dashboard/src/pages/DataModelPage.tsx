@@ -7,7 +7,6 @@ import { MODEL_COMMISSIONING_PROMPT } from "../lib/llm-prompts";
 import { assignmentSummary, parseCommissioningPayload } from "../lib/commissioningImport";
 import DataModelSparqlPanel from "../components/DataModelSparqlPanel";
 import CommissioningImportExportPanel from "../components/CommissioningImportExportPanel";
-import PointRulePinsPanel from "../components/PointRulePinsPanel";
 import ModelSyncBar from "../components/ModelSyncBar";
 import PageHeader from "../components/PageHeader";
 import { apiFetch } from "../lib/api";
@@ -65,6 +64,18 @@ export default function DataModelPage() {
       setOut(`Copy failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setCopyBusy(false);
+    }
+  }
+
+  async function syncTtlDisk() {
+    setTtlLoading(true);
+    try {
+      const res = await apiFetch<{ path: string }>("/api/model/sync-ttl", { method: "POST" });
+      setOut(`TTL written to ${res.path}`);
+    } catch (error) {
+      setOut(`TTL sync failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setTtlLoading(false);
     }
   }
 
@@ -138,24 +149,19 @@ export default function DataModelPage() {
       </div>
 
       {activeTab === "import" ? (
-        <>
-          <PointRulePinsPanel refreshKey={refreshKey} />
-          <CommissioningImportExportPanel
-            onStatus={setOut}
-            onImported={() => void refreshMeta()}
-          />
-        </>
+        <CommissioningImportExportPanel
+          onStatus={setOut}
+          onImported={() => void refreshMeta()}
+        />
       ) : null}
 
       {activeTab === "explorer" ? (
         <>
-          <ModelSyncBar refreshKey={refreshKey} onStatus={setOut} />
-          <PointRulePinsPanel refreshKey={refreshKey} />
+          <ModelSyncBar refreshKey={refreshKey} onStatus={setOut} showWriteTtl={false} />
           <p className="muted panel">
-            BACnet poll → model sync keeps <code>model.json</code> aligned with live polling. Pin FDD rules by editing{" "}
-            <code>points[].fdd_rule_ids</code> in <strong>Import / export</strong> (export also includes{" "}
-            <code>fdd_rules_linked</code> with Rule Lab names). Rule Lab edits Python only — assignments live here.
-            Trend context: <a href="/plot">Trend plot</a>.
+            BACnet poll → model sync keeps <code>model.json</code> aligned with live polling. Pin FDD rules via{" "}
+            <strong>Import / export</strong> or Rule Lab equipment test. RDF / TTL tools are on <strong>SPARQL</strong>{" "}
+            and <strong>Advanced</strong>.
           </p>
         </>
       ) : null}
@@ -166,11 +172,15 @@ export default function DataModelPage() {
         <div className="dm-advanced panel">
           <p className="muted">
             <strong>Copy prompt + commissioning JSON for LLM</strong> bundles BRICK redesign instructions with live
-            export including <code>fdd_rules</code> and per-point <code>fdd_rule_ids</code>.
+            export including <code>fdd_rules</code> and per-point <code>fdd_rule_ids</code>. Rule Lab owns Python code —
+            the LLM only edits model JSON and rule assignments.
           </p>
           <div className="row">
             <button type="button" onClick={() => void doViewTtlPopup()}>
               {ttlLoading ? "Loading TTL…" : "View TTL (new tab)"}
+            </button>
+            <button type="button" className="secondary-btn" disabled={ttlLoading} onClick={() => void syncTtlDisk()}>
+              {ttlLoading ? "Writing TTL…" : "Write TTL to disk"}
             </button>
             <button type="button" className="secondary-btn" onClick={() => void doViewJsonPopup()}>
               View commissioning JSON (new tab)
