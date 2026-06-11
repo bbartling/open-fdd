@@ -142,4 +142,4 @@ MCP RAG stays on edge today for doc retrieval. Long-term: a **benserver** agent 
 
 ## Known bugs (check issues before next cycle)
 
-- [#260](https://github.com/bbartling/open-fdd/issues/260) — intermittent GHCR commission push `unknown blob`
+- Override `last_scan_at` may lag on slow MSTP scans — monitor `GET /api/bacnet/overrides/status`
