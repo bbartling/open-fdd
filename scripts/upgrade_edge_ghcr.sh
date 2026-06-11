@@ -35,7 +35,9 @@ if [[ -z "$TAG" || "$TAG" == "local" ]]; then
   echo "Set OPENFDD_IMAGE_TAG to the GHCR tag to pull." >&2
   exit 1
 fi
-
+# shellcheck source=../scripts/openfdd_normalize_image_tag.sh
+source "${ROOT}/scripts/openfdd_normalize_image_tag.sh"
+TAG="$(normalize_openfdd_image_tag "$TAG")"
 export OPENFDD_IMAGE_TAG="$TAG"
 export RUN_POST_CHECK="${RUN_POST_CHECK:-1}"
 
