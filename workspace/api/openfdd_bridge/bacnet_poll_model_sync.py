@@ -130,6 +130,46 @@ def duplicate_bacnet_equipment_report(model: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def duplicate_point_id_report(model: dict[str, Any]) -> dict[str, Any]:
+    """Detect multiple model rows sharing one point id (commissioning export double-count)."""
+    from collections import Counter
+
+    points = [p for p in (model.get("points") or []) if isinstance(p, dict)]
+    ids = [str(p.get("id") or "").strip() for p in points if str(p.get("id") or "").strip()]
+    dup = {k: v for k, v in Counter(ids).items() if v > 1}
+    return {"duplicate_point_ids": len(dup), "instances": dup}
+
+
+def _point_row_richness(row: dict[str, Any]) -> int:
+    score = 0
+    for key in ("external_id", "series_id", "fdd_input", "brick_type", "description"):
+        if str(row.get(key) or "").strip():
+            score += 1
+    return score
+
+
+def repair_duplicate_point_ids(points: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """Keep the richest row per point id; drop sparse BACnet poll duplicates."""
+    best: dict[str, dict[str, Any]] = {}
+    no_id: list[dict[str, Any]] = []
+    pruned = 0
+    for pt in points:
+        if not isinstance(pt, dict):
+            continue
+        pid = str(pt.get("id") or "").strip()
+        if not pid:
+            no_id.append(dict(pt))
+            continue
+        prev = best.get(pid)
+        if prev is None:
+            best[pid] = dict(pt)
+            continue
+        if _point_row_richness(pt) >= _point_row_richness(prev):
+            best[pid] = dict(pt)
+        pruned += 1
+    return list(best.values()) + no_id, pruned
+
+
 def repair_duplicate_bacnet_equipment(
     equipment: list[dict[str, Any]],
     points: list[dict[str, Any]],
@@ -286,6 +326,8 @@ def sync_enabled_polling_to_model(*, site_id: str | None = None, sync_ttl: bool 
         removed = before_pts - len(model["points"])
         equipment, model["points"], pruned = repair_duplicate_bacnet_equipment(equipment, model["points"])
         repaired += pruned
+        model["points"], pt_pruned = repair_duplicate_point_ids(model["points"])
+        repaired += pt_pruned
         remaining_eq_ids = {str(p.get("equipment_id") or "") for p in model["points"] if isinstance(p, dict)}
         model["equipment"] = [
             e

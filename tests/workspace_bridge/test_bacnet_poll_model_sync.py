@@ -203,3 +203,16 @@ def test_repair_duplicate_bacnet_equipment(model_env):
     assert len(eq) == 1
     assert eq[0]["id"] == "acme-vav-39"
     assert pts[0]["equipment_id"] == "acme-vav-39"
+
+
+def test_repair_duplicate_point_ids_keeps_richest_row():
+    from openfdd_bridge.bacnet_poll_model_sync import repair_duplicate_point_ids  # noqa: E402
+
+    points = [
+        {"id": "12035-analog-input-1", "equipment_id": "vav", "external_id": "ZN-T"},
+        {"id": "12035-analog-input-1", "equipment_id": "vav"},
+    ]
+    repaired, n = repair_duplicate_point_ids(points)
+    assert n == 1
+    assert len(repaired) == 1
+    assert repaired[0]["external_id"] == "ZN-T"
