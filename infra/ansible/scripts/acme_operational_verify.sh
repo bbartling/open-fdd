@@ -308,7 +308,11 @@ fi
 if [[ "$SKIP_WAIT" -eq 0 ]]; then
   log_info "Wait ${WAIT_MINUTES}m for poll samples..."
   sleep $((WAIT_MINUTES * 60))
-  ssh -o BatchMode=yes -o ConnectTimeout=10 "bbartling@${HOST}" \
+  # shellcheck source=edge_ssh_helpers.sh
+  source "${DIR}/edge_ssh_helpers.sh"
+  EDGE_SSH_CONNECT_TIMEOUT=10
+  ssh_user="${ACME_SSH_USER:-bbartling}"
+  edge_ssh_run "${ssh_user}@${HOST}" \
     "wc -l ~/open-fdd/workspace/bacnet/polls/samples.csv 2>/dev/null || true" || true
 fi
 

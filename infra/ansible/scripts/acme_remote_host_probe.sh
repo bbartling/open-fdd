@@ -39,12 +39,16 @@ if [[ -z "$SSH_HOST" ]]; then
   exit 1
 fi
 
-SSH_OPTS=(-o ConnectTimeout=12 -o BatchMode=yes)
-if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
-  RAW="$(SSHPASS="$SSHPASS" sshpass -e ssh "${SSH_OPTS[@]}" "${SSH_USER}@${SSH_HOST}" python3 - <"$PROBE_PY")"
-else
-  RAW="$(ssh "${SSH_OPTS[@]}" "${SSH_USER}@${SSH_HOST}" python3 - <"$PROBE_PY")"
+# shellcheck source=edge_ssh_helpers.sh
+source "${DIR}/edge_ssh_helpers.sh"
+EDGE_SSH_CONNECT_TIMEOUT=12
+build_edge_ssh_cmd
+target="${SSH_USER}@${SSH_HOST}"
+ssh_cmd=("${EDGE_SSH_CMD[@]}")
+if ! "${EDGE_SSH_CMD[@]}" "$target" true 2>/dev/null && [[ ${#EDGE_SSH_PASS_CMD[@]} -gt 0 ]]; then
+  ssh_cmd=("${EDGE_SSH_PASS_CMD[@]}")
 fi
+RAW="$("${ssh_cmd[@]}" "$target" python3 - <"$PROBE_PY")"
 
 if [[ -n "$JSON_OUT" ]]; then
   printf '%s\n' "$RAW" >"$JSON_OUT"
