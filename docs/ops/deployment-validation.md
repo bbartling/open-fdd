@@ -6,6 +6,8 @@ nav_order: 4
 
 # Deployment validation
 
+For the **live Acme site** after GHCR updates, use the dedicated harness documented in [Acme live validation]({% link ops/acme-live-validation.md %}) (`acme_post_deploy_validate.sh`).
+
 Non-destructive checks after deploy or image upgrade. Run from the **edge host** (smoke) or from a **control machine** with the full repo (insurance suite).
 
 ## Edge host smoke (5 minutes)
