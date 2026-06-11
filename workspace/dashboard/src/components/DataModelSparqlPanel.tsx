@@ -215,16 +215,8 @@ export default function DataModelSparqlPanel({ onStatus }: Props) {
       </section>
 
       <section className="dm-sparql-presets">
-        <h3>Summarize HVAC</h3>
-        <p className="muted">Predefined counts and equipment lists. Results appear in the custom section below.</p>
-        <label className="dm-sparql-bacnet-toggle">
-          <input
-            type="checkbox"
-            checked={includeBacnetRefs}
-            onChange={(e) => setIncludeBacnetRefs(e.target.checked)}
-          />
-          <span>Include BACnet device and point IDs (for telemetry and algorithms)</span>
-        </label>
+        <h3>Summarize HVAC (SPARQL)</h3>
+        <p className="muted">Predefined BRICK counts and equipment lists. Results appear in the custom section below.</p>
         <div className="dm-sparql-buttons">
           {hvacQueries.map((item) => (
             <button
