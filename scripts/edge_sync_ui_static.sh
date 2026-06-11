@@ -45,11 +45,13 @@ load_edge_secrets() {
 }
 
 build_ssh_rsync() {
-  RSYNC_SSH=(ssh -o ConnectTimeout=15)
-  if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
-    export SSHPASS
-    RSYNC_SSH=(sshpass -e ssh -o ConnectTimeout=15 -o PreferredAuthentications=password -o PubkeyAuthentication=no)
-  fi
+  # shellcheck source=../infra/ansible/scripts/edge_ssh_helpers.sh
+  source "${ROOT}/infra/ansible/scripts/edge_ssh_helpers.sh"
+  EDGE_SSH_CONNECT_TIMEOUT=15
+  EDGE_RSYNC_PROBE_TARGET="${SSH_USER}@${HOST}"
+  build_edge_rsync_ssh
+  # shellcheck disable=SC2206
+  RSYNC_SSH=($(printf '%s\n' "${EDGE_RSYNC_SSH[@]}"))
 }
 
 while [[ $# -gt 0 ]]; do
