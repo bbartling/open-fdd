@@ -55,4 +55,4 @@ OPENFDD_IMAGE_TAG=latest ~/open-fdd/scripts/update-open-fdd-edge.sh
 2. `portfolio_collect.py` — central Dash history  
 3. `GET /api/building-agent/tuning-brief` — tune bounds via API  
 
-See [ansible/README.md](ansible/README.md) and [docs/development/ansible_refactor_audit.md](../docs/development/ansible_refactor_audit.md).
+See [ansible/README.md](ansible/README.md).
