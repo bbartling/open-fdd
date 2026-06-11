@@ -206,6 +206,8 @@ edge_backup/local/acme/*
 !edge_backup/local/acme/vm-bbartling/
 edge_backup/local/acme/vm-bbartling/*
 !edge_backup/local/acme/vm-bbartling/device_poll_profiles.csv
+!edge_backup/local/acme/vm-bbartling/points.csv
+!edge_backup/local/acme/vm-bbartling/fdd_minimal_poll.manifest.json
 
 # Local build/scratch (Acme model experiments)
 .build_acme_data/
@@ -234,6 +236,8 @@ workspace/logs/
 !/workspace/mcp_rag/**
 !/workspace/mcp_server/
 !/workspace/mcp_server/**
+!/workspace/cloud_exporter/
+!/workspace/cloud_exporter/**
 !/workspace/MEMORY.md.example
 !/workspace/memory/
 !/workspace/memory/**

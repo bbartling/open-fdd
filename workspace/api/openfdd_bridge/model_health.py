@@ -26,6 +26,7 @@ def model_health_summary(model: dict[str, Any]) -> dict[str, Any]:
                 "missing_brick_type": 0,
                 "missing_fdd_input": 0,
                 "duplicate_external_ids": 0,
+                "duplicate_bacnet_device_instances": 0,
             },
             "issues": [],
             "summary": "",
@@ -72,8 +73,13 @@ def model_health_summary(model: dict[str, Any]) -> dict[str, Any]:
         duplicate_map[key] = duplicate_map.get(key, 0) + 1
     duplicate_external_ids = sum(1 for count in duplicate_map.values() if count > 1)
 
+    from .bacnet_poll_model_sync import duplicate_bacnet_equipment_report
+
+    dup_bacnet = duplicate_bacnet_equipment_report(model)
+    duplicate_bacnet_device_instances = int(dup_bacnet.get("duplicate_device_instances") or 0)
+
     critical = orphan_equipment + orphan_points_site + orphan_points_equipment
-    warning = missing_brick_type + missing_fdd_input + duplicate_external_ids
+    warning = missing_brick_type + missing_fdd_input + duplicate_external_ids + duplicate_bacnet_device_instances
     score = max(0, 100 - (critical * 10) - (warning * 2))
 
     issues: list[dict[str, str]] = []
@@ -125,6 +131,14 @@ def model_health_summary(model: dict[str, Any]) -> dict[str, Any]:
                 "detail": "Each site/equipment/external_id tuple should be unique.",
             }
         )
+    if duplicate_bacnet_device_instances:
+        issues.append(
+            {
+                "severity": "warning",
+                "title": f"{duplicate_bacnet_device_instances} BACnet device(s) mapped to multiple equipment rows",
+                "detail": "Often bacnet-{instance} stubs duplicate GL36 equipment — run POST /api/model/bacnet-sync or repair.",
+            }
+        )
 
     status = "ok"
     if critical:
@@ -146,6 +160,7 @@ def model_health_summary(model: dict[str, Any]) -> dict[str, Any]:
             "missing_brick_type": missing_brick_type,
             "missing_fdd_input": missing_fdd_input,
             "duplicate_external_ids": duplicate_external_ids,
+            "duplicate_bacnet_device_instances": duplicate_bacnet_device_instances,
         },
         "issues": issues,
         "summary": (

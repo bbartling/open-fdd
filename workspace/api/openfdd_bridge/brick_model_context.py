@@ -208,6 +208,20 @@ def api_query_guide() -> dict[str, Any]:
             "GET /api/timeseries/readings?site_id=&columns=&hours=": "feather poll trends + optional FDD overlay",
             "GET /api/timeseries/series?site_id=": "plottable column list grouped by equipment",
         },
+        "bacnet_poll_policy": {
+            "rule": "Poll ONLY BACnet objects required by enabled FDD rules — never the full discovery tree.",
+            "forbidden": [
+                "enable_points --all",
+                "bulk enable every object in points_discovered.csv",
+                "raising poll rate to compensate for polling unneeded points",
+            ],
+            "allowed": [
+                "bacnet_toolshed.fdd_minimal_poll.filter_points_for_fdd_rules",
+                "infra/ansible/scripts/acme_commission_fdd_minimal.sh",
+                "per-point enable in UI for a specific new rule binding",
+            ],
+            "source_of_truth": "edge_backup/.../rules_store.json + points.csv enabled rows",
+        },
         "faults": {
             "GET /api/faults/catalog": "fixed fault code definitions (VAV-C, AHU-B, …)",
             "GET /api/faults/tree": "catalog by family/category",

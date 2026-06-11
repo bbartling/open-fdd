@@ -28,6 +28,21 @@ type CommissionStatus = {
   discover_range?: [string, string];
 };
 
+type BacnetInterface = {
+  interface: string;
+  ipv4: string;
+  prefix_len: string;
+  cidr: string;
+  kind: string;
+  label: string;
+};
+
+type BacnetInterfacesResponse = {
+  current_bind?: string;
+  current_host?: string;
+  interfaces?: BacnetInterface[];
+};
+
 type DiscoverJob = {
   job_id?: string;
   id?: string;
@@ -99,6 +114,9 @@ export default function BacnetPage() {
   const [overrideScanPending, setOverrideScanPending] = useState(false);
   const [selectedPointIds, setSelectedPointIds] = useState<Set<string>>(() => new Set());
   const [bulkPollPending, setBulkPollPending] = useState(false);
+  const [ifaces, setIfaces] = useState<BacnetInterface[]>([]);
+  const [selectedBind, setSelectedBind] = useState("");
+  const [bindPending, setBindPending] = useState(false);
 
   const loadDriverTree = useCallback(async () => {
     setTreeLoading(true);
@@ -126,7 +144,16 @@ export default function BacnetPage() {
         setWhoisHigh(Number(s.discover_range[1]) || 4194303);
       }
     }
-  }, [loadDriverTree]);
+    try {
+      const nic = await apiFetch<BacnetInterfacesResponse>("/api/bacnet/interfaces");
+      setIfaces(nic.interfaces ?? []);
+      if (!selectedBind && nic.current_bind) {
+        setSelectedBind(nic.current_bind);
+      }
+    } catch {
+      /* integrator-only — ignore for operator */
+    }
+  }, [loadDriverTree, selectedBind]);
 
   useEffect(() => {
     refresh().catch((e) => setLoadError(String(e)));
@@ -134,6 +161,42 @@ export default function BacnetPage() {
       .then((s) => setOverrideStatus(s))
       .catch(() => undefined);
   }, [refresh]);
+
+  async function applyBindAddress() {
+    if (!selectedBind.trim()) return;
+    setBindPending(true);
+    setActionError("");
+    try {
+      const res = await apiFetch<{ ok?: boolean; bacnet_bind?: string; restart?: { ok?: boolean } }>(
+        "/api/bacnet/bind-address",
+        { method: "POST", body: JSON.stringify({ bind: selectedBind, restart: true }) },
+      );
+      setStatusMsg(
+        res.restart?.ok
+          ? `BACnet bind updated to ${res.bacnet_bind ?? selectedBind} — commission restarted`
+          : `BACnet bind saved (${res.bacnet_bind ?? selectedBind}); restart may need manual action`,
+      );
+      await refresh();
+    } catch (e) {
+      setActionError(formatApiError(e));
+    } finally {
+      setBindPending(false);
+    }
+  }
+
+  async function restoreBindAddress() {
+    setBindPending(true);
+    setActionError("");
+    try {
+      await apiFetch("/api/bacnet/bind-address/restore", { method: "POST" });
+      setStatusMsg("Restored previous BACnet bind and restarted commission");
+      await refresh();
+    } catch (e) {
+      setActionError(formatApiError(e));
+    } finally {
+      setBindPending(false);
+    }
+  }
 
   async function downloadOverrideExport() {
     const base = getBridgeBase();
@@ -714,6 +777,40 @@ export default function BacnetPage() {
             Refresh
           </button>
         </div>
+        {ifaces.length > 0 ? (
+          <div className="form-row" style={{ marginTop: "1rem" }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label className="field-label" htmlFor="bacnet-bind-select">
+                BACnet network interface / bind IP
+              </label>
+              <select
+                id="bacnet-bind-select"
+                value={selectedBind}
+                onChange={(e) => setSelectedBind(e.target.value)}
+              >
+                <option value={status?.bacnet_bind ?? ""}>
+                  Current — {status?.bacnet_bind ?? "—"}
+                </option>
+                {ifaces.map((iface) => (
+                  <option key={`${iface.interface}-${iface.ipv4}`} value={`${iface.ipv4}/${iface.prefix_len}:47808`}>
+                    {iface.label}
+                  </option>
+                ))}
+              </select>
+              <p className="muted">
+                BACnet/IP usually needs the building LAN NIC, not Tailscale or loopback.
+              </p>
+            </div>
+            <div className="toolbar">
+              <button type="button" disabled={bindPending} onClick={() => void applyBindAddress()}>
+                {bindPending ? "Saving…" : "Save & restart commission"}
+              </button>
+              <button type="button" className="secondary-btn" disabled={bindPending} onClick={() => void restoreBindAddress()}>
+                Restore previous bind
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="panel">

@@ -119,3 +119,23 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')" || exit 1
 
 CMD ["uvicorn", "mcp_server.asgi:create_app", "--factory", "--host", "0.0.0.0", "--port", "8090"]
+
+FROM python-base AS cloud-exporter
+
+ARG OPENFDD_IMAGE_TAG=local
+ARG OPENFDD_BUILD_GIT_SHA=unknown
+ARG OPENFDD_BUILD_TIME=
+ENV OPENFDD_IMAGE_TAG=${OPENFDD_IMAGE_TAG} \
+    OPENFDD_BUILD_GIT_SHA=${OPENFDD_BUILD_GIT_SHA} \
+    OPENFDD_BUILD_TIME=${OPENFDD_BUILD_TIME}
+
+RUN pip install httpx
+
+COPY workspace/cloud_exporter ./workspace/cloud_exporter
+
+ENV OPENFDD_REPO_ROOT=/app \
+    PYTHONPATH=/app/workspace \
+    OPENFDD_EXPORT_DRY_RUN=1 \
+    OPENFDD_BRIDGE_BASE_URL=http://bridge:8765
+
+CMD ["python", "-m", "cloud_exporter.app"]

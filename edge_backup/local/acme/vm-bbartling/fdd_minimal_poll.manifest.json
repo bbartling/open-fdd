@@ -1,0 +1,43 @@
+{
+  "policy": "fdd_minimal_poll",
+  "description": "Poll only BACnet points required by enabled FDD rules \u2014 never poll the full discovery tree.",
+  "enabled_rule_count": 8,
+  "requirements": {
+    "brick_types": [
+      "Discharge_Air_Temperature_Sensor",
+      "Mixed_Air_Temperature_Sensor",
+      "Supply_Air_Static_Pressure_Sensor",
+      "Supply_Air_Temperature_Sensor",
+      "Zone_Air_Temperature_Sensor"
+    ],
+    "point_ids": [
+      "1100-analog-output-1"
+    ],
+    "column_hints": [
+      "averagespacetemperature-first-floor-area-2",
+      "averagespacetemperature-second-floor-area-3",
+      "compressor-1-command",
+      "compressor-2-command",
+      "compressor-3-command",
+      "compressor-4-command",
+      "supply-fan-speed-command",
+      "supply-fan-start-stop-command"
+    ],
+    "equipment_ids": [
+      "acme-vm-bbartling-rtu-01"
+    ]
+  },
+  "matched_rows": 76,
+  "source_rows": 363,
+  "device_count": 33,
+  "brick_class_counts": {
+    "Zone_Air_Temperature_Sensor": 34,
+    "Discharge_Air_Temperature_Sensor": 30,
+    "Point": 5,
+    "Supply_Air_Temperature_Sensor": 4,
+    "Mixed_Air_Temperature_Sensor": 1,
+    "Supply_Air_Static_Pressure_Sensor": 1,
+    "Supply_Fan_Speed_Command": 1
+  },
+  "poll_interval_s": 60
+}

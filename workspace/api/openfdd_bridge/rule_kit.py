@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import io
 import json
+import os
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -417,6 +418,140 @@ def build_rule_kit_zip(
         zf.writestr("requirements.txt", REQUIREMENTS_TXT)
         zf.writestr("run_test.py", RUN_TEST_PY)
         zf.writestr("README.md", readme)
+    return out.getvalue(), zip_name
+
+
+def _app_version_meta() -> dict[str, str]:
+    meta: dict[str, str] = {}
+    try:
+        import open_fdd
+
+        meta["app_version"] = str(getattr(open_fdd, "__version__", "") or "")
+    except Exception:
+        pass
+    for key, env in (
+        ("git_sha", "OPENFDD_BUILD_GIT_SHA"),
+        ("image_tag", "OPENFDD_IMAGE_TAG"),
+    ):
+        val = os.environ.get(env, "").strip()
+        if val:
+            meta[key] = val
+    return meta
+
+
+def build_all_rules_export_zip(
+    *,
+    site_id: str | None = None,
+    include_demo: bool = False,
+    lookback_hours: float = 3,
+    limit: int = 5000,
+) -> tuple[bytes, str]:
+    """Export every enabled real rule into one zip with manifest."""
+    from datetime import datetime, timezone
+
+    store = RuleStore()
+    svc = ModelService()
+    ttl = TtlService()
+    sid = (site_id or "").strip() or ensure_default_site(svc, ttl)
+    model = svc.load()
+    rules = store.list_rules()
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    zip_name = f"openfdd-rule-export-{stamp}.zip"
+    manifest_rules: list[dict[str, Any]] = []
+    success = skipped = errors = 0
+
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for rule in rules:
+            rid = str(rule.get("id") or "")
+            name = str(rule.get("name") or rid)
+            status = "pending"
+            sample_source = ""
+            synthetic = False
+            err_text = ""
+
+            if not rule.get("enabled", True):
+                status = "skipped"
+                err_text = "disabled"
+                skipped += 1
+            elif not include_demo and str(rule.get("demo") or "").lower() in {"1", "true", "yes"}:
+                status = "skipped"
+                err_text = "demo rule"
+                skipped += 1
+            else:
+                try:
+                    payload, _ = build_rule_kit_zip(
+                        site_id=sid,
+                        rule_id=rid,
+                        lookback_hours=lookback_hours,
+                        limit=limit,
+                    )
+                    sub = zipfile.ZipFile(io.BytesIO(payload))
+                    prefix = f"rules/{rid}/"
+                    for member in sub.namelist():
+                        zf.writestr(prefix + member, sub.read(member))
+                    kit_meta = json.loads(sub.read("kit_meta.json").decode("utf-8"))
+                    sample_source = str(kit_meta.get("data_source") or "")
+                    if int(kit_meta.get("row_count") or 0) == 0:
+                        synthetic = True
+                        err_text = "no historian rows — empty sample"
+                    status = "ok"
+                    success += 1
+                except RuleKitError as exc:
+                    status = "error"
+                    err_text = str(exc)
+                    errors += 1
+                    zf.writestr(f"rules/{rid}/errors.txt", err_text + "\n")
+                except Exception as exc:
+                    status = "error"
+                    err_text = str(exc)
+                    errors += 1
+                    zf.writestr(f"rules/{rid}/errors.txt", err_text + "\n")
+
+            manifest_rules.append(
+                {
+                    "rule_id": rid,
+                    "rule_name": name,
+                    "status": status,
+                    "sample_source": sample_source,
+                    "synthetic": synthetic,
+                    "error": err_text,
+                }
+            )
+
+        manifest = {
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "site_id": sid,
+            **_app_version_meta(),
+            "rule_count": len(rules),
+            "success_count": success,
+            "error_count": errors,
+            "skipped_count": skipped,
+            "rules": manifest_rules,
+            "include_demo": include_demo,
+            "lookback_hours": lookback_hours,
+        }
+        zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+        zf.writestr(
+            "README.md",
+            "# Open-FDD export all rules\n\n"
+            "Per-rule folders under `rules/<rule_id>/` mirror the single-rule Rule Lab kit.\n"
+            "See `manifest.json` for per-rule status and warnings.\n",
+        )
+        try:
+            from .fault_catalog import catalog_payload
+
+            zf.writestr("catalog/fault_codes.json", json.dumps(catalog_payload(), indent=2))
+        except Exception:
+            pass
+        zf.writestr("catalog/rules_store.json", json.dumps({"rules": rules}, indent=2))
+        zf.writestr("model/model.json", json.dumps(model, indent=2))
+        try:
+            zf.writestr("model/data_model.ttl", ttl.build_ttl())
+        except Exception:
+            pass
+
     return out.getvalue(), zip_name
 
 

@@ -21,6 +21,18 @@ type SparqlResponse = {
   truncated?: boolean;
 };
 
+type FddPresetMeta = {
+  preset_id: string;
+  title: string;
+  description: string;
+};
+
+type FddPresetResult = FddPresetMeta & {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  row_count?: number;
+};
+
 type Props = {
   onStatus?: (message: string) => void;
 };
@@ -35,6 +47,11 @@ export default function DataModelSparqlPanel({ onStatus }: Props) {
   const [bindings, setBindings] = useState<Record<string, string>[]>([]);
   const [truncated, setTruncated] = useState(false);
   const [hasRun, setHasRun] = useState(false);
+  const [fddPresets, setFddPresets] = useState<FddPresetMeta[]>([]);
+  const [fddPresetId, setFddPresetId] = useState("");
+  const [fddRows, setFddRows] = useState<Record<string, unknown>[]>([]);
+  const [fddColumns, setFddColumns] = useState<string[]>([]);
+  const [fddDescription, setFddDescription] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -44,6 +61,9 @@ export default function DataModelSparqlPanel({ onStatus }: Props) {
         setSparqlQuery(data.default_query);
       })
       .catch((e) => setCatalogError(e instanceof Error ? e.message : String(e)));
+    apiFetch<{ presets: FddPresetMeta[] }>("/api/model/fdd-query-presets")
+      .then((data) => setFddPresets(data.presets ?? []))
+      .catch(() => undefined);
   }, []);
 
   const relationshipQueries = useMemo(
@@ -92,6 +112,27 @@ export default function DataModelSparqlPanel({ onStatus }: Props) {
     void runQuery(q);
   }
 
+  async function runFddPreset(presetId: string) {
+    setRunning(true);
+    setError("");
+    setFddPresetId(presetId);
+    setFddRows([]);
+    setFddColumns([]);
+    try {
+      const res = await apiFetch<FddPresetResult>(`/api/model/fdd-query-presets/${presetId}`);
+      setFddRows(res.rows ?? []);
+      setFddColumns(res.columns ?? []);
+      setFddDescription(res.description ?? "");
+      onStatus?.(`FDD preset ${res.title}: ${res.row_count ?? res.rows?.length ?? 0} row(s).`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      onStatus?.(`FDD preset failed: ${msg}`);
+    } finally {
+      setRunning(false);
+    }
+  }
+
   const columns =
     bindings.length > 0
       ? Array.from(new Set(bindings.flatMap((row) => Object.keys(row)))).sort()
@@ -125,6 +166,52 @@ export default function DataModelSparqlPanel({ onStatus }: Props) {
           ))}
           {running ? <span className="dm-sparql-running">Running SPARQL…</span> : null}
         </div>
+      </section>
+
+      <section className="dm-sparql-presets">
+        <h3>FDD / BRICK query presets</h3>
+        <p className="muted">
+          Composed coverage queries across rules, equipment, sensors, and BACnet bindings (no parallel model store).
+        </p>
+        <div className="dm-sparql-buttons">
+          {fddPresets.map((item) => (
+            <button
+              key={item.preset_id}
+              type="button"
+              className="secondary-btn"
+              title={item.description}
+              disabled={running}
+              onClick={() => void runFddPreset(item.preset_id)}
+            >
+              {item.title}
+            </button>
+          ))}
+        </div>
+        {fddDescription ? <p className="muted">{fddDescription}</p> : null}
+        {fddRows.length > 0 && fddColumns.length > 0 ? (
+          <div className="dm-points-table-wrap">
+            <table className="dm-points-table dm-sparql-table">
+              <thead>
+                <tr>
+                  {fddColumns.map((key) => (
+                    <th key={key}>{key}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {fddRows.map((row, i) => (
+                  <tr key={`${fddPresetId}-${i}`} className="dm-points-row">
+                    {fddColumns.map((key) => (
+                      <td key={key} className="dm-brick-cell">
+                        {row[key] == null || row[key] === "" ? "—" : String(row[key])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </section>
 
       <section className="dm-sparql-presets">

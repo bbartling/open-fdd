@@ -17,7 +17,7 @@ openfdd_docker_image_tag: "latest"
 post_check_full: true
 post_check_min_model_points: 300
 post_check_min_bacnet_devices: 30
-post_check_min_bacnet_points: 340
+post_check_min_bacnet_points: 70
 post_check_min_saved_rules: 1
 post_check_min_bound_points: 10
 
@@ -33,6 +33,7 @@ bacnet_discover_high: 4194303
 bacnet_discover_timeout: 30
 
 # GL36 poll set: JCI VAV 1–100, RTU 1100, boiler 1002, Trane VAV 11000–13000 (see acme_trim_devices.sh)
+# FDD-minimal poll (~76 pts when 8 rules enabled) — NOT full GL36 340-pt set. See acme_commission_fdd_minimal.sh
 enable_bacnet_poll_driver: true
 bacnet_poll_interval: 60
 

@@ -4,7 +4,7 @@
   "sites": [
     {
       "id": "acme",
-      "name": "Acme Building"
+      "name": "Acme"
     }
   ],
   "equipment": [
@@ -286,17 +286,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "12035-analog-input-2",
-      "name": "Space Temperature Setpoint Local",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12035",
-      "bacnet_object": "analog-input,2",
-      "series_id": "acme#vm-bbartling#trane-vav-12035#12035-analog-input-2",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "ZN-SP"
-    },
-    {
       "id": "12035-analog-input-4",
       "name": "Discharge Air Temperature",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -306,83 +295,6 @@
       "poll_interval_s": 60,
       "units": "degrees-celsius",
       "brick_tag": "DA-T"
-    },
-    {
-      "id": "12035-analog-input-6",
-      "name": "Air Valve Drive Status",
-      "brick_type": "Damper_Position_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12035",
-      "bacnet_object": "analog-input,6",
-      "series_id": "acme#vm-bbartling#trane-vav-12035#12035-analog-input-6",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-STAT"
-    },
-    {
-      "id": "12035-analog-output-1",
-      "name": "Air Valve Drive Command",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12035",
-      "bacnet_object": "analog-output,1",
-      "series_id": "acme#vm-bbartling#trane-vav-12035#12035-analog-output-1",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-CMD"
-    },
-    {
-      "id": "12035-analog-output-3",
-      "name": "Heating Valve Command",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12035",
-      "bacnet_object": "analog-output,3",
-      "series_id": "acme#vm-bbartling#trane-vav-12035#12035-analog-output-3",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-CMD"
-    },
-    {
-      "id": "12035-analog-value-5",
-      "name": "Active Cool Setpoint",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12035",
-      "bacnet_object": "analog-value,5",
-      "series_id": "acme#vm-bbartling#trane-vav-12035#12035-analog-value-5",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "CLG-SP"
-    },
-    {
-      "id": "12035-analog-value-6",
-      "name": "Active Heat Setpoint",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12035",
-      "bacnet_object": "analog-value,6",
-      "series_id": "acme#vm-bbartling#trane-vav-12035#12035-analog-value-6",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "HTG-SP"
-    },
-    {
-      "id": "12035-analog-value-13",
-      "name": "Air Flow Setpoint Active",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12035",
-      "bacnet_object": "analog-value,13",
-      "series_id": "acme#vm-bbartling#trane-vav-12035#12035-analog-value-13",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "12035-analog-value-20",
-      "name": "Discharge Air Flow",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12035",
-      "bacnet_object": "analog-value,20",
-      "series_id": "acme#vm-bbartling#trane-vav-12035#12035-analog-value-20",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SA-F"
     },
     {
       "id": "12033-analog-input-1",
@@ -396,17 +308,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "12033-analog-input-2",
-      "name": "Space Temperature Setpoint Local",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12033",
-      "bacnet_object": "analog-input,2",
-      "series_id": "acme#vm-bbartling#trane-vav-12033#12033-analog-input-2",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "ZN-SP"
-    },
-    {
       "id": "12033-analog-input-4",
       "name": "Discharge Air Temperature",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -416,83 +317,6 @@
       "poll_interval_s": 60,
       "units": "degrees-celsius",
       "brick_tag": "DA-T"
-    },
-    {
-      "id": "12033-analog-input-6",
-      "name": "Air Valve Drive Status",
-      "brick_type": "Damper_Position_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12033",
-      "bacnet_object": "analog-input,6",
-      "series_id": "acme#vm-bbartling#trane-vav-12033#12033-analog-input-6",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-STAT"
-    },
-    {
-      "id": "12033-analog-output-1",
-      "name": "Air Valve Drive Command",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12033",
-      "bacnet_object": "analog-output,1",
-      "series_id": "acme#vm-bbartling#trane-vav-12033#12033-analog-output-1",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-CMD"
-    },
-    {
-      "id": "12033-analog-output-3",
-      "name": "Heating Valve Command",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12033",
-      "bacnet_object": "analog-output,3",
-      "series_id": "acme#vm-bbartling#trane-vav-12033#12033-analog-output-3",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-CMD"
-    },
-    {
-      "id": "12033-analog-value-5",
-      "name": "Active Cool Setpoint",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12033",
-      "bacnet_object": "analog-value,5",
-      "series_id": "acme#vm-bbartling#trane-vav-12033#12033-analog-value-5",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "CLG-SP"
-    },
-    {
-      "id": "12033-analog-value-6",
-      "name": "Active Heat Setpoint",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12033",
-      "bacnet_object": "analog-value,6",
-      "series_id": "acme#vm-bbartling#trane-vav-12033#12033-analog-value-6",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "HTG-SP"
-    },
-    {
-      "id": "12033-analog-value-13",
-      "name": "Air Flow Setpoint Active",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12033",
-      "bacnet_object": "analog-value,13",
-      "series_id": "acme#vm-bbartling#trane-vav-12033#12033-analog-value-13",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "12033-analog-value-20",
-      "name": "Discharge Air Flow",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12033",
-      "bacnet_object": "analog-value,20",
-      "series_id": "acme#vm-bbartling#trane-vav-12033#12033-analog-value-20",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SA-F"
     },
     {
       "id": "12032-analog-input-1",
@@ -506,17 +330,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "12032-analog-input-2",
-      "name": "Space Temperature Setpoint Local",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12032",
-      "bacnet_object": "analog-input,2",
-      "series_id": "acme#vm-bbartling#trane-vav-12032#12032-analog-input-2",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "ZN-SP"
-    },
-    {
       "id": "12032-analog-input-4",
       "name": "Discharge Air Temperature",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -526,83 +339,6 @@
       "poll_interval_s": 60,
       "units": "degrees-celsius",
       "brick_tag": "DA-T"
-    },
-    {
-      "id": "12032-analog-input-6",
-      "name": "Air Valve Drive Status",
-      "brick_type": "Damper_Position_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12032",
-      "bacnet_object": "analog-input,6",
-      "series_id": "acme#vm-bbartling#trane-vav-12032#12032-analog-input-6",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-STAT"
-    },
-    {
-      "id": "12032-analog-output-1",
-      "name": "Air Valve Drive Command",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12032",
-      "bacnet_object": "analog-output,1",
-      "series_id": "acme#vm-bbartling#trane-vav-12032#12032-analog-output-1",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-CMD"
-    },
-    {
-      "id": "12032-analog-output-3",
-      "name": "Heating Valve Command",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12032",
-      "bacnet_object": "analog-output,3",
-      "series_id": "acme#vm-bbartling#trane-vav-12032#12032-analog-output-3",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-CMD"
-    },
-    {
-      "id": "12032-analog-value-5",
-      "name": "Active Cool Setpoint",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12032",
-      "bacnet_object": "analog-value,5",
-      "series_id": "acme#vm-bbartling#trane-vav-12032#12032-analog-value-5",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "CLG-SP"
-    },
-    {
-      "id": "12032-analog-value-6",
-      "name": "Active Heat Setpoint",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12032",
-      "bacnet_object": "analog-value,6",
-      "series_id": "acme#vm-bbartling#trane-vav-12032#12032-analog-value-6",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "HTG-SP"
-    },
-    {
-      "id": "12032-analog-value-13",
-      "name": "Air Flow Setpoint Active",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12032",
-      "bacnet_object": "analog-value,13",
-      "series_id": "acme#vm-bbartling#trane-vav-12032#12032-analog-value-13",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "12032-analog-value-20",
-      "name": "Discharge Air Flow",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12032",
-      "bacnet_object": "analog-value,20",
-      "series_id": "acme#vm-bbartling#trane-vav-12032#12032-analog-value-20",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SA-F"
     },
     {
       "id": "12028-analog-input-1",
@@ -616,17 +352,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "12028-analog-input-2",
-      "name": "Space Temperature Setpoint Local",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12028",
-      "bacnet_object": "analog-input,2",
-      "series_id": "acme#vm-bbartling#trane-vav-12028#12028-analog-input-2",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "ZN-SP"
-    },
-    {
       "id": "12028-analog-input-4",
       "name": "Discharge Air Temperature",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -636,83 +361,6 @@
       "poll_interval_s": 60,
       "units": "degrees-celsius",
       "brick_tag": "DA-T"
-    },
-    {
-      "id": "12028-analog-input-6",
-      "name": "Air Valve Drive Status",
-      "brick_type": "Damper_Position_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12028",
-      "bacnet_object": "analog-input,6",
-      "series_id": "acme#vm-bbartling#trane-vav-12028#12028-analog-input-6",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-STAT"
-    },
-    {
-      "id": "12028-analog-output-1",
-      "name": "Air Valve Drive Command",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12028",
-      "bacnet_object": "analog-output,1",
-      "series_id": "acme#vm-bbartling#trane-vav-12028#12028-analog-output-1",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-CMD"
-    },
-    {
-      "id": "12028-analog-output-3",
-      "name": "Heating Valve Command",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12028",
-      "bacnet_object": "analog-output,3",
-      "series_id": "acme#vm-bbartling#trane-vav-12028#12028-analog-output-3",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-CMD"
-    },
-    {
-      "id": "12028-analog-value-5",
-      "name": "Active Cool Setpoint",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12028",
-      "bacnet_object": "analog-value,5",
-      "series_id": "acme#vm-bbartling#trane-vav-12028#12028-analog-value-5",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "CLG-SP"
-    },
-    {
-      "id": "12028-analog-value-6",
-      "name": "Active Heat Setpoint",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12028",
-      "bacnet_object": "analog-value,6",
-      "series_id": "acme#vm-bbartling#trane-vav-12028#12028-analog-value-6",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "HTG-SP"
-    },
-    {
-      "id": "12028-analog-value-13",
-      "name": "Air Flow Setpoint Active",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12028",
-      "bacnet_object": "analog-value,13",
-      "series_id": "acme#vm-bbartling#trane-vav-12028#12028-analog-value-13",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "12028-analog-value-20",
-      "name": "Discharge Air Flow",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12028",
-      "bacnet_object": "analog-value,20",
-      "series_id": "acme#vm-bbartling#trane-vav-12028#12028-analog-value-20",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SA-F"
     },
     {
       "id": "12026-analog-input-1",
@@ -726,17 +374,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "12026-analog-input-2",
-      "name": "Space Temperature Setpoint Local",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12026",
-      "bacnet_object": "analog-input,2",
-      "series_id": "acme#vm-bbartling#trane-vav-12026#12026-analog-input-2",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "ZN-SP"
-    },
-    {
       "id": "12026-analog-input-4",
       "name": "Discharge Air Temperature",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -746,83 +383,6 @@
       "poll_interval_s": 60,
       "units": "degrees-celsius",
       "brick_tag": "DA-T"
-    },
-    {
-      "id": "12026-analog-input-6",
-      "name": "Air Valve Drive Status",
-      "brick_type": "Damper_Position_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12026",
-      "bacnet_object": "analog-input,6",
-      "series_id": "acme#vm-bbartling#trane-vav-12026#12026-analog-input-6",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-STAT"
-    },
-    {
-      "id": "12026-analog-output-1",
-      "name": "Air Valve Drive Command",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12026",
-      "bacnet_object": "analog-output,1",
-      "series_id": "acme#vm-bbartling#trane-vav-12026#12026-analog-output-1",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-CMD"
-    },
-    {
-      "id": "12026-analog-output-3",
-      "name": "Heating Valve Command",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12026",
-      "bacnet_object": "analog-output,3",
-      "series_id": "acme#vm-bbartling#trane-vav-12026#12026-analog-output-3",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-CMD"
-    },
-    {
-      "id": "12026-analog-value-5",
-      "name": "Active Cool Setpoint",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12026",
-      "bacnet_object": "analog-value,5",
-      "series_id": "acme#vm-bbartling#trane-vav-12026#12026-analog-value-5",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "CLG-SP"
-    },
-    {
-      "id": "12026-analog-value-6",
-      "name": "Active Heat Setpoint",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12026",
-      "bacnet_object": "analog-value,6",
-      "series_id": "acme#vm-bbartling#trane-vav-12026#12026-analog-value-6",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "HTG-SP"
-    },
-    {
-      "id": "12026-analog-value-13",
-      "name": "Air Flow Setpoint Active",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12026",
-      "bacnet_object": "analog-value,13",
-      "series_id": "acme#vm-bbartling#trane-vav-12026#12026-analog-value-13",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "12026-analog-value-20",
-      "name": "Discharge Air Flow",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12026",
-      "bacnet_object": "analog-value,20",
-      "series_id": "acme#vm-bbartling#trane-vav-12026#12026-analog-value-20",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SA-F"
     },
     {
       "id": "12023-analog-input-1",
@@ -836,17 +396,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "12023-analog-input-2",
-      "name": "Space Temperature Setpoint Local",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12023",
-      "bacnet_object": "analog-input,2",
-      "series_id": "acme#vm-bbartling#trane-vav-12023#12023-analog-input-2",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "ZN-SP"
-    },
-    {
       "id": "12023-analog-input-4",
       "name": "Discharge Air Temperature",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -856,83 +405,6 @@
       "poll_interval_s": 60,
       "units": "degrees-celsius",
       "brick_tag": "DA-T"
-    },
-    {
-      "id": "12023-analog-input-6",
-      "name": "Air Valve Drive Status",
-      "brick_type": "Damper_Position_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12023",
-      "bacnet_object": "analog-input,6",
-      "series_id": "acme#vm-bbartling#trane-vav-12023#12023-analog-input-6",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-STAT"
-    },
-    {
-      "id": "12023-analog-output-1",
-      "name": "Air Valve Drive Command",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12023",
-      "bacnet_object": "analog-output,1",
-      "series_id": "acme#vm-bbartling#trane-vav-12023#12023-analog-output-1",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-CMD"
-    },
-    {
-      "id": "12023-analog-output-3",
-      "name": "Heating Valve Command",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12023",
-      "bacnet_object": "analog-output,3",
-      "series_id": "acme#vm-bbartling#trane-vav-12023#12023-analog-output-3",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-CMD"
-    },
-    {
-      "id": "12023-analog-value-5",
-      "name": "Active Cool Setpoint",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12023",
-      "bacnet_object": "analog-value,5",
-      "series_id": "acme#vm-bbartling#trane-vav-12023#12023-analog-value-5",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "CLG-SP"
-    },
-    {
-      "id": "12023-analog-value-6",
-      "name": "Active Heat Setpoint",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12023",
-      "bacnet_object": "analog-value,6",
-      "series_id": "acme#vm-bbartling#trane-vav-12023#12023-analog-value-6",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "HTG-SP"
-    },
-    {
-      "id": "12023-analog-value-13",
-      "name": "Air Flow Setpoint Active",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12023",
-      "bacnet_object": "analog-value,13",
-      "series_id": "acme#vm-bbartling#trane-vav-12023#12023-analog-value-13",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "12023-analog-value-20",
-      "name": "Discharge Air Flow",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-12023",
-      "bacnet_object": "analog-value,20",
-      "series_id": "acme#vm-bbartling#trane-vav-12023#12023-analog-value-20",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SA-F"
     },
     {
       "id": "11007-analog-input-1",
@@ -946,17 +418,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "11007-analog-input-2",
-      "name": "Space Temperature Setpoint Local",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11007",
-      "bacnet_object": "analog-input,2",
-      "series_id": "acme#vm-bbartling#trane-vav-11007#11007-analog-input-2",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "ZN-SP"
-    },
-    {
       "id": "11007-analog-input-4",
       "name": "Discharge Air Temperature",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -966,83 +427,6 @@
       "poll_interval_s": 60,
       "units": "degrees-celsius",
       "brick_tag": "DA-T"
-    },
-    {
-      "id": "11007-analog-input-6",
-      "name": "Air Valve Drive Status",
-      "brick_type": "Damper_Position_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11007",
-      "bacnet_object": "analog-input,6",
-      "series_id": "acme#vm-bbartling#trane-vav-11007#11007-analog-input-6",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-STAT"
-    },
-    {
-      "id": "11007-analog-output-1",
-      "name": "Air Valve Drive Command",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11007",
-      "bacnet_object": "analog-output,1",
-      "series_id": "acme#vm-bbartling#trane-vav-11007#11007-analog-output-1",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-CMD"
-    },
-    {
-      "id": "11007-analog-output-3",
-      "name": "Heating Valve Command",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11007",
-      "bacnet_object": "analog-output,3",
-      "series_id": "acme#vm-bbartling#trane-vav-11007#11007-analog-output-3",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-CMD"
-    },
-    {
-      "id": "11007-analog-value-5",
-      "name": "Active Cool Setpoint",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11007",
-      "bacnet_object": "analog-value,5",
-      "series_id": "acme#vm-bbartling#trane-vav-11007#11007-analog-value-5",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "CLG-SP"
-    },
-    {
-      "id": "11007-analog-value-6",
-      "name": "Active Heat Setpoint",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11007",
-      "bacnet_object": "analog-value,6",
-      "series_id": "acme#vm-bbartling#trane-vav-11007#11007-analog-value-6",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "HTG-SP"
-    },
-    {
-      "id": "11007-analog-value-13",
-      "name": "Air Flow Setpoint Active",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11007",
-      "bacnet_object": "analog-value,13",
-      "series_id": "acme#vm-bbartling#trane-vav-11007#11007-analog-value-13",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "11007-analog-value-20",
-      "name": "Discharge Air Flow",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11007",
-      "bacnet_object": "analog-value,20",
-      "series_id": "acme#vm-bbartling#trane-vav-11007#11007-analog-value-20",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SA-F"
     },
     {
       "id": "11002-analog-input-1",
@@ -1056,17 +440,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "11002-analog-input-2",
-      "name": "Space Temperature Setpoint Local",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11002",
-      "bacnet_object": "analog-input,2",
-      "series_id": "acme#vm-bbartling#trane-vav-11002#11002-analog-input-2",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "ZN-SP"
-    },
-    {
       "id": "11002-analog-input-4",
       "name": "Discharge Air Temperature",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -1076,105 +449,6 @@
       "poll_interval_s": 60,
       "units": "degrees-celsius",
       "brick_tag": "DA-T"
-    },
-    {
-      "id": "11002-analog-input-6",
-      "name": "Air Valve Drive Status",
-      "brick_type": "Damper_Position_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11002",
-      "bacnet_object": "analog-input,6",
-      "series_id": "acme#vm-bbartling#trane-vav-11002#11002-analog-input-6",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-STAT"
-    },
-    {
-      "id": "11002-analog-output-1",
-      "name": "Air Valve Drive Command",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11002",
-      "bacnet_object": "analog-output,1",
-      "series_id": "acme#vm-bbartling#trane-vav-11002#11002-analog-output-1",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-CMD"
-    },
-    {
-      "id": "11002-analog-output-3",
-      "name": "Heating Valve Command",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11002",
-      "bacnet_object": "analog-output,3",
-      "series_id": "acme#vm-bbartling#trane-vav-11002#11002-analog-output-3",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-CMD"
-    },
-    {
-      "id": "11002-analog-value-5",
-      "name": "Active Cool Setpoint",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11002",
-      "bacnet_object": "analog-value,5",
-      "series_id": "acme#vm-bbartling#trane-vav-11002#11002-analog-value-5",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "CLG-SP"
-    },
-    {
-      "id": "11002-analog-value-6",
-      "name": "Active Heat Setpoint",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11002",
-      "bacnet_object": "analog-value,6",
-      "series_id": "acme#vm-bbartling#trane-vav-11002#11002-analog-value-6",
-      "poll_interval_s": 60,
-      "units": "degrees-celsius",
-      "brick_tag": "HTG-SP"
-    },
-    {
-      "id": "11002-analog-value-13",
-      "name": "Air Flow Setpoint Active",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11002",
-      "bacnet_object": "analog-value,13",
-      "series_id": "acme#vm-bbartling#trane-vav-11002#11002-analog-value-13",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "11002-analog-value-20",
-      "name": "Discharge Air Flow",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-trane-vav-11002",
-      "bacnet_object": "analog-value,20",
-      "series_id": "acme#vm-bbartling#trane-vav-11002#11002-analog-value-20",
-      "poll_interval_s": 60,
-      "units": "liters-per-second",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "10000-unknown-1",
-      "name": "Facility Outdoor Air Temperature",
-      "brick_type": "Outside_Air_Temperature_Sensor",
-      "equipment_id": "acme-vm-bbartling-tracer-sc",
-      "bacnet_object": "analog-input,1",
-      "series_id": "acme#vm-bbartling#tracer-sc#10000-unknown-1",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "OAT"
-    },
-    {
-      "id": "10000-unknown-2",
-      "name": "Facility Outdoor Air Humidity",
-      "brick_type": "Outside_Air_Humidity_Sensor",
-      "equipment_id": "acme-vm-bbartling-tracer-sc",
-      "bacnet_object": "analog-input,2",
-      "series_id": "acme#vm-bbartling#tracer-sc#10000-unknown-2",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "OAH"
     },
     {
       "id": "10000-unknown-18",
@@ -1232,28 +506,6 @@
       "brick_tag": "SAT"
     },
     {
-      "id": "1100-unknown-2",
-      "name": "Outdoor Air Temperature Local",
-      "brick_type": "Outside_Air_Temperature_Sensor",
-      "equipment_id": "acme-vm-bbartling-rtu-01",
-      "bacnet_object": "analog-input,2",
-      "series_id": "acme#vm-bbartling#rtu-01#1100-unknown-2",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "OAT"
-    },
-    {
-      "id": "1100-unknown-3",
-      "name": "Return Air Temperature",
-      "brick_type": "Return_Air_Temperature_Sensor",
-      "equipment_id": "acme-vm-bbartling-rtu-01",
-      "bacnet_object": "analog-input,3",
-      "series_id": "acme#vm-bbartling#rtu-01#1100-unknown-3",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "RAT"
-    },
-    {
       "id": "1100-unknown-4",
       "name": "Mixed Air Temperature Local",
       "brick_type": "Mixed_Air_Temperature_Sensor",
@@ -1276,17 +528,6 @@
       "brick_tag": "SAP"
     },
     {
-      "id": "1100-unknown-8",
-      "name": "Return Air Humidity Local",
-      "brick_type": "Return_Air_Humidity_Sensor",
-      "equipment_id": "acme-vm-bbartling-rtu-01",
-      "bacnet_object": "analog-input,8",
-      "series_id": "acme#vm-bbartling#rtu-01#1100-unknown-8",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "RAH"
-    },
-    {
       "id": "1100-analog-output-1",
       "name": "Supply Fan Speed Command",
       "brick_type": "Supply_Fan_Speed_Command",
@@ -1298,94 +539,6 @@
       "brick_tag": "SF-CMD"
     },
     {
-      "id": "1100-analog-output-2",
-      "name": "Return Fan Speed Output Command",
-      "brick_type": "Return_Fan_Speed_Command",
-      "equipment_id": "acme-vm-bbartling-rtu-01",
-      "bacnet_object": "analog-output,2",
-      "series_id": "acme#vm-bbartling#rtu-01#1100-analog-output-2",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "RF-CMD"
-    },
-    {
-      "id": "1100-analog-output-3",
-      "name": "Outdoor Air Damper Command",
-      "brick_type": "Outside_Air_Damper_Command",
-      "equipment_id": "acme-vm-bbartling-rtu-01",
-      "bacnet_object": "analog-output,3",
-      "series_id": "acme#vm-bbartling#rtu-01#1100-analog-output-3",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "OAD-CMD"
-    },
-    {
-      "id": "1100-analog-value-3",
-      "name": "Duct Static Pressure Setpoint BAS",
-      "brick_type": "Supply_Air_Static_Pressure_Setpoint",
-      "equipment_id": "acme-vm-bbartling-rtu-01",
-      "bacnet_object": "analog-value,3",
-      "series_id": "acme#vm-bbartling#rtu-01#1100-analog-value-3",
-      "poll_interval_s": 60,
-      "units": "inches-of-water",
-      "brick_tag": "SAP-SP"
-    },
-    {
-      "id": "1100-analog-value-4",
-      "name": "Discharge Air Cooling Setpoint BAS",
-      "brick_type": "Discharge_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-rtu-01",
-      "bacnet_object": "analog-value,4",
-      "series_id": "acme#vm-bbartling#rtu-01#1100-analog-value-4",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "DAT-SP"
-    },
-    {
-      "id": "1100-analog-value-5",
-      "name": "Cooling Capacity Status",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-rtu-01",
-      "bacnet_object": "analog-value,5",
-      "series_id": "acme#vm-bbartling#rtu-01#1100-analog-value-5",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-STAT"
-    },
-    {
-      "id": "1100-analog-value-12",
-      "name": "Discharge Air Temperature Setpoint Active",
-      "brick_type": "Discharge_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-rtu-01",
-      "bacnet_object": "analog-value,12",
-      "series_id": "acme#vm-bbartling#rtu-01#1100-analog-value-12",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "DAT-SP"
-    },
-    {
-      "id": "1100-analog-value-15",
-      "name": "Duct Static Pressure Setpoint Active",
-      "brick_type": "Supply_Air_Static_Pressure_Setpoint",
-      "equipment_id": "acme-vm-bbartling-rtu-01",
-      "bacnet_object": "analog-value,15",
-      "series_id": "acme#vm-bbartling#rtu-01#1100-analog-value-15",
-      "poll_interval_s": 60,
-      "units": "inches-of-water",
-      "brick_tag": "SAP-SP"
-    },
-    {
-      "id": "1100-analog-value-8",
-      "name": "Outdoor Air Temperature BAS",
-      "brick_type": "Outside_Air_Temperature_Sensor",
-      "equipment_id": "acme-vm-bbartling-rtu-01",
-      "bacnet_object": "analog-value,8",
-      "series_id": "acme#vm-bbartling#rtu-01#1100-analog-value-8",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "OAT-BAS"
-    },
-    {
       "id": "1100-binary-output-1",
       "name": "Supply Fan Start Stop Command",
       "brick_type": "Point",
@@ -1395,17 +548,6 @@
       "poll_interval_s": 60,
       "units": "",
       "brick_tag": "Supply-Fan-Start-Stop-Command"
-    },
-    {
-      "id": "1100-binary-output-2",
-      "name": "Return Fan Start Stop Command",
-      "brick_type": "Point",
-      "equipment_id": "acme-vm-bbartling-rtu-01",
-      "bacnet_object": "binary-output,2",
-      "series_id": "acme#vm-bbartling#rtu-01#1100-binary-output-2",
-      "poll_interval_s": 60,
-      "units": "",
-      "brick_tag": "Return-Fan-Start-Stop-Command"
     },
     {
       "id": "1100-binary-output-3",
@@ -1463,17 +605,6 @@
       "brick_tag": "SAT"
     },
     {
-      "id": "1002-unknown-2",
-      "name": "Hot Water Return Temperature",
-      "brick_type": "Point",
-      "equipment_id": "acme-vm-bbartling-hw-plant",
-      "bacnet_object": "analog-input,2",
-      "series_id": "acme#vm-bbartling#hw-plant#1002-unknown-2",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "Hot-Water-Return-Temperature"
-    },
-    {
       "id": "1002-unknown-3",
       "name": "Boiler-01 Hot Water Supply Temperature",
       "brick_type": "Supply_Air_Temperature_Sensor",
@@ -1485,17 +616,6 @@
       "brick_tag": "SAT"
     },
     {
-      "id": "1002-unknown-4",
-      "name": "Boiler-01 Hot Water Return Temperature",
-      "brick_type": "Point",
-      "equipment_id": "acme-vm-bbartling-hw-plant",
-      "bacnet_object": "analog-input,4",
-      "series_id": "acme#vm-bbartling#hw-plant#1002-unknown-4",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "Boiler-01-Hot-Water-Return-Tempe"
-    },
-    {
       "id": "1002-unknown-5",
       "name": "Boiler-02 Hot Water Supply Temperature",
       "brick_type": "Supply_Air_Temperature_Sensor",
@@ -1505,94 +625,6 @@
       "poll_interval_s": 60,
       "units": "degrees-fahrenheit",
       "brick_tag": "SAT"
-    },
-    {
-      "id": "1002-unknown-6",
-      "name": "Boiler-02 Hot Water Return Temperature",
-      "brick_type": "Point",
-      "equipment_id": "acme-vm-bbartling-hw-plant",
-      "bacnet_object": "analog-input,6",
-      "series_id": "acme#vm-bbartling#hw-plant#1002-unknown-6",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "Boiler-02-Hot-Water-Return-Tempe"
-    },
-    {
-      "id": "1002-unknown-8",
-      "name": "HWS Differential Pressure",
-      "brick_type": "Point",
-      "equipment_id": "acme-vm-bbartling-hw-plant",
-      "bacnet_object": "analog-input,8",
-      "series_id": "acme#vm-bbartling#hw-plant#1002-unknown-8",
-      "poll_interval_s": 60,
-      "units": "pounds-force-per-square-inch",
-      "brick_tag": "HWS-Differential-Pressure"
-    },
-    {
-      "id": "1002-unknown-10",
-      "name": "HWS Plant Requests",
-      "brick_type": "Point",
-      "equipment_id": "acme-vm-bbartling-hw-plant",
-      "bacnet_object": "analog-input,10",
-      "series_id": "acme#vm-bbartling#hw-plant#1002-unknown-10",
-      "poll_interval_s": 60,
-      "units": "no-units",
-      "brick_tag": "HWS-Plant-Requests"
-    },
-    {
-      "id": "1002-unknown-11",
-      "name": "HWS Plant Request Ignores",
-      "brick_type": "Point",
-      "equipment_id": "acme-vm-bbartling-hw-plant",
-      "bacnet_object": "analog-input,11",
-      "series_id": "acme#vm-bbartling#hw-plant#1002-unknown-11",
-      "poll_interval_s": 60,
-      "units": "no-units",
-      "brick_tag": "HWS-Plant-Request-Ignores"
-    },
-    {
-      "id": "1002-analog-output-1",
-      "name": "System Pump VFD Signal",
-      "brick_type": "Point",
-      "equipment_id": "acme-vm-bbartling-hw-plant",
-      "bacnet_object": "analog-output,1",
-      "series_id": "acme#vm-bbartling#hw-plant#1002-analog-output-1",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "System-Pump-VFD-Signal"
-    },
-    {
-      "id": "1002-analog-output-2",
-      "name": "Boiler-01 Firing Rate",
-      "brick_type": "Point",
-      "equipment_id": "acme-vm-bbartling-hw-plant",
-      "bacnet_object": "analog-output,2",
-      "series_id": "acme#vm-bbartling#hw-plant#1002-analog-output-2",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "Boiler-01-Firing-Rate"
-    },
-    {
-      "id": "1002-analog-output-3",
-      "name": "Boiler-02 Firing Rate",
-      "brick_type": "Point",
-      "equipment_id": "acme-vm-bbartling-hw-plant",
-      "bacnet_object": "analog-output,3",
-      "series_id": "acme#vm-bbartling#hw-plant#1002-analog-output-3",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "Boiler-02-Firing-Rate"
-    },
-    {
-      "id": "1002-analog-value-6",
-      "name": "Hot Water Return Setpoint",
-      "brick_type": "Point",
-      "equipment_id": "acme-vm-bbartling-hw-plant",
-      "bacnet_object": "analog-value,6",
-      "series_id": "acme#vm-bbartling#hw-plant#1002-analog-value-6",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "Hot-Water-Return-Setpoint"
     },
     {
       "id": "39-analog-input-1019",
@@ -1617,94 +649,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "39-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-39",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-39#39-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "264",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "39-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-39",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-39#39-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "39-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-39",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-39#39-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "39-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-39",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-39#39-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "39-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-39",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-39#39-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "39-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-39",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-39#39-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "39-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-39",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-39#39-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "39-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-39",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-39#39-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
-    },
-    {
       "id": "38-analog-input-1019",
       "name": "DA-T",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -1725,94 +669,6 @@
       "poll_interval_s": 60,
       "units": "degrees-fahrenheit",
       "brick_tag": "ZN-T"
-    },
-    {
-      "id": "38-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-38",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-38#38-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "264",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "38-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-38",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-38#38-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "38-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-38",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-38#38-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "38-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-38",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-38#38-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "38-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-38",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-38#38-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "38-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-38",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-38#38-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "38-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-38",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-38#38-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "38-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-38",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-38#38-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
     },
     {
       "id": "37-analog-input-1019",
@@ -1837,94 +693,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "37-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-37",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-37#37-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "37-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-37",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-37#37-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "37-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-37",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-37#37-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "37-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-37",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-37#37-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "37-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-37",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-37#37-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "37-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-37",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-37#37-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "37-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-37",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-37#37-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "37-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-37",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-37#37-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
-    },
-    {
       "id": "36-analog-input-1019",
       "name": "DA-T",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -1945,94 +713,6 @@
       "poll_interval_s": 60,
       "units": "degrees-fahrenheit",
       "brick_tag": "ZN-T"
-    },
-    {
-      "id": "36-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-36",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-36#36-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "36-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-36",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-36#36-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "36-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-36",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-36#36-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "36-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-36",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-36#36-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "36-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-36",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-36#36-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "36-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-36",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-36#36-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "36-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-36",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-36#36-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "36-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-36",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-36#36-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
     },
     {
       "id": "34-analog-input-1019",
@@ -2057,94 +737,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "34-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-34",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-34#34-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "264",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "34-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-34",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-34#34-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "34-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-34",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-34#34-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "34-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-34",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-34#34-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "34-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-34",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-34#34-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "34-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-34",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-34#34-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "34-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-34",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-34#34-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "34-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-34",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-34#34-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
-    },
-    {
       "id": "31-analog-input-1019",
       "name": "DA-T",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -2165,94 +757,6 @@
       "poll_interval_s": 60,
       "units": "degrees-fahrenheit",
       "brick_tag": "ZN-T"
-    },
-    {
-      "id": "31-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-31",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-31#31-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "31-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-31",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-31#31-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "31-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-31",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-31#31-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "31-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-31",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-31#31-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "31-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-31",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-31#31-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "31-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-31",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-31#31-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "31-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-31",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-31#31-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "31-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-31",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-31#31-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
     },
     {
       "id": "30-analog-input-1019",
@@ -2277,94 +781,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "30-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-30",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-30#30-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "264",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "30-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-30",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-30#30-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "30-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-30",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-30#30-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "30-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-30",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-30#30-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "30-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-30",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-30#30-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "30-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-30",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-30#30-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "30-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-30",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-30#30-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "30-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-30",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-30#30-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
-    },
-    {
       "id": "29-analog-input-1019",
       "name": "DA-T",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -2385,94 +801,6 @@
       "poll_interval_s": 60,
       "units": "degrees-fahrenheit",
       "brick_tag": "ZN-T"
-    },
-    {
-      "id": "29-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-29",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-29#29-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "29-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-29",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-29#29-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "29-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-29",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-29#29-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "29-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-29",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-29#29-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "29-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-29",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-29#29-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "29-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-29",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-29#29-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "29-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-29",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-29#29-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "29-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-29",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-29#29-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
     },
     {
       "id": "27-analog-input-1019",
@@ -2497,94 +825,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "27-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-27",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-27#27-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "264",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "27-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-27",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-27#27-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "27-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-27",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-27#27-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "27-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-27",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-27#27-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "27-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-27",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-27#27-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "27-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-27",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-27#27-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "27-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-27",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-27#27-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "27-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-27",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-27#27-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
-    },
-    {
       "id": "25-analog-input-1019",
       "name": "DA-T",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -2605,94 +845,6 @@
       "poll_interval_s": 60,
       "units": "degrees-fahrenheit",
       "brick_tag": "ZN-T"
-    },
-    {
-      "id": "25-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-25",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-25#25-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "264",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "25-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-25",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-25#25-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "25-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-25",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-25#25-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "25-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-25",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-25#25-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "25-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-25",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-25#25-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "25-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-25",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-25#25-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "25-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-25",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-25#25-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "25-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-25",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-25#25-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
     },
     {
       "id": "24-analog-input-1019",
@@ -2717,94 +869,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "24-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-24",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-24#24-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "264",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "24-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-24",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-24#24-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "24-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-24",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-24#24-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "24-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-24",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-24#24-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "24-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-24",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-24#24-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "24-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-24",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-24#24-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "24-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-24",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-24#24-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "24-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-24",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-24#24-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
-    },
-    {
       "id": "21-analog-input-1019",
       "name": "DA-T",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -2825,94 +889,6 @@
       "poll_interval_s": 60,
       "units": "degrees-fahrenheit",
       "brick_tag": "ZN-T"
-    },
-    {
-      "id": "21-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-21",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-21#21-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "264",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "21-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-21",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-21#21-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "21-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-21",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-21#21-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "21-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-21",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-21#21-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "21-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-21",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-21#21-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "21-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-21",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-21#21-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "21-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-21",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-21#21-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "21-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-21",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-21#21-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
     },
     {
       "id": "20-analog-input-1019",
@@ -2937,94 +913,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "20-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-20",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-20#20-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "20-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-20",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-20#20-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "20-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-20",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-20#20-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "20-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-20",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-20#20-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "20-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-20",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-20#20-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "20-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-20",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-20#20-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "20-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-20",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-20#20-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "20-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-20",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-20#20-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
-    },
-    {
       "id": "19-analog-input-1019",
       "name": "DA-T",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -3045,94 +933,6 @@
       "poll_interval_s": 60,
       "units": "degrees-fahrenheit",
       "brick_tag": "ZN-T"
-    },
-    {
-      "id": "19-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-19",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-19#19-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "264",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "19-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-19",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-19#19-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "19-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-19",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-19#19-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "19-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-19",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-19#19-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "19-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-19",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-19#19-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "19-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-19",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-19#19-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "19-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-19",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-19#19-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "19-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-19",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-19#19-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
     },
     {
       "id": "16-analog-input-1019",
@@ -3157,94 +957,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "16-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-16",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-16#16-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "16-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-16",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-16#16-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "16-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-16",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-16#16-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "16-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-16",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-16#16-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "16-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-16",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-16#16-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "16-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-16",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-16#16-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "16-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-16",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-16#16-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "16-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-16",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-16#16-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
-    },
-    {
       "id": "15-analog-input-1019",
       "name": "DA-T",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -3265,94 +977,6 @@
       "poll_interval_s": 60,
       "units": "degrees-fahrenheit",
       "brick_tag": "ZN-T"
-    },
-    {
-      "id": "15-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-15",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-15#15-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "264",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "15-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-15",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-15#15-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "15-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-15",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-15#15-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "15-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-15",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-15#15-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "15-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-15",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-15#15-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "15-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-15",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-15#15-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "15-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-15",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-15#15-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "15-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-15",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-15#15-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
     },
     {
       "id": "14-analog-input-1019",
@@ -3377,94 +1001,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "14-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-14",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-14#14-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "14-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-14",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-14#14-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "14-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-14",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-14#14-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "14-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-14",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-14#14-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "14-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-14",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-14#14-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "14-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-14",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-14#14-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "14-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-14",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-14#14-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "14-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-14",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-14#14-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
-    },
-    {
       "id": "13-analog-input-1019",
       "name": "DA-T",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -3485,94 +1021,6 @@
       "poll_interval_s": 60,
       "units": "degrees-fahrenheit",
       "brick_tag": "ZN-T"
-    },
-    {
-      "id": "13-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-13",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-13#13-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "13-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-13",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-13#13-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "13-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-13",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-13#13-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "13-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-13",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-13#13-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "13-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-13",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-13#13-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "13-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-13",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-13#13-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "13-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-13",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-13#13-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "13-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-13",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-13#13-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
     },
     {
       "id": "11-analog-input-1019",
@@ -3597,94 +1045,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "11-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-11",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-11#11-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "11-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-11",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-11#11-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "11-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-11",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-11#11-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "11-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-11",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-11#11-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "11-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-11",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-11#11-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "11-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-11",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-11#11-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "11-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-11",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-11#11-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "11-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-11",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-11#11-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
-    },
-    {
       "id": "10-analog-input-1019",
       "name": "DA-T",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -3705,94 +1065,6 @@
       "poll_interval_s": 60,
       "units": "degrees-fahrenheit",
       "brick_tag": "ZN-T"
-    },
-    {
-      "id": "10-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-10",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-10#10-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "264",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "10-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-10",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-10#10-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "10-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-10",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-10#10-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "10-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-10",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-10#10-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "10-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-10",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-10#10-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "10-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-10",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-10#10-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "10-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-10",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-10#10-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "10-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-10",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-10#10-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
     },
     {
       "id": "9-analog-input-1019",
@@ -3817,94 +1089,6 @@
       "brick_tag": "ZN-T"
     },
     {
-      "id": "9-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-9",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-9#9-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "264",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "9-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-9",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-9#9-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "9-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-9",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-9#9-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "9-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-9",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-9#9-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "9-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-9",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-9#9-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "9-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-9",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-9#9-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "9-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-9",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-9#9-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "9-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-9",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-9#9-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
-    },
-    {
       "id": "8-unknown-1019",
       "name": "DA-T",
       "brick_type": "Discharge_Air_Temperature_Sensor",
@@ -3925,94 +1109,6 @@
       "poll_interval_s": 60,
       "units": "degrees-fahrenheit",
       "brick_tag": "ZN-T"
-    },
-    {
-      "id": "8-analog-output-2014",
-      "name": "HTG-O",
-      "brick_type": "Heating_Valve_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-8",
-      "bacnet_object": "analog-output,2014",
-      "series_id": "acme#vm-bbartling#jci-vav-8#8-analog-output-2014",
-      "poll_interval_s": 60,
-      "units": "264",
-      "brick_tag": "HTG-O"
-    },
-    {
-      "id": "8-analog-output-2131",
-      "name": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-8",
-      "bacnet_object": "analog-output,2131",
-      "series_id": "acme#vm-bbartling#jci-vav-8#8-analog-output-2131",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "DPR-O"
-    },
-    {
-      "id": "8-analog-value-1103",
-      "name": "ZN-SP",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-8",
-      "bacnet_object": "analog-value,1103",
-      "series_id": "acme#vm-bbartling#jci-vav-8#8-analog-value-1103",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "ZN-SP"
-    },
-    {
-      "id": "8-analog-value-3384",
-      "name": "SAFLOW-SP",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-8",
-      "bacnet_object": "analog-value,3384",
-      "series_id": "acme#vm-bbartling#jci-vav-8#8-analog-value-3384",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SAFLOW-SP"
-    },
-    {
-      "id": "8-analog-value-3472",
-      "name": "EFFCLG-SP",
-      "brick_type": "Cooling_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-8",
-      "bacnet_object": "analog-value,3472",
-      "series_id": "acme#vm-bbartling#jci-vav-8#8-analog-value-3472",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFCLG-SP"
-    },
-    {
-      "id": "8-analog-value-3473",
-      "name": "EFFHTG-SP",
-      "brick_type": "Heating_Temperature_Setpoint",
-      "equipment_id": "acme-vm-bbartling-jci-vav-8",
-      "bacnet_object": "analog-value,3473",
-      "series_id": "acme#vm-bbartling#jci-vav-8#8-analog-value-3473",
-      "poll_interval_s": 60,
-      "units": "degrees-fahrenheit",
-      "brick_tag": "EFFHTG-SP"
-    },
-    {
-      "id": "8-analog-value-3515",
-      "name": "SA-F",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "equipment_id": "acme-vm-bbartling-jci-vav-8",
-      "bacnet_object": "analog-value,3515",
-      "series_id": "acme#vm-bbartling#jci-vav-8#8-analog-value-3515",
-      "poll_interval_s": 60,
-      "units": "cubic-feet-per-minute",
-      "brick_tag": "SA-F"
-    },
-    {
-      "id": "8-analog-value-3615",
-      "name": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "equipment_id": "acme-vm-bbartling-jci-vav-8",
-      "bacnet_object": "analog-value,3615",
-      "series_id": "acme#vm-bbartling#jci-vav-8#8-analog-value-3615",
-      "poll_interval_s": 60,
-      "units": "percent",
-      "brick_tag": "CLG-O"
     }
   ]
 }

@@ -608,6 +608,46 @@ def internal_ingest_poll_samples(request: Request) -> dict:
     return {"ok": True, "queued": True}
 
 
+class BacnetBindBody(BaseModel):
+    bind: str = Field(min_length=3, max_length=128)
+    restart: bool = True
+
+
+@router.get("/api/bacnet/interfaces", dependencies=[_INTEGRATOR])
+def bacnet_interfaces() -> dict:
+    from ..bacnet_bind_config import interfaces_payload
+
+    return interfaces_payload()
+
+
+@router.post("/api/bacnet/bind-address", dependencies=[_INTEGRATOR])
+def bacnet_set_bind(body: BacnetBindBody) -> dict:
+    from ..bacnet_bind_config import read_bacnet_bind, restart_bacnet_commission, write_bacnet_bind
+
+    current = read_bacnet_bind()
+    result = write_bacnet_bind(body.bind, previous=current or None)
+    if body.restart:
+        result["restart"] = restart_bacnet_commission()
+    return result
+
+
+@router.post("/api/bacnet/bind-address/restore", dependencies=[_INTEGRATOR])
+def bacnet_restore_bind(restart: bool = True) -> dict:
+    from ..bacnet_bind_config import restore_previous_bacnet_bind, restart_bacnet_commission
+
+    result = restore_previous_bacnet_bind()
+    if restart and result.get("ok"):
+        result["restart"] = restart_bacnet_commission()
+    return result
+
+
+@router.post("/api/bacnet/restart", dependencies=[_INTEGRATOR])
+def bacnet_restart_service() -> dict:
+    from ..bacnet_bind_config import restart_bacnet_commission
+
+    return restart_bacnet_commission()
+
+
 @router.post("/ingest/bacnet", dependencies=[_READ])
 def ingest_bacnet(site_id: str | None = None) -> dict:
     if site_id:

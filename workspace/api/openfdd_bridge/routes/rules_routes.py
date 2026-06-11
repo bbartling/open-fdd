@@ -14,7 +14,7 @@ from ..fdd_runner import run_batch
 from ..paths import data_dir
 from ..rule_bindings import apply_bind_op, build_assignments_view
 from ..rule_store import RuleStore
-from ..rule_kit import RuleKitError, build_rule_kit_zip, ingest_uploaded_rule
+from ..rule_kit import RuleKitError, build_all_rules_export_zip, build_rule_kit_zip, ingest_uploaded_rule
 from ..rule_source import read_source, write_source
 from ..model_service import ModelService
 from ..site_defaults import ensure_default_site
@@ -107,6 +107,31 @@ def export_rule_kit(
             lookback_hours=lookback_hours,
             limit=limit,
             point_keys=point_keys,
+        )
+    except RuleKitError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(
+        content=payload,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/export-all-kit")
+def export_all_rules_kit(
+    site_id: str | None = Query(default=None),
+    include_demo: bool = Query(default=False),
+    lookback_hours: float = Query(default=3, ge=1, le=720),
+    limit: int = Query(default=5000, ge=1, le=20000),
+    _user: dict = Depends(require_roles("integrator", "agent")),
+) -> Response:
+    """Download zip bundling every enabled rule with samples and manifest."""
+    try:
+        payload, filename = build_all_rules_export_zip(
+            site_id=site_id,
+            include_demo=include_demo,
+            lookback_hours=lookback_hours,
+            limit=limit,
         )
     except RuleKitError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
