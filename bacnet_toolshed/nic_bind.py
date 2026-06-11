@@ -200,7 +200,7 @@ def list_host_interfaces() -> list[dict[str, str | bool]]:
                     "cidr": f"{ip_part}/{prefix}",
                     "kind": kind,
                     "label": label,
-                    "is_private": str(addr.is_private).lower(),
+                    "is_private": addr.is_private,
                 }
             )
     rows.sort(key=lambda r: (str(r.get("kind")), str(r.get("interface"))))
