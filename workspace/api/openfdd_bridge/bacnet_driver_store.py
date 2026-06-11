@@ -85,7 +85,35 @@ def _load_csv(path: Path) -> list[dict[str, str]]:
     if not path.is_file():
         return []
     with path.open(newline="", encoding="utf-8") as fh:
-        return [dict(row) for row in csv.DictReader(fh)]
+        rows = [dict(row) for row in csv.DictReader(fh)]
+    if path == _discovered_path():
+        return _dedupe_discovered_rows(rows)
+    return rows
+
+
+def _dedupe_discovered_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """One BACnet object per device — prefer canonical point_id over *-unknown-* aliases."""
+    best: dict[tuple[str, str, str], dict[str, str]] = {}
+
+    def _score(row: dict[str, str]) -> tuple[int, int]:
+        pid = str(row.get("point_id") or "")
+        unknown_penalty = 1 if "-unknown-" in pid else 0
+        return unknown_penalty, len(pid)
+
+    for row in rows:
+        inst = str(row.get("device_instance") or "").strip()
+        obj_type = str(row.get("object_type") or "").strip()
+        obj_inst = str(row.get("object_instance") or "").strip()
+        if not inst or not obj_type or not obj_inst:
+            continue
+        key = (inst, obj_type, obj_inst)
+        prev = best.get(key)
+        if prev is None or _score(row) < _score(prev):
+            best[key] = row
+    if not best:
+        return rows
+    extras = [r for r in rows if not str(r.get("device_instance") or "").strip()]
+    return extras + list(best.values())
 
 
 def _save_csv(path: Path, rows: list[dict[str, str]]) -> None:

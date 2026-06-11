@@ -154,3 +154,53 @@ def test_sync_removes_stale_enabled_points(model_env):
     model = __import__("json").loads((data / "model.json").read_text(encoding="utf-8"))
     assert len(model["points"]) == 1
     assert model["points"][0]["object_identifier"] == "analog-input,1"
+
+
+def test_sync_does_not_duplicate_gl36_equipment(model_env, monkeypatch):
+    """GL36 model already has equipment per BACnet instance — sync must not add bacnet-{inst} stubs."""
+    data, comm = model_env
+    repo = Path(__file__).resolve().parents[2]
+    acme_csv = repo / "edge_backup/local/acme/vm-bbartling/points.csv"
+    if not acme_csv.is_file():
+        pytest.skip("acme minimal points.csv not in repo")
+    import shutil
+
+    shutil.copy(acme_csv, comm / "points.csv")
+    shutil.copy(
+        repo / "edge_backup/local/acme/vm-bbartling/points_discovered.csv",
+        comm / "points_discovered.csv",
+    )
+    shutil.copy(repo / "workspace/data/acme_gl36_model.json", data / "model.json")
+
+    from openfdd_bridge.bacnet_poll_model_sync import sync_enabled_polling_to_model  # noqa: E402
+    from openfdd_bridge.model_sparql import query_model_tree  # noqa: E402
+
+    before = __import__("json").loads((data / "model.json").read_text(encoding="utf-8"))
+    assert len(before.get("equipment") or []) == 33
+
+    res = sync_enabled_polling_to_model(sync_ttl=True)
+    assert res.get("equipment_stubs_repaired", 0) == 0
+
+    after = __import__("json").loads((data / "model.json").read_text(encoding="utf-8"))
+    assert len(after.get("equipment") or []) == 33
+    stubs = [e for e in after.get("equipment") or [] if str(e.get("id", "")).startswith("bacnet-")]
+    assert not stubs
+
+    tree = query_model_tree()
+    assert len(tree.get("equipment") or []) == 33
+
+
+def test_repair_duplicate_bacnet_equipment(model_env):
+    data, _comm = model_env
+    from openfdd_bridge.bacnet_poll_model_sync import repair_duplicate_bacnet_equipment  # noqa: E402
+
+    equipment = [
+        {"id": "acme-vav-39", "bacnet_device_instance": 39, "name": "VAV 39"},
+        {"id": "bacnet-39", "bacnet_device_id": 39, "equipment_type": "BACnet_Device"},
+    ]
+    points = [{"id": "p1", "equipment_id": "bacnet-39", "bacnet_device_id": 39}]
+    eq, pts, n = repair_duplicate_bacnet_equipment(equipment, points)
+    assert n == 1
+    assert len(eq) == 1
+    assert eq[0]["id"] == "acme-vav-39"
+    assert pts[0]["equipment_id"] == "acme-vav-39"
