@@ -31,9 +31,15 @@ def main() -> int:
     from open_fdd.arrow_runtime import run_arrow_rule
     from open_fdd.playground.sandbox import lint_python
 
-    acme_files = sorted(RULES.glob("acme_*.py"))
-    if not acme_files:
-        print("no acme_*.py rules found", file=sys.stderr)
+    canonical = [
+        RULES / "vav_zone_temp_bounds_occupied.py",
+        RULES / "vav_zone_temp_flatline_occupied.py",
+    ]
+    rule_files = [p for p in canonical if p.is_file()]
+    if not rule_files:
+        rule_files = sorted(RULES.glob("vav_*.py"))[:5]
+    if not rule_files:
+        print("no canonical vav_*.py rules found for wheel smoke", file=sys.stderr)
         return 1
 
     table = pa.table(
@@ -57,7 +63,7 @@ def main() -> int:
     }
 
     failed = 0
-    for path in acme_files:
+    for path in rule_files:
         code = path.read_text(encoding="utf-8")
         lint = lint_python(code, require_evaluate=False, strict_imports=True)
         if not lint["ok"]:
