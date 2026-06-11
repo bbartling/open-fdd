@@ -113,9 +113,9 @@ def resolve_fault_model_context(
         "fault_code": fault_code,
         "site_id": site_id,
         "equipment": {
-            "id": eid or ename or "—",
-            "name": ename or eid or "—",
-            "type": eq_type or "—",
+            "id": eid or ename or "",
+            "name": ename or eid or "",
+            "type": eq_type or "",
         },
         "point": point_ctx
         or {
@@ -163,8 +163,10 @@ def enrich_fault_alert(alert: dict[str, Any], model: dict[str, Any]) -> dict[str
     ctx["severity"] = str(alert.get("severity") or "warning")
     out = dict(alert)
     out["model_context"] = ctx
-    if ctx["equipment"]["name"] and not out.get("equipment_name"):
-        out["equipment_name"] = ctx["equipment"]["name"]
-    if ctx["equipment"]["id"] and not out.get("equipment_id"):
-        out["equipment_id"] = ctx["equipment"]["id"]
+    eq_name = str(ctx["equipment"].get("name") or "").strip()
+    eq_id = str(ctx["equipment"].get("id") or "").strip()
+    if eq_name and not out.get("equipment_name"):
+        out["equipment_name"] = eq_name
+    if eq_id and not out.get("equipment_id"):
+        out["equipment_id"] = eq_id
     return out
