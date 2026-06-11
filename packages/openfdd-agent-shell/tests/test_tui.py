@@ -15,7 +15,7 @@ def test_repl_skills_command_lists_selected_skills(repo_root, tmp_path, monkeypa
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
     assert run_repl(manifest, dry_run=True) == 0
     out = capsys.readouterr().out
-    assert "engine-pandas-fdd" in out
+    assert "openfdd-mcp-server" in out
 
 
 def test_repl_verify_prints_codex_command(repo_root, tmp_path, monkeypatch, capsys):

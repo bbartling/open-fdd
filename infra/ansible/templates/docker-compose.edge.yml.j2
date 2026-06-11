@@ -24,7 +24,12 @@ services:
     environment:
       OPENFDD_BACNET_COMMISSION_URL: "{% if bacnet_commission_network_host | default(false) | bool %}http://host.docker.internal:8767{% else %}http://commission:8767{% endif %}"
       OFDD_ALLOW_LAN_INTERNAL_INGEST: "1"
+{% if enable_mcp | default(true) | bool %}
       OFDD_MCP_REST_BASE: http://mcp-rag:{{ mcp_listen_port | default(8090) }}
+      OFDD_MCP_ENABLED: "1"
+{% else %}
+      OFDD_MCP_ENABLED: "0"
+{% endif %}
       OFDD_OLLAMA_ENABLED: "{% if enable_ollama | default(false) | bool %}1{% else %}0{% endif %}"
 {% if enable_ollama | default(false) | bool %}
       OFDD_OLLAMA_BASE_URL: "{% if not (openfdd_docker_ollama | default(false) | bool) %}http://host.docker.internal:11434{% else %}http://ollama:11434{% endif %}"

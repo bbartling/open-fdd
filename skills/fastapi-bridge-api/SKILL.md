@@ -32,7 +32,7 @@ cd workspace/api && uvicorn openfdd_bridge.main:app --reload --port 8765
 
 Use when the operator needs HTTP access to sites, ingest, Python rules, timeseries, or plots.
 
-Skip for pure in-process library runs ([engine-pandas-fdd](../engine-pandas-fdd/SKILL.md) YAML `RuleRunner` in notebooks).
+For MCP agent access to the same APIs, see [openfdd-mcp-server](../openfdd-mcp-server/SKILL.md).
 
 ## Prerequisites
 

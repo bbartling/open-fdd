@@ -75,12 +75,14 @@ def health() -> dict[str, Any] | JSONResponse:
 @app.get("/manifest")
 def manifest() -> dict[str, Any]:
     return {
-        "name": "open-fdd-mcp-rag",
-        "version": "1.0.0",
+        "name": "open-fdd-mcp",
+        "version": "2.0.0",
+        "mcp_transport": "/mcp (streamable-http)",
         "tools": [
-            {"name": "search_docs", "route": "/tools/search_docs"},
-            {"name": "get_doc_section", "route": "/tools/get_doc_section"},
+            {"name": "search_docs", "route": "/tools/search_docs", "legacy": True},
+            {"name": "get_doc_section", "route": "/tools/get_doc_section", "legacy": True},
         ],
+        "note": "Prefer MCP clients on /mcp; REST /tools/* kept for bridge compatibility.",
     }
 
 

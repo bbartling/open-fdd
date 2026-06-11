@@ -162,7 +162,8 @@ echo "Open-FDD post-deploy check → ${HOST} [${mode_label}]"
 
 [[ -f "$HTTP_PROBES" ]] || { log_fail "Missing ${HTTP_PROBES}"; exit 1; }
 
-probe_args=(check "$BASE" --require-mcp --site-id "$PROBE_SITE_ID")
+probe_args=(check "$BASE" --site-id "$PROBE_SITE_ID")
+[[ "${POST_CHECK_REQUIRE_MCP:-1}" == "1" ]] && probe_args+=(--require-mcp)
 [[ "${POST_CHECK_REQUIRE_OLLAMA:-0}" == "1" ]] && probe_args+=(--require-ollama)
 [[ "$FULL_CHECK" == "1" ]] && probe_args+=(--full)
 if [[ -n "$LOGIN_USER" && -n "$LOGIN_PASS" ]]; then
@@ -347,7 +348,9 @@ elif [[ "$INVENTORY_DOCKER_STACK" == "1" ]]; then
     else
       log_warn "Feather store check skipped (SSH to ${SSH_USER}@${HOST} failed — set SSHPASS in secrets/acme.env.local)"
     fi
-    for svc in bridge commission mcp-rag; do
+    mcp_services=(bridge commission)
+    [[ "${POST_CHECK_REQUIRE_MCP:-1}" == "1" ]] && mcp_services+=(mcp-rag)
+    for svc in "${mcp_services[@]}"; do
       if ! remote_state="$(ssh_remote "cid=\$(docker ps -aq -f name=${svc} 2>/dev/null | head -1); if [[ -z \"\$cid\" ]]; then echo missing; else docker inspect -f '{{.State.Status}} {{.RestartCount}}' \"\$cid\" 2>/dev/null || echo missing; fi")"; then
         log_warn "Docker ${svc}: SSH unavailable (skipped container gate)"
         break

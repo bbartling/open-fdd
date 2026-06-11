@@ -61,7 +61,7 @@ Runtime bind mount: `~/open-fdd/workspace` (feather, auth env, BACnet CSVs on ed
 
 ## Deprecated
 
-- `all`, `ui`, `backend`, `drivers`, `data` → moved to [legacy/README.md](legacy/README.md)
+- Workstation rsync deploy (`all`, `ui`, `backend`, `drivers`, `data`) — removed; use GHCR `docker` only
 - `-e openfdd_push_site_pack=true` → one-time bootstrap only; use API thereafter
 - Workstation rsync / `make ui-deploy` → removed from Makefile
 

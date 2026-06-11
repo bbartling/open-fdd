@@ -13,6 +13,8 @@ Triggers: patch cycle, GHCR upgrade, `setup_gl36_fdd.py`, tuning brief, operatio
 
 ## Turnkey patch cycle (required order)
 
+Acme edge runs **without** MCP (`enable_mcp: false`, `post_check_require_mcp: false`). Portfolio MCP on bensserver calls Acme over Tailscale.
+
 1. **Branch** from `master`: `fix/3.0.N-<topic>`
 2. **Bump** `open_fdd/__init__.py` + `pyproject.toml` version
 3. **Tests**: `pytest open_fdd/tests/arrow_runtime tests/workspace_bridge/test_acme_* -q`

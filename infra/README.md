@@ -14,8 +14,6 @@ GitHub (source) → Actions → ghcr.io/bbartling/openfdd-* → edge docker comp
 |------|---------|
 | **[ansible/](ansible/README.md)** | Inventory, `deploy.sh`, Docker compose template, health probes |
 | **ansible/scripts/** | `post_deploy_check.sh`, `acme_operational_verify.sh`, `http_probes.py` |
-| **ansible/legacy/** | Obsolete rsync/systemd playbooks (lab Pi only) |
-
 ## Deploy (any org, VPN/Tailscale)
 
 ```bash

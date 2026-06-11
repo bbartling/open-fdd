@@ -7,7 +7,7 @@ def test_load_example_manifest(repo_root: Path) -> None:
     manifest_path = repo_root / "openfdd.toml.example"
     manifest = Manifest.load(manifest_path, repo_root)
     assert manifest.project_name == "my-fdd-workspace"
-    assert "engine-pandas-fdd" in manifest.agent_skills
+    assert "openfdd-mcp-server" in manifest.agent_skills
     assert manifest.build_deploy == "local"
     assert manifest.memory.bootstrap_max_chars == 12000
     assert manifest.cron.timezone == "UTC"

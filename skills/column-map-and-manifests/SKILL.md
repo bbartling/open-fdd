@@ -35,7 +35,7 @@ column_map = build_column_map_from_model_points(model, site_id="demo")
 
 ## Compose with other skills
 
-- [engine-pandas-fdd](../engine-pandas-fdd/SKILL.md)
+- [rules-crud-and-batch-run](../rules-crud-and-batch-run/SKILL.md)
 - [brick-ttl-data-model](../brick-ttl-data-model/SKILL.md) when TTL/model drives maps
 
 ## Verification

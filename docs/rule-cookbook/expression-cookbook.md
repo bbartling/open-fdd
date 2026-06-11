@@ -11,7 +11,7 @@ redirect_from:
 
 Reference for **Open-FDD 3.x Rule Lab**: every rule is a Python module with **`apply_faults_arrow(table, cfg, context)`** using **`pyarrow.compute`** — **no pandas**, **no YAML expression files**, **no NumPy DataFrames on the IoT edge**.
 
-This is the **only** expression cookbook for Open-FDD 3.x. The old pandas/YAML page is [retired]({% link legacy/retired-pandas-yaml-engine.md %}). Legacy GL36-style recipes map to **fixed [fault codes]({% link fault-codes/index.md %})** and Arrow patterns below.
+This is the **only** expression cookbook for Open-FDD 3.x. The pandas/YAML `RuleRunner` path is retired — use Arrow `apply_faults_arrow` and the operator bridge Rule Lab. Legacy GL36-style recipes map to **fixed [fault codes]({% link fault-codes/index.md %})** and Arrow patterns below.
 
 | Topic | Page |
 |-------|------|

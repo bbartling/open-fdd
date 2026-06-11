@@ -48,7 +48,8 @@ stop_early_file = "workspace/cron/stop_mini_loop"
 
 [agent]
 skills = [
-  "engine-pandas-fdd",
+  "openfdd-mcp-server",
+  "openfdd-portfolio-agent",
   "workspace-memory",
   "workspace-cron",
   "fastapi-bridge-api",
