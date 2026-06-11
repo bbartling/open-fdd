@@ -105,6 +105,7 @@ if [[ -n "$LIMIT" && -f "$INV" ]] && command -v ansible-inventory >/dev/null 2>&
     INVENTORY_DOCKER_STACK="$(read_inv '1 if d.get("openfdd_docker_stack") else 0')"
     PROBE_SITE_ID="$(read_inv 'd.get("site_id","demo") or "demo"')"
     POST_CHECK_REQUIRE_OLLAMA="$(read_inv '1 if d.get("post_check_require_ollama") else 0')"
+    POST_CHECK_REQUIRE_MCP="$(read_inv '1 if d.get("post_check_require_mcp", True) and d.get("enable_mcp", True) else 0')"
     INV_ENABLE_OLLAMA="$(read_inv '1 if d.get("enable_ollama") else 0')"
     INV_DOCKER_OLLAMA="$(read_inv '0 if d.get("openfdd_docker_ollama") is False else 1')"
     INV_OLLAMA_REQUIRED="$(read_inv '1 if d.get("ollama_required") else 0')"
