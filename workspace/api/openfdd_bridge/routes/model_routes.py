@@ -202,6 +202,34 @@ def run_model_sparql(body: SparqlBody, _user: dict = Depends(require_user)) -> d
     return execute_model_sparql(body.query, _ttl())
 
 
+@router.get("/fdd-query-presets")
+def fdd_query_presets_list(_user: dict = Depends(require_user)) -> dict:
+    from ..fdd_query_presets import list_fdd_presets
+
+    return list_fdd_presets()
+
+
+@router.get("/fdd-query-presets/{preset_id}")
+def fdd_query_preset_run(preset_id: str, _user: dict = Depends(require_user)) -> dict:
+    from ..fdd_query_presets import run_fdd_preset
+
+    try:
+        return run_fdd_preset(preset_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"unknown preset: {preset_id}") from exc
+
+
+@router.get("/fdd-coverage")
+def fdd_coverage(_user: dict = Depends(require_user)) -> dict:
+    from ..fdd_query_presets import run_fdd_preset
+
+    return {
+        "missing_bindings": run_fdd_preset("missing_rule_bindings"),
+        "orphan_points": run_fdd_preset("orphan_points"),
+        "rule_coverage": run_fdd_preset("rule_coverage_by_equipment_type"),
+    }
+
+
 @router.get("/health")
 def model_health(_user: dict = Depends(require_user)) -> dict:
     svc = _model()
