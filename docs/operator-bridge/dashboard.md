@@ -10,7 +10,7 @@ nav_order: 1
 
 | Area | Purpose |
 |------|---------|
-| **Home / Building insight** | Check-engine status (green/yellow/red), active fault summary |
+| **Home / Building insight** | Check-engine status; fault cards show equipment, rule, point, historian column, BACnet |
 | **Trends** | Point history from feather store |
 | **Faults** | Rule hits grouped by equipment family |
 | **Rule Lab** | Edit, lint, and test Python FDD rules (PyArrow kit zip) |
