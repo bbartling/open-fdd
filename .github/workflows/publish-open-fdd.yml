@@ -56,7 +56,9 @@ jobs:
 
       - name: Run package tests
         run: |
-          python -m pytest open_fdd/tests/arrow_runtime open_fdd/tests/playground open_fdd/tests/faults -q
+          python -m pytest open_fdd/tests/arrow_runtime -q
+          python -m pytest open_fdd/tests/playground -q
+          python -m pytest open_fdd/tests/faults -q
           python -m pytest open_fdd/tests/test_version_consistency.py open_fdd/tests/test_package_import.py open_fdd/tests/test_cli_smoke.py -q
           python -m pytest tests/test_no_pandas_edge_fdd.py -q
 
