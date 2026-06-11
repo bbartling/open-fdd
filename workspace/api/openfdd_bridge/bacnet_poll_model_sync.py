@@ -236,6 +236,7 @@ def sync_enabled_polling_to_model(*, site_id: str | None = None, sync_ttl: bool 
     updated = 0
     removed = 0
     repaired = 0
+    points_deduplicated = 0
     sid = ""
 
     with svc.transaction() as model:
@@ -243,6 +244,8 @@ def sync_enabled_polling_to_model(*, site_id: str | None = None, sync_ttl: bool 
         equipment = model.setdefault("equipment", [])
         points = model.setdefault("points", [])
         equipment, points, repaired = repair_duplicate_bacnet_equipment(equipment, points)
+        points, pt_pruned = repair_duplicate_point_ids(points)
+        points_deduplicated += pt_pruned
         by_key = _model_bacnet_keys(points)
 
         devices_touched: set[str] = set()
@@ -327,7 +330,7 @@ def sync_enabled_polling_to_model(*, site_id: str | None = None, sync_ttl: bool 
         equipment, model["points"], pruned = repair_duplicate_bacnet_equipment(equipment, model["points"])
         repaired += pruned
         model["points"], pt_pruned = repair_duplicate_point_ids(model["points"])
-        repaired += pt_pruned
+        points_deduplicated += pt_pruned
         remaining_eq_ids = {str(p.get("equipment_id") or "") for p in model["points"] if isinstance(p, dict)}
         model["equipment"] = [
             e
@@ -337,7 +340,7 @@ def sync_enabled_polling_to_model(*, site_id: str | None = None, sync_ttl: bool 
         ]
 
     ttl_path = None
-    if sync_ttl and (added or updated or removed or repaired):
+    if sync_ttl and (added or updated or removed or repaired or points_deduplicated):
         ttl_path = str(TtlService().sync())
 
     return {
@@ -347,6 +350,7 @@ def sync_enabled_polling_to_model(*, site_id: str | None = None, sync_ttl: bool 
         "points_updated": updated,
         "points_removed": removed,
         "equipment_stubs_repaired": repaired,
+        "points_deduplicated": points_deduplicated,
         "devices": sorted(devices_touched),
         "ttl_path": ttl_path,
     }
