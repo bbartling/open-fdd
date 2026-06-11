@@ -153,14 +153,91 @@ function MetricMeter({
   );
 }
 
+type PoogePreview = {
+  ok?: boolean;
+  dry_run?: boolean;
+  targets?: { action?: string; label?: string; path?: string }[];
+  audit?: string[];
+  errors?: string[];
+};
+
 export default function HostStatsPage() {
   const [stats, setStats] = useState<HostStats | null>(null);
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [poogeDryRun, setPoogeDryRun] = useState(true);
+  const [poogeConfirm, setPoogeConfirm] = useState("");
+  const [poogeClearHistorian, setPoogeClearHistorian] = useState(true);
+  const [poogeClearBacnet, setPoogeClearBacnet] = useState(true);
+  const [poogeClearModel, setPoogeClearModel] = useState(false);
+  const [poogeClearRules, setPoogeClearRules] = useState(false);
+  const [poogeClearExports, setPoogeClearExports] = useState(true);
+  const [poogeLinuxUpdate, setPoogeLinuxUpdate] = useState(false);
+  const [poogeDockerUpdate, setPoogeDockerUpdate] = useState(false);
+  const [poogePreview, setPoogePreview] = useState<PoogePreview | null>(null);
+  const [poogeBusy, setPoogeBusy] = useState(false);
   const inFlightRef = useRef(false);
   const pollRef = useRef<number | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
+
+  const poogeBody = useCallback(
+    () => ({
+      dry_run: poogeDryRun,
+      confirmation: poogeConfirm,
+      clear_historian: poogeClearHistorian,
+      clear_bacnet: poogeClearBacnet,
+      clear_model: poogeClearModel,
+      clear_rules: poogeClearRules,
+      clear_exports: poogeClearExports,
+      preserve_auth: true,
+      preserve_network: true,
+      preserve_site_identity: true,
+      linux_update: poogeLinuxUpdate,
+      docker_update: poogeDockerUpdate,
+    }),
+    [
+      poogeDryRun,
+      poogeConfirm,
+      poogeClearHistorian,
+      poogeClearBacnet,
+      poogeClearModel,
+      poogeClearRules,
+      poogeClearExports,
+      poogeLinuxUpdate,
+      poogeDockerUpdate,
+    ],
+  );
+
+  async function previewPooge() {
+    setPoogeBusy(true);
+    try {
+      const res = await apiFetch<PoogePreview>("/api/host/pooge/preview", {
+        method: "POST",
+        body: JSON.stringify(poogeBody()),
+      });
+      setPoogePreview(res);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setPoogeBusy(false);
+    }
+  }
+
+  async function runPooge() {
+    setPoogeBusy(true);
+    try {
+      const res = await apiFetch<PoogePreview>("/api/host/pooge/run", {
+        method: "POST",
+        body: JSON.stringify(poogeBody()),
+      });
+      setPoogePreview(res);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setPoogeBusy(false);
+    }
+  }
 
   const load = useCallback(async () => {
     if (inFlightRef.current) return;
@@ -428,6 +505,49 @@ export default function HostStatsPage() {
               </table>
             </div>
           ) : null}
+
+          <div className="panel danger-zone">
+            <h3 className="panel-title">Danger Zone</h3>
+            <p className="muted">
+              <strong>Nuclear Easy Pooge and Reset</strong> — for temporary job-site devices. Integrator only.
+              Type <code>POOGE THIS EDGE</code> to run for real. Dry-run is on by default.
+            </p>
+            <label>
+              <input type="checkbox" checked={poogeDryRun} onChange={(e) => setPoogeDryRun(e.target.checked)} />
+              Dry-run preview (no deletes)
+            </label>
+            <div className="host-info-grid">
+              <label><input type="checkbox" checked={poogeClearHistorian} onChange={(e) => setPoogeClearHistorian(e.target.checked)} /> Clear historian</label>
+              <label><input type="checkbox" checked={poogeClearBacnet} onChange={(e) => setPoogeClearBacnet(e.target.checked)} /> Clear BACnet scratch</label>
+              <label><input type="checkbox" checked={poogeClearModel} onChange={(e) => setPoogeClearModel(e.target.checked)} /> Clear BRICK model</label>
+              <label><input type="checkbox" checked={poogeClearRules} onChange={(e) => setPoogeClearRules(e.target.checked)} /> Clear rules</label>
+              <label><input type="checkbox" checked={poogeClearExports} onChange={(e) => setPoogeClearExports(e.target.checked)} /> Clear exports</label>
+              <label><input type="checkbox" checked={poogeLinuxUpdate} onChange={(e) => setPoogeLinuxUpdate(e.target.checked)} /> Linux package update</label>
+              <label><input type="checkbox" checked={poogeDockerUpdate} onChange={(e) => setPoogeDockerUpdate(e.target.checked)} /> Pull Docker images</label>
+            </div>
+            <div className="field">
+              <label className="field-label">Confirmation phrase</label>
+              <input value={poogeConfirm} onChange={(e) => setPoogeConfirm(e.target.value)} placeholder="POOGE THIS EDGE" />
+            </div>
+            <div className="toolbar">
+              <button type="button" className="secondary-btn" disabled={poogeBusy} onClick={() => void previewPooge()}>
+                Preview actions
+              </button>
+              <button type="button" className="danger-btn" disabled={poogeBusy || poogeDryRun} onClick={() => void runPooge()}>
+                Easy Pooge / Reset Device
+              </button>
+            </div>
+            {poogePreview?.targets?.length ? (
+              <ul className="muted">
+                {poogePreview.targets.map((t, i) => (
+                  <li key={i}>{t.label || t.action}{t.path ? ` — ${t.path}` : ""}</li>
+                ))}
+              </ul>
+            ) : null}
+            {poogePreview?.audit?.length ? (
+              <pre className="muted">{poogePreview.audit.join("\n")}</pre>
+            ) : null}
+          </div>
 
           <div className="panel">
             <h3 className="panel-title">System</h3>
