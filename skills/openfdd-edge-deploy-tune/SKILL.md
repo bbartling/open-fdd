@@ -17,7 +17,7 @@ Triggers: patch cycle, GHCR upgrade, `setup_gl36_fdd.py`, tuning brief, operatio
 2. **Bump** `open_fdd/__init__.py` + `pyproject.toml` version
 3. **Tests**: `pytest open_fdd/tests/arrow_runtime tests/workspace_bridge/test_acme_* -q`
 4. **PR** → CI green → merge
-5. **GHCR**: `gh workflow run "Publish Docker addons" --ref master` (retry if commission push `unknown blob` — see [#260](https://github.com/bbartling/open-fdd/issues/260))
+5. **GHCR**: `gh workflow run "Publish Docker addons" --ref master` (`docker_publish.sh` retries push + manifest verify per image)
 6. **Deploy** (image-only; preserves feather/model on edge):
 
 ```bash
