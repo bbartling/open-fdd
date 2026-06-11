@@ -37,6 +37,26 @@ export type FaultAnalytics = {
   value_columns?: string[];
 };
 
+export type FaultModelContext = {
+  severity?: string;
+  rule_id?: string;
+  rule_name?: string;
+  fault_code?: string;
+  site_id?: string;
+  equipment?: { id: string; name: string; type: string };
+  point?: {
+    id: string;
+    name: string;
+    external_id?: string;
+    fdd_input?: string;
+    brick_type?: string;
+    bacnet_device_id?: number | string | null;
+    object_identifier?: string;
+  };
+  bacnet_summary?: string;
+  historian_column?: string;
+};
+
 export type FaultAlert = {
   id?: string;
   severity: string;
@@ -49,6 +69,7 @@ export type FaultAlert = {
   equipment_id?: string;
   equipment_name?: string;
   equipment_family?: string;
+  model_context?: FaultModelContext;
   analytics?: FaultAnalytics;
 };
 

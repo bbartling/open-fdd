@@ -13,6 +13,7 @@ export type DisplayFault = {
   underlying: FaultAlert[];
   plainEnglish: string;
   technical?: string;
+  modelContext?: FaultAlert["model_context"];
 };
 
 function mapSeverity(sev: string): DisplayFault["severity"] {
@@ -143,34 +144,76 @@ function groupFddInput(alerts: FaultAlert[]): DisplayFault | null {
 
 function alertToDisplay(a: FaultAlert, equipmentLabel: string): DisplayFault {
   const sev = mapSeverity(String(a.severity || "warning"));
+  const ctx = a.model_context;
   const meta: { label: string; value: string }[] = [];
+  if (ctx?.rule_name) {
+    meta.push({ label: "Rule", value: ctx.rule_name });
+  } else if (a.rule_name) {
+    meta.push({ label: "Rule", value: a.rule_name });
+  }
+  if (ctx?.fault_code || a.code) {
+    meta.push({ label: "Fault code", value: String(ctx?.fault_code || a.code) });
+  }
+  if (ctx?.point?.name && ctx.point.name !== "not mapped") {
+    meta.push({ label: "Point", value: ctx.point.name });
+  }
+  if (ctx?.historian_column || ctx?.point?.external_id) {
+    meta.push({
+      label: "Historian column",
+      value: String(ctx?.historian_column || ctx?.point?.external_id || ""),
+    });
+  }
+  if (ctx?.point?.brick_type) {
+    meta.push({ label: "BRICK class", value: ctx.point.brick_type });
+  }
+  if (ctx?.bacnet_summary && ctx.bacnet_summary !== "not available") {
+    meta.push({ label: "BACnet", value: ctx.bacnet_summary });
+  }
+  if (ctx?.site_id) {
+    meta.push({ label: "Site", value: ctx.site_id });
+  }
   if (a.analytics?.estimated_fault_duration_label) {
     meta.push({ label: "Duration", value: a.analytics.estimated_fault_duration_label });
   }
   if (a.analytics?.fault_samples != null && a.analytics?.total_samples != null) {
     meta.push({
-      label: "Samples",
+      label: "Samples flagged",
       value: `${a.analytics.fault_samples} / ${a.analytics.total_samples}`,
     });
   }
-  if (a.code && a.source !== "poll_health" && a.source !== "model_health") {
-    meta.push({ label: "Fault code", value: a.code });
-  }
+  const eqName = ctx?.equipment?.name || a.equipment_name || equipmentLabel;
+  const eqType = ctx?.equipment?.type;
+  const displayEq =
+    eqType && eqType !== "—" ? `${eqName} — ${eqType}` : eqName;
+  const title =
+    ctx?.rule_name && eqName
+      ? `${eqName}: ${ctx.rule_name}`
+      : String(a.title || "Issue");
   return {
     id: String(a.id || `${a.source}-${a.title}`),
     severity: sev,
     severityLabel: severityLabel(sev),
-    title: String(a.title || "Issue"),
+    title,
     detail: String(a.detail || ""),
-    equipmentLabel,
+    equipmentLabel: displayEq,
     source: a.source,
     code: a.code,
     meta,
     underlying: [a],
     plainEnglish: String(a.detail || a.title || ""),
-    technical: a.analytics
-      ? JSON.stringify(a.analytics, null, 2)
-      : [a.code, a.rule_id, a.rule_name].filter(Boolean).join(" · ") || undefined,
+    technical:
+      ctx && a.source === "fdd"
+        ? [
+            ctx.equipment?.id ? `Equipment: ${ctx.equipment.id}` : "",
+            ctx.rule_id ? `Rule: ${ctx.rule_id}` : "",
+            ctx.point?.id ? `Point id: ${ctx.point.id}` : "",
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : a.analytics
+          ? JSON.stringify(a.analytics, null, 2)
+          : [a.code, a.rule_id, a.rule_name].filter(Boolean).join(" · ") || undefined,
+    modelContext: ctx,
   };
 }
 

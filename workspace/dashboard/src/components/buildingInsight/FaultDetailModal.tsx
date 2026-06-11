@@ -18,6 +18,8 @@ export default function FaultDetailModal({ fault, onClose }: Props) {
 
   if (!fault) return null;
 
+  const ctx = fault.modelContext;
+
   return (
     <div
       className="bis-modal-backdrop"
@@ -38,6 +40,54 @@ export default function FaultDetailModal({ fault, onClose }: Props) {
           </button>
         </div>
         <div className="bis-modal-body">
+          {ctx && fault.source === "fdd" ? (
+            <section className="bis-modal-section">
+              <h4>Equipment &amp; sensor</h4>
+              <dl className="bis-meta-grid">
+                <div>
+                  <dt>Equipment</dt>
+                  <dd>
+                    {ctx.equipment?.name || "—"}
+                    {ctx.equipment?.type && ctx.equipment.type !== "—"
+                      ? ` — ${ctx.equipment.type}`
+                      : ""}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Rule</dt>
+                  <dd>{ctx.rule_name || ctx.rule_id || "—"}</dd>
+                </div>
+                <div>
+                  <dt>Fault code</dt>
+                  <dd>{ctx.fault_code || fault.code || "—"}</dd>
+                </div>
+                <div>
+                  <dt>Point / sensor</dt>
+                  <dd>{ctx.point?.name || "not mapped"}</dd>
+                </div>
+                <div>
+                  <dt>Historian column</dt>
+                  <dd>{ctx.historian_column || ctx.point?.external_id || "—"}</dd>
+                </div>
+                {ctx.point?.brick_type ? (
+                  <div>
+                    <dt>BRICK class</dt>
+                    <dd>{ctx.point.brick_type}</dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt>BACnet</dt>
+                  <dd>{ctx.bacnet_summary || "not available"}</dd>
+                </div>
+                {ctx.site_id ? (
+                  <div>
+                    <dt>Site</dt>
+                    <dd>{ctx.site_id}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </section>
+          ) : null}
           <section className="bis-modal-section">
             <h4>What this means</h4>
             <p>{fault.plainEnglish}</p>
@@ -61,7 +111,7 @@ export default function FaultDetailModal({ fault, onClose }: Props) {
               </ul>
             </section>
           ) : null}
-          {fault.technical ? (
+          {fault.technical && !ctx ? (
             <section className="bis-modal-section">
               <h4>Technical</h4>
               <pre className="bis-technical">{fault.technical}</pre>
@@ -89,11 +139,11 @@ export default function FaultDetailModal({ fault, onClose }: Props) {
               <Link to="/bacnet" className="bis-btn bis-btn-primary" onClick={onClose}>
                 BACnet &amp; poll
               </Link>
-            ) : (
-              <Link to="/model" className="bis-btn bis-btn-primary" onClick={onClose}>
-                Model &amp; assignments
+            ) : fault.source === "fdd" ? (
+              <Link to="/rules" className="bis-btn bis-btn-primary" onClick={onClose}>
+                Rule Lab
               </Link>
-            )}
+            ) : null}
             <button type="button" className="bis-btn bis-btn-secondary" onClick={onClose}>
               Close
             </button>
