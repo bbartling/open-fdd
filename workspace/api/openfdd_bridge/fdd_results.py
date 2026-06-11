@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .fdd_fault_analytics import format_fault_detail
+from .fault_model_context import enrich_fault_alert
 from .fdd_equipment import equipment_labels_for_columns
 from .model_service import ModelService
 from .paths import data_dir
@@ -149,5 +150,5 @@ def fdd_issues() -> list[dict[str, Any]]:
             issue["equipment_names"] = equipment_names
         if analytics:
             issue["analytics"] = analytics
-        issues.append(issue)
+        issues.append(enrich_fault_alert(issue, model))
     return issues

@@ -18,6 +18,10 @@ Open-FDD import contract (POST /api/model/commissioning-import):
 - Include non-empty sites, equipment, points arrays.
 - points[].site_id must exist in sites[].id; points[].equipment_id must exist in equipment[].id when set.
 - fdd_rule_ids on points is the assignment surface; fdd_rules_linked is export-only readability (stripped on import).
+- Optional fdd_rules[] updates rule bindings; use only rule ids from export — do not invent new rule code (Rule Lab owns Python).
+- Preserve point ids and equipment ids when possible.
+
+Validate before import: use the dashboard "Validate import JSON" button or POST commissioning-import with dry_run if available.
 
 OUTPUT — return ONLY one JSON object with keys:
 - validation_notes (string)

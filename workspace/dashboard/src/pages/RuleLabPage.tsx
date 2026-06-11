@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/PageHeader";
+import FddRuleTestPanel from "../components/FddRuleTestPanel";
 import PythonCodeEditor from "../components/PythonCodeEditor";
 import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
 import { apiDownloadBlob, apiFetch, fetchAuthMe, getBridgeBase } from "../lib/api";
@@ -56,6 +57,8 @@ export default function RuleLabPage() {
   const [creatingNew, setCreatingNew] = useState(true);
   const [authRole, setAuthRole] = useState<string | null>(null);
   const [metaDirty, setMetaDirty] = useState(false);
+  const [helperSource, setHelperSource] = useState("");
+  const [helperWarnings, setHelperWarnings] = useState<string[]>([]);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
   const lintTimer = useRef<number | null>(null);
@@ -82,6 +85,22 @@ export default function RuleLabPage() {
       const res = await apiFetch<{ code: string; path: string }>(`/api/rules/saved/${rule.id}/source`);
       setCode(res.code?.trim() || rule.code?.trim() || "");
       setSourcePath(res.path || rule.source_path || "");
+      if (rule.id) {
+        try {
+          const expanded = await apiFetch<{
+            imports?: { module: string; source?: string; warning?: string }[];
+            warnings?: string[];
+          }>(`/api/playground/rules/${rule.id}/source-expanded`);
+          const blocks = (expanded.imports || [])
+            .filter((i) => i.source)
+            .map((i) => `# ${i.module}\n${i.source}`);
+          setHelperSource(blocks.join("\n\n"));
+          setHelperWarnings(expanded.warnings || []);
+        } catch {
+          setHelperSource("");
+          setHelperWarnings([]);
+        }
+      }
     } catch (e) {
       if (rule.code?.trim()) {
         setCode(rule.code);
@@ -439,7 +458,7 @@ export default function RuleLabPage() {
         subtitle={
           <>
             Arrow-only rules: <strong>download kit</strong> → edit locally → <strong>upload rule.py</strong>.
-            Pin rules via <a href="/model">Model & assignments</a> commissioning JSON.
+            Pin rules on the <a href="/model">Data Model</a> commissioning JSON or test by equipment below.
           </>
         }
       />
@@ -573,22 +592,16 @@ export default function RuleLabPage() {
       </div>
 
       {sourcePath ? (
-        <p className="muted code-path">
-          File: <code>{sourcePath}</code>
-          {code.trim() ? (
-            <>
-              {" "}
-              ·{" "}
-              <button type="button" className="linkish" onClick={openRuleInTab}>
-                Open in new tab
-              </button>
-            </>
-          ) : null}
-        </p>
+        <details className="muted code-path">
+          <summary>Rule file metadata</summary>
+          <code>{sourcePath.split("/").pop() || "rule.py"}</code>
+        </details>
       ) : null}
 
+      <FddRuleTestPanel rules={saved} disabled={busy || authRole === "operator"} />
+
       <div className="panel rule-lab-readonly-panel">
-        <h3 className="panel-title">rule.py (read-only)</h3>
+        <h3 className="panel-title">Rule source</h3>
         {code.trim() ? (
           <div className="rule-readonly-editor">
             <PythonCodeEditor
@@ -618,6 +631,16 @@ export default function RuleLabPage() {
           </ul>
         ) : null}
       </div>
+
+      {helperSource ? (
+        <div className="panel rule-lab-readonly-panel">
+          <h3 className="panel-title">Resolved helper source</h3>
+          <p className="muted">Imported Open-FDD helpers (e.g. cookbook masks) expanded for review.</p>
+          <pre className="rule-helper-source">{helperSource}</pre>
+        </div>
+      ) : helperWarnings.length ? (
+        <p className="muted panel">{helperWarnings.join(" · ")}</p>
+      ) : null}
 
       <RuleLabConsole
         lines={consoleLines}

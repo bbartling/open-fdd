@@ -35,7 +35,12 @@ export function buildPlotTraces(
     theme: "light" | "dark";
   },
 ): { traces: Plotly.Data[]; layout: Partial<Plotly.Layout>; shapes: Partial<Plotly.Shape>[] } {
-  const x = data.timestamps ?? [];
+  const x = (data.timestamps ?? []).map((t) => {
+    const s = String(t ?? "").trim();
+    if (!s) return s;
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.replace(" ", "T");
+    return s;
+  });
   const kinds = data.series_kinds ?? {};
   const labels = data.labels ?? {};
   const traces: Plotly.Data[] = [];

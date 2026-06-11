@@ -8,6 +8,16 @@ nav_order: 2
 
 Rule Lab authors **Arrow-native** Python FDD rules against the feather historian.
 
+## Equipment-scoped test and export
+
+Use **Equipment-scoped test & export** on Rule Lab:
+
+1. Select site, equipment, and sensor (point).
+2. **Test selected rule** or **Test all for equipment** against recent feather data.
+3. **Download equipment kit** — zip with `manifest.json`, `equipment.json`, `points.json`, per-rule samples, expanded helper source, and commissioning export subset.
+
+API: `GET /api/rules/export-equipment-kit?equipment_id=…` · expanded helpers: `GET /api/playground/rules/{id}/source-expanded`.
+
 ## Export all rules
 
 Integrators can download **Export all rules** — one zip with per-rule kits, `manifest.json`,

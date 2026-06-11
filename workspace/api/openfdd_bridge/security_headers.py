@@ -42,7 +42,13 @@ _SECURITY_HEADERS: dict[str, str] = {
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> object:
         response: Response = await call_next(request)
+        scheme = str(getattr(request.url, "scheme", "") or "").lower()
         for key, value in _SECURITY_HEADERS.items():
+            if scheme != "https" and key in {
+                "Cross-Origin-Opener-Policy",
+                "Cross-Origin-Resource-Policy",
+            }:
+                continue
             response.headers[key] = value
         # Avoid stacking uvicorn/Caddy Server banners on the wire.
         if "server" in response.headers:

@@ -5,7 +5,7 @@ import time
 import traceback
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Query
 from pydantic import BaseModel, Field
 
 from .. import playground
@@ -126,6 +126,16 @@ def arrow_templates() -> dict:
         "templates": ARROW_TEMPLATES,
         "legacy_migration_message": LEGACY_MIGRATION_MESSAGE,
     }
+
+
+@router.get("/rules/{rule_id}/source-expanded")
+def rule_source_expanded(rule_id: str) -> dict:
+    from ..rule_source_expanded import expand_rule_source
+
+    result = expand_rule_source(rule_id=rule_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail=str(result.get("error") or "source not found"))
+    return result
 
 
 @router.post("/test-rule")

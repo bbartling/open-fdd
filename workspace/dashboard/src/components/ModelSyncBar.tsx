@@ -23,9 +23,10 @@ type Health = {
 type Props = {
   onStatus?: (msg: string) => void;
   refreshKey?: number;
+  showWriteTtl?: boolean;
 };
 
-export default function ModelSyncBar({ onStatus, refreshKey = 0 }: Props) {
+export default function ModelSyncBar({ onStatus, refreshKey = 0, showWriteTtl = true }: Props) {
   const [sync, setSync] = useState<SyncStatus | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [busy, setBusy] = useState(false);
@@ -109,9 +110,11 @@ export default function ModelSyncBar({ onStatus, refreshKey = 0 }: Props) {
           <button type="button" className="secondary-btn" disabled={busy} onClick={() => void resync()}>
             {busy ? "Syncing…" : "Sync poll → model"}
           </button>
-          <button type="button" className="secondary-btn" disabled={busy} onClick={() => void syncTtl()}>
-            Write TTL
-          </button>
+          {showWriteTtl ? (
+            <button type="button" className="secondary-btn" disabled={busy} onClick={() => void syncTtl()}>
+              Write TTL
+            </button>
+          ) : null}
         </div>
       </div>
       {health?.configured && health.issues.length ? (

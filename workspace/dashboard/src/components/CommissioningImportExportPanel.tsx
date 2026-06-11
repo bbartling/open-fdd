@@ -53,6 +53,31 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
     }
   }, [exportText]);
 
+  async function validateImport() {
+    if (!importText.trim()) {
+      onStatus("Paste commissioning JSON to validate.");
+      return;
+    }
+    try {
+      const payload = parseCommissioningPayload(importText);
+      const summary = assignmentSummary(payload);
+      const siteIds = new Set((payload.sites || []).map((s) => String(s.id)));
+      const eqIds = new Set((payload.equipment || []).map((e) => String(e.id)));
+      let orphanPts = 0;
+      for (const pt of payload.points || []) {
+        if (pt.site_id && !siteIds.has(String(pt.site_id))) orphanPts += 1;
+        if (pt.equipment_id && !eqIds.has(String(pt.equipment_id))) orphanPts += 1;
+      }
+      onStatus(
+        `Valid JSON — ${payload.sites?.length ?? 0} sites, ${payload.equipment?.length ?? 0} equipment, ` +
+          `${payload.points?.length ?? 0} points, ${summary.ruleCount} rules, ${summary.boundPointCount} bound points` +
+          (orphanPts ? ` · ${orphanPts} orphan link(s) — fix site_id/equipment_id` : ""),
+      );
+    } catch (error) {
+      onStatus(`Validation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   async function doImport() {
     if (!importText.trim()) {
       onStatus("Paste commissioning JSON in the import box first (or upload a file).");
@@ -141,8 +166,8 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
           </p>
         ) : null}
         {pinRows.length ? (
-          <details className="dm-pin-preview" open>
-            <summary>Point → rule names (from export)</summary>
+          <details className="dm-pin-preview">
+            <summary>Advanced: point → rule names (from export)</summary>
             <table className="data-table point-rule-pins-table">
               <thead>
                 <tr>
@@ -212,6 +237,9 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
         <div className="row">
           <button type="button" disabled={importLoading || !importText.trim()} onClick={() => void doImport()}>
             {importLoading ? "Importing…" : "Import model + FDD assignments"}
+          </button>
+          <button type="button" className="secondary-btn" disabled={!importText.trim()} onClick={() => void validateImport()}>
+            Validate import JSON
           </button>
           <button type="button" className="secondary-btn" disabled={!importText} onClick={() => setImportText("")}>
             Clear import box

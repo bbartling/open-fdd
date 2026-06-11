@@ -228,8 +228,9 @@ def test_security_headers_on_health(client: TestClient):
     assert r.headers.get("Permissions-Policy") == (
         "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
     )
-    assert r.headers.get("Cross-Origin-Opener-Policy") == "same-origin"
-    assert r.headers.get("Cross-Origin-Resource-Policy") == "same-origin"
+    # COOP/CORP omitted on plain HTTP (Tailscale/LAN) — set only behind HTTPS.
+    assert r.headers.get("Cross-Origin-Opener-Policy") is None
+    assert r.headers.get("Cross-Origin-Resource-Policy") is None
     assert r.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
     # Single value per header (no Caddy + bridge duplication).
     raw = r.headers.raw
