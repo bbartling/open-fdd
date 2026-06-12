@@ -4,9 +4,11 @@ parent: Portfolio
 nav_order: 1
 ---
 
-# Portfolio central collection
+# OpenFDD RCx Central — collection
 
-Edge Open-FDD sites emit **interval summaries** (not raw historian by default). Central portfolio ingests, stores, and aggregates for Dash and the AI tuning agent.
+**OpenFDD Edge** sites emit **interval summaries** (not raw historian by default). **OpenFDD RCx Central** ingests rollups over Tailscale/VPN, stores them locally, and feeds the Dash overview and validation jobs.
+
+RCx Central is read-only toward Edge/BACnet. It runs on an analyst workstation or Docker Desktop — not on the OT edge by default.
 
 ## Interval summary schema
 

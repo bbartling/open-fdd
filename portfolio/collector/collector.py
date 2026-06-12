@@ -29,7 +29,15 @@ def _portfolio_root() -> Path:
 
 
 def load_sites_config(path: Path | None = None) -> list[SiteConfig]:
-    cfg_path = path or (_portfolio_root() / "sites.json")
+    if path is None:
+        try:
+            from portfolio.central.paths import sites_path as _sites_path
+
+            cfg_path = _sites_path()
+        except ImportError:
+            cfg_path = _portfolio_root() / "sites.json"
+    else:
+        cfg_path = path
     if not cfg_path.is_file():
         example = _portfolio_root() / "sites.json.example"
         raise FileNotFoundError(

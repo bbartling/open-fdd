@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-"""Launch OpenFDD RCx Central API (uvicorn)."""
+"""Run OpenFDD RCx Central API: python -m portfolio.central"""
 
 from __future__ import annotations
 
