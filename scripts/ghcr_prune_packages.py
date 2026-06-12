@@ -344,6 +344,30 @@ def write_markdown_report(report: PruneReport, path: Path) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def verify_packages_api_access(token: str | None) -> None:
+    """Fail fast when gh token cannot list container packages."""
+    env = os.environ.copy()
+    if token:
+        env["GH_TOKEN"] = token
+    proc = subprocess.run(
+        ["gh", "api", "user/packages", "-f", "package_type=container", "-f", "per_page=1"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    if proc.returncode == 0:
+        return
+    detail = (proc.stderr or proc.stdout or "").strip()
+    if "read:packages" in detail:
+        raise SystemExit(
+            "GHCR dry-run requires read:packages on your gh token.\n"
+            "  gh auth refresh -h github.com -s read:packages,delete:packages\n"
+            "Then re-run: ./scripts/ghcr_prune_packages.sh --all-images --dry-run"
+        )
+    raise SystemExit(f"Cannot list GHCR packages: {detail}")
+
+
 def resolve_token(explicit: str | None) -> str | None:
     if explicit:
         return explicit
@@ -357,6 +381,7 @@ def resolve_token(explicit: str | None) -> str | None:
 
 def build_plan(args: argparse.Namespace) -> PruneReport:
     token = resolve_token(args.token)
+    verify_packages_api_access(token)
     protected = load_protected_tags(Path(args.protected_tags_file))
     if args.current_acme_tag:
         protected.add(args.current_acme_tag.strip())

@@ -3,9 +3,10 @@
 latest
 edge
 
-# Add Acme known-good release tags before running cleanup.
-v3.0.31
-v3.0.30
+# Acme known-good release tags (current + rollback).
+3.0.34
+3.0.33
+3.0.32
 
-# v3.0.29
-# v3.0.28
+# v3.0.31
+# v3.0.30
