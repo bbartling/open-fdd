@@ -340,13 +340,17 @@ def write_markdown_report(report: PruneReport, path: Path) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def verify_packages_api_access(token: str | None) -> None:
-    """Fail fast when gh token cannot list container packages."""
+def verify_packages_api_access(owner: str, token: str | None) -> None:
+    """Fail fast when gh token cannot list container packages for owner."""
     env = os.environ.copy()
     if token:
         env["GH_TOKEN"] = token
     proc = subprocess.run(
-        ["gh", "api", "user/packages?package_type=container&per_page=1"],
+        [
+            "gh",
+            "api",
+            f"users/{owner}/packages?package_type=container&per_page=1",
+        ],
         capture_output=True,
         text=True,
         env=env,
@@ -361,7 +365,7 @@ def verify_packages_api_access(token: str | None) -> None:
             "  gh auth refresh -h github.com -s read:packages,delete:packages\n"
             "Then re-run: ./scripts/ghcr_prune_packages.sh --all-images --dry-run"
         )
-    raise SystemExit(f"Cannot list GHCR packages: {detail}")
+    raise SystemExit(f"Cannot list GHCR packages for {owner}: {detail}")
 
 
 def resolve_token(explicit: str | None) -> str | None:
@@ -377,7 +381,7 @@ def resolve_token(explicit: str | None) -> str | None:
 
 def build_plan(args: argparse.Namespace) -> PruneReport:
     token = resolve_token(args.token)
-    verify_packages_api_access(token)
+    verify_packages_api_access(args.owner, token)
     protected = load_protected_tags(Path(args.protected_tags_file))
     if args.current_acme_tag:
         protected.add(args.current_acme_tag.strip())
