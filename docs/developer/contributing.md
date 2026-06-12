@@ -36,7 +36,7 @@ nav_order: 4
 
 The site is a **project page** at `https://bbartling.github.io/open-fdd/` (`baseurl: /open-fdd` in `docs/_config.yml`).
 
-- **Do not** use Jekyll `{% link path.md %}` in Markdown body text — it omits `baseurl` and 404s on GitHub Pages.
+- **Do not** use {% raw %}`{% link path.md %}`{% endraw %} in Markdown body text — it omits `baseurl` and 404s on GitHub Pages.
 - **Do** use `[label]({{ "/section/page/" | relative_url }})` for internal links.
 - After `bundle exec jekyll build`, run `python3 scripts/check_docs_internal_links.py --site _site` from the repo root.
 
