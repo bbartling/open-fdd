@@ -48,7 +48,9 @@ export function getBridgeBase(): string {
 
 function shouldRedirectLogin(): boolean {
   const publicPaths = new Set(["/", "/faults", "/login"]);
-  return window.top === window.self && !publicPaths.has(window.location.pathname);
+  const path = window.location.pathname;
+  if (path.startsWith("/analytics")) return false;
+  return window.top === window.self && !publicPaths.has(path);
 }
 
 function authHeaders(): HeadersInit {

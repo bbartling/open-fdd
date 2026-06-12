@@ -7,6 +7,11 @@ import StackStatusStrip from "./StackStatusStrip";
 
 const NAV = [
   { to: "/", end: true, icon: "🏠", label: "Building status" },
+  { to: "/analytics", icon: "📊", label: "Overview" },
+  { to: "/analytics/faults", icon: "🚦", label: "Fault analytics" },
+  { to: "/analytics/equipment", icon: "🏭", label: "Equipment" },
+  { to: "/analytics/health", icon: "🩺", label: "Model health" },
+  { to: "/analytics/rcx", icon: "📄", label: "RCx report" },
   { to: "/bacnet", icon: "📡", label: "BACnet", protected: true },
   { to: "/modbus", icon: "🔌", label: "Modbus", protected: true },
   { to: "/json-api", icon: "🌐", label: "JSON API", protected: true },
