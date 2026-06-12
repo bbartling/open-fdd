@@ -3785,9 +3785,11 @@ Restore `docker-compose.yml` from backup, pull previous tag, `docker compose up 
 
 # Central collection
 
-# Portfolio central collection
+# OpenFDD RCx Central — collection
 
-Edge Open-FDD sites emit **interval summaries** (not raw historian by default). Central portfolio ingests, stores, and aggregates for Dash and the AI tuning agent.
+**OpenFDD Edge** sites emit **interval summaries** (not raw historian by default). **OpenFDD RCx Central** ingests rollups over Tailscale/VPN, stores them locally, and feeds the Dash overview and validation jobs.
+
+RCx Central is read-only toward Edge/BACnet. It runs on an analyst workstation or Docker Desktop — not on the OT edge by default.
 
 ## Interval summary schema
 
@@ -3938,56 +3940,68 @@ docker image prune -f
 - [Live site update]({{ "/ops/live_site_update/" | relative_url }})
 
 
-# Open-FDD Central API
+# OpenFDD RCx Central API
 
-# Open-FDD Central API
+# OpenFDD RCx Central API
 
-Multi-building desk over Tailscale/VPN. **Read-only toward edges** — no BACnet, no commands.
+Local analyst API for multi-edge RCx workflows over Tailscale/VPN. **Read-only toward OpenFDD Edge** — no BACnet, no commands.
+
+> Package path: `portfolio/central/api.py` — service name **openfdd-rcx-central**.
 
 ## Start
 
 ```bash
 pip install -r portfolio/requirements.txt
-cp portfolio/sites.json.example portfolio/sites.json   # edit base URLs
-./scripts/run_central_api.sh                           # http://127.0.0.1:8060
+./scripts/run_central_api.sh   # http://127.0.0.1:8060/health
 ```
 
-## Endpoints
+Docker Desktop: [docs/rcx-central/docker-desktop-windows.md](../rcx-central/docker-desktop-windows.md)
+
+## Edge registry (browser auth)
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/health` | Central service health |
-| GET | `/api/central/sites` | Edge registry + last check-in |
-| POST | `/api/central/sites/{site_id}/collect-validate` | Portfolio collect + read-only validation |
-| POST | `/api/central/validation/run` | One-off (`duration_hours=0`) or 24h plan |
-| GET | `/api/central/validation/jobs` | Stored validation jobs |
-| GET | `/api/central/validation/jobs/{id}` | Job detail + cycles |
-| POST | `/api/central/rcx/report` | Download RCx `.docx` report |
+| GET | `/api/central/edges` | Saved Edge instances (secrets masked) |
+| POST | `/api/central/edges` | Add/update Edge |
+| POST | `/api/central/edges/test` | Test connection (health + model) |
+| PUT | `/api/central/edges/{site_id}` | Update Edge |
+| DELETE | `/api/central/edges/{site_id}` | Remove Edge |
 
-## Validation plan body
+## Analytics & RCx
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/central/mechanical-summary/{site_id}` | Equipment counts, BACnet, readiness |
+| GET | `/api/central/fdd-analytics/{site_id}` | FDD rules + chart packs |
+| POST | `/api/central/rcx/preview` | Data readiness + chart catalog |
+| POST | `/api/central/rcx/charts/preview` | Matplotlib PNG previews (base64) |
+| POST | `/api/central/rcx/report` | Download DOCX report |
+
+## Validation (legacy collect workflow)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/central/sites` | Edge registry + last check-in |
+| POST | `/api/central/sites/{site_id}/collect-validate` | Collect rollup + validation |
+| POST | `/api/central/validation/run` | One-off or scheduled plan |
+| GET | `/api/central/validation/jobs` | Stored jobs |
+| GET | `/api/central/validation/jobs/{id}` | Job detail |
+
+## RCx report body
 
 ```json
 {
   "site_id": "acme",
-  "interval_hours": 2,
-  "duration_hours": 24,
-  "sleep_seconds": 0
+  "hours": 24,
+  "charts": ["fault_hours_by_severity", "ahu_sat_vs_setpoint"],
+  "sections": ["executive_summary", "mechanical_summary"],
+  "save_to_volume": true
 }
 ```
 
-Set `sleep_seconds` to `7200` for true 2-hour wall-clock spacing. Use `duration_hours: 0` for a one-off probe.
+Reports save under `portfolio/data/reports/` (configurable via `OPENFDD_RCX_CENTRAL_DATA`).
 
-## RCx report
-
-POST `/api/central/rcx/report` with `{"site_id": "acme"}`. Includes:
-
-- Active faults **with equipment name** (never severity-only)
-- Fault-hour estimates from rollup history
-- Missing-data / validation warnings
-
-## Safety
-
-Central never writes to BACnet devices or edge schedules. All edge calls use authenticated GET probes only.
+Legacy endpoint: `POST /api/central/rcx/report-legacy`
 
 
 # VAV faults
@@ -6294,6 +6308,190 @@ Store passwords in env or OS keychain — not in git.
 - Docker image `openfdd-mcp-rag` — compatibility name; runs unified server
 
 
+# Dashboard Analytics
+
+# Dashboard analytics
+
+Engineering analytics pages live under **Analytics** in the operator dashboard (`/analytics`).
+
+## Pages
+
+| Route | Purpose |
+|-------|---------|
+| `/analytics` | Overview KPIs, fault-hour charts, top faults table |
+| `/analytics/faults` | Time-range fault analytics |
+| `/analytics/equipment` | AHU / VAV fault-hour summary |
+| `/analytics/health` | BACnet / BRICK model health |
+| `/analytics/rcx` | RCx Report Builder (preview + DOCX download) |
+
+## API (read-only)
+
+- `GET /api/analytics/overview`
+- `GET /api/analytics/faults?hours=24`
+- `GET /api/analytics/model-health`
+- `POST /api/reports/rcx/preview`
+- `POST /api/reports/rcx/generate` → DOCX download
+
+## Fault hours
+
+Elapsed fault hours are estimated from FDD batch run `analytics.estimated_fault_duration_sec` when present, otherwise from flagged/total sample ratio. See `open_fdd/reports/fault_hours.py`.
+
+## Theme
+
+All Plotly charts use `getPlotlyThemeLayout(theme)` from `workspace/dashboard/src/lib/plotly-theme.ts`.
+
+## Tests
+
+```bash
+pytest tests/workspace_bridge/test_dashboard_analytics.py open_fdd/tests/test_fault_hours.py
+cd workspace/dashboard && npm test
+```
+
+Live BACnet is not required. Gate live ACME validation with `OPENFDD_LIVE_ACME=1`.
+
+
+# Dashboard Rcx Makeover Inventory
+
+# Dashboard + RCx Makeover — Inventory
+
+Branch: `feature/dashboard-rcx-mega-makeover`  
+Date: 2026-05-30
+
+## What exists
+
+| Area | Location | Notes |
+|------|----------|-------|
+| React operator dashboard | `workspace/dashboard/` | Vite + React 19, theme via `contexts/theme-context.tsx`, CSS vars |
+| Plotly charts | `lib/plot-chart.ts`, `PlotPage.tsx`, `HostStatsPage.tsx` | Partial theme handling; not centralized |
+| Building check-engine | `building_status.py`, `FaultsPage`, `BuildingInsightDashboard` | Single source for alerts |
+| FDD batch + analytics | `fdd_results.py`, `fdd_fault_analytics.py` | Per-run sample analytics, equipment enrichment |
+| Poll / model health | `poll_throughput.py`, `model_health.py`, `device_poll_health.py` | Used by agent, not dashboard analytics pages |
+| Zone temp analytics | `zone_temp_analytics.py` | VAV comfort metrics via agent routes |
+| Central RCx DOCX | `portfolio/central/rcx_report.py`, `fault_hours.py` | Central-only (`POST /api/central/rcx/report`) |
+| Generic open_fdd reports | `open_fdd/reports/docx_generator.py`, `fault_viz.py` | Equipment FDD reports, optional deps |
+| Portfolio desk | `portfolio/dash/app.py`, `portfolio/central/api.py` | Separate Dash + FastAPI stack |
+| Frontend unit tests | 14 Vitest files under `workspace/dashboard/src/lib/` | Not in CI |
+| Bridge Python tests | `tests/workspace_bridge/`, `tests/portfolio/` | Strong coverage for building insight, central |
+
+## What partially exists
+
+- **Theme toggle** — app shell updates; Plotly uses inline colors in `plot-chart.ts` / `HostStatsPage.tsx` (inconsistent).
+- **Fault display** — equipment names in check-engine alerts when model maps columns; catalog page is not analytics-focused.
+- **RCx DOCX** — portfolio central builder with basic sections; not exposed on edge bridge; no chart/section checkboxes.
+- **Fault hours** — `portfolio/central/fault_hours.py` estimates from rollups; FDD run analytics has duration estimates but no REST aggregation.
+- **Demo data** — `workspace/data/acme_gl36_model.json`, `fdd_results.json`, `samples/demo_site.csv`; no unified analytics fixture.
+
+## What is missing (this branch targets)
+
+- Shared `getPlotlyThemeLayout()` helper + all charts using it
+- Analytics pages: Overview, Fault Analytics, Equipment, BACnet/Model Health, RCx Report Builder
+- Bridge REST: `/api/analytics/overview`, `/faults`, `/equipment/{id}`, `/model-health`, `/reports/rcx/preview`, `/reports/rcx/generate`
+- Edge RCx DOCX with selectable sections/charts (`open_fdd/reports/rcx_docx.py`)
+- Fault-hour aggregation module with tests
+- Demo analytics fixture for CI
+- Docs: `docs/dashboard-analytics.md`, `docs/rcx-report-builder.md`
+
+## Files inspected
+
+```
+AGENTS.md, README.md, pyproject.toml
+workspace/dashboard/src/App.tsx, AppLayout.tsx, theme-context.tsx, plot-chart.ts
+workspace/api/openfdd_bridge/main.py, building_status.py, fdd_results.py, fdd_fault_analytics.py
+workspace/api/openfdd_bridge/routes/analytics_routes.py
+portfolio/central/rcx_report.py, fault_hours.py, api.py
+open_fdd/reports/
+tests/workspace_bridge/, tests/portfolio/test_central.py
+```
+
+## Recommended implementation path
+
+1. **Foundation** — `open_fdd/reports/fault_hours.py`, `charts.py`, `rcx_docx.py`; bridge `dashboard_analytics.py` + routes; deps in bridge requirements.
+2. **Theme** — `plotly-theme.ts`; refactor `plot-chart.ts` + `HostStatsPage.tsx`.
+3. **UI** — Analytics nav section + pages wired to new APIs; RCx Report Builder with preview/generate.
+4. **Fixtures + tests** — demo JSON, backend pytest, Vitest for theme + report builder.
+5. **Docs** — operator-facing how-to.
+
+## Known risks
+
+- **Scope** — full prompt is multi-PR; this branch delivers edge dashboard + bridge RCx; Central Dash remains separate.
+- **Live BACnet** — analytics read persisted FDD/model/poll data only (read-only).
+- **Trend charts in RCx** — need timeseries API + point roles; may be partial when historian empty.
+- **ACME coupling** — use demo fixture + model-driven roles, not hard-coded point names.
+
+
+# Rcx Central Current State
+
+# OpenFDD RCx Central — current state
+
+Branch: `feature/rcx-central-edge-analytics-docx`  
+Updated: 2026-05-30
+
+## Product names
+
+| User-facing | Internal path |
+|-------------|----------------|
+| **OpenFDD Edge** | `workspace/`, `docker/`, GHCR images |
+| **OpenFDD RCx Central** | `portfolio/` (Dash + Central API) |
+
+## Entrypoints
+
+| Service | Command | Port |
+|---------|---------|------|
+| RCx Central Dash | `python -m portfolio.dash` / `./scripts/run_portfolio_dash.sh` | 8050 |
+| RCx Central API | `./scripts/run_central_api.sh` → `python scripts/run_central_api.py` | 8060 |
+| Docker (both) | `./scripts/run_rcx_central_docker.sh` | 8050, 8060 |
+
+## Central API (new/changed)
+
+- `GET/POST/PUT/DELETE /api/central/edges`, `POST /api/central/edges/test`
+- `GET /api/central/mechanical-summary/{site_id}`
+- `GET /api/central/fdd-analytics/{site_id}`
+- `POST /api/central/rcx/preview`, `/charts/preview`, `/report`
+- `POST /api/central/rcx/report-legacy` (backward compatible)
+
+## Edge REST (read-only)
+
+Model: `/api/model/tree`, `/api/model/health`, SPARQL, `/api/model/fdd-query-presets`  
+Trends: `/api/timeseries/readings`, `/api/timeseries/series`  
+Analytics: `/api/analytics/overview`, `/api/analytics/faults`  
+Faults: `/api/faults/status`  
+Collect: `/api/building/portfolio-rollup`
+
+## Dash UI tabs
+
+Overview · Edge Connections · Mechanical Summary · FDD Analytics · Trend Explorer · RCx Report Builder · Validation Runs · Settings
+
+Header: **OpenFDD RCx Central**
+
+## RCx / charts
+
+- `portfolio/central/chart_preview.py` — matplotlib base64 previews, fault overlay bands from timeseries fault flags
+- `portfolio/central/trend_charts.py` — role→column mapping, trend fetch
+- `portfolio/central/fdd_analytics.py` — rules + chart packs
+- `open_fdd/reports/rcx_docx.py` — DOCX when installed
+
+## Docker
+
+`docker/rcx-central/` — Dockerfile, compose, volumes `rcx-central-data`, `rcx-central-config`  
+Smoke: `scripts/test_rcx_central_docker.sh`, `scripts/test_rcx_central_docker.ps1`
+
+## Tests
+
+`tests/portfolio/test_central.py`, `test_edge_registry.py`, `test_chart_preview.py`
+
+## Remaining gaps
+
+- GHCR publish for `openfdd-rcx-central` image tag
+- Trend Explorer tab (placeholder; Overview Plotly charts use local CSV collect)
+- Live ACME opt-in manual workflow doc section in CI
+- Deeper equipment-tree scope in RCx builder UI
+- More chart types (economizer, VAV worst zones)
+
+## Recommended next PR
+
+Publish RCx Central image + expand chart catalog + equipment-tree report scope.
+
+
 # Data Model
 
 # Data Model — sync and FDD queries
@@ -6376,5 +6574,267 @@ Set `OPENFDD_EXPORT_DRY_RUN=0` only when you intend live export.
 - Tokens are redacted in logs.
 
 See `workspace/cloud_exporter/README.md` for environment variables.
+
+
+# Ai Agent Workflow
+
+# AI agent workflow vs runtime use
+
+## Runtime analyst (no git clone)
+
+1. `docker compose -f docker/rcx-central/docker-compose.yml up`
+2. Open http://localhost:8050
+3. Add ACME Edge via Tailscale URL in Edge Connections
+4. Test → Save → Mechanical Summary → RCx Report Builder → DOCX
+
+Kill container when done. Data persists in Docker volumes.
+
+## Developer / coding agent (git working tree)
+
+Use Cursor or Codex against the `open-fdd` repo to change Central code, tests, and docs. This requires a clone or working tree — **not** the runtime Docker image alone.
+
+## Secrets
+
+- Never commit `portfolio/config/credentials.json` or `sites.json` with passwords
+- Use env vars for CI: `OFDD_AGENT_PASSWORD`, etc.
+- Live ACME tests: `OPENFDD_LIVE_ACME=1` only
+
+## Model routing (test triage)
+
+See `AGENTS.md` — classify CI failures as SIMPLE (primary model) vs COMPLEX (thinking model) before processing.
+
+
+# Docker Desktop Windows
+
+# RCx Central on Docker Desktop (Windows)
+
+## Prerequisites
+
+- Docker Desktop for Windows
+- Edge reachable from the host (e.g. Tailscale)
+
+## Run
+
+```powershell
+cd open-fdd
+docker compose -f docker/rcx-central/docker-compose.yml up --build
+```
+
+Open:
+
+- Dash: http://localhost:8050
+- API health: http://localhost:8060/health
+
+No git clone required at runtime if you pull `ghcr.io/bbartling/openfdd-rcx-central` (when published). Build locally with `OPENFDD_IMAGE_TAG=local`.
+
+## Volumes
+
+| Volume | Purpose |
+|--------|---------|
+| `rcx-central-data` | Rollups, reports (`portfolio/data/reports/`) |
+| `rcx-central-config` | `sites.json`, masked credentials |
+
+## Tailscale networking
+
+If Edge is reachable on the Windows host but not from inside the Linux container:
+
+1. Test from host: `curl https://<tailscale-ip>:8765/health`
+2. Test from container: `docker compose exec rcx-central-api curl -s http://<tailscale-ip>:8765/health`
+3. If container cannot route, use the host's Tailscale IP (Docker Desktop often routes LAN correctly) or document `host.docker.internal` proxy for dev.
+
+## Smoke test
+
+```bash
+./scripts/test_rcx_central_docker.sh
+```
+
+Windows PowerShell variant: run compose up, then curl health URLs manually per steps above.
+
+
+# Edge Auth
+
+# Edge authentication (RCx Central)
+
+## Browser flow
+
+1. Open RCx Central → **Edge Connections**
+2. Enter site_id, name, Edge base URL (`https://<tailscale-ip>:8765`)
+3. Enter username/password (or bearer token via API)
+4. **Test Connection** — probes `/health`, `/api/model/health`, `/api/faults/status`
+5. **Save Edge** — writes to `portfolio/config/sites.json` + `credentials.json` (Docker volume)
+
+## API
+
+```text
+GET  /api/central/edges
+POST /api/central/edges
+POST /api/central/edges/test
+PUT  /api/central/edges/{site_id}
+DELETE /api/central/edges/{site_id}
+```
+
+Secrets are **never** returned in API responses or committed to git. Passwords are masked in UI after save.
+
+## Auth types
+
+- `password` — `POST /api/auth/login` on Edge
+- `bearer` — static token in credentials store
+- `none` — public Edge endpoints only (dev)
+
+## Rejected URLs
+
+`file://`, `ftp://`, and hosts without scheme are rejected.
+
+
+# Index
+
+# OpenFDD RCx Central
+
+**OpenFDD RCx Central** is the local analyst / RCx engineer dashboard. It runs on an analyst workstation or **Docker Desktop (Windows/Linux)** — not on the OT edge by default.
+
+| Product | Role |
+|---------|------|
+| **OpenFDD Edge** | Arrow-native, no-pandas OT-LAN FDD machine at the building |
+| **OpenFDD RCx Central** | Read-only multi-edge analytics, chart preview, DOCX reports |
+
+Internal source path: `portfolio/` (package name unchanged).
+
+## Quick start (host Python)
+
+```bash
+pip install -r portfolio/requirements.txt
+./scripts/run_central_api.sh   # :8060
+./scripts/run_portfolio_dash.sh # :8050
+```
+
+## Docker Desktop
+
+```bash
+./scripts/run_rcx_central_docker.sh
+# Dash http://localhost:8050  API http://localhost:8060/health
+```
+
+See [docker-desktop-windows.md](docker-desktop-windows.md).
+
+## Pages
+
+- Overview — collected rollup trends (Plotly, light/dark theme)
+- Edge Connections — add/test/save Edge URLs (secrets in local volume)
+- Mechanical Summary — BRICK equipment counts from Edge APIs
+- FDD Rules & Analytics — configured rules, chart packs
+- Trend Explorer — pointer to Overview Plotly charts (local collect CSVs)
+- RCx Report Builder — matplotlib preview, fault overlays, DOCX download
+- Validation Runs — one-off read-only Edge probes
+- Settings — API URL and volume paths
+
+Model query details: [model-queries.md](model-queries.md)
+
+## Safety
+
+RCx Central is **read-only** toward Edge and BACnet. No writes, commands, or setpoint changes.
+
+
+# Model Queries
+
+# Model queries (RCx Central → OpenFDD Edge)
+
+OpenFDD RCx Central reuses the **same read-only Edge REST APIs** as the Edge operator React **Data model** tab. RCx Central does not scrape the React UI.
+
+## Primary endpoints
+
+| Method | Edge path | Purpose |
+|--------|-----------|---------|
+| GET | `/api/model/tree` | Equipment + points (BRICK roles, timeseries columns) |
+| GET | `/api/model/health` | Point/equipment counts, model issues |
+| GET | `/api/model/sparql/predefined` | Prebuilt SPARQL query list |
+| POST | `/api/model/sparql` | Run SPARQL (`{"query": "..."}`) |
+| GET | `/api/model/fdd-query-presets` | FDD commissioning query presets |
+| GET | `/api/model/fdd-query-presets/{id}` | Run preset by id |
+
+## Trends (matplotlib preview + fault overlays)
+
+| Method | Edge path | Purpose |
+|--------|-----------|---------|
+| GET | `/api/timeseries/series?site_id=` | Plottable columns per site |
+| GET | `/api/timeseries/readings?site_id=&columns=&hours=` | Trend samples + optional FDD fault flags |
+
+RCx Central maps BRICK **point roles** (e.g. `supply_air_temperature`) to historian columns via `/api/model/tree`, then calls `/api/timeseries/readings` with `include_faults=true` for overlay bands.
+
+## Analytics
+
+| Method | Edge path | Purpose |
+|--------|-----------|---------|
+| GET | `/api/analytics/overview` | KPIs, fault hours by severity/equipment |
+| GET | `/api/analytics/faults?hours=` | Fault rows for selected window |
+| GET | `/api/analytics/model-health` | Stale/missing roles |
+
+## RCx Central API wrappers
+
+| Method | Central path |
+|--------|----------------|
+| GET | `/api/central/mechanical-summary/{site_id}` |
+| GET | `/api/central/fdd-analytics/{site_id}` |
+| POST | `/api/central/rcx/preview` |
+
+All calls are **read-only** toward Edge.
+
+
+# Report Builder
+
+# RCx Report Builder (RCx Central)
+
+## Flow
+
+1. Select saved Edge site
+2. Choose date range (2h / 24h / 7d)
+3. **Collect Data / Preview** — `POST /api/central/rcx/preview`
+4. **Preview Charts** — matplotlib PNG as base64 in browser
+5. Select chart/section checkboxes
+6. **Generate DOCX** — `POST /api/central/rcx/report`
+
+Reports save to `portfolio/data/reports/` when `save_to_volume=true`.
+
+## Fault overlays
+
+Preview charts include severity-colored bands when fault rows exist and overlay toggle is on.
+
+## DOCX
+
+Uses `open_fdd/reports/rcx_docx.py` when available (selectable sections/charts). Falls back to `portfolio/central/rcx_report.py`.
+
+Read-only safety note is included in every report.
+
+
+# Rcx Report Builder
+
+# RCx Report Builder
+
+The **RCx Report Builder** (`/analytics/rcx`) collects a read-only snapshot from the edge bridge and generates a Word document.
+
+## Workflow
+
+1. Choose report window (2 h / 24 h / 7 d).
+2. Click **Collect Data / Preview** — calls `POST /api/reports/rcx/preview`.
+3. Review available vs disabled charts (disabled charts show missing point roles or no fault data).
+4. Select sections and charts.
+5. Click **Generate DOCX** — `POST /api/reports/rcx/generate` returns `application/vnd.openxmlformats-officedocument.wordprocessingml.document`.
+
+## Implementation
+
+- Preview/readiness: `workspace/api/openfdd_bridge/dashboard_analytics.py`
+- DOCX builder: `open_fdd/reports/rcx_docx.py`
+- Charts: `open_fdd/reports/charts.py` (matplotlib → BytesIO, no temp PNGs)
+
+## Safety
+
+Report generation is **read-only**. No BACnet writes, commands, overrides, or setpoint changes.
+
+## Dependencies
+
+Bridge API requires `python-docx` and `matplotlib` (see `workspace/api/requirements.txt`).
+
+## Central vs edge
+
+Portfolio Central (`portfolio/central/rcx_report.py`, port 8060) supports multi-site rollups. The edge builder uses local FDD results and building status for single-site RCx exports from the operator UI.
 
 
