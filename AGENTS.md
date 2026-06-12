@@ -52,3 +52,25 @@ This repository is **Arrow-native FDD only** (3.0.1+). The published PyPI wheel 
 | BRICK TTL model | [skills/brick-ttl-data-model/SKILL.md](skills/brick-ttl-data-model/SKILL.md) |
 
 Load each selected skill's `SKILL.md` and follow linked `references/REFERENCE.md` for route tables and env catalogs.
+
+## Model routing policy
+
+When analyzing **test results** (CI logs, pytest output, Vitest, smoke/e2e), **classify the task before processing**. Default to the **primary (fast) model** unless the failure is ambiguous or multi-layered.
+
+**SIMPLE — use primary model:**
+
+- Pass/fail test results
+- HTTP status code errors (404, 500, timeout)
+- Missing UI elements or broken selectors
+- Test environment setup failures
+- Syntax errors or import failures
+
+**COMPLEX — use thinking model:**
+
+- Unexpected behavior that passed but shouldn't have
+- Race conditions or timing-dependent failures
+- Security vulnerabilities
+- Performance degradation patterns
+- Failures that span multiple components or files
+
+**Rules:** Always classify first, then process. Never use the thinking model for a task that fits the SIMPLE list.

@@ -1,5 +1,7 @@
 /** Build Plotly traces/layout for telemetry + fault overlays (web_lambda-style). */
 
+import { getPlotlyThemeLayout, type ChartTheme } from "./plotly-theme";
+
 export type PlotReadingsResponse = {
   timestamps: string[];
   series: Record<string, (number | null)[]>;
@@ -32,7 +34,7 @@ export function buildPlotTraces(
     enabledFaults: Set<string>;
     showBounds: boolean;
     showRollingAvg: boolean;
-    theme: "light" | "dark";
+    theme: ChartTheme;
   },
 ): { traces: Plotly.Data[]; layout: Partial<Plotly.Layout>; shapes: Partial<Plotly.Shape>[] } {
   const x = (data.timestamps ?? []).map((t) => {
@@ -122,40 +124,33 @@ export function buildPlotTraces(
     });
   }
 
-  const isDark = opts.theme === "dark";
-  const grid = isDark ? "#30363d" : "#d8e0ec";
-  const font = isDark ? "#e6edf3" : "#1a2332";
-  const paper = "transparent";
-  const plotBg = isDark ? "#161b24" : "#ffffff";
-
+  const themed = getPlotlyThemeLayout(opts.theme);
   const layout: Partial<Plotly.Layout> = {
-    paper_bgcolor: paper,
-    plot_bgcolor: plotBg,
-    font: { color: font },
-    margin: { t: 48, r: showFaultAxis ? 88 : 48, b: 48, l: 56 },
+    ...themed,
     hovermode: "x unified",
-    legend: { orientation: "h", y: 1.14 },
-    xaxis: { title: "Time (UTC)", gridcolor: grid, automargin: true },
+    xaxis: { ...themed.xaxis, title: "Time (UTC)", automargin: true },
     yaxis: {
+      ...themed.yaxis,
       title: hasTemp ? "Temperature" : "Value",
       side: "left",
-      gridcolor: grid,
       automargin: true,
     },
   };
+  layout.margin = { ...themed.margin, r: showFaultAxis ? 88 : themed.margin.r };
 
   if (hasRh) {
     layout.yaxis2 = {
+      ...themed.yaxis,
       title: "% RH",
       side: "right",
       overlaying: "y",
-      gridcolor: grid,
       automargin: true,
     };
   }
 
   if (showFaultAxis) {
     const faultLayout: Partial<Plotly.LayoutAxis> = {
+      ...themed.yaxis,
       title: "Faults (0/1)",
       side: "right",
       overlaying: "y",

@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "generated_at": "2026-01-15T12:00:00+00:00",
+  "runs": [
+    {
+      "rule_id": "acme-sat-flatline",
+      "rule_name": "AHU SAT flatline 1h",
+      "site_id": "acme",
+      "fault_code": "AHU-C",
+      "equipment_family": "AHU",
+      "equipment_name": "AHU-C",
+      "equipment_names": ["AHU-C"],
+      "severity": "warning",
+      "status": "ok",
+      "flagged": 4,
+      "rows": 24,
+      "analytics": {
+        "fault_samples": 4,
+        "total_samples": 24,
+        "estimated_fault_duration_sec": 3600,
+        "value_unit": "°F"
+      }
+    },
+    {
+      "rule_id": "vav-comfort",
+      "rule_name": "VAV zone comfort bounds",
+      "site_id": "acme",
+      "fault_code": "VAV-101",
+      "equipment_family": "VAV",
+      "equipment_name": "VAV-101",
+      "severity": "warning",
+      "status": "ok",
+      "flagged": 6,
+      "rows": 24,
+      "analytics": {
+        "fault_samples": 6,
+        "total_samples": 24,
+        "estimated_fault_duration_sec": 5400
+      }
+    },
+    {
+      "rule_id": "ahu-static",
+      "rule_name": "Duct static not maintained",
+      "site_id": "acme",
+      "fault_code": "AHU-C",
+      "equipment_family": "AHU",
+      "equipment_name": "AHU-C",
+      "severity": "critical",
+      "status": "ok",
+      "flagged": 8,
+      "rows": 24,
+      "analytics": {
+        "fault_samples": 8,
+        "total_samples": 24,
+        "estimated_fault_duration_sec": 7200
+      }
+    }
+  ]
+}

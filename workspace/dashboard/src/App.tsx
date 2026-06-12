@@ -3,7 +3,10 @@ import AppLayout from "./components/AppLayout";
 import RequireAuth from "./components/RequireAuth";
 import { DashboardStreamProvider } from "./lib/dashboardStream";
 import AgentPage from "./pages/AgentPage";
+import AnalyticsOverviewPage from "./pages/AnalyticsOverviewPage";
 import BacnetPage from "./pages/BacnetPage";
+import EquipmentAnalyticsPage from "./pages/EquipmentAnalyticsPage";
+import FaultAnalyticsPage from "./pages/FaultAnalyticsPage";
 import JsonApiPage from "./pages/JsonApiPage";
 import ModbusPage from "./pages/ModbusPage";
 import DataModelPage from "./pages/DataModelPage";
@@ -11,7 +14,9 @@ import FaultsPage from "./pages/FaultsPage";
 import HomePage from "./pages/HomePage";
 import HostStatsPage from "./pages/HostStatsPage";
 import LoginPage from "./pages/LoginPage";
+import ModelHealthPage from "./pages/ModelHealthPage";
 import PlotPage from "./pages/PlotPage";
+import RcxReportBuilderPage from "./pages/RcxReportBuilderPage";
 import RuleLabPage from "./pages/RuleLabPage";
 import AlgorithmsPage from "./pages/AlgorithmsPage";
 import { TabErrorBoundary } from "./components/TabDebugPanel";
@@ -24,6 +29,11 @@ export default function App() {
         {/* Public check-engine views — no sign-in required */}
         <Route element={<AppLayout />}>
           <Route index element={<HomePage />} />
+          <Route path="analytics" element={<AnalyticsOverviewPage />} />
+          <Route path="analytics/faults" element={<FaultAnalyticsPage />} />
+          <Route path="analytics/equipment" element={<EquipmentAnalyticsPage />} />
+          <Route path="analytics/health" element={<ModelHealthPage />} />
+          <Route path="analytics/rcx" element={<RcxReportBuilderPage />} />
           <Route path="faults" element={<FaultsPage />} />
           <Route element={<RequireAuth />}>
             <Route path="rule-lab" element={<TabErrorBoundary tab="rule-lab"><RuleLabPage /></TabErrorBoundary>} />
