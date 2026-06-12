@@ -80,10 +80,23 @@ def enrich_fdd_run_with_equipment(
         eid = str((col_map.get(str(col)) or {}).get("equipment_id") or "").strip()
         if eid and eid not in ids:
             ids.append(eid)
+    if not names and ids:
+        eq_index = _equipment_index(model, site_id)
+        for eid in ids:
+            eq = eq_index.get(eid) or {}
+            label = str(eq.get("name") or eid).strip()
+            if label and label not in names:
+                names.append(label)
+    if not names:
+        fc = str(run.get("fault_code") or "").strip()
+        if fc and (fc.upper().startswith(("AHU", "VAV", "RTU", "BLD"))):
+            names = [fc]
     if names:
         run = {**run, "equipment_names": names}
     if ids:
         run = {**run, "equipment_id": ids[0], "equipment_ids": ids}
         if len(ids) == 1:
             run.setdefault("equipment_name", names[0] if names else None)
+    elif names:
+        run = {**run, "equipment_name": names[0]}
     return run
