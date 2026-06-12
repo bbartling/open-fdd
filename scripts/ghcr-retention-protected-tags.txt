@@ -1,0 +1,12 @@
+# One tag per line. Comments and blank lines are ignored.
+# These tags are never deleted by scripts/ghcr_prune_packages.sh.
+latest
+edge
+
+# Acme known-good release tags (current + rollback).
+3.0.34
+3.0.33
+3.0.32
+
+# v3.0.31
+# v3.0.30

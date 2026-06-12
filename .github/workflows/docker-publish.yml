@@ -137,7 +137,9 @@ jobs:
 
       - name: Prune old GHCR versions
         env:
+          GH_TOKEN: ${{ github.token }}
           GHCR_KEEP_VERSIONS: ${{ inputs.keep_versions || '3' }}
         run: |
           chmod +x scripts/ghcr_prune_packages.sh
-          ./scripts/ghcr_prune_packages.sh --delete-retired --keep "${GHCR_KEEP_VERSIONS}"
+          ./scripts/ghcr_prune_packages.sh --delete-retired --all-images \
+            --keep-releases "${GHCR_KEEP_VERSIONS}" --confirm-delete
