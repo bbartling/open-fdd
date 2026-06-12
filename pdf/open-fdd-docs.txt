@@ -24,9 +24,9 @@ Open-FDD is an open-source **building edge platform** for BACnet integration, fe
 
 | Path | Go to |
 |------|-------|
-| **Try it** | [Quick Start — Run with Docker](/quick-start/docker/) |
-| **Operate it** | [Updating the stack](/quick-start/updating/) · [Operations](/ops/) |
-| **Develop it** | [Developer Guide](/developer/) · [Architecture](/architecture/) |
+| **Try it** | [Quick Start — Run with Docker]({{ "/quick-start/docker/" | relative_url }}) |
+| **Operate it** | [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) · [Operations]({{ "/ops/" | relative_url }}) |
+| **Develop it** | [Developer Guide]({{ "/developer/" | relative_url }}) · [Architecture]({{ "/architecture/" | relative_url }}) |
 
 ## v3 edge stack
 
@@ -40,9 +40,9 @@ Three primary containers on a Linux edge host:
 
 Host **Caddy** on `:80` or `:443` is the normal LAN front door. BACnet UDP `:47808` is bound by **commission** only — the bridge ingests `samples.csv` into the feather historian.
 
-Details: [Containers](/architecture/containers/) · [Deployment modes](/architecture/deployment-modes/)
+Details: [Containers]({{ "/architecture/containers/" | relative_url }}) · [Deployment modes]({{ "/architecture/deployment-modes/" | relative_url }})
 
-> **LAN / OT edge only.** Do not expose the Operator Bridge to the public internet without TLS, strong auth, and site review. BACnet writes are disabled by default — see [BACnet write guard](/security/bacnet-writes/).
+> **LAN / OT edge only.** Do not expose the Operator Bridge to the public internet without TLS, strong auth, and site review. BACnet writes are disabled by default — see [BACnet write guard]({{ "/security/bacnet-writes/" | relative_url }}).
 
 ## Distribution
 
@@ -101,7 +101,7 @@ Existing code to extend (do not rewrite):
 ## Prerequisites
 
 - ACME validation PR merged and **3.0.33** deployed (equipment context on live FDD alerts).
-- Follow-ups: FDD run-history equipment grouping, RTU role mapping (see [ACME validation follow-ups](/ops/acme-validation-follow-ups/)).
+- Follow-ups: FDD run-history equipment grouping, RTU role mapping (see [ACME validation follow-ups]({{ "/ops/acme-validation-follow-ups/" | relative_url }})).
 
 ## Safety
 
@@ -180,7 +180,7 @@ OFDD_AGENT_USER=agent
 OFDD_AGENT_PASSWORD=<random>
 ```
 
-Sign in as **integrator** with the password from that file → [First login and health check](/quick-start/health-check/).
+Sign in as **integrator** with the password from that file → [First login and health check]({{ "/quick-start/health-check/" | relative_url }}).
 
 | Action | Touches `auth.env.local`? |
 |--------|---------------------------|
@@ -228,7 +228,7 @@ The script prints **BACnet NIC**, **BACNET_BIND**, and file paths — **validate
 nano ~/open-fdd/workspace/bacnet/commissioning/commission.env
 ```
 
-> If you used `--start`, the stack is already up. Next step → [First login and health check](/quick-start/health-check/).
+> If you used `--start`, the stack is already up. Next step → [First login and health check]({{ "/quick-start/health-check/" | relative_url }}).
 
 ### Manual start (optional)
 
@@ -242,7 +242,7 @@ docker compose ps
 curl -sf http://127.0.0.1:8765/health && echo
 ```
 
-Expected: **bridge**, **commission**, **mcp-rag** — all `Up`. Then → [First login and health check](/quick-start/health-check/).
+Expected: **bridge**, **commission**, **mcp-rag** — all `Up`. Then → [First login and health check]({{ "/quick-start/health-check/" | relative_url }}).
 
 ## Long-term operation
 
@@ -276,22 +276,22 @@ Put **Caddy** (or nginx) on port 80 → `127.0.0.1:8765`, or expose 8765 through
 | Mode | Compose services | When to use |
 |------|------------------|-------------|
 | **Standard OT / BACnet** | `bridge` + `commission` + `mcp-rag` | Real buildings — commission polls BACnet into `samples.csv`; bridge ingests to feather |
-| **Non-BACnet / demo** | `bridge` + `mcp-rag` (omit `commission`) | JSON API, Modbus-only, or lab without field BACnet — see [Driver framework](/drivers/) |
+| **Non-BACnet / demo** | `bridge` + `mcp-rag` (omit `commission`) | JSON API, Modbus-only, or lab without field BACnet — see [Driver framework]({{ "/drivers/" | relative_url }}) |
 | **TLS on OT LAN** | Same stack + **host Caddy** `OFDD_CADDY_MODE=tls` | Encrypt browser↔edge; trust self-signed CA on operator PCs — not for public internet |
 
 Do **not** run the retired `openfdd-bacnet-poll` image or legacy `openfdd-bacnet-poll` systemd unit alongside Docker **commission** — that double-polls BACnet.
 
 ## Next steps
 
-→ [First login and health check](/quick-start/health-check/)  
-→ [Updating the stack](/quick-start/updating/) — `./scripts/openfdd_site_update.sh`
+→ [First login and health check]({{ "/quick-start/health-check/" | relative_url }})  
+→ [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) — `./scripts/openfdd_site_update.sh`
 
 
 # First login and health check
 
 # First login and health check
 
-Quick checks after `docker compose up -d` on the edge host. Services use `restart: unless-stopped` — after a reboot, run `docker compose ps` once Docker is up (see [Run with Docker](/quick-start/docker/#survive-power-cycles)).
+Quick checks after `docker compose up -d` on the edge host. Services use `restart: unless-stopped` — after a reboot, run `docker compose ps` once Docker is up (see [Run with Docker]({{ "/quick-start/docker/" | relative_url }}#survive-power-cycles)).
 
 ## Public health
 
@@ -346,11 +346,11 @@ Look for `bacnet_poll` green/yellow in the services list.
 | Symptom | Fix |
 |---------|-----|
 | 401 everywhere | Configure `workspace/auth.env.local` |
-| Empty BACnet discover | Fix `BACNET_BIND` in `commission.env` — [network setup](/bacnet/network-setup/) |
+| Empty BACnet discover | Fix `BACNET_BIND` in `commission.env` — [network setup]({{ "/bacnet/network-setup/" | relative_url }}) |
 | No poll rows | Commission container running? `points.csv` has enabled rows? |
 | LAN browser timeout | Open firewall port 80 or 8765 |
 
-Advanced probes (model graph, Rule Lab, compose profiles): [Developer health check](/developer/health-check/).
+Advanced probes (model graph, Rule Lab, compose profiles): [Developer health check]({{ "/developer/health-check/" | relative_url }}).
 
 
 # Quick Start
@@ -361,9 +361,9 @@ Run Open-FDD on a Linux edge host using **three GHCR Docker images**. No git clo
 
 | Step | Page |
 |------|------|
-| 1 | [Run with Docker images](/quick-start/docker/) — bootstrap script + `docker compose up` |
-| 2 | [First login and health check](/quick-start/health-check/) |
-| 3 | [Updating the stack](/quick-start/updating/) — backup + pull |
+| 1 | [Run with Docker images]({{ "/quick-start/docker/" | relative_url }}) — bootstrap script + `docker compose up` |
+| 2 | [First login and health check]({{ "/quick-start/health-check/" | relative_url }}) |
+| 3 | [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) — backup + pull |
 
 **One-liner bootstrap** (edge host):
 
@@ -375,9 +375,9 @@ bash /tmp/openfdd_edge_bootstrap.sh --start
 
 **Prerequisites:** Linux, Docker enabled on boot, BACnet LAN if polling OT equipment.
 
-> **BACnet writes are disabled by default.** See [Write safety](/bacnet/write-safety/).
+> **BACnet writes are disabled by default.** See [Write safety]({{ "/bacnet/write-safety/" | relative_url }}).
 
-**Stack:** `bridge` + `commission` (BACnet + poll) + `mcp-rag`. Details: [Containers](/architecture/containers/).
+**Stack:** `bridge` + `commission` (BACnet + poll) + `mcp-rag`. Details: [Containers]({{ "/architecture/containers/" | relative_url }}).
 
 
 # Updating the stack
@@ -469,7 +469,7 @@ tail -1 workspace/bacnet/polls/samples.csv
 ls -lah workspace/data/feather_store/
 ```
 
-→ [Health check](/quick-start/health-check/)
+→ [Health check]({{ "/quick-start/health-check/" | relative_url }})
 
 ## Dashboard UI updates
 
@@ -491,8 +491,8 @@ docker image prune -f
 
 ## Next steps
 
-→ [Run with Docker images](/quick-start/docker/) — bootstrap a new host  
-→ [Health check](/quick-start/health-check/)
+→ [Run with Docker images]({{ "/quick-start/docker/" | relative_url }}) — bootstrap a new host  
+→ [Health check]({{ "/quick-start/health-check/" | relative_url }})
 
 
 # Local development
@@ -541,7 +541,7 @@ Same shape as an Acme edge deploy: **prod React UI**, **Caddy on :80**, bridge o
 
 Credentials: `workspace/auth.pentest.local` (generated on first start). ZAP target is usually `http://<lan-ip>/` (benserver example: `http://192.168.204.18/`). If LAN clients cannot reach :80, run `sudo ./scripts/open_lan_port.sh 80`.
 
-See also [Health checks (developer)](/developer/health-check/) for probe details and [ZAP baseline expectations](/security/zap-baseline/) for accepted Medium/Low findings.
+See also [Health checks (developer)]({{ "/developer/health-check/" | relative_url }}) for probe details and [ZAP baseline expectations]({{ "/security/zap-baseline/" | relative_url }}) for accepted Medium/Low findings.
 
 ## Docs preview
 
@@ -587,12 +587,12 @@ Clone, build, test, and contribute to Open-FDD.
 
 | Topic | Page |
 |-------|------|
-| Local setup | [Local development](/developer/local-setup/) |
-| Docker builds | [Build Docker images](/developer/docker-build/) |
-| Health checks | [Health checks (developer)](/developer/health-check/) |
-| Tests & CI | [Tests and CI](/developer/tests-ci/) |
-| Security testing | [Release & LAN scan cycle](/developer/security-testing/) |
-| PRs | [Contributing](/developer/contributing/) |
+| Local setup | [Local development]({{ "/developer/local-setup/" | relative_url }}) |
+| Docker builds | [Build Docker images]({{ "/developer/docker-build/" | relative_url }}) |
+| Health checks | [Health checks (developer)]({{ "/developer/health-check/" | relative_url }}) |
+| Tests & CI | [Tests and CI]({{ "/developer/tests-ci/" | relative_url }}) |
+| Security testing | [Release & LAN scan cycle]({{ "/developer/security-testing/" | relative_url }}) |
+| PRs | [Contributing]({{ "/developer/contributing/" | relative_url }}) |
 
 AI-assisted contributors: see repository `AGENTS.md` for workspace layout, skill routing, and agent policy (one paragraph in public docs; details stay internal).
 
@@ -628,7 +628,7 @@ Fix any template or link errors before opening a PR that touches `docs/`.
 
 ## Security-related CI
 
-`ci.yml` includes bridge security tests (`tests/workspace_bridge/test_security.py`). That complements — but does not replace — LAN [ZAP + Nmap scans](/security/zap-baseline/) on each patch revision. See [Security testing cycle](/developer/security-testing/).
+`ci.yml` includes bridge security tests (`tests/workspace_bridge/test_security.py`). That complements — but does not replace — LAN [ZAP + Nmap scans]({{ "/security/zap-baseline/" | relative_url }}) on each patch revision. See [Security testing cycle]({{ "/developer/security-testing/" | relative_url }}).
 
 
 # Contributing
@@ -648,7 +648,7 @@ Fix any template or link errors before opening a PR that touches `docs/`.
 - [ ] Docs updated if user-facing behavior changed
 - [ ] `docs/` Jekyll build succeeds
 - [ ] No credentials in diff
-- [ ] Auth/Caddy/header changes: re-run [pentest verify + LAN ZAP](/developer/security-testing/) and update [ZAP baseline](/security/zap-baseline/) if expectations changed
+- [ ] Auth/Caddy/header changes: re-run [pentest verify + LAN ZAP]({{ "/developer/security-testing/" | relative_url }}) and update [ZAP baseline]({{ "/security/zap-baseline/" | relative_url }}) if expectations changed
 
 ## Repository layout (short)
 
@@ -660,6 +660,14 @@ Fix any template or link errors before opening a PR that touches `docs/`.
 | `docker/` | Compose files and image contexts |
 | `infra/ansible/` | Edge deploy playbooks |
 | `docs/` | This site (Jekyll + Just the Docs) |
+
+## Docs links (GitHub Pages)
+
+The site is a **project page** at `https://bbartling.github.io/open-fdd/` (`baseurl: /open-fdd` in `docs/_config.yml`).
+
+- **Do not** use {% raw %}`/path/`{% endraw %} in Markdown body text — it omits `baseurl` and 404s on GitHub Pages.
+- **Do** use `[label]({{ "/section/page/" | relative_url }})` for internal links.
+- After `bundle exec jekyll build`, run `python3 scripts/check_docs_internal_links.py --site _site` from the repo root.
 
 ## Security issues
 
@@ -676,7 +684,7 @@ Cursor/Claude contributors: read `AGENTS.md` and `skills/` for automation bounda
 
 Extended validation for engineers with a **full git checkout** — CI, compose overlays, and pre-release gates.
 
-IT operators on edge hosts should use [Quick Start — health check](/quick-start/health-check/) and [Deployment validation](/ops/deployment-validation/) instead.
+IT operators on edge hosts should use [Quick Start — health check]({{ "/quick-start/health-check/" | relative_url }}) and [Deployment validation]({{ "/ops/deployment-validation/" | relative_url }}) instead.
 
 ## Clone and local stack
 
@@ -744,7 +752,7 @@ Then from a **LAN workstation**, run the packaged scan:
 - Windows: `scripts/security/Run-OpenFddSecurityScan.ps1`
 - macOS/Linux: `scripts/security/run_openfdd_security_scan.sh`
 
-See [scripts/security/README.md](https://github.com/bbartling/open-fdd/blob/master/scripts/security/README.md), [Security — ZAP baseline](/security/zap-baseline/), and the full [security testing cycle](/developer/security-testing/). Host-side notes: `workspace/deploy/PENTEST.md`.
+See [scripts/security/README.md](https://github.com/bbartling/open-fdd/blob/master/scripts/security/README.md), [Security — ZAP baseline]({{ "/security/zap-baseline/" | relative_url }}), and the full [security testing cycle]({{ "/developer/security-testing/" | relative_url }}). Host-side notes: `workspace/deploy/PENTEST.md`.
 
 ## Post-deploy insurance (inventory hosts)
 
@@ -757,7 +765,7 @@ For automated checks against named inventory hosts, see `infra/ansible/scripts/p
 
 How Open-FDD validates each **patch revision** before it ships to the live Acme HVAC bench — local automation, AI-assisted PR review, LAN passive scans, and edge post-deploy checks.
 
-Related security docs: [ZAP baseline](/security/zap-baseline/), [TLS and certificates](/security/tls-and-certs/), [LAN hardening](/security/lan-hardening/), [Linux host hardening](/security/linux-host-hardening/), [Tenable remediation](/security/tenable-remediation/), [Authenticated scanning (roadmap)](/security/authenticated-scanning/).
+Related security docs: [ZAP baseline]({{ "/security/zap-baseline/" | relative_url }}), [TLS and certificates]({{ "/security/tls-and-certs/" | relative_url }}), [LAN hardening]({{ "/security/lan-hardening/" | relative_url }}), [Linux host hardening]({{ "/security/linux-host-hardening/" | relative_url }}), [Tenable remediation]({{ "/security/tenable-remediation/" | relative_url }}), [Authenticated scanning (roadmap)]({{ "/security/authenticated-scanning/" | relative_url }}).
 
 ## Who owns what
 
@@ -769,7 +777,7 @@ Related security docs: [ZAP baseline](/security/zap-baseline/), [TLS and certifi
 | Pentest credentials | Generated per stack | `workspace/auth.pentest.local` (never commit) |
 | LAN ZAP + Nmap scans | **Developer workstation** on test LAN | `scripts/security/` |
 
-See [TLS and certificate ownership](/security/tls-and-certs/) for cert lifecycle.
+See [TLS and certificate ownership]({{ "/security/tls-and-certs/" | relative_url }}) for cert lifecycle.
 
 ## Per-revision workflow
 
@@ -802,7 +810,7 @@ infra/ansible/scripts/bench_5007_arrow_battery.sh   # when FDD/Arrow paths chang
 ./scripts/pentest_production_stack.sh verify
 ```
 
-Confirms Caddy `:80` fronts the bridge, auth is enabled, BACnet writes disabled, and security headers are singular (no Caddy duplicates). Details: [Health checks — pentest](/developer/health-check/#pentest-production-stack-lan-zap).
+Confirms Caddy `:80` fronts the bridge, auth is enabled, BACnet writes disabled, and security headers are singular (no Caddy duplicates). Details: [Health checks — pentest]({{ "/developer/health-check/" | relative_url }}#pentest-production-stack-lan-zap).
 
 ### 3. Host + exposure checks (on edge VM)
 
@@ -828,7 +836,7 @@ Setup (Docker Desktop, Nmap): [scripts/security/README.md](https://github.com/bb
 
 Target URL is usually **`http://<lan-ip>/`** (Caddy), not `:8765`.
 
-Review `openfdd-security-report/90-quick-findings-summary.txt` and compare against [ZAP baseline expectations](/security/zap-baseline/).
+Review `openfdd-security-report/90-quick-findings-summary.txt` and compare against [ZAP baseline expectations]({{ "/security/zap-baseline/" | relative_url }}).
 
 ### 5. Pull request + automated review
 
@@ -856,7 +864,7 @@ OPENFDD_IMAGE_TAG=latest ./scripts/upgrade_edge_full.sh --limit <inventory_host>
 infra/ansible/scripts/post_deploy_check.sh --limit <inventory_host> --full
 ```
 
-Re-run LAN ZAP + Nmap against the edge LAN IP if Caddy or auth behavior changed. Site-specific example: [GL36 lab note](/examples/acme-gl36-lab/).
+Re-run LAN ZAP + Nmap against the edge LAN IP if Caddy or auth behavior changed. Site-specific example: [GL36 lab note]({{ "/examples/acme-gl36-lab/" | relative_url }}).
 
 ### 8. Next cycle
 
@@ -870,13 +878,13 @@ Bump patch version locally (`pyproject.toml`, `open_fdd/__init__.py`) on `master
 | Stack smoke | `pentest_production_stack.sh verify` | Live headers, health, auth file |
 | Passive web | ZAP baseline | Public routes, CSP, cookies, CORS |
 | Port exposure | Nmap scoped | One host, known service ports |
-| Authenticated API/dashboard | ZAP full + login | **Roadmap** — [Authenticated scanning](/security/authenticated-scanning/) |
+| Authenticated API/dashboard | ZAP full + login | **Roadmap** — [Authenticated scanning]({{ "/security/authenticated-scanning/" | relative_url }}) |
 
 Baseline ZAP does **not** exercise integrator login or protected `/api/*` routes deeply.
 
 ## Open-source contributors
 
-The `scripts/security/` folder is part of the public repo so any fork can run the same LAN smoke against their bench. PRs that change Caddy, auth, or `security_headers.py` should update [ZAP baseline](/security/zap-baseline/) and re-run the scan scripts.
+The `scripts/security/` folder is part of the public repo so any fork can run the same LAN smoke against their bench. PRs that change Caddy, auth, or `security_headers.py` should update [ZAP baseline]({{ "/security/zap-baseline/" | relative_url }}) and re-run the scan scripts.
 
 
 # Python recipes (full Arrow library)
@@ -889,7 +897,7 @@ Copy-paste **`apply_faults_arrow`** modules for Rule Lab. Replaces the legacy pa
 - Set **`fault_code`** in Rule Lab metadata (letter codes or Grade-A `AHU-ECON-001`)
 - Map historian column names in the data model / rule bindings (`ma-t`, `oa-t`, `stat_zn-t`, …)
 
-Quick patterns: [Arrow recipes](/rule-cookbook/arrow-recipes/) · Index: [Expression cookbook (Arrow-native)](/rule-cookbook/expression-cookbook/)
+Quick patterns: [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}) · Index: [Expression cookbook (Arrow-native)]({{ "/rule-cookbook/expression-cookbook/" | relative_url }})
 
 ---
 
@@ -1287,7 +1295,7 @@ def apply_faults_arrow(table, cfg, context=None):
 
 ### Zone / IAQ bounds
 
-Use `sensor_bounds_mask(table, "zone_temp", cfg)` or `sensor_bounds_mask` with CO₂ profile — see [sensor validation](/rule-cookbook/expression-cookbook/#sensor-validation-bounds-flatline-rate-of-change).
+Use `sensor_bounds_mask(table, "zone_temp", cfg)` or `sensor_bounds_mask` with CO₂ profile — see [sensor validation]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#sensor-validation-bounds-flatline-rate-of-change).
 
 ---
 
@@ -1525,7 +1533,7 @@ Pass `occupied_start_hour`, `occupied_end_hour`, `tz_offset_hours` in Rule Lab `
 4. Quick-test on 3–24 h feather window
 5. Ship via `setup_gl36_fdd.py` or Rule Lab save
 
-**See also:** [Expression cookbook](/rule-cookbook/expression-cookbook/) · [Fault codes](/fault-codes/) · [Rule Lab](/operator-bridge/rule-lab/)
+**See also:** [Expression cookbook]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}) · [Fault codes]({{ "/fault-codes/" | relative_url }}) · [Rule Lab]({{ "/operator-bridge/rule-lab/" | relative_url }})
 
 
 # System overview
@@ -1554,7 +1562,7 @@ Pass `occupied_start_hour`, `occupied_end_hour`, `tz_offset_hours` in Rule Lab `
 
 ## Docker edge stack (production)
 
-Three GHCR images — see [Containers](/architecture/containers/):
+Three GHCR images — see [Containers]({{ "/architecture/containers/" | relative_url }}):
 
 | Container | BACnet OT | Operator LAN |
 |-----------|-----------|--------------|
@@ -1579,11 +1587,11 @@ BACnet **polling** is not a separate container — it runs inside **commission**
 
 ## Deployment
 
-IT operators: [Quick Start — Docker](/quick-start/docker/). Modes and Caddy: [Deployment modes](/architecture/deployment-modes/).
+IT operators: [Quick Start — Docker]({{ "/quick-start/docker/" | relative_url }}). Modes and Caddy: [Deployment modes]({{ "/architecture/deployment-modes/" | relative_url }}).
 
 ## Optional PyPI-only path
 
-`pip install open-fdd` ships Arrow runtime + playground lint helpers **without** the Operator Bridge UI. Use for offline rule tests or CI. See [Appendix — Python package](/appendix/python-package/).
+`pip install open-fdd` ships Arrow runtime + playground lint helpers **without** the Operator Bridge UI. Use for offline rule tests or CI. See [Appendix — Python package]({{ "/appendix/python-package/" | relative_url }}).
 
 
 # Expression cookbook (Arrow-native)
@@ -1592,15 +1600,15 @@ IT operators: [Quick Start — Docker](/quick-start/docker/). Modes and Caddy: [
 
 Reference for **Open-FDD 3.x Rule Lab**: every rule is a Python module with **`apply_faults_arrow(table, cfg, context)`** using **`pyarrow.compute`** — **no pandas**, **no YAML expression files**, **no NumPy DataFrames on the IoT edge**.
 
-This is the **only** expression cookbook for Open-FDD 3.x. The pandas/YAML `RuleRunner` path is retired — use Arrow `apply_faults_arrow` and the operator bridge Rule Lab. Legacy GL36-style recipes map to **fixed [fault codes](/fault-codes/)** and Arrow patterns below.
+This is the **only** expression cookbook for Open-FDD 3.x. The pandas/YAML `RuleRunner` path is retired — use Arrow `apply_faults_arrow` and the operator bridge Rule Lab. Legacy GL36-style recipes map to **fixed [fault codes]({{ "/fault-codes/" | relative_url }})** and Arrow patterns below.
 
 | Topic | Page |
 |-------|------|
-| **Full copy-paste library (GL36 A–M, VAV, plant)** | **[Python recipes (full Arrow library)](/rule-cookbook/python-recipes-arrow/)** |
-| Quick templates | [Arrow recipes](/rule-cookbook/arrow-recipes/) |
-| Shared imports | [Python recipes](/rule-cookbook/python-recipes/) |
-| Console window stats | [Lookback window](/rule-cookbook/lookback-window/) |
-| Fault code catalog | [Fault codes](/fault-codes/) |
+| **Full copy-paste library (GL36 A–M, VAV, plant)** | **[Python recipes (full Arrow library)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }})** |
+| Quick templates | [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}) |
+| Shared imports | [Python recipes]({{ "/rule-cookbook/python-recipes/" | relative_url }}) |
+| Console window stats | [Lookback window]({{ "/rule-cookbook/lookback-window/" | relative_url }}) |
+| Fault code catalog | [Fault codes]({{ "/fault-codes/" | relative_url }}) |
 | Programmatic defaults | `open_fdd.arrow_runtime.sensor_catalog` |
 
 ---
@@ -1736,21 +1744,21 @@ ASHRAE Guideline 36-style rules from the old YAML cookbook, translated to Arrow.
 
 | Legacy rule | Summary | Code | Full Arrow module |
 |-------------|---------|------|-------------------|
-| Rule A — duct static low @ full fan | SP below SP setpoint at high VFD | **AHU-A** | [Rule A](/rule-cookbook/python-recipes-arrow/#rule-a--duct-static-low-at-full-fan-speed-ahu-a) |
-| Rule B — blend below band | MAT below OAT/RAT envelope | **AHU-D** | [Rules B & C](/rule-cookbook/python-recipes-arrow/#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
-| Rule C — blend above band | MAT above OAT/RAT envelope | **AHU-D** | [Rules B & C](/rule-cookbook/python-recipes-arrow/#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
-| Rule D — discharge cold when heating | SAT low vs MAT, heat valve open | **AHU-B** | [Rule D](/rule-cookbook/python-recipes-arrow/#rule-d--discharge-cold-when-heating-commanded-ahu-b) |
-| Rule E — SAT low, full heating | SAT below SP, valve > 90% | **AHU-C** | [Rule E](/rule-cookbook/python-recipes-arrow/#rule-e--sat-too-low-with-full-heating-ahu-c) |
-| Rule F — SAT/MAT mismatch econ | Econ mode, SAT ≠ MAT | **AHU-E** | [Rule F](/rule-cookbook/python-recipes-arrow/#rule-f--satmat-mismatch-in-economizer-mode-ahu-e) |
-| Rule G — ambient warm free cool | OAT > SAT SP, econ open, cool off | **AHU-E** | [Rule G](/rule-cookbook/python-recipes-arrow/#rule-g--ambient-too-warm-for-free-cooling-ahu-e) |
-| Rule H — OAT/MAT mismatch econ+mech | Mech + econ, MAT ≠ OAT | **AHU-E** | [Rule H](/rule-cookbook/python-recipes-arrow/#rule-h--oatmat-mismatch-econ--mech-cooling-ahu-e) |
-| Rule I — OAT/MAT mismatch econ-only | Econ only, MAT ≠ OAT | **AHU-E** | [Rule I](/rule-cookbook/python-recipes-arrow/#rule-i--oatmat-mismatch-economizer-only-ahu-e) |
-| Rule J — discharge above blend cooling | SAT > MAT in cooling | **AHU-B** | [Rule J](/rule-cookbook/python-recipes-arrow/#rule-j--discharge-above-blended-in-cooling-ahu-b) |
-| Rule K — discharge above SP full cool | SAT > SP, full cooling | **AHU-C** | [Rule K](/rule-cookbook/python-recipes-arrow/#rule-k--discharge-above-setpoint-in-full-cooling-ahu-c) |
-| Rule L — cooling coil ΔT when off | CHW drop when valves closed | **CH-C** | [Rule L](/rule-cookbook/python-recipes-arrow/#rule-l--cooling-coil-δt-when-inactive-ch-c) |
-| Rule M — heating coil ΔT when off | HW rise when valves closed | **AHU-B** | [Rule M](/rule-cookbook/python-recipes-arrow/#rule-m--heating-coil-δt-when-inactive-ahu-b) |
+| Rule A — duct static low @ full fan | SP below SP setpoint at high VFD | **AHU-A** | [Rule A]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-a--duct-static-low-at-full-fan-speed-ahu-a) |
+| Rule B — blend below band | MAT below OAT/RAT envelope | **AHU-D** | [Rules B & C]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
+| Rule C — blend above band | MAT above OAT/RAT envelope | **AHU-D** | [Rules B & C]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
+| Rule D — discharge cold when heating | SAT low vs MAT, heat valve open | **AHU-B** | [Rule D]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-d--discharge-cold-when-heating-commanded-ahu-b) |
+| Rule E — SAT low, full heating | SAT below SP, valve > 90% | **AHU-C** | [Rule E]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-e--sat-too-low-with-full-heating-ahu-c) |
+| Rule F — SAT/MAT mismatch econ | Econ mode, SAT ≠ MAT | **AHU-E** | [Rule F]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-f--satmat-mismatch-in-economizer-mode-ahu-e) |
+| Rule G — ambient warm free cool | OAT > SAT SP, econ open, cool off | **AHU-E** | [Rule G]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-g--ambient-too-warm-for-free-cooling-ahu-e) |
+| Rule H — OAT/MAT mismatch econ+mech | Mech + econ, MAT ≠ OAT | **AHU-E** | [Rule H]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-h--oatmat-mismatch-econ--mech-cooling-ahu-e) |
+| Rule I — OAT/MAT mismatch econ-only | Econ only, MAT ≠ OAT | **AHU-E** | [Rule I]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-i--oatmat-mismatch-economizer-only-ahu-e) |
+| Rule J — discharge above blend cooling | SAT > MAT in cooling | **AHU-B** | [Rule J]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-j--discharge-above-blended-in-cooling-ahu-b) |
+| Rule K — discharge above SP full cool | SAT > SP, full cooling | **AHU-C** | [Rule K]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-k--discharge-above-setpoint-in-full-cooling-ahu-c) |
+| Rule L — cooling coil ΔT when off | CHW drop when valves closed | **CH-C** | [Rule L]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-l--cooling-coil-δt-when-inactive-ch-c) |
+| Rule M — heating coil ΔT when off | HW rise when valves closed | **AHU-B** | [Rule M]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-m--heating-coil-δt-when-inactive-ahu-b) |
 
-All rules A–M have **full `apply_faults_arrow` modules** in [Python recipes (full Arrow library)](/rule-cookbook/python-recipes-arrow/).
+All rules A–M have **full `apply_faults_arrow` modules** in [Python recipes (full Arrow library)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}).
 
 ---
 
@@ -1764,19 +1772,19 @@ Maps to legacy YAML starter filenames; use as first deploy bundle.
 | `02_vav_zone_temp_flatline_occupied` | `sensor_flatline_mask(..., "zone_temp")` + occupied | **VAV-C** |
 | `03_vav_damper_command_extreme_flatline` | `flatline_1h_mask` on damper cmd column | **VAV-D** |
 | `04_ahu_runtime_outside_schedule` | `after_hours_fan_satisfied_mask` / run-hours script | **BLD-C** |
-| `05_ahu_duct_static_pressure_not_maintained` | [Rule A](/rule-cookbook/python-recipes-arrow/#rule-a--duct-static-low-at-full-fan-speed-ahu-a) | **AHU-A** |
+| `05_ahu_duct_static_pressure_not_maintained` | [Rule A]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-a--duct-static-low-at-full-fan-speed-ahu-a) | **AHU-A** |
 | `06_ahu_internal_temp_sensor_bounds` | `sensor_bounds_mask` on SAT/MAT | **AHU-C** |
 | `07_ahu_internal_temp_sensor_flatline` | `sensor_flatline_mask` on SAT | **AHU-C** |
 
 ### Economizer starters
 
-Full modules: [economizer section](/rule-cookbook/python-recipes-arrow/#economizer-starters) (`ahu_econ_100oa_temp_tracking_fault`, `ahu_mech_cooling_when_free_cooling_available`, `ahu_oa_damper_excess_open_extreme_ambient`).
+Full modules: [economizer section]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#economizer-starters) (`ahu_econ_100oa_temp_tracking_fault`, `ahu_mech_cooling_when_free_cooling_available`, `ahu_oa_damper_excess_open_extreme_ambient`).
 
 ---
 
 ## VAV, central plant, heat pump
 
-Full modules: [VAV](/rule-cookbook/python-recipes-arrow/#vav-zones) · [Central plant](/rule-cookbook/python-recipes-arrow/#central-plant) · [Heat pumps](/rule-cookbook/python-recipes-arrow/#heat-pumps).
+Full modules: [VAV]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#vav-zones) · [Central plant]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#central-plant) · [Heat pumps]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#heat-pumps).
 
 Rolling persistence: `arrow_rolling_min` + `pc.and_` (replaces pandas `.rolling(n).min()`).
 
@@ -1784,7 +1792,7 @@ Rolling persistence: `arrow_rolling_min` + `pc.and_` (replaces pandas `.rolling(
 
 ## Opportunistic / ventilation
 
-Full modules: [Opportunistic section](/rule-cookbook/python-recipes-arrow/#opportunistic--ventilation) · [Weather](/rule-cookbook/python-recipes-arrow/#weather-station).
+Full modules: [Opportunistic section]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#opportunistic--ventilation) · [Weather]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#weather-station).
 
 ---
 
@@ -1798,7 +1806,7 @@ Full modules: [Opportunistic section](/rule-cookbook/python-recipes-arrow/#oppor
 | No new samples | `stale_points` | **BLD-D** | Equipment fault |
 | MAT ∉ [OAT, RAT] | `mixing_envelope` | **AHU-D** | Stratification during startup |
 
-Always gate sensor faults with **fan on**, **valve open**, or **occupied** where appropriate — see [Sensor & data quality](/fault-codes/sensor-quality/).
+Always gate sensor faults with **fan on**, **valve open**, or **occupied** where appropriate — see [Sensor & data quality]({{ "/fault-codes/sensor-quality/" | relative_url }}).
 
 ---
 
@@ -1821,7 +1829,7 @@ Set `cfg["temp_unit"] = "metric"` in Rule Lab or scale constants:
 
 ## Binding rules to the fault catalog
 
-1. Pick a **letter code** from [Fault codes](/fault-codes/) — never invent suffixes.
+1. Pick a **letter code** from [Fault codes]({{ "/fault-codes/" | relative_url }}) — never invent suffixes.
 2. In Rule Lab, set **fault_code** on the rule row.
 3. Batch FDD aggregates into `GET /api/faults/status` and portfolio rollup.
 4. Legacy numeric codes (`AHU-03`) migrate via `LEGACY_CODE_MAP` in the bridge.
@@ -1841,7 +1849,7 @@ curl -s http://127.0.0.1:8765/api/faults/catalog | jq '.families[].codes[] | sel
 - [ ] Apply sensor_catalog defaults; tune bounds for site climate
 - [ ] Enable building-agent check-in; verify faults in portfolio rollup
 
-**Next:** [Python recipes (full Arrow library)](/rule-cookbook/python-recipes-arrow/) · [Arrow recipes](/rule-cookbook/arrow-recipes/) · [Fault codes](/fault-codes/) · [Rule Lab](/operator-bridge/rule-lab/)
+**Next:** [Python recipes (full Arrow library)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}) · [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}) · [Fault codes]({{ "/fault-codes/" | relative_url }}) · [Rule Lab]({{ "/operator-bridge/rule-lab/" | relative_url }})
 
 
 # Deployment modes
@@ -1868,7 +1876,7 @@ How Open-FDD is typically run: local development, lab LAN trials, and production
 
 > **`openfdd-bacnet-poll` is retired.** BACnet polling runs inside **commission** only. Do not run the legacy poll container or `openfdd-bacnet-poll` systemd unit alongside Docker commission — that double-polls the OT network.
 
-See [Containers](/architecture/containers/) for ports, networks, and persistence.
+See [Containers]({{ "/architecture/containers/" | relative_url }}) for ports, networks, and persistence.
 
 ## Caddy HTTP (typical edge)
 
@@ -1876,7 +1884,7 @@ See [Containers](/architecture/containers/) for ports, networks, and persistence
 - Reverse-proxies to bridge at `127.0.0.1:8765`
 - Bridge stays loopback-only; operators bookmark `http://<edge-ip>/`
 
-Bootstrap and compose: [Quick Start — Docker](/quick-start/docker/).
+Bootstrap and compose: [Quick Start — Docker]({{ "/quick-start/docker/" | relative_url }}).
 
 ## Caddy TLS (OT LAN)
 
@@ -1886,7 +1894,7 @@ For HTTPS on the edge LAN (self-signed or site CA):
 2. Start with `OFDD_CADDY_MODE=tls`
 3. Trust the CA on operator PCs
 
-Details: [TLS and certificates](/security/tls-and-certs/). Security headers are set by the **Operator Bridge**; Caddy adds **HSTS** only in TLS mode.
+Details: [TLS and certificates]({{ "/security/tls-and-certs/" | relative_url }}). Security headers are set by the **Operator Bridge**; Caddy adds **HSTS** only in TLS mode.
 
 ## BACnet data path
 
@@ -1909,10 +1917,10 @@ The bridge thread named `bacnet_poll_worker` is **ingest only** — it does not 
 
 | Topic | Page |
 |-------|------|
-| First deploy | [Quick Start — Docker](/quick-start/docker/) |
-| Upgrade | [Updating the stack](/quick-start/updating/) |
-| LAN security | [LAN hardening](/security/lan-hardening/) |
-| Lab example site | [Examples — GL36 lab note](/examples/acme-gl36-lab/) |
+| First deploy | [Quick Start — Docker]({{ "/quick-start/docker/" | relative_url }}) |
+| Upgrade | [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) |
+| LAN security | [LAN hardening]({{ "/security/lan-hardening/" | relative_url }}) |
+| Lab example site | [Examples — GL36 lab note]({{ "/examples/acme-gl36-lab/" | relative_url }}) |
 
 
 # Arrow recipes
@@ -1921,7 +1929,7 @@ The bridge thread named `bacnet_poll_worker` is **ingest only** — it does not 
 
 Open-FDD 3.0 Rule Lab rules use **`apply_faults_arrow(table, cfg, context)`**, **`pyarrow.compute`**, and **module constants** (no `config.json`).
 
-For **full GL36 A–M and plant recipes**, see **[Python recipes (full Arrow library)](/rule-cookbook/python-recipes-arrow/)**. Sensor tables: **[Expression cookbook](/rule-cookbook/expression-cookbook/)**.
+For **full GL36 A–M and plant recipes**, see **[Python recipes (full Arrow library)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }})**. Sensor tables: **[Expression cookbook]({{ "/rule-cookbook/expression-cookbook/" | relative_url }})**.
 
 ## Simple threshold
 
@@ -2006,13 +2014,13 @@ def apply_faults_arrow(table, cfg, context=None):
     return pc.or_(flat, spike)  # import pyarrow.compute as pc
 ```
 
-Bounds table: [Expression cookbook — sensor validation](/rule-cookbook/expression-cookbook/#sensor-validation-bounds-flatline-rate-of-change).
+Bounds table: [Expression cookbook — sensor validation]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#sensor-validation-bounds-flatline-rate-of-change).
 
 More templates ship in `open_fdd.playground.arrow_templates` and via `GET /api/playground/arrow-templates`.
 
 Bench examples: `workspace/data/rules_py/bench_*.py`.
 
-Dev kit zip layout: [Rule Lab — dev kit zip](/operator-bridge/rule-lab/#dev-kit-zip-download).
+Dev kit zip layout: [Rule Lab — dev kit zip]({{ "/operator-bridge/rule-lab/" | relative_url }}#dev-kit-zip-download).
 
 
 # Python recipes (Arrow)
@@ -2021,9 +2029,9 @@ Dev kit zip layout: [Rule Lab — dev kit zip](/operator-bridge/rule-lab/#dev-ki
 
 All Rule Lab Python rules use **`apply_faults_arrow(table, cfg, context)`** on PyArrow tables with **`pyarrow.compute`** and **module constants**.
 
-See **[Arrow recipes](/rule-cookbook/arrow-recipes/)** for the canonical cookbook (flatline, spread, OOB, schedule faults).
+See **[Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }})** for the canonical cookbook (flatline, spread, OOB, schedule faults).
 
-Shared helpers live in `open_fdd.arrow_runtime.cookbook` and `open_fdd.arrow_runtime.windows`. For console validation, copy **`_kit_lookback_stats`** from [Lookback window helper](/rule-cookbook/lookback-window/).
+Shared helpers live in `open_fdd.arrow_runtime.cookbook` and `open_fdd.arrow_runtime.windows`. For console validation, copy **`_kit_lookback_stats`** from [Lookback window helper]({{ "/rule-cookbook/lookback-window/" | relative_url }}).
 
 ```python
 from open_fdd.arrow_runtime.windows import arrow_rolling_min, arrow_rolling_max
@@ -2115,7 +2123,7 @@ cd ~/open-fdd && docker compose ps
 
 If containers are down: `docker compose up -d` (idempotent).
 
-See [Run with Docker images](/quick-start/docker/).
+See [Run with Docker images]({{ "/quick-start/docker/" | relative_url }}).
 
 ## Persistent data
 
@@ -2213,7 +2221,7 @@ Always call `_kit_lookback_stats(table)` first so operators can confirm the tabl
 | Rule Lab **Update all records** | 24 h (`chunk_hours: 6`, `use_chunks: true`) |
 | Rule Lab Quick test | 3 h (UI default) |
 
-See [Windowing & debugging](/rule-cookbook/windowing-debugging/) for `arrow_rolling_min` / `arrow_consecutive_true`.
+See [Windowing & debugging]({{ "/rule-cookbook/windowing-debugging/" | relative_url }}) for `arrow_rolling_min` / `arrow_consecutive_true`.
 
 
 # Data flow
@@ -2252,7 +2260,7 @@ OT REST / weather API → bridge JSON API worker → samples.csv → feather_sto
                                                       ↘ merged into FDD frame with bacnet/modbus
 ```
 
-Showcase: [OpenWeatherMap bundle](/drivers/json-api/#openweathermap-showcase-recommended-demo). Details: [Driver framework](/drivers/), [BACnet polling](/bacnet/polling/), [JSON API driver](/drivers/json-api/), [Containers](/architecture/containers/).
+Showcase: [OpenWeatherMap bundle]({{ "/drivers/json-api/" | relative_url }}#openweathermap-showcase-recommended-demo). Details: [Driver framework]({{ "/drivers/" | relative_url }}), [BACnet polling]({{ "/bacnet/polling/" | relative_url }}), [JSON API driver]({{ "/drivers/json-api/" | relative_url }}), [Containers]({{ "/architecture/containers/" | relative_url }}).
 
 ## Rule evaluation
 
@@ -2268,7 +2276,7 @@ Showcase: [OpenWeatherMap bundle](/drivers/json-api/#openweathermap-showcase-rec
 
 ## Retention
 
-Feather files grow on disk; retention is configurable (`workspace/data.env.local`). Image upgrades must **preserve** `workspace/data/` — backup before `docker compose up -d --force-recreate`. See [Updating the stack](/quick-start/updating/).
+Feather files grow on disk; retention is configurable (`workspace/data.env.local`). Image upgrades must **preserve** `workspace/data/` — backup before `docker compose up -d --force-recreate`. See [Updating the stack]({{ "/quick-start/updating/" | relative_url }}).
 
 
 # Architecture
@@ -2279,15 +2287,15 @@ Open-FDD v3 edge: **three Docker containers** (`bridge`, `commission`, `mcp-rag`
 
 | Page | Topic |
 |------|-------|
-| [System overview](/architecture/overview/) | Components and diagram |
-| [Deployment modes](/architecture/deployment-modes/) | Local dev, lab LAN, edge production, Caddy HTTP/TLS |
-| [Data flow](/architecture/data-flow/) | BACnet / Modbus / JSON API → feather → FDD → dashboard |
-| [Containers](/architecture/containers/) | GHCR images, ports, persistence, retired poll image |
-| [Driver framework](/drivers/) | Shared commissioning pattern for OT sources |
+| [System overview]({{ "/architecture/overview/" | relative_url }}) | Components and diagram |
+| [Deployment modes]({{ "/architecture/deployment-modes/" | relative_url }}) | Local dev, lab LAN, edge production, Caddy HTTP/TLS |
+| [Data flow]({{ "/architecture/data-flow/" | relative_url }}) | BACnet / Modbus / JSON API → feather → FDD → dashboard |
+| [Containers]({{ "/architecture/containers/" | relative_url }}) | GHCR images, ports, persistence, retired poll image |
+| [Driver framework]({{ "/drivers/" | relative_url }}) | Shared commissioning pattern for OT sources |
 
-**Operators:** [Quick Start — Docker](/quick-start/docker/) — no git clone on the edge host.
+**Operators:** [Quick Start — Docker]({{ "/quick-start/docker/" | relative_url }}) — no git clone on the edge host.
 
-**BACnet polling:** [Polling](/bacnet/polling/) — commission container only.
+**BACnet polling:** [Polling]({{ "/bacnet/polling/" | relative_url }}) — commission container only.
 
 
 # Rule Cookbook
@@ -2298,13 +2306,13 @@ Practical patterns for **Arrow-native Rule Lab** (`apply_faults_arrow`) on feath
 
 | Page | Use when |
 |------|----------|
-| [**Python recipes (full Arrow library)**](/rule-cookbook/python-recipes-arrow/) | **Copy-paste GL36 A–M, VAV, plant, economizer, weather** — replaces legacy YAML cookbook |
-| [**Expression cookbook (Arrow-native)**](/rule-cookbook/expression-cookbook/) | Sensor bounds, legacy→Arrow map, commissioning checklist |
-| [Arrow recipes](/rule-cookbook/arrow-recipes/) | Short templates — threshold, flatline, OOB, fan/schedule |
-| [Python recipes](/rule-cookbook/python-recipes/) | Shared `open_fdd.arrow_runtime.cookbook` imports |
-| [Lookback window helper](/rule-cookbook/lookback-window/) | `_kit_lookback_stats` — print start/stop timestamps and span |
-| [Windowing & debugging](/rule-cookbook/windowing-debugging/) | Rolling windows, batch runtime, Rule Lab console |
-| [GL36 algorithm stubs](/rule-cookbook/gl36-algorithm-stubs/) | Doc-only supervisory patterns (trim & respond, plant resets) |
+| [**Python recipes (full Arrow library)**]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}) | **Copy-paste GL36 A–M, VAV, plant, economizer, weather** — replaces legacy YAML cookbook |
+| [**Expression cookbook (Arrow-native)**]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}) | Sensor bounds, legacy→Arrow map, commissioning checklist |
+| [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}) | Short templates — threshold, flatline, OOB, fan/schedule |
+| [Python recipes]({{ "/rule-cookbook/python-recipes/" | relative_url }}) | Shared `open_fdd.arrow_runtime.cookbook` imports |
+| [Lookback window helper]({{ "/rule-cookbook/lookback-window/" | relative_url }}) | `_kit_lookback_stats` — print start/stop timestamps and span |
+| [Windowing & debugging]({{ "/rule-cookbook/windowing-debugging/" | relative_url }}) | Rolling windows, batch runtime, Rule Lab console |
+| [GL36 algorithm stubs]({{ "/rule-cookbook/gl36-algorithm-stubs/" | relative_url }}) | Doc-only supervisory patterns (trim & respond, plant resets) |
 
 Programmatic sensor defaults: `open_fdd.arrow_runtime.sensor_catalog.SENSOR_PROFILES`.
 
@@ -2329,7 +2337,7 @@ Future graph ML (sklearn / PyG) runs in a separate training service — see [Git
 |---|------------------------|-------------------|
 | Set by | Batch `lookback_hours`, FDD loop, Quick test UI | `WINDOW_SAMPLES` constant in `rule.py` |
 | Typical | 1 h scheduled; 24 h Update all | 12 samples ≈ 1 h @ 5 min poll |
-| Validate with | `_kit_lookback_stats(table)` — see [Lookback window helper](/rule-cookbook/lookback-window/) | Rule logic + console `flagged` count |
+| Validate with | `_kit_lookback_stats(table)` — see [Lookback window helper]({{ "/rule-cookbook/lookback-window/" | relative_url }}) | Rule logic + console `flagged` count |
 
 ## Rolling windows (Arrow)
 
@@ -2559,7 +2567,7 @@ mask = low_delta_t_mask(
 assert mask.to_pylist()[-1] is True
 ```
 
-See [Fault codes — chiller plant](/fault-codes/) (expanded in 3.0.19).
+See [Fault codes — chiller plant]({{ "/fault-codes/" | relative_url }}) (expanded in 3.0.19).
 
 
 # Dashboard overview
@@ -2585,7 +2593,7 @@ Dashboard tiles use REST polling and `WS /ws/dashboard` for selected live views 
 
 ## Roles
 
-Read-only operators see trends and faults; integrators access Rule Lab and model import. See [Auth and roles](/operator-bridge/auth-roles/).
+Read-only operators see trends and faults; integrators access Rule Lab and model import. See [Auth and roles]({{ "/operator-bridge/auth-roles/" | relative_url }}).
 
 
 # Auth and roles
@@ -2612,7 +2620,7 @@ Login: `POST /api/auth/login` → Bearer JWT on API calls.
 
 `OFDD_BRIDGE_HOST=127.0.0.1` with `OFDD_AUTH_DISABLED=1` is acceptable on a single machine. **Never** use auth-disabled mode on a building LAN.
 
-Full hardening: [Security](/security/).
+Full hardening: [Security]({{ "/security/" | relative_url }}).
 
 
 # Rule Lab
@@ -2728,19 +2736,19 @@ flagged=…
 
 ## Lookback windows
 
-Rules that need multi-hour history should call `_kit_lookback_stats(table)` (see [Lookback window helper](/rule-cookbook/lookback-window/)). Pass `hours=1`, `3`, `6`, `12`, or `24` to validate timestamp span in the console.
+Rules that need multi-hour history should call `_kit_lookback_stats(table)` (see [Lookback window helper]({{ "/rule-cookbook/lookback-window/" | relative_url }})). Pass `hours=1`, `3`, `6`, `12`, or `24` to validate timestamp span in the console.
 
-Rolling-window rules (flatline, spread) use `WINDOW_SAMPLES` (~12 samples ≈ 1 h at 5 min poll) — see [Windowing & debugging](/rule-cookbook/windowing-debugging/).
+Rolling-window rules (flatline, spread) use `WINDOW_SAMPLES` (~12 samples ≈ 1 h at 5 min poll) — see [Windowing & debugging]({{ "/rule-cookbook/windowing-debugging/" | relative_url }}).
 
 ## Algorithms (supervisory — coming soon)
 
-GL36 trim & respond and plant reset sequences will live on the **[Algorithms](/operator-bridge/algorithms/)** tab with the same zip kit shape but `apply_algorithm_arrow` outputs. Reference: [README_TRIM_RESPOND](https://github.com/bbartling/niagara4-vibe-code-addict/blob/develop/README_TRIM_RESPOND.md).
+GL36 trim & respond and plant reset sequences will live on the **[Algorithms]({{ "/operator-bridge/algorithms/" | relative_url }})** tab with the same zip kit shape but `apply_algorithm_arrow` outputs. Reference: [README_TRIM_RESPOND](https://github.com/bbartling/niagara4-vibe-code-addict/blob/develop/README_TRIM_RESPOND.md).
 
 ## Related
 
-- [Model workflow](/operator-bridge/model-workflow/)
-- [Arrow recipes](/rule-cookbook/arrow-recipes/)
-- [GL36 algorithm stubs](/rule-cookbook/gl36-algorithm-stubs/) (doc-only)
+- [Model workflow]({{ "/operator-bridge/model-workflow/" | relative_url }})
+- [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }})
+- [GL36 algorithm stubs]({{ "/rule-cookbook/gl36-algorithm-stubs/" | relative_url }}) (doc-only)
 
 
 # JSON API driver
@@ -2940,7 +2948,7 @@ Credentials in `endpoints.csv` are redacted in API responses (`***`). Prefer `${
 | PATCH | `/api/json-api/endpoint/poll` | integrator+ | Enable/disable poll interval |
 | DELETE | `/api/json-api/endpoint/{point_id}` | integrator+ | Remove endpoint |
 
-Full route list: [API routes](/appendix/bridge_api/).
+Full route list: [API routes]({{ "/appendix/bridge_api/" | relative_url }}).
 
 ## Typical OT URLs
 
@@ -2967,7 +2975,7 @@ curl -X PATCH http://127.0.0.1:8765/api/json-api/endpoint/poll \
   -d '{"point_id":"ja-api-openweathermap-org-get-web-oat-t","enabled":false,"poll_interval_s":0}'
 ```
 
-API keys live in `json_api.env.local` (gitignored) — never committed; audit logs do not record expanded URLs with `appid=`. See [Logging and audit](/ops/logging/).
+API keys live in `json_api.env.local` (gitignored) — never committed; audit logs do not record expanded URLs with `appid=`. See [Logging and audit]({{ "/ops/logging/" | relative_url }}).
 
 ## Smoke test
 
@@ -2991,7 +2999,7 @@ The **Algorithms** dashboard tab (`/algorithms`) is a placeholder for **supervis
 | Output | Boolean fault mask | Numeric outputs / structured dict |
 | Historian | Same `feather_store` PyArrow tables | Same |
 
-Until the tab ships, draft patterns live in this doc and in [GL36 algorithm stubs](/rule-cookbook/gl36-algorithm-stubs/).
+Until the tab ships, draft patterns live in this doc and in [GL36 algorithm stubs]({{ "/rule-cookbook/gl36-algorithm-stubs/" | relative_url }}).
 
 ## GL36 Trim & Respond reference
 
@@ -3015,11 +3023,11 @@ Porting those blocks to PyArrow is in progress; the dashboard tab shows **COMING
 3. Run `python run_test.py` locally against `sample.feather`
 4. Upload `algorithm.py` when satisfied
 
-Kit files will match the Rule Lab zip layout (see [Rule Lab — dev kit zip](/operator-bridge/rule-lab/#dev-kit-zip-download)).
+Kit files will match the Rule Lab zip layout (see [Rule Lab — dev kit zip]({{ "/operator-bridge/rule-lab/" | relative_url }}#dev-kit-zip-download)).
 
 ## Lookback windows
 
-Rules and algorithms that need multi-hour history should use the shared **lookback stats helper** documented in [Lookback window helper](/rule-cookbook/lookback-window/). Pass `hours=1`, `3`, `6`, `12`, or `24` to print row count, timestamp start/stop, and span for console validation.
+Rules and algorithms that need multi-hour history should use the shared **lookback stats helper** documented in [Lookback window helper]({{ "/rule-cookbook/lookback-window/" | relative_url }}). Pass `hours=1`, `3`, `6`, `12`, or `24` to print row count, timestamp start/stop, and span for console validation.
 
 Scheduled batch defaults: **1 h** lookback on the FDD loop; **Update all records** in Rule Lab uses **24 h** with 6 h chunks.
 
@@ -3093,13 +3101,13 @@ def apply_faults_arrow(table, cfg, context=None):
 
 ## Plant supervisory checks (doc-only)
 
-See [GL36 algorithm stubs](/rule-cookbook/gl36-algorithm-stubs/) for chiller plant enable, HWST trim & respond, and CHW DP/CHWST reset patterns aligned with the Niagara README.
+See [GL36 algorithm stubs]({{ "/rule-cookbook/gl36-algorithm-stubs/" | relative_url }}) for chiller plant enable, HWST trim & respond, and CHW DP/CHWST reset patterns aligned with the Niagara README.
 
 ## Related
 
-- [Rule Lab](/operator-bridge/rule-lab/) — live FDD authoring
-- [Model workflow](/operator-bridge/model-workflow/) — point bindings
-- [Windowing & debugging](/rule-cookbook/windowing-debugging/) — rolling windows
+- [Rule Lab]({{ "/operator-bridge/rule-lab/" | relative_url }}) — live FDD authoring
+- [Model workflow]({{ "/operator-bridge/model-workflow/" | relative_url }}) — point bindings
+- [Windowing & debugging]({{ "/rule-cookbook/windowing-debugging/" | relative_url }}) — rolling windows
 
 
 # Model workflow
@@ -3121,9 +3129,9 @@ See [GL36 algorithm stubs](/rule-cookbook/gl36-algorithm-stubs/) for chiller pla
 5. Run `POST /api/model/sync-ttl` after bulk imports.
 6. Validate on **Trend plot** with FDD overlays (`?fdd=1`) — faults render on a right-hand 0/1 axis per device scope.
 
-AI Agent and commissioning JSON import can bulk-apply steps 2–4; integrator should review model health before production FDD. See [FDD and assignments](/operator-bridge/fdd-assignments/) and [Ollama and analytics](/operator-bridge/ollama-analytics/).
+AI Agent and commissioning JSON import can bulk-apply steps 2–4; integrator should review model health before production FDD. See [FDD and assignments]({{ "/operator-bridge/fdd-assignments/" | relative_url }}) and [Ollama and analytics]({{ "/operator-bridge/ollama-analytics/" | relative_url }}).
 
-Export: `GET /api/model/export` (TTL/JSON). Commissioning bundle: `GET /api/model/commissioning-export` — includes per-point `fdd_rules_linked` (Rule Lab names) plus `fdd_rules[]` catalog. Use **Import / export** tab preview table or **Point → FDD rule pins** before editing raw JSON. API detail in [Appendix](/appendix/bridge_api/).
+Export: `GET /api/model/export` (TTL/JSON). Commissioning bundle: `GET /api/model/commissioning-export` — includes per-point `fdd_rules_linked` (Rule Lab names) plus `fdd_rules[]` catalog. Use **Import / export** tab preview table or **Point → FDD rule pins** before editing raw JSON. API detail in [Appendix]({{ "/appendix/bridge_api/" | relative_url }}).
 
 
 # Driver framework
@@ -3136,9 +3144,9 @@ Open-FDD edge commissioning uses a **shared driver pattern** for OT data sources
 
 | Driver | Protocol | Feather `source` | Commissioning tab |
 |--------|----------|------------------|-------------------|
-| [BACnet](/bacnet/) | MS/TP / IP (`:47808`) | `bacnet` | BACnet |
+| [BACnet]({{ "/bacnet/" | relative_url }}) | MS/TP / IP (`:47808`) | `bacnet` | BACnet |
 | Modbus | Modbus TCP | `modbus` | Modbus |
-| [JSON API](/drivers/json-api/) | HTTP/HTTPS REST (+ [OpenWeather showcase](/drivers/json-api/#openweathermap-showcase-recommended-demo)) | `json_api` | JSON API |
+| [JSON API]({{ "/drivers/json-api/" | relative_url }}) | HTTP/HTTPS REST (+ [OpenWeather showcase]({{ "/drivers/json-api/" | relative_url }}#openweathermap-showcase-recommended-demo)) | `json_api` | JSON API |
 
 All three drivers share the same operator workflow:
 
@@ -3168,7 +3176,7 @@ workspace/
 
 - **Plot tab** — numeric columns from `bacnet` and `modbus` sources (`GET /api/timeseries/plot?source=…`).
 - **String JSON fields** — stored in feather under `json_api`; use the JSON API tree or feather directly (plot is numeric-only).
-- **FDD batch** — merges `bacnet` + `modbus` + `json_api` historian columns by nearest timestamp; rules use BRICK-bound `external_id` names (e.g. compare BACnet `oa-t` vs JSON API `web-oat-t` — see [JSON API](/drivers/json-api/)).
+- **FDD batch** — merges `bacnet` + `modbus` + `json_api` historian columns by nearest timestamp; rules use BRICK-bound `external_id` names (e.g. compare BACnet `oa-t` vs JSON API `web-oat-t` — see [JSON API]({{ "/drivers/json-api/" | relative_url }})).
 - **BRICK model** — bind points in **Model & assignments** commissioning JSON; sync TTL for SPARQL scope.
 
 ## Rule Lab (Arrow upload/download)
@@ -3191,9 +3199,9 @@ python3 scripts/validate_modbus_temp_e2e.py --no-server
 
 ## Related docs
 
-- [Data flow](/architecture/data-flow/) — poll → CSV → feather → FDD
-- [API routes](/appendix/bridge_api/) — REST reference
-- [BACnet polling](/bacnet/polling/) — commission container loop
+- [Data flow]({{ "/architecture/data-flow/" | relative_url }}) — poll → CSV → feather → FDD
+- [API routes]({{ "/appendix/bridge_api/" | relative_url }}) — REST reference
+- [BACnet polling]({{ "/bacnet/polling/" | relative_url }}) — commission container loop
 
 
 # Operator Bridge
@@ -3204,15 +3212,15 @@ The Operator Bridge is the FastAPI service and React dashboard operators use dai
 
 | Page | Topic |
 |------|-------|
-| [Dashboard overview](/operator-bridge/dashboard/) | Main UI areas |
-| [Auth and roles](/operator-bridge/auth-roles/) | Login and permissions |
-| [Rule Lab](/operator-bridge/rule-lab/) | Python FDD rule authoring (PyArrow kit zip) |
-| [Algorithms](/operator-bridge/algorithms/) | Supervisory GL36 sequences (coming soon) |
-| [Model workflow](/operator-bridge/model-workflow/) | Brick bindings and imports |
-| [FDD and assignments](/operator-bridge/fdd-assignments/) | Rule bindings, BRICK classes, commissioning JSON |
-| [Ollama and analytics](/operator-bridge/ollama-analytics/) | Home briefing, zone levers, model RAM tiers |
+| [Dashboard overview]({{ "/operator-bridge/dashboard/" | relative_url }}) | Main UI areas |
+| [Auth and roles]({{ "/operator-bridge/auth-roles/" | relative_url }}) | Login and permissions |
+| [Rule Lab]({{ "/operator-bridge/rule-lab/" | relative_url }}) | Python FDD rule authoring (PyArrow kit zip) |
+| [Algorithms]({{ "/operator-bridge/algorithms/" | relative_url }}) | Supervisory GL36 sequences (coming soon) |
+| [Model workflow]({{ "/operator-bridge/model-workflow/" | relative_url }}) | Brick bindings and imports |
+| [FDD and assignments]({{ "/operator-bridge/fdd-assignments/" | relative_url }}) | Rule bindings, BRICK classes, commissioning JSON |
+| [Ollama and analytics]({{ "/operator-bridge/ollama-analytics/" | relative_url }}) | Home briefing, zone levers, model RAM tiers |
 
-REST details: [Appendix — API routes](/appendix/bridge_api/). Env files: [Workspace env files](/appendix/workspace-env-files/).
+REST details: [Appendix — API routes]({{ "/appendix/bridge_api/" | relative_url }}). Env files: [Workspace env files]({{ "/appendix/workspace-env-files/" | relative_url }}).
 
 
 # Ollama and analytics
@@ -3382,9 +3390,9 @@ After import, verify in **Trend plot** with `?fdd=1` — fault lanes appear on t
 
 ## Related
 
-- [Model workflow](/operator-bridge/model-workflow/)
-- [Rule Lab](/operator-bridge/rule-lab/)
-- [Trend plot / fault overlays](/operator-bridge/dashboard/#trend-plot)
+- [Model workflow]({{ "/operator-bridge/model-workflow/" | relative_url }})
+- [Rule Lab]({{ "/operator-bridge/rule-lab/" | relative_url }})
+- [Trend plot / fault overlays]({{ "/operator-bridge/dashboard/" | relative_url }}#trend-plot)
 
 
 # Network setup
@@ -3430,13 +3438,13 @@ The **commission** container exposes HTTP APIs for discovery and read-property w
 | Who-Is / I-Am | Device discovery on OT subnet |
 | Read property | Present value, object name, units |
 | RPM | Bulk reads for inventory export |
-| Write property | **Gated** — see [Write safety](/bacnet/write-safety/) |
+| Write property | **Gated** — see [Write safety]({{ "/bacnet/write-safety/" | relative_url }}) |
 
 Exported inventory feeds `points_discovered.csv` and the Brick point registry.
 
 ## Operator workflow
 
-1. Confirm [network setup](/bacnet/network-setup/).
+1. Confirm [network setup]({{ "/bacnet/network-setup/" | relative_url }}).
 2. Run discover from dashboard or API.
 3. Review discovered objects; enable points for poll profiles.
 4. Sync model bindings for FDD inputs.
@@ -3481,7 +3489,7 @@ Inside **bridge**, a background thread watches `samples.csv` and ingests new row
 
 Dashboard stack health (`GET /health/stack`) reports `bacnet_poll` status from the commission agent — not a separate container.
 
-Stale points trigger data-quality fault patterns — see [Sensor quality faults](/fault-codes/sensor-quality/).
+Stale points trigger data-quality fault patterns — see [Sensor quality faults]({{ "/fault-codes/sensor-quality/" | relative_url }}).
 
 ## Poll strategy (edge)
 
@@ -3504,14 +3512,14 @@ Acme ships **FDD-minimal polling** (~76 points on a typical GL36 lab when 8 rule
 | RPM batching | Present-value reads chunked (25 objects) to cut APDUs |
 | Poll loop | Sequential per-device RPM when `interruptible=True` so operator UI can preempt |
 | Operator UI | **INTERACTIVE** priority — cancels in-flight background work |
-| Override scans | **BACKGROUND**, 15 min timeout — see [Operator override scans](/bacnet/override-scans/) |
+| Override scans | **BACKGROUND**, 15 min timeout — see [Operator override scans]({{ "/bacnet/override-scans/" | relative_url }}) |
 | Bridge ingest | Async notify after each poll cycle → feather historian |
 
-Do **not** run a second BACnet bind on 47808 (no parallel `openfdd-bacnet-poll` container). See [Containers](/architecture/containers/).
+Do **not** run a second BACnet bind on 47808 (no parallel `openfdd-bacnet-poll` container). See [Containers]({{ "/architecture/containers/" | relative_url }}).
 
 ## Operator override scans
 
-Hourly P8 supervisory scans rotate one device at a time. Documented in [Operator override scans](/bacnet/override-scans/).
+Hourly P8 supervisory scans rotate one device at a time. Documented in [Operator override scans]({{ "/bacnet/override-scans/" | relative_url }}).
 
 
 # Operator override scans
@@ -3570,7 +3578,7 @@ Expect `device_count` > 0, `last_scan_at` within the last few hours on a healthy
 | `workspace/bacnet/overrides/registry.json` | Per-device last scan + override points |
 | `workspace/bacnet/overrides/overrides_export.csv` | Flat export for spreadsheets |
 
-Preserved across Docker upgrades when `workspace/` is on the edge volume — see [Backup & restore](/ops/backup-restore/).
+Preserved across Docker upgrades when `workspace/` is on the edge volume — see [Backup & restore]({{ "/ops/backup-restore/" | relative_url }}).
 
 
 # Write safety
@@ -3589,7 +3597,7 @@ Preserved across Docker upgrades when `workspace/` is on the edge volume — see
 
 ## Enable writes (commission role)
 
-1. Set env flag documented in [Security](/security/) (`OFDD_BACNET_WRITE_ENABLED` or site equivalent).
+1. Set env flag documented in [Security]({{ "/security/" | relative_url }}) (`OFDD_BACNET_WRITE_ENABLED` or site equivalent).
 2. Populate write allowlist CSV / config with explicit object IDs.
 3. Use **commission** role JWT; every write should include reason/note where API supports it.
 4. Test on bench hardware before production OT.
@@ -3609,11 +3617,11 @@ Open-FDD integrates with field controllers via BACnet/IP (and bench MSTP overlay
 
 | Page | Topic |
 |------|-------|
-| [Network setup](/bacnet/network-setup/) | Bind address and NIC |
-| [Discover and read](/bacnet/discover-read/) | Commission agent |
-| [Polling](/bacnet/polling/) | Historian driver |
-| [Operator override scans](/bacnet/override-scans/) | Hourly P8 supervisory rotation |
-| [Write safety](/bacnet/write-safety/) | Defaults and allowlists |
+| [Network setup]({{ "/bacnet/network-setup/" | relative_url }}) | Bind address and NIC |
+| [Discover and read]({{ "/bacnet/discover-read/" | relative_url }}) | Commission agent |
+| [Polling]({{ "/bacnet/polling/" | relative_url }}) | Historian driver |
+| [Operator override scans]({{ "/bacnet/override-scans/" | relative_url }}) | Hourly P8 supervisory rotation |
+| [Write safety]({{ "/bacnet/write-safety/" | relative_url }}) | Defaults and allowlists |
 
 
 # Convention
@@ -3666,7 +3674,7 @@ In Rule Lab, set `fault_code` on the rule metadata. Batch FDD aggregates hits in
 
 ## Cookbook mapping
 
-Each catalog entry lists `cookbook_patterns` (e.g. `flatline_1h`, `mixing_envelope`, `rate_of_change`) — see [Expression cookbook (Arrow-native)](/rule-cookbook/expression-cookbook/).
+Each catalog entry lists `cookbook_patterns` (e.g. `flatline_1h`, `mixing_envelope`, `rate_of_change`) — see [Expression cookbook (Arrow-native)]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}).
 
 Legacy pandas `type: expression` YAML rules are **not** used on the edge in 3.x; translate to `rules_py` Arrow modules and bind **`fault_code`** in Rule Lab.
 
@@ -3677,7 +3685,7 @@ Legacy pandas `type: expression` YAML rules are **not** used on the edge in 3.x;
 
 Upgrade GHCR images on a **live edge host** that already has `~/open-fdd/` — no `git pull` on the host.
 
-> **IT operators:** prefer [Quick Start — Updating the stack](/quick-start/updating/) and `openfdd_site_backup.sh` / `openfdd_site_update.sh` on the edge host. This page adds control-machine UI deploy and Ansible paths.
+> **IT operators:** prefer [Quick Start — Updating the stack]({{ "/quick-start/updating/" | relative_url }}) and `openfdd_site_backup.sh` / `openfdd_site_update.sh` on the edge host. This page adds control-machine UI deploy and Ansible paths.
 
 ## Layout on the edge host
 
@@ -3689,7 +3697,7 @@ Upgrade GHCR images on a **live edge host** that already has `~/open-fdd/` — n
 
 `workspace/` holds BACnet commissioning, poll CSV, feather historian, BRICK model, FDD rules, and `auth.env.local`. Image upgrades must **preserve** it.
 
-See [Backup and restore](/ops/backup-restore/) before any upgrade.
+See [Backup and restore]({{ "/ops/backup-restore/" | relative_url }}) before any upgrade.
 
 ## Concepts
 
@@ -3763,16 +3771,16 @@ OPENFDD_IMAGE_TAG=latest RUN_POST_CHECK=1 ./scripts/upgrade_edge_ghcr.sh --limit
 
 ## 5. Validate
 
-→ [Deployment validation](/ops/deployment-validation/)
+→ [Deployment validation]({{ "/ops/deployment-validation/" | relative_url }})
 
 ## Rollback
 
-Restore `docker-compose.yml` from backup, pull previous tag, `docker compose up -d --force-recreate`. `workspace/` is unchanged. Details: [Backup and restore](/ops/backup-restore/).
+Restore `docker-compose.yml` from backup, pull previous tag, `docker compose up -d --force-recreate`. `workspace/` is unchanged. Details: [Backup and restore]({{ "/ops/backup-restore/" | relative_url }}).
 
 ## Related
 
-- [Updating the stack](/quick-start/updating/) — edge-host helper scripts
-- [Containers](/architecture/containers/) — three-image architecture
+- [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) — edge-host helper scripts
+- [Containers]({{ "/architecture/containers/" | relative_url }}) — three-image architecture
 
 
 # Central collection
@@ -3825,7 +3833,7 @@ Air handling unit codes (sample from catalog).
 | **AHU-E** | Economizer not economizing | warning | Free cool available, OA minimum | Stuck damper, lockout | OA damper vs OAT trend |
 | **AHU-F** | Damper command vs feedback mismatch | warning | Cmd ≠ feedback | Stuck actuator, linkage | Compare cmd/feedback trends |
 
-**Example rule:** `flatline_1h` on SAT → tag **AHU-C**. Recipe: [Python recipes](/rule-cookbook/python-recipes/).
+**Example rule:** `flatline_1h` on SAT → tag **AHU-C**. Recipe: [Python recipes]({{ "/rule-cookbook/python-recipes/" | relative_url }}).
 
 
 # Standards crosswalk
@@ -3914,7 +3922,7 @@ du -h "$BACKUP_ROOT/workspace-full.tgz"
 2. Restore `docker-compose.yml` from backup
 3. If data corruption: extract selective files from `workspace-full.tgz` — model, rules, feather shards
 4. `docker compose pull && docker compose up -d --force-recreate`
-5. Verify: [Deployment validation](/ops/deployment-validation/)
+5. Verify: [Deployment validation]({{ "/ops/deployment-validation/" | relative_url }})
 
 ## Safe cleanup
 
@@ -3926,8 +3934,8 @@ docker image prune -f
 
 ## Related
 
-- [Updating the stack](/quick-start/updating/)
-- [Live site update](/ops/live_site_update/)
+- [Updating the stack]({{ "/quick-start/updating/" | relative_url }})
+- [Live site update]({{ "/ops/live_site_update/" | relative_url }})
 
 
 # Open-FDD Central API
@@ -4044,7 +4052,7 @@ Manual: Actions → workflow_dispatch (publishes `latest`).
 | Embed FDD in your Python/cloud job | `pip install open-fdd` |
 | BACnet + UI + bridge on an edge host | GHCR images |
 
-See [Release process](../developer/release-process.md).
+See [Release process]({{ "/developer/release-process/" | relative_url }}).
 
 
 # RTU faults
@@ -4067,7 +4075,7 @@ Bind rules to packaged unit `fdd_input` points (SAT, OAT, compressor cmd, …).
 
 # Deployment validation
 
-For the **live Acme site** after GHCR updates, use the dedicated harness documented in [Acme live validation](/ops/acme-live-validation/) (`acme_post_deploy_validate.sh`).
+For the **live Acme site** after GHCR updates, use the dedicated harness documented in [Acme live validation]({{ "/ops/acme-live-validation/" | relative_url }}) (`acme_post_deploy_validate.sh`).
 
 Non-destructive checks after deploy or image upgrade. Run from the **edge host** (smoke) or from a **control machine** with the full repo (insurance suite).
 
@@ -4118,7 +4126,7 @@ Or by IP:
 
 Checks include: Caddy → React dashboard, `/health/stack`, MCP RAG, BACnet tree, BRICK/SPARQL, Docker log scan.
 
-> **Do not run on live commissioned sites without approval:** `acme_operational_verify.sh` with BACnet rediscover — use `--skip-discover` for smoke only. See [Examples — GL36 lab](/examples/acme-gl36-lab/).
+> **Do not run on live commissioned sites without approval:** `acme_operational_verify.sh` with BACnet rediscover — use `--skip-discover` for smoke only. See [Examples — GL36 lab]({{ "/examples/acme-gl36-lab/" | relative_url }}).
 
 ## LAN security smoke (optional)
 
@@ -4127,7 +4135,7 @@ From a workstation on the same LAN as the edge:
 - Windows: `scripts/security/Run-OpenFddSecurityScan.ps1`
 - macOS/Linux: `scripts/security/run_openfdd_security_scan.sh`
 
-Expected findings: [ZAP baseline](/security/zap-baseline/).
+Expected findings: [ZAP baseline]({{ "/security/zap-baseline/" | relative_url }}).
 
 ## Arrow / FDD rules (3.0+)
 
@@ -4145,15 +4153,15 @@ grep -R "apply_faults_arrow" workspace/data/rules_py | wc -l
 
 ## Related
 
-- [Health check](/quick-start/health-check/)
-- [Security testing cycle](/developer/security-testing/) (maintainers)
+- [Health check]({{ "/quick-start/health-check/" | relative_url }})
+- [Security testing cycle]({{ "/developer/security-testing/" | relative_url }}) (maintainers)
 
 
 # Sensor and data quality
 
 # Sensor and data quality
 
-Sensor faults use cookbook patterns **`flatline_1h`**, **`oob_rolling`**, **`rate_of_change`**, and **`mixing_envelope`**. Full thresholds: [Expression cookbook — sensor validation](/rule-cookbook/expression-cookbook/#sensor-validation-bounds-flatline-rate-of-change).
+Sensor faults use cookbook patterns **`flatline_1h`**, **`oob_rolling`**, **`rate_of_change`**, and **`mixing_envelope`**. Full thresholds: [Expression cookbook — sensor validation]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#sensor-validation-bounds-flatline-rate-of-change).
 
 ## Catalog codes
 
@@ -4356,13 +4364,133 @@ docker compose logs bridge --tail 50
 | Log rotation / size caps | Yes — defaults above + Docker `max-size` |
 | SIEM-ready export | Yes — file tail / Filebeat on `workspace/logs/` |
 
-For BACnet write safety and credential generation, see [SECURITY.md](https://github.com/bbartling/open-fdd/blob/master/workspace/deploy/SECURITY.md) and [Secrets and auth](/security/secrets-auth/).
+For BACnet write safety and credential generation, see [SECURITY.md](https://github.com/bbartling/open-fdd/blob/master/workspace/deploy/SECURITY.md) and [Secrets and auth]({{ "/security/secrets-auth/" | relative_url }}).
 
 ## Related
 
-- [JSON API driver](/drivers/json-api/) — OpenWeatherMap showcase, env-based API keys (`json_api.env.local`)
-- [Live site update](/ops/live_site_update/) — `docker compose logs` after upgrades
-- [Data flow](/architecture/data-flow/) — historian retention (`OFDD_FEATHER_*`) is separate from audit logs
+- [JSON API driver]({{ "/drivers/json-api/" | relative_url }}) — OpenWeatherMap showcase, env-based API keys (`json_api.env.local`)
+- [Live site update]({{ "/ops/live_site_update/" | relative_url }}) — `docker compose logs` after upgrades
+- [Data flow]({{ "/architecture/data-flow/" | relative_url }}) — historian retention (`OFDD_FEATHER_*`) is separate from audit logs
+
+
+# GHCR image retention
+
+# GHCR image retention
+
+Open-FDD publishes edge images to **GHCR** (`ghcr.io/bbartling/openfdd-*`). During rapid development, old package versions accumulate. This retention system prunes **noise** while protecting rollback tags for **Acme**, our live validation building.
+
+## Policy (conservative)
+
+**Always keep:**
+
+- `latest` and `edge`
+- Latest **5** SemVer release tags per image (configurable)
+- Tags listed in `scripts/ghcr-retention-protected-tags.txt`
+- Current Acme deployed tag (workflow input or `--current-acme-tag`)
+- Previous Acme known-good tag (`--previous-acme-tag`)
+
+**Delete candidates (only with `--confirm-delete`):**
+
+- Untagged versions older than **7** days
+- SHA-only tags older than **30** days
+- Feature/dev-style tags older than **30** days
+- SemVer releases beyond the latest N window (unless protected)
+
+Images are defined in `docker/images.yaml`:
+
+- `openfdd-bridge`
+- `openfdd-commission`
+- `openfdd-mcp-rag`
+- `openfdd-cloud-exporter`
+
+## Dry-run first
+
+The script defaults to **dry-run**. It prints a keep/delete table and optional JSON/Markdown reports. Nothing is deleted until you pass **`--confirm-delete`**.
+
+There is **no scheduled automatic deletion** yet — only manual runs locally or via GitHub Actions `workflow_dispatch`.
+
+## Protect Acme rollback tags
+
+Before cleanup, edit `scripts/ghcr-retention-protected-tags.txt`:
+
+```text
+latest
+edge
+v3.0.31
+v3.0.30
+```
+
+Or pass tags at runtime:
+
+```bash
+./scripts/ghcr_prune_packages.sh --all-images --dry-run \
+  --current-acme-tag v3.0.31 \
+  --previous-acme-tag v3.0.30
+```
+
+## Run locally
+
+```bash
+gh auth login   # needs read:packages + delete:packages for confirm-delete
+
+./scripts/ghcr_prune_packages.sh --all-images --dry-run
+./scripts/ghcr_prune_packages.sh --image openfdd-bridge --dry-run \
+  --json-out reports/ghcr-prune-plan.json \
+  --markdown-out reports/ghcr-prune-plan.md
+
+# After reviewing the plan:
+./scripts/ghcr_prune_packages.sh --all-images --confirm-delete \
+  --current-acme-tag v3.0.31 --previous-acme-tag v3.0.30
+```
+
+## GitHub Actions workflow
+
+Workflow: **Prune old GHCR images** (`.github/workflows/ghcr-prune.yml`)
+
+1. Actions → **Prune old GHCR images** → **Run workflow**
+2. Leave **Dry run only** = `true` for the first run
+3. Download the `ghcr-prune-report` artifact
+4. Re-run with **Dry run only** = `false` only after reviewing the plan
+5. Set **Current Acme deployed tag** and **Previous Acme rollback tag** when known
+
+## Permissions
+
+Deleting package versions requires:
+
+- Local: `gh auth login` with `delete:packages` (and `read:packages`)
+- Actions: `permissions.packages: write` on the workflow (already set)
+
+If deletion fails, the script prints:
+
+> Deleting GHCR package versions requires package delete permissions…
+
+## Verify images still pull
+
+After pruning:
+
+```bash
+docker pull ghcr.io/bbartling/openfdd-bridge:latest
+docker pull ghcr.io/bbartling/openfdd-commission:latest
+```
+
+On Acme:
+
+```bash
+export OPENFDD_IMAGE_TAG=v3.0.31
+./scripts/upgrade_edge_ghcr.sh --limit acme_vm_bbartling
+./scripts/acme_post_deploy_validate.sh --limit acme_vm_bbartling --quick
+```
+
+## Rollback example
+
+```bash
+export OPENFDD_IMAGE_TAG=v3.0.30
+./scripts/upgrade_edge_ghcr.sh --limit acme_vm_bbartling
+```
+
+## Related issues
+
+Track open Acme/deploy blockers in [GitHub issue #276](https://github.com/bbartling/open-fdd/issues/276).
 
 
 # Fault Codes
@@ -4373,11 +4501,11 @@ Open-FDD uses a **check-engine** model: one building-level status (green / yello
 
 | Page | Content |
 |------|---------|
-| [Convention](/fault-codes/convention/) | Naming, severity, categories |
-| [AHU faults](/fault-codes/ahu/) | Air handling units |
-| [VAV faults](/fault-codes/vav/) | Terminal units |
-| [RTU faults](/fault-codes/rtu/) | Packaged rooftops |
-| [Sensor & data quality](/fault-codes/sensor-quality/) | Stale, flatline, comms |
+| [Convention]({{ "/fault-codes/convention/" | relative_url }}) | Naming, severity, categories |
+| [AHU faults]({{ "/fault-codes/ahu/" | relative_url }}) | Air handling units |
+| [VAV faults]({{ "/fault-codes/vav/" | relative_url }}) | Terminal units |
+| [RTU faults]({{ "/fault-codes/rtu/" | relative_url }}) | Packaged rooftops |
+| [Sensor & data quality]({{ "/fault-codes/sensor-quality/" | relative_url }}) | Stale, flatline, comms |
 
 Live catalog API: `GET /api/faults/catalog` on the Operator Bridge.
 
@@ -4386,21 +4514,21 @@ Live catalog API: `GET /api/faults/catalog` on the Operator Bridge.
 
 # Operations
 
-Runbooks for live edge hosts after the initial [Quick Start](/quick-start/) deploy.
+Runbooks for live edge hosts after the initial [Quick Start]({{ "/quick-start/" | relative_url }}) deploy.
 
 | Page | When to use |
 |------|-------------|
-| [Live site update](/ops/live_site_update/) | Pull new GHCR tags, preserve `workspace/` |
-| [Backup and restore](/ops/backup-restore/) | Archive `workspace/` before upgrades |
-| [Logging and audit](/ops/logging/) | Auth audit trail, rotation, Docker log caps |
-| [Deployment validation](/ops/deployment-validation/) | Post-upgrade smoke and insurance checks |
-| [Acme live validation](/ops/acme-live-validation/) | Read-only harness after GHCR upgrades |
-| [Acme deploy 3.0.33 plan](/ops/acme-deploy-3.0.33-validation/) | Post-merge deploy and re-validation |
-| [Acme validation follow-ups](/ops/acme-validation-follow-ups/) | Run-history equipment, RTU roles, true overnight |
+| [Live site update]({{ "/ops/live_site_update/" | relative_url }}) | Pull new GHCR tags, preserve `workspace/` |
+| [Backup and restore]({{ "/ops/backup-restore/" | relative_url }}) | Archive `workspace/` before upgrades |
+| [Logging and audit]({{ "/ops/logging/" | relative_url }}) | Auth audit trail, rotation, Docker log caps |
+| [Deployment validation]({{ "/ops/deployment-validation/" | relative_url }}) | Post-upgrade smoke and insurance checks |
+| [Acme live validation]({{ "/ops/acme-live-validation/" | relative_url }}) | Read-only harness after GHCR upgrades |
+| [Acme deploy 3.0.33 plan]({{ "/ops/acme-deploy-3.0.33-validation/" | relative_url }}) | Post-merge deploy and re-validation |
+| [Acme validation follow-ups]({{ "/ops/acme-validation-follow-ups/" | relative_url }}) | Run-history equipment, RTU roles, true overnight |
 
-Site-specific lab notes (example BACnet scope, GL36 rules): [Examples & lab notes](/examples/).
+Site-specific lab notes (example BACnet scope, GL36 rules): [Examples & lab notes]({{ "/examples/" | relative_url }}).
 
-For first-time deploy: [Quick Start — Docker](/quick-start/docker/).
+For first-time deploy: [Quick Start — Docker]({{ "/quick-start/docker/" | relative_url }}).
 
 
 # Portfolio
@@ -4411,7 +4539,7 @@ Multi-site analytics on **benserver** — not part of the edge Docker stack.
 
 | Topic | Page |
 |-------|------|
-| Collect rollups from edge sites | [Central collection](/portfolio/central-collection/) |
+| Collect rollups from edge sites | [Central collection]({{ "/portfolio/central-collection/" | relative_url }}) |
 
 Repo layout: `portfolio/` (collector, Dash, `sites.json`). Maintainer tuning API flow: `skills/openfdd-edge-deploy-tune/SKILL.md`.
 
@@ -4508,7 +4636,7 @@ Before enabling more rules:
 
 ## BACnet override scans
 
-Commission agent rotates **one device/hour** through P8 priority-array reads. Status: `GET /api/bacnet/overrides/status`. See [Operator override scans](/bacnet/override-scans/).
+Commission agent rotates **one device/hour** through P8 priority-array reads. Status: `GET /api/bacnet/overrides/status`. See [Operator override scans]({{ "/bacnet/override-scans/" | relative_url }}).
 
 ## Docker backup / recovery
 
@@ -4615,7 +4743,7 @@ OPENFDD_LIVE_ACME=1 OPENFDD_IMAGE_TAG=3.0.32 ACME_OVERNIGHT_CYCLES=4 \
 | `ACME_WINDOW_HOURS` | `2` | Historian lookback per cycle |
 | `ACME_CYCLE_SLEEP_MINUTES` | `0` | Set `120` for true 2-hour wall-clock spacing |
 
-Reports are written under `reports/` (gitignored). See [ACME validation follow-ups](/ops/acme-validation-follow-ups/) and [ACME deploy 3.0.33 validation plan](/ops/acme-deploy-3.0.33-validation/).
+Reports are written under `reports/` (gitignored). See [ACME validation follow-ups]({{ "/ops/acme-validation-follow-ups/" | relative_url }}) and [ACME deploy 3.0.33 validation plan]({{ "/ops/acme-deploy-3.0.33-validation/" | relative_url }}).
 
 ### Live bridge vs branch fix
 
@@ -4774,7 +4902,7 @@ All validation is **read-only**. No BACnet writes, commands, overrides, schedule
 
 Open-FDD targets **trusted building LAN / OT edge** deployment. The Operator Bridge is not intended for direct public internet exposure.
 
-Full mode matrix: [Deployment modes](/architecture/deployment-modes/).
+Full mode matrix: [Deployment modes]({{ "/architecture/deployment-modes/" | relative_url }}).
 
 ## Auth and bind
 
@@ -4791,7 +4919,7 @@ Startup **fails** on non-loopback bind without credentials (unless insecure lab 
 - Put **Caddy** on `:80` / `:443`; keep bridge `:8765` on loopback when possible.
 - Do not port-forward the Operator Bridge to the public internet without TLS and strong auth.
 - Keep BACnet on OT VLANs; management UI on IT VLAN with firewall rules.
-- BACnet **writes** are gated by default — [BACnet write guard](/security/bacnet-writes/).
+- BACnet **writes** are gated by default — [BACnet write guard]({{ "/security/bacnet-writes/" | relative_url }}).
 
 ## Rule Lab
 
@@ -4801,10 +4929,10 @@ Rule Lab runs **operator-authored Python** in a sandbox. Restrict integrator acc
 
 | Topic | Page |
 |-------|------|
-| Certificates (self-signed / site CA) | [TLS and certificates](/security/tls-and-certs/) |
-| ZAP + Nmap bench smoke | [ZAP baseline](/security/zap-baseline/) · `scripts/security/` |
-| Ubuntu host + Tenable/Nessus | [Linux host hardening](/security/linux-host-hardening/) · [Tenable remediation](/security/tenable-remediation/) |
-| Release test cycle (maintainers) | [Security testing](/developer/security-testing/) |
+| Certificates (self-signed / site CA) | [TLS and certificates]({{ "/security/tls-and-certs/" | relative_url }}) |
+| ZAP + Nmap bench smoke | [ZAP baseline]({{ "/security/zap-baseline/" | relative_url }}) · `scripts/security/` |
+| Ubuntu host + Tenable/Nessus | [Linux host hardening]({{ "/security/linux-host-hardening/" | relative_url }}) · [Tenable remediation]({{ "/security/tenable-remediation/" | relative_url }}) |
+| Release test cycle (maintainers) | [Security testing]({{ "/developer/security-testing/" | relative_url }}) |
 
 ## Ollama on the edge
 
@@ -4817,7 +4945,7 @@ Ollama has **no built-in auth**. Bind `OLLAMA_HOST=127.0.0.1:11434` on the host;
 
 Passive [OWASP ZAP baseline](https://www.zaproxy.org/docs/docker/baseline-scan/) against the **pentest production stack** on benserver is the standard LAN security smoke before Acme edge deploys.
 
-Full per-revision workflow (pytest → PR → GHCR → Acme): [Developer — security testing cycle](/developer/security-testing/).
+Full per-revision workflow (pytest → PR → GHCR → Acme): [Developer — security testing cycle]({{ "/developer/security-testing/" | relative_url }}).
 
 Packaged scan scripts (Windows + Mac/Linux): [scripts/security/README.md](https://github.com/bbartling/open-fdd/blob/master/scripts/security/README.md).
 
@@ -4842,7 +4970,7 @@ Packaged scan scripts (Windows + Mac/Linux): [scripts/security/README.md](https:
 ./scripts/security/run_openfdd_security_scan.sh --url http://192.168.204.18
 ```
 
-ZAP target (example): `http://192.168.204.18/` — Caddy on `:80` only; bridge `:8765` stays loopback. TLS bench: see [TLS and certificates](/security/tls-and-certs/).
+ZAP target (example): `http://192.168.204.18/` — Caddy on `:80` only; bridge `:8765` stays loopback. TLS bench: see [TLS and certificates]({{ "/security/tls-and-certs/" | relative_url }}).
 
 ## Expected results (HTTP bench mode)
 
@@ -4865,7 +4993,7 @@ ZAP target (example): `http://192.168.204.18/` — Caddy on `:80` only; bridge `
 
 ## Authenticated scan (later)
 
-Baseline scan hits ~4 public endpoints (`/health`, public agent insight routes). Deep API/dashboard coverage requires ZAP with integrator login — see [Authenticated scanning (roadmap)](/security/authenticated-scanning/).
+Baseline scan hits ~4 public endpoints (`/health`, public agent insight routes). Deep API/dashboard coverage requires ZAP with integrator login — see [Authenticated scanning (roadmap)]({{ "/security/authenticated-scanning/" | relative_url }}).
 
 ## After fixes
 
@@ -4878,7 +5006,7 @@ Re-run `pentest_production_stack.sh verify`, then the packaged LAN scan from `sc
 
 Who generates, stores, and renews TLS material for Open-FDD on OT LANs — and how that ties into ZAP/Nmap bench testing.
 
-Developer release cycle: [Security testing cycle](/developer/security-testing/).
+Developer release cycle: [Security testing cycle]({{ "/developer/security-testing/" | relative_url }}).
 
 ## Ownership
 
@@ -4904,7 +5032,7 @@ OFDD_CADDY_MODE=tls ./scripts/run_local.sh
 # or pentest stack with OFDD_CADDY_MODE=tls
 ```
 
-Caddy serves `:443` and redirects `:80` → HTTPS. Caddy adds **`Strict-Transport-Security`** only; all other security headers remain on the **bridge** ([ZAP baseline](/security/zap-baseline/#header-ownership)).
+Caddy serves `:443` and redirects `:80` → HTTPS. Caddy adds **`Strict-Transport-Security`** only; all other security headers remain on the **bridge** ([ZAP baseline]({{ "/security/zap-baseline/" | relative_url }}#header-ownership)).
 
 ## ZAP / Nmap with TLS bench
 
@@ -4959,7 +5087,7 @@ openssl x509 -in /etc/openfdd/caddy/cert.pem -noout -dates
 }
 ```
 
-Lab/self-signed mode still produces expected **Medium** Tenable findings — document as accepted risk or switch to enterprise CA. See [Tenable remediation](/security/tenable-remediation/).
+Lab/self-signed mode still produces expected **Medium** Tenable findings — document as accepted risk or switch to enterprise CA. See [Tenable remediation]({{ "/security/tenable-remediation/" | relative_url }}).
 
 ## Caddy internal CA mode (lab)
 
@@ -4975,11 +5103,11 @@ Lab/self-signed mode still produces expected **Medium** Tenable findings — doc
 
 # Authenticated scanning (roadmap)
 
-[ZAP baseline](/security/zap-baseline/) is **unauthenticated** — it checks public pages, response headers, and a handful of routes reachable without login. That is the right default for every docker image / patch revision smoke on a test LAN.
+[ZAP baseline]({{ "/security/zap-baseline/" | relative_url }}) is **unauthenticated** — it checks public pages, response headers, and a handful of routes reachable without login. That is the right default for every docker image / patch revision smoke on a test LAN.
 
 For **deep** coverage of integrator dashboards, `/api/*` routes, WebSocket sessions, and role-gated writes, plan a separate **authenticated** scan — only on fake/bench stacks with explicit approval.
 
-Release context: [Security testing cycle](/developer/security-testing/).
+Release context: [Security testing cycle]({{ "/developer/security-testing/" | relative_url }}).
 
 ## Current state (3.0.x)
 
@@ -5023,8 +5151,8 @@ Do **not** run active scans against production Acme without a maintenance window
 ## Related
 
 - [scripts/security/README.md](https://github.com/bbartling/open-fdd/blob/master/scripts/security/README.md) — baseline setup
-- [Secrets and auth](/security/secrets-auth/) — env file layout
-- [LAN hardening](/security/lan-hardening/) — bind and auth modes
+- [Secrets and auth]({{ "/security/secrets-auth/" | relative_url }}) — env file layout
+- [LAN hardening]({{ "/security/lan-hardening/" | relative_url }}) — bind and auth modes
 
 
 # Secrets and auth
@@ -5044,7 +5172,7 @@ Do **not** run active scans against production Acme without a maintenance window
 | `workspace/pentest.env.local` | LAN security scan stack |
 | `infra/ansible/secrets/<host>.env.local` | SSH deploy secrets (maintainers) |
 
-Copy from `*.example` templates only. Full inventory: [Workspace env files](/appendix/workspace-env-files/).
+Copy from `*.example` templates only. Full inventory: [Workspace env files]({{ "/appendix/workspace-env-files/" | relative_url }}).
 
 ## Required variables (production)
 
@@ -5062,7 +5190,7 @@ Use read-only registry credentials on edge if images are private; rotate tokens 
 
 Back up `workspace/data/` and auth env in secure operator vault — not in git.
 
-Audit JSONL under `workspace/logs/` may contain client IPs and usernames — treat like security logs. See [Logging and audit](/ops/logging/).
+Audit JSONL under `workspace/logs/` may contain client IPs and usernames — treat like security logs. See [Logging and audit]({{ "/ops/logging/" | relative_url }}).
 
 
 # BACnet write allowlists
@@ -5072,7 +5200,7 @@ Audit JSONL under `workspace/logs/` may contain client IPs and usernames — tre
 Supervisory writes require:
 
 1. **Feature flag** enabled in environment (off by default).
-2. **Allowlist** file at `workspace/bacnet/write_allowlist.json` (copy from [`write_allowlist.example.json`](write_allowlist.example.json)). If the flag is on but the allowlist is missing, writes are **denied**.
+2. **Allowlist** file at `workspace/bacnet/write_allowlist.json` (copy from [`write_allowlist.example.json`](https://github.com/bbartling/open-fdd/blob/master/docs/security/write_allowlist.example.json)). If the flag is on but the allowlist is missing, writes are **denied**.
 3. **Integrator** role on API calls.
 4. **Audit** log review after commissioning sessions.
 
@@ -5080,7 +5208,7 @@ Allowlist entries support `device_instance`, `object_identifier`, `property_iden
 
 Lab-only override: `OFDD_BACNET_WRITE_ALLOW_ANY=1` (audited; not for production edges).
 
-See operator guide: [BACnet write safety](/bacnet/write-safety/).
+See operator guide: [BACnet write safety]({{ "/bacnet/write-safety/" | relative_url }}).
 
 Never enable blanket write access for agent or integrator automation without human approval per site.
 
@@ -5089,9 +5217,9 @@ Never enable blanket write access for agent or integrator automation without hum
 
 # Linux host hardening
 
-Generic **Ubuntu edge VM** guidance for Open-FDD deployments scanned by IT tools (Tenable/Nessus, Qualys, etc.). This complements application-level [LAN hardening](/security/lan-hardening/) and [TLS](/security/tls-and-certs/).
+Generic **Ubuntu edge VM** guidance for Open-FDD deployments scanned by IT tools (Tenable/Nessus, Qualys, etc.). This complements application-level [LAN hardening]({{ "/security/lan-hardening/" | relative_url }}) and [TLS]({{ "/security/tls-and-certs/" | relative_url }}).
 
-Nessus-specific finding tables: [Tenable remediation](/security/tenable-remediation/).
+Nessus-specific finding tables: [Tenable remediation]({{ "/security/tenable-remediation/" | relative_url }}).
 
 ## Scope
 
@@ -5100,7 +5228,7 @@ Nessus-specific finding tables: [Tenable remediation](/security/tenable-remediat
 | Ubuntu kernel, OpenSSH, apt packages | **Site IT / integrator** | `scripts/security/remediate_ubuntu_host.sh` |
 | Docker engine, compose, Caddy | **Integrator** | Ansible + `check_openfdd_exposure.sh` |
 | Open-FDD containers (pip/pyOpenSSL) | **Open-FDD maintainers** | `docker/python-security-constraints.txt`, GHCR images |
-| Self-signed TLS on OT LAN | **Expected lab finding** | Enterprise CA path in [TLS](/security/tls-and-certs/) |
+| Self-signed TLS on OT LAN | **Expected lab finding** | Enterprise CA path in [TLS]({{ "/security/tls-and-certs/" | relative_url }}) |
 
 ## Quick operator workflow
 
@@ -5218,7 +5346,7 @@ sudo nft add rule inet filter input icmp type timestamp-request drop
 
 ## TLS and certificate scans
 
-Self-signed or internal CA certificates produce **Medium** Nessus SSL findings (untrusted, self-signed, expiry). That is **expected** for lab/OT encryption-in-transit. For clean SSL plugin results, install a **site enterprise CA** certificate on Caddy — [TLS and certificates](/security/tls-and-certs/#enterprise-ca-production).
+Self-signed or internal CA certificates produce **Medium** Nessus SSL findings (untrusted, self-signed, expiry). That is **expected** for lab/OT encryption-in-transit. For clean SSL plugin results, install a **site enterprise CA** certificate on Caddy — [TLS and certificates]({{ "/security/tls-and-certs/" | relative_url }}#enterprise-ca-production).
 
 ## Maintainer security audits (CI parity)
 
@@ -5235,7 +5363,7 @@ Matches GitHub Actions `operator-bridge-security` job where possible.
 
 Remediation plan for **IT/Tenable.io Nessus** findings on an Open-FDD **OT/LAN edge** deployment (e.g. Acme GL36 lab VM). Open-FDD runs behind a building firewall on Ubuntu with Docker Compose, Caddy, and optional host Ollama.
 
-Related: [Linux host hardening](/security/linux-host-hardening/), [TLS and certificates](/security/tls-and-certs/), [LAN hardening](/security/lan-hardening/), [Security testing cycle](/developer/security-testing/).
+Related: [Linux host hardening]({{ "/security/linux-host-hardening/" | relative_url }}), [TLS and certificates]({{ "/security/tls-and-certs/" | relative_url }}), [LAN hardening]({{ "/security/lan-hardening/" | relative_url }}), [Security testing cycle]({{ "/developer/security-testing/" | relative_url }}).
 
 ## Prioritized action plan
 
@@ -5346,7 +5474,7 @@ CI `pip-audit` runs against bridge + bacnet requirements with the same constrain
 | Caddy self-signed `:443` | Medium: untrusted, self-signed, expiry | OT LAN encryption, lab |
 | Enterprise CA cert on Caddy | Clean SSL plugins (if chain trusted) | IT mandates clean Nessus |
 
-See [TLS — enterprise CA](/security/tls-and-certs/#enterprise-ca-on-caddy-edge).
+See [TLS — enterprise CA]({{ "/security/tls-and-certs/" | relative_url }}#enterprise-ca-on-caddy-edge).
 
 ## Residual findings after remediation
 
@@ -5363,7 +5491,7 @@ Even with a patched host and loopback-only Ollama, IT may still see:
 3. **BACnet UDP 47808** on commission is expected OT traffic — out of scope for web/plugin remediation.
 4. Do not expose Ollama **11434** to the building LAN; agent chat is server-side only.
 5. Kernel CVEs require **host reboot** — schedule with operations.
-6. For authenticated web/API depth, see roadmap [Authenticated scanning](/security/authenticated-scanning/).
+6. For authenticated web/API depth, see roadmap [Authenticated scanning]({{ "/security/authenticated-scanning/" | relative_url }}).
 
 ## Repo-owned fixes (this document’s release)
 
@@ -5380,7 +5508,7 @@ Even with a patched host and loopback-only Ollama, IT may still see:
 
 # AI agents and MCP
 
-- [MCP server](/ai/mcp-server/) — FastMCP tools over the operator bridge
+- [MCP server]({{ "/ai/mcp-server/" | relative_url }}) — FastMCP tools over the operator bridge
 - Skills under `skills/openfdd-*-agent/` and `skills/openfdd-mcp-server/`
 - Operator memory: `workspace/MEMORY.md` (see `workspace/MEMORY.md.example`)
 
@@ -5393,16 +5521,16 @@ LAN deployment security for the Operator Bridge and BACnet write guard. Open-FDD
 
 | Page | Topic |
 |------|-------|
-| [LAN hardening](/security/lan-hardening/) | Auth and bind modes |
-| [ZAP baseline (local bench)](/security/zap-baseline/) | Pentest stack, expected warnings |
-| [TLS and certificates](/security/tls-and-certs/) | Cert ownership, bench TLS mode |
-| [Linux host hardening](/security/linux-host-hardening/) | Ubuntu edge VM, SSH, kernel, Ollama bind |
-| [Tenable / Nessus remediation](/security/tenable-remediation/) | IT scan findings, operator runbook |
-| [Authenticated scanning (roadmap)](/security/authenticated-scanning/) | Deep ZAP / protected API |
-| [Secrets and auth](/security/secrets-auth/) | Env files |
-| [BACnet write allowlists](/security/bacnet-writes/) | Supervisory write gates |
-| [Release & LAN scan cycle](/developer/security-testing/) | Per-revision ZAP + CI workflow |
-| [Logging and audit](/ops/logging/) | Auth audit trail, rotation, SIEM |
+| [LAN hardening]({{ "/security/lan-hardening/" | relative_url }}) | Auth and bind modes |
+| [ZAP baseline (local bench)]({{ "/security/zap-baseline/" | relative_url }}) | Pentest stack, expected warnings |
+| [TLS and certificates]({{ "/security/tls-and-certs/" | relative_url }}) | Cert ownership, bench TLS mode |
+| [Linux host hardening]({{ "/security/linux-host-hardening/" | relative_url }}) | Ubuntu edge VM, SSH, kernel, Ollama bind |
+| [Tenable / Nessus remediation]({{ "/security/tenable-remediation/" | relative_url }}) | IT scan findings, operator runbook |
+| [Authenticated scanning (roadmap)]({{ "/security/authenticated-scanning/" | relative_url }}) | Deep ZAP / protected API |
+| [Secrets and auth]({{ "/security/secrets-auth/" | relative_url }}) | Env files |
+| [BACnet write allowlists]({{ "/security/bacnet-writes/" | relative_url }}) | Supervisory write gates |
+| [Release & LAN scan cycle]({{ "/developer/security-testing/" | relative_url }}) | Per-revision ZAP + CI workflow |
+| [Logging and audit]({{ "/ops/logging/" | relative_url }}) | Auth audit trail, rotation, SIEM |
 
 
 # API routes
@@ -5413,7 +5541,7 @@ REST API served by **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Produ
 
 **OpenAPI:** `GET /docs` and `GET /redoc` when the bridge runs.
 
-**Auth:** JWT via `POST /api/auth/login`. Most routes require `Authorization: Bearer <token>`. Roles: `viewer`, `operator`, `integrator`, `commission`, `agent`, `admin`. BACnet writes require commission role + [write safety](/bacnet/write-safety/). Dev: `OFDD_AUTH_DISABLED` on loopback only.
+**Auth:** JWT via `POST /api/auth/login`. Most routes require `Authorization: Bearer <token>`. Roles: `viewer`, `operator`, `integrator`, `commission`, `agent`, `admin`. BACnet writes require commission role + [write safety]({{ "/bacnet/write-safety/" | relative_url }}). Dev: `OFDD_AUTH_DISABLED` on loopback only.
 
 **WebSocket:** `WS /ws/dashboard` — `POST /api/auth/ws-ticket`, then pass the ticket via `Sec-WebSocket-Protocol: ofdd.ws, <ticket>`. Query `?ticket=` is dev-only when `OFDD_WS_ALLOW_QUERY_TICKET=1`. Tickets are short-lived and not interchangeable with the Bearer token.
 
@@ -5508,7 +5636,7 @@ REST API served by **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Produ
 | GET | `/api/bacnet/poll/status` | read | Poll worker status |
 | POST | `/ingest/bacnet` | read | Ingest samples into feather |
 
-Bind address: `BACNET_BIND` in commission env — see [BACnet network setup](/bacnet/network-setup/). Operator guide: [Discover and read](/bacnet/discover-read/).
+Bind address: `BACNET_BIND` in commission env — see [BACnet network setup]({{ "/bacnet/network-setup/" | relative_url }}). Operator guide: [Discover and read]({{ "/bacnet/discover-read/" | relative_url }}).
 
 | PATCH | `/api/bacnet/driver/point` | commission | Enable poll + interval on point |
 | PATCH | `/api/bacnet/driver/device` | commission | Enable poll for all points on device |
@@ -5567,7 +5695,7 @@ Prefix **`/openfdd-agent`**. Role **`agent`** for tool execution.
 | GET | `/openfdd-agent/zone-temps` | Zone temperature insight |
 | POST | `/openfdd-agent/chat` | Chat completion (catalog-bound) |
 
-Optional host Ollama for building insight — not required for core FDD. Configure via compose profile or host service; see [Architecture overview](/architecture/overview/).
+Optional host Ollama for building insight — not required for core FDD. Configure via compose profile or host service; see [Architecture overview]({{ "/architecture/overview/" | relative_url }}).
 
 ---
 
@@ -5583,7 +5711,7 @@ Optional host Ollama for building insight — not required for core FDD. Configu
 | POST | `/api/modbus/refresh` | operator+ | Re-read one register |
 | PATCH | `/api/modbus/register/poll` | integrator+ | Enable poll interval |
 
-See [Driver framework](/drivers/).
+See [Driver framework]({{ "/drivers/" | relative_url }}).
 
 ---
 
@@ -5602,19 +5730,19 @@ See [Driver framework](/drivers/).
 | PATCH | `/api/json-api/endpoint/poll` | integrator+ | Enable poll interval |
 | DELETE | `/api/json-api/endpoint/{point_id}` | integrator+ | Remove endpoint |
 
-**Outbound auth:** `auth_type` = `none` \| `bearer` \| `basic`; optional `verify_tls` (default true). See [JSON API driver](/drivers/json-api/).
+**Outbound auth:** `auth_type` = `none` \| `bearer` \| `basic`; optional `verify_tls` (default true). See [JSON API driver]({{ "/drivers/json-api/" | relative_url }}).
 
 ---
 
 ## PyPI package (separate)
 
-Library-only HTTP is **not** bundled. See [Python package](/appendix/python-package/) for `open_fdd.arrow_runtime` (Arrow rules offline).
+Library-only HTTP is **not** bundled. See [Python package]({{ "/appendix/python-package/" | relative_url }}) for `open_fdd.arrow_runtime` (Arrow rules offline).
 
 ---
 
 ## Errors
 
-JSON error bodies; stack traces hidden unless `OFDD_DEBUG_TRACEBACKS=1`. See [LAN hardening](/security/lan-hardening/).
+JSON error bodies; stack traces hidden unless `OFDD_DEBUG_TRACEBACKS=1`. See [LAN hardening]({{ "/security/lan-hardening/" | relative_url }}).
 
 
 # Python package
@@ -5648,7 +5776,7 @@ Retired in 3.0.1+: `open_fdd.engine` (YAML/pandas `RuleRunner`) is **not** shipp
 
 ## Versioning
 
-Publish: git tag `vX.Y.Z` (or legacy `open-fdd-vX.Y.Z`) → GitHub Actions **Publish open-fdd to PyPI**. See [Release process](/developer/release-process/).
+Publish: git tag `vX.Y.Z` (or legacy `open-fdd-vX.Y.Z`) → GitHub Actions **Publish open-fdd to PyPI**. See [Release process]({{ "/developer/release-process/" | relative_url }}).
 
 ```python
 import open_fdd
@@ -5673,7 +5801,7 @@ result = run_arrow_rule(code, table, {"high": 85})
 print(result.flagged_count)
 ```
 
-API surface: `open_fdd/arrow_runtime` docstrings and [Arrow recipes](/rule-cookbook/arrow-recipes/).
+API surface: `open_fdd/arrow_runtime` docstrings and [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}).
 
 
 # Configuration reference
@@ -5733,7 +5861,7 @@ All live under `workspace/`. Copy from `*.example` templates; committed `*.local
 | `auth.env.local` | `run_local.sh`, Docker compose, Ansible | JWT secret (`OFDD_AUTH_SECRET`), integrator/operator/agent passwords, `OFDD_AUTH_DISABLED` for localhost dev only |
 | `data.env.local` | `run_local.sh`, bridge, feather maintain | Feather historian caps (`OFDD_FEATHER_*`), audit/error log rotation (`OFDD_LOG_*`), BACnet discovery mutation toggle |
 | `json_api.env.local` | bridge, Ansible edge sync | API keys for JSON API driver `${ENV:VAR}` substitution (e.g. `OPENWEATHER_API_KEY`) |
-| `ollama.env.local` | `run_local.sh`, bridge | Ollama base URL, model name, RAM tier, GPU mode, timeouts — see [Ollama and analytics](/operator-bridge/ollama-analytics/) |
+| `ollama.env.local` | `run_local.sh`, bridge | Ollama base URL, model name, RAM tier, GPU mode, timeouts — see [Ollama and analytics]({{ "/operator-bridge/ollama-analytics/" | relative_url }}) |
 | `mcp.env.local` | `run_local.sh`, MCP sidecar | Enable MCP RAG REST (`OFDD_MCP_*`), index path |
 | `caddy.env.local` | `run_local.sh`, Ansible edge | Reverse proxy mode (`http` / `tls` / `off`), TLS CN, port overrides |
 | `pentest.env.local` | `pentest_production_stack.sh` | Production-like LAN scan stack: CORS, auth, passive BACnet defaults |
@@ -5746,10 +5874,10 @@ All live under `workspace/`. Copy from `*.example` templates; committed `*.local
 
 ## Related docs
 
-- [Secrets and auth](/security/secrets-auth/) — required production variables
-- [Logging and audit](/ops/logging/) — `OFDD_LOG_*` detail
-- [JSON API driver](/drivers/json-api/) — `${ENV:VAR}` pattern
-- [Configuration reference](/appendix/configuration/) — bridge runtime flags not in env files
+- [Secrets and auth]({{ "/security/secrets-auth/" | relative_url }}) — required production variables
+- [Logging and audit]({{ "/ops/logging/" | relative_url }}) — `OFDD_LOG_*` detail
+- [JSON API driver]({{ "/drivers/json-api/" | relative_url }}) — `${ENV:VAR}` pattern
+- [Configuration reference]({{ "/appendix/configuration/" | relative_url }}) — bridge runtime flags not in env files
 
 
 # Appendix
@@ -5760,11 +5888,11 @@ Reference material for integrators and library users.
 
 | Page | Content |
 |------|---------|
-| [API routes](/appendix/bridge_api/) | Operator Bridge REST/WebSocket |
-| [Python package](/appendix/python-package/) | PyPI `open-fdd` |
-| [Configuration reference](/appendix/configuration/) | Key env variables |
-| [Workspace env files](/appendix/workspace-env-files/) | `workspace/*.env.local` inventory |
-| [Glossary](/appendix/glossary/) | Terms |
+| [API routes]({{ "/appendix/bridge_api/" | relative_url }}) | Operator Bridge REST/WebSocket |
+| [Python package]({{ "/appendix/python-package/" | relative_url }}) | PyPI `open-fdd` |
+| [Configuration reference]({{ "/appendix/configuration/" | relative_url }}) | Key env variables |
+| [Workspace env files]({{ "/appendix/workspace-env-files/" | relative_url }}) | `workspace/*.env.local` inventory |
+| [Glossary]({{ "/appendix/glossary/" | relative_url }}) | Terms |
 
 
 # GL36 lab site (Acme)
@@ -5891,9 +6019,9 @@ Site-specific commissioning notes, GL36 examples, and maintainer lab workflows. 
 
 | Page | Description |
 |------|-------------|
-| [GL36 lab site (Acme)](/examples/acme-gl36-lab/) | Example real-building poll scope, Arrow rule stubs, Ansible deploy commands |
+| [GL36 lab site (Acme)]({{ "/examples/acme-gl36-lab/" | relative_url }}) | Example real-building poll scope, Arrow rule stubs, Ansible deploy commands |
 
-For production IT operators, start with [Quick Start](/quick-start/) and [Operations](/ops/).
+For production IT operators, start with [Quick Start]({{ "/quick-start/" | relative_url }}) and [Operations]({{ "/ops/" | relative_url }}).
 
 
 # Arrow-native runtime
@@ -5999,7 +6127,7 @@ docker manifest inspect ghcr.io/bbartling/openfdd-bridge:3.0.30
 
 ## Package vs Docker
 
-See [PyPI package](pypi-package.md) and [Docker images](../ops/docker-images.md).
+See [PyPI package]({{ "/developer/pypi-package/" | relative_url }}) and [Docker images]({{ "/ops/docker-images/" | relative_url }}).
 
 
 # PyPI package
