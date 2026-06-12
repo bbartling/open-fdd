@@ -23,4 +23,15 @@ python3 scripts/portfolio_collect.py --json
 
 Edge API: `workspace/api/openfdd_bridge/portfolio_rollup.py` → `GET /api/building/portfolio-rollup`.
 
-Published docs: [docs/portfolio/central-collection.md](../docs/portfolio/central-collection.md)
+Published docs: [docs/portfolio/central-collection.md](../docs/portfolio/central-collection.md), [Central API](../docs/portfolio/central-api.md).
+
+## Central API (validation + RCx)
+
+```bash
+pip install -r portfolio/requirements.txt
+./scripts/run_central_api.sh    # :8060
+curl http://127.0.0.1:8060/api/central/sites
+curl -X POST http://127.0.0.1:8060/api/central/validation/run \
+  -H 'Content-Type: application/json' \
+  -d '{"site_id":"acme","duration_hours":0}'
+```

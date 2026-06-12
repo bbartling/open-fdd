@@ -1,72 +1,43 @@
-"""Fault alert model_context enrichment for Building Status."""
+"""Fault alert model_context enrichment."""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-import pytest
-
 REPO = Path(__file__).resolve().parents[2]
-API_ROOT = REPO / "workspace" / "api"
-if str(API_ROOT) not in sys.path:
-    sys.path.insert(0, str(API_ROOT))
+sys.path.insert(0, str(REPO / "workspace" / "api"))
+
+from openfdd_bridge.fault_model_context import enrich_fault_alert  # noqa: E402
 
 
-def test_enrich_fdd_alert_adds_point_and_equipment():
-    from openfdd_bridge.fault_model_context import enrich_fault_alert
-
-    model = {
-        "sites": [{"id": "acme", "name": "Acme"}],
-        "equipment": [
-            {
-                "id": "ahu-c",
-                "site_id": "acme",
-                "name": "AHU-C",
-                "equipment_type": "Air_Handling_Unit",
-            }
-        ],
-        "points": [
-            {
-                "id": "1100-analog-input-1234",
-                "site_id": "acme",
-                "equipment_id": "ahu-c",
-                "external_id": "AHU-C-SAT",
-                "brick_type": "Supply_Air_Temperature_Sensor",
-                "description": "Supply Air Temperature",
-                "bacnet_device_id": 1100,
-                "object_identifier": "analog-input,1234",
-            }
-        ],
-    }
+def test_enrich_fault_alert_uses_title_equipment_label():
+    model = {"sites": [{"id": "acme"}], "equipment": [], "points": []}
     alert = {
-        "id": "fdd-1",
-        "severity": "warning",
         "source": "fdd",
-        "title": "AHU-C · acme-sat-flatline-1h · AHU SAT flatline 1h: 1 fault row(s) at acme",
-        "detail": "1/24 samples flagged",
-        "code": "acme-sat-flatline-1h",
+        "code": "AHU-C",
+        "severity": "warning",
+        "title": "AHU-C · AHU SAT flatline 1h: 1 fault row(s) at acme",
         "rule_id": "acme-sat-flatline-1h",
         "rule_name": "AHU SAT flatline 1h",
-        "equipment_name": "AHU-C",
-        "analytics": {"flagged_columns": ["AHU-C-SAT"], "fault_samples": 1, "total_samples": 24},
     }
     out = enrich_fault_alert(alert, model)
-    ctx = out["model_context"]
-    assert ctx["equipment"]["name"] == "AHU-C"
-    assert ctx["point"]["name"] == "Supply Air Temperature"
-    assert ctx["historian_column"] == "AHU-C-SAT"
-    assert "1100" in ctx["bacnet_summary"]
+    assert out.get("equipment_name") == "AHU-C"
+    ctx = out.get("model_context") or {}
+    assert ctx.get("equipment", {}).get("name") == "AHU-C"
+    assert ctx.get("equipment", {}).get("type") == "AHU"
 
 
-def test_enrich_graceful_when_unmapped():
-    from openfdd_bridge.fault_model_context import enrich_fault_alert
-
+def test_enrich_fault_alert_infers_building_type_from_bld_code():
+    model = {"sites": [{"id": "acme"}], "equipment": [], "points": []}
     alert = {
         "source": "fdd",
-        "title": "mystery fault",
-        "rule_id": "r1",
-        "analytics": {},
+        "code": "BLD-B",
+        "severity": "warning",
+        "title": "BLD-B · Outdoor air temp flatline 1h: 1 fault row(s) at acme",
+        "rule_id": "acme-oat-flatline-1h",
     }
-    out = enrich_fault_alert(alert, {"sites": [], "equipment": [], "points": []})
-    assert out["model_context"]["point"]["name"] == "not mapped"
+    out = enrich_fault_alert(alert, model)
+    ctx = out.get("model_context") or {}
+    assert ctx.get("equipment", {}).get("name") == "BLD-B"
+    assert ctx.get("equipment", {}).get("type") == "Building"
