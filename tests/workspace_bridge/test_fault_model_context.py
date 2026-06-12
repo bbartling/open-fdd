@@ -26,3 +26,18 @@ def test_enrich_fault_alert_uses_title_equipment_label():
     ctx = out.get("model_context") or {}
     assert ctx.get("equipment", {}).get("name") == "AHU-C"
     assert ctx.get("equipment", {}).get("type") == "AHU"
+
+
+def test_enrich_fault_alert_infers_building_type_from_bld_code():
+    model = {"sites": [{"id": "acme"}], "equipment": [], "points": []}
+    alert = {
+        "source": "fdd",
+        "code": "BLD-B",
+        "severity": "warning",
+        "title": "BLD-B · Outdoor air temp flatline 1h: 1 fault row(s) at acme",
+        "rule_id": "acme-oat-flatline-1h",
+    }
+    out = enrich_fault_alert(alert, model)
+    ctx = out.get("model_context") or {}
+    assert ctx.get("equipment", {}).get("name") == "BLD-B"
+    assert ctx.get("equipment", {}).get("type") == "Building"

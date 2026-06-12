@@ -14,6 +14,9 @@ Runbooks for live edge hosts after the initial [Quick Start]({% link quick-start
 | [Backup and restore]({% link ops/backup-restore.md %}) | Archive `workspace/` before upgrades |
 | [Logging and audit]({% link ops/logging.md %}) | Auth audit trail, rotation, Docker log caps |
 | [Deployment validation]({% link ops/deployment-validation.md %}) | Post-upgrade smoke and insurance checks |
+| [Acme live validation]({% link ops/acme-live-validation.md %}) | Read-only harness after GHCR upgrades |
+| [Acme deploy 3.0.33 plan]({% link ops/acme-deploy-3.0.33-validation.md %}) | Post-merge deploy and re-validation |
+| [Acme validation follow-ups]({% link ops/acme-validation-follow-ups.md %}) | Run-history equipment, RTU roles, true overnight |
 
 Site-specific lab notes (example BACnet scope, GL36 rules): [Examples & lab notes]({% link examples/index.md %}).
 
