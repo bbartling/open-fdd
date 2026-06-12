@@ -19,7 +19,7 @@ nav_order: 4
 - [ ] Docs updated if user-facing behavior changed
 - [ ] `docs/` Jekyll build succeeds
 - [ ] No credentials in diff
-- [ ] Auth/Caddy/header changes: re-run [pentest verify + LAN ZAP]({% link developer/security-testing.md %}) and update [ZAP baseline]({% link security/zap-baseline.md %}) if expectations changed
+- [ ] Auth/Caddy/header changes: re-run [pentest verify + LAN ZAP]({{ "/developer/security-testing/" | relative_url }}) and update [ZAP baseline]({{ "/security/zap-baseline/" | relative_url }}) if expectations changed
 
 ## Repository layout (short)
 
@@ -31,6 +31,14 @@ nav_order: 4
 | `docker/` | Compose files and image contexts |
 | `infra/ansible/` | Edge deploy playbooks |
 | `docs/` | This site (Jekyll + Just the Docs) |
+
+## Docs links (GitHub Pages)
+
+The site is a **project page** at `https://bbartling.github.io/open-fdd/` (`baseurl: /open-fdd` in `docs/_config.yml`).
+
+- **Do not** use Jekyll `{% link path.md %}` in Markdown body text — it omits `baseurl` and 404s on GitHub Pages.
+- **Do** use `[label]({{ "/section/page/" | relative_url }})` for internal links.
+- After `bundle exec jekyll build`, run `python3 scripts/check_docs_internal_links.py --site _site` from the repo root.
 
 ## Security issues
 

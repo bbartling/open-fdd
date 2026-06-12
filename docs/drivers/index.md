@@ -12,9 +12,9 @@ Open-FDD edge commissioning uses a **shared driver pattern** for OT data sources
 
 | Driver | Protocol | Feather `source` | Commissioning tab |
 |--------|----------|------------------|-------------------|
-| [BACnet]({% link bacnet/index.md %}) | MS/TP / IP (`:47808`) | `bacnet` | BACnet |
+| [BACnet]({{ "/bacnet/" | relative_url }}) | MS/TP / IP (`:47808`) | `bacnet` | BACnet |
 | Modbus | Modbus TCP | `modbus` | Modbus |
-| [JSON API]({% link drivers/json-api.md %}) | HTTP/HTTPS REST (+ [OpenWeather showcase]({% link drivers/json-api.md %}#openweathermap-showcase-recommended-demo)) | `json_api` | JSON API |
+| [JSON API]({{ "/drivers/json-api/" | relative_url }}) | HTTP/HTTPS REST (+ [OpenWeather showcase]({{ "/drivers/json-api/" | relative_url }}#openweathermap-showcase-recommended-demo)) | `json_api` | JSON API |
 
 All three drivers share the same operator workflow:
 
@@ -44,7 +44,7 @@ workspace/
 
 - **Plot tab** — numeric columns from `bacnet` and `modbus` sources (`GET /api/timeseries/plot?source=…`).
 - **String JSON fields** — stored in feather under `json_api`; use the JSON API tree or feather directly (plot is numeric-only).
-- **FDD batch** — merges `bacnet` + `modbus` + `json_api` historian columns by nearest timestamp; rules use BRICK-bound `external_id` names (e.g. compare BACnet `oa-t` vs JSON API `web-oat-t` — see [JSON API]({% link drivers/json-api.md %})).
+- **FDD batch** — merges `bacnet` + `modbus` + `json_api` historian columns by nearest timestamp; rules use BRICK-bound `external_id` names (e.g. compare BACnet `oa-t` vs JSON API `web-oat-t` — see [JSON API]({{ "/drivers/json-api/" | relative_url }})).
 - **BRICK model** — bind points in **Model & assignments** commissioning JSON; sync TTL for SPARQL scope.
 
 ## Rule Lab (Arrow upload/download)
@@ -67,6 +67,6 @@ python3 scripts/validate_modbus_temp_e2e.py --no-server
 
 ## Related docs
 
-- [Data flow]({% link architecture/data-flow.md %}) — poll → CSV → feather → FDD
-- [API routes]({% link appendix/bridge_api.md %}) — REST reference
-- [BACnet polling]({% link bacnet/polling.md %}) — commission container loop
+- [Data flow]({{ "/architecture/data-flow/" | relative_url }}) — poll → CSV → feather → FDD
+- [API routes]({{ "/appendix/bridge_api/" | relative_url }}) — REST reference
+- [BACnet polling]({{ "/bacnet/polling/" | relative_url }}) — commission container loop

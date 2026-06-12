@@ -9,13 +9,13 @@ Practical patterns for **Arrow-native Rule Lab** (`apply_faults_arrow`) on feath
 
 | Page | Use when |
 |------|----------|
-| [**Python recipes (full Arrow library)**]({% link rule-cookbook/python-recipes-arrow.md %}) | **Copy-paste GL36 A–M, VAV, plant, economizer, weather** — replaces legacy YAML cookbook |
-| [**Expression cookbook (Arrow-native)**]({% link rule-cookbook/expression-cookbook.md %}) | Sensor bounds, legacy→Arrow map, commissioning checklist |
-| [Arrow recipes]({% link rule-cookbook/arrow-recipes.md %}) | Short templates — threshold, flatline, OOB, fan/schedule |
-| [Python recipes]({% link rule-cookbook/python-recipes.md %}) | Shared `open_fdd.arrow_runtime.cookbook` imports |
-| [Lookback window helper]({% link rule-cookbook/lookback-window.md %}) | `_kit_lookback_stats` — print start/stop timestamps and span |
-| [Windowing & debugging]({% link rule-cookbook/windowing-debugging.md %}) | Rolling windows, batch runtime, Rule Lab console |
-| [GL36 algorithm stubs]({% link rule-cookbook/gl36-algorithm-stubs.md %}) | Doc-only supervisory patterns (trim & respond, plant resets) |
+| [**Python recipes (full Arrow library)**]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}) | **Copy-paste GL36 A–M, VAV, plant, economizer, weather** — replaces legacy YAML cookbook |
+| [**Expression cookbook (Arrow-native)**]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}) | Sensor bounds, legacy→Arrow map, commissioning checklist |
+| [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}) | Short templates — threshold, flatline, OOB, fan/schedule |
+| [Python recipes]({{ "/rule-cookbook/python-recipes/" | relative_url }}) | Shared `open_fdd.arrow_runtime.cookbook` imports |
+| [Lookback window helper]({{ "/rule-cookbook/lookback-window/" | relative_url }}) | `_kit_lookback_stats` — print start/stop timestamps and span |
+| [Windowing & debugging]({{ "/rule-cookbook/windowing-debugging/" | relative_url }}) | Rolling windows, batch runtime, Rule Lab console |
+| [GL36 algorithm stubs]({{ "/rule-cookbook/gl36-algorithm-stubs/" | relative_url }}) | Doc-only supervisory patterns (trim & respond, plant resets) |
 
 Programmatic sensor defaults: `open_fdd.arrow_runtime.sensor_catalog.SENSOR_PROFILES`.
 

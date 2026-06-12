@@ -43,6 +43,18 @@ def _skip_href(href: str) -> bool:
     return False
 
 
+def _missing_baseurl(href: str) -> bool:
+    """Root-absolute paths must include GitHub Pages project baseurl."""
+    if not href.startswith("/"):
+        return False
+    if href.startswith(BASEURL + "/") or href == BASEURL + "/" or href == BASEURL:
+        return False
+    # Allow root-only anchors and asset paths that Jekyll may emit at repo root (rare).
+    if href.startswith("/assets/"):
+        return True
+    return True
+
+
 def _site_path_for_href(href: str, site_dir: Path) -> Path | None:
     """Map published href to expected file under _site."""
     path = unquote(urlparse(href).path)
@@ -86,8 +98,11 @@ def check_site(site_dir: Path) -> tuple[list[str], list[str]]:
                 continue
             resolved = _site_path_for_href(href, site_dir)
             if resolved is None:
-                # Only flag paths under baseurl or root-relative site paths
-                if href.startswith(BASEURL) or href.startswith("/"):
+                if _missing_baseurl(href):
+                    errors.append(
+                        f"{page_url}: href missing {BASEURL} prefix (use relative_url) → {href}"
+                    )
+                elif href.startswith(BASEURL) or href.startswith("/"):
                     errors.append(f"{page_url}: broken internal link → {href}")
             elif "github.com" in href:
                 skipped.append(href)

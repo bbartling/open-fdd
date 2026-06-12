@@ -10,6 +10,6 @@ Multi-site analytics on **benserver** — not part of the edge Docker stack.
 
 | Topic | Page |
 |-------|------|
-| Collect rollups from edge sites | [Central collection]({% link portfolio/central-collection.md %}) |
+| Collect rollups from edge sites | [Central collection]({{ "/portfolio/central-collection/" | relative_url }}) |
 
 Repo layout: `portfolio/` (collector, Dash, `sites.json`). Maintainer tuning API flow: `skills/openfdd-edge-deploy-tune/SKILL.md`.

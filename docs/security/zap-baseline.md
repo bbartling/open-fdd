@@ -8,7 +8,7 @@ nav_order: 2
 
 Passive [OWASP ZAP baseline](https://www.zaproxy.org/docs/docker/baseline-scan/) against the **pentest production stack** on benserver is the standard LAN security smoke before Acme edge deploys.
 
-Full per-revision workflow (pytest → PR → GHCR → Acme): [Developer — security testing cycle]({% link developer/security-testing.md %}).
+Full per-revision workflow (pytest → PR → GHCR → Acme): [Developer — security testing cycle]({{ "/developer/security-testing/" | relative_url }}).
 
 Packaged scan scripts (Windows + Mac/Linux): [scripts/security/README.md](https://github.com/bbartling/open-fdd/blob/master/scripts/security/README.md).
 
@@ -33,7 +33,7 @@ Packaged scan scripts (Windows + Mac/Linux): [scripts/security/README.md](https:
 ./scripts/security/run_openfdd_security_scan.sh --url http://192.168.204.18
 ```
 
-ZAP target (example): `http://192.168.204.18/` — Caddy on `:80` only; bridge `:8765` stays loopback. TLS bench: see [TLS and certificates]({% link security/tls-and-certs.md %}).
+ZAP target (example): `http://192.168.204.18/` — Caddy on `:80` only; bridge `:8765` stays loopback. TLS bench: see [TLS and certificates]({{ "/security/tls-and-certs/" | relative_url }}).
 
 ## Expected results (HTTP bench mode)
 
@@ -56,7 +56,7 @@ ZAP target (example): `http://192.168.204.18/` — Caddy on `:80` only; bridge `
 
 ## Authenticated scan (later)
 
-Baseline scan hits ~4 public endpoints (`/health`, public agent insight routes). Deep API/dashboard coverage requires ZAP with integrator login — see [Authenticated scanning (roadmap)]({% link security/authenticated-scanning.md %}).
+Baseline scan hits ~4 public endpoints (`/health`, public agent insight routes). Deep API/dashboard coverage requires ZAP with integrator login — see [Authenticated scanning (roadmap)]({{ "/security/authenticated-scanning/" | relative_url }}).
 
 ## After fixes
 

@@ -46,7 +46,7 @@ Existing code to extend (do not rewrite):
 ## Prerequisites
 
 - ACME validation PR merged and **3.0.33** deployed (equipment context on live FDD alerts).
-- Follow-ups: FDD run-history equipment grouping, RTU role mapping (see [ACME validation follow-ups]({% link ops/acme-validation-follow-ups.md %})).
+- Follow-ups: FDD run-history equipment grouping, RTU role mapping (see [ACME validation follow-ups]({{ "/ops/acme-validation-follow-ups/" | relative_url }})).
 
 ## Safety
 

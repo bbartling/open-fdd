@@ -10,12 +10,12 @@ Open-FDD v3 edge: **three Docker containers** (`bridge`, `commission`, `mcp-rag`
 
 | Page | Topic |
 |------|-------|
-| [System overview]({% link architecture/overview.md %}) | Components and diagram |
-| [Deployment modes]({% link architecture/deployment-modes.md %}) | Local dev, lab LAN, edge production, Caddy HTTP/TLS |
-| [Data flow]({% link architecture/data-flow.md %}) | BACnet / Modbus / JSON API → feather → FDD → dashboard |
-| [Containers]({% link architecture/containers.md %}) | GHCR images, ports, persistence, retired poll image |
-| [Driver framework]({% link drivers/index.md %}) | Shared commissioning pattern for OT sources |
+| [System overview]({{ "/architecture/overview/" | relative_url }}) | Components and diagram |
+| [Deployment modes]({{ "/architecture/deployment-modes/" | relative_url }}) | Local dev, lab LAN, edge production, Caddy HTTP/TLS |
+| [Data flow]({{ "/architecture/data-flow/" | relative_url }}) | BACnet / Modbus / JSON API → feather → FDD → dashboard |
+| [Containers]({{ "/architecture/containers/" | relative_url }}) | GHCR images, ports, persistence, retired poll image |
+| [Driver framework]({{ "/drivers/" | relative_url }}) | Shared commissioning pattern for OT sources |
 
-**Operators:** [Quick Start — Docker]({% link quick-start/docker.md %}) — no git clone on the edge host.
+**Operators:** [Quick Start — Docker]({{ "/quick-start/docker/" | relative_url }}) — no git clone on the edge host.
 
-**BACnet polling:** [Polling]({% link bacnet/polling.md %}) — commission container only.
+**BACnet polling:** [Polling]({{ "/bacnet/polling/" | relative_url }}) — commission container only.

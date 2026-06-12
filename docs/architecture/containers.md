@@ -77,7 +77,7 @@ cd ~/open-fdd && docker compose ps
 
 If containers are down: `docker compose up -d` (idempotent).
 
-See [Run with Docker images]({% link quick-start/docker.md %}).
+See [Run with Docker images]({{ "/quick-start/docker/" | relative_url }}).
 
 ## Persistent data
 
