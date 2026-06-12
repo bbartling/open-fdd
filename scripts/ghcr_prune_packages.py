@@ -151,11 +151,7 @@ def list_package_versions(owner: str, package: str, token: str | None) -> list[d
         cmd = [
             "gh",
             "api",
-            f"users/{owner}/packages/container/{package}/versions",
-            "-f",
-            f"per_page=100",
-            "-f",
-            f"page={page}",
+            f"users/{owner}/packages/container/{package}/versions?per_page=100&page={page}",
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True, env=env, check=False)
         if proc.returncode != 0:
@@ -350,7 +346,7 @@ def verify_packages_api_access(token: str | None) -> None:
     if token:
         env["GH_TOKEN"] = token
     proc = subprocess.run(
-        ["gh", "api", "user/packages", "-f", "package_type=container", "-f", "per_page=1"],
+        ["gh", "api", "user/packages?package_type=container&per_page=1"],
         capture_output=True,
         text=True,
         env=env,
