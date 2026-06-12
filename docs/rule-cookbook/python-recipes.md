@@ -8,9 +8,9 @@ nav_order: 2
 
 All Rule Lab Python rules use **`apply_faults_arrow(table, cfg, context)`** on PyArrow tables with **`pyarrow.compute`** and **module constants**.
 
-See **[Arrow recipes]({% link rule-cookbook/arrow-recipes.md %})** for the canonical cookbook (flatline, spread, OOB, schedule faults).
+See **[Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }})** for the canonical cookbook (flatline, spread, OOB, schedule faults).
 
-Shared helpers live in `open_fdd.arrow_runtime.cookbook` and `open_fdd.arrow_runtime.windows`. For console validation, copy **`_kit_lookback_stats`** from [Lookback window helper]({% link rule-cookbook/lookback-window.md %}).
+Shared helpers live in `open_fdd.arrow_runtime.cookbook` and `open_fdd.arrow_runtime.windows`. For console validation, copy **`_kit_lookback_stats`** from [Lookback window helper]({{ "/rule-cookbook/lookback-window/" | relative_url }}).
 
 ```python
 from open_fdd.arrow_runtime.windows import arrow_rolling_min, arrow_rolling_max

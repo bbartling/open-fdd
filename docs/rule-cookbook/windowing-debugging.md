@@ -12,7 +12,7 @@ nav_order: 4
 |---|------------------------|-------------------|
 | Set by | Batch `lookback_hours`, FDD loop, Quick test UI | `WINDOW_SAMPLES` constant in `rule.py` |
 | Typical | 1 h scheduled; 24 h Update all | 12 samples ≈ 1 h @ 5 min poll |
-| Validate with | `_kit_lookback_stats(table)` — see [Lookback window helper]({% link rule-cookbook/lookback-window.md %}) | Rule logic + console `flagged` count |
+| Validate with | `_kit_lookback_stats(table)` — see [Lookback window helper]({{ "/rule-cookbook/lookback-window/" | relative_url }}) | Rule logic + console `flagged` count |
 
 ## Rolling windows (Arrow)
 

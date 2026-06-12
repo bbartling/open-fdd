@@ -74,7 +74,7 @@ OFDD_AGENT_USER=agent
 OFDD_AGENT_PASSWORD=<random>
 ```
 
-Sign in as **integrator** with the password from that file → [First login and health check]({% link quick-start/health-check.md %}).
+Sign in as **integrator** with the password from that file → [First login and health check]({{ "/quick-start/health-check/" | relative_url }}).
 
 | Action | Touches `auth.env.local`? |
 |--------|---------------------------|
@@ -123,7 +123,7 @@ nano ~/open-fdd/workspace/bacnet/commissioning/commission.env
 ```
 
 {: .note }
-> If you used `--start`, the stack is already up. Next step → [First login and health check]({% link quick-start/health-check.md %}).
+> If you used `--start`, the stack is already up. Next step → [First login and health check]({{ "/quick-start/health-check/" | relative_url }}).
 
 ### Manual start (optional)
 
@@ -137,7 +137,7 @@ docker compose ps
 curl -sf http://127.0.0.1:8765/health && echo
 ```
 
-Expected: **bridge**, **commission**, **mcp-rag** — all `Up`. Then → [First login and health check]({% link quick-start/health-check.md %}).
+Expected: **bridge**, **commission**, **mcp-rag** — all `Up`. Then → [First login and health check]({{ "/quick-start/health-check/" | relative_url }}).
 
 ## Long-term operation
 
@@ -172,12 +172,12 @@ Put **Caddy** (or nginx) on port 80 → `127.0.0.1:8765`, or expose 8765 through
 | Mode | Compose services | When to use |
 |------|------------------|-------------|
 | **Standard OT / BACnet** | `bridge` + `commission` + `mcp-rag` | Real buildings — commission polls BACnet into `samples.csv`; bridge ingests to feather |
-| **Non-BACnet / demo** | `bridge` + `mcp-rag` (omit `commission`) | JSON API, Modbus-only, or lab without field BACnet — see [Driver framework]({% link drivers/index.md %}) |
+| **Non-BACnet / demo** | `bridge` + `mcp-rag` (omit `commission`) | JSON API, Modbus-only, or lab without field BACnet — see [Driver framework]({{ "/drivers/" | relative_url }}) |
 | **TLS on OT LAN** | Same stack + **host Caddy** `OFDD_CADDY_MODE=tls` | Encrypt browser↔edge; trust self-signed CA on operator PCs — not for public internet |
 
 Do **not** run the retired `openfdd-bacnet-poll` image or legacy `openfdd-bacnet-poll` systemd unit alongside Docker **commission** — that double-polls BACnet.
 
 ## Next steps
 
-→ [First login and health check]({% link quick-start/health-check.md %})  
-→ [Updating the stack]({% link quick-start/updating.md %}) — `./scripts/openfdd_site_update.sh`
+→ [First login and health check]({{ "/quick-start/health-check/" | relative_url }})  
+→ [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) — `./scripts/openfdd_site_update.sh`

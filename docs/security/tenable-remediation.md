@@ -8,7 +8,7 @@ nav_order: 8
 
 Remediation plan for **IT/Tenable.io Nessus** findings on an Open-FDD **OT/LAN edge** deployment (e.g. Acme GL36 lab VM). Open-FDD runs behind a building firewall on Ubuntu with Docker Compose, Caddy, and optional host Ollama.
 
-Related: [Linux host hardening]({% link security/linux-host-hardening.md %}), [TLS and certificates]({% link security/tls-and-certs.md %}), [LAN hardening]({% link security/lan-hardening.md %}), [Security testing cycle]({% link developer/security-testing.md %}).
+Related: [Linux host hardening]({{ "/security/linux-host-hardening/" | relative_url }}), [TLS and certificates]({{ "/security/tls-and-certs/" | relative_url }}), [LAN hardening]({{ "/security/lan-hardening/" | relative_url }}), [Security testing cycle]({{ "/developer/security-testing/" | relative_url }}).
 
 ## Prioritized action plan
 
@@ -119,7 +119,7 @@ CI `pip-audit` runs against bridge + bacnet requirements with the same constrain
 | Caddy self-signed `:443` | Medium: untrusted, self-signed, expiry | OT LAN encryption, lab |
 | Enterprise CA cert on Caddy | Clean SSL plugins (if chain trusted) | IT mandates clean Nessus |
 
-See [TLS — enterprise CA]({% link security/tls-and-certs.md %}#enterprise-ca-on-caddy-edge).
+See [TLS — enterprise CA]({{ "/security/tls-and-certs/" | relative_url }}#enterprise-ca-on-caddy-edge).
 
 ## Residual findings after remediation
 
@@ -136,7 +136,7 @@ Even with a patched host and loopback-only Ollama, IT may still see:
 3. **BACnet UDP 47808** on commission is expected OT traffic — out of scope for web/plugin remediation.
 4. Do not expose Ollama **11434** to the building LAN; agent chat is server-side only.
 5. Kernel CVEs require **host reboot** — schedule with operations.
-6. For authenticated web/API depth, see roadmap [Authenticated scanning]({% link security/authenticated-scanning.md %}).
+6. For authenticated web/API depth, see roadmap [Authenticated scanning]({{ "/security/authenticated-scanning/" | relative_url }}).
 
 ## Repo-owned fixes (this document’s release)
 

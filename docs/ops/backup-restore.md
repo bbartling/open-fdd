@@ -60,7 +60,7 @@ du -h "$BACKUP_ROOT/workspace-full.tgz"
 2. Restore `docker-compose.yml` from backup
 3. If data corruption: extract selective files from `workspace-full.tgz` — model, rules, feather shards
 4. `docker compose pull && docker compose up -d --force-recreate`
-5. Verify: [Deployment validation]({% link ops/deployment-validation.md %})
+5. Verify: [Deployment validation]({{ "/ops/deployment-validation/" | relative_url }})
 
 ## Safe cleanup
 
@@ -73,5 +73,5 @@ docker image prune -f
 
 ## Related
 
-- [Updating the stack]({% link quick-start/updating.md %})
-- [Live site update]({% link ops/live_site_update.md %})
+- [Updating the stack]({{ "/quick-start/updating/" | relative_url }})
+- [Live site update]({{ "/ops/live_site_update/" | relative_url }})

@@ -6,7 +6,7 @@ nav_order: 4
 
 # Deployment validation
 
-For the **live Acme site** after GHCR updates, use the dedicated harness documented in [Acme live validation]({% link ops/acme-live-validation.md %}) (`acme_post_deploy_validate.sh`).
+For the **live Acme site** after GHCR updates, use the dedicated harness documented in [Acme live validation]({{ "/ops/acme-live-validation/" | relative_url }}) (`acme_post_deploy_validate.sh`).
 
 Non-destructive checks after deploy or image upgrade. Run from the **edge host** (smoke) or from a **control machine** with the full repo (insurance suite).
 
@@ -58,7 +58,7 @@ Or by IP:
 Checks include: Caddy → React dashboard, `/health/stack`, MCP RAG, BACnet tree, BRICK/SPARQL, Docker log scan.
 
 {: .warning }
-> **Do not run on live commissioned sites without approval:** `acme_operational_verify.sh` with BACnet rediscover — use `--skip-discover` for smoke only. See [Examples — GL36 lab]({% link examples/acme-gl36-lab.md %}).
+> **Do not run on live commissioned sites without approval:** `acme_operational_verify.sh` with BACnet rediscover — use `--skip-discover` for smoke only. See [Examples — GL36 lab]({{ "/examples/acme-gl36-lab/" | relative_url }}).
 
 ## LAN security smoke (optional)
 
@@ -67,7 +67,7 @@ From a workstation on the same LAN as the edge:
 - Windows: `scripts/security/Run-OpenFddSecurityScan.ps1`
 - macOS/Linux: `scripts/security/run_openfdd_security_scan.sh`
 
-Expected findings: [ZAP baseline]({% link security/zap-baseline.md %}).
+Expected findings: [ZAP baseline]({{ "/security/zap-baseline/" | relative_url }}).
 
 ## Arrow / FDD rules (3.0+)
 
@@ -85,5 +85,5 @@ grep -R "apply_faults_arrow" workspace/data/rules_py | wc -l
 
 ## Related
 
-- [Health check]({% link quick-start/health-check.md %})
-- [Security testing cycle]({% link developer/security-testing.md %}) (maintainers)
+- [Health check]({{ "/quick-start/health-check/" | relative_url }})
+- [Security testing cycle]({{ "/developer/security-testing/" | relative_url }}) (maintainers)

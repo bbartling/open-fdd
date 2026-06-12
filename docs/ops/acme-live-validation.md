@@ -96,7 +96,7 @@ OPENFDD_LIVE_ACME=1 OPENFDD_IMAGE_TAG=3.0.32 ACME_OVERNIGHT_CYCLES=4 \
 | `ACME_WINDOW_HOURS` | `2` | Historian lookback per cycle |
 | `ACME_CYCLE_SLEEP_MINUTES` | `0` | Set `120` for true 2-hour wall-clock spacing |
 
-Reports are written under `reports/` (gitignored). See [ACME validation follow-ups]({% link ops/acme-validation-follow-ups.md %}) and [ACME deploy 3.0.33 validation plan]({% link ops/acme-deploy-3.0.33-validation.md %}).
+Reports are written under `reports/` (gitignored). See [ACME validation follow-ups]({{ "/ops/acme-validation-follow-ups/" | relative_url }}) and [ACME deploy 3.0.33 validation plan]({{ "/ops/acme-deploy-3.0.33-validation/" | relative_url }}).
 
 ### Live bridge vs branch fix
 

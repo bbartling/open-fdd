@@ -20,9 +20,9 @@ Open-FDD is an open-source **building edge platform** for BACnet integration, fe
 
 | Path | Go to |
 |------|-------|
-| **Try it** | [Quick Start — Run with Docker]({% link quick-start/docker.md %}) |
-| **Operate it** | [Updating the stack]({% link quick-start/updating.md %}) · [Operations]({% link ops/index.md %}) |
-| **Develop it** | [Developer Guide]({% link developer/index.md %}) · [Architecture]({% link architecture/index.md %}) |
+| **Try it** | [Quick Start — Run with Docker]({{ "/quick-start/docker/" | relative_url }}) |
+| **Operate it** | [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) · [Operations]({{ "/ops/" | relative_url }}) |
+| **Develop it** | [Developer Guide]({{ "/developer/" | relative_url }}) · [Architecture]({{ "/architecture/" | relative_url }}) |
 
 ## v3 edge stack
 
@@ -36,10 +36,10 @@ Three primary containers on a Linux edge host:
 
 Host **Caddy** on `:80` or `:443` is the normal LAN front door. BACnet UDP `:47808` is bound by **commission** only — the bridge ingests `samples.csv` into the feather historian.
 
-Details: [Containers]({% link architecture/containers.md %}) · [Deployment modes]({% link architecture/deployment-modes.md %})
+Details: [Containers]({{ "/architecture/containers/" | relative_url }}) · [Deployment modes]({{ "/architecture/deployment-modes/" | relative_url }})
 
 {: .warning }
-> **LAN / OT edge only.** Do not expose the Operator Bridge to the public internet without TLS, strong auth, and site review. BACnet writes are disabled by default — see [BACnet write guard]({% link security/bacnet-writes.md %}).
+> **LAN / OT edge only.** Do not expose the Operator Bridge to the public internet without TLS, strong auth, and site review. BACnet writes are disabled by default — see [BACnet write guard]({{ "/security/bacnet-writes/" | relative_url }}).
 
 ## Distribution
 

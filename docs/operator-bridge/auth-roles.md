@@ -26,4 +26,4 @@ Login: `POST /api/auth/login` → Bearer JWT on API calls.
 
 `OFDD_BRIDGE_HOST=127.0.0.1` with `OFDD_AUTH_DISABLED=1` is acceptable on a single machine. **Never** use auth-disabled mode on a building LAN.
 
-Full hardening: [Security]({% link security/index.md %}).
+Full hardening: [Security]({{ "/security/" | relative_url }}).

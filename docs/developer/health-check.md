@@ -8,7 +8,7 @@ nav_order: 5
 
 Extended validation for engineers with a **full git checkout** — CI, compose overlays, and pre-release gates.
 
-IT operators on edge hosts should use [Quick Start — health check]({% link quick-start/health-check.md %}) and [Deployment validation]({% link ops/deployment-validation.md %}) instead.
+IT operators on edge hosts should use [Quick Start — health check]({{ "/quick-start/health-check/" | relative_url }}) and [Deployment validation]({{ "/ops/deployment-validation/" | relative_url }}) instead.
 
 ## Clone and local stack
 
@@ -76,7 +76,7 @@ Then from a **LAN workstation**, run the packaged scan:
 - Windows: `scripts/security/Run-OpenFddSecurityScan.ps1`
 - macOS/Linux: `scripts/security/run_openfdd_security_scan.sh`
 
-See [scripts/security/README.md](https://github.com/bbartling/open-fdd/blob/master/scripts/security/README.md), [Security — ZAP baseline]({% link security/zap-baseline.md %}), and the full [security testing cycle]({% link developer/security-testing.md %}). Host-side notes: `workspace/deploy/PENTEST.md`.
+See [scripts/security/README.md](https://github.com/bbartling/open-fdd/blob/master/scripts/security/README.md), [Security — ZAP baseline]({{ "/security/zap-baseline/" | relative_url }}), and the full [security testing cycle]({{ "/developer/security-testing/" | relative_url }}). Host-side notes: `workspace/deploy/PENTEST.md`.
 
 ## Post-deploy insurance (inventory hosts)
 

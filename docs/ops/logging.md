@@ -160,10 +160,10 @@ docker compose logs bridge --tail 50
 | Log rotation / size caps | Yes — defaults above + Docker `max-size` |
 | SIEM-ready export | Yes — file tail / Filebeat on `workspace/logs/` |
 
-For BACnet write safety and credential generation, see [SECURITY.md](https://github.com/bbartling/open-fdd/blob/master/workspace/deploy/SECURITY.md) and [Secrets and auth]({% link security/secrets-auth.md %}).
+For BACnet write safety and credential generation, see [SECURITY.md](https://github.com/bbartling/open-fdd/blob/master/workspace/deploy/SECURITY.md) and [Secrets and auth]({{ "/security/secrets-auth/" | relative_url }}).
 
 ## Related
 
-- [JSON API driver]({% link drivers/json-api.md %}) — OpenWeatherMap showcase, env-based API keys (`json_api.env.local`)
-- [Live site update]({% link ops/live_site_update.md %}) — `docker compose logs` after upgrades
-- [Data flow]({% link architecture/data-flow.md %}) — historian retention (`OFDD_FEATHER_*`) is separate from audit logs
+- [JSON API driver]({{ "/drivers/json-api/" | relative_url }}) — OpenWeatherMap showcase, env-based API keys (`json_api.env.local`)
+- [Live site update]({{ "/ops/live_site_update/" | relative_url }}) — `docker compose logs` after upgrades
+- [Data flow]({{ "/architecture/data-flow/" | relative_url }}) — historian retention (`OFDD_FEATHER_*`) is separate from audit logs
