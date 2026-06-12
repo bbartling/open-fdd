@@ -73,7 +73,9 @@ print(result.true_count)
 |------|-----|
 | Run FDD in your Python / cloud pipeline | **PyPI** `open-fdd` |
 | BACnet + UI + bridge on an edge host | **GHCR** Docker images |
-| Portfolio / MCP agent over Tailscale | Docker stack + [portfolio docs](https://bbartling.github.io/open-fdd/portfolio/) |
+| **OpenFDD Edge** on OT LAN | **GHCR** Docker images |
+| **OpenFDD RCx Central** (analyst PC) | [RCx Central docs](docs/rcx-central/index.md) · `./scripts/run_rcx_central_docker.sh` |
+| Portfolio collect / MCP over Tailscale | Edge stack + [portfolio docs](https://bbartling.github.io/open-fdd/portfolio/) |
 
 Examples: [`examples/`](examples/). Release: [developer/release-process](https://bbartling.github.io/open-fdd/developer/release-process/).
 

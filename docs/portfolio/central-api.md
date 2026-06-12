@@ -1,54 +1,66 @@
 ---
-title: Open-FDD Central API
+title: OpenFDD RCx Central API
 parent: Portfolio
 nav_order: 2
 ---
 
-# Open-FDD Central API
+# OpenFDD RCx Central API
 
-Multi-building desk over Tailscale/VPN. **Read-only toward edges** — no BACnet, no commands.
+Local analyst API for multi-edge RCx workflows over Tailscale/VPN. **Read-only toward OpenFDD Edge** — no BACnet, no commands.
+
+> Package path: `portfolio/central/api.py` — service name **openfdd-rcx-central**.
 
 ## Start
 
 ```bash
 pip install -r portfolio/requirements.txt
-cp portfolio/sites.json.example portfolio/sites.json   # edit base URLs
-./scripts/run_central_api.sh                           # http://127.0.0.1:8060
+./scripts/run_central_api.sh   # http://127.0.0.1:8060/health
 ```
 
-## Endpoints
+Docker Desktop: [docs/rcx-central/docker-desktop-windows.md](../rcx-central/docker-desktop-windows.md)
+
+## Edge registry (browser auth)
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/health` | Central service health |
-| GET | `/api/central/sites` | Edge registry + last check-in |
-| POST | `/api/central/sites/{site_id}/collect-validate` | Portfolio collect + read-only validation |
-| POST | `/api/central/validation/run` | One-off (`duration_hours=0`) or 24h plan |
-| GET | `/api/central/validation/jobs` | Stored validation jobs |
-| GET | `/api/central/validation/jobs/{id}` | Job detail + cycles |
-| POST | `/api/central/rcx/report` | Download RCx `.docx` report |
+| GET | `/api/central/edges` | Saved Edge instances (secrets masked) |
+| POST | `/api/central/edges` | Add/update Edge |
+| POST | `/api/central/edges/test` | Test connection (health + model) |
+| PUT | `/api/central/edges/{site_id}` | Update Edge |
+| DELETE | `/api/central/edges/{site_id}` | Remove Edge |
 
-## Validation plan body
+## Analytics & RCx
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/central/mechanical-summary/{site_id}` | Equipment counts, BACnet, readiness |
+| GET | `/api/central/fdd-analytics/{site_id}` | FDD rules + chart packs |
+| POST | `/api/central/rcx/preview` | Data readiness + chart catalog |
+| POST | `/api/central/rcx/charts/preview` | Matplotlib PNG previews (base64) |
+| POST | `/api/central/rcx/report` | Download DOCX report |
+
+## Validation (legacy collect workflow)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/central/sites` | Edge registry + last check-in |
+| POST | `/api/central/sites/{site_id}/collect-validate` | Collect rollup + validation |
+| POST | `/api/central/validation/run` | One-off or scheduled plan |
+| GET | `/api/central/validation/jobs` | Stored jobs |
+| GET | `/api/central/validation/jobs/{id}` | Job detail |
+
+## RCx report body
 
 ```json
 {
   "site_id": "acme",
-  "interval_hours": 2,
-  "duration_hours": 24,
-  "sleep_seconds": 0
+  "hours": 24,
+  "charts": ["fault_hours_by_severity", "ahu_sat_vs_setpoint"],
+  "sections": ["executive_summary", "mechanical_summary"],
+  "save_to_volume": true
 }
 ```
 
-Set `sleep_seconds` to `7200` for true 2-hour wall-clock spacing. Use `duration_hours: 0` for a one-off probe.
+Reports save under `portfolio/data/reports/` (configurable via `OPENFDD_RCX_CENTRAL_DATA`).
 
-## RCx report
-
-POST `/api/central/rcx/report` with `{"site_id": "acme"}`. Includes:
-
-- Active faults **with equipment name** (never severity-only)
-- Fault-hour estimates from rollup history
-- Missing-data / validation warnings
-
-## Safety
-
-Central never writes to BACnet devices or edge schedules. All edge calls use authenticated GET probes only.
+Legacy endpoint: `POST /api/central/rcx/report-legacy`

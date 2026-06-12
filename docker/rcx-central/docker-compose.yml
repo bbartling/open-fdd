@@ -1,0 +1,49 @@
+# OpenFDD RCx Central — Docker Desktop / analyst workstation
+# docker compose -f docker/rcx-central/docker-compose.yml up --build
+
+services:
+  rcx-central-api:
+    image: ghcr.io/bbartling/openfdd-rcx-central:${OPENFDD_IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: docker/rcx-central/Dockerfile
+    command: ["api"]
+    ports:
+      - "8060:8060"
+    environment:
+      OPENFDD_CENTRAL_API_HOST: 0.0.0.0
+      OPENFDD_CENTRAL_API_PORT: "8060"
+      OPENFDD_RCX_CENTRAL_DATA: /app/portfolio/data
+      OPENFDD_RCX_CENTRAL_CONFIG: /app/portfolio/config
+    volumes:
+      - rcx-central-data:/app/portfolio/data
+      - rcx-central-config:/app/portfolio/config
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8060/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  rcx-central-dash:
+    image: ghcr.io/bbartling/openfdd-rcx-central:${OPENFDD_IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: docker/rcx-central/Dockerfile
+    command: ["dash"]
+    ports:
+      - "8050:8050"
+    environment:
+      OPENFDD_CENTRAL_API_URL: http://rcx-central-api:8060
+      OPENFDD_RCX_CENTRAL_DATA: /app/portfolio/data
+      OPENFDD_RCX_CENTRAL_CONFIG: /app/portfolio/config
+    volumes:
+      - rcx-central-data:/app/portfolio/data
+      - rcx-central-config:/app/portfolio/config
+    depends_on:
+      rcx-central-api:
+        condition: service_healthy
+
+volumes:
+  rcx-central-data:
+  rcx-central-config:

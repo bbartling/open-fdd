@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Open-FDD central portfolio dashboard — run-hour & fault rollups across sites."""
+"""OpenFDD RCx Central — multi-edge analytics and RCx report builder (Dash)."""
 
 from __future__ import annotations
 
@@ -418,9 +418,55 @@ def _site_options() -> list[dict[str, str]]:
     return [{"label": s, "value": s} for s in sorted(checkins["site_id"].dropna().unique())]
 
 
-app = dash.Dash(__name__, suppress_callback_exceptions=True)
+app = dash.Dash(__name__, title="OpenFDD RCx Central", suppress_callback_exceptions=True)
 
 _sites = _site_options()
+
+def _overview_tab() -> html.Div:
+    return html.Div(
+        children=[
+            html.Div(id="overview-intro"),
+            html.Div(id="site-cards"),
+            html.Div(
+                id="chart-grid",
+                style={"display": "grid", "gridTemplateColumns": "280px 1fr", "gap": "16px", "marginTop": "20px"},
+                children=[
+                    html.Div(
+                        id="sidebar",
+                        children=[
+                            html.Label("Site", id="site-label"),
+                            dcc.Dropdown(
+                                id="site-select",
+                                options=_sites,
+                                value=_sites[0]["value"] if _sites else None,
+                                clearable=False,
+                            ),
+                            html.Label("Metric", id="metric-label", style={"marginTop": "12px"}),
+                            dcc.RadioItems(
+                                id="metric-select",
+                                options=[
+                                    {"label": "Fan run hours", "value": "fan_run_hours"},
+                                    {"label": "System run hours", "value": "system_run_hours"},
+                                    {"label": "Unoccupied fan hours", "value": "unoccupied_fan_hours"},
+                                ],
+                                value="fan_run_hours",
+                            ),
+                            html.P(
+                                id="delta-legend",
+                                children="Δ bars: green = hours down (good) · red = hours up",
+                                style={"fontSize": "12px", "marginTop": "12px"},
+                            ),
+                        ],
+                    ),
+                    dcc.Graph(id="run-hours-chart"),
+                ],
+            ),
+            dcc.Graph(id="site-fault-total-chart", style={"marginTop": "16px"}),
+            dcc.Graph(id="fault-trend-chart", style={"marginTop": "16px"}),
+            dcc.Graph(id="override-chart", style={"marginTop": "16px"}),
+        ]
+    )
+
 
 app.layout = html.Div(
     id="app-root",
@@ -428,44 +474,20 @@ app.layout = html.Div(
         dcc.Store(id="theme-store", data="dark"),
         dcc.Interval(id="refresh-interval", interval=120_000, n_intervals=0),
         html.Div(id="header-row"),
-        html.Div(id="site-cards"),
-        html.Div(
-            id="chart-grid",
-            style={"display": "grid", "gridTemplateColumns": "280px 1fr", "gap": "16px", "marginTop": "20px"},
+        dcc.Tabs(
+            id="main-tabs",
+            value="overview",
             children=[
-                html.Div(
-                    id="sidebar",
-                    children=[
-                        html.Label("Site", id="site-label"),
-                        dcc.Dropdown(
-                            id="site-select",
-                            options=_sites,
-                            value=_sites[0]["value"] if _sites else None,
-                            clearable=False,
-                        ),
-                        html.Label("Metric", id="metric-label", style={"marginTop": "12px"}),
-                        dcc.RadioItems(
-                            id="metric-select",
-                            options=[
-                                {"label": "Fan run hours", "value": "fan_run_hours"},
-                                {"label": "System run hours", "value": "system_run_hours"},
-                                {"label": "Unoccupied fan hours", "value": "unoccupied_fan_hours"},
-                            ],
-                            value="fan_run_hours",
-                        ),
-                        html.P(
-                            id="delta-legend",
-                            children="Δ bars: green = hours down (good) · red = hours up",
-                            style={"fontSize": "12px", "marginTop": "12px"},
-                        ),
-                    ],
-                ),
-                dcc.Graph(id="run-hours-chart"),
+                dcc.Tab(label="Overview", value="overview", children=[_overview_tab()]),
+                dcc.Tab(label="Edge Connections", value="edges", children=[html.Div(id="edges-tab")]),
+                dcc.Tab(label="Mechanical Summary", value="mechanical", children=[html.Div(id="mech-tab")]),
+                dcc.Tab(label="FDD Analytics", value="fdd", children=[html.Div(id="fdd-tab")]),
+                dcc.Tab(label="Trend Explorer", value="trends", children=[html.Div(id="trends-tab")]),
+                dcc.Tab(label="RCx Report Builder", value="rcx", children=[html.Div(id="rcx-tab")]),
+                dcc.Tab(label="Validation Runs", value="validation", children=[html.Div(id="val-tab")]),
+                dcc.Tab(label="Settings", value="settings", children=[html.Div(id="settings-tab")]),
             ],
         ),
-        dcc.Graph(id="site-fault-total-chart", style={"marginTop": "16px"}),
-        dcc.Graph(id="fault-trend-chart", style={"marginTop": "16px"}),
-        dcc.Graph(id="override-chart", style={"marginTop": "16px"}),
     ],
 )
 
@@ -490,9 +512,9 @@ def render_header(theme_key: str):
         children=[
             html.Div(
                 children=[
-                    html.H1("Open-FDD Portfolio", style={"margin": 0, "color": theme["text"]}),
+                    html.H1("OpenFDD RCx Central", style={"margin": 0, "color": theme["text"]}),
                     html.P(
-                        "Stock-style fault & run-hour trends · per-code breakdown · AI agent check-ins · P8 overrides",
+                        "Local analyst tool · multi-edge RCx analytics · read-only toward OpenFDD Edge",
                         style={"color": theme["muted"], "margin": "4px 0 0"},
                     ),
                 ]
@@ -643,7 +665,46 @@ def update_charts(
     )
 
 
+@app.callback(
+    Output("overview-intro", "children"),
+    Output("edges-tab", "children"),
+    Output("mech-tab", "children"),
+    Output("fdd-tab", "children"),
+    Output("trends-tab", "children"),
+    Output("rcx-tab", "children"),
+    Output("val-tab", "children"),
+    Output("settings-tab", "children"),
+    Input("theme-store", "data"),
+)
+def render_tab_shells(theme_key: str):
+    from portfolio.dash.rcx_pages import (
+        edge_connections_layout,
+        fdd_analytics_layout,
+        mechanical_layout,
+        overview_intro,
+        rcx_builder_layout,
+        settings_layout,
+        trend_explorer_layout,
+        validation_layout,
+    )
+
+    theme = THEMES.get(theme_key or "dark", THEMES["dark"])
+    return (
+        overview_intro(theme),
+        edge_connections_layout(theme),
+        mechanical_layout(theme),
+        fdd_analytics_layout(theme),
+        trend_explorer_layout(theme),
+        rcx_builder_layout(theme),
+        validation_layout(theme),
+        settings_layout(theme),
+    )
+
+
 def main() -> None:
+    from portfolio.dash.rcx_callbacks import register_rcx_callbacks
+
+    register_rcx_callbacks(app)
     app.run(host="0.0.0.0", port=8050, debug=False)
 
 

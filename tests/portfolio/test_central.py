@@ -179,4 +179,6 @@ def test_central_api_health():
     from portfolio.central.api import app
 
     client = TestClient(app)
-    assert client.get("/health").json()["status"] == "ok"
+    body = client.get("/health").json()
+    assert body["status"] == "ok"
+    assert body["service"] == "openfdd-rcx-central"

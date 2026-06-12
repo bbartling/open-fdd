@@ -214,6 +214,7 @@ edge_backup/local/acme/vm-bbartling/*
 
 # Central portfolio analytics (analyst clone — not edge)
 portfolio/data/
+portfolio/config/
 portfolio/sites.json
 portfolio/agent/MEMORY.md
 portfolio/agent/SKILLS.md
