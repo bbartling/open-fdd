@@ -42,12 +42,50 @@ def _point_text(pt: dict[str, Any]) -> str:
         pt.get("name"),
         pt.get("external_id"),
         pt.get("fdd_input"),
+        pt.get("brick_tag"),
     ]
     return _norm(" ".join(str(p) for p in parts if p))
 
 
+# RTU/AHU packaged units may lack setpoints or discrete fan status points.
+RTU_OPTIONAL_AHU_ROLES: frozenset[str] = frozenset(
+    {
+        "supply_air_temperature_setpoint",
+        "supply_fan_status",
+        "return_air_temperature",
+    }
+)
+
+# Extra keyword aliases for packaged RTU points (Acme device 1100).
+RTU_AHU_ROLE_ALIASES: dict[str, tuple[str, ...]] = {
+    "supply_fan_command": ("supply_fan_speed", "fan_start", "sf_cmd", "fan_speed"),
+    "supply_fan_status": ("fan_start", "fan_stop", "fan_stat"),
+    "duct_static_pressure": ("static_pressure", "sap", "duct_static"),
+}
+
+
 def _equipment_type(eq: dict[str, Any]) -> str:
-    return _norm(str(eq.get("equipment_type") or eq.get("brick_type") or eq.get("name") or ""))
+    parts = [
+        eq.get("equipment_type"),
+        eq.get("brick_type"),
+        eq.get("name"),
+        eq.get("id"),
+    ]
+    return _norm(" ".join(str(p) for p in parts if p))
+
+
+def _is_rtu_equipment(eq: dict[str, Any]) -> bool:
+    return "rtu" in _equipment_type(eq)
+
+
+def _role_map_for_equipment(eq: dict[str, Any]) -> dict[str, tuple[str, ...]]:
+    if not _is_rtu_equipment(eq):
+        return AHU_POINT_ROLES
+    merged: dict[str, tuple[str, ...]] = {}
+    for role, keywords in AHU_POINT_ROLES.items():
+        extra = RTU_AHU_ROLE_ALIASES.get(role, ())
+        merged[role] = keywords + extra
+    return merged
 
 
 def duplicate_audit(model: dict[str, Any]) -> dict[str, Any]:
@@ -97,23 +135,34 @@ def equipment_point_role_audit(model: dict[str, Any], *, site_id: str = "acme") 
     """Report AHU/VAV point role coverage and equipment assignment sanity."""
     equipment = [e for e in model.get("equipment") or [] if isinstance(e, dict)]
     points = [p for p in model.get("points") or [] if isinstance(p, dict)]
-    ahurs = [e for e in equipment if "ahu" in _equipment_type(e) or "rtu" in _equipment_type(e)]
+    ahurs = [e for e in equipment if "ahu" in _equipment_type(e) and not _is_rtu_equipment(e)]
+    rtus = [e for e in equipment if _is_rtu_equipment(e)]
     vavs = [e for e in equipment if "vav" in _equipment_type(e)]
     ahu_reports: list[dict[str, Any]] = []
-    for eq in ahurs:
+    rtu_reports: list[dict[str, Any]] = []
+
+    def _audit_row(eq: dict[str, Any], *, equipment_class: str) -> dict[str, Any]:
         eid = str(eq.get("id") or "")
         eq_pts = [p for p in points if str(p.get("equipment_id") or "") == eid]
-        roles = _roles_present(eq_pts, AHU_POINT_ROLES)
+        role_map = _role_map_for_equipment(eq)
+        roles = _roles_present(eq_pts, role_map)
         missing = [r for r, ok in roles.items() if not ok]
-        ahu_reports.append(
-            {
-                "equipment_id": eid,
-                "name": eq.get("name"),
-                "point_count": len(eq_pts),
-                "roles_found": [r for r, ok in roles.items() if ok],
-                "roles_missing": missing,
-            }
-        )
+        optional_missing = [r for r in missing if equipment_class == "RTU" and r in RTU_OPTIONAL_AHU_ROLES]
+        required_missing = [r for r in missing if r not in optional_missing]
+        return {
+            "equipment_id": eid,
+            "name": eq.get("name"),
+            "equipment_class": equipment_class,
+            "point_count": len(eq_pts),
+            "roles_found": [r for r, ok in roles.items() if ok],
+            "roles_missing": required_missing,
+            "roles_missing_optional": optional_missing,
+        }
+
+    for eq in ahurs:
+        ahu_reports.append(_audit_row(eq, equipment_class="AHU"))
+    for eq in rtus:
+        rtu_reports.append(_audit_row(eq, equipment_class="RTU"))
     vav_reports: list[dict[str, Any]] = []
     for eq in vavs:
         eid = str(eq.get("id") or "")
@@ -136,8 +185,10 @@ def equipment_point_role_audit(model: dict[str, Any], *, site_id: str = "acme") 
     ]
     return {
         "ahu_count": len(ahurs),
+        "rtu_count": len(rtus),
         "vav_count": len(vavs),
         "ahu_reports": ahu_reports,
+        "rtu_reports": rtu_reports,
         "vav_reports": vav_reports,
         "orphan_point_count": len(orphan_pts),
         "orphan_point_samples": orphan_pts[:10],
@@ -173,4 +224,10 @@ def validate_fdd_run_schema(run: dict[str, Any]) -> list[str]:
             errors.append(f"run missing {key}")
     if run.get("flagged") is None and run.get("fault_rows") is None:
         errors.append("run missing flagged/fault_rows count")
+    flagged = int(run.get("flagged") or run.get("fault_rows") or 0)
+    if flagged > 0:
+        names = run.get("equipment_names") or []
+        eq_name = str(run.get("equipment_name") or "").strip()
+        if not names and not eq_name:
+            errors.append("run missing equipment_names for flagged row")
     return errors

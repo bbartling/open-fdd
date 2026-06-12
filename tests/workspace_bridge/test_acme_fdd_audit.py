@@ -100,3 +100,18 @@ def test_acme_gl36_model_no_duplicates_if_present():
     model = json.loads(path.read_text(encoding="utf-8"))
     out = duplicate_audit(model)
     assert out["duplicate_point_ids"] == 0
+
+
+def test_acme_rtu_role_audit_covers_sat_and_fan_command():
+    path = REPO / "workspace/data/acme_gl36_model.json"
+    if not path.is_file():
+        pytest.skip("fixture missing")
+    model = json.loads(path.read_text(encoding="utf-8"))
+    out = equipment_point_role_audit(model)
+    rtu = next((r for r in out["rtu_reports"] if r["equipment_id"] == "acme-vm-bbartling-rtu-01"), None)
+    assert rtu is not None
+    assert rtu["equipment_class"] == "RTU"
+    assert "supply_air_temperature" in rtu["roles_found"]
+    assert "supply_fan_command" in rtu["roles_found"]
+    assert "duct_static_pressure" in rtu["roles_found"]
+    assert "supply_air_temperature_setpoint" in rtu["roles_missing_optional"]
