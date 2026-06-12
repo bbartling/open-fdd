@@ -39,6 +39,19 @@ def test_duplicate_audit_flags_dup_point_ids():
     assert out["duplicate_point_ids"] == 1
 
 
+def test_duplicate_audit_flags_dup_bacnet_equipment_ids():
+    model = {
+        "equipment": [
+            {"id": "eq-a", "bacnet_device_instance": 1100},
+            {"id": "eq-b", "bacnet_device_instance": 1100},
+        ],
+        "points": [],
+    }
+    out = duplicate_audit(model)
+    assert out["ok"] is False
+    assert out["duplicate_bacnet_equipment_ids"]
+
+
 def test_equipment_role_audit_finds_ahu_sat():
     model = {
         "equipment": [{"id": "ahu-c", "equipment_type": "AHU", "name": "AHU-C"}],

@@ -123,6 +123,47 @@ def test_building_status_missing_context_fails():
     assert "missing" in msg.lower()
 
 
+def test_building_status_nested_equipment_name_passes():
+    validator = AcmeLiveValidator(
+        base="http://127.0.0.1:8765",
+        site_id="acme",
+        building_id="vm-bbartling",
+        profile={},
+        auth_env=Path("/nonexistent"),
+    )
+    validator.token = "tok"
+
+    def fake_get(path, auth=True):
+        if path.startswith("/api/faults/status"):
+            return 200, {
+                "families": [
+                    {
+                        "faults": [
+                            {
+                                "source": "fdd",
+                                "title": "AHU-C · SAT flatline",
+                                "code": "AHU-C",
+                                "model_context": {
+                                    "equipment": {"id": "ahu-c", "name": "AHU-C", "type": "AHU"},
+                                    "point": {"id": "p1", "name": "SAT"},
+                                },
+                            }
+                        ]
+                    }
+                ]
+            }, 1.0
+        return 200, {}, 1.0
+
+    validator.client.get_json = fake_get  # type: ignore[method-assign]
+    with patch(
+        "http_probes.check_building_dashboard_health",
+        return_value={"errors": [], "warnings": []},
+    ):
+        status, msg, _ = validator._check_building_status()
+    assert status == "pass"
+    assert "missing equipment" not in msg.lower()
+
+
 def test_trend_empty_fails_via_http_probes_errors():
     validator = AcmeLiveValidator(
         base="http://127.0.0.1:8765",

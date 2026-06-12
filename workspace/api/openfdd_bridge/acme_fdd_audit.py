@@ -65,15 +65,18 @@ def duplicate_audit(model: dict[str, Any]) -> dict[str, Any]:
     dup_inst = {k: v for k, v in dev_inst.items() if v > 1}
     eq_ids = [str(e.get("id")) for e in equipment if isinstance(e, dict) and e.get("id")]
     dup_eq_id = {k: v for k, v in Counter(eq_ids).items() if v > 1}
+    dup_inst_map = bacnet.get("instances") or {}
+    dup_bacnet_eq = list(dup_inst_map.keys()) if isinstance(dup_inst_map, dict) else []
     return {
         "duplicate_bacnet_device_instances": int(bacnet.get("duplicate_device_instances") or 0),
-        "duplicate_bacnet_equipment_ids": bacnet.get("duplicate_equipment_ids") or [],
+        "duplicate_bacnet_equipment_ids": dup_bacnet_eq,
         "duplicate_point_ids": int(points.get("duplicate_point_ids") or 0),
         "duplicate_point_id_samples": points.get("instances") or {},
         "duplicate_equipment_id_strings": dup_eq_id,
         "duplicate_device_instance_counts": dup_inst,
         "ok": (
             int(bacnet.get("duplicate_device_instances") or 0) == 0
+            and not dup_inst_map
             and int(points.get("duplicate_point_ids") or 0) == 0
             and not dup_eq_id
         ),
@@ -97,7 +100,7 @@ def equipment_point_role_audit(model: dict[str, Any], *, site_id: str = "acme") 
     ahurs = [e for e in equipment if "ahu" in _equipment_type(e) or "rtu" in _equipment_type(e)]
     vavs = [e for e in equipment if "vav" in _equipment_type(e)]
     ahu_reports: list[dict[str, Any]] = []
-    for eq in ahurs[:20]:
+    for eq in ahurs:
         eid = str(eq.get("id") or "")
         eq_pts = [p for p in points if str(p.get("equipment_id") or "") == eid]
         roles = _roles_present(eq_pts, AHU_POINT_ROLES)
@@ -112,7 +115,7 @@ def equipment_point_role_audit(model: dict[str, Any], *, site_id: str = "acme") 
             }
         )
     vav_reports: list[dict[str, Any]] = []
-    for eq in vavs[:30]:
+    for eq in vavs:
         eid = str(eq.get("id") or "")
         eq_pts = [p for p in points if str(p.get("equipment_id") or "") == eid]
         roles = _roles_present(eq_pts, VAV_POINT_ROLES)

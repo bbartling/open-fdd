@@ -114,8 +114,10 @@ def resolve_fault_model_context(
                 ename = eq_name
                 break
     if not ename and fault_code:
-        ename = fault_code.strip()
-        eq_type = _equipment_type_from_fault_code(fault_code)
+        inferred = _equipment_type_from_fault_code(fault_code)
+        if inferred:
+            ename = fault_code.strip()
+            eq_type = inferred
     if not eid and cols:
         eid = str((col_map.get(cols[0]) or {}).get("equipment_id") or "")
     if not ename and eid:
