@@ -10,11 +10,11 @@ Clone, build, test, and contribute to Open-FDD.
 
 | Topic | Page |
 |-------|------|
-| Local setup | [Local development]({% link developer/local-setup.md %}) |
-| Docker builds | [Build Docker images]({% link developer/docker-build.md %}) |
-| Health checks | [Health checks (developer)]({% link developer/health-check.md %}) |
-| Tests & CI | [Tests and CI]({% link developer/tests-ci.md %}) |
-| Security testing | [Release & LAN scan cycle]({% link developer/security-testing.md %}) |
-| PRs | [Contributing]({% link developer/contributing.md %}) |
+| Local setup | [Local development]({{ "/developer/local-setup/" | relative_url }}) |
+| Docker builds | [Build Docker images]({{ "/developer/docker-build/" | relative_url }}) |
+| Health checks | [Health checks (developer)]({{ "/developer/health-check/" | relative_url }}) |
+| Tests & CI | [Tests and CI]({{ "/developer/tests-ci/" | relative_url }}) |
+| Security testing | [Release & LAN scan cycle]({{ "/developer/security-testing/" | relative_url }}) |
+| PRs | [Contributing]({{ "/developer/contributing/" | relative_url }}) |
 
 AI-assisted contributors: see repository `AGENTS.md` for workspace layout, skill routing, and agent policy (one paragraph in public docs; details stay internal).

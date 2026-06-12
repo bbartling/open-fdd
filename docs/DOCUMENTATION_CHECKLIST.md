@@ -8,6 +8,8 @@ nav_exclude: true
 Run before merging docs PRs:
 
 - [ ] `cd docs && bundle exec jekyll build` succeeds
+- [ ] `python3 scripts/check_docs_internal_links.py --site _site` passes (catches missing `/open-fdd/` on body links)
+- [ ] Internal doc links use `{{ "/path/" | relative_url }}` — not bare {% raw %}`{% link %}`{% endraw %} (no baseurl on GitHub Pages project sites)
 - [ ] No broken `parent:` titles (must match parent page `title` exactly)
 - [ ] `rg -i 'acme|bensserver' docs --glob '*.md' | grep -v docs_cleanup_plan | grep -v DOCUMENTATION_CHECKLIST | grep -v '^docs/examples/'` is empty (Acme names allowed under `docs/examples/` only)
 - [ ] GHCR commands use real image names (`ghcr.io/bbartling/openfdd-*`)

@@ -115,16 +115,16 @@ flagged=…
 
 ## Lookback windows
 
-Rules that need multi-hour history should call `_kit_lookback_stats(table)` (see [Lookback window helper]({% link rule-cookbook/lookback-window.md %})). Pass `hours=1`, `3`, `6`, `12`, or `24` to validate timestamp span in the console.
+Rules that need multi-hour history should call `_kit_lookback_stats(table)` (see [Lookback window helper]({{ "/rule-cookbook/lookback-window/" | relative_url }})). Pass `hours=1`, `3`, `6`, `12`, or `24` to validate timestamp span in the console.
 
-Rolling-window rules (flatline, spread) use `WINDOW_SAMPLES` (~12 samples ≈ 1 h at 5 min poll) — see [Windowing & debugging]({% link rule-cookbook/windowing-debugging.md %}).
+Rolling-window rules (flatline, spread) use `WINDOW_SAMPLES` (~12 samples ≈ 1 h at 5 min poll) — see [Windowing & debugging]({{ "/rule-cookbook/windowing-debugging/" | relative_url }}).
 
 ## Algorithms (supervisory — coming soon)
 
-GL36 trim & respond and plant reset sequences will live on the **[Algorithms]({% link operator-bridge/algorithms.md %})** tab with the same zip kit shape but `apply_algorithm_arrow` outputs. Reference: [README_TRIM_RESPOND](https://github.com/bbartling/niagara4-vibe-code-addict/blob/develop/README_TRIM_RESPOND.md).
+GL36 trim & respond and plant reset sequences will live on the **[Algorithms]({{ "/operator-bridge/algorithms/" | relative_url }})** tab with the same zip kit shape but `apply_algorithm_arrow` outputs. Reference: [README_TRIM_RESPOND](https://github.com/bbartling/niagara4-vibe-code-addict/blob/develop/README_TRIM_RESPOND.md).
 
 ## Related
 
-- [Model workflow]({% link operator-bridge/model-workflow.md %})
-- [Arrow recipes]({% link rule-cookbook/arrow-recipes.md %})
-- [GL36 algorithm stubs]({% link rule-cookbook/gl36-algorithm-stubs.md %}) (doc-only)
+- [Model workflow]({{ "/operator-bridge/model-workflow/" | relative_url }})
+- [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }})
+- [GL36 algorithm stubs]({{ "/rule-cookbook/gl36-algorithm-stubs/" | relative_url }}) (doc-only)

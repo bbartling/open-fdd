@@ -8,7 +8,8 @@
 | **`build_docs_pdf.sh`** / **`build_docs_pdf.py`** | Combined Markdown → `pdf/open-fdd-docs.pdf` (+ `.txt`). Needs system **pandoc** + `pip install weasyprint` (or `pip install -e ".[docs]"`). CI opens a PR on `master`/`main` doc changes — merge `chore/docs-pdf-refresh`. |
 | **`openfdd_edge_validate.sh`** | Bensserver / edge gate: backup → BACnet+model reset → bench setup → stack → **public check-engine (no auth)** → SPARQL/http probes → operational verify → pytest → health → log scan. `--quick` (no resets), `--full` / `--long` (full bench), `--pre-update-backup`, `--rebuild`. |
 | **`docker_maintenance.sh`** | Safe prune/rebuild; never prunes bind-mounted workspace volumes. |
-| **`upgrade_edge_full.sh`** | Build UI + `deploy.sh ui` + GHCR image upgrade + post-deploy check (fixes stale `static/app` on edge). |
+| **`upgrade_edge_full.sh`** | Build UI + `edge_sync_ui_static.sh` + GHCR image upgrade + post-deploy check (fixes stale `static/app` on edge). |
+| **`edge_sync_ui_static.sh`** | Rsync `workspace/api/static/app/` to edge bind mount via inventory SSH. |
 | **`acme_post_deploy_validate.sh`** | **Live Acme** read-only validation after GHCR updates — image tag, UI bundle, duplicates, BACnet, trends, FDD, Rule Lab, logs. `--quick` \| `--full`. |
 | **`acme_live_validate.py`** | Python API probe engine used by `acme_post_deploy_validate.sh`; JSON/JUnit/Markdown reports. |
 | **`ghcr_prune_packages.sh`** | Safe GHCR retention cleanup (dry-run default). See `docs/ops/ghcr-retention.md`. |

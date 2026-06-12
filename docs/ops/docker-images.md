@@ -47,4 +47,4 @@ Manual: Actions → workflow_dispatch (publishes `latest`).
 | Embed FDD in your Python/cloud job | `pip install open-fdd` |
 | BACnet + UI + bridge on an edge host | GHCR images |
 
-See [Release process](../developer/release-process.md).
+See [Release process]({{ "/developer/release-process/" | relative_url }}).

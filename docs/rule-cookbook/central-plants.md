@@ -40,4 +40,4 @@ mask = low_delta_t_mask(
 assert mask.to_pylist()[-1] is True
 ```
 
-See [Fault codes — chiller plant]({% link fault-codes/index.md %}) (expanded in 3.0.19).
+See [Fault codes — chiller plant]({{ "/fault-codes/" | relative_url }}) (expanded in 3.0.19).

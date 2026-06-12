@@ -11,7 +11,7 @@ Acme (`vm-bbartling`) is the **live Open-FDD test site** on the OT LAN (reachabl
 ## Recommended flow
 
 ```bash
-export OPENFDD_IMAGE_TAG=v3.0.32
+export OPENFDD_IMAGE_TAG=3.0.32
 
 # Full upgrade: React static bundle + GHCR containers (not image-only)
 ./scripts/upgrade_edge_full.sh --limit acme_vm_bbartling
@@ -21,7 +21,9 @@ export OPENFDD_IMAGE_TAG=v3.0.32
   --json-out reports/acme-live-validate.json
 ```
 
-Use **`upgrade_edge_full.sh`**, not `upgrade_edge_ghcr.sh` alone, when the Operator Bridge UI changed — the edge bind-mount serves `workspace/api/static/app/` **before** image-baked assets.
+Use **`upgrade_edge_full.sh`**, not `upgrade_edge_ghcr.sh` alone, when the Operator Bridge UI changed — the edge bind-mount serves `workspace/api/static/app/` **before** image-baked assets (`edge_sync_ui_static.sh` rsyncs the bundle; `deploy.sh ui` was removed).
+
+GHCR SemVer tags omit the leading `v` (`3.0.32`, not `v3.0.32`). `upgrade_edge_ghcr.sh` normalizes `OPENFDD_IMAGE_TAG` automatically.
 
 ## Modes
 
@@ -76,6 +78,29 @@ ACME_VALIDATE_LIVE=1 python -m pytest tests/live/test_acme_live.py -q
 ```
 
 Requires Tailscale/inventory reachability and local secrets. CI skips this test by default.
+
+## Overnight FDD validation (read-only)
+
+Four-cycle runner for BACnet health, duplicate audit, equipment roles, and FDD fault schema. **Requires explicit opt-in:**
+
+```bash
+OPENFDD_LIVE_ACME=1 OPENFDD_IMAGE_TAG=3.0.32 ACME_OVERNIGHT_CYCLES=4 \
+  ACME_WINDOW_HOURS=2 ACME_CYCLE_SLEEP_MINUTES=0 \
+  python3 scripts/acme_overnight_fdd_validate.py --limit acme_vm_bbartling
+```
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `OPENFDD_LIVE_ACME` | (unset) | Must be `1` for live API calls |
+| `ACME_OVERNIGHT_CYCLES` | `4` | Number of validation cycles |
+| `ACME_WINDOW_HOURS` | `2` | Historian lookback per cycle |
+| `ACME_CYCLE_SLEEP_MINUTES` | `0` | Set `120` for true 2-hour wall-clock spacing |
+
+Reports are written under `reports/` (gitignored). See [ACME validation follow-ups]({{ "/ops/acme-validation-follow-ups/" | relative_url }}) and [ACME deploy 3.0.33 validation plan]({{ "/ops/acme-deploy-3.0.33-validation/" | relative_url }}).
+
+### Live bridge vs branch fix
+
+Live ACME on **3.0.32** may fail `building_status_context` because the deployed bridge does not yet include `fault_model_context` equipment enrichment. The branch fix enriches payloads correctly in tests and via the overnight runner’s post-enrich check. **Do not claim live ACME is fixed until a new image (e.g. 3.0.33) is published and deployed**, then re-run validation.
 
 ## Safety
 

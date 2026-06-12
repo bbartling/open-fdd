@@ -76,4 +76,4 @@ Always call `_kit_lookback_stats(table)` first so operators can confirm the tabl
 | Rule Lab **Update all records** | 24 h (`chunk_hours: 6`, `use_chunks: true`) |
 | Rule Lab Quick test | 3 h (UI default) |
 
-See [Windowing & debugging]({% link rule-cookbook/windowing-debugging.md %}) for `arrow_rolling_min` / `arrow_consecutive_true`.
+See [Windowing & debugging]({{ "/rule-cookbook/windowing-debugging/" | relative_url }}) for `arrow_rolling_min` / `arrow_consecutive_true`.

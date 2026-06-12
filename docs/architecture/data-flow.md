@@ -38,7 +38,7 @@ OT REST / weather API → bridge JSON API worker → samples.csv → feather_sto
                                                       ↘ merged into FDD frame with bacnet/modbus
 ```
 
-Showcase: [OpenWeatherMap bundle]({% link drivers/json-api.md %}#openweathermap-showcase-recommended-demo). Details: [Driver framework]({% link drivers/index.md %}), [BACnet polling]({% link bacnet/polling.md %}), [JSON API driver]({% link drivers/json-api.md %}), [Containers]({% link architecture/containers.md %}).
+Showcase: [OpenWeatherMap bundle]({{ "/drivers/json-api/" | relative_url }}#openweathermap-showcase-recommended-demo). Details: [Driver framework]({{ "/drivers/" | relative_url }}), [BACnet polling]({{ "/bacnet/polling/" | relative_url }}), [JSON API driver]({{ "/drivers/json-api/" | relative_url }}), [Containers]({{ "/architecture/containers/" | relative_url }}).
 
 ## Rule evaluation
 
@@ -54,4 +54,4 @@ Showcase: [OpenWeatherMap bundle]({% link drivers/json-api.md %}#openweathermap-
 
 ## Retention
 
-Feather files grow on disk; retention is configurable (`workspace/data.env.local`). Image upgrades must **preserve** `workspace/data/` — backup before `docker compose up -d --force-recreate`. See [Updating the stack]({% link quick-start/updating.md %}).
+Feather files grow on disk; retention is configurable (`workspace/data.env.local`). Image upgrades must **preserve** `workspace/data/` — backup before `docker compose up -d --force-recreate`. See [Updating the stack]({{ "/quick-start/updating/" | relative_url }}).

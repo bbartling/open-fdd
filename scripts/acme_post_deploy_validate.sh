@@ -93,6 +93,12 @@ if [[ -z "$BASE" && -z "$LIMIT" ]]; then
 fi
 
 TAG="${OPENFDD_IMAGE_TAG:-}"
+if [[ -n "$TAG" ]]; then
+  # shellcheck source=scripts/openfdd_normalize_image_tag.sh
+  source "${ROOT}/scripts/openfdd_normalize_image_tag.sh"
+  TAG="$(normalize_openfdd_image_tag "$TAG")"
+  export OPENFDD_IMAGE_TAG="$TAG"
+fi
 if [[ -z "$TAG" ]]; then
   echo "warn: OPENFDD_IMAGE_TAG not set — Docker image tag checks are best-effort" >&2
 fi
@@ -140,8 +146,9 @@ if ! "${PY_ARGS[@]}"; then
   FAIL=1
 fi
 
-if [[ "$MODE" != "quick" && "$FAIL" == "0" && -f "${ROOT}/scripts/stack_health_check.sh" ]]; then
-  echo "==> stack_health_check.sh (supplemental)"
+# stack_health_check.sh targets local compose.dev.yml and requires MCP — skip on remote edge (--limit).
+if [[ "$MODE" != "quick" && "$FAIL" == "0" && -z "$LIMIT" && -f "${ROOT}/scripts/stack_health_check.sh" ]]; then
+  echo "==> stack_health_check.sh (supplemental, local dev stack only)"
   RESOLVED_BASE="$BASE"
   if [[ -z "$RESOLVED_BASE" && -n "$LIMIT" ]]; then
     RESOLVED_BASE="$(python3 -c "

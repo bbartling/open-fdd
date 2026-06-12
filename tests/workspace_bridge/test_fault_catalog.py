@@ -216,5 +216,8 @@ def test_fault_code_groups_into_family_tree(client: TestClient):
     status = client.get("/api/faults/status").json()
     assert status["traffic"] == "red"
     families = {f["family"]: f for f in status["families"]}
-    assert "AHU" in families
-    assert any(a.get("code") == "AHU-B" for a in families["AHU"]["faults"])
+    # FDD alerts with equipment_name group under EQ:<id|name>, not generic AHU family.
+    eq_family = "EQ:AHU-B"
+    assert eq_family in families, f"expected equipment family {eq_family!r}, got {list(families)}"
+    assert families[eq_family]["label"] == "AHU-B"
+    assert any(a.get("code") == "AHU-B" for a in families[eq_family]["faults"])

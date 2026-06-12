@@ -25,4 +25,4 @@ Dashboard tiles use REST polling and `WS /ws/dashboard` for selected live views 
 
 ## Roles
 
-Read-only operators see trends and faults; integrators access Rule Lab and model import. See [Auth and roles]({% link operator-bridge/auth-roles.md %}).
+Read-only operators see trends and faults; integrators access Rule Lab and model import. See [Auth and roles]({{ "/operator-bridge/auth-roles/" | relative_url }}).

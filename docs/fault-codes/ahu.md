@@ -17,4 +17,4 @@ Air handling unit codes (sample from catalog).
 | **AHU-E** | Economizer not economizing | warning | Free cool available, OA minimum | Stuck damper, lockout | OA damper vs OAT trend |
 | **AHU-F** | Damper command vs feedback mismatch | warning | Cmd ≠ feedback | Stuck actuator, linkage | Compare cmd/feedback trends |
 
-**Example rule:** `flatline_1h` on SAT → tag **AHU-C**. Recipe: [Python recipes]({% link rule-cookbook/python-recipes.md %}).
+**Example rule:** `flatline_1h` on SAT → tag **AHU-C**. Recipe: [Python recipes]({{ "/rule-cookbook/python-recipes/" | relative_url }}).

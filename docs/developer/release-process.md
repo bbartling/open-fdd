@@ -69,4 +69,4 @@ docker manifest inspect ghcr.io/bbartling/openfdd-bridge:3.0.30
 
 ## Package vs Docker
 
-See [PyPI package](pypi-package.md) and [Docker images](../ops/docker-images.md).
+See [PyPI package]({{ "/developer/pypi-package/" | relative_url }}) and [Docker images]({{ "/ops/docker-images/" | relative_url }}).

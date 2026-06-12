@@ -33,7 +33,7 @@ Retired in 3.0.1+: `open_fdd.engine` (YAML/pandas `RuleRunner`) is **not** shipp
 
 ## Versioning
 
-Publish: git tag `vX.Y.Z` (or legacy `open-fdd-vX.Y.Z`) → GitHub Actions **Publish open-fdd to PyPI**. See [Release process]({% link developer/release-process.md %}).
+Publish: git tag `vX.Y.Z` (or legacy `open-fdd-vX.Y.Z`) → GitHub Actions **Publish open-fdd to PyPI**. See [Release process]({{ "/developer/release-process/" | relative_url }}).
 
 ```python
 import open_fdd
@@ -58,4 +58,4 @@ result = run_arrow_rule(code, table, {"high": 85})
 print(result.flagged_count)
 ```
 
-API surface: `open_fdd/arrow_runtime` docstrings and [Arrow recipes]({% link rule-cookbook/arrow-recipes.md %}).
+API surface: `open_fdd/arrow_runtime` docstrings and [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}).

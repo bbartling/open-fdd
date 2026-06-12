@@ -21,6 +21,6 @@ nav_order: 4
 5. Run `POST /api/model/sync-ttl` after bulk imports.
 6. Validate on **Trend plot** with FDD overlays (`?fdd=1`) — faults render on a right-hand 0/1 axis per device scope.
 
-AI Agent and commissioning JSON import can bulk-apply steps 2–4; integrator should review model health before production FDD. See [FDD and assignments]({% link operator-bridge/fdd-assignments.md %}) and [Ollama and analytics]({% link operator-bridge/ollama-analytics.md %}).
+AI Agent and commissioning JSON import can bulk-apply steps 2–4; integrator should review model health before production FDD. See [FDD and assignments]({{ "/operator-bridge/fdd-assignments/" | relative_url }}) and [Ollama and analytics]({{ "/operator-bridge/ollama-analytics/" | relative_url }}).
 
-Export: `GET /api/model/export` (TTL/JSON). Commissioning bundle: `GET /api/model/commissioning-export` — includes per-point `fdd_rules_linked` (Rule Lab names) plus `fdd_rules[]` catalog. Use **Import / export** tab preview table or **Point → FDD rule pins** before editing raw JSON. API detail in [Appendix]({% link appendix/bridge_api.md %}).
+Export: `GET /api/model/export` (TTL/JSON). Commissioning bundle: `GET /api/model/commissioning-export` — includes per-point `fdd_rules_linked` (Rule Lab names) plus `fdd_rules[]` catalog. Use **Import / export** tab preview table or **Point → FDD rule pins** before editing raw JSON. API detail in [Appendix]({{ "/appendix/bridge_api/" | relative_url }}).

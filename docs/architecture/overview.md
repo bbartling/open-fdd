@@ -28,7 +28,7 @@ nav_order: 1
 
 ## Docker edge stack (production)
 
-Three GHCR images — see [Containers]({% link architecture/containers.md %}):
+Three GHCR images — see [Containers]({{ "/architecture/containers/" | relative_url }}):
 
 | Container | BACnet OT | Operator LAN |
 |-----------|-----------|--------------|
@@ -53,8 +53,8 @@ BACnet **polling** is not a separate container — it runs inside **commission**
 
 ## Deployment
 
-IT operators: [Quick Start — Docker]({% link quick-start/docker.md %}). Modes and Caddy: [Deployment modes]({% link architecture/deployment-modes.md %}).
+IT operators: [Quick Start — Docker]({{ "/quick-start/docker/" | relative_url }}). Modes and Caddy: [Deployment modes]({{ "/architecture/deployment-modes/" | relative_url }}).
 
 ## Optional PyPI-only path
 
-`pip install open-fdd` ships Arrow runtime + playground lint helpers **without** the Operator Bridge UI. Use for offline rule tests or CI. See [Appendix — Python package]({% link appendix/python-package.md %}).
+`pip install open-fdd` ships Arrow runtime + playground lint helpers **without** the Operator Bridge UI. Use for offline rule tests or CI. See [Appendix — Python package]({{ "/appendix/python-package/" | relative_url }}).

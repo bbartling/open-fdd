@@ -77,7 +77,16 @@ def load_results() -> dict[str, Any]:
 
 
 def save_results(runs: list[dict[str, Any]]) -> dict[str, Any]:
-    doc = {"version": 1, "generated_at": _now(), "runs": runs}
+    from .fdd_equipment import enrich_fdd_run_with_equipment
+
+    model = _model_for_fdd()
+    enriched: list[dict[str, Any]] = []
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        site_id = str(run.get("site_id") or "").strip()
+        enriched.append(enrich_fdd_run_with_equipment(dict(run), model, site_id))
+    doc = {"version": 1, "generated_at": _now(), "runs": enriched}
     path = fdd_results_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(doc, indent=2)

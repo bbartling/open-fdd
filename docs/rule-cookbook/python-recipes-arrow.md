@@ -12,7 +12,7 @@ Copy-paste **`apply_faults_arrow`** modules for Rule Lab. Replaces the legacy pa
 - Set **`fault_code`** in Rule Lab metadata (letter codes or Grade-A `AHU-ECON-001`)
 - Map historian column names in the data model / rule bindings (`ma-t`, `oa-t`, `stat_zn-t`, …)
 
-Quick patterns: [Arrow recipes]({% link rule-cookbook/arrow-recipes.md %}) · Index: [Expression cookbook (Arrow-native)]({% link rule-cookbook/expression-cookbook.md %})
+Quick patterns: [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}) · Index: [Expression cookbook (Arrow-native)]({{ "/rule-cookbook/expression-cookbook/" | relative_url }})
 
 ---
 
@@ -410,7 +410,7 @@ def apply_faults_arrow(table, cfg, context=None):
 
 ### Zone / IAQ bounds
 
-Use `sensor_bounds_mask(table, "zone_temp", cfg)` or `sensor_bounds_mask` with CO₂ profile — see [sensor validation]({% link rule-cookbook/expression-cookbook.md %}#sensor-validation-bounds-flatline-rate-of-change).
+Use `sensor_bounds_mask(table, "zone_temp", cfg)` or `sensor_bounds_mask` with CO₂ profile — see [sensor validation]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#sensor-validation-bounds-flatline-rate-of-change).
 
 ---
 
@@ -648,4 +648,4 @@ Pass `occupied_start_hour`, `occupied_end_hour`, `tz_offset_hours` in Rule Lab `
 4. Quick-test on 3–24 h feather window
 5. Ship via `setup_gl36_fdd.py` or Rule Lab save
 
-**See also:** [Expression cookbook]({% link rule-cookbook/expression-cookbook.md %}) · [Fault codes]({% link fault-codes/index.md %}) · [Rule Lab]({% link operator-bridge/rule-lab.md %})
+**See also:** [Expression cookbook]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}) · [Fault codes]({{ "/fault-codes/" | relative_url }}) · [Rule Lab]({{ "/operator-bridge/rule-lab/" | relative_url }})

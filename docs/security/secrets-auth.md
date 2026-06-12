@@ -19,7 +19,7 @@ nav_order: 5
 | `workspace/pentest.env.local` | LAN security scan stack |
 | `infra/ansible/secrets/<host>.env.local` | SSH deploy secrets (maintainers) |
 
-Copy from `*.example` templates only. Full inventory: [Workspace env files]({% link appendix/workspace-env-files.md %}).
+Copy from `*.example` templates only. Full inventory: [Workspace env files]({{ "/appendix/workspace-env-files/" | relative_url }}).
 
 ## Required variables (production)
 
@@ -37,4 +37,4 @@ Use read-only registry credentials on edge if images are private; rotate tokens 
 
 Back up `workspace/data/` and auth env in secure operator vault — not in git.
 
-Audit JSONL under `workspace/logs/` may contain client IPs and usernames — treat like security logs. See [Logging and audit]({% link ops/logging.md %}).
+Audit JSONL under `workspace/logs/` may contain client IPs and usernames — treat like security logs. See [Logging and audit]({{ "/ops/logging/" | relative_url }}).
