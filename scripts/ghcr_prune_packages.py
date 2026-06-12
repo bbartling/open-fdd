@@ -340,8 +340,8 @@ def write_markdown_report(report: PruneReport, path: Path) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def verify_packages_api_access(owner: str, token: str | None) -> None:
-    """Fail fast when gh token cannot list container packages for owner."""
+def verify_packages_api_access(owner: str, token: str | None, probe_package: str = "openfdd-bridge") -> None:
+    """Fail fast when gh token cannot read container package versions."""
     env = os.environ.copy()
     if token:
         env["GH_TOKEN"] = token
@@ -349,7 +349,7 @@ def verify_packages_api_access(owner: str, token: str | None) -> None:
         [
             "gh",
             "api",
-            f"users/{owner}/packages?package_type=container&per_page=1",
+            f"users/{owner}/packages/container/{probe_package}/versions?per_page=1",
         ],
         capture_output=True,
         text=True,
@@ -365,7 +365,7 @@ def verify_packages_api_access(owner: str, token: str | None) -> None:
             "  gh auth refresh -h github.com -s read:packages,delete:packages\n"
             "Then re-run: ./scripts/ghcr_prune_packages.sh --all-images --dry-run"
         )
-    raise SystemExit(f"Cannot list GHCR packages for {owner}: {detail}")
+    raise SystemExit(f"Cannot read GHCR package {owner}/{probe_package}: {detail}")
 
 
 def resolve_token(explicit: str | None) -> str | None:
