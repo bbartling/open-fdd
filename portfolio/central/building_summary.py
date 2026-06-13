@@ -24,7 +24,7 @@ def _primary_brick_site(tree: dict[str, Any], registry_site_id: str) -> tuple[st
     return "", ""
 
 
-def build_building_summary(registry_site_id: str) -> dict[str, Any]:
+def build_building_summary(registry_site_id: str, *, fast: bool = False) -> dict[str, Any]:
     """Summarise Edge BRICK model for RCx Central dashboard."""
     site = resolve_site_config(registry_site_id)
     client = EdgeClient(site.base_url)
@@ -37,33 +37,44 @@ def build_building_summary(registry_site_id: str) -> dict[str, Any]:
     model_score: int | None = None
     feed_chains: list[str] = []
 
-    try:
-        tree = client.get_model_tree(token=token)
-        brick_site_id, brick_site_name = _primary_brick_site(tree, registry_site_id)
-        equipment_count = len(tree.get("equipment") or [])
-        point_count = len(tree.get("points") or [])
-    except RuntimeError:
-        tree = {}
+    if fast:
+        try:
+            health = client.get_model_health(token=token)
+            counts = health.get("counts") if isinstance(health.get("counts"), dict) else {}
+            equipment_count = int(counts.get("equipment") or 0)
+            point_count = int(counts.get("points") or 0)
+            model_score = int(health["score"]) if health.get("score") is not None else None
+        except RuntimeError:
+            pass
+        mech = build_mechanical_narrative(registry_site_id, fast=True)
+    else:
+        try:
+            tree = client.get_model_tree(token=token)
+            brick_site_id, brick_site_name = _primary_brick_site(tree, registry_site_id)
+            equipment_count = len(tree.get("equipment") or [])
+            point_count = len(tree.get("points") or [])
+        except RuntimeError:
+            tree = {}
 
-    try:
-        health = client.get_model_health(token=token)
-        counts = health.get("counts") if isinstance(health.get("counts"), dict) else {}
-        equipment_count = int(counts.get("equipment") or equipment_count or 0)
-        point_count = int(counts.get("points") or point_count or 0)
-        model_score = int(health["score"]) if health.get("score") is not None else None
-    except RuntimeError:
-        pass
+        try:
+            health = client.get_model_health(token=token)
+            counts = health.get("counts") if isinstance(health.get("counts"), dict) else {}
+            equipment_count = int(counts.get("equipment") or equipment_count or 0)
+            point_count = int(counts.get("points") or point_count or 0)
+            model_score = int(health["score"]) if health.get("score") is not None else None
+        except RuntimeError:
+            pass
 
-    try:
-        brief = client.api_get("/openfdd-agent/operational-brief", token=token)
-        bm = brief.get("brick_model") if isinstance(brief.get("brick_model"), dict) else {}
-        feed_chains = [str(c) for c in (bm.get("feeds_chains") or []) if c][:12]
-        if not brick_site_id:
-            brick_site_id = str(bm.get("site_id") or "")
-    except RuntimeError:
-        pass
+        try:
+            brief = client.api_get("/openfdd-agent/operational-brief", token=token)
+            bm = brief.get("brick_model") if isinstance(brief.get("brick_model"), dict) else {}
+            feed_chains = [str(c) for c in (bm.get("feeds_chains") or []) if c][:12]
+            if not brick_site_id:
+                brick_site_id = str(bm.get("site_id") or "")
+        except RuntimeError:
+            pass
 
-    mech = build_mechanical_narrative(registry_site_id)
+        mech = build_mechanical_narrative(registry_site_id, fast=False)
     counts = mech.get("counts") if isinstance(mech.get("counts"), dict) else {}
 
     title = site.name or registry_site_id
@@ -101,4 +112,5 @@ def build_building_summary(registry_site_id: str) -> dict[str, Any]:
         "model_points": point_count,
         "model_score": model_score,
         "counts": counts,
+        "fast_mode": fast,
     }

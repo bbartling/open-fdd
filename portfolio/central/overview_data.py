@@ -147,7 +147,7 @@ def build_overview_from_csv(site_id: str) -> dict[str, Any]:
     }
 
 
-def build_overview(site_id: str, *, include_live: bool = True) -> dict[str, Any]:
+def build_overview(site_id: str, *, include_live: bool = True, fast: bool = True) -> dict[str, Any]:
     out = build_overview_from_csv(site_id)
     out["live_edge"] = None
     out["mechanical_narrative"] = None
@@ -156,64 +156,92 @@ def build_overview(site_id: str, *, include_live: bool = True) -> dict[str, Any]
     out["last_connection_at"] = None
     out["last_connection_at_local"] = None
     out["overrides_source"] = "csv" if out.get("overrides_p8") else "none"
+    out["fast_mode"] = fast
+    out["model_tree_loaded"] = False
 
     if not include_live:
         return out
 
     try:
-        from portfolio.central.building_summary import build_building_summary
+        from portfolio.central.edge_fetch import edge_client_for_site, run_parallel
 
-        summary = build_building_summary(site_id)
+        site_cfg, token, client = edge_client_for_site(site_id)
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        def _summary() -> dict[str, Any]:
+            from portfolio.central.building_summary import build_building_summary
+
+            return build_building_summary(site_id, fast=fast)
+
+        rollup_timeout = 8 if fast else 30
+        results, parallel_errors = run_parallel(
+            {
+                "faults": lambda: client.get_faults_status(token=token),
+                "summary": _summary,
+                "rollup": lambda: client.get_portfolio_rollup(
+                    site_id=site_id, token=token, timeout=rollup_timeout
+                ),
+            },
+            max_workers=3,
+        )
+
+        summary = results.get("summary") or {}
         out["mechanical_narrative"] = summary.get("narrative")
         out["mechanical_counts"] = summary.get("counts")
         out["brick_site_id"] = summary.get("brick_site_id")
         out["brick_site_name"] = summary.get("brick_site_name")
         out["registry_name"] = summary.get("registry_name")
         out["feeds_chains"] = summary.get("feeds_chains") or []
+        out["model_equipment"] = summary.get("model_equipment")
+        out["model_points"] = summary.get("model_points")
         out["credentials_ok"] = True
-        out["data_source_live"] = "Edge REST: /api/model/fdd-query-presets/* + model health"
-
-        from portfolio.central.edge_registry import resolve_site_config, resolve_token
-        from portfolio.collector.edge_client import EdgeClient
-
-        site = resolve_site_config(site_id)
-        token = resolve_token(site)
-        client = EdgeClient(site.base_url)
-        now_iso = datetime.now(timezone.utc).isoformat()
+        out["data_source_live"] = (
+            "Edge REST (fast): parallel faults + health + ahus_vavs_zones"
+            if fast
+            else "Edge REST: full building summary"
+        )
         out["connection_ok"] = True
         out["last_connection_at"] = now_iso
         out["last_connection_at_local"] = format_ts_local(now_iso)
-        faults = client.get_faults_status(token=token)
-        try:
-            rollup = client.get_portfolio_rollup(site_id=site_id, token=token)
-            ov = rollup.get("overrides") if isinstance(rollup.get("overrides"), dict) else {}
-            live_points: list[dict[str, Any]] = []
-            for pt in ov.get("points") or []:
-                if not isinstance(pt, dict):
-                    continue
-                dev = pt.get("device_instance")
-                name = str(pt.get("object_name") or pt.get("object_identifier") or "?")
-                label = f"dev{int(dev)} · {name}" if dev is not None else name
-                live_points.append(
-                    {
-                        "label": label,
-                        "device_instance": dev,
-                        "object_name": name,
-                        "value": pt.get("value"),
-                    }
+        if parallel_errors:
+            out["live_warnings"] = parallel_errors
+
+        faults = results.get("faults") or {}
+        rollup = results.get("rollup")
+        if isinstance(rollup, dict):
+            try:
+                ov = rollup.get("overrides") if isinstance(rollup.get("overrides"), dict) else {}
+                live_points: list[dict[str, Any]] = []
+                for pt in ov.get("points") or []:
+                    if not isinstance(pt, dict):
+                        continue
+                    dev = pt.get("device_instance")
+                    name = str(pt.get("object_name") or pt.get("object_identifier") or "?")
+                    label = f"dev{int(dev)} · {name}" if dev is not None else name
+                    live_points.append(
+                        {
+                            "label": label,
+                            "device_instance": dev,
+                            "object_name": name,
+                            "value": pt.get("value"),
+                        }
+                    )
+                if live_points:
+                    out["overrides_p8"] = live_points
+                    out["overrides_source"] = "live"
+                out["operator_overrides"] = int(
+                    ov.get("operator_override_points") or out.get("operator_overrides") or 0
                 )
-            if live_points:
-                out["overrides_p8"] = live_points
-                out["overrides_source"] = "live"
-            out["operator_overrides"] = int(ov.get("operator_override_points") or out.get("operator_overrides") or 0)
-        except Exception:
-            pass
+            except Exception:
+                pass
+        elif parallel_errors.get("rollup"):
+            out.setdefault("live_warnings", {})["rollup"] = parallel_errors["rollup"]
+
         live_count = int(faults.get("alert_count") or 0)
         out["live_edge"] = {
             "active_faults": live_count,
             "traffic": faults.get("traffic"),
         }
-        # Prefer live fault families for pie when available
         families = faults.get("families") if isinstance(faults.get("families"), list) else []
         live_pie: list[dict[str, Any]] = []
         for fam in families:

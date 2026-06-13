@@ -23,9 +23,9 @@ HOUR_OPTS = [
 ]
 
 
-def _api_get(path: str) -> dict:
+def _api_get(path: str, *, timeout: int = 60) -> dict:
     req = request.Request(f"{CENTRAL_API}{path}", method="GET")
-    with request.urlopen(req, timeout=60) as resp:
+    with request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -43,14 +43,15 @@ def _api(method: str, path: str, body: dict | None = None) -> dict:
         raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
 
 
-def _load_overview(site_id: str) -> dict:
+def _load_overview(site_id: str, *, fast: bool = True) -> dict:
+    qs = "?fast=true" if fast else "?fast=false"
     try:
-        return _api_get(f"/api/central/overview/{site_id}")
+        return _api_get(f"/api/central/overview/{site_id}{qs}")
     except Exception:
         from portfolio.central.overview_data import build_overview, build_overview_from_csv
 
         try:
-            return build_overview(site_id, include_live=True)
+            return build_overview(site_id, include_live=True, fast=fast)
         except KeyError:
             return build_overview_from_csv(site_id)
 
@@ -136,7 +137,36 @@ def overview_layout(theme: dict) -> html.Div:
                     ),
                     html.Div(
                         style=_card_style(theme),
-                        children=[html.Div(id="overview-mech-narrative")],
+                        children=[
+                            html.Div(id="overview-mech-narrative"),
+                            html.Div(
+                                style={"marginTop": "14px", "paddingTop": "12px", "borderTop": f"1px solid {theme['grid']}"},
+                                children=[
+                                    html.Div(
+                                        "BRICK model graph",
+                                        style={"fontSize": "12px", "fontWeight": 600, "color": theme["muted"], "marginBottom": "6px"},
+                                    ),
+                                    html.P(
+                                        "Optional — loads the full equipment/point tree from Edge. "
+                                        "Large sites often take 20–40 seconds over the network (~100+ KB). "
+                                        "Not refreshed automatically.",
+                                        style={"color": theme["muted"], "fontSize": "12px", "margin": "0 0 10px", "lineHeight": 1.45},
+                                    ),
+                                    html.Button(
+                                        "Load full BRICK model",
+                                        id="load-model-tree-btn",
+                                        n_clicks=0,
+                                        style=BTN_SECONDARY,
+                                    ),
+                                    dcc.Loading(
+                                        id="model-tree-loading",
+                                        type="dot",
+                                        color=theme["accent"],
+                                        children=html.Div(id="overview-model-tree", style={"marginTop": "10px"}),
+                                    ),
+                                ],
+                            ),
+                        ],
                     ),
                 ],
             ),
@@ -148,7 +178,28 @@ def overview_layout(theme: dict) -> html.Div:
             _section(
                 "FDD rules & analytics",
                 theme,
-                html.Div(id="overview-fdd-rules"),
+                html.Div(
+                    style={"display": "flex", "gap": "10px", "alignItems": "center", "flexWrap": "wrap", "marginBottom": "10px"},
+                    children=[
+                        html.Button("Load FDD rules", id="load-fdd-rules-btn", n_clicks=0, style=BTN_SECONDARY),
+                        html.Span(
+                            "Queries saved rules and fault analytics from Edge — skipped on auto-refresh.",
+                            style={"color": theme["muted"], "fontSize": "12px"},
+                        ),
+                    ],
+                ),
+                dcc.Loading(
+                    id="overview-fdd-rules-loading",
+                    type="dot",
+                    color=theme["accent"],
+                    children=html.Div(
+                        id="overview-fdd-rules",
+                        children=html.P(
+                            "Click Load FDD rules to query saved rules and fault analytics from Edge.",
+                            style={"color": theme["muted"], "fontSize": "13px"},
+                        ),
+                    ),
+                ),
                 html.P(
                     "FDD / BRICK query presets — same composed coverage queries as the OpenFDD Edge Data Model tab.",
                     style={"color": theme["muted"], "fontSize": "13px", "margin": "12px 0 8px"},
@@ -175,26 +226,11 @@ def overview_layout(theme: dict) -> html.Div:
             _section(
                 "RCx report",
                 theme,
-                dcc.Checklist(
-                    id="rcx-overlays",
-                    options=[{"label": "Show fault overlays on chart previews", "value": "on"}],
-                    value=["on"],
-                    style={"marginBottom": "10px"},
+                html.P(
+                    "Use the Report Builder tab to pick charts, BACnet points, date range, and FDD overlays — "
+                    "then preview trends and export a Word (DOCX) report with statistics and analyst notes.",
+                    style={"color": theme["muted"], "fontSize": "14px", "margin": 0},
                 ),
-                html.Div(
-                    style={"display": "flex", "gap": "10px", "flexWrap": "wrap", "marginBottom": "12px"},
-                    children=[
-                        html.Button("Preview data readiness", id="rcx-preview-btn", n_clicks=0, style=BTN_PRIMARY),
-                        html.Button("Preview charts", id="rcx-charts-btn", n_clicks=0, style=BTN_PRIMARY),
-                        html.Button("Generate DOCX", id="rcx-docx-btn", n_clicks=0, style=BTN_PRIMARY),
-                    ],
-                ),
-                html.Div(id="rcx-readiness", style={"color": theme["muted"], "fontSize": "13px"}),
-                html.Div(id="rcx-chart-checkboxes"),
-                html.Div(id="rcx-section-checkboxes"),
-                html.Div(id="rcx-chart-previews"),
-                dcc.Download(id="rcx-download"),
-                html.Div(id="rcx-status", style={"color": theme["muted"], "fontSize": "13px", "marginTop": "8px"}),
             ),
         ]
     )
@@ -517,6 +553,51 @@ def _fdd_preset_result_html(result: dict, theme: dict) -> html.Div:
     )
 
 
+def _model_tree_html(data: dict, theme: dict) -> html.Component:
+    if not data:
+        return html.Div()
+    err = data.get("error")
+    if err:
+        return html.P(str(err)[:300], style={"color": theme["warn"], "fontSize": "12px"})
+    eq = data.get("equipment_count", "—")
+    pts = data.get("point_count", "—")
+    kb = data.get("approx_payload_kb")
+    cache = data.get("_cache") or {}
+    cache_note = " (cached)" if cache.get("hit") else ""
+    lines = [
+        html.Div(
+            [
+                html.Strong(f"{eq} equipment · {pts} points"),
+                html.Span(f" · ~{kb} KB{cache_note}" if kb else cache_note, style={"color": theme["muted"]}),
+            ],
+            style={"fontSize": "13px", "marginBottom": "6px"},
+        ),
+    ]
+    sample = data.get("equipment_sample") or []
+    if sample:
+        lines.append(
+            html.Ul(
+                [html.Li(name, style={"fontSize": "12px", "color": theme["muted"]}) for name in sample[:12]],
+                style={"margin": "4px 0 0", "paddingLeft": "18px"},
+            )
+        )
+    sites = data.get("sites") or []
+    if sites:
+        site_labels = [
+            str(s.get("name") or s.get("site_id") or "")
+            for s in sites[:6]
+            if isinstance(s, dict) and (s.get("name") or s.get("site_id"))
+        ]
+        if site_labels:
+            lines.append(
+                html.Div(
+                    "Sites: " + ", ".join(site_labels),
+                    style={"fontSize": "11px", "color": theme["muted"], "marginTop": "6px"},
+                )
+            )
+    return html.Div(lines)
+
+
 def register_overview_callbacks(app, theme: dict) -> None:
     @app.callback(
         Output("overview-kpi-row", "children"),
@@ -524,27 +605,25 @@ def register_overview_callbacks(app, theme: dict) -> None:
         Output("overview-fault-legend", "children"),
         Output("overview-p8-section", "children"),
         Output("overview-mech-narrative", "children"),
-        Output("overview-fdd-rules", "children"),
         Output("overview-source", "children"),
         Input("overview-site", "value"),
-        Input("overview-hours", "value"),
         Input("main-tabs", "value"),
         Input("refresh-interval", "n_intervals"),
         Input("refresh-data-btn", "n_clicks"),
         Input("edge-save-btn", "n_clicks"),
         Input("edge-registry-revision", "data"),
     )
-    def refresh_dashboard(site_id, hours, tab, _n, _refresh, _save, _revision):
+    def refresh_dashboard_fast(site_id, tab, _n, _refresh, _save, _revision):
         if tab and tab != "dashboard":
-            return (no_update,) * 7
+            return (no_update,) * 6
         empty_fig = _fault_pie_figure([], theme)
         empty_legend = _fault_legend([], theme)
         empty_p8 = _p8_section([], theme)
         if not site_id:
             empty = html.P("Connect an Edge on the Edge Connections tab.", style={"color": theme["muted"]})
-            return [], empty_fig, empty_legend, empty_p8, empty, empty, _source_html({}, theme)
+            return [], empty_fig, empty_legend, empty_p8, empty, _source_html({}, theme)
 
-        data = _load_overview(site_id)
+        data = _load_overview(site_id, fast=True)
         kpis = _kpi_cards(data, theme)
         pie_rows = data.get("fault_pie") or []
         fig = _fault_pie_figure(pie_rows, theme)
@@ -563,6 +642,14 @@ def register_overview_callbacks(app, theme: dict) -> None:
                         style={"fontSize": "12px", "color": theme["accent"], "marginBottom": "8px", "fontWeight": 600},
                     )
                 )
+            cache = data.get("_cache") or {}
+            if cache.get("hit"):
+                header_children.append(
+                    html.Div(
+                        f"Overview cached ({cache.get('ttl_s', '—')}s TTL) — fast path skips model/tree.",
+                        style={"fontSize": "11px", "color": theme["muted"], "marginBottom": "8px"},
+                    )
+                )
             mech = html.Div(
                 header_children
                 + [html.P(narrative, style={"lineHeight": 1.55, "whiteSpace": "pre-wrap", "margin": 0})]
@@ -572,14 +659,43 @@ def register_overview_callbacks(app, theme: dict) -> None:
         else:
             mech = html.P("Connect an Edge and save credentials to load the BRICK building summary.", style={"color": theme["muted"]})
 
+        return kpis, fig, legend, p8_section, mech, _source_html(data, theme)
+
+    @app.callback(
+        Output("overview-fdd-rules", "children"),
+        Input("load-fdd-rules-btn", "n_clicks"),
+        Input("refresh-data-btn", "n_clicks"),
+        State("overview-site", "value"),
+        State("overview-hours", "value"),
+        State("main-tabs", "value"),
+        prevent_initial_call=True,
+    )
+    def refresh_fdd_rules(_load, _refresh, site_id, hours, tab):
+        if tab and tab != "dashboard":
+            return no_update
+        if not site_id:
+            return html.P("Select a building.", style={"color": theme["muted"]})
         fdd_data: dict = {"rules": [], "warnings": ["Central API not running — FDD rules need API + Edge."]}
         try:
             fdd_data = _api_get(f"/api/central/fdd-analytics/{site_id}?hours={hours or 24}")
         except Exception:
             pass
-        fdd_panel = _fdd_rules_html(fdd_data, theme)
+        return _fdd_rules_html(fdd_data, theme)
 
-        return kpis, fig, legend, p8_section, mech, fdd_panel, _source_html(data, theme)
+    @app.callback(
+        Output("overview-model-tree", "children"),
+        Input("load-model-tree-btn", "n_clicks"),
+        State("overview-site", "value"),
+        prevent_initial_call=True,
+    )
+    def load_model_tree(n_clicks, site_id):
+        if not site_id or not n_clicks:
+            return no_update
+        try:
+            data = _api_get(f"/api/central/model-tree/{site_id}", timeout=90)
+            return _model_tree_html(data, theme)
+        except Exception as exc:
+            return _model_tree_html({"error": str(exc)}, theme)
 
     @app.callback(
         Output("overview-fdd-preset-result", "children"),
@@ -598,111 +714,3 @@ def register_overview_callbacks(app, theme: dict) -> None:
             return _fdd_preset_result_html(result, theme)
         except Exception as exc:
             return html.P(str(exc)[:300], style={"color": theme["warn"], "fontSize": "13px"})
-
-    @app.callback(
-        Output("rcx-readiness", "children"),
-        Output("rcx-chart-checkboxes", "children"),
-        Output("rcx-section-checkboxes", "children"),
-        Input("rcx-preview-btn", "n_clicks"),
-        State("overview-site", "value"),
-        State("overview-hours", "value"),
-        State("rcx-overlays", "value"),
-        prevent_initial_call=True,
-    )
-    def rcx_preview(_n, site_id, hours, overlays):
-        if not site_id:
-            return "Select a site on Edge Connections.", no_update, no_update
-        try:
-            out = _api(
-                "POST",
-                "/api/central/rcx/preview",
-                {
-                    "site_id": site_id,
-                    "hours": hours or 24,
-                    "show_fault_overlays": "on" in (overlays or []),
-                },
-            )
-            fs = out.get("fault_summary") or {}
-            text = (
-                f"Active faults: {fs.get('active_faults')} · Fault hours: {fs.get('total_fault_hours')} · "
-                f"Disabled charts: {len(out.get('disabled_charts') or [])}"
-            )
-            charts = dcc.Checklist(
-                id="rcx-charts-selected",
-                options=[{"label": c.get("title"), "value": c.get("chart_id")} for c in (out.get("available_charts") or [])],
-                value=[c.get("chart_id") for c in (out.get("available_charts") or [])],
-            )
-            disabled = html.Ul([html.Li(f"{c.get('title')}: {c.get('reason')}") for c in (out.get("disabled_charts") or [])])
-            sections = dcc.Checklist(
-                id="rcx-sections-selected",
-                options=[{"label": s.get("label"), "value": s.get("id")} for s in (out.get("sections") or [])],
-                value=[s.get("id") for s in (out.get("sections") or [])],
-            )
-            return html.Div([html.P(text), disabled]), charts, sections
-        except Exception as exc:
-            return str(exc), no_update, no_update
-
-    @app.callback(
-        Output("rcx-chart-previews", "children"),
-        Input("rcx-charts-btn", "n_clicks"),
-        State("overview-site", "value"),
-        State("overview-hours", "value"),
-        State("rcx-charts-selected", "value"),
-        State("rcx-overlays", "value"),
-        prevent_initial_call=True,
-    )
-    def rcx_chart_previews(_n, site_id, hours, chart_ids, overlays):
-        if not site_id:
-            return "Select a site."
-        try:
-            out = _api(
-                "POST",
-                "/api/central/rcx/charts/preview",
-                {
-                    "site_id": site_id,
-                    "hours": hours or 24,
-                    "chart_ids": chart_ids or [],
-                    "show_fault_overlays": "on" in (overlays or []),
-                },
-            )
-            imgs = []
-            for p in out.get("chart_previews") or []:
-                b64 = p.get("image_base64")
-                if b64:
-                    imgs.append(
-                        html.Div(
-                            [
-                                html.Strong(p.get("title")),
-                                html.Img(src=f"data:image/png;base64,{b64}", style={"maxWidth": "100%", "marginTop": "6px"}),
-                            ],
-                            style={"marginBottom": "16px"},
-                        )
-                    )
-            return imgs or html.P("No chart previews (API/matplotlib/Edge data required).", style={"color": theme["muted"]})
-        except Exception as exc:
-            return str(exc)
-
-    @app.callback(
-        Output("rcx-download", "data"),
-        Output("rcx-status", "children"),
-        Input("rcx-docx-btn", "n_clicks"),
-        State("overview-site", "value"),
-        State("overview-hours", "value"),
-        State("rcx-charts-selected", "value"),
-        State("rcx-sections-selected", "value"),
-        prevent_initial_call=True,
-    )
-    def rcx_download(_n, site_id, hours, charts, sections):
-        if not site_id:
-            return no_update, "Select a site."
-        try:
-            url = f"{CENTRAL_API}/api/central/rcx/report"
-            body = json.dumps(
-                {"site_id": site_id, "hours": hours or 24, "charts": charts or [], "sections": sections or []}
-            ).encode("utf-8")
-            req = request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
-            with request.urlopen(req, timeout=180) as resp:
-                blob = resp.read()
-            return dcc.send_bytes(blob, f"openfdd-rcx-{site_id}.docx"), "DOCX download started."
-        except Exception as exc:
-            return no_update, str(exc)

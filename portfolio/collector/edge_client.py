@@ -79,11 +79,12 @@ def fetch_portfolio_rollup(
     token: str,
     *,
     site_id: str | None = None,
+    timeout: int = 8,
 ) -> dict[str, Any]:
     path = "/api/building/portfolio-rollup"
     if site_id:
         path = f"{path}?site_id={urllib.parse.quote(site_id)}"
-    return api_get(base_url, token, path)
+    return api_get(base_url, token, path, timeout=timeout)
 
 
 class EdgeClient:
@@ -95,8 +96,8 @@ class EdgeClient:
     def login(self, *, username: str, password: str) -> str:
         return login(self.base_url, username=username, password=password)
 
-    def api_get(self, path: str, *, token: str = "") -> dict[str, Any]:
-        return api_get(self.base_url, token, path)
+    def api_get(self, path: str, *, token: str = "", timeout: int = 120) -> dict[str, Any]:
+        return api_get(self.base_url, token, path, timeout=timeout)
 
     def try_api_get(self, path: str, *, token: str = "") -> dict[str, Any] | None:
         """Read-only GET; returns None on HTTP 404 (older Edge builds without route)."""
@@ -175,5 +176,11 @@ class EdgeClient:
         )
         return self.api_get(path, token=token)
 
-    def get_portfolio_rollup(self, *, site_id: str | None = None, token: str = "") -> dict[str, Any]:
-        return fetch_portfolio_rollup(self.base_url, token, site_id=site_id)
+    def get_portfolio_rollup(
+        self,
+        *,
+        site_id: str | None = None,
+        token: str = "",
+        timeout: int = 8,
+    ) -> dict[str, Any]:
+        return fetch_portfolio_rollup(self.base_url, token, site_id=site_id, timeout=timeout)
