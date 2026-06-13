@@ -16,7 +16,9 @@ FastMCP agent interface over the **operator bridge** — not a parallel FDD stac
 | Edge | `edge` | `OPENFDD_BRIDGE_BASE_URL` (default `http://127.0.0.1:8765`) |
 | Portfolio | `portfolio` | `portfolio/sites.json` + optional `site_id` per tool |
 
-Acme production edge runs **without** MCP (`enable_mcp: false`). Run MCP centrally and call `http://100.122.106.124` via Tailscale.
+**RCx Central** (`:8050` Dash, `:8060` API) is a **separate HTTP stack** — not the MCP server. Agents doing RCx overview, FDD preset tables, or DOCX reports should call Central API (`/api/central/*`) or use the Dash; see [RCx Central agent guide](../agent-skills/rcx-central-dash-agent.md).
+
+Acme production edge runs **without** MCP (`enable_mcp: false`). Run MCP centrally and call `http://100.122.106.124` via Tailscale, or use RCx Central with Edge Connections registry.
 
 ## Transport
 
@@ -83,8 +85,33 @@ curl -fsS http://127.0.0.1:8090/health
 
 Store passwords in env or OS keychain — not in git.
 
-## Module layout
+## RCx Central (not MCP)
+
+| Service | Default URL | Agent docs |
+|---------|-------------|------------|
+| Central API | `http://127.0.0.1:8060` | [central-api.md](../portfolio/central-api.md) |
+| RCx Dash | `http://127.0.0.1:8050` | [rcx-central-dash-agent.md](../agent-skills/rcx-central-dash-agent.md) |
+
+MCP `portfolio_rollup` hits Edge `/api/building/portfolio-rollup` per site. RCx `GET /api/central/overview/{site_id}` adds Dash KPIs, fault pie (with [short fault descriptions](../fault-codes/short-lookup.md)), and mechanical narrative from FDD presets.
+
+## Fault code labels (agents)
+
+Use fixed lookup — do not paraphrase codes in UI copy:
+
+- Docs: [fault-codes/short-lookup.md](../fault-codes/short-lookup.md)
+- Python: `portfolio/central/fault_code_lookup.py`
+- Edge API: `GET /api/faults/catalog`
+
+## Doc RAG refresh
+
+After editing `docs/` consumed by MCP search:
+
+```bash
+./scripts/build_mcp_rag_index.sh
+```
 
 - `workspace/mcp_server/` — FastMCP tools, resources, prompts
 - `workspace/mcp_rag/retrieval.py` — RAG index (rebuild separately)
 - Docker image `openfdd-mcp-rag` — compatibility name; runs unified server
+
+## Module layout

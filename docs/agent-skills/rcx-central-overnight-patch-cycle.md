@@ -1,5 +1,7 @@
 # RCx Central overnight patch-cycle (agent runbook)
 
+See also: [RCx Central Dash agent guide](rcx-central-dash-agent.md) for UI/API modules and BRICK typing.
+
 Mission: validate **OpenFDD RCx Central** against local services and (optionally) live **ACME Edge** read-only, up to **10 patch cycles** with **2-hour** spacing.
 
 ## Safety (non-negotiable)
@@ -14,7 +16,7 @@ Mission: validate **OpenFDD RCx Central** against local services and (optionally
 2. `gh pr checks 298` and `gh run view <id> --log-failed` for failures.
 3. Classify CodeRabbit comments: must-fix / nice-to-have / false positive.
 4. Run tests: `python3 -m pytest tests/portfolio tests/workspace_bridge -q`.
-5. Start RCx Central: `./scripts/run_central_api.sh`, `./scripts/run_portfolio_dash.sh`.
+5. Start RCx Central: `./scripts/run_central_api.sh`, `./scripts/run_portfolio_dash.sh` (bind `0.0.0.0`; LAN: `sudo ./scripts/open_rcx_central_lan_ports.sh`).
 6. Run `python3 scripts/rcx_central_overnight_patch_cycle.py` (try-out or overnight env).
 7. Patch bugs, commit, push, confirm CI green.
 8. Write `reports/rcx_central_overnight_logs/cycle_NN.md`.

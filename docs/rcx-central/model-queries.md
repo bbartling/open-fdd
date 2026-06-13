@@ -34,8 +34,24 @@ RCx Central maps BRICK **point roles** (e.g. `supply_air_temperature`) to histor
 
 | Method | Central path |
 |--------|----------------|
+| GET | `/api/central/overview/{site_id}` |
 | GET | `/api/central/mechanical-summary/{site_id}` |
 | GET | `/api/central/fdd-analytics/{site_id}` |
+| GET | `/api/central/fdd-preset/{site_id}/{preset_id}` |
 | POST | `/api/central/rcx/preview` |
 
 All calls are **read-only** toward Edge.
+
+## FDD preset ids (Edge parity)
+
+Same as React `DataModelSparqlPanel` FDD buttons:
+
+`rules_to_equipment`, `rules_to_sensors`, `rules_to_bacnet_devices`, `equipment_to_points`, `ahus_vavs_zones`, `missing_rule_bindings`, `points_by_bacnet_device`, `sensor_classes_used_by_fdd`, `rule_coverage_by_equipment_type`, `orphan_points`
+
+## BRICK typing (do not mis-count AHUs/VAVs)
+
+Many sites (including Acme) set **`brick_type`** (`AHU`, `VAV`) without `equipment_type`. Presets and mechanical narrative use `equipment_classify` — not `equipment_type` alone.
+
+After `model.json` changes on Edge, **sync TTL** (`ttl_service.sync`) so SPARQL predefined queries (`Air_Handling_Unit`, `Variable_Air_Volume_Box`) match equipment counts.
+
+Packaged rooftop air handlers feeding VAVs should be modeled as **`brick_type: AHU`** even when the legacy BACnet name contains "RTU".

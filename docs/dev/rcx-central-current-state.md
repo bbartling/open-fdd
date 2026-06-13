@@ -1,7 +1,7 @@
 # OpenFDD RCx Central — current state
 
-Branch: `feature/rcx-central-edge-analytics-docx`  
-Updated: 2026-05-30
+Updated: 2026-06-13  
+Branches: `feature/rcx-central-overview-ui` (#298), `fix/edge-dashboard-bridge` (#299)
 
 ## Product names
 
@@ -12,58 +12,59 @@ Updated: 2026-05-30
 
 ## Entrypoints
 
-| Service | Command | Port |
-|---------|---------|------|
-| RCx Central Dash | `python -m portfolio.dash` / `./scripts/run_portfolio_dash.sh` | 8050 |
-| RCx Central API | `./scripts/run_central_api.sh` → `python scripts/run_central_api.py` | 8060 |
-| Docker (both) | `./scripts/run_rcx_central_docker.sh` | 8050, 8060 |
+| Service | Command | Port | Bind default |
+|---------|---------|------|--------------|
+| RCx Central Dash | `./scripts/run_portfolio_dash.sh` | 8050 | `0.0.0.0` |
+| RCx Central API | `./scripts/run_central_api.sh` | 8060 | `0.0.0.0` |
+| Docker (both) | `docker/rcx-central/docker-compose.yml` | 8050, 8060 | |
 
-## Central API (new/changed)
+LAN firewall (benserver): `sudo ./scripts/open_rcx_central_lan_ports.sh`
+
+## Central API
 
 - `GET/POST/PUT/DELETE /api/central/edges`, `POST /api/central/edges/test`
+- `GET /api/central/overview/{site_id}` — KPIs, fault pie, mechanical narrative, P8
+- `GET /api/central/fdd-analytics/{site_id}` — rules table + descriptions
+- `GET /api/central/fdd-preset/{site_id}/{preset_id}` — Edge FDD preset proxy
 - `GET /api/central/mechanical-summary/{site_id}`
-- `GET /api/central/fdd-analytics/{site_id}`
 - `POST /api/central/rcx/preview`, `/charts/preview`, `/report`
-- `POST /api/central/rcx/report-legacy` (backward compatible)
 
-## Edge REST (read-only)
+## Edge REST (read-only, shared with Data Model tab)
 
-Model: `/api/model/tree`, `/api/model/health`, SPARQL, `/api/model/fdd-query-presets`  
-Trends: `/api/timeseries/readings`, `/api/timeseries/series`  
-Analytics: `/api/analytics/overview`, `/api/analytics/faults`  
-Faults: `/api/faults/status`  
-Collect: `/api/building/portfolio-rollup`
+Model: `/api/model/tree`, `/api/model/health`, SPARQL, `/api/model/fdd-query-presets/{id}`  
+Trends: `/api/timeseries/readings`  
+Analytics: `/api/analytics/faults`  
+Faults: `/api/faults/status`, `/api/faults/catalog`
 
 ## Dash UI tabs
 
-Overview · Edge Connections · Mechanical Summary · FDD Analytics · Trend Explorer · RCx Report Builder · Validation Runs · Settings
+**Dashboard** (unified) · **Edge Connections**
 
-Header: **OpenFDD RCx Central**
+Dashboard sections: fault mix + legend, building summary, P8 KPI (+ chart if overrides), FDD rules table, **FDD/BRICK preset buttons** (Edge parity), RCx report builder.
 
-## RCx / charts
+## BRICK model notes (agents)
 
-- `portfolio/central/chart_preview.py` — matplotlib base64 previews, fault overlay bands from timeseries fault flags
-- `portfolio/central/trend_charts.py` — role→column mapping, trend fetch
-- `portfolio/central/fdd_analytics.py` — rules + chart packs
-- `open_fdd/reports/rcx_docx.py` — DOCX when installed
+- Classify equipment with `brick_type` **and** `equipment_type` — see `equipment_classify.py`
+- TTL maps `AHU`/`VAV` → Brick schema classes for SPARQL HVAC queries
+- Acme roof unit: `brick_type: AHU`, name `AHU 01` (not `Rtu 01` in new models)
 
-## Docker
+## Fault codes
 
-`docker/rcx-central/` — Dockerfile, compose, volumes `rcx-central-data`, `rcx-central-config`  
-Smoke: `scripts/test_rcx_central_docker.sh`, `scripts/test_rcx_central_docker.ps1`
+- Stable short labels: `docs/fault-codes/short-lookup.md`, `portfolio/central/fault_code_lookup.py`
+- Full catalog: `GET /api/faults/catalog` on Edge
+
+## Agent docs
+
+- [RCx Central Dash agent guide](../agent-skills/rcx-central-dash-agent.md)
+- [AI agent workflow](../rcx-central/ai-agent-workflow.md)
+- [MCP server](../ai/mcp-server.md)
 
 ## Tests
 
-`tests/portfolio/test_central.py`, `test_edge_registry.py`, `test_chart_preview.py`
+`pytest tests/portfolio/` · `tests/workspace_bridge/test_fdd_query_presets.py`
 
 ## Remaining gaps
 
-- GHCR publish for `openfdd-rcx-central` image tag
-- Trend Explorer tab (placeholder; Overview Plotly charts use local CSV collect)
-- Live ACME opt-in manual workflow doc section in CI
+- GHCR publish for `openfdd-rcx-central` image
+- Summarize HVAC SPARQL buttons on Dash (FDD presets done; raw SPARQL optional)
 - Deeper equipment-tree scope in RCx builder UI
-- More chart types (economizer, VAV worst zones)
-
-## Recommended next PR
-
-Publish RCx Central image + expand chart catalog + equipment-tree report scope.

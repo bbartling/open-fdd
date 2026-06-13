@@ -11,7 +11,16 @@ description: "Open-FDD FastMCP server — edge and portfolio modes, bridge tools
 - **Edge mode:** MCP on bensserver or analyst workstation calling local bridge (`OPENFDD_BRIDGE_BASE_URL`)
 - **Portfolio mode:** central MCP with `portfolio/sites.json` over Tailscale
 
-Acme edge (`enable_mcp: false`) has **no** MCP container — use portfolio MCP against `http://100.122.106.124`.
+Acme edge (`enable_mcp: false`) has **no** MCP container — use portfolio MCP against `http://100.122.106.124`, or **RCx Central** (`:8060` / `:8050`) for analyst UI — `docs/agent-skills/rcx-central-dash-agent.md`.
+
+## RCx Central vs MCP
+
+| Need | Use |
+|------|-----|
+| Rule save, FDD batch, BACnet | MCP edge/portfolio mode |
+| Dash overview, FDD presets, RCx DOCX | RCx Central API |
+
+After doc edits for RAG: `./scripts/build_mcp_rag_index.sh`
 
 ## Run locally
 
