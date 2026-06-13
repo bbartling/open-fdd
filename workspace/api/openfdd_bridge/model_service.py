@@ -145,3 +145,21 @@ class ModelService:
                 ]
                 pts_removed = before_pts - len(model["points"])
         return {"equipment_removed": eq_removed, "points_removed": pts_removed}
+
+    def patch_equipment(self, equipment_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
+        """Merge fields onto one equipment row."""
+        eq_id = str(equipment_id or "").strip()
+        if not eq_id or not updates:
+            return None
+        patched: dict[str, Any] | None = None
+        with self.transaction() as model:
+            equipment = model.get("equipment") if isinstance(model.get("equipment"), list) else []
+            for row in equipment:
+                if not isinstance(row, dict) or str(row.get("id") or "") != eq_id:
+                    continue
+                for key, value in updates.items():
+                    if value is not None:
+                        row[key] = value
+                patched = dict(row)
+                break
+        return patched

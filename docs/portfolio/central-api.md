@@ -15,9 +15,12 @@ Local analyst API for multi-edge RCx workflows over Tailscale/VPN. **Read-only t
 ```bash
 pip install -r portfolio/requirements.txt
 ./scripts/run_central_api.sh   # http://127.0.0.1:8060/health
+./scripts/run_portfolio_dash.sh # http://127.0.0.1:8050
 ```
 
-Docker Desktop: [docs/rcx-central/docker-desktop-windows.md](../rcx-central/docker-desktop-windows.md)
+Bind defaults: `0.0.0.0` (`OPENFDD_CENTRAL_API_HOST`, `OPENFDD_RCX_DASH_HOST`). LAN: `sudo ./scripts/open_rcx_central_lan_ports.sh`.
+
+Agent guide: [docs/agent-skills/rcx-central-dash-agent.md](../agent-skills/rcx-central-dash-agent.md)
 
 ## Edge registry (browser auth)
 
@@ -33,8 +36,10 @@ Docker Desktop: [docs/rcx-central/docker-desktop-windows.md](../rcx-central/dock
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/central/mechanical-summary/{site_id}` | Equipment counts, BACnet, readiness |
-| GET | `/api/central/fdd-analytics/{site_id}` | FDD rules + chart packs |
+| GET | `/api/central/overview/{site_id}` | Dash payload: KPIs, fault pie, building summary, P8 |
+| GET | `/api/central/mechanical-summary/{site_id}` | Equipment counts, BACnet, narrative |
+| GET | `/api/central/fdd-analytics/{site_id}` | FDD rules + fault descriptions |
+| GET | `/api/central/fdd-preset/{site_id}/{preset_id}` | Proxy Edge FDD/BRICK preset (Data Model tab parity) |
 | POST | `/api/central/rcx/preview` | Data readiness + chart catalog |
 | POST | `/api/central/rcx/charts/preview` | Matplotlib PNG previews (base64) |
 | POST | `/api/central/rcx/report` | Download DOCX report |

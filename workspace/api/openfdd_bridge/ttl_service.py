@@ -12,7 +12,35 @@ from pathlib import Path
 from .model_store import ModelStore
 from .paths import model_ttl_path
 
-_log = logging.getLogger(__name__)
+from .equipment_classify import effective_equipment_type, is_ahu, is_vav
+
+# Short commissioning types → Brick schema class names (SPARQL predefined queries).
+_BRICK_EQUIPMENT_CLASS: dict[str, str] = {
+    "AHU": "Air_Handling_Unit",
+    "AIR_HANDLING_UNIT": "Air_Handling_Unit",
+    "RTU": "Rooftop_Unit",
+    "ROOFTOP_UNIT": "Rooftop_Unit",
+    "VAV": "Variable_Air_Volume_Box",
+    "VARIABLE_AIR_VOLUME_BOX": "Variable_Air_Volume_Box",
+    "HVAC_ZONE": "HVAC_Zone",
+    "ZONE": "HVAC_Zone",
+    "CHILLER": "Chiller",
+    "BOILER": "Boiler",
+    "COOLING_TOWER": "Cooling_Tower",
+    "HOT_WATER_PLANT": "Hot_Water_System",
+}
+
+
+def _brick_equipment_class(eq: dict) -> str:
+    for raw in (eq.get("equipment_type"), eq.get("brick_type")):
+        token = str(raw or "").strip().upper().replace(" ", "_").replace("-", "_")
+        if token in _BRICK_EQUIPMENT_CLASS:
+            return _BRICK_EQUIPMENT_CLASS[token]
+    if is_vav(eq):
+        return "Variable_Air_Volume_Box"
+    if is_ahu(eq):
+        return "Air_Handling_Unit"
+    return _safe_brick_type(effective_equipment_type(eq), "Equipment")
 
 
 def _escape(value: str) -> str:
@@ -93,7 +121,7 @@ class TtlService:
             sid = _sanitize_local_name(eq.get("site_id"))
             if eid is None or sid is None:
                 continue
-            et = _safe_brick_type(str(eq.get("equipment_type") or "Equipment"), "Equipment")
+            et = _brick_equipment_class(eq)
             lines.append(f":eq_{eid} a brick:{et} ;")
             lines.append(f'  rdfs:label "{_escape(str(eq.get("name", "Equipment")))}" ;')
             inst = eq.get("bacnet_device_instance")

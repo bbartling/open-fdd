@@ -18,6 +18,9 @@ from portfolio.central.edge_registry import (
 )
 from portfolio.central.fdd_analytics import build_fdd_analytics
 from portfolio.central.mechanical_summary import build_mechanical_summary
+from portfolio.central.model_tree import build_model_tree_summary
+from portfolio.central.overview_cache import cache_ttl_seconds, get_or_set
+from portfolio.central.overview_data import build_overview
 from portfolio.central.paths import data_dir, reports_dir, sites_path
 from portfolio.central.registry import list_edge_sites, site_config_for, touch_site
 from portfolio.central.validation import (
@@ -62,7 +65,21 @@ class EdgeTestBody(BaseModel):
 class RcxPreviewBody(BaseModel):
     site_id: str = Field(min_length=1)
     hours: int = Field(default=24, ge=2, le=168)
+    start: str | None = None
+    end: str | None = None
     chart_ids: list[str] = Field(default_factory=list)
+    custom_columns: list[str] = Field(default_factory=list)
+    show_fault_overlays: bool = True
+    include_previews: bool = True
+    catalog_only: bool = False
+    gallery_mode: bool = False
+    bundle_ids: list[str] = Field(default_factory=list)
+
+
+class RcxWorkspaceQuery(BaseModel):
+    hours: int = Field(default=24, ge=2, le=168)
+    start: str | None = None
+    end: str | None = None
     show_fault_overlays: bool = True
 
 
@@ -70,6 +87,11 @@ class RcxReportBody(RcxPreviewBody):
     sections: list[str] = Field(default_factory=list)
     charts: list[str] = Field(default_factory=list)
     save_to_volume: bool = True
+
+
+class SparqlBody(BaseModel):
+    query: str = Field(min_length=1)
+    query_id: str = ""
 
 
 @app.get("/health")
@@ -138,8 +160,166 @@ def get_sites() -> dict[str, Any]:
 
 @app.get("/api/central/fdd-analytics/{site_id}")
 def get_fdd_analytics(site_id: str, hours: int = 24) -> dict[str, Any]:
-    try:
+    ttl = cache_ttl_seconds()
+
+    def _build() -> dict[str, Any]:
         return build_fdd_analytics(site_id, hours=hours)
+
+    try:
+        data, from_cache = get_or_set(f"fdd-analytics:{site_id}:{hours}", ttl, _build)
+        return {**data, "_cache": {"hit": from_cache, "ttl_s": ttl}}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/central/fdd-preset/{site_id}/{preset_id}")
+def get_fdd_preset(site_id: str, preset_id: str) -> dict[str, Any]:
+    try:
+        from portfolio.central.edge_registry import resolve_site_config, resolve_token
+        from portfolio.collector.edge_client import EdgeClient
+
+        site = resolve_site_config(site_id)
+        client = EdgeClient(site.base_url)
+        token = resolve_token(site)
+        raw = client.get_fdd_query_preset(preset_id, token=token)
+        from portfolio.central.fdd_preset_enrich import enrich_fdd_preset
+
+        return enrich_fdd_preset(preset_id, raw, client=client, token=token)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/central/overview/{site_id}")
+def get_overview(site_id: str, live: bool = True, fast: bool = True) -> dict[str, Any]:
+    ttl = cache_ttl_seconds()
+
+    def _build() -> dict[str, Any]:
+        return build_overview(site_id, include_live=live, fast=fast)
+
+    try:
+        data, from_cache = get_or_set(f"overview:{site_id}:live={live}:fast={fast}", ttl, _build)
+        return {**data, "_cache": {"hit": from_cache, "ttl_s": ttl}}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/central/model-tree/{site_id}")
+def get_model_tree(site_id: str, include_tree: bool = False) -> dict[str, Any]:
+    """On-demand full BRICK model graph — slow on large remote Edge sites."""
+    ttl = max(cache_ttl_seconds(), 300)
+
+    def _build() -> dict[str, Any]:
+        return build_model_tree_summary(site_id, include_tree=include_tree)
+
+    try:
+        data, from_cache = get_or_set(
+            f"model-tree:{site_id}:full={include_tree}",
+            ttl,
+            _build,
+        )
+        return {**data, "_cache": {"hit": from_cache, "ttl_s": ttl}}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/central/model/remediate-hvac/{site_id}")
+def post_remediate_hvac(site_id: str, dry_run: bool = False) -> dict[str, Any]:
+    try:
+        from portfolio.central.model_remediate import remediate_hvac_equipment
+
+        return remediate_hvac_equipment(site_id, dry_run=dry_run)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/central/model/remediate/{site_id}")
+def post_remediate_model(site_id: str, dry_run: bool = False) -> dict[str, Any]:
+    """Full Edge model.json fix: equipment brick types + BACnet device ids on points + TTL sync."""
+    try:
+        from portfolio.central.model_remediate import remediate_full_model
+
+        return remediate_full_model(site_id, dry_run=dry_run)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/central/model/sync-ttl/{site_id}")
+def post_sync_site_ttl(site_id: str, sync_edge: bool = True) -> dict[str, Any]:
+    """Mirror Edge data_model.ttl to Central for local SPARQL validation."""
+    try:
+        from portfolio.central.model_ttl_mirror import mirror_site_ttl
+
+        return mirror_site_ttl(site_id, sync_edge=sync_edge)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/central/model/ttl/{site_id}")
+def get_site_ttl_status(site_id: str) -> dict[str, Any]:
+    try:
+        from portfolio.central.model_ttl_mirror import ttl_mirror_status
+
+        return ttl_mirror_status(site_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/central/model/sparql/predefined/{site_id}")
+def get_site_sparql_predefined(site_id: str) -> dict[str, Any]:
+    try:
+        from portfolio.central.model_sparql_local import predefined_catalog
+
+        return predefined_catalog(site_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/central/model/sparql/{site_id}")
+def post_site_sparql(site_id: str, body: SparqlBody) -> dict[str, Any]:
+    try:
+        from portfolio.central.model_sparql_local import execute_site_sparql, predefined_catalog
+
+        query = body.query.strip()
+        if not query and body.query_id:
+            catalog = predefined_catalog(site_id)
+            match = next(
+                (q for q in (catalog.get("queries") or []) if str(q.get("id")) == body.query_id),
+                None,
+            )
+            if match is None:
+                raise HTTPException(status_code=404, detail=f"unknown query_id: {body.query_id}")
+            query = str(match.get("query") or "")
+        if not query:
+            raise HTTPException(status_code=400, detail="query or query_id required")
+        return execute_site_sparql(site_id, query)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/central/model/sparql/validate/{site_id}")
+def get_site_sparql_validate(site_id: str, sync_if_missing: bool = True) -> dict[str, Any]:
+    try:
+        from portfolio.central.model_sparql_local import validate_site_model
+
+        return validate_site_model(site_id, sync_if_missing=sync_if_missing)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -149,7 +329,18 @@ def get_fdd_analytics(site_id: str, hours: int = 24) -> dict[str, Any]:
 @app.get("/api/central/mechanical-summary/{site_id}")
 def get_mechanical_summary(site_id: str, hours: int = 24) -> dict[str, Any]:
     try:
-        return build_mechanical_summary(site_id, hours=hours)
+        from portfolio.central.mechanical_narrative import build_mechanical_narrative
+
+        summary = build_mechanical_summary(site_id, hours=hours)
+        try:
+            narrative = build_mechanical_narrative(site_id)
+            summary["mechanical_narrative"] = narrative.get("narrative")
+            summary["mechanical_counts"] = narrative.get("counts")
+            summary["narrative"] = narrative.get("narrative")
+            summary["counts"] = narrative.get("counts")
+        except RuntimeError as exc:
+            summary.setdefault("warnings", []).append(str(exc)[:200])
+        return summary
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -197,14 +388,69 @@ def get_validation_job(job_id: str) -> dict[str, Any]:
 
 # --- RCx preview + report ---
 
+@app.get("/api/central/rcx/workspace/{site_id}")
+def get_rcx_workspace(
+    site_id: str,
+    hours: int = 24,
+    start: str | None = None,
+    end: str | None = None,
+    show_fault_overlays: bool = True,
+) -> dict[str, Any]:
+    try:
+        from portfolio.central.rcx_cache import get_workspace
+
+        return get_workspace(
+            site_id=site_id,
+            hours=hours,
+            start=start,
+            end=end,
+            show_fault_overlays=show_fault_overlays,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/central/rcx/points/{site_id}")
+def get_rcx_points(site_id: str, limit: int = 500) -> dict[str, Any]:
+    try:
+        from portfolio.central.rcx_points import list_report_points
+
+        return list_report_points(site_id, limit=limit)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/central/rcx/point-tree/{site_id}")
+def get_rcx_point_tree(site_id: str, limit: int = 500) -> dict[str, Any]:
+    try:
+        from portfolio.central.rcx_points import list_report_point_tree
+
+        return list_report_point_tree(site_id, limit=limit)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
 @app.post("/api/central/rcx/preview")
 def post_rcx_preview(body: RcxPreviewBody) -> dict[str, Any]:
     try:
         return build_rcx_preview(
             site_id=body.site_id,
             hours=body.hours,
+            start=body.start,
+            end=body.end,
             chart_ids=body.chart_ids or None,
+            custom_columns=body.custom_columns or None,
             show_fault_overlays=body.show_fault_overlays,
+            include_previews=body.include_previews,
+            catalog_only=body.catalog_only,
+            gallery_mode=body.gallery_mode,
+            bundle_ids=body.bundle_ids or None,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -223,8 +469,12 @@ def post_rcx_report(body: RcxReportBody) -> Response:
         blob, fname = generate_rcx_docx(
             site_id=body.site_id,
             hours=body.hours,
+            start=body.start,
+            end=body.end,
             sections=body.sections or None,
             charts=body.charts or body.chart_ids or None,
+            custom_columns=body.custom_columns or None,
+            show_fault_overlays=body.show_fault_overlays,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

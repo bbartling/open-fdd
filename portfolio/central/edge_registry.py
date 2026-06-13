@@ -182,9 +182,19 @@ def resolve_token(site: SiteConfig) -> str:
         return str(c["token"])
     if c.get("auth_type") == "none":
         return ""
-    if site.password:
-        return EdgeClient(site.base_url).login(username=site.username, password=site.password)
-    raise RuntimeError(f"{site.site_id}: missing credentials")
+    password = str(c.get("password") or site.password or "")
+    if not password:
+        # Re-resolve env-backed passwords (same as portfolio_collect.py)
+        for cfg in load_sites_config(sites_path()):
+            if cfg.site_id == site.site_id:
+                password = cfg.password
+                break
+    if password:
+        return EdgeClient(site.base_url).login(username=site.username, password=password)
+    raise RuntimeError(
+        f"{site.site_id}: missing credentials — save Edge in RCx Central UI or set "
+        "ACME_INTEGRATOR_PASSWORD / OFDD_AGENT_PASSWORD for the API process"
+    )
 
 
 def test_edge_connection(

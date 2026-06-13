@@ -12,8 +12,10 @@ from open_fdd.playground.cookbook import cfg_threshold
 from .windows import (
     arrow_abs_diff,
     arrow_consecutive_true,
+    arrow_diff,
     arrow_rolling_max,
     arrow_rolling_min,
+    arrow_rolling_sum,
 )
 
 _SKIP_META = frozenset({"timestamp", "ts", "site_id", "equipment_id", "ts_ms"})
@@ -280,3 +282,88 @@ def after_hours_fan_satisfied_mask(table: pa.Table, cfg: dict[str, Any]) -> pa.C
     candidate = pc.and_(pc.and_(unoccupied, fan_on), zones_ok)
     min_samples = int(cfg.get("min_fault_samples") or 10)
     return arrow_consecutive_true(candidate, min_samples)
+
+
+def norm_cmd_array(array: pa.Array | pa.ChunkedArray) -> pa.ChunkedArray:
+    """Scale BACnet percent commands (0–100) to 0–1 fraction."""
+    c = pc.cast(array, pa.float64())
+    return pc.if_else(pc.greater(c, 1.0), pc.divide(c, 100.0), c)
+
+
+def _column_or_zero(table: pa.Table, col: str) -> pa.ChunkedArray:
+    arr = _column_float(table, col)
+    if arr is None:
+        return pa.array([0.0] * table.num_rows, type=pa.float64())
+    return arr
+
+
+def _hunting_window_samples(cfg: dict[str, Any]) -> int:
+    if cfg.get("hunting_window_samples") is not None:
+        return max(2, int(cfg["hunting_window_samples"]))
+    if cfg.get("window_samples") is not None:
+        return max(2, int(cfg["window_samples"]))
+    interval_s = max(30, int(cfg.get("poll_interval_s") or cfg.get("median_poll_interval_s") or 60))
+    hours = float(cfg.get("hunting_window_hours") or 1.0)
+    return max(2, int(round(hours * 3600.0 / interval_s)))
+
+
+def pid_hunting_command_mask(
+    table: pa.Table,
+    cfg: dict[str, Any],
+    *,
+    col: str | None = None,
+) -> pa.ChunkedArray:
+    """Legacy GL36 FC4 (single loop): excessive command reversals in a rolling window.
+
+    Flags when the analog output (damper, valve, pump VFD, cooling capacity) changes
+    direction/step more than ``delta_os_max`` times while the loop is active.
+    """
+    name = value_column(table, cfg, col)
+    cmd = norm_cmd_array(table[name])
+    min_active = float(cfg.get("min_active_command") or 0.02)
+    min_delta = float(cfg.get("min_command_delta") or 0.03)
+    max_changes = float(cfg.get("delta_os_max") or 10)
+    window = _hunting_window_samples(cfg)
+
+    active = pc.greater(cmd, min_active)
+    deltas = arrow_abs_diff(cmd, 1)
+    significant = pc.and_(pc.greater(deltas, min_delta), active)
+    change_int = pc.cast(significant, pa.float64())
+    change_sum = arrow_rolling_sum(change_int, window)
+    return pc.and_(pc.greater(change_sum, max_changes), active)
+
+
+def pid_hunting_ahu_os_mask(table: pa.Table, cfg: dict[str, Any]) -> pa.ChunkedArray:
+    """Legacy GL36 FC4 (AHU): excessive operating-state bitmap changes (pandas ``check_hunting`` port)."""
+    min_oa = float(cfg.get("ahu_min_oa_dpr") or 0.1)
+    max_changes = float(cfg.get("delta_os_max") or 10)
+    window = _hunting_window_samples(cfg)
+
+    economizer = norm_cmd_array(
+        _column_or_zero(table, str(cfg.get("economizer_col") or "outside-air-damper-command"))
+    )
+    fan = norm_cmd_array(
+        _column_or_zero(table, str(cfg.get("fan_speed_col") or "supply-fan-speed-command"))
+    )
+    heating = norm_cmd_array(
+        _column_or_zero(table, str(cfg.get("heating_col") or "heating-valve-command"))
+    )
+    cooling = norm_cmd_array(
+        _column_or_zero(table, str(cfg.get("cooling_col") or "cooling-valve-command"))
+    )
+
+    os_bitmap = pc.add(
+        pc.add(
+            pc.cast(pc.greater(economizer, 0.0), pa.int32()),
+            pc.cast(pc.greater(fan, min_oa), pa.int32()),
+        ),
+        pc.add(
+            pc.cast(pc.greater(heating, 0.0), pa.int32()),
+            pc.cast(pc.greater(cooling, 0.0), pa.int32()),
+        ),
+    )
+    os_bitmap = pc.cast(os_bitmap, pa.float64())
+    os_diff = pc.abs(arrow_diff(os_bitmap, 1))
+    change_sum = arrow_rolling_sum(os_diff, window)
+    fan_on = pc.greater(fan, float(cfg.get("fan_on_threshold") or 0.01))
+    return pc.and_(pc.greater(change_sum, max_changes), fan_on)

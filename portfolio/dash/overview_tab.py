@@ -1,0 +1,811 @@
+"""OpenFDD RCx Central — unified dashboard (faults, mechanical, FDD, RCx report)."""
+
+from __future__ import annotations
+
+import json
+import os
+from urllib import error, request
+
+import plotly.graph_objects as go
+from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
+
+from portfolio.central.display_time import format_ts_local, tz_label
+from portfolio.central.fdd_preset_catalog import FDD_PRESET_BUTTONS
+from portfolio.central.sparql_preset_catalog import SPARQL_BUTTONS
+from portfolio.central.fault_code_lookup import lookup_fault_description
+from portfolio.dash.theme import BTN_PRIMARY, BTN_SECONDARY, SECTION_STYLE
+
+CENTRAL_API = os.environ.get("OPENFDD_CENTRAL_API_URL", "http://127.0.0.1:8060").rstrip("/")
+
+HOUR_OPTS = [
+    {"label": "Last 2 hours", "value": 2},
+    {"label": "Last 24 hours", "value": 24},
+    {"label": "Last 7 days", "value": 168},
+]
+
+
+def _api_get(path: str, *, timeout: int = 60) -> dict:
+    req = request.Request(f"{CENTRAL_API}{path}", method="GET")
+    with request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _api(method: str, path: str, body: dict | None = None) -> dict:
+    url = f"{CENTRAL_API}{path}"
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    headers = {"Content-Type": "application/json"} if body else {}
+    req = request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with request.urlopen(req, timeout=120) as resp:
+            raw = resp.read().decode("utf-8")
+            return json.loads(raw) if raw else {}
+    except error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
+
+
+def _load_overview(site_id: str, *, fast: bool = True) -> dict:
+    qs = "?fast=true" if fast else "?fast=false"
+    try:
+        return _api_get(f"/api/central/overview/{site_id}{qs}")
+    except Exception:
+        from portfolio.central.overview_data import build_overview, build_overview_from_csv
+
+        try:
+            return build_overview(site_id, include_live=True, fast=fast)
+        except KeyError:
+            return build_overview_from_csv(site_id)
+
+
+def _card_style(theme: dict) -> dict:
+    return {
+        "background": theme["card_bg"],
+        "borderRadius": "10px",
+        "padding": "16px 20px",
+        "boxShadow": "0 1px 3px rgba(15,23,42,0.08)",
+        "border": f"1px solid {theme['grid']}",
+    }
+
+
+def _section(title: str, theme: dict, *children) -> html.Div:
+    return html.Section(
+        style={**SECTION_STYLE, "marginTop": "28px"},
+        children=[
+            html.H2(title, style={"margin": "0 0 12px", "fontSize": "18px", "color": theme["text"]}),
+            *children,
+        ],
+    )
+
+
+def overview_layout(theme: dict) -> html.Div:
+    return html.Div(
+        children=[
+            html.P(
+                "Connect an Edge on the Edge Connections tab, then select a building here.",
+                style={"color": theme["muted"], "margin": "0 0 16px", "fontSize": "14px"},
+            ),
+            html.Div(
+                style={"display": "flex", "gap": "16px", "alignItems": "center", "flexWrap": "wrap"},
+                children=[
+                    html.Label("Building", style={"fontWeight": 600}),
+                    dcc.Dropdown(
+                        id="overview-site",
+                        placeholder="Connect an Edge first",
+                        clearable=False,
+                        style={"minWidth": "280px", "flex": "1"},
+                    ),
+                    html.Button("Refresh data", id="refresh-data-btn", n_clicks=0, style=BTN_PRIMARY),
+                    html.Span(id="refresh-status", style={"color": theme["muted"], "fontSize": "13px"}),
+                    dcc.RadioItems(
+                        id="overview-hours",
+                        options=HOUR_OPTS,
+                        value=24,
+                        inline=True,
+                        style={"fontSize": "13px"},
+                    ),
+                ],
+            ),
+            dcc.Loading(
+                id="overview-loading",
+                type="circle",
+                color=theme["accent"],
+                children=[
+                    html.Span(
+                        id="overview-source",
+                        style={"color": theme["muted"], "fontSize": "12px", "display": "block", "marginTop": "8px"},
+                    ),
+                    html.Div(
+                        id="overview-kpi-row",
+                        style={
+                            "display": "grid",
+                            "gridTemplateColumns": "repeat(auto-fit, minmax(200px, 1fr))",
+                            "gap": "14px",
+                            "marginTop": "18px",
+                        },
+                    ),
+                ],
+            ),
+            html.Div(
+                style={"display": "grid", "gridTemplateColumns": "1fr 1.2fr", "gap": "18px", "marginTop": "18px"},
+                children=[
+                    html.Div(
+                        style=_card_style(theme),
+                        children=[
+                            html.H3("Fault mix", style={"margin": "0 0 8px", "fontSize": "15px"}),
+                            dcc.Graph(id="overview-fault-pie", config={"displayModeBar": False}, style={"height": "260px"}),
+                            html.Div(id="overview-fault-legend"),
+                        ],
+                    ),
+                    html.Div(
+                        style=_card_style(theme),
+                        children=[
+                            html.Div(id="overview-mech-narrative"),
+                            html.Div(
+                                style={"marginTop": "14px", "paddingTop": "12px", "borderTop": f"1px solid {theme['grid']}"},
+                                children=[
+                                    html.Div(
+                                        "BRICK model graph",
+                                        style={"fontSize": "12px", "fontWeight": 600, "color": theme["muted"], "marginBottom": "6px"},
+                                    ),
+                                    html.P(
+                                        "Optional — loads the full equipment/point tree from Edge. "
+                                        "Large sites often take 20–40 seconds over the network (~100+ KB). "
+                                        "Not refreshed automatically.",
+                                        style={"color": theme["muted"], "fontSize": "12px", "margin": "0 0 10px", "lineHeight": 1.45},
+                                    ),
+                                    html.Button(
+                                        "Load full BRICK model",
+                                        id="load-model-tree-btn",
+                                        n_clicks=0,
+                                        style=BTN_SECONDARY,
+                                    ),
+                                    dcc.Loading(
+                                        id="model-tree-loading",
+                                        type="dot",
+                                        color=theme["accent"],
+                                        children=html.Div(id="overview-model-tree", style={"marginTop": "10px"}),
+                                    ),
+                                ],
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+            _section(
+                "Priority 8 operator overrides",
+                theme,
+                html.Div(id="overview-p8-section"),
+            ),
+            _section(
+                "FDD rules & analytics",
+                theme,
+                html.Div(
+                    style={"display": "flex", "gap": "10px", "alignItems": "center", "flexWrap": "wrap", "marginBottom": "10px"},
+                    children=[
+                        html.Button("Load FDD rules", id="load-fdd-rules-btn", n_clicks=0, style=BTN_SECONDARY),
+                        html.Span(
+                            "Queries saved rules and fault analytics from Edge — skipped on auto-refresh.",
+                            style={"color": theme["muted"], "fontSize": "12px"},
+                        ),
+                    ],
+                ),
+                dcc.Loading(
+                    id="overview-fdd-rules-loading",
+                    type="dot",
+                    color=theme["accent"],
+                    children=html.Div(
+                        id="overview-fdd-rules",
+                        children=html.P(
+                            "Click Load FDD rules to query saved rules and fault analytics from Edge.",
+                            style={"color": theme["muted"], "fontSize": "13px"},
+                        ),
+                    ),
+                ),
+                html.P(
+                    "FDD / BRICK query presets — same composed coverage queries as the OpenFDD Edge Data Model tab.",
+                    style={"color": theme["muted"], "fontSize": "13px", "margin": "12px 0 8px"},
+                ),
+                html.Div(
+                    style={"display": "flex", "flexWrap": "wrap", "gap": "4px"},
+                    children=[
+                        html.Button(
+                            title,
+                            id={"type": "fdd-preset-btn", "index": preset_id},
+                            n_clicks=0,
+                            style=BTN_SECONDARY,
+                        )
+                        for preset_id, title in FDD_PRESET_BUTTONS
+                    ],
+                ),
+                dcc.Loading(
+                    id="overview-fdd-preset-loading",
+                    type="dot",
+                    color=theme["accent"],
+                    children=html.Div(id="overview-fdd-preset-result", style={"marginTop": "12px"}),
+                ),
+                html.P(
+                    "Local BRICK SPARQL — mirrored TTL on RCx Central (no Edge round-trip per query).",
+                    style={"color": theme["muted"], "fontSize": "13px", "margin": "16px 0 8px"},
+                ),
+                html.Div(
+                    style={"display": "flex", "flexWrap": "wrap", "gap": "4px"},
+                    children=[
+                        html.Button(
+                            title,
+                            id={"type": "sparql-btn", "index": query_id},
+                            n_clicks=0,
+                            style=BTN_SECONDARY,
+                        )
+                        for query_id, title in SPARQL_BUTTONS
+                    ],
+                ),
+                dcc.Loading(
+                    id="overview-sparql-loading",
+                    type="dot",
+                    color=theme["accent"],
+                    children=html.Div(id="overview-sparql-result", style={"marginTop": "12px"}),
+                ),
+            ),
+            _section(
+                "RCx report",
+                theme,
+                html.P(
+                    "Use the Report Builder tab to pick charts, BACnet points, date range, and FDD overlays — "
+                    "then preview trends and export a Word (DOCX) report with statistics and analyst notes.",
+                    style={"color": theme["muted"], "fontSize": "14px", "margin": 0},
+                ),
+            ),
+        ]
+    )
+
+
+def _fault_pie_figure(pie_data: list[dict], theme: dict) -> go.Figure:
+    labels = [str(p.get("fault_code") or "?") for p in pie_data]
+    values = [int(p.get("count") or 0) for p in pie_data]
+    hover = [
+        f"{p.get('fault_code') or '?'} — {p.get('description') or ''} ({int(p.get('count') or 0)})"
+        for p in pie_data
+    ]
+    if not labels:
+        fig = go.Figure()
+        fig.add_annotation(text="No fault data", showarrow=False, font={"color": theme["muted"]})
+    else:
+        fig = go.Figure(
+            data=[
+                go.Pie(
+                    labels=labels,
+                    values=values,
+                    hole=0.4,
+                    textinfo="percent",
+                    hovertext=hover,
+                    hoverinfo="text",
+                )
+            ]
+        )
+    fig.update_layout(
+        template=theme["plot_template"],
+        paper_bgcolor=theme["paper"],
+        plot_bgcolor=theme["plot"],
+        font={"color": theme["text"]},
+        margin={"l": 8, "r": 8, "t": 8, "b": 8},
+        showlegend=False,
+    )
+    return fig
+
+
+def _fault_legend(pie_data: list[dict], theme: dict) -> html.Component:
+    if not pie_data:
+        return html.P("No active fault codes.", style={"color": theme["muted"], "fontSize": "12px", "margin": "8px 0 0"})
+    items = []
+    for p in pie_data:
+        code = str(p.get("fault_code") or "?")
+        desc = str(p.get("description") or code)
+        count = int(p.get("count") or 0)
+        items.append(
+            html.Li(
+                [
+                    html.Strong(code, style={"color": theme["text"]}),
+                    f" — {desc} ",
+                    html.Span(f"({count})", style={"color": theme["muted"]}),
+                ],
+                style={"marginBottom": "4px", "lineHeight": 1.45},
+            )
+        )
+    return html.Div(
+        [
+            html.Div("Fault codes", style={"fontSize": "11px", "fontWeight": 600, "color": theme["muted"], "marginTop": "4px"}),
+            html.Ul(items, style={"margin": "6px 0 0", "paddingLeft": "18px", "fontSize": "12px", "color": theme["muted"]}),
+        ]
+    )
+
+
+def _connection_kpi(data: dict, theme: dict) -> html.Div:
+    ok = data.get("connection_ok")
+    ts = data.get("last_connection_at_local")
+    if data.get("live_error"):
+        status = html.Div(
+            [
+                html.Span("✗ ", style={"color": theme["down"]}),
+                html.Span("Edge unreachable", style={"fontSize": "14px", "fontWeight": 600}),
+            ]
+        )
+        detail = html.Div(str(data.get("live_error", ""))[:80], style={"fontSize": "11px", "color": theme["muted"], "marginTop": "4px"})
+    elif ok and ts:
+        status = html.Div(
+            [
+                html.Span("● ", style={"color": theme["up"]}),
+                html.Span("Connected", style={"fontSize": "14px", "fontWeight": 600}),
+            ]
+        )
+        detail = html.Div(f"{ts} {tz_label()}", style={"fontSize": "12px", "marginTop": "6px"})
+    elif data.get("credentials_ok") is False and not data.get("last_collect_at"):
+        status = html.Div("No credentials", style={"fontSize": "14px", "color": theme["muted"]})
+        detail = html.Div("Save Edge on Edge Connections tab", style={"fontSize": "11px", "color": theme["muted"], "marginTop": "4px"})
+    else:
+        status = html.Div(
+            [
+                html.Span("○ ", style={"color": theme["accent"], "marginRight": "2px"}),
+                html.Span("Offline snapshot", style={"fontSize": "14px"}),
+            ]
+        )
+        detail = html.Div("Start API + credentials for live Edge", style={"fontSize": "11px", "color": theme["muted"], "marginTop": "4px"})
+    return html.Div(
+        style=_card_style(theme),
+        children=[
+            html.Div("Last connection", style={"color": theme["muted"], "fontSize": "12px"}),
+            status,
+            detail,
+        ],
+    )
+
+
+def _kpi_cards(data: dict, theme: dict) -> list:
+    active = int(data.get("active_faults") or 0)
+    pct = float(data.get("fault_pct_change") or 0)
+    delta = int(data.get("fault_delta") or 0)
+    sign = "+" if pct > 0 else ""
+    pct_color = theme["down"] if pct > 0 else theme["up"] if pct < 0 else theme["muted"]
+    cards = [
+        html.Div(
+            style=_card_style(theme),
+            children=[
+                html.Div("Active faults", style={"color": theme["muted"], "fontSize": "12px"}),
+                html.Div(str(active), style={"fontSize": "36px", "fontWeight": 700}),
+                html.Div(f"{sign}{pct:.1f}% vs prior check-in ({delta:+d})", style={"color": pct_color, "fontSize": "13px"}),
+            ],
+        ),
+        _connection_kpi(data, theme),
+    ]
+    if data.get("last_collect_at"):
+        local_ts = data.get("last_collect_at_local") or format_ts_local(data.get("last_collect_at"))
+        cards.append(
+            html.Div(
+                style=_card_style(theme),
+                children=[
+                    html.Div("Last refresh", style={"color": theme["muted"], "fontSize": "12px"}),
+                    html.Div(local_ts, style={"fontSize": "14px", "marginTop": "6px", "fontWeight": 600}),
+                    html.Div(tz_label(), style={"fontSize": "11px", "color": theme["muted"], "marginTop": "2px"}),
+                ],
+            )
+        )
+    op_ov = int(data.get("operator_overrides") or 0)
+    cards.append(
+        html.Div(
+            style=_card_style(theme),
+            children=[
+                html.Div("P8 overrides", style={"color": theme["muted"], "fontSize": "12px"}),
+                html.Div(str(op_ov), style={"fontSize": "28px", "fontWeight": 700}),
+                html.Div(str(data.get("overrides_source") or "—"), style={"fontSize": "11px", "color": theme["muted"]}),
+            ],
+        )
+    )
+    traffic = str(data.get("traffic") or (data.get("live_edge") or {}).get("traffic") or "—")
+    cards.append(
+        html.Div(
+            style={**_card_style(theme), "borderLeft": f"4px solid {theme['warn']}"},
+            children=[
+                html.Div("Edge traffic", style={"color": theme["muted"], "fontSize": "12px"}),
+                html.Div(traffic.upper(), style={"fontSize": "20px", "fontWeight": 600}),
+            ],
+        )
+    )
+    return cards
+
+
+def _overrides_chart_figure(points: list[dict], theme: dict) -> go.Figure:
+    fig = go.Figure()
+    if not points:
+        fig.add_annotation(text="No P8 overrides in snapshot or live rollup", showarrow=False, font={"color": theme["muted"]})
+    else:
+        labels = [str(p.get("label") or p.get("object_name") or "?") for p in points[:20]]
+        fig.add_trace(
+            go.Bar(
+                x=labels,
+                y=[1] * len(labels),
+                orientation="v",
+                marker_color=theme["warn"],
+                text=[str(p.get("value") or "") for p in points[:20]],
+                textposition="outside",
+            )
+        )
+        fig.update_layout(bargap=0.35)
+    fig.update_layout(
+        template=theme["plot_template"],
+        paper_bgcolor=theme["paper"],
+        plot_bgcolor=theme["plot"],
+        font={"color": theme["text"], "size": 11},
+        margin={"l": 8, "r": 8, "t": 8, "b": 120},
+        xaxis={"tickangle": -35},
+        yaxis={"visible": False, "showgrid": False},
+        showlegend=False,
+    )
+    return fig
+
+
+def _source_html(data: dict, theme: dict) -> html.Div:
+    if data.get("connection_ok") and data.get("credentials_ok"):
+        label = "Live Edge"
+        color = theme["up"]
+        detail = f"Connected · {data.get('last_connection_at_local') or ''} {tz_label()}".strip()
+    elif data.get("live_error"):
+        label = "Edge unreachable"
+        color = theme["warn"]
+        detail = str(data["live_error"])[:120]
+    elif data.get("last_collect_at_local"):
+        label = "Cached snapshot"
+        color = theme["muted"]
+        detail = f"Last refresh {data.get('last_collect_at_local')} {tz_label()}"
+    else:
+        label = "No data"
+        color = theme["muted"]
+        detail = "Connect an Edge and click Refresh data"
+    return html.Div(
+        [html.Span(f"{label} — ", style={"fontWeight": 600, "color": color}), html.Span(detail, style={"color": theme["muted"]})],
+        style={"fontSize": "12px"},
+    )
+
+
+def _table_styles(theme: dict) -> tuple[dict, dict, dict]:
+    table = {
+        "width": "100%",
+        "fontSize": "13px",
+        "borderCollapse": "collapse",
+        "tableLayout": "fixed",
+    }
+    th = {
+        "textAlign": "left",
+        "padding": "8px 10px",
+        "borderBottom": f"2px solid {theme['grid']}",
+        "color": theme["muted"],
+        "fontSize": "12px",
+        "fontWeight": "600",
+    }
+    td = {
+        "padding": "8px 10px",
+        "borderBottom": f"1px solid {theme['grid']}",
+        "verticalAlign": "top",
+        "wordBreak": "break-word",
+    }
+    return table, th, td
+
+
+def _data_table(columns: list[str], rows: list[dict], theme: dict, *, max_rows: int = 40) -> html.Table:
+    table_style, th_style, td_style = _table_styles(theme)
+    header = html.Tr([html.Th(col, style=th_style) for col in columns])
+    body = []
+    for row in rows[:max_rows]:
+        if not isinstance(row, dict):
+            continue
+        body.append(
+            html.Tr([html.Td(str(row.get(col, "") or "—"), style=td_style) for col in columns])
+        )
+    return html.Table([html.Thead(header), html.Tbody(body)], style=table_style)
+
+
+def _p8_section(overrides: list[dict], theme: dict) -> html.Component:
+    if not overrides:
+        return html.Div()
+    return html.Div(
+        [
+            html.P(
+                "BACnet priority-array slot 8 (operator override) from Edge live rollup or portfolio/data/overrides_daily.csv.",
+                style={"color": theme["muted"], "fontSize": "13px", "marginTop": 0},
+            ),
+            dcc.Graph(
+                figure=_overrides_chart_figure(overrides, theme),
+                config={"displayModeBar": False},
+                style={"height": "280px"},
+            ),
+        ]
+    )
+
+
+def _fdd_rules_html(data: dict, theme: dict) -> html.Div:
+    rules = data.get("rules") or []
+    warnings = data.get("warnings") or []
+    if not rules:
+        return html.P(
+            (warnings[0] if warnings else "No FDD rules — start Central API and connect Edge."),
+            style={"color": theme["muted"]},
+        )
+    columns = ("Rule", "Code", "Description", "Type", "Active", "Fault hrs")
+    table_style, th_style, td_style = _table_styles(theme)
+    header = html.Tr([html.Th(c, style=th_style) for c in columns])
+    body = []
+    for r in rules[:25]:
+        code = str(r.get("fault_code") or "")
+        desc = str(r.get("fault_description") or lookup_fault_description(code) or "—")
+        body.append(
+            html.Tr(
+                [
+                    html.Td(str(r.get("fault_name") or r.get("rule_id") or ""), style=td_style),
+                    html.Td(code, style=td_style),
+                    html.Td(desc, style=td_style),
+                    html.Td(str(r.get("equipment_type") or "—"), style=td_style),
+                    html.Td(str(r.get("active_fault_count") or 0), style=td_style),
+                    html.Td(f"{float(r.get('elapsed_fault_hours') or 0):.1f}", style=td_style),
+                ]
+            )
+        )
+    return html.Div(
+        [
+            html.P(f"{data.get('rules_configured', len(rules))} rules configured", style={"color": theme["muted"], "fontSize": "13px"}),
+            html.Table([html.Thead(header), html.Tbody(body)], style=table_style),
+        ]
+    )
+
+
+def _fdd_preset_result_html(result: dict, theme: dict) -> html.Div:
+    if not result:
+        return html.Div()
+    columns = result.get("columns") or []
+    rows = result.get("rows") or []
+    title = str(result.get("title") or result.get("preset_id") or "Preset")
+    desc = str(result.get("description") or "")
+    if not rows:
+        return html.P(f"{title}: no rows.", style={"color": theme["muted"], "fontSize": "13px"})
+    if not columns and rows and isinstance(rows[0], dict):
+        columns = list(rows[0].keys())
+    return html.Div(
+        [
+            html.H4(title, style={"margin": "0 0 4px", "fontSize": "15px"}),
+            html.P(desc, style={"color": theme["muted"], "fontSize": "12px", "margin": "0 0 8px"}) if desc else None,
+            html.P(f"{result.get('row_count', len(rows))} row(s)", style={"color": theme["muted"], "fontSize": "12px"}),
+            _data_table([str(c) for c in columns], rows, theme),
+        ]
+    )
+
+
+def _sparql_result_html(result: dict, theme: dict) -> html.Div:
+    if not result:
+        return html.Div()
+    if result.get("checks"):
+        lines = [
+            html.H4("SPARQL model validation", style={"margin": "0 0 8px", "fontSize": "15px"}),
+            html.P(
+                f"Mirror: {'ok' if result.get('ok') else 'issues'} — "
+                f"{(result.get('mirror') or {}).get('bytes', 0)} bytes",
+                style={"color": theme["muted"], "fontSize": "12px"},
+            ),
+        ]
+        for chk in result.get("checks") or []:
+            status = "ok" if chk.get("ok") else "fail"
+            color = theme["up"] if chk.get("ok") else theme["warn"]
+            detail = f"count={chk.get('count')}" if chk.get("count") is not None else str(chk.get("error") or "")
+            lines.append(
+                html.P(
+                    f"{chk.get('label') or chk.get('id')}: {status} ({detail})",
+                    style={"color": color, "fontSize": "13px", "margin": "2px 0"},
+                )
+            )
+        return html.Div(lines)
+    if result.get("synced_at") or result.get("sha256"):
+        return html.Div(
+            [
+                html.H4("TTL mirrored to Central", style={"margin": "0 0 8px", "fontSize": "15px"}),
+                html.P(f"synced_at: {result.get('synced_at', '—')}", style={"color": theme["muted"], "fontSize": "12px"}),
+                html.P(f"bytes: {result.get('bytes', 0)}", style={"color": theme["muted"], "fontSize": "12px"}),
+                html.P(f"edge_ttl_synced: {result.get('edge_ttl_synced')}", style={"color": theme["muted"], "fontSize": "12px"}),
+            ]
+        )
+    bindings = result.get("bindings") or []
+    if not bindings:
+        return html.P("SPARQL: no rows.", style={"color": theme["muted"], "fontSize": "13px"})
+    columns = list(bindings[0].keys()) if isinstance(bindings[0], dict) else []
+    return html.Div(
+        [
+            html.H4("SPARQL result", style={"margin": "0 0 8px", "fontSize": "15px"}),
+            html.P(f"{result.get('row_count', len(bindings))} row(s) — local TTL", style={"color": theme["muted"], "fontSize": "12px"}),
+            _data_table(columns, bindings, theme),
+        ]
+    )
+
+
+def _model_tree_html(data: dict, theme: dict) -> html.Component:
+    if not data:
+        return html.Div()
+    err = data.get("error")
+    if err:
+        return html.P(str(err)[:300], style={"color": theme["warn"], "fontSize": "12px"})
+    eq = data.get("equipment_count", "—")
+    pts = data.get("point_count", "—")
+    kb = data.get("approx_payload_kb")
+    cache = data.get("_cache") or {}
+    cache_note = " (cached)" if cache.get("hit") else ""
+    lines = [
+        html.Div(
+            [
+                html.Strong(f"{eq} equipment · {pts} points"),
+                html.Span(f" · ~{kb} KB{cache_note}" if kb else cache_note, style={"color": theme["muted"]}),
+            ],
+            style={"fontSize": "13px", "marginBottom": "6px"},
+        ),
+    ]
+    sample = data.get("equipment_sample") or []
+    if sample:
+        lines.append(
+            html.Ul(
+                [html.Li(name, style={"fontSize": "12px", "color": theme["muted"]}) for name in sample[:12]],
+                style={"margin": "4px 0 0", "paddingLeft": "18px"},
+            )
+        )
+    sites = data.get("sites") or []
+    if sites:
+        site_labels = [
+            str(s.get("name") or s.get("site_id") or "")
+            for s in sites[:6]
+            if isinstance(s, dict) and (s.get("name") or s.get("site_id"))
+        ]
+        if site_labels:
+            lines.append(
+                html.Div(
+                    "Sites: " + ", ".join(site_labels),
+                    style={"fontSize": "11px", "color": theme["muted"], "marginTop": "6px"},
+                )
+            )
+    return html.Div(lines)
+
+
+def register_overview_callbacks(app, theme: dict) -> None:
+    @app.callback(
+        Output("overview-kpi-row", "children"),
+        Output("overview-fault-pie", "figure"),
+        Output("overview-fault-legend", "children"),
+        Output("overview-p8-section", "children"),
+        Output("overview-mech-narrative", "children"),
+        Output("overview-source", "children"),
+        Input("overview-site", "value"),
+        Input("main-tabs", "value"),
+        Input("refresh-interval", "n_intervals"),
+        Input("refresh-data-btn", "n_clicks"),
+        Input("edge-save-btn", "n_clicks"),
+        Input("edge-registry-revision", "data"),
+    )
+    def refresh_dashboard_fast(site_id, tab, _n, _refresh, _save, _revision):
+        if tab and tab != "dashboard":
+            return (no_update,) * 6
+        empty_fig = _fault_pie_figure([], theme)
+        empty_legend = _fault_legend([], theme)
+        empty_p8 = _p8_section([], theme)
+        if not site_id:
+            empty = html.P("Connect an Edge on the Edge Connections tab.", style={"color": theme["muted"]})
+            return [], empty_fig, empty_legend, empty_p8, empty, _source_html({}, theme)
+
+        data = _load_overview(site_id, fast=True)
+        kpis = _kpi_cards(data, theme)
+        pie_rows = data.get("fault_pie") or []
+        fig = _fault_pie_figure(pie_rows, theme)
+        legend = _fault_legend(pie_rows, theme)
+        p8_section = _p8_section(data.get("overrides_p8") or [], theme)
+
+        narrative = data.get("mechanical_narrative")
+        brick_name = data.get("brick_site_name")
+        if narrative:
+            header_children = [html.H3("Building summary", style={"margin": "0 0 10px", "fontSize": "15px"})]
+            if brick_name:
+                header_children.append(
+                    html.Div(
+                        f"BRICK site: {brick_name}"
+                        + (f" ({data.get('brick_site_id')})" if data.get("brick_site_id") else ""),
+                        style={"fontSize": "12px", "color": theme["accent"], "marginBottom": "8px", "fontWeight": 600},
+                    )
+                )
+            cache = data.get("_cache") or {}
+            if cache.get("hit"):
+                header_children.append(
+                    html.Div(
+                        f"Overview cached ({cache.get('ttl_s', '—')}s TTL) — fast path skips model/tree.",
+                        style={"fontSize": "11px", "color": theme["muted"], "marginBottom": "8px"},
+                    )
+                )
+            mech = html.Div(
+                header_children
+                + [html.P(narrative, style={"lineHeight": 1.55, "whiteSpace": "pre-wrap", "margin": 0})]
+            )
+        elif data.get("live_error"):
+            mech = html.P(f"Building summary unavailable: {data['live_error']}", style={"color": theme["warn"]})
+        else:
+            mech = html.P("Connect an Edge and save credentials to load the BRICK building summary.", style={"color": theme["muted"]})
+
+        return kpis, fig, legend, p8_section, mech, _source_html(data, theme)
+
+    @app.callback(
+        Output("overview-fdd-rules", "children"),
+        Input("load-fdd-rules-btn", "n_clicks"),
+        Input("refresh-data-btn", "n_clicks"),
+        State("overview-site", "value"),
+        State("overview-hours", "value"),
+        State("main-tabs", "value"),
+        prevent_initial_call=True,
+    )
+    def refresh_fdd_rules(_load, _refresh, site_id, hours, tab):
+        if tab and tab != "dashboard":
+            return no_update
+        if not site_id:
+            return html.P("Select a building.", style={"color": theme["muted"]})
+        fdd_data: dict = {"rules": [], "warnings": ["Central API not running — FDD rules need API + Edge."]}
+        try:
+            fdd_data = _api_get(f"/api/central/fdd-analytics/{site_id}?hours={hours or 24}")
+        except Exception:
+            pass
+        return _fdd_rules_html(fdd_data, theme)
+
+    @app.callback(
+        Output("overview-model-tree", "children"),
+        Input("load-model-tree-btn", "n_clicks"),
+        State("overview-site", "value"),
+        prevent_initial_call=True,
+    )
+    def load_model_tree(n_clicks, site_id):
+        if not site_id or not n_clicks:
+            return no_update
+        try:
+            data = _api_get(f"/api/central/model-tree/{site_id}", timeout=90)
+            return _model_tree_html(data, theme)
+        except Exception as exc:
+            return _model_tree_html({"error": str(exc)}, theme)
+
+    @app.callback(
+        Output("overview-fdd-preset-result", "children"),
+        Input({"type": "fdd-preset-btn", "index": ALL}, "n_clicks"),
+        State("overview-site", "value"),
+        prevent_initial_call=True,
+    )
+    def run_fdd_preset(n_clicks_list, site_id):
+        if not site_id or not ctx.triggered_id:
+            return no_update
+        preset_id = ctx.triggered_id.get("index") if isinstance(ctx.triggered_id, dict) else None
+        if not preset_id:
+            return no_update
+        try:
+            result = _api_get(f"/api/central/fdd-preset/{site_id}/{preset_id}")
+            return _fdd_preset_result_html(result, theme)
+        except Exception as exc:
+            return html.P(str(exc)[:300], style={"color": theme["warn"], "fontSize": "13px"})
+
+    @app.callback(
+        Output("overview-sparql-result", "children"),
+        Input({"type": "sparql-btn", "index": ALL}, "n_clicks"),
+        State("overview-site", "value"),
+        prevent_initial_call=True,
+    )
+    def run_sparql_query(n_clicks_list, site_id):
+        if not site_id or not ctx.triggered_id:
+            return no_update
+        query_id = ctx.triggered_id.get("index") if isinstance(ctx.triggered_id, dict) else None
+        if not query_id:
+            return no_update
+        try:
+            if query_id == "sync_ttl":
+                result = _api("POST", f"/api/central/model/sync-ttl/{site_id}")
+            elif query_id == "validate":
+                result = _api_get(f"/api/central/model/sparql/validate/{site_id}")
+            else:
+                result = _api(
+                    "POST",
+                    f"/api/central/model/sparql/{site_id}",
+                    {"query": "", "query_id": query_id},
+                )
+            return _sparql_result_html(result, theme)
+        except Exception as exc:
+            return html.P(str(exc)[:300], style={"color": theme["warn"], "fontSize": "13px"})

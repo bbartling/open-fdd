@@ -72,6 +72,24 @@ def arrow_rolling_max(array: pa.Array | pa.ChunkedArray, window: int) -> pa.Chun
     return pa.array(out, type=pa.float64())
 
 
+def arrow_rolling_sum(array: pa.Array | pa.ChunkedArray, window: int) -> pa.ChunkedArray:
+    """Fixed-window rolling sum (used for PID hunting / state-change counts)."""
+    flat = pc.cast(as_array(array), pa.float64())
+    n = len(flat)
+    if window <= 1 or n == 0:
+        return flat
+    out: list[Any] = []
+    for i in range(n):
+        start = max(0, i - window + 1)
+        chunk = flat.slice(start, i - start + 1)
+        valid = pc.drop_null(chunk)
+        if len(valid) == 0:
+            out.append(None)
+        else:
+            out.append(pc.sum(valid).as_py())
+    return pa.array(out, type=pa.float64())
+
+
 def arrow_flatline_check(array: pa.Array | pa.ChunkedArray, window: int, epsilon: float = 1e-6) -> pa.ChunkedArray:
     """True when rolling max-min <= epsilon over ``window`` samples."""
     rmin = arrow_rolling_min(array, window)

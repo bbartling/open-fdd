@@ -15,5 +15,6 @@ Open-FDD uses a **check-engine** model: one building-level status (green / yello
 | [VAV faults]({{ "/fault-codes/vav/" | relative_url }}) | Terminal units |
 | [RTU faults]({{ "/fault-codes/rtu/" | relative_url }}) | Packaged rooftops |
 | [Sensor & data quality]({{ "/fault-codes/sensor-quality/" | relative_url }}) | Stale, flatline, comms |
+| [Short lookup]({{ "/fault-codes/short-lookup/" | relative_url }}) | Stable code → one-line description (pie charts, Dash) |
 
 Live catalog API: `GET /api/faults/catalog` on the Operator Bridge.

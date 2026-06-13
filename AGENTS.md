@@ -49,6 +49,9 @@ This repository is **Arrow-native FDD only** (3.0.1+). The published PyPI wheel 
 | BACnet single-stack | [skills/bacnet-single-stack/SKILL.md](skills/bacnet-single-stack/SKILL.md) |
 | Building check-engine | [skills/building-check-engine/SKILL.md](skills/building-check-engine/SKILL.md) |
 | **Edge deploy / Acme tune** | [skills/openfdd-edge-deploy-tune/SKILL.md](skills/openfdd-edge-deploy-tune/SKILL.md) |
+| **RCx Central Dash / API** | [docs/agent-skills/rcx-central-dash-agent.md](docs/agent-skills/rcx-central-dash-agent.md) |
+| Portfolio MCP / morning check | [skills/openfdd-portfolio-agent/SKILL.md](skills/openfdd-portfolio-agent/SKILL.md) |
+| MCP server (stdio/HTTP) | [skills/openfdd-mcp-server/SKILL.md](skills/openfdd-mcp-server/SKILL.md) |
 | BRICK TTL model | [skills/brick-ttl-data-model/SKILL.md](skills/brick-ttl-data-model/SKILL.md) |
 
 Load each selected skill's `SKILL.md` and follow linked `references/REFERENCE.md` for route tables and env catalogs.

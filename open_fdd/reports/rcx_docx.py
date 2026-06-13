@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import io
 from datetime import datetime, timezone
 from typing import Any
@@ -12,9 +13,12 @@ from open_fdd.reports.fault_hours import aggregate_fault_hours
 
 DEFAULT_SECTIONS = [
     "executive_summary",
+    "mechanical_summary",
+    "trend_charts",
     "fault_analytics",
     "ahu_analytics",
     "vav_analytics",
+    "analyst_insights",
     "runtime_analytics",
     "model_health",
     "recommendations",
@@ -59,12 +63,14 @@ def build_rcx_docx(
     charts: list[str] | None = None,
     warnings: list[str] | None = None,
     equipment_notes: list[dict[str, Any]] | None = None,
+    chart_previews: list[dict[str, Any]] | None = None,
 ) -> bytes:
     from docx import Document
-    from docx.shared import Inches
+    from docx.shared import Inches, Pt
 
     enabled_sections = set(sections or DEFAULT_SECTIONS)
     enabled_charts = set(charts or DEFAULT_CHARTS)
+    previews = chart_previews or []
     doc = Document()
     doc.add_heading("Open-FDD RCx Report", level=0)
     doc.add_paragraph(f"Building / site: {site_name}")
@@ -89,6 +95,47 @@ def build_rcx_docx(
             doc.add_paragraph(f"Worst equipment: {by_eq[0].get('group')} (~{by_eq[0].get('elapsed_hours')} h)")
         for w in (warnings or [])[:8]:
             doc.add_paragraph(f"• {w}")
+
+    if "mechanical_summary" in enabled_sections:
+        doc.add_heading("Mechanical summary", level=1)
+        mech = ov.get("mechanical_summary") if isinstance(ov.get("mechanical_summary"), dict) else {}
+        narrative = str(mech.get("narrative") or "").strip()
+        if narrative:
+            for para in narrative.split("\n\n"):
+                if para.strip():
+                    doc.add_paragraph(para.strip())
+        counts = mech.get("counts") if isinstance(mech.get("counts"), dict) else {}
+        if counts:
+            doc.add_paragraph(
+                f"Inventory: {counts.get('ahus', '—')} AHU(s), {counts.get('vavs', '—')} VAV(s), "
+                f"{counts.get('zones', '—')} zone(s)."
+            )
+        elif not narrative:
+            doc.add_paragraph("Mechanical summary unavailable for this Edge snapshot.")
+
+    trend_previews = [
+        p
+        for p in previews
+        if p.get("image_base64")
+        and (
+            not enabled_charts
+            or p.get("chart_id") in enabled_charts
+            or str(p.get("chart_id") or "").startswith("custom_")
+        )
+    ]
+    if "trend_charts" in enabled_sections and trend_previews:
+        doc.add_heading("Trend charts", level=1)
+        for item in trend_previews:
+            title = str(item.get("title") or item.get("chart_id") or "Chart")
+            doc.add_heading(title, level=2)
+            try:
+                png = base64.b64decode(str(item["image_base64"]))
+                doc.add_picture(io.BytesIO(png), width=Inches(6.5))
+            except (ValueError, KeyError, TypeError):
+                doc.add_paragraph("(Chart image unavailable)")
+            for bullet in item.get("stats_bullets") or []:
+                p = doc.add_paragraph(style="List Bullet")
+                p.add_run(str(bullet))
 
     if "fault_analytics" in enabled_sections:
         doc.add_heading("Fault analytics", level=1)
@@ -171,6 +218,19 @@ def build_rcx_docx(
         doc.add_heading("Recommendations", level=1)
         for rec in _recommendations(fault_rows, warnings or []):
             doc.add_paragraph(f"• {rec}")
+
+    if "analyst_insights" in enabled_sections and trend_previews:
+        doc.add_heading("Analyst insights", level=1)
+        doc.add_paragraph(
+            "Plain-language interpretation of selected trends (template-based; optional AI narration can be added later)."
+        )
+        for item in trend_previews:
+            narrative = str(item.get("narrative") or "").strip()
+            if not narrative:
+                continue
+            doc.add_heading(str(item.get("title") or "Insight"), level=3)
+            run = doc.add_paragraph().add_run(narrative)
+            run.font.size = Pt(11)
 
     if "appendix_faults" in enabled_sections:
         doc.add_heading("Appendix: fault table", level=1)

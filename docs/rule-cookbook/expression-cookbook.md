@@ -29,14 +29,16 @@ This is the **only** expression cookbook for Open-FDD 3.x. The pandas/YAML `Rule
 | Legacy (pandas / YAML) | Arrow-native (3.x) |
 |------------------------|---------------------|
 | `type: expression` + `expression:` string | `apply_faults_arrow()` in `rules_py/*.py` |
+| `type: hunting` (GL36 **FC4**) | `pid_hunting_fc4.py` → **AHU-G** / **VAV-F** / **CH-G** / **RTU-E** |
 | `RuleRunner.run(df, column_map=…)` | Rule Lab batch on **feather PyArrow table** |
 | `np.maximum(a, b)` | `pc.max(a, b)` |
 | `series.rolling(n).min()` | `arrow_rolling_min(vals, n)` from `open_fdd.arrow_runtime.windows` |
 | `series.diff().abs()` | `arrow_abs_diff(vals, 1)` |
-| `normalize_cmd(x)` | `pc.if_else(pc.greater(x, 1), pc.divide(x, 100), x)` |
+| `normalize_cmd(x)` | `norm_cmd_array()` / `pc.if_else(pc.greater(x, 1), pc.divide(x, 100), x)` |
 | `params.max_temp` in YAML | Module constant or `cfg["bounds_high"]` |
 | `flag: rule_a_flag` | Rule metadata **`fault_code`** → `AHU-A` … `VAV-C` |
 | Numeric codes `VAV-03` | Letter codes **`VAV-C`** (see `LEGACY_CODE_MAP` in bridge) |
+| Pandas `FC4` / `fc4_flag` | `LEGACY_CODE_MAP`: `FC4` → **AHU-G** |
 
 **Edge constraint:** Docker / BACnet poll path never imports pandas. Central portfolio Dash may use pandas for CSV analytics only.
 
@@ -168,6 +170,7 @@ ASHRAE Guideline 36-style rules from the old YAML cookbook, translated to Arrow.
 | Rule K — discharge above SP full cool | SAT > SP, full cooling | **AHU-C** | [Rule K]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-k--discharge-above-setpoint-in-full-cooling-ahu-c) |
 | Rule L — cooling coil ΔT when off | CHW drop when valves closed | **CH-C** | [Rule L]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-l--cooling-coil-δt-when-inactive-ch-c) |
 | Rule M — heating coil ΔT when off | HW rise when valves closed | **AHU-B** | [Rule M]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-m--heating-coil-δt-when-inactive-ahu-b) |
+| **FC4 — PID hunting** | Excessive command reversals or AHU OS changes | **AHU-G** / **VAV-F** / **CH-G** / **RTU-E** | [FC4 PID hunting]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#fc4--pid-hunting-legacy-gl36) |
 
 All rules A–M have **full `apply_faults_arrow` modules** in [Python recipes (full Arrow library)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}).
 

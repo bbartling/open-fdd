@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from portfolio.central.chart_specs import CHART_SPECS
+from portfolio.central.fault_code_lookup import lookup_fault_description
 from portfolio.central.edge_registry import resolve_site_config, resolve_token
 from portfolio.collector.edge_client import EdgeClient
 
@@ -38,6 +39,27 @@ def build_fdd_analytics(site_id: str, *, hours: int = 24) -> dict[str, Any]:
 
     faults = client.get_analytics_faults(hours=hours, token=token)
     fault_rows = faults.get("faults") if isinstance(faults.get("faults"), list) else []
+    warnings: list[str] = []
+    if not fault_rows:
+        try:
+            status = client.get_faults_status(token=token)
+            for fam in status.get("families") or []:
+                if not isinstance(fam, dict):
+                    continue
+                for f in fam.get("faults") or []:
+                    if isinstance(f, dict):
+                        fault_rows.append(
+                            {
+                                "rule_id": f.get("rule_id"),
+                                "fault_code": f.get("code"),
+                                "fault_name": f.get("title"),
+                                "severity": f.get("severity"),
+                            }
+                        )
+            if fault_rows and not faults:
+                warnings.append("Using /api/faults/status — /api/analytics/faults not on this Edge build.")
+        except RuntimeError:
+            pass
     by_rule: dict[str, dict[str, Any]] = {}
     for row in fault_rows:
         if not isinstance(row, dict):
@@ -61,6 +83,7 @@ def build_fdd_analytics(site_id: str, *, hours: int = 24) -> dict[str, Any]:
                 "rule_id": rid,
                 "fault_code": rule.get("fault_code") or rule.get("code"),
                 "fault_name": rule.get("name") or rule.get("title"),
+                "fault_description": lookup_fault_description(str(rule.get("fault_code") or rule.get("code") or "")),
                 "equipment_type": rule.get("equipment_type") or cfg.get("equipment_type"),
                 "severity": rule.get("severity") or cfg.get("severity"),
                 "required_roles": cfg.get("required_roles") or rule.get("required_roles") or [],
@@ -83,5 +106,6 @@ def build_fdd_analytics(site_id: str, *, hours: int = 24) -> dict[str, Any]:
         "rules_configured": len(rules_out),
         "active_faults": len(fault_rows),
         "model_query_presets": preset_list[:30],
-        "warnings": [] if rules_out else ["No FDD rules returned from Edge — check Rule Lab export."],
+        "warnings": warnings
+        + ([] if rules_out else ["No FDD rules returned from Edge — check Rule Lab export."]),
     }

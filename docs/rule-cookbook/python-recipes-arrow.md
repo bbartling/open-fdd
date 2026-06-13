@@ -640,6 +640,53 @@ Pass `occupied_start_hour`, `occupied_end_hour`, `tz_offset_hours` in Rule Lab `
 
 ---
 
+## FC4 — PID hunting (legacy GL36)
+
+Ports pandas `FaultConditionFour` / `check_hunting` to Arrow. Two modes:
+
+| Mode | `cfg["hunting_mode"]` | Use on |
+|------|----------------------|--------|
+| Per-loop command | `command` (default) | VAV damper, reheat, pump VFD, RTU cooling % |
+| AHU operating-state bitmap | `ahu_os` | RTU/AHU with economizer + fan + heat + cool columns in wide frame |
+
+**Fault codes:** **VAV-F** (VAV outputs), **CH-G** (plant pump), **RTU-E** (RTU cooling capacity), **AHU-G** (multi-signal OS / legacy `FC4` alias).
+
+```python
+"""pid_hunting_fc4.py — deploy via setup_gl36_fdd.py or Rule Lab."""
+
+import pyarrow as pa
+
+from open_fdd.arrow_runtime.cookbook import pid_hunting_ahu_os_mask, pid_hunting_command_mask
+
+FAULT_CODE = "VAV-F"  # or AHU-G, CH-G, RTU-E per binding
+
+
+def apply_faults_arrow(table, cfg, context=None):
+    mode = str(cfg.get("hunting_mode") or "command").strip().lower()
+    if mode in ("ahu", "ahu_os", "os"):
+        return pid_hunting_ahu_os_mask(table, cfg)
+    col = str(cfg.get("value_column") or cfg.get("column") or "").strip()
+    if col and col not in table.column_names:
+        return pa.array([False] * table.num_rows, type=pa.bool_)
+    return pid_hunting_command_mask(table, cfg, col=col or None)
+```
+
+**Tuning (Acme 60 s poll, 1 h window):**
+
+```python
+cfg = {
+    "poll_interval_s": 60,
+    "hunting_window_hours": 1.0,
+    "delta_os_max": 10,          # max command steps or OS bitmap changes per window
+    "min_command_delta": 0.03,   # 3 % minimum step to count as a reversal
+    "min_active_command": 0.05,  # loop must be modulating above 5 %
+}
+```
+
+Legacy interlink: `LEGACY_CODE_MAP["FC4"]` → **AHU-G**; per-loop VAV/plant rules use family-specific codes above.
+
+---
+
 ## Next steps
 
 1. Copy a module into `workspace/data/rules_py/<site>_<rule>.py`

@@ -1,4 +1,4 @@
-"""Callbacks for RCx Central tabs (Edge, Mechanical, Report Builder)."""
+"""Callbacks for Edge Connections (site registry drives Dashboard dropdown)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 import os
 from urllib import error, request
 
-from dash import Input, Output, State, dcc, html, no_update
+from dash import ALL, Input, Output, State, ctx, html, no_update
 
 CENTRAL_API = os.environ.get("OPENFDD_CENTRAL_API_URL", "http://127.0.0.1:8060").rstrip("/")
 
@@ -25,245 +25,267 @@ def _api(method: str, path: str, body: dict | None = None) -> dict:
         raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
 
 
-def register_rcx_callbacks(app) -> None:
+def _edges_local() -> list[dict]:
+    try:
+        from portfolio.central.edge_registry import list_edges_public
+
+        return list_edges_public()
+    except Exception:
+        return []
+
+
+def _dash_options(edges: list[dict]) -> tuple[list[dict], str | None]:
+    opts = [
+        {"label": str(e.get("name") or e.get("site_id")), "value": e.get("site_id")}
+        for e in edges
+        if e.get("site_id")
+    ]
+    default = opts[0]["value"] if opts else None
+    return opts, default
+
+
+def _api_or_local_edges() -> tuple[list[dict], str | None]:
+    try:
+        data = _api("GET", "/api/central/edges")
+        return data.get("edges") or [], None
+    except Exception as exc:
+        return _edges_local(), str(exc)
+
+
+def _save_edge_local(site_id: str, name: str, url: str, user: str, password: str) -> str:
+    from portfolio.central.edge_registry import add_or_update_edge
+
+    add_or_update_edge(
+        site_id=site_id.strip(),
+        name=(name or site_id).strip(),
+        base_url=url.strip(),
+        auth_type="password",
+        username=(user or "integrator").strip(),
+        password=password or "",
+    )
+    return f"Saved {name or site_id} — open Dashboard to view data."
+
+
+def _remove_edge_local(site_id: str) -> str:
+    from portfolio.central.edge_registry import delete_edge
+
+    delete_edge(site_id.strip())
+    return f"Removed connection."
+
+
+def _test_edge_local(url: str, user: str, password: str, site_id: str | None = None) -> dict:
+    from portfolio.central.edge_registry import test_edge_connection
+
+    if site_id:
+        return test_edge_connection(site_id=site_id.strip())
+    return test_edge_connection(
+        base_url=url.strip(),
+        auth_type="password",
+        username=(user or "integrator").strip(),
+        password=password or "",
+    )
+
+
+def _resolve_site_id(url: str, name: str) -> str:
+    from portfolio.central.site_resolve import resolve_site_id
+
+    return resolve_site_id(base_url=url, name=name)
+
+
+def register_edge_callbacks(app) -> None:
     @app.callback(
         Output("edge-list", "children"),
-        Output("mech-site", "options"),
-        Output("rcx-site", "options"),
-        Output("fdd-site", "options"),
-        Output("val-site", "options"),
+        Output("overview-site", "options"),
+        Output("overview-site", "value"),
+        Output("edge-registry-revision", "data"),
         Input("main-tabs", "value"),
         Input("edge-save-btn", "n_clicks"),
+        Input({"type": "edge-remove-btn", "site_id": ALL}, "n_clicks"),
+        Input("refresh-interval", "n_intervals"),
+        State("overview-site", "value"),
+        State("edge-name", "value"),
+        State("edge-url", "value"),
+        State("edge-registry-revision", "data"),
+        prevent_initial_call=False,
     )
-    def refresh_edge_lists(tab, _save):
-        try:
-            data = _api("GET", "/api/central/edges")
-            edges = data.get("edges") or []
-            opts = [{"label": f"{e.get('name')} ({e.get('site_id')})", "value": e.get("site_id")} for e in edges]
-            rows = [html.Li(f"{e.get('name')} — {e.get('base_url')} [{e.get('auth_type')}]") for e in edges]
-            return html.Ul(rows), opts, opts, opts, opts
-        except Exception as exc:
-            return html.P(str(exc)), [], [], [], []
+    def refresh_edges(_tab, save_n, _remove_clicks, _interval_n, current_site, form_name, form_url, revision):
+        edges, api_err = _api_or_local_edges()
+        opts, default = _dash_options(edges)
+        valid = {o["value"] for o in opts}
+        dash_value = current_site if current_site in valid else default
+
+        rev = int(revision or 0)
+        if ctx.triggered_id == "edge-save-btn" and save_n and form_url:
+            try:
+                dash_value = _resolve_site_id(form_url, form_name or "")
+            except ValueError:
+                pass
+            rev += 1
+
+        if isinstance(ctx.triggered_id, dict) and ctx.triggered_id.get("type") == "edge-remove-btn":
+            rev += 1
+            if dash_value not in valid:
+                dash_value = default
+
+        if not edges:
+            hint = html.P("No Edge connections yet — add your URL below.", style={"color": "#b45309"})
+            return hint, opts, dash_value, rev
+
+        rows = []
+        for e in edges:
+            cred = "ready" if e.get("has_password") or e.get("has_token") else "needs password"
+            rows.append(
+                html.Div(
+                    style={
+                        "display": "flex",
+                        "alignItems": "center",
+                        "gap": "10px",
+                        "padding": "10px 12px",
+                        "marginBottom": "8px",
+                        "border": "1px solid #e2e8f0",
+                        "borderRadius": "8px",
+                        "background": "#fff",
+                        "flexWrap": "wrap",
+                    },
+                    children=[
+                        html.Div(
+                            style={"flex": "1", "minWidth": "200px"},
+                            children=[
+                                html.Strong(str(e.get("name") or e.get("site_id"))),
+                                html.Div(
+                                    f"{e.get('base_url')} · {cred}",
+                                    style={"fontSize": "12px", "color": "#475569", "marginTop": "2px"},
+                                ),
+                            ],
+                        ),
+                        html.Button(
+                            "Edit",
+                            id={"type": "edge-edit-btn", "site_id": e.get("site_id")},
+                            n_clicks=0,
+                            style={
+                                "background": "#1d4ed8",
+                                "color": "#fff",
+                                "border": "none",
+                                "padding": "6px 14px",
+                                "borderRadius": "6px",
+                                "cursor": "pointer",
+                                "fontSize": "13px",
+                            },
+                        ),
+                        html.Button(
+                            "Remove",
+                            id={"type": "edge-remove-btn", "site_id": e.get("site_id")},
+                            n_clicks=0,
+                            style={
+                                "background": "#b91c1c",
+                                "color": "#fff",
+                                "border": "none",
+                                "padding": "6px 14px",
+                                "borderRadius": "6px",
+                                "cursor": "pointer",
+                                "fontSize": "13px",
+                            },
+                        ),
+                    ],
+                )
+            )
+        return html.Div(rows), opts, dash_value, rev
+
+    @app.callback(
+        Output("edge-name", "value"),
+        Output("edge-url", "value"),
+        Output("edge-user", "value"),
+        Input({"type": "edge-edit-btn", "site_id": ALL}, "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def prefill_edge_form(_clicks):
+        triggered = ctx.triggered_id
+        if not isinstance(triggered, dict) or triggered.get("type") != "edge-edit-btn":
+            return no_update, no_update, no_update
+        site_id = str(triggered.get("site_id") or "")
+        for e in _edges_local():
+            if e.get("site_id") == site_id:
+                return e.get("name") or site_id, e.get("base_url") or "", e.get("username") or ""
+        return no_update, no_update, no_update
 
     @app.callback(
         Output("edge-test-result", "children"),
         Input("edge-test-btn", "n_clicks"),
-        State("edge-url", "value"),
-        State("edge-user", "value"),
-        State("edge-password", "value"),
-        prevent_initial_call=True,
-    )
-    def test_edge(_n, url, user, password):
-        if not url:
-            return "Enter Edge base URL."
-        try:
-            out = _api(
-                "POST",
-                "/api/central/edges/test",
-                {"base_url": url, "username": user or "agent", "password": password or "", "auth_type": "password"},
-            )
-            return json.dumps(out, indent=2)
-        except Exception as exc:
-            return str(exc)
-
-    @app.callback(
-        Output("edge-test-result", "children", allow_duplicate=True),
         Input("edge-save-btn", "n_clicks"),
-        State("edge-site-id", "value"),
+        Input({"type": "edge-remove-btn", "site_id": ALL}, "n_clicks"),
         State("edge-name", "value"),
         State("edge-url", "value"),
         State("edge-user", "value"),
         State("edge-password", "value"),
         prevent_initial_call=True,
     )
-    def save_edge(_n, site_id, name, url, user, password):
-        if not site_id or not url:
-            return "site_id and base_url required."
-        try:
-            _api(
-                "POST",
-                "/api/central/edges",
-                {
-                    "site_id": site_id,
-                    "name": name or site_id,
-                    "base_url": url,
-                    "username": user or "agent",
-                    "password": password or "",
-                    "auth_type": "password",
-                },
-            )
-            return f"Saved Edge {site_id}."
-        except Exception as exc:
-            return str(exc)
+    def edge_actions(test_n, save_n, _remove_clicks, name, url, user, password):
+        triggered = ctx.triggered_id
+        if not triggered:
+            return no_update
 
-    @app.callback(
-        Output("mech-summary", "children"),
-        Input("mech-refresh-btn", "n_clicks"),
-        State("mech-site", "value"),
-        State("mech-hours", "value"),
-        prevent_initial_call=True,
-    )
-    def refresh_mech(_n, site_id, hours):
-        if not site_id:
-            return "Select a site."
-        try:
-            out = _api("GET", f"/api/central/mechanical-summary/{site_id}?hours={hours or 24}")
-            return json.dumps(out, indent=2)
-        except Exception as exc:
-            return str(exc)
+        if isinstance(triggered, dict) and triggered.get("type") == "edge-remove-btn":
+            rid = str(triggered.get("site_id") or "")
+            if not rid:
+                return "Could not remove — unknown site."
+            try:
+                _api("DELETE", f"/api/central/edges/{rid}")
+                return "Connection removed."
+            except Exception:
+                try:
+                    return _remove_edge_local(rid)
+                except Exception as exc:
+                    return str(exc)
 
-    @app.callback(
-        Output("rcx-readiness", "children"),
-        Output("rcx-chart-checkboxes", "children"),
-        Output("rcx-section-checkboxes", "children"),
-        Input("rcx-preview-btn", "n_clicks"),
-        State("rcx-site", "value"),
-        State("rcx-hours", "value"),
-        State("rcx-overlays", "value"),
-        prevent_initial_call=True,
-    )
-    def rcx_preview(_n, site_id, hours, overlays):
-        if not site_id:
-            return "Select a site.", no_update, no_update
-        try:
-            out = _api(
-                "POST",
-                "/api/central/rcx/preview",
-                {
-                    "site_id": site_id,
-                    "hours": hours or 24,
-                    "show_fault_overlays": "on" in (overlays or []),
-                },
-            )
-            fs = out.get("fault_summary") or {}
-            text = (
-                f"Active faults: {fs.get('active_faults')} · "
-                f"Fault hours: {fs.get('total_fault_hours')} · "
-                f"Disabled charts: {len(out.get('disabled_charts') or [])}"
-            )
-            charts = dcc.Checklist(
-                id="rcx-charts-selected",
-                options=[
-                    {"label": c.get("title"), "value": c.get("chart_id")}
-                    for c in (out.get("available_charts") or [])
-                ],
-                value=[c.get("chart_id") for c in (out.get("available_charts") or [])],
-            )
-            disabled = html.Ul(
-                [html.Li(f"{c.get('title')}: {c.get('reason')}") for c in (out.get("disabled_charts") or [])]
-            )
-            sections = dcc.Checklist(
-                id="rcx-sections-selected",
-                options=[{"label": s.get("label"), "value": s.get("id")} for s in (out.get("sections") or [])],
-                value=[s.get("id") for s in (out.get("sections") or [])],
-            )
-            return html.Div([html.P(text), disabled]), charts, sections
-        except Exception as exc:
-            return str(exc), no_update, no_update
+        if triggered == "edge-save-btn":
+            if not url:
+                return "Edge URL required."
+            try:
+                site_id = _resolve_site_id(url, name or "")
+            except ValueError as exc:
+                return str(exc)
+            body = {
+                "site_id": site_id,
+                "name": (name or site_id).strip(),
+                "base_url": url.strip(),
+                "username": (user or "integrator").strip(),
+                "password": password or "",
+                "auth_type": "password",
+            }
+            try:
+                _api("POST", "/api/central/edges", body)
+                return f"Saved {body['name']} — switch to Dashboard (data refreshes automatically)."
+            except Exception:
+                try:
+                    return _save_edge_local(site_id, name or site_id, url, user or "integrator", password or "")
+                except Exception as exc:
+                    return str(exc)
 
-    @app.callback(
-        Output("rcx-chart-previews", "children"),
-        Input("rcx-charts-btn", "n_clicks"),
-        State("rcx-site", "value"),
-        State("rcx-hours", "value"),
-        State("rcx-charts-selected", "value"),
-        State("rcx-overlays", "value"),
-        prevent_initial_call=True,
-    )
-    def rcx_chart_previews(_n, site_id, hours, chart_ids, overlays):
-        if not site_id:
-            return "Select a site."
-        try:
-            out = _api(
-                "POST",
-                "/api/central/rcx/charts/preview",
-                {
-                    "site_id": site_id,
-                    "hours": hours or 24,
-                    "chart_ids": chart_ids or [],
-                    "show_fault_overlays": "on" in (overlays or []),
-                },
-            )
-            imgs = []
-            for p in out.get("chart_previews") or []:
-                b64 = p.get("image_base64")
-                if b64:
-                    imgs.append(
-                        html.Div(
-                            [
-                                html.H4(p.get("title")),
-                                html.Img(src=f"data:image/png;base64,{b64}", style={"maxWidth": "100%"}),
-                            ]
-                        )
-                    )
-            return imgs or "No chart previews (missing data or python-docx/matplotlib)."
-        except Exception as exc:
-            return str(exc)
+        if triggered == "edge-test-btn":
+            if not url:
+                return "Enter Edge URL first."
+            try:
+                site_id = _resolve_site_id(url, name or "")
+            except ValueError:
+                site_id = None
+            try:
+                out = _api(
+                    "POST",
+                    "/api/central/edges/test",
+                    {
+                        "site_id": site_id or "",
+                        "base_url": url.strip(),
+                        "username": user or "integrator",
+                        "password": password or "",
+                        "auth_type": "password",
+                    },
+                )
+                return json.dumps(out, indent=2)
+            except Exception:
+                try:
+                    out = _test_edge_local(url, user or "integrator", password or "", site_id=site_id)
+                    return json.dumps(out, indent=2)
+                except Exception as exc:
+                    return str(exc)
 
-    @app.callback(
-        Output("fdd-rules-table", "children"),
-        Input("fdd-refresh-btn", "n_clicks"),
-        State("fdd-site", "value"),
-        State("fdd-hours", "value"),
-        prevent_initial_call=True,
-    )
-    def refresh_fdd(_n, site_id, hours):
-        if not site_id:
-            return "Select a site."
-        try:
-            out = _api("GET", f"/api/central/fdd-analytics/{site_id}?hours={hours or 24}")
-            return json.dumps(out, indent=2)
-        except Exception as exc:
-            return str(exc)
-
-    @app.callback(
-        Output("val-result", "children"),
-        Output("val-jobs", "children"),
-        Input("val-run-btn", "n_clicks"),
-        State("val-site", "value"),
-        prevent_initial_call=True,
-    )
-    def run_validation(_n, site_id):
-        if not site_id:
-            return "Select a site.", no_update
-        try:
-            out = _api(
-                "POST",
-                "/api/central/validation/run",
-                {"site_id": site_id, "interval_hours": 2, "duration_hours": 0, "sleep_seconds": 0},
-            )
-            jobs = _api("GET", "/api/central/validation/jobs")
-            return json.dumps(out, indent=2), json.dumps(jobs, indent=2)
-        except Exception as exc:
-            return str(exc), no_update
-
-    @app.callback(
-        Output("rcx-download", "data"),
-        Output("rcx-status", "children"),
-        Input("rcx-docx-btn", "n_clicks"),
-        State("rcx-site", "value"),
-        State("rcx-hours", "value"),
-        State("rcx-charts-selected", "value"),
-        State("rcx-sections-selected", "value"),
-        prevent_initial_call=True,
-    )
-    def rcx_download(_n, site_id, hours, charts, sections):
-        if not site_id:
-            return no_update, "Select a site."
-        try:
-            url = f"{CENTRAL_API}/api/central/rcx/report"
-            body = json.dumps(
-                {
-                    "site_id": site_id,
-                    "hours": hours or 24,
-                    "charts": charts or [],
-                    "sections": sections or [],
-                }
-            ).encode("utf-8")
-            req = request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
-            with request.urlopen(req, timeout=180) as resp:
-                blob = resp.read()
-            fname = f"openfdd-rcx-{site_id}.docx"
-            return dcc.send_bytes(blob, fname), "Report generated — download started."
-        except Exception as exc:
-            return no_update, str(exc)
+        return no_update

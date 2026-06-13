@@ -9,13 +9,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     OPENFDD_RCX_CENTRAL_DATA=/app/portfolio/data \
     OPENFDD_RCX_CENTRAL_CONFIG=/app/portfolio/config \
-    PYTHONPATH=/app
+    PYTHONPATH=/app:/app/workspace/api
 
 WORKDIR /app
 
 COPY pyproject.toml README.md ./
 COPY open_fdd ./open_fdd
 COPY portfolio ./portfolio
+COPY workspace/api ./workspace/api
 
 RUN pip install --upgrade pip \
     && pip install -e . \
