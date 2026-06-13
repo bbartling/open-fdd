@@ -31,13 +31,15 @@ def test_overlays_from_readings():
     __import__("importlib").util.find_spec("matplotlib") is None,
     reason="matplotlib not installed",
 )
+@patch("portfolio.central.chart_preview.build_mechanical_narrative")
 @patch("portfolio.central.chart_preview.build_mechanical_summary")
 @patch("portfolio.central.chart_preview.resolve_token", return_value="tok")
 @patch("portfolio.central.chart_preview.resolve_site_config")
 @patch("portfolio.central.chart_preview.EdgeClient")
-def test_build_rcx_preview_fault_bars(mock_client_cls, mock_site, _tok, mock_mech):
+def test_build_rcx_preview_fault_bars(mock_client_cls, mock_site, _tok, mock_mech, mock_narr):
     mock_site.return_value = MagicMock(name="ACME", base_url="http://edge.test")
     mock_mech.return_value = {"warnings": [], "model_issues": []}
+    mock_narr.return_value = {"narrative": "Test narrative", "counts": {"ahu": 1, "vav": 30}}
     client = mock_client_cls.return_value
     client.get_model_tree.return_value = {"points": []}
     client.get_analytics_overview.return_value = {
@@ -48,6 +50,7 @@ def test_build_rcx_preview_fault_bars(mock_client_cls, mock_site, _tok, mock_mec
     client.get_analytics_faults.return_value = {
         "faults": [{"fault_name": "SAT", "severity": "warning", "equipment": "AHU-C"}]
     }
+    client.get_fdd_query_preset.return_value = {"rows": [], "columns": []}
 
     from portfolio.central.chart_preview import build_rcx_preview
 
