@@ -1,7 +1,8 @@
 # OpenFDD RCx Central — current state
 
 Updated: 2026-06-13  
-Branches: `feature/rcx-central-overview-ui` (#298), `fix/edge-dashboard-bridge` (#299)
+Branches: `feature/rcx-central-overview-ui` (#298), `fix/edge-dashboard-bridge` (#299)  
+**Status:** Pushed for AI PR review — **benserver Dash check pending** before Docker image refresh.
 
 ## Product names
 
@@ -27,6 +28,8 @@ LAN firewall (benserver): `sudo ./scripts/open_rcx_central_lan_ports.sh`
 - `GET /api/central/fdd-analytics/{site_id}` — rules table + descriptions
 - `GET /api/central/fdd-preset/{site_id}/{preset_id}` — Edge FDD preset proxy
 - `GET /api/central/mechanical-summary/{site_id}`
+- `GET /api/central/model-tree/{site_id}` — on-demand BRICK tree (lazy; not on auto-refresh)
+- `GET /api/central/rcx/points/{site_id}` — BACnet point catalog for Report Builder
 - `POST /api/central/rcx/preview`, `/charts/preview`, `/report`
 
 ## Edge REST (read-only, shared with Data Model tab)
@@ -38,9 +41,19 @@ Faults: `/api/faults/status`, `/api/faults/catalog`
 
 ## Dash UI tabs
 
-**Dashboard** (unified) · **Edge Connections**
+**Dashboard** · **Report Builder** · **Edge Connections**
 
-Dashboard sections: fault mix + legend, building summary, P8 KPI (+ chart if overrides), FDD rules table, **FDD/BRICK preset buttons** (Edge parity), RCx report builder.
+Dashboard: fault mix + legend, building summary, P8 KPI, FDD rules (lazy load), FDD/BRICK preset buttons.  
+Report Builder: 3-step wizard — building/time → charts & sections → custom points → preview DOCX.  
+Edge data fetched on demand (not with dashboard load).
+
+## Pre-Docker owner checklist (benserver :8050)
+
+1. Dashboard loads in under 5s without hanging on model tree.
+2. **Load full BRICK model** and **Load FDD rules** buttons work when clicked.
+3. Report Builder: load catalog → preview charts → generate DOCX for Acme.
+4. Fault overlays visible on trend previews when enabled.
+5. Sign off here before `docker/rcx-central` image rebuild or `RCX_ALLOW_PUBLISH=1`.
 
 ## BRICK model notes (agents)
 
@@ -65,6 +78,8 @@ Dashboard sections: fault mix + legend, building summary, P8 KPI (+ chart if ove
 
 ## Remaining gaps
 
-- GHCR publish for `openfdd-rcx-central` image
+- **Owner Dash sign-off** on benserver before Docker GHCR publish
+- GHCR publish for `openfdd-rcx-central` image (gated: `RCX_ALLOW_PUBLISH=1`)
+- Optional OpenAI insights hook (templates used today)
+- True Edge `start`/`end` bounded timeseries (hours lookback used for now)
 - Summarize HVAC SPARQL buttons on Dash (FDD presets done; raw SPARQL optional)
-- Deeper equipment-tree scope in RCx builder UI
