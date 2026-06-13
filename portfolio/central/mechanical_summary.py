@@ -18,7 +18,11 @@ def build_mechanical_summary(site_id: str, *, hours: int = 24) -> dict[str, Any]
     model_health = client.get_model_health(token=token)
     faults = client.get_faults_status(token=token)
     analytics = client.get_analytics_overview(token=token)
-    bacnet = client.get_bacnet_poll_status(token=token)
+    bacnet = client.try_api_get("/api/bacnet/poll/status", token=token) or {}
+    if not analytics:
+        warnings.append(
+            "Edge /api/analytics/overview not available — upgrade Edge image or using fault status only."
+        )
 
     equipment = tree.get("equipment") if isinstance(tree.get("equipment"), list) else []
     by_type: dict[str, int] = {}

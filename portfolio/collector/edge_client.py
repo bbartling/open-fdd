@@ -98,6 +98,15 @@ class EdgeClient:
     def api_get(self, path: str, *, token: str = "") -> dict[str, Any]:
         return api_get(self.base_url, token, path)
 
+    def try_api_get(self, path: str, *, token: str = "") -> dict[str, Any] | None:
+        """Read-only GET; returns None on HTTP 404 (older Edge builds without route)."""
+        try:
+            return self.api_get(path, token=token)
+        except RuntimeError as exc:
+            if "HTTP 404" in str(exc):
+                return None
+            raise
+
     def api_post(self, path: str, body: dict[str, Any], *, token: str = "") -> dict[str, Any]:
         return api_post(self.base_url, token, path, body)
 
@@ -123,10 +132,10 @@ class EdgeClient:
         return self.api_get("/api/faults/status", token=token)
 
     def get_analytics_overview(self, *, token: str = "") -> dict[str, Any]:
-        return self.api_get("/api/analytics/overview", token=token)
+        return self.try_api_get("/api/analytics/overview", token=token) or {}
 
     def get_analytics_faults(self, hours: int = 24, *, token: str = "") -> dict[str, Any]:
-        return self.api_get(f"/api/analytics/faults?hours={hours}", token=token)
+        return self.try_api_get(f"/api/analytics/faults?hours={hours}", token=token) or {}
 
     def get_bacnet_poll_status(self, *, token: str = "") -> dict[str, Any]:
         return self.api_get("/api/bacnet/poll/status", token=token)
@@ -136,6 +145,12 @@ class EdgeClient:
 
     def get_fdd_query_presets(self, *, token: str = "") -> dict[str, Any]:
         return self.api_get("/api/model/fdd-query-presets", token=token)
+
+    def get_fdd_query_preset(self, preset_id: str, *, token: str = "") -> dict[str, Any]:
+        import urllib.parse
+
+        pid = urllib.parse.quote(preset_id, safe="")
+        return self.api_get(f"/api/model/fdd-query-presets/{pid}", token=token)
 
     def get_timeseries_series(self, site_id: str, *, token: str = "", source: str = "bacnet") -> dict[str, Any]:
         return self.api_get(f"/api/timeseries/series?site_id={site_id}&source={source}", token=token)

@@ -67,8 +67,10 @@ def test_central_edges_api(tmp_path, monkeypatch):
 
 
 def test_dash_title():
-    text = (Path(__file__).resolve().parents[2] / "portfolio" / "dash" / "app.py").read_text()
-    assert 'title="OpenFDD RCx Central"' in text
-    assert "OpenFDD RCx Central" in text
-    for tab in ("Edge Connections", "Mechanical Summary", "FDD Analytics", "RCx Report Builder"):
-        assert tab in text
+    root = Path(__file__).resolve().parents[2] / "portfolio" / "dash"
+    app_text = (root / "app.py").read_text()
+    assert 'title="OpenFDD RCx Central"' in app_text
+    assert "OpenFDD RCx Central" in app_text
+    for label in ("Dashboard", "Edge Connections"):
+        assert label in app_text
+    assert "overview-site" in (root / "overview_tab.py").read_text()

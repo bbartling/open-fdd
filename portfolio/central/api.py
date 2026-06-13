@@ -18,6 +18,7 @@ from portfolio.central.edge_registry import (
 )
 from portfolio.central.fdd_analytics import build_fdd_analytics
 from portfolio.central.mechanical_summary import build_mechanical_summary
+from portfolio.central.overview_data import build_overview
 from portfolio.central.paths import data_dir, reports_dir, sites_path
 from portfolio.central.registry import list_edge_sites, site_config_for, touch_site
 from portfolio.central.validation import (
@@ -146,10 +147,27 @@ def get_fdd_analytics(site_id: str, hours: int = 24) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+@app.get("/api/central/overview/{site_id}")
+def get_overview(site_id: str, live: bool = True) -> dict[str, Any]:
+    try:
+        return build_overview(site_id, include_live=live)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.get("/api/central/mechanical-summary/{site_id}")
 def get_mechanical_summary(site_id: str, hours: int = 24) -> dict[str, Any]:
     try:
-        return build_mechanical_summary(site_id, hours=hours)
+        from portfolio.central.mechanical_narrative import build_mechanical_narrative
+
+        summary = build_mechanical_summary(site_id, hours=hours)
+        try:
+            narrative = build_mechanical_narrative(site_id)
+            summary["mechanical_narrative"] = narrative.get("narrative")
+            summary["mechanical_counts"] = narrative.get("counts")
+        except RuntimeError as exc:
+            summary.setdefault("warnings", []).append(str(exc)[:200])
+        return summary
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
