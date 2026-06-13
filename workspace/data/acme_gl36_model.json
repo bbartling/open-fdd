@@ -82,7 +82,8 @@
     },
     {
       "id": "acme-vm-bbartling-rtu-01",
-      "name": "Rtu 01",
+      "name": "AHU 01",
+      "equipment_type": "AHU",
       "brick_type": "AHU",
       "site_id": "acme",
       "building_id": "vm-bbartling",
