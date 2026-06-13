@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearToken, fetchAuthMe, fetchAuthStatus, hasToken } from "../lib/api";
 import { useTheme } from "../contexts/theme-context";
+import { useDashboardStream } from "../lib/dashboardStream";
 import OpenFddVersion from "./OpenFddVersion";
 import StackStatusStrip from "./StackStatusStrip";
 
@@ -27,6 +28,11 @@ const NAV = [
 export default function AppLayout() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+  const { snapshot } = useDashboardStream();
+  const agentNavDisabled = useMemo(() => {
+    const ollama = snapshot?.stack?.services?.find((s) => s.id === "ollama");
+    return ollama?.status === "gray" && (ollama.optional !== false || !ollama.configured);
+  }, [snapshot]);
   const [authRequired, setAuthRequired] = useState<boolean | null>(null);
   const [tokenPresent, setTokenPresent] = useState(hasToken());
   const [sessionRole, setSessionRole] = useState<string | null>(null);
@@ -85,22 +91,37 @@ export default function AppLayout() {
         <StackStatusStrip />
         <OpenFddVersion />
         <nav className="sidebar-nav">
-          {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
-            >
-              <span className="nav-icon">{item.icon}</span>
-              {item.label}
-              {item.protected && authRequired && !signedIn ? (
-                <span className="nav-lock" title="Sign in required">
-                  🔒
+          {NAV.map((item) => {
+            const disabled = item.to === "/agent" && agentNavDisabled;
+            if (disabled) {
+              return (
+                <span
+                  key={item.to}
+                  className="nav-item nav-item-disabled"
+                  title="Optional on CPU-only hosts — enable GPU Ollama or set OFDD_AGENT_CHAT_WITHOUT_GPU=1"
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  {item.label}
                 </span>
-              ) : null}
-            </NavLink>
-          ))}
+              );
+            }
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                {item.label}
+                {item.protected && authRequired && !signedIn ? (
+                  <span className="nav-lock" title="Sign in required">
+                    🔒
+                  </span>
+                ) : null}
+              </NavLink>
+            );
+          })}
         </nav>
         {authRequired === null ? null : authRequired && !signedIn ? (
           <button type="button" className="secondary-btn sign-out-btn" onClick={() => navigate("/login")}>

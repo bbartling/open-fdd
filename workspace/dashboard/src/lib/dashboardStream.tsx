@@ -9,6 +9,7 @@ export type StackService = {
   label: string;
   status: ServiceStatus;
   configured: boolean;
+  optional?: boolean;
   detail: string | Record<string, unknown>;
   url?: string;
 };

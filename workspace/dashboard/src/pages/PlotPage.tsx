@@ -79,7 +79,7 @@ export default function PlotPage() {
     () => localStorage.getItem("ofdd_plot_show_rolling_avg") !== "0",
   );
   const [showBounds, setShowBounds] = useState(true);
-  const [includeFaults, setIncludeFaults] = useState(() => urlState.autoFddOverlay === true);
+  const [includeFaults, setIncludeFaults] = useState(() => urlState.autoFddOverlay !== false);
   const [savedRules, setSavedRules] = useState<SavedRule[]>([]);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -209,7 +209,7 @@ export default function PlotPage() {
         rolling_avg_minutes: String(normalizeRollingMinutes(rollingAvgMinutes)),
         show_rolling_avg: String(showRollingAvg),
       });
-      if (includeFaults && scopedRuleIds.length) {
+      if (includeFaults) {
         qs.set("fault_rules", scopedRuleIds.join(","));
       }
       const res = await apiFetch<PlotReadingsResponse>(`/api/timeseries/readings?${qs}`, {
@@ -340,6 +340,9 @@ export default function PlotPage() {
       hours: String(hours),
       include_faults: String(includeFaults),
     });
+    if (includeFaults) {
+      qs.set("fault_rules", scopedRuleIds.join(","));
+    }
     const base = getBridgeBase();
     const token = sessionStorage.getItem("ofdd_token");
     const res = await fetch(`${base}/api/timeseries/export.csv?${qs}`, {
@@ -362,17 +365,7 @@ export default function PlotPage() {
 
   return (
     <div className="page page-wide">
-      <PageHeader
-        title="Trend plot"
-        subtitle={
-          <>
-            Feather telemetry with optional FDD overlays on a right-hand 0/1 axis (desktop-ui parity). Pick a device,
-            select points, enable FDD overlays or use <code>?fdd=1</code> in the URL. Right-click a series chip to pin
-            an FDD rule. Enable debug:{" "}
-            <code>localStorage.ofdd_debug_plot=1</code>
-          </>
-        }
-      />
+      <PageHeader title="Trend plot" />
       <TabDebugPanel tab="plot" />
 
       <div className="panel">

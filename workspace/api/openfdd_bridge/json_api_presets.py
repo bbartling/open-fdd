@@ -111,9 +111,9 @@ REST_PRESETS: list[dict[str, Any]] = [
     },
     {
         "id": "openweather-bundle",
-        "name": "OpenWeatherMap — OAT + RH + description",
+        "name": "OpenWeatherMap — OAT + RH",
         "category": "weather",
-        "description": "Multi-sensor from one URL — requires OPENWEATHER_API_KEY in json_api.env.local.",
+        "description": "Dry-bulb and humidity from one URL (30 min poll) — requires OPENWEATHER_API_KEY in json_api.env.local.",
         "resource": OPENWEATHER_URL,
         "method": "GET",
         "requires_env": ["OPENWEATHER_API_KEY"],

@@ -211,6 +211,28 @@ def _chat_timeout_s() -> float:
 def _ollama_payload() -> dict[str, Any]:
     """Ollama status for Host Stats — API reachability matches the Agent chat tab."""
     from . import ollama_client
+    from .stack_health import _ollama_optional_cpu
+
+    if _ollama_optional_cpu():
+        tier = ollama_client.configured_ram_tier()
+        gpu = os.environ.get("OFDD_OLLAMA_GPU_MODE", "cpu")
+        model = str(os.environ.get("OFDD_OLLAMA_MODEL") or os.environ.get("OLLAMA_MODEL") or "").strip()
+        base = ollama_client.ollama_base_url()
+        return {
+            "optional": True,
+            "api_ok": False,
+            "base_url": base,
+            "active_base_url": None,
+            "tried_urls": [],
+            "interactive_chat_enabled": False,
+            "configured_model": model or None,
+            "configured_ram_tier": tier,
+            "gpu_mode": gpu,
+            "gpu_available": False,
+            "health_timeout_s": float(os.environ.get("OFDD_OLLAMA_HEALTH_TIMEOUT_S", "8") or 8),
+            "chat_timeout_s": _chat_timeout_s(),
+            "detail": "optional (CPU-only — insight uses rule-based summary)",
+        }
 
     health = ollama_client.health()
     proc = _ollama_process_summary()

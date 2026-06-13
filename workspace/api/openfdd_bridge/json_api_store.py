@@ -36,7 +36,6 @@ OPENWEATHER_URL = (
 OPENWEATHER_POINTS = (
     {"json_path": "main.temp", "label": "web-oat-t"},
     {"json_path": "main.humidity", "label": "web-rh"},
-    {"json_path": "weather.0.description", "label": "web-weather-desc"},
 )
 SAMPLES_HEADER = (
     "timestamp_utc,site_id,point_id,host,method,url,json_path,label,value,units\n"
@@ -327,7 +326,7 @@ def register_openweather_bundle(
     poll_interval_s: int = 1800,
     enabled: bool = True,
 ) -> dict[str, Any]:
-    """Register three OpenWeatherMap historian columns from one shared URL."""
+    """Register outdoor air temp and RH from one OpenWeatherMap URL (single HTTP poll)."""
     missing = missing_env_vars(["OPENWEATHER_API_KEY"])
     if missing:
         raise ValueError(
@@ -345,7 +344,14 @@ def register_openweather_bundle(
         poll_interval_s=poll_interval_s,
         enabled=enabled,
     )
+    # Drop legacy description sensor if present from older bundles.
+    rows = _load_endpoints()
+    kept = [r for r in rows if str(r.get("label") or "") != "web-weather-desc"]
+    if len(kept) != len(rows):
+        _save_endpoints(kept)
+        out["removed_legacy_sensors"] = ["web-weather-desc"]
     out["url_template"] = OPENWEATHER_URL
+    out["poll_resources"] = 1
     return out
 
 
@@ -440,6 +446,26 @@ def driver_tree() -> dict[str, Any]:
     for dev in device_list:
         dev["point_count"] = len(dev["points"])
         dev["poll_count"] = sum(1 for p in dev["points"] if p["enabled"])
+        poll_keys: set[tuple[str, ...]] = set()
+        for p in dev["points"]:
+            if not p["enabled"]:
+                continue
+            poll_keys.add(
+                _poll_group_key(
+                    {
+                        "url": p["url"],
+                        "method": p["method"],
+                        "headers_json": "",
+                        "body_json": "",
+                        "auth_type": p.get("auth_type") or "none",
+                        "bearer_token": "",
+                        "basic_user": "",
+                        "basic_password": "",
+                        "verify_tls": "1" if p.get("verify_tls") else "0",
+                    }
+                )
+            )
+        dev["poll_resource_count"] = len(poll_keys)
         dev["device_instance"] = dev["device_key"]
         dev["device_address"] = dev["host"]
     return {

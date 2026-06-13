@@ -48,13 +48,20 @@ def timeseries_readings(
     source: str = Query(default="bacnet"),
     limit: int = Query(default=4000, ge=100, le=8000),
     include_faults: bool = Query(default=True),
-    fault_rules: str = Query(default="", description="Comma-separated rule ids to plot"),
+    fault_rules: str | None = Query(
+        default=None,
+        description="Comma-separated rule ids to plot; empty string scopes to none (omit for all rules)",
+    ),
     rolling_avg_minutes: int = Query(default=5, ge=1, le=60),
     show_rolling_avg: bool = Query(default=True),
     _user: dict = Depends(require_user),
 ) -> dict:
     cols = [c.strip() for c in columns.split(",") if c.strip()]
-    rule_ids = [r.strip() for r in fault_rules.split(",") if r.strip()]
+    rule_ids = (
+        None
+        if fault_rules is None
+        else [r.strip() for r in fault_rules.split(",") if r.strip()]
+    )
     return {
         "ok": True,
         **read_plot_readings(
@@ -64,7 +71,7 @@ def timeseries_readings(
             hours=hours,
             limit=limit,
             include_faults=include_faults,
-            rule_ids=rule_ids or None,
+            rule_ids=rule_ids,
             rolling_avg_minutes=normalize_rolling_avg_minutes(rolling_avg_minutes),
             show_rolling_avg=show_rolling_avg,
         ),
@@ -79,12 +86,19 @@ def timeseries_export_csv(
     source: str = Query(default="bacnet"),
     limit: int = Query(default=8000, ge=100, le=8000),
     include_faults: bool = Query(default=True),
-    fault_rules: str = Query(default="", description="Comma-separated rule ids"),
+    fault_rules: str | None = Query(
+        default=None,
+        description="Comma-separated rule ids; empty string scopes to none",
+    ),
     _user: dict = Depends(require_user),
 ) -> Response:
     """Download wide time-series CSV (telemetry + FDD fault columns) for Excel."""
     cols = [c.strip() for c in columns.split(",") if c.strip()]
-    rule_ids = [r.strip() for r in fault_rules.split(",") if r.strip()]
+    rule_ids = (
+        None
+        if fault_rules is None
+        else [r.strip() for r in fault_rules.split(",") if r.strip()]
+    )
     data = read_plot_readings(
         site_id,
         cols,
@@ -93,7 +107,7 @@ def timeseries_export_csv(
         limit=limit,
         max_chart_points=limit,
         include_faults=include_faults,
-        rule_ids=rule_ids or None,
+        rule_ids=rule_ids,
         rolling_avg_minutes=0,
         show_rolling_avg=False,
     )

@@ -149,6 +149,16 @@ a {
   color: var(--nav-active-text);
 }
 
+.nav-item-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.host-ollama-optional {
+  opacity: 0.72;
+}
+
 .nav-icon {
   width: 18px;
   text-align: center;

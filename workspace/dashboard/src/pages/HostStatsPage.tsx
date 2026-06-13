@@ -50,6 +50,8 @@ type HostStats = {
   storage: StorageBlock;
   network: { available?: boolean; rx_bytes?: number; tx_bytes?: number };
   ollama: {
+    optional?: boolean;
+    detail?: string;
     api_ok?: boolean;
     base_url?: string;
     active_base_url?: string;
@@ -396,81 +398,110 @@ export default function HostStatsPage() {
             <div className="panel muted">Data disk metrics unavailable on this host.</div>
           )}
 
-          <div className="panel">
-            <h3 className="panel-title">Ollama (API health)</h3>
-            <div className="host-ollama-grid">
-              <div className="status-kv">
-                <span className="status-kv-label">API</span>
-                <span className={`status-kv-value ${stats.ollama.api_ok ? "ok" : "error"}`}>
-                  {stats.ollama.api_ok ? "reachable" : "unreachable"}
-                </span>
-              </div>
-              {stats.ollama.active_base_url || stats.ollama.base_url ? (
-                <div className="status-kv">
-                  <span className="status-kv-label">URL</span>
-                  <span className="status-kv-value mono">
-                    {stats.ollama.active_base_url || stats.ollama.base_url}
-                  </span>
+          <div className={`panel${stats.ollama.optional ? " host-ollama-optional" : ""}`}>
+            <h3 className="panel-title">Ollama</h3>
+            {stats.ollama.optional ? (
+              <>
+                <p className="muted">
+                  {stats.ollama.detail || "Optional on CPU-only hosts — building insight uses rule-based summaries."}
+                </p>
+                {stats.ollama.configured_ram_tier || stats.ollama.configured_model ? (
+                  <div className="host-ollama-grid">
+                    {stats.ollama.configured_model ? (
+                      <div className="status-kv">
+                        <span className="status-kv-label">Model</span>
+                        <span className="status-kv-value">{stats.ollama.configured_model}</span>
+                      </div>
+                    ) : null}
+                    {stats.ollama.configured_ram_tier ? (
+                      <div className="status-kv">
+                        <span className="status-kv-label">Runtime</span>
+                        <span className="status-kv-value">
+                          {stats.ollama.configured_ram_tier}
+                          {stats.ollama.gpu_mode ? `, ${stats.ollama.gpu_mode}` : ""}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <div className="host-ollama-grid">
+                  <div className="status-kv">
+                    <span className="status-kv-label">API</span>
+                    <span className={`status-kv-value ${stats.ollama.api_ok ? "ok" : "error"}`}>
+                      {stats.ollama.api_ok ? "reachable" : "unreachable"}
+                    </span>
+                  </div>
+                  {stats.ollama.active_base_url || stats.ollama.base_url ? (
+                    <div className="status-kv">
+                      <span className="status-kv-label">URL</span>
+                      <span className="status-kv-value mono">
+                        {stats.ollama.active_base_url || stats.ollama.base_url}
+                      </span>
+                    </div>
+                  ) : null}
+                  {stats.ollama.configured_model ? (
+                    <div className="status-kv">
+                      <span className="status-kv-label">Model</span>
+                      <span className="status-kv-value">{stats.ollama.configured_model}</span>
+                    </div>
+                  ) : null}
+                  {stats.ollama.configured_ram_tier ? (
+                    <div className="status-kv">
+                      <span className="status-kv-label">Runtime</span>
+                      <span className="status-kv-value">
+                        {stats.ollama.configured_ram_tier}
+                        {stats.ollama.gpu_mode ? `, ${stats.ollama.gpu_mode}` : ""}
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="status-kv">
+                    <span className="status-kv-label">GPU</span>
+                    <span className={`status-kv-value ${stats.ollama.gpu_available ? "ok" : ""}`}>
+                      {stats.ollama.gpu_available ? "available" : "not detected"}
+                    </span>
+                  </div>
+                  <div className="status-kv">
+                    <span className="status-kv-label">Agent chat</span>
+                    <span className={`status-kv-value ${stats.ollama.interactive_chat_enabled ? "ok" : ""}`}>
+                      {stats.ollama.interactive_chat_enabled ? "enabled" : "disabled"}
+                    </span>
+                  </div>
+                  {stats.ollama.health_timeout_s != null ? (
+                    <div className="status-kv">
+                      <span className="status-kv-label">Health probe</span>
+                      <span className="status-kv-value">{formatDurationMs(stats.ollama.health_timeout_s * 1000)}</span>
+                    </div>
+                  ) : null}
+                  {stats.ollama.chat_timeout_s != null ? (
+                    <div className="status-kv">
+                      <span className="status-kv-label">Agent chat timeout</span>
+                      <span className="status-kv-value">{formatDurationMs(stats.ollama.chat_timeout_s * 1000)}</span>
+                    </div>
+                  ) : null}
+                  {stats.ollama.process?.rss_bytes || stats.ollama.rss_bytes ? (
+                    <div className="status-kv">
+                      <span className="status-kv-label">Host process RAM</span>
+                      <span className="status-kv-value">
+                        {fmtBytes(stats.ollama.process?.rss_bytes ?? stats.ollama.rss_bytes)}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-              {stats.ollama.configured_model ? (
-                <div className="status-kv">
-                  <span className="status-kv-label">Model</span>
-                  <span className="status-kv-value">{stats.ollama.configured_model}</span>
-                </div>
-              ) : null}
-              {stats.ollama.configured_ram_tier ? (
-                <div className="status-kv">
-                  <span className="status-kv-label">Runtime</span>
-                  <span className="status-kv-value">
-                    {stats.ollama.configured_ram_tier}
-                    {stats.ollama.gpu_mode ? `, ${stats.ollama.gpu_mode}` : ""}
-                  </span>
-                </div>
-              ) : null}
-              <div className="status-kv">
-                <span className="status-kv-label">GPU</span>
-                <span className={`status-kv-value ${stats.ollama.gpu_available ? "ok" : ""}`}>
-                  {stats.ollama.gpu_available ? "available" : "not detected"}
-                </span>
-              </div>
-              <div className="status-kv">
-                <span className="status-kv-label">Agent chat</span>
-                <span className={`status-kv-value ${stats.ollama.interactive_chat_enabled ? "ok" : ""}`}>
-                  {stats.ollama.interactive_chat_enabled ? "enabled" : "disabled (CPU-only)"}
-                </span>
-              </div>
-              {stats.ollama.health_timeout_s != null ? (
-                <div className="status-kv">
-                  <span className="status-kv-label">Health probe</span>
-                  <span className="status-kv-value">{formatDurationMs(stats.ollama.health_timeout_s * 1000)}</span>
-                </div>
-              ) : null}
-              {stats.ollama.chat_timeout_s != null ? (
-                <div className="status-kv">
-                  <span className="status-kv-label">Agent chat timeout</span>
-                  <span className="status-kv-value">{formatDurationMs(stats.ollama.chat_timeout_s * 1000)}</span>
-                </div>
-              ) : null}
-              {stats.ollama.process?.rss_bytes || stats.ollama.rss_bytes ? (
-                <div className="status-kv">
-                  <span className="status-kv-label">Host process RAM</span>
-                  <span className="status-kv-value">
-                    {fmtBytes(stats.ollama.process?.rss_bytes ?? stats.ollama.rss_bytes)}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-            {stats.ollama.error && !stats.ollama.api_ok ? (
-              <p className="muted host-storage-note">{stats.ollama.error}</p>
-            ) : null}
-            {!stats.ollama.api_ok && stats.ollama.tried_urls?.length ? (
-              <p className="muted host-storage-note">
-                Probed: {stats.ollama.tried_urls.join(", ")} — use{" "}
-                <code>docker compose --profile ai up -d</code> or set <code>OFDD_OLLAMA_BASE_URL</code> in{" "}
-                <code>workspace/ollama.env.local</code>.
-              </p>
-            ) : null}
+                {stats.ollama.error && !stats.ollama.api_ok ? (
+                  <p className="muted host-storage-note">{stats.ollama.error}</p>
+                ) : null}
+                {!stats.ollama.api_ok && stats.ollama.tried_urls?.length ? (
+                  <p className="muted host-storage-note">
+                    Probed: {stats.ollama.tried_urls.join(", ")} — use{" "}
+                    <code>docker compose --profile ai up -d</code> or set <code>OFDD_OLLAMA_BASE_URL</code> in{" "}
+                    <code>workspace/ollama.env.local</code>.
+                  </p>
+                ) : null}
+              </>
+            )}
           </div>
 
           {stats.container_revisions?.services?.length ? (
@@ -509,8 +540,8 @@ export default function HostStatsPage() {
           <div className="panel danger-zone">
             <h3 className="panel-title">Danger Zone</h3>
             <p className="muted">
-              <strong>Nuclear Easy Pooge and Reset</strong> — for temporary job-site devices. Integrator only.
-              Type <code>POOGE THIS EDGE</code> to run for real. Dry-run is on by default.
+              <strong>Factory reset</strong> — wipe historian, BACnet scratch, and exports for a clean job-site
+              redeploy. Integrator only. Type <code>RESET THIS EDGE</code> to run for real. Dry-run is on by default.
             </p>
             <label>
               <input type="checkbox" checked={poogeDryRun} onChange={(e) => setPoogeDryRun(e.target.checked)} />
@@ -527,14 +558,14 @@ export default function HostStatsPage() {
             </div>
             <div className="field">
               <label className="field-label">Confirmation phrase</label>
-              <input value={poogeConfirm} onChange={(e) => setPoogeConfirm(e.target.value)} placeholder="POOGE THIS EDGE" />
+              <input value={poogeConfirm} onChange={(e) => setPoogeConfirm(e.target.value)} placeholder="RESET THIS EDGE" />
             </div>
             <div className="toolbar">
               <button type="button" className="secondary-btn" disabled={poogeBusy} onClick={() => void previewPooge()}>
                 Preview actions
               </button>
               <button type="button" className="danger-btn" disabled={poogeBusy || poogeDryRun} onClick={() => void runPooge()}>
-                Easy Pooge / Reset Device
+                Run factory reset
               </button>
             </div>
             {poogePreview?.targets?.length ? (

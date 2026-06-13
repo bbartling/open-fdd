@@ -126,6 +126,25 @@ def _apply_arrow_thread_env() -> None:
             pass
 
 
+def _concat_arrow_tables(tables: list[Any]) -> Any:
+    """Merge feather shards; tolerate mixed int/float column types across shards."""
+    import pyarrow as pa
+
+    if len(tables) == 1:
+        return tables[0]
+    try:
+        return pa.concat_tables(tables, promote_options="default")
+    except (pa.ArrowTypeError, pa.ArrowInvalid) as exc:
+        _log.warning("concat_tables default failed (%s); retrying permissive", exc)
+    try:
+        return pa.concat_tables(tables, promote_options="permissive")
+    except Exception as exc:
+        _log.warning("concat_tables permissive failed (%s); falling back to pandas", exc)
+    frames = [t.to_pandas() for t in tables]
+    merged = pd.concat(frames, ignore_index=True)
+    return pa.Table.from_pandas(merged, preserve_index=False)
+
+
 def read_site_arrow(
     store: FeatherStore,
     site_id: str,
@@ -276,7 +295,7 @@ class FeatherStore:
                 return None
             if len(tables) == 1:
                 return tables[0]
-            return pa.concat_tables(tables, promote_options="default")
+            return _concat_arrow_tables(tables)
 
         frames: list[pd.DataFrame] = []
         for path in files:

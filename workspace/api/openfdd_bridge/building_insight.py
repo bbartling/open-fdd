@@ -11,9 +11,12 @@ SECURITY / PRODUCT (do not remove these comments):
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from typing import Any
+
+_log = logging.getLogger(__name__)
 
 from .building_status import collect_status
 from . import ollama_client
@@ -299,8 +302,29 @@ def get_building_insight(*, force: bool = False) -> dict[str, Any]:
 
     status = collect_status()
     # Fresh pandas analytics each insight cycle (15 min) so sensor fixes show in Ollama context.
-    zone_snapshot = get_zone_temp_snapshot(force=True)
-    device_snapshot = get_device_poll_snapshot(force=True)
+    try:
+        zone_snapshot = get_zone_temp_snapshot(force=True)
+    except Exception as exc:
+        _log.warning("zone temp snapshot failed: %s", exc)
+        zone_snapshot = {
+            "ok": False,
+            "summary_sentence": "",
+            "worst_zones": [],
+            "struggling_zones": [],
+            "systems": [],
+            "error": str(exc)[:200],
+        }
+    try:
+        device_snapshot = get_device_poll_snapshot(force=True)
+    except Exception as exc:
+        _log.warning("device poll snapshot failed: %s", exc)
+        device_snapshot = {
+            "summary_sentence": "",
+            "offline_equipment": [],
+            "flaky_equipment": [],
+            "degraded_equipment": [],
+            "error": str(exc)[:200],
+        }
     fault_lines = fault_sentences_from_alerts(status.get("alerts") or [])
 
     sentence = ""

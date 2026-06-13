@@ -200,6 +200,28 @@ def test_feather_max_gib_from_env(monkeypatch: pytest.MonkeyPatch):
     assert feather_max_gib_from_env() == 0.0
 
 
+def test_read_site_merges_mixed_numeric_shard_types(store: FeatherStore):
+    """Regression: BACnet ingest may write int64 in one shard and float64 in another."""
+    t1 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2025-01-01", periods=3, freq="1h", tz="UTC"),
+            "web-oat-t": [1.0, 2.0, 3.0],
+        }
+    )
+    t2 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2025-01-01 03:00", periods=3, freq="1h", tz="UTC"),
+            "web-oat-t": [4, 5, 6],
+        }
+    )
+    store.write_shard(t1, source="bacnet", site_id="s1")
+    store.write_shard(t2, source="bacnet", site_id="s1")
+    df = store.read_site("s1", source="bacnet")
+    assert df is not None
+    assert len(df) == 6
+    assert "web-oat-t" in df.columns
+
+
 def test_read_site_column_prune(store: FeatherStore):
     wide = _large_frame("2025-01-01", 20, width=30)
     store.write_shard(wide, source="bacnet", site_id="s1")

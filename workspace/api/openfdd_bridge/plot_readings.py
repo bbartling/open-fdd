@@ -367,7 +367,11 @@ def read_plot_readings(
     fault_totals: dict[str, int] = {}
     chart_guides: dict[str, float | None] = {}
     if include_faults:
-        rid_set = {str(x) for x in rule_ids if str(x).strip()} if rule_ids else None
+        rid_set = (
+            {str(x) for x in rule_ids if str(x).strip()}
+            if rule_ids is not None
+            else None
+        )
         t_fault = time.perf_counter()
         fault_plots, fault_panels, fault_totals = evaluate_fault_plots(
             df,

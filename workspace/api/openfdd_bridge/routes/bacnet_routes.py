@@ -613,7 +613,7 @@ class BacnetBindBody(BaseModel):
     restart: bool = True
 
 
-@router.get("/api/bacnet/interfaces", dependencies=[_INTEGRATOR])
+@router.get("/api/bacnet/interfaces", dependencies=[_READ])
 def bacnet_interfaces() -> dict:
     from ..bacnet_bind_config import interfaces_payload
 

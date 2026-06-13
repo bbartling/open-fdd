@@ -1,4 +1,4 @@
-"""Guarded Easy Pooge / edge reset — allowlisted path cleanup for job-site redeploys."""
+"""Guarded factory reset / edge wipe — allowlisted path cleanup for job-site redeploys."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from typing import Any
 
 from .paths import data_dir, workspace_dir
 
-POOGE_CONFIRMATION = "POOGE THIS EDGE"
+POOGE_CONFIRMATION = "RESET THIS EDGE"
 
 
 @dataclass

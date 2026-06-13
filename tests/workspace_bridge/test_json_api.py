@@ -243,14 +243,15 @@ def test_openweather_preset_mocked(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["count"] == 3
+    assert body["count"] == 2
     assert "bench-key" in fake.last_url
     tree = client.get(
         "/api/json-api/driver/tree",
         headers={"Authorization": f"Bearer {token}"},
     )
     labels = {p["label"] for d in tree.json()["devices"] for p in d["points"]}
-    assert {"web-oat-t", "web-rh", "web-weather-desc"} <= labels
+    assert {"web-oat-t", "web-rh"} <= labels
+    assert "web-weather-desc" not in labels
 
 
 def test_json_api_presets_catalog(authed_client: TestClient):

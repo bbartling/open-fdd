@@ -26,6 +26,7 @@ export type JsonApiDevice = {
   device_address?: string;
   point_count: number;
   poll_count: number;
+  poll_resource_count?: number;
   points: JsonApiPoint[];
 };
 
@@ -213,9 +214,13 @@ export default function JsonApiPointsTree({
               <span className="bacnet-tree-device-title">
                 <strong>{dev.host}</strong>
               </span>
-              <span className="badge">{dev.point_count} endpoints</span>
+              <span className="badge">
+                {dev.point_count} sensor{dev.point_count === 1 ? "" : "s"}
+              </span>
               {dev.poll_count > 0 ? (
-                <span className="badge poll-badge">{dev.poll_count} polling</span>
+                <span className="badge poll-badge">
+                  {dev.poll_resource_count ?? 1} HTTP poll{(dev.poll_resource_count ?? 1) === 1 ? "" : "s"}
+                </span>
               ) : null}
             </button>
             {devOpen ? (

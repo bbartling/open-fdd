@@ -34,8 +34,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$DRY_RUN" == 0 && "$CONFIRM" != "POOGE THIS EDGE" ]]; then
-  echo "ERROR: --confirm must be exactly: POOGE THIS EDGE" >&2
+if [[ "$DRY_RUN" == 0 && "$CONFIRM" != "RESET THIS EDGE" ]]; then
+  echo "ERROR: --confirm must be exactly: RESET THIS EDGE" >&2
   exit 1
 fi
 
