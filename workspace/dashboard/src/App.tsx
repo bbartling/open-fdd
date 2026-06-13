@@ -9,6 +9,7 @@ import EquipmentAnalyticsPage from "./pages/EquipmentAnalyticsPage";
 import FaultAnalyticsPage from "./pages/FaultAnalyticsPage";
 import JsonApiPage from "./pages/JsonApiPage";
 import ModbusPage from "./pages/ModbusPage";
+import NiagaraPage from "./pages/NiagaraPage";
 import DataModelPage from "./pages/DataModelPage";
 import FaultsPage from "./pages/FaultsPage";
 import HomePage from "./pages/HomePage";
@@ -44,6 +45,7 @@ export default function App() {
             <Route path="plot" element={<TabErrorBoundary tab="plot"><PlotPage /></TabErrorBoundary>} />
             <Route path="bacnet" element={<TabErrorBoundary tab="bacnet"><BacnetPage /></TabErrorBoundary>} />
             <Route path="modbus" element={<TabErrorBoundary tab="modbus"><ModbusPage /></TabErrorBoundary>} />
+            <Route path="niagara" element={<TabErrorBoundary tab="niagara"><NiagaraPage /></TabErrorBoundary>} />
             <Route path="json-api" element={<TabErrorBoundary tab="json-api"><JsonApiPage /></TabErrorBoundary>} />
             <Route path="agent" element={<TabErrorBoundary tab="agent"><AgentPage /></TabErrorBoundary>} />
             <Route path="host" element={<TabErrorBoundary tab="host"><HostStatsPage /></TabErrorBoundary>} />

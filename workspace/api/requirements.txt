@@ -5,6 +5,9 @@ pyarrow>=17.0.0
 # Bridge analytics/plots/ingest (not Rule Lab — FDD rules are Arrow-only).
 pandas>=2.0.0
 httpx>=0.27.0
+aiohttp>=3.10.0
+msgpack>=1.0.8
+PyYAML>=6.0.0
 pyModbusTCP>=0.2.1
 rdflib>=7.0.0
 pyparsing>=3.0.0,<3.2.0
