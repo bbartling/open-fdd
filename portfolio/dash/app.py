@@ -30,12 +30,18 @@ def _edges_shell() -> html.Div:
     return edge_connections_layout(THEME)
 
 
+def _report_shell() -> html.Div:
+    from portfolio.dash.rcx_report_tab import report_layout
+
+    return html.Div(id="report-root", children=[report_layout(THEME)])
+
+
 app.layout = html.Div(
     id="app-root",
     style=ROOT_STYLE,
     children=[
         dcc.Store(id="edge-registry-revision", data=0),
-        dcc.Interval(id="refresh-interval", interval=120_000, n_intervals=0),
+        dcc.Interval(id="refresh-interval", interval=300_000, n_intervals=0),
         html.Header(
             style={"marginBottom": "20px", "borderBottom": f"1px solid {THEME['grid']}", "paddingBottom": "16px"},
             children=[
@@ -48,6 +54,7 @@ app.layout = html.Div(
             value="dashboard",
             children=[
                 dcc.Tab(label="Dashboard", value="dashboard", children=[_overview_shell()]),
+                dcc.Tab(label="Report Builder", value="report", children=[_report_shell()]),
                 dcc.Tab(label="Edge Connections", value="edges", children=[_edges_shell()]),
             ],
         ),
@@ -87,8 +94,10 @@ def run_collect(n_clicks: int):
 def main() -> None:
     from portfolio.dash.overview_tab import register_overview_callbacks
     from portfolio.dash.rcx_callbacks import register_edge_callbacks
+    from portfolio.dash.rcx_report_tab import register_report_callbacks
 
     register_overview_callbacks(app, THEME)
+    register_report_callbacks(app, THEME)
     register_edge_callbacks(app)
     host = os.environ.get("OPENFDD_RCX_DASH_HOST", "0.0.0.0")
     port = int(os.environ.get("OPENFDD_RCX_DASH_PORT", "8050"))

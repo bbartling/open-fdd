@@ -10,6 +10,8 @@ from typing import Any
 from portfolio.central.chart_specs import CHART_SPECS, SECTION_SPECS, chart_readiness
 from portfolio.central.edge_registry import resolve_site_config, resolve_token
 from portfolio.central.mechanical_summary import build_mechanical_summary
+from portfolio.central.rcx_narrative import build_chart_narrative
+from portfolio.central.rcx_stats import summarize_readings
 from portfolio.central.trend_charts import (
     columns_for_roles,
     overlays_from_readings,
@@ -32,19 +34,33 @@ SEVERITY_COLORS = {
 }
 
 
-def _window(hours: int) -> tuple[str, str]:
-    end = datetime.now(timezone.utc)
-    start = end - timedelta(hours=hours)
-    return start.isoformat(), end.isoformat()
+def _window(
+    hours: int,
+    *,
+    start: str | None = None,
+    end: str | None = None,
+) -> tuple[str, str, int]:
+    if start and end:
+        try:
+            s = datetime.fromisoformat(str(start).replace("Z", "+00:00"))
+            e = datetime.fromisoformat(str(end).replace("Z", "+00:00"))
+            if e > s:
+                span_h = max(2, min(168, int((e - s).total_seconds() // 3600) or hours))
+                return s.isoformat(), e.isoformat(), span_h
+        except ValueError:
+            pass
+    end_dt = datetime.now(timezone.utc)
+    start_dt = end_dt - timedelta(hours=hours)
+    return start_dt.isoformat(), end_dt.isoformat(), hours
 
 
-def _png_base64(title: str, render_fn) -> str:
+def _png_base64(title: str, render_fn, *, figsize: tuple[float, float] = (6.5, 3.2)) -> str:
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(figsize=(6.5, 3.2))
+    fig, ax = plt.subplots(figsize=figsize)
     render_fn(ax)
     ax.set_title(title, fontsize=11)
     fig.tight_layout()
@@ -57,23 +73,46 @@ def _png_base64(title: str, render_fn) -> str:
 def _fault_overlays(ax, overlays: list[dict[str, Any]]) -> None:
     for ov in overlays:
         color = SEVERITY_COLORS.get(str(ov.get("severity") or "warning").lower(), SEVERITY_COLORS["warning"])
-        ax.axvspan(float(ov.get("x0", 0)), float(ov.get("x1", 1)), color=color, label=ov.get("label"))
+        ax.axvspan(ov.get("x0"), ov.get("x1"), color=color, label=ov.get("label"))
+
+
+def _enrich_preview(
+    preview: dict[str, Any],
+    readings: dict[str, Any],
+    *,
+    fault_summary: dict[str, Any],
+) -> dict[str, Any]:
+    stats = summarize_readings(
+        readings,
+        chart_id=str(preview.get("chart_id") or ""),
+        title=str(preview.get("title") or ""),
+    )
+    narrative = build_chart_narrative(
+        chart_id=str(preview.get("chart_id") or ""),
+        title=str(preview.get("title") or ""),
+        stats=stats,
+        fault_summary=fault_summary,
+    )
+    return {**preview, "stats": stats, "stats_bullets": stats.get("stats_bullets") or [], "narrative": narrative}
 
 
 def build_rcx_preview(
     *,
     site_id: str,
     hours: int = 24,
+    start: str | None = None,
+    end: str | None = None,
     chart_ids: list[str] | None = None,
+    custom_columns: list[str] | None = None,
     show_fault_overlays: bool = True,
 ) -> dict[str, Any]:
-    start, end = _window(hours)
-    mech = build_mechanical_summary(site_id, hours=hours)
+    win_start, win_end, eff_hours = _window(hours, start=start, end=end)
+    mech = build_mechanical_summary(site_id, hours=eff_hours)
     site = resolve_site_config(site_id)
     client = EdgeClient(site.base_url)
     token = resolve_token(site)
     analytics = client.get_analytics_overview(token=token)
-    faults_data = client.get_analytics_faults(hours=hours, token=token)
+    faults_data = client.get_analytics_faults(hours=eff_hours, token=token)
 
     roles_present: set[str] = set()
     tree = client.get_model_tree(token=token)
@@ -86,30 +125,36 @@ def build_rcx_preview(
     fault_rows = faults_data.get("faults") if isinstance(faults_data.get("faults"), list) else []
     has_faults = bool(fault_rows)
     trend_cache: dict[str, dict[str, Any]] = {}
+    fault_summary = {
+        "active_faults": len(fault_rows),
+        "total_fault_hours": (analytics.get("kpis") or {}).get("total_fault_hours"),
+    }
 
-    def _readings_for_chart(chart_id: str) -> dict[str, Any]:
-        if chart_id in trend_cache:
-            return trend_cache[chart_id]
-        roles = TREND_CHARTS.get(chart_id)
-        if not roles:
-            trend_cache[chart_id] = {}
-            return {}
-        cols = columns_for_roles(tree, roles)
+    def _readings_for_columns(cols: list[str]) -> dict[str, Any]:
+        key = ",".join(cols)
+        if key in trend_cache:
+            return trend_cache[key]
         if not cols:
-            trend_cache[chart_id] = {}
+            trend_cache[key] = {}
             return {}
         try:
             data = client.get_timeseries_readings(
                 site_id,
                 cols,
-                hours=hours,
+                hours=eff_hours,
                 token=token,
                 include_faults=show_fault_overlays,
             )
         except RuntimeError:
             data = {}
-        trend_cache[chart_id] = data
+        trend_cache[key] = data
         return data
+
+    def _readings_for_chart(chart_id: str) -> dict[str, Any]:
+        roles = TREND_CHARTS.get(chart_id)
+        if not roles:
+            return {}
+        return _readings_for_columns(columns_for_roles(tree, roles))
 
     has_trends = any((_readings_for_chart(cid).get("row_count") or 0) > 0 for cid in TREND_CHARTS)
 
@@ -142,13 +187,18 @@ def build_rcx_preview(
             ax.bar(labels, values, color="#2563eb")
             ax.set_ylabel("Hours (est.)")
 
+        raw = {
+            "chart_id": "fault_hours_by_severity",
+            "title": "Fault hours by severity",
+            "image_base64": _png_base64("Fault hours by severity", render),
+            "warnings": [],
+        }
         previews.append(
-            {
-                "chart_id": "fault_hours_by_severity",
-                "title": "Fault hours by severity",
-                "image_base64": _png_base64("Fault hours by severity", render),
-                "warnings": [],
-            }
+            _enrich_preview(
+                raw,
+                {"timestamps": [], "series": {}, "row_count": len(fault_rows)},
+                fault_summary=fault_summary,
+            )
         )
 
     by_eq = analytics.get("fault_hours_by_equipment") or []
@@ -161,39 +211,85 @@ def build_rcx_preview(
             ax.tick_params(axis="x", rotation=45, labelsize=7)
             ax.set_ylabel("Hours (est.)")
 
+        raw = {
+            "chart_id": "fault_hours_by_equipment",
+            "title": "Fault hours by equipment",
+            "image_base64": _png_base64("Fault hours by equipment", render_eq),
+            "warnings": [],
+        }
         previews.append(
-            {
-                "chart_id": "fault_hours_by_equipment",
-                "title": "Fault hours by equipment",
-                "image_base64": _png_base64("Fault hours by equipment", render_eq),
-                "warnings": [],
-            }
+            _enrich_preview(
+                raw,
+                {"timestamps": [], "series": {}, "row_count": len(fault_rows)},
+                fault_summary=fault_summary,
+            )
         )
 
     for chart_id, roles in TREND_CHARTS.items():
         if chart_ids and chart_id not in chart_ids:
             continue
-        if chart_id not in [p["chart_id"] for p in previews] and chart_id in [s["chart_id"] for s in available]:
-            readings = _readings_for_chart(chart_id)
-            if (readings.get("row_count") or 0) <= 0:
-                continue
-            title = next((s["title"] for s in CHART_SPECS if s["chart_id"] == chart_id), chart_id)
-            overlays = overlays_from_readings(readings, show=show_fault_overlays)
+        if chart_id not in [s["chart_id"] for s in available]:
+            continue
+        readings = _readings_for_chart(chart_id)
+        if (readings.get("row_count") or 0) <= 0:
+            continue
+        title = next((s["title"] for s in CHART_SPECS if s["chart_id"] == chart_id), chart_id)
+        overlays = overlays_from_readings(readings, show=show_fault_overlays)
 
-            def _make_render(rd, ov, rl):
-                def render(ax):
-                    render_trend_ax(ax, rd, title_cols=rl, overlays=ov, overlay_fn=_fault_overlays)
+        def _make_render(rd, ov, rl):
+            def render(ax):
+                render_trend_ax(ax, rd, title_cols=rl, overlays=ov, overlay_fn=_fault_overlays)
 
-                return render
+            return render
 
-            previews.append(
-                {
-                    "chart_id": chart_id,
-                    "title": title,
-                    "image_base64": _png_base64(title, _make_render(readings, overlays, roles)),
-                    "warnings": [],
-                }
-            )
+        raw = {
+            "chart_id": chart_id,
+            "title": title,
+            "image_base64": _png_base64(title, _make_render(readings, overlays, roles)),
+            "warnings": [],
+        }
+        previews.append(_enrich_preview(raw, readings, fault_summary=fault_summary))
+
+    for col in custom_columns or []:
+        col = str(col).strip()
+        if not col:
+            continue
+        if chart_ids and f"custom_{col}" not in chart_ids and col not in chart_ids:
+            continue
+        readings = _readings_for_columns([col])
+        if (readings.get("row_count") or 0) <= 0:
+            continue
+        labels = readings.get("labels") if isinstance(readings.get("labels"), dict) else {}
+        title = str(labels.get(col) or col)
+        overlays = overlays_from_readings(readings, show=show_fault_overlays)
+        chart_key = f"custom_{col}"
+
+        def _make_custom(rd, ov, lbl):
+            def render(ax):
+                render_trend_ax(ax, rd, overlays=ov, overlay_fn=_fault_overlays)
+                ax.set_ylabel(lbl)
+
+            return render
+
+        raw = {
+            "chart_id": chart_key,
+            "title": title,
+            "image_base64": _png_base64(title, _make_custom(readings, overlays, title), figsize=(6.5, 3.5)),
+            "warnings": [],
+            "columns": [col],
+        }
+        previews.append(_enrich_preview(raw, readings, fault_summary=fault_summary))
+        available.append(
+            {
+                "chart_id": chart_key,
+                "title": f"Custom: {title}",
+                "equipment_type": "custom",
+                "required_roles": [],
+                "supports_fault_overlay": True,
+                "supports_preview": True,
+                "supports_docx": True,
+            }
+        )
 
     fault_overlays: list[dict[str, Any]] = []
     if show_fault_overlays:
@@ -204,15 +300,12 @@ def build_rcx_preview(
     return {
         "site_id": site_id,
         "site_name": site.name,
-        "window": {"start": start, "end": end, "hours": hours},
+        "window": {"start": win_start, "end": win_end, "hours": eff_hours},
         "mechanical_summary": mech,
         "available_charts": available,
         "disabled_charts": disabled,
         "sections": SECTION_SPECS,
-        "fault_summary": {
-            "active_faults": len(fault_rows),
-            "total_fault_hours": (analytics.get("kpis") or {}).get("total_fault_hours"),
-        },
+        "fault_summary": fault_summary,
         "fault_rows": fault_rows[:50],
         "fault_overlays": fault_overlays,
         "chart_previews": previews,
@@ -227,10 +320,22 @@ def generate_rcx_docx(
     *,
     site_id: str,
     hours: int = 24,
+    start: str | None = None,
+    end: str | None = None,
     sections: list[str] | None = None,
     charts: list[str] | None = None,
+    custom_columns: list[str] | None = None,
+    show_fault_overlays: bool = True,
 ) -> tuple[bytes, str]:
-    preview = build_rcx_preview(site_id=site_id, hours=hours, chart_ids=charts)
+    preview = build_rcx_preview(
+        site_id=site_id,
+        hours=hours,
+        start=start,
+        end=end,
+        chart_ids=charts,
+        custom_columns=custom_columns,
+        show_fault_overlays=show_fault_overlays,
+    )
     site = resolve_site_config(site_id)
     fault_rows = preview.get("fault_rows") or []
 
@@ -249,13 +354,14 @@ def generate_rcx_docx(
         fname = f"openfdd-rcx-{site_id}.docx"
         return blob, fname
 
+    mech = preview.get("mechanical_summary") or {}
     overview = {
         "active_faults": preview["fault_summary"]["active_faults"],
         "total_fault_hours": preview["fault_summary"]["total_fault_hours"],
         "missing_roles": preview.get("missing_roles"),
+        "mechanical_summary": mech,
+        "model_health": mech.get("model_health") if isinstance(mech.get("model_health"), dict) else {},
     }
-    if preview.get("mechanical_summary"):
-        overview["mechanical_summary"] = preview["mechanical_summary"]
 
     blob = build_rcx_docx(
         site_id=site_id,
@@ -266,8 +372,9 @@ def generate_rcx_docx(
         sections=sections,
         charts=charts,
         warnings=preview.get("warnings"),
+        chart_previews=preview.get("chart_previews") or [],
     )
-    start = (preview.get("window") or {}).get("start", "")[:10]
-    end = (preview.get("window") or {}).get("end", "")[:10]
-    fname = f"openfdd-rcx-{site_id}-{start}-{end}.docx"
+    start_s = (preview.get("window") or {}).get("start", "")[:10]
+    end_s = (preview.get("window") or {}).get("end", "")[:10]
+    fname = f"openfdd-rcx-{site_id}-{start_s}-{end_s}.docx"
     return blob, fname

@@ -65,9 +65,11 @@ CHART_SPECS: list[dict[str, Any]] = [
 SECTION_SPECS = [
     {"id": "executive_summary", "label": "Executive summary"},
     {"id": "mechanical_summary", "label": "Mechanical summary"},
+    {"id": "trend_charts", "label": "Trend charts (selected)"},
     {"id": "fault_analytics", "label": "Fault analytics"},
     {"id": "ahu_analytics", "label": "AHU analytics"},
     {"id": "vav_analytics", "label": "VAV zone analytics"},
+    {"id": "analyst_insights", "label": "Analyst insights (plain language)"},
     {"id": "runtime_analytics", "label": "Runtime analytics"},
     {"id": "model_health", "label": "BACnet / model health"},
     {"id": "recommendations", "label": "Recommendations"},

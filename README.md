@@ -58,15 +58,20 @@ pip install open-fdd
 
 ```python
 import pyarrow as pa
+import pyarrow.compute as pc
+
 from open_fdd.arrow_runtime import run_arrow_rule
 
-code = '''
-import pyarrow.compute as pc
-def apply_faults_arrow(table, cfg, context=None):
+
+def high_sat(table, cfg, context=None):
     return pc.greater(table["SAT"], float(cfg["high"]))
-'''
-result = run_arrow_rule(code, pa.table({"SAT": [70.0, 90.0]}), {"high": 85})
-print(result.true_count)
+
+
+table = pa.table({"SAT": [70.0, 90.0]})
+
+result = run_arrow_rule(high_sat, table, {"high": 85})
+
+print(result.true_count)  # 1
 ```
 
 | Need | Use |

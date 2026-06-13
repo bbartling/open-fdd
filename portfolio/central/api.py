@@ -18,6 +18,8 @@ from portfolio.central.edge_registry import (
 )
 from portfolio.central.fdd_analytics import build_fdd_analytics
 from portfolio.central.mechanical_summary import build_mechanical_summary
+from portfolio.central.model_tree import build_model_tree_summary
+from portfolio.central.overview_cache import cache_ttl_seconds, get_or_set
 from portfolio.central.overview_data import build_overview
 from portfolio.central.paths import data_dir, reports_dir, sites_path
 from portfolio.central.registry import list_edge_sites, site_config_for, touch_site
@@ -63,7 +65,10 @@ class EdgeTestBody(BaseModel):
 class RcxPreviewBody(BaseModel):
     site_id: str = Field(min_length=1)
     hours: int = Field(default=24, ge=2, le=168)
+    start: str | None = None
+    end: str | None = None
     chart_ids: list[str] = Field(default_factory=list)
+    custom_columns: list[str] = Field(default_factory=list)
     show_fault_overlays: bool = True
 
 
@@ -139,8 +144,14 @@ def get_sites() -> dict[str, Any]:
 
 @app.get("/api/central/fdd-analytics/{site_id}")
 def get_fdd_analytics(site_id: str, hours: int = 24) -> dict[str, Any]:
-    try:
+    ttl = cache_ttl_seconds()
+
+    def _build() -> dict[str, Any]:
         return build_fdd_analytics(site_id, hours=hours)
+
+    try:
+        data, from_cache = get_or_set(f"fdd-analytics:{site_id}:{hours}", ttl, _build)
+        return {**data, "_cache": {"hit": from_cache, "ttl_s": ttl}}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -164,11 +175,38 @@ def get_fdd_preset(site_id: str, preset_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/central/overview/{site_id}")
-def get_overview(site_id: str, live: bool = True) -> dict[str, Any]:
+def get_overview(site_id: str, live: bool = True, fast: bool = True) -> dict[str, Any]:
+    ttl = cache_ttl_seconds()
+
+    def _build() -> dict[str, Any]:
+        return build_overview(site_id, include_live=live, fast=fast)
+
     try:
-        return build_overview(site_id, include_live=live)
+        data, from_cache = get_or_set(f"overview:{site_id}:live={live}:fast={fast}", ttl, _build)
+        return {**data, "_cache": {"hit": from_cache, "ttl_s": ttl}}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/central/model-tree/{site_id}")
+def get_model_tree(site_id: str, include_tree: bool = False) -> dict[str, Any]:
+    """On-demand full BRICK model graph — slow on large remote Edge sites."""
+    ttl = max(cache_ttl_seconds(), 300)
+
+    def _build() -> dict[str, Any]:
+        return build_model_tree_summary(site_id, include_tree=include_tree)
+
+    try:
+        data, from_cache = get_or_set(
+            f"model-tree:{site_id}:full={include_tree}",
+            ttl,
+            _build,
+        )
+        return {**data, "_cache": {"hit": from_cache, "ttl_s": ttl}}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.get("/api/central/mechanical-summary/{site_id}")
@@ -231,13 +269,28 @@ def get_validation_job(job_id: str) -> dict[str, Any]:
 
 # --- RCx preview + report ---
 
+@app.get("/api/central/rcx/points/{site_id}")
+def get_rcx_points(site_id: str, limit: int = 200) -> dict[str, Any]:
+    try:
+        from portfolio.central.rcx_points import list_report_points
+
+        return list_report_points(site_id, limit=limit)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
 @app.post("/api/central/rcx/preview")
 def post_rcx_preview(body: RcxPreviewBody) -> dict[str, Any]:
     try:
         return build_rcx_preview(
             site_id=body.site_id,
             hours=body.hours,
+            start=body.start,
+            end=body.end,
             chart_ids=body.chart_ids or None,
+            custom_columns=body.custom_columns or None,
             show_fault_overlays=body.show_fault_overlays,
         )
     except KeyError as exc:
@@ -257,8 +310,12 @@ def post_rcx_report(body: RcxReportBody) -> Response:
         blob, fname = generate_rcx_docx(
             site_id=body.site_id,
             hours=body.hours,
+            start=body.start,
+            end=body.end,
             sections=body.sections or None,
             charts=body.charts or body.chart_ids or None,
+            custom_columns=body.custom_columns or None,
+            show_fault_overlays=body.show_fault_overlays,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
