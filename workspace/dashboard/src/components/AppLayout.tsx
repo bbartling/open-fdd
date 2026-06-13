@@ -14,6 +14,7 @@ const NAV = [
   { to: "/analytics/rcx", icon: "📄", label: "RCx report" },
   { to: "/bacnet", icon: "📡", label: "BACnet", protected: true },
   { to: "/modbus", icon: "🔌", label: "Modbus", protected: true },
+  { to: "/niagara", icon: "🏢", label: "Niagara", protected: true },
   { to: "/json-api", icon: "🌐", label: "JSON API", protected: true },
   { to: "/rule-lab", icon: "🐍", label: "Rule Lab", protected: true },
   { to: "/model", icon: "🧱", label: "Model & assignments", protected: true },

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 
@@ -47,6 +48,19 @@ def json_api_poll_csv() -> Path:
 
 def json_api_endpoints_path() -> Path:
     return workspace_dir() / "json_api" / "commissioning" / "endpoints.csv"
+
+
+def niagara_stations_path() -> Path:
+    return data_dir() / "niagara" / "niagara_stations.json"
+
+
+def niagara_points_cache_path(station_id: str) -> Path:
+    safe = re.sub(r"[^a-zA-Z0-9_-]+", "-", station_id).strip("-") or "station"
+    return data_dir() / "niagara" / "points" / f"{safe}.json"
+
+
+def niagara_poll_csv() -> Path:
+    return workspace_dir() / "niagara" / "polls" / "samples.csv"
 
 
 def commissioning_dir() -> Path:
