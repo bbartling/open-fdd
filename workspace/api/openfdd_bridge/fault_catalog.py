@@ -49,6 +49,7 @@ COOKBOOK_PATTERNS: dict[str, str] = {
     "custom_arrow": "Site-specific apply_faults_arrow logic in rules_py",
     "schedule_compare": "Runtime vs occupancy schedule",
     "stale_points": "Telemetry freshness / poll dropout",
+    "pid_hunting": "Excessive PID/command reversals or AHU operating-state changes (GL36 FC4)",
 }
 
 
@@ -124,6 +125,13 @@ FAULT_CATALOG: dict[str, dict[str, Any]] = {
                 ["Compare command to feedback", "Manually stroke actuator", "Inspect linkage"],
                 cookbook_patterns=["custom_arrow"],
             ),
+            _code(
+                "AHU-G", "io_fault", "PID hunting / excessive control oscillation", "warning",
+                "Control loop command oscillates or AHU operating mode changes too frequently (legacy GL36 FC4).",
+                ["Aggressive PID gains", "Sensor noise", "Valve/damper oversizing", "Sequencing conflict"],
+                ["Trend command output for hunting", "Review PID tuning", "Check sensor filtering"],
+                cookbook_patterns=["pid_hunting", "custom_arrow"],
+            ),
         ],
     },
     "VAV": {
@@ -164,6 +172,13 @@ FAULT_CATALOG: dict[str, dict[str, Any]] = {
                 ["Oversized/undersized box", "Bad setpoints", "Solar/internal load mismatch"],
                 ["Identify reset-driving zone", "Review zone setpoints", "Check load profile"],
                 cookbook_patterns=["spread_1h", "custom_arrow"],
+            ),
+            _code(
+                "VAV-F", "io_fault", "VAV actuator PID hunting", "warning",
+                "Damper or reheat valve command oscillates excessively (legacy GL36 FC4 per-loop).",
+                ["Aggressive PID gains", "Flow sensor noise", "Oversized damper actuator"],
+                ["Trend damper/reheat command", "Compare to airflow", "Review VAV controller tuning"],
+                cookbook_patterns=["pid_hunting"],
             ),
         ],
     },
@@ -288,6 +303,54 @@ FAULT_CATALOG: dict[str, dict[str, Any]] = {
                 ["Trend kW/ton vs load", "Review staging/reset", "Schedule service"],
                 cookbook_patterns=["spread_1h"],
             ),
+            _code(
+                "CH-G", "io_fault", "Pump / variable-speed PID hunting", "warning",
+                "CHW/HW pump VFD or plant speed command oscillates excessively (legacy GL36 FC4 per-loop).",
+                ["Aggressive PID gains", "Deadband too tight", "Sensor noise on DP or temp"],
+                ["Trend pump speed command", "Review plant sequencer", "Check DP sensor"],
+                cookbook_patterns=["pid_hunting"],
+            ),
+        ],
+    },
+    "RTU": {
+        "label": "Packaged RTU",
+        "description": "Rooftop units (SAT/MAT/OAT, economizer, compressors, cooling capacity %).",
+        "codes": [
+            _code(
+                "RTU-A", "performance_degradation", "Supply fan performance degradation", "warning",
+                "Supply fan delivering less airflow per unit speed vs baseline.",
+                ["Belt slip", "Loaded filters", "VFD limit"],
+                ["Trend fan speed vs static", "Check filters", "Compare runtime"],
+                cookbook_patterns=["spread_1h"],
+            ),
+            _code(
+                "RTU-B", "simultaneous_heat_cool", "Simultaneous heating and cooling", "critical",
+                "Heating and cooling stages/commands active together.",
+                ["Sequencing/PID conflict", "Leaking valve", "Bad sensor"],
+                ["Trend heat vs cool commands", "Check staging logic", "Verify SAT control"],
+                cookbook_patterns=["custom_arrow"],
+            ),
+            _code(
+                "RTU-C", "sensor_fault", "Discharge air temperature sensor fault", "warning",
+                "Discharge/supply air temp flatlined or out of range.",
+                ["Failed sensor", "Bad calibration", "Probe location"],
+                ["Inspect SAT trend", "Cross-check coil behavior", "Field verify"],
+                cookbook_patterns=["flatline_1h", "oob_rolling"],
+            ),
+            _code(
+                "RTU-D", "io_fault", "Damper/valve command vs feedback mismatch", "warning",
+                "OA damper or valve command does not match feedback.",
+                ["Stuck actuator", "Linkage slip", "Feedback fault"],
+                ["Compare command vs feedback", "Stroke actuator", "Inspect linkage"],
+                cookbook_patterns=["custom_arrow"],
+            ),
+            _code(
+                "RTU-E", "io_fault", "Cooling capacity PID hunting", "warning",
+                "RTU cooling capacity / compressor modulation command oscillates (legacy GL36 FC4 per-loop).",
+                ["Aggressive PID gains", "Low refrigerant", "Oversized staging"],
+                ["Trend cooling capacity %", "Review compressor PID", "Check charge/staging"],
+                cookbook_patterns=["pid_hunting"],
+            ),
         ],
     },
     "DATACENTER": {
@@ -370,10 +433,11 @@ FAULT_CATALOG: dict[str, dict[str, Any]] = {
 # Legacy numeric codes (v1) → letter codes (v2) for migrations and docs
 LEGACY_CODE_MAP: dict[str, str] = {
     "AHU-01": "AHU-A", "AHU-02": "AHU-B", "AHU-03": "AHU-C", "AHU-04": "AHU-D", "AHU-05": "AHU-E", "AHU-06": "AHU-F",
-    "VAV-01": "VAV-A", "VAV-02": "VAV-B", "VAV-03": "VAV-C", "VAV-04": "VAV-D", "VAV-05": "VAV-E",
+    "AHU-07": "AHU-G", "FC4": "AHU-G", "GL36-FC4": "AHU-G",
+    "VAV-01": "VAV-A", "VAV-02": "VAV-B", "VAV-03": "VAV-C", "VAV-04": "VAV-D", "VAV-05": "VAV-E", "VAV-06": "VAV-F",
     "HP-01": "HP-A", "HP-02": "HP-B", "HP-03": "HP-C", "HP-04": "HP-D", "HP-05": "HP-E",
     "GEO-01": "GEO-A", "GEO-02": "GEO-B", "GEO-03": "GEO-C", "GEO-04": "GEO-D",
-    "CH-01": "CH-A", "CH-02": "CH-B", "CH-03": "CH-C", "CH-04": "CH-D", "CH-05": "CH-E", "CH-06": "CH-F",
+    "CH-01": "CH-A", "CH-02": "CH-B", "CH-03": "CH-C", "CH-04": "CH-D", "CH-05": "CH-E", "CH-06": "CH-F", "CH-07": "CH-G",
     "DC-01": "DC-A", "DC-02": "DC-B", "DC-03": "DC-C", "DC-04": "DC-D", "DC-05": "DC-E",
     "BLD-01": "BLD-A", "BLD-02": "BLD-B", "BLD-03": "BLD-C", "BLD-04": "BLD-D",
 }

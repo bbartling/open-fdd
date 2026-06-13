@@ -307,6 +307,101 @@ def gl36_rule_specs(
             },
             "enabled": False,
         },
+        # Phase 1b — GL36 FC4 PID hunting on control outputs (Arrow, per-loop command mode)
+        {
+            "id": f"{p}-pid-hunting-vav-damper",
+            "name": "VAV damper PID hunting (FC4)",
+            "fault_code": "VAV-F",
+            "code_file": "pid_hunting_fc4.py",
+            "config": _cfg(
+                extra={
+                    "delta_os_max": 10,
+                    "min_command_delta": 0.03,
+                    "min_active_command": 0.05,
+                    "hunting_window_hours": 1.0,
+                }
+            ),
+            "bindings": {
+                "point_ids": [],
+                "equipment_ids": [],
+                "brick_types": ["Damper_Position_Command"],
+            },
+        },
+        {
+            "id": f"{p}-pid-hunting-vav-reheat",
+            "name": "VAV reheat PID hunting (FC4)",
+            "fault_code": "VAV-F",
+            "code_file": "pid_hunting_fc4.py",
+            "config": _cfg(
+                extra={
+                    "delta_os_max": 10,
+                    "min_command_delta": 0.03,
+                    "min_active_command": 0.05,
+                    "hunting_window_hours": 1.0,
+                }
+            ),
+            "bindings": {
+                "point_ids": [],
+                "equipment_ids": [],
+                "brick_types": ["Heating_Valve_Command"],
+            },
+        },
+        {
+            "id": f"{p}-pid-hunting-rtu-cooling",
+            "name": "RTU cooling capacity PID hunting (FC4)",
+            "fault_code": "RTU-E",
+            "code_file": "pid_hunting_fc4.py",
+            "config": _cfg(
+                extra={
+                    "delta_os_max": 8,
+                    "min_command_delta": 0.05,
+                    "min_active_command": 0.02,
+                    "hunting_window_hours": 1.0,
+                }
+            ),
+            "bindings": {
+                "point_ids": [],
+                "equipment_ids": [ahu_equipment_id] if ahu_equipment_id else [],
+                "brick_types": ["Cooling_Command"],
+            },
+        },
+        {
+            "id": f"{p}-pid-hunting-plant-pump",
+            "name": "HW plant pump VFD PID hunting (FC4)",
+            "fault_code": "CH-G",
+            "code_file": "pid_hunting_fc4.py",
+            "config": _cfg(
+                extra={
+                    "delta_os_max": 10,
+                    "min_command_delta": 0.04,
+                    "min_active_command": 0.10,
+                    "hunting_window_hours": 1.0,
+                }
+            ),
+            "bindings": {
+                "point_ids": [],
+                "equipment_ids": [],
+                "brick_types": ["Pump_Speed_Command"],
+            },
+        },
+        {
+            "id": f"{p}-pid-hunting-ahu-os",
+            "name": "AHU operating-state PID hunting (FC4 multi-signal)",
+            "fault_code": "AHU-G",
+            "code_file": "pid_hunting_fc4.py",
+            "config": {
+                **_cfg(),
+                "hunting_mode": "ahu_os",
+                "delta_os_max": 10,
+                "ahu_min_oa_dpr": 0.1,
+                "economizer_col": "outside-air-damper-command",
+                "fan_speed_col": "supply-fan-speed-command",
+                "heating_col": "heating-valve-command",
+                "cooling_col": "cooling-capacity-status",
+            },
+            "bindings": ahu_bindings,
+            "enabled": False,
+        },
     ]
 
 

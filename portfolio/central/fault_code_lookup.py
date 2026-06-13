@@ -14,11 +14,13 @@ SHORT_DESCRIPTIONS: dict[str, str] = {
     "AHU-D": "Mixed-air temperature inconsistent with OAT/RAT",
     "AHU-E": "Economizer not economizing",
     "AHU-F": "Damper/valve command vs feedback mismatch",
+    "AHU-G": "PID hunting / excessive control oscillation",
     "VAV-A": "Reheat active during cooling demand",
     "VAV-B": "Airflow not meeting setpoint",
     "VAV-C": "Zone temperature sensor fault",
     "VAV-D": "Damper command vs airflow mismatch",
     "VAV-E": "Rogue zone (chronic reheat/overcooling)",
+    "VAV-F": "VAV actuator PID hunting",
     "HP-A": "Heating/cooling capacity or COP degradation",
     "HP-B": "Auxiliary heat with compressor cooling",
     "HP-C": "Reversing valve fault (mode mismatch)",
@@ -34,6 +36,7 @@ SHORT_DESCRIPTIONS: dict[str, str] = {
     "CH-D": "Chilled-water supply temperature sensor fault",
     "CH-E": "CHW valve/pump command vs feedback mismatch",
     "CH-F": "Chiller efficiency drift (kW/ton)",
+    "CH-G": "Pump / variable-speed PID hunting",
     "DC-A": "Units fighting (simultaneous humidify/dehumidify or heat/cool)",
     "DC-B": "Cooling capacity degradation / high return temp",
     "DC-C": "Supply/return air temperature sensor fault",
@@ -46,6 +49,7 @@ SHORT_DESCRIPTIONS: dict[str, str] = {
     "RTU-B": "Simultaneous heating and cooling",
     "RTU-C": "Discharge air temperature sensor fault",
     "RTU-D": "Damper/valve command vs feedback mismatch",
+    "RTU-E": "Cooling capacity PID hunting",
 }
 
 
