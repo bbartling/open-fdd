@@ -11,6 +11,7 @@ from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 
 from portfolio.central.display_time import format_ts_local, tz_label
 from portfolio.central.fdd_preset_catalog import FDD_PRESET_BUTTONS
+from portfolio.central.sparql_preset_catalog import SPARQL_BUTTONS
 from portfolio.central.fault_code_lookup import lookup_fault_description
 from portfolio.dash.theme import BTN_PRIMARY, BTN_SECONDARY, SECTION_STYLE
 
@@ -221,6 +222,28 @@ def overview_layout(theme: dict) -> html.Div:
                     type="dot",
                     color=theme["accent"],
                     children=html.Div(id="overview-fdd-preset-result", style={"marginTop": "12px"}),
+                ),
+                html.P(
+                    "Local BRICK SPARQL — mirrored TTL on RCx Central (no Edge round-trip per query).",
+                    style={"color": theme["muted"], "fontSize": "13px", "margin": "16px 0 8px"},
+                ),
+                html.Div(
+                    style={"display": "flex", "flexWrap": "wrap", "gap": "4px"},
+                    children=[
+                        html.Button(
+                            title,
+                            id={"type": "sparql-btn", "index": query_id},
+                            n_clicks=0,
+                            style=BTN_SECONDARY,
+                        )
+                        for query_id, title in SPARQL_BUTTONS
+                    ],
+                ),
+                dcc.Loading(
+                    id="overview-sparql-loading",
+                    type="dot",
+                    color=theme["accent"],
+                    children=html.Div(id="overview-sparql-result", style={"marginTop": "12px"}),
                 ),
             ),
             _section(
@@ -553,6 +576,51 @@ def _fdd_preset_result_html(result: dict, theme: dict) -> html.Div:
     )
 
 
+def _sparql_result_html(result: dict, theme: dict) -> html.Div:
+    if not result:
+        return html.Div()
+    if result.get("checks"):
+        lines = [
+            html.H4("SPARQL model validation", style={"margin": "0 0 8px", "fontSize": "15px"}),
+            html.P(
+                f"Mirror: {'ok' if result.get('ok') else 'issues'} — "
+                f"{(result.get('mirror') or {}).get('bytes', 0)} bytes",
+                style={"color": theme["muted"], "fontSize": "12px"},
+            ),
+        ]
+        for chk in result.get("checks") or []:
+            status = "ok" if chk.get("ok") else "fail"
+            color = theme["up"] if chk.get("ok") else theme["warn"]
+            detail = f"count={chk.get('count')}" if chk.get("count") is not None else str(chk.get("error") or "")
+            lines.append(
+                html.P(
+                    f"{chk.get('label') or chk.get('id')}: {status} ({detail})",
+                    style={"color": color, "fontSize": "13px", "margin": "2px 0"},
+                )
+            )
+        return html.Div(lines)
+    if result.get("synced_at") or result.get("sha256"):
+        return html.Div(
+            [
+                html.H4("TTL mirrored to Central", style={"margin": "0 0 8px", "fontSize": "15px"}),
+                html.P(f"synced_at: {result.get('synced_at', '—')}", style={"color": theme["muted"], "fontSize": "12px"}),
+                html.P(f"bytes: {result.get('bytes', 0)}", style={"color": theme["muted"], "fontSize": "12px"}),
+                html.P(f"edge_ttl_synced: {result.get('edge_ttl_synced')}", style={"color": theme["muted"], "fontSize": "12px"}),
+            ]
+        )
+    bindings = result.get("bindings") or []
+    if not bindings:
+        return html.P("SPARQL: no rows.", style={"color": theme["muted"], "fontSize": "13px"})
+    columns = list(bindings[0].keys()) if isinstance(bindings[0], dict) else []
+    return html.Div(
+        [
+            html.H4("SPARQL result", style={"margin": "0 0 8px", "fontSize": "15px"}),
+            html.P(f"{result.get('row_count', len(bindings))} row(s) — local TTL", style={"color": theme["muted"], "fontSize": "12px"}),
+            _data_table(columns, bindings, theme),
+        ]
+    )
+
+
 def _model_tree_html(data: dict, theme: dict) -> html.Component:
     if not data:
         return html.Div()
@@ -712,5 +780,32 @@ def register_overview_callbacks(app, theme: dict) -> None:
         try:
             result = _api_get(f"/api/central/fdd-preset/{site_id}/{preset_id}")
             return _fdd_preset_result_html(result, theme)
+        except Exception as exc:
+            return html.P(str(exc)[:300], style={"color": theme["warn"], "fontSize": "13px"})
+
+    @app.callback(
+        Output("overview-sparql-result", "children"),
+        Input({"type": "sparql-btn", "index": ALL}, "n_clicks"),
+        State("overview-site", "value"),
+        prevent_initial_call=True,
+    )
+    def run_sparql_query(n_clicks_list, site_id):
+        if not site_id or not ctx.triggered_id:
+            return no_update
+        query_id = ctx.triggered_id.get("index") if isinstance(ctx.triggered_id, dict) else None
+        if not query_id:
+            return no_update
+        try:
+            if query_id == "sync_ttl":
+                result = _api("POST", f"/api/central/model/sync-ttl/{site_id}")
+            elif query_id == "validate":
+                result = _api_get(f"/api/central/model/sparql/validate/{site_id}")
+            else:
+                result = _api(
+                    "POST",
+                    f"/api/central/model/sparql/{site_id}",
+                    {"query": "", "query_id": query_id},
+                )
+            return _sparql_result_html(result, theme)
         except Exception as exc:
             return html.P(str(exc)[:300], style={"color": theme["warn"], "fontSize": "13px"})

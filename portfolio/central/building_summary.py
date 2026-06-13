@@ -51,8 +51,10 @@ def build_building_summary(registry_site_id: str, *, fast: bool = False) -> dict
         try:
             tree = client.get_model_tree(token=token)
             brick_site_id, brick_site_name = _primary_brick_site(tree, registry_site_id)
-            equipment_count = len(tree.get("equipment") or [])
-            point_count = len(tree.get("points") or [])
+            equipment = tree.get("equipment")
+            points = tree.get("points")
+            equipment_count = len(equipment) if isinstance(equipment, list) else 0
+            point_count = len(points) if isinstance(points, list) else 0
         except RuntimeError:
             tree = {}
 

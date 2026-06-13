@@ -9,7 +9,13 @@ HOST="${OPENFDD_CENTRAL_API_HOST:-0.0.0.0}"
 PORT="${OPENFDD_CENTRAL_API_PORT:-8060}"
 free_port "$PORT" "OpenFDD RCx Central API"
 
-export PYTHONPATH="${ROOT}:${PYTHONPATH:-}"
+if [[ -d .venv ]]; then
+  # shellcheck disable=SC1091
+  source .venv/bin/activate
+fi
+pip install -q -r portfolio/requirements.txt 2>/dev/null || true
+
+export PYTHONPATH="${ROOT}:${ROOT}/workspace/api:${PYTHONPATH:-}"
 export OPENFDD_CENTRAL_API_HOST="$HOST"
 export OPENFDD_CENTRAL_API_PORT="$PORT"
 exec python3 "$ROOT/scripts/run_central_api.py" "$@"

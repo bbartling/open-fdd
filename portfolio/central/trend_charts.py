@@ -8,26 +8,71 @@ from typing import Any
 from portfolio.collector.edge_client import EdgeClient
 
 ROLE_ALIASES: dict[str, list[str]] = {
-    "supply_air_temperature": ["supply_air_temperature", "Supply_Air_Temperature", "SAT"],
+    "supply_air_temperature": [
+        "supply_air_temperature",
+        "Supply_Air_Temperature",
+        "SAT",
+        "supply_air_temperature_sensor",
+    ],
     "supply_air_temperature_setpoint": [
         "supply_air_temperature_setpoint",
         "Supply_Air_Temperature_Setpoint",
         "SAT_Setpoint",
+        "sat_sp",
+        "sat setpoint",
     ],
-    "duct_static_pressure": ["duct_static_pressure", "Duct_Static_Pressure"],
-    "duct_static_pressure_setpoint": ["duct_static_pressure_setpoint", "Duct_Static_Setpoint"],
-    "zone_temperature": ["zone_temperature", "Zone_Temperature"],
-    "zone_cooling_setpoint": ["zone_cooling_setpoint", "Zone_Cooling_Setpoint"],
-    "zone_heating_setpoint": ["zone_heating_setpoint", "Zone_Heating_Setpoint"],
+    "duct_static_pressure": [
+        "duct_static_pressure",
+        "Duct_Static_Pressure",
+        "Supply_Air_Static_Pressure",
+        "static_pressure",
+        "SAP",
+    ],
+    "duct_static_pressure_setpoint": [
+        "duct_static_pressure_setpoint",
+        "Duct_Static_Setpoint",
+        "static_sp",
+        "static setpoint",
+    ],
+    "zone_temperature": [
+        "zone_temperature",
+        "Zone_Temperature",
+        "Zone_Air_Temperature",
+        "zone_temp",
+        "zn-t",
+        "AVG-ZN-T",
+    ],
+    "zone_cooling_setpoint": ["zone_cooling_setpoint", "Zone_Cooling_Setpoint", "cooling_sp"],
+    "zone_heating_setpoint": ["zone_heating_setpoint", "Zone_Heating_Setpoint", "heating_sp"],
 }
+
+
+def historian_column_for_point(point: dict[str, Any]) -> str:
+    """Feather/historian column — matches Edge ``plot_column_name``."""
+    ext = str(point.get("external_id") or "").strip()
+    if ext:
+        return ext
+    fdd = str(point.get("fdd_input") or "").strip()
+    if fdd:
+        return fdd
+    pid = str(point.get("id") or "").strip()
+    if pid:
+        return pid
+    return str(point.get("name") or "").strip()
 
 
 def _role_matches(point: dict[str, Any], role: str) -> bool:
     candidates = {role.lower()}
     candidates.update(a.lower() for a in ROLE_ALIASES.get(role, []))
-    for key in ("brick_type", "role", "point_role", "semantic_role"):
-        val = str(point.get(key) or "").strip().lower()
-        if val in candidates or role.lower() in val:
+    hay = " ".join(
+        str(point.get(k) or "")
+        for k in ("brick_type", "role", "point_role", "semantic_role", "brick_tag", "name", "description", "fdd_input")
+    ).lower().replace("-", "_").replace(" ", "_")
+    for cand in candidates:
+        if not cand:
+            continue
+        c = cand.replace("-", "_").replace(" ", "_")
+        if c in hay or hay.find(c) >= 0:
             return True
     return False
 
@@ -40,16 +85,47 @@ def columns_for_roles(tree: dict[str, Any], roles: list[str]) -> list[str]:
         for pt in points:
             if not isinstance(pt, dict) or not _role_matches(pt, role):
                 continue
-            col = (
-                pt.get("timeseries_column")
-                or pt.get("historian_column")
-                or pt.get("column")
-                or pt.get("name")
-            )
-            if col and str(col) not in cols:
-                cols.append(str(col))
+            col = historian_column_for_point(pt)
+            if col and col not in cols:
+                cols.append(col)
                 break
     return cols
+
+
+def resolve_roles_on_tree(tree: dict[str, Any], roles: list[str]) -> tuple[list[str], list[str]]:
+    """Return (resolved columns, missing role names). Partial match allowed."""
+    points = tree.get("points") if isinstance(tree.get("points"), list) else []
+    cols: list[str] = []
+    missing: list[str] = []
+    for role in roles:
+        found = False
+        for pt in points:
+            if not isinstance(pt, dict) or not _role_matches(pt, role):
+                continue
+            col = historian_column_for_point(pt)
+            if col:
+                cols.append(col)
+                found = True
+                break
+        if not found:
+            missing.append(role)
+    return cols, missing
+
+
+def canonical_roles_present(tree: dict[str, Any]) -> set[str]:
+    """Roles that resolve to at least one historian column."""
+    all_roles = set(ROLE_ALIASES.keys())
+    for roles in (
+        ["supply_air_temperature", "supply_air_temperature_setpoint"],
+        ["duct_static_pressure", "duct_static_pressure_setpoint"],
+        ["zone_temperature", "zone_cooling_setpoint", "zone_heating_setpoint"],
+    ):
+        all_roles.update(roles)
+    present: set[str] = set()
+    for role in all_roles:
+        if columns_for_roles(tree, [role]):
+            present.add(role)
+    return present
 
 
 def fetch_trend_readings(

@@ -84,11 +84,33 @@ COLUMNS: dict[str, list[str]] = {
 }
 
 
-def _point_meta(point: dict[str, Any]) -> dict[str, str]:
+def _point_meta(point: dict[str, Any], eq_map: dict[str, dict[str, Any]] | None = None) -> dict[str, str]:
     meta = point.get("metadata") if isinstance(point.get("metadata"), dict) else {}
+    eq = (eq_map or {}).get(str(point.get("equipment_id") or ""), {})
+    dev = str(
+        point.get("bacnet_device_id")
+        or meta.get("bacnet_device_id")
+        or meta.get("device_instance")
+        or eq.get("bacnet_device_instance")
+        or eq.get("bacnet_device_id")
+        or ""
+    )
+    if not dev:
+        import re
+
+        m = re.match(r"^(\d+)-", str(point.get("id") or ""))
+        if m:
+            dev = m.group(1)
+    obj = str(
+        point.get("object_identifier")
+        or meta.get("object_identifier")
+        or meta.get("object_id")
+        or point.get("bacnet_object")
+        or ""
+    )
     return {
-        "bacnet_device_id": str(meta.get("bacnet_device_id") or meta.get("device_instance") or ""),
-        "object_identifier": str(meta.get("object_identifier") or meta.get("object_id") or ""),
+        "bacnet_device_id": dev,
+        "object_identifier": obj,
         "series_ref": str(meta.get("external_ref") or ""),
     }
 
@@ -141,15 +163,48 @@ def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, A
                     }
                 )
                 continue
-            for eid in eq_ids or [""]:
-                eq = eq_map.get(eid, {})
+            if eq_ids:
+                for eid in eq_ids:
+                    eq = eq_map.get(eid, {})
+                    rows.append(
+                        {
+                            "rule_id": rule.get("id"),
+                            "rule_name": rule.get("name"),
+                            "enabled": rule.get("enabled", True),
+                            "equipment_id": eid,
+                            "equipment_type": effective_equipment_type(eq),
+                            "brick_types": ", ".join(brick_types),
+                        }
+                    )
+                continue
+            matched_eq: set[str] = set()
+            for bt in brick_types:
+                for pt in points:
+                    if str(pt.get("brick_type") or "") == bt:
+                        eid = str(pt.get("equipment_id") or "")
+                        if eid:
+                            matched_eq.add(eid)
+            if matched_eq:
+                for eid in sorted(matched_eq):
+                    eq = eq_map.get(eid, {})
+                    rows.append(
+                        {
+                            "rule_id": rule.get("id"),
+                            "rule_name": rule.get("name"),
+                            "enabled": rule.get("enabled", True),
+                            "equipment_id": eid,
+                            "equipment_type": effective_equipment_type(eq),
+                            "brick_types": ", ".join(brick_types),
+                        }
+                    )
+            else:
                 rows.append(
                     {
                         "rule_id": rule.get("id"),
                         "rule_name": rule.get("name"),
                         "enabled": rule.get("enabled", True),
-                        "equipment_id": eid,
-                        "equipment_type": effective_equipment_type(eq),
+                        "equipment_id": "",
+                        "equipment_type": "",
                         "brick_types": ", ".join(brick_types),
                     }
                 )
@@ -183,7 +238,7 @@ def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, A
             bindings = rule.get("bindings") if isinstance(rule.get("bindings"), dict) else {}
             for pid in bindings.get("point_ids") or []:
                 pt = point_by_id.get(str(pid), {})
-                m = _point_meta(pt)
+                m = _point_meta(pt, eq_map)
                 rows.append(
                     {
                         "rule_id": rule.get("id"),
@@ -198,7 +253,7 @@ def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, A
     elif preset_id == "equipment_to_points":
         for pt in points:
             eq = eq_map.get(str(pt.get("equipment_id") or ""), {})
-            m = _point_meta(pt)
+            m = _point_meta(pt, eq_map)
             rows.append(
                 {
                     "equipment_id": str(pt.get("equipment_id") or ""),
@@ -250,7 +305,7 @@ def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, A
 
     elif preset_id == "points_by_bacnet_device":
         for pt in points:
-            m = _point_meta(pt)
+            m = _point_meta(pt, eq_map)
             dev = m["bacnet_device_id"] or "(none)"
             rows.append(
                 {
@@ -282,9 +337,21 @@ def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, A
         tally: dict[str, list[str]] = {}
         for rule in rules:
             bindings = rule.get("bindings") if isinstance(rule.get("bindings"), dict) else {}
-            for eid in bindings.get("equipment_ids") or []:
-                eq = eq_map.get(str(eid), {})
-                et = effective_equipment_type(eq) or "unknown"
+            eq_ids = [str(x) for x in bindings.get("equipment_ids") or [] if str(x).strip()]
+            brick_types = [str(x) for x in bindings.get("brick_types") or [] if str(x).strip()]
+            targets: set[str] = set(eq_ids)
+            if not targets and brick_types:
+                for bt in brick_types:
+                    for pt in points:
+                        if str(pt.get("brick_type") or "") == bt:
+                            eid = str(pt.get("equipment_id") or "")
+                            if eid:
+                                targets.add(eid)
+            for eid in targets or [""]:
+                eq = eq_map.get(eid, {}) if eid else {}
+                et = effective_equipment_type(eq) if eid else "BRICK-bound"
+                if et in ("", "Equipment"):
+                    et = "BRICK-bound"
                 tally.setdefault(et, []).append(str(rule.get("id") or ""))
         for et, rule_ids in sorted(tally.items()):
             rows.append({"equipment_type": et, "rule_count": len(rule_ids), "rule_ids": ", ".join(rule_ids)})

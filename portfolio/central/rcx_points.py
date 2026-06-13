@@ -8,12 +8,11 @@ from portfolio.central.edge_registry import resolve_site_config, resolve_token
 from portfolio.collector.edge_client import EdgeClient
 
 
+from portfolio.central.trend_charts import historian_column_for_point
+
+
 def _plot_column(pt: dict[str, Any]) -> str:
-    for key in ("timeseries_column", "historian_column", "fdd_input", "column", "brick_tag", "id"):
-        val = str(pt.get(key) or "").strip()
-        if val:
-            return val
-    return str(pt.get("name") or "").strip()
+    return historian_column_for_point(pt)
 
 
 def list_report_points(site_id: str, *, limit: int = 200) -> dict[str, Any]:
@@ -54,4 +53,31 @@ def list_report_points(site_id: str, *, limit: int = 200) -> dict[str, Any]:
         "site_id": site_id,
         "count": len(rows),
         "points": rows,
+    }
+
+
+def list_report_point_tree(site_id: str, *, limit: int = 500) -> dict[str, Any]:
+    """Group historian columns by equipment for tree-style Dash picker."""
+    flat = list_report_points(site_id, limit=limit)
+    by_equipment: dict[str, list[dict[str, Any]]] = {}
+    for pt in flat.get("points") or []:
+        eq = str(pt.get("equipment_name") or pt.get("equipment_id") or "Unassigned")
+        by_equipment.setdefault(eq, []).append(pt)
+
+    equipment = []
+    for name in sorted(by_equipment.keys(), key=lambda s: s.lower()):
+        pts = by_equipment[name]
+        equipment.append(
+            {
+                "equipment_name": name,
+                "equipment_id": str(pts[0].get("equipment_id") or name),
+                "point_count": len(pts),
+                "points": pts,
+            }
+        )
+    return {
+        "site_id": site_id,
+        "equipment_count": len(equipment),
+        "point_count": flat.get("count") or 0,
+        "equipment": equipment,
     }

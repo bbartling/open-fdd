@@ -36,6 +36,13 @@ class SparqlBody(BaseModel):
     query: str = Field(min_length=1, max_length=200_000)
 
 
+class EquipmentPatchBody(BaseModel):
+    name: str | None = None
+    equipment_type: str | None = None
+    brick_type: str | None = None
+    bacnet_device_instance: int | None = None
+
+
 def _model() -> ModelService:
     return ModelService()
 
@@ -345,6 +352,32 @@ def delete_point(
         "bindings_pruned": bindings_pruned,
         "ttl_synced": True,
     }
+    if debug_diagnostics_enabled():
+        payload["ttl_path"] = str(path)
+    return payload
+
+
+@router.patch("/equipment/{equipment_id}")
+def patch_equipment_row(
+    equipment_id: str,
+    body: EquipmentPatchBody,
+    user: dict = _MODEL_MUTATION,
+) -> dict:
+    svc = _model()
+    updates = body.model_dump(exclude_none=True)
+    row = svc.patch_equipment(equipment_id, updates)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"equipment not found: {equipment_id}")
+    path = _ttl().sync()
+    write_audit(
+        event_type="model.write",
+        action="patch_equipment",
+        outcome="success",
+        user=user,
+        resource_type="equipment",
+        resource_id=equipment_id,
+    )
+    payload = {"ok": True, "equipment": row, "ttl_synced": True}
     if debug_diagnostics_enabled():
         payload["ttl_path"] = str(path)
     return payload

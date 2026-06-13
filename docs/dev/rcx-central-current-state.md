@@ -1,8 +1,8 @@
 # OpenFDD RCx Central — current state
 
-Updated: 2026-06-13  
-Branches: `feature/rcx-central-overview-ui` (#298), `fix/edge-dashboard-bridge` (#299)  
-**Status:** Pushed for AI PR review — **benserver Dash check pending** before Docker image refresh.
+Updated: 2026-05-30  
+Branches: `feature/rcx-central-overview-ui` (#298)  
+**Status:** Local TTL mirror + SPARQL on Central; benserver sign-off before Docker GHCR publish.
 
 ## Product names
 
@@ -26,7 +26,11 @@ LAN firewall (benserver): `sudo ./scripts/open_rcx_central_lan_ports.sh`
 - `GET/POST/PUT/DELETE /api/central/edges`, `POST /api/central/edges/test`
 - `GET /api/central/overview/{site_id}` — KPIs, fault pie, mechanical narrative, P8
 - `GET /api/central/fdd-analytics/{site_id}` — rules table + descriptions
-- `GET /api/central/fdd-preset/{site_id}/{preset_id}` — Edge FDD preset proxy
+- `GET /api/central/fdd-preset/{site_id}/{preset_id}` — Edge FDD preset proxy + Central enrichment
+- `POST /api/central/model/remediate/{site_id}` — equipment types, BACnet metadata, Edge TTL sync, Central mirror
+- `POST /api/central/model/sync-ttl/{site_id}` — pull `data_model.ttl` to `portfolio/data/sites/{site_id}/model/`
+- `GET /api/central/model/sparql/validate/{site_id}` — local AHU/VAV/site SPARQL counts
+- `POST /api/central/model/sparql/{site_id}` — read-only SPARQL on mirrored TTL
 - `GET /api/central/mechanical-summary/{site_id}`
 - `GET /api/central/model-tree/{site_id}` — on-demand BRICK tree (lazy; not on auto-refresh)
 - `GET /api/central/rcx/points/{site_id}` — BACnet point catalog for Report Builder
@@ -43,7 +47,7 @@ Faults: `/api/faults/status`, `/api/faults/catalog`
 
 **Dashboard** · **Report Builder** · **Edge Connections**
 
-Dashboard: fault mix + legend, building summary, P8 KPI, FDD rules (lazy load), FDD/BRICK preset buttons.  
+Dashboard: fault mix + legend, building summary, P8 KPI, FDD rules (lazy load), FDD/BRICK preset buttons, **local SPARQL** (TTL mirror).  
 Report Builder: 3-step wizard — building/time → charts & sections → custom points → preview DOCX.  
 Edge data fetched on demand (not with dashboard load).
 
@@ -82,4 +86,4 @@ Edge data fetched on demand (not with dashboard load).
 - GHCR publish for `openfdd-rcx-central` image (gated: `RCX_ALLOW_PUBLISH=1`)
 - Optional OpenAI insights hook (templates used today)
 - True Edge `start`/`end` bounded timeseries (hours lookback used for now)
-- Summarize HVAC SPARQL buttons on Dash (FDD presets done; raw SPARQL optional)
+- Summarize HVAC SPARQL buttons on Dash — **done** (local TTL mirror on Central)

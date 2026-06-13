@@ -5,6 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 
+def _equipment_key(eq: dict[str, Any]) -> str:
+    return str(eq.get("id") or eq.get("equipment_id") or "").lower()
+
+
 def effective_equipment_type(eq: dict[str, Any]) -> str:
     et = str(eq.get("equipment_type") or "").strip()
     if et:
@@ -16,19 +20,30 @@ def effective_equipment_type(eq: dict[str, Any]) -> str:
 def is_vav(eq: dict[str, Any]) -> bool:
     et = effective_equipment_type(eq).upper()
     name = str(eq.get("name") or "").lower()
-    return "VAV" in et or "VARIABLE_AIR" in et or "vav" in name
+    eid = _equipment_key(eq)
+    if "VAV" in et or "VARIABLE_AIR" in et or "vav" in name:
+        return True
+    return "-vav-" in eid or eid.endswith("-vav") or "trane-vav" in eid or "jci-vav" in eid
 
 
 def is_ahu(eq: dict[str, Any]) -> bool:
     et = effective_equipment_type(eq).upper()
     name = str(eq.get("name") or "").lower()
+    eid = _equipment_key(eq)
     if "AHU" in et or "AIR_HANDLER" in et or "AIR_HANDLING" in et:
         return True
     if "RTU" in et or "ROOFTOP" in et:
         return True
     if "rtu" in name or "ahu" in name:
         return True
-    return "air_handling" in name.replace(" ", "_")
+    if "air_handling" in name.replace(" ", "_"):
+        return True
+    if "-rtu-" in eid or eid.endswith("-rtu") or "-ahu-" in eid or eid.endswith("-ahu"):
+        return True
+    inst = eq.get("bacnet_device_instance")
+    if inst is not None and str(inst) == "1100":
+        return True
+    return False
 
 
 def is_zone(eq: dict[str, Any]) -> bool:
@@ -47,3 +62,28 @@ def hvac_bucket(eq: dict[str, Any]) -> str | None:
     if is_zone(eq):
         return "ZONE"
     return None
+
+
+def is_hws(eq: dict[str, Any]) -> bool:
+    et = effective_equipment_type(eq).upper()
+    name = str(eq.get("name") or "").lower()
+    eid = _equipment_key(eq)
+    if "HOT_WATER" in et or "HW_PLANT" in et or "BOILER" in et or "CHILLER" in et:
+        return True
+    if "hw-plant" in eid or "hw_plant" in eid or "boiler" in eid:
+        return True
+    return "hw plant" in name or "boiler" in name or "hot water" in name
+
+
+def report_family(eq: dict[str, Any]) -> str:
+    """Report bundle family for equipment row."""
+    if is_ahu(eq):
+        return "ahu"
+    if is_hws(eq):
+        return "hws"
+    if is_vav(eq):
+        return "vav"
+    et = effective_equipment_type(eq).upper()
+    if et in ("BUILDING_SUPERVISOR", "BACNET_DEVICE"):
+        return "other"
+    return "other"

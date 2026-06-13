@@ -25,6 +25,23 @@ def login(base_url: str, *, username: str, password: str, timeout: int = 30) -> 
     return token
 
 
+def api_get_text(base_url: str, token: str, path: str, *, timeout: int = 180) -> str:
+    headers: dict[str, str] = {"Accept": "text/turtle"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(
+        f"{base_url.rstrip('/')}{path}",
+        headers=headers,
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:800]
+        raise RuntimeError(f"HTTP {exc.code} {path}: {detail}") from exc
+
+
 def api_get(base_url: str, token: str, path: str, *, timeout: int = 120) -> dict[str, Any]:
     headers: dict[str, str] = {}
     if token:
@@ -74,6 +91,35 @@ def api_post(
     return raw
 
 
+def api_patch(
+    base_url: str,
+    token: str,
+    path: str,
+    body: dict[str, Any],
+    *,
+    timeout: int = 120,
+) -> dict[str, Any]:
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    data = json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(
+        f"{base_url.rstrip('/')}{path}",
+        data=data,
+        headers=headers,
+        method="PATCH",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:800]
+        raise RuntimeError(f"HTTP {exc.code} {path}: {detail}") from exc
+    if not isinstance(raw, dict):
+        raise RuntimeError(f"expected JSON object from {path}")
+    return raw
+
+
 def fetch_portfolio_rollup(
     base_url: str,
     token: str,
@@ -111,6 +157,9 @@ class EdgeClient:
     def api_post(self, path: str, body: dict[str, Any], *, token: str = "") -> dict[str, Any]:
         return api_post(self.base_url, token, path, body)
 
+    def api_patch(self, path: str, body: dict[str, Any], *, token: str = "") -> dict[str, Any]:
+        return api_patch(self.base_url, token, path, body)
+
     def get_health(self, *, token: str = "") -> dict[str, Any]:
         return self.api_get("/health", token=token)
 
@@ -122,6 +171,10 @@ class EdgeClient:
 
     def get_model_tree(self, *, token: str = "") -> dict[str, Any]:
         return self.api_get("/api/model/tree", token=token)
+
+    def get_model_ttl(self, *, token: str = "", save: bool = False) -> str:
+        flag = "true" if save else "false"
+        return api_get_text(self.base_url, token, f"/api/model/ttl?save={flag}")
 
     def get_model_queries(self, *, token: str = "") -> dict[str, Any]:
         return self.api_get("/api/model/sparql/predefined", token=token)

@@ -34,9 +34,12 @@ def _count_hvac_row(row: dict[str, Any]) -> tuple[int, int, int]:
     if hvac_class == "ZONE":
         return 0, 0, 1
     pseudo = {
+        "id": row.get("equipment_id"),
+        "equipment_id": row.get("equipment_id"),
         "equipment_type": row.get("equipment_type") or row.get("type"),
         "brick_type": row.get("brick_type"),
-        "name": row.get("name"),
+        "name": row.get("name") or row.get("equipment_id"),
+        "bacnet_device_instance": row.get("bacnet_device_instance"),
     }
     if is_ahu(pseudo):
         return 1, 0, 0
@@ -53,6 +56,43 @@ def _count_hvac_row(row: dict[str, Any]) -> tuple[int, int, int]:
     if "ZONE" in et:
         return 0, 0, 1
     return 0, 0, 0
+
+
+def _supplement_hvac_counts(
+    client: EdgeClient,
+    token: str,
+    *,
+    seen: set[str],
+    ahus: int,
+    vavs: int,
+    zones: int,
+) -> tuple[int, int, int]:
+    """Count HVAC equipment missing from ahus_vavs_zones (untyped RTU rows on older Edge builds)."""
+    try:
+        eq_pts = client.get_fdd_query_preset("equipment_to_points", token=token)
+    except RuntimeError:
+        return ahus, vavs, zones
+    for row in eq_pts.get("rows") or []:
+        if not isinstance(row, dict):
+            continue
+        eid = str(row.get("equipment_id") or "").strip()
+        if not eid or eid in seen:
+            continue
+        pseudo = {
+            "id": eid,
+            "equipment_id": eid,
+            "name": eid,
+            "equipment_type": row.get("equipment_type"),
+            "brick_type": row.get("brick_type"),
+        }
+        da, dv, dz = _count_hvac_row(pseudo)
+        if not (da or dv or dz):
+            continue
+        seen.add(eid)
+        ahus += da
+        vavs += dv
+        zones += dz
+    return ahus, vavs, zones
 
 
 def build_mechanical_narrative(site_id: str, *, fast: bool = False) -> dict[str, Any]:
@@ -83,24 +123,38 @@ def build_mechanical_narrative(site_id: str, *, fast: bool = False) -> dict[str,
         model_health = results.get("health") or {}
         bacnet = results.get("bacnet") or {}
         counts = model_health.get("counts") if isinstance(model_health.get("counts"), dict) else {}
+        seen_hvac: set[str] = set()
         for row in hvac.get("rows") or []:
             if not isinstance(row, dict):
                 continue
+            eid = str(row.get("equipment_id") or "").strip()
+            if eid:
+                seen_hvac.add(eid)
             da, dv, dz = _count_hvac_row(row)
             ahus += da
             vavs += dv
             zones += dz
+        ahus, vavs, zones = _supplement_hvac_counts(
+            client, token, seen=seen_hvac, ahus=ahus, vavs=vavs, zones=zones
+        )
         presets_used = list(_FAST_PRESETS)
     else:
         try:
             hvac = _run_preset(client, "ahus_vavs_zones", token)
+            seen_hvac: set[str] = set()
             for row in hvac.get("rows") or []:
                 if not isinstance(row, dict):
                     continue
+                eid = str(row.get("equipment_id") or "").strip()
+                if eid:
+                    seen_hvac.add(eid)
                 da, dv, dz = _count_hvac_row(row)
                 ahus += da
                 vavs += dv
                 zones += dz
+            ahus, vavs, zones = _supplement_hvac_counts(
+                client, token, seen=seen_hvac, ahus=ahus, vavs=vavs, zones=zones
+            )
         except RuntimeError as exc:
             preset_errors.append(f"ahus_vavs_zones: {exc}")
 

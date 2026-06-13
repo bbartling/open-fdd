@@ -58,5 +58,20 @@ def reports_dir() -> Path:
     return path
 
 
+def site_model_dir(site_id: str) -> Path:
+    """Per-site BRICK model mirror (TTL + manifest) for local SPARQL."""
+    path = data_dir() / "sites" / site_id / "model"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def site_ttl_path(site_id: str) -> Path:
+    return site_model_dir(site_id) / "data_model.ttl"
+
+
+def site_ttl_manifest_path(site_id: str) -> Path:
+    return site_model_dir(site_id) / "ttl_manifest.json"
+
+
 def central_api_url() -> str:
     return os.environ.get("OPENFDD_CENTRAL_API_URL", "http://127.0.0.1:8060").rstrip("/")
