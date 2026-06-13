@@ -147,6 +147,22 @@ def get_fdd_analytics(site_id: str, hours: int = 24) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+@app.get("/api/central/fdd-preset/{site_id}/{preset_id}")
+def get_fdd_preset(site_id: str, preset_id: str) -> dict[str, Any]:
+    try:
+        from portfolio.central.edge_registry import resolve_site_config, resolve_token
+        from portfolio.collector.edge_client import EdgeClient
+
+        site = resolve_site_config(site_id)
+        client = EdgeClient(site.base_url)
+        token = resolve_token(site)
+        return client.get_fdd_query_preset(preset_id, token=token)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
 @app.get("/api/central/overview/{site_id}")
 def get_overview(site_id: str, live: bool = True) -> dict[str, Any]:
     try:

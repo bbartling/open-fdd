@@ -81,18 +81,11 @@ def build_building_summary(registry_site_id: str) -> dict[str, Any]:
         + "."
     )
 
-    feed_line = ""
-    if feed_chains:
-        feed_line = "HVAC feeds (sample): " + "; ".join(feed_chains[:8]) + "."
-    else:
-        feed_line = "Feeds & research: no feed relationships in model summary yet."
-
     narrative = "\n\n".join(
         part
         for part in (
             intro,
             mech.get("narrative", "").split("\n\n", 1)[-1] if mech.get("narrative") else "",
-            feed_line,
         )
         if part
     )

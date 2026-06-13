@@ -43,6 +43,18 @@ EDGE_INPUT_STYLE: dict[str, str] = {
     "borderRadius": "8px",
 }
 
+BTN_SECONDARY = {
+    "background": "#ffffff",
+    "color": THEME["text"],
+    "border": f"1px solid {THEME['grid']}",
+    "padding": "8px 14px",
+    "borderRadius": "8px",
+    "fontSize": "13px",
+    "fontWeight": "500",
+    "cursor": "pointer",
+    "margin": "0 6px 6px 0",
+}
+
 BTN_PRIMARY = {
     "background": THEME["accent"],
     "color": "#ffffff",

@@ -34,6 +34,8 @@ services:
     ports:
       - "8050:8050"
     environment:
+      OPENFDD_RCX_DASH_HOST: 0.0.0.0
+      OPENFDD_RCX_DASH_PORT: "8050"
       OPENFDD_CENTRAL_API_URL: http://rcx-central-api:8060
       OPENFDD_RCX_CENTRAL_DATA: /app/portfolio/data
       OPENFDD_RCX_CENTRAL_CONFIG: /app/portfolio/config

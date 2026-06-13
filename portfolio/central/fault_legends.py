@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-# Prefix / exact hints when Edge does not send a title.
+from portfolio.central.fault_code_lookup import lookup_fault_description
 _FAULT_HINTS: dict[str, str] = {
     "SAT": "Supply air temperature",
     "SAT-FLAT": "Supply air temp flatline",
@@ -44,6 +44,9 @@ def fault_code_hint(code: str) -> str:
 
 
 def short_fault_description(*, code: str, title: str = "", rule_name: str = "", detail: str = "") -> str:
+    catalog = lookup_fault_description(code)
+    if catalog:
+        return catalog
     for raw in (title, rule_name, detail):
         text = str(raw or "").strip()
         if text and text.upper() != str(code or "").upper():

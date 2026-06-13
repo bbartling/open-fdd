@@ -4,21 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from .equipment_classify import is_ahu, is_vav
+
 
 def _is_vav(eq: dict[str, Any]) -> bool:
-    et = str(eq.get("equipment_type") or eq.get("brick_type") or "").upper()
-    name = str(eq.get("name") or "").lower()
-    return "VAV" in et or "vav" in name
+    return is_vav(eq)
 
 
 def _is_ahu(eq: dict[str, Any]) -> bool:
-    et = str(eq.get("equipment_type") or eq.get("brick_type") or "").upper()
-    name = str(eq.get("name") or "").lower()
-    if "AHU" in et or "AIR_HANDLER" in et:
-        return True
-    if "rtu" in name:
-        return True
-    return "ahu" in name
+    return is_ahu(eq)
 
 
 def _is_hot_water_plant(eq: dict[str, Any]) -> bool:

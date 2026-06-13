@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -89,7 +90,10 @@ def main() -> None:
 
     register_overview_callbacks(app, THEME)
     register_edge_callbacks(app)
-    app.run(host="0.0.0.0", port=8050, debug=False)
+    host = os.environ.get("OPENFDD_RCX_DASH_HOST", "0.0.0.0")
+    port = int(os.environ.get("OPENFDD_RCX_DASH_PORT", "8050"))
+    print(f"OpenFDD RCx Central Dash → http://{host}:{port}/", flush=True)
+    app.run(host=host, port=port, debug=False)
 
 
 if __name__ == "__main__":

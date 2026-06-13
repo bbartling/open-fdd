@@ -7,10 +7,12 @@ import os
 from urllib import error, request
 
 import plotly.graph_objects as go
-from dash import Input, Output, State, dcc, html, no_update
+from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 
 from portfolio.central.display_time import format_ts_local, tz_label
-from portfolio.dash.theme import BTN_PRIMARY, SECTION_STYLE
+from portfolio.central.fdd_preset_catalog import FDD_PRESET_BUTTONS
+from portfolio.central.fault_code_lookup import lookup_fault_description
+from portfolio.dash.theme import BTN_PRIMARY, BTN_SECONDARY, SECTION_STYLE
 
 CENTRAL_API = os.environ.get("OPENFDD_CENTRAL_API_URL", "http://127.0.0.1:8060").rstrip("/")
 
@@ -141,13 +143,35 @@ def overview_layout(theme: dict) -> html.Div:
             _section(
                 "Priority 8 operator overrides",
                 theme,
-                html.P(
-                    "BACnet priority-array slot 8 (operator override) from Edge live rollup or portfolio/data/overrides_daily.csv.",
-                    style={"color": theme["muted"], "fontSize": "13px", "marginTop": 0},
-                ),
-                dcc.Graph(id="overview-overrides-chart", config={"displayModeBar": False}, style={"height": "280px"}),
+                html.Div(id="overview-p8-section"),
             ),
-            _section("FDD rules & analytics", theme, html.Div(id="overview-fdd-panel")),
+            _section(
+                "FDD rules & analytics",
+                theme,
+                html.Div(id="overview-fdd-rules"),
+                html.P(
+                    "FDD / BRICK query presets — same composed coverage queries as the OpenFDD Edge Data Model tab.",
+                    style={"color": theme["muted"], "fontSize": "13px", "margin": "12px 0 8px"},
+                ),
+                html.Div(
+                    style={"display": "flex", "flexWrap": "wrap", "gap": "4px"},
+                    children=[
+                        html.Button(
+                            title,
+                            id={"type": "fdd-preset-btn", "index": preset_id},
+                            n_clicks=0,
+                            style=BTN_SECONDARY,
+                        )
+                        for preset_id, title in FDD_PRESET_BUTTONS
+                    ],
+                ),
+                dcc.Loading(
+                    id="overview-fdd-preset-loading",
+                    type="dot",
+                    color=theme["accent"],
+                    children=html.Div(id="overview-fdd-preset-result", style={"marginTop": "12px"}),
+                ),
+            ),
             _section(
                 "RCx report",
                 theme,
@@ -382,7 +406,62 @@ def _source_html(data: dict, theme: dict) -> html.Div:
     )
 
 
-def _fdd_panel_html(data: dict, theme: dict) -> html.Div:
+def _table_styles(theme: dict) -> tuple[dict, dict, dict]:
+    table = {
+        "width": "100%",
+        "fontSize": "13px",
+        "borderCollapse": "collapse",
+        "tableLayout": "fixed",
+    }
+    th = {
+        "textAlign": "left",
+        "padding": "8px 10px",
+        "borderBottom": f"2px solid {theme['grid']}",
+        "color": theme["muted"],
+        "fontSize": "12px",
+        "fontWeight": "600",
+    }
+    td = {
+        "padding": "8px 10px",
+        "borderBottom": f"1px solid {theme['grid']}",
+        "verticalAlign": "top",
+        "wordBreak": "break-word",
+    }
+    return table, th, td
+
+
+def _data_table(columns: list[str], rows: list[dict], theme: dict, *, max_rows: int = 40) -> html.Table:
+    table_style, th_style, td_style = _table_styles(theme)
+    header = html.Tr([html.Th(col, style=th_style) for col in columns])
+    body = []
+    for row in rows[:max_rows]:
+        if not isinstance(row, dict):
+            continue
+        body.append(
+            html.Tr([html.Td(str(row.get(col, "") or "—"), style=td_style) for col in columns])
+        )
+    return html.Table([html.Thead(header), html.Tbody(body)], style=table_style)
+
+
+def _p8_section(overrides: list[dict], theme: dict) -> html.Component:
+    if not overrides:
+        return html.Div()
+    return html.Div(
+        [
+            html.P(
+                "BACnet priority-array slot 8 (operator override) from Edge live rollup or portfolio/data/overrides_daily.csv.",
+                style={"color": theme["muted"], "fontSize": "13px", "marginTop": 0},
+            ),
+            dcc.Graph(
+                figure=_overrides_chart_figure(overrides, theme),
+                config={"displayModeBar": False},
+                style={"height": "280px"},
+            ),
+        ]
+    )
+
+
+def _fdd_rules_html(data: dict, theme: dict) -> html.Div:
     rules = data.get("rules") or []
     warnings = data.get("warnings") or []
     if not rules:
@@ -390,28 +469,50 @@ def _fdd_panel_html(data: dict, theme: dict) -> html.Div:
             (warnings[0] if warnings else "No FDD rules — start Central API and connect Edge."),
             style={"color": theme["muted"]},
         )
-    header = html.Tr([html.Th(c) for c in ("Rule", "Code", "Type", "Active", "Fault hrs", "Charts")])
+    columns = ("Rule", "Code", "Description", "Type", "Active", "Fault hrs")
+    table_style, th_style, td_style = _table_styles(theme)
+    header = html.Tr([html.Th(c, style=th_style) for c in columns])
     body = []
     for r in rules[:25]:
+        code = str(r.get("fault_code") or "")
+        desc = str(r.get("fault_description") or lookup_fault_description(code) or "—")
         body.append(
             html.Tr(
                 [
-                    html.Td(str(r.get("fault_name") or r.get("rule_id") or "")),
-                    html.Td(str(r.get("fault_code") or "")),
-                    html.Td(str(r.get("equipment_type") or "")),
-                    html.Td(str(r.get("active_fault_count") or 0)),
-                    html.Td(f"{float(r.get('elapsed_fault_hours') or 0):.1f}"),
-                    html.Td(", ".join(r.get("chart_pack") or []) or "—"),
+                    html.Td(str(r.get("fault_name") or r.get("rule_id") or ""), style=td_style),
+                    html.Td(code, style=td_style),
+                    html.Td(desc, style=td_style),
+                    html.Td(str(r.get("equipment_type") or "—"), style=td_style),
+                    html.Td(str(r.get("active_fault_count") or 0), style=td_style),
+                    html.Td(f"{float(r.get('elapsed_fault_hours') or 0):.1f}", style=td_style),
                 ]
             )
         )
     return html.Div(
         [
             html.P(f"{data.get('rules_configured', len(rules))} rules configured", style={"color": theme["muted"], "fontSize": "13px"}),
-            html.Table(
-                [html.Thead(header), html.Tbody(body)],
-                style={"width": "100%", "fontSize": "13px", "borderCollapse": "collapse"},
-            ),
+            html.Table([html.Thead(header), html.Tbody(body)], style=table_style),
+        ]
+    )
+
+
+def _fdd_preset_result_html(result: dict, theme: dict) -> html.Div:
+    if not result:
+        return html.Div()
+    columns = result.get("columns") or []
+    rows = result.get("rows") or []
+    title = str(result.get("title") or result.get("preset_id") or "Preset")
+    desc = str(result.get("description") or "")
+    if not rows:
+        return html.P(f"{title}: no rows.", style={"color": theme["muted"], "fontSize": "13px"})
+    if not columns and rows and isinstance(rows[0], dict):
+        columns = list(rows[0].keys())
+    return html.Div(
+        [
+            html.H4(title, style={"margin": "0 0 4px", "fontSize": "15px"}),
+            html.P(desc, style={"color": theme["muted"], "fontSize": "12px", "margin": "0 0 8px"}) if desc else None,
+            html.P(f"{result.get('row_count', len(rows))} row(s)", style={"color": theme["muted"], "fontSize": "12px"}),
+            _data_table([str(c) for c in columns], rows, theme),
         ]
     )
 
@@ -421,9 +522,9 @@ def register_overview_callbacks(app, theme: dict) -> None:
         Output("overview-kpi-row", "children"),
         Output("overview-fault-pie", "figure"),
         Output("overview-fault-legend", "children"),
-        Output("overview-overrides-chart", "figure"),
+        Output("overview-p8-section", "children"),
         Output("overview-mech-narrative", "children"),
-        Output("overview-fdd-panel", "children"),
+        Output("overview-fdd-rules", "children"),
         Output("overview-source", "children"),
         Input("overview-site", "value"),
         Input("overview-hours", "value"),
@@ -438,17 +539,17 @@ def register_overview_callbacks(app, theme: dict) -> None:
             return (no_update,) * 7
         empty_fig = _fault_pie_figure([], theme)
         empty_legend = _fault_legend([], theme)
-        empty_ov = _overrides_chart_figure([], theme)
+        empty_p8 = _p8_section([], theme)
         if not site_id:
             empty = html.P("Connect an Edge on the Edge Connections tab.", style={"color": theme["muted"]})
-            return [], empty_fig, empty_legend, empty_ov, empty, empty, _source_html({}, theme)
+            return [], empty_fig, empty_legend, empty_p8, empty, empty, _source_html({}, theme)
 
         data = _load_overview(site_id)
         kpis = _kpi_cards(data, theme)
         pie_rows = data.get("fault_pie") or []
         fig = _fault_pie_figure(pie_rows, theme)
         legend = _fault_legend(pie_rows, theme)
-        ov_fig = _overrides_chart_figure(data.get("overrides_p8") or [], theme)
+        p8_section = _p8_section(data.get("overrides_p8") or [], theme)
 
         narrative = data.get("mechanical_narrative")
         brick_name = data.get("brick_site_name")
@@ -476,9 +577,27 @@ def register_overview_callbacks(app, theme: dict) -> None:
             fdd_data = _api_get(f"/api/central/fdd-analytics/{site_id}?hours={hours or 24}")
         except Exception:
             pass
-        fdd_panel = _fdd_panel_html(fdd_data, theme)
+        fdd_panel = _fdd_rules_html(fdd_data, theme)
 
-        return kpis, fig, legend, ov_fig, mech, fdd_panel, _source_html(data, theme)
+        return kpis, fig, legend, p8_section, mech, fdd_panel, _source_html(data, theme)
+
+    @app.callback(
+        Output("overview-fdd-preset-result", "children"),
+        Input({"type": "fdd-preset-btn", "index": ALL}, "n_clicks"),
+        State("overview-site", "value"),
+        prevent_initial_call=True,
+    )
+    def run_fdd_preset(n_clicks_list, site_id):
+        if not site_id or not ctx.triggered_id:
+            return no_update
+        preset_id = ctx.triggered_id.get("index") if isinstance(ctx.triggered_id, dict) else None
+        if not preset_id:
+            return no_update
+        try:
+            result = _api_get(f"/api/central/fdd-preset/{site_id}/{preset_id}")
+            return _fdd_preset_result_html(result, theme)
+        except Exception as exc:
+            return html.P(str(exc)[:300], style={"color": theme["warn"], "fontSize": "13px"})
 
     @app.callback(
         Output("rcx-readiness", "children"),

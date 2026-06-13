@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .equipment_classify import effective_equipment_type, hvac_bucket
 from .model_service import ModelService
 from .rule_store import RuleStore
 from .site_defaults import ensure_default_site
@@ -74,7 +75,7 @@ COLUMNS: dict[str, list[str]] = {
         "brick_class",
     ],
     "equipment_to_points": ["equipment_id", "equipment_type", "point_id", "brick_class", "external_id", "series_ref"],
-    "ahus_vavs_zones": ["equipment_id", "equipment_type", "name", "point_count"],
+    "ahus_vavs_zones": ["equipment_id", "hvac_class", "equipment_type", "brick_type", "name", "point_count"],
     "missing_rule_bindings": ["rule_id", "rule_name", "enabled", "issue"],
     "points_by_bacnet_device": ["bacnet_device_id", "point_id", "brick_class", "external_id", "equipment_id"],
     "sensor_classes_used_by_fdd": ["brick_class", "rule_count", "rule_ids"],
@@ -148,7 +149,7 @@ def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, A
                         "rule_name": rule.get("name"),
                         "enabled": rule.get("enabled", True),
                         "equipment_id": eid,
-                        "equipment_type": str(eq.get("equipment_type") or ""),
+                        "equipment_type": effective_equipment_type(eq),
                         "brick_types": ", ".join(brick_types),
                     }
                 )
@@ -201,7 +202,7 @@ def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, A
             rows.append(
                 {
                     "equipment_id": str(pt.get("equipment_id") or ""),
-                    "equipment_type": str(eq.get("equipment_type") or ""),
+                    "equipment_type": effective_equipment_type(eq),
                     "point_id": str(pt.get("id") or ""),
                     "brick_class": str(pt.get("brick_type") or ""),
                     "external_id": str(pt.get("external_id") or ""),
@@ -210,23 +211,24 @@ def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, A
             )
 
     elif preset_id == "ahus_vavs_zones":
-        keywords = ("air_handling", "vav", "zone", "ahu")
         counts: dict[str, int] = {}
         for pt in points:
             eid = str(pt.get("equipment_id") or "")
             counts[eid] = counts.get(eid, 0) + 1
         for eid, eq in eq_map.items():
-            et = str(eq.get("equipment_type") or "").lower()
-            name = str(eq.get("name") or "")
-            if any(k in et or k in name.lower() for k in keywords):
-                rows.append(
-                    {
-                        "equipment_id": eid,
-                        "equipment_type": eq.get("equipment_type"),
-                        "name": name,
-                        "point_count": counts.get(eid, 0),
-                    }
-                )
+            bucket = hvac_bucket(eq)
+            if not bucket:
+                continue
+            rows.append(
+                {
+                    "equipment_id": eid,
+                    "hvac_class": bucket,
+                    "equipment_type": effective_equipment_type(eq),
+                    "brick_type": str(eq.get("brick_type") or ""),
+                    "name": str(eq.get("name") or ""),
+                    "point_count": counts.get(eid, 0),
+                }
+            )
 
     elif preset_id == "missing_rule_bindings":
         for rule in rules:
@@ -282,7 +284,7 @@ def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, A
             bindings = rule.get("bindings") if isinstance(rule.get("bindings"), dict) else {}
             for eid in bindings.get("equipment_ids") or []:
                 eq = eq_map.get(str(eid), {})
-                et = str(eq.get("equipment_type") or "unknown")
+                et = effective_equipment_type(eq) or "unknown"
                 tally.setdefault(et, []).append(str(rule.get("id") or ""))
         for et, rule_ids in sorted(tally.items()):
             rows.append({"equipment_type": et, "rule_count": len(rule_ids), "rule_ids": ", ".join(rule_ids)})
