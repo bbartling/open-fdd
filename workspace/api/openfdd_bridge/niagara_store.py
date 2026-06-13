@@ -130,7 +130,26 @@ def _save_stations(rows: list[dict[str, Any]]) -> None:
     path.write_text(json.dumps({"stations": clean}, indent=2), encoding="utf-8")
 
 
+def validate_station_url(station_url: str) -> str:
+    """Basic SSRF guard for Niagara station URLs (lab-safe)."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(station_url.strip())
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("station_url must use http or https")
+    host = (parsed.hostname or "").lower()
+    if not host:
+        raise ValueError("station_url missing host")
+    blocked = {"169.254.169.254", "metadata.google.internal", "localhost", "127.0.0.1", "::1"}
+    if host in blocked and os.environ.get("OFDD_NIAGARA_ALLOW_LOCALHOST", "").lower() not in {"1", "true", "yes"}:
+        raise ValueError(f"station_url host {host} is blocked (set OFDD_NIAGARA_ALLOW_LOCALHOST=1 for lab loopback)")
+    return station_url.rstrip("/")
+
+
 def upsert_station(payload: dict[str, Any]) -> dict[str, Any]:
+    url = str(payload.get("station_url") or "").strip()
+    if url:
+        payload = {**payload, "station_url": validate_station_url(url)}
     sid = str(payload.get("id") or "").strip() or _slug(str(payload.get("name") or "station"))
     rows = _load_raw_stations()
     merged = {**DEFAULT_STATION, **payload, "id": sid}

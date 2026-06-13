@@ -19,6 +19,7 @@ from .routes import (
     audit_routes,
     auth_routes,
     bacnet_routes,
+    bench_routes,
     building_agent_routes,
     building_routes,
     fdd_routes,
@@ -97,6 +98,7 @@ def create_app() -> FastAPI:
     app.include_router(faults_routes.router)
     app.include_router(sites_routes.router)
     app.include_router(bacnet_routes.router)
+    app.include_router(bench_routes.router)
     app.include_router(modbus_routes.router)
     app.include_router(niagara_routes.router)
     app.include_router(json_api_routes.router)

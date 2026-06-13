@@ -1,0 +1,83 @@
+# Bench cross-source mapping: native BACnet direct vs Niagara baskStream
+# Same physical device: BENS BENCHTEST BOX (BACnet instance 5007 via MS/TP router 2000:7)
+#
+# ORDs must preserve $20 / $2d / $23 encoding exactly.
+
+bench_device:
+  name: BENS BENCHTEST BOX
+  bacnet_device_instance: 5007
+  bacnet_device_address: "2000:7"
+  niagara_station_id: bench9065
+  niagara_point_root: slot:/Drivers/BacnetNetwork/BENS$20BENCHTEST$20BOX/points
+  site_id: demo
+  equipment_id: bench-bens-box
+
+tolerances:
+  temperature_degF: 1.0
+  humidity_percentRH: 5.0
+  pressure_inH2O: 0.10
+  timestamp_skew_seconds: 180
+
+points:
+  outside_air_temperature:
+    semantic_id: oa-t
+    brick_type: Outside_Air_Temperature_Sensor
+    bacnet_point_id: 5007-analog-input-1173
+    bacnet_names: ["OA-T", "Outdoor Air Temperature", "OAT"]
+    niagara_ord: slot:/Drivers/BacnetNetwork/BENS$20BENCHTEST$20BOX/points/OA$2dT
+    tolerance: 1.0
+    units: degF
+    kind: numeric
+
+  outside_air_humidity:
+    semantic_id: oa-h
+    brick_type: Outside_Air_Humidity_Sensor
+    bacnet_point_id: 5007-analog-input-1168
+    bacnet_names: ["OA-H", "Outdoor Air Humidity", "OAH"]
+    niagara_ord: slot:/Drivers/BacnetNetwork/BENS$20BENCHTEST$20BOX/points/OA$2dH
+    tolerance: 5.0
+    units: percentRH
+    kind: numeric
+
+  duct_temperature:
+    semantic_id: duct-t
+    brick_type: Discharge_Air_Temperature_Sensor
+    bacnet_point_id: 5007-analog-input-1192
+    bacnet_names: ["DUCT-T", "Discharge Air Temperature", "DAT", "SAT"]
+    niagara_ord: slot:/Drivers/BacnetNetwork/BENS$20BENCHTEST$20BOX/points/DUCT$2dT
+    tolerance: 1.0
+    units: degF
+    kind: numeric
+
+  duct_pressure:
+    semantic_id: duct-p
+    brick_type: Supply_Air_Static_Pressure_Sensor
+    bacnet_point_id: null
+    bacnet_names: ["DUCT-P", "Duct Static Pressure", "DSP"]
+    niagara_ord: slot:/Drivers/BacnetNetwork/BENS$20BENCHTEST$20BOX/points/DUCT$2dP
+    tolerance: 0.10
+    units: inH2O
+    kind: numeric
+
+  zone_temperature:
+    semantic_id: stat_zn-t
+    brick_type: Zone_Air_Temperature_Sensor
+    bacnet_point_id: 5007-analog-input-10014
+    bacnet_names: ["STAT ZN-T", "Zone Temperature", "ZN-T"]
+    niagara_ord: slot:/Drivers/BacnetNetwork/BENS$20BENCHTEST$20BOX/points/STAT$20ZN$2dT
+    tolerance: 1.0
+    units: degF
+    kind: numeric
+
+  current_status:
+    semantic_id: current-s
+    brick_type: Sensor
+    bacnet_point_id: null
+    bacnet_names: ["CURRENT-S", "Current Status"]
+    niagara_ord: slot:/Drivers/BacnetNetwork/BENS$20BENCHTEST$20BOX/points/CURRENT$2dS
+    kind: boolean
+
+poll:
+  default_interval_seconds: 60
+  lab_min_interval_seconds: 30
+  lab_max_interval_seconds: 3600
