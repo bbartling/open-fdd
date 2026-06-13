@@ -117,8 +117,7 @@ def test_cookie_jar_captures_multiple_set_cookie():
 # --- Protocol / msgpack ---
 
 
-@pytest.mark.asyncio
-async def test_call_correlates_by_id():
+async def _call_correlates_by_id_async():
     client = AsyncNiagaraBaskStreamClient("https://example.test", verify_tls=False)
     sent: list[bytes] = []
 
@@ -156,8 +155,11 @@ async def test_call_correlates_by_id():
     assert unpacked["id"] == "req-1"
 
 
-@pytest.mark.asyncio
-async def test_call_raises_on_error_frame():
+def test_call_correlates_by_id():
+    asyncio.run(_call_correlates_by_id_async())
+
+
+async def _call_raises_on_error_frame_async():
     client = AsyncNiagaraBaskStreamClient("https://example.test", verify_tls=False)
     err_frame = msgpack.packb({"op": "error", "id": "x1", "error": "bad ord"}, use_bin_type=True)
 
@@ -173,8 +175,12 @@ async def test_call_raises_on_error_frame():
     client._cookies._cookies = {"s": "1"}
 
     with patch.object(client, "connect_ws", new=AsyncMock()):
-        with pytest.raises(NiagaraBaskStreamError):
-            await client.call("read", id="x1", points=["slot:/x"])
+        await client.call("read", id="x1", points=["slot:/x"])
+
+
+def test_call_raises_on_error_frame():
+    with pytest.raises(NiagaraBaskStreamError):
+        asyncio.run(_call_raises_on_error_frame_async())
 
 
 def test_friendly_error_tls():
@@ -361,8 +367,7 @@ def test_app_boot_with_unreachable_station(raw_client: TestClient):
     assert r.status_code in {200, 401, 403}
 
 
-@pytest.mark.asyncio
-async def test_poll_station_once_batches(monkeypatch):
+def test_poll_station_once_batches(monkeypatch):
     monkeypatch.setattr("openfdd_bridge.niagara_store.append_samples_and_ingest", lambda samples, **kw: {"samples": len(samples)})
     station = upsert_station(
         {
@@ -403,6 +408,9 @@ async def test_poll_station_once_batches(monkeypatch):
     monkeypatch.setattr("openfdd_bridge.niagara_service._login_client", fake_login)
     from openfdd_bridge.niagara_service import poll_station_once
 
-    out = await poll_station_once(station["id"], persistent=False)
-    assert out["samples"] == 3
-    assert len(reads) == 2  # batch size 2 → 2 + 1
+    async def run():
+        out = await poll_station_once(station["id"], persistent=False)
+        assert out["samples"] == 3
+        assert len(reads) == 2
+
+    asyncio.run(run())

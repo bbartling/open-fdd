@@ -77,7 +77,7 @@ def resolve_password(station: dict[str, Any]) -> str:
 
 
 def make_point_id(station_id: str, point_ord: str) -> str:
-    digest = hashlib.sha1(point_ord.encode("utf-8")).hexdigest()[:10]
+    digest = hashlib.sha1(point_ord.encode("utf-8"), usedforsecurity=False).hexdigest()[:10]
     return f"niagara-{_slug(station_id)}-{digest}"
 
 
