@@ -1,4 +1,4 @@
-"""CI guard: production dashboard assets must not embed private LAN or bench defaults."""
+"""CI guard: committed production dashboard assets must not embed private LAN or bench defaults."""
 
 from __future__ import annotations
 
@@ -8,18 +8,13 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 CHECK = REPO / "scripts" / "check_production_assets.py"
-DASHBOARD = REPO / "workspace" / "dashboard"
+ASSET_DIR = REPO / "workspace" / "api" / "static" / "app" / "assets"
 
 
 def test_production_assets_exclude_private_lan_and_bench_defaults() -> None:
-    """Build dashboard and scan shipped static assets."""
-    subprocess.run(
-        ["npm", "run", "build"],
-        cwd=DASHBOARD,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    """Scan shipped static assets (built in CI security job and committed to repo)."""
+    assert ASSET_DIR.is_dir(), "static/app/assets missing — run dashboard production build"
+    assert list(ASSET_DIR.glob("*.js")), "no JS bundle in static/app/assets"
     proc = subprocess.run(
         [sys.executable, str(CHECK)],
         cwd=REPO,
