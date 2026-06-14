@@ -387,7 +387,7 @@ start_bridge() {
   mkdir -p "$PID_DIR" workspace/data workspace/bacnet/commissioning workspace/bacnet/polls
   restart_if_running "$BRIDGE_PID" "uvicorn openfdd_bridge.main:app" "bridge"
   ensure_build
-  "${VENV}/bin/pip" install -q -e ".[dev,engine]" -r workspace/api/requirements.txt
+  "${VENV}/bin/pip" install -q -e ".[dev,engine,datafusion]" -r workspace/api/requirements.txt
   nohup "${VENV}/bin/uvicorn" openfdd_bridge.main:app \
     --app-dir workspace/api \
     --host "$OFDD_BRIDGE_HOST" --port "$OFDD_BRIDGE_PORT" \
@@ -499,7 +499,7 @@ start_ollama() {
 start_fdd_loop() {
   mkdir -p "$PID_DIR"
   restart_if_running "$FDD_PID" "openfdd_bridge.fdd_runner" "FDD loop"
-  "${VENV}/bin/pip" install -q -e ".[dev,engine]" -r workspace/api/requirements.txt
+  "${VENV}/bin/pip" install -q -e ".[dev,engine,datafusion]" -r workspace/api/requirements.txt
   (
     cd "${ROOT}/workspace/api"
     nohup "${VENV}/bin/python" -m openfdd_bridge.fdd_runner \
