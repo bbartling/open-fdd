@@ -36,7 +36,9 @@ class SaveRuleBody(BaseModel):
     description: str = ""
     mode: str = "rule"
     backend: str = ""
-    code: str
+    code: str = ""
+    sql: str = ""
+    fault_column: str = "fault"
     config: dict[str, Any] = Field(default_factory=dict)
     column_map: dict[str, str] = Field(default_factory=dict)
     applies_to: AppliesTo = Field(default_factory=AppliesTo)
@@ -242,6 +244,13 @@ def infer_fault_codes_route(
 def save_rule(body: SaveRuleBody, user: dict = Depends(require_roles("integrator", "agent"))) -> dict:
     saved_by = str(user.get("sub") or user.get("role") or "operator")
     payload = body.model_dump()
+    backend = str(payload.get("backend") or "").strip()
+    if backend == "datafusion_sql":
+        if not str(payload.get("sql") or "").strip():
+            raise HTTPException(status_code=400, detail="datafusion_sql rules require sql")
+        payload.setdefault("code", "# DataFusion SQL rule — see sql field")
+    elif not str(payload.get("code") or "").strip():
+        raise HTTPException(status_code=400, detail="rule code is required")
     if not str(payload.get("short_description") or "").strip():
         payload["short_description"] = str(body.name or "Fault detected").strip()[:240]
     try:

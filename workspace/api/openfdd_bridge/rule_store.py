@@ -200,12 +200,23 @@ class RuleStore:
         return True
 
 
-def _lint_rule_code(code: str, *, mode: str) -> None:
+def _lint_rule_code(code: str, *, mode: str, backend: str = "", sql: str = "", fault_column: str = "fault") -> None:
     """Reject pandas/legacy patterns before persisting a rule."""
+    from open_fdd.arrow_runtime.datafusion_backend import lint_datafusion_sql_rule
     from open_fdd.arrow_runtime.rules import detect_rule_backend
 
     from . import playground
 
+    if backend == "datafusion_sql" or str(sql or "").strip():
+        lint = lint_datafusion_sql_rule(sql, fault_column=fault_column or "fault")
+        if lint.get("ok"):
+            return
+        msgs = [
+            str(i.get("message") or "lint failed")
+            for i in lint.get("issues", [])
+            if i.get("severity") == "error"
+        ]
+        raise ValueError("SQL lint failed:\n" + "\n".join(msgs) if msgs else "SQL lint failed")
     if mode == "script":
         lint = playground.lint_python(
             code,
@@ -235,14 +246,26 @@ def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict
     if severity not in VALID_SEVERITIES:
         severity = "warning"
     code = str(entry.get("code") or "")
+    sql = str(entry.get("sql") or "").strip()
+    fault_column = str(entry.get("fault_column") or "fault").strip() or "fault"
     path = str(entry.get("source_path") or "")
-    if path:
-        disk = read_source(path)
-        if disk.strip():
-            code = disk
-    if not code.strip():
-        raise ValueError("rule code is required")
-    _lint_rule_code(code, mode=mode)
+    backend = str(entry.get("backend") or "").strip()
+    resolved_backend = backend
+    if backend == "datafusion_sql" or sql:
+        if not sql:
+            raise ValueError("datafusion_sql rules require sql field")
+        _lint_rule_code(code, mode=mode, backend="datafusion_sql", sql=sql, fault_column=fault_column)
+        if not code.strip():
+            code = "# DataFusion SQL rule — see sql field"
+        resolved_backend = "datafusion_sql"
+    else:
+        if path:
+            disk = read_source(path)
+            if disk.strip():
+                code = disk
+        if not code.strip():
+            raise ValueError("rule code is required")
+        _lint_rule_code(code, mode=mode)
     config = entry.get("config")
     if not isinstance(config, dict):
         config = {}
@@ -252,23 +275,22 @@ def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict
     applies_to = entry.get("applies_to")
     if not isinstance(applies_to, dict):
         applies_to = {}
-    backend = str(entry.get("backend") or "").strip()
-    if backend not in {"arrow", "legacy_row"}:
+    if resolved_backend not in {"arrow", "legacy_row", "datafusion_sql"}:
         try:
             from open_fdd.arrow_runtime.rules import detect_rule_backend
 
-            backend = detect_rule_backend(code, {"mode": mode})
-            if backend == "script":
-                backend = ""
+            resolved_backend = detect_rule_backend(code, {"mode": mode, "sql": sql, "backend": resolved_backend})
+            if resolved_backend == "script":
+                resolved_backend = ""
         except Exception:
-            backend = ""
-    return {
+            resolved_backend = ""
+    out = {
         "id": str(entry.get("id") or uuid4()),
         "name": str(entry.get("name") or "Untitled rule")[:200],
         "short_description": _short_description(entry),
         "description": str(entry.get("description") or "")[:1000],
         "mode": mode,
-        "backend": backend,
+        "backend": resolved_backend,
         "code": code,
         "config": config,
         "column_map": column_map,
@@ -285,3 +307,7 @@ def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict
         "created_at": str(entry.get("created_at") or _now()),
         "updated_at": _now(),
     }
+    if resolved_backend == "datafusion_sql":
+        out["sql"] = sql
+        out["fault_column"] = fault_column
+    return out

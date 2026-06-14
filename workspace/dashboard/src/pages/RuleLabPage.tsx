@@ -17,16 +17,34 @@ import {
 
 const NEW_RULE_VALUE = "__new__";
 
+type RuleBackend = "arrow" | "datafusion_sql";
+
+const SQL_THRESHOLD_TEMPLATE = `SELECT
+  *,
+  zone_temp > 75.0 AS fault
+FROM telemetry`;
+
+const SQL_CASE_TEMPLATE = `SELECT
+  *,
+  CASE
+    WHEN fan_cmd > 0.5 AND airflow_cfm < 1000.0 THEN true
+    ELSE false
+  END AS fault
+FROM telemetry`;
+
 type SavedRule = {
   id: string;
   name: string;
   mode: "rule" | "script";
+  backend?: RuleBackend | string;
   severity: string;
   enabled: boolean;
   source_path?: string;
   fault_code?: string;
   fault_codes?: string[];
   code?: string;
+  sql?: string;
+  fault_column?: string;
   config?: Record<string, unknown>;
   bindings?: {
     point_ids?: string[];
@@ -45,6 +63,12 @@ function syntaxPillClass(ok: boolean | null, busy: boolean): string {
 export default function RuleLabPage() {
   const activeSiteId = useActiveSiteId();
   const [code, setCode] = useState("");
+  const [sql, setSql] = useState(SQL_THRESHOLD_TEMPLATE);
+  const [ruleBackend, setRuleBackend] = useState<RuleBackend>("arrow");
+  const [faultColumn, setFaultColumn] = useState("fault");
+  const [sqlLintIssues, setSqlLintIssues] = useState<LintIssue[]>([]);
+  const [sqlSyntaxOk, setSqlSyntaxOk] = useState<boolean | null>(null);
+  const [sqlPreview, setSqlPreview] = useState<Record<string, unknown> | null>(null);
   const [sourcePath, setSourcePath] = useState("");
   const [consoleText, setConsoleText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -81,6 +105,17 @@ export default function RuleLabPage() {
     setActiveRuleId(rule.id);
     setRuleName(displayRuleName(rule.name));
     setMetaDirty(false);
+    const backend = (rule.backend === "datafusion_sql" ? "datafusion_sql" : "arrow") as RuleBackend;
+    setRuleBackend(backend);
+    setFaultColumn(rule.fault_column || "fault");
+    if (backend === "datafusion_sql") {
+      setSql(rule.sql?.trim() || SQL_THRESHOLD_TEMPLATE);
+      setCode(rule.code?.trim() || "# DataFusion SQL rule — see sql field");
+      setSourcePath("");
+      setHelperSource("");
+      setHelperWarnings([]);
+      return;
+    }
     try {
       const res = await apiFetch<{ code: string; path: string }>(`/api/rules/saved/${rule.id}/source`);
       setCode(res.code?.trim() || rule.code?.trim() || "");
@@ -156,12 +191,43 @@ export default function RuleLabPage() {
     }, 400);
   }, []);
 
+  const runDebouncedSqlLint = useCallback((source: string) => {
+    if (!source.trim()) {
+      setSqlSyntaxOk(null);
+      setSqlLintIssues([]);
+      return;
+    }
+    if (lintTimer.current) window.clearTimeout(lintTimer.current);
+    lintTimer.current = window.setTimeout(() => {
+      setLintBusy(true);
+      apiFetch<{ ok: boolean; issues: LintIssue[] }>("/api/rules/lab/lint-sql", {
+        method: "POST",
+        body: JSON.stringify({ backend: "datafusion_sql", sql: source, fault_column: faultColumn }),
+      })
+        .then((res) => {
+          setSqlSyntaxOk(res.ok);
+          setSqlLintIssues(res.issues || []);
+        })
+        .catch(() => {
+          setSqlSyntaxOk(null);
+          setSqlLintIssues([]);
+        })
+        .finally(() => setLintBusy(false));
+    }, 400);
+  }, [faultColumn]);
+
   useEffect(() => {
+    if (ruleBackend === "datafusion_sql") {
+      runDebouncedSqlLint(sql);
+      return () => {
+        if (lintTimer.current) window.clearTimeout(lintTimer.current);
+      };
+    }
     runDebouncedLint(code);
     return () => {
       if (lintTimer.current) window.clearTimeout(lintTimer.current);
     };
-  }, [code, runDebouncedLint]);
+  }, [code, sql, ruleBackend, runDebouncedLint, runDebouncedSqlLint]);
 
   function appendConsole(text: string) {
     setConsoleText((prev) => (prev ? `${prev}\n${text}` : text));
@@ -175,7 +241,157 @@ export default function RuleLabPage() {
     };
   }
 
+  async function validateSql() {
+    if (!sql.trim()) {
+      appendConsole("Enter SQL before validating.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await apiFetch<{
+        ok: boolean;
+        error?: string;
+        details?: string;
+        true_count?: number;
+        false_count?: number;
+        row_count?: number;
+        datafusion_installed?: boolean;
+      }>("/api/rules/lab/validate", {
+        method: "POST",
+        body: JSON.stringify({
+          backend: "datafusion_sql",
+          sql,
+          fault_column: faultColumn,
+          site_id: activeSiteId || undefined,
+          limit: 500,
+        }),
+      });
+      setSqlSyntaxOk(res.ok);
+      if (res.ok) {
+        appendConsole(
+          `>>> SQL valid · rows=${res.row_count} true=${res.true_count} false=${res.false_count}`,
+        );
+      } else {
+        appendConsole([res.error, res.details].filter(Boolean).join("\n"));
+      }
+    } catch (e) {
+      appendConsole(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function previewSql() {
+    if (!sql.trim()) return;
+    setBusy(true);
+    setConsoleText("");
+    try {
+      const res = await apiFetch<Record<string, unknown>>("/api/rules/lab/preview", {
+        method: "POST",
+        body: JSON.stringify({
+          backend: "datafusion_sql",
+          sql,
+          fault_column: faultColumn,
+          site_id: activeSiteId || undefined,
+          limit: 500,
+        }),
+      });
+      setSqlPreview(res);
+      if (res.ok) {
+        setConsoleText(
+          [
+            ">>> DataFusion SQL preview",
+            `backend: datafusion_sql · rows=${res.row_count} · true=${res.true_count} (${res.fault_rate_pct}%)`,
+            `null=${res.null_count} · ${res.ms ?? res.duration_ms} ms · ${res.data_source}`,
+            Array.isArray(res.preview) && res.preview.length
+              ? `fault preview: ${JSON.stringify(res.preview.slice(0, 5), null, 2)}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        );
+      } else {
+        setConsoleText(String(res.error || res.details || "SQL preview failed"));
+      }
+    } catch (e) {
+      setConsoleText(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function compareBackends() {
+    if (ruleBackend !== "datafusion_sql" || !sql.trim() || !code.trim()) {
+      appendConsole("Compare needs a PyArrow code buffer and DataFusion SQL rule.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await apiFetch<{
+        ok: boolean;
+        left_true_count?: number;
+        right_true_count?: number;
+        matching_rows?: number;
+        mismatching_rows?: number;
+        error?: string;
+      }>("/api/rules/lab/compare", {
+        method: "POST",
+        body: JSON.stringify({
+          left: { backend: "arrow", code },
+          right: { backend: "datafusion_sql", sql, fault_column: faultColumn },
+          site_id: activeSiteId || undefined,
+          limit: 1000,
+        }),
+      });
+      if (res.ok) {
+        appendConsole(
+          `>>> Compare arrow vs SQL · left=${res.left_true_count} right=${res.right_true_count} mismatches=${res.mismatching_rows}`,
+        );
+      } else {
+        appendConsole(res.error || "Compare failed");
+      }
+    } catch (e) {
+      appendConsole(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveSqlRule() {
+    setBusy(true);
+    try {
+      const res = await apiFetch<{ rule: SavedRule }>("/api/rules/lab/save", {
+        method: "POST",
+        body: JSON.stringify({
+          id: creatingNew ? undefined : activeRuleId || undefined,
+          name: ruleName,
+          mode: "rule",
+          backend: "datafusion_sql",
+          sql,
+          fault_column: faultColumn,
+          code: "# DataFusion SQL rule — see sql field",
+          config: {},
+          severity: "warning",
+          enabled: false,
+        }),
+      });
+      setActiveRuleId(res.rule.id);
+      setCreatingNew(false);
+      setMetaDirty(false);
+      appendConsole(`>>> Saved DataFusion SQL rule ${res.rule.id}`);
+      await refreshSaved();
+    } catch (e) {
+      appendConsole(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function lintNow() {
+    if (ruleBackend === "datafusion_sql") {
+      await validateSql();
+      return;
+    }
     if (!code.trim()) {
       appendConsole("No rule loaded — upload rule.py or select a saved rule.");
       return;
@@ -197,6 +413,10 @@ export default function RuleLabPage() {
   }
 
   async function testRun() {
+    if (ruleBackend === "datafusion_sql") {
+      await previewSql();
+      return;
+    }
     if (!code.trim()) {
       appendConsole("Upload rule.py before testing.");
       return;
@@ -403,9 +623,19 @@ export default function RuleLabPage() {
     setActiveRuleId("");
     setRuleName("New rule");
     setCode("");
+    setSql(SQL_THRESHOLD_TEMPLATE);
+    setRuleBackend("arrow");
     setSourcePath("");
     setMetaDirty(false);
-    appendConsole("Download a blank kit or upload rule.py to create a new Arrow rule.");
+    appendConsole("Download a blank kit, upload rule.py (PyArrow), or switch to DataFusion SQL.");
+  }
+
+  function onBackendChange(next: RuleBackend) {
+    setRuleBackend(next);
+    setMetaDirty(true);
+    if (next === "datafusion_sql" && !sql.trim()) {
+      setSql(SQL_THRESHOLD_TEMPLATE);
+    }
   }
 
   async function removeRule() {
@@ -442,12 +672,17 @@ export default function RuleLabPage() {
 
   const selectValue = creatingNew ? NEW_RULE_VALUE : activeRuleId || saved[0]?.id || "";
 
+  const activeLintIssues = ruleBackend === "datafusion_sql" ? sqlLintIssues : lintIssues;
+  const activeSyntaxOk = ruleBackend === "datafusion_sql" ? sqlSyntaxOk : syntaxOk;
+
   const syntaxTitle = useMemo(() => {
     if (lintBusy) return "Checking syntax…";
-    if (syntaxOk === true) return "Arrow lint OK";
-    if (syntaxOk === false) return lintIssues.find((i) => i.severity === "error")?.message || "Lint error";
-    return code.trim() ? "Lint pending" : "No rule loaded";
-  }, [lintBusy, syntaxOk, lintIssues, code]);
+    if (activeSyntaxOk === true) return ruleBackend === "datafusion_sql" ? "SQL lint OK" : "Arrow lint OK";
+    if (activeSyntaxOk === false)
+      return activeLintIssues.find((i) => i.severity === "error")?.message || "Lint error";
+    const hasSource = ruleBackend === "datafusion_sql" ? sql.trim() : code.trim();
+    return hasSource ? "Lint pending" : "No rule loaded";
+  }, [lintBusy, activeSyntaxOk, activeLintIssues, code, sql, ruleBackend]);
 
   const consoleLines = useMemo(() => consoleTextToLines(consoleText), [consoleText]);
 
@@ -457,7 +692,8 @@ export default function RuleLabPage() {
         title="Rule Lab"
         subtitle={
           <>
-            Arrow-only rules: <strong>download kit</strong> → edit locally → <strong>upload rule.py</strong>.
+            Arrow-only rules: <strong>download kit</strong> → edit locally → <strong>upload rule.py</strong>, or author{" "}
+            <strong>DataFusion SQL</strong> (server-side, optional extra).
             Pin rules on the <a href="/model">Data Model</a> commissioning JSON or test by equipment below.
           </>
         }
@@ -512,12 +748,26 @@ export default function RuleLabPage() {
               +
             </button>
           </div>
-          <span className={syntaxPillClass(syntaxOk, lintBusy)} title={syntaxTitle}>
-            {lintBusy ? "…" : syntaxOk === true ? "arrow ok" : syntaxOk === false ? "lint err" : "arrow —"}
+          <span className={syntaxPillClass(activeSyntaxOk, lintBusy)} title={syntaxTitle}>
+            {lintBusy ? "…" : activeSyntaxOk === true ? (ruleBackend === "datafusion_sql" ? "sql ok" : "arrow ok") : activeSyntaxOk === false ? "lint err" : ruleBackend === "datafusion_sql" ? "sql —" : "arrow —"}
           </span>
         </div>
 
         <div className="form-grid">
+          <div className="field">
+            <label className="field-label" htmlFor="rule-backend">
+              Rule backend
+            </label>
+            <select
+              id="rule-backend"
+              value={ruleBackend}
+              disabled={busy}
+              onChange={(e) => onBackendChange(e.target.value as RuleBackend)}
+            >
+              <option value="arrow">PyArrow</option>
+              <option value="datafusion_sql">DataFusion SQL</option>
+            </select>
+          </div>
           <div className="field">
             <label className="field-label" htmlFor="rule-name">
               Name
@@ -535,30 +785,75 @@ export default function RuleLabPage() {
         </div>
 
         <p className="muted rule-lab-hint">
-          Tune thresholds in <code>rule.py</code> constants (<code>VALUE_COLUMN</code>, limits) — download kit, edit locally,
-          upload.
+          {ruleBackend === "datafusion_sql" ? (
+            <>
+              DataFusion SQL rules run <strong>server-side</strong> against the Arrow table <code>telemetry</code>. The query
+              must return one boolean column named <code>{faultColumn}</code>. Install optional extra:{" "}
+              <code>open-fdd[datafusion]</code>.
+            </>
+          ) : (
+            <>
+              Tune thresholds in <code>rule.py</code> constants (<code>VALUE_COLUMN</code>, limits) — download kit, edit
+              locally, upload.
+            </>
+          )}
         </p>
 
         <div className="toolbar rule-lab-actions">
-          <button type="button" className="secondary" disabled={busy} onClick={() => void downloadKit()}>
-            Download kit (.zip)
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy || authRole === "operator"}
-            onClick={() => void downloadAllRulesKit()}
-          >
-            Export all rules
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy || authRole === "operator"}
-            onClick={() => uploadRef.current?.click()}
-          >
-            Upload rule.py
-          </button>
+          {ruleBackend === "arrow" ? (
+            <>
+              <button type="button" className="secondary" disabled={busy} onClick={() => void downloadKit()}>
+                Download kit (.zip)
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || authRole === "operator"}
+                onClick={() => void downloadAllRulesKit()}
+              >
+                Export all rules
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || authRole === "operator"}
+                onClick={() => uploadRef.current?.click()}
+              >
+                Upload rule.py
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() => {
+                  setSql(SQL_THRESHOLD_TEMPLATE);
+                  setMetaDirty(true);
+                }}
+              >
+                Threshold template
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() => {
+                  setSql(SQL_CASE_TEMPLATE);
+                  setMetaDirty(true);
+                }}
+              >
+                CASE template
+              </button>
+              <button type="button" className="secondary" disabled={busy || authRole === "operator"} onClick={() => void saveSqlRule()}>
+                Save SQL rule
+              </button>
+              <button type="button" className="secondary" disabled={busy || !code.trim() || !sql.trim()} onClick={() => void compareBackends()}>
+                Compare backends
+              </button>
+            </>
+          )}
           <input
             ref={uploadRef}
             type="file"
@@ -566,11 +861,24 @@ export default function RuleLabPage() {
             hidden
             onChange={(e) => void onUploadFile(e.target.files?.[0] ?? null)}
           />
-          <button type="button" className="secondary" disabled={busy || !code.trim()} onClick={() => void lintNow()}>
-            Lint
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy || (ruleBackend === "arrow" ? !code.trim() : !sql.trim())}
+            onClick={() => void lintNow()}
+          >
+            {ruleBackend === "datafusion_sql" ? "Validate SQL" : "Lint"}
           </button>
-          <button type="button" disabled={busy || syntaxOk === false || !code.trim()} onClick={() => void testRun()}>
-            Quick test
+          <button
+            type="button"
+            disabled={
+              busy ||
+              activeSyntaxOk === false ||
+              (ruleBackend === "arrow" ? !code.trim() : !sql.trim())
+            }
+            onClick={() => void testRun()}
+          >
+            {ruleBackend === "datafusion_sql" ? "Run Preview" : "Quick test"}
           </button>
           <button
             type="button"
@@ -582,7 +890,7 @@ export default function RuleLabPage() {
           <button
             type="button"
             className="primary"
-            disabled={busy || authRole === "operator" || !code.trim()}
+            disabled={busy || authRole === "operator" || (ruleBackend === "arrow" ? !code.trim() : false)}
             onClick={() => void updateAllRecords()}
           >
             Update all records
@@ -601,8 +909,40 @@ export default function RuleLabPage() {
       <FddRuleTestPanel rules={saved} disabled={busy || authRole === "operator"} />
 
       <div className="panel rule-lab-readonly-panel">
-        <h3 className="panel-title">Rule source</h3>
-        {code.trim() ? (
+        <h3 className="panel-title">{ruleBackend === "datafusion_sql" ? "SQL rule editor" : "Rule source"}</h3>
+        {ruleBackend === "datafusion_sql" ? (
+          <>
+            <label className="field-label" htmlFor="fault-column">
+              Fault column
+            </label>
+            <input
+              id="fault-column"
+              value={faultColumn}
+              disabled={busy}
+              onChange={(e) => {
+                setFaultColumn(e.target.value);
+                setMetaDirty(true);
+              }}
+            />
+            <textarea
+              className="sql-rule-editor"
+              rows={14}
+              value={sql}
+              disabled={busy || authRole === "operator"}
+              onChange={(e) => {
+                setSql(e.target.value);
+                setMetaDirty(true);
+              }}
+              spellCheck={false}
+            />
+            {sqlPreview?.ok === false && sqlPreview.datafusion_installed === false ? (
+              <p className="error panel">
+                DataFusion SQL backend is not installed on this Open-FDD runtime. Install{" "}
+                <code>open-fdd[datafusion]</code>.
+              </p>
+            ) : null}
+          </>
+        ) : code.trim() ? (
           <div className="rule-readonly-editor">
             <PythonCodeEditor
               value={code}
@@ -618,21 +958,28 @@ export default function RuleLabPage() {
             <code>pip install open-fdd pyarrow</code>, then upload when lint passes.
           </p>
         )}
-        {lintIssues.length > 0 && syntaxOk === false ? (
+        {activeLintIssues.length > 0 && activeSyntaxOk === false ? (
           <ul className="rule-lint-list">
-            {lintIssues
+            {activeLintIssues
               .filter((i) => i.severity === "error")
               .slice(0, 6)
               .map((i, idx) => (
                 <li key={`${i.line}-${idx}`}>
-                  line {i.line}: {i.message}
+                  {i.line ? `line ${i.line}: ` : ""}
+                  {i.message}
                 </li>
               ))}
           </ul>
         ) : null}
+        {ruleBackend === "datafusion_sql" && sqlPreview?.ok ? (
+          <p className="muted">
+            Backend: <strong>DataFusion SQL</strong> · rows={String(sqlPreview.row_count)} · fault rate{" "}
+            {String(sqlPreview.fault_rate_pct)}%
+          </p>
+        ) : null}
       </div>
 
-      {helperSource || helperWarnings.length ? (
+      {ruleBackend === "arrow" && (helperSource || helperWarnings.length) ? (
         <details className="panel rule-lab-readonly-panel">
           <summary>Helper libraries (Open-FDD + PyArrow)</summary>
           {helperSource ? (
