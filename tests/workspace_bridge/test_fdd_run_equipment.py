@@ -24,31 +24,34 @@ def _use_workspace_data(monkeypatch):
     fdd_equipment_mod._RULE_STORE_CACHE = None
 
 
+MINI_BENCH_MODEL = {
+    "sites": [{"id": "demo", "name": "Demo"}],
+    "equipment": [
+        {"id": "bacnet-5007", "site_id": "demo", "name": "BACnet MS/TP device 5007"},
+        {"id": "niagara-bench9065", "site_id": "demo", "name": "Niagara station bench9065"},
+    ],
+    "points": [
+        {
+            "id": "5007-analog-input-1173",
+            "site_id": "demo",
+            "equipment_id": "bacnet-5007",
+            "external_id": "duct-t",
+        },
+        {
+            "id": "niagara-bench9065-f4c0862bb4",
+            "site_id": "demo",
+            "equipment_id": "niagara-bench9065",
+            "external_id": "oa-t",
+        },
+    ],
+}
+
+
 def _bench_model() -> dict:
     path = REPO / "workspace" / "data" / "model.json"
     if path.is_file():
         return json.loads(path.read_text(encoding="utf-8"))
-    return {
-        "sites": [{"id": "demo", "name": "Demo"}],
-        "equipment": [
-            {"id": "bacnet-5007", "site_id": "demo", "name": "BACnet MS/TP device 5007"},
-            {"id": "niagara-bench9065", "site_id": "demo", "name": "Niagara station bench9065"},
-        ],
-        "points": [
-            {
-                "id": "5007-analog-input-1173",
-                "site_id": "demo",
-                "equipment_id": "bacnet-5007",
-                "external_id": "duct-t",
-            },
-            {
-                "id": "niagara-bench9065-f4c0862bb4",
-                "site_id": "demo",
-                "equipment_id": "niagara-bench9065",
-                "external_id": "oa-t",
-            },
-        ],
-    }
+    return MINI_BENCH_MODEL
 
 
 def test_plain_symptom_strips_niagara_prefix():
@@ -79,11 +82,9 @@ BENCH_RULE_BINDINGS = {
 
 def _mock_rules(monkeypatch):
     _use_workspace_data(monkeypatch)
-    monkeypatch.setattr(
-        fdd_equipment_mod,
-        "_RULE_STORE_CACHE",
-        {"temp-out-of-bounds": BENCH_RULE_BINDINGS["temp-out-of-bounds"]},
-    )
+    rules = {"temp-out-of-bounds": BENCH_RULE_BINDINGS["temp-out-of-bounds"]}
+    monkeypatch.setattr(fdd_equipment_mod, "_RULE_STORE_CACHE", rules)
+    monkeypatch.setattr(fdd_equipment_mod, "_rules_by_id", lambda: rules)
 
 
 def test_equipment_from_rule_bindings_resolves_bacnet_device(monkeypatch):
@@ -136,11 +137,9 @@ def test_save_results_persists_equipment_names(tmp_path, monkeypatch):
     import openfdd_bridge.fdd_results as mod
 
     _mock_rules(monkeypatch)
-    model = _bench_model()
-    monkeypatch.setattr(mod, "_MODEL_CACHE", model)
-
-    monkeypatch.setattr(mod, "fdd_results_path", lambda: tmp_path / "fdd_results.json")
-    monkeypatch.setattr(mod, "_model_for_fdd", lambda: model)
+    mod._MODEL_CACHE = MINI_BENCH_MODEL
+    path = tmp_path / "fdd_results.json"
+    mod.fdd_results_path = lambda: path
     out = mod.save_results(
         [
             {
@@ -152,5 +151,6 @@ def test_save_results_persists_equipment_names(tmp_path, monkeypatch):
             }
         ]
     )
-    assert out["runs"][0]["equipment_names"]
-    assert (tmp_path / "fdd_results.json").is_file()
+    run0 = out["runs"][0]
+    assert run0.get("equipment_names")
+    assert path.is_file()
