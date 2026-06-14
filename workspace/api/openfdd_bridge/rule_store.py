@@ -249,6 +249,7 @@ def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict
     sql = str(entry.get("sql") or "").strip()
     fault_column = str(entry.get("fault_column") or "fault").strip() or "fault"
     path = str(entry.get("source_path") or "")
+    backend = str(entry.get("backend") or "").strip()
     resolved_backend = backend
     if backend == "datafusion_sql" or sql:
         if not sql:
