@@ -136,10 +136,10 @@ def test_fdd_alert_title_is_equipment_first():
 def test_save_results_persists_equipment_names(tmp_path, monkeypatch):
     import openfdd_bridge.fdd_results as mod
 
-    _mock_rules(monkeypatch)
-    mod._MODEL_CACHE = MINI_BENCH_MODEL
-    path = tmp_path / "fdd_results.json"
-    mod.fdd_results_path = lambda: path
+    rules = {"temp-out-of-bounds": BENCH_RULE_BINDINGS["temp-out-of-bounds"]}
+    monkeypatch.setattr("openfdd_bridge.fdd_equipment._rules_by_id", lambda: rules)
+    monkeypatch.setattr(mod, "_MODEL_CACHE", MINI_BENCH_MODEL)
+    monkeypatch.setattr(mod, "fdd_results_path", lambda: tmp_path / "fdd_results.json")
     out = mod.save_results(
         [
             {
@@ -153,4 +153,4 @@ def test_save_results_persists_equipment_names(tmp_path, monkeypatch):
     )
     run0 = out["runs"][0]
     assert run0.get("equipment_names")
-    assert path.is_file()
+    assert (tmp_path / "fdd_results.json").is_file()
