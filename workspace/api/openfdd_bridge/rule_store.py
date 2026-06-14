@@ -97,17 +97,25 @@ class RuleStore:
         return raw
 
     def list_rules(self) -> list[dict[str, Any]]:
-        return list(self.load().get("rules", []))
+        out: list[dict[str, Any]] = []
+        for rule in self.load().get("rules", []):
+            if not isinstance(rule, dict):
+                continue
+            out.append(self._hydrate_rule_code(dict(rule)))
+        return out
+
+    def _hydrate_rule_code(self, rule: dict[str, Any]) -> dict[str, Any]:
+        path = str(rule.get("source_path") or "")
+        if path:
+            disk = read_source(path)
+            if disk.strip():
+                rule = dict(rule)
+                rule["code"] = disk
+        return rule
 
     def get(self, rule_id: str) -> dict[str, Any] | None:
         for rule in self.list_rules():
             if str(rule.get("id")) == str(rule_id):
-                path = str(rule.get("source_path") or "")
-                if path:
-                    disk = read_source(path)
-                    if disk.strip():
-                        rule = dict(rule)
-                        rule["code"] = disk
                 return rule
         return None
 
@@ -240,6 +248,11 @@ def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict
     if severity not in VALID_SEVERITIES:
         severity = "warning"
     code = str(entry.get("code") or "")
+    path = str(entry.get("source_path") or "")
+    if path:
+        disk = read_source(path)
+        if disk.strip():
+            code = disk
     if not code.strip():
         raise ValueError("rule code is required")
     _lint_rule_code(code, mode=mode)
