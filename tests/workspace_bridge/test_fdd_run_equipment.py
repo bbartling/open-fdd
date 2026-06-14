@@ -25,7 +25,30 @@ def _use_workspace_data(monkeypatch):
 
 
 def _bench_model() -> dict:
-    return json.loads((REPO / "workspace" / "data" / "model.json").read_text(encoding="utf-8"))
+    path = REPO / "workspace" / "data" / "model.json"
+    if path.is_file():
+        return json.loads(path.read_text(encoding="utf-8"))
+    return {
+        "sites": [{"id": "demo", "name": "Demo"}],
+        "equipment": [
+            {"id": "bacnet-5007", "site_id": "demo", "name": "BACnet MS/TP device 5007"},
+            {"id": "niagara-bench9065", "site_id": "demo", "name": "Niagara station bench9065"},
+        ],
+        "points": [
+            {
+                "id": "5007-analog-input-1173",
+                "site_id": "demo",
+                "equipment_id": "bacnet-5007",
+                "external_id": "duct-t",
+            },
+            {
+                "id": "niagara-bench9065-f4c0862bb4",
+                "site_id": "demo",
+                "equipment_id": "niagara-bench9065",
+                "external_id": "oa-t",
+            },
+        ],
+    }
 
 
 def test_plain_symptom_strips_niagara_prefix():
@@ -114,6 +137,7 @@ def test_save_results_persists_equipment_names(tmp_path, monkeypatch):
 
     _mock_rules(monkeypatch)
     model = _bench_model()
+    monkeypatch.setattr(mod, "_MODEL_CACHE", model)
 
     monkeypatch.setattr(mod, "fdd_results_path", lambda: tmp_path / "fdd_results.json")
     monkeypatch.setattr(mod, "_model_for_fdd", lambda: model)
