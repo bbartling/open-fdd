@@ -31,23 +31,13 @@ import {
 } from "../lib/niagara-api";
 import { STANDARD_POLL_INTERVALS } from "../lib/pollIntervals";
 
-const BENCH_DEFAULTS = {
-  name: "Bench Station 9065",
-  station_url: "https://192.168.204.11",
-  username: "admin",
-  password_env: "OPENFDD_NIAGARA_ADMIN_PASSWORD",
-  verify_tls: false,
-  root_ord: "slot:/Drivers",
-  default_points_root: "slot:/Drivers/BacnetNetwork/BENS$20BENCHTEST$20BOX/points",
-  poll_interval_seconds: 60,
-  read_batch_size: 50,
-};
+const STATION_URL_PLACEHOLDER = "https://niagara.example.local";
 
 const emptyForm = (): Partial<NiagaraStation> => ({
   name: "",
   station_url: "",
   username: "",
-  password_env: "OPENFDD_NIAGARA_ADMIN_PASSWORD",
+  password_env: "",
   verify_tls: false,
   enabled: false,
   root_ord: "slot:/Drivers",
@@ -63,7 +53,7 @@ const emptyForm = (): Partial<NiagaraStation> => ({
 });
 
 export default function NiagaraPage() {
-  const benchApplied = useRef(false);
+  const devBenchReady = useRef(false);
   const [health, setHealth] = useState<{ dependencies_ok?: boolean; dependencies_error?: string } | null>(null);
   const [stations, setStations] = useState<NiagaraStation[]>([]);
   const [selectedStationId, setSelectedStationId] = useState("");
@@ -149,11 +139,17 @@ export default function NiagaraPage() {
     loadDriverTree().catch(() => undefined);
   }, [selectedStationId, refreshPollStatus, loadDriverTree]);
 
-  useEffect(() => {
-    if (benchApplied.current || stations.length > 0) return;
-    benchApplied.current = true;
+  async function loadDevBenchTemplate() {
+    if (!import.meta.env.DEV) return;
+    const { BENCH_DEFAULTS } = await import("../dev/niagaraBenchDefaults");
     setForm({ ...emptyForm(), ...BENCH_DEFAULTS });
-    setBrowseBase(BENCH_DEFAULTS.default_points_root || BENCH_DEFAULTS.root_ord);
+    setBrowseBase(BENCH_DEFAULTS.default_points_root || BENCH_DEFAULTS.root_ord || "slot:/Drivers");
+  }
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || devBenchReady.current || stations.length > 0) return;
+    devBenchReady.current = true;
+    void loadDevBenchTemplate();
   }, [stations.length]);
 
   function selectStation(station: NiagaraStation) {
@@ -370,7 +366,7 @@ export default function NiagaraPage() {
     <div className="page page-wide niagara-page">
       <PageHeader
         title="Niagara"
-        subtitle="Supervisory read-only driver — same layout as BACnet/Modbus. Set OPENFDD_NIAGARA_ADMIN_PASSWORD in workspace/niagara.env.local on the edge."
+        subtitle="Supervisory read-only driver — same layout as BACnet/Modbus. Configure station URL and credentials on the edge host (niagara.env.local)."
       />
       <TabDebugPanel tab="niagara" />
 
@@ -494,8 +490,8 @@ export default function NiagaraPage() {
         </summary>
         {!form.password_env || selectedStation?.password_configured === false ? (
           <p className="muted" style={{ marginTop: "0.5rem" }}>
-            Password env <code>{form.password_env || "OPENFDD_NIAGARA_ADMIN_PASSWORD"}</code> is not set on the edge —
-            add <code>workspace/niagara.env.local</code> and restart the bridge.
+            Station password is not configured on the edge — add the password environment variable in{" "}
+            <code>workspace/niagara.env.local</code> and restart the bridge.
           </p>
         ) : null}
         <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", margin: "0.75rem 0" }}>
@@ -514,11 +510,17 @@ export default function NiagaraPage() {
             className="secondary-btn"
             onClick={() => {
               setSelectedStationId("");
-              setForm({ ...emptyForm(), ...BENCH_DEFAULTS });
+              setForm(emptyForm());
+              setBrowseBase("slot:/Drivers");
             }}
           >
             + New station
           </button>
+          {import.meta.env.DEV ? (
+            <button type="button" className="secondary-btn" onClick={() => void loadDevBenchTemplate()}>
+              Load dev bench template
+            </button>
+          ) : null}
         </div>
         <div className="form-grid">
           <div className="field">
@@ -530,7 +532,7 @@ export default function NiagaraPage() {
             <input
               value={form.station_url ?? ""}
               onChange={(e) => setForm((f) => ({ ...f, station_url: e.target.value }))}
-              placeholder="https://192.168.204.11"
+              placeholder={STATION_URL_PLACEHOLDER}
             />
           </div>
           <div className="field">
@@ -540,8 +542,9 @@ export default function NiagaraPage() {
           <div className="field">
             <label className="field-label">Password env var</label>
             <input
-              value={form.password_env ?? "OPENFDD_NIAGARA_ADMIN_PASSWORD"}
+              value={form.password_env ?? ""}
               onChange={(e) => setForm((f) => ({ ...f, password_env: e.target.value }))}
+              placeholder="edge password env var"
             />
           </div>
           <div className="field">

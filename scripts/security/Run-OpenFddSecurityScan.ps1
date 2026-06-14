@@ -45,7 +45,10 @@ param(
     [switch]$SkipZap,
     [switch]$SkipZapPull,
     [switch]$SkipNmap,
-    [switch]$KeepExisting
+    [switch]$KeepExisting,
+
+    # Optional path to auth.env.local (integrator creds for authenticated probe — never commit).
+    [string]$AuthEnvFile = ""
 )
 
 $ErrorActionPreference = "Continue"
@@ -214,8 +217,111 @@ $ZapJsonPath = Join-Path $BaseDir $ZapJson
 $ZapMdPath = Join-Path $BaseDir $ZapMd
 $ZapFindings = Join-Path $BaseDir "31-zap-findings-summary.txt"
 
+function Read-AuthFromEnvFile {
+    param([string]$Path)
+
+    $user = $null
+    $pass = $null
+    if (-not $Path -or -not (Test-Path $Path)) {
+        return @{ User = $user; Password = $pass; Loaded = $false }
+    }
+    foreach ($line in Get-Content -Path $Path -ErrorAction SilentlyContinue) {
+        $t = $line.Trim()
+        if ($t -match '^\s*#' -or -not $t.Contains('=')) { continue }
+        $parts = $t.Split('=', 2)
+        $key = $parts[0].Trim()
+        $val = $parts[1].Trim().Trim("'").Trim('"')
+        if ($key -eq 'OFDD_INTEGRATOR_USER' -and $val) { $user = $val }
+        if ($key -eq 'OFDD_INTEGRATOR_PASSWORD' -and $val) { $pass = $val }
+    }
+    $loaded = [bool]($user -and $pass)
+    return @{ User = $user; Password = $pass; Loaded = $loaded }
+}
+
+function Test-ProductionAssetLeak {
+    param(
+        [string]$HtmlPath,
+        [string]$BaseUrl
+    )
+
+    $issues = [System.Collections.Generic.List[string]]::new()
+    $banned = @(
+        '192.168.204.11',
+        '192.168.204.18',
+        'Bench Station 9065',
+        'OPENFDD_NIAGARA_ADMIN_PASSWORD',
+        'BENS$20BENCHTEST$20BOX'
+    )
+    $privateIp = [regex]'192\.168\.\d{1,3}\.\d{1,3}'
+
+    $scriptUrls = @()
+    if (Test-Path $HtmlPath) {
+        $html = Get-Content -Raw -Path $HtmlPath -ErrorAction SilentlyContinue
+        if ($html) {
+            foreach ($literal in $banned) {
+                if ($html.Contains($literal)) {
+                    $issues.Add("HTML contains banned literal: $literal")
+                }
+            }
+            $scriptUrls = [regex]::Matches($html, 'src="(/assets/[^"]+\.js)"') |
+                ForEach-Object { $_.Groups[1].Value }
+        }
+    }
+
+    foreach ($rel in $scriptUrls) {
+        $jsUrl = if ($BaseUrl.EndsWith('/')) { $BaseUrl.TrimEnd('/') + $rel } else { $BaseUrl + $rel }
+        $tmpJs = Join-Path $env:TEMP ("ofdd-asset-" + [guid]::NewGuid().ToString() + ".js")
+        try {
+            & curl.exe -k -sS -L --max-time 30 -o $tmpJs $jsUrl 2>$null
+            if (Test-Path $tmpJs) {
+                $js = Get-Content -Raw -Path $tmpJs -ErrorAction SilentlyContinue
+                if ($js) {
+                    foreach ($literal in $banned) {
+                        if ($js.Contains($literal)) {
+                            $issues.Add("JS $rel contains banned literal: $literal")
+                        }
+                    }
+                    foreach ($m in $privateIp.Matches($js)) {
+                        $issues.Add("JS $rel contains private IP: $($m.Value)")
+                    }
+                }
+            }
+        } finally {
+            Remove-Item -Force -ErrorAction SilentlyContinue $tmpJs
+        }
+    }
+
+    return $issues
+}
+
+function Invoke-AuthProbe {
+    param(
+        [string]$BaseUrl,
+        [string]$User,
+        [string]$Password
+    )
+
+    if (-not $User -or -not $Password) {
+        return @{ Ok = $false; Detail = "credentials not provided" }
+    }
+    $loginUrl = ($BaseUrl.TrimEnd('/') + '/api/auth/login')
+    $body = (@{ username = $User; password = $Password } | ConvertTo-Json -Compress)
+    $tmpBody = [System.IO.Path]::GetTempFileName()
+    try {
+        & curl.exe -k -sS -X POST -H "Content-Type: application/json" -d $body -o $tmpBody --max-time 20 $loginUrl 2>$null
+        $resp = Get-Content -Raw -Path $tmpBody -ErrorAction SilentlyContinue
+        if ($resp -and $resp.Contains('"token"')) {
+            return @{ Ok = $true; Detail = "integrator login returned token" }
+        }
+        return @{ Ok = $false; Detail = "login did not return token (check OFDD_INTEGRATOR_USER / OFDD_INTEGRATOR_PASSWORD)" }
+    } finally {
+        Remove-Item -Force -ErrorAction SilentlyContinue $tmpBody
+    }
+}
+
 $QuickSummary = Join-Path $BaseDir "90-quick-findings-summary.txt"
 $Checklist = Join-Path $BaseDir "99-review-checklist.txt"
+$GateReport = Join-Path $BaseDir "40-release-gate-summary.txt"
 
 Write-Section "Open-FDD local security scan"
 Write-Host "Report folder: $BaseDir"
@@ -535,14 +641,82 @@ Important:
 - Do not run broad scans against live OT/BAS networks or controllers.
 "@ | Set-Content -Path $Checklist -Encoding utf8
 
+Write-Section "Release gate (production asset leak + auth probe)"
+
+$gateFails = 0
+$gateWarnings = 0
+$authLoaded = $false
+$integratorUser = $env:OFDD_INTEGRATOR_USER
+$integratorPass = $env:OFDD_INTEGRATOR_PASSWORD
+
+if ($AuthEnvFile) {
+    $parsed = Read-AuthFromEnvFile -Path $AuthEnvFile
+    if ($parsed.Loaded) {
+        $integratorUser = $parsed.User
+        $integratorPass = $parsed.Password
+        $authLoaded = $true
+    }
+} elseif ($integratorUser -and $integratorPass) {
+    $authLoaded = $true
+}
+
+$gateLines = @(
+    "Release gate summary",
+    "Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
+    "Target: $TargetUrl",
+    "Auth loaded: $authLoaded",
+    ""
+)
+
+if ($TargetReachable) {
+    $assetIssues = Test-ProductionAssetLeak -HtmlPath $WebBodySample -BaseUrl $TargetUrl
+    if ($assetIssues.Count -eq 0) {
+        $gateLines += "PASS: production JS bundle — no private LAN / bench literals detected"
+    } else {
+        $gateFails += $assetIssues.Count
+        $gateLines += "FAIL: production asset leak ($($assetIssues.Count) issue(s)):"
+        $gateLines += $assetIssues
+    }
+
+    $authResult = Invoke-AuthProbe -BaseUrl $TargetUrl -User $integratorUser -Password $integratorPass
+    if ($authLoaded -and $authResult.Ok) {
+        $gateLines += "PASS: integrator auth probe — $($authResult.Detail)"
+    } elseif ($authLoaded) {
+        $gateWarnings += 1
+        $gateLines += "WARN: auth file/env loaded but login probe failed — $($authResult.Detail)"
+    } else {
+        $gateWarnings += 1
+        $gateLines += "WARN: Auth loaded: False — pass -AuthEnvFile <path-to-auth.env.local> or set OFDD_INTEGRATOR_USER / OFDD_INTEGRATOR_PASSWORD in the shell (values are never logged)."
+    }
+} else {
+    $gateFails += 1
+    $gateLines += "FAIL: target not reachable — cannot run asset leak or auth probes"
+}
+
+if ($gateFails -gt 0) {
+    $gateLines += ""
+    $gateLines += "SECURITY GATE: FAIL ($gateFails fail, $gateWarnings warn)"
+} else {
+    $gateLines += ""
+    $gateLines += "SECURITY GATE: PASS ($gateWarnings warn)"
+}
+
+$gateLines | Set-Content -Path $GateReport -Encoding utf8
+Write-Host ($gateLines -join "`n")
+
 Write-Section "Done"
 Write-Host "Reports saved to:"
 Write-Host $BaseDir
 Write-Host ""
 Write-Host "Read these first:"
+Write-Host "  $GateReport"
 Write-Host "  $QuickSummary"
 Write-Host "  $NmapFindings"
 Write-Host "  $ZapFindings"
 Write-Host "  $Checklist"
 Write-Host ""
 Write-Host "No files were opened automatically."
+
+if ($gateFails -gt 0) {
+    exit 1
+}

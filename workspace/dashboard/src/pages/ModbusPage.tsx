@@ -73,7 +73,7 @@ export default function ModbusPage() {
   }, [loadDriverTree, refreshPollStatus]);
 
   useEffect(() => {
-    if (!benchHintAvailable || benchDefaultsApplied.current) return;
+    if (!import.meta.env.DEV || !benchHintAvailable || benchDefaultsApplied.current) return;
     benchDefaultsApplied.current = true;
     setHost("127.0.0.1");
     setPort(5502);

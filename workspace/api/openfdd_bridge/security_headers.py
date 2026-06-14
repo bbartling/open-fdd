@@ -12,8 +12,8 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 # Plotly + Vite SPA: hashed JS/CSS under /assets.
-# TODO: remove style-src 'unsafe-inline' after migrating inline styles to hashed CSS
-# modules or nonce-based CSP (Vite/React style injection currently requires unsafe-inline).
+# style-src 'unsafe-inline' is required today — Vite/React/Plotly inject inline styles at runtime.
+# Removing 'unsafe-inline' breaks trend charts and layout (verified 2026-06); migrate to nonce/hash CSP later.
 _CSP = (
     "default-src 'self'; "
     "base-uri 'self'; "

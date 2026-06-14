@@ -99,6 +99,7 @@ cd open-fdd/scripts/security
 
 | File | Content |
 |------|---------|
+| `40-release-gate-summary.txt` | **SECURITY GATE** — asset leak scan + auth probe |
 | `90-quick-findings-summary.txt` | One-page overview |
 | `30-nmap-findings-summary.txt` | Port exposure |
 | `31-zap-findings-summary.txt` | ZAP alert snippets |
@@ -114,6 +115,19 @@ cd open-fdd/scripts/security
 | 8765 | **closed** (bridge loopback) |
 | 5173 | **closed** (no dev Vite) |
 | 8090 | closed/filtered (mcp-rag internal) |
+
+## Release gate (production bundle)
+
+CI and local builds run `scripts/check_production_assets.py` after `npm run build`. It fails if shipped JS/CSS contains private LAN IPs (`192.168.*`, `10.*`, `172.16–31.*`), bench Niagara defaults, or `ws://` URLs.
+
+PowerShell scan enforces the same against the live target (`40-release-gate-summary.txt`).
+
+**Authenticated probe (optional):** pass integrator creds without logging secrets:
+
+```powershell
+.\Run-OpenFddSecurityScan.ps1 -AuthEnvFile "C:\secrets\auth.env.local"
+# or: $env:OFDD_INTEGRATOR_USER / $env:OFDD_INTEGRATOR_PASSWORD in the shell
+```
 
 ## Accepted ZAP findings (3.0.4+)
 
