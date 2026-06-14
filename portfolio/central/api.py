@@ -9,16 +9,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from portfolio.central.chart_preview import build_rcx_preview, generate_rcx_docx
+from portfolio.central.fdd_analytics import build_fdd_analytics
+from portfolio.central.model_tree import build_model_tree_summary
 from portfolio.central.edge_registry import (
     add_or_update_edge,
     delete_edge,
     list_edges_public,
     test_edge_connection,
 )
-from portfolio.central.fdd_analytics import build_fdd_analytics
-from portfolio.central.mechanical_summary import build_mechanical_summary
-from portfolio.central.model_tree import build_model_tree_summary
 from portfolio.central.overview_cache import cache_ttl_seconds, get_or_set
 from portfolio.central.overview_data import build_overview
 from portfolio.central.paths import data_dir, reports_dir, sites_path
@@ -329,11 +327,11 @@ def get_site_sparql_validate(site_id: str, sync_if_missing: bool = True) -> dict
 @app.get("/api/central/mechanical-summary/{site_id}")
 def get_mechanical_summary(site_id: str, hours: int = 24) -> dict[str, Any]:
     try:
-        from portfolio.central.mechanical_narrative import build_mechanical_narrative
+        from portfolio.central.rcx_proxy import rcx_mechanical_narrative, rcx_mechanical_summary
 
-        summary = build_mechanical_summary(site_id, hours=hours)
+        summary = rcx_mechanical_summary(site_id, hours=hours)
         try:
-            narrative = build_mechanical_narrative(site_id)
+            narrative = rcx_mechanical_narrative(site_id)
             summary["mechanical_narrative"] = narrative.get("narrative")
             summary["mechanical_counts"] = narrative.get("counts")
             summary["narrative"] = narrative.get("narrative")
@@ -397,10 +395,10 @@ def get_rcx_workspace(
     show_fault_overlays: bool = True,
 ) -> dict[str, Any]:
     try:
-        from portfolio.central.rcx_cache import get_workspace
+        from portfolio.central.rcx_proxy import rcx_workspace
 
-        return get_workspace(
-            site_id=site_id,
+        return rcx_workspace(
+            site_id,
             hours=hours,
             start=start,
             end=end,
@@ -415,9 +413,9 @@ def get_rcx_workspace(
 @app.get("/api/central/rcx/points/{site_id}")
 def get_rcx_points(site_id: str, limit: int = 500) -> dict[str, Any]:
     try:
-        from portfolio.central.rcx_points import list_report_points
+        from portfolio.central.rcx_proxy import rcx_points
 
-        return list_report_points(site_id, limit=limit)
+        return rcx_points(site_id, limit=limit)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -427,9 +425,9 @@ def get_rcx_points(site_id: str, limit: int = 500) -> dict[str, Any]:
 @app.get("/api/central/rcx/point-tree/{site_id}")
 def get_rcx_point_tree(site_id: str, limit: int = 500) -> dict[str, Any]:
     try:
-        from portfolio.central.rcx_points import list_report_point_tree
+        from portfolio.central.rcx_proxy import rcx_point_tree
 
-        return list_report_point_tree(site_id, limit=limit)
+        return rcx_point_tree(site_id, limit=limit)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -439,18 +437,11 @@ def get_rcx_point_tree(site_id: str, limit: int = 500) -> dict[str, Any]:
 @app.post("/api/central/rcx/preview")
 def post_rcx_preview(body: RcxPreviewBody) -> dict[str, Any]:
     try:
-        return build_rcx_preview(
-            site_id=body.site_id,
-            hours=body.hours,
-            start=body.start,
-            end=body.end,
-            chart_ids=body.chart_ids or None,
-            custom_columns=body.custom_columns or None,
-            show_fault_overlays=body.show_fault_overlays,
-            include_previews=body.include_previews,
-            catalog_only=body.catalog_only,
-            gallery_mode=body.gallery_mode,
-            bundle_ids=body.bundle_ids or None,
+        from portfolio.central.rcx_proxy import rcx_preview
+
+        return rcx_preview(
+            body.site_id,
+            body.model_dump(exclude_none=True),
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -466,16 +457,12 @@ def post_charts_preview(body: RcxPreviewBody) -> dict[str, Any]:
 @app.post("/api/central/rcx/report")
 def post_rcx_report(body: RcxReportBody) -> Response:
     try:
-        blob, fname = generate_rcx_docx(
-            site_id=body.site_id,
-            hours=body.hours,
-            start=body.start,
-            end=body.end,
-            sections=body.sections or None,
-            charts=body.charts or body.chart_ids or None,
-            custom_columns=body.custom_columns or None,
-            show_fault_overlays=body.show_fault_overlays,
-        )
+        from portfolio.central.rcx_proxy import rcx_report
+
+        payload = body.model_dump(exclude_none=True)
+        if body.charts or body.chart_ids:
+            payload["charts"] = body.charts or body.chart_ids
+        blob, fname = rcx_report(body.site_id, payload)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ModuleNotFoundError as exc:
@@ -502,7 +489,10 @@ class RcxReportBodyLegacy(BaseModel):
 
 @app.post("/api/central/rcx/report-legacy")
 def post_rcx_report_legacy(body: RcxReportBodyLegacy) -> Response:
-    from portfolio.central.rcx_report import build_rcx_docx as legacy_build
+    try:
+        from open_fdd.reports.rcx_docx import build_rcx_docx
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="python-docx required") from exc
 
     try:
         cfg = site_config_for(body.site_id, sites_path=_SITES)
@@ -525,11 +515,19 @@ def post_rcx_report_legacy(body: RcxReportBodyLegacy) -> Response:
     else:
         warnings.append("No latest rollup JSON — run collect first.")
 
-    blob = legacy_build(
+    fault_rows: list[dict[str, Any]] = []
+    if validation:
+        from portfolio.central.fault_hours import fault_summary_from_validation
+
+        fault_rows = fault_summary_from_validation(validation)
+
+    blob = build_rcx_docx(
         site_id=body.site_id,
         site_name=cfg.name,
-        validation=validation,
-        rollups=rollups,
+        window={},
+        fault_rows=fault_rows,
+        overview={"active_faults": len(fault_rows), "validation": validation, "rollups": rollups},
+        sections=["executive_summary", "fault_analytics"],
         warnings=warnings,
     )
     filename = f"openfdd-rcx-{body.site_id}.docx"

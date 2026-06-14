@@ -69,7 +69,6 @@ def build_chart_narrative(
             body = "No fault overlays on this custom series for the selected rules."
         return f"{intro} {body}"
 
-    # Bar / analytics charts
     if "fault_hours" in chart_id:
         return (
             f"Fault-hour distribution for the {hours:.0f}-hour report window. "

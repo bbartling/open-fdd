@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from portfolio.central.rcx_stats import summarize_readings
+from openfdd_bridge.rcx.rcx_stats import summarize_readings
 
 
 def test_summarize_readings_fault_hours_and_bullets():

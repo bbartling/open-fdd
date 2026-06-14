@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from portfolio.central.report_bundles import build_report_bundles, chart_ids_for_bundles
+from openfdd_bridge.rcx.report_bundles import build_report_bundles, chart_ids_for_bundles
 
 
 def _rows_for(eid: str, points: list[tuple[str, str]]) -> list[dict]:

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from portfolio.central.trend_charts import fault_overlay_spans, overlays_from_readings
+from openfdd_bridge.rcx.trend_charts import fault_overlay_spans, overlays_from_readings
 
 
 def test_fault_overlay_spans_contiguous():
@@ -31,28 +31,34 @@ def test_overlays_from_readings():
     __import__("importlib").util.find_spec("matplotlib") is None,
     reason="matplotlib not installed",
 )
-@patch("portfolio.central.chart_preview.build_mechanical_narrative")
-@patch("portfolio.central.chart_preview.build_mechanical_summary")
-@patch("portfolio.central.chart_preview.resolve_token", return_value="tok")
-@patch("portfolio.central.chart_preview.resolve_site_config")
-@patch("portfolio.central.chart_preview.EdgeClient")
-def test_build_rcx_preview_fault_bars(mock_client_cls, mock_site, _tok, mock_mech, mock_narr):
-    mock_site.return_value = MagicMock(name="ACME", base_url="http://edge.test")
+@patch("openfdd_bridge.rcx.chart_preview.build_mechanical_narrative")
+@patch("openfdd_bridge.rcx.chart_preview.build_mechanical_summary")
+@patch("openfdd_bridge.rcx.chart_preview.query_model_tree")
+@patch("openfdd_bridge.rcx.chart_preview.build_fault_analytics")
+@patch("openfdd_bridge.rcx.chart_preview.build_overview")
+@patch("openfdd_bridge.rcx.chart_preview.run_fdd_preset")
+def test_build_rcx_preview_fault_bars(
+    mock_preset,
+    mock_overview,
+    mock_faults,
+    mock_tree,
+    mock_mech,
+    mock_narr,
+):
     mock_mech.return_value = {"warnings": [], "model_issues": []}
     mock_narr.return_value = {"narrative": "Test narrative", "counts": {"ahu": 1, "vav": 30}}
-    client = mock_client_cls.return_value
-    client.get_model_tree.return_value = {"points": []}
-    client.get_analytics_overview.return_value = {
+    mock_tree.return_value = {"points": [], "equipment": []}
+    mock_overview.return_value = {
         "kpis": {"active_faults": 2, "total_fault_hours": 5.0},
         "faults_by_severity": [{"group": "warning", "elapsed_hours": 3}],
         "fault_hours_by_equipment": [{"group": "AHU-C", "elapsed_hours": 2}],
     }
-    client.get_analytics_faults.return_value = {
+    mock_faults.return_value = {
         "faults": [{"fault_name": "SAT", "severity": "warning", "equipment": "AHU-C"}]
     }
-    client.get_fdd_query_preset.return_value = {"rows": [], "columns": []}
+    mock_preset.return_value = {"rows": [], "columns": []}
 
-    from portfolio.central.chart_preview import build_rcx_preview
+    from openfdd_bridge.rcx.chart_preview import build_rcx_preview
 
     out = build_rcx_preview(site_id="acme", hours=24)
     assert out["fault_summary"]["active_faults"] == 1

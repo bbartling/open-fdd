@@ -65,7 +65,7 @@ def apply_faults_arrow(table, cfg, context=None):
 3. **Run** `pip install -r requirements.txt` then `python run_test.py`
 4. **Upload** `rule.py` on Rule Lab (integrator)
 
-Upload validation (Phase B): AST parse, forbidden imports, `apply_faults_arrow(table, cfg, context=None)` signature.
+Upload validation (Phase B): AST parse, forbidden imports (**no pandas/numpy**), `apply_faults_arrow(table, cfg, context=None)` signature for fault rules. Script-mode rules must use **`table`** (PyArrow), not legacy **`df`** DataFrames — lint errors explain this for AI agents.
 
 The bridge runs rules on **PyArrow tables** via `open_fdd.arrow_runtime`, and persists `.py` sources under `workspace/data/rules_py/`.
 

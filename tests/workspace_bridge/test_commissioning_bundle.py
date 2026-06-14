@@ -63,7 +63,7 @@ def test_apply_commissioning_import_from_point_rule_ids(tmp_path: Path, monkeypa
             "id": "rule-a",
             "name": "Zone OOB",
             "mode": "rule",
-            "code": "def apply_faults_arrow(t,cfg,ctx=None):\n return False\n",
+            "code": "def apply_faults_arrow(table, cfg, context=None):\n return False\n",
             "bindings": {},
         },
         saved_by="test",

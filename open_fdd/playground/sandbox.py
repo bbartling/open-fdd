@@ -17,6 +17,7 @@ from collections.abc import Mapping
 from contextlib import nullcontext, redirect_stdout
 from typing import Any, Callable
 
+from open_fdd.arrow_runtime.pyarrow_policy import FORBIDDEN_IMPORT_ROOTS, NO_PANDAS_AGENT_MSG, lint_pyarrow_only
 from open_fdd.playground.cookbook import attach_rolling_avg, inject_cookbook_helpers, normalize_rolling_avg_minutes
 
 try:
@@ -75,24 +76,34 @@ def lint_python(
             for alias in node.names:
                 root = alias.name.split(".")[0]
                 if root not in ALLOWED_IMPORT_ROOTS:
+                    msg = (
+                        f"import '{alias.name}' forbidden — {NO_PANDAS_AGENT_MSG}"
+                        if root in FORBIDDEN_IMPORT_ROOTS
+                        else f"import '{alias.name}' not allowed"
+                    )
                     issues.append(
                         {
                             "line": node.lineno,
                             "col": node.col_offset or 1,
                             "end_col": (node.col_offset or 1) + 6,
-                            "message": f"import '{alias.name}' not allowed",
+                            "message": msg,
                             "severity": "error" if strict_imports else "warning",
                         }
                     )
         elif isinstance(node, ast.ImportFrom) and node.module:
             root = node.module.split(".")[0]
             if root not in ALLOWED_IMPORT_ROOTS:
+                msg = (
+                    f"import from '{node.module}' forbidden — {NO_PANDAS_AGENT_MSG}"
+                    if root in FORBIDDEN_IMPORT_ROOTS
+                    else f"import from '{node.module}' not allowed"
+                )
                 issues.append(
                     {
                         "line": node.lineno,
                         "col": node.col_offset or 1,
                         "end_col": (node.col_offset or 1) + 6,
-                        "message": f"import from '{node.module}' not allowed",
+                        "message": msg,
                         "severity": "error" if strict_imports else "warning",
                     }
                 )
@@ -121,6 +132,8 @@ def lint_python(
                 "severity": "error",
             }
         )
+
+    issues.extend(lint_pyarrow_only(tree, script_mode=not require_arrow_rule))
 
     return {"ok": not any(i["severity"] == "error" for i in issues), "issues": issues}
 

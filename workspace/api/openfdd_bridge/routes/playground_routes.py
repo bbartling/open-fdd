@@ -111,12 +111,19 @@ def _apply_lookback(df, lookback_hours: float):
 
 @router.post("/lint")
 def lint_code(body: LintBody) -> dict:
+    if body.mode == "script":
+        return playground.lint_python(
+            body.code,
+            require_arrow_rule=False,
+            require_evaluate=False,
+            strict_imports=True,
+        )
     if body.mode == "arrow":
         return playground.lint_arrow_python(body.code)
     backend = detect_rule_backend(body.code, {})
     if backend == "arrow":
         return playground.lint_arrow_python(body.code)
-    return playground.lint_python(body.code, require_evaluate=body.mode != "script")
+    return playground.lint_python(body.code, require_evaluate=body.mode != "script", strict_imports=True)
 
 
 @router.get("/arrow-templates")

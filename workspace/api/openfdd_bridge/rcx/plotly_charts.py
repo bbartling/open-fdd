@@ -210,7 +210,7 @@ def _matplotlib_trend_png(readings: dict[str, Any], *, title: str, show_faults: 
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        from portfolio.central.trend_charts import overlays_from_readings, render_trend_ax
+        from .trend_charts import overlays_from_readings, render_trend_ax
 
         fig, ax = plt.subplots(figsize=(9, 3.6))
         overlays = overlays_from_readings(readings, show=show_faults)
@@ -251,7 +251,3 @@ def _figure_to_png(fig) -> str:
         return base64.b64encode(png).decode("ascii")
     except Exception:
         return ""
-
-
-def _matplotlib_fallback(fig) -> str:
-    return ""

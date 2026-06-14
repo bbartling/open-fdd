@@ -265,60 +265,14 @@ def build_rcx_preview(
     hours: int = 24,
     scope: str = "building",
     equipment_ids: list[str] | None = None,
+    **kwargs: Any,
 ) -> dict[str, Any]:
-    overview = build_overview(site_id=site_id)
-    fault_rows = fault_hours_from_fdd_runs(_load_fdd_runs())
-    if not fault_rows:
-        status = _collect_status()
-        fault_rows = fault_hours_from_alerts(
-            [a for a in status.get("alerts", []) if str(a.get("source")) == "fdd"]
-        )
-    start, end = _parse_window(hours)
-    mh = build_model_health()
-    roles_present: list[str] = []
-    try:
-        from .model_service import ModelService
+    from .rcx.chart_preview import build_rcx_preview as _build
 
-        model = ModelService().load()
-        for pt in model.get("points") or []:
-            if isinstance(pt, dict):
-                role = str(pt.get("brick_type") or pt.get("role") or "").strip()
-                if role:
-                    roles_present.append(role)
-    except Exception:
-        pass
-
-    scope_ctx = {
-        "fault_rows": fault_rows,
-        "roles_present": roles_present,
-    }
-    available_charts, disabled_charts = _chart_readiness(scope_ctx)
-    warnings: list[str] = []
-    if mh.get("issues"):
-        warnings.append(f"{len(mh['issues'])} model health issue(s)")
-    if not fault_rows:
-        warnings.append("No FDD fault rows in current snapshot")
-
-    return {
-        "site": site_id or overview.get("site_name"),
-        "site_name": overview.get("site_name"),
-        "window": {"start": start, "end": end, "hours": hours},
-        "scope": scope,
-        "equipment": equipment_ids or [],
-        "available_charts": available_charts,
-        "disabled_charts": disabled_charts,
-        "sections": SECTION_CATALOG,
-        "missing_roles": mh.get("missing_roles") or [],
-        "fault_summary": {
-            "active_faults": len(fault_rows),
-            "total_fault_hours": overview["kpis"]["total_fault_hours"],
-            "by_severity": overview.get("faults_by_severity"),
-        },
-        "fault_hours": {
-            "by_equipment": overview.get("fault_hours_by_equipment"),
-            "by_code": overview.get("fault_hours_by_code"),
-        },
-        "trend_sample_counts": {},
-        "warnings": warnings,
-        "fault_rows": fault_rows[:50],
-    }
+    return _build(
+        site_id=site_id,
+        hours=hours,
+        scope=scope,
+        equipment_ids=equipment_ids,
+        **kwargs,
+    )

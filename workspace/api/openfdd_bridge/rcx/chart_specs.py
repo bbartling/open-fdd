@@ -78,6 +78,18 @@ SECTION_SPECS = [
     {"id": "appendix_faults", "label": "Appendix: raw fault table"},
 ]
 
+TREND_CHART_IDS = {
+    "ahu_sat_vs_setpoint",
+    "ahu_duct_static_vs_setpoint",
+    "vav_zone_temp",
+}
+
+_FAULT_KEYWORDS: dict[str, list[str]] = {
+    "ahu_sat_vs_setpoint": ["sat", "supply air", "flatline", "ahu-c", "rtu-c"],
+    "ahu_duct_static_vs_setpoint": ["duct static", "dsp", "static pressure", "ahu-a"],
+    "vav_zone_temp": ["zone temp", "vav-c", "vav-e", "comfort", "reheat"],
+}
+
 
 def chart_readiness(
     spec: dict[str, Any],
@@ -95,7 +107,7 @@ def chart_readiness(
     needed = spec.get("required_roles") or []
     if needed:
         if tree:
-            from openfdd_bridge.rcx.trend_charts import resolve_roles_on_tree
+            from .trend_charts import resolve_roles_on_tree
 
             cols, missing = resolve_roles_on_tree(tree, needed)
             if not cols:
@@ -111,19 +123,6 @@ def chart_readiness(
         if not has_trend_data:
             return (False, "No trend samples in selected window")
     return (True, "")
-
-
-TREND_CHART_IDS = {
-    "ahu_sat_vs_setpoint",
-    "ahu_duct_static_vs_setpoint",
-    "vav_zone_temp",
-}
-
-_FAULT_KEYWORDS: dict[str, list[str]] = {
-    "ahu_sat_vs_setpoint": ["sat", "supply air", "flatline", "ahu-c", "rtu-c"],
-    "ahu_duct_static_vs_setpoint": ["duct static", "dsp", "static pressure", "ahu-a"],
-    "vav_zone_temp": ["zone temp", "vav-c", "vav-e", "comfort", "reheat"],
-}
 
 
 def suggest_charts_for_faults(

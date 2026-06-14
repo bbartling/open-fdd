@@ -33,13 +33,23 @@ from open_fdd.arrow_runtime.backend import run_arrow_rule  # noqa: E402
 from openfdd_bridge.fdd_runner import run_batch  # noqa: E402
 from openfdd_bridge.model_service import ModelService  # noqa: E402
 from openfdd_bridge.playground import lint_python  # noqa: E402
-from openfdd_bridge.data_loader import load_frame_for_run  # noqa: E402
+from openfdd_bridge.data_loader import historian_columns_for_rule, load_frame_for_run  # noqa: E402
 from openfdd_bridge.rule_store import RuleStore  # noqa: E402
 from openfdd_bridge.ttl_service import TtlService  # noqa: E402
 
 DATA = REPO / "workspace" / "data"
-MODEL_IMPORT = DATA / "bench_import_model.json"
+MODEL_IMPORT = DATA / "bench_dual_source_model.json"
 RULES_PY = DATA / "rules_py"
+
+NIAGARA_POINT_BINDINGS = {
+    "bench-oa-t-flatline-1h": "niagara-bench9065-f4c0862bb4",
+    "bench-oa-t-oob": "niagara-bench9065-f4c0862bb4",
+    "bench-stat-zn-t-flatline-1h": "niagara-bench9065-fa1b48f7f0",
+    "duct-t-flatline-1h": "niagara-bench9065-9fc449ad9c",
+    "duct-t-spread-1h": "niagara-bench9065-9fc449ad9c",
+    "bench-oa-h-flatline-1h": "niagara-bench9065-954f1fe9a8",
+    "bench-oa-h-oob": "niagara-bench9065-954f1fe9a8",
+}
 
 
 def _read_rule_code(name: str) -> str:
@@ -106,6 +116,19 @@ BENCH_RULES: list[dict] = [
     },
 ]
 
+for spec in list(BENCH_RULES):
+    nid = NIAGARA_POINT_BINDINGS.get(spec["id"])
+    if not nid:
+        continue
+    BENCH_RULES.append(
+        {
+            **spec,
+            "id": f"niagara-{spec['id']}",
+            "name": f"Niagara {spec['name']}",
+            "bindings": {"point_ids": [nid], "equipment_ids": [], "brick_types": []},
+        }
+    )
+
 
 def import_model() -> dict:
     payload = json.loads(MODEL_IMPORT.read_text(encoding="utf-8"))
@@ -156,15 +179,17 @@ def test_rules_on_frame(model: dict) -> None:
     table = pa.Table.from_pandas(sample, preserve_index=False)
     for spec in BENCH_RULES:
         code = _read_rule_code(spec["code_file"])
+        cols = historian_columns_for_rule(model, site_id, spec, available_columns=set(sample.columns))
+        cfg = {"value_column": cols[0]} if cols else {}
         try:
-            result = run_arrow_rule(code, table, {}, rule_id=spec["id"])
+            result = run_arrow_rule(code, table, cfg, rule_id=spec["id"])
         except Exception as exc:
             print(f"  {spec['id']}: ERROR {exc}")
             continue
         if result.errors:
             print(f"  {spec['id']}: ERROR {result.errors[0]}")
         else:
-            print(f"  {spec['id']}: rows={result.row_count} flagged={result.true_count}")
+            print(f"  {spec['id']}: rows={result.row_count} flagged={result.true_count} col={cfg.get('value_column','')}")
 
 
 def main() -> int:

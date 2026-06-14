@@ -1,11 +1,9 @@
-"""Matplotlib trend charts from Edge /api/timeseries/readings (read-only)."""
+"""Trend chart helpers — BRICK role resolution and fault overlays."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
-
-from portfolio.collector.edge_client import EdgeClient
 
 ROLE_ALIASES: dict[str, list[str]] = {
     "supply_air_temperature": [
@@ -126,25 +124,6 @@ def canonical_roles_present(tree: dict[str, Any]) -> set[str]:
         if columns_for_roles(tree, [role]):
             present.add(role)
     return present
-
-
-def fetch_trend_readings(
-    client: EdgeClient,
-    *,
-    site_id: str,
-    columns: list[str],
-    hours: int,
-    token: str,
-    include_faults: bool = True,
-) -> dict[str, Any]:
-    if not columns:
-        return {}
-    col_param = ",".join(columns)
-    path = (
-        f"/api/timeseries/readings?site_id={site_id}"
-        f"&columns={col_param}&hours={hours}&include_faults={'true' if include_faults else 'false'}"
-    )
-    return client.api_get(path, token=token)
 
 
 def _parse_dt(ts: str) -> datetime | None:

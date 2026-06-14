@@ -306,12 +306,50 @@ def append_samples_and_ingest(
         for row in samples:
             writer.writerow(row)
 
-    df = pd.DataFrame(samples)
-    df["timestamp"] = pd.to_datetime(df["timestamp_utc"], utc=True, errors="coerce")
-    df = df.rename(columns={"point_id": "column"})
-    df = df[["timestamp", "column", "value"]]
+    # Wide historian shard keyed by model external_id (mirrors BACnet poll ingest).
+    point_cols: dict[str, str] = {}
+    try:
+        from .timeseries_api import plot_column_name
+
+        model = ModelService().load()
+        for pt in model.get("points") or []:
+            if not isinstance(pt, dict):
+                continue
+            pid = str(pt.get("id") or "").strip()
+            if pid:
+                point_cols[pid] = plot_column_name(pt)
+    except Exception:
+        point_cols = {}
+
+    wide_rows: dict[Any, dict[str, Any]] = {}
+    for row in samples:
+        ts_raw = row.get("timestamp_utc") or row.get("timestamp")
+        pid = str(row.get("point_id") or "").strip()
+        col = point_cols.get(pid) or pid
+        if not ts_raw or not col:
+            continue
+        try:
+            ts = pd.to_datetime(ts_raw, utc=True, errors="coerce")
+        except Exception:
+            continue
+        if pd.isna(ts):
+            continue
+        bucket = wide_rows.setdefault(ts, {"timestamp": ts, "site_id": sid})
+        try:
+            bucket[col] = float(row.get("value"))
+        except (TypeError, ValueError):
+            bucket[col] = row.get("value")
+
     store = FeatherStore()
-    store.write_shard(df, source="niagara_baskstream", site_id=sid)
+    if wide_rows:
+        wide_df = pd.DataFrame(sorted(wide_rows.values(), key=lambda r: r["timestamp"]))
+        store.write_shard(wide_df, source="niagara_baskstream", site_id=sid)
+    else:
+        df = pd.DataFrame(samples)
+        df["timestamp"] = pd.to_datetime(df["timestamp_utc"], utc=True, errors="coerce")
+        df = df.rename(columns={"point_id": "column"})
+        df = df[["timestamp", "column", "value"]]
+        store.write_shard(df, source="niagara_baskstream", site_id=sid)
     return {"samples": len(samples), "ingested": len(samples), "feather_source": "niagara_baskstream", "site_id": sid}
 
 

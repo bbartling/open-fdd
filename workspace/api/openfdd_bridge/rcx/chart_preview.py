@@ -1,4 +1,4 @@
-"""Matplotlib chart previews with fault overlays (BytesIO → base64)."""
+"""RCx chart previews with fault overlays (Plotly → base64 PNG)."""
 
 from __future__ import annotations
 
@@ -7,33 +7,36 @@ import io
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from portfolio.central.chart_specs import (
+from ..dashboard_analytics import build_fault_analytics, build_model_health, build_overview
+from ..fdd_query_presets import run_fdd_preset
+from ..model_service import ModelService
+from ..model_sparql import query_model_tree
+from ..site_defaults import default_site_id, ensure_default_site
+from ..ttl_service import TtlService
+from .chart_readings import read_chart_readings_with_plot_fallback
+from .chart_specs import (
     CHART_SPECS,
     SECTION_SPECS,
     TREND_CHART_IDS,
     chart_readiness,
     suggest_charts_for_faults,
 )
-from portfolio.central.edge_fetch import run_parallel
-from portfolio.central.edge_registry import resolve_site_config, resolve_token
-from portfolio.central.mechanical_narrative import build_mechanical_narrative
-from portfolio.central.mechanical_summary import build_mechanical_summary
-from portfolio.central.report_bundles import (
+from .mechanical_narrative import build_mechanical_narrative
+from .mechanical_summary import build_mechanical_summary
+from .plotly_charts import build_bar_figure, build_building_inventory_figure, build_trend_figure
+from .report_bundles import (
+    build_report_bundles,
     chart_ids_for_bundles,
     equipment_charts_for_ids,
-    build_report_bundles,
 )
-from portfolio.central.rcx_narrative import build_chart_narrative
-from portfolio.central.rcx_stats import summarize_readings
-from portfolio.central.trend_charts import (
+from .rcx_narrative import build_chart_narrative
+from .rcx_stats import summarize_readings
+from .trend_charts import (
     canonical_roles_present,
     columns_for_roles,
-    historian_column_for_point,
     overlays_from_readings,
     resolve_roles_on_tree,
 )
-from portfolio.central.plotly_charts import build_bar_figure, build_building_inventory_figure, build_model_health_figure, build_trend_figure
-from portfolio.collector.edge_client import EdgeClient
 
 TREND_CHARTS = {
     "ahu_sat_vs_setpoint": ["supply_air_temperature", "supply_air_temperature_setpoint"],
@@ -48,6 +51,26 @@ SEVERITY_COLORS = {
     "medium": (0.98, 0.75, 0.15, 0.18),
     "info": (0.4, 0.5, 0.7, 0.15),
 }
+
+
+def _resolve_site(site_id: str) -> tuple[str, str]:
+    sid = str(site_id or "").strip()
+    if not sid:
+        svc = ModelService()
+        sid = ensure_default_site(svc, TtlService()) or default_site_id()
+    name = sid
+    try:
+        model = ModelService().load()
+        for site in model.get("sites") or []:
+            if isinstance(site, dict) and str(site.get("id") or "") == sid:
+                name = str(site.get("name") or sid)
+                break
+        meta = model.get("meta") if isinstance(model.get("meta"), dict) else {}
+        if name == sid:
+            name = str(meta.get("site_name") or meta.get("name") or sid)
+    except Exception:
+        pass
+    return sid, name
 
 
 def _window(
@@ -68,28 +91,6 @@ def _window(
     end_dt = datetime.now(timezone.utc)
     start_dt = end_dt - timedelta(hours=hours)
     return start_dt.isoformat(), end_dt.isoformat(), hours
-
-
-def _png_base64(title: str, render_fn, *, figsize: tuple[float, float] = (6.5, 3.2)) -> str:
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    fig, ax = plt.subplots(figsize=figsize)
-    render_fn(ax)
-    ax.set_title(title, fontsize=11)
-    fig.tight_layout()
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=120)
-    plt.close(fig)
-    return base64.b64encode(buf.getvalue()).decode("ascii")
-
-
-def _fault_overlays(ax, overlays: list[dict[str, Any]]) -> None:
-    for ov in overlays:
-        color = SEVERITY_COLORS.get(str(ov.get("severity") or "warning").lower(), SEVERITY_COLORS["warning"])
-        ax.axvspan(ov.get("x0"), ov.get("x1"), color=color, label=ov.get("label"))
 
 
 def _enrich_preview(
@@ -197,7 +198,7 @@ def _build_diagnostics(
 
 def build_rcx_preview(
     *,
-    site_id: str,
+    site_id: str = "",
     hours: int = 24,
     start: str | None = None,
     end: str | None = None,
@@ -208,53 +209,38 @@ def build_rcx_preview(
     include_previews: bool = True,
     catalog_only: bool = False,
     gallery_mode: bool = False,
+    scope: str = "building",
+    equipment_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     win_start, win_end, eff_hours = _window(hours, start=start, end=end)
-    site = resolve_site_config(site_id)
-    client = EdgeClient(site.base_url)
-    token = resolve_token(site)
+    sid, site_name = _resolve_site(site_id)
 
     def _mech_payload(*, full: bool) -> dict[str, Any]:
-        narr = build_mechanical_narrative(site_id, fast=not full)
+        narr = build_mechanical_narrative(sid, fast=not full)
         payload: dict[str, Any] = {
             "narrative": narr.get("narrative"),
             "counts": narr.get("counts"),
         }
         if full:
-            detail = build_mechanical_summary(site_id, hours=eff_hours)
+            detail = build_mechanical_summary(sid, hours=eff_hours)
             payload.update(detail)
             payload["narrative"] = narr.get("narrative")
             payload["counts"] = narr.get("counts")
         return payload
 
-    if catalog_only:
-        parallel, _errors = run_parallel(
-            {
-                "tree": lambda: client.get_model_tree(token=token),
-                "analytics": lambda: client.get_analytics_overview(token=token),
-                "faults": lambda: client.get_analytics_faults(hours=eff_hours, token=token),
-                "eq_pts": lambda: client.get_fdd_query_preset("equipment_to_points", token=token),
-            }
-        )
-        tree = parallel.get("tree") or {}
-        analytics = parallel.get("analytics") or {}
-        faults_data = parallel.get("faults") or {}
-        eq_pts = parallel.get("eq_pts") or {}
-        mech = _mech_payload(full=False)
-    else:
-        parallel, _errors = run_parallel(
-            {
-                "tree": lambda: client.get_model_tree(token=token),
-                "analytics": lambda: client.get_analytics_overview(token=token),
-                "faults": lambda: client.get_analytics_faults(hours=eff_hours, token=token),
-                "eq_pts": lambda: client.get_fdd_query_preset("equipment_to_points", token=token),
-            }
-        )
-        tree = parallel.get("tree") or {}
-        analytics = parallel.get("analytics") or {}
-        faults_data = parallel.get("faults") or {}
-        eq_pts = parallel.get("eq_pts") or {}
-        mech = _mech_payload(full=not gallery_mode)
+    try:
+        tree = query_model_tree()
+    except Exception:
+        tree = {"equipment": [], "points": []}
+
+    overview = build_overview(site_id=sid)
+    faults_data = build_fault_analytics(hours=eff_hours)
+    try:
+        eq_pts = run_fdd_preset("equipment_to_points", site_id=sid)
+    except KeyError:
+        eq_pts = {"rows": [], "columns": []}
+
+    mech = _mech_payload(full=not gallery_mode and not catalog_only)
 
     fault_rows = faults_data.get("faults") if isinstance(faults_data.get("faults"), list) else []
     equipment_meta = {
@@ -277,12 +263,11 @@ def build_rcx_preview(
         chart_ids = chart_ids_for_bundles(bundles, report_model.get("default_bundle_ids") or [])
 
     roles_present = canonical_roles_present(tree)
-
     has_faults = bool(fault_rows)
     trend_cache: dict[str, dict[str, Any]] = {}
     fault_summary = {
         "active_faults": len(fault_rows),
-        "total_fault_hours": (analytics.get("kpis") or {}).get("total_fault_hours"),
+        "total_fault_hours": (overview.get("kpis") or {}).get("total_fault_hours"),
     }
 
     def _readings_for_columns(cols: list[str]) -> dict[str, Any]:
@@ -293,14 +278,13 @@ def build_rcx_preview(
             trend_cache[key] = {}
             return {}
         try:
-            data = client.get_timeseries_readings(
-                site_id,
+            data = read_chart_readings_with_plot_fallback(
+                sid,
                 cols,
                 hours=eff_hours,
-                token=token,
                 include_faults=show_fault_overlays,
             )
-        except RuntimeError:
+        except Exception:
             data = {}
         trend_cache[key] = data
         return data
@@ -312,7 +296,6 @@ def build_rcx_preview(
         return _readings_for_columns(columns_for_roles(tree, roles))
 
     render_previews = include_previews and not catalog_only
-    has_trends = True
     batch_readings: dict[str, Any] = {}
     if render_previews:
         cols_needed: list[str] = []
@@ -336,7 +319,6 @@ def build_rcx_preview(
         cols_needed = list(dict.fromkeys(cols_needed))
         if cols_needed:
             batch_readings = _readings_for_columns(cols_needed)
-        has_trends = bool((batch_readings.get("row_count") or 0) > 0)
 
     available: list[dict[str, Any]] = []
     disabled: list[dict[str, Any]] = []
@@ -355,7 +337,7 @@ def build_rcx_preview(
                 sub = _subset_readings(batch_readings, cols) if batch_readings else _readings_for_columns(cols)
                 trend_ok = (sub.get("row_count") or 0) > 0
         elif render_previews:
-            trend_ok = has_trends
+            trend_ok = bool((batch_readings.get("row_count") or 0) > 0)
         else:
             trend_ok = True
         ok, reason = chart_readiness(
@@ -396,31 +378,36 @@ def build_rcx_preview(
 
     suggested_chart_ids = chart_ids_for_bundles(bundles, bundle_ids or report_model.get("default_bundle_ids") or [])
 
-    if not render_previews:
-        return {
-            "site_id": site_id,
-            "site_name": site.name,
-            "window": {"start": win_start, "end": win_end, "hours": eff_hours},
-            "mechanical_summary": mech,
-            "available_charts": available,
-            "disabled_charts": disabled,
-            "sections": SECTION_SPECS,
-            "suggested_chart_ids": suggested_chart_ids,
-            "fault_summary": fault_summary,
-            "fault_rows": fault_rows[:50],
-            "fault_overlays": [],
-            "chart_previews": [],
-            "report_bundles": report_model,
-            "diagnostics": _build_diagnostics(
-                tree, available=available, disabled=disabled, fault_summary=fault_summary
-            ),
-            "warnings": mech.get("warnings") or [],
-            "missing_roles": [
-                str(i.get("title") or "") for i in (mech.get("model_issues") or [])[:10]
-            ],
-        }
+    base_payload = {
+        "site_id": sid,
+        "site": sid,
+        "site_name": site_name,
+        "window": {"start": win_start, "end": win_end, "hours": eff_hours},
+        "scope": scope,
+        "equipment": equipment_ids or [],
+        "mechanical_summary": mech,
+        "available_charts": available,
+        "disabled_charts": disabled,
+        "sections": SECTION_SPECS,
+        "suggested_chart_ids": suggested_chart_ids,
+        "fault_summary": fault_summary,
+        "fault_rows": fault_rows[:50],
+        "fault_overlays": [],
+        "chart_previews": [],
+        "report_bundles": report_model,
+        "diagnostics": _build_diagnostics(
+            tree, available=available, disabled=disabled, fault_summary=fault_summary
+        ),
+        "warnings": mech.get("warnings") or [],
+        "missing_roles": [
+            str(i.get("title") or "") for i in (mech.get("model_issues") or [])[:10]
+        ],
+    }
 
-    by_sev = analytics.get("faults_by_severity") or []
+    if not render_previews:
+        return base_payload
+
+    by_sev = overview.get("faults_by_severity") or faults_data.get("fault_count_by_severity") or []
     if has_faults and (not chart_ids or "fault_hours_by_severity" in (chart_ids or [])):
         labels = [r.get("group", "") for r in by_sev]
         values = [float(r.get("elapsed_hours") or 0) for r in by_sev]
@@ -436,7 +423,7 @@ def build_rcx_preview(
             )
         )
 
-    by_eq = analytics.get("fault_hours_by_equipment") or []
+    by_eq = overview.get("fault_hours_by_equipment") or faults_data.get("fault_hours_by_equipment") or []
     if has_faults and (not chart_ids or "fault_hours_by_equipment" in (chart_ids or [])):
         labels = [str(r.get("group", ""))[:20] for r in by_eq[:12]]
         values = [float(r.get("elapsed_hours") or 0) for r in by_eq[:12]]
@@ -454,10 +441,7 @@ def build_rcx_preview(
 
     if not chart_ids or "building_inventory" in (chart_ids or []):
         if "building_inventory" in available_ids:
-            try:
-                mh = client.get_model_health(token=token)
-            except Exception:
-                mh = {}
+            mh = build_model_health()
             inv_counts = mech.get("counts") if isinstance(mech.get("counts"), dict) else {}
             plotted = build_building_inventory_figure(
                 counts=inv_counts,
@@ -568,32 +552,15 @@ def build_rcx_preview(
             fault_overlays.extend(overlays_from_readings(rd, show=True)[:8])
 
     return {
-        "site_id": site_id,
-        "site_name": site.name,
-        "window": {"start": win_start, "end": win_end, "hours": eff_hours},
-        "mechanical_summary": mech,
-        "available_charts": available,
-        "disabled_charts": disabled,
-        "sections": SECTION_SPECS,
-        "suggested_chart_ids": suggested_chart_ids,
-        "fault_summary": fault_summary,
-        "fault_rows": fault_rows[:50],
+        **base_payload,
         "fault_overlays": _json_safe_overlays(fault_overlays),
         "chart_previews": previews,
-        "report_bundles": report_model,
-        "diagnostics": _build_diagnostics(
-            tree, available=available, disabled=disabled, fault_summary=fault_summary
-        ),
-        "warnings": mech.get("warnings") or [],
-        "missing_roles": [
-            str(i.get("title") or "") for i in (mech.get("model_issues") or [])[:10]
-        ],
     }
 
 
 def generate_rcx_docx(
     *,
-    site_id: str,
+    site_id: str = "",
     hours: int = 24,
     start: str | None = None,
     end: str | None = None,
@@ -611,23 +578,10 @@ def generate_rcx_docx(
         custom_columns=custom_columns,
         show_fault_overlays=show_fault_overlays,
     )
-    site = resolve_site_config(site_id)
+    sid, site_name = _resolve_site(site_id)
     fault_rows = preview.get("fault_rows") or []
 
-    try:
-        from open_fdd.reports.rcx_docx import build_rcx_docx
-    except ImportError:
-        from portfolio.central.rcx_report import build_rcx_docx as legacy_build
-
-        blob = legacy_build(
-            site_id=site_id,
-            site_name=site.name,
-            validation=None,
-            rollups=[],
-            warnings=preview.get("warnings"),
-        )
-        fname = f"openfdd-rcx-{site_id}.docx"
-        return blob, fname
+    from open_fdd.reports.rcx_docx import build_rcx_docx
 
     mech = preview.get("mechanical_summary") or {}
     overview = {
@@ -639,8 +593,8 @@ def generate_rcx_docx(
     }
 
     blob = build_rcx_docx(
-        site_id=site_id,
-        site_name=site.name,
+        site_id=sid,
+        site_name=site_name,
         window=preview.get("window") or {},
         fault_rows=fault_rows,
         overview=overview,
@@ -651,5 +605,5 @@ def generate_rcx_docx(
     )
     start_s = (preview.get("window") or {}).get("start", "")[:10]
     end_s = (preview.get("window") or {}).get("end", "")[:10]
-    fname = f"openfdd-rcx-{site_id}-{start_s}-{end_s}.docx"
+    fname = f"openfdd-rcx-{sid}-{start_s}-{end_s}.docx"
     return blob, fname

@@ -1,14 +1,17 @@
-"""Paragraph mechanical summary from Edge FDD query presets (React Data Model parity)."""
+"""Paragraph mechanical summary from local FDD query presets."""
 
 from __future__ import annotations
 
-from typing import Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Callable
 
-from portfolio.central.edge_fetch import edge_client_for_site, run_parallel
-from portfolio.central.equipment_classify import is_ahu, is_vav, is_zone
-from portfolio.collector.edge_client import EdgeClient
+from ..equipment_classify import is_ahu, is_vav, is_zone
+from ..fdd_query_presets import run_fdd_preset
+from ..dashboard_analytics import build_model_health
+from ..model_service import ModelService
+from ..site_defaults import default_site_id, ensure_default_site
+from ..ttl_service import TtlService
 
-# Same preset ids as workspace/dashboard DataModelSparqlPanel FDD buttons
 _NARRATIVE_PRESETS = (
     "ahus_vavs_zones",
     "equipment_to_points",
@@ -20,12 +23,47 @@ _NARRATIVE_PRESETS = (
 _FAST_PRESETS = ("ahus_vavs_zones",)
 
 
-def _run_preset(client: EdgeClient, preset_id: str, token: str) -> dict[str, Any]:
-    return client.get_fdd_query_preset(preset_id, token=token)
+def _run_parallel(
+    tasks: dict[str, Callable[[], Any]],
+    *,
+    max_workers: int = 4,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    if not tasks:
+        return {}, {}
+    results: dict[str, Any] = {}
+    errors: dict[str, str] = {}
+    workers = min(max_workers, len(tasks))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(fn): name for name, fn in tasks.items()}
+        for fut in as_completed(futures):
+            name = futures[fut]
+            try:
+                results[name] = fut.result()
+            except Exception as exc:
+                errors[name] = str(exc)[:300]
+    return results, errors
+
+
+def _resolve_site_id(site_id: str) -> str:
+    sid = str(site_id or "").strip()
+    if sid:
+        return sid
+    svc = ModelService()
+    return ensure_default_site(svc, TtlService()) or default_site_id()
+
+
+def _site_name(site_id: str) -> str:
+    try:
+        model = ModelService().load()
+        for site in model.get("sites") or []:
+            if isinstance(site, dict) and str(site.get("id") or "") == site_id:
+                return str(site.get("name") or site_id)
+    except Exception:
+        pass
+    return site_id
 
 
 def _count_hvac_row(row: dict[str, Any]) -> tuple[int, int, int]:
-    """Return (ahu, vav, zone) increment tuple for one preset row."""
     hvac_class = str(row.get("hvac_class") or "").upper()
     if hvac_class == "AHU":
         return 1, 0, 0
@@ -59,18 +97,16 @@ def _count_hvac_row(row: dict[str, Any]) -> tuple[int, int, int]:
 
 
 def _supplement_hvac_counts(
-    client: EdgeClient,
-    token: str,
     *,
+    site_id: str,
     seen: set[str],
     ahus: int,
     vavs: int,
     zones: int,
 ) -> tuple[int, int, int]:
-    """Count HVAC equipment missing from ahus_vavs_zones (untyped RTU rows on older Edge builds)."""
     try:
-        eq_pts = client.get_fdd_query_preset("equipment_to_points", token=token)
-    except RuntimeError:
+        eq_pts = run_fdd_preset("equipment_to_points", site_id=site_id)
+    except KeyError:
         return ahus, vavs, zones
     for row in eq_pts.get("rows") or []:
         if not isinstance(row, dict):
@@ -96,8 +132,9 @@ def _supplement_hvac_counts(
 
 
 def build_mechanical_narrative(site_id: str, *, fast: bool = False) -> dict[str, Any]:
-    """Read-only narrative using Edge /api/model/fdd-query-presets/*."""
-    site, token, client = edge_client_for_site(site_id)
+    """Read-only narrative using local FDD query presets."""
+    sid = _resolve_site_id(site_id)
+    site_name = _site_name(sid)
 
     ahus = vavs = zones = 0
     point_rows = 0
@@ -109,16 +146,15 @@ def build_mechanical_narrative(site_id: str, *, fast: bool = False) -> dict[str,
     bacnet: dict[str, Any] = {}
 
     if fast:
-        results, errors = run_parallel(
+        results, errors = _run_parallel(
             {
-                "hvac": lambda: _run_preset(client, "ahus_vavs_zones", token),
-                "health": lambda: client.get_model_health(token=token),
-                "bacnet": lambda: client.get_bacnet_poll_status(token=token),
+                "hvac": lambda: run_fdd_preset("ahus_vavs_zones", site_id=sid),
+                "health": lambda: build_model_health(),
+                "bacnet": lambda: _bacnet_status(),
             },
             max_workers=3,
         )
-        for name, msg in errors.items():
-            preset_errors.append(f"{name}: {msg}")
+        preset_errors.extend(f"{k}: {v}" for k, v in errors.items())
         hvac = results.get("hvac") or {}
         model_health = results.get("health") or {}
         bacnet = results.get("bacnet") or {}
@@ -135,12 +171,12 @@ def build_mechanical_narrative(site_id: str, *, fast: bool = False) -> dict[str,
             vavs += dv
             zones += dz
         ahus, vavs, zones = _supplement_hvac_counts(
-            client, token, seen=seen_hvac, ahus=ahus, vavs=vavs, zones=zones
+            site_id=sid, seen=seen_hvac, ahus=ahus, vavs=vavs, zones=zones
         )
         presets_used = list(_FAST_PRESETS)
     else:
         try:
-            hvac = _run_preset(client, "ahus_vavs_zones", token)
+            hvac = run_fdd_preset("ahus_vavs_zones", site_id=sid)
             seen_hvac: set[str] = set()
             for row in hvac.get("rows") or []:
                 if not isinstance(row, dict):
@@ -153,43 +189,42 @@ def build_mechanical_narrative(site_id: str, *, fast: bool = False) -> dict[str,
                 vavs += dv
                 zones += dz
             ahus, vavs, zones = _supplement_hvac_counts(
-                client, token, seen=seen_hvac, ahus=ahus, vavs=vavs, zones=zones
+                site_id=sid, seen=seen_hvac, ahus=ahus, vavs=vavs, zones=zones
             )
-        except RuntimeError as exc:
+        except KeyError as exc:
             preset_errors.append(f"ahus_vavs_zones: {exc}")
 
-        try:
-            eq_pts = _run_preset(client, "equipment_to_points", token)
-            point_rows = int(eq_pts.get("row_count") or len(eq_pts.get("rows") or []))
-        except RuntimeError as exc:
-            preset_errors.append(f"equipment_to_points: {exc}")
+        for preset_id, assign in (
+            ("equipment_to_points", lambda r: int(r.get("row_count") or len(r.get("rows") or []))),
+            ("missing_rule_bindings", lambda r: int(r.get("row_count") or len(r.get("rows") or []))),
+            ("orphan_points", lambda r: int(r.get("row_count") or len(r.get("rows") or []))),
+        ):
+            try:
+                raw = run_fdd_preset(preset_id, site_id=sid)
+                val = assign(raw)
+                if preset_id == "equipment_to_points":
+                    point_rows = val
+                elif preset_id == "missing_rule_bindings":
+                    missing_bindings = val
+                else:
+                    orphan_points = val
+            except KeyError as exc:
+                preset_errors.append(f"{preset_id}: {exc}")
 
         try:
-            miss = _run_preset(client, "missing_rule_bindings", token)
-            missing_bindings = int(miss.get("row_count") or len(miss.get("rows") or []))
-        except RuntimeError as exc:
-            preset_errors.append(f"missing_rule_bindings: {exc}")
-
-        try:
-            orphan = _run_preset(client, "orphan_points", token)
-            orphan_points = int(orphan.get("row_count") or len(orphan.get("rows") or []))
-        except RuntimeError as exc:
-            preset_errors.append(f"orphan_points: {exc}")
-
-        try:
-            cov = _run_preset(client, "rule_coverage_by_equipment_type", token)
+            cov = run_fdd_preset("rule_coverage_by_equipment_type", site_id=sid)
             for row in (cov.get("rows") or [])[:8]:
                 if isinstance(row, dict):
                     et = row.get("equipment_type") or row.get("group")
                     cnt = row.get("rule_count") or row.get("count")
                     if et is not None and str(et) != "unknown":
                         coverage_lines.append(f"{et}: {cnt} rule(s)")
-        except RuntimeError as exc:
+        except KeyError as exc:
             preset_errors.append(f"rule_coverage: {exc}")
 
-        model_health = client.get_model_health(token=token)
+        model_health = build_model_health()
         counts = model_health.get("counts") if isinstance(model_health.get("counts"), dict) else {}
-        bacnet = client.get_bacnet_poll_status(token=token)
+        bacnet = _bacnet_status()
         presets_used = list(_NARRATIVE_PRESETS)
 
     zone_note = ""
@@ -197,8 +232,8 @@ def build_mechanical_narrative(site_id: str, *, fast: bool = False) -> dict[str,
         zone_note = f" ({vavs} VAV terminal(s) — discrete HVAC_Zone equipment not modeled)"
 
     paragraphs = [
-        f"{site.name} ({site_id}) at {site.base_url} — BRICK model via Edge FDD query presets "
-        f"(same endpoints as the OpenFDD Edge Data Model tab).",
+        f"{site_name} ({sid}) — local OpenFDD Edge BRICK model via FDD query presets "
+        "(same endpoints as the Data Model tab).",
         (
             f"Mechanical inventory: {ahus} AHU(s), {vavs} VAV(s), {zones} zone(s){zone_note}; "
             + (
@@ -228,7 +263,7 @@ def build_mechanical_narrative(site_id: str, *, fast: bool = False) -> dict[str,
         )
 
     return {
-        "site_id": site_id,
+        "site_id": sid,
         "narrative": "\n\n".join(paragraphs),
         "presets_used": presets_used,
         "fast_mode": fast,
@@ -241,3 +276,16 @@ def build_mechanical_narrative(site_id: str, *, fast: bool = False) -> dict[str,
             "orphan_points": orphan_points,
         },
     }
+
+
+def _bacnet_status() -> dict[str, Any]:
+    try:
+        from ..poll_throughput import compute_poll_throughput
+
+        pt = compute_poll_throughput(window_minutes=60)
+        return {
+            "enabled_points": pt.get("enabled_points"),
+            "last_poll_at": pt.get("last_poll_at"),
+        }
+    except Exception:
+        return {}

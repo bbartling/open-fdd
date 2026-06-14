@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from portfolio.central.mechanical_narrative import _count_hvac_row
+from openfdd_bridge.rcx.mechanical_narrative import _count_hvac_row
 
 
 def test_count_hvac_row_rtu_equipment_id():

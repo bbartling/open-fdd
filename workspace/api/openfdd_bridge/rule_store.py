@@ -205,6 +205,33 @@ class RuleStore:
         return True
 
 
+def _lint_rule_code(code: str, *, mode: str) -> None:
+    """Reject pandas/legacy patterns before persisting a rule."""
+    from open_fdd.arrow_runtime.rules import detect_rule_backend
+
+    from . import playground
+
+    if mode == "script":
+        lint = playground.lint_python(
+            code,
+            require_arrow_rule=False,
+            require_evaluate=False,
+            strict_imports=True,
+        )
+    elif detect_rule_backend(code, {"mode": mode}) == "arrow":
+        lint = playground.lint_arrow_python(code)
+    else:
+        lint = playground.lint_python(code, strict_imports=True)
+    if lint.get("ok"):
+        return
+    msgs = [
+        str(i.get("message") or "lint failed")
+        for i in lint.get("issues", [])
+        if i.get("severity") == "error"
+    ]
+    raise ValueError("rule lint failed:\n" + "\n".join(msgs) if msgs else "rule lint failed")
+
+
 def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict[str, Any]:
     mode = str(entry.get("mode") or "rule")
     if mode not in VALID_MODES:
@@ -215,6 +242,7 @@ def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict
     code = str(entry.get("code") or "")
     if not code.strip():
         raise ValueError("rule code is required")
+    _lint_rule_code(code, mode=mode)
     config = entry.get("config")
     if not isinstance(config, dict):
         config = {}

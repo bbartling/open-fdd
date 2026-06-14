@@ -5,7 +5,7 @@
       "name": "Bens bench — dual source",
       "metadata": {
         "rule_pack": "bench",
-        "description": "MS/TP BACnet 5007 + Niagara BENS BENCHTEST BOX cross-validation"
+        "description": "MS/TP BACnet device 5007 + Niagara station bench9065 as separate driver devices"
       }
     }
   ],
@@ -16,81 +16,98 @@
       "name": "BENS BENCHTEST BOX",
       "equipment_type": "Laboratory_Equipment",
       "feeds": ["duct-bens"],
-      "bacnet_device_id": 5007,
-      "bacnet_device_instance": 5007
+      "metadata": {"physical_asset": true}
     },
     {
       "id": "duct-bens",
       "site_id": "demo",
       "name": "Bench supply duct",
-      "equipment_type": "Air_Duct"
+      "equipment_type": "Air_Duct",
+      "isPartOf": "bench-bens-box"
     },
     {
       "id": "bacnet-5007",
       "site_id": "demo",
-      "name": "BACnet device 5007",
+      "name": "BACnet MS/TP device 5007",
       "equipment_type": "BACnet_Device",
       "bacnet_device_id": 5007,
-      "bacnet_device_instance": 5007
+      "bacnet_device_instance": 5007,
+      "metadata": {"source": "bacnet_direct", "driver": "bacnet_poll"}
+    },
+    {
+      "id": "niagara-bench9065",
+      "site_id": "demo",
+      "name": "Niagara station bench9065",
+      "equipment_type": "Niagara_Station",
+      "metadata": {
+        "source": "niagara_baskstream",
+        "station_id": "bench9065",
+        "driver": "niagara_baskstream"
+      }
     }
   ],
   "points": [
     {
       "id": "5007-analog-input-1173",
       "site_id": "demo",
-      "equipment_id": "bench-bens-box",
+      "equipment_id": "bacnet-5007",
       "external_id": "oa-t",
       "brick_type": "Outside_Air_Temperature_Sensor",
       "fdd_input": "oa-t",
       "bacnet_device_id": 5007,
       "object_identifier": "analog-input,1173",
       "description": "OA-T (BACnet direct)",
+      "units": "degF",
       "metadata": {"source": "bacnet_direct", "cross_source_semantic": "oa-t"}
     },
     {
       "id": "5007-analog-input-1168",
       "site_id": "demo",
-      "equipment_id": "bench-bens-box",
+      "equipment_id": "bacnet-5007",
       "external_id": "oa-h",
       "brick_type": "Outside_Air_Humidity_Sensor",
       "fdd_input": "oa-h",
       "bacnet_device_id": 5007,
       "object_identifier": "analog-input,1168",
-      "description": "OA-H (BACnet direct)",
+      "description": "OA-H humidity (BACnet direct)",
+      "units": "%RH",
       "metadata": {"source": "bacnet_direct", "cross_source_semantic": "oa-h"}
     },
     {
       "id": "5007-analog-input-1192",
       "site_id": "demo",
-      "equipment_id": "duct-bens",
+      "equipment_id": "bacnet-5007",
       "external_id": "duct-t",
       "brick_type": "Discharge_Air_Temperature_Sensor",
       "fdd_input": "duct-t",
       "bacnet_device_id": 5007,
       "object_identifier": "analog-input,1192",
-      "description": "DUCT-T (BACnet direct)",
+      "description": "DUCT-T discharge air temp (BACnet direct)",
+      "units": "degF",
       "metadata": {"source": "bacnet_direct", "cross_source_semantic": "duct-t"}
     },
     {
       "id": "5007-analog-input-10014",
       "site_id": "demo",
-      "equipment_id": "bench-bens-box",
+      "equipment_id": "bacnet-5007",
       "external_id": "stat_zn-t",
       "brick_type": "Zone_Air_Temperature_Sensor",
       "fdd_input": "stat_zn-t",
       "bacnet_device_id": 5007,
       "object_identifier": "analog-input,10014",
-      "description": "STAT ZN-T (BACnet direct)",
+      "description": "STAT ZN-T zone temp (BACnet direct)",
+      "units": "degF",
       "metadata": {"source": "bacnet_direct", "cross_source_semantic": "stat_zn-t"}
     },
     {
-      "id": "niagara-bench-oa-t",
+      "id": "niagara-bench9065-f4c0862bb4",
       "site_id": "demo",
-      "equipment_id": "bench-bens-box",
+      "equipment_id": "niagara-bench9065",
       "external_id": "niagara-oa-t",
       "brick_type": "Outside_Air_Temperature_Sensor",
       "fdd_input": "oa-t",
       "description": "OA-T (Niagara baskStream)",
+      "units": "degF",
       "metadata": {
         "source": "niagara_baskstream",
         "station_id": "bench9065",
@@ -100,13 +117,14 @@
       }
     },
     {
-      "id": "niagara-bench-oa-h",
+      "id": "niagara-bench9065-954f1fe9a8",
       "site_id": "demo",
-      "equipment_id": "bench-bens-box",
+      "equipment_id": "niagara-bench9065",
       "external_id": "niagara-oa-h",
       "brick_type": "Outside_Air_Humidity_Sensor",
       "fdd_input": "oa-h",
-      "description": "OA-H (Niagara baskStream)",
+      "description": "OA-H humidity (Niagara baskStream)",
+      "units": "%RH",
       "metadata": {
         "source": "niagara_baskstream",
         "station_id": "bench9065",
@@ -116,13 +134,14 @@
       }
     },
     {
-      "id": "niagara-bench-duct-t",
+      "id": "niagara-bench9065-9fc449ad9c",
       "site_id": "demo",
-      "equipment_id": "duct-bens",
+      "equipment_id": "niagara-bench9065",
       "external_id": "niagara-duct-t",
       "brick_type": "Discharge_Air_Temperature_Sensor",
       "fdd_input": "duct-t",
-      "description": "DUCT-T (Niagara baskStream)",
+      "description": "DUCT-T discharge air temp (Niagara baskStream)",
+      "units": "degF",
       "metadata": {
         "source": "niagara_baskstream",
         "station_id": "bench9065",
@@ -132,13 +151,14 @@
       }
     },
     {
-      "id": "niagara-bench-duct-p",
+      "id": "niagara-bench9065-c35309e939",
       "site_id": "demo",
-      "equipment_id": "duct-bens",
+      "equipment_id": "niagara-bench9065",
       "external_id": "niagara-duct-p",
       "brick_type": "Supply_Air_Static_Pressure_Sensor",
       "fdd_input": "duct-p",
-      "description": "DUCT-P (Niagara baskStream)",
+      "description": "DUCT-P static pressure (Niagara baskStream)",
+      "units": "inWC",
       "metadata": {
         "source": "niagara_baskstream",
         "station_id": "bench9065",
@@ -148,13 +168,14 @@
       }
     },
     {
-      "id": "niagara-bench-stat-zn-t",
+      "id": "niagara-bench9065-fa1b48f7f0",
       "site_id": "demo",
-      "equipment_id": "bench-bens-box",
+      "equipment_id": "niagara-bench9065",
       "external_id": "niagara-stat-zn-t",
       "brick_type": "Zone_Air_Temperature_Sensor",
       "fdd_input": "stat_zn-t",
-      "description": "STAT ZN-T (Niagara baskStream)",
+      "description": "STAT ZN-T zone temp (Niagara baskStream)",
+      "units": "degF",
       "metadata": {
         "source": "niagara_baskstream",
         "station_id": "bench9065",
@@ -164,13 +185,14 @@
       }
     },
     {
-      "id": "niagara-bench-current-s",
+      "id": "niagara-bench9065-96d2041b61",
       "site_id": "demo",
-      "equipment_id": "bench-bens-box",
+      "equipment_id": "niagara-bench9065",
       "external_id": "niagara-current-s",
       "brick_type": "Sensor",
       "fdd_input": "current-s",
       "description": "CURRENT-S (Niagara baskStream, read-only)",
+      "units": "A",
       "metadata": {
         "source": "niagara_baskstream",
         "station_id": "bench9065",

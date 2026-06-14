@@ -4,16 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from portfolio.central.equipment_classify import (
-    effective_equipment_type,
-    is_ahu,
-    is_hws,
-    is_vav,
-    report_family,
-)
-from portfolio.central.trend_charts import historian_column_for_point
+from ..equipment_classify import report_family
+from .trend_charts import historian_column_for_point
 
-# Brick-class groups per equipment family — resolved from equipment_to_points rows.
 CHART_TEMPLATES: dict[str, list[dict[str, Any]]] = {
     "ahu": [
         {
@@ -225,7 +218,7 @@ def build_report_bundles(
     )
 
     families: dict[str, dict[str, Any]] = {
-        "building": {"label": "Building overview", "count": 1},
+        "building": {"label": "Building overview", "count": 0},
         "ahu": {"label": "AHU reports", "count": 0},
         "hws": {"label": "HWS / plant reports", "count": 0},
         "vav": {"label": "VAV reports", "count": 0},

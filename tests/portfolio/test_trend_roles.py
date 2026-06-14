@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from portfolio.central.trend_charts import (
+from openfdd_bridge.rcx.trend_charts import (
     _role_matches,
     columns_for_roles,
     historian_column_for_point,

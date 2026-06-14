@@ -4,23 +4,25 @@ from __future__ import annotations
 
 from typing import Any
 
-from portfolio.central.edge_registry import resolve_site_config, resolve_token
-from portfolio.collector.edge_client import EdgeClient
+from ..model_service import ModelService
+from ..model_sparql import query_model_tree
+from ..site_defaults import default_site_id, ensure_default_site
+from ..ttl_service import TtlService
+from .trend_charts import historian_column_for_point
 
 
-from portfolio.central.trend_charts import historian_column_for_point
-
-
-def _plot_column(pt: dict[str, Any]) -> str:
-    return historian_column_for_point(pt)
+def _resolve_site_id(site_id: str) -> str:
+    sid = str(site_id or "").strip()
+    if sid:
+        return sid
+    svc = ModelService()
+    return ensure_default_site(svc, TtlService()) or default_site_id()
 
 
 def list_report_points(site_id: str, *, limit: int = 200) -> dict[str, Any]:
-    """Return pollable columns from Edge model tree for ad-hoc trend charts."""
-    site = resolve_site_config(site_id)
-    client = EdgeClient(site.base_url)
-    token = resolve_token(site)
-    tree = client.get_model_tree(token=token)
+    """Return pollable columns from local model tree for ad-hoc trend charts."""
+    sid = _resolve_site_id(site_id)
+    tree = query_model_tree()
     equipment_by_id = {
         str(e.get("id") or e.get("equipment_id") or ""): e
         for e in (tree.get("equipment") or [])
@@ -30,7 +32,7 @@ def list_report_points(site_id: str, *, limit: int = 200) -> dict[str, Any]:
     for pt in tree.get("points") or []:
         if not isinstance(pt, dict):
             continue
-        col = _plot_column(pt)
+        col = historian_column_for_point(pt)
         if not col:
             continue
         eid = str(pt.get("equipment_id") or "")
@@ -50,14 +52,14 @@ def list_report_points(site_id: str, *, limit: int = 200) -> dict[str, Any]:
     if limit > 0:
         rows = rows[:limit]
     return {
-        "site_id": site_id,
+        "site_id": sid,
         "count": len(rows),
         "points": rows,
     }
 
 
 def list_report_point_tree(site_id: str, *, limit: int = 500) -> dict[str, Any]:
-    """Group historian columns by equipment for tree-style Dash picker."""
+    """Group historian columns by equipment for tree-style picker."""
     flat = list_report_points(site_id, limit=limit)
     by_equipment: dict[str, list[dict[str, Any]]] = {}
     for pt in flat.get("points") or []:
@@ -76,7 +78,7 @@ def list_report_point_tree(site_id: str, *, limit: int = 500) -> dict[str, Any]:
             }
         )
     return {
-        "site_id": site_id,
+        "site_id": flat.get("site_id"),
         "equipment_count": len(equipment),
         "point_count": flat.get("count") or 0,
         "equipment": equipment,
