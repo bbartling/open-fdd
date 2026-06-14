@@ -46,13 +46,17 @@ def fault_hours_from_fdd_runs(runs: list[dict[str, Any]]) -> list[dict[str, Any]
             names = run.get("equipment_names")
             if isinstance(names, list) and names:
                 eq = str(names[0] or "").strip()
+        symptom = str(run.get("symptom") or "").strip() or str(run.get("rule_name") or "")
         rows.append(
             {
                 "site_id": str(run.get("site_id") or ""),
                 "equipment": eq or "—",
                 "equipment_type": str(run.get("equipment_family") or run.get("equipment_type") or ""),
-                "fault_code": str(run.get("fault_code") or run.get("rule_id") or ""),
-                "fault_name": str(run.get("rule_name") or ""),
+                "rule_id": str(run.get("rule_id") or ""),
+                "fault_name": symptom,
+                "short_description": str(run.get("short_description") or symptom),
+                "symptom": symptom,
+                "data_source": str(run.get("data_source") or ""),
                 "severity": str(run.get("severity") or "warning"),
                 "elapsed_hours": round(hours, 3),
                 "samples_flagged": flagged,
@@ -74,7 +78,9 @@ def aggregate_fault_hours(
     for row in rows:
         key_field = {
             "equipment": row.get("equipment") or "—",
-            "fault_code": row.get("fault_code") or "—",
+            "fault_code": row.get("fault_code") or row.get("rule_id") or "—",
+            "rule_id": row.get("rule_id") or "—",
+            "fault_name": row.get("fault_name") or row.get("short_description") or "—",
             "severity": row.get("severity") or "warning",
             "site_id": row.get("site_id") or "",
         }.get(group_by, row.get(group_by) or "—")
@@ -103,6 +109,7 @@ def fault_hours_from_alerts(alerts: list[dict[str, Any]]) -> list[dict[str, Any]
         hours = _hours_from_analytics(analytics)
         ctx = alert.get("model_context") if isinstance(alert.get("model_context"), dict) else {}
         eq = ctx.get("equipment") if isinstance(ctx.get("equipment"), dict) else {}
+        symptom = str(alert.get("short_description") or alert.get("symptom") or ctx.get("short_description") or alert.get("rule_name") or "").strip()
         rows.append(
             {
                 "site_id": str(alert.get("site_id") or ""),
@@ -113,8 +120,11 @@ def fault_hours_from_alerts(alerts: list[dict[str, Any]]) -> list[dict[str, Any]
                     or "—"
                 ),
                 "equipment_type": str(eq.get("type") or alert.get("equipment_family") or ""),
-                "fault_code": str(alert.get("code") or ""),
-                "fault_name": str(alert.get("rule_name") or alert.get("title") or ""),
+                "rule_id": str(alert.get("rule_id") or ""),
+                "fault_name": symptom or str(alert.get("rule_name") or alert.get("title") or ""),
+                "short_description": symptom,
+                "symptom": symptom,
+                "data_source": str(alert.get("data_source") or ctx.get("data_source") or ""),
                 "severity": str(alert.get("severity") or "warning"),
                 "elapsed_hours": round(hours, 3),
                 "samples_flagged": analytics.get("fault_samples"),

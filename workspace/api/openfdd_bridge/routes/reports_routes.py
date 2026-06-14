@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
+from ..deps import require_user
 from ..rcx.chart_preview import build_rcx_preview, generate_rcx_docx
 from ..rcx.rcx_points import list_report_point_tree, list_report_points
 from ..rcx.report_store import list_reports, resolve_report, save_report
@@ -45,6 +46,7 @@ def rcx_workspace(
     start: str | None = None,
     end: str | None = None,
     show_fault_overlays: bool = True,
+    _user: dict = Depends(require_user),
 ) -> dict[str, Any]:
     return get_workspace(
         site_id=site_id,
@@ -56,17 +58,17 @@ def rcx_workspace(
 
 
 @router.get("/points")
-def rcx_points(site_id: str = "", limit: int = 500) -> dict[str, Any]:
+def rcx_points(site_id: str = "", limit: int = 500, _user: dict = Depends(require_user)) -> dict[str, Any]:
     return list_report_points(site_id, limit=limit)
 
 
 @router.get("/point-tree")
-def rcx_point_tree(site_id: str = "", limit: int = 500) -> dict[str, Any]:
+def rcx_point_tree(site_id: str = "", limit: int = 500, _user: dict = Depends(require_user)) -> dict[str, Any]:
     return list_report_point_tree(site_id, limit=limit)
 
 
 @router.post("/preview")
-def rcx_preview(body: RcxPreviewRequest) -> dict[str, Any]:
+def rcx_preview(body: RcxPreviewRequest, _user: dict = Depends(require_user)) -> dict[str, Any]:
     """Data readiness preview and optional chart gallery for RCx Report Builder."""
     return build_rcx_preview(
         site_id=body.site_id,
@@ -86,24 +88,28 @@ def rcx_preview(body: RcxPreviewRequest) -> dict[str, Any]:
 
 
 @router.post("/charts/preview")
-def rcx_charts_preview(body: RcxPreviewRequest) -> dict[str, Any]:
+def rcx_charts_preview(body: RcxPreviewRequest, _user: dict = Depends(require_user)) -> dict[str, Any]:
     return rcx_preview(body)
 
 
 @router.post("/generate")
-def rcx_generate(body: RcxGenerateRequest) -> Response:
+def rcx_generate(body: RcxGenerateRequest, _user: dict = Depends(require_user)) -> Response:
     """Generate downloadable RCx DOCX from selected sections/charts."""
-    charts = body.charts or body.chart_ids or None
+    charts = [str(c).strip() for c in (body.charts or body.chart_ids or []) if c and str(c).strip()]
+    sections = [str(s).strip() for s in (body.sections or []) if s and str(s).strip()]
+    bundle_ids = [str(b).strip() for b in (body.bundle_ids or []) if b and str(b).strip()]
     try:
         docx_bytes, fname = generate_rcx_docx(
             site_id=body.site_id,
             hours=body.hours,
             start=body.start,
             end=body.end,
-            sections=body.sections or None,
-            charts=charts,
+            sections=sections or None,
+            charts=charts or None,
             custom_columns=body.custom_columns or None,
             show_fault_overlays=body.show_fault_overlays,
+            bundle_ids=bundle_ids or None,
+            equipment_ids=body.equipment_ids or None,
         )
     except ModuleNotFoundError as exc:
         raise HTTPException(
@@ -122,13 +128,13 @@ def rcx_generate(body: RcxGenerateRequest) -> Response:
 
 
 @router.get("/list")
-def rcx_report_list(limit: int = 100) -> dict[str, Any]:
+def rcx_report_list(limit: int = 100, _user: dict = Depends(require_user)) -> dict[str, Any]:
     reports = list_reports(limit=limit)
     return {"reports": reports, "count": len(reports)}
 
 
 @router.get("/download/{filename}")
-def rcx_report_download(filename: str) -> FileResponse:
+def rcx_report_download(filename: str, _user: dict = Depends(require_user)) -> FileResponse:
     try:
         path = resolve_report(filename)
     except FileNotFoundError as exc:

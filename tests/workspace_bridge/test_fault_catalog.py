@@ -143,6 +143,11 @@ def test_public_check_engine_endpoints_no_auth_header(raw_client: TestClient):
         "/api/building/status",
         "/api/building/snapshot",
         "/api/faults/status",
+        "/health/stack",
+    ):
+        r = raw_client.get(path)
+        assert r.status_code == 401, path
+    for path in (
         "/openfdd-agent/building-insight",
         "/openfdd-agent/operational-brief",
         "/openfdd-agent/zone-temps",
@@ -150,7 +155,6 @@ def test_public_check_engine_endpoints_no_auth_header(raw_client: TestClient):
     ):
         r = raw_client.get(path)
         assert r.status_code == 200, path
-    assert raw_client.get("/health/stack").status_code == 401
 
 
 def test_status_api_starts_green(client: TestClient):

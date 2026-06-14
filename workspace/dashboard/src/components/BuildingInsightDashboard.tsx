@@ -241,16 +241,28 @@ export default function BuildingInsightDashboard() {
         </div>
 
         <div className="bis-card">
-          <h3>Context</h3>
-          <h2>Feeds &amp; research</h2>
-          {insight?.brick_model?.feeds_chains?.length ? (
-            <p className="bis-muted-line">
-              <strong>BRICK feeds:</strong> {insight.brick_model.feeds_chains.slice(0, 5).join("; ")}
-              {(insight.brick_model.feeds_chains.length ?? 0) > 5 ? " …" : ""}
-            </p>
+          <h3>Devices with issues</h3>
+          {insight?.faults_linked?.length ? (
+            <ul className="bis-device-faults">
+              {insight.faults_linked.slice(0, 8).map((f, i) => (
+                <li key={`${f.equipment_id || f.equipment_name}-${f.symptom}-${i}`}>
+                  <div className="bis-device-fault-head">
+                    <strong className="bis-device-name">{f.equipment_name || "Unknown device"}</strong>
+                    {f.data_source ? <span className="bis-source-badge">{f.data_source}</span> : null}
+                  </div>
+                  <div className="bis-device-symptom">{f.short_description || f.symptom || f.rule_name}</div>
+                </li>
+              ))}
+            </ul>
           ) : (
-            <p className="muted">No feed relationships in model summary.</p>
+            <p className="muted">No active FDD faults on modeled devices.</p>
           )}
+          {insight?.brick_model?.feeds_chains?.length ? (
+            <p className="bis-muted-line bis-foot-feeds">
+              <strong>BRICK feeds:</strong> {insight.brick_model.feeds_chains.slice(0, 4).join("; ")}
+              {(insight.brick_model.feeds_chains.length ?? 0) > 4 ? " …" : ""}
+            </p>
+          ) : null}
           {insight?.zone_temps?.struggling_zones?.length ? (
             <p className="bis-muted-line">
               <strong>Slow recovery:</strong>{" "}
@@ -259,23 +271,6 @@ export default function BuildingInsightDashboard() {
                 .map((z) => `${z.label || "?"} (${z.ahu_name || "AHU"})`)
                 .join(", ")}
             </p>
-          ) : null}
-          {insight?.faults_linked?.length ? (
-            <ul className="bis-linked-faults">
-              {insight.faults_linked.slice(0, 6).map((f, i) => (
-                <li key={`${f.code}-${f.equipment_name}-${i}`}>
-                  {f.equipment_name ? (
-                    <>
-                      <strong>{f.equipment_name}</strong>
-                      {f.code ? <> · <span className="bis-code">{f.code}</span></> : null}
-                    </>
-                  ) : (
-                    f.code ? <span className="bis-code">{f.code}</span> : null
-                  )}
-                  {f.title ? ` · ${String(f.title).replace(/^[A-Z0-9-]+ · /, "")}` : ""}
-                </li>
-              ))}
-            </ul>
           ) : null}
           <p className="bis-foot-meta">
             {insight?.source === "ollama" ? "AI summary" : "Rule-based summary"}

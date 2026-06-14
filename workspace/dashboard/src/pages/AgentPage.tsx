@@ -128,10 +128,15 @@ export default function AgentPage() {
     apiFetch<Context>("/openfdd-agent/context")
       .then((c) => {
         setCtx(c);
-        setChat((prev) => ({
-          ...prev,
-          model: prev.model || c.ollama_model || "",
-        }));
+        if (c.interactive_chat_enabled !== true) {
+          clearAgentChat();
+          setChat(loadAgentChat());
+        } else {
+          setChat((prev) => ({
+            ...prev,
+            model: prev.model || c.ollama_model || "",
+          }));
+        }
       })
       .catch((e) => {
         logTabInfo("agent", formatApiError(e));
@@ -193,7 +198,7 @@ export default function AgentPage() {
   }
 
   const ollamaOk = ctx?.ollama?.ok === true;
-  const chatEnabled = ctx?.interactive_chat_enabled !== false && ollamaOk;
+  const chatEnabled = ctx?.interactive_chat_enabled === true;
   const thinkingModels = ctx?.ollama_thinking_models || [];
   const installed = ctx?.ollama?.models_installed || [];
   const modelOptions = [...new Set([...installed, ...thinkingModels.map((m) => m.model)])];
@@ -209,14 +214,12 @@ export default function AgentPage() {
         {ctx && !chatEnabled ? (
           <p className="agent-offline-banner">
             {ctx.interactive_chat_disabled_reason ||
-              (ollamaOk
-                ? "Local chat is disabled on this host."
-                : "Ollama is not running — open Host stats for model/runtime details or restart the local stack.")}{" "}
-            Use the home dashboard <strong>Refresh</strong> for building analytics (zone temps, poll health, overrides).
+              "Local Ollama is not available on this CPU-only edge. Use Building status and Rule Lab for faults and trends; external agents (Cursor, OpenClaw) can attach via MCP when enabled."}
           </p>
         ) : null}
       </div>
 
+      {chatEnabled ? (
       <div className="agent-layout">
         <div ref={logRef} className="agent-chat-log">
           {chat.messages.length ? (
@@ -349,6 +352,7 @@ export default function AgentPage() {
           </div>
         </form>
       </div>
+      ) : null}
     </div>
   );
 }

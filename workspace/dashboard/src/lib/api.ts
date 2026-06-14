@@ -47,7 +47,7 @@ export function getBridgeBase(): string {
 }
 
 function shouldRedirectLogin(): boolean {
-  const publicPaths = new Set(["/", "/faults", "/login"]);
+  const publicPaths = new Set(["/login"]);
   const path = window.location.pathname;
   if (path.startsWith("/analytics")) return false;
   return window.top === window.self && !publicPaths.has(path);

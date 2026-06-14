@@ -81,12 +81,69 @@ def _site_name(site_id: str) -> str:
 
 def _load_fdd_runs() -> list[dict[str, Any]]:
     try:
+        from .fdd_equipment import enrich_fdd_run_with_equipment
         from .fdd_results import load_results
+        from .model_service import ModelService
 
+        model = ModelService().load()
         doc = load_results()
-        return [r for r in doc.get("runs", []) if isinstance(r, dict)]
+        out: list[dict[str, Any]] = []
+        for run in doc.get("runs", []):
+            if not isinstance(run, dict):
+                continue
+            site_id = str(run.get("site_id") or "").strip()
+            out.append(enrich_fdd_run_with_equipment(dict(run), model, site_id))
+        return out
     except Exception:
         return []
+
+
+def _fault_code_chart_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped = aggregate_fault_hours(rows, group_by="rule_id")[:15]
+    if not grouped or grouped[0].get("group") in {"", "—"}:
+        grouped = aggregate_fault_hours(rows, group_by="fault_name")[:15]
+    for row in grouped:
+        label = str(row.get("fault_name") or row.get("short_description") or row.get("group") or "Fault")
+        row["label"] = label
+        row["rule_id"] = str(row.get("rule_id") or row.get("group") or "")
+    return grouped
+
+
+def _active_fault_devices(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One row per device with symptom list for operator dashboard."""
+    by_device: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        device = str(row.get("equipment") or "—").strip()
+        bucket = by_device.setdefault(
+            device,
+            {
+                "equipment": device,
+                "equipment_type": row.get("equipment_type") or "",
+                "symptoms": [],
+                "rule_ids": [],
+                "elapsed_hours": 0.0,
+                "samples_flagged": 0,
+            },
+        )
+        symptom = str(row.get("fault_name") or row.get("symptom") or "").strip()
+        rid = str(row.get("rule_id") or "").strip()
+        if symptom and symptom not in bucket["symptoms"]:
+            bucket["symptoms"].append(symptom)
+        if rid and rid not in bucket["rule_ids"]:
+            bucket["rule_ids"].append(rid)
+        try:
+            bucket["elapsed_hours"] += float(row.get("elapsed_hours") or 0)
+        except (TypeError, ValueError):
+            pass
+        try:
+            bucket["samples_flagged"] += int(row.get("samples_flagged") or 0)
+        except (TypeError, ValueError):
+            pass
+    out = list(by_device.values())
+    out.sort(key=lambda r: (-float(r.get("elapsed_hours") or 0), str(r.get("equipment"))))
+    for row in out:
+        row["elapsed_hours"] = round(float(row.get("elapsed_hours") or 0), 3)
+    return out[:20]
 
 
 def _collect_status() -> dict[str, Any]:
@@ -139,7 +196,8 @@ def build_overview(*, site_id: str | None = None) -> dict[str, Any]:
         },
         "faults_by_severity": aggregate_fault_hours(fault_rows, group_by="severity"),
         "fault_hours_by_equipment": aggregate_fault_hours(fault_rows, group_by="equipment")[:15],
-        "fault_hours_by_code": aggregate_fault_hours(fault_rows, group_by="fault_code")[:15],
+        "fault_hours_by_code": _fault_code_chart_rows(fault_rows),
+        "active_fault_devices": _active_fault_devices(fault_rows),
         "top_faults": _top_faults_table(fault_rows),
         "traffic": status.get("traffic"),
         "model_health": _model_health_counts(mh),
@@ -153,7 +211,8 @@ def _top_faults_table(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             {
                 "equipment": row.get("equipment"),
                 "equipment_type": row.get("equipment_type"),
-                "fault_name": row.get("fault_name") or row.get("fault_code"),
+                "fault_name": row.get("fault_name") or row.get("symptom") or row.get("fault_code"),
+                "fault_code": row.get("fault_code"),
                 "severity": row.get("severity"),
                 "elapsed_fault_hours": row.get("elapsed_hours"),
                 "samples_flagged": row.get("samples_flagged"),
@@ -201,7 +260,8 @@ def build_fault_analytics(
         "fault_count_by_severity": aggregate_fault_hours(rows, group_by="severity"),
         "fault_hours_by_severity": aggregate_fault_hours(rows, group_by="severity"),
         "fault_hours_by_equipment": aggregate_fault_hours(rows, group_by="equipment")[:20],
-        "fault_hours_by_code": aggregate_fault_hours(rows, group_by="fault_code")[:20],
+        "fault_hours_by_code": _fault_code_chart_rows(rows)[:20],
+        "active_fault_devices": _active_fault_devices(rows),
         "top_equipment": aggregate_fault_hours(rows, group_by="equipment")[:10],
         "faults": rows,
     }

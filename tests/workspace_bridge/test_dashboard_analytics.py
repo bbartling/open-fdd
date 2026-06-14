@@ -81,9 +81,9 @@ def test_rcx_docx_contains_sections_and_chart():
 
     doc = Document(io.BytesIO(payload))
     text = "\n".join(p.text for p in doc.paragraphs)
-    assert "Open-FDD RCx Report" in text
+    assert "Retro-Commissioning Analytics Report" in text
     assert "AHU-C" in text
-    assert len(doc.inline_shapes) >= 1
+    assert "FDD rule trend screenshots" in text
 
 
 def test_analytics_overview_endpoint(raw_client):
@@ -100,16 +100,19 @@ def test_analytics_faults_endpoint(raw_client):
     assert "faults" in resp.json()
 
 
-def test_rcx_preview_endpoint(raw_client):
-    resp = raw_client.post("/api/reports/rcx/preview", json={"hours": 24})
+def test_rcx_preview_endpoint(client):
+    resp = client.post(
+        "/api/reports/rcx/preview",
+        json={"hours": 24, "catalog_only": True, "include_previews": False},
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert "available_charts" in body
     assert "sections" in body
 
 
-def test_rcx_generate_mime(raw_client):
-    resp = raw_client.post(
+def test_rcx_generate_mime(client):
+    resp = client.post(
         "/api/reports/rcx/generate",
         json={"hours": 24, "sections": ["executive_summary"], "charts": []},
     )

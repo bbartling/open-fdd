@@ -28,6 +28,10 @@ def test_overlays_from_readings():
 
 
 @pytest.mark.skipif(
+    __import__("importlib").util.find_spec("plotly") is None,
+    reason="plotly not installed",
+)
+@pytest.mark.skipif(
     __import__("importlib").util.find_spec("matplotlib") is None,
     reason="matplotlib not installed",
 )

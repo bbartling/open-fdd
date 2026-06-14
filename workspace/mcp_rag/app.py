@@ -33,6 +33,41 @@ class GetSectionRequest(BaseModel):
     path_or_id: str
 
 
+class SearchApiRequest(BaseModel):
+    query: str
+    top_k: int = Field(default=8, ge=1, le=25)
+
+
+_OPENAPI_CACHE: dict[str, Any] | None = None
+
+FASTMCP_TOOLS = [
+    "health_check",
+    "portfolio_rollup",
+    "building_agent_checkin",
+    "get_tuning_brief",
+    "preview_fdd_tuning",
+    "apply_fdd_tuning",
+    "list_fault_catalog",
+    "get_fdd_results",
+    "run_fdd_batch",
+    "search_model",
+    "get_equipment_context",
+    "recommend_rules_for_equipment",
+    "search_rule_cookbook",
+    "draft_arrow_rule",
+    "lint_rule",
+    "save_rule",
+    "bacnet_override_status",
+    "search_docs",
+    "get_doc_section",
+    "commission_building_fdd",
+    "diagnose_fault_trend",
+    "tune_fdd_thresholds",
+    "portfolio_morning_check",
+    "write_rule_from_cookbook",
+]
+
+
 def _load_index() -> RagIndex:
     global _idx
     if _idx is None:
@@ -74,16 +109,89 @@ def health() -> dict[str, Any] | JSONResponse:
 
 @app.get("/manifest")
 def manifest() -> dict[str, Any]:
+    idx_meta: dict[str, Any] = {"index_exists": INDEX_PATH.is_file()}
+    if INDEX_PATH.is_file():
+        try:
+            idx = _load_index()
+            idx_meta["chunk_count"] = len(idx.docs)
+            idx_meta["doc_count"] = getattr(idx, "doc_count", None)
+        except HTTPException:
+            pass
     return {
         "name": "open-fdd-mcp",
         "version": "2.0.0",
         "mcp_transport": "/mcp (streamable-http)",
-        "tools": [
-            {"name": "search_docs", "route": "/tools/search_docs", "legacy": True},
-            {"name": "get_doc_section", "route": "/tools/get_doc_section", "legacy": True},
+        "agent_note": (
+            "Production CPU edges: use Cursor/Codex/OpenClaw MCP on /mcp — local Ollama is optional (GPU) or dev-only. "
+            "Bridge agent tools: GET /openfdd-agent/context and POST /openfdd-agent/tool."
+        ),
+        "legacy_rest_tools": [
+            {"name": "search_docs", "route": "POST /tools/search_docs"},
+            {"name": "get_doc_section", "route": "POST /tools/get_doc_section"},
+            {"name": "search_api_capabilities", "route": "POST /tools/search_api_capabilities"},
         ],
-        "note": "Prefer MCP clients on /mcp; REST /tools/* kept for bridge compatibility.",
+        "fastmcp_tools": FASTMCP_TOOLS,
+        "fastmcp_tool_count": len(FASTMCP_TOOLS),
+        "rag_index": idx_meta,
+        "note": "Prefer MCP clients on /mcp; REST /tools/* for bridge-compat and lightweight doc search.",
     }
+
+
+def _load_openapi_paths() -> list[dict[str, str]]:
+    global _OPENAPI_CACHE
+    if _OPENAPI_CACHE is not None:
+        return _OPENAPI_CACHE.get("rows") or []
+
+    import httpx
+
+    base = os.getenv("OPENFDD_BRIDGE_BASE_URL", "http://127.0.0.1:8765").rstrip("/")
+    rows: list[dict[str, str]] = []
+    try:
+        with httpx.Client(timeout=4.0) as client:
+            resp = client.get(f"{base}/openapi.json")
+            resp.raise_for_status()
+            spec = resp.json()
+        for path, methods in (spec.get("paths") or {}).items():
+            if not isinstance(methods, dict):
+                continue
+            for method, meta in methods.items():
+                if method.startswith("x-") or not isinstance(meta, dict):
+                    continue
+                summary = str(meta.get("summary") or meta.get("description") or "").strip()
+                rows.append(
+                    {
+                        "path": str(path),
+                        "method": method.upper(),
+                        "summary": summary[:240],
+                        "haystack": f"{path} {method} {summary}".lower(),
+                    }
+                )
+    except Exception:
+        rows = []
+    _OPENAPI_CACHE = {"rows": rows}
+    return rows
+
+
+@app.post("/tools/search_api_capabilities")
+def search_api_capabilities(req: SearchApiRequest) -> dict[str, Any]:
+    """Search bridge OpenAPI paths — helps external agents find REST routes."""
+    q = req.query.strip().lower()
+    if not q:
+        raise HTTPException(status_code=400, detail="query required")
+    tokens = [t for t in q.replace("/", " ").split() if t]
+    rows = _load_openapi_paths()
+    scored: list[tuple[float, dict[str, str]]] = []
+    for row in rows:
+        hay = row.get("haystack") or ""
+        score = sum(1.0 for t in tokens if t in hay)
+        if score > 0:
+            scored.append((score, row))
+    scored.sort(key=lambda x: (-x[0], x[1]["path"]))
+    hits = [
+        {"path": r["path"], "method": r["method"], "summary": r["summary"], "score": s}
+        for s, r in scored[: req.top_k]
+    ]
+    return {"query": req.query, "count": len(hits), "results": hits, "openapi_source": "bridge"}
 
 
 @app.post("/tools/search_docs")

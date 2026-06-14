@@ -425,10 +425,12 @@ start_mcp_rag() {
   ensure_mcp_index
   local host="${OFDD_MCP_LISTEN_HOST:-127.0.0.1}"
   local port="${OFDD_MCP_LISTEN_PORT:-8090}"
-  restart_if_running "$MCP_PID" "uvicorn mcp_rag.app:app" "MCP RAG"
+  restart_if_running "$MCP_PID" "uvicorn mcp_server.asgi:create_app" "MCP RAG"
   mkdir -p "$PID_DIR"
-  "${VENV}/bin/pip" install -q -r workspace/api/requirements.txt
-  nohup "${VENV}/bin/uvicorn" mcp_rag.app:app \
+  "${VENV}/bin/pip" install -q -r workspace/mcp_server/requirements.txt
+  export OPENFDD_BRIDGE_BASE_URL="${OPENFDD_BRIDGE_BASE_URL:-http://127.0.0.1:${OFDD_BRIDGE_PORT:-8765}}"
+  nohup "${VENV}/bin/uvicorn" mcp_server.asgi:create_app \
+    --factory \
     --app-dir workspace \
     --host "$host" --port "$port" \
     >"$MCP_LOG" 2>&1 &
@@ -568,7 +570,8 @@ case "$CMD" in
     stop_one "$CADDY_PID" "caddy"
     stop_by_pattern "caddy run --config ${PID_DIR}/Caddyfile" "caddy"
     stop_one "$MCP_PID" "MCP RAG"
-    stop_by_pattern "uvicorn mcp_rag.app:app" "MCP RAG"
+    stop_by_pattern "uvicorn mcp_server.asgi:create_app" "MCP RAG"
+    stop_by_pattern "uvicorn mcp_rag.app:app" "MCP RAG (legacy)"
     stop_one "$OLLAMA_PID" "ollama"
     stop_one "$COMMISSION_PID" "commission agent"
     stop_one "$BRIDGE_PID" "bridge"

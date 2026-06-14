@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { fetchAuthStatus, hasToken, setToken } from "../lib/api";
 
-/** Gate integrator/agent pages. Check-engine home + fault catalog stay public. */
+/** Gate integrator/agent pages and building status dashboard. */
 export default function RequireAuth() {
   const [authRequired, setAuthRequired] = useState<boolean | null>(null);
 

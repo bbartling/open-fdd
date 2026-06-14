@@ -293,7 +293,7 @@ def build_rcx_preview(
         roles = TREND_CHARTS.get(chart_id)
         if not roles:
             return {}
-        return _readings_for_columns(columns_for_roles(tree, roles))
+        return _readings_for_columns(columns_for_roles(tree, roles, equipment_ids=equipment_ids))
 
     render_previews = include_previews and not catalog_only
     batch_readings: dict[str, Any] = {}
@@ -306,7 +306,9 @@ def build_rcx_preview(
             if use_model_bundles and cid in TREND_CHART_IDS:
                 continue
             if cid in TREND_CHARTS:
-                cols, _ = resolve_roles_on_tree(tree, spec.get("required_roles") or [])
+                cols, _ = resolve_roles_on_tree(
+                    tree, spec.get("required_roles") or [], equipment_ids=equipment_ids
+                )
                 cols_needed.extend(cols)
         for col in custom_columns or []:
             c = str(col).strip()
@@ -331,7 +333,9 @@ def build_rcx_preview(
             continue
         cid = spec["chart_id"]
         if cid in TREND_CHARTS:
-            cols, _missing = resolve_roles_on_tree(tree, spec.get("required_roles") or [])
+            cols, _missing = resolve_roles_on_tree(
+                tree, spec.get("required_roles") or [], equipment_ids=equipment_ids
+            )
             trend_ok = bool(cols)
             if render_previews and cols:
                 sub = _subset_readings(batch_readings, cols) if batch_readings else _readings_for_columns(cols)
@@ -467,7 +471,7 @@ def build_rcx_preview(
             continue
         if chart_id not in available_ids:
             continue
-        cols, _missing = resolve_roles_on_tree(tree, roles)
+        cols, _missing = resolve_roles_on_tree(tree, roles, equipment_ids=equipment_ids)
         if not cols:
             continue
         readings = _subset_readings(batch_readings, cols) if batch_readings else _readings_for_columns(cols)
@@ -547,7 +551,7 @@ def build_rcx_preview(
     if show_fault_overlays and not gallery_mode:
         for chart_id in TREND_CHARTS:
             roles = TREND_CHARTS.get(chart_id) or []
-            cols = columns_for_roles(tree, roles)
+            cols = columns_for_roles(tree, roles, equipment_ids=equipment_ids)
             rd = _subset_readings(batch_readings, cols) if batch_readings else _readings_for_chart(chart_id)
             fault_overlays.extend(overlays_from_readings(rd, show=True)[:8])
 
@@ -568,6 +572,8 @@ def generate_rcx_docx(
     charts: list[str] | None = None,
     custom_columns: list[str] | None = None,
     show_fault_overlays: bool = True,
+    bundle_ids: list[str] | None = None,
+    equipment_ids: list[str] | None = None,
 ) -> tuple[bytes, str]:
     preview = build_rcx_preview(
         site_id=site_id,
@@ -577,11 +583,16 @@ def generate_rcx_docx(
         chart_ids=charts,
         custom_columns=custom_columns,
         show_fault_overlays=show_fault_overlays,
+        catalog_only=True,
+        include_previews=False,
+        bundle_ids=bundle_ids,
+        equipment_ids=equipment_ids,
     )
     sid, site_name = _resolve_site(site_id)
     fault_rows = preview.get("fault_rows") or []
 
     from open_fdd.reports.rcx_docx import build_rcx_docx
+    from .rcx_report_context import build_rcx_report_context
 
     mech = preview.get("mechanical_summary") or {}
     overview = {
@@ -591,6 +602,15 @@ def generate_rcx_docx(
         "mechanical_summary": mech,
         "model_health": mech.get("model_health") if isinstance(mech.get("model_health"), dict) else {},
     }
+    report_ctx = build_rcx_report_context(site_id=sid, hours=preview.get("window", {}).get("hours") or hours)
+    bundles = (preview.get("report_bundles") or {}).get("bundles") or []
+    equipment_bundle = None
+    if charts:
+        for b in bundles:
+            chart_ids = b.get("chart_ids") or []
+            if any(c in chart_ids for c in charts):
+                equipment_bundle = b
+                break
 
     blob = build_rcx_docx(
         site_id=sid,
@@ -602,6 +622,8 @@ def generate_rcx_docx(
         charts=charts,
         warnings=preview.get("warnings"),
         chart_previews=preview.get("chart_previews") or [],
+        report_context=report_ctx,
+        equipment_bundle=equipment_bundle,
     )
     start_s = (preview.get("window") or {}).get("start", "")[:10]
     end_s = (preview.get("window") or {}).get("end", "")[:10]

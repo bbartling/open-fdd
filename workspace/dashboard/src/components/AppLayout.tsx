@@ -1,27 +1,21 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { clearToken, fetchAuthMe, fetchAuthStatus, hasToken } from "../lib/api";
+import { apiFetch, clearToken, fetchAuthMe, fetchAuthStatus, hasToken } from "../lib/api";
 import { useTheme } from "../contexts/theme-context";
 import OpenFddVersion from "./OpenFddVersion";
 import StackStatusStrip from "./StackStatusStrip";
 
 const NAV = [
-  { to: "/", end: true, icon: "🏠", label: "Building status" },
-  { to: "/analytics", icon: "📊", label: "Overview" },
-  { to: "/analytics/faults", icon: "🚦", label: "Fault analytics" },
-  { to: "/analytics/equipment", icon: "🏭", label: "Equipment" },
-  { to: "/analytics/health", icon: "🩺", label: "Model health" },
-  { to: "/analytics/rcx", icon: "📄", label: "RCx report" },
+  { to: "/", end: true, icon: "🏠", label: "Building status", protected: true },
   { to: "/bacnet", icon: "📡", label: "BACnet", protected: true },
   { to: "/modbus", icon: "🔌", label: "Modbus", protected: true },
   { to: "/niagara", icon: "🏢", label: "Niagara", protected: true },
   { to: "/json-api", icon: "🌐", label: "JSON API", protected: true },
   { to: "/rule-lab", icon: "🐍", label: "Rule Lab", protected: true },
   { to: "/model", icon: "🧱", label: "Model & assignments", protected: true },
-  { to: "/algorithms", icon: "⚙️", label: "Algorithms", protected: true },
-  { to: "/faults", icon: "🚦", label: "Fault catalog" },
   { to: "/plot", icon: "📈", label: "Trend plot", protected: true },
-  { to: "/agent", icon: "🤖", label: "AI Agent", protected: true },
+  { to: "/analytics/rcx", icon: "📄", label: "RCx report" },
+  { to: "/agent", icon: "🤖", label: "AI Agent", protected: true, cpuOptional: true },
   { to: "/host", icon: "📊", label: "Host stats", protected: true },
 ];
 
@@ -32,6 +26,7 @@ export default function AppLayout() {
   const [tokenPresent, setTokenPresent] = useState(hasToken());
   const [sessionRole, setSessionRole] = useState<string | null>(null);
   const [sessionUser, setSessionUser] = useState<string | null>(null);
+  const [agentChatEnabled, setAgentChatEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
     fetchAuthStatus()
@@ -69,6 +64,17 @@ export default function AppLayout() {
   }, []);
 
   const signedIn = authRequired === false || tokenPresent;
+
+  useEffect(() => {
+    if (!signedIn) {
+      setAgentChatEnabled(null);
+      return;
+    }
+    apiFetch<{ interactive_chat_enabled?: boolean }>("/openfdd-agent/context")
+      .then((ctx) => setAgentChatEnabled(ctx.interactive_chat_enabled === true))
+      .catch(() => setAgentChatEnabled(false));
+  }, [signedIn]);
+
   const roleChip =
     authRequired === false ? "dev" : sessionRole || (signedIn ? "signed in" : null);
 
@@ -86,22 +92,37 @@ export default function AppLayout() {
         <StackStatusStrip />
         <OpenFddVersion />
         <nav className="sidebar-nav">
-          {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
-            >
-              <span className="nav-icon">{item.icon}</span>
-              {item.label}
-              {item.protected && authRequired && !signedIn ? (
-                <span className="nav-lock" title="Sign in required">
-                  🔒
+          {NAV.map((item) => {
+            const agentDisabled = item.to === "/agent" && agentChatEnabled === false;
+            if (agentDisabled) {
+              return (
+                <span
+                  key={item.to}
+                  className="nav-item nav-item-disabled"
+                  title="Local Ollama is not available on this CPU-only edge"
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  {item.label}
                 </span>
-              ) : null}
-            </NavLink>
-          ))}
+              );
+            }
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                {item.label}
+                {item.protected && authRequired && !signedIn ? (
+                  <span className="nav-lock" title="Sign in required">
+                    🔒
+                  </span>
+                ) : null}
+              </NavLink>
+            );
+          })}
         </nav>
         {authRequired === null ? null : authRequired && !signedIn ? (
           <button type="button" className="secondary-btn sign-out-btn" onClick={() => navigate("/login")}>

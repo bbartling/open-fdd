@@ -75,9 +75,20 @@ def is_hws(eq: dict[str, Any]) -> bool:
     return "hw plant" in name or "boiler" in name or "hot water" in name
 
 
+def is_chiller(eq: dict[str, Any]) -> bool:
+    et = effective_equipment_type(eq).upper()
+    name = str(eq.get("name") or "").lower()
+    eid = _equipment_key(eq)
+    if "CHILLER" in et or "CHILLED_WATER" in et or "CW_PLANT" in et:
+        return True
+    return "chiller" in name or "chw" in eid or "cw-plant" in eid
+
+
 def report_family(eq: dict[str, Any]) -> str:
     if is_ahu(eq):
         return "ahu"
+    if is_chiller(eq):
+        return "chiller"
     if is_hws(eq):
         return "hws"
     if is_vav(eq):

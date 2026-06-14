@@ -75,11 +75,17 @@ def mcp_agent_hints() -> dict[str, Any]:
         {
             "mcp_health": f"{base}/health",
             "mcp_manifest": f"{base}/manifest",
+            "mcp_streamable": f"{base}/mcp",
             "mcp_search_docs": f"{base}/tools/search_docs",
             "mcp_search_api": f"{base}/tools/search_api_capabilities",
             "search_docs_example": {"query": "Rule Lab BACnet", "top_k": 5},
+            "search_api_example": {"query": "portfolio rollup building status", "top_k": 5},
             "bridge_openapi": f"{bridge_base_url()}/openapi.json",
             "bridge_agent_context": f"{bridge_base_url()}/openfdd-agent/context",
+            "external_agents": (
+                "On CPU-only edge hosts, prefer Cursor MCP (/mcp), Codex CLI, or OpenClaw — "
+                "not the in-browser Ollama chat tab."
+            ),
         }
     )
     return hints

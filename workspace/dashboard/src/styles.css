@@ -149,6 +149,12 @@ a {
   color: var(--nav-active-text);
 }
 
+.nav-item-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .nav-icon {
   width: 18px;
   text-align: center;
@@ -2942,6 +2948,34 @@ button.linkish {
   font-weight: 700;
   color: var(--text);
   margin-top: 0.25rem;
+}
+
+.active-devices-panel {
+  margin: 16px 0 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.active-devices-panel h3 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+.active-devices-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.active-devices-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .analytics-grid {

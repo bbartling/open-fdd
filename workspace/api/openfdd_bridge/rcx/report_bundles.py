@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..equipment_classify import report_family
-from .trend_charts import historian_column_for_point
+from .trend_charts import ROLE_BRICK_CLASSES, historian_column_for_point, resolve_roles_on_tree
 
 CHART_TEMPLATES: dict[str, list[dict[str, Any]]] = {
     "ahu": [
@@ -83,6 +83,24 @@ CHART_TEMPLATES: dict[str, list[dict[str, Any]]] = {
             ],
         },
     ],
+    "chiller": [
+        {
+            "suffix": "chw_supply_temps",
+            "title": "Chilled water supply / return temperatures",
+            "brick_patterns": [
+                ["chilled_water", "Chilled_Water", "chw_supply", "supply_temperature"],
+                ["return_water", "Return_Water_Temperature"],
+            ],
+        },
+        {
+            "suffix": "chiller_load",
+            "title": "Chiller load / status",
+            "brick_patterns": [
+                ["chiller", "Chiller", "compressor", "load"],
+                ["Run_Status", "On_Off_Status"],
+            ],
+        },
+    ],
 }
 
 BUILDING_CHARTS = [
@@ -120,24 +138,40 @@ def _match_patterns(pt: dict[str, Any], patterns: list[str]) -> bool:
     return False
 
 
-def _columns_for_template(points: list[dict[str, Any]], brick_patterns: list[list[str]]) -> list[str]:
+def _columns_for_template(
+    points: list[dict[str, Any]],
+    brick_patterns: list[list[str]],
+    *,
+    equipment_id: str | None = None,
+) -> list[str]:
+    """Resolve historian columns via BRICK chart roles (SPARQL tree), then pattern fallback."""
+    tree = {"points": points}
+    eq_ids = [equipment_id] if equipment_id else None
     cols: list[str] = []
     for group in brick_patterns:
+        role_key = next((p for p in group if p in ROLE_BRICK_CLASSES), None)
+        if role_key:
+            resolved, _ = resolve_roles_on_tree(tree, [role_key], equipment_ids=eq_ids)
+            if resolved:
+                for col in resolved:
+                    if col not in cols:
+                        cols.append(col)
+                continue
         for pt in points:
             if not isinstance(pt, dict):
                 continue
             if not _match_patterns(pt, group):
                 continue
-            col = str(pt.get("external_id") or pt.get("column") or "").strip()
-            if not col:
-                col = historian_column_for_point(
-                    {
-                        "external_id": pt.get("external_id"),
-                        "fdd_input": pt.get("fdd_input"),
-                        "id": pt.get("point_id"),
-                        "name": pt.get("name"),
-                    }
-                )
+            col = historian_column_for_point(
+                {
+                    "external_id": pt.get("external_id"),
+                    "fdd_input": pt.get("fdd_input"),
+                    "timeseries_column": pt.get("timeseries_column"),
+                    "id": pt.get("point_id") or pt.get("id"),
+                    "name": pt.get("name"),
+                    "brick_type": pt.get("brick_type") or pt.get("brick_class"),
+                }
+            )
             if col and col not in cols:
                 cols.append(col)
                 break
@@ -161,7 +195,7 @@ def build_equipment_charts(
 ) -> list[dict[str, Any]]:
     charts: list[dict[str, Any]] = []
     for tmpl in CHART_TEMPLATES.get(family) or []:
-        cols = _columns_for_template(points, tmpl["brick_patterns"])
+        cols = _columns_for_template(points, tmpl["brick_patterns"], equipment_id=equipment_id)
         if len(cols) < 1:
             continue
         suffix = str(tmpl["suffix"])
@@ -220,8 +254,9 @@ def build_report_bundles(
     families: dict[str, dict[str, Any]] = {
         "building": {"label": "Building overview", "count": 0},
         "ahu": {"label": "AHU reports", "count": 0},
-        "hws": {"label": "HWS / plant reports", "count": 0},
         "vav": {"label": "VAV reports", "count": 0},
+        "hws": {"label": "HWS / boiler plant reports", "count": 0},
+        "chiller": {"label": "Chiller plant reports", "count": 0},
     }
 
     ahu_first = True
@@ -234,7 +269,7 @@ def build_report_bundles(
             eq["name"] = pts[0].get("equipment_type") or eid
 
         family = report_family(eq)
-        if family not in ("ahu", "hws", "vav"):
+        if family not in ("ahu", "hws", "vav", "chiller"):
             continue
 
         name = _equipment_label(eq, eid)
@@ -250,7 +285,9 @@ def build_report_bundles(
             default = True
             ahu_first = False
 
-        family_label = {"ahu": "AHU", "hws": "HWS", "vav": "VAV"}.get(family, family.upper())
+        family_label = {"ahu": "AHU", "hws": "HWS", "vav": "VAV", "chiller": "Chiller"}.get(
+            family, family.upper()
+        )
         bundles.append(
             {
                 "bundle_id": f"{family}:{eid}",

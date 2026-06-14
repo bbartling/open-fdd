@@ -14,7 +14,7 @@ import { apiFetch } from "../lib/api";
 type SiteRow = { id: string; name: string };
 
 export default function DataModelPage() {
-  const [activeTab, setActiveTab] = useState<"explorer" | "import" | "sparql" | "advanced">("import");
+  const [activeTab, setActiveTab] = useState<"import" | "sparql" | "advanced">("import");
   const [out, setOut] = useState("");
   const [ttlLoading, setTtlLoading] = useState(false);
   const [copiedKey, setCopiedKey] = useState("");
@@ -127,13 +127,6 @@ export default function DataModelPage() {
         </button>
         <button
           type="button"
-          className={activeTab === "explorer" ? "" : "secondary-btn"}
-          onClick={() => setActiveTab("explorer")}
-        >
-          Explorer
-        </button>
-        <button
-          type="button"
           className={activeTab === "sparql" ? "" : "secondary-btn"}
           onClick={() => setActiveTab("sparql")}
         >
@@ -149,20 +142,13 @@ export default function DataModelPage() {
       </div>
 
       {activeTab === "import" ? (
-        <CommissioningImportExportPanel
-          onStatus={setOut}
-          onImported={() => void refreshMeta()}
-        />
-      ) : null}
-
-      {activeTab === "explorer" ? (
         <>
           <ModelSyncBar refreshKey={refreshKey} onStatus={setOut} showWriteTtl={false} />
           <p className="muted panel">
-            BACnet poll → model sync keeps <code>model.json</code> aligned with live polling. Pin FDD rules via{" "}
-            <strong>Import / export</strong> or Rule Lab equipment test. RDF / TTL tools are on <strong>SPARQL</strong>{" "}
-            and <strong>Advanced</strong>.
+            BACnet poll → model sync keeps <code>model.json</code> aligned with live polling. Pin FDD rules via this tab
+            or Rule Lab equipment test. RDF / TTL tools are on <strong>SPARQL</strong> and <strong>Advanced</strong>.
           </p>
+          <CommissioningImportExportPanel onStatus={setOut} onImported={() => void refreshMeta()} />
         </>
       ) : null}
 

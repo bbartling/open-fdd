@@ -1,9 +1,50 @@
-"""Trend chart helpers — BRICK role resolution and fault overlays."""
+"""Trend chart helpers — SPARQL/BRICK role resolution and fault overlays."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+
+# Chart semantic roles → BRICK classes (from synced TTL / query_model_tree).
+ROLE_BRICK_CLASSES: dict[str, frozenset[str]] = {
+    "supply_air_temperature": frozenset(
+        {
+            "Supply_Air_Temperature_Sensor",
+            "Discharge_Air_Temperature_Sensor",
+            "Supply_Air_Temperature",
+        }
+    ),
+    "supply_air_temperature_setpoint": frozenset(
+        {
+            "Supply_Air_Temperature_Setpoint",
+            "Supply_Air_Temperature_Setpoint_Sensor",
+            "Discharge_Air_Temperature_Setpoint",
+        }
+    ),
+    "outside_air_temperature": frozenset({"Outside_Air_Temperature_Sensor"}),
+    "outside_air_humidity": frozenset({"Outside_Air_Humidity_Sensor"}),
+    "duct_static_pressure": frozenset(
+        {
+            "Duct_Static_Pressure",
+            "Supply_Air_Static_Pressure_Sensor",
+            "Duct_Static_Pressure_Sensor",
+        }
+    ),
+    "duct_static_pressure_setpoint": frozenset(
+        {
+            "Duct_Static_Pressure_Setpoint",
+            "Supply_Air_Static_Pressure_Setpoint",
+        }
+    ),
+    "zone_temperature": frozenset(
+        {
+            "Zone_Temperature_Sensor",
+            "Zone_Air_Temperature_Sensor",
+        }
+    ),
+    "zone_cooling_setpoint": frozenset({"Zone_Cooling_Temperature_Setpoint", "Zone_Cooling_Setpoint"}),
+    "zone_heating_setpoint": frozenset({"Zone_Heating_Temperature_Setpoint", "Zone_Heating_Setpoint"}),
+}
 
 ROLE_ALIASES: dict[str, list[str]] = {
     "supply_air_temperature": [
@@ -46,7 +87,10 @@ ROLE_ALIASES: dict[str, list[str]] = {
 
 
 def historian_column_for_point(point: dict[str, Any]) -> str:
-    """Feather/historian column — matches Edge ``plot_column_name``."""
+    """Feather/historian column — prefers SPARQL ``ofdd:timeseriesColumn`` when present."""
+    ts = str(point.get("timeseries_column") or "").strip()
+    if ts:
+        return ts
     ext = str(point.get("external_id") or "").strip()
     if ext:
         return ext
@@ -59,7 +103,24 @@ def historian_column_for_point(point: dict[str, Any]) -> str:
     return str(point.get("name") or "").strip()
 
 
+def _brick_matches_role(point: dict[str, Any], role: str) -> bool:
+    brick = str(point.get("brick_type") or "").strip()
+    if brick and brick in ROLE_BRICK_CLASSES.get(role, frozenset()):
+        return True
+    ts_col = str(point.get("timeseries_column") or point.get("external_id") or "").strip()
+    fdd = str(point.get("fdd_input") or "").strip()
+    for token in ROLE_ALIASES.get(role, []):
+        t = token.replace("-", "_").lower()
+        if ts_col and t in ts_col.replace("-", "_").lower():
+            return True
+        if fdd and t in fdd.replace("-", "_").lower():
+            return True
+    return False
+
+
 def _role_matches(point: dict[str, Any], role: str) -> bool:
+    if _brick_matches_role(point, role):
+        return True
     candidates = {role.lower()}
     candidates.update(a.lower() for a in ROLE_ALIASES.get(role, []))
     hay = " ".join(
@@ -75,14 +136,24 @@ def _role_matches(point: dict[str, Any], role: str) -> bool:
     return False
 
 
-def columns_for_roles(tree: dict[str, Any], roles: list[str]) -> list[str]:
-    """Map BRICK roles to historian column names from model tree points."""
+def columns_for_roles(
+    tree: dict[str, Any],
+    roles: list[str],
+    *,
+    equipment_ids: list[str] | None = None,
+) -> list[str]:
+    """Map chart roles to historian columns using BRICK types from SPARQL model tree."""
     points = tree.get("points") if isinstance(tree.get("points"), list) else []
+    eq_filter = {str(x).strip() for x in (equipment_ids or []) if str(x).strip()}
     cols: list[str] = []
     for role in roles:
         for pt in points:
             if not isinstance(pt, dict) or not _role_matches(pt, role):
                 continue
+            if eq_filter:
+                eq_id = str(pt.get("equipment_id") or "").strip()
+                if eq_id not in eq_filter:
+                    continue
             col = historian_column_for_point(pt)
             if col and col not in cols:
                 cols.append(col)
@@ -90,9 +161,15 @@ def columns_for_roles(tree: dict[str, Any], roles: list[str]) -> list[str]:
     return cols
 
 
-def resolve_roles_on_tree(tree: dict[str, Any], roles: list[str]) -> tuple[list[str], list[str]]:
+def resolve_roles_on_tree(
+    tree: dict[str, Any],
+    roles: list[str],
+    *,
+    equipment_ids: list[str] | None = None,
+) -> tuple[list[str], list[str]]:
     """Return (resolved columns, missing role names). Partial match allowed."""
     points = tree.get("points") if isinstance(tree.get("points"), list) else []
+    eq_filter = {str(x).strip() for x in (equipment_ids or []) if str(x).strip()}
     cols: list[str] = []
     missing: list[str] = []
     for role in roles:
@@ -100,6 +177,10 @@ def resolve_roles_on_tree(tree: dict[str, Any], roles: list[str]) -> tuple[list[
         for pt in points:
             if not isinstance(pt, dict) or not _role_matches(pt, role):
                 continue
+            if eq_filter:
+                eq_id = str(pt.get("equipment_id") or "").strip()
+                if eq_id not in eq_filter:
+                    continue
             col = historian_column_for_point(pt)
             if col:
                 cols.append(col)

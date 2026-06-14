@@ -1,15 +1,11 @@
-"""Edge RCx DOCX report builder — read-only, selectable sections/charts."""
+"""Edge RCx DOCX — professional template with screenshot placeholders + programmatic data."""
 
 from __future__ import annotations
 
-import base64
-import io
 from datetime import datetime, timezone
 from typing import Any
 
-from open_fdd.reports.charts import bar_chart_png
 from open_fdd.reports.fault_hours import aggregate_fault_hours
-
 
 DEFAULT_SECTIONS = [
     "executive_summary",
@@ -26,12 +22,7 @@ DEFAULT_SECTIONS = [
     "appendix_missing_roles",
 ]
 
-DEFAULT_CHARTS = [
-    "fault_hours_by_severity",
-    "fault_hours_by_equipment",
-    "fault_hours_by_code",
-    "active_faults_table",
-]
+SCREENSHOT_LABEL = "[ INSERT SCREENSHOT HERE ]"
 
 
 def _recommendations(rows: list[dict[str, Any]], warnings: list[str]) -> list[str]:
@@ -52,6 +43,36 @@ def _recommendations(rows: list[dict[str, Any]], warnings: list[str]) -> list[st
     return recs[:12]
 
 
+def _screenshot_placeholder(doc, *, title: str, subtitle: str = "") -> None:
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt, RGBColor
+
+    doc.add_paragraph()
+    box = doc.add_paragraph()
+    box.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = box.add_run(SCREENSHOT_LABEL)
+    run.bold = True
+    run.font.size = Pt(14)
+    run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+    cap = doc.add_paragraph()
+    cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    cap.add_run(title).italic = True
+    if subtitle:
+        sub = doc.add_paragraph()
+        sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        sub.add_run(subtitle).font.size = Pt(9)
+
+
+def _kv_table(doc, rows: list[tuple[str, str]]) -> None:
+    if not rows:
+        return
+    table = doc.add_table(rows=len(rows), cols=2)
+    table.style = "Table Grid"
+    for i, (k, v) in enumerate(rows):
+        table.rows[i].cells[0].text = str(k)
+        table.rows[i].cells[1].text = str(v)
+
+
 def build_rcx_docx(
     *,
     site_id: str,
@@ -64,22 +85,37 @@ def build_rcx_docx(
     warnings: list[str] | None = None,
     equipment_notes: list[dict[str, Any]] | None = None,
     chart_previews: list[dict[str, Any]] | None = None,
+    report_context: dict[str, Any] | None = None,
+    equipment_bundle: dict[str, Any] | None = None,
 ) -> bytes:
     from docx import Document
     from docx.shared import Inches, Pt
 
     enabled_sections = set(sections or DEFAULT_SECTIONS)
-    enabled_charts = set(charts or DEFAULT_CHARTS)
-    previews = chart_previews or []
+    ctx = report_context or {}
+    assigned_rules = ctx.get("assigned_rules") if isinstance(ctx.get("assigned_rules"), list) else []
+    motor_rows = ctx.get("motor_runtime") if isinstance(ctx.get("motor_runtime"), list) else []
+    overrides = ctx.get("overrides") if isinstance(ctx.get("overrides"), dict) else {}
+    override_list = overrides.get("overrides") if isinstance(overrides.get("overrides"), list) else []
+
     doc = Document()
-    doc.add_heading("Open-FDD RCx Report", level=0)
-    doc.add_paragraph(f"Building / site: {site_name}")
-    doc.add_paragraph(f"Edge instance / site ID: {site_id}")
+    style = doc.styles["Normal"]
+    style.font.name = "Calibri"
+    style.font.size = Pt(11)
+
+    doc.add_heading("Retro-Commissioning Analytics Report", level=0)
+    doc.add_paragraph(f"Building: {site_name}")
+    doc.add_paragraph(f"Site ID: {site_id}")
+    if equipment_bundle:
+        doc.add_paragraph(
+            f"Equipment report: {equipment_bundle.get('label') or equipment_bundle.get('bundle_id') or '—'}"
+        )
     if window.get("start") or window.get("end"):
-        doc.add_paragraph(f"Report window: {window.get('start') or '—'} → {window.get('end') or '—'}")
+        doc.add_paragraph(f"Analysis window: {window.get('start') or '—'} → {window.get('end') or '—'}")
     doc.add_paragraph(f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     doc.add_paragraph(
-        "Read-only analytics report. No BACnet writes, commands, overrides, or setpoint changes."
+        "Read-only analytics export. Paste Plotly trend screenshots into the marked placeholders. "
+        "No BACnet writes or overrides are performed by this report."
     )
 
     ov = overview or {}
@@ -89,11 +125,21 @@ def build_rcx_docx(
 
     if "executive_summary" in enabled_sections:
         doc.add_heading("Executive summary", level=1)
-        doc.add_paragraph(f"Active faults: {ov.get('active_faults', len(fault_rows))}")
-        doc.add_paragraph(f"Total elapsed fault hours (est.): {ov.get('total_fault_hours', 0)}")
+        _kv_table(
+            doc,
+            [
+                ("Active faults", str(ov.get("active_faults", len(fault_rows)))),
+                ("Total elapsed fault hours (est.)", str(ov.get("total_fault_hours", 0))),
+                ("BACnet P8 overrides", str(ctx.get("override_count", 0))),
+                ("Assigned FDD rules", str(len(assigned_rules))),
+                ("Motor / fan points modeled", str(len(motor_rows))),
+            ],
+        )
         if by_eq:
-            doc.add_paragraph(f"Worst equipment: {by_eq[0].get('group')} (~{by_eq[0].get('elapsed_hours')} h)")
-        for w in (warnings or [])[:8]:
+            doc.add_paragraph(
+                f"Worst equipment: {by_eq[0].get('group')} (~{by_eq[0].get('elapsed_hours')} h)"
+            )
+        for w in (warnings or [])[:6]:
             doc.add_paragraph(f"• {w}")
 
     if "mechanical_summary" in enabled_sections:
@@ -107,75 +153,53 @@ def build_rcx_docx(
         counts = mech.get("counts") if isinstance(mech.get("counts"), dict) else {}
         if counts:
             doc.add_paragraph(
-                f"Inventory: {counts.get('ahus', '—')} AHU(s), {counts.get('vavs', '—')} VAV(s), "
+                f"Inventory: {counts.get('ahus', counts.get('ahu', '—'))} AHU(s), "
+                f"{counts.get('vavs', counts.get('vav', '—'))} VAV(s), "
                 f"{counts.get('zones', '—')} zone(s)."
             )
         elif not narrative:
             doc.add_paragraph("Mechanical summary unavailable for this Edge snapshot.")
 
-    trend_previews = [
-        p
-        for p in previews
-        if p.get("image_base64")
-        and (
-            not enabled_charts
-            or p.get("chart_id") in enabled_charts
-            or str(p.get("chart_id") or "").startswith("custom_")
+    if "trend_charts" in enabled_sections:
+        doc.add_heading("Trend charts (engineer screenshots)", level=1)
+        doc.add_paragraph(
+            "Use the RCx Report Builder Plotly gallery or Trend plot tab. "
+            "When the trend looks correct, snip the chart and paste into each placeholder below."
         )
-    ]
-    if "trend_charts" in enabled_sections and trend_previews:
-        doc.add_heading("Trend charts", level=1)
-        for item in trend_previews:
-            title = str(item.get("title") or item.get("chart_id") or "Chart")
-            doc.add_heading(title, level=2)
-            try:
-                png = base64.b64decode(str(item["image_base64"]))
-                doc.add_picture(io.BytesIO(png), width=Inches(6.5))
-            except (ValueError, KeyError, TypeError):
-                doc.add_paragraph("(Chart image unavailable)")
-            for bullet in item.get("stats_bullets") or []:
-                p = doc.add_paragraph(style="List Bullet")
-                p.add_run(str(bullet))
+        eq_charts = equipment_bundle.get("chart_ids") if isinstance(equipment_bundle, dict) else None
+        if eq_charts:
+            for cid in eq_charts:
+                _screenshot_placeholder(doc, title=str(cid), subtitle="Equipment trend — paste Plotly snip")
+        else:
+            for spec_id in charts or ["ahu_sat_vs_setpoint", "ahu_duct_static_vs_setpoint", "vav_zone_temp"]:
+                _screenshot_placeholder(doc, title=str(spec_id), subtitle="Building trend — paste Plotly snip")
 
     if "fault_analytics" in enabled_sections:
         doc.add_heading("Fault analytics", level=1)
-        if "fault_hours_by_severity" in enabled_charts and by_sev:
-            png = bar_chart_png(
-                "Fault hours by severity",
-                [r["group"] for r in by_sev],
-                [r["elapsed_hours"] for r in by_sev],
-                ylabel="Hours (est.)",
+        if by_sev:
+            doc.add_paragraph("Fault hours by severity:")
+            for row in by_sev:
+                doc.add_paragraph(f"  {row.get('group')}: {row.get('elapsed_hours')} h")
+        if by_eq:
+            doc.add_paragraph("Fault hours by equipment:")
+            for row in by_eq[:15]:
+                doc.add_paragraph(f"  {row.get('group')}: {row.get('elapsed_hours')} h")
+        if by_code:
+            doc.add_paragraph("Fault hours by code:")
+            for row in by_code[:15]:
+                doc.add_paragraph(f"  {row.get('group')}: {row.get('elapsed_hours')} h")
+        doc.add_paragraph("Active fault detail:")
+        for row in fault_rows[:30]:
+            doc.add_paragraph(
+                f"{row.get('equipment')} ({row.get('equipment_type') or '—'}) — "
+                f"{row.get('severity')}: {row.get('fault_name') or row.get('fault_code')} "
+                f"[~{row.get('elapsed_hours')} h, "
+                f"{row.get('samples_flagged')}/{row.get('samples_evaluated')} samples]"
             )
-            doc.add_picture(io.BytesIO(png), width=Inches(5.5))
-        if "fault_hours_by_equipment" in enabled_charts and by_eq:
-            png = bar_chart_png(
-                "Fault hours by equipment",
-                [r["group"] for r in by_eq[:12]],
-                [r["elapsed_hours"] for r in by_eq[:12]],
-                ylabel="Hours (est.)",
-            )
-            doc.add_picture(io.BytesIO(png), width=Inches(5.5))
-        if "fault_hours_by_code" in enabled_charts and by_code:
-            png = bar_chart_png(
-                "Fault hours by fault code",
-                [r["group"] for r in by_code[:12]],
-                [r["elapsed_hours"] for r in by_code[:12]],
-                ylabel="Hours (est.)",
-            )
-            doc.add_picture(io.BytesIO(png), width=Inches(5.5))
-        if "active_faults_table" in enabled_charts or not enabled_charts:
-            doc.add_paragraph("Active faults:")
-            for row in fault_rows[:30]:
-                doc.add_paragraph(
-                    f"{row.get('equipment')} ({row.get('equipment_type') or '—'}) — "
-                    f"{row.get('severity')}: {row.get('fault_name') or row.get('fault_code')} "
-                    f"[~{row.get('elapsed_hours')} h, "
-                    f"{row.get('samples_flagged')}/{row.get('samples_evaluated')} samples]"
-                )
 
     if "ahu_analytics" in enabled_sections:
         doc.add_heading("AHU analytics", level=1)
-        ahu_rows = [r for r in fault_rows if str(r.get("equipment_type") or "").upper() == "AHU"]
+        ahu_rows = [r for r in fault_rows if str(r.get("equipment_type") or "").upper() in ("AHU", "RTU")]
         if ahu_rows:
             for row in ahu_rows[:10]:
                 doc.add_paragraph(
@@ -183,6 +207,7 @@ def build_rcx_docx(
                 )
         else:
             doc.add_paragraph("No AHU fault rows in selected window.")
+        _screenshot_placeholder(doc, title="AHU overview trend", subtitle="SAT / static / OA-MAT-RAT")
 
     if "vav_analytics" in enabled_sections:
         doc.add_heading("VAV zone analytics", level=1)
@@ -194,43 +219,104 @@ def build_rcx_docx(
                 )
         else:
             doc.add_paragraph("No VAV fault rows in selected window.")
+        _screenshot_placeholder(doc, title="VAV zone comfort trend", subtitle="Zone temp vs setpoints")
 
     if "runtime_analytics" in enabled_sections:
-        doc.add_heading("Runtime analytics", level=1)
-        doc.add_paragraph(
-            "Runtime estimates require fan status/speed historian points; "
-            "values labeled estimated when motor run-hour points are absent."
-        )
+        doc.add_heading("Runtime analytics (motor / fan / pump)", level=1)
+        if motor_rows:
+            doc.add_paragraph("Estimated run-hours from BRICK motor/fan/pump points (PyArrow historian):")
+            table = doc.add_table(rows=1, cols=5)
+            table.style = "Table Grid"
+            hdr = table.rows[0].cells
+            hdr[0].text = "Equipment"
+            hdr[1].text = "Point"
+            hdr[2].text = "Column"
+            hdr[3].text = "Hours (window)"
+            hdr[4].text = "Weekly est. (h)"
+            for m in motor_rows[:20]:
+                row = table.add_row().cells
+                row[0].text = str(m.get("equipment_name") or "—")
+                row[1].text = str(m.get("label") or "—")
+                row[2].text = str(m.get("column") or "—")
+                row[3].text = str(m.get("runtime_hours") or 0)
+                row[4].text = str(m.get("weekly_hours_est") or 0)
+        else:
+            doc.add_paragraph(
+                "No motor/fan/pump points detected in BRICK model. "
+                "Tag Fan_Status, Pump_Status, or VFD speed sensors to enable runtime estimates."
+            )
+        _screenshot_placeholder(doc, title="Motor / fan runtime trend", subtitle="Weekly run-hours verification")
 
     if "model_health" in enabled_sections:
         doc.add_heading("BACnet / model health", level=1)
         mh = ov.get("model_health") if isinstance(ov.get("model_health"), dict) else {}
-        for label, key in (
-            ("Devices", "device_count"),
-            ("Points", "point_count"),
-            ("Equipment", "equipment_count"),
-            ("Stale points", "stale_point_count"),
-        ):
-            if key in mh:
-                doc.add_paragraph(f"{label}: {mh[key]}")
+        _kv_table(
+            doc,
+            [
+                (label, str(mh[key]))
+                for label, key in (
+                    ("Devices", "device_count"),
+                    ("Points", "point_count"),
+                    ("Equipment", "equipment_count"),
+                    ("Stale points", "stale_point_count"),
+                )
+                if key in mh
+            ],
+        )
+        if override_list:
+            doc.add_paragraph(f"Active BACnet overrides: {len(override_list)}")
+            for ov_row in override_list[:12]:
+                if isinstance(ov_row, dict):
+                    doc.add_paragraph(
+                        f"  {ov_row.get('device_id') or ov_row.get('device') or '—'} "
+                        f"{ov_row.get('object') or ov_row.get('object_id') or ''} "
+                        f"priority {ov_row.get('priority') or '—'}"
+                    )
+
+    doc.add_heading("FDD rule trend screenshots", level=1)
+    doc.add_paragraph(
+        "For each assigned Rule Lab rule, paste a trend screenshot for the bound sensor columns "
+        "(required even when no fault is active in the lookback window)."
+    )
+    if assigned_rules:
+        for rule in assigned_rules:
+            doc.add_heading(str(rule.get("rule_name") or rule.get("rule_id")), level=2)
+            doc.add_paragraph(
+                f"Fault code: {rule.get('fault_code') or '—'} · Severity: {rule.get('severity') or '—'}"
+            )
+            sensors = rule.get("sensors") if isinstance(rule.get("sensors"), list) else []
+            if sensors:
+                for s in sensors:
+                    if not isinstance(s, dict):
+                        continue
+                    label = str(s.get("label") or s.get("column") or "sensor")
+                    col = str(s.get("column") or "")
+                    brick = str(s.get("brick_type") or "")
+                    doc.add_paragraph(f"Sensor: {label} ({col}) {brick}")
+                    _screenshot_placeholder(
+                        doc,
+                        title=f"{rule.get('rule_name')} — {label}",
+                        subtitle=f"Historian column: {col}",
+                    )
+            else:
+                _screenshot_placeholder(
+                    doc,
+                    title=str(rule.get("rule_name") or "Rule trend"),
+                    subtitle="Bind points in Model & assignments",
+                )
+    else:
+        doc.add_paragraph("No enabled Rule Lab rules found for this site.")
 
     if "recommendations" in enabled_sections:
         doc.add_heading("Recommendations", level=1)
         for rec in _recommendations(fault_rows, warnings or []):
             doc.add_paragraph(f"• {rec}")
 
-    if "analyst_insights" in enabled_sections and trend_previews:
+    if "analyst_insights" in enabled_sections:
         doc.add_heading("Analyst insights", level=1)
         doc.add_paragraph(
-            "Plain-language interpretation of selected trends (template-based; optional AI narration can be added later)."
+            "Plain-language interpretation — add field notes here after reviewing trends and fault evidence."
         )
-        for item in trend_previews:
-            narrative = str(item.get("narrative") or "").strip()
-            if not narrative:
-                continue
-            doc.add_heading(str(item.get("title") or "Insight"), level=3)
-            run = doc.add_paragraph().add_run(narrative)
-            run.font.size = Pt(11)
 
     if "appendix_faults" in enabled_sections:
         doc.add_heading("Appendix: fault table", level=1)
@@ -253,6 +339,8 @@ def build_rcx_docx(
         doc.add_heading("Equipment notes", level=1)
         for note in equipment_notes[:20]:
             doc.add_paragraph(str(note.get("text") or note))
+
+    import io
 
     buf = io.BytesIO()
     doc.save(buf)

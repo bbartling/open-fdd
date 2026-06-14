@@ -76,6 +76,16 @@ export default function DataModelSparqlPanel({ onStatus }: Props) {
     [catalog],
   );
 
+  const dataSourcePreset = useMemo(
+    () => fddPresets.find((p) => p.preset_id === "rules_by_data_source") ?? null,
+    [fddPresets],
+  );
+
+  const coveragePresets = useMemo(
+    () => fddPresets.filter((p) => p.preset_id !== "rules_by_data_source"),
+    [fddPresets],
+  );
+
   const runQuery = useCallback(
     async (query: string) => {
       const trimmed = query.trim();
@@ -92,8 +102,11 @@ export default function DataModelSparqlPanel({ onStatus }: Props) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query: trimmed }),
         });
-        setBindings(res.bindings ?? []);
-        setTruncated(Boolean(res.truncated));
+      setBindings(res.bindings ?? []);
+      setTruncated(Boolean(res.truncated));
+      setFddRows([]);
+      setFddColumns([]);
+      setFddDescription("");
         const count = res.row_count ?? res.bindings?.length ?? 0;
         onStatus?.(`SPARQL returned ${count} row${count === 1 ? "" : "s"}${res.truncated ? " (truncated)" : ""}.`);
       } catch (e) {
@@ -118,6 +131,8 @@ export default function DataModelSparqlPanel({ onStatus }: Props) {
     setFddPresetId(presetId);
     setFddRows([]);
     setFddColumns([]);
+    setBindings([]);
+    setHasRun(false);
     try {
       const res = await apiFetch<FddPresetResult>(`/api/model/fdd-query-presets/${presetId}`);
       setFddRows(res.rows ?? []);
@@ -169,12 +184,32 @@ export default function DataModelSparqlPanel({ onStatus }: Props) {
       </section>
 
       <section className="dm-sparql-presets">
+        <h3>Rules by data source</h3>
+        <p className="muted">
+          Source-agnostic FDD rules with bound points grouped by BACnet vs Niagara driver. Rule names stay generic —
+          data source appears only here for commissioning coverage.
+        </p>
+        <div className="dm-sparql-buttons">
+          {dataSourcePreset ? (
+            <button
+              type="button"
+              title={dataSourcePreset.description}
+              disabled={running}
+              onClick={() => void runFddPreset(dataSourcePreset.preset_id)}
+            >
+              {dataSourcePreset.title}
+            </button>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="dm-sparql-presets">
         <h3>FDD / BRICK query presets</h3>
         <p className="muted">
           Composed coverage queries across rules, equipment, sensors, and BACnet bindings (no parallel model store).
         </p>
         <div className="dm-sparql-buttons">
-          {fddPresets.map((item) => (
+          {coveragePresets.map((item) => (
             <button
               key={item.preset_id}
               type="button"

@@ -97,7 +97,7 @@ export default function ModelImportExportPanel({ onStatus, onImported }: Props) 
         </header>
         <p className="muted">
           Full <code>model.json</code> for LLM tagging or backup. After BACnet discovery, run{" "}
-          <strong>Sync poll → model</strong> on the Explorer tab so export matches live polling.
+          <strong>Sync poll → model</strong> below keeps export aligned with live polling.
         </p>
         <textarea
           readOnly

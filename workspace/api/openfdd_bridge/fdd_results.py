@@ -17,7 +17,11 @@ from typing import Any
 
 from .fdd_fault_analytics import format_fault_detail
 from .fault_model_context import enrich_fault_alert
-from .fdd_equipment import equipment_labels_for_columns
+from .fdd_equipment import (
+    enrich_fdd_run_with_equipment,
+    equipment_labels_for_columns,
+    plain_symptom_from_rule_name,
+)
 from .model_service import ModelService
 from .paths import data_dir
 
@@ -34,25 +38,27 @@ def _model_for_fdd() -> dict[str, Any]:
 def _fdd_alert_title(
     run: dict[str, Any],
     *,
-    code: str,
     flagged: int,
     equipment_names: list[str],
 ) -> str:
-    rule_name = str(run.get("rule_name") or "FDD rule")
+    """Equipment-first title; fault code is not repeated in the headline."""
+    symptom = str(run.get("short_description") or run.get("symptom") or "").strip()
+    if not symptom:
+        symptom = plain_symptom_from_rule_name(str(run.get("rule_name") or "FDD rule"))
     site_id = str(run.get("site_id") or "")
     if equipment_names:
         if len(equipment_names) == 1:
             who = equipment_names[0]
         else:
             who = f"{equipment_names[0]} (+{len(equipment_names) - 1} more)"
-        parts = [who]
-        if code:
-            parts.append(code)
-        parts.append(rule_name)
-        return f"{' · '.join(parts)}: {flagged} fault row(s)" + (f" at {site_id}" if site_id else "")
-    if code:
-        return f"{code} · {rule_name}: {flagged} fault row(s)" + (f" at {site_id}" if site_id else "")
-    return f"{rule_name}: {flagged} fault row(s)" + (f" at {site_id}" if site_id else "")
+        title = f"{who} — {symptom}"
+    else:
+        title = symptom
+    if flagged > 0:
+        title += f" ({flagged} samples)"
+    if site_id:
+        title += f" at {site_id}"
+    return title
 
 
 def fdd_results_path() -> Path:
@@ -77,8 +83,6 @@ def load_results() -> dict[str, Any]:
 
 
 def save_results(runs: list[dict[str, Any]]) -> dict[str, Any]:
-    from .fdd_equipment import enrich_fdd_run_with_equipment
-
     model = _model_for_fdd()
     enriched: list[dict[str, Any]] = []
     for run in runs:
@@ -110,9 +114,11 @@ def fdd_issues() -> list[dict[str, Any]]:
     doc = load_results()
     model = _model_for_fdd()
     issues: list[dict[str, Any]] = []
-    for run in doc.get("runs", []):
-        if not isinstance(run, dict):
+    for raw_run in doc.get("runs", []):
+        if not isinstance(raw_run, dict):
             continue
+        site_id = str(raw_run.get("site_id") or "").strip()
+        run = enrich_fdd_run_with_equipment(dict(raw_run), model, site_id)
         if run.get("status") == "error":
             issues.append(
                 {
@@ -121,8 +127,9 @@ def fdd_issues() -> list[dict[str, Any]]:
                     "title": f"Rule '{run.get('rule_name')}' failed on {run.get('site_id')}",
                     "detail": str(run.get("error") or "")[:2000],
                     "source": "fdd",
-                    "code": str(run.get("fault_code") or ""),
-                    "equipment_family": str(run.get("equipment_family") or ""),
+                    "rule_id": str(run.get("rule_id") or ""),
+                    "rule_name": str(run.get("rule_name") or ""),
+                    "short_description": str(run.get("short_description") or run.get("rule_name") or ""),
                 }
             )
             continue
@@ -130,8 +137,8 @@ def fdd_issues() -> list[dict[str, Any]]:
         if flagged <= 0:
             continue
         rows = int(run.get("rows") or 0)
-        code = str(run.get("fault_code") or "")
         site_id = str(run.get("site_id") or "").strip()
+        short_desc = str(run.get("short_description") or run.get("rule_name") or "").strip()
         analytics = run.get("analytics") if isinstance(run.get("analytics"), dict) else {}
         detail = str(run.get("detail") or "").strip()
         if not detail and analytics:
@@ -142,21 +149,28 @@ def fdd_issues() -> list[dict[str, Any]]:
                 f"{' (' + str(run.get('source')) + ' data)' if run.get('source') else ''}."
             )
         cols = analytics.get("flagged_columns") or analytics.get("value_columns") or []
-        equipment_names = equipment_labels_for_columns(model, site_id, list(cols) if cols else None)
+        equipment_names = list(run.get("equipment_names") or [])
+        if not equipment_names:
+            equipment_names = equipment_labels_for_columns(model, site_id, list(cols) if cols else None)
         issue: dict[str, Any] = {
             "id": f"fdd-{run.get('rule_id')}-{run.get('site_id')}",
             "severity": str(run.get("severity") or "warning"),
-            "title": _fdd_alert_title(run, code=code, flagged=flagged, equipment_names=equipment_names),
+            "title": _fdd_alert_title(run, flagged=flagged, equipment_names=equipment_names),
             "detail": detail,
             "source": "fdd",
-            "code": code,
-            "equipment_family": str(run.get("equipment_family") or ""),
             "rule_id": str(run.get("rule_id") or ""),
             "rule_name": str(run.get("rule_name") or ""),
+            "short_description": short_desc,
         }
         if equipment_names:
             issue["equipment_name"] = equipment_names[0]
             issue["equipment_names"] = equipment_names
+        if run.get("equipment_id"):
+            issue["equipment_id"] = run.get("equipment_id")
+        if run.get("data_source"):
+            issue["data_source"] = run.get("data_source")
+        if run.get("symptom"):
+            issue["symptom"] = run.get("symptom")
         if analytics:
             issue["analytics"] = analytics
         issues.append(enrich_fault_alert(issue, model))

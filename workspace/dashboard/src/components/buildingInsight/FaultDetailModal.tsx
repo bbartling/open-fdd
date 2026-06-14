@@ -33,7 +33,8 @@ export default function FaultDetailModal({ fault, onClose }: Props) {
           <span className={`bis-severity-pill bis-sev-${fault.severity}`}>{fault.severityLabel}</span>
           <div className="bis-modal-head-text">
             <h2 id="bis-modal-title">{fault.title}</h2>
-            <div className="bis-modal-eq">{fault.equipmentLabel}</div>
+            <div className="bis-modal-eq">{fault.symptom}</div>
+            {fault.dataSource ? <span className="bis-source-badge">{fault.dataSource}</span> : null}
           </div>
           <button type="button" className="bis-modal-close" onClick={onClose} aria-label="Close">
             ×
@@ -56,10 +57,6 @@ export default function FaultDetailModal({ fault, onClose }: Props) {
                 <div>
                   <dt>Rule</dt>
                   <dd>{ctx.rule_name || ctx.rule_id || "—"}</dd>
-                </div>
-                <div>
-                  <dt>Fault code</dt>
-                  <dd>{ctx.fault_code || fault.code || "—"}</dd>
                 </div>
                 <div>
                   <dt>Point / sensor</dt>

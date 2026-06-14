@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Import bench BRICK model + cookbook FDD rules; validate lint/test/batch.
-
-Uses the same paths as the LLM workflow:
-  GET  /api/model/export  → bench_import_model.json template
-  POST /api/model/import  → ModelService.import_json
+"""Import bench BRICK model + four source-agnostic FDD rules; validate lint/test/batch.
 
 Run from repo root:
   python3 scripts/setup_bench_afdd.py
@@ -41,93 +37,59 @@ DATA = REPO / "workspace" / "data"
 MODEL_IMPORT = DATA / "bench_dual_source_model.json"
 RULES_PY = DATA / "rules_py"
 
-NIAGARA_POINT_BINDINGS = {
-    "bench-oa-t-flatline-1h": "niagara-bench9065-f4c0862bb4",
-    "bench-oa-t-oob": "niagara-bench9065-f4c0862bb4",
-    "bench-stat-zn-t-flatline-1h": "niagara-bench9065-fa1b48f7f0",
-    "duct-t-flatline-1h": "niagara-bench9065-9fc449ad9c",
-    "duct-t-spread-1h": "niagara-bench9065-9fc449ad9c",
-    "bench-oa-h-flatline-1h": "niagara-bench9065-954f1fe9a8",
-    "bench-oa-h-oob": "niagara-bench9065-954f1fe9a8",
-}
+TEMP_POINT_IDS = [
+    "5007-analog-input-1173",
+    "5007-analog-input-1192",
+    "5007-analog-input-10014",
+    "niagara-bench9065-f4c0862bb4",
+    "niagara-bench9065-9fc449ad9c",
+    "niagara-bench9065-fa1b48f7f0",
+]
+
+HUMIDITY_POINT_IDS = [
+    "5007-analog-input-1168",
+    "niagara-bench9065-954f1fe9a8",
+]
 
 
 def _read_rule_code(name: str) -> str:
-    """Load rule source from workspace/data/rules_py."""
     return (RULES_PY / name).read_text(encoding="utf-8")
 
 
 BENCH_RULES: list[dict] = [
     {
-        "id": "bench-oa-t-flatline-1h",
-        "name": "Bench OA-T flatline 1h",
-        "fault_code": "VAV-C",
-        "code_file": "bench_oa-t_flatline_1h.py",
-        "config": {},
-        "bindings": {"point_ids": ["5007-analog-input-1173"], "equipment_ids": [], "brick_types": []},
+        "id": "temp-out-of-bounds",
+        "name": "Temperature out of bounds",
+        "short_description": "Temperature reading is outside the configured range.",
+        "code_file": "temp_out_of_bounds.py",
+        "config": {"low": 40.0, "high": 110.0},
+        "bindings": {"point_ids": TEMP_POINT_IDS, "equipment_ids": [], "brick_types": []},
     },
     {
-        "id": "bench-oa-t-oob",
-        "name": "Bench OA-T out of bounds",
-        "fault_code": "VAV-C",
-        "code_file": "bench_oa-t_out_of_bounds.py",
-        "config": {},
-        "bindings": {"point_ids": ["5007-analog-input-1173"], "equipment_ids": [], "brick_types": []},
+        "id": "temp-rate-of-change",
+        "name": "Temperature rate of change",
+        "short_description": "Temperature is changing faster than the last hour of data typically allows.",
+        "code_file": "temp_rate_of_change.py",
+        "config": {"roc_multiplier": 3.0, "roc_floor": 0.15},
+        "bindings": {"point_ids": TEMP_POINT_IDS, "equipment_ids": [], "brick_types": []},
     },
     {
-        "id": "bench-stat-zn-t-flatline-1h",
-        "name": "Bench stat ZN-T flatline 1h",
-        "fault_code": "VAV-C",
-        "code_file": "bench_stat_zn-t_flatline_1h.py",
-        "config": {},
-        "bindings": {"point_ids": ["5007-analog-input-10014"], "equipment_ids": [], "brick_types": []},
+        "id": "humidity-out-of-bounds",
+        "name": "Humidity out of bounds",
+        "short_description": "Humidity reading is outside the configured range.",
+        "code_file": "humidity_out_of_bounds.py",
+        "config": {"low": 15.0, "high": 75.0},
+        "bindings": {"point_ids": HUMIDITY_POINT_IDS, "equipment_ids": [], "brick_types": []},
     },
     {
-        "id": "duct-t-flatline-1h",
-        "name": "Duct-T flatline 1h",
-        "fault_code": "DC-C",
-        "code_file": "duct-t_flatline_1h.py",
-        "config": {},
-        "bindings": {"point_ids": ["5007-analog-input-1192"], "equipment_ids": [], "brick_types": []},
-    },
-    {
-        "id": "duct-t-spread-1h",
-        "name": "Duct-T spread 1h",
-        "fault_code": "DC-C",
-        "code_file": "duct-t_spread_1h.py",
-        "config": {},
-        "bindings": {"point_ids": ["5007-analog-input-1192"], "equipment_ids": [], "brick_types": []},
-    },
-    {
-        "id": "bench-oa-h-flatline-1h",
-        "name": "Bench humidity flatline 1h",
-        "fault_code": "BLD-B",
-        "code_file": "bench_humidity_flatline_1h.py",
-        "config": {},
-        "bindings": {"point_ids": ["5007-analog-input-1168"], "equipment_ids": [], "brick_types": []},
-    },
-    {
-        "id": "bench-oa-h-oob",
-        "name": "Bench humidity out of bounds",
-        "fault_code": "BLD-B",
-        "code_file": "bench_humidity_out_of_bounds.py",
-        "config": {},
-        "bindings": {"point_ids": ["5007-analog-input-1168"], "equipment_ids": [], "brick_types": []},
+        "id": "humidity-rate-of-change",
+        "name": "Humidity rate of change",
+        "short_description": "Humidity is changing faster than the last hour of data typically allows.",
+        "code_file": "humidity_rate_of_change.py",
+        "config": {"roc_multiplier": 3.0, "roc_floor": 1.0},
+        "bindings": {"point_ids": HUMIDITY_POINT_IDS, "equipment_ids": [], "brick_types": []},
     },
 ]
-
-for spec in list(BENCH_RULES):
-    nid = NIAGARA_POINT_BINDINGS.get(spec["id"])
-    if not nid:
-        continue
-    BENCH_RULES.append(
-        {
-            **spec,
-            "id": f"niagara-{spec['id']}",
-            "name": f"Niagara {spec['name']}",
-            "bindings": {"point_ids": [nid], "equipment_ids": [], "brick_types": []},
-        }
-    )
 
 
 def import_model() -> dict:
@@ -153,9 +115,9 @@ def save_rules(*, replace_all: bool = True) -> list[dict]:
             {
                 "id": spec["id"],
                 "name": spec["name"],
+                "short_description": spec["short_description"],
                 "mode": "rule",
                 "code": code,
-                "fault_code": spec["fault_code"],
                 "config": spec["config"],
                 "bindings": spec["bindings"],
                 "severity": "warning",
@@ -164,55 +126,25 @@ def save_rules(*, replace_all: bool = True) -> list[dict]:
             saved_by="setup_bench_afdd",
         )
         saved.append(entry)
-        print(f"Saved rule {entry['id']} → {entry.get('source_path')}")
+        print(f"Saved rule: {spec['id']} ({len(spec['bindings']['point_ids'])} points)")
     return saved
 
 
-def test_rules_on_frame(model: dict) -> None:
-    site_id = "demo"
-    frame, origin = load_frame_for_run(site_id)
-    print(f"Test frame: origin={origin} rows={len(frame)} cols={list(frame.columns)}")
-    if frame is None or frame.empty:
-        print("  skip (no historian frame)")
-        return
-    sample = frame.tail(min(len(frame), 500))
-    table = pa.Table.from_pandas(sample, preserve_index=False)
-    for spec in BENCH_RULES:
-        code = _read_rule_code(spec["code_file"])
-        cols = historian_columns_for_rule(model, site_id, spec, available_columns=set(sample.columns))
-        cfg = {"value_column": cols[0]} if cols else {}
-        try:
-            result = run_arrow_rule(code, table, cfg, rule_id=spec["id"])
-        except Exception as exc:
-            print(f"  {spec['id']}: ERROR {exc}")
-            continue
-        if result.errors:
-            print(f"  {spec['id']}: ERROR {result.errors[0]}")
-        else:
-            print(f"  {spec['id']}: rows={result.row_count} flagged={result.true_count} col={cfg.get('value_column','')}")
+def run_batch_once() -> dict:
+    return run_batch(limit=1000, lookback_hours=1.0)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--test-only", action="store_true", help="skip import/save; test existing rules")
-    parser.add_argument("--batch", action="store_true", help="run batch after setup")
+    parser.add_argument("--test-only", action="store_true")
     args = parser.parse_args()
-
-    if args.test_only:
-        model = ModelService().load()
-    else:
-        model = import_model()
-        save_rules()
-
-    test_rules_on_frame(model)
-
-    if args.batch or not args.test_only:
-        summary = run_batch(lookback_hours=1, use_chunks=False, persist=True)
-        print(
-            f"Batch: rules={summary['rules_run']} runs={summary['site_runs']} "
-            f"flagged={summary['flagged_runs']} errors={summary['error_runs']} "
-            f"lookback={summary.get('lookback_hours')}h"
-        )
+    if not args.test_only:
+        import_model()
+        save_rules(replace_all=True)
+    batch = run_batch_once()
+    runs = batch.get("runs") or []
+    flagged = sum(int(r.get("flagged") or 0) for r in runs if isinstance(r, dict))
+    print(f"Batch complete: {len(runs)} runs, {flagged} flagged samples")
     return 0
 
 

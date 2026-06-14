@@ -30,14 +30,14 @@ class AlertsBody(BaseModel):
 
 
 @router.get("/snapshot")
-def building_snapshot() -> dict:
-    """Public dashboard payload: stack status strip + live fault tree (no login)."""
+def building_snapshot(_user: dict = Depends(require_user)) -> dict:
+    """Dashboard payload: stack status strip + live fault tree (authenticated)."""
     snap = public_dashboard_snapshot()
     return {"ok": True, **snap}
 
 
 @router.get("/status")
-def building_status() -> dict:
+def building_status(_user: dict = Depends(require_user)) -> dict:
     status = collect_status()
     health = status["model_health"]
     configured = bool(status.get("model_configured"))

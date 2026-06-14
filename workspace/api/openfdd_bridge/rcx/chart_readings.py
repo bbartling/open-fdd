@@ -7,7 +7,7 @@ from typing import Any
 
 from ..feather_store import FeatherStore
 from ..model_service import ModelService
-from ..plot_readings import CHART_MAX_POINTS, downsample_aligned_plot, evaluate_fault_plots
+from ..plot_readings import CHART_MAX_POINTS, downsample_aligned_plot, evaluate_fault_plots_table
 from ..site_defaults import default_site_id, ensure_default_site
 from ..timeseries_api import column_kinds_for_site, list_plot_series, resolve_plot_columns
 from ..ttl_service import TtlService
@@ -113,9 +113,8 @@ def read_chart_readings(
     fault_panels: list[dict[str, str]] = []
     fault_totals: dict[str, int] = {}
     if include_faults:
-        df = table.to_pandas()
-        fault_plots, fault_panels, fault_totals = evaluate_fault_plots(
-            df,
+        fault_plots, fault_panels, fault_totals = evaluate_fault_plots_table(
+            table,
             sid,
             model,
             scope_columns=columns or None,
