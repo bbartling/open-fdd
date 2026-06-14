@@ -86,15 +86,19 @@ def _ollama_service() -> dict[str, Any]:
     from . import ollama_client
 
     optional = _ollama_optional_cpu()
+    dev_cpu_chat = os.environ.get("OFDD_AGENT_CHAT_WITHOUT_GPU", "").strip().lower() in {"1", "true", "yes"}
     configured = _ollama_configured()
     if not configured or optional:
+        detail = "optional (CPU-only — use MCP / external agent: Cursor, OpenClaw)"
+        if dev_cpu_chat:
+            detail = "dev CPU chat enabled — not for production edge hosts"
         return {
             "id": "ollama",
             "label": "Ollama",
             "status": "gray",
             "configured": False,
             "optional": True,
-            "detail": "optional (CPU-only — insight uses rule-based summary)",
+            "detail": detail,
         }
 
     try:
@@ -106,6 +110,18 @@ def _ollama_service() -> dict[str, Any]:
     model = str(health.get("configured_model") or "").strip()
     tier = str(health.get("configured_ram_tier") or "").strip()
     gpu = os.environ.get("OFDD_OLLAMA_GPU_MODE", "cpu").strip() or "cpu"
+    gpu_ok = ollama_client.gpu_available()
+    if ok and not gpu_ok and dev_cpu_chat:
+        detail = f"dev CPU only — {model or 'model'} ({tier}, {gpu})"
+        return {
+            "id": "ollama",
+            "label": "Ollama (dev)",
+            "status": "yellow",
+            "configured": True,
+            "optional": True,
+            "detail": detail,
+            "url": health.get("base_url"),
+        }
     if ok:
         detail = ", ".join(x for x in [model, f"{tier}, {gpu}" if tier else gpu] if x)
     else:

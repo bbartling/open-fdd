@@ -133,6 +133,11 @@ jobs:
         run: |
           npm ci
           npm audit --audit-level=high
+      - name: Build production dashboard
+        working-directory: workspace/dashboard
+        run: npm run build
+      - name: Scan production assets for private LAN / bench literals
+        run: python scripts/check_production_assets.py
 
   operator-bridge:
     runs-on: ubuntu-latest

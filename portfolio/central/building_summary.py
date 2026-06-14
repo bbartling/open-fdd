@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from portfolio.central.edge_registry import resolve_site_config, resolve_token
-from portfolio.central.mechanical_narrative import build_mechanical_narrative
 from portfolio.collector.edge_client import EdgeClient
 
 
@@ -46,7 +45,12 @@ def build_building_summary(registry_site_id: str, *, fast: bool = False) -> dict
             model_score = int(health["score"]) if health.get("score") is not None else None
         except RuntimeError:
             pass
-        mech = build_mechanical_narrative(registry_site_id, fast=True)
+        try:
+            from portfolio.central.rcx_proxy import rcx_mechanical_narrative
+
+            mech = rcx_mechanical_narrative(registry_site_id, fast=True)
+        except RuntimeError:
+            mech = {"narrative": "", "counts": {}}
     else:
         try:
             tree = client.get_model_tree(token=token)
@@ -76,7 +80,12 @@ def build_building_summary(registry_site_id: str, *, fast: bool = False) -> dict
         except RuntimeError:
             pass
 
-        mech = build_mechanical_narrative(registry_site_id, fast=False)
+        try:
+            from portfolio.central.rcx_proxy import rcx_mechanical_narrative
+
+            mech = rcx_mechanical_narrative(registry_site_id, fast=False)
+        except RuntimeError:
+            mech = {"narrative": "", "counts": {}}
     counts = mech.get("counts") if isinstance(mech.get("counts"), dict) else {}
 
     title = site.name or registry_site_id

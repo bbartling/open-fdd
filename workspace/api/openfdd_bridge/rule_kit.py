@@ -53,6 +53,28 @@ def _kit_value_stats(table):
 
 REQUIREMENTS_TXT = "open-fdd>=3.0.1\npyarrow\n"
 
+AI_CONTEXT_MD = """# Open-FDD Rule Lab kit — AI assistant context
+
+Upload this zip to ChatGPT, Claude, or Cursor when editing `rule.py`.
+
+## Official docs (online)
+- Arrow-native rules: https://github.com/bbartling/open-fdd/blob/main/docs/developer/arrow-native-runtime.md
+- Rule Lab / playground: https://github.com/bbartling/open-fdd/blob/main/docs/operator/rule-lab.md
+- BRICK data model: https://github.com/bbartling/open-fdd/blob/main/docs/operator/data-model.md
+- PyArrow compute API: https://arrow.apache.org/docs/python/generated/pyarrow.compute.html
+
+## Constraints
+- Use **pyarrow** and **pyarrow.compute (pc)** only — no pandas/numpy in uploaded rules.
+- Entrypoint: `apply_faults_arrow(table, cfg, context=None)` → boolean PyArrow array.
+- Tune thresholds via module constants at top of `rule.py`.
+
+## Files in this kit
+- `rule.py` — edit and re-upload to Rule Lab when lint passes
+- `sample.feather` — historian window for local `python run_test.py`
+- `column_map.json` — BRICK logical keys → feather columns
+- `helpers/` — expanded Open-FDD helper source when present
+"""
+
 
 def _has_pc_import(tree: ast.Module) -> bool:
     for node in tree.body:
@@ -418,6 +440,7 @@ def build_rule_kit_zip(
         zf.writestr("requirements.txt", REQUIREMENTS_TXT)
         zf.writestr("run_test.py", RUN_TEST_PY)
         zf.writestr("README.md", readme)
+        zf.writestr("AI_CONTEXT.md", AI_CONTEXT_MD)
     return out.getvalue(), zip_name
 
 

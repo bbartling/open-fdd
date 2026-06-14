@@ -160,13 +160,15 @@ def test_validate_edge_readonly_mock(mock_get, _login):
     reason="python-docx not installed",
 )
 def test_rcx_docx_builds():
-    from portfolio.central.rcx_report import build_rcx_docx
+    from open_fdd.reports.rcx_docx import build_rcx_docx
 
     blob = build_rcx_docx(
         site_id="acme",
         site_name="Acme Lab",
-        validation={"ok": True, "errors": [], "checks": {}},
-        rollups=[{"site_id": "acme", "faults": {"active_by_code": {"AHU-C": 2}}}],
+        window={},
+        fault_rows=[],
+        overview={"active_faults": 0, "total_fault_hours": 0},
+        sections=["executive_summary"],
         warnings=["sample warning"],
     )
     assert blob[:2] == b"PK"

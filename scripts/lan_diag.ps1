@@ -1,15 +1,21 @@
 # Open-FDD LAN connectivity check — run on your Windows PC.
 # Usage:  powershell -ExecutionPolicy Bypass -File .\lan_diag.ps1
+#         powershell -ExecutionPolicy Bypass -File .\lan_diag.ps1 -UseCaddy
 #         powershell -ExecutionPolicy Bypass -File .\lan_diag.ps1 -TargetHost 192.168.204.18 -Port 8765
 
 param(
     [string]$TargetHost = "192.168.204.18",
-    [int]$Port = 8765
+    [int]$Port = 8765,
+    [switch]$UseCaddy
 )
+
+if ($UseCaddy) { $Port = 80 }
+
+$BaseUrl = if ($Port -eq 80) { "http://${TargetHost}/" } else { "http://${TargetHost}:${Port}/" }
 
 $ErrorActionPreference = "Continue"
 Write-Host "=== Open-FDD LAN diagnostic ===" -ForegroundColor Cyan
-Write-Host "Target: http://${TargetHost}:${Port}/login"
+Write-Host "Target: ${BaseUrl}login"
 Write-Host ""
 
 Write-Host "--- This PC ---" -ForegroundColor Yellow
@@ -44,7 +50,8 @@ if (-not $tcp.TcpTestSucceeded) {
 Write-Host ""
 Write-Host "--- HTTP GET /health ---" -ForegroundColor Yellow
 try {
-    $resp = Invoke-WebRequest -Uri "http://${TargetHost}:${Port}/health" -UseBasicParsing -TimeoutSec 10
+    $healthUri = if ($Port -eq 80) { "http://${TargetHost}/health" } else { "http://${TargetHost}:${Port}/health" }
+    $resp = Invoke-WebRequest -Uri $healthUri -UseBasicParsing -TimeoutSec 10
     Write-Host "Status: $($resp.StatusCode)"
     Write-Host $resp.Content
 } catch {
@@ -55,7 +62,8 @@ try {
 Write-Host ""
 Write-Host "--- HTTP GET /login (first 200 chars) ---" -ForegroundColor Yellow
 try {
-    $login = Invoke-WebRequest -Uri "http://${TargetHost}:${Port}/login" -UseBasicParsing -TimeoutSec 10
+    $loginUri = "${BaseUrl}login"
+    $login = Invoke-WebRequest -Uri $loginUri -UseBasicParsing -TimeoutSec 10
     Write-Host "Status: $($login.StatusCode)  Content-Type: $($login.Headers['Content-Type'])"
     $preview = $login.Content
     if ($preview.Length -gt 200) { $preview = $preview.Substring(0, 200) + "..." }
@@ -67,5 +75,5 @@ try {
 
 Write-Host ""
 Write-Host "LAN path looks OK — open in Chrome/Firefox (not an IDE preview):" -ForegroundColor Green
-Write-Host "  http://${TargetHost}:${Port}/login"
+Write-Host "  ${BaseUrl}login"
 Write-Host "  integrator / msi-local"

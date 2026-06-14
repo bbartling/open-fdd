@@ -24,13 +24,14 @@ _DOCS = DocSearch(_CONFIG.rag_index_path)
 mcp = FastMCP(
     "open-fdd",
     instructions=(
-        "Open-FDD MCP server — query buildings, BRICK models, FDD diagnostics, and rule cookbooks. "
-        "Writes, tuning, batch runs, and rule saves require human_approved=true. "
-        "Never invent fault codes; use list_fault_catalog. "
-        "BACnet polling policy: NEVER enable poll on every discovered BACnet object. "
-        "Poll only the minimum points required by enabled FDD rules (brick_types, point_ids, rule config columns). "
-        "Use FDD-minimal poll filters (bacnet_toolshed.fdd_minimal_poll / acme_commission_fdd_minimal.sh). "
-        "Do not bulk-enable all points in points.csv or use enable_points --all."
+        "Open-FDD edge MCP (FastMCP streamable-http). Primary interface for AI agents — "
+        "the operator React dashboard is optional and customizable per deployment; agents should "
+        "use tools and resources here, not scrape HTML. "
+        "Start with resource openfdd://agent-guide for the consolidated data map. "
+        "Read-only: health_check, portfolio_rollup, list_rules, get_building_status, get_fdd_results, "
+        "search_model, get_equipment_context, search_docs. "
+        "Writes (run_fdd_batch, save_rule, apply_fdd_tuning) require human_approved=true. "
+        "BACnet polling: poll only FDD-minimal points required by enabled rules — never bulk-enable all objects."
     ),
 )
 
@@ -165,8 +166,42 @@ def apply_fdd_tuning(
 
 
 @mcp.tool()
+def list_rules(site_id: str | None = None) -> str:
+    """Saved FDD rules for a site — id, name, short_description, bindings, enabled."""
+    try:
+        payload = _BRIDGE.get(site_id, "/api/rules/saved")
+        rules = payload.get("rules") or []
+        slim = [
+            {
+                "id": r.get("id"),
+                "name": r.get("name"),
+                "short_description": r.get("short_description") or r.get("name"),
+                "mode": r.get("mode"),
+                "enabled": r.get("enabled", True),
+                "bindings": r.get("bindings"),
+            }
+            for r in rules
+            if isinstance(r, dict)
+        ]
+        return json.dumps({"ok": True, "site_id": site_id or _REGISTRY.get(site_id).site_id, "rules": slim})
+    except Exception as exc:
+        return _err_text(exc)
+
+
+@mcp.tool()
+def get_building_status(site_id: str | None = None) -> str:
+    """Traffic-light building status: active alerts, equipment rollups, poll health."""
+    try:
+        sid = site_id or _REGISTRY.get(site_id).site_id
+        payload = _BRIDGE.get(site_id, "/api/building/status", params={"site_id": sid})
+        return json.dumps(payload)
+    except Exception as exc:
+        return _err_text(exc)
+
+
+@mcp.tool()
 def list_fault_catalog(site_id: str | None = None) -> str:
-    """Fixed fault code catalog — source of truth."""
+    """Legacy fault-code catalog (optional). Prefer list_rules + get_building_status."""
     try:
         payload = _BRIDGE.get(site_id, "/api/faults/catalog", auth_required=False)
         return json.dumps(payload)
@@ -177,11 +212,11 @@ def list_fault_catalog(site_id: str | None = None) -> str:
 @mcp.tool()
 def get_fdd_results(
     site_id: str,
-    fault_code: str | None = None,
+    rule_id: str | None = None,
     equipment_id: str | None = None,
     window_minutes: int = 180,
 ) -> str:
-    """Latest FDD batch results with optional client-side filter."""
+    """Latest FDD batch results; filter by rule_id or equipment_id."""
     try:
         payload = _BRIDGE.get(
             site_id,
@@ -189,16 +224,19 @@ def get_fdd_results(
             params={"site_id": site_id, "limit": 200},
         )
         runs = payload.get("runs") or []
-        if fault_code:
-            fc = fault_code.strip().upper()
+        if rule_id:
+            rid = rule_id.strip()
             runs = [
                 r
                 for r in runs
                 if isinstance(r, dict)
-                and any(
-                    str(x.get("fault_code") or x.get("code") or "").upper() == fc
-                    for x in (r.get("rules") or r.get("results") or [r])
-                    if isinstance(x, dict)
+                and (
+                    str(r.get("rule_id") or "") == rid
+                    or any(
+                        str(x.get("rule_id") or x.get("id") or "") == rid
+                        for x in (r.get("rules") or r.get("results") or [r])
+                        if isinstance(x, dict)
+                    )
                 )
             ]
         if equipment_id:
@@ -465,6 +503,71 @@ def get_doc_section(path_or_id: str) -> str:
 # --- Resources ---
 
 
+def _agent_guide_payload() -> dict[str, Any]:
+    repo = Path(__file__).resolve().parents[2]
+    data = repo / "workspace" / "data"
+    return {
+        "product": "Open-FDD edge",
+        "mcp_framework": "FastMCP (mcp.server.fastmcp)",
+        "transport": "streamable-http at /mcp on the MCP listen port (default :8090)",
+        "operator_ui": {
+            "status": "optional",
+            "note": (
+                "The React check-engine dashboard is a customizable operator UI per deployment. "
+                "AI agents should use FastMCP tools/resources and bridge REST — not scrape HTML."
+            ),
+            "enable": "Set OFDD_CADDY_ENABLED=1 and build static/app, or run Vite dev on :5173",
+        },
+        "stack": {
+            "bridge": {"url": _CONFIG.bridge_base_url, "role": "BRICK model, rules, FDD batch, BACnet ingest"},
+            "mcp": {"url": f"http://{_CONFIG.host}:{_CONFIG.port}", "manifest": "/manifest", "fastmcp": "/mcp"},
+            "fdd_loop": "Periodic rule evaluation (openfdd_bridge.fdd_runner)",
+        },
+        "data_layout": {
+            "model": str(data / "model.json"),
+            "rules_store": str(data / "rules_store.json"),
+            "rules_py": str(data / "rules_py"),
+            "fdd_results": str(data / "fdd_results.json"),
+            "rag_index": str(_CONFIG.rag_index_path),
+            "memory": str(_CONFIG.memory_path),
+            "skills": str(_CONFIG.skills_dir),
+        },
+        "tool_groups": {
+            "health": ["health_check", "portfolio_rollup", "get_building_status"],
+            "rules": ["list_rules", "get_fdd_results", "run_fdd_batch", "lint_rule", "save_rule"],
+            "model": ["search_model", "get_equipment_context", "recommend_rules_for_equipment"],
+            "tuning": ["get_tuning_brief", "preview_fdd_tuning", "apply_fdd_tuning"],
+            "docs": ["search_docs", "get_doc_section", "search_rule_cookbook"],
+            "bacnet": ["bacnet_override_status"],
+        },
+        "resources": [
+            "openfdd://agent-guide",
+            "openfdd://sites",
+            "openfdd://memory",
+            "openfdd://skills",
+            "openfdd://model/{site_id}",
+            "openfdd://rules/{site_id}",
+            "openfdd://docs/rag-index",
+        ],
+        "agent_workflow": [
+            "1. Read openfdd://agent-guide and openfdd://memory",
+            "2. health_check → get_building_status → list_rules",
+            "3. get_equipment_context / search_model for scope",
+            "4. search_docs or search_rule_cookbook for procedures",
+            "5. Human approval before run_fdd_batch, save_rule, apply_fdd_tuning",
+        ],
+        "auth": {
+            "bridge": "OFDD_INTEGRATOR_USER / OFDD_INTEGRATOR_PASSWORD from workspace/auth.env.local on edge hosts",
+            "mcp_site_registry": str(_REGISTRY.path),
+        },
+    }
+
+
+@mcp.resource("openfdd://agent-guide")
+def resource_agent_guide() -> str:
+    return json.dumps(_agent_guide_payload(), indent=2)
+
+
 @mcp.resource("openfdd://sites")
 def resource_sites() -> str:
     return json.dumps(_REGISTRY.redacted_payload())
@@ -511,8 +614,9 @@ def resource_rules(site_id: str) -> str:
             {
                 "id": r.get("id"),
                 "name": r.get("name"),
+                "short_description": r.get("short_description") or r.get("name"),
                 "mode": r.get("mode"),
-                "fault_codes": r.get("fault_codes"),
+                "enabled": r.get("enabled", True),
             }
             for r in rules
             if isinstance(r, dict)
@@ -540,11 +644,20 @@ def commission_building_fdd(site_id: str, equipment_class: str = "VAV") -> str:
 
 
 @mcp.prompt()
+def diagnose_rule_symptom(site_id: str, rule_id: str, equipment_id: str = "") -> str:
+    return (
+        f"Diagnose rule {rule_id} on site {site_id} equipment {equipment_id or 'any'}. "
+        "Use get_fdd_results(rule_id=...), get_building_status, portfolio_rollup poll health, "
+        "bacnet_override_status, get_equipment_context, and search_docs."
+    )
+
+
+@mcp.prompt()
 def diagnose_fault_trend(site_id: str, fault_code: str, equipment_id: str = "") -> str:
     return (
-        f"Diagnose fault {fault_code} on site {site_id} equipment {equipment_id or 'any'}. "
-        "Use get_fdd_results, portfolio_rollup poll health, bacnet_override_status, "
-        "get_equipment_context, and search_docs."
+        f"Diagnose rule/symptom {fault_code} on site {site_id} equipment {equipment_id or 'any'}. "
+        "Use get_fdd_results(rule_id=...), get_building_status, portfolio_rollup poll health, "
+        "bacnet_override_status, get_equipment_context, and search_docs."
     )
 
 

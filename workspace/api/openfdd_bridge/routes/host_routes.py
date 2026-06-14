@@ -23,8 +23,6 @@ class PoogeBody(BaseModel):
     preserve_auth: bool = True
     preserve_network: bool = True
     preserve_site_identity: bool = True
-    linux_update: bool = False
-    docker_update: bool = False
 
 
 def _to_req(body: PoogeBody) -> PoogeRequest:

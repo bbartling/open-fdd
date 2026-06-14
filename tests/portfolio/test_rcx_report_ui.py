@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from portfolio.central.chart_specs import suggest_charts_for_faults
-from portfolio.central.rcx_points import list_report_point_tree
 
 
 def test_suggest_charts_for_sat_fault():
@@ -20,7 +19,6 @@ def test_suggest_charts_for_sat_fault():
 
 
 def test_point_tree_groups_by_equipment():
-    tree = list_report_point_tree.__wrapped__ if hasattr(list_report_point_tree, "__wrapped__") else None
     # offline shape test without Edge
     sample = {
         "points": [

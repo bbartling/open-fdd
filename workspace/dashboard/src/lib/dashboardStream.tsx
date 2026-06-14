@@ -41,7 +41,10 @@ export type FaultModelContext = {
   severity?: string;
   rule_id?: string;
   rule_name?: string;
-  fault_code?: string;
+  short_description?: string;
+  symptom?: string;
+  short_description?: string;
+  data_source?: string;
   site_id?: string;
   equipment?: { id: string; name: string; type: string };
   point?: {
@@ -69,6 +72,8 @@ export type FaultAlert = {
   equipment_id?: string;
   equipment_name?: string;
   equipment_family?: string;
+  symptom?: string;
+  data_source?: string;
   model_context?: FaultModelContext;
   analytics?: FaultAnalytics;
 };
@@ -124,16 +129,11 @@ function wsBaseUrl(): string {
 
 async function fetchSnapshot(authenticated: boolean): Promise<DashboardSnapshot> {
   if (!authenticated) {
-    const snap = await apiFetch<DashboardSnapshot & { ok?: boolean }>("/api/building/snapshot");
-    const { ok: _ok, ...body } = snap;
-    return body as DashboardSnapshot;
+    throw new Error("Sign in required for building status");
   }
-  const [stack, faults] = await Promise.all([
-    apiFetch<StackHealth>("/health/stack"),
-    apiFetch<FaultsStatus & { ok?: boolean }>("/api/faults/status"),
-  ]);
-  const { ok: _ok, ...faultBody } = faults;
-  return { stack, faults: faultBody as FaultsStatus };
+  const snap = await apiFetch<DashboardSnapshot & { ok?: boolean }>("/api/building/snapshot");
+  const { ok: _ok, ...body } = snap;
+  return body as DashboardSnapshot;
 }
 
 export function DashboardStreamProvider({ children, pollMs = 15000 }: { children: ReactNode; pollMs?: number }) {

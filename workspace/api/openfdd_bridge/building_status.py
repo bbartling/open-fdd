@@ -19,7 +19,7 @@ try:
 except ImportError:
     def bacnet_override_alerts(*, operator_only: bool = False):  # type: ignore[misc]
         return []
-from .fault_catalog import family_for_code, family_label
+
 from .fdd_results import fdd_issues
 from .model_health import model_health_summary
 from .model_service import ModelService
@@ -82,16 +82,10 @@ def _family_of(alert: dict[str, Any]) -> str:
             return f"POLL:{name}"
     if source == "model_health":
         return "MODEL"
-    explicit = str(alert.get("equipment_family") or "").strip().upper()
-    if explicit and explicit not in {"BUILDING", "POLL"}:
-        return explicit
-    by_code = family_for_code(alert.get("code"))
-    if by_code:
-        return by_code
     return "GENERAL"
 
 
-def _family_group_label(family: str, alerts: list[dict[str, Any]]) -> str:
+def _family_label(family: str, alerts: list[dict[str, Any]]) -> str:
     if family.startswith("EQ:"):
         for alert in alerts:
             name = str(alert.get("equipment_name") or "").strip()
@@ -106,7 +100,7 @@ def _family_group_label(family: str, alerts: list[dict[str, Any]]) -> str:
         return family.split(":", 1)[-1] or "Device poll health"
     if family == "MODEL":
         return "Data model"
-    return "General / system" if family == "GENERAL" else family_label(family)
+    return "General / system" if family == "GENERAL" else family
 
 
 def _worst(severities: list[str]) -> str:
@@ -135,7 +129,7 @@ def faults_by_family(status: dict[str, Any] | None = None) -> dict[str, Any]:
         families.append(
             {
                 "family": family,
-                "label": _family_group_label(family, alerts),
+                "label": _family_label(family, alerts),
                 "worst": worst,
                 "traffic": TRAFFIC.get(traffic_key, "green"),
                 "count": len(alerts),

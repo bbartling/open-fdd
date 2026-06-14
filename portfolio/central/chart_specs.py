@@ -95,7 +95,7 @@ def chart_readiness(
     needed = spec.get("required_roles") or []
     if needed:
         if tree:
-            from portfolio.central.trend_charts import resolve_roles_on_tree
+            from openfdd_bridge.rcx.trend_charts import resolve_roles_on_tree
 
             cols, missing = resolve_roles_on_tree(tree, needed)
             if not cols:

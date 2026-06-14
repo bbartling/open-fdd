@@ -13,6 +13,8 @@ from .rule_store import RuleStore
 _ALLOWLIST_PREFIXES = (
     "open_fdd.",
     "open_fdd_arrow_runtime",
+    "pyarrow",
+    "pyarrow.compute",
 )
 
 

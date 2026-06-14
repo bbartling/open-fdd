@@ -632,14 +632,18 @@ export default function RuleLabPage() {
         ) : null}
       </div>
 
-      {helperSource ? (
-        <div className="panel rule-lab-readonly-panel">
-          <h3 className="panel-title">Resolved helper source</h3>
-          <p className="muted">Imported Open-FDD helpers (e.g. cookbook masks) expanded for review.</p>
-          <pre className="rule-helper-source">{helperSource}</pre>
-        </div>
-      ) : helperWarnings.length ? (
-        <p className="muted panel">{helperWarnings.join(" · ")}</p>
+      {helperSource || helperWarnings.length ? (
+        <details className="panel rule-lab-readonly-panel">
+          <summary>Helper libraries (Open-FDD + PyArrow)</summary>
+          {helperSource ? (
+            <>
+              <p className="muted">Expanded imports for review — included in download zip as working source.</p>
+              <pre className="rule-helper-source">{helperSource}</pre>
+            </>
+          ) : (
+            <p className="muted">{helperWarnings.join(" · ")}</p>
+          )}
+        </details>
       ) : null}
 
       <RuleLabConsole

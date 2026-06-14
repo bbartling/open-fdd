@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from .fdd_equipment import column_to_equipment_map, equipment_labels_for_columns
+from .fdd_equipment import (
+    bound_point_ids_for_rule,
+    column_to_equipment_map,
+    data_source_label,
+    equipment_from_rule_bindings,
+    equipment_labels_for_columns,
+    plain_symptom_from_rule_name,
+)
 from .timeseries_api import historian_column_candidates, plot_column_name
 
 
@@ -85,7 +92,7 @@ def resolve_fault_model_context(
     site_id: str,
     rule_id: str = "",
     rule_name: str = "",
-    fault_code: str = "",
+    short_description: str = "",
     equipment_id: str = "",
     equipment_name: str = "",
     flagged_columns: list[str] | None = None,
@@ -105,19 +112,12 @@ def resolve_fault_model_context(
     eid = str(equipment_id or "").strip()
     ename = str(equipment_name or "").strip()
     eq_type = ""
-    if not ename and fault_code:
-        fc_upper = fault_code.strip().upper()
-        for eq_id, eq in eq_index.items():
-            eq_name = str(eq.get("name") or "").strip()
-            if eq_name.upper() == fc_upper:
-                eid = eid or eq_id
-                ename = eq_name
-                break
-    if not ename and fault_code:
-        inferred = _equipment_type_from_fault_code(fault_code)
-        if inferred:
-            ename = fault_code.strip()
-            eq_type = inferred
+    if not eid and not ename and rule_id:
+        bind_names, bind_ids = equipment_from_rule_bindings(model, site_id, rule_id)
+        if bind_ids:
+            eid = bind_ids[0]
+        if bind_names:
+            ename = bind_names[0]
     if not eid and cols:
         eid = str((col_map.get(cols[0]) or {}).get("equipment_id") or "")
     if not ename and eid:
@@ -129,10 +129,23 @@ def resolve_fault_model_context(
     eq = eq_index.get(eid) if eid else None
     if eq:
         eq_type = _equipment_type_label(eq)
-    elif not eq_type and fault_code:
-        eq_type = _equipment_type_from_fault_code(fault_code)
+    elif not eq_type:
+        eq_type = ""
+
+    symptom = str(short_description or "").strip() or plain_symptom_from_rule_name(rule_name)
+    source_label = data_source_label(eq) if eq else ""
 
     point_ctx = _point_context(pt) if pt else None
+    if not pt and eid and rule_id:
+        pt_index = {
+            str(p.get("id") or ""): p for p in model.get("points") or [] if isinstance(p, dict)
+        }
+        for pid in bound_point_ids_for_rule(rule_id):
+            cand = pt_index.get(pid)
+            if cand and str(cand.get("equipment_id") or "") == eid:
+                point_ctx = _point_context(cand)
+                break
+
     bacnet_line = ""
     if point_ctx:
         dev = point_ctx.get("bacnet_device_id")
@@ -146,7 +159,9 @@ def resolve_fault_model_context(
         "severity": "",
         "rule_id": rule_id,
         "rule_name": rule_name,
-        "fault_code": fault_code,
+        "short_description": symptom,
+        "symptom": symptom,
+        "data_source": source_label,
         "site_id": site_id,
         "equipment": {
             "id": eid or ename or "",
@@ -193,7 +208,7 @@ def enrich_fault_alert(alert: dict[str, Any], model: dict[str, Any]) -> dict[str
         site_id=site_id,
         rule_id=str(alert.get("rule_id") or ""),
         rule_name=str(alert.get("rule_name") or ""),
-        fault_code=str(alert.get("code") or ""),
+        short_description=str(alert.get("short_description") or alert.get("symptom") or ""),
         equipment_id=str(alert.get("equipment_id") or ""),
         equipment_name=eq_name_in,
         flagged_columns=list(cols) if isinstance(cols, list) else [],
@@ -207,4 +222,8 @@ def enrich_fault_alert(alert: dict[str, Any], model: dict[str, Any]) -> dict[str
         out["equipment_name"] = eq_name
     if eq_id and not out.get("equipment_id"):
         out["equipment_id"] = eq_id
+    if ctx.get("symptom") and not out.get("symptom"):
+        out["symptom"] = ctx["symptom"]
+    if ctx.get("data_source") and not out.get("data_source"):
+        out["data_source"] = ctx["data_source"]
     return out

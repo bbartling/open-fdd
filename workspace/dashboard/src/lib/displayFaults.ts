@@ -1,14 +1,16 @@
 import type { FaultAlert, FaultFamily } from "./dashboardStream";
+import { describeFaultCause } from "./faultInsight";
 
 export type DisplayFault = {
   id: string;
   severity: "critical" | "high" | "medium" | "info";
   severityLabel: string;
   title: string;
+  symptom: string;
   detail: string;
   equipmentLabel: string;
+  dataSource?: string;
   source?: string;
-  code?: string;
   meta: { label: string; value: string }[];
   underlying: FaultAlert[];
   plainEnglish: string;
@@ -59,6 +61,7 @@ function groupBacnetOverrides(alerts: FaultAlert[]): DisplayFault | null {
     severity: worst,
     severityLabel: severityLabel(worst),
     title: `BACnet operator overrides (P8) — ${hits.length} active`,
+    symptom: "Manual priority-8 writes on commandable points",
     detail: lines.join("; ") + extra,
     equipmentLabel: "Overrides",
     source: "bacnet_override",
@@ -100,7 +103,8 @@ function groupHistorianLag(alerts: FaultAlert[]): DisplayFault | null {
     id: "group-historian-lag",
     severity: worst,
     severityLabel: severityLabel(worst),
-    title: "Historian behind live BACnet poll",
+    title: preview + extra || "Multiple devices",
+    symptom: "Historian behind live BACnet poll",
     detail: `Poll CSV is updating but feather columns are stale for ${unique.length} device(s). Check bridge ingest after poll cycles.`,
     equipmentLabel: preview + extra || "Multiple devices",
     source: "poll_health",
@@ -127,7 +131,8 @@ function groupFddInput(alerts: FaultAlert[]): DisplayFault | null {
     id: "group-fdd-input",
     severity: "medium",
     severityLabel: "Medium",
-    title: `${n} points missing fdd_input mapping`,
+    title: "Data model",
+    symptom: `${n} points missing fdd_input mapping`,
     detail: String(hit.detail || hit.title || ""),
     equipmentLabel: "Data model",
     source: "model_health",
@@ -142,18 +147,27 @@ function groupFddInput(alerts: FaultAlert[]): DisplayFault | null {
   };
 }
 
+function plainSymptom(a: FaultAlert, ctx: FaultAlert["model_context"]): string {
+  const fromCtx = String(
+    a.short_description || a.symptom || ctx?.short_description || ctx?.symptom || "",
+  ).trim();
+  if (fromCtx) return fromCtx;
+  const rule = String(ctx?.rule_name || a.rule_name || "").trim();
+  if (!rule) return String(a.detail || a.title || "Issue");
+  return rule;
+}
+
 function alertToDisplay(a: FaultAlert, equipmentLabel: string): DisplayFault {
   const sev = mapSeverity(String(a.severity || "warning"));
   const ctx = a.model_context;
+  const eqName = String(ctx?.equipment?.name || a.equipment_name || equipmentLabel || "Unknown device").trim();
+  const eqType = ctx?.equipment?.type;
+  const displayEq = eqType && eqType !== "—" ? `${eqName} — ${eqType}` : eqName;
+  const symptom = plainSymptom(a, ctx);
+  const dataSource = String(a.data_source || ctx?.data_source || "").trim();
+
   const meta: { label: string; value: string }[] = [];
-  if (ctx?.rule_name) {
-    meta.push({ label: "Rule", value: ctx.rule_name });
-  } else if (a.rule_name) {
-    meta.push({ label: "Rule", value: a.rule_name });
-  }
-  if (ctx?.fault_code || a.code) {
-    meta.push({ label: "Fault code", value: String(ctx?.fault_code || a.code) });
-  }
+  if (dataSource) meta.push({ label: "Data source", value: dataSource });
   if (ctx?.point?.name && ctx.point.name !== "not mapped") {
     meta.push({ label: "Point", value: ctx.point.name });
   }
@@ -163,14 +177,8 @@ function alertToDisplay(a: FaultAlert, equipmentLabel: string): DisplayFault {
       value: String(ctx?.historian_column || ctx?.point?.external_id || ""),
     });
   }
-  if (ctx?.point?.brick_type) {
-    meta.push({ label: "BRICK class", value: ctx.point.brick_type });
-  }
   if (ctx?.bacnet_summary && ctx.bacnet_summary !== "not available") {
     meta.push({ label: "BACnet", value: ctx.bacnet_summary });
-  }
-  if (ctx?.site_id) {
-    meta.push({ label: "Site", value: ctx.site_id });
   }
   if (a.analytics?.estimated_fault_duration_label) {
     meta.push({ label: "Duration", value: a.analytics.estimated_fault_duration_label });
@@ -181,26 +189,23 @@ function alertToDisplay(a: FaultAlert, equipmentLabel: string): DisplayFault {
       value: `${a.analytics.fault_samples} / ${a.analytics.total_samples}`,
     });
   }
-  const eqName = ctx?.equipment?.name || a.equipment_name || equipmentLabel;
-  const eqType = ctx?.equipment?.type;
-  const displayEq =
-    eqType && eqType !== "—" ? `${eqName} — ${eqType}` : eqName;
-  const title =
-    ctx?.rule_name && eqName
-      ? `${eqName}: ${ctx.rule_name}`
-      : String(a.title || "Issue");
+
   return {
     id: String(a.id || `${a.source}-${a.title}`),
     severity: sev,
     severityLabel: severityLabel(sev),
-    title,
+    title: eqName,
+    symptom,
     detail: String(a.detail || ""),
     equipmentLabel: displayEq,
+    dataSource: dataSource || undefined,
     source: a.source,
-    code: a.code,
     meta,
     underlying: [a],
-    plainEnglish: String(a.detail || a.title || ""),
+    plainEnglish:
+      a.source === "fdd" && a.analytics
+        ? describeFaultCause(a.analytics)
+        : String(a.detail || symptom || a.title || ""),
     technical:
       ctx && a.source === "fdd"
         ? [
@@ -212,7 +217,7 @@ function alertToDisplay(a: FaultAlert, equipmentLabel: string): DisplayFault {
             .join(" · ")
         : a.analytics
           ? JSON.stringify(a.analytics, null, 2)
-          : [a.code, a.rule_id, a.rule_name].filter(Boolean).join(" · ") || undefined,
+          : [a.rule_id, a.rule_name].filter(Boolean).join(" · ") || undefined,
     modelContext: ctx,
   };
 }

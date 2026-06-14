@@ -38,10 +38,19 @@ def test_link_faults_to_brick_equipment(monkeypatch: pytest.MonkeyPatch, tmp_pat
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
     monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
     linked = link_faults_to_brick(
-        [{"code": "VAV-C", "title": "Zone OOB", "equipment_id": "vav-1", "severity": "warning"}],
+        [
+            {
+                "title": "VAV-1 — OA-T out of bounds",
+                "equipment_id": "vav-1",
+                "severity": "warning",
+                "rule_name": "Temperature out of bounds",
+                "short_description": "Temperature reading is outside the configured range.",
+            }
+        ],
         site_id="demo",
     )
     assert linked[0]["equipment_name"] == "VAV-1"
+    assert linked[0]["short_description"] == "Temperature reading is outside the configured range."
 
 
 def test_building_insight_context_has_fault_catalog(monkeypatch: pytest.MonkeyPatch):

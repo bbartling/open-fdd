@@ -18,9 +18,8 @@ from typing import Any
 
 from . import playground
 from .data_loader import column_map_for_rule, historian_columns_for_rule, load_frame_for_run
-from .fdd_row_prep import prepare_fdd_rows
-from .fault_catalog import family_for_code
 from .feather_store import FeatherStore
+from .fdd_row_prep import prepare_fdd_rows
 from .fdd_fault_analytics import format_fault_detail, summarize_fault_run
 from .fdd_results import save_results
 from .model_service import ModelService
@@ -217,20 +216,15 @@ def _run_one(
         origin = origin or "feather"
     if lookback_hours > 0 and frame is not None:
         frame = _trim_lookback(frame, lookback_hours)
-    from .rule_store import _normalize_fault_codes
-
-    fault_codes = _normalize_fault_codes(rule)
-    fault_code = fault_codes[0] if fault_codes else str(rule.get("fault_code") or "")
+    short_description = str(rule.get("short_description") or rule.get("name") or "Fault detected").strip()
     code = _rule_code(rule)
     base = {
         "rule_id": rule.get("id"),
         "rule_name": rule.get("name"),
+        "short_description": short_description,
         "site_id": site_id,
         "severity": rule.get("severity", "warning"),
         "source": origin,
-        "fault_code": fault_code,
-        "fault_codes": fault_codes,
-        "equipment_family": family_for_code(fault_code) or "",
     }
     try:
         from open_fdd.arrow_runtime.rules import detect_rule_backend, legacy_row_allowed

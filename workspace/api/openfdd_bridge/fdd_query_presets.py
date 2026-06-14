@@ -5,12 +5,18 @@ from __future__ import annotations
 from typing import Any
 
 from .equipment_classify import effective_equipment_type, hvac_bucket
+from .fdd_equipment import data_source_label
 from .model_service import ModelService
 from .rule_store import RuleStore
 from .site_defaults import ensure_default_site
 from .ttl_service import TtlService
 
 PRESET_CATALOG: list[dict[str, str]] = [
+    {
+        "preset_id": "rules_by_data_source",
+        "title": "Rules by data source",
+        "description": "Source-agnostic FDD rules with bound points grouped by BACnet vs Niagara driver.",
+    },
     {
         "preset_id": "rules_to_equipment",
         "title": "Rules → Equipment",
@@ -64,8 +70,25 @@ PRESET_CATALOG: list[dict[str, str]] = [
 ]
 
 COLUMNS: dict[str, list[str]] = {
-    "rules_to_equipment": ["rule_id", "rule_name", "enabled", "equipment_id", "equipment_type", "brick_types"],
-    "rules_to_sensors": ["rule_id", "rule_name", "point_id", "brick_class", "external_id", "equipment_id"],
+    "rules_by_data_source": [
+        "rule_id",
+        "rule_name",
+        "short_description",
+        "data_source",
+        "bound_points",
+        "point_ids",
+    ],
+    "rules_to_equipment": ["rule_id", "rule_name", "short_description", "enabled", "equipment_id", "equipment_type", "brick_types"],
+    "rules_to_sensors": [
+        "rule_id",
+        "rule_name",
+        "short_description",
+        "data_source",
+        "point_id",
+        "brick_class",
+        "external_id",
+        "equipment_id",
+    ],
     "rules_to_bacnet_devices": [
         "rule_id",
         "rule_name",
@@ -133,6 +156,25 @@ def _bound_point_ids(rules: list[dict[str, Any]]) -> set[str]:
     return ids
 
 
+def _point_source_label(pt: dict[str, Any], eq_map: dict[str, dict[str, Any]]) -> str:
+    eq = eq_map.get(str(pt.get("equipment_id") or ""), {})
+    label = data_source_label(eq)
+    if label:
+        return label
+    pid = str(pt.get("id") or "").lower()
+    if pid.startswith("niagara-"):
+        return "Niagara"
+    if pid[:1].isdigit() or "analog-" in pid or "binary-" in pid:
+        return "BACnet"
+    meta = pt.get("metadata") if isinstance(pt.get("metadata"), dict) else {}
+    driver = str(meta.get("driver") or meta.get("source") or "").strip()
+    return driver.replace("_", " ") if driver else "(unassigned)"
+
+
+def _rule_short_description(rule: dict[str, Any]) -> str:
+    return str(rule.get("short_description") or rule.get("name") or "").strip()
+
+
 def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, Any]:
     meta = next((p for p in PRESET_CATALOG if p["preset_id"] == preset_id), None)
     if meta is None:
@@ -146,7 +188,45 @@ def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, A
     points = [p for p in (model.get("points") or []) if isinstance(p, dict)]
     rows: list[dict[str, Any]] = []
 
-    if preset_id == "rules_to_equipment":
+    if preset_id == "rules_by_data_source":
+        point_by_id = {str(p.get("id")): p for p in points if p.get("id")}
+        for rule in rules:
+            bindings = rule.get("bindings") if isinstance(rule.get("bindings"), dict) else {}
+            pids = [str(x) for x in bindings.get("point_ids") or [] if str(x).strip()]
+            if not pids:
+                rows.append(
+                    {
+                        "rule_id": rule.get("id"),
+                        "rule_name": rule.get("name"),
+                        "short_description": _rule_short_description(rule),
+                        "data_source": "(no bindings)",
+                        "bound_points": 0,
+                        "point_ids": "",
+                    }
+                )
+                continue
+            by_source: dict[str, list[str]] = {}
+            for pid in pids:
+                pt = point_by_id.get(pid, {})
+                src = _point_source_label(pt, eq_map)
+                by_source.setdefault(src, []).append(pid)
+            for src in sorted(by_source):
+                pids_for_src = by_source[src]
+                preview = ", ".join(pids_for_src[:6])
+                if len(pids_for_src) > 6:
+                    preview += "…"
+                rows.append(
+                    {
+                        "rule_id": rule.get("id"),
+                        "rule_name": rule.get("name"),
+                        "short_description": _rule_short_description(rule),
+                        "data_source": src,
+                        "bound_points": len(pids_for_src),
+                        "point_ids": preview,
+                    }
+                )
+
+    elif preset_id == "rules_to_equipment":
         for rule in rules:
             bindings = rule.get("bindings") if isinstance(rule.get("bindings"), dict) else {}
             eq_ids = [str(x) for x in bindings.get("equipment_ids") or [] if str(x).strip()]
@@ -156,6 +236,7 @@ def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, A
                     {
                         "rule_id": rule.get("id"),
                         "rule_name": rule.get("name"),
+                        "short_description": _rule_short_description(rule),
                         "enabled": rule.get("enabled", True),
                         "equipment_id": "",
                         "equipment_type": "",
@@ -170,6 +251,7 @@ def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, A
                         {
                             "rule_id": rule.get("id"),
                             "rule_name": rule.get("name"),
+                            "short_description": _rule_short_description(rule),
                             "enabled": rule.get("enabled", True),
                             "equipment_id": eid,
                             "equipment_type": effective_equipment_type(eq),
@@ -191,6 +273,7 @@ def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, A
                         {
                             "rule_id": rule.get("id"),
                             "rule_name": rule.get("name"),
+                            "short_description": _rule_short_description(rule),
                             "enabled": rule.get("enabled", True),
                             "equipment_id": eid,
                             "equipment_type": effective_equipment_type(eq),
@@ -202,6 +285,7 @@ def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, A
                     {
                         "rule_id": rule.get("id"),
                         "rule_name": rule.get("name"),
+                        "short_description": _rule_short_description(rule),
                         "enabled": rule.get("enabled", True),
                         "equipment_id": "",
                         "equipment_type": "",
@@ -225,6 +309,8 @@ def run_fdd_preset(preset_id: str, *, site_id: str | None = None) -> dict[str, A
                     {
                         "rule_id": rule.get("id"),
                         "rule_name": rule.get("name"),
+                        "short_description": _rule_short_description(rule),
+                        "data_source": _point_source_label(pt, eq_map),
                         "point_id": pid,
                         "brick_class": str(pt.get("brick_type") or ""),
                         "external_id": str(pt.get("external_id") or ""),

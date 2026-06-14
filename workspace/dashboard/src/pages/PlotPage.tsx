@@ -364,14 +364,7 @@ export default function PlotPage() {
     <div className="page page-wide">
       <PageHeader
         title="Trend plot"
-        subtitle={
-          <>
-            Feather telemetry with optional FDD overlays on a right-hand 0/1 axis (desktop-ui parity). Pick a device,
-            select points, enable FDD overlays or use <code>?fdd=1</code> in the URL. Right-click a series chip to pin
-            an FDD rule. Enable debug:{" "}
-            <code>localStorage.ofdd_debug_plot=1</code>
-          </>
-        }
+        subtitle="Pick equipment, select points, and turn on fault overlays to see rule hits on the chart."
       />
       <TabDebugPanel tab="plot" />
 

@@ -32,12 +32,11 @@ class AppliesTo(BaseModel):
 class SaveRuleBody(BaseModel):
     id: str | None = None
     name: str = "Untitled rule"
+    short_description: str = ""
     description: str = ""
     mode: str = "rule"
     backend: str = ""
     code: str
-    fault_code: str = ""
-    fault_codes: list[str] = Field(default_factory=list)
     config: dict[str, Any] = Field(default_factory=dict)
     column_map: dict[str, str] = Field(default_factory=dict)
     applies_to: AppliesTo = Field(default_factory=AppliesTo)
@@ -243,39 +242,13 @@ def infer_fault_codes_route(
 def save_rule(body: SaveRuleBody, user: dict = Depends(require_roles("integrator", "agent"))) -> dict:
     saved_by = str(user.get("sub") or user.get("role") or "operator")
     payload = body.model_dump()
-    codes_raw = [str(c).strip() for c in (body.fault_codes or []) if str(c).strip()]
-    if not codes_raw and body.fault_code:
-        codes_raw = [str(body.fault_code).strip()]
-    validated = _validate_fault_codes(codes_raw) if codes_raw else []
-    fault_inference: dict[str, Any] | None = None
-    if not validated:
-        from ..rule_fault_inference import infer_fault_codes_for_rule
-
-        svc = ModelService()
-        ttl = TtlService()
-        site_id = ensure_default_site(svc, ttl)
-        applies = body.applies_to.site_ids if body.applies_to else []
-        if applies:
-            site_id = str(applies[0]).strip() or site_id
-        fault_inference = infer_fault_codes_for_rule(
-            name=body.name,
-            code=body.code,
-            mode=body.mode,
-            config=body.config,
-            severity=body.severity,
-            site_id=site_id,
-        )
-        validated = _validate_fault_codes(fault_inference.get("fault_codes") or [])
-    payload["fault_codes"] = validated
-    payload["fault_code"] = validated[0] if validated else ""
+    if not str(payload.get("short_description") or "").strip():
+        payload["short_description"] = str(body.name or "Fault detected").strip()[:240]
     try:
         entry = RuleStore().upsert(payload, saved_by=saved_by)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    out: dict[str, Any] = {"ok": True, "rule": entry}
-    if fault_inference:
-        out["fault_inference"] = fault_inference
-    return out
+    return {"ok": True, "rule": entry}
 
 
 @router.get("/saved/{rule_id}/source")

@@ -1,0 +1,23 @@
+{
+  "stations": [
+    {
+      "id": "bench9065",
+      "name": "Bench Station 9065",
+      "station_url": "https://192.168.204.11",
+      "username": "open_fdd",
+      "password_env": "OPENFDD_NIAGARA_ADMIN_PASSWORD",
+      "verify_tls": false,
+      "enabled": true,
+      "root_ord": "slot:/Drivers",
+      "poll_interval_seconds": 60,
+      "read_batch_size": 50,
+      "browse_depth": 4,
+      "max_nodes": 2000,
+      "include_patterns": [],
+      "exclude_patterns": [],
+      "default_points_root": "slot:/Drivers/BacnetNetwork/BENS$20BENCHTEST$20BOX/points",
+      "follow_external": false,
+      "include_proxy_ext": false
+    }
+  ]
+}

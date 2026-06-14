@@ -29,7 +29,7 @@
 
 ### Full Open-FDD edge stack (Docker / GHCR)
 
-Use GHCR for BACnet polling, Operator Bridge API, React dashboard, historian, and MCP sidecar.
+Use GHCR for BACnet polling, Operator Bridge API, React dashboard, historian, and MCP sidecar in a `docker pull` workflow.
 
 | Image | Role |
 |-------|------|
@@ -40,13 +40,20 @@ Use GHCR for BACnet polling, Operator Bridge API, React dashboard, historian, an
 **Prefer pinned release tags in production** (not floating `latest`):
 
 ```bash
-export OPENFDD_IMAGE_TAG=3.0.30   # match your release
-docker pull ghcr.io/bbartling/openfdd-bridge:${OPENFDD_IMAGE_TAG}
-docker pull ghcr.io/bbartling/openfdd-commission:${OPENFDD_IMAGE_TAG}
-docker pull ghcr.io/bbartling/openfdd-mcp-rag:${OPENFDD_IMAGE_TAG}
+# Bootstrap a new edge host (no git clone) — creates ~/open-fdd, auth.env.local, BACnet bind
+curl -fsSL -o /tmp/openfdd_edge_bootstrap.sh \
+  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_edge_bootstrap.sh
+OPENFDD_IMAGE_TAG=3.0.34 bash /tmp/openfdd_edge_bootstrap.sh --start --image-tag 3.0.34
+
+# Update an existing site — backup workspace, pull pinned GHCR tags, recreate containers
+cd ~/open-fdd
+./scripts/openfdd_site_backup.sh
+NEW_TAG=3.0.34 ./scripts/openfdd_site_update.sh
 ```
 
-Edge bootstrap: [Run with Docker images](https://bbartling.github.io/open-fdd/quick-start/docker/).
+From a repo checkout: `./scripts/openfdd_edge_bootstrap.sh --start --image-tag 3.0.34`
+
+Edge bootstrap: [Run with Docker images](https://bbartling.github.io/open-fdd/quick-start/docker/) · Site updates: [Updating the stack](https://bbartling.github.io/open-fdd/quick-start/updating/)
 
 ### Python package (PyPI)
 
@@ -74,15 +81,6 @@ result = run_arrow_rule(high_sat, table, {"high": 85})
 print(result.true_count)  # 1
 ```
 
-| Need | Use |
-|------|-----|
-| Run FDD in your Python / cloud pipeline | **PyPI** `open-fdd` |
-| BACnet + UI + bridge on an edge host | **GHCR** Docker images |
-| **OpenFDD Edge** on OT LAN | **GHCR** Docker images |
-| **OpenFDD RCx Central** (analyst PC) | [RCx Central docs](docs/rcx-central/index.md) · `./scripts/run_rcx_central_docker.sh` |
-| Portfolio collect / MCP over Tailscale | Edge stack + [portfolio docs](https://bbartling.github.io/open-fdd/portfolio/) |
-
-Examples: [`examples/`](examples/). Release: [developer/release-process](https://bbartling.github.io/open-fdd/developer/release-process/).
 
 ---
 

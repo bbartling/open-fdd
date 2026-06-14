@@ -13,6 +13,11 @@ type SyncStatus = {
   ttl_path: string;
 };
 
+type ModelTree = {
+  points?: Array<{ metadata?: { source?: string; driver?: string } }>;
+  equipment?: Array<{ metadata?: { source?: string; driver?: string }; equipment_type?: string }>;
+};
+
 type Health = {
   status: string;
   score: number | null;
@@ -28,6 +33,7 @@ type Props = {
 
 export default function ModelSyncBar({ onStatus, refreshKey = 0, showWriteTtl = true }: Props) {
   const [sync, setSync] = useState<SyncStatus | null>(null);
+  const [sourceSummary, setSourceSummary] = useState<string>("");
   const [health, setHealth] = useState<Health | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -36,12 +42,22 @@ export default function ModelSyncBar({ onStatus, refreshKey = 0, showWriteTtl = 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, h] = await Promise.all([
+      const [s, h, tree] = await Promise.all([
         apiFetch<SyncStatus>("/api/model/bacnet-sync"),
         apiFetch<Health>("/api/model/health"),
+        apiFetch<ModelTree>("/api/model/tree"),
       ]);
       setSync(s);
       setHealth(h);
+      const counts = new Map<string, number>();
+      for (const pt of tree.points || []) {
+        const src = String(pt.metadata?.source || pt.metadata?.driver || "model").trim();
+        counts.set(src, (counts.get(src) || 0) + 1);
+      }
+      const parts = [...counts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([src, n]) => `${src} ${n}`);
+      setSourceSummary(parts.length ? parts.join(" · ") : "");
       setError("");
     } finally {
       setLoading(false);
@@ -92,11 +108,12 @@ export default function ModelSyncBar({ onStatus, refreshKey = 0, showWriteTtl = 
       <div className="dm-sync-row">
         <span className={pillClass}>
           <span className="status-dot" />
-          BACnet poll CSV ↔ model.json {sync?.in_sync ? "in sync" : "drift"}
+          Poll CSV ↔ model.json {sync?.in_sync ? "in sync" : "drift"}
         </span>
         {sync ? (
           <span className="muted dm-sync-meta">
             {sync.poll_enabled_count} enabled in poll CSV · {sync.model_bacnet_count} BACnet points in model
+            {sourceSummary ? <> · sources: {sourceSummary}</> : null}
             {!sync.in_sync ? (
               <>
                 {" "}

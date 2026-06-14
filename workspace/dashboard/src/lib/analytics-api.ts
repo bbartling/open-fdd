@@ -21,7 +21,15 @@ export type OverviewResponse = {
   };
   faults_by_severity: { group: string; elapsed_hours: number }[];
   fault_hours_by_equipment: { group: string; elapsed_hours: number; equipment_type?: string }[];
-  fault_hours_by_code: { group: string; elapsed_hours: number }[];
+  fault_hours_by_code: { group: string; label?: string; code?: string; elapsed_hours: number }[];
+  active_fault_devices?: {
+    equipment: string;
+    equipment_type?: string;
+    symptoms: string[];
+    fault_codes: string[];
+    elapsed_hours: number;
+    samples_flagged?: number;
+  }[];
   top_faults: {
     equipment: string;
     equipment_type: string;
@@ -34,17 +42,67 @@ export type OverviewResponse = {
   }[];
 };
 
+export type RcxChartOption = {
+  chart_id: string;
+  title: string;
+  equipment_id?: string;
+  equipment_type?: string;
+  partial_note?: string;
+};
+
+export type RcxBundle = {
+  bundle_id: string;
+  family: string;
+  label: string;
+  equipment_id?: string | null;
+  equipment_name?: string | null;
+  chart_ids: string[];
+  chart_count: number;
+  default_selected?: boolean;
+};
+
 export type RcxPreviewResponse = {
+  site_id: string;
   site: string;
   site_name: string;
   window: { start: string | null; end: string | null; hours: number };
-  available_charts: { id: string; label: string }[];
-  disabled_charts: { id: string; label: string; reason: string }[];
+  available_charts: RcxChartOption[];
+  disabled_charts: { chart_id: string; title: string; reason: string }[];
   sections: { id: string; label: string }[];
   warnings: string[];
   fault_summary: { active_faults: number; total_fault_hours: number };
   fault_rows: unknown[];
+  report_bundles?: {
+    bundles: RcxBundle[];
+    default_bundle_ids?: string[];
+    families?: Record<string, { label: string; count: number }>;
+  };
+  diagnostics?: { hints?: string[]; roles_resolved?: Record<string, string> };
 };
+
+function normalizePreview(raw: Record<string, unknown>): RcxPreviewResponse {
+  const avail = (raw.available_charts as Record<string, unknown>[]) ?? [];
+  const disabled = (raw.disabled_charts as Record<string, unknown>[]) ?? [];
+  return {
+    ...(raw as unknown as RcxPreviewResponse),
+    available_charts: avail.map((c) => ({
+      chart_id: String(c.chart_id ?? c.id ?? ""),
+      title: String(c.title ?? c.label ?? c.chart_id ?? ""),
+      equipment_id: c.equipment_id as string | undefined,
+      equipment_type: c.equipment_type as string | undefined,
+      partial_note: c.partial_note as string | undefined,
+    })),
+    disabled_charts: disabled.map((c) => ({
+      chart_id: String(c.chart_id ?? c.id ?? ""),
+      title: String(c.title ?? c.label ?? ""),
+      reason: String(c.reason ?? ""),
+    })),
+    sections: ((raw.sections as Record<string, unknown>[]) ?? []).map((s) => ({
+      id: String(s.id ?? ""),
+      label: String(s.label ?? s.id ?? ""),
+    })),
+  };
+}
 
 export async function fetchAnalyticsOverview(): Promise<OverviewResponse> {
   return apiFetch("/api/analytics/overview");
@@ -61,26 +119,38 @@ export async function fetchModelHealth(): Promise<Record<string, unknown>> {
 export async function fetchRcxPreview(body: {
   site_id?: string;
   hours?: number;
+  start?: string;
+  end?: string;
   scope?: string;
+  bundle_ids?: string[];
+  equipment_ids?: string[];
+  catalog_only?: boolean;
+  include_previews?: boolean;
 }): Promise<RcxPreviewResponse> {
-  return apiFetch("/api/reports/rcx/preview", {
+  const raw = await apiFetch<Record<string, unknown>>("/api/reports/rcx/preview", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  return normalizePreview(raw);
 }
 
 export async function downloadRcxReport(body: {
   site_id?: string;
   hours?: number;
+  start?: string;
+  end?: string;
   scope?: string;
+  bundle_ids?: string[];
+  equipment_ids?: string[];
   sections?: string[];
   charts?: string[];
 }): Promise<Blob> {
+  const charts = (body.charts ?? []).filter((c): c is string => Boolean(c && String(c).trim()));
   const res = await fetch(`${getBridgeBase()}/api/reports/rcx/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, charts }),
   });
   if (!res.ok) {
     const text = await res.text();

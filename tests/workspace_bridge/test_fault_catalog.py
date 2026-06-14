@@ -86,36 +86,39 @@ def test_tree_api(client: TestClient):
 
 
 def test_families_for_equipment_detection():
-    assert "AHU" in fault_catalog_scope.families_for_equipment("Air_Handler_Unit", "AHU-1")
-    assert "AHU" in fault_catalog_scope.families_for_equipment("", "AHU-1")
-    assert "VAV" in fault_catalog_scope.families_for_equipment("Fan_Coil_Unit", "FCU-12")
-    assert "HEATPUMP" in fault_catalog_scope.families_for_equipment("Heat_Pump", "HP roof")
-    assert not fault_catalog_scope.families_for_equipment("Laboratory_Equipment", "Lab bench")
+    assert fault_catalog_scope.families_for_equipment("Air_Handler_Unit", "AHU-1") == set()
+    assert fault_catalog_scope.families_for_equipment("Fan_Coil_Unit", "FCU-12") == set()
 
 
-def test_detect_applicable_families_hides_heatpump_without_equipment():
+def test_detect_applicable_families_lists_equipment_without_catalog_families():
     scope = fault_catalog_scope.detect_applicable_families(
         [{"equipment_id": "vav-1", "name": "VAV-3", "equipment_type": "Variable_Air_Volume_Box"}]
     )
-    assert "VAV" in scope["applicable_families"]
-    assert "BUILDING" in scope["applicable_families"]
-    assert "HEATPUMP" in scope["hidden_families"]
-    assert "AHU" in scope["hidden_families"]
+    assert scope["applicable_families"] == []
+    assert scope["hidden_families"] == []
+    assert scope["equipment_count"] == 1
+    assert scope["unmatched_equipment"][0]["equipment_id"] == "vav-1"
 
 
-def test_applicable_rules_pick_matched_fault_code():
+def test_applicable_rules_use_short_description():
+    model = {
+        "sites": [{"id": "site-a"}],
+        "equipment": [{"id": "vav-1", "site_id": "site-a", "name": "VAV-3"}],
+        "points": [{"id": "p1", "site_id": "site-a", "equipment_id": "vav-1"}],
+    }
     rules = [
         {
             "id": "r1",
-            "name": "Multi",
+            "name": "Temperature out of bounds",
+            "short_description": "Temperature reading is outside the configured range.",
             "enabled": True,
-            "fault_codes": ["AHU-B", "VAV-C"],
+            "bindings": {"point_ids": ["p1"], "equipment_ids": [], "brick_types": []},
         }
     ]
-    out = fault_catalog_scope._applicable_rules(rules, {"VAV", "BUILDING"}, "site-a")
+    out = fault_catalog_scope._applicable_rules(rules, "site-a", model=model)
     assert len(out) == 1
-    assert out[0]["fault_code"] == "VAV-C"
-    assert out[0]["family"] == "VAV"
+    assert out[0]["short_description"] == "Temperature reading is outside the configured range."
+    assert out[0]["device_names"] == ["VAV-3"]
 
 
 def test_applicable_api(client: TestClient):
@@ -143,6 +146,11 @@ def test_public_check_engine_endpoints_no_auth_header(raw_client: TestClient):
         "/api/building/status",
         "/api/building/snapshot",
         "/api/faults/status",
+        "/health/stack",
+    ):
+        r = raw_client.get(path)
+        assert r.status_code == 401, path
+    for path in (
         "/openfdd-agent/building-insight",
         "/openfdd-agent/operational-brief",
         "/openfdd-agent/zone-temps",
@@ -150,7 +158,6 @@ def test_public_check_engine_endpoints_no_auth_header(raw_client: TestClient):
     ):
         r = raw_client.get(path)
         assert r.status_code == 200, path
-    assert raw_client.get("/health/stack").status_code == 401
 
 
 def test_status_api_starts_green(client: TestClient):
@@ -164,40 +171,23 @@ def test_status_api_starts_green(client: TestClient):
 
 
 def test_unknown_code_rejected_on_alert(client: TestClient):
-    bad = client.put(
-        "/api/building/alerts",
-        json={"alerts": [{"title": "x", "code": "ZZZ-ZZ"}]},
-    )
-    assert bad.status_code == 400
-
-    numeric = client.put(
-        "/api/building/alerts",
-        json={"alerts": [{"title": "zone 3", "code": "VAV-03"}]},
-    )
-    assert numeric.status_code == 400
-
     good = client.put(
         "/api/building/alerts",
-        json={"alerts": [{"title": "AHU fighting", "severity": "critical", "code": "AHU-B"}]},
+        json={"alerts": [{"title": "AHU fighting", "severity": "critical"}]},
     )
     assert good.status_code == 200
 
 
-def test_unknown_code_rejected_on_rule(client: TestClient):
-    bad = client.post(
+def test_save_rule_uses_short_description_default(client: TestClient):
+    good = client.post(
         "/api/rules/save",
-        json={"name": "x", "mode": "rule", "code": RULE_CODE, "fault_code": "NOPE-X"},
+        json={"name": "SAT high", "mode": "rule", "code": RULE_CODE},
     )
-    assert bad.status_code == 400
-
-    legacy = client.post(
-        "/api/rules/save",
-        json={"name": "x", "mode": "rule", "code": RULE_CODE, "fault_code": "VAV-03"},
-    )
-    assert legacy.status_code == 400
+    assert good.status_code == 200
+    assert good.json()["rule"]["short_description"] == "SAT high"
 
 
-def test_fault_code_groups_into_family_tree(client: TestClient):
+def test_fault_batch_surfaces_equipment_first_alert(client: TestClient):
     save = client.post(
         "/api/rules/save",
         json={
@@ -207,7 +197,7 @@ def test_fault_code_groups_into_family_tree(client: TestClient):
             "code": RULE_CODE,
             "config": {"high": 50},
             "severity": "critical",
-            "fault_code": "AHU-B",
+            "short_description": "Supply air temperature is above the configured limit.",
         },
     )
     assert save.status_code == 200
@@ -216,8 +206,6 @@ def test_fault_code_groups_into_family_tree(client: TestClient):
     status = client.get("/api/faults/status").json()
     assert status["traffic"] == "red"
     families = {f["family"]: f for f in status["families"]}
-    # FDD alerts with equipment_name group under EQ:<id|name>, not generic AHU family.
-    eq_family = "EQ:AHU-B"
-    assert eq_family in families, f"expected equipment family {eq_family!r}, got {list(families)}"
-    assert families[eq_family]["label"] == "AHU-B"
-    assert any(a.get("code") == "AHU-B" for a in families[eq_family]["faults"])
+    assert families, "expected at least one equipment family bucket"
+    first = next(iter(families.values()))
+    assert any(a.get("symptom") or a.get("short_description") for a in first["faults"])

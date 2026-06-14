@@ -100,6 +100,13 @@ load_env_files() {
     set +a
     [[ "$quiet" == false ]] && echo "Loaded workspace/json_api.env.local (JSON API env placeholders)" || true
   fi
+  if [[ -f "${ROOT}/workspace/niagara.env.local" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "${ROOT}/workspace/niagara.env.local"
+    set +a
+    [[ "$quiet" == false ]] && echo "Loaded workspace/niagara.env.local (Niagara baskStream)" || true
+  fi
   if [[ -f "${ROOT}/workspace/ollama.env.local" ]]; then
     set -a
     # shellcheck disable=SC1091
@@ -184,7 +191,15 @@ apply_caddy_bridge_bind() {
 
 apply_caddy_bridge_bind
 
+edge_agent_only() {
+  [[ "${OFDD_EDGE_AGENT_ONLY:-0}" == "1" ]]
+}
+
 ensure_build() {
+  if edge_agent_only; then
+    echo "Agent-only edge (OFDD_EDGE_AGENT_ONLY=1) — skipping operator dashboard build"
+    return 0
+  fi
   case "$UI_BUILD_MODE" in
     skip)
       if [[ ! -f workspace/api/static/app/index.html ]]; then
@@ -425,10 +440,12 @@ start_mcp_rag() {
   ensure_mcp_index
   local host="${OFDD_MCP_LISTEN_HOST:-127.0.0.1}"
   local port="${OFDD_MCP_LISTEN_PORT:-8090}"
-  restart_if_running "$MCP_PID" "uvicorn mcp_rag.app:app" "MCP RAG"
+  restart_if_running "$MCP_PID" "uvicorn mcp_server.asgi:create_app" "MCP RAG"
   mkdir -p "$PID_DIR"
-  "${VENV}/bin/pip" install -q -r workspace/api/requirements.txt
-  nohup "${VENV}/bin/uvicorn" mcp_rag.app:app \
+  "${VENV}/bin/pip" install -q -r workspace/mcp_server/requirements.txt
+  export OPENFDD_BRIDGE_BASE_URL="${OPENFDD_BRIDGE_BASE_URL:-http://127.0.0.1:${OFDD_BRIDGE_PORT:-8765}}"
+  nohup "${VENV}/bin/uvicorn" mcp_server.asgi:create_app \
+    --factory \
     --app-dir workspace \
     --host "$host" --port "$port" \
     >"$MCP_LOG" 2>&1 &
@@ -519,10 +536,31 @@ wait_health() {
 
 print_lan_note() {
   if systemctl is-active --quiet ufw 2>/dev/null; then
+    local ports="${OFDD_BRIDGE_PORT}"
+    if caddy_enabled; then
+      ports="${OFDD_CADDY_HTTP_PORT:-80}"
+    fi
     echo ""
     echo "Note: UFW firewall is active. Localhost works; other LAN clients may need:"
-    echo "  sudo ${ROOT}/scripts/open_lan_port.sh ${OFDD_BRIDGE_PORT}"
+    echo "  sudo ${ROOT}/scripts/open_lan_port.sh ${ports}"
     echo "(This is informational — start succeeded.)"
+  fi
+}
+
+run_bench_smoke() {
+  if [[ "${OFDD_SMOKE_BENCH:-1}" == "0" ]]; then
+    return 0
+  fi
+  if [[ ! -f "${ROOT}/scripts/smoke_benserver_bench.py" ]]; then
+    return 0
+  fi
+  echo ""
+  echo "Benserver bench smoke (dual devices + agnostic rules)…"
+  if python3 "${ROOT}/scripts/smoke_benserver_bench.py"; then
+    echo "Benserver bench smoke: OK"
+  else
+    echo "Benserver bench smoke: FAILED (set OFDD_SMOKE_BENCH=0 to skip; use --strict-cross-source for hard match)" >&2
+    return 1
   fi
 }
 
@@ -537,6 +575,17 @@ case "$CMD" in
     fi
     wait_health
     start_fdd_loop
+    if edge_agent_only; then
+      echo ""
+      echo "Agent-only edge: bridge http://127.0.0.1:${OFDD_BRIDGE_PORT}/"
+      echo "FastMCP:          $(mcp_base_url)/mcp  (streamable-http)"
+      echo "MCP manifest:     $(mcp_base_url)/manifest"
+      run_bench_smoke || true
+      print_lan_note
+      if [[ "$DEV_UI" == true ]]; then
+        echo "Vite dev (optional): http://127.0.0.1:5173/  — not required for MCP agents"
+      fi
+    else
     start_caddy
     echo ""
     LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
@@ -557,8 +606,10 @@ case "$CMD" in
       echo "                     http://127.0.0.1:${OFDD_BRIDGE_PORT}/  (production static/app bundle)"
     fi
     print_lan_note
+    run_bench_smoke || true
     if [[ "$DEV_UI" == true ]]; then
       echo "Vite dev (optional): http://127.0.0.1:5173/  — not the same as Ansible/production UI"
+    fi
     fi
     ;;
   stop)
@@ -568,7 +619,8 @@ case "$CMD" in
     stop_one "$CADDY_PID" "caddy"
     stop_by_pattern "caddy run --config ${PID_DIR}/Caddyfile" "caddy"
     stop_one "$MCP_PID" "MCP RAG"
-    stop_by_pattern "uvicorn mcp_rag.app:app" "MCP RAG"
+    stop_by_pattern "uvicorn mcp_server.asgi:create_app" "MCP RAG"
+    stop_by_pattern "uvicorn mcp_rag.app:app" "MCP RAG (legacy)"
     stop_one "$OLLAMA_PID" "ollama"
     stop_one "$COMMISSION_PID" "commission agent"
     stop_one "$BRIDGE_PID" "bridge"

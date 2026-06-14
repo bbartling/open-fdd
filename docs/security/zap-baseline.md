@@ -24,9 +24,14 @@ Packaged scan scripts (Windows + Mac/Linux): [scripts/security/README.md](https:
 **From a LAN workstation** (after verify passes):
 
 ```powershell
-# Windows
-.\scripts\security\Run-OpenFddSecurityScan.ps1
+# Windows — optional integrator auth probe (copy auth.env.local to scan PC; never commit)
+.\scripts\security\Run-OpenFddSecurityScan.ps1 -TargetUrl "http://192.168.204.18" `
+  -AuthEnvFile "C:\path\to\auth.env.local"
 ```
+
+The script writes `40-release-gate-summary.txt` with **SECURITY GATE: PASS/FAIL**:
+- Fails if production JS bundles contain private LAN IPs or bench Niagara defaults
+- Warns if auth env is missing (`Auth loaded: False`) — pass `-AuthEnvFile` or shell vars `OFDD_INTEGRATOR_USER` / `OFDD_INTEGRATOR_PASSWORD` (values are never logged)
 
 ```bash
 # macOS / Linux

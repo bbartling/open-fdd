@@ -75,11 +75,46 @@ def is_hws(eq: dict[str, Any]) -> bool:
     return "hw plant" in name or "boiler" in name or "hot water" in name
 
 
+def is_chiller(eq: dict[str, Any]) -> bool:
+    et = effective_equipment_type(eq).upper()
+    name = str(eq.get("name") or "").lower()
+    eid = _equipment_key(eq)
+    if "CHILLER" in et or "CHILLED_WATER" in et or "CW_PLANT" in et:
+        return True
+    return "chiller" in name or "chw" in eid or "cw-plant" in eid
+
+
+def is_zone_box(eq: dict[str, Any]) -> bool:
+    """Generic zone-level equipment (FCU/VAV box, lab BACnet device, zone sensors)."""
+    et = effective_equipment_type(eq).upper()
+    name = str(eq.get("name") or "").lower()
+    eid = _equipment_key(eq)
+    if is_ahu(eq) or is_vav(eq) or is_chiller(eq) or is_hws(eq):
+        return False
+    if "BACNET_DEVICE" in et or "LABORATORY" in et or "BRICK" in et:
+        return True
+    if "bench" in eid or "5007" in eid or "bens" in name:
+        return True
+    return is_zone(eq)
+
+
+def is_oat_sensor(eq: dict[str, Any]) -> bool:
+    et = effective_equipment_type(eq).upper()
+    name = str(eq.get("name") or "").lower()
+    return "OUTSIDE_AIR" in et or "WEATHER" in et or "oat" in name or "outside air" in name
+
+
 def report_family(eq: dict[str, Any]) -> str:
     if is_ahu(eq):
         return "ahu"
+    if is_chiller(eq):
+        return "chiller"
     if is_hws(eq):
         return "hws"
     if is_vav(eq):
         return "vav"
+    if is_oat_sensor(eq):
+        return "oat_weather"
+    if is_zone_box(eq):
+        return "zone"
     return "other"

@@ -35,8 +35,8 @@ def test_add_list_delete_edge(tmp_path, monkeypatch):
         password="secret",
     )
     edges = list_edges_public()
-    assert any(e["site_id"] == "demo" for e in edges)
-    assert edges[0]["has_password"]
+    demo_edge = next(e for e in edges if e["site_id"] == "demo")
+    assert demo_edge["has_password"]
     assert "secret" not in json.dumps(edges)
 
     delete_edge("demo")

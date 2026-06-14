@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from ..building_alerts import load_alerts, replace_alerts
 from ..building_status import collect_status, public_dashboard_snapshot
 from ..deps import require_roles, require_user
-from ..fault_catalog import is_valid_code
 from ..portfolio_rollup import build_portfolio_rollup
 
 router = APIRouter(prefix="/api/building", tags=["building"])
@@ -30,14 +29,14 @@ class AlertsBody(BaseModel):
 
 
 @router.get("/snapshot")
-def building_snapshot() -> dict:
-    """Public dashboard payload: stack status strip + live fault tree (no login)."""
+def building_snapshot(_user: dict = Depends(require_user)) -> dict:
+    """Dashboard payload: stack status strip + live fault tree (authenticated)."""
     snap = public_dashboard_snapshot()
     return {"ok": True, **snap}
 
 
 @router.get("/status")
-def building_status() -> dict:
+def building_status(_user: dict = Depends(require_user)) -> dict:
     status = collect_status()
     health = status["model_health"]
     configured = bool(status.get("model_configured"))
@@ -80,14 +79,7 @@ def get_alerts(_user: dict = Depends(require_user)) -> dict:
 def put_alerts(body: AlertsBody, user: dict = Depends(require_roles("integrator", "agent"))) -> dict:
     username = str(user.get("sub") or "agent")
     for alert in body.alerts:
-        if alert.code and not is_valid_code(alert.code):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"unknown fault code '{alert.code}'. Use a fixed code from "
-                    "/api/faults/catalog — codes must not be invented."
-                ),
-            )
+        _ = alert
     doc = replace_alerts(
         [a.model_dump() for a in body.alerts],
         updated_by=username,

@@ -11,8 +11,10 @@ export type RuleBindings = {
 export type SavedRule = {
   id: string;
   name: string;
+  short_description?: string;
   severity?: string;
   enabled?: boolean;
+  config?: Record<string, unknown>;
   bindings?: RuleBindings;
 };
 

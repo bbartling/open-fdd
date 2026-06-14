@@ -17,7 +17,19 @@ export type InsightResponse = {
     description?: string;
     suggested_checks?: string[];
   }[];
-  faults_linked?: { code?: string; title?: string; equipment_name?: string }[];
+  faults_linked?: {
+    code?: string;
+    code_title?: string;
+    code_description?: string;
+    symptom?: string;
+    title?: string;
+    equipment_name?: string;
+    equipment_id?: string;
+    equipment_type?: string;
+    data_source?: string;
+    rule_id?: string;
+    rule_name?: string;
+  }[];
   brick_model?: { feeds_chains?: string[]; equipment_count?: number };
   worst_zones?: {
     label?: string;

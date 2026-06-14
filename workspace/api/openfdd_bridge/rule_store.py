@@ -16,31 +16,18 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from .fault_catalog import normalize_code
 from .paths import data_dir
 from .rule_source import read_source, write_source
 
 
-def _normalize_fault_code(raw: Any) -> str:
-    return (normalize_code(str(raw or "")) or "")[:32]
 
+def _short_description(entry: dict[str, Any]) -> str:
+    desc = str(entry.get("short_description") or entry.get("description") or "").strip()
+    if desc:
+        return desc[:240]
+    name = str(entry.get("name") or "").strip()
+    return name[:240] if name else "Fault detected"
 
-def _normalize_fault_codes(entry: dict[str, Any]) -> list[str]:
-    """Deduped catalog codes; supports fault_codes list or legacy fault_code string."""
-    out: list[str] = []
-    seen: set[str] = set()
-    raw_list = entry.get("fault_codes")
-    if isinstance(raw_list, list):
-        for item in raw_list:
-            code = _normalize_fault_code(item)
-            if code and code not in seen:
-                seen.add(code)
-                out.append(code)
-    if not out:
-        single = _normalize_fault_code(entry.get("fault_code"))
-        if single:
-            out.append(single)
-    return out
 
 _LOCK = threading.RLock()
 
@@ -97,17 +84,25 @@ class RuleStore:
         return raw
 
     def list_rules(self) -> list[dict[str, Any]]:
-        return list(self.load().get("rules", []))
+        out: list[dict[str, Any]] = []
+        for rule in self.load().get("rules", []):
+            if not isinstance(rule, dict):
+                continue
+            out.append(self._hydrate_rule_code(dict(rule)))
+        return out
+
+    def _hydrate_rule_code(self, rule: dict[str, Any]) -> dict[str, Any]:
+        path = str(rule.get("source_path") or "")
+        if path:
+            disk = read_source(path)
+            if disk.strip():
+                rule = dict(rule)
+                rule["code"] = disk
+        return rule
 
     def get(self, rule_id: str) -> dict[str, Any] | None:
         for rule in self.list_rules():
             if str(rule.get("id")) == str(rule_id):
-                path = str(rule.get("source_path") or "")
-                if path:
-                    disk = read_source(path)
-                    if disk.strip():
-                        rule = dict(rule)
-                        rule["code"] = disk
                 return rule
         return None
 
@@ -205,6 +200,33 @@ class RuleStore:
         return True
 
 
+def _lint_rule_code(code: str, *, mode: str) -> None:
+    """Reject pandas/legacy patterns before persisting a rule."""
+    from open_fdd.arrow_runtime.rules import detect_rule_backend
+
+    from . import playground
+
+    if mode == "script":
+        lint = playground.lint_python(
+            code,
+            require_arrow_rule=False,
+            require_evaluate=False,
+            strict_imports=True,
+        )
+    elif detect_rule_backend(code, {"mode": mode}) == "arrow":
+        lint = playground.lint_arrow_python(code)
+    else:
+        lint = playground.lint_python(code, strict_imports=True)
+    if lint.get("ok"):
+        return
+    msgs = [
+        str(i.get("message") or "lint failed")
+        for i in lint.get("issues", [])
+        if i.get("severity") == "error"
+    ]
+    raise ValueError("rule lint failed:\n" + "\n".join(msgs) if msgs else "rule lint failed")
+
+
 def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict[str, Any]:
     mode = str(entry.get("mode") or "rule")
     if mode not in VALID_MODES:
@@ -213,8 +235,14 @@ def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict
     if severity not in VALID_SEVERITIES:
         severity = "warning"
     code = str(entry.get("code") or "")
+    path = str(entry.get("source_path") or "")
+    if path:
+        disk = read_source(path)
+        if disk.strip():
+            code = disk
     if not code.strip():
         raise ValueError("rule code is required")
+    _lint_rule_code(code, mode=mode)
     config = entry.get("config")
     if not isinstance(config, dict):
         config = {}
@@ -224,7 +252,6 @@ def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict
     applies_to = entry.get("applies_to")
     if not isinstance(applies_to, dict):
         applies_to = {}
-    fault_codes = _normalize_fault_codes(entry)
     backend = str(entry.get("backend") or "").strip()
     if backend not in {"arrow", "legacy_row"}:
         try:
@@ -238,12 +265,11 @@ def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict
     return {
         "id": str(entry.get("id") or uuid4()),
         "name": str(entry.get("name") or "Untitled rule")[:200],
+        "short_description": _short_description(entry),
         "description": str(entry.get("description") or "")[:1000],
         "mode": mode,
         "backend": backend,
         "code": code,
-        "fault_codes": fault_codes,
-        "fault_code": fault_codes[0] if fault_codes else "",
         "config": config,
         "column_map": column_map,
         "applies_to": {

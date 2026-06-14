@@ -10,6 +10,7 @@ import json
 from typing import Any
 
 from .fault_catalog import CATEGORIES, entry_for_code
+from .fdd_equipment import plain_symptom_from_rule_name
 from .model_service import ModelService
 from .site_defaults import ensure_default_site
 from .ttl_service import TtlService
@@ -164,7 +165,7 @@ def link_faults_to_brick(
     *,
     site_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Attach BRICK equipment names to fault alerts when equipment_id is present."""
+    """Attach BRICK equipment + rule short description to fault alerts for operator UI."""
     svc = ModelService()
     sid = (site_id or "").strip()
     if not sid:
@@ -177,17 +178,33 @@ def link_faults_to_brick(
     for alert in alerts[:12]:
         if not isinstance(alert, dict):
             continue
-        eid = str(alert.get("equipment_id") or "").strip()
+        ctx = alert.get("model_context") if isinstance(alert.get("model_context"), dict) else {}
+        eq_ctx = ctx.get("equipment") if isinstance(ctx.get("equipment"), dict) else {}
+        eid = str(alert.get("equipment_id") or eq_ctx.get("id") or "").strip()
         eq = eq_index.get(eid) or {}
-        ename = str(alert.get("equipment_name") or "").strip() or (eq.get("name") if eid else None)
+        ename = (
+            str(alert.get("equipment_name") or eq_ctx.get("name") or "").strip()
+            or (eq.get("name") if eid else None)
+        )
+        symptom = str(
+            alert.get("short_description") or alert.get("symptom") or ctx.get("short_description") or ""
+        ).strip()
+        if not symptom:
+            symptom = plain_symptom_from_rule_name(
+                str(alert.get("rule_name") or ctx.get("rule_name") or "")
+            )
         linked.append(
             {
-                "code": alert.get("code"),
+                "symptom": symptom,
+                "short_description": symptom,
                 "title": alert.get("title"),
                 "severity": alert.get("severity"),
                 "equipment_id": eid or None,
                 "equipment_name": ename,
-                "equipment_type": eq.get("equipment_type") if eid else None,
+                "equipment_type": eq.get("equipment_type") if eid else eq_ctx.get("type"),
+                "data_source": str(alert.get("data_source") or ctx.get("data_source") or ""),
+                "rule_id": alert.get("rule_id"),
+                "rule_name": alert.get("rule_name"),
             }
         )
     return linked

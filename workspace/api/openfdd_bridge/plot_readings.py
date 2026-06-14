@@ -162,8 +162,8 @@ def _rule_matches_plot_scope(
     return False
 
 
-def evaluate_fault_plots(
-    df: pd.DataFrame,
+def evaluate_fault_plots_table(
+    table: Any,
     site_id: str,
     model: dict[str, Any],
     *,
@@ -171,6 +171,15 @@ def evaluate_fault_plots(
     scope_columns: list[str] | None = None,
     max_rules: int = 12,
 ) -> tuple[dict[str, list[int]], list[dict[str, str]], dict[str, int]]:
+    """Evaluate enabled Arrow rules against a PyArrow table (no pandas)."""
+    import pyarrow as pa
+
+    from open_fdd.arrow_runtime.backend import run_arrow_rule
+    from open_fdd.arrow_runtime.rules import detect_rule_backend
+
+    if not isinstance(table, pa.Table):
+        raise TypeError("evaluate_fault_plots_table requires pyarrow.Table")
+
     fault_plots: dict[str, list[int]] = {}
     fault_panels: list[dict[str, str]] = []
     fault_totals: dict[str, int] = {}
@@ -184,6 +193,7 @@ def evaluate_fault_plots(
         )
     color_i = 0
     evaluated = 0
+    n = table.num_rows
     for rule in rules:
         if evaluated >= max_rules:
             break
@@ -202,12 +212,6 @@ def evaluate_fault_plots(
         code = _rule_code(rule)
         if not code.strip():
             continue
-        import pyarrow as pa
-        from open_fdd.arrow_runtime.backend import run_arrow_rule
-        from open_fdd.arrow_runtime.rules import detect_rule_backend
-
-        table = pa.Table.from_pandas(df.reset_index(drop=True), preserve_index=False)
-        n = table.num_rows
         if n == 0 or detect_rule_backend(code, rule) != "arrow":
             continue
         cfg = dict(rule.get("config") or {})
@@ -234,6 +238,28 @@ def evaluate_fault_plots(
         )
         evaluated += 1
     return fault_plots, fault_panels, fault_totals
+
+
+def evaluate_fault_plots(
+    df: pd.DataFrame,
+    site_id: str,
+    model: dict[str, Any],
+    *,
+    rule_ids: set[str] | None = None,
+    scope_columns: list[str] | None = None,
+    max_rules: int = 12,
+) -> tuple[dict[str, list[int]], list[dict[str, str]], dict[str, int]]:
+    import pyarrow as pa
+
+    table = pa.Table.from_pandas(df.reset_index(drop=True), preserve_index=False)
+    return evaluate_fault_plots_table(
+        table,
+        site_id,
+        model,
+        rule_ids=rule_ids,
+        scope_columns=scope_columns,
+        max_rules=max_rules,
+    )
 
 
 def _prepare_frame(site_id: str, *, source: str, hours: int, limit: int) -> pd.DataFrame | None:
@@ -425,5 +451,6 @@ __all__ = [
     "list_plot_series",
     "read_plot_readings",
     "evaluate_fault_plots",
+    "evaluate_fault_plots_table",
     "downsample_aligned_plot",
 ]

@@ -1,7 +1,6 @@
 """Fixed fault-code catalog + live equipment fault tree (check-engine light).
 
-Read endpoints are public so the building traffic-light dashboard works without
-login on OT LAN wall displays. Writes stay behind integrator/agent auth.
+Catalog read endpoints stay public for analytics pages. Live status requires auth.
 """
 
 from __future__ import annotations
@@ -58,6 +57,6 @@ def get_code(code: str) -> dict:
 
 
 @router.get("/status")
-def get_status() -> dict:
+def get_status(_user: dict = Depends(require_user)) -> dict:
     """Live GREEN/YELLOW/RED traffic + active faults grouped by equipment family."""
     return {"ok": True, **faults_by_family()}

@@ -66,7 +66,7 @@ def agent_context(user: dict = _AGENT_ROLES) -> dict:
             ""
             if chat_enabled
             else (
-                "No NVIDIA GPU detected — local Agent chat is disabled (CPU inference is too slow)."
+                "Local Ollama is not available on this CPU-only edge — use Building status, Rule Lab, and MCP from an external agent (Cursor, OpenClaw)."
                 if not gpu_ok
                 else str(ollama.get("error") or "Ollama unreachable")
             )

@@ -12,8 +12,8 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 # Plotly + Vite SPA: hashed JS/CSS under /assets.
-# TODO: remove style-src 'unsafe-inline' after migrating inline styles to hashed CSS
-# modules or nonce-based CSP (Vite/React style injection currently requires unsafe-inline).
+# style-src 'unsafe-inline' is required today — Vite/React/Plotly inject inline styles at runtime.
+# Removing 'unsafe-inline' breaks trend charts and layout (verified 2026-06); migrate to nonce/hash CSP later.
 _CSP = (
     "default-src 'self'; "
     "base-uri 'self'; "
@@ -39,6 +39,23 @@ _SECURITY_HEADERS: dict[str, str] = {
 }
 
 
+def _cache_control_for_path(path: str) -> str | None:
+    """Sensitive API/auth/data responses must not be cached by browsers or proxies."""
+    if path.startswith("/api/"):
+        return "no-store"
+    if path in {"/health/stack", "/health/revisions"}:
+        return "no-store"
+    if path.startswith("/openfdd-agent/") and path not in {
+        "/openfdd-agent/building-insight",
+        "/openfdd-agent/operational-brief",
+        "/openfdd-agent/zone-temps",
+        "/openfdd-agent/device-poll-health",
+        "/openfdd-agent/ollama/health",
+    }:
+        return "no-store"
+    return None
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> object:
         response: Response = await call_next(request)
@@ -50,6 +67,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             }:
                 continue
             response.headers[key] = value
+        cache_control = _cache_control_for_path(request.url.path)
+        if cache_control and "cache-control" not in response.headers:
+            response.headers["Cache-Control"] = cache_control
         # Avoid stacking uvicorn/Caddy Server banners on the wire.
         if "server" in response.headers:
             del response.headers["server"]

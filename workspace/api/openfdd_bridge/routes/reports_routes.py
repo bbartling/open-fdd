@@ -1,21 +1,34 @@
-"""RCx report preview and DOCX generation (read-only)."""
+"""RCx report preview, generation, and persisted report downloads (read-only)."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from ..dashboard_analytics import build_rcx_preview
+from ..deps import require_user
+from ..rcx.chart_preview import build_rcx_preview, generate_rcx_docx
+from ..rcx.rcx_points import list_report_point_tree, list_report_points
+from ..rcx.report_store import list_reports, resolve_report, save_report
+from ..rcx.workspace import get_workspace
 
 router = APIRouter(prefix="/api/reports/rcx", tags=["reports"])
 
 
 class RcxPreviewRequest(BaseModel):
     site_id: str = ""
-    hours: int = Field(default=24, ge=2, le=168)
+    hours: int = Field(default=24, ge=2, le=8760)
+    start: str | None = None
+    end: str | None = None
+    chart_ids: list[str] = Field(default_factory=list)
+    custom_columns: list[str] = Field(default_factory=list)
+    show_fault_overlays: bool = True
+    include_previews: bool = True
+    catalog_only: bool = False
+    gallery_mode: bool = False
+    bundle_ids: list[str] = Field(default_factory=list)
     scope: str = "building"
     equipment_ids: list[str] = Field(default_factory=list)
 
@@ -23,65 +36,111 @@ class RcxPreviewRequest(BaseModel):
 class RcxGenerateRequest(RcxPreviewRequest):
     sections: list[str] = Field(default_factory=list)
     charts: list[str] = Field(default_factory=list)
+    save_to_volume: bool = True
+
+
+@router.get("/workspace")
+def rcx_workspace(
+    site_id: str = "",
+    hours: int = 24,
+    start: str | None = None,
+    end: str | None = None,
+    show_fault_overlays: bool = True,
+    _user: dict = Depends(require_user),
+) -> dict[str, Any]:
+    return get_workspace(
+        site_id=site_id,
+        hours=hours,
+        start=start,
+        end=end,
+        show_fault_overlays=show_fault_overlays,
+    )
+
+
+@router.get("/points")
+def rcx_points(site_id: str = "", limit: int = 500, _user: dict = Depends(require_user)) -> dict[str, Any]:
+    return list_report_points(site_id, limit=limit)
+
+
+@router.get("/point-tree")
+def rcx_point_tree(site_id: str = "", limit: int = 500, _user: dict = Depends(require_user)) -> dict[str, Any]:
+    return list_report_point_tree(site_id, limit=limit)
 
 
 @router.post("/preview")
-def rcx_preview(body: RcxPreviewRequest) -> dict[str, Any]:
-    """Data readiness preview for RCx Report Builder."""
+def rcx_preview(body: RcxPreviewRequest, _user: dict = Depends(require_user)) -> dict[str, Any]:
+    """Data readiness preview and optional chart gallery for RCx Report Builder."""
     return build_rcx_preview(
         site_id=body.site_id,
         hours=body.hours,
+        start=body.start,
+        end=body.end,
+        chart_ids=body.chart_ids or None,
+        custom_columns=body.custom_columns or None,
+        show_fault_overlays=body.show_fault_overlays,
+        include_previews=body.include_previews,
+        catalog_only=body.catalog_only,
+        gallery_mode=body.gallery_mode,
+        bundle_ids=body.bundle_ids or None,
         scope=body.scope,
-        equipment_ids=body.equipment_ids,
+        equipment_ids=body.equipment_ids or None,
     )
+
+
+@router.post("/charts/preview")
+def rcx_charts_preview(body: RcxPreviewRequest, _user: dict = Depends(require_user)) -> dict[str, Any]:
+    return rcx_preview(body)
 
 
 @router.post("/generate")
-def rcx_generate(body: RcxGenerateRequest) -> Response:
+def rcx_generate(body: RcxGenerateRequest, _user: dict = Depends(require_user)) -> Response:
     """Generate downloadable RCx DOCX from selected sections/charts."""
-    preview = build_rcx_preview(
-        site_id=body.site_id,
-        hours=body.hours,
-        scope=body.scope,
-        equipment_ids=body.equipment_ids,
-    )
+    charts = [str(c).strip() for c in (body.charts or body.chart_ids or []) if c and str(c).strip()]
+    sections = [str(s).strip() for s in (body.sections or []) if s and str(s).strip()]
+    bundle_ids = [str(b).strip() for b in (body.bundle_ids or []) if b and str(b).strip()]
     try:
-        from open_fdd.reports.rcx_docx import build_rcx_docx
-    except ImportError as exc:
-        from fastapi import HTTPException
-
-        raise HTTPException(
-            status_code=503,
-            detail="Report generation requires python-docx (install bridge requirements).",
-        ) from exc
-
-    overview = {
-        "active_faults": preview.get("fault_summary", {}).get("active_faults"),
-        "total_fault_hours": preview.get("fault_summary", {}).get("total_fault_hours"),
-        "model_health": preview.get("fault_summary"),
-        "missing_roles": preview.get("missing_roles"),
-    }
-    try:
-        docx_bytes = build_rcx_docx(
-            site_id=body.site_id or str(preview.get("site") or ""),
-            site_name=str(preview.get("site_name") or preview.get("site") or "Edge"),
-            window=preview.get("window") or {},
-            fault_rows=preview.get("fault_rows") or [],
-            overview=overview,
-            sections=body.sections or None,
-            charts=body.charts or None,
-            warnings=preview.get("warnings") or [],
+        docx_bytes, fname = generate_rcx_docx(
+            site_id=body.site_id,
+            hours=body.hours,
+            start=body.start,
+            end=body.end,
+            sections=sections or None,
+            charts=charts or None,
+            custom_columns=body.custom_columns or None,
+            show_fault_overlays=body.show_fault_overlays,
+            bundle_ids=bundle_ids or None,
+            equipment_ids=body.equipment_ids or None,
         )
     except ModuleNotFoundError as exc:
-        from fastapi import HTTPException
-
         raise HTTPException(
             status_code=503,
             detail="Report generation requires python-docx (install bridge requirements).",
         ) from exc
-    fname = f"openfdd-rcx-{body.site_id or 'edge'}.docx"
+
+    if body.save_to_volume:
+        save_report(fname, docx_bytes)
+
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@router.get("/list")
+def rcx_report_list(limit: int = 100, _user: dict = Depends(require_user)) -> dict[str, Any]:
+    reports = list_reports(limit=limit)
+    return {"reports": reports, "count": len(reports)}
+
+
+@router.get("/download/{filename}")
+def rcx_report_download(filename: str, _user: dict = Depends(require_user)) -> FileResponse:
+    try:
+        path = resolve_report(filename)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(
+        path,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=path.name,
     )

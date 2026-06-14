@@ -47,6 +47,9 @@ unset OFDD_AUTH_SECRET OFDD_OPERATOR_USER OFDD_OPERATOR_PASSWORD \
 echo "==> Smoke: compiled SPA present"
 test -f workspace/api/static/app/index.html
 
+echo "==> Production asset security scan"
+python scripts/check_production_assets.py
+
 echo "==> Supervisor manifest vs Dockerfile"
 chmod +x scripts/validate_supervisor_manifest.sh
 ./scripts/validate_supervisor_manifest.sh

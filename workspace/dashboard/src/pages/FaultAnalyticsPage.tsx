@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import PageHeader from "../components/PageHeader";
+import FaultCatalogSection from "../components/FaultCatalogSection";
 import { AnalyticsBarChart, SeverityBadge } from "../components/analytics/AnalyticsCharts";
 import { fetchFaultAnalytics } from "../lib/analytics-api";
 import { useTheme } from "../contexts/theme-context";
@@ -30,7 +31,10 @@ export default function FaultAnalyticsPage() {
 
   return (
     <div className="analytics-page">
-      <PageHeader title="Fault analytics" subtitle="Worst equipment and rules by elapsed fault hours" />
+      <PageHeader
+        title="Fault analytics"
+        subtitle="Elapsed fault hours, live rule hits, and SPARQL-scoped fault catalog for your site"
+      />
       <div className="toolbar-row">
         {RANGES.map((r) => (
           <button
@@ -97,6 +101,7 @@ export default function FaultAnalyticsPage() {
           </tbody>
         </table>
       </section>
+      <FaultCatalogSection />
     </div>
   );
 }

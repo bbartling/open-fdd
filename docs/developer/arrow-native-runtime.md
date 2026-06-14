@@ -28,6 +28,18 @@ Cookbook helpers: `open_fdd.arrow_runtime.cookbook` (flatline, spread, OOB, afte
 
 Script-mode analytics rules receive `table` (PyArrow) and `cfg` in the sandbox — not pandas DataFrames.
 
+## PyArrow-only policy (edge + Rule Lab)
+
+| Allowed | Forbidden |
+|---------|-----------|
+| `pyarrow` (`pa`), `pyarrow.compute` (`pc`) | `import pandas`, `pd.DataFrame`, `to_pandas()` |
+| `open_fdd.arrow_runtime.cookbook` helpers | `import numpy` for rule logic |
+| Script mode globals: `table`, `cfg`, `out` | Legacy `df` DataFrame scripts |
+
+Rule Lab **lint** (`POST /api/playground/lint`) and rule **save** reject pandas patterns with agent-facing errors, e.g. *use `table` (PyArrow), not `df`*.
+
+Fault rules: `apply_faults_arrow(table, cfg, context=None)`. Analytics scripts: top-level code on `table`/`cfg`, set `out = {"events": [...], "metrics": {...}}`.
+
 ## Package layout
 
 | Module | Role |

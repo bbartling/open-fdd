@@ -19,6 +19,7 @@ from .routes import (
     audit_routes,
     auth_routes,
     bacnet_routes,
+    bench_routes,
     building_agent_routes,
     building_routes,
     fdd_routes,
@@ -27,6 +28,7 @@ from .routes import (
     host_routes,
     json_api_routes,
     modbus_routes,
+    niagara_routes,
     model_routes,
     ops_routes,
     playground_routes,
@@ -45,6 +47,7 @@ async def _lifespan(_app: FastAPI):
     from .json_api_poll_worker import start_json_api_poll_worker
     from .log_rotation import rotate_logs_on_startup, start_log_rotation_worker
     from .modbus_poll_worker import start_modbus_poll_worker
+    from .niagara_poll_worker import start_niagara_poll_worker
 
     from .deployment_roles import log_bridge_deployment_roles
 
@@ -54,6 +57,7 @@ async def _lifespan(_app: FastAPI):
     log_bridge_deployment_roles()
     start_bacnet_poll_worker()
     start_modbus_poll_worker()
+    start_niagara_poll_worker()
     start_json_api_poll_worker()
     yield
 
@@ -94,7 +98,9 @@ def create_app() -> FastAPI:
     app.include_router(faults_routes.router)
     app.include_router(sites_routes.router)
     app.include_router(bacnet_routes.router)
+    app.include_router(bench_routes.router)
     app.include_router(modbus_routes.router)
+    app.include_router(niagara_routes.router)
     app.include_router(json_api_routes.router)
     app.include_router(agent_routes.router)
     app.include_router(host_routes.router)

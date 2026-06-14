@@ -36,7 +36,7 @@ def load_demo_dataframe(site_id: str | None = None) -> pd.DataFrame:
     )
 
 
-DRIVER_SOURCES = ("bacnet", "modbus", "json_api")
+DRIVER_SOURCES = ("bacnet", "modbus", "json_api", "niagara_baskstream")
 
 
 def load_site_frame(

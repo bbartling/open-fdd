@@ -15,6 +15,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 
 from .config import configure_arrow_runtime
+from .pyarrow_policy import FORBIDDEN_IMPORT_ROOTS, NO_PANDAS_AGENT_MSG, lint_pyarrow_only
 from .summary import preview_fault_rows, summarize_arrow_run
 
 ALLOWED_ARROW_IMPORT_ROOTS = frozenset(
@@ -79,20 +80,30 @@ def lint_arrow_rule(code: str, *, strict_imports: bool = True) -> dict[str, Any]
             for alias in node.names:
                 root = alias.name.split(".")[0]
                 if root not in ALLOWED_ARROW_IMPORT_ROOTS:
+                    msg = (
+                        f"import '{alias.name}' forbidden — {NO_PANDAS_AGENT_MSG}"
+                        if root in FORBIDDEN_IMPORT_ROOTS
+                        else f"import '{alias.name}' not allowed in Arrow rules"
+                    )
                     issues.append(
                         {
                             "line": node.lineno,
-                            "message": f"import '{alias.name}' not allowed in Arrow rules",
+                            "message": msg,
                             "severity": "error" if strict_imports else "warning",
                         }
                     )
         elif isinstance(node, ast.ImportFrom) and node.module:
             root = node.module.split(".")[0]
             if root not in ALLOWED_ARROW_IMPORT_ROOTS:
+                msg = (
+                    f"import from '{node.module}' forbidden — {NO_PANDAS_AGENT_MSG}"
+                    if root in FORBIDDEN_IMPORT_ROOTS
+                    else f"import from '{node.module}' not allowed"
+                )
                 issues.append(
                     {
                         "line": node.lineno,
-                        "message": f"import from '{node.module}' not allowed",
+                        "message": msg,
                         "severity": "error" if strict_imports else "warning",
                     }
                 )
@@ -127,6 +138,7 @@ def lint_arrow_rule(code: str, *, strict_imports: bool = True) -> dict[str, Any]
                     "severity": "warning",
                 }
             )
+    issues.extend(lint_pyarrow_only(tree, script_mode=False))
     return {"ok": not any(i["severity"] == "error" for i in issues), "issues": issues}
 
 

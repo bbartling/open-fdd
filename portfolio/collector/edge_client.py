@@ -91,6 +91,38 @@ def api_post(
     return raw
 
 
+def api_post_bytes(
+    base_url: str,
+    token: str,
+    path: str,
+    body: dict[str, Any],
+    *,
+    timeout: int = 600,
+) -> tuple[bytes, str]:
+    """POST JSON body; return raw response bytes and Content-Disposition filename."""
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    data = json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(
+        f"{base_url.rstrip('/')}{path}",
+        data=data,
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            content = resp.read()
+            disp = resp.headers.get("Content-Disposition") or ""
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:800]
+        raise RuntimeError(f"HTTP {exc.code} {path}: {detail}") from exc
+    fname = "openfdd-rcx.docx"
+    if "filename=" in disp:
+        fname = disp.split("filename=", 1)[-1].strip().strip('"')
+    return content, fname
+
+
 def api_patch(
     base_url: str,
     token: str,
@@ -237,3 +269,45 @@ class EdgeClient:
         timeout: int = 8,
     ) -> dict[str, Any]:
         return fetch_portfolio_rollup(self.base_url, token, site_id=site_id, timeout=timeout)
+
+    def get_rcx_workspace(
+        self,
+        site_id: str,
+        *,
+        hours: int = 24,
+        start: str | None = None,
+        end: str | None = None,
+        show_fault_overlays: bool = True,
+        token: str = "",
+    ) -> dict[str, Any]:
+        params: list[str] = [
+            f"site_id={urllib.parse.quote(site_id)}",
+            f"hours={hours}",
+            f"show_fault_overlays={'true' if show_fault_overlays else 'false'}",
+        ]
+        if start:
+            params.append(f"start={urllib.parse.quote(start)}")
+        if end:
+            params.append(f"end={urllib.parse.quote(end)}")
+        return self.api_get(f"/api/reports/rcx/workspace?{'&'.join(params)}", token=token)
+
+    def get_rcx_points(self, site_id: str, *, limit: int = 500, token: str = "") -> dict[str, Any]:
+        return self.api_get(
+            f"/api/reports/rcx/points?site_id={urllib.parse.quote(site_id)}&limit={limit}",
+            token=token,
+        )
+
+    def get_rcx_point_tree(self, site_id: str, *, limit: int = 500, token: str = "") -> dict[str, Any]:
+        return self.api_get(
+            f"/api/reports/rcx/point-tree?site_id={urllib.parse.quote(site_id)}&limit={limit}",
+            token=token,
+        )
+
+    def post_rcx_preview(self, body: dict[str, Any], *, token: str = "") -> dict[str, Any]:
+        return self.api_post("/api/reports/rcx/preview", body, token=token)
+
+    def post_rcx_generate(self, body: dict[str, Any], *, token: str = "") -> tuple[bytes, str]:
+        return api_post_bytes(self.base_url, token, "/api/reports/rcx/generate", body)
+
+    def list_rcx_reports(self, *, limit: int = 100, token: str = "") -> dict[str, Any]:
+        return self.api_get(f"/api/reports/rcx/list?limit={limit}", token=token)

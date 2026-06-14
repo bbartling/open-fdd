@@ -316,9 +316,15 @@ def run_arrow_script(
             "ms": int((time.time() - started) * 1000),
         }
     except Exception as exc:
+        err = sanitize_traceback_text(str(exc)) or "script failed"
+        if "df" in err and "not defined" in err:
+            err = (
+                f"{err} — script mode injects PyArrow `table`, not `df`. "
+                "Use pyarrow.compute (pc); see docs/developer/arrow-native-runtime.md"
+            )
         return {
             "ok": False,
-            "error": sanitize_traceback_text(str(exc)) or "script failed",
+            "error": err,
             "trace": sanitize_traceback_text(traceback.format_exc(limit=8)),
             "stdout": "",
             "ms": int((time.time() - started) * 1000),

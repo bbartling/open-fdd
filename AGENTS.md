@@ -53,8 +53,22 @@ This repository is **Arrow-native FDD only** (3.0.1+). The published PyPI wheel 
 | Portfolio MCP / morning check | [skills/openfdd-portfolio-agent/SKILL.md](skills/openfdd-portfolio-agent/SKILL.md) |
 | MCP server (stdio/HTTP) | [skills/openfdd-mcp-server/SKILL.md](skills/openfdd-mcp-server/SKILL.md) |
 | BRICK TTL model | [skills/brick-ttl-data-model/SKILL.md](skills/brick-ttl-data-model/SKILL.md) |
+| **Local bench BACnet vs Niagara** | [docs/agent-skills/bench-validation-agent.md](docs/agent-skills/bench-validation-agent.md) |
 
 Load each selected skill's `SKILL.md` and follow linked `references/REFERENCE.md` for route tables and env catalogs.
+
+## Local bench (benserver, read-only)
+
+Dual-source validation: native BACnet device **5007** vs Niagara **baskStream** on the same physical **BENS BENCHTEST BOX**.
+
+```bash
+export OPENFDD_NIAGARA_ADMIN_PASSWORD='…'   # env only — never commit
+python3 scripts/bootstrap_bench_dual_source.py
+python3 scripts/bench_validate_bacnet_vs_niagara.py --write-report
+python3 scripts/run_overnight_bench_smoke.py --dry-run
+```
+
+Docs: [bench-bacnet-vs-niagara.md](docs/bench-bacnet-vs-niagara.md), [niagara-baskstream-connector.md](docs/niagara-baskstream-connector.md).
 
 ## Model routing policy
 

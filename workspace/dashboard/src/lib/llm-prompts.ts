@@ -4,6 +4,7 @@ export const MODEL_COMMISSIONING_PROMPT = `You are an HVAC ontology and FDD comm
 Task:
 1) Wait until I upload openfdd-commissioning.json from GET /api/model/commissioning-export.
 2) Do not produce final output until the export is present.
+3) Ask the commissioning engineer for any missing context before finalizing (site topology, equipment names, historian column names, expected setpoints, and which rules should apply to which equipment).
 
 When the export is available:
 - Redefine/enrich BRICK sites, equipment, and points (preserve point ids when possible).
