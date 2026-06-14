@@ -100,6 +100,13 @@ load_env_files() {
     set +a
     [[ "$quiet" == false ]] && echo "Loaded workspace/json_api.env.local (JSON API env placeholders)" || true
   fi
+  if [[ -f "${ROOT}/workspace/niagara.env.local" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "${ROOT}/workspace/niagara.env.local"
+    set +a
+    [[ "$quiet" == false ]] && echo "Loaded workspace/niagara.env.local (Niagara baskStream)" || true
+  fi
   if [[ -f "${ROOT}/workspace/ollama.env.local" ]]; then
     set -a
     # shellcheck disable=SC1091
@@ -528,6 +535,23 @@ print_lan_note() {
   fi
 }
 
+run_bench_smoke() {
+  if [[ "${OFDD_SMOKE_BENCH:-1}" == "0" ]]; then
+    return 0
+  fi
+  if [[ ! -f "${ROOT}/scripts/smoke_benserver_bench.py" ]]; then
+    return 0
+  fi
+  echo ""
+  echo "Benserver bench smoke (dual devices + agnostic rules)…"
+  if python3 "${ROOT}/scripts/smoke_benserver_bench.py"; then
+    echo "Benserver bench smoke: OK"
+  else
+    echo "Benserver bench smoke: FAILED (set OFDD_SMOKE_BENCH=0 to skip; use --strict-cross-source for hard match)" >&2
+    return 1
+  fi
+}
+
 case "$CMD" in
   start|up)
     start_mcp_rag
@@ -559,6 +583,7 @@ case "$CMD" in
       echo "                     http://127.0.0.1:${OFDD_BRIDGE_PORT}/  (production static/app bundle)"
     fi
     print_lan_note
+    run_bench_smoke || true
     if [[ "$DEV_UI" == true ]]; then
       echo "Vite dev (optional): http://127.0.0.1:5173/  — not the same as Ansible/production UI"
     fi
