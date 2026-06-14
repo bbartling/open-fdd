@@ -98,6 +98,30 @@ def test_validate_bacnet_vs_niagara_passes(bench_samples):
     assert report["summary"]["passed"] >= 4
 
 
+def test_validate_niagara_from_poll_csv_without_memory(bench_samples, monkeypatch):
+    import os
+    from datetime import datetime, timezone
+    from openfdd_bridge.niagara_store import _LAST_VALUES
+
+    ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    niagara_csv = """timestamp_utc,site_id,point_id,station_id,point_ord,point_name,value,status,source
+{ts},demo,niagara-oa-t,bench9065,slot:/Drivers/BacnetNetwork/BENS$20BENCHTEST$20BOX/points/OA$2dT,OA-T,76.2,{{ok}},niagara_baskstream
+{ts},demo,niagara-oa-h,bench9065,slot:/Drivers/BacnetNetwork/BENS$20BENCHTEST$20BOX/points/OA$2dH,OA-H,46.0,{{ok}},niagara_baskstream
+{ts},demo,niagara-duct-t,bench9065,slot:/Drivers/BacnetNetwork/BENS$20BENCHTEST$20BOX/points/DUCT$2dT,DUCT-T,53.5,{{ok}},niagara_baskstream
+{ts},demo,niagara-stat,bench9065,slot:/Drivers/BacnetNetwork/BENS$20BENCHTEST$20BOX/points/STAT$20ZN$2dT,STAT ZN-T,77.1,{{ok}},niagara_baskstream
+{ts},demo,niagara-cs,bench9065,slot:/Drivers/BacnetNetwork/BENS$20BENCHTEST$20BOX/points/CURRENT$2dS,CURRENT-S,false,{{ok}},niagara_baskstream
+""".format(ts=ts)
+    workspace = Path(os.environ["OPENFDD_WORKSPACE_DIR"])
+    (workspace / "niagara" / "polls").mkdir(parents=True, exist_ok=True)
+    (workspace / "niagara" / "polls" / "samples.csv").write_text(niagara_csv)
+    _LAST_VALUES.clear()
+
+    report = validate_bacnet_vs_niagara()
+    oa = next(p for p in report["points"] if p["semantic_point_id"] == "oa-t")
+    assert oa["pass"] is True
+    assert not oa["missing_niagara"]
+
+
 def test_export_report_markdown():
     report = {"bench_device": "BENS", "validated_at": "t", "ok": True, "summary": {"score_pct": 100}, "points": []}
     md = export_report_markdown(report)

@@ -102,8 +102,11 @@ def bootstrap_direct(*, skip_bacnet_discover: bool) -> dict:
     model_path = REPO / "workspace" / "data" / "bench_dual_source_model.json"
     if model_path.is_file():
         payload = json.loads(model_path.read_text(encoding="utf-8"))
-        results["model"] = ModelService().import_json(payload, replace=False)
-        TtlService().sync()
+        try:
+            results["model"] = ModelService().import_json(payload, replace=False)
+            TtlService().sync()
+        except (PermissionError, OSError) as exc:
+            results["model"] = {"skipped": True, "error": str(exc)}
     return results
 
 

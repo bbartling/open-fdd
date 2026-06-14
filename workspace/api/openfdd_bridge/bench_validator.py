@@ -62,10 +62,41 @@ def _latest_bacnet_samples() -> dict[str, dict[str, Any]]:
     return out
 
 
+def _latest_niagara_samples_from_csv(station_id: str) -> dict[str, dict[str, Any]]:
+    """Last sample per point_ord from Niagara poll CSV (cross-process safe)."""
+    from .paths import niagara_poll_csv
+
+    path = niagara_poll_csv()
+    out: dict[str, dict[str, Any]] = {}
+    if not path.is_file():
+        return out
+    with path.open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            if str(row.get("station_id") or "") != station_id:
+                continue
+            ord_value = str(row.get("point_ord") or "").strip()
+            if not ord_value:
+                continue
+            ts = str(row.get("timestamp_utc") or "")
+            prev = out.get(ord_value)
+            if prev is None or ts >= str(prev.get("timestamp") or ""):
+                out[ord_value] = {
+                    "point_ord": ord_value,
+                    "point_id": str(row.get("point_id") or ""),
+                    "value": row.get("value"),
+                    "timestamp": ts,
+                    "status": str(row.get("status") or "ok"),
+                    "point_name": str(row.get("point_name") or ""),
+                }
+    return out
+
+
 def _latest_niagara_values(station_id: str) -> dict[str, dict[str, Any]]:
     from .niagara_store import get_last_values, load_points_cache, make_point_id
 
     last = get_last_values(station_id)
+    if not last:
+        last = _latest_niagara_samples_from_csv(station_id)
     points = {p["point_ord"]: p for p in load_points_cache(station_id)}
     out: dict[str, dict[str, Any]] = {}
     for ord_value, row in last.items():

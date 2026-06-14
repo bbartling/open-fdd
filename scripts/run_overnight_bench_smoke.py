@@ -37,6 +37,15 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def _bridge_reachable(base: str) -> bool:
+    try:
+        req = urllib.request.Request(f"{base.rstrip('/')}/health")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status == 200
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return False
+
+
 def _run_pytest(targets: list[str]) -> dict:
     cmd = [sys.executable, "-m", "pytest", *targets, "-q", "--tb=line"]
     env = {**os.environ, "PYTHONPATH": f"{API}:{REPO}"}
@@ -151,7 +160,14 @@ def main() -> int:
     (run_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
     if not args.skip_bootstrap:
-        subprocess.run([sys.executable, str(REPO / "scripts" / "bootstrap_bench_dual_source.py")], check=False)
+        bootstrap_cmd = [
+            sys.executable,
+            str(REPO / "scripts" / "bootstrap_bench_dual_source.py"),
+            "--skip-bacnet-discover",
+        ]
+        if args.api and _bridge_reachable(args.api):
+            bootstrap_cmd += ["--api", args.api, "--niagara-only"]
+        subprocess.run(bootstrap_cmd, check=False, env={**os.environ, "PYTHONPATH": f"{API}:{REPO}"})
 
     duration_s = args.duration_hours * 3600
     checkpoint_s = args.checkpoint_hours * 3600
