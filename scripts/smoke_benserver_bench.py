@@ -157,10 +157,17 @@ def _try_niagara_poll(token: str) -> bool:
         token=token,
         timeout=120.0,
     )
-    if status == 200 and isinstance(body, dict) and body.get("ok"):
-        pts = int(body.get("points_read") or body.get("point_count") or 0)
-        ok(f"Niagara bench9065 poll once — {pts} point(s)")
-        return True
+    if status == 200 and isinstance(body, dict):
+        pts = int(
+            body.get("points_read")
+            or body.get("point_count")
+            or body.get("samples")
+            or (body.get("ingest") or {}).get("ingested")
+            or 0
+        )
+        if body.get("ok") or pts > 0:
+            ok(f"Niagara bench9065 poll once — {pts} sample(s)")
+            return True
     fail(f"Niagara poll once failed: HTTP {status} {body if isinstance(body, dict) else body}")
     return False
 

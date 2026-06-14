@@ -3086,6 +3086,46 @@ button.linkish {
   cursor: not-allowed;
 }
 
+.rcx-builder-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.rcx-intro {
+  margin: 0;
+}
+
+.rcx-toolbar-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.rcx-toolbar-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.rcx-actions-block {
+  margin-top: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.rcx-bundle-field {
+  margin: 0;
+}
+
+.rcx-date-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
 .error-panel,
 .error-text {
   color: var(--danger);

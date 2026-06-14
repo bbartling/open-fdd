@@ -130,8 +130,8 @@ export default function DataModelPage() {
         title="Model & FDD assignments"
         subtitle={
           <>
-            Site <code>{activeSiteId || "…"}</code> · {eqCount} equipment · {pointCount} points · {ruleCount} rules ·{" "}
-            {boundPoints} bound points · edit BRICK + rule pins via commissioning JSON (Import / export tab)
+            {eqCount} equipment · {pointCount} points · {ruleCount} rules · {boundPoints} bound points — enhance the
+            model with AI, then import assignments here
           </>
         }
       />

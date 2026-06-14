@@ -84,7 +84,7 @@ def _window(
             s = datetime.fromisoformat(str(start).replace("Z", "+00:00"))
             e = datetime.fromisoformat(str(end).replace("Z", "+00:00"))
             if e > s:
-                span_h = max(2, min(168, int((e - s).total_seconds() // 3600) or hours))
+                span_h = max(2, min(8760, int((e - s).total_seconds() // 3600) or hours))
                 return s.isoformat(), e.isoformat(), span_h
         except ValueError:
             pass

@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/reports/rcx", tags=["reports"])
 
 class RcxPreviewRequest(BaseModel):
     site_id: str = ""
-    hours: int = Field(default=24, ge=2, le=168)
+    hours: int = Field(default=24, ge=2, le=8760)
     start: str | None = None
     end: str | None = None
     chart_ids: list[str] = Field(default_factory=list)

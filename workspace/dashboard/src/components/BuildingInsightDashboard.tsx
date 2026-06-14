@@ -8,6 +8,7 @@ import { computeBuildingHealthIndex } from "../lib/healthScores";
 import BuildingStrip from "./buildingInsight/BuildingStrip";
 import ComfortZonePanel from "./buildingInsight/ComfortZonePanel";
 import FaultCard from "./buildingInsight/FaultCard";
+import FddRulesInServicePanel from "./buildingInsight/FddRulesInServicePanel";
 import FaultDetailModal from "./buildingInsight/FaultDetailModal";
 import HealthGauge from "./buildingInsight/HealthGauge";
 import type { InsightResponse } from "../lib/insightTypes";
@@ -111,10 +112,6 @@ export default function BuildingInsightDashboard() {
           .join(" · ");
 
   const days = insight?.lookback_days ?? 14;
-  const updatedLabel =
-    insight?.generated_at != null
-      ? new Date(insight.generated_at * 1000).toLocaleString()
-      : null;
 
   if (streamError && !snapshot) {
     return (
@@ -238,49 +235,10 @@ export default function BuildingInsightDashboard() {
           ) : (
             <p className="bis-lead bis-ok-text">All clear — no open faults or model warnings.</p>
           )}
-        </div>
-
-        <div className="bis-card">
-          <h3>Devices with issues</h3>
-          {insight?.faults_linked?.length ? (
-            <ul className="bis-device-faults">
-              {insight.faults_linked.slice(0, 8).map((f, i) => (
-                <li key={`${f.equipment_id || f.equipment_name}-${f.symptom}-${i}`}>
-                  <div className="bis-device-fault-head">
-                    <strong className="bis-device-name">{f.equipment_name || "Unknown device"}</strong>
-                    {f.data_source ? <span className="bis-source-badge">{f.data_source}</span> : null}
-                  </div>
-                  <div className="bis-device-symptom">{f.short_description || f.symptom || f.rule_name}</div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="muted">No active FDD faults on modeled devices.</p>
-          )}
-          {insight?.brick_model?.feeds_chains?.length ? (
-            <p className="bis-muted-line bis-foot-feeds">
-              <strong>BRICK feeds:</strong> {insight.brick_model.feeds_chains.slice(0, 4).join("; ")}
-              {(insight.brick_model.feeds_chains.length ?? 0) > 4 ? " …" : ""}
-            </p>
-          ) : null}
-          {insight?.zone_temps?.struggling_zones?.length ? (
-            <p className="bis-muted-line">
-              <strong>Slow recovery:</strong>{" "}
-              {insight.zone_temps.struggling_zones
-                .slice(0, 4)
-                .map((z) => `${z.label || "?"} (${z.ahu_name || "AHU"})`)
-                .join(", ")}
-            </p>
-          ) : null}
-          <p className="bis-foot-meta">
-            {insight?.source === "ollama" ? "AI summary" : "Rule-based summary"}
-            {updatedLabel ? ` · updated ${updatedLabel}` : ""}
-            {insight?.refresh_interval_s
-              ? ` · every ${Math.round(insight.refresh_interval_s / 60)} min`
-              : ""}
-          </p>
           {insightError ? <p className="error">{insightError}</p> : null}
         </div>
+
+        <FddRulesInServicePanel />
       </div>
 
       <FaultDetailModal fault={selectedFault} onClose={() => setSelectedFault(null)} />

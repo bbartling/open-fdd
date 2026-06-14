@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
+import { copyToClipboard } from "../lib/clipboard";
+import { buildLlmCommissioningBundle } from "../lib/llmModelBundle";
+import { MODEL_COMMISSIONING_PROMPT } from "../lib/llm-prompts";
 import {
   assignmentSummary,
   semanticRulePinRows,
@@ -18,6 +21,7 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
   const [importText, setImportText] = useState("");
   const [exportLoading, setExportLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
+  const [copyBusy, setCopyBusy] = useState(false);
 
   const loadExport = useCallback(async () => {
     setExportLoading(true);
@@ -86,7 +90,7 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
     try {
       const payload = parseCommissioningPayload(importText);
       const confirmed = window.confirm(
-        "Import replaces sites, equipment, and points, then applies FDD rule bindings from fdd_rules and points[].fdd_rule_ids. Continue?",
+        "Import replaces sites, equipment, points, and FDD rule bindings from the uploaded model. Continue?",
       );
       if (!confirmed) {
         onStatus("Import canceled.");
@@ -140,17 +144,37 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
     }
   }
 
+  async function copyExportForAi() {
+    if (!exportText.trim()) {
+      onStatus("Refresh export first.");
+      return;
+    }
+    setCopyBusy(true);
+    try {
+      const payload = parseCommissioningPayload(exportText);
+      await copyToClipboard(buildLlmCommissioningBundle(MODEL_COMMISSIONING_PROMPT, payload));
+      onStatus("Copied AI prompt + model JSON — paste into your chat session and ask the engineer for any missing site context.");
+    } catch (error) {
+      onStatus(`Copy failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setCopyBusy(false);
+    }
+  }
+
   return (
     <div className="dm-io-grid">
       <section className="dm-io-panel panel">
         <header className="dm-io-head">
-          <h3 className="panel-title">Export commissioning JSON</h3>
+          <h3 className="panel-title">Export for AI</h3>
           <div className="row">
             <button type="button" className="secondary-btn" disabled={exportLoading} onClick={() => void loadExport()}>
               {exportLoading ? "Loading…" : "Refresh"}
             </button>
+            <button type="button" disabled={copyBusy || !exportText.trim()} onClick={() => void copyExportForAi()}>
+              {copyBusy ? "Copying…" : "Copy for AI"}
+            </button>
             <button type="button" disabled={!exportText.trim()} onClick={downloadExport}>
-              Download
+              Download JSON
             </button>
           </div>
         </header>
@@ -200,15 +224,15 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
           readOnly
           className="dm-json-editor"
           value={exportText}
-          placeholder="Click Refresh to load BRICK model + FDD assignments…"
+          placeholder="Click Refresh to load the live BRICK model and rule assignments…"
         />
       </section>
 
       <section className="dm-io-panel panel">
         <header className="dm-io-head">
-          <h3 className="panel-title">Import commissioning JSON</h3>
+          <h3 className="panel-title">Upload AI-enhanced model</h3>
           <label className="secondary-btn file-upload-btn">
-            Upload file
+            Choose file
             <input
               type="file"
               accept=".json,application/json,text/plain"
@@ -221,19 +245,18 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
           </label>
         </header>
         <p className="muted">
-          Edit assignments with <code>points[].fdd_rule_ids</code> — use ids from <code>fdd_rules[].id</code> (names are
-          in <code>fdd_rules_linked</code> on export for readability). Supports <code>import_ready_json</code> wrappers.
+          Paste or upload the JSON your AI assistant returned after enhancing the export. Validate before import.
         </p>
         <textarea
           className="dm-json-editor"
           value={importText}
           onChange={(e) => setImportText(e.target.value)}
-          placeholder='{"sites":[…],"equipment":[…],"points":[{"id":"…","fdd_rule_ids":["rule-id"]}],"fdd_rules":[…]}'
+          placeholder="Paste AI-enhanced model JSON here…"
           spellCheck={false}
         />
         <div className="row">
           <button type="button" disabled={importLoading || !importText.trim()} onClick={() => void doImport()}>
-            {importLoading ? "Importing…" : "Import model + FDD assignments"}
+            {importLoading ? "Importing…" : "Import model"}
           </button>
           <button type="button" className="secondary-btn" disabled={!importText.trim()} onClick={() => void validateImport()}>
             Validate import JSON

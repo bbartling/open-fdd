@@ -119,6 +119,8 @@ export async function fetchModelHealth(): Promise<Record<string, unknown>> {
 export async function fetchRcxPreview(body: {
   site_id?: string;
   hours?: number;
+  start?: string;
+  end?: string;
   scope?: string;
   bundle_ids?: string[];
   equipment_ids?: string[];
@@ -136,6 +138,8 @@ export async function fetchRcxPreview(body: {
 export async function downloadRcxReport(body: {
   site_id?: string;
   hours?: number;
+  start?: string;
+  end?: string;
   scope?: string;
   bundle_ids?: string[];
   equipment_ids?: string[];

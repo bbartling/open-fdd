@@ -4,7 +4,7 @@
       "id": "bench9065",
       "name": "Bench Station 9065",
       "station_url": "https://192.168.204.11",
-      "username": "admin",
+      "username": "open_fdd",
       "password_env": "OPENFDD_NIAGARA_ADMIN_PASSWORD",
       "verify_tls": false,
       "enabled": true,

@@ -1,4 +1,5 @@
 import type { FaultAlert, FaultFamily } from "./dashboardStream";
+import { describeFaultCause } from "./faultInsight";
 
 export type DisplayFault = {
   id: string;
@@ -201,7 +202,10 @@ function alertToDisplay(a: FaultAlert, equipmentLabel: string): DisplayFault {
     source: a.source,
     meta,
     underlying: [a],
-    plainEnglish: String(a.detail || symptom || a.title || ""),
+    plainEnglish:
+      a.source === "fdd" && a.analytics
+        ? describeFaultCause(a.analytics)
+        : String(a.detail || symptom || a.title || ""),
     technical:
       ctx && a.source === "fdd"
         ? [

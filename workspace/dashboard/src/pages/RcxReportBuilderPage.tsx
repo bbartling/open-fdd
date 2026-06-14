@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import PageHeader from "../components/PageHeader";
 import {
   downloadRcxReport,
@@ -7,14 +7,65 @@ import {
   type RcxPreviewResponse,
 } from "../lib/analytics-api";
 
-const WINDOW_OPTS = [
-  { label: "2 hours", hours: 2 },
-  { label: "24 hours", hours: 24 },
-  { label: "7 days", hours: 168 },
+type WindowPreset = {
+  id: string;
+  label: string;
+  hours?: number;
+  range?: () => { start: string; end: string };
+};
+
+function startOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+function endOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+const WINDOW_PRESETS: WindowPreset[] = [
+  { id: "2h", label: "2 hours", hours: 2 },
+  { id: "24h", label: "24 hours", hours: 24 },
+  { id: "7d", label: "7 days", hours: 168 },
+  { id: "30d", label: "1 month", hours: 720 },
+  {
+    id: "last-month",
+    label: "Last month",
+    range: () => {
+      const now = new Date();
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return { start: startOfMonth(prev).toISOString(), end: endOfMonth(prev).toISOString() };
+    },
+  },
+  {
+    id: "ytd",
+    label: "Year to date",
+    range: () => {
+      const now = new Date();
+      return { start: new Date(now.getFullYear(), 0, 1).toISOString(), end: now.toISOString() };
+    },
+  },
 ];
 
+type WindowSelection = {
+  presetId: string;
+  hours: number;
+  start?: string;
+  end?: string;
+};
+
+function resolvePreset(id: string): WindowSelection {
+  const preset = WINDOW_PRESETS.find((p) => p.id === id) || WINDOW_PRESETS[2];
+  if (preset.range) {
+    const { start, end } = preset.range();
+    return { presetId: preset.id, hours: 168, start, end };
+  }
+  return { presetId: preset.id, hours: preset.hours ?? 168 };
+}
+
 export default function RcxReportBuilderPage() {
-  const [hours, setHours] = useState(168);
+  const [windowSel, setWindowSel] = useState<WindowSelection>(() => resolvePreset("7d"));
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
   const [preview, setPreview] = useState<RcxPreviewResponse | null>(null);
   const [selectedBundle, setSelectedBundle] = useState("");
   const [selectedCharts, setSelectedCharts] = useState<Set<string>>(new Set());
@@ -25,6 +76,16 @@ export default function RcxReportBuilderPage() {
 
   const bundles: RcxBundle[] = preview?.report_bundles?.bundles ?? [];
 
+  const reportBody = useMemo(() => {
+    if (windowSel.presetId === "custom" && customStart && customEnd) {
+      return { hours: 168, start: new Date(customStart).toISOString(), end: new Date(customEnd).toISOString() };
+    }
+    if (windowSel.start && windowSel.end) {
+      return { hours: windowSel.hours, start: windowSel.start, end: windowSel.end };
+    }
+    return { hours: windowSel.hours };
+  }, [windowSel, customStart, customEnd]);
+
   async function collectPreview(bundleId?: string) {
     setLoading(true);
     setError("");
@@ -32,7 +93,7 @@ export default function RcxReportBuilderPage() {
     const bid = bundleId ?? selectedBundle;
     try {
       const p = await fetchRcxPreview({
-        hours,
+        ...reportBody,
         scope: "building",
         bundle_ids: bid ? [bid] : undefined,
         catalog_only: true,
@@ -58,6 +119,14 @@ export default function RcxReportBuilderPage() {
     void collectPreview(bundleId);
   }
 
+  function onPreset(id: string) {
+    if (id === "custom") {
+      setWindowSel({ presetId: "custom", hours: 168 });
+      return;
+    }
+    setWindowSel(resolvePreset(id));
+  }
+
   function toggle(setter: Dispatch<SetStateAction<Set<string>>>, id: string) {
     setter((prev) => {
       const next = new Set(prev);
@@ -73,7 +142,7 @@ export default function RcxReportBuilderPage() {
     try {
       const charts = [...selectedCharts].filter((c) => c && c.trim());
       const blob = await downloadRcxReport({
-        hours,
+        ...reportBody,
         scope: "building",
         bundle_ids: selectedBundle ? [selectedBundle] : undefined,
         charts,
@@ -99,26 +168,50 @@ export default function RcxReportBuilderPage() {
         title="RCx Report Builder"
         subtitle="BRICK-driven equipment reports — zone/box, AHU, VAV, boiler/HWS, chiller, OAT vs weather. Charts from SPARQL model; paste Plotly snips into INSERT HERE placeholders."
       />
-      <section className="panel">
+      <section className="panel rcx-builder-panel">
         <h2>Equipment report package</h2>
-        <p className="muted">
+        <p className="muted rcx-intro">
           Select a building overview or per-equipment report from the BRICK model. Bench BACnet device 5007 maps to a
           zone-level template. Use Trend plot to snip charts into DOCX placeholders.
         </p>
-        <div className="toolbar-row">
-          {WINDOW_OPTS.map((w) => (
+
+        <div className="rcx-toolbar-block">
+          <span className="rcx-toolbar-label">Time range</span>
+          <div className="toolbar-row rcx-window-chips">
+            {WINDOW_PRESETS.map((w) => (
+              <button
+                key={w.id}
+                type="button"
+                className={`btn-chip${windowSel.presetId === w.id ? " active" : ""}`}
+                onClick={() => onPreset(w.id)}
+              >
+                {w.label}
+              </button>
+            ))}
             <button
-              key={w.hours}
               type="button"
-              className={`btn-chip${hours === w.hours ? " active" : ""}`}
-              onClick={() => setHours(w.hours)}
+              className={`btn-chip${windowSel.presetId === "custom" ? " active" : ""}`}
+              onClick={() => onPreset("custom")}
             >
-              {w.label}
+              Custom dates
             </button>
-          ))}
+          </div>
+          {windowSel.presetId === "custom" ? (
+            <div className="rcx-date-row">
+              <label className="field">
+                <span className="field-label">Start</span>
+                <input type="datetime-local" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+              </label>
+              <label className="field">
+                <span className="field-label">End</span>
+                <input type="datetime-local" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+              </label>
+            </div>
+          ) : null}
         </div>
+
         {bundles.length ? (
-          <div className="field" style={{ marginTop: 12 }}>
+          <div className="field rcx-bundle-field">
             <label className="field-label" htmlFor="rcx-bundle">
               Report package
             </label>
@@ -136,14 +229,19 @@ export default function RcxReportBuilderPage() {
             </select>
           </div>
         ) : null}
-        <div className="toolbar-row">
-          <button type="button" className="btn primary" onClick={() => void collectPreview()} disabled={loading}>
-            Collect Data / Preview
-          </button>
-          <button type="button" className="btn" onClick={() => void generateDocx()} disabled={loading || !preview}>
-            Generate DOCX
-          </button>
+
+        <div className="rcx-toolbar-block rcx-actions-block">
+          <span className="rcx-toolbar-label">Actions</span>
+          <div className="toolbar-row rcx-action-row">
+            <button type="button" className="btn primary" onClick={() => void collectPreview()} disabled={loading}>
+              Collect Data / Preview
+            </button>
+            <button type="button" className="btn" onClick={() => void generateDocx()} disabled={loading || !preview}>
+              Generate DOCX
+            </button>
+          </div>
         </div>
+
         {status ? <p className="ok-text">{status}</p> : null}
         {error ? <p className="error-text">{error}</p> : null}
       </section>
