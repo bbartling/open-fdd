@@ -48,7 +48,10 @@ param(
     [switch]$KeepExisting,
 
     # Optional path to auth.env.local (integrator creds for authenticated probe — never commit).
-    [string]$AuthEnvFile = ""
+    [string]$AuthEnvFile = "",
+
+    # Fail gate on ZAP Medium alerts (default: High/missing report/nonzero fatal exit only).
+    [switch]$StrictZap
 )
 
 $ErrorActionPreference = "Continue"
@@ -77,6 +80,35 @@ function Quote-NativeArg {
     return '"' + $Escaped + '"'
 }
 
+function Format-LoggedCommand {
+    param(
+        [string]$Exe,
+        [string[]]$Args
+    )
+
+    $parts = @($Exe)
+    $skipNext = $false
+    for ($i = 0; $i -lt $Args.Count; $i++) {
+        if ($skipNext) {
+            $skipNext = $false
+            $parts += "<redacted>"
+            continue
+        }
+        $arg = $Args[$i]
+        if ($arg -eq "--env-file" -or $arg -eq "-env-file") {
+            $parts += $arg
+            $skipNext = $true
+            continue
+        }
+        if ($arg -match '(?i)Bearer\s|Basic\s|password|OFDD_INTEGRATOR|token=') {
+            $parts += "<redacted>"
+            continue
+        }
+        $parts += $arg
+    }
+    return ($parts -join " ")
+}
+
 function Invoke-NativeToFile {
     param(
         [Parameter(Mandatory=$true)][string]$Exe,
@@ -85,12 +117,11 @@ function Invoke-NativeToFile {
         [switch]$Append
     )
 
-    $ArgLine = ($Args | ForEach-Object { Quote-NativeArg $_ }) -join " "
     $TempOut = [System.IO.Path]::GetTempFileName()
     $TempErr = [System.IO.Path]::GetTempFileName()
 
     $Header = @(
-        "> $Exe $ArgLine"
+        "> $(Format-LoggedCommand -Exe $Exe -Args $Args)"
         "Started: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
         ""
     )
@@ -104,7 +135,7 @@ function Invoke-NativeToFile {
     try {
         $Process = Start-Process `
             -FilePath $Exe `
-            -ArgumentList $ArgLine `
+            -ArgumentList $Args `
             -NoNewWindow `
             -Wait `
             -PassThru `
@@ -216,6 +247,12 @@ $ZapHtmlPath = Join-Path $BaseDir $ZapHtml
 $ZapJsonPath = Join-Path $BaseDir $ZapJson
 $ZapMdPath = Join-Path $BaseDir $ZapMd
 $ZapFindings = Join-Path $BaseDir "31-zap-findings-summary.txt"
+$ZapReplacerConfig = Join-Path $BaseDir "32-zap-replacer.prop"
+$ZapAuthEnvHost = Join-Path $BaseDir "33-zap-docker-auth.env"
+
+$ZapExitCode = $null
+$ZapAuthInjected = $false
+$ZapSkipped = $false
 
 function Read-AuthFromEnvFile {
     param([string]$Path)
@@ -294,6 +331,160 @@ function Test-ProductionAssetLeak {
     return $issues
 }
 
+function Get-IntegratorToken {
+    param(
+        [string]$BaseUrl,
+        [string]$User,
+        [string]$Password
+    )
+
+    if (-not $User -or -not $Password) {
+        return $null
+    }
+    $loginUrl = ($BaseUrl.TrimEnd('/') + '/api/auth/login')
+    $bodyFile = [System.IO.Path]::GetTempFileName()
+    $respFile = [System.IO.Path]::GetTempFileName()
+    try {
+        $payload = @{ username = $User; password = $Password } | ConvertTo-Json -Compress
+        Set-Content -Path $bodyFile -Value $payload -Encoding utf8 -NoNewline
+        & curl.exe -k -sS -X POST -H "Content-Type: application/json" --data-binary "@$bodyFile" -o $respFile --max-time 20 $loginUrl 2>$null
+        $resp = Get-Content -Raw -Path $respFile -ErrorAction SilentlyContinue
+        if ($resp -match '"token"\s*:\s*"([^"]+)"') {
+            return $Matches[1]
+        }
+        return $null
+    } finally {
+        Remove-Item -Force -ErrorAction SilentlyContinue $bodyFile, $respFile
+    }
+}
+
+function Write-ZapReplacerConfig {
+    param(
+        [string]$Path,
+        [string]$BearerToken
+    )
+
+    $replacement = "Bearer $BearerToken"
+    @(
+        "replacer.full_list(0).description=ofdd-bearer"
+        "replacer.full_list(0).enabled=true"
+        "replacer.full_list(0).matchtype=REQ_HEADER"
+        "replacer.full_list(0).matchstr=Authorization"
+        "replacer.full_list(0).regex=false"
+        "replacer.full_list(0).replacement=$replacement"
+    ) | Set-Content -Path $Path -Encoding ascii
+}
+
+function Get-ZapAlertCounts {
+    param([string]$JsonPath)
+
+    $counts = @{ High = 0; Medium = 0; Low = 0; Informational = 0 }
+    if (-not (Test-Path $JsonPath)) {
+        return $counts
+    }
+    try {
+        $raw = Get-Content -Raw -Path $JsonPath -ErrorAction Stop | ConvertFrom-Json
+    } catch {
+        return $counts
+    }
+    $alerts = @()
+    if ($raw.PSObject.Properties.Name -contains "site") {
+        foreach ($site in @($raw.site)) {
+            if ($site.alerts) { $alerts += $site.alerts }
+        }
+    } elseif ($raw.PSObject.Properties.Name -contains "alerts") {
+        $alerts += $raw.alerts
+    }
+    foreach ($alert in $alerts) {
+        $risk = [string]($alert.riskcode)
+        if (-not $risk -and $alert.risk) { $risk = [string]$alert.risk }
+        switch ($risk) {
+            "3" { $counts.High++ }
+            "2" { $counts.Medium++ }
+            "1" { $counts.Low++ }
+            default {
+                $name = [string]$alert.riskdesc
+                if ($name -match '(?i)high') { $counts.High++ }
+                elseif ($name -match '(?i)medium') { $counts.Medium++ }
+                elseif ($name -match '(?i)low') { $counts.Low++ }
+                else { $counts.Informational++ }
+            }
+        }
+    }
+    return $counts
+}
+
+function Test-AnonymousRoute {
+    param(
+        [string]$BaseUrl,
+        [string]$Path,
+        [int[]]$ExpectedStatus
+    )
+
+    $url = $BaseUrl.TrimEnd('/') + $Path
+    $tmp = [System.IO.Path]::GetTempFileName()
+    try {
+        $codeText = & curl.exe -k -sS -o $tmp -w "%{http_code}" --max-time 15 $url 2>$null
+        $code = [int]$codeText
+        $ok = $ExpectedStatus -contains $code
+        return @{ Ok = $ok; Status = $code; Path = $Path }
+    } finally {
+        Remove-Item -Force -ErrorAction SilentlyContinue $tmp
+    }
+}
+
+function Test-ProtectedRoutesAnonymous {
+    param([string]$BaseUrl)
+
+    $protected = @(
+        "/api/auth/me",
+        "/api/fdd/results",
+        "/health/stack",
+        "/api/host/stats",
+        "/api/model/health",
+        "/api/bacnet/driver/tree"
+    )
+    $public = @(
+        "/health",
+        "/api/auth/status"
+    )
+    $issues = [System.Collections.Generic.List[string]]::new()
+    foreach ($path in $protected) {
+        $r = Test-AnonymousRoute -BaseUrl $BaseUrl -Path $path -ExpectedStatus @(401, 403)
+        if (-not $r.Ok) {
+            $issues.Add("Anonymous $($r.Path) returned $($r.Status) (expected 401/403)")
+        }
+    }
+    foreach ($path in $public) {
+        $r = Test-AnonymousRoute -BaseUrl $BaseUrl -Path $path -ExpectedStatus @(200)
+        if (-not $r.Ok) {
+            $issues.Add("Public $($r.Path) returned $($r.Status) (expected 200)")
+        }
+    }
+    return $issues
+}
+
+function Test-HostileCorsRejected {
+    param([string]$BaseUrl)
+
+    $url = $BaseUrl.TrimEnd('/') + '/api/auth/status'
+    $tmp = [System.IO.Path]::GetTempFileName()
+    try {
+        & curl.exe -k -sS -D $tmp -o NUL -H "Origin: https://evil.example.test" --max-time 15 $url 2>$null
+        if (-not (Test-Path $tmp)) {
+            return @{ Ok = $false; Detail = "no response headers" }
+        }
+        $headers = Get-Content -Path $tmp -ErrorAction SilentlyContinue
+        $acao = ($headers | Where-Object { $_ -match '^Access-Control-Allow-Origin:\s*(.+)$' } | Select-Object -First 1)
+        if ($acao -and $acao -match 'evil\.example\.test') {
+            return @{ Ok = $false; Detail = "hostile origin reflected in ACAO" }
+        }
+        return @{ Ok = $true; Detail = "hostile origin not allowed" }
+    } finally {
+        Remove-Item -Force -ErrorAction SilentlyContinue $tmp
+    }
+}
+
 function Invoke-AuthProbe {
     param(
         [string]$BaseUrl,
@@ -304,24 +495,30 @@ function Invoke-AuthProbe {
     if (-not $User -or -not $Password) {
         return @{ Ok = $false; Detail = "credentials not provided" }
     }
-    $loginUrl = ($BaseUrl.TrimEnd('/') + '/api/auth/login')
-    $body = (@{ username = $User; password = $Password } | ConvertTo-Json -Compress)
-    $tmpBody = [System.IO.Path]::GetTempFileName()
-    try {
-        & curl.exe -k -sS -X POST -H "Content-Type: application/json" -d $body -o $tmpBody --max-time 20 $loginUrl 2>$null
-        $resp = Get-Content -Raw -Path $tmpBody -ErrorAction SilentlyContinue
-        if ($resp -and $resp.Contains('"token"')) {
-            return @{ Ok = $true; Detail = "integrator login returned token" }
-        }
-        return @{ Ok = $false; Detail = "login did not return token (check OFDD_INTEGRATOR_USER / OFDD_INTEGRATOR_PASSWORD)" }
-    } finally {
-        Remove-Item -Force -ErrorAction SilentlyContinue $tmpBody
+    $token = Get-IntegratorToken -BaseUrl $BaseUrl -User $User -Password $Password
+    if ($token) {
+        return @{ Ok = $true; Detail = "integrator login returned token" }
     }
+    return @{ Ok = $false; Detail = "login did not return token (check OFDD_INTEGRATOR_USER / OFDD_INTEGRATOR_PASSWORD)" }
 }
 
 $QuickSummary = Join-Path $BaseDir "90-quick-findings-summary.txt"
 $Checklist = Join-Path $BaseDir "99-review-checklist.txt"
 $GateReport = Join-Path $BaseDir "40-release-gate-summary.txt"
+
+$integratorUser = $env:OFDD_INTEGRATOR_USER
+$integratorPass = $env:OFDD_INTEGRATOR_PASSWORD
+$authLoaded = $false
+if ($AuthEnvFile) {
+    $parsedAuthEarly = Read-AuthFromEnvFile -Path $AuthEnvFile
+    if ($parsedAuthEarly.Loaded) {
+        $integratorUser = $parsedAuthEarly.User
+        $integratorPass = $parsedAuthEarly.Password
+        $authLoaded = $true
+    }
+} elseif ($integratorUser -and $integratorPass) {
+    $authLoaded = $true
+}
 
 Write-Section "Open-FDD local security scan"
 Write-Host "Report folder: $BaseDir"
@@ -402,6 +599,7 @@ if (-not $SkipZap) {
     if (-not $DockerOk) {
         "SKIPPED: Docker is not available or Docker Desktop is not running." | Set-Content -Path $ZapConsole -Encoding utf8
         Write-Host "Skipping ZAP because Docker is unavailable."
+        $ZapSkipped = $true
     }
     elseif (-not $TargetReachable) {
         @"
@@ -418,6 +616,7 @@ Common fixes:
 
 "@ | Set-Content -Path $ZapConsole -Encoding utf8
         Write-Host "Skipping ZAP because target is not reachable."
+        $ZapSkipped = $true
     }
     else {
         if (-not $SkipZapPull) {
@@ -428,6 +627,19 @@ Common fixes:
         }
 
         Write-Host "Running ZAP baseline. Output goes to report folder."
+        $zapToken = $null
+        if ($authLoaded) {
+            $zapToken = Get-IntegratorToken -BaseUrl $TargetUrl -User $integratorUser -Password $integratorPass
+            if ($zapToken) {
+                Write-ZapReplacerConfig -Path $ZapReplacerConfig -BearerToken $zapToken
+                "ZAP_AUTH_HEADER_VALUE=Bearer $zapToken" | Set-Content -Path $ZapAuthEnvHost -Encoding ascii -NoNewline
+                $ZapAuthInjected = $true
+                Write-Host "ZAP auth: Bearer token loaded (not logged)."
+            } else {
+                Write-Host "WARN: auth.env loaded but integrator login failed — running unauthenticated ZAP."
+            }
+        }
+
         $ZapArgs = @(
             "run", "--rm",
             "-v", "${BaseDir}:/zap/wrk/:rw",
@@ -439,11 +651,28 @@ Common fixes:
             "-w", $ZapMd,
             "-I"
         )
+        if ($ZapAuthInjected) {
+            $ZapArgs = @(
+                "run", "--rm",
+                "--env-file", $ZapAuthEnvHost,
+                "-v", "${BaseDir}:/zap/wrk/:rw",
+                "-t", "ghcr.io/zaproxy/zaproxy:stable",
+                "zap-baseline.py",
+                "-t", $TargetUrl,
+                "-r", $ZapHtml,
+                "-J", $ZapJson,
+                "-w", $ZapMd,
+                "-I",
+                "-z", "-configfile /zap/wrk/32-zap-replacer.prop"
+            )
+        }
 
-        Invoke-NativeToFile -Exe "docker" -Args $ZapArgs -OutputFile $ZapConsole -Append | Out-Null
+        $ZapExitCode = Invoke-NativeToFile -Exe "docker" -Args $ZapArgs -OutputFile $ZapConsole -Append
+        Remove-Item -Force -ErrorAction SilentlyContinue $ZapAuthEnvHost
     }
 } else {
     "SKIPPED by -SkipZap." | Set-Content -Path $ZapConsole -Encoding utf8
+    $ZapSkipped = $true
 }
 
 if (-not $SkipNmap) {
@@ -525,11 +754,14 @@ if (Test-Path $NmapHttp) {
 ZAP findings summary
 Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 Target: $TargetUrl
+Auth injected: $ZapAuthInjected
+ZAP exit code: $(if ($null -eq $ZapExitCode) { 'n/a' } else { $ZapExitCode })
+Reports: HTML=$(Test-Path $ZapHtmlPath) JSON=$(Test-Path $ZapJsonPath) MD=$(Test-Path $ZapMdPath)
 
 Notes:
-- This is unauthenticated ZAP baseline.
-- If Open-FDD requires login, this still checks public pages and headers, but it will not deeply test protected dashboard/API routes.
-- Use authenticated ZAP later only on a fake/test bench.
+- Authenticated ZAP uses integrator Bearer token via docker --env-file + replacer config (secrets never logged).
+- Baseline scan checks public pages, response headers, and shallow protected routes when auth is injected.
+- Use -StrictZap to fail the release gate on Medium alerts.
 
 "@ | Set-Content -Path $ZapFindings -Encoding utf8
 
@@ -546,10 +778,14 @@ else {
     @"
 No ZAP markdown report was created.
 
+Auth injected: $ZapAuthInjected
+ZAP exit code: $(if ($null -eq $ZapExitCode) { 'n/a' } else { $ZapExitCode })
+ZAP skipped: $ZapSkipped
+
 Most likely reasons:
 - Target URL was not reachable from the ZAP Docker container.
 - Docker Desktop was not running.
-- ZAP failed before report generation.
+- ZAP failed before report generation (check exit code 3 in 20-zap-console-output.txt).
 
 Review:
 - $ZapConsole
@@ -641,36 +877,25 @@ Important:
 - Do not run broad scans against live OT/BAS networks or controllers.
 "@ | Set-Content -Path $Checklist -Encoding utf8
 
-Write-Section "Release gate (production asset leak + auth probe)"
+Write-Section "Release gate (production asset leak + auth + ZAP)"
 
 $gateFails = 0
 $gateWarnings = 0
-$authLoaded = $false
-$integratorUser = $env:OFDD_INTEGRATOR_USER
-$integratorPass = $env:OFDD_INTEGRATOR_PASSWORD
-
-if ($AuthEnvFile) {
-    $parsed = Read-AuthFromEnvFile -Path $AuthEnvFile
-    if ($parsed.Loaded) {
-        $integratorUser = $parsed.User
-        $integratorPass = $parsed.Password
-        $authLoaded = $true
-    }
-} elseif ($integratorUser -and $integratorPass) {
-    $authLoaded = $true
-}
+$gatePasses = 0
 
 $gateLines = @(
     "Release gate summary",
     "Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
     "Target: $TargetUrl",
     "Auth loaded: $authLoaded",
+    "ZAP auth injected: $ZapAuthInjected",
     ""
 )
 
 if ($TargetReachable) {
     $assetIssues = Test-ProductionAssetLeak -HtmlPath $WebBodySample -BaseUrl $TargetUrl
     if ($assetIssues.Count -eq 0) {
+        $gatePasses += 1
         $gateLines += "PASS: production JS bundle — no private LAN / bench literals detected"
     } else {
         $gateFails += $assetIssues.Count
@@ -680,24 +905,86 @@ if ($TargetReachable) {
 
     $authResult = Invoke-AuthProbe -BaseUrl $TargetUrl -User $integratorUser -Password $integratorPass
     if ($authLoaded -and $authResult.Ok) {
+        $gatePasses += 1
         $gateLines += "PASS: integrator auth probe — $($authResult.Detail)"
     } elseif ($authLoaded) {
-        $gateWarnings += 1
-        $gateLines += "WARN: auth file/env loaded but login probe failed — $($authResult.Detail)"
+        $gateFails += 1
+        $gateLines += "FAIL: auth file/env loaded but login probe failed — $($authResult.Detail)"
     } else {
         $gateWarnings += 1
         $gateLines += "WARN: Auth loaded: False — pass -AuthEnvFile <path-to-auth.env.local> or set OFDD_INTEGRATOR_USER / OFDD_INTEGRATOR_PASSWORD in the shell (values are never logged)."
+    }
+
+    $routeIssues = Test-ProtectedRoutesAnonymous -BaseUrl $TargetUrl
+    if ($routeIssues.Count -eq 0) {
+        $gatePasses += 1
+        $gateLines += "PASS: anonymous protected API routes return 401/403 (public /health and /api/auth/status return 200)"
+    } else {
+        $gateFails += $routeIssues.Count
+        $gateLines += "FAIL: route auth probe ($($routeIssues.Count) issue(s)):"
+        $gateLines += $routeIssues
+    }
+
+    $cors = Test-HostileCorsRejected -BaseUrl $TargetUrl
+    if ($cors.Ok) {
+        $gatePasses += 1
+        $gateLines += "PASS: hostile CORS origin rejected — $($cors.Detail)"
+    } else {
+        $gateFails += 1
+        $gateLines += "FAIL: CORS probe — $($cors.Detail)"
     }
 } else {
     $gateFails += 1
     $gateLines += "FAIL: target not reachable — cannot run asset leak or auth probes"
 }
 
-if ($gateFails -gt 0) {
+if (-not $SkipZap -and -not $ZapSkipped) {
+    $reportsOk = (Test-Path $ZapHtmlPath) -and (Test-Path $ZapJsonPath) -and (Test-Path $ZapMdPath)
+    $zapCounts = Get-ZapAlertCounts -JsonPath $ZapJsonPath
     $gateLines += ""
+    $gateLines += "ZAP baseline:"
+    $gateLines += "  exit code: $(if ($null -eq $ZapExitCode) { 'n/a' } else { $ZapExitCode })"
+    $gateLines += "  reports produced: $reportsOk"
+    $gateLines += "  alerts: High=$($zapCounts.High) Medium=$($zapCounts.Medium) Low=$($zapCounts.Low)"
+
+    if (-not $reportsOk) {
+        $gateFails += 1
+        $gateLines += "FAIL: ZAP reports missing (expected 21-zap-openfdd-baseline.html/json/md)"
+    } elseif ($null -ne $ZapExitCode -and $ZapExitCode -eq 3) {
+        $gateFails += 1
+        $gateLines += "FAIL: ZAP exited with code 3 — scan did not complete (see 20-zap-console-output.txt)"
+    } elseif ($null -ne $ZapExitCode -and $ZapExitCode -ne 0) {
+        $gateFails += 1
+        $gateLines += "FAIL: ZAP exited with code $ZapExitCode"
+    } elseif ($zapCounts.High -gt 0) {
+        $gateFails += 1
+        $gateLines += "FAIL: ZAP High alerts = $($zapCounts.High)"
+    } elseif ($StrictZap -and $zapCounts.Medium -gt 0) {
+        $gateFails += 1
+        $gateLines += "FAIL: ZAP Medium alerts = $($zapCounts.Medium) (-StrictZap)"
+    } else {
+        $gatePasses += 1
+        $gateLines += "PASS: ZAP baseline completed with reports"
+        if ($zapCounts.Medium -gt 0) {
+            $gateWarnings += 1
+            $gateLines += "WARN: ZAP Medium alerts = $($zapCounts.Medium) (accepted unless -StrictZap)"
+        }
+    }
+} elseif ($SkipZap) {
+    $gateWarnings += 1
+    $gateLines += ""
+    $gateLines += "WARN: ZAP skipped (-SkipZap) — release gate does not include passive web scan"
+} else {
+    $gateFails += 1
+    $gateLines += ""
+    $gateLines += "FAIL: ZAP did not run (Docker down or target unreachable)"
+}
+
+$gateLines += ""
+$gateLines += "Summary: $gatePasses pass / $gateWarnings warn / $gateFails fail"
+if ($gateFails -gt 0) {
     $gateLines += "SECURITY GATE: FAIL ($gateFails fail, $gateWarnings warn)"
 } else {
-    $gateLines += ""
     $gateLines += "SECURITY GATE: PASS ($gateWarnings warn)"
 }
 

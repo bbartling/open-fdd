@@ -342,6 +342,29 @@ export default function NiagaraPage() {
     });
   }
 
+  function toggleTypeSelection(device: NiagaraDevice, _typeName: string, points: NiagaraPoint[], selected: boolean) {
+    setSelectedPointOrds((prev) => {
+      const next = new Set(prev);
+      for (const p of points) {
+        if (selected) next.add(p.point_ord);
+        else next.delete(p.point_ord);
+      }
+      return next;
+    });
+  }
+
+  function selectAllTreePoints() {
+    const all = new Set<string>();
+    for (const d of driverDevices) {
+      for (const p of d.points) all.add(p.point_ord);
+    }
+    setSelectedPointOrds(all);
+  }
+
+  function clearPointSelection() {
+    setSelectedPointOrds(new Set());
+  }
+
   const selectedPointsFlat: NiagaraPoint[] = useMemo(() => {
     const out: NiagaraPoint[] = [];
     for (const d of driverDevices) {
@@ -380,30 +403,49 @@ export default function NiagaraPage() {
       ) : null}
 
       {loadError ? <div className="panel error-panel">{loadError}</div> : null}
-      {actionError ? <div className="panel error-panel">{actionError}</div> : null}
-      {log ? (
-        <div className="panel">
-          <p className="muted">{log}</p>
-        </div>
-      ) : null}
-
       {pollStatus && selectedStationId ? (
-        <div className="panel driver-poll-strip">
-          <div className="row row-spread" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-            <strong>{selectedStation?.name ?? selectedStationId}</strong>
-            <span className={`badge ${pollStatus.running ? "poll-badge" : "muted-badge"}`}>
-              {pollStatus.running ? "polling" : "stopped"}
-            </span>
-            <span className="badge muted-badge">{pollStatus.connected ? "connected" : "disconnected"}</span>
-            <span className="muted">{pollStatus.active_points} point(s)</span>
-            {pollStatus.last_success ? (
-              <span className="muted">
-                Last OK: {formatPollSampleAt({ at: pollStatus.last_success }) ?? pollStatus.last_success}
+        <div className="panel">
+          <div className="status-bar">
+            <div className="status-kv">
+              <span className="status-kv-label">Station</span>
+              <span className="status-kv-value">{selectedStation?.name ?? selectedStationId}</span>
+            </div>
+            <div className="status-kv">
+              <span className="status-kv-label">Poll driver</span>
+              <span className="status-kv-value">
+                <span className={`badge ${pollStatus.running ? "poll-badge" : "muted-badge"}`}>
+                  {pollStatus.running ? "polling" : "stopped"}
+                </span>{" "}
+                {pollStatus.active_points} point(s)
               </span>
+            </div>
+            <div className="status-kv">
+              <span className="status-kv-label">Connection</span>
+              <span className={`status-kv-value ${pollStatus.connected ? "ok" : "error"}`}>
+                {pollStatus.connected ? "connected" : "disconnected"}
+              </span>
+            </div>
+            {pollStatus.last_success ? (
+              <div className="status-kv">
+                <span className="status-kv-label">Last sample</span>
+                <span className="status-kv-value">
+                  {formatPollSampleAt({ at: pollStatus.last_success }) ?? pollStatus.last_success}
+                  {pollStatus.last_poll_duration_ms ? (
+                    <span className="muted" style={{ display: "block", fontSize: "0.85em" }}>
+                      {pollStatus.last_poll_duration_ms} ms · {pollStatus.batch_count} batch(es)
+                    </span>
+                  ) : null}
+                </span>
+              </div>
             ) : null}
-            {pollStatus.last_error ? <span className="muted">Error: {pollStatus.last_error}</span> : null}
+            {pollStatus.last_error ? (
+              <div className="status-kv">
+                <span className="status-kv-label">Error</span>
+                <span className="status-kv-value error">{pollStatus.last_error}</span>
+              </div>
+            ) : null}
           </div>
-          <div className="row" style={{ marginTop: "0.65rem", gap: "0.5rem" }}>
+          <div className="row" style={{ marginTop: "0.65rem", gap: "0.5rem", flexWrap: "wrap" }}>
             <ActionButton secondary pending={pending} onClick={() => void handlePollStart()} disabled={pollStatus.running}>
               Start poll
             </ActionButton>
@@ -423,13 +465,57 @@ export default function NiagaraPage() {
       <div className="panel">
         <h3 className="panel-title">Devices &amp; points</h3>
         <NiagaraTreeLegend />
-        {treeLoading ? <Spinner label="Loading driver tree…" /> : null}
-        <NiagaraPointsTree
-          devices={driverDevices}
-          selectedPointOrds={selectedPointOrds}
-          onTogglePointSelection={togglePointOrd}
-          onToggleDeviceSelection={toggleDeviceSelection}
-          onRefreshDevice={async (device) => {
+        <div className="row row-spread" style={{ marginTop: "0.65rem" }}>
+          <p className="muted" style={{ flex: 1, margin: 0 }}>
+            Check boxes to multi-select points for bulk read or export. Right-click a station or point for refresh and
+            copy actions.
+          </p>
+        </div>
+        {driverDevices.length > 0 ? (
+          <div className="bacnet-bulk-toolbar">
+            <span className="muted">{selectedPointOrds.size} point(s) selected</span>
+            <button type="button" className="secondary-btn" onClick={selectAllTreePoints}>
+              Select all points
+            </button>
+            <button type="button" className="secondary-btn" onClick={clearPointSelection}>
+              Clear selection
+            </button>
+            <ActionButton
+              secondary
+              pending={pending}
+              disabled={!selectedPointOrds.size}
+              onClick={() => void handleReadSelected()}
+            >
+              Read selected ({selectedPointOrds.size})
+            </ActionButton>
+            <ActionButton
+              secondary
+              disabled={!selectedPointsFlat.length}
+              onClick={() => downloadText("niagara-points.csv", exportPointsCsv(selectedPointsFlat), "text/csv")}
+            >
+              Export CSV
+            </ActionButton>
+            <ActionButton
+              secondary
+              disabled={!selectedPointsFlat.length}
+              onClick={() =>
+                downloadText("niagara-points.json", exportPointsJson(selectedPointsFlat), "application/json")
+              }
+            >
+              Export JSON
+            </ActionButton>
+          </div>
+        ) : null}
+        {treeLoading && driverDevices.length === 0 ? (
+          <Spinner label="Loading driver tree…" />
+        ) : (
+          <NiagaraPointsTree
+            devices={driverDevices}
+            selectedPointOrds={selectedPointOrds}
+            onTogglePointSelection={togglePointOrd}
+            onToggleDeviceSelection={toggleDeviceSelection}
+            onToggleTypeSelection={toggleTypeSelection}
+            onRefreshDevice={async (device) => {
             const ords = device.points.map((p) => p.point_ord);
             if (!ords.length) return;
             setPending(true);
@@ -453,35 +539,24 @@ export default function NiagaraPage() {
               setPending(false);
             }
           }}
-          onDiscoverDevice={async (device) => {
-            setSelectedStationId(device.station_id);
-            await handleDiscover();
-          }}
-        />
-        <div className="row" style={{ marginTop: "0.75rem", gap: "0.5rem", flexWrap: "wrap" }}>
-          <ActionButton
-            secondary
-            pending={pending}
-            disabled={!selectedPointOrds.size}
-            onClick={() => void handleReadSelected()}
-          >
-            Read selected ({selectedPointOrds.size})
-          </ActionButton>
-          <ActionButton
-            secondary
-            disabled={!selectedPointsFlat.length}
-            onClick={() => downloadText("niagara-points.csv", exportPointsCsv(selectedPointsFlat), "text/csv")}
-          >
-            Export CSV
-          </ActionButton>
-          <ActionButton
-            secondary
-            disabled={!selectedPointsFlat.length}
-            onClick={() => downloadText("niagara-points.json", exportPointsJson(selectedPointsFlat), "application/json")}
-          >
-            Export JSON
-          </ActionButton>
-        </div>
+            onDiscoverDevice={async (device) => {
+              setSelectedStationId(device.station_id);
+              await handleDiscover();
+            }}
+          />
+        )}
+        {treeLoading && driverDevices.length > 0 ? (
+          <p className="muted">
+            <Spinner label="Refreshing tree…" />
+          </p>
+        ) : null}
+      </div>
+
+      <div className="panel">
+        <h3>Activity</h3>
+        {pending ? <p className="muted"><Spinner label="Niagara operation in progress…" /></p> : null}
+        {actionError ? <p className="error">{actionError}</p> : null}
+        <pre className="console">{log || "Ready."}</pre>
       </div>
 
       <details className="panel">

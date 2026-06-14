@@ -1,4 +1,4 @@
-/** Inline legend for Niagara point tree badges. */
+/** Inline legend for Niagara point tree badges (matches BACnet tree legend). */
 export default function NiagaraTreeLegend() {
   return (
     <div className="bacnet-tree-legend" aria-label="Niagara tree badge legend">
@@ -12,8 +12,8 @@ export default function NiagaraTreeLegend() {
         <span className="bacnet-tree-legend-desc">Background poll enabled for this station</span>
       </span>
       <span className="bacnet-tree-legend-item">
-        <span className="badge muted-badge">read-only</span>
-        <span className="bacnet-tree-legend-desc">Writes and overrides are not implemented (OT-safe)</span>
+        <span className="badge commandable-badge">cmd</span>
+        <span className="bacnet-tree-legend-desc">Writable on the station — supervisory writes are not enabled (OT-safe)</span>
       </span>
     </div>
   );

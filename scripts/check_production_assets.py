@@ -45,6 +45,15 @@ BANNED_PROTOCOL = re.compile(r"ws://", re.IGNORECASE)
 # Hardcoded backend URLs (SPA should use same-origin relative paths).
 HARDCODED_HTTP = re.compile(r"https?://(?:192\.168|10\.|172\.(?:1[6-9]|2\d|3[01])\.)\S+", re.IGNORECASE)
 
+# Harmless dev/library strings — not Open-FDD API endpoints.
+HARMLESS_LITERALS = (
+    "localhost",
+    "127.0.0.1",
+    "http://www.w3.org/",
+    "https://www.w3.org/",
+    "http://schemas.openxmlformats.org/",
+)
+
 
 def _is_allowed_context(text: str, start: int, length: int) -> bool:
     window = text[max(0, start - 80) : start + length + 80]
@@ -62,6 +71,9 @@ def scan_file(path: Path) -> list[str]:
     for pat in PRIVATE_IP_PATTERNS:
         for m in pat.finditer(text):
             if _is_allowed_context(text, m.start(), len(m.group(0))):
+                continue
+            window = text[max(0, m.start() - 80) : m.start() + len(m.group(0)) + 80]
+            if any(token in window for token in HARMLESS_LITERALS):
                 continue
             issues.append(f"{path.name}: private IP {m.group(0)!r}")
 

@@ -232,6 +232,7 @@ def test_security_headers_on_health(client: TestClient):
     assert r.headers.get("Cross-Origin-Opener-Policy") is None
     assert r.headers.get("Cross-Origin-Resource-Policy") is None
     assert r.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+    assert r.headers.get("Cache-Control") is None
     # Single value per header (no Caddy + bridge duplication).
     raw = r.headers.raw
     for name in (
@@ -242,6 +243,15 @@ def test_security_headers_on_health(client: TestClient):
     ):
         matches = [pair for pair in raw if pair[0].lower() == name]
         assert len(matches) == 1, f"duplicate header {name.decode()}"
+
+
+def test_api_responses_have_no_store_cache_control(raw_client: TestClient, client: TestClient):
+    assert raw_client.get("/api/auth/me").status_code == 401
+    assert raw_client.get("/api/auth/me").headers.get("Cache-Control") == "no-store"
+    r = client.get("/api/auth/me")
+    assert r.status_code == 200
+    assert r.headers.get("Cache-Control") == "no-store"
+    assert client.get("/health/stack").headers.get("Cache-Control") == "no-store"
 
 
 def test_anonymous_cannot_read_host_stats(raw_client: TestClient):
