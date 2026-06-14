@@ -17,13 +17,15 @@ def _has_function(code: str, name: str) -> bool:
 
 
 def detect_rule_backend(code: str, rule: dict[str, Any] | None = None) -> str:
-    """Return ``arrow``, ``legacy_row``, or ``script``."""
+    """Return ``arrow``, ``datafusion_sql``, ``legacy_row``, or ``script``."""
     rule = rule or {}
     if rule.get("mode") == "script":
         return "script"
     explicit = str(rule.get("backend") or "").strip()
-    if explicit in {"arrow", "legacy_row"}:
+    if explicit in {"arrow", "legacy_row", "datafusion_sql"}:
         return explicit
+    if str(rule.get("sql") or "").strip():
+        return "datafusion_sql"
     if _has_function(code, "apply_faults_arrow"):
         return "arrow"
     if _has_function(code, "evaluate"):

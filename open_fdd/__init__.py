@@ -9,6 +9,6 @@ GHCR Docker images (``openfdd-bridge``, ``openfdd-commission``, ``openfdd-mcp-ra
 not inside this wheel.
 """
 
-__version__ = "3.0.34"
+__version__ = "3.1.0"
 
 __all__ = ["__version__"]

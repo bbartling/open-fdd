@@ -230,6 +230,53 @@ def _run_one(
         from open_fdd.arrow_runtime.rules import detect_rule_backend, legacy_row_allowed
 
         backend = detect_rule_backend(code, rule)
+        if backend == "datafusion_sql":
+            from .data_loader import load_arrow_table_for_run
+            from open_fdd.arrow_runtime.datafusion_backend import run_datafusion_sql_rule
+
+            import pyarrow as pa
+
+            if frame is not None:
+                table = frame if hasattr(frame, "num_rows") else pa.Table.from_pandas(frame)
+            else:
+                table, origin = load_arrow_table_for_run(site_id)
+                frame = table
+            if lookback_hours > 0 and table is not None and "timestamp" in table.column_names:
+                from open_fdd.arrow_runtime.features import arrow_time_filter
+                import datetime as _dt
+
+                cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(hours=lookback_hours)
+                table = arrow_time_filter(table, "timestamp", cutoff, None)
+            if limit and table.num_rows > limit:
+                table = table.slice(max(0, table.num_rows - limit), min(limit, table.num_rows))
+            cfg = dict(rule.get("config") or {})
+            cfg.setdefault("site_id", site_id)
+            sql = str(rule.get("sql") or "").strip()
+            fault_column = str(rule.get("fault_column") or "fault")
+            arrow_result = run_datafusion_sql_rule(
+                sql,
+                table,
+                cfg,
+                rule_id=str(rule.get("id") or ""),
+                fault_column=fault_column,
+            )
+            if arrow_result.errors:
+                return {
+                    **base,
+                    "status": "error",
+                    "rows": arrow_result.row_count,
+                    "flagged": 0,
+                    "error": arrow_result.errors[0],
+                    "backend": "datafusion_sql",
+                }
+            return {
+                **base,
+                "status": "ok",
+                "rows": arrow_result.row_count,
+                "flagged": arrow_result.true_count,
+                "backend": "datafusion_sql",
+                "duration_ms": arrow_result.duration_ms,
+            }
         if backend == "arrow":
             from .data_loader import load_arrow_table_for_run
 

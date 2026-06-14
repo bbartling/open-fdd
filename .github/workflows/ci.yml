@@ -74,6 +74,23 @@ jobs:
           /tmp/ofdd-wheel-smoke/bin/pip install "$wheel"
           /tmp/ofdd-wheel-smoke/bin/python -c "from open_fdd.arrow_runtime import run_arrow_rule; from open_fdd.arrow_runtime.column_map_from_model import build_column_map_from_model_points; import open_fdd; assert open_fdd.__version__"
 
+  test-datafusion:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install with DataFusion extra
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,datafusion]"
+      - name: DataFusion SQL backend tests
+        run: python -m pytest open_fdd/tests/arrow_runtime/test_datafusion_backend.py -q
+
   agent-shell:
     runs-on: ubuntu-latest
     steps:

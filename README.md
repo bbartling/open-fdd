@@ -14,6 +14,7 @@
 
 <p align="center">
   Open-source <strong>supervisory fault detection</strong> for buildings — Arrow-native rules,
+  optional DataFusion SQL rules for Rust-ready migration,
   optional <strong>PyPI</strong> embeddable runtime, and a full <strong>Docker/GHCR</strong> edge operator stack
   (BACnet, bridge API, dashboard, MCP).
 </p>

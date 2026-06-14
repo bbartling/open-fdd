@@ -5,10 +5,11 @@ These examples use **`pip install open-fdd`** — the embeddable FDD runtime. Th
 | Example | Purpose |
 |---------|---------|
 | [arrow_minimal/](arrow_minimal/) | Smallest `apply_faults_arrow` + `run_arrow_rule` |
+| [datafusion_sql_rule/](datafusion_sql_rule/) | Optional DataFusion SQL backend (`pip install open-fdd[datafusion]`) |
 | [feather_rule_run/](feather_rule_run/) | Run a rule against a Feather file |
 | [cloud_pipeline/generic_iot_pipeline/](cloud_pipeline/generic_iot_pipeline/) | IoT rows → Arrow → FDD → fake fault sink |
 
-**Rule contract:** rules define `apply_faults_arrow(table, cfg, context=None)` and return a PyArrow boolean mask (or documented `ArrowRuleResult` from `run_arrow_rule`).
+**Rule contract:** rules define `apply_faults_arrow(table, cfg, context=None)` and return a PyArrow boolean mask (or documented `ArrowRuleResult` from `run_arrow_rule`). An optional **DataFusion SQL** backend (`backend: datafusion_sql`) uses the same result shape for simple expression-style rules — see [docs/datafusion-sql-rules.md](../docs/datafusion-sql-rules.md).
 
 **Not included here:** pandas/YAML `RuleRunner` notebooks — archived under `_archive/examples_pandas_yaml/`.
 

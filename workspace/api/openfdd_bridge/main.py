@@ -34,6 +34,7 @@ from .routes import (
     playground_routes,
     reports_routes,
     rules_routes,
+    rules_lab_routes,
     sites_routes,
     timeseries_routes,
 )
@@ -87,6 +88,7 @@ def create_app() -> FastAPI:
     app.include_router(audit_routes.router)
     app.include_router(playground_routes.router)
     app.include_router(rules_routes.router)
+    app.include_router(rules_lab_routes.router)
     app.include_router(model_routes.router)
     app.include_router(timeseries_routes.router)
     app.include_router(building_routes.router)
