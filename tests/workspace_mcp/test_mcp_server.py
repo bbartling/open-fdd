@@ -127,3 +127,15 @@ def test_mcp_lists_tools() -> None:
     assert "health_check" in names
     assert "search_docs" in names
     assert "save_rule" in names
+    assert "list_rules" in names
+    assert "get_building_status" in names
+
+
+def test_agent_guide_resource() -> None:
+    import asyncio
+
+    from mcp_server.server import mcp
+
+    resources = asyncio.run(mcp.list_resources())
+    uris = {str(r.uri) for r in resources}
+    assert "openfdd://agent-guide" in uris

@@ -48,6 +48,61 @@ export function parseCommissioningPayload(input: string): CommissioningPayload {
   return { ...base, version: typeof obj.version === "number" ? obj.version : 1, fdd_rules };
 }
 
+export function semanticRulePinRows(payload: CommissioningPayload): Array<{
+  pointId: string;
+  label: string;
+  rules: FddRuleLink[];
+}> {
+  const catalog = new Map(
+    (payload.fdd_rules ?? []).map((r) => [r.id, String(r.name || r.id)] as const),
+  );
+  const bySemantic = new Map<
+    string,
+    { semantic: string; rules: Map<string, FddRuleLink>; sources: Set<string>; pointIds: string[] }
+  >();
+
+  for (const pt of payload.points || []) {
+    const linked = pt.fdd_rules_linked;
+    const ids = pt.fdd_rule_ids;
+    let rules: FddRuleLink[] = [];
+    if (Array.isArray(linked) && linked.length) {
+      rules = linked.map((r) => ({
+        id: String(r.id),
+        name: String(r.name || catalog.get(String(r.id)) || r.id),
+      }));
+    } else if (Array.isArray(ids) && ids.length) {
+      rules = ids.map((id) => ({
+        id: String(id),
+        name: catalog.get(String(id)) || String(id),
+      }));
+    }
+    if (!rules.length) continue;
+
+    const meta = (pt.metadata || {}) as Record<string, unknown>;
+    const semantic = String(
+      pt.fdd_input || pt.cross_source_semantic || pt.external_id || pt.brick_type || pt.id || "",
+    ).trim();
+    const source = String(meta.source || meta.driver || "model").trim();
+    const key = semantic.toLowerCase();
+    let row = bySemantic.get(key);
+    if (!row) {
+      row = { semantic, rules: new Map(), sources: new Set(), pointIds: [] };
+      bySemantic.set(key, row);
+    }
+    for (const r of rules) row.rules.set(r.id, r);
+    row.sources.add(source);
+    row.pointIds.push(String(pt.id || ""));
+  }
+
+  const rows = [...bySemantic.values()].map((row) => ({
+    pointId: row.pointIds.join(", "),
+    label: `${row.semantic} · ${[...row.sources].sort().join(" + ")}`,
+    rules: [...row.rules.values()],
+  }));
+  rows.sort((a, b) => a.label.localeCompare(b.label));
+  return rows;
+}
+
 export function pointRulePinRows(payload: CommissioningPayload): Array<{
   pointId: string;
   label: string;

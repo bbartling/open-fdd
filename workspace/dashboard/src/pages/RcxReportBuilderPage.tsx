@@ -97,13 +97,13 @@ export default function RcxReportBuilderPage() {
     <div className="analytics-page">
       <PageHeader
         title="RCx Report Builder"
-        subtitle="BRICK equipment-driven reports — programmatic fault counts + screenshot placeholders for engineer snips"
+        subtitle="BRICK-driven equipment reports — zone/box, AHU, VAV, boiler/HWS, chiller, OAT vs weather. Charts from SPARQL model; paste Plotly snips into INSERT HERE placeholders."
       />
       <section className="panel">
         <h2>Equipment report package</h2>
         <p className="muted">
-          Select a building overview or per-equipment report (AHU, VAV, boiler/HWS, chiller). Charts auto-populate
-          from the SPARQL data model. Use Trend plot or gallery to snip Plotly charts into the DOCX placeholders.
+          Select a building overview or per-equipment report from the BRICK model. Bench BACnet device 5007 maps to a
+          zone-level template. Use Trend plot to snip charts into DOCX placeholders.
         </p>
         <div className="toolbar-row">
           {WINDOW_OPTS.map((w) => (

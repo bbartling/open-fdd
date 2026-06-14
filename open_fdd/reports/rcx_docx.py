@@ -264,12 +264,33 @@ def build_rcx_docx(
             ],
         )
         if override_list:
-            doc.add_paragraph(f"Active BACnet overrides: {len(override_list)}")
+            doc.add_paragraph(f"Active BACnet operator overrides (P8): {len(override_list)}")
+            by_device: dict[str, int] = {}
+            for ov_row in override_list:
+                if isinstance(ov_row, dict):
+                    dev = str(
+                        ov_row.get("device_name")
+                        or ov_row.get("device_id")
+                        or ov_row.get("device")
+                        or ov_row.get("device_instance")
+                        or "—"
+                    )
+                    by_device[dev] = by_device.get(dev, 0) + 1
+            if by_device:
+                doc.add_paragraph("Devices with overrides:")
+                for dev, cnt in sorted(by_device.items(), key=lambda x: (-x[1], x[0]))[:12]:
+                    doc.add_paragraph(f"  {dev}: {cnt} point(s)")
             for ov_row in override_list[:12]:
                 if isinstance(ov_row, dict):
+                    dev = str(
+                        ov_row.get("device_name")
+                        or ov_row.get("device_id")
+                        or ov_row.get("device")
+                        or ov_row.get("device_instance")
+                        or "—"
+                    )
                     doc.add_paragraph(
-                        f"  {ov_row.get('device_id') or ov_row.get('device') or '—'} "
-                        f"{ov_row.get('object') or ov_row.get('object_id') or ''} "
+                        f"  {dev} · {ov_row.get('object') or ov_row.get('object_id') or ''} "
                         f"priority {ov_row.get('priority') or '—'}"
                     )
 

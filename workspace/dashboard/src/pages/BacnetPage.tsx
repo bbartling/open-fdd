@@ -973,8 +973,8 @@ export default function BacnetPage() {
         <p className="muted">
           Rotates one BACnet device per hour (or full site in{" "}
           {overrideStatus?.full_rotation_hours ?? "—"}h for {overrideStatus?.device_count ?? 0} devices).
-          Dashboard shows operator P{overrideStatus?.operator_priority ?? 8} overrides; tree shows all active
-          priority slots from the last scan per device.
+          Dashboard shows operator P{overrideStatus?.operator_priority ?? 8} overrides; devices with active
+          overrides are flagged in the tree below (⚠ ovrd / P8 badges per device).
         </p>
         <div className="row row-spread" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
           <span className="badge">

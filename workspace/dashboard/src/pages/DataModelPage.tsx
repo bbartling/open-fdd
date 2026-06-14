@@ -92,6 +92,25 @@ export default function DataModelPage() {
     }
   }
 
+  async function downloadTtlFile() {
+    setTtlLoading(true);
+    try {
+      const text = await apiFetchText("/api/model/ttl?save=false", { headers: { Accept: "text/turtle" } });
+      const blob = new Blob([text], { type: "text/turtle" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "openfdd-model.ttl";
+      a.click();
+      URL.revokeObjectURL(url);
+      setOut("Downloaded openfdd-model.ttl");
+    } catch (error) {
+      setOut(`TTL download failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setTtlLoading(false);
+    }
+  }
+
   async function doViewJsonPopup() {
     try {
       const text = JSON.stringify(await apiFetch("/api/model/commissioning-export"), null, 2);
@@ -144,10 +163,6 @@ export default function DataModelPage() {
       {activeTab === "import" ? (
         <>
           <ModelSyncBar refreshKey={refreshKey} onStatus={setOut} showWriteTtl={false} />
-          <p className="muted panel">
-            BACnet poll → model sync keeps <code>model.json</code> aligned with live polling. Pin FDD rules via this tab
-            or Rule Lab equipment test. RDF / TTL tools are on <strong>SPARQL</strong> and <strong>Advanced</strong>.
-          </p>
           <CommissioningImportExportPanel onStatus={setOut} onImported={() => void refreshMeta()} />
         </>
       ) : null}
@@ -161,17 +176,20 @@ export default function DataModelPage() {
             export including <code>fdd_rules</code> and per-point <code>fdd_rule_ids</code>. Rule Lab owns Python code —
             the LLM only edits model JSON and rule assignments.
           </p>
-          <div className="row">
-            <button type="button" onClick={() => void doViewTtlPopup()}>
-              {ttlLoading ? "Loading TTL…" : "View TTL (new tab)"}
+          <div className="row dm-advanced-actions">
+            <button type="button" disabled={ttlLoading} onClick={() => void doViewTtlPopup()}>
+              {ttlLoading ? "Loading TTL…" : "View TTL JSON (new tab)"}
             </button>
-            <button type="button" className="secondary-btn" disabled={ttlLoading} onClick={() => void syncTtlDisk()}>
+            <button type="button" disabled={ttlLoading} onClick={() => void downloadTtlFile()}>
+              Send TTL file
+            </button>
+            <button type="button" disabled={ttlLoading} onClick={() => void syncTtlDisk()}>
               {ttlLoading ? "Writing TTL…" : "Write TTL to disk"}
             </button>
-            <button type="button" className="secondary-btn" onClick={() => void doViewJsonPopup()}>
+            <button type="button" onClick={() => void doViewJsonPopup()}>
               View commissioning JSON (new tab)
             </button>
-            <button type="button" className="secondary-btn" disabled={copyBusy} onClick={() => void copyForLlm()}>
+            <button type="button" disabled={copyBusy} onClick={() => void copyForLlm()}>
               {copiedKey === "llm" ? "Copied for LLM" : copyBusy ? "Copying…" : "Copy prompt + JSON for LLM"}
             </button>
           </div>

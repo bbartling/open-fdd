@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -105,6 +106,23 @@ class SiteRegistry:
         elif self.edge_base_url:
             sid = self.default_site_id or "local"
             self._sites[sid] = SiteRecord(site_id=sid, name="local edge", base_url=self.edge_base_url)
+        self._apply_edge_credentials()
+
+    def _apply_edge_credentials(self) -> None:
+        """Local edge: bind sites to bridge URL and integrator creds from env (auth.env.local)."""
+        if not self.edge_base_url:
+            return
+        user = os.getenv("OFDD_INTEGRATOR_USER", "").strip() or "integrator"
+        pw = os.getenv("OFDD_INTEGRATOR_PASSWORD", "").strip()
+        if len(pw) >= 2 and pw[0] == pw[-1] and pw[0] in "'\"":
+            pw = pw[1:-1]
+        agent_only = os.getenv("OFDD_EDGE_AGENT_ONLY", "0").strip() == "1"
+        for site in self._sites.values():
+            if agent_only or not site.base_url:
+                site.base_url = self.edge_base_url
+            if pw and not site.password:
+                site.username = site.username or user
+                site.password = pw
 
     def list_sites(self) -> list[SiteRecord]:
         return list(self._sites.values())

@@ -2071,6 +2071,27 @@ textarea {
   background: color-mix(in srgb, var(--danger) 8%, var(--panel));
 }
 
+.page-agent-disabled .page-agent-top {
+  opacity: 0.92;
+}
+
+.agent-unavailable-panel {
+  border-color: color-mix(in srgb, var(--muted) 40%, var(--border));
+}
+
+.dm-advanced-actions {
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dm-advanced-actions button {
+  min-width: 10rem;
+}
+
+.dm-pin-preview:not([open]) summary {
+  cursor: pointer;
+}
+
 .agent-compose {
   flex-shrink: 0;
   display: flex;

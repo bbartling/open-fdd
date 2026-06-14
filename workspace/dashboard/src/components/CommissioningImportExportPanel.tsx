@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
 import {
   assignmentSummary,
-  pointRulePinRows,
+  semanticRulePinRows,
   type CommissioningPayload,
   parseCommissioningPayload,
 } from "../lib/commissioningImport";
@@ -47,7 +47,7 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
   const pinRows = useMemo(() => {
     if (!exportText.trim()) return [];
     try {
-      return pointRulePinRows(parseCommissioningPayload(exportText));
+      return semanticRulePinRows(parseCommissioningPayload(exportText));
     } catch {
       return [];
     }
@@ -154,11 +154,6 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
             </button>
           </div>
         </header>
-        <p className="muted">
-          Each pinned point includes <code>fdd_rules_linked</code> (id + Rule Lab name) for humans/AI, plus{" "}
-          <code>fdd_rule_ids</code> for import. The <code>fdd_rules[]</code> section lists every saved rule with{" "}
-          <code>source_file</code> when deployed from Rule Lab Python.
-        </p>
         {exportSummary ? (
           <p className="muted">
             <strong>{exportSummary.ruleCount}</strong> saved rules · <strong>{exportSummary.boundPointCount}</strong>{" "}
@@ -167,20 +162,22 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
         ) : null}
         {pinRows.length ? (
           <details className="dm-pin-preview">
-            <summary>Advanced: point → rule names (from export)</summary>
+            <summary>Advanced: semantic role → rules (all sources)</summary>
             <table className="data-table point-rule-pins-table">
               <thead>
                 <tr>
-                  <th>Point</th>
+                  <th>Semantic / sources</th>
                   <th>FDD rules</th>
                 </tr>
               </thead>
               <tbody>
                 {pinRows.map((row) => (
-                  <tr key={row.pointId}>
+                  <tr key={row.label}>
                     <td>
-                      <code>{row.pointId}</code>
-                      <div className="muted">{row.label}</div>
+                      <div>{row.label}</div>
+                      <div className="muted">
+                        <code>{row.pointId}</code>
+                      </div>
                     </td>
                     <td>
                       {row.rules.map((r) => (

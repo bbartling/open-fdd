@@ -47,6 +47,8 @@ FASTMCP_TOOLS = [
     "get_tuning_brief",
     "preview_fdd_tuning",
     "apply_fdd_tuning",
+    "list_rules",
+    "get_building_status",
     "list_fault_catalog",
     "get_fdd_results",
     "run_fdd_batch",
@@ -61,10 +63,21 @@ FASTMCP_TOOLS = [
     "search_docs",
     "get_doc_section",
     "commission_building_fdd",
+    "diagnose_rule_symptom",
     "diagnose_fault_trend",
     "tune_fdd_thresholds",
     "portfolio_morning_check",
     "write_rule_from_cookbook",
+]
+
+FASTMCP_RESOURCES = [
+    "openfdd://agent-guide",
+    "openfdd://sites",
+    "openfdd://memory",
+    "openfdd://skills",
+    "openfdd://model/{site_id}",
+    "openfdd://rules/{site_id}",
+    "openfdd://docs/rag-index",
 ]
 
 
@@ -119,11 +132,13 @@ def manifest() -> dict[str, Any]:
             pass
     return {
         "name": "open-fdd-mcp",
-        "version": "2.0.0",
+        "version": "2.1.0",
+        "mcp_framework": "FastMCP",
         "mcp_transport": "/mcp (streamable-http)",
         "agent_note": (
-            "Production CPU edges: use Cursor/Codex/OpenClaw MCP on /mcp — local Ollama is optional (GPU) or dev-only. "
-            "Bridge agent tools: GET /openfdd-agent/context and POST /openfdd-agent/tool."
+            "Open-FDD edge for AI agents: connect MCP clients to /mcp (FastMCP streamable-http). "
+            "Read openfdd://agent-guide first — consolidated data map, tool groups, workspace paths. "
+            "The operator React dashboard is optional and customizable per deployment; agents use MCP + bridge REST, not HTML."
         ),
         "legacy_rest_tools": [
             {"name": "search_docs", "route": "POST /tools/search_docs"},
@@ -132,6 +147,7 @@ def manifest() -> dict[str, Any]:
         ],
         "fastmcp_tools": FASTMCP_TOOLS,
         "fastmcp_tool_count": len(FASTMCP_TOOLS),
+        "fastmcp_resources": FASTMCP_RESOURCES,
         "rag_index": idx_meta,
         "note": "Prefer MCP clients on /mcp; REST /tools/* for bridge-compat and lightweight doc search.",
     }

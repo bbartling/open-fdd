@@ -191,7 +191,15 @@ apply_caddy_bridge_bind() {
 
 apply_caddy_bridge_bind
 
+edge_agent_only() {
+  [[ "${OFDD_EDGE_AGENT_ONLY:-0}" == "1" ]]
+}
+
 ensure_build() {
+  if edge_agent_only; then
+    echo "Agent-only edge (OFDD_EDGE_AGENT_ONLY=1) — skipping operator dashboard build"
+    return 0
+  fi
   case "$UI_BUILD_MODE" in
     skip)
       if [[ ! -f workspace/api/static/app/index.html ]]; then
@@ -528,9 +536,13 @@ wait_health() {
 
 print_lan_note() {
   if systemctl is-active --quiet ufw 2>/dev/null; then
+    local ports="${OFDD_BRIDGE_PORT}"
+    if caddy_enabled; then
+      ports="${OFDD_CADDY_HTTP_PORT:-80}"
+    fi
     echo ""
     echo "Note: UFW firewall is active. Localhost works; other LAN clients may need:"
-    echo "  sudo ${ROOT}/scripts/open_lan_port.sh ${OFDD_BRIDGE_PORT}"
+    echo "  sudo ${ROOT}/scripts/open_lan_port.sh ${ports}"
     echo "(This is informational — start succeeded.)"
   fi
 }
@@ -563,6 +575,17 @@ case "$CMD" in
     fi
     wait_health
     start_fdd_loop
+    if edge_agent_only; then
+      echo ""
+      echo "Agent-only edge: bridge http://127.0.0.1:${OFDD_BRIDGE_PORT}/"
+      echo "FastMCP:          $(mcp_base_url)/mcp  (streamable-http)"
+      echo "MCP manifest:     $(mcp_base_url)/manifest"
+      run_bench_smoke || true
+      print_lan_note
+      if [[ "$DEV_UI" == true ]]; then
+        echo "Vite dev (optional): http://127.0.0.1:5173/  — not required for MCP agents"
+      fi
+    else
     start_caddy
     echo ""
     LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
@@ -586,6 +609,7 @@ case "$CMD" in
     run_bench_smoke || true
     if [[ "$DEV_UI" == true ]]; then
       echo "Vite dev (optional): http://127.0.0.1:5173/  — not the same as Ansible/production UI"
+    fi
     fi
     ;;
   stop)

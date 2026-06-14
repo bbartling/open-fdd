@@ -204,18 +204,30 @@ export default function AgentPage() {
   const modelOptions = [...new Set([...installed, ...thinkingModels.map((m) => m.model)])];
 
   return (
-    <div className="page page-agent">
+    <div className={`page page-agent${chatEnabled ? "" : " page-agent-disabled"}`}>
       <div className="page-agent-top">
         <PageHeader
           title="AI Agent"
-          subtitle="Local operator assistant. Right-click a message to delete; recent turns are sent within a token budget."
+          subtitle={
+            chatEnabled
+              ? "Local operator assistant. Right-click a message to delete; recent turns are sent within a token budget."
+              : "Local chat requires Ollama with GPU or a configured RAM tier — not available on CPU-only edges."
+          }
         />
         <TabDebugPanel tab="agent" />
-        {ctx && !chatEnabled ? (
-          <p className="agent-offline-banner">
-            {ctx.interactive_chat_disabled_reason ||
-              "Local Ollama is not available on this CPU-only edge. Use Building status and Rule Lab for faults and trends; external agents (Cursor, OpenClaw) can attach via MCP when enabled."}
-          </p>
+        {!ctx ? (
+          <p className="agent-offline-banner">Checking local AI service…</p>
+        ) : !chatEnabled ? (
+          <div className="agent-unavailable-panel panel">
+            <h3 className="panel-title">Local AI unavailable</h3>
+            <p>
+              {ctx.interactive_chat_disabled_reason ||
+                "Ollama is not running or this edge is CPU-only without a configured model tier. Use Building status, Rule Lab, MCP (/mcp), or an external agent (Cursor, OpenClaw) instead."}
+            </p>
+            {ctx.gpu_available === false ? (
+              <p className="muted">GPU: not detected · RAM tier: {ctx.ollama_ram_tier || "—"}</p>
+            ) : null}
+          </div>
         ) : null}
       </div>
 

@@ -98,10 +98,14 @@ export default function NiagaraPage() {
 
   const loadStations = useCallback(async () => {
     const res = await fetchNiagaraStations();
-    setStations(res.stations ?? []);
-    if (!selectedStationId && res.stations?.length) {
-      setSelectedStationId(res.stations[0].id);
-      setForm(res.stations[0]);
+    const list = (res.stations ?? []).filter(
+      (s) => s.enabled && !String(s.station_url || "").includes("example.test"),
+    );
+    setStations(list.length ? list : res.stations ?? []);
+    const pick = list[0] ?? res.stations?.[0];
+    if (!selectedStationId && pick) {
+      setSelectedStationId(pick.id);
+      setForm(pick);
     }
   }, [selectedStationId]);
 
@@ -365,24 +369,16 @@ export default function NiagaraPage() {
   return (
     <div className="page page-wide niagara-page">
       <PageHeader
-        title="Niagara (baskStream)"
-        subtitle="Read-only supervisory connector via Niagara baskStream — browser talks to Open-FDD bridge only. Passwords via password_env (e.g. OPENFDD_NIAGARA_ADMIN_PASSWORD)."
+        title="Niagara"
+        subtitle="Supervisory read-only driver — same layout as BACnet/Modbus. Set OPENFDD_NIAGARA_ADMIN_PASSWORD in workspace/niagara.env.local on the edge."
       />
       <TabDebugPanel tab="niagara" />
-
-      <div className="panel" style={{ borderColor: "var(--warn-border, #b45309)" }}>
-        <strong>Read-only OT posture</strong>
-        <p className="muted" style={{ margin: "0.35rem 0 0" }}>
-          Writes, overrides, alarm ack, and emergency actions are intentionally not implemented. Use Niagara Workbench for
-          commands; this tab is for discovery, monitoring, and historian ingest only.
-        </p>
-      </div>
 
       {health && !health.dependencies_ok ? (
         <div className="panel">
           <p className="muted">
-            Niagara connector dependencies missing: {health.dependencies_error}. Install{" "}
-            <code>aiohttp</code> and <code>msgpack</code> in the bridge API venv.
+            Connector dependencies missing: {health.dependencies_error}. Install <code>aiohttp</code> and{" "}
+            <code>msgpack</code> in the bridge API venv.
           </p>
         </div>
       ) : null}
@@ -395,9 +391,114 @@ export default function NiagaraPage() {
         </div>
       ) : null}
 
+      {pollStatus && selectedStationId ? (
+        <div className="panel driver-poll-strip">
+          <div className="row row-spread" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+            <strong>{selectedStation?.name ?? selectedStationId}</strong>
+            <span className={`badge ${pollStatus.running ? "poll-badge" : "muted-badge"}`}>
+              {pollStatus.running ? "polling" : "stopped"}
+            </span>
+            <span className="badge muted-badge">{pollStatus.connected ? "connected" : "disconnected"}</span>
+            <span className="muted">{pollStatus.active_points} point(s)</span>
+            {pollStatus.last_success ? (
+              <span className="muted">
+                Last OK: {formatPollSampleAt({ at: pollStatus.last_success }) ?? pollStatus.last_success}
+              </span>
+            ) : null}
+            {pollStatus.last_error ? <span className="muted">Error: {pollStatus.last_error}</span> : null}
+          </div>
+          <div className="row" style={{ marginTop: "0.65rem", gap: "0.5rem" }}>
+            <ActionButton secondary pending={pending} onClick={() => void handlePollStart()} disabled={pollStatus.running}>
+              Start poll
+            </ActionButton>
+            <ActionButton secondary pending={pending} onClick={() => void handlePollStop()} disabled={!pollStatus.running}>
+              Stop poll
+            </ActionButton>
+            <ActionButton secondary pending={pending} onClick={() => void handlePollOnce()}>
+              Poll once
+            </ActionButton>
+            <ActionButton secondary pending={pending} onClick={() => void handleDiscover()} disabled={!selectedStationId}>
+              Discover points
+            </ActionButton>
+          </div>
+        </div>
+      ) : null}
+
       <div className="panel">
-        <h3 className="panel-title">Stations</h3>
-        <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+        <h3 className="panel-title">Devices &amp; points</h3>
+        <NiagaraTreeLegend />
+        {treeLoading ? <Spinner label="Loading driver tree…" /> : null}
+        <NiagaraPointsTree
+          devices={driverDevices}
+          selectedPointOrds={selectedPointOrds}
+          onTogglePointSelection={togglePointOrd}
+          onToggleDeviceSelection={toggleDeviceSelection}
+          onRefreshDevice={async (device) => {
+            const ords = device.points.map((p) => p.point_ord);
+            if (!ords.length) return;
+            setPending(true);
+            try {
+              await readNiagaraPoints(device.station_id, ords, true);
+              await loadDriverTree();
+            } catch (e) {
+              setActionError(formatApiError(e));
+            } finally {
+              setPending(false);
+            }
+          }}
+          onRefreshPoint={async (device, point) => {
+            setPending(true);
+            try {
+              await readNiagaraPoints(device.station_id, [point.point_ord], true);
+              await loadDriverTree();
+            } catch (e) {
+              setActionError(formatApiError(e));
+            } finally {
+              setPending(false);
+            }
+          }}
+          onDiscoverDevice={async (device) => {
+            setSelectedStationId(device.station_id);
+            await handleDiscover();
+          }}
+        />
+        <div className="row" style={{ marginTop: "0.75rem", gap: "0.5rem", flexWrap: "wrap" }}>
+          <ActionButton
+            secondary
+            pending={pending}
+            disabled={!selectedPointOrds.size}
+            onClick={() => void handleReadSelected()}
+          >
+            Read selected ({selectedPointOrds.size})
+          </ActionButton>
+          <ActionButton
+            secondary
+            disabled={!selectedPointsFlat.length}
+            onClick={() => downloadText("niagara-points.csv", exportPointsCsv(selectedPointsFlat), "text/csv")}
+          >
+            Export CSV
+          </ActionButton>
+          <ActionButton
+            secondary
+            disabled={!selectedPointsFlat.length}
+            onClick={() => downloadText("niagara-points.json", exportPointsJson(selectedPointsFlat), "application/json")}
+          >
+            Export JSON
+          </ActionButton>
+        </div>
+      </div>
+
+      <details className="panel">
+        <summary className="panel-title" style={{ display: "inline", cursor: "pointer" }}>
+          Station connection
+        </summary>
+        {!form.password_env || selectedStation?.password_configured === false ? (
+          <p className="muted" style={{ marginTop: "0.5rem" }}>
+            Password env <code>{form.password_env || "OPENFDD_NIAGARA_ADMIN_PASSWORD"}</code> is not set on the edge —
+            add <code>workspace/niagara.env.local</code> and restart the bridge.
+          </p>
+        ) : null}
+        <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", margin: "0.75rem 0" }}>
           {stations.map((s) => (
             <button
               key={s.id}
@@ -406,7 +507,6 @@ export default function NiagaraPage() {
               onClick={() => selectStation(s)}
             >
               {s.name}
-              {!s.password_configured ? " (no password env)" : ""}
             </button>
           ))}
           <button
@@ -414,13 +514,12 @@ export default function NiagaraPage() {
             className="secondary-btn"
             onClick={() => {
               setSelectedStationId("");
-              setForm(emptyForm());
+              setForm({ ...emptyForm(), ...BENCH_DEFAULTS });
             }}
           >
             + New station
           </button>
         </div>
-
         <div className="form-grid">
           <div className="field">
             <label className="field-label">Name</label>
@@ -529,148 +628,7 @@ export default function NiagaraPage() {
             </ActionButton>
           ) : null}
         </div>
-      </div>
-
-      {pollStatus && selectedStationId ? (
-        <div className="panel">
-          <h3 className="panel-title">Poll status — {selectedStation?.name}</h3>
-          <div className="row row-spread" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-            <span className={`badge ${pollStatus.running ? "poll-badge" : "muted-badge"}`}>
-              {pollStatus.running ? "running" : "stopped"}
-            </span>
-            <span className="badge muted-badge">{pollStatus.connected ? "connected" : "disconnected"}</span>
-            <span className="muted">{pollStatus.active_points} active point(s)</span>
-            {pollStatus.last_success ? (
-              <span className="muted">Last OK: {formatPollSampleAt({ at: pollStatus.last_success }) ?? pollStatus.last_success}</span>
-            ) : null}
-            {pollStatus.last_error ? <span className="muted">Error: {pollStatus.last_error}</span> : null}
-          </div>
-          <div className="row" style={{ marginTop: "0.65rem", gap: "0.5rem" }}>
-            <ActionButton secondary pending={pending} onClick={() => void handlePollStart()} disabled={pollStatus.running}>
-              Start poll
-            </ActionButton>
-            <ActionButton secondary pending={pending} onClick={() => void handlePollStop()} disabled={!pollStatus.running}>
-              Stop poll
-            </ActionButton>
-            <ActionButton secondary pending={pending} onClick={() => void handlePollOnce()}>
-              Poll once
-            </ActionButton>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="panel">
-        <h3 className="panel-title">Browse tree</h3>
-        <div className="form-grid">
-          <div className="field" style={{ gridColumn: "1 / -1" }}>
-            <label className="field-label">Base ORD</label>
-            <input value={browseBase} onChange={(e) => setBrowseBase(e.target.value)} />
-          </div>
-          <div className="field">
-            <label className="field-label">Depth</label>
-            <input type="number" min={1} max={8} value={browseDepth} onChange={(e) => setBrowseDepth(Number(e.target.value))} />
-          </div>
-          <div className="field">
-            <label className="field-label">
-              <input type="checkbox" checked={followExternal} onChange={(e) => setFollowExternal(e.target.checked)} /> Follow
-              external links
-            </label>
-          </div>
-        </div>
-        <ActionButton secondary pending={pending} onClick={() => void handleBrowse()} disabled={!selectedStationId}>
-          Browse
-        </ActionButton>
-        {treeNodes.length ? (
-          <pre className="code-block" style={{ marginTop: "0.75rem", maxHeight: "240px", overflow: "auto" }}>
-            {treeNodes.map((n) => `${"  ".repeat(n.indent)}${n.name}  ${n.ord}  ${n.type}\n`).join("")}
-          </pre>
-        ) : null}
-      </div>
-
-      <div className="panel">
-        <h3 className="panel-title">Discovered points</h3>
-        <NiagaraTreeLegend />
-        {treeLoading ? <Spinner label="Loading driver tree…" /> : null}
-        <NiagaraPointsTree
-          devices={driverDevices}
-          selectedPointOrds={selectedPointOrds}
-          onTogglePointSelection={togglePointOrd}
-          onToggleDeviceSelection={toggleDeviceSelection}
-          onRefreshDevice={async (device) => {
-            const ords = device.points.map((p) => p.point_ord);
-            if (!ords.length) return;
-            setPending(true);
-            try {
-              await readNiagaraPoints(device.station_id, ords, true);
-              await loadDriverTree();
-            } catch (e) {
-              setActionError(formatApiError(e));
-            } finally {
-              setPending(false);
-            }
-          }}
-          onRefreshPoint={async (device, point) => {
-            setPending(true);
-            try {
-              await readNiagaraPoints(device.station_id, [point.point_ord], true);
-              await loadDriverTree();
-            } catch (e) {
-              setActionError(formatApiError(e));
-            } finally {
-              setPending(false);
-            }
-          }}
-          onDiscoverDevice={async (device) => {
-            setSelectedStationId(device.station_id);
-            await handleDiscover();
-          }}
-        />
-        <div className="row" style={{ marginTop: "0.75rem", gap: "0.5rem", flexWrap: "wrap" }}>
-          <ActionButton
-            secondary
-            pending={pending}
-            disabled={!selectedPointOrds.size}
-            onClick={() => void handleReadSelected()}
-          >
-            Read selected ({selectedPointOrds.size})
-          </ActionButton>
-          <ActionButton
-            secondary
-            disabled={!selectedPointsFlat.length}
-            onClick={() => downloadText("niagara-points.csv", exportPointsCsv(selectedPointsFlat), "text/csv")}
-          >
-            Export CSV
-          </ActionButton>
-          <ActionButton
-            secondary
-            disabled={!selectedPointsFlat.length}
-            onClick={() => downloadText("niagara-points.json", exportPointsJson(selectedPointsFlat), "application/json")}
-          >
-            Export JSON
-          </ActionButton>
-        </div>
-      </div>
-
-      <div className="panel">
-        <h3 className="panel-title">Schedules</h3>
-        <div className="row" style={{ gap: "0.5rem" }}>
-          <ActionButton secondary pending={pending} onClick={() => void handleLoadSchedules(false)} disabled={!selectedStationId}>
-            List schedules
-          </ActionButton>
-          <ActionButton secondary pending={pending} onClick={() => void handleLoadSchedules(true)} disabled={!selectedStationId}>
-            Read schedules
-          </ActionButton>
-        </div>
-        {schedules.length ? (
-          <pre className="code-block" style={{ marginTop: "0.75rem", maxHeight: "200px", overflow: "auto" }}>
-            {JSON.stringify(schedules, null, 2)}
-          </pre>
-        ) : (
-          <p className="muted" style={{ marginTop: "0.5rem" }}>
-            Browse slot:/Schedules on the station (read-only).
-          </p>
-        )}
-      </div>
+      </details>
     </div>
   );
 }

@@ -101,6 +101,47 @@ CHART_TEMPLATES: dict[str, list[dict[str, Any]]] = {
             ],
         },
     ],
+    "zone": [
+        {
+            "suffix": "zone_temps",
+            "title": "Zone / space / discharge air temperatures",
+            "brick_patterns": [
+                ["zone_air_temperature", "Zone_Air_Temperature", "space_temperature", "stat_zn", "zn-t"],
+                ["discharge_air_temperature", "Discharge_Air_Temperature", "duct-t", "supply_air_temperature"],
+                ["outside_air_temperature", "Outside_Air_Temperature", "oa-t"],
+            ],
+        },
+        {
+            "suffix": "zone_humidity",
+            "title": "Humidity sensors",
+            "brick_patterns": [
+                ["humidity", "Relative_Humidity", "oa-h", "zone_humidity"],
+            ],
+        },
+        {
+            "suffix": "zone_pressure",
+            "title": "Duct static / pressure",
+            "brick_patterns": [
+                ["duct_static", "static_pressure", "duct-p", "supply_air_static_pressure"],
+            ],
+        },
+    ],
+    "oat_weather": [
+        {
+            "suffix": "oat_vs_weather",
+            "title": "Local outside air temp vs web weather",
+            "brick_patterns": [
+                ["outside_air_temperature", "Outside_Air_Temperature", "oa-t", "outdoor_air"],
+            ],
+        },
+        {
+            "suffix": "humidity_vs_weather",
+            "title": "Local humidity vs web weather (when modeled)",
+            "brick_patterns": [
+                ["humidity", "Relative_Humidity", "oa-h", "outside_air_humidity"],
+            ],
+        },
+    ],
 }
 
 BUILDING_CHARTS = [
@@ -253,10 +294,12 @@ def build_report_bundles(
 
     families: dict[str, dict[str, Any]] = {
         "building": {"label": "Building overview", "count": 0},
+        "zone": {"label": "Zone / box reports (FCU, VAV, bench)", "count": 0},
         "ahu": {"label": "AHU reports", "count": 0},
         "vav": {"label": "VAV reports", "count": 0},
         "hws": {"label": "HWS / boiler plant reports", "count": 0},
         "chiller": {"label": "Chiller plant reports", "count": 0},
+        "oat_weather": {"label": "Outside air vs weather", "count": 0},
     }
 
     ahu_first = True
@@ -269,7 +312,7 @@ def build_report_bundles(
             eq["name"] = pts[0].get("equipment_type") or eid
 
         family = report_family(eq)
-        if family not in ("ahu", "hws", "vav", "chiller"):
+        if family not in ("ahu", "hws", "vav", "chiller", "zone", "oat_weather"):
             continue
 
         name = _equipment_label(eq, eid)
@@ -285,9 +328,14 @@ def build_report_bundles(
             default = True
             ahu_first = False
 
-        family_label = {"ahu": "AHU", "hws": "HWS", "vav": "VAV", "chiller": "Chiller"}.get(
-            family, family.upper()
-        )
+        family_label = {
+            "ahu": "AHU",
+            "hws": "HWS",
+            "vav": "VAV",
+            "chiller": "Chiller",
+            "zone": "Zone",
+            "oat_weather": "OAT vs weather",
+        }.get(family, family.upper())
         bundles.append(
             {
                 "bundle_id": f"{family}:{eid}",
