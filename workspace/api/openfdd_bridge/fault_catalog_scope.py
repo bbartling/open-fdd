@@ -76,7 +76,7 @@ def _applicable_rules(
         if site_ids and site_id and site_id not in site_ids:
             continue
         rid = str(rule.get("id") or "")
-        device_names, device_ids = equipment_from_rule_bindings(mdl, site_id, rid)
+        device_names, device_ids = equipment_from_rule_bindings(mdl, site_id, rid, rule=rule)
         if not device_names and not device_ids:
             bindings = rule.get("bindings") if isinstance(rule.get("bindings"), dict) else {}
             if not bindings.get("point_ids") and not bindings.get("equipment_ids"):

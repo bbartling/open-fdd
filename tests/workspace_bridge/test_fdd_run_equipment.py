@@ -33,8 +33,38 @@ def test_plain_symptom_strips_niagara_prefix():
     assert plain_symptom_from_rule_name("Bench humidity flatline 1h") == "humidity flatline 1h"
 
 
-def test_equipment_from_rule_bindings_resolves_bacnet_device(monkeypatch):
+BENCH_RULE_BINDINGS = {
+    "temp-out-of-bounds": {
+        "id": "temp-out-of-bounds",
+        "name": "Temperature out of bounds",
+        "short_description": "Temperature reading is outside the configured range.",
+        "bindings": {
+            "point_ids": [
+                "5007-analog-input-1173",
+                "5007-analog-input-1192",
+                "5007-analog-input-10014",
+                "niagara-bench9065-f4c0862bb4",
+                "niagara-bench9065-9fc449ad9c",
+                "niagara-bench9065-fa1b48f7f0",
+            ],
+            "equipment_ids": [],
+            "brick_types": [],
+        },
+    }
+}
+
+
+def _mock_rules(monkeypatch):
     _use_workspace_data(monkeypatch)
+    monkeypatch.setattr(
+        fdd_equipment_mod,
+        "_RULE_STORE_CACHE",
+        {"temp-out-of-bounds": BENCH_RULE_BINDINGS["temp-out-of-bounds"]},
+    )
+
+
+def test_equipment_from_rule_bindings_resolves_bacnet_device(monkeypatch):
+    _mock_rules(monkeypatch)
     model = _bench_model()
     names, ids = equipment_from_rule_bindings(model, "demo", "temp-out-of-bounds")
     assert "bacnet-5007" in ids
@@ -42,7 +72,7 @@ def test_equipment_from_rule_bindings_resolves_bacnet_device(monkeypatch):
 
 
 def test_equipment_from_rule_bindings_resolves_niagara_station(monkeypatch):
-    _use_workspace_data(monkeypatch)
+    _mock_rules(monkeypatch)
     model = _bench_model()
     names, ids = equipment_from_rule_bindings(model, "demo", "temp-out-of-bounds")
     assert "niagara-bench9065" in ids
@@ -50,7 +80,7 @@ def test_equipment_from_rule_bindings_resolves_niagara_station(monkeypatch):
 
 
 def test_enrich_fdd_run_uses_rule_bindings_not_fault_code(monkeypatch):
-    _use_workspace_data(monkeypatch)
+    _mock_rules(monkeypatch)
     model = _bench_model()
     run = {
         "site_id": "demo",
@@ -82,7 +112,7 @@ def test_fdd_alert_title_is_equipment_first():
 def test_save_results_persists_equipment_names(tmp_path, monkeypatch):
     import openfdd_bridge.fdd_results as mod
 
-    _use_workspace_data(monkeypatch)
+    _mock_rules(monkeypatch)
     model = _bench_model()
 
     monkeypatch.setattr(mod, "fdd_results_path", lambda: tmp_path / "fdd_results.json")

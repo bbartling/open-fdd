@@ -18,6 +18,7 @@ from typing import Any
 
 from . import playground
 from .data_loader import column_map_for_rule, historian_columns_for_rule, load_frame_for_run
+from .feather_store import FeatherStore
 from .fdd_row_prep import prepare_fdd_rows
 from .fdd_fault_analytics import format_fault_detail, summarize_fault_run
 from .fdd_results import save_results

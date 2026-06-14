@@ -83,9 +83,11 @@ def equipment_from_rule_bindings(
     model: dict[str, Any],
     site_id: str,
     rule_id: str,
+    *,
+    rule: dict[str, Any] | None = None,
 ) -> tuple[list[str], list[str]]:
     """Resolve equipment names/ids from Rule Lab point bindings."""
-    rule = _rules_by_id().get(str(rule_id or "").strip())
+    rule = rule or _rules_by_id().get(str(rule_id or "").strip())
     if not rule:
         return [], []
     bindings = rule.get("bindings") if isinstance(rule.get("bindings"), dict) else {}

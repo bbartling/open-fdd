@@ -38,23 +38,11 @@ def test_infer_route(client: TestClient):
     assert "fault_codes" in r.json()
 
 
-def test_save_auto_infers_when_no_fault_codes(client: TestClient):
-    with patch(
-        "openfdd_bridge.rule_fault_inference.infer_fault_codes_for_rule",
-        return_value={
-            "ok": True,
-            "fault_codes": ["VAV-C"],
-            "fault_code": "VAV-C",
-            "narrative": "Sensor flatline rule maps to VAV-C.",
-            "source": "ollama",
-            "ollama_ok": True,
-        },
-    ):
-        r = client.post(
-            "/api/rules/save",
-            json={"name": "Flatline", "mode": "rule", "code": RULE, "config": {}},
-        )
+def test_save_auto_infers_short_description_when_missing(client: TestClient):
+    r = client.post(
+        "/api/rules/save",
+        json={"name": "Flatline", "mode": "rule", "code": RULE, "config": {}},
+    )
     assert r.status_code == 200
     body = r.json()
-    assert body["rule"]["fault_codes"] == ["VAV-C"]
-    assert body.get("fault_inference", {}).get("narrative")
+    assert body["rule"]["short_description"] == "Flatline"
