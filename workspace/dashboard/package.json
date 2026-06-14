@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:watch": "vite build --watch",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run"
