@@ -234,6 +234,8 @@ async def read_point_ords(
 ) -> dict[str, Any]:
     station = _station_or_raise(station_id)
     batch = int(chunk_size if chunk_size is not None else station.get("read_batch_size") or 50)
+    if batch < 1:
+        raise NiagaraBaskStreamError("read batch size must be >= 1")
     cached = {p["point_ord"]: p for p in load_points_cache(station_id)}
     client = await _login_client(station, persistent=False)
     values: list[dict[str, Any]] = []

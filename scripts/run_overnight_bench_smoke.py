@@ -167,7 +167,10 @@ def main() -> int:
         ]
         if args.api and _bridge_reachable(args.api):
             bootstrap_cmd += ["--api", args.api, "--niagara-only"]
-        subprocess.run(bootstrap_cmd, check=False, env={**os.environ, "PYTHONPATH": f"{API}:{REPO}"})
+        bootstrap = subprocess.run(bootstrap_cmd, check=False, env={**os.environ, "PYTHONPATH": f"{API}:{REPO}"})
+        if bootstrap.returncode != 0:
+            print("bootstrap_bench_dual_source.py failed; aborting smoke run", file=sys.stderr)
+            return 1
 
     duration_s = args.duration_hours * 3600
     checkpoint_s = args.checkpoint_hours * 3600
