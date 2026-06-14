@@ -237,3 +237,53 @@ def test_building_alerts_put(client: TestClient):
     assert r2.status_code == 200
     titles = [a["title"] for a in r2.json()["alerts"]]
     assert "SAT sensor drifting" in titles
+
+
+def test_building_status_with_unreadable_model(client: TestClient, tmp_path, monkeypatch):
+    """Regression: unreadable model.json must not 500 the home dashboard."""
+    import json
+
+    data = tmp_path / "data"
+    data.mkdir(parents=True, exist_ok=True)
+    unreadable = data / "model.json"
+    unreadable.write_text('{"sites":[],"equipment":[],"points":[]}', encoding="utf-8")
+    unreadable.chmod(0o000)
+    fallback = data / "bench_dual_source_model.json"
+    fallback.write_text(
+        json.dumps(
+            {
+                "sites": [{"id": "demo", "name": "Demo"}],
+                "equipment": [
+                    {
+                        "id": "bench-box",
+                        "site_id": "demo",
+                        "name": "Bench Box",
+                        "equipment_type": "Air_Handling_Unit",
+                    }
+                ],
+                "points": [
+                    {
+                        "id": "oa-t",
+                        "site_id": "demo",
+                        "equipment_id": "bench-box",
+                        "name": "OA-T",
+                        "brick_type": "Outside_Air_Temperature_Sensor",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
+    monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
+
+    try:
+        for path in ("/api/building/status", "/api/building/snapshot", "/api/faults/status"):
+            r = client.get(path)
+            assert r.status_code == 200, path
+            body = r.json()
+            assert body.get("ok", True) is not False or "traffic" in body or "stack" in body, path
+        status = client.get("/api/building/status").json()
+        assert status["model_configured"] is True
+    finally:
+        unreadable.chmod(0o644)

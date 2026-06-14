@@ -21,6 +21,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
 API = REPO / "workspace" / "api"
@@ -58,6 +59,28 @@ def _run_pytest(targets: list[str]) -> dict:
     }
 
 
+def _probe_dashboard_endpoints(api_base: str) -> dict:
+    """Home dashboard must not 500 when model.json is unreadable."""
+    paths = ("/api/building/status", "/api/building/snapshot", "/api/faults/status")
+    out: dict[str, Any] = {"ok": True, "endpoints": {}}
+    base = api_base.rstrip("/")
+    for path in paths:
+        req = urllib.request.Request(f"{base}{path}")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+                out["endpoints"][path] = {"status": resp.status, "ok": body.get("ok", True)}
+                if resp.status != 200:
+                    out["ok"] = False
+        except urllib.error.HTTPError as exc:
+            out["endpoints"][path] = {"status": exc.code, "error": exc.read().decode("utf-8", errors="replace")[:200]}
+            out["ok"] = False
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            out["endpoints"][path] = {"status": 0, "error": str(exc)[:200]}
+            out["ok"] = False
+    return out
+
+
 def _checkpoint(
     *,
     label: str,
@@ -83,8 +106,13 @@ def _checkpoint(
             "tests/workspace_bridge/test_bench_validator.py",
             "tests/workspace_bridge/test_driver_point_contract.py",
             "tests/workspace_bridge/test_niagara.py",
+            "tests/workspace_bridge/test_model_building.py::test_building_status_with_unreadable_model",
         ]
     )
+    if api_base:
+        report["dashboard_probes"] = _probe_dashboard_endpoints(api_base)
+        if not report["dashboard_probes"].get("ok"):
+            report["ok"] = False
 
     if test_poll_freq and api_base:
         report["poll_freq_test"] = _poll_frequency_sequence(api_base)
