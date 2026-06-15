@@ -63,7 +63,13 @@ def evaluate_long_fdd(body: BenchLongFddEvaluateBody, model: dict[str, Any]) -> 
         run_start = _parse_ts(body.run_started_at)
         if run_start:
             cutoff = max(cutoff, run_start - timedelta(minutes=5))
-    table = arrow_time_filter(table, "timestamp", cutoff, None)
+    filtered = arrow_time_filter(table, "timestamp", cutoff, None)
+    time_filter_relaxed = False
+    if filtered.num_rows == 0 and table.num_rows > 0:
+        # Demo fallback or stale feather replay — evaluate full table; freshness gates decide verdict.
+        filtered = table
+        time_filter_relaxed = True
+    table = filtered
     if table.num_rows == 0:
         return {"ok": False, "error": f"no historian rows within lookback/window", "origin": origin}
 
@@ -90,6 +96,7 @@ def evaluate_long_fdd(body: BenchLongFddEvaluateBody, model: dict[str, Any]) -> 
     return {
         "ok": not metrics.errors,
         "origin": origin,
+        "time_filter_relaxed": time_filter_relaxed,
         "metrics": {
             "source": metrics.source,
             "point_id": metrics.point_id,

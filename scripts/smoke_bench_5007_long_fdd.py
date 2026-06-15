@@ -443,7 +443,7 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
         report.errors.append("fault phase never reached — increase duration_minutes")
 
     # Final snapshot with full lookback for fault-phase evidence
-    lookback_h = max(1.0, (cfg.duration_minutes + 10) / 60.0)
+    lookback_h = max(24.0, (cfg.duration_minutes + 10) / 60.0)
     for source in sources:
         for backend in backends:
             if backend == "datafusion_sql" and not datafusion_available():
