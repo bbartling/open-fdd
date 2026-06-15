@@ -32,6 +32,10 @@ class BenchLongFddEvaluateBody(BaseModel):
 
 
 def evaluate_long_fdd(body: BenchLongFddEvaluateBody, model: dict[str, Any]) -> dict[str, Any]:
+    from datetime import datetime, timedelta, timezone
+
+    from open_fdd.arrow_runtime.column_map_from_model import build_column_map_from_model_points
+    from open_fdd.arrow_runtime.features import arrow_time_filter
     from openfdd_bridge.data_loader import load_arrow_table_for_run
 
     aligned = align_semantic_points(model, body.site_id)
@@ -40,12 +44,18 @@ def evaluate_long_fdd(body: BenchLongFddEvaluateBody, model: dict[str, Any]) -> 
     if pt is None:
         return {"ok": False, "error": f"no model alignment for {body.semantic_key!r} source {body.source!r}"}
 
+    col_map = build_column_map_from_model_points(model, body.site_id)
+    value_col = col_map.get(pt.fdd_input) or pt.historian_column or pt.fdd_input
     hist_src = historian_source(body.source)
-    columns = [pt.fdd_input, pt.historian_column, "timestamp", "site_id", "equipment_id"]
-    columns = sorted({c for c in columns if c})
+    columns = sorted({value_col, "timestamp", "site_id", "equipment_id"})
     table, origin = load_arrow_table_for_run(body.site_id, source=hist_src, columns=columns)
     if not isinstance(table, pa.Table) or table.num_rows == 0:
         return {"ok": False, "error": f"no historian data for source={hist_src}", "origin": origin}
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=body.lookback_hours)
+    table = arrow_time_filter(table, "timestamp", cutoff, None)
+    if table.num_rows == 0:
+        return {"ok": False, "error": f"no historian rows within lookback_hours={body.lookback_hours}", "origin": origin}
 
     cfg = SmokeConfig(
         site_id=body.site_id,

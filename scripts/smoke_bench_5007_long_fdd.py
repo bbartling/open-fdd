@@ -272,13 +272,29 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
                 )
             )
 
-        _fetch("POST", f"{base}/api/bacnet/poll/once", token=token, timeout=180.0)
-        _fetch(
+        bacnet_status, bacnet_res = _fetch("POST", f"{base}/api/bacnet/poll/once", token=token, timeout=180.0)
+        niagara_status, niagara_res = _fetch(
             "POST",
             f"{base}/api/niagara/stations/{cfg.niagara_station}/poll/once",
             token=token,
             timeout=180.0,
         )
+        if bacnet_status != 200:
+            warn = f"cycle {cycle} bacnet poll failed: HTTP {bacnet_status} {_redact_payload(bacnet_res)}"
+            if warn not in report.warnings:
+                report.warnings.append(warn)
+            remaining_sleep = total_s - (time.monotonic() - t0)
+            if remaining_sleep > 0:
+                time.sleep(min(cfg.poll_seconds, remaining_sleep))
+            continue
+        if niagara_status != 200:
+            warn = f"cycle {cycle} niagara poll failed: HTTP {niagara_status} {_redact_payload(niagara_res)}"
+            if warn not in report.warnings:
+                report.warnings.append(warn)
+            remaining_sleep = total_s - (time.monotonic() - t0)
+            if remaining_sleep > 0:
+                time.sleep(min(cfg.poll_seconds, remaining_sleep))
+            continue
 
         for source in sources:
             for backend in backends:
@@ -356,8 +372,8 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
             )
 
         remaining_sleep = total_s - (time.monotonic() - t0)
-        if remaining_sleep > cfg.poll_seconds:
-            time.sleep(cfg.poll_seconds)
+        if remaining_sleep > 0:
+            time.sleep(min(cfg.poll_seconds, remaining_sleep))
 
     if not threshold_changed:
         report.errors.append("fault phase never reached — increase duration_minutes")
@@ -381,6 +397,10 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
             if status == 200 and isinstance(res, dict) and res.get("ok"):
                 latest_runs[(source, backend)] = _metrics_from_response(
                     source, backend, cfg.primary_semantic, res
+                )
+            else:
+                report.errors.append(
+                    f"final {source}/{backend}: HTTP {status} {_redact_payload(res)}"
                 )
 
     status, poll_status = _fetch("GET", f"{base}/api/bench/poll-status", token=token)

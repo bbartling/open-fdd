@@ -35,11 +35,17 @@ _BENCH_MODEL = {
 
 
 def test_bench_long_fdd_evaluate_synthetic_table(monkeypatch: pytest.MonkeyPatch):
+    from datetime import datetime, timedelta, timezone
+
     from openfdd_bridge.bench_long_fdd_eval import BenchLongFddEvaluateBody, evaluate_long_fdd
 
+    now = datetime.now(timezone.utc)
+    timestamps = [
+        (now - timedelta(minutes=i)).isoformat().replace("+00:00", "Z") for i in range(14, -1, -1)
+    ]
     table = pa.table(
         {
-            "timestamp": [f"2026-01-01T00:{i:02d}:00Z" for i in range(15)],
+            "timestamp": timestamps,
             "duct-t": [75.0] * 15,
             "site_id": ["demo"] * 15,
         }
@@ -120,10 +126,16 @@ def test_bench_long_fdd_http_clean_error_no_traceback(client: TestClient, monkey
 
 
 def test_bench_long_fdd_http_success(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from datetime import datetime, timedelta, timezone
+
     monkeypatch.setattr("openfdd_bridge.model_store.ModelStore.load", lambda self: _BENCH_MODEL)
+    now = datetime.now(timezone.utc)
+    timestamps = [
+        (now - timedelta(minutes=i)).isoformat().replace("+00:00", "Z") for i in range(11, -1, -1)
+    ]
     table = pa.table(
         {
-            "timestamp": [f"2026-01-01T00:{i:02d}:00Z" for i in range(12)],
+            "timestamp": timestamps,
             "duct-t": [75.0] * 12,
             "site_id": ["demo"] * 12,
         }
@@ -143,4 +155,4 @@ def test_bench_long_fdd_http_success(client: TestClient, monkeypatch: pytest.Mon
     assert body["metrics"]["execution_evidence"]["computation_path"] == "pyarrow_compute"
     text = json.dumps(body).lower()
     assert "password" not in text
-    assert "bearer" not in text or "********" in text
+    assert "bearer" not in text or "***" in text

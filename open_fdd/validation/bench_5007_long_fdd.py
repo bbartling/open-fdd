@@ -207,6 +207,9 @@ def plot_column_name(point: dict[str, Any]) -> str:
 
 def align_semantic_points(model: dict[str, Any], site_id: str) -> dict[str, dict[str, PointAlignment]]:
     """Index paired sensors by cross_source_semantic and metadata.source."""
+    from open_fdd.arrow_runtime.column_map_from_model import build_column_map_from_model_points
+
+    col_map = build_column_map_from_model_points(model, site_id)
     out: dict[str, dict[str, PointAlignment]] = {}
     for pt in model.get("points") or []:
         if not isinstance(pt, dict) or str(pt.get("site_id") or "") != site_id:
@@ -216,14 +219,16 @@ def align_semantic_points(model: dict[str, Any], site_id: str) -> dict[str, dict
         source = str(meta.get("source") or "").strip()
         if not semantic or not source:
             continue
+        fdd = str(pt.get("fdd_input") or semantic).strip()
+        hist_col = col_map.get(fdd) or col_map.get(str(pt.get("brick_type") or "")) or plot_column_name(pt)
         out.setdefault(semantic, {})[source] = PointAlignment(
             semantic_key=semantic,
             source=source,
             point_id=str(pt.get("id") or ""),
             equipment_id=str(pt.get("equipment_id") or ""),
-            historian_column=plot_column_name(pt),
+            historian_column=hist_col,
             brick_type=str(pt.get("brick_type") or ""),
-            fdd_input=str(pt.get("fdd_input") or semantic),
+            fdd_input=fdd,
             units=str(pt.get("units") or ""),
         )
     return out
@@ -612,7 +617,12 @@ def run_synthetic_validation(cfg: SmokeConfig, model: dict[str, Any] | None = No
 
     report.errors.extend(validate_model_preflight(model, cfg))
     aligned = align_semantic_points(model, cfg.site_id)
-    for semantic, by_source in aligned.items():
+    if report.errors:
+        report.finished_at = datetime.now(timezone.utc).isoformat()
+        report.verdict = "FAIL"
+        return report
+
+    for _semantic, by_source in aligned.items():
         for pt in by_source.values():
             report.model_alignment.append(pt)
 
@@ -806,6 +816,7 @@ def _allowed_warning(text: str) -> bool:
         "confirmation_engine=python_loop_over_arrow_mask",
         "datafusion not installed",
         "sql backend skipped",
+        "poll failed",
     )
     return any(token in lowered for token in allowed)
 
@@ -998,7 +1009,7 @@ def finalize_live_report(
         SmokeEvent(
             timestamp=datetime.now(timezone.utc).isoformat(),
             event_type="final_verdict",
-            message=f"verdict pending quality gates",
+            message="verdict pending quality gates",
         )
     )
     report.errors.extend(collect_verdict_errors(report))

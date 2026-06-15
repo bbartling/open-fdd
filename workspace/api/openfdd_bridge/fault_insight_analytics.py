@@ -217,6 +217,8 @@ def resolve_sensor_columns(
         for pt in model.get("points") or []:
             if not isinstance(pt, dict):
                 continue
+            if str(pt.get("site_id") or "").strip() not in {"", site_id}:
+                continue
             if str(pt.get("equipment_id") or "") == equipment_id:
                 _add(pt)
 
@@ -258,7 +260,10 @@ def _float_column(table, column: str):
 
     if table is None or column not in table.column_names:
         return None
-    return pc.cast(table.column(column), pa.float64())
+    try:
+        return pc.cast(table.column(column), pa.float64())
+    except (pa.ArrowInvalid, pa.ArrowTypeError, ValueError):
+        return None
 
 
 def _valid_numeric_mask(vals) -> Any:
@@ -313,7 +318,9 @@ def _motor_on_mask(table, motors: list[dict[str, Any]]):
         if not mcol or mcol not in table.column_names:
             continue
         threshold = float(m.get("threshold") or 0.5)
-        mvals = pc.cast(table.column(mcol), pa.float64())
+        mvals = _float_column(table, mcol)
+        if mvals is None:
+            continue
         this_on = pc.greater_equal(mvals, pa.scalar(threshold))
         on = this_on if on is None else pc.or_(on, this_on)
     return on
