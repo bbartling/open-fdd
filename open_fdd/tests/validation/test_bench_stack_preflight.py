@@ -15,8 +15,33 @@ REPO = Path(__file__).resolve().parents[3]
 RULES_STORE = REPO / "workspace" / "data" / "rules_store.json"
 
 
+def _bench_rules_fixture() -> list[dict]:
+    """CI-safe fixture — mirrors benserver 4-rule bench bindings without gitignored data/."""
+
+    def _rule(rule_id: str, point_count: int) -> dict:
+        return {
+            "id": rule_id,
+            "enabled": True,
+            "backend": "arrow",
+            "bindings": {"point_ids": [f"bench-{rule_id}-{i}" for i in range(point_count)]},
+        }
+
+    return [
+        _rule("temp-out-of-bounds", 6),
+        _rule("temp-rate-of-change", 6),
+        _rule("humidity-out-of-bounds", 2),
+        _rule("humidity-rate-of-change", 2),
+    ]
+
+
+def _load_bench_rules() -> list[dict]:
+    if RULES_STORE.is_file():
+        return json.loads(RULES_STORE.read_text(encoding="utf-8")).get("rules") or []
+    return _bench_rules_fixture()
+
+
 def test_validate_rules_in_service_matches_ui_counts():
-    rules = json.loads(RULES_STORE.read_text(encoding="utf-8")).get("rules") or []
+    rules = _load_bench_rules()
     report = validate_rules_in_service(rules)
     assert report["ok"] is True
     assert report["enabled_count"] == 4
@@ -36,7 +61,7 @@ def test_validate_rules_in_service_fails_when_rule_missing():
 
 
 def test_validate_stack_preflight_happy_path():
-    rules = json.loads(RULES_STORE.read_text(encoding="utf-8")).get("rules") or []
+    rules = _load_bench_rules()
 
     def fetch(method: str, path: str, body: dict | None = None):
         if path == "/health":
