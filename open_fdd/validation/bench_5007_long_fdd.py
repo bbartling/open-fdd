@@ -17,6 +17,15 @@ from open_fdd.arrow_runtime.backend import run_arrow_rule
 from open_fdd.arrow_runtime.confirmation import CONFIRMATION_ENGINE, confirm_fault_mask
 from open_fdd.arrow_runtime.datafusion_backend import datafusion_available, run_datafusion_sql_rule
 from open_fdd.arrow_runtime.execution_evidence import validate_computation_path
+from open_fdd.validation.bench_data_freshness import (
+    assess_data_freshness,
+    classify_historian_mode,
+    compute_post_change_timing,
+    expected_confirmation_delay_seconds,
+    infer_timing_validation_method,
+    parse_ts as freshness_parse_ts,
+    timestamp_interval_stats,
+)
 
 BACNET_SOURCE = "bacnet_direct"
 NIAGARA_SOURCE = "niagara_baskstream"
@@ -45,6 +54,10 @@ class SmokeConfig:
     overnight: bool = False
     dry_run: bool = False
     synthetic: bool = False
+    live: bool = True
+    allow_historical_replay: bool = False
+    strict_live_freshness: bool = True
+    freshness_window_minutes: float = 5.0
     strict_datafusion: bool = False
     align_tolerance_s: int = 90
     secondary_semantics: tuple[str, ...] = DEFAULT_SEMANTICS
@@ -111,6 +124,16 @@ class FddRunMetrics:
     first_confirmed_fault_time: str = ""
     confirmation_delay_seconds: float | None = None
     expected_confirmation_delay_seconds: float = 0.0
+    threshold_change_wall_time: str = ""
+    threshold_change_sample_time: str = ""
+    threshold_change_row_index: int | None = None
+    preexisting_raw_fault: bool = False
+    first_raw_fault_after_change: str = ""
+    first_confirmed_fault_after_change: str = ""
+    observed_confirmation_delay_seconds: float | None = None
+    early_confirmed_fault: bool = False
+    average_sample_interval_s: float | None = None
+    max_sample_gap_s: float | None = None
     mismatch_count: int = 0
     rule_hash: str = ""
     rule_config: dict[str, Any] = field(default_factory=dict)
@@ -166,6 +189,8 @@ class ValidationReport:
     threshold_change_at: str = ""
     started_at: str = ""
     finished_at: str = ""
+    data_freshness: dict[str, Any] = field(default_factory=dict)
+    timing_validation_method: str = ""
     alignment_method: str = "data_model_cross_source_semantic"
 
     def to_dict(self) -> dict[str, Any]:
@@ -338,6 +363,8 @@ def evaluate_backend_on_table(
     threshold: float,
     phase: str,
     include_raw: bool = True,
+    threshold_change_wall: datetime | None = None,
+    threshold_change_row_index: int | None = None,
 ) -> FddRunMetrics:
     value_col = alignment.fdd_input if alignment.fdd_input in table.column_names else alignment.historian_column
     if value_col not in table.column_names and alignment.semantic_key in table.column_names:
@@ -354,7 +381,11 @@ def evaluate_backend_on_table(
         semantic_key=alignment.semantic_key,
         backend=backend,
         rule_config=rule_cfg,
-        expected_confirmation_delay_seconds=cfg.confirmation_minutes * 60.0,
+        expected_confirmation_delay_seconds=expected_confirmation_delay_seconds(
+            confirmation_minutes=cfg.confirmation_minutes,
+            confirmation_rows=cfg.confirmation_rows,
+            poll_seconds=cfg.poll_seconds,
+        ),
     )
 
     if table.num_rows == 0:
@@ -365,6 +396,9 @@ def evaluate_backend_on_table(
     if ts_col is not None:
         metrics.first_sample_time = str(ts_col[0].as_py())
         metrics.last_sample_time = str(ts_col[-1].as_py())
+        interval_stats = timestamp_interval_stats(ts_col)
+        metrics.average_sample_interval_s = interval_stats["average_interval_s"]
+        metrics.max_sample_gap_s = interval_stats["max_gap_s"]
 
     try:
         if backend == "pyarrow":
@@ -419,13 +453,36 @@ def evaluate_backend_on_table(
     metrics.errors.extend(validate_computation_path(evidence))
 
     if ts_col is not None:
-        metrics.first_raw_fault_time = _first_true_timestamp(ts_col, raw_mask)
-        metrics.first_confirmed_fault_time = _first_true_timestamp(ts_col, conf_mask)
-        if metrics.first_raw_fault_time and metrics.first_confirmed_fault_time:
-            t0 = _parse_ts(metrics.first_raw_fault_time)
-            t1 = _parse_ts(metrics.first_confirmed_fault_time)
-            if t0 and t1:
-                metrics.confirmation_delay_seconds = (t1 - t0).total_seconds()
+        timing = compute_post_change_timing(
+            ts_col,
+            raw_mask,
+            conf_mask,
+            threshold_change_wall=threshold_change_wall,
+            threshold_change_row_index=threshold_change_row_index,
+            expected_confirmation_delay_seconds=metrics.expected_confirmation_delay_seconds,
+            confirmation_rows=cfg.confirmation_rows,
+        )
+        metrics.threshold_change_wall_time = str(timing.get("threshold_change_wall_time") or "")
+        metrics.threshold_change_sample_time = str(timing.get("threshold_change_sample_time") or "")
+        metrics.threshold_change_row_index = timing.get("threshold_change_row_index")
+        metrics.preexisting_raw_fault = bool(timing.get("preexisting_raw_fault"))
+        metrics.first_raw_fault_after_change = str(timing.get("first_raw_fault_after_change") or "")
+        metrics.first_confirmed_fault_after_change = str(timing.get("first_confirmed_fault_after_change") or "")
+        metrics.observed_confirmation_delay_seconds = timing.get("observed_confirmation_delay_seconds")
+        metrics.early_confirmed_fault = bool(timing.get("early_confirmed_fault"))
+
+        if threshold_change_wall is not None or threshold_change_row_index is not None:
+            metrics.first_raw_fault_time = metrics.first_raw_fault_after_change
+            metrics.first_confirmed_fault_time = metrics.first_confirmed_fault_after_change
+            metrics.confirmation_delay_seconds = metrics.observed_confirmation_delay_seconds
+        else:
+            metrics.first_raw_fault_time = _first_true_timestamp(ts_col, raw_mask)
+            metrics.first_confirmed_fault_time = _first_true_timestamp(ts_col, conf_mask)
+            if metrics.first_raw_fault_time and metrics.first_confirmed_fault_time:
+                t0 = _parse_ts(metrics.first_raw_fault_time)
+                t1 = _parse_ts(metrics.first_confirmed_fault_time)
+                if t0 and t1:
+                    metrics.confirmation_delay_seconds = (t1 - t0).total_seconds()
 
     return metrics
 
@@ -554,6 +611,7 @@ def validate_confirmation_timing(
         cfg=cfg,
         threshold=threshold,
         phase="fault",
+        threshold_change_row_index=baseline_rows,
     )
     if metrics.errors:
         return metrics.errors
@@ -661,6 +719,7 @@ def run_synthetic_validation(cfg: SmokeConfig, model: dict[str, Any] | None = No
                 cfg=cfg,
                 threshold=cfg.forced_threshold_f,
                 phase="fault",
+                threshold_change_row_index=baseline_rows,
             )
             report.matrix_runs.append(m)
             report.execution_evidence.append({"run": f"{source}/{backend}", **m.execution_evidence})
@@ -744,6 +803,9 @@ def run_synthetic_validation(cfg: SmokeConfig, model: dict[str, Any] | None = No
     )
 
     report.finished_at = datetime.now(timezone.utc).isoformat()
+    report.data_freshness = build_report_data_freshness(report)
+    report.timing_validation_method = str(report.data_freshness.get("timing_validation_method") or "")
+    report.polling_health = build_live_data_health(report)
     report.events.insert(
         0,
         SmokeEvent(
@@ -817,8 +879,57 @@ def _allowed_warning(text: str) -> bool:
         "datafusion not installed",
         "sql backend skipped",
         "poll failed",
+        "historical replay",
+        "historian_mode=historical_replay",
+        "live polling freshness not proven",
+        "did not prove live polling",
     )
     return any(token in lowered for token in allowed)
+
+
+def build_report_data_freshness(report: ValidationReport) -> dict[str, Any]:
+    """Aggregate freshness across latest matrix runs."""
+    cfg = report.config
+    mode = _report_mode(report)
+    latest = aggregate_latest_runs(report.matrix_runs)
+    is_synthetic = cfg.synthetic or mode == "synthetic"
+
+    first_ts = ""
+    last_ts = ""
+    if latest:
+        starts = [r.first_sample_time for r in latest if r.first_sample_time]
+        ends = [r.last_sample_time for r in latest if r.last_sample_time]
+        if starts:
+            first_ts = min(starts, key=lambda s: freshness_parse_ts(s) or datetime.min.replace(tzinfo=timezone.utc))
+        if ends:
+            last_ts = max(ends, key=lambda s: freshness_parse_ts(s) or datetime.min.replace(tzinfo=timezone.utc))
+
+    freshness = assess_data_freshness(
+        first_sample_time=first_ts,
+        last_sample_time=last_ts,
+        wall_clock_start=report.started_at,
+        wall_clock_end=report.finished_at or datetime.now(timezone.utc).isoformat(),
+        freshness_window_minutes=cfg.freshness_window_minutes,
+        poll_seconds=cfg.poll_seconds,
+    )
+    historian_mode = classify_historian_mode(
+        synthetic=is_synthetic,
+        dry_run=cfg.dry_run and not is_synthetic,
+        live=mode == "live",
+        data_is_fresh=bool(freshness.get("data_is_fresh")),
+        data_window_matches_run_window=bool(freshness.get("data_window_matches_run_window")),
+    )
+    freshness["historian_mode"] = historian_mode
+    change_row = next(
+        (r.threshold_change_row_index for r in latest if r.threshold_change_row_index is not None),
+        None,
+    )
+    freshness["timing_validation_method"] = infer_timing_validation_method(
+        historian_mode=historian_mode,
+        data_is_fresh=bool(freshness.get("data_is_fresh")),
+        threshold_change_row_index=change_row,
+    )
+    return freshness
 
 
 def collect_verdict_errors(report: ValidationReport) -> list[str]:
@@ -828,9 +939,18 @@ def collect_verdict_errors(report: ValidationReport) -> list[str]:
     mode = _report_mode(report)
     is_live = mode == "live"
     latest = aggregate_latest_runs(report.matrix_runs)
+    freshness = report.data_freshness or build_report_data_freshness(report)
+    historian_mode = str(freshness.get("historian_mode") or "unknown")
 
     if is_live and not latest:
         errors.append("live mode: matrix_runs empty — no evaluate snapshots collected")
+
+    if is_live and cfg.strict_live_freshness and not cfg.allow_historical_replay:
+        if historian_mode == "historical_replay" or not freshness.get("data_is_fresh"):
+            errors.append(
+                "live mode: historian samples are stale or historical replay — "
+                "live polling freshness not validated (use --allow-historical-replay to permit WARN)"
+            )
 
     if is_live:
         wall = wall_clock_duration_minutes(report)
@@ -863,19 +983,44 @@ def collect_verdict_errors(report: ValidationReport) -> list[str]:
 
     if is_live and cfg.fault_direction == "below":
         fault_runs = [r for r in latest if r.backend == "pyarrow"]
-        if fault_runs and not any(r.first_raw_fault_time for r in fault_runs):
-            errors.append("forced fault threshold set but first_raw_fault_time missing on PyArrow path")
-        if fault_runs and not any(r.first_confirmed_fault_time for r in fault_runs):
-            errors.append("fault phase ran but first_confirmed_fault_time missing after confirmation window")
+        if fault_runs and historian_mode == "live_recent":
+            if not any(r.first_raw_fault_after_change or r.first_raw_fault_time for r in fault_runs):
+                errors.append("forced fault threshold set but first_raw_fault_after_change missing on PyArrow path")
+            if not any(r.first_confirmed_fault_after_change or r.first_confirmed_fault_time for r in fault_runs):
+                errors.append("fault phase ran but first_confirmed_fault_after_change missing after confirmation window")
+        elif fault_runs and historian_mode in ("synthetic", "historical_replay"):
+            if not any(r.first_confirmed_fault_after_change or r.first_confirmed_fault_time for r in fault_runs):
+                if historian_mode == "synthetic" or cfg.allow_historical_replay:
+                    pass  # timing may be unprovable on replay
+                else:
+                    errors.append("fault phase ran but confirmed fault timing could not be validated")
 
     for run in latest:
-        if run.first_confirmed_fault_time and run.first_raw_fault_time:
-            delay = run.confirmation_delay_seconds
-            expected = run.expected_confirmation_delay_seconds
-            if delay is not None and expected > 0 and delay < expected * 0.9:
+        if run.early_confirmed_fault:
+            errors.append(
+                f"early confirmed fault on {run.source}/{run.backend}: "
+                f"before threshold-change + confirmation window"
+            )
+        if run.preexisting_raw_fault and is_live and historian_mode == "live_recent":
+            errors.append(
+                f"preexisting raw fault before threshold change on {run.source}/{run.backend}"
+            )
+        delay = run.observed_confirmation_delay_seconds or run.confirmation_delay_seconds
+        expected = run.expected_confirmation_delay_seconds
+        if delay is not None and expected > 0 and delay < expected * 0.9:
+            if run.first_confirmed_fault_after_change or run.first_confirmed_fault_time:
                 errors.append(
                     f"early confirmed fault on {run.source}/{run.backend}: "
                     f"delay {delay}s < expected {expected}s"
+                )
+
+    if is_live and historian_mode == "historical_replay" and cfg.strict_live_freshness:
+        timing_method = str(freshness.get("timing_validation_method") or "")
+        if timing_method == "wall_clock_unavailable" and not cfg.allow_historical_replay:
+            py_runs = [r for r in latest if r.backend == "pyarrow"]
+            if py_runs and not any(r.threshold_change_sample_time for r in py_runs):
+                errors.append(
+                    "timing cannot prove 10-minute holdoff — threshold change not aligned to sample timestamps"
                 )
 
     if is_live and len(report.events) < 3:
@@ -928,24 +1073,48 @@ def build_live_data_health(
     poll_status: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     cfg = report.config
-    expected = int(round(cfg.duration_minutes * 60 / cfg.poll_seconds))
+    freshness = report.data_freshness or build_report_data_freshness(report)
+    data_is_fresh = bool(freshness.get("data_is_fresh"))
+    historian_mode = str(freshness.get("historian_mode") or "unknown")
     latest = aggregate_latest_runs(report.matrix_runs)
     rows: list[dict[str, Any]] = []
     for source in (BACNET_SOURCE, NIAGARA_SOURCE):
         runs = [r for r in latest if r.source == source]
         row_count = max((r.row_count for r in runs), default=0)
-        cadence = {}
-        if poll_status and isinstance(poll_status.get(source), dict):
+        first_ts = next((r.first_sample_time for r in runs if r.first_sample_time), "")
+        last_ts = next((r.last_sample_time for r in runs if r.last_sample_time), "")
+        avg_interval = next((r.average_sample_interval_s for r in runs if r.average_sample_interval_s is not None), None)
+        max_gap = next((r.max_sample_gap_s for r in runs if r.max_sample_gap_s is not None), None)
+
+        if avg_interval is None and poll_status and isinstance(poll_status.get(source), dict):
             cadence = poll_status[source].get("cadence") or {}
+            avg_interval = cadence.get("observed_interval_s")
+            if max_gap is None:
+                max_gap = cadence.get("max_gap_s")
+
+        expected = 0
+        if data_is_fresh:
+            expected = int(round(cfg.duration_minutes * 60 / cfg.poll_seconds))
+        elif first_ts and last_ts:
+            t0 = freshness_parse_ts(first_ts)
+            t1 = freshness_parse_ts(last_ts)
+            if t0 and t1:
+                window_s = max(0.0, (t1 - t0).total_seconds())
+                expected = int(round(window_s / cfg.poll_seconds)) + 1
+        elif historian_mode == "synthetic":
+            expected = row_count
+
         rows.append(
             {
                 "source": source,
                 "expected_samples": expected,
                 "actual_rows": row_count,
-                "first_timestamp": next((r.first_sample_time for r in runs if r.first_sample_time), ""),
-                "last_timestamp": next((r.last_sample_time for r in runs if r.last_sample_time), ""),
-                "average_interval_s": cadence.get("observed_interval_s"),
-                "max_gap_s": cadence.get("max_gap_s"),
+                "first_timestamp": first_ts,
+                "last_timestamp": last_ts,
+                "average_interval_s": avg_interval,
+                "max_gap_s": max_gap,
+                "data_is_fresh": data_is_fresh,
+                "historian_mode": historian_mode,
                 "stale_or_missing": max(0, expected - row_count) if expected else 0,
             }
         )
@@ -961,6 +1130,16 @@ def finalize_live_report(
     latest = aggregate_latest_runs(report.matrix_runs)
     report.matrix_runs = latest
     report.fault_timeline = list(latest)
+    report.data_freshness = build_report_data_freshness(report)
+    report.timing_validation_method = str(report.data_freshness.get("timing_validation_method") or "")
+    historian_mode = str(report.data_freshness.get("historian_mode") or "")
+    if historian_mode == "historical_replay":
+        msg = (
+            "historian_mode=historical_replay — backend equivalence validated, "
+            "but live polling freshness not proven"
+        )
+        if msg not in report.warnings:
+            report.warnings.append(msg)
     report.polling_health = build_live_data_health(report, poll_status=poll_status)
     report.execution_evidence = [
         {"run": f"{r.source}/{r.backend}", **r.execution_evidence} for r in latest if r.execution_evidence
@@ -1036,6 +1215,9 @@ def summarize_report_dict(payload: dict[str, Any]) -> dict[str, Any]:
                 first_raw_fault_time=str(m.get("first_raw_fault_time") or ""),
                 first_confirmed_fault_time=str(m.get("first_confirmed_fault_time") or ""),
                 confirmation_delay_seconds=m.get("confirmation_delay_seconds"),
+                expected_confirmation_delay_seconds=float(m.get("expected_confirmation_delay_seconds") or 0.0),
+                preexisting_raw_fault=bool(m.get("preexisting_raw_fault")),
+                early_confirmed_fault=bool(m.get("early_confirmed_fault")),
                 value_avg=m.get("value_avg"),
                 confirmed_mask_fingerprint=str(m.get("confirmed_mask_fingerprint") or ""),
                 execution_evidence=m.get("execution_evidence") or {},
@@ -1102,6 +1284,16 @@ def summarize_report_dict(payload: dict[str, Any]) -> dict[str, Any]:
             None,
         ),
         "csv_event_rows": len(payload.get("events") or []),
+        "historian_mode": (payload.get("data_freshness") or {}).get("historian_mode"),
+        "data_is_fresh": (payload.get("data_freshness") or {}).get("data_is_fresh"),
+        "data_window_start": (payload.get("data_freshness") or {}).get("data_window_start"),
+        "data_window_end": (payload.get("data_freshness") or {}).get("data_window_end"),
+        "timing_validation_method": payload.get("timing_validation_method")
+        or (payload.get("data_freshness") or {}).get("timing_validation_method"),
+        "expected_confirmation_delay_seconds": next(
+            (r.expected_confirmation_delay_seconds for r in latest if r.expected_confirmation_delay_seconds > 0),
+            None,
+        ),
     }
 
 
@@ -1114,6 +1306,13 @@ def _compute_verdict(report: ValidationReport) -> str:
     equiv_fail = [e for e in report.backend_equivalence + report.source_equivalence if not e.pass_]
     if equiv_fail:
         return "FAIL"
+    mode = _report_mode(report)
+    freshness = report.data_freshness or {}
+    historian_mode = str(freshness.get("historian_mode") or "")
+    if mode == "live" and historian_mode == "live_recent" and not report.warnings:
+        return "PASS"
+    if mode == "synthetic" and not report.warnings:
+        return "PASS"
     if report.warnings:
         return "WARN"
     return "PASS"
@@ -1198,23 +1397,56 @@ def render_markdown_report(report: ValidationReport) -> str:
         f"- **Alignment method:** {report.alignment_method}",
         f"- **Confirmation Python-loop only warning:** {'yes' if only_python_loop_warn else 'no'}",
         "",
-        "## Environment",
+        "## Data Freshness / Replay Status",
         "",
-        f"- **Site:** {cfg.site_id}",
-        f"- **BACnet device:** {cfg.bacnet_device_id}",
-        f"- **Niagara station:** {cfg.niagara_station}",
-        "",
-        "## Live Data Health",
-        "",
-        "| source | expected_samples | actual_rows | first_timestamp | last_timestamp | avg_interval_s | max_gap_s | stale/missing |",
-        "|---|---:|---:|---|---|---|---:|---:|",
     ]
+    df = report.data_freshness or {}
+    historian_mode = str(df.get("historian_mode") or mode)
+    data_is_fresh = df.get("data_is_fresh")
+    lines.extend(
+        [
+            f"- **Wall-clock run window:** {df.get('wall_clock_start') or report.started_at} → "
+            f"{df.get('wall_clock_end') or report.finished_at}",
+            f"- **Historian sample window:** {df.get('data_window_start', 'n/a')} → {df.get('data_window_end', 'n/a')}",
+            f"- **Historian mode:** {historian_mode}",
+            f"- **Data is fresh:** {data_is_fresh}",
+            f"- **Data age (seconds):** {df.get('data_age_seconds', 'n/a')}",
+            f"- **Sample window matches run:** {df.get('data_window_matches_run_window', 'n/a')}",
+            f"- **Timing validation method:** {report.timing_validation_method or df.get('timing_validation_method', 'n/a')}",
+            f"- **Freshness window (minutes):** {df.get('freshness_window_minutes', cfg.freshness_window_minutes)}",
+        ]
+    )
+    if historian_mode == "historical_replay":
+        lines.extend(
+            [
+                "",
+                "> **Warning:** This run used historical/replay-like sample timestamps. "
+                "It validated backend equivalence and confirmation logic, but did not prove live polling freshness.",
+            ]
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Environment",
+            "",
+            f"- **Site:** {cfg.site_id}",
+            f"- **BACnet device:** {cfg.bacnet_device_id}",
+            f"- **Niagara station:** {cfg.niagara_station}",
+            "",
+            "## Live Data Health",
+            "",
+            "| source | expected_samples | actual_rows | first_timestamp | last_timestamp | avg_interval_s | max_gap_s | fresh | stale/missing |",
+            "|---|---:|---:|---|---|---|---:|---:|---|---:|",
+        ]
+    )
     health_rows = report.polling_health or build_live_data_health(report)
     for row in health_rows:
         lines.append(
             f"| {row.get('source', '')} | {row.get('expected_samples', '')} | {row.get('actual_rows', '')} | "
             f"{row.get('first_timestamp', '')} | {row.get('last_timestamp', '')} | "
-            f"{row.get('average_interval_s', '')} | {row.get('max_gap_s', '')} | {row.get('stale_or_missing', '')} |"
+            f"{row.get('average_interval_s', '')} | {row.get('max_gap_s', '')} | "
+            f"{row.get('data_is_fresh', '')} | {row.get('stale_or_missing', '')} |"
         )
 
     lines.extend(
@@ -1239,8 +1471,9 @@ def render_markdown_report(report: ValidationReport) -> str:
             "",
             f"- **Baseline threshold:** {cfg.baseline_threshold_f}F ({cfg.fault_direction})",
             f"- **Forced threshold:** {cfg.forced_threshold_f}F",
-            f"- **Threshold change at:** {report.threshold_change_at or 'n/a'}",
+            f"- **Threshold change at (wall clock):** {report.threshold_change_at or 'n/a'}",
             f"- **Confirmation rows/minutes:** {cfg.confirmation_rows} / {cfg.confirmation_minutes}",
+            f"- **Expected confirmation delay (seconds):** {expected_confirmation_delay_seconds(confirmation_minutes=cfg.confirmation_minutes, confirmation_rows=cfg.confirmation_rows, poll_seconds=cfg.poll_seconds)}",
             "",
             "## Rule Configuration",
             "",
@@ -1266,15 +1499,18 @@ def render_markdown_report(report: ValidationReport) -> str:
             "",
             "## Fault Timeline",
             "",
-            "| source | backend | rows | raw_true | confirmed_true | first_raw_fault | first_confirmed_fault | delay_s | expected_s |",
-            "|---|---|---:|---:|---:|---|---|---:|---:|",
+            "| source | backend | rows | raw_true | confirmed_true | first_raw_after_change | first_confirmed_after_change | "
+            "delay_s | expected_s | preexisting_raw | early_confirmed |",
+            "|---|---|---:|---:|---:|---|---|---:|---:|---|---|",
         ]
     )
     for m in report.fault_timeline or latest:
+        delay = m.observed_confirmation_delay_seconds if m.observed_confirmation_delay_seconds is not None else m.confirmation_delay_seconds
         lines.append(
             f"| {m.source} | {m.backend} | {m.row_count} | {m.raw_true_count} | {m.confirmed_true_count} | "
-            f"{m.first_raw_fault_time} | {m.first_confirmed_fault_time} | "
-            f"{m.confirmation_delay_seconds} | {m.expected_confirmation_delay_seconds} |"
+            f"{m.first_raw_fault_after_change or m.first_raw_fault_time} | "
+            f"{m.first_confirmed_fault_after_change or m.first_confirmed_fault_time} | "
+            f"{delay} | {m.expected_confirmation_delay_seconds} | {m.preexisting_raw_fault} | {m.early_confirmed_fault} |"
         )
 
     lines.extend(["", "## Backend Equivalence", ""])
@@ -1312,11 +1548,17 @@ def render_markdown_report(report: ValidationReport) -> str:
         for err in report.errors:
             lines.append(f"- {err}")
 
-    why = "PASS — live data collected, backends exercised, confirmation window respected."
+    why = "PASS — fresh live or synthetic data, backends exercised, confirmation window respected."
     if report.verdict == "WARN":
-        why = "WARN — useful evidence collected; only known non-fatal warnings (see above)."
+        if historian_mode == "historical_replay":
+            why = (
+                "WARN — backend equivalence and confirmation logic validated on historical/replay samples; "
+                "live polling freshness not proven. See python_loop warning if present."
+            )
+        else:
+            why = "WARN — useful evidence collected; only known non-fatal warnings (see above)."
     elif report.verdict == "FAIL":
-        why = "FAIL — missing live data, timing, equivalence, or unexpected warnings."
+        why = "FAIL — stale live data, timing, equivalence, or unexpected warnings."
 
     lines.extend(["", "## Final Verdict", "", f"**{report.verdict}**", "", why, ""])
     return "\n".join(lines) + "\n"

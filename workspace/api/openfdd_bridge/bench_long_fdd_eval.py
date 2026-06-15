@@ -12,6 +12,7 @@ from open_fdd.validation.bench_5007_long_fdd import (
     align_semantic_points,
     evaluate_backend_on_table,
     historian_source,
+    _parse_ts,
 )
 
 
@@ -29,6 +30,10 @@ class BenchLongFddEvaluateBody(BaseModel):
     confirmation_rows: int = Field(default=10, ge=1, le=1000)
     confirmation_minutes: float = Field(default=10.0, ge=0.0, le=1440.0)
     fault_direction: str = Field(default="below", pattern="^(below|above)$")
+    run_started_at: str | None = None
+    threshold_change_at: str | None = None
+    threshold_change_row_index: int | None = Field(default=None, ge=0, le=100000)
+    freshness_window_minutes: float | None = Field(default=None, ge=0.1, le=1440.0)
 
 
 def evaluate_long_fdd(body: BenchLongFddEvaluateBody, model: dict[str, Any]) -> dict[str, Any]:
@@ -52,10 +57,15 @@ def evaluate_long_fdd(body: BenchLongFddEvaluateBody, model: dict[str, Any]) -> 
     if not isinstance(table, pa.Table) or table.num_rows == 0:
         return {"ok": False, "error": f"no historian data for source={hist_src}", "origin": origin}
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=body.lookback_hours)
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=body.lookback_hours)
+    if body.run_started_at:
+        run_start = _parse_ts(body.run_started_at)
+        if run_start:
+            cutoff = max(cutoff, run_start - timedelta(minutes=5))
     table = arrow_time_filter(table, "timestamp", cutoff, None)
     if table.num_rows == 0:
-        return {"ok": False, "error": f"no historian rows within lookback_hours={body.lookback_hours}", "origin": origin}
+        return {"ok": False, "error": f"no historian rows within lookback/window", "origin": origin}
 
     cfg = SmokeConfig(
         site_id=body.site_id,
@@ -64,7 +74,9 @@ def evaluate_long_fdd(body: BenchLongFddEvaluateBody, model: dict[str, Any]) -> 
         confirmation_minutes=body.confirmation_minutes,
         fault_direction=body.fault_direction,
         forced_threshold_f=body.threshold,
+        freshness_window_minutes=body.freshness_window_minutes or 5.0,
     )
+    threshold_change_wall = _parse_ts(body.threshold_change_at) if body.threshold_change_at else None
     metrics = evaluate_backend_on_table(
         table,
         alignment=pt,
@@ -72,6 +84,8 @@ def evaluate_long_fdd(body: BenchLongFddEvaluateBody, model: dict[str, Any]) -> 
         cfg=cfg,
         threshold=body.threshold,
         phase=body.phase,
+        threshold_change_wall=threshold_change_wall,
+        threshold_change_row_index=body.threshold_change_row_index,
     )
     return {
         "ok": not metrics.errors,
@@ -87,9 +101,20 @@ def evaluate_long_fdd(body: BenchLongFddEvaluateBody, model: dict[str, Any]) -> 
             "confirmed_true_count": metrics.confirmed_true_count,
             "first_raw_fault_time": metrics.first_raw_fault_time,
             "first_confirmed_fault_time": metrics.first_confirmed_fault_time,
+            "first_raw_fault_after_change": metrics.first_raw_fault_after_change,
+            "first_confirmed_fault_after_change": metrics.first_confirmed_fault_after_change,
             "first_sample_time": metrics.first_sample_time,
             "last_sample_time": metrics.last_sample_time,
             "confirmation_delay_seconds": metrics.confirmation_delay_seconds,
+            "observed_confirmation_delay_seconds": metrics.observed_confirmation_delay_seconds,
+            "expected_confirmation_delay_seconds": metrics.expected_confirmation_delay_seconds,
+            "average_sample_interval_s": metrics.average_sample_interval_s,
+            "max_sample_gap_s": metrics.max_sample_gap_s,
+            "threshold_change_wall_time": metrics.threshold_change_wall_time,
+            "threshold_change_sample_time": metrics.threshold_change_sample_time,
+            "threshold_change_row_index": metrics.threshold_change_row_index,
+            "preexisting_raw_fault": metrics.preexisting_raw_fault,
+            "early_confirmed_fault": metrics.early_confirmed_fault,
             "value_avg": metrics.value_avg,
             "value_min": metrics.value_min,
             "value_max": metrics.value_max,

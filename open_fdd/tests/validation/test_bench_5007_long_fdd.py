@@ -17,6 +17,8 @@ from open_fdd.arrow_runtime.datafusion_backend import datafusion_available, run_
 from open_fdd.arrow_runtime.execution_evidence import validate_computation_path
 from open_fdd.validation.bench_5007_long_fdd import (
     SmokeConfig,
+    SmokeEvent,
+    FddRunMetrics,
     ValidationReport,
     align_semantic_points,
     build_datafusion_threshold_sql,
@@ -186,6 +188,7 @@ def test_confirmation_timestamp_not_before_window(smoke_cfg: SmokeConfig):
         cfg=smoke_cfg,
         threshold=80.0,
         phase="fault",
+        threshold_change_row_index=baseline_rows,
     )
     assert not metrics.errors
     assert metrics.first_raw_fault_time
@@ -256,6 +259,87 @@ def test_collect_verdict_errors_live_empty():
     )
     errors = collect_verdict_errors(report)
     assert any("matrix_runs empty" in e for e in errors)
+
+
+def test_expected_confirmation_delay_uses_rows_and_minutes(smoke_cfg: SmokeConfig):
+    from open_fdd.validation.bench_data_freshness import expected_confirmation_delay_seconds
+
+    delay = expected_confirmation_delay_seconds(
+        confirmation_minutes=10.0,
+        confirmation_rows=10,
+        poll_seconds=60,
+    )
+    assert delay == 600.0
+
+
+def test_historical_replay_classified_not_fresh():
+    from open_fdd.validation.bench_data_freshness import assess_data_freshness, classify_historian_mode
+
+    freshness = assess_data_freshness(
+        first_sample_time="2025-01-15T08:00:00Z",
+        last_sample_time="2025-01-15T09:55:00Z",
+        wall_clock_start="2026-06-15T16:25:54Z",
+        wall_clock_end="2026-06-15T17:00:56Z",
+        freshness_window_minutes=5.0,
+        poll_seconds=60,
+    )
+    assert freshness["data_is_fresh"] is False
+    mode = classify_historian_mode(
+        synthetic=False,
+        dry_run=False,
+        live=True,
+        data_is_fresh=False,
+        data_window_matches_run_window=False,
+    )
+    assert mode == "historical_replay"
+
+
+def test_strict_live_freshness_fails_stale_historian():
+    report = ValidationReport(
+        config=SmokeConfig(duration_minutes=35, strict_live_freshness=True, allow_historical_replay=False),
+        environment={"mode": "live"},
+        started_at="2026-06-15T16:25:54Z",
+        finished_at="2026-06-15T17:00:56Z",
+        data_freshness={
+            "historian_mode": "historical_replay",
+            "data_is_fresh": False,
+            "timing_validation_method": "wall_clock_unavailable",
+        },
+        matrix_runs=[
+            FddRunMetrics(
+                source="bacnet_direct",
+                point_id="p1",
+                equipment_id="e1",
+                semantic_key="duct-t",
+                backend="pyarrow",
+                row_count=24,
+                first_sample_time="2025-01-15T08:00:00Z",
+                last_sample_time="2025-01-15T09:55:00Z",
+                expected_confirmation_delay_seconds=600.0,
+            ),
+            FddRunMetrics(
+                source="niagara_baskstream",
+                point_id="p2",
+                equipment_id="e2",
+                semantic_key="duct-t",
+                backend="pyarrow",
+                row_count=24,
+                first_sample_time="2025-01-15T08:00:00Z",
+                last_sample_time="2025-01-15T09:55:00Z",
+                expected_confirmation_delay_seconds=600.0,
+            ),
+        ],
+        events=[SmokeEvent(timestamp="t", event_type="a", message="m")] * 5,
+    )
+    errors = collect_verdict_errors(report)
+    assert any("historical replay" in e.lower() or "stale" in e.lower() for e in errors)
+
+
+def test_synthetic_report_includes_freshness_section(smoke_cfg: SmokeConfig, bench_model: dict, tmp_path: Path):
+    report = run_synthetic_validation(smoke_cfg, model=bench_model)
+    md = render_markdown_report(report)
+    assert "Data Freshness / Replay Status" in md
+    assert report.data_freshness.get("historian_mode") == "synthetic"
 
 
 def test_inspect_script_subprocess(smoke_cfg: SmokeConfig, bench_model: dict, tmp_path: Path):

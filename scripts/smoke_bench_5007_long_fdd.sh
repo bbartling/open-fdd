@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bench 5007 long FDD validation — default 2h, overnight 12h, synthetic for CI.
+# Bench 5007 long FDD validation — default 2h live + strict freshness, synthetic for CI.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -30,5 +30,6 @@ if [[ ! -x "$PYTHON" ]]; then
   PYTHON=python3
 fi
 
+DEFAULT_ARGS=(--live --strict-live-freshness --freshness-window-minutes 5)
 echo "==> Bench 5007 long FDD smoke (${OPENFDD_SMOKE_DURATION_MINUTES} min, confirmation window=${OPENFDD_SMOKE_CONFIRMATION_ROWS} rows)"
-exec "$PYTHON" scripts/smoke_bench_5007_long_fdd.py "$@"
+exec "$PYTHON" scripts/smoke_bench_5007_long_fdd.py "${DEFAULT_ARGS[@]}" "$@"

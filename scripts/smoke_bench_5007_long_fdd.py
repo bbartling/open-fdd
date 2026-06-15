@@ -116,7 +116,18 @@ def _metrics_from_response(source: str, backend: str, semantic: str, res: dict[s
         last_sample_time=str(m.get("last_sample_time") or ""),
         first_raw_fault_time=str(m.get("first_raw_fault_time") or ""),
         first_confirmed_fault_time=str(m.get("first_confirmed_fault_time") or ""),
+        first_raw_fault_after_change=str(m.get("first_raw_fault_after_change") or ""),
+        first_confirmed_fault_after_change=str(m.get("first_confirmed_fault_after_change") or ""),
         confirmation_delay_seconds=m.get("confirmation_delay_seconds"),
+        observed_confirmation_delay_seconds=m.get("observed_confirmation_delay_seconds"),
+        expected_confirmation_delay_seconds=float(m.get("expected_confirmation_delay_seconds") or 0.0),
+        average_sample_interval_s=m.get("average_sample_interval_s"),
+        max_sample_gap_s=m.get("max_sample_gap_s"),
+        threshold_change_wall_time=str(m.get("threshold_change_wall_time") or ""),
+        threshold_change_sample_time=str(m.get("threshold_change_sample_time") or ""),
+        threshold_change_row_index=m.get("threshold_change_row_index"),
+        preexisting_raw_fault=bool(m.get("preexisting_raw_fault")),
+        early_confirmed_fault=bool(m.get("early_confirmed_fault")),
         execution_evidence=m.get("execution_evidence") or {},
         errors=list(m.get("errors") or []),
     )
@@ -132,6 +143,8 @@ def _evaluate(
     threshold: float,
     phase: str,
     lookback_hours: float | None = None,
+    run_started_at: str | None = None,
+    threshold_change_at: str | None = None,
 ) -> tuple[int, dict[str, Any]]:
     body: dict[str, Any] = {
         "site_id": cfg.site_id,
@@ -144,9 +157,14 @@ def _evaluate(
         "confirmation_rows": cfg.confirmation_rows,
         "confirmation_minutes": cfg.confirmation_minutes,
         "fault_direction": cfg.fault_direction,
+        "freshness_window_minutes": cfg.freshness_window_minutes,
     }
     if lookback_hours is not None:
         body["lookback_hours"] = lookback_hours
+    if run_started_at:
+        body["run_started_at"] = run_started_at
+    if threshold_change_at:
+        body["threshold_change_at"] = threshold_change_at
     return _fetch("POST", f"{base}/api/bench/long-fdd/evaluate", token=token, body=body, timeout=180.0)
 
 
@@ -290,6 +308,8 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
     backends = ("pyarrow", "datafusion_sql")
     sources = (BACNET_SOURCE, NIAGARA_SOURCE)
 
+    lookback_h = max(1.0, (cfg.duration_minutes + 10) / 60.0)
+
     while (time.monotonic() - t0) < total_s:
         cycle += 1
         elapsed = time.monotonic() - t0
@@ -343,6 +363,9 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
                     backend=backend,
                     threshold=threshold,
                     phase=phase,
+                    lookback_hours=lookback_h,
+                    run_started_at=report.started_at,
+                    threshold_change_at=report.threshold_change_at or None,
                 )
                 if status != 200 or not isinstance(res, dict) or not res.get("ok"):
                     report.errors.append(
@@ -356,28 +379,32 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
                     warn_key = f"confirmation uses python loop ({source}/{backend})"
                     if warn_key not in report.warnings:
                         report.warnings.append(warn_key)
-                if metrics.first_raw_fault_time and not raw_fault_seen:
-                    raw_fault_seen = True
-                    report.events.append(
-                        SmokeEvent(
-                            timestamp=metrics.first_raw_fault_time,
-                            event_type="raw_fault_first_seen",
-                            source=source,
-                            backend=backend,
-                            message=f"first raw fault on {source}/{backend}",
+                if metrics.first_raw_fault_after_change or metrics.first_raw_fault_time:
+                    if not raw_fault_seen:
+                        raw_fault_seen = True
+                        ts = metrics.first_raw_fault_after_change or metrics.first_raw_fault_time
+                        report.events.append(
+                            SmokeEvent(
+                                timestamp=ts,
+                                event_type="raw_fault_first_seen",
+                                source=source,
+                                backend=backend,
+                                message=f"first raw fault after change on {source}/{backend}",
+                            )
                         )
-                    )
-                if metrics.first_confirmed_fault_time and not confirmed_fault_seen:
-                    confirmed_fault_seen = True
-                    report.events.append(
-                        SmokeEvent(
-                            timestamp=metrics.first_confirmed_fault_time,
-                            event_type="confirmed_fault_first_seen",
-                            source=source,
-                            backend=backend,
-                            message=f"first confirmed fault on {source}/{backend}",
+                if metrics.first_confirmed_fault_after_change or metrics.first_confirmed_fault_time:
+                    if not confirmed_fault_seen:
+                        confirmed_fault_seen = True
+                        ts = metrics.first_confirmed_fault_after_change or metrics.first_confirmed_fault_time
+                        report.events.append(
+                            SmokeEvent(
+                                timestamp=ts,
+                                event_type="confirmed_fault_first_seen",
+                                source=source,
+                                backend=backend,
+                                message=f"first confirmed fault after change on {source}/{backend}",
+                            )
                         )
-                    )
 
         if time.monotonic() - last_progress >= PROGRESS_INTERVAL_S or cycle == 1:
             last_progress = time.monotonic()
@@ -414,7 +441,7 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
         report.errors.append("fault phase never reached — increase duration_minutes")
 
     # Final snapshot with full lookback for fault-phase evidence
-    lookback_h = max(1.0, cfg.duration_minutes / 60.0)
+    lookback_h = max(1.0, (cfg.duration_minutes + 10) / 60.0)
     for source in sources:
         for backend in backends:
             if backend == "datafusion_sql" and not datafusion_available():
@@ -428,6 +455,8 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
                 threshold=cfg.forced_threshold_f,
                 phase="final",
                 lookback_hours=lookback_h,
+                run_started_at=report.started_at,
+                threshold_change_at=report.threshold_change_at or None,
             )
             if status == 200 and isinstance(res, dict) and res.get("ok"):
                 latest_runs[(source, backend)] = _metrics_from_response(
@@ -466,8 +495,17 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Bench 5007 long FDD validation smoke")
+    parser.add_argument("--live", action="store_true", help="Live historian polling validation (default unless --synthetic)")
     parser.add_argument("--synthetic", action="store_true", help="CI-friendly synthetic Arrow tables")
     parser.add_argument("--dry-run", action="store_true", help="Short developer run (explicit only)")
+    parser.add_argument("--allow-historical-replay", action="store_true", help="Permit WARN (not FAIL) when historian returns replay data")
+    parser.add_argument(
+        "--strict-live-freshness",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="FAIL live runs when sample timestamps are not fresh (default: enabled)",
+    )
+    parser.add_argument("--freshness-window-minutes", type=float, default=5.0, help="Freshness tolerance vs wall clock")
     parser.add_argument("--overnight", action="store_true", help="12-hour validation (720 min)")
     parser.add_argument("--strict-datafusion", action="store_true", help="Fail if DataFusion extra missing")
     parser.add_argument("--site-id", default=None)
@@ -510,6 +548,10 @@ def main() -> int:
     if args.reports_dir:
         cfg.reports_dir = args.reports_dir
     cfg.synthetic = args.synthetic
+    cfg.live = not args.synthetic
+    cfg.allow_historical_replay = args.allow_historical_replay
+    cfg.strict_live_freshness = args.strict_live_freshness
+    cfg.freshness_window_minutes = args.freshness_window_minutes
 
     print(
         f"==> Bench 5007 long FDD smoke ({cfg.duration_minutes} min, confirmation window={cfg.confirmation_rows} rows)",
