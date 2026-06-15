@@ -12,7 +12,20 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 
-def test_build_commissioning_export_includes_point_rule_ids():
+def test_validate_commissioning_payload_rejects_unknown_rule():
+    from openfdd_bridge.commissioning_bundle import validate_commissioning_payload
+
+    payload = {
+        "sites": [{"id": "demo"}],
+        "equipment": [{"id": "eq1", "site_id": "demo"}],
+        "points": [{"id": "p1", "site_id": "demo", "equipment_id": "eq1", "fdd_rule_ids": ["missing-rule"]}],
+        "fdd_rules": [],
+    }
+    out = validate_commissioning_payload(payload, known_rule_ids={"existing-rule"})
+    assert out["ok"] is False
+    assert any("missing-rule" in i for i in out["issues"])
+
+
     from openfdd_bridge.commissioning_bundle import build_commissioning_export
 
     model = {

@@ -120,6 +120,38 @@ def _bindings_from_points(points: list[dict[str, Any]]) -> dict[str, dict[str, l
     }
 
 
+def validate_commissioning_payload(payload: dict[str, Any], *, known_rule_ids: set[str] | None = None) -> dict[str, Any]:
+    """Validate commissioning import JSON — sites, equipment, points, rule refs."""
+    issues: list[str] = []
+    sites = {str(s.get("id") or s.get("site_id") or "").strip() for s in (payload.get("sites") or []) if isinstance(s, dict)}
+    sites.discard("")
+    equipment_ids = {
+        str(e.get("id") or e.get("equipment_id") or "").strip()
+        for e in (payload.get("equipment") or [])
+        if isinstance(e, dict)
+    }
+    equipment_ids.discard("")
+    rule_ids = known_rule_ids or {
+        str(r.get("id") or "").strip() for r in (payload.get("fdd_rules") or []) if isinstance(r, dict)
+    }
+    rule_ids.discard("")
+    for pt in payload.get("points") or []:
+        if not isinstance(pt, dict):
+            continue
+        pid = str(pt.get("id") or "").strip()
+        sid = str(pt.get("site_id") or "").strip()
+        eid = str(pt.get("equipment_id") or "").strip()
+        if sid and sites and sid not in sites:
+            issues.append(f"point {pid}: unknown site_id {sid!r}")
+        if eid and equipment_ids and eid not in equipment_ids:
+            issues.append(f"point {pid}: unknown equipment_id {eid!r}")
+        for rid in pt.get("fdd_rule_ids") or []:
+            r = str(rid).strip()
+            if r and rule_ids and r not in rule_ids:
+                issues.append(f"point {pid}: unknown fdd_rule_id {r!r}")
+    return {"ok": not issues, "issues": issues}
+
+
 def apply_commissioning_import(payload: dict[str, Any], *, replace_model: bool = True) -> dict[str, Any]:
     """Import model + merge FDD rule bindings from fdd_rules and/or points[].fdd_rule_ids."""
     from .model_service import ModelService

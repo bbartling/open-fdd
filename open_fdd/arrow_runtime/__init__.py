@@ -3,6 +3,11 @@
 from .backend import ArrowRuleResult, run_arrow_rule
 from .column_map_from_model import build_column_map_from_model_points
 from .config import ArrowRuntimeConfig, configure_arrow_runtime, get_arrow_runtime_config
+from .confirmation import (
+    apply_fault_confirmation_from_cfg,
+    confirm_consecutive_true,
+    confirm_fault_mask,
+)
 from .datafusion_backend import (
     datafusion_available,
     lint_datafusion_sql_rule,
@@ -13,8 +18,11 @@ from .rules import detect_rule_backend, legacy_row_allowed, migrate_legacy_thres
 __all__ = [
     "ArrowRuleResult",
     "ArrowRuntimeConfig",
+    "apply_fault_confirmation_from_cfg",
     "build_column_map_from_model_points",
     "configure_arrow_runtime",
+    "confirm_consecutive_true",
+    "confirm_fault_mask",
     "datafusion_available",
     "detect_rule_backend",
     "get_arrow_runtime_config",

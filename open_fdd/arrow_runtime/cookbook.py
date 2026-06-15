@@ -255,12 +255,26 @@ def mixing_envelope_mask(
     return outside
 
 
-def sensor_bounds_mask(table: pa.Table, kind: str, cfg: dict[str, Any] | None = None) -> pa.ChunkedArray:
-    """OOB mask using :mod:`sensor_catalog` defaults merged with ``cfg``."""
+def sensor_bounds_mask(
+    table: pa.Table,
+    kind: str,
+    cfg: dict[str, Any] | None = None,
+    *,
+    min_true_rows: int | None = None,
+    min_elapsed_minutes: float | None = None,
+) -> pa.ChunkedArray:
+    """OOB mask using :mod:`sensor_catalog` defaults, with optional fault confirmation."""
+    from .confirmation import apply_fault_confirmation_from_cfg
     from .sensor_catalog import cfg_from_profile
 
     merged = cfg_from_profile(kind, cfg)
-    return oob_mask(table, merged)
+    if min_true_rows is not None:
+        merged["min_true_rows"] = min_true_rows
+    if min_elapsed_minutes is not None:
+        merged["min_elapsed_minutes"] = min_elapsed_minutes
+    raw = oob_mask(table, merged)
+    confirmed, _warnings = apply_fault_confirmation_from_cfg(raw, table, merged)
+    return confirmed
 
 
 def sensor_flatline_mask(table: pa.Table, kind: str, cfg: dict[str, Any] | None = None) -> pa.ChunkedArray:

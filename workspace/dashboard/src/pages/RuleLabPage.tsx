@@ -21,8 +21,23 @@ type RuleBackend = "arrow" | "datafusion_sql";
 
 const SQL_THRESHOLD_TEMPLATE = `SELECT
   *,
-  zone_temp > 75.0 AS fault
+  value > 80.0 AS fault
 FROM telemetry`;
+
+function sqlQuoteIdent(col: string): string {
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(col)) return col;
+  return `"${col.replace(/"/g, '""')}"`;
+}
+
+function sqlThresholdTemplate(col = "value", threshold = 80): string {
+  const c = sqlQuoteIdent(col);
+  return `SELECT\n  *,\n  ${c} > ${threshold}.0 AS fault\nFROM telemetry`;
+}
+
+function sqlHumidityTemplate(col = "oa-h", threshold = 70): string {
+  const c = sqlQuoteIdent(col);
+  return `SELECT\n  *,\n  ${c} > ${threshold}.0 AS fault\nFROM telemetry`;
+}
 
 const SQL_CASE_TEMPLATE = `SELECT
   *,
@@ -719,9 +734,8 @@ export default function RuleLabPage() {
         title="Rule Lab"
         subtitle={
           <>
-            Arrow-only rules: <strong>download kit</strong> → edit locally → <strong>upload rule.py</strong>, or author{" "}
-            <strong>DataFusion SQL</strong> (server-side, optional extra).
-            Pin rules on the <a href="/model">Data Model</a> commissioning JSON or test by equipment below.
+            Build and test FDD rules against recent site data. Choose a rule type below — pin assignments on the{" "}
+            <a href="/model">Data Model</a> tab or test by equipment in the panel below.
           </>
         }
       />
@@ -780,21 +794,43 @@ export default function RuleLabPage() {
           </span>
         </div>
 
+        <div className="rule-lab-type-tabs" role="tablist" aria-label="Rule type">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={ruleBackend === "arrow"}
+            className={ruleBackend === "arrow" ? "rule-type-tab active" : "rule-type-tab"}
+            disabled={busy}
+            onClick={() => onBackendChange("arrow")}
+          >
+            PyArrow rule.py
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={ruleBackend === "datafusion_sql"}
+            className={ruleBackend === "datafusion_sql" ? "rule-type-tab active" : "rule-type-tab"}
+            disabled={busy}
+            onClick={() => onBackendChange("datafusion_sql")}
+          >
+            DataFusion SQL
+          </button>
+        </div>
+        <p className="muted rule-lab-type-hint">
+          {ruleBackend === "datafusion_sql" ? (
+            <>
+              <strong>DataFusion SQL</strong> — simple threshold, CASE WHEN, and SQL-readable rules. Runs{" "}
+              <strong>server-side only</strong> (<code>pip install open-fdd[datafusion]</code>).
+            </>
+          ) : (
+            <>
+              <strong>PyArrow rule.py</strong> — full HVAC logic, rolling windows, helper libraries, and ML-ready Python
+              workflows.
+            </>
+          )}
+        </p>
+
         <div className="form-grid">
-          <div className="field">
-            <label className="field-label" htmlFor="rule-backend">
-              Rule backend
-            </label>
-            <select
-              id="rule-backend"
-              value={ruleBackend}
-              disabled={busy}
-              onChange={(e) => onBackendChange(e.target.value as RuleBackend)}
-            >
-              <option value="arrow">PyArrow</option>
-              <option value="datafusion_sql">DataFusion SQL</option>
-            </select>
-          </div>
           <div className="field">
             <label className="field-label" htmlFor="rule-name">
               Name
@@ -814,14 +850,14 @@ export default function RuleLabPage() {
         <p className="muted rule-lab-hint">
           {ruleBackend === "datafusion_sql" ? (
             <>
-              DataFusion SQL rules run <strong>server-side</strong> against the Arrow table <code>telemetry</code>. The query
-              must return one boolean column named <code>{faultColumn}</code>. Install optional extra:{" "}
-              <code>open-fdd[datafusion]</code>.
+              Use the Arrow table <code>telemetry</code>. Return one boolean column named <code>fault</code> (configurable
+              in Advanced). Set <code>min_true_rows</code> in rule config for fault confirmation (e.g. 5 rows at 60s poll ≈
+              5 minutes).
             </>
           ) : (
             <>
-              Tune thresholds in <code>rule.py</code> constants (<code>VALUE_COLUMN</code>, limits) — download kit, edit
-              locally, upload.
+              Download kit → edit <code>rule.py</code> locally → upload. Set <code>min_true_rows</code> or{" "}
+              <code>min_elapsed_minutes</code> in config for fault confirmation.
             </>
           )}
         </p>
@@ -856,11 +892,24 @@ export default function RuleLabPage() {
                 className="secondary"
                 disabled={busy}
                 onClick={() => {
-                  setSql(SQL_THRESHOLD_TEMPLATE);
+                  const rule = saved.find((r) => r.id === activeRuleId);
+                  const col = rule?.config?.value_column as string | undefined;
+                  setSql(sqlThresholdTemplate(typeof col === "string" ? col : "value"));
                   setMetaDirty(true);
                 }}
               >
-                Threshold template
+                Temp high
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() => {
+                  setSql(sqlHumidityTemplate("oa-h"));
+                  setMetaDirty(true);
+                }}
+              >
+                Humidity high
               </button>
               <button
                 type="button"
@@ -874,10 +923,10 @@ export default function RuleLabPage() {
                 CASE template
               </button>
               <button type="button" className="secondary" disabled={busy || authRole === "operator"} onClick={() => void saveSqlRule()}>
-                Save SQL rule
+                Save rule
               </button>
               <button type="button" className="secondary" disabled={busy || !code.trim() || !sql.trim()} onClick={() => void compareBackends()}>
-                Compare backends
+                Compare PyArrow vs SQL
               </button>
             </>
           )}
@@ -894,7 +943,7 @@ export default function RuleLabPage() {
             disabled={busy || (ruleBackend === "arrow" ? !code.trim() : !sql.trim())}
             onClick={() => void lintNow()}
           >
-            {ruleBackend === "datafusion_sql" ? "Validate SQL" : "Lint"}
+            {ruleBackend === "datafusion_sql" ? "Check SQL" : "Lint"}
           </button>
           <button
             type="button"
@@ -905,7 +954,7 @@ export default function RuleLabPage() {
             }
             onClick={() => void testRun()}
           >
-            {ruleBackend === "datafusion_sql" ? "Run Preview" : "Quick test"}
+            {ruleBackend === "datafusion_sql" ? "Test on recent data" : "Quick test"}
           </button>
           <button
             type="button"
@@ -936,31 +985,38 @@ export default function RuleLabPage() {
       <FddRuleTestPanel rules={saved} disabled={busy || authRole === "operator"} />
 
       <div className="panel rule-lab-readonly-panel">
-        <h3 className="panel-title">{ruleBackend === "datafusion_sql" ? "SQL rule editor" : "Rule source"}</h3>
+        <h3 className="panel-title">{ruleBackend === "datafusion_sql" ? "SQL fault expression" : "Rule source"}</h3>
         {ruleBackend === "datafusion_sql" ? (
           <>
-            <label className="field-label" htmlFor="fault-column">
-              Fault column
-            </label>
-            <input
-              id="fault-column"
-              value={faultColumn}
-              disabled={busy}
-              onChange={(e) => {
-                setFaultColumn(e.target.value);
-                setMetaDirty(true);
-              }}
-            />
+            <p className="muted">
+              Use the Arrow table named <code>telemetry</code>. Return one boolean column named <code>fault</code>.
+            </p>
+            <details className="rule-lab-advanced">
+              <summary>Advanced</summary>
+              <label className="field-label" htmlFor="fault-column">
+                Fault column name
+              </label>
+              <input
+                id="fault-column"
+                value={faultColumn}
+                disabled={busy}
+                onChange={(e) => {
+                  setFaultColumn(e.target.value);
+                  setMetaDirty(true);
+                }}
+              />
+            </details>
             <textarea
               className="sql-rule-editor"
-              rows={14}
+              rows={16}
+              spellCheck={false}
               value={sql}
               disabled={busy || authRole === "operator"}
               onChange={(e) => {
                 setSql(e.target.value);
                 setMetaDirty(true);
               }}
-              spellCheck={false}
+              placeholder={sqlThresholdTemplate("value")}
             />
             {sqlPreview?.ok === false && sqlPreview.datafusion_installed === false ? (
               <p className="error panel">

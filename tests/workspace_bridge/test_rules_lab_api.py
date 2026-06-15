@@ -12,11 +12,11 @@ API_ROOT = Path(__file__).resolve().parents[2] / "workspace" / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-from open_fdd.arrow_runtime.datafusion_backend import lint_datafusion_sql_rule
+from open_fdd.arrow_runtime.datafusion_backend import datafusion_available, lint_datafusion_sql_rule
 
 GOOD_SQL = """SELECT
   *,
-  zone_temp > 75.0 AS fault
+  "SAT" > 75.0 AS fault
 FROM telemetry"""
 
 SQL_RULE = {
@@ -129,3 +129,30 @@ def test_lint_rejects_missing_fault_projection():
 def test_lint_rejects_wrong_fault_column_name():
     lint = lint_datafusion_sql_rule("SELECT *, zone_temp > 75 AS not_fault FROM telemetry")
     assert lint["ok"] is False
+
+
+@pytest.mark.skipif(not datafusion_available(), reason="datafusion optional extra not installed")
+def test_sql_rule_participates_in_batch(client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "data"))
+    created = client.post(
+        "/api/rules/lab/save",
+        json={
+            **SQL_RULE,
+            "name": "Batch SQL test",
+            "enabled": True,
+            "config": {"min_true_rows": 1},
+        },
+    )
+    assert created.status_code == 200
+    rule_id = created.json()["rule"]["id"]
+    batch = client.post("/api/rules/batch", json={"limit": 100})
+    assert batch.status_code == 200
+    runs = batch.json().get("runs") or []
+    sql_run = next((r for r in runs if r.get("rule_id") == rule_id), None)
+    assert sql_run is not None
+    assert sql_run.get("backend") == "datafusion_sql"
+    assert sql_run.get("status") in {"ok", "error"}
+    if sql_run.get("status") == "error":
+        err = str(sql_run.get("error") or "").lower()
+        assert "datafusion" in err or "schema" in err or "row" in err
+    client.delete(f"/api/rules/saved/{rule_id}")
