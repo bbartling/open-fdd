@@ -6,6 +6,7 @@ import pytest
 
 from open_fdd.arrow_runtime.datafusion_backend import (
     datafusion_available,
+    equivalent_pyarrow_threshold_rule,
     lint_datafusion_sql_rule,
     run_datafusion_sql_rule,
 )
@@ -103,3 +104,43 @@ def test_wrong_row_count_fails():
     bad_sql = "SELECT *, true AS fault FROM telemetry LIMIT 5"
     result = run_datafusion_sql_rule(bad_sql, table, {})
     assert result.errors
+
+
+@pytest.mark.parametrize(
+    "column",
+    ["SAT", "zone temp", 'bad"column', r"bad\column"],
+)
+def test_equivalent_pyarrow_threshold_escapes_column_names(column: str):
+    code = equivalent_pyarrow_threshold_rule(column, 65.0)
+    compile(code, "<rule>", "exec")
+    assert repr(column) in code
+    assert "65.0" in code
+
+
+def test_lint_rejects_read_parquet_path():
+    lint = lint_datafusion_sql_rule(
+        "SELECT *, true AS fault FROM read_parquet('file:///tmp/x.parquet')"
+    )
+    assert not lint["ok"]
+
+
+def test_lint_rejects_count_aggregate_as_fault():
+    lint = lint_datafusion_sql_rule("SELECT COUNT(*) AS fault FROM telemetry")
+    assert lint["ok"] is True  # lint passes; row-count guard rejects at execution
+
+
+@pytest.mark.skipif(not datafusion_available(), reason="datafusion optional extra not installed")
+def test_count_aggregate_row_mismatch_at_runtime():
+    table = sample_hvac_table(10)
+    result = run_datafusion_sql_rule("SELECT COUNT(*) AS fault FROM telemetry", table, {})
+    assert result.errors
+    assert "row count" in result.errors[0].lower()
+
+
+@pytest.mark.skipif(not datafusion_available(), reason="datafusion optional extra not installed")
+def test_run_error_summary_omits_trace_without_debug(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("OFDD_DEBUG_TRACEBACKS", raising=False)
+    table = sample_hvac_table(3)
+    result = run_datafusion_sql_rule("SELECT * FROM telemetry", table, {})
+    assert result.errors
+    assert "trace" not in result.summary

@@ -481,12 +481,39 @@ export default function RuleLabPage() {
       appendConsole("Upload rule.py first to create a rule.");
       return;
     }
-    if (!code.trim()) return;
+    if (ruleBackend === "datafusion_sql") {
+      if (!sql.trim()) return;
+    } else if (!code.trim()) {
+      return;
+    }
     const manageBusy = opts?.manageBusy !== false;
     if (manageBusy) setBusy(true);
     try {
       const fresh = await apiFetch<{ rules: SavedRule[] }>("/api/rules/saved");
-      const bindingsSource = fresh.rules?.find((r) => r.id === activeRuleId)?.bindings;
+      const existing = fresh.rules?.find((r) => r.id === activeRuleId);
+      const bindingsSource = existing?.bindings;
+      if (ruleBackend === "datafusion_sql") {
+        const res = await apiFetch<{ rule: SavedRule }>("/api/rules/lab/save", {
+          method: "POST",
+          body: JSON.stringify({
+            id: activeRuleId,
+            name: ruleName,
+            mode: "rule",
+            backend: "datafusion_sql",
+            sql,
+            fault_column: faultColumn,
+            code: code.trim() || "# DataFusion SQL rule — see sql field",
+            config: existing?.config ?? {},
+            severity: existing?.severity ?? "warning",
+            enabled: existing?.enabled ?? false,
+            bindings: preservedBindings(bindingsSource),
+          }),
+        });
+        setMetaDirty(false);
+        appendConsole(`>>> Saved name for ${res.rule.id}`);
+        await refreshSaved();
+        return;
+      }
       const res = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
         method: "POST",
         body: JSON.stringify({
