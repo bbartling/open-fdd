@@ -3,7 +3,10 @@
 #
 #   cd ~/open-fdd
 #   ./scripts/openfdd_site_backup.sh
-#   BACKUP_ROOT=~/openfdd-backups/manual ./scripts/openfdd_site_backup.sh
+#   BACKUP_ROOT=~/openfdd-backups/latest ./scripts/openfdd_site_backup.sh
+#
+# Default overwrites ~/openfdd-backups/latest (rigorous testing — no timestamp archive pile-up).
+# Timestamped dir only when BACKUP_ROOT is set explicitly.
 #
 # Fast pre-upgrade backup (skips large poll CSV history; feather/model/rules kept):
 #   BACKUP_INCLUDE_POLL_SAMPLES=0 ./scripts/openfdd_site_backup.sh
@@ -14,10 +17,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-BACKUP_ROOT="${BACKUP_ROOT:-$HOME/openfdd-backups/$(date +%Y%m%d-%H%M%S)}"
+BACKUP_ROOT="${BACKUP_ROOT:-$HOME/openfdd-backups/latest}"
 BACKUP_INCLUDE_POLL_SAMPLES="${BACKUP_INCLUDE_POLL_SAMPLES:-1}"
 BACKUP_TIMEOUT_SECS="${BACKUP_TIMEOUT_SECS:-1800}"
 BACKUP_TAR_XATTRS="${BACKUP_TAR_XATTRS:-0}"
+# Overwrite prior backup at this path (rigorous testing pace — one rolling copy).
+rm -rf "$BACKUP_ROOT"
 mkdir -p "$BACKUP_ROOT"
 
 COMPOSE_FILE="${COMPOSE_FILE:-}"
@@ -144,3 +149,13 @@ echo "  workspace/bacnet/commissioning/   BACnet bind, points.csv"
 echo "  workspace/bacnet/polls/           poll samples.csv (optional in fast mode)"
 echo "  workspace/auth.env.local          login secrets"
 echo "  workspace/api/static/app/         dashboard bundle (if rsync'd)"
+
+# Drop legacy timestamped dirs — keep only the rolling latest backup.
+legacy_root="$(dirname "$BACKUP_ROOT")"
+if [[ -d "$legacy_root" && "$(basename "$BACKUP_ROOT")" == "latest" ]]; then
+  for old in "$legacy_root"/*/; do
+    [[ -d "$old" ]] || continue
+    [[ "$old" == "${BACKUP_ROOT}/" ]] && continue
+    rm -rf "$old"
+  done
+fi

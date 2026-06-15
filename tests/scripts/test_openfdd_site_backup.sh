@@ -6,6 +6,7 @@ SCRIPT="${ROOT}/scripts/openfdd_site_backup.sh"
 
 [[ -x "$SCRIPT" ]] || { echo "missing $SCRIPT"; exit 1; }
 
+grep -q 'openfdd-backups/latest' "$SCRIPT" || { echo "missing rolling latest backup default"; exit 1; }
 grep -q 'BACKUP_INCLUDE_POLL_SAMPLES' "$SCRIPT" || { echo "missing poll sample toggle"; exit 1; }
 grep -q 'BACKUP_TIMEOUT_SECS' "$SCRIPT" || { echo "missing backup timeout"; exit 1; }
 grep -q 'fix_edge_workspace_permissions' "$SCRIPT" || { echo "missing edge permission fix hook"; exit 1; }

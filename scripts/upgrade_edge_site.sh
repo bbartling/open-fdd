@@ -93,11 +93,11 @@ echo "==> Edge site upgrade → ${LIMIT} (image tag ${TAG})"
 
 if [[ "$SKIP_BACKUP" == "0" ]]; then
   echo "==> 1/4 Remote backup (local on edge — no data transfer over Tailscale)"
-  BACKUP_ENV="cd ${REMOTE_REPO}"
+  BACKUP_ENV="cd ${REMOTE_REPO} && BACKUP_ROOT=~/openfdd-backups/latest"
   if [[ "$FAST_BACKUP" == "1" ]]; then
-    BACKUP_ENV+=" && BACKUP_INCLUDE_POLL_SAMPLES=0"
+    BACKUP_ENV+=" BACKUP_INCLUDE_POLL_SAMPLES=0"
   fi
-  BACKUP_ENV+=" && ./scripts/openfdd_site_backup.sh"
+  BACKUP_ENV+=" ./scripts/openfdd_site_backup.sh"
   echo "    async budget: ${BACKUP_ASYNC_SECS}s (poll every 15s)"
   if ! "${APB}" -i "$INV" "$LIMIT" "${ANSIBLE_SSH_OPTS[@]}" "${ANSIBLE_ASYNC_OPTS[@]}" \
     -m shell -a "$BACKUP_ENV"; then
@@ -107,13 +107,13 @@ if [[ "$SKIP_BACKUP" == "0" ]]; then
     exit 1
   fi
   BACKUP_DIR="$(
-    ansible_shell "ls -1dt ~/openfdd-backups/*/ 2>/dev/null | head -1" 2>/dev/null \
-      | grep -oE '/home/[^[:space:]]+/openfdd-backups/[0-9]{8}-[0-9]{6}' | tail -1 || true
+    ansible_shell 'echo ~/openfdd-backups/latest' 2>/dev/null \
+      | grep -oE '/home/[^[:space:]]+/openfdd-backups/latest' | tail -1 || true
   )"
   if [[ -n "$BACKUP_DIR" ]]; then
-    echo "    Latest backup: $BACKUP_DIR"
+    echo "    Rolling backup (overwrite): $BACKUP_DIR"
   else
-    echo "    WARN: could not detect latest backup dir on edge" >&2
+    echo "    WARN: could not detect backup dir on edge" >&2
   fi
 else
   echo "==> 1/4 Skipping remote backup (--skip-backup)"
@@ -127,11 +127,11 @@ else
 fi
 
 if [[ "$SKIP_PRUNE" == "0" ]]; then
-  echo "==> 3/4 Prune old edge backup archives (keep latest only)"
-  PRUNE_CMD='BACKUP_ROOT="$HOME/openfdd-backups"; latest="$(ls -1dt "$BACKUP_ROOT"/*/ 2>/dev/null | head -1 || true)"; count=0; for d in "$BACKUP_ROOT"/*/; do [ -d "$d" ] || continue; if [ "$d" != "$latest" ]; then rm -rf "$d"; count=$((count+1)); fi; done; echo "removed ${count} old backup dir(s); kept ${latest:-none}"'
+  echo "==> 3/4 Remove legacy timestamped edge backups (keep ~/openfdd-backups/latest only)"
+  PRUNE_CMD='for d in "$HOME/openfdd-backups"/*/; do [ -d "$d" ] || continue; case "$d" in */latest/) continue ;; esac; rm -rf "$d"; done; echo "kept ~/openfdd-backups/latest"'
   ansible_shell_bash "$PRUNE_CMD"
 else
-  echo "==> 3/4 Skipping backup prune"
+  echo "==> 3/4 Skipping legacy backup cleanup"
 fi
 
 echo "==> 4/4 Post-deploy health check"
