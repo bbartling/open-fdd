@@ -229,12 +229,17 @@ def run_datafusion_sql_rule(
     )
     from .execution_evidence import COMPUTATION_PATH_DATAFUSION, build_execution_evidence
 
+    from .confirmation import confirmation_window_configured
+
     summary["execution_evidence"] = build_execution_evidence(
         table=table,
         mask=mask,
         backend="datafusion_sql",
         computation_path=COMPUTATION_PATH_DATAFUSION,
-        confirmation_applied=bool(cfg.get("min_true_rows") or cfg.get("min_elapsed_minutes")),
+        confirmation_applied=confirmation_window_configured(
+            cfg.get("min_true_rows"),
+            cfg.get("min_elapsed_minutes"),
+        ),
     )
     preview = preview_fault_rows(table, mask, columns=preview_columns, limit=preview_limit)
     return ArrowRuleResult(

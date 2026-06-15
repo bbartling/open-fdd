@@ -1,7 +1,7 @@
 ---
 title: ACME deploy 3.0.33 validation plan
 parent: Operations
-nav_order: 27
+nav_exclude: true
 ---
 
 # ACME deploy 3.0.33 validation plan

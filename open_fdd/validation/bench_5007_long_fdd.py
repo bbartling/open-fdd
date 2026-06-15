@@ -184,9 +184,19 @@ def historian_source(metadata_source: str) -> str:
 
 
 def plot_column_name(point: dict[str, Any]) -> str:
-    ext = str(point.get("external_id") or "").strip()
-    fdd = str(point.get("fdd_input") or "").strip()
-    return ext or fdd or str(point.get("id") or "")
+    """Historian column name — delegate to bridge helper when available."""
+    try:
+        from openfdd_bridge.model_point_utils import point_historian_column
+
+        return point_historian_column(point)
+    except ImportError:
+        ext = str(point.get("external_id") or "").strip()
+        if ext:
+            return ext
+        fdd = str(point.get("fdd_input") or "").strip()
+        if fdd:
+            return fdd
+        return str(point.get("id") or "")
 
 
 def align_semantic_points(model: dict[str, Any], site_id: str) -> dict[str, dict[str, PointAlignment]]:

@@ -44,6 +44,7 @@ This repository is **Arrow-native FDD only** (3.0.1+). The published PyPI wheel 
 | Column map / manifest | [skills/column-map-and-manifests/SKILL.md](skills/column-map-and-manifests/SKILL.md) |
 | Graph ML (offline) | [skills/ml-lab-sklearn/SKILL.md](skills/ml-lab-sklearn/SKILL.md) · issue #211 |
 | HTTP bridge API | [skills/fastapi-bridge-api/SKILL.md](skills/fastapi-bridge-api/SKILL.md) |
+| **AI / MCP context map** | [docs/ai-agent-context.md](docs/ai-agent-context.md) |
 | React dashboard | [skills/react-operator-dashboard/SKILL.md](skills/react-operator-dashboard/SKILL.md) |
 | Local feather storage | [skills/feather-local-storage/SKILL.md](skills/feather-local-storage/SKILL.md) |
 | BACnet single-stack | [skills/bacnet-single-stack/SKILL.md](skills/bacnet-single-stack/SKILL.md) |

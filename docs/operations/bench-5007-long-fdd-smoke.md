@@ -1,3 +1,9 @@
+---
+title: Bench 5007 long FDD smoke
+parent: Operations
+nav_order: 22
+---
+
 # Bench 5007 long FDD smoke
 
 Validates **data-source-agnostic FDD**, **PyArrow vs DataFusion SQL equivalence**, and the **fault confirmation window** on BACnet 5007 + Niagara bench9065 (site `demo`).

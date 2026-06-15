@@ -1,7 +1,7 @@
 ---
 title: Expression cookbook (Arrow-native)
 parent: Rule Cookbook
-nav_order: 1
+nav_order: 5
 redirect_from:
   - /expression_rule_cookbook
   - /expression_rule_cookbook.html

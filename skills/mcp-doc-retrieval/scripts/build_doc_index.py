@@ -157,8 +157,14 @@ def main() -> int:
         parser.error("--chunk-size must be > 0")
     chunks: list[Chunk] = []
     if args.docs_dir.is_dir():
+        skip_parts = {"dev", "_site", "_build"}
+        skip_names = {"docs_cleanup_plan.md", "DOCUMENTATION_CHECKLIST.md", "404.md"}
         for md in sorted(args.docs_dir.rglob("*.md")):
-            if "_build" in md.parts or md.name == "404.md":
+            if any(part in skip_parts for part in md.parts):
+                continue
+            if md.name in skip_names:
+                continue
+            if md.is_relative_to(args.docs_dir / "agent-skills"):
                 continue
             chunks.extend(read_markdown_chunks(md, args.chunk_size))
     if args.openapi_json and args.openapi_json.exists():

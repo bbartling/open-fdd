@@ -20,6 +20,12 @@ Open-FDD runs supervisory FDD over historian telemetry from BACnet, Niagara, JSO
 
 5. **Drivers must not bypass the contract.** No connector may emit a custom FDD result shape or row-loop rule path for production batch evaluation.
 
+6. **No browser-side SQL.** DataFusion runs in the bridge process only.
+
+7. **No pandas row-loop runtime on edge.** PyArrow columnar masks only for production FDD.
+
+8. **Confirmation.** May use correctness-first Python streak loops today; future vectorized/window implementations must keep the same raw vs confirmed mask contract.
+
 ## Consequences
 
 - Rule Lab, batch FDD, and validation smokes share one mask contract.
