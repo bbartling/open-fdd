@@ -23,6 +23,25 @@ Custom location:
 BACKUP_ROOT=~/openfdd-backups/manual ./scripts/openfdd_site_backup.sh
 ```
 
+Fast pre-upgrade backup (excludes large `workspace/bacnet/polls/` CSV history; feather/model/rules kept):
+
+```bash
+BACKUP_INCLUDE_POLL_SAMPLES=0 ./scripts/openfdd_site_backup.sh
+```
+
+From bensserver for any edge host (Ansible — backup runs **on the edge**, no workspace transfer over Tailscale):
+
+```bash
+OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling
+OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling --fast-backup
+```
+
+Acme wrapper (same flow):
+
+```bash
+OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_acme_site.sh --fast-backup
+```
+
 ## Manual backup (SSH)
 
 Container processes may write files as **`root:root`** with mode **`0600`**. Use `sudo` for a full archive:
