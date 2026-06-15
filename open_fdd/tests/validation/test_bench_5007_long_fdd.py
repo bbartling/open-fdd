@@ -294,6 +294,25 @@ def test_historical_replay_classified_not_fresh():
     assert mode == "historical_replay"
 
 
+def test_describe_staleness_includes_demo_and_relaxed_reasons():
+    from open_fdd.validation.bench_data_freshness import describe_staleness
+
+    out = describe_staleness(
+        first_sample_time="2025-01-15T08:00:00Z",
+        last_sample_time="2025-01-15T09:55:00Z",
+        wall_clock_start="2026-06-15T16:25:54Z",
+        wall_clock_end="2026-06-15T17:00:56Z",
+        freshness_window_minutes=5.0,
+        poll_seconds=60,
+        origin="demo",
+        time_filter_relaxed=True,
+    )
+    assert out["data_is_fresh"] is False
+    assert "demo_historian_fallback" in out["staleness_reasons"]
+    assert "time_filter_relaxed_full_stale_table" in out["staleness_reasons"]
+    assert "origin=demo" in out["summary"]
+
+
 def test_strict_live_freshness_fails_stale_historian():
     report = ValidationReport(
         config=SmokeConfig(duration_minutes=35, strict_live_freshness=True, allow_historical_replay=False),

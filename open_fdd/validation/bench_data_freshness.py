@@ -109,6 +109,59 @@ def assess_data_freshness(
     }
 
 
+def describe_staleness(
+    *,
+    first_sample_time: str,
+    last_sample_time: str,
+    wall_clock_start: str,
+    wall_clock_end: str,
+    freshness_window_minutes: float,
+    poll_seconds: int,
+    origin: str = "",
+    time_filter_relaxed: bool = False,
+) -> dict[str, Any]:
+    """Human-readable staleness diagnosis for strict-live smoke and API responses."""
+    freshness = assess_data_freshness(
+        first_sample_time=first_sample_time,
+        last_sample_time=last_sample_time,
+        wall_clock_start=wall_clock_start,
+        wall_clock_end=wall_clock_end,
+        freshness_window_minutes=freshness_window_minutes,
+        poll_seconds=poll_seconds,
+    )
+    reasons: list[str] = []
+    if origin == "demo":
+        reasons.append("demo_historian_fallback")
+    if time_filter_relaxed:
+        reasons.append("time_filter_relaxed_full_stale_table")
+    if not freshness.get("data_is_fresh"):
+        if not freshness.get("data_window_matches_run_window"):
+            reasons.append("no_timestamp_overlap_with_run_window")
+        age = freshness.get("data_age_seconds")
+        if age is not None and age > freshness_window_minutes * 60:
+            reasons.append("data_age_exceeded")
+
+    parts: list[str] = []
+    if origin:
+        parts.append(f"origin={origin}")
+    if time_filter_relaxed:
+        parts.append("time_filter_relaxed=true")
+    if last_sample_time:
+        parts.append(f"last_sample={last_sample_time}")
+    if freshness.get("data_age_seconds") is not None:
+        parts.append(f"data_age_s={int(freshness['data_age_seconds'])}")
+    if reasons:
+        parts.append(f"reasons={','.join(reasons)}")
+
+    return {
+        **freshness,
+        "origin": origin,
+        "time_filter_relaxed": time_filter_relaxed,
+        "staleness_reasons": reasons,
+        "summary": "; ".join(parts) if parts else "fresh",
+    }
+
+
 def infer_timing_validation_method(
     *,
     historian_mode: str,

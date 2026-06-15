@@ -139,6 +139,9 @@ class FddRunMetrics:
     rule_config: dict[str, Any] = field(default_factory=dict)
     execution_evidence: dict[str, Any] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
+    historian_origin: str = ""
+    time_filter_relaxed: bool = False
+    evaluate_freshness: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -947,10 +950,27 @@ def collect_verdict_errors(report: ValidationReport) -> list[str]:
 
     if is_live and cfg.strict_live_freshness and not cfg.allow_historical_replay:
         if historian_mode == "historical_replay" or not freshness.get("data_is_fresh"):
+            summary = freshness.get("summary") or ""
+            reasons = freshness.get("staleness_reasons") or []
+            hint = (
+                " — fix poll workers/feather_store; retry: "
+                "python scripts/smoke_bench_5007_long_fdd.py --live --strict-live-freshness"
+            )
             errors.append(
                 "live mode: historian samples are stale or historical replay — "
-                "live polling freshness not validated (use --allow-historical-replay to permit WARN)"
+                f"live polling freshness not validated ({summary or ','.join(reasons) or 'no overlap'})"
+                f"{hint}"
             )
+        for run in latest:
+            if run.historian_origin == "demo":
+                errors.append(
+                    f"live mode: evaluate used demo historian fallback for {run.source}/{run.backend}"
+                )
+            if run.time_filter_relaxed:
+                errors.append(
+                    f"live mode: time filter relaxed for {run.source}/{run.backend} — "
+                    f"{run.evaluate_freshness.get('summary', 'stale table evaluated')}"
+                )
 
     if is_live:
         wall = wall_clock_duration_minutes(report)
