@@ -24,6 +24,7 @@ os.environ.setdefault("OPENFDD_WORKSPACE_DIR", str(REPO / "workspace"))
 os.environ.setdefault("OFDD_DESKTOP_DATA_DIR", str(REPO / "workspace" / "data"))
 
 from open_fdd.arrow_runtime.datafusion_backend import datafusion_available
+from open_fdd.validation.bench_stack_preflight import validate_stack_preflight
 from open_fdd.validation.bench_5007_long_fdd import (  # noqa: E402
     BACNET_SOURCE,
     NIAGARA_SOURCE,
@@ -214,6 +215,40 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
 
     if cfg.strict_datafusion and not datafusion_available():
         report.errors.append("DataFusion required but not installed")
+
+    status, rules_body = _fetch("GET", f"{base}/api/rules/saved", token=token)
+    rules = rules_body.get("rules") if isinstance(rules_body, dict) else []
+
+    def _api_fetch(method: str, path: str, body: dict | None = None) -> tuple[int, Any]:
+        return _fetch(method, f"{base}{path}", token=token, body=body, timeout=120.0)
+
+    stack = validate_stack_preflight(_api_fetch, token, model=model, rules=rules if isinstance(rules, list) else [])
+    report.environment["stack_preflight"] = stack
+    for w in stack.get("warnings") or []:
+        if w not in report.warnings:
+            report.warnings.append(w)
+    if not stack.get("ok"):
+        for err in stack.get("errors") or []:
+            report.errors.append(f"stack preflight: {err}")
+        report.verdict = "FAIL"
+        report.finished_at = datetime.now(timezone.utc).isoformat()
+        return report
+    rules_pf = stack.get("rules") or {}
+    report.events.append(
+        SmokeEvent(
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            event_type="stack_preflight",
+            message=(
+                f"health+s snapshot ok; {rules_pf.get('enabled_count', 0)} rules enabled, "
+                f"{rules_pf.get('arrow_rules', 0)} arrow, {rules_pf.get('datafusion_sql_rules', 0)} sql"
+            ),
+        )
+    )
+    print(
+        f"[preflight] stack ok — building/snapshot, {rules_pf.get('enabled_count')} FDD rules, "
+        f"batch runs={next((c.get('run_count') for c in stack.get('checks') or [] if c.get('name')=='fdd_batch'), 0)}",
+        flush=True,
+    )
 
     pf_status, pf_res = _evaluate(
         base,
