@@ -81,6 +81,41 @@ def test_bench_long_fdd_evaluate_missing_alignment():
     assert "no model alignment" in out["error"]
 
 
+def test_bench_long_fdd_evaluate_historical_replay_relaxed_filter(monkeypatch: pytest.MonkeyPatch):
+    """Stale/demo historian must still evaluate; freshness is a smoke verdict concern."""
+    from datetime import datetime, timezone
+
+    from openfdd_bridge.bench_long_fdd_eval import BenchLongFddEvaluateBody, evaluate_long_fdd
+
+    timestamps = [f"2025-01-15T08:{i:02d}:00Z" for i in range(0, 24, 5)]
+    table = pa.table(
+        {
+            "timestamp": timestamps,
+            "duct-t": [68.0 + i * 0.2 for i in range(len(timestamps))],
+            "site_id": ["demo"] * len(timestamps),
+        }
+    )
+
+    def _fake_load(site_id, *, source="bacnet", columns=None):
+        return table, "demo"
+
+    monkeypatch.setattr("openfdd_bridge.data_loader.load_arrow_table_for_run", _fake_load)
+
+    body = BenchLongFddEvaluateBody(
+        site_id="demo",
+        source="bacnet_direct",
+        semantic_key="duct-t",
+        backend="pyarrow",
+        threshold=80.0,
+        lookback_hours=2.0,
+        run_started_at=datetime.now(timezone.utc).isoformat(),
+    )
+    out = evaluate_long_fdd(body, _BENCH_MODEL)
+    assert out["ok"] is True
+    assert out.get("time_filter_relaxed") is True
+    assert out["metrics"]["row_count"] == len(timestamps)
+
+
 def test_bench_long_fdd_evaluate_missing_historian(monkeypatch: pytest.MonkeyPatch):
     from openfdd_bridge.bench_long_fdd_eval import BenchLongFddEvaluateBody, evaluate_long_fdd
 
