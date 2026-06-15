@@ -100,6 +100,11 @@ class FddRunMetrics:
     confirmed_true_count: int = 0
     false_count: int = 0
     null_count: int = 0
+    value_avg: float | None = None
+    value_min: float | None = None
+    value_max: float | None = None
+    raw_mask_fingerprint: str = ""
+    confirmed_mask_fingerprint: str = ""
     first_sample_time: str = ""
     last_sample_time: str = ""
     first_raw_fault_time: str = ""
@@ -161,6 +166,7 @@ class ValidationReport:
     threshold_change_at: str = ""
     started_at: str = ""
     finished_at: str = ""
+    alignment_method: str = "data_model_cross_source_semantic"
 
     def to_dict(self) -> dict[str, Any]:
         def _conv(obj: Any) -> Any:
@@ -292,6 +298,28 @@ def _rule_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
+def _mask_fingerprint(mask: pa.Array | pa.ChunkedArray) -> str:
+    combined = mask.combine_chunks() if isinstance(mask, pa.ChunkedArray) else mask
+    buf = combined.buffers()[1]
+    if buf is None:
+        return ""
+    return hashlib.sha256(buf.to_pybytes()).hexdigest()[:16]
+
+
+def _value_stats(table: pa.Table, column: str) -> tuple[float | None, float | None, float | None]:
+    if column not in table.column_names or table.num_rows == 0:
+        return None, None, None
+    vals = pc.cast(table[column], pa.float64())
+    valid = pc.drop_null(vals)
+    if valid.length() == 0:
+        return None, None, None
+    return (
+        float(pc.mean(valid).as_py()),
+        float(pc.min(valid).as_py()),
+        float(pc.max(valid).as_py()),
+    )
+
+
 def _mask_true_count(mask: pa.Array | pa.ChunkedArray) -> int:
     return int(pc.sum(pc.cast(mask, pa.int64())).as_py() or 0)
 
@@ -376,6 +404,12 @@ def evaluate_backend_on_table(
     metrics.confirmed_true_count = _mask_true_count(conf_mask)
     metrics.false_count = result.false_count
     metrics.null_count = result.null_count
+    metrics.raw_mask_fingerprint = _mask_fingerprint(raw_mask)
+    metrics.confirmed_mask_fingerprint = _mask_fingerprint(conf_mask)
+    avg, vmin, vmax = _value_stats(table, value_col)
+    metrics.value_avg = avg
+    metrics.value_min = vmin
+    metrics.value_max = vmax
     metrics.execution_evidence = evidence
     metrics.errors.extend(validate_computation_path(evidence))
 
@@ -700,8 +734,364 @@ def run_synthetic_validation(cfg: SmokeConfig, model: dict[str, Any] | None = No
     )
 
     report.finished_at = datetime.now(timezone.utc).isoformat()
+    report.events.insert(
+        0,
+        SmokeEvent(
+            timestamp=report.started_at,
+            event_type="preflight",
+            message="synthetic validation started",
+        ),
+    )
+    report.events.insert(
+        1,
+        SmokeEvent(
+            timestamp=report.started_at,
+            event_type="baseline_start",
+            semantic_key=cfg.primary_semantic,
+            message=f"baseline threshold {cfg.baseline_threshold_f}F",
+        ),
+    )
+    report.events.append(
+        SmokeEvent(
+            timestamp=report.finished_at,
+            event_type="equivalence_check",
+            message=f"backend_checks={len(report.backend_equivalence)} source_checks={len(report.source_equivalence)}",
+        )
+    )
+    report.errors.extend(collect_verdict_errors(report))
     report.verdict = _compute_verdict(report)
+    report.events.append(
+        SmokeEvent(
+            timestamp=report.finished_at,
+            event_type="final_verdict",
+            message=f"verdict={report.verdict}",
+        )
+    )
     return report
+
+
+def wall_clock_duration_minutes(report: ValidationReport) -> float | None:
+    if not report.started_at or not report.finished_at:
+        return None
+    t0 = _parse_ts(report.started_at)
+    t1 = _parse_ts(report.finished_at)
+    if not t0 or not t1:
+        return None
+    return (t1 - t0).total_seconds() / 60.0
+
+
+def aggregate_latest_runs(runs: list[FddRunMetrics]) -> list[FddRunMetrics]:
+    latest: dict[tuple[str, str], FddRunMetrics] = {}
+    for run in runs:
+        latest[(run.source, run.backend)] = run
+    return list(latest.values())
+
+
+def _report_mode(report: ValidationReport) -> str:
+    env_mode = str(report.environment.get("mode") or "").strip().lower()
+    if env_mode:
+        return env_mode
+    cfg = report.config
+    if cfg.synthetic:
+        return "synthetic"
+    if cfg.dry_run:
+        return "dry-run"
+    return "live"
+
+
+def _allowed_warning(text: str) -> bool:
+    lowered = text.lower()
+    allowed = (
+        "confirmation uses python loop",
+        "confirmation_engine=python_loop_over_arrow_mask",
+        "datafusion not installed",
+        "sql backend skipped",
+    )
+    return any(token in lowered for token in allowed)
+
+
+def collect_verdict_errors(report: ValidationReport) -> list[str]:
+    """Quality gates — append to report.errors before computing verdict."""
+    errors: list[str] = []
+    cfg = report.config
+    mode = _report_mode(report)
+    is_live = mode == "live"
+    latest = aggregate_latest_runs(report.matrix_runs)
+
+    if is_live and not latest:
+        errors.append("live mode: matrix_runs empty — no evaluate snapshots collected")
+
+    if is_live:
+        wall = wall_clock_duration_minutes(report)
+        if wall is not None and wall < cfg.duration_minutes * 0.85:
+            errors.append(
+                f"live run wall-clock {wall:.1f} min < configured {cfg.duration_minutes} min (possible early exit)"
+            )
+
+    bacnet_runs = [r for r in latest if r.source == BACNET_SOURCE]
+    niagara_runs = [r for r in latest if r.source == NIAGARA_SOURCE]
+    bacnet_rows = max((r.row_count for r in bacnet_runs), default=0)
+    niagara_rows = max((r.row_count for r in niagara_runs), default=0)
+
+    if is_live and bacnet_rows == 0:
+        errors.append("live mode: zero BACnet historian rows in final evaluate")
+    if is_live and niagara_rows == 0:
+        errors.append("live mode: zero Niagara historian rows in final evaluate")
+
+    sources_seen = {r.source for r in latest}
+    if is_live and len(sources_seen) < 2:
+        errors.append(f"live mode: expected both sources, got {sorted(sources_seen)}")
+
+    backends_seen = {r.backend for r in latest}
+    if "pyarrow" not in backends_seen:
+        errors.append("PyArrow backend path did not run")
+    if datafusion_available() and cfg.strict_datafusion and "datafusion_sql" not in backends_seen:
+        errors.append("DataFusion installed (strict) but datafusion_sql path missing")
+    elif datafusion_available() and is_live and "datafusion_sql" not in backends_seen:
+        errors.append("live mode: DataFusion installed but datafusion_sql path missing")
+
+    if is_live and cfg.fault_direction == "below":
+        fault_runs = [r for r in latest if r.backend == "pyarrow"]
+        if fault_runs and not any(r.first_raw_fault_time for r in fault_runs):
+            errors.append("forced fault threshold set but first_raw_fault_time missing on PyArrow path")
+        if fault_runs and not any(r.first_confirmed_fault_time for r in fault_runs):
+            errors.append("fault phase ran but first_confirmed_fault_time missing after confirmation window")
+
+    for run in latest:
+        if run.first_confirmed_fault_time and run.first_raw_fault_time:
+            delay = run.confirmation_delay_seconds
+            expected = run.expected_confirmation_delay_seconds
+            if delay is not None and expected > 0 and delay < expected * 0.9:
+                errors.append(
+                    f"early confirmed fault on {run.source}/{run.backend}: "
+                    f"delay {delay}s < expected {expected}s"
+                )
+
+    if is_live and len(report.events) < 3:
+        errors.append("CSV event log too sparse — missing lifecycle events")
+
+    hard_fails = [e for e in report.execution_evidence if e.get("computation_path") == "python_list"]
+    if hard_fails:
+        errors.append("python_list core computation path detected")
+
+    equiv_fail = [e for e in report.backend_equivalence + report.source_equivalence if not e.pass_]
+    if equiv_fail and is_live:
+        labels = ", ".join(e.comparison for e in equiv_fail)
+        errors.append(f"equivalence failures: {labels}")
+
+    for w in report.warnings:
+        if not _allowed_warning(w):
+            errors.append(f"unexpected warning treated as failure: {w}")
+
+    return errors
+
+
+def compare_fingerprint_equivalence(
+    left: FddRunMetrics,
+    right: FddRunMetrics,
+    *,
+    label: str,
+) -> EquivalenceResult:
+    mismatches = 0
+    if left.confirmed_mask_fingerprint and right.confirmed_mask_fingerprint:
+        if left.confirmed_mask_fingerprint != right.confirmed_mask_fingerprint:
+            mismatches = max(abs(left.confirmed_true_count - right.confirmed_true_count), 1)
+    elif left.confirmed_true_count != right.confirmed_true_count:
+        mismatches = abs(left.confirmed_true_count - right.confirmed_true_count)
+    delta_avg: float | None = None
+    if left.value_avg is not None and right.value_avg is not None:
+        delta_avg = abs(left.value_avg - right.value_avg)
+    return EquivalenceResult(
+        comparison=label,
+        rows_aligned=min(left.row_count, right.row_count),
+        mismatches=mismatches,
+        pass_=mismatches == 0 and not left.errors and not right.errors,
+        value_delta_avg=delta_avg,
+        notes="; ".join(left.errors + right.errors),
+    )
+
+
+def build_live_data_health(
+    report: ValidationReport,
+    *,
+    poll_status: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    cfg = report.config
+    expected = int(round(cfg.duration_minutes * 60 / cfg.poll_seconds))
+    latest = aggregate_latest_runs(report.matrix_runs)
+    rows: list[dict[str, Any]] = []
+    for source in (BACNET_SOURCE, NIAGARA_SOURCE):
+        runs = [r for r in latest if r.source == source]
+        row_count = max((r.row_count for r in runs), default=0)
+        cadence = {}
+        if poll_status and isinstance(poll_status.get(source), dict):
+            cadence = poll_status[source].get("cadence") or {}
+        rows.append(
+            {
+                "source": source,
+                "expected_samples": expected,
+                "actual_rows": row_count,
+                "first_timestamp": next((r.first_sample_time for r in runs if r.first_sample_time), ""),
+                "last_timestamp": next((r.last_sample_time for r in runs if r.last_sample_time), ""),
+                "average_interval_s": cadence.get("observed_interval_s"),
+                "max_gap_s": cadence.get("max_gap_s"),
+                "stale_or_missing": max(0, expected - row_count) if expected else 0,
+            }
+        )
+    return rows
+
+
+def finalize_live_report(
+    report: ValidationReport,
+    *,
+    poll_status: dict[str, Any] | None = None,
+) -> None:
+    """Collapse per-cycle snapshots, compute equivalence, and enrich artifacts."""
+    latest = aggregate_latest_runs(report.matrix_runs)
+    report.matrix_runs = latest
+    report.fault_timeline = list(latest)
+    report.polling_health = build_live_data_health(report, poll_status=poll_status)
+    report.execution_evidence = [
+        {"run": f"{r.source}/{r.backend}", **r.execution_evidence} for r in latest if r.execution_evidence
+    ]
+    primary = report.config.primary_semantic
+    report.rule_config = rule_config_snapshot(
+        report.config,
+        threshold=report.config.forced_threshold_f,
+        value_column=primary,
+        phase="fault",
+    )
+
+    bacnet_py = next((r for r in latest if r.source == BACNET_SOURCE and r.backend == "pyarrow"), None)
+    bacnet_df = next((r for r in latest if r.source == BACNET_SOURCE and r.backend == "datafusion_sql"), None)
+    niagara_py = next((r for r in latest if r.source == NIAGARA_SOURCE and r.backend == "pyarrow"), None)
+    niagara_df = next((r for r in latest if r.source == NIAGARA_SOURCE and r.backend == "datafusion_sql"), None)
+
+    if bacnet_py and bacnet_df:
+        report.backend_equivalence.append(
+            compare_fingerprint_equivalence(bacnet_py, bacnet_df, label="BACnet PyArrow vs DataFusion SQL")
+        )
+    if niagara_py and niagara_df:
+        report.backend_equivalence.append(
+            compare_fingerprint_equivalence(niagara_py, niagara_df, label="Niagara PyArrow vs DataFusion SQL")
+        )
+    if bacnet_py and niagara_py:
+        report.source_equivalence.append(
+            compare_fingerprint_equivalence(bacnet_py, niagara_py, label="BACnet vs Niagara (PyArrow)")
+        )
+    if bacnet_df and niagara_df:
+        report.source_equivalence.append(
+            compare_fingerprint_equivalence(bacnet_df, niagara_df, label="BACnet vs Niagara (DataFusion SQL)")
+        )
+
+    report.events.append(
+        SmokeEvent(
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            event_type="equivalence_check",
+            message=(
+                f"backend_checks={len(report.backend_equivalence)} "
+                f"source_checks={len(report.source_equivalence)}"
+            ),
+        )
+    )
+    report.events.append(
+        SmokeEvent(
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            event_type="final_verdict",
+            message=f"verdict pending quality gates",
+        )
+    )
+    report.errors.extend(collect_verdict_errors(report))
+    report.verdict = _compute_verdict(report)
+    report.events[-1].message = f"verdict={report.verdict}"
+
+
+def summarize_report_dict(payload: dict[str, Any]) -> dict[str, Any]:
+    """Flatten JSON artifact for inspect_bench_5007_long_fdd_report.py."""
+    cfg = payload.get("config") or {}
+    env = payload.get("environment") or {}
+    matrix = payload.get("matrix_runs") or []
+    latest = aggregate_latest_runs(
+        [
+            FddRunMetrics(
+                source=str(m.get("source") or ""),
+                point_id=str(m.get("point_id") or ""),
+                equipment_id=str(m.get("equipment_id") or ""),
+                semantic_key=str(m.get("semantic_key") or ""),
+                backend=str(m.get("backend") or ""),
+                row_count=int(m.get("row_count") or 0),
+                raw_true_count=int(m.get("raw_true_count") or 0),
+                confirmed_true_count=int(m.get("confirmed_true_count") or 0),
+                first_raw_fault_time=str(m.get("first_raw_fault_time") or ""),
+                first_confirmed_fault_time=str(m.get("first_confirmed_fault_time") or ""),
+                confirmation_delay_seconds=m.get("confirmation_delay_seconds"),
+                value_avg=m.get("value_avg"),
+                confirmed_mask_fingerprint=str(m.get("confirmed_mask_fingerprint") or ""),
+                execution_evidence=m.get("execution_evidence") or {},
+            )
+            for m in matrix
+            if isinstance(m, dict)
+        ]
+    )
+    bacnet_rows = max((r.row_count for r in latest if r.source == BACNET_SOURCE), default=0)
+    niagara_rows = max((r.row_count for r in latest if r.source == NIAGARA_SOURCE), default=0)
+    py_rows = max((r.row_count for r in latest if r.backend == "pyarrow"), default=0)
+    df_rows = max((r.row_count for r in latest if r.backend == "datafusion_sql"), default=0)
+    py_run = next((r for r in latest if r.backend == "pyarrow"), None)
+    wall = None
+    if payload.get("started_at") and payload.get("finished_at"):
+        t0 = _parse_ts(str(payload["started_at"]))
+        t1 = _parse_ts(str(payload["finished_at"]))
+        if t0 and t1:
+            wall = (t1 - t0).total_seconds() / 60.0
+
+    return {
+        "verdict": payload.get("verdict"),
+        "warnings": payload.get("warnings") or [],
+        "errors": payload.get("errors") or [],
+        "started_at": payload.get("started_at"),
+        "finished_at": payload.get("finished_at"),
+        "wall_clock_minutes": wall,
+        "configured_duration_minutes": cfg.get("duration_minutes"),
+        "mode": env.get("mode") or ("synthetic" if cfg.get("synthetic") else "live"),
+        "datafusion_installed": env.get("datafusion_installed"),
+        "alignment_method": payload.get("alignment_method"),
+        "model_aligned_points": len(payload.get("model_alignment") or []),
+        "matrix_runs": len(latest),
+        "bacnet_rows": bacnet_rows,
+        "niagara_rows": niagara_rows,
+        "pyarrow_rows": py_rows,
+        "datafusion_rows": df_rows,
+        "raw_true_count": max((r.raw_true_count for r in latest), default=0),
+        "confirmed_true_count": max((r.confirmed_true_count for r in latest), default=0),
+        "first_raw_fault_time": next((r.first_raw_fault_time for r in latest if r.first_raw_fault_time), ""),
+        "first_confirmed_fault_time": next(
+            (r.first_confirmed_fault_time for r in latest if r.first_confirmed_fault_time),
+            "",
+        ),
+        "confirmation_delay_seconds": next(
+            (r.confirmation_delay_seconds for r in latest if r.confirmation_delay_seconds is not None),
+            None,
+        ),
+        "backend_equivalence_mismatches": sum(
+            int(e.get("mismatches") or 0) for e in (payload.get("backend_equivalence") or [])
+        ),
+        "source_equivalence_mismatches": sum(
+            int(e.get("mismatches") or 0) for e in (payload.get("source_equivalence") or [])
+        ),
+        "execution_evidence_paths": [
+            e.get("computation_path") for e in (payload.get("execution_evidence") or []) if isinstance(e, dict)
+        ],
+        "confirmation_engine": next(
+            (
+                (r.execution_evidence or {}).get("confirmation_engine")
+                for r in latest
+                if (r.execution_evidence or {}).get("confirmation_engine")
+            ),
+            None,
+        ),
+        "csv_event_rows": len(payload.get("events") or []),
+    }
 
 
 def _compute_verdict(report: ValidationReport) -> str:
@@ -772,75 +1162,150 @@ def _csv(val: Any) -> str:
 
 def render_markdown_report(report: ValidationReport) -> str:
     cfg = report.config
+    mode = _report_mode(report)
+    wall = wall_clock_duration_minutes(report)
+    real_long_run = mode == "live" and not cfg.dry_run and (wall or 0) >= cfg.duration_minutes * 0.85
+    only_python_loop_warn = bool(report.warnings) and all(_allowed_warning(w) for w in report.warnings)
+    latest = aggregate_latest_runs(report.matrix_runs)
+
     lines = [
         "# Bench 5007 Long FDD Smoke Report",
         "",
         "## Summary",
         "",
         f"- **Verdict:** {report.verdict}",
-        f"- **Duration:** {cfg.duration_minutes} min",
+        f"- **Mode:** {mode}",
+        f"- **Configured duration:** {cfg.duration_minutes} min",
+        f"- **Actual wall-clock duration:** {wall:.1f} min" if wall is not None else "- **Actual wall-clock duration:** unknown",
+        f"- **Real long run:** {'yes' if real_long_run else 'no'}",
         f"- **Poll interval:** {cfg.poll_seconds}s",
         f"- **Fault confirmation window:** {cfg.confirmation_rows} rows / {cfg.confirmation_minutes} min "
         f"(at {cfg.poll_seconds}s polling ≈ {cfg.confirmation_rows * cfg.poll_seconds // 60} min)",
         f"- **Started:** {report.started_at}",
         f"- **Finished:** {report.finished_at}",
+        f"- **DataFusion installed:** {report.environment.get('datafusion_installed', datafusion_available())}",
+        f"- **Alignment method:** {report.alignment_method}",
+        f"- **Confirmation Python-loop only warning:** {'yes' if only_python_loop_warn else 'no'}",
         "",
         "## Environment",
         "",
         f"- **Site:** {cfg.site_id}",
         f"- **BACnet device:** {cfg.bacnet_device_id}",
         f"- **Niagara station:** {cfg.niagara_station}",
-        f"- **DataFusion installed:** {report.environment.get('datafusion_installed', datafusion_available())}",
         "",
-        "## Data Model Alignment",
+        "## Live Data Health",
         "",
-        "| semantic | source | point_id | historian_column | brick_type | fdd_input |",
-        "|---|---|---|---|---|---|",
+        "| source | expected_samples | actual_rows | first_timestamp | last_timestamp | avg_interval_s | max_gap_s | stale/missing |",
+        "|---|---:|---:|---|---|---|---:|---:|",
     ]
+    health_rows = report.polling_health or build_live_data_health(report)
+    for row in health_rows:
+        lines.append(
+            f"| {row.get('source', '')} | {row.get('expected_samples', '')} | {row.get('actual_rows', '')} | "
+            f"{row.get('first_timestamp', '')} | {row.get('last_timestamp', '')} | "
+            f"{row.get('average_interval_s', '')} | {row.get('max_gap_s', '')} | {row.get('stale_or_missing', '')} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Data Model Alignment",
+            "",
+            "| semantic | source | point_id | historian_column | brick_type | fdd_input |",
+            "|---|---|---|---|---|---|",
+        ]
+    )
     for pt in report.model_alignment:
         lines.append(
             f"| {pt.semantic_key} | {pt.source} | {pt.point_id} | {pt.historian_column} | "
             f"{pt.brick_type} | {pt.fdd_input} |"
         )
 
-    lines.extend(["", "## Rule Configuration", "", "```json", json.dumps(report.rule_config, indent=2), "```"])
-
-    lines.extend(["", "## Arrow/DataFusion Execution Evidence", ""])
-    lines.append("| backend | computation_path | confirmation_engine | rows | chunks |")
-    lines.append("|---|---|---|---|---|")
+    lines.extend(
+        [
+            "",
+            "## Rule Change Event",
+            "",
+            f"- **Baseline threshold:** {cfg.baseline_threshold_f}F ({cfg.fault_direction})",
+            f"- **Forced threshold:** {cfg.forced_threshold_f}F",
+            f"- **Threshold change at:** {report.threshold_change_at or 'n/a'}",
+            f"- **Confirmation rows/minutes:** {cfg.confirmation_rows} / {cfg.confirmation_minutes}",
+            "",
+            "## Rule Configuration",
+            "",
+            "```json",
+            json.dumps(report.rule_config, indent=2),
+            "```",
+            "",
+            "## Arrow/DataFusion Execution Evidence",
+            "",
+            "| run | backend | computation_path | confirmation_engine | rows | chunks |",
+            "|---|---|---|---|---:|---:|",
+        ]
+    )
     for ev in report.execution_evidence:
         lines.append(
-            f"| {ev.get('backend', '')} | {ev.get('computation_path', '')} | "
+            f"| {ev.get('run', '')} | {ev.get('backend', '')} | {ev.get('computation_path', '')} | "
             f"{ev.get('confirmation_engine', '')} | {ev.get('arrow_num_rows', '')} | "
             f"{ev.get('arrow_chunk_count', '')} |"
         )
 
-    lines.extend(["", "## Fault Timeline", ""])
-    lines.append("| source | backend | first_raw_fault | first_confirmed_fault | delay_s | expected_s |")
-    lines.append("|---|---|---|---|---|---|")
-    for m in report.fault_timeline:
+    lines.extend(
+        [
+            "",
+            "## Fault Timeline",
+            "",
+            "| source | backend | rows | raw_true | confirmed_true | first_raw_fault | first_confirmed_fault | delay_s | expected_s |",
+            "|---|---|---:|---:|---:|---|---|---:|---:|",
+        ]
+    )
+    for m in report.fault_timeline or latest:
         lines.append(
-            f"| {m.source} | {m.backend} | {m.first_raw_fault_time} | {m.first_confirmed_fault_time} | "
+            f"| {m.source} | {m.backend} | {m.row_count} | {m.raw_true_count} | {m.confirmed_true_count} | "
+            f"{m.first_raw_fault_time} | {m.first_confirmed_fault_time} | "
             f"{m.confirmation_delay_seconds} | {m.expected_confirmation_delay_seconds} |"
         )
 
     lines.extend(["", "## Backend Equivalence", ""])
-    for eq in report.backend_equivalence:
-        lines.append(f"- **{eq.comparison}:** mismatches={eq.mismatches} pass={eq.pass_}")
+    if report.backend_equivalence:
+        for eq in report.backend_equivalence:
+            lines.append(
+                f"- **{eq.comparison}:** mismatches={eq.mismatches} pass={eq.pass_}"
+                + (f" value_delta_avg={eq.value_delta_avg}" if eq.value_delta_avg is not None else "")
+            )
+    else:
+        lines.append("- (none recorded)")
 
     lines.extend(["", "## Source Equivalence", ""])
-    for eq in report.source_equivalence:
-        lines.append(f"- **{eq.comparison}:** mismatches={eq.mismatches} pass={eq.pass_}")
+    if report.source_equivalence:
+        for eq in report.source_equivalence:
+            lines.append(
+                f"- **{eq.comparison}:** mismatches={eq.mismatches} pass={eq.pass_}"
+                + (f" value_delta_avg={eq.value_delta_avg}" if eq.value_delta_avg is not None else "")
+            )
+    else:
+        lines.append("- (none recorded)")
 
     if report.warnings:
         lines.extend(["", "## Warnings", ""])
         for w in report.warnings:
             lines.append(f"- {w}")
+        lines.append("")
+        lines.append(
+            "_WARN means validation completed with known non-fatal issues "
+            "(typically confirmation_engine=python_loop_over_arrow_mask until vectorized)._"
+        )
 
     if report.errors:
         lines.extend(["", "## Errors", ""])
         for err in report.errors:
             lines.append(f"- {err}")
 
-    lines.extend(["", "## Final Verdict", "", f"**{report.verdict}**", ""])
+    why = "PASS — live data collected, backends exercised, confirmation window respected."
+    if report.verdict == "WARN":
+        why = "WARN — useful evidence collected; only known non-fatal warnings (see above)."
+    elif report.verdict == "FAIL":
+        why = "FAIL — missing live data, timing, equivalence, or unexpected warnings."
+
+    lines.extend(["", "## Final Verdict", "", f"**{report.verdict}**", "", why, ""])
     return "\n".join(lines) + "\n"

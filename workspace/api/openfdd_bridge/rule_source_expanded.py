@@ -55,7 +55,9 @@ def expand_rule_source(*, rule_id: str) -> dict[str, Any]:
     if not rule:
         return {"ok": False, "error": f"rule not found: {rule_id}"}
     path = str(rule.get("source_path") or "")
-    rule_source = read_source(path) if path else str(rule.get("code") or "")
+    rule_source = read_source(path) if path else ""
+    if not rule_source.strip():
+        rule_source = str(rule.get("code") or "")
     if not rule_source.strip():
         return {"ok": False, "error": "rule source empty"}
 

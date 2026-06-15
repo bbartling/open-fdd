@@ -17,6 +17,7 @@ from open_fdd.arrow_runtime.datafusion_backend import datafusion_available, run_
 from open_fdd.arrow_runtime.execution_evidence import validate_computation_path
 from open_fdd.validation.bench_5007_long_fdd import (
     SmokeConfig,
+    ValidationReport,
     align_semantic_points,
     build_datafusion_threshold_sql,
     build_pyarrow_threshold_code,
@@ -24,6 +25,8 @@ from open_fdd.validation.bench_5007_long_fdd import (
     PointAlignment,
     render_markdown_report,
     run_synthetic_validation,
+    summarize_report_dict,
+    collect_verdict_errors,
     validate_confirmation_timing,
     write_report_artifacts,
 )
@@ -232,3 +235,39 @@ def test_smoke_script_synthetic_subprocess():
     assert proc.returncode == 0, proc.stderr + proc.stdout
     assert "LONG FDD SMOKE" in proc.stdout
     assert "password" not in proc.stdout.lower() or "********" in proc.stdout
+
+
+def test_summarize_report_dict(smoke_cfg: SmokeConfig, bench_model: dict):
+    report = run_synthetic_validation(smoke_cfg, model=bench_model)
+    payload = report.to_dict()
+    summary = summarize_report_dict(payload)
+    assert summary["verdict"] in ("PASS", "WARN")
+    assert summary["matrix_runs"] >= 2
+    assert summary["pyarrow_rows"] > 0
+    assert summary["csv_event_rows"] >= 3
+
+
+def test_collect_verdict_errors_live_empty():
+    report = ValidationReport(
+        config=SmokeConfig(duration_minutes=120),
+        environment={"mode": "live"},
+        started_at="2026-01-01T00:00:00+00:00",
+        finished_at="2026-01-01T02:00:00+00:00",
+    )
+    errors = collect_verdict_errors(report)
+    assert any("matrix_runs empty" in e for e in errors)
+
+
+def test_inspect_script_subprocess(smoke_cfg: SmokeConfig, bench_model: dict, tmp_path: Path):
+    report = run_synthetic_validation(smoke_cfg, model=bench_model)
+    paths = write_report_artifacts(report, tmp_path)
+    proc = subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "inspect_bench_5007_long_fdd_report.py"), paths["json"]],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+    assert "verdict:" in proc.stdout
+    assert "matrix_runs:" in proc.stdout

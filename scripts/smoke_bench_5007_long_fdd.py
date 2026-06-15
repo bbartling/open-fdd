@@ -27,13 +27,19 @@ from open_fdd.arrow_runtime.datafusion_backend import datafusion_available
 from open_fdd.validation.bench_5007_long_fdd import (  # noqa: E402
     BACNET_SOURCE,
     NIAGARA_SOURCE,
+    FddRunMetrics,
     SmokeConfig,
+    SmokeEvent,
     ValidationReport,
     align_semantic_points,
+    finalize_live_report,
+    aggregate_latest_runs,
     run_synthetic_validation,
     validate_model_preflight,
     write_report_artifacts,
 )
+
+PROGRESS_INTERVAL_S = 300
 
 
 def _load_auth() -> tuple[str, str]:
@@ -89,12 +95,93 @@ def _redact_payload(payload: Any) -> str:
     return text
 
 
+def _metrics_from_response(source: str, backend: str, semantic: str, res: dict[str, Any]) -> FddRunMetrics:
+    m = res.get("metrics") or {}
+    return FddRunMetrics(
+        source=str(m.get("source") or source),
+        point_id=str(m.get("point_id") or ""),
+        equipment_id=str(m.get("equipment_id") or ""),
+        semantic_key=str(m.get("semantic_key") or semantic),
+        backend=backend,
+        row_count=int(m.get("row_count") or 0),
+        raw_true_count=int(m.get("raw_true_count") or 0),
+        confirmed_true_count=int(m.get("confirmed_true_count") or 0),
+        value_avg=m.get("value_avg"),
+        value_min=m.get("value_min"),
+        value_max=m.get("value_max"),
+        raw_mask_fingerprint=str(m.get("raw_mask_fingerprint") or ""),
+        confirmed_mask_fingerprint=str(m.get("confirmed_mask_fingerprint") or ""),
+        first_sample_time=str(m.get("first_sample_time") or ""),
+        last_sample_time=str(m.get("last_sample_time") or ""),
+        first_raw_fault_time=str(m.get("first_raw_fault_time") or ""),
+        first_confirmed_fault_time=str(m.get("first_confirmed_fault_time") or ""),
+        confirmation_delay_seconds=m.get("confirmation_delay_seconds"),
+        execution_evidence=m.get("execution_evidence") or {},
+        errors=list(m.get("errors") or []),
+    )
+
+
+def _evaluate(
+    base: str,
+    token: str,
+    cfg: SmokeConfig,
+    *,
+    source: str,
+    backend: str,
+    threshold: float,
+    phase: str,
+    lookback_hours: float | None = None,
+) -> tuple[int, dict[str, Any]]:
+    body: dict[str, Any] = {
+        "site_id": cfg.site_id,
+        "source": source,
+        "semantic_key": cfg.primary_semantic,
+        "backend": backend,
+        "threshold": threshold,
+        "phase": phase,
+        "poll_interval_s": cfg.poll_seconds,
+        "confirmation_rows": cfg.confirmation_rows,
+        "confirmation_minutes": cfg.confirmation_minutes,
+        "fault_direction": cfg.fault_direction,
+    }
+    if lookback_hours is not None:
+        body["lookback_hours"] = lookback_hours
+    return _fetch("POST", f"{base}/api/bench/long-fdd/evaluate", token=token, body=body, timeout=180.0)
+
+
+def _progress_line(
+    *,
+    elapsed_min: float,
+    remaining_min: float,
+    bacnet_rows: int,
+    niagara_rows: int,
+    raw_seen: bool,
+    confirmed_seen: bool,
+    verdict_state: str,
+    datafusion_ok: bool,
+) -> str:
+    return (
+        f"[progress] elapsed={elapsed_min:.0f}m remaining={remaining_min:.0f}m "
+        f"bacnet_rows={bacnet_rows} niagara_rows={niagara_rows} "
+        f"pyarrow=ok datafusion={'ok' if datafusion_ok else 'skip'} "
+        f"raw_fault={'yes' if raw_seen else 'no'} confirmed_fault={'yes' if confirmed_seen else 'no'} "
+        f"state={verdict_state}"
+    )
+
+
 def run_live(cfg: SmokeConfig) -> ValidationReport:
     base = cfg.base_url.rstrip("/")
     report = ValidationReport(
         config=cfg,
         started_at=datetime.now(timezone.utc).isoformat(),
         environment={"mode": "live", "base_url": base, "datafusion_installed": datafusion_available()},
+    )
+    report.events.append(
+        SmokeEvent(
+            timestamp=report.started_at,
+            event_type="preflight",
+            message=f"live smoke starting ({cfg.duration_minutes} min)",
+        )
     )
 
     user, password = _load_auth()
@@ -109,7 +196,9 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
     if status != 200:
         report.errors.append(f"health HTTP {status}")
     else:
-        report.environment["health"] = {k: health.get(k) for k in ("ok", "openfdd_version", "git_sha") if isinstance(health, dict)}
+        report.environment["health"] = {
+            k: health.get(k) for k in ("ok", "openfdd_version", "git_sha") if isinstance(health, dict)
+        }
 
     status, model = _fetch("GET", f"{base}/api/model/commissioning-export", token=token)
     if status != 200 or not isinstance(model, dict):
@@ -126,28 +215,14 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
     if cfg.strict_datafusion and not datafusion_available():
         report.errors.append("DataFusion required but not installed")
 
-    status, poll_status = _fetch("GET", f"{base}/api/bench/poll-status", token=token)
-    if status == 200 and isinstance(poll_status, dict):
-        report.polling_health.append(poll_status)
-
-    # Preflight: fail fast if evaluate route or historian path is broken (avoid wasting 2h).
-    pf_status, pf_res = _fetch(
-        "POST",
-        f"{base}/api/bench/long-fdd/evaluate",
-        token=token,
-        body={
-            "site_id": cfg.site_id,
-            "source": BACNET_SOURCE,
-            "semantic_key": cfg.primary_semantic,
-            "backend": "pyarrow",
-            "threshold": cfg.baseline_threshold_f,
-            "phase": "preflight",
-            "poll_interval_s": cfg.poll_seconds,
-            "confirmation_rows": cfg.confirmation_rows,
-            "confirmation_minutes": cfg.confirmation_minutes,
-            "fault_direction": cfg.fault_direction,
-        },
-        timeout=180.0,
+    pf_status, pf_res = _evaluate(
+        base,
+        token,
+        cfg,
+        source=BACNET_SOURCE,
+        backend="pyarrow",
+        threshold=cfg.baseline_threshold_f,
+        phase="preflight",
     )
     if pf_status != 200 or not isinstance(pf_res, dict) or not pf_res.get("ok"):
         report.errors.append(
@@ -157,11 +232,25 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
         report.finished_at = datetime.now(timezone.utc).isoformat()
         return report
 
+    report.events.append(
+        SmokeEvent(
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            event_type="baseline_start",
+            semantic_key=cfg.primary_semantic,
+            message=f"baseline threshold {cfg.baseline_threshold_f}F for {cfg.baseline_minutes} min",
+        )
+    )
+
     t0 = time.monotonic()
     baseline_s = cfg.baseline_minutes * 60
     total_s = cfg.duration_minutes * 60
     cycle = 0
     threshold_changed = False
+    raw_fault_seen = False
+    confirmed_fault_seen = False
+    last_progress = t0
+    latest_runs: dict[tuple[str, str], FddRunMetrics] = {}
+    poll_status: dict[str, Any] | None = None
 
     backends = ("pyarrow", "datafusion_sql")
     sources = (BACNET_SOURCE, NIAGARA_SOURCE)
@@ -174,6 +263,14 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
         if phase == "fault" and not threshold_changed:
             threshold_changed = True
             report.threshold_change_at = datetime.now(timezone.utc).isoformat()
+            report.events.append(
+                SmokeEvent(
+                    timestamp=report.threshold_change_at,
+                    event_type="threshold_change",
+                    semantic_key=cfg.primary_semantic,
+                    message=f"forced threshold {cfg.forced_threshold_f}F ({cfg.fault_direction})",
+                )
+            )
 
         _fetch("POST", f"{base}/api/bacnet/poll/once", token=token, timeout=180.0)
         _fetch(
@@ -187,52 +284,66 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
             for backend in backends:
                 if backend == "datafusion_sql" and not datafusion_available():
                     continue
-                status, res = _fetch(
-                    "POST",
-                    f"{base}/api/bench/long-fdd/evaluate",
-                    token=token,
-                    body={
-                        "site_id": cfg.site_id,
-                        "source": source,
-                        "semantic_key": cfg.primary_semantic,
-                        "backend": backend,
-                        "threshold": threshold,
-                        "phase": phase,
-                        "poll_interval_s": cfg.poll_seconds,
-                        "confirmation_rows": cfg.confirmation_rows,
-                        "confirmation_minutes": cfg.confirmation_minutes,
-                        "fault_direction": cfg.fault_direction,
-                    },
+                status, res = _evaluate(
+                    base,
+                    token,
+                    cfg,
+                    source=source,
+                    backend=backend,
+                    threshold=threshold,
+                    phase=phase,
                 )
                 if status != 200 or not isinstance(res, dict) or not res.get("ok"):
                     report.errors.append(
                         f"cycle {cycle} {source}/{backend}: HTTP {status} {_redact_payload(res)}"
                     )
                     continue
-                m = res.get("metrics") or {}
-                from open_fdd.validation.bench_5007_long_fdd import FddRunMetrics
-
-                metrics = FddRunMetrics(
-                    source=str(m.get("source") or source),
-                    point_id=str(m.get("point_id") or ""),
-                    equipment_id=str(m.get("equipment_id") or ""),
-                    semantic_key=cfg.primary_semantic,
-                    backend=backend,
-                    row_count=int(m.get("row_count") or 0),
-                    raw_true_count=int(m.get("raw_true_count") or 0),
-                    confirmed_true_count=int(m.get("confirmed_true_count") or 0),
-                    first_raw_fault_time=str(m.get("first_raw_fault_time") or ""),
-                    first_confirmed_fault_time=str(m.get("first_confirmed_fault_time") or ""),
-                    confirmation_delay_seconds=m.get("confirmation_delay_seconds"),
-                    execution_evidence=m.get("execution_evidence") or {},
-                    errors=list(m.get("errors") or []),
-                )
-                report.matrix_runs.append(metrics)
+                metrics = _metrics_from_response(source, backend, cfg.primary_semantic, res)
+                latest_runs[(source, backend)] = metrics
                 eng = metrics.execution_evidence.get("confirmation_engine")
                 if eng == "python_loop_over_arrow_mask":
                     warn_key = f"confirmation uses python loop ({source}/{backend})"
                     if warn_key not in report.warnings:
                         report.warnings.append(warn_key)
+                if metrics.first_raw_fault_time and not raw_fault_seen:
+                    raw_fault_seen = True
+                    report.events.append(
+                        SmokeEvent(
+                            timestamp=metrics.first_raw_fault_time,
+                            event_type="raw_fault_first_seen",
+                            source=source,
+                            backend=backend,
+                            message=f"first raw fault on {source}/{backend}",
+                        )
+                    )
+                if metrics.first_confirmed_fault_time and not confirmed_fault_seen:
+                    confirmed_fault_seen = True
+                    report.events.append(
+                        SmokeEvent(
+                            timestamp=metrics.first_confirmed_fault_time,
+                            event_type="confirmed_fault_first_seen",
+                            source=source,
+                            backend=backend,
+                            message=f"first confirmed fault on {source}/{backend}",
+                        )
+                    )
+
+        if time.monotonic() - last_progress >= PROGRESS_INTERVAL_S or cycle == 1:
+            last_progress = time.monotonic()
+            bacnet_rows = max((r.row_count for (s, _), r in latest_runs.items() if s == BACNET_SOURCE), default=0)
+            niagara_rows = max((r.row_count for (s, _), r in latest_runs.items() if s == NIAGARA_SOURCE), default=0)
+            remaining = max(0.0, (total_s - elapsed) / 60.0)
+            line = _progress_line(
+                elapsed_min=elapsed / 60.0,
+                remaining_min=remaining,
+                bacnet_rows=bacnet_rows,
+                niagara_rows=niagara_rows,
+                raw_seen=raw_fault_seen,
+                confirmed_seen=confirmed_fault_seen,
+                verdict_state="running",
+                datafusion_ok=datafusion_available(),
+            )
+            print(line, flush=True)
 
         if cfg.overnight and cycle % max(1, int(3600 / cfg.poll_seconds)) == 0:
             report.hourly_rollups.append(
@@ -240,24 +351,61 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
                     "cycle": cycle,
                     "elapsed_minutes": round(elapsed / 60, 1),
                     "phase": phase,
-                    "runs": len(report.matrix_runs),
+                    "runs": len(latest_runs),
                 }
             )
 
-        remaining = total_s - (time.monotonic() - t0)
-        if remaining > cfg.poll_seconds:
+        remaining_sleep = total_s - (time.monotonic() - t0)
+        if remaining_sleep > cfg.poll_seconds:
             time.sleep(cfg.poll_seconds)
 
     if not threshold_changed:
         report.errors.append("fault phase never reached — increase duration_minutes")
 
-    # Final fault-phase evaluation snapshot for timeline
-    report.fault_timeline = [r for r in report.matrix_runs if r.backend and r.source]
+    # Final snapshot with full lookback for fault-phase evidence
+    lookback_h = max(1.0, cfg.duration_minutes / 60.0)
+    for source in sources:
+        for backend in backends:
+            if backend == "datafusion_sql" and not datafusion_available():
+                continue
+            status, res = _evaluate(
+                base,
+                token,
+                cfg,
+                source=source,
+                backend=backend,
+                threshold=cfg.forced_threshold_f,
+                phase="final",
+                lookback_hours=lookback_h,
+            )
+            if status == 200 and isinstance(res, dict) and res.get("ok"):
+                latest_runs[(source, backend)] = _metrics_from_response(
+                    source, backend, cfg.primary_semantic, res
+                )
 
+    status, poll_status = _fetch("GET", f"{base}/api/bench/poll-status", token=token)
+    if status != 200:
+        poll_status = None
+
+    report.matrix_runs = list(latest_runs.values())
     report.finished_at = datetime.now(timezone.utc).isoformat()
-    from open_fdd.validation.bench_5007_long_fdd import _compute_verdict
+    finalize_live_report(report, poll_status=poll_status if isinstance(poll_status, dict) else None)
 
-    report.verdict = _compute_verdict(report)
+    bacnet_rows = max((r.row_count for r in report.matrix_runs if r.source == BACNET_SOURCE), default=0)
+    niagara_rows = max((r.row_count for r in report.matrix_runs if r.source == NIAGARA_SOURCE), default=0)
+    print(
+        _progress_line(
+            elapsed_min=cfg.duration_minutes,
+            remaining_min=0,
+            bacnet_rows=bacnet_rows,
+            niagara_rows=niagara_rows,
+            raw_seen=raw_fault_seen,
+            confirmed_seen=confirmed_fault_seen,
+            verdict_state=report.verdict,
+            datafusion_ok=datafusion_available(),
+        ),
+        flush=True,
+    )
     return report
 
 
@@ -308,13 +456,29 @@ def main() -> int:
         cfg.reports_dir = args.reports_dir
     cfg.synthetic = args.synthetic
 
+    print(
+        f"==> Bench 5007 long FDD smoke ({cfg.duration_minutes} min, confirmation window={cfg.confirmation_rows} rows)",
+        flush=True,
+    )
+
     if args.synthetic:
         report = run_synthetic_validation(cfg)
     else:
         report = run_live(cfg)
 
     paths = write_report_artifacts(report, REPO / cfg.reports_dir)
-    print(json.dumps({"verdict": report.verdict, "artifacts": paths, "errors": report.errors}, indent=2))
+    summary = {
+        "verdict": report.verdict,
+        "mode": report.environment.get("mode", "synthetic" if cfg.synthetic else "live"),
+        "started_at": report.started_at,
+        "finished_at": report.finished_at,
+        "matrix_runs": len(aggregate_latest_runs(report.matrix_runs)),
+        "events": len(report.events),
+        "artifacts": paths,
+        "errors": report.errors,
+        "warnings": report.warnings,
+    }
+    print(json.dumps(summary, indent=2))
 
     if report.verdict == "FAIL":
         print("\nLONG FDD SMOKE FAILED", file=sys.stderr)

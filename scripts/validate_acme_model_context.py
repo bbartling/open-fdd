@@ -31,7 +31,11 @@ def main() -> int:
         print(f"Model not found: {args.model}", file=sys.stderr)
         return 2
 
-    model = load_acme_model(args.model)
+    try:
+        model = load_acme_model(args.model)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        print(f"Failed to load model: {exc}", file=sys.stderr)
+        return 2
     report = validate_acme_model(model)
     rt_errors = round_trip_preserves_model_fields(model)
     if rt_errors:
