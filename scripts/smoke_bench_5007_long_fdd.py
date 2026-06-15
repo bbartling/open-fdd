@@ -130,6 +130,33 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
     if status == 200 and isinstance(poll_status, dict):
         report.polling_health.append(poll_status)
 
+    # Preflight: fail fast if evaluate route or historian path is broken (avoid wasting 2h).
+    pf_status, pf_res = _fetch(
+        "POST",
+        f"{base}/api/bench/long-fdd/evaluate",
+        token=token,
+        body={
+            "site_id": cfg.site_id,
+            "source": BACNET_SOURCE,
+            "semantic_key": cfg.primary_semantic,
+            "backend": "pyarrow",
+            "threshold": cfg.baseline_threshold_f,
+            "phase": "preflight",
+            "poll_interval_s": cfg.poll_seconds,
+            "confirmation_rows": cfg.confirmation_rows,
+            "confirmation_minutes": cfg.confirmation_minutes,
+            "fault_direction": cfg.fault_direction,
+        },
+        timeout=180.0,
+    )
+    if pf_status != 200 or not isinstance(pf_res, dict) or not pf_res.get("ok"):
+        report.errors.append(
+            f"preflight evaluate failed HTTP {pf_status} {_redact_payload(pf_res)} — restart bridge after pulling PR branch"
+        )
+        report.verdict = "FAIL"
+        report.finished_at = datetime.now(timezone.utc).isoformat()
+        return report
+
     t0 = time.monotonic()
     baseline_s = cfg.baseline_minutes * 60
     total_s = cfg.duration_minutes * 60
@@ -201,8 +228,11 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
                     errors=list(m.get("errors") or []),
                 )
                 report.matrix_runs.append(metrics)
-                if metrics.execution_evidence.get("confirmation_engine") == "python_loop_over_arrow_mask":
-                    report.warnings.append(f"confirmation uses python loop ({source}/{backend})")
+                eng = metrics.execution_evidence.get("confirmation_engine")
+                if eng == "python_loop_over_arrow_mask":
+                    warn_key = f"confirmation uses python loop ({source}/{backend})"
+                    if warn_key not in report.warnings:
+                        report.warnings.append(warn_key)
 
         if cfg.overnight and cycle % max(1, int(3600 / cfg.poll_seconds)) == 0:
             report.hourly_rollups.append(
