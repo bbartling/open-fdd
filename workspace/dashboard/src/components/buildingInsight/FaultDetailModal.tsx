@@ -58,6 +58,7 @@ export default function FaultDetailModal({ fault, onClose }: Props) {
   const primary = fault.underlying[0];
   const analytics = (primary?.analytics || {}) as FaultAnalytics;
   const insight = ctx?.insight;
+  const sensors = insight?.sensors?.length ? insight.sensors : [];
   const unit = analytics.value_unit || insight?.value_unit || "°F";
   const ruleName = ctx?.rule_name || primary?.rule_name || ruleMeta?.name || "";
   const ruleId = ctx?.rule_id || primary?.rule_id || ruleMeta?.id || "";
@@ -120,60 +121,112 @@ export default function FaultDetailModal({ fault, onClose }: Props) {
           {fault.source === "fdd" && (insight || analytics.avg_value_fault != null) ? (
             <section className="bis-modal-section">
               <h4>Sensor analytics</h4>
-              <dl className="bis-meta-grid">
-                {insight?.avg_while_fault != null || analytics.avg_value_fault != null ? (
-                  <div>
-                    <dt>Avg while fault</dt>
-                    <dd>
-                      {insight?.avg_while_fault ?? analytics.avg_value_fault}
-                      {unit}
-                    </dd>
-                  </div>
-                ) : null}
-                {insight?.avg_overall != null ? (
-                  <div>
-                    <dt>Avg overall (lookback)</dt>
-                    <dd>
-                      {insight.avg_overall}
-                      {unit}
-                      {insight.min_overall != null && insight.max_overall != null
-                        ? ` (${insight.min_overall}–${insight.max_overall})`
-                        : ""}
-                    </dd>
-                  </div>
-                ) : null}
-                {insight?.avg_while_motor_run != null ? (
-                  <div>
-                    <dt>Avg while motor run</dt>
-                    <dd>
-                      {insight.avg_while_motor_run}
-                      {unit}
-                      {insight.motor_label ? ` · ${insight.motor_label}` : ""}
-                    </dd>
-                  </div>
-                ) : null}
-                {insight?.fault_sample_pct != null ? (
-                  <div>
-                    <dt>Fault sample rate</dt>
-                    <dd>{insight.fault_sample_pct}% of lookback</dd>
-                  </div>
-                ) : null}
-                {insight?.motor_runtime_hours != null && insight.motor_runtime_hours > 0 ? (
-                  <div>
-                    <dt>Motor run-hours</dt>
-                    <dd>
-                      {insight.motor_runtime_hours} h
-                      {insight.motor_equipment ? ` (${insight.motor_equipment})` : ""}
-                    </dd>
-                  </div>
-                ) : null}
-                {insight?.historian_source ? (
-                  <div>
-                    <dt>Historian source</dt>
-                    <dd>{insight.historian_source}</dd>
-                  </div>
-                ) : null}
-              </dl>
+              {sensors.length > 1 ? (
+                <div className="bis-sensor-table-wrap">
+                  <table className="bis-sensor-table">
+                    <thead>
+                      <tr>
+                        <th>Sensor</th>
+                        <th>Avg fault</th>
+                        <th>Avg OK</th>
+                        <th>Avg overall</th>
+                        <th>Avg motor run</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sensors.map((s) => (
+                        <tr key={s.column || s.label}>
+                          <td>
+                            <strong>{s.label || s.column}</strong>
+                            {s.brick_type ? <div className="muted">{s.brick_type}</div> : null}
+                          </td>
+                          <td>{s.avg_while_fault != null ? `${s.avg_while_fault}${unit}` : "—"}</td>
+                          <td>{s.avg_while_ok != null ? `${s.avg_while_ok}${unit}` : "—"}</td>
+                          <td>
+                            {s.avg_overall != null
+                              ? `${s.avg_overall}${unit}${s.min_overall != null && s.max_overall != null ? ` (${s.min_overall}–${s.max_overall})` : ""}`
+                              : "—"}
+                          </td>
+                          <td>{s.avg_while_motor_run != null ? `${s.avg_while_motor_run}${unit}` : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <dl className="bis-meta-grid">
+                  {insight?.avg_while_fault != null || analytics.avg_value_fault != null ? (
+                    <div>
+                      <dt>Avg while fault</dt>
+                      <dd>
+                        {insight?.avg_while_fault ?? analytics.avg_value_fault}
+                        {unit}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {insight?.avg_while_ok != null ? (
+                    <div>
+                      <dt>Avg while OK</dt>
+                      <dd>
+                        {insight.avg_while_ok}
+                        {unit}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {insight?.avg_overall != null ? (
+                    <div>
+                      <dt>Avg overall (lookback)</dt>
+                      <dd>
+                        {insight.avg_overall}
+                        {unit}
+                        {insight.min_overall != null && insight.max_overall != null
+                          ? ` (${insight.min_overall}–${insight.max_overall})`
+                          : ""}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {insight?.avg_while_motor_run != null ? (
+                    <div>
+                      <dt>Avg while motor run</dt>
+                      <dd>
+                        {insight.avg_while_motor_run}
+                        {unit}
+                        {insight.motor_label ? ` · ${insight.motor_label}` : ""}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {insight?.avg_while_motor_run_fault != null ? (
+                    <div>
+                      <dt>Avg motor run + fault</dt>
+                      <dd>
+                        {insight.avg_while_motor_run_fault}
+                        {unit}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {insight?.fault_sample_pct != null ? (
+                    <div>
+                      <dt>Fault sample rate</dt>
+                      <dd>{insight.fault_sample_pct}% of lookback</dd>
+                    </div>
+                  ) : null}
+                  {insight?.motor_runtime_hours != null && insight.motor_runtime_hours > 0 ? (
+                    <div>
+                      <dt>Motor run-hours</dt>
+                      <dd>
+                        {insight.motor_runtime_hours} h
+                        {insight.motor_equipment ? ` (${insight.motor_equipment})` : ""}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {insight?.historian_source ? (
+                    <div>
+                      <dt>Historian source</dt>
+                      <dd>{insight.historian_source}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              )}
             </section>
           ) : null}
 

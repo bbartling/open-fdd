@@ -94,4 +94,16 @@ def test_enrich_fault_insight_with_historian(monkeypatch: pytest.MonkeyPatch) ->
     assert insight["rule_bounds_low"] == 50
     assert insight["rule_bounds_high"] == 85
     assert insight["avg_overall"] is not None
+    assert insight.get("avg_while_ok") is not None
+    assert insight["sensors"]
     assert insight.get("motor_runtime_hours", 0) >= 0
+
+
+def test_sensor_analytics_fault_vs_ok() -> None:
+    import pyarrow as pa
+    from openfdd_bridge.fault_insight_analytics import _sensor_analytics_pyarrow
+
+    table = pa.table({"oa-t": [60.0, 70.0, 90.0, 95.0, 72.0]})
+    out = _sensor_analytics_pyarrow(table, "oa-t", motors=[], bounds_low=50.0, bounds_high=85.0)
+    assert out["avg_while_fault"] == 92.5
+    assert out["avg_while_ok"] == 67.33 or out["avg_while_ok"] == 67.34 or abs(out["avg_while_ok"] - 67.33) < 0.1

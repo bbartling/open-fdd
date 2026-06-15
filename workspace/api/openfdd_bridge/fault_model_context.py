@@ -225,6 +225,7 @@ def enrich_fault_alert(alert: dict[str, Any], model: dict[str, Any]) -> dict[str
         site_id=site_id,
         equipment_id=str(ctx["equipment"].get("id") or alert.get("equipment_id") or ""),
         sensor_column=str(ctx.get("historian_column") or ""),
+        rule_id=rule_id,
         analytics=analytics,
         rule_config=rule_cfg,
     )
