@@ -268,6 +268,7 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
         flush=True,
     )
 
+    lookback_h = max(24.0, (cfg.duration_minutes + 10) / 60.0)
     pf_status, pf_res = _evaluate(
         base,
         token,
@@ -276,6 +277,7 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
         backend="pyarrow",
         threshold=cfg.baseline_threshold_f,
         phase="preflight",
+        lookback_hours=lookback_h,
     )
     if pf_status != 200 or not isinstance(pf_res, dict) or not pf_res.get("ok"):
         report.errors.append(
@@ -308,7 +310,7 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
     backends = ("pyarrow", "datafusion_sql")
     sources = (BACNET_SOURCE, NIAGARA_SOURCE)
 
-    lookback_h = max(1.0, (cfg.duration_minutes + 10) / 60.0)
+    lookback_h = max(24.0, (cfg.duration_minutes + 10) / 60.0)
 
     while (time.monotonic() - t0) < total_s:
         cycle += 1
