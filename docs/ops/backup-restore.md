@@ -15,12 +15,38 @@ cd ~/open-fdd
 ./scripts/openfdd_site_backup.sh
 ```
 
-Archives land under `~/openfdd-backups/<timestamp>/`.
+Archives default to **`~/openfdd-backups/latest`** on the edge host (overwrites each run — one rolling copy for rigorous testing).
 
-Custom location:
+```bash
+cd ~/open-fdd
+./scripts/openfdd_site_backup.sh
+```
+
+Custom location (also overwritten each run unless you use a new path):
 
 ```bash
 BACKUP_ROOT=~/openfdd-backups/manual ./scripts/openfdd_site_backup.sh
+```
+
+Fast pre-upgrade backup (skips large `workspace/bacnet/polls/` CSV history; feather/model/rules kept):
+
+```bash
+BACKUP_INCLUDE_POLL_SAMPLES=0 ./scripts/openfdd_site_backup.sh
+```
+
+On **bensserver**, site packs under `edge_backup/local/<site>/<building>/` are likewise overwritten by `edge_site_backup.sh` — no timestamp pile-up during validation.
+
+From bensserver for any edge host (Ansible — backup runs **on the edge**, no workspace transfer over Tailscale):
+
+```bash
+OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling
+OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling --fast-backup
+```
+
+Acme wrapper (same flow):
+
+```bash
+OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_acme_site.sh --fast-backup
 ```
 
 ## Manual backup (SSH)

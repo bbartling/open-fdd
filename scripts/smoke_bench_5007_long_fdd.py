@@ -130,6 +130,9 @@ def _metrics_from_response(source: str, backend: str, semantic: str, res: dict[s
         early_confirmed_fault=bool(m.get("early_confirmed_fault")),
         execution_evidence=m.get("execution_evidence") or {},
         errors=list(m.get("errors") or []),
+        historian_origin=str(res.get("origin") or ""),
+        time_filter_relaxed=bool(res.get("time_filter_relaxed")),
+        evaluate_freshness=dict(res.get("freshness") or {}),
     )
 
 
@@ -158,6 +161,8 @@ def _evaluate(
         "confirmation_minutes": cfg.confirmation_minutes,
         "fault_direction": cfg.fault_direction,
         "freshness_window_minutes": cfg.freshness_window_minutes,
+        "strict_live_freshness": cfg.strict_live_freshness,
+        "allow_historical_replay": cfg.allow_historical_replay,
     }
     if lookback_hours is not None:
         body["lookback_hours"] = lookback_hours
@@ -370,9 +375,21 @@ def run_live(cfg: SmokeConfig) -> ValidationReport:
                     threshold_change_at=report.threshold_change_at or None,
                 )
                 if status != 200 or not isinstance(res, dict) or not res.get("ok"):
+                    detail = res.get("error") or _redact_payload(res)
+                    fresh = res.get("freshness") or {}
+                    if fresh.get("summary"):
+                        detail = f"{detail} ({fresh['summary']})"
                     report.errors.append(
-                        f"cycle {cycle} {source}/{backend}: HTTP {status} {_redact_payload(res)}"
+                        f"cycle {cycle} {source}/{backend}: HTTP {status} {detail}"
                     )
+                    if cfg.strict_live_freshness and cycle == 1:
+                        report.errors.append(
+                            f"strict live freshness failed on cycle 1 for {source}/{backend} — "
+                            "aborting early (fix historian before long run)"
+                        )
+                        report.finished_at = datetime.now(timezone.utc).isoformat()
+                        finalize_live_report(report, poll_status=None)
+                        return report
                     continue
                 metrics = _metrics_from_response(source, backend, cfg.primary_semantic, res)
                 latest_runs[(source, backend)] = metrics

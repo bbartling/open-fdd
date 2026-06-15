@@ -7,6 +7,7 @@ from typing import Any
 import pyarrow as pa
 from pydantic import BaseModel, Field
 
+from open_fdd.validation.bench_data_freshness import describe_staleness
 from open_fdd.validation.bench_5007_long_fdd import (
     SmokeConfig,
     align_semantic_points,
@@ -34,6 +35,8 @@ class BenchLongFddEvaluateBody(BaseModel):
     threshold_change_at: str | None = None
     threshold_change_row_index: int | None = Field(default=None, ge=0, le=100000)
     freshness_window_minutes: float | None = Field(default=None, ge=0.1, le=1440.0)
+    strict_live_freshness: bool = False
+    allow_historical_replay: bool = False
 
 
 def evaluate_long_fdd(body: BenchLongFddEvaluateBody, model: dict[str, Any]) -> dict[str, Any]:
@@ -57,6 +60,21 @@ def evaluate_long_fdd(body: BenchLongFddEvaluateBody, model: dict[str, Any]) -> 
     if not isinstance(table, pa.Table) or table.num_rows == 0:
         return {"ok": False, "error": f"no historian data for source={hist_src}", "origin": origin}
 
+    if body.strict_live_freshness and body.run_started_at and origin == "demo":
+        return {
+            "ok": False,
+            "error": (
+                f"strict live freshness: demo historian fallback for source={hist_src} "
+                f"(no feather rows — check poll workers and feather_store)"
+            ),
+            "origin": origin,
+            "time_filter_relaxed": False,
+            "freshness": {
+                "origin": origin,
+                "staleness_reasons": ["demo_historian_fallback"],
+            },
+        }
+
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=body.lookback_hours)
     if body.run_started_at:
@@ -72,6 +90,27 @@ def evaluate_long_fdd(body: BenchLongFddEvaluateBody, model: dict[str, Any]) -> 
     table = filtered
     if table.num_rows == 0:
         return {"ok": False, "error": f"no historian rows within lookback/window", "origin": origin}
+
+    wall_end = now.isoformat()
+    wall_start = body.run_started_at or wall_end
+    first_ts = ""
+    last_ts = ""
+    ts_col = table.column("timestamp") if "timestamp" in table.column_names else None
+    if ts_col is not None and table.num_rows > 0:
+        ts_py = [str(x) for x in ts_col.to_pylist() if x is not None]
+        if ts_py:
+            first_ts = min(ts_py)
+            last_ts = max(ts_py)
+    freshness = describe_staleness(
+        first_sample_time=first_ts,
+        last_sample_time=last_ts,
+        wall_clock_start=wall_start,
+        wall_clock_end=wall_end,
+        freshness_window_minutes=body.freshness_window_minutes or 5.0,
+        poll_seconds=body.poll_interval_s,
+        origin=origin,
+        time_filter_relaxed=time_filter_relaxed,
+    )
 
     cfg = SmokeConfig(
         site_id=body.site_id,
@@ -93,10 +132,38 @@ def evaluate_long_fdd(body: BenchLongFddEvaluateBody, model: dict[str, Any]) -> 
         threshold_change_wall=threshold_change_wall,
         threshold_change_row_index=body.threshold_change_row_index,
     )
+    if metrics.first_sample_time and metrics.last_sample_time:
+        freshness = describe_staleness(
+            first_sample_time=metrics.first_sample_time,
+            last_sample_time=metrics.last_sample_time,
+            wall_clock_start=wall_start,
+            wall_clock_end=wall_end,
+            freshness_window_minutes=body.freshness_window_minutes or 5.0,
+            poll_seconds=body.poll_interval_s,
+            origin=origin,
+            time_filter_relaxed=time_filter_relaxed,
+        )
+
+    strict_errors: list[str] = []
+    if body.strict_live_freshness and body.run_started_at and not body.allow_historical_replay:
+        if time_filter_relaxed:
+            strict_errors.append(
+                "strict live freshness: time filter empty — evaluated full stale historian table "
+                f"({freshness.get('summary', '')})"
+            )
+        elif not freshness.get("data_is_fresh"):
+            strict_errors.append(
+                "strict live freshness: historian samples not fresh — "
+                f"{freshness.get('summary', '')}"
+            )
+
+    ok = not metrics.errors and not strict_errors
     return {
-        "ok": not metrics.errors,
+        "ok": ok,
         "origin": origin,
         "time_filter_relaxed": time_filter_relaxed,
+        "freshness": freshness,
+        "error": strict_errors[0] if strict_errors and not metrics.errors else None,
         "metrics": {
             "source": metrics.source,
             "point_id": metrics.point_id,
