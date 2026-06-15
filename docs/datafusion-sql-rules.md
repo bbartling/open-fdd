@@ -45,6 +45,7 @@ SQL rules are **not** a database console. The linter rejects:
 - File paths and external URLs
 - Missing or non-boolean `fault` column
 - Row counts that differ from input telemetry
+- Wrong fault column alias (e.g. `not_fault` when `fault` is required)
 
 Server-side execution only — the Rules Lab browser editor never runs SQL locally.
 

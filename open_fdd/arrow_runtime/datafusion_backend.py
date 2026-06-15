@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import time
 import traceback
@@ -28,18 +29,33 @@ _FORBIDDEN_SQL = re.compile(
 )
 
 _FILE_OR_URL = re.compile(
-    r"(?:file://|s3://|gs://|hdfs://|/[\w./-]+\.(?:csv|parquet|json|feather|arrow)\b)",
+    r"(?:file://|s3://|gs://|hdfs://|https?://|/[\w./-]+\.(?:csv|parquet|json|feather|arrow)\b)",
     re.IGNORECASE,
 )
+
+_READ_TABLE_FUNCS = re.compile(
+    r"\bread_(?:parquet|csv|json|avro|_ndjson)\s*\(",
+    re.IGNORECASE,
+)
+
+_FROM_TABLE = re.compile(r"\bFROM\s+([`\w.-]+)", re.IGNORECASE)
+_JOIN_TABLE = re.compile(r"\bJOIN\s+([`\w.-]+)", re.IGNORECASE)
+
+
+def _debug_tracebacks_enabled() -> bool:
+    return os.environ.get("OFDD_DEBUG_TRACEBACKS", "").strip().lower() in ("1", "true", "yes")
 
 
 @dataclass
 class DataFusionSqlRule:
+    """Restricted SQL rule body executed against the registered ``telemetry`` table."""
+
     sql: str
     fault_column: str = DEFAULT_FAULT_COLUMN
 
 
 def datafusion_available() -> bool:
+    """Return True when the optional ``datafusion`` PyPI package is importable."""
     try:
         import datafusion  # noqa: F401
 
@@ -56,7 +72,7 @@ def _strip_sql(sql: str) -> str:
 
 
 def lint_datafusion_sql_rule(sql: str, *, fault_column: str = DEFAULT_FAULT_COLUMN) -> dict[str, Any]:
-    """Static SQL lint — safe without DataFusion installed."""
+    """Static SQL lint for fault-expression rules (no DataFusion install required)."""
     issues: list[dict[str, Any]] = []
     raw = str(sql or "").strip()
     if not raw:
@@ -71,14 +87,33 @@ def lint_datafusion_sql_rule(sql: str, *, fault_column: str = DEFAULT_FAULT_COLU
     if _FORBIDDEN_SQL.search(cleaned):
         issues.append({"message": "DDL/DML keywords are not allowed in SQL rules", "severity": "error"})
 
-    if _FILE_OR_URL.search(cleaned):
-        issues.append({"message": "file paths and external URLs are not allowed", "severity": "error"})
+    if _FILE_OR_URL.search(cleaned) or _READ_TABLE_FUNCS.search(cleaned):
+        issues.append({"message": "file paths, URLs, and external table reads are not allowed", "severity": "error"})
+
+    for match in _FROM_TABLE.finditer(cleaned):
+        tbl = match.group(1).strip("`")
+        if tbl.lower() != TELEMETRY_TABLE:
+            issues.append(
+                {
+                    "message": f"SQL may only read FROM {TELEMETRY_TABLE}, not {tbl!r}",
+                    "severity": "error",
+                }
+            )
+    for match in _JOIN_TABLE.finditer(cleaned):
+        tbl = match.group(1).strip("`")
+        if tbl.lower() != TELEMETRY_TABLE:
+            issues.append(
+                {
+                    "message": f"SQL may only JOIN {TELEMETRY_TABLE}, not {tbl!r}",
+                    "severity": "error",
+                }
+            )
 
     if not re.search(rf"\bFROM\s+{re.escape(TELEMETRY_TABLE)}\b", cleaned, re.IGNORECASE):
         issues.append({"message": f"SQL must read FROM {TELEMETRY_TABLE}", "severity": "error"})
 
     fault_pat = rf"\bAS\s+{re.escape(fault_column)}\b|,\s*{re.escape(fault_column)}\s*[,)]"
-    if not re.search(fault_pat, cleaned, re.IGNORECASE) and fault_column.lower() not in cleaned.lower():
+    if not re.search(fault_pat, cleaned, re.IGNORECASE):
         issues.append(
             {
                 "message": f"SQL must produce boolean column '{fault_column}'",
@@ -155,6 +190,9 @@ def run_datafusion_sql_rule(
         err = str(exc)
         mask = pa.array([False] * table.num_rows, type=pa.bool_())
         duration_ms = (time.perf_counter() - started) * 1000
+        summary: dict[str, Any] = {"error": err}
+        if _debug_tracebacks_enabled():
+            summary["trace"] = traceback.format_exc(limit=6)
         return ArrowRuleResult(
             rule_id=rule_id,
             backend="datafusion_sql",
@@ -165,7 +203,7 @@ def run_datafusion_sql_rule(
             duration_ms=duration_ms,
             fault_mask=mask,
             errors=[err],
-            summary={"error": err, "trace": traceback.format_exc(limit=6)},
+            summary=summary,
         )
 
     from .events import count_mask_values
@@ -196,8 +234,11 @@ def run_datafusion_sql_rule(
 
 
 def equivalent_pyarrow_threshold_rule(column: str, threshold: float) -> str:
-    return f'''import pyarrow.compute as pc
+    """Generate a minimal PyArrow threshold rule for compare/migration helpers."""
+    col_lit = repr(column)
+    thresh_lit = repr(float(threshold))
+    return f"""import pyarrow.compute as pc
 
 def apply_faults_arrow(table, cfg, context=None):
-    return pc.greater(table["{column}"], {threshold})
-'''
+    return pc.greater(table[{col_lit}], {thresh_lit})
+"""

@@ -39,6 +39,7 @@ def load_lab_sample_table(
     limit: int = 500,
     lookback_hours: float = 24,
 ) -> tuple[pa.Table, str]:
+    """Load a bounded Arrow telemetry sample for Rules Lab validate/preview."""
     table, origin = load_arrow_table_for_run(site_id)
     if not isinstance(table, pa.Table):
         table = pa.Table.from_pandas(table)
@@ -58,6 +59,23 @@ def _result_payload(result, *, site_id: str = "", data_source: str = "") -> dict
     return payload
 
 
+def compare_fault_mask_stats(
+    left_mask: pa.Array | pa.ChunkedArray,
+    right_mask: pa.Array | pa.ChunkedArray,
+) -> tuple[int, int, pa.Array | pa.ChunkedArray]:
+    """Count matching/mismatching rows with null-aware semantics.
+
+    null vs null counts as a match; null vs true/false counts as a mismatch.
+    """
+    equal_raw = pc.equal(left_mask, right_mask)
+    both_null = pc.and_(pc.is_null(left_mask), pc.is_null(right_mask))
+    equal = pc.fill_null(pc.or_(pc.fill_null(equal_raw, False), both_null), False)
+    mismatch = pc.invert(equal)
+    mismatch_count = int(pc.sum(pc.cast(mismatch, pa.int64())).as_py() or 0)
+    matching = len(left_mask) - mismatch_count
+    return matching, mismatch_count, mismatch
+
+
 def validate_datafusion_sql(
     *,
     sql: str,
@@ -66,6 +84,7 @@ def validate_datafusion_sql(
     limit: int = 500,
     lookback_hours: float = 24,
 ) -> dict[str, Any]:
+    """Lint and optionally execute SQL against latest site telemetry."""
     lint = lint_datafusion_sql_rule(sql, fault_column=fault_column)
     if not lint["ok"]:
         msgs = [i["message"] for i in lint["issues"] if i["severity"] == "error"]
@@ -148,6 +167,7 @@ def compare_rule_backends(
     limit: int = 1000,
     lookback_hours: float = 24,
 ) -> dict[str, Any]:
+    """Compare PyArrow and DataFusion SQL fault masks on the same telemetry sample."""
     table, origin = load_lab_sample_table(site_id, limit=limit, lookback_hours=lookback_hours)
     left_backend = str(left.get("backend") or "").strip()
     right_backend = str(right.get("backend") or "").strip()
@@ -207,10 +227,7 @@ def compare_rule_backends(
             "data_source": origin,
         }
 
-    equal = pc.equal(left_mask, right_mask)
-    mismatch = pc.invert(equal)
-    mismatch_count = int(pc.sum(pc.cast(mismatch, pa.int64())).as_py() or 0)
-    matching = int(table.num_rows) - mismatch_count
+    matching, mismatch_count, mismatch = compare_fault_mask_stats(left_mask, right_mask)
 
     mismatches_preview: list[dict[str, Any]] = []
     if mismatch_count > 0:
