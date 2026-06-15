@@ -7633,3 +7633,62 @@ Bridge API requires `python-docx` and `matplotlib` (see `workspace/api/requireme
 Portfolio Central (`portfolio/central/rcx_report.py`, port 8060) supports multi-site rollups. The edge builder uses local FDD results and building status for single-site RCx exports from the operator UI.
 
 
+# 3.1.2
+
+# Open-FDD 3.1.2
+
+Release date: 2026-06-15
+
+## Highlights
+
+- **DataFusion / Rust-prep validation** — Bench long FDD smoke exercises PyArrow and DataFusion SQL backends with execution evidence and backend equivalence checks.
+- **Bench 5007 long FDD smoke** — Model-driven dual-source validation (BACnet MS/TP device 5007 + Niagara bench9065) with 10-minute fault confirmation window.
+- **Fault confirmation window** — Confirmed faults require consecutive true samples; reports include raw vs confirmed timing.
+- **GHCR tags** — `ghcr.io/bbartling/openfdd-bridge:3.1.2`, `openfdd-commission:3.1.2`, `openfdd-mcp-rag:3.1.2`.
+
+## Known warnings
+
+- `confirmation_engine=python_loop_over_arrow_mask` — confirmation still uses a Python loop over the Arrow fault mask; vectorized confirmation is planned.
+
+## Validation
+
+```bash
+python scripts/smoke_bench_5007_long_fdd.py --synthetic --dry-run
+python scripts/smoke_bench_5007_long_fdd.py --live --duration-minutes 35 --baseline-minutes 10 \
+  --confirmation-rows 10 --confirmation-minutes 10 --poll-seconds 60 --strict-live-freshness
+python scripts/inspect_bench_5007_long_fdd_report.py workspace/reports/bench_5007_long_fdd_*.json
+```
+
+Reports now classify **historian_mode** (`live_recent`, `historical_replay`, `synthetic`, `dry_run`) and refuse to claim live polling was validated when sample timestamps are outside the wall-clock run window. Use `--allow-historical-replay` only for debugging replay data.
+
+For live bench sign-off, the inspector must show `data_is_fresh: true` and `historian_mode: live_recent`, plus non-zero BACnet/Niagara rows.
+
+
+# 3.1.3
+
+# Open-FDD 3.1.3
+
+Release date: 2026-06-15
+
+## Patch fixes
+
+- **Bench long FDD evaluate** — when wall-clock `run_started_at` / lookback filtering would empty a non-empty historian table (demo CSV fallback or stale feather replay), evaluate now uses the full loaded table and sets `time_filter_relaxed: true`. Strict smoke freshness gates still FAIL/WARN honestly on non-fresh samples.
+- **Live smoke lookback** — final matrix evaluate uses the same 24h minimum lookback as cycle evaluates.
+
+## GHCR tags
+
+- `ghcr.io/bbartling/openfdd-bridge:3.1.3`
+- `ghcr.io/bbartling/openfdd-commission:3.1.3`
+- `ghcr.io/bbartling/openfdd-mcp-rag:3.1.3`
+
+## Validation
+
+```bash
+python scripts/smoke_bench_5007_long_fdd.py --synthetic --dry-run
+python scripts/smoke_bench_5007_long_fdd.py --live --duration-minutes 35 \
+  --baseline-minutes 10 --confirmation-rows 10 --confirmation-minutes 10 \
+  --poll-seconds 60 --strict-live-freshness
+python scripts/inspect_bench_5007_long_fdd_report.py workspace/reports/bench_5007_long_fdd_*.json
+```
+
+
