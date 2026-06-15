@@ -14,6 +14,7 @@ from ..bench_validator import (
     validate_bacnet_vs_niagara,
     write_checkpoint_report,
 )
+from ..bench_long_fdd_eval import BenchLongFddEvaluateBody, evaluate_long_fdd
 from ..deps import require_roles
 from ..niagara_store import get_station, list_stations, poll_status as niagara_poll_status
 from ..bacnet_driver_store import driver_tree as bacnet_driver_tree
@@ -124,3 +125,13 @@ def bench_poll_cadence(
         station_id=station_id,
         expected_interval_s=expected_interval_s,
     )
+
+
+
+@router.post("/api/bench/long-fdd/evaluate", dependencies=[_READ])
+def bench_long_fdd_evaluate(body: BenchLongFddEvaluateBody) -> dict[str, Any]:
+    """Read-only FDD evaluation for Bench 5007 long smoke (source-specific historian)."""
+    from ..model_store import load_model
+
+    model = load_model()
+    return evaluate_long_fdd(body, model)

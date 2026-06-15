@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+# Engine identifier surfaced in smoke reports and execution evidence.
+CONFIRMATION_ENGINE = "python_loop_over_arrow_mask"
+
 import datetime as _dt
 from typing import Any
 

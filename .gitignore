@@ -16,6 +16,7 @@ docker/dist/
 # word reports
 *.docx
 /reports
+workspace/reports/bench_5007_long_fdd_*
 *.csv
 !examples/*.csv
 !examples/data/*.csv
