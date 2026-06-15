@@ -251,6 +251,16 @@ def _run_one(
                 table = table.slice(max(0, table.num_rows - limit), min(limit, table.num_rows))
             cfg = dict(rule.get("config") or {})
             cfg.setdefault("site_id", site_id)
+            avail_cols = (
+                set(table.column_names)
+                if hasattr(table, "num_rows")
+                else set(getattr(frame, "columns", []))
+            )
+            bound_cols = historian_columns_for_rule(
+                model, site_id, rule, available_columns=avail_cols
+            )
+            if bound_cols and len(bound_cols) == 1:
+                cfg.setdefault("value_column", bound_cols[0])
             sql = str(rule.get("sql") or "").strip()
             fault_column = str(rule.get("fault_column") or "fault")
             arrow_result = run_datafusion_sql_rule(

@@ -156,6 +156,7 @@ def run_datafusion_sql_rule(
     started = time.perf_counter()
     cfg = dict(cfg or {})
     _ = context or {}
+    warnings: list[str] = []
     fault_column = str(fault_column or DEFAULT_FAULT_COLUMN).strip() or DEFAULT_FAULT_COLUMN
     lint = lint_datafusion_sql_rule(sql, fault_column=fault_column)
     if not lint["ok"]:
@@ -186,6 +187,13 @@ def run_datafusion_sql_rule(
         df = ctx.sql(cleaned)
         result = df.to_arrow_table()
         mask = _extract_fault_mask(result, fault_column=fault_column, expected_len=table.num_rows)
+        from .confirmation import apply_fault_confirmation_from_cfg
+
+        mask, confirm_warnings = apply_fault_confirmation_from_cfg(mask, table, cfg)
+        if confirm_warnings:
+            warnings = list(confirm_warnings)
+        else:
+            warnings = []
     except Exception as exc:  # noqa: BLE001
         err = str(exc)
         mask = pa.array([False] * table.num_rows, type=pa.bool_())
@@ -217,6 +225,7 @@ def run_datafusion_sql_rule(
         site_id=str(cfg.get("site_id") or ""),
         duration_ms=duration_ms,
         backend="datafusion_sql",
+        warnings=warnings,
     )
     preview = preview_fault_rows(table, mask, columns=preview_columns, limit=preview_limit)
     return ArrowRuleResult(
@@ -228,6 +237,7 @@ def run_datafusion_sql_rule(
         null_count=counts["null_count"],
         duration_ms=duration_ms,
         fault_mask=mask,
+        warnings=warnings,
         summary=summary,
         preview=preview,
     )
@@ -240,5 +250,7 @@ def equivalent_pyarrow_threshold_rule(column: str, threshold: float) -> str:
     return f"""import pyarrow.compute as pc
 
 def apply_faults_arrow(table, cfg, context=None):
-    return pc.greater(table[{col_lit}], {thresh_lit})
+    col = {col_lit}
+    threshold = {thresh_lit}
+    return pc.greater(table[col], threshold)
 """

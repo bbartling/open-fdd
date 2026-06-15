@@ -239,6 +239,10 @@ def run_arrow_rule(
         )
         raw = fn(table, cfg, ctx)
         mask = normalize_fault_mask(raw, expected_len=table.num_rows)
+        from .confirmation import apply_fault_confirmation_from_cfg
+
+        mask, confirm_warnings = apply_fault_confirmation_from_cfg(mask, table, cfg)
+        warnings.extend(confirm_warnings)
     except Exception as exc:  # noqa: BLE001
         errors.append(str(exc))
         mask = pa.array([False] * table.num_rows, type=pa.bool_())

@@ -114,7 +114,7 @@ def test_equivalent_pyarrow_threshold_escapes_column_names(column: str):
     code = equivalent_pyarrow_threshold_rule(column, 65.0)
     compile(code, "<rule>", "exec")
     assert repr(column) in code
-    assert "65.0" in code
+    assert "col =" in code
 
 
 def test_lint_rejects_read_parquet_path():

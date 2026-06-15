@@ -2306,6 +2306,49 @@ textarea {
   gap: 12px;
 }
 
+.rule-lab-type-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rule-type-tab {
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rule-type-tab.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--input-bg));
+}
+
+.rule-lab-type-hint {
+  margin: 0;
+}
+
+.sql-rule-editor {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--text);
+  resize: vertical;
+  min-height: 280px;
+}
+
+.rule-lab-advanced {
+  margin: 8px 0 12px;
+}
+
 .rule-lab-rule-row {
   display: flex;
   flex-wrap: wrap;
