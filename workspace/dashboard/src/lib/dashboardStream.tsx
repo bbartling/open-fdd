@@ -37,6 +37,28 @@ export type FaultAnalytics = {
   value_columns?: string[];
 };
 
+export type FaultInsight = {
+  sensor_column?: string;
+  lookback_hours?: number;
+  bounds_low?: number;
+  bounds_high?: number;
+  avg_while_fault?: number;
+  avg_overall?: number;
+  avg_while_motor_run?: number;
+  min_overall?: number;
+  max_overall?: number;
+  fault_sample_pct?: number;
+  motor_runtime_hours?: number;
+  motor_label?: string;
+  motor_equipment?: string;
+  rule_bounds_low?: number | string;
+  rule_bounds_high?: number | string;
+  rule_window_samples?: number | string;
+  rule_flatline_tolerance?: number | string;
+  value_unit?: string;
+  historian_source?: string;
+};
+
 export type FaultModelContext = {
   severity?: string;
   rule_id?: string;
@@ -58,6 +80,7 @@ export type FaultModelContext = {
   };
   bacnet_summary?: string;
   historian_column?: string;
+  insight?: FaultInsight;
 };
 
 export type FaultAlert = {

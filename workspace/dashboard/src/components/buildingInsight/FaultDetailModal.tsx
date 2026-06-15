@@ -57,9 +57,23 @@ export default function FaultDetailModal({ fault, onClose }: Props) {
   const ctx = fault.modelContext;
   const primary = fault.underlying[0];
   const analytics = (primary?.analytics || {}) as FaultAnalytics;
+  const insight = ctx?.insight;
+  const unit = analytics.value_unit || insight?.value_unit || "°F";
   const ruleName = ctx?.rule_name || primary?.rule_name || ruleMeta?.name || "";
   const ruleId = ctx?.rule_id || primary?.rule_id || ruleMeta?.id || "";
   const configLines = ruleConfigLines(ruleMeta?.config);
+  const thresholdLines = (() => {
+    const lines: { label: string; value: string }[] = [];
+    const lo = insight?.rule_bounds_low ?? insight?.bounds_low ?? analytics.bounds_low;
+    const hi = insight?.rule_bounds_high ?? insight?.bounds_high ?? analytics.bounds_high;
+    if (lo != null && String(lo).trim() !== "") lines.push({ label: "Low setpoint", value: `${lo}${unit}` });
+    if (hi != null && String(hi).trim() !== "") lines.push({ label: "High setpoint", value: `${hi}${unit}` });
+    if (insight?.rule_window_samples != null)
+      lines.push({ label: "Window (samples)", value: String(insight.rule_window_samples) });
+    if (insight?.rule_flatline_tolerance != null)
+      lines.push({ label: "Flatline tolerance", value: String(insight.rule_flatline_tolerance) });
+    return lines;
+  })();
   const causeText = describeFaultCause(analytics, ruleMeta?.config);
   const plotHref = plotLinkForFault(ctx?.equipment?.id, ctx?.site_id);
 
@@ -88,16 +102,78 @@ export default function FaultDetailModal({ fault, onClose }: Props) {
             <section className="bis-modal-section bis-modal-cause">
               <h4>Why this fired</h4>
               <p>{causeText}</p>
-              {configLines.length ? (
+              {thresholdLines.length || configLines.length ? (
                 <dl className="bis-meta-grid bis-meta-grid-compact">
-                  {configLines.map((line) => (
-                    <div key={line.label}>
-                      <dt>{line.label}</dt>
-                      <dd>{line.value}</dd>
-                    </div>
-                  ))}
+                  {[...thresholdLines, ...configLines.filter((c) => !thresholdLines.some((t) => t.label === c.label))].map(
+                    (line) => (
+                      <div key={line.label}>
+                        <dt>{line.label}</dt>
+                        <dd>{line.value}</dd>
+                      </div>
+                    ),
+                  )}
                 </dl>
               ) : null}
+            </section>
+          ) : null}
+
+          {fault.source === "fdd" && (insight || analytics.avg_value_fault != null) ? (
+            <section className="bis-modal-section">
+              <h4>Sensor analytics</h4>
+              <dl className="bis-meta-grid">
+                {insight?.avg_while_fault != null || analytics.avg_value_fault != null ? (
+                  <div>
+                    <dt>Avg while fault</dt>
+                    <dd>
+                      {insight?.avg_while_fault ?? analytics.avg_value_fault}
+                      {unit}
+                    </dd>
+                  </div>
+                ) : null}
+                {insight?.avg_overall != null ? (
+                  <div>
+                    <dt>Avg overall (lookback)</dt>
+                    <dd>
+                      {insight.avg_overall}
+                      {unit}
+                      {insight.min_overall != null && insight.max_overall != null
+                        ? ` (${insight.min_overall}–${insight.max_overall})`
+                        : ""}
+                    </dd>
+                  </div>
+                ) : null}
+                {insight?.avg_while_motor_run != null ? (
+                  <div>
+                    <dt>Avg while motor run</dt>
+                    <dd>
+                      {insight.avg_while_motor_run}
+                      {unit}
+                      {insight.motor_label ? ` · ${insight.motor_label}` : ""}
+                    </dd>
+                  </div>
+                ) : null}
+                {insight?.fault_sample_pct != null ? (
+                  <div>
+                    <dt>Fault sample rate</dt>
+                    <dd>{insight.fault_sample_pct}% of lookback</dd>
+                  </div>
+                ) : null}
+                {insight?.motor_runtime_hours != null && insight.motor_runtime_hours > 0 ? (
+                  <div>
+                    <dt>Motor run-hours</dt>
+                    <dd>
+                      {insight.motor_runtime_hours} h
+                      {insight.motor_equipment ? ` (${insight.motor_equipment})` : ""}
+                    </dd>
+                  </div>
+                ) : null}
+                {insight?.historian_source ? (
+                  <div>
+                    <dt>Historian source</dt>
+                    <dd>{insight.historian_source}</dd>
+                  </div>
+                ) : null}
+              </dl>
             </section>
           ) : null}
 
