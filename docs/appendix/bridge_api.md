@@ -70,19 +70,67 @@ REST API served by **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Produ
 
 ## BRICK / data model
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/model/sites` | Site list |
-| GET | `/api/model/tree` | Equipment tree (SPARQL) |
-| GET | `/api/model/graph` | RDF graph fragment |
-| GET | `/api/model/scope` | Scoped query |
-| GET | `/api/model/export` | Export TTL/JSON |
-| GET | `/api/model/health` | Model point/equipment counts |
-| GET | `/api/model/ttl` | TTL metadata |
-| POST | `/api/model/sync-ttl` | Regenerate TTL from JSON |
-| POST | `/api/model/import` | Import model payload |
-| POST | `/api/model/sites` | Create site |
-| GET/POST | `/api/model/bacnet-sync` | BACnet ↔ model sync state |
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/model/sites` | user | Site list |
+| GET | `/api/model/tree` | user | Equipment tree (SPARQL) |
+| GET | `/api/model/graph` | user | RDF graph fragment |
+| GET | `/api/model/scope` | user | Scoped query |
+| GET | `/api/model/export` | user | Export TTL/JSON |
+| GET | `/api/model/commissioning-export` | user | Full commissioning bundle (points + `fdd_rule_ids` + `fdd_rules`) |
+| POST | `/api/model/commissioning-import` | integrator+ | Bulk import; validate in UI dry-run first |
+| GET | `/api/model/health` | user | Model point/equipment counts |
+| GET | `/api/model/ttl` | user | TTL metadata |
+| POST | `/api/model/sync-ttl` | integrator+ | Regenerate TTL from JSON |
+| POST | `/api/model/import` | integrator+ | Import model payload |
+| POST | `/api/model/sites` | integrator+ | Create site |
+| GET/POST | `/api/model/bacnet-sync` | integrator+ | BACnet ↔ model sync state |
+| GET | `/api/model/fdd-query-presets` | user | Saved FDD query presets |
+| GET | `/api/model/fdd-coverage` | user | Rule coverage summary |
+| POST | `/api/model/sparql` | user | SPARQL query (scoped) |
+
+---
+
+## Rule Lab (dashboard)
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| POST | `/api/rules/lab/validate` | operator+ | Validate rule source |
+| POST | `/api/rules/lab/preview` | operator+ | Preview rule on historian window |
+| POST | `/api/rules/lab/compare` | operator+ | Compare two rule versions |
+| POST | `/api/rules/lab/lint-sql` | operator+ | DataFusion SQL safety lint |
+| POST | `/api/rules/lab/save` | operator+ | Save Rule Lab draft |
+
+Mounted at `/api/rules/lab` — see OpenAPI `/docs`.
+
+---
+
+## Bench validation (read-only)
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/bench/health` | operator+ | Bench harness health |
+| GET | `/api/bench/mapping` | operator+ | Semantic cross-source mapping |
+| GET | `/api/bench/poll-status` | operator+ | BACnet + Niagara poll heartbeat |
+| POST | `/api/bench/validate/bacnet-vs-niagara` | operator+ | Dual-source equivalence check |
+| POST | `/api/bench/long-fdd/evaluate` | operator+ | Long FDD smoke evaluate (PyArrow/DataFusion) |
+
+See [Bench 5007 long FDD smoke]({{ "/operations/bench-5007-long-fdd-smoke/" | relative_url }}).
+
+---
+
+## Niagara baskStream
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/niagara/health` | read | Connector health |
+| GET | `/api/niagara/stations` | read | Configured stations |
+| POST | `/api/niagara/stations/{id}/discover` | read | Discover points |
+| POST | `/api/niagara/stations/{id}/poll/once` | poll | One poll cycle |
+| GET | `/api/niagara/stations/{id}/poll/status` | read | Poll worker status |
+| GET | `/api/niagara/driver/tree` | read | Driver commissioning tree |
+
+Read-only by default. See [Niagara baskStream connector]({{ "/niagara-baskstream-connector/" | relative_url }}).
 
 ---
 

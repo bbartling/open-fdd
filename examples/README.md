@@ -11,6 +11,4 @@ These examples use **`pip install open-fdd`** — the embeddable FDD runtime. Th
 
 **Rule contract:** rules define `apply_faults_arrow(table, cfg, context=None)` and return a PyArrow boolean mask (or documented `ArrowRuleResult` from `run_arrow_rule`). An optional **DataFusion SQL** backend (`backend: datafusion_sql`) uses the same result shape for simple expression-style rules — see [docs/datafusion-sql-rules.md](../docs/datafusion-sql-rules.md).
 
-**Not included here:** pandas/YAML `RuleRunner` notebooks — archived under `_archive/examples_pandas_yaml/`.
-
 **Full edge stack:** GHCR images `openfdd-bridge`, `openfdd-commission`, `openfdd-mcp-rag` — see [Run with Docker images](https://bbartling.github.io/open-fdd/quick-start/docker/).

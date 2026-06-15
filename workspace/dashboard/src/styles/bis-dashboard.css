@@ -749,6 +749,32 @@
   font-size: 0.88rem;
 }
 
+.bis-sensor-table-wrap {
+  overflow-x: auto;
+  margin-top: 4px;
+}
+
+.bis-sensor-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.bis-sensor-table th,
+.bis-sensor-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--bis-border, #d8e0ec);
+  vertical-align: top;
+}
+
+.bis-sensor-table th {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  color: var(--bis-muted);
+  font-weight: 600;
+}
+
 .bis-modal-actions {
   display: flex;
   flex-wrap: wrap;

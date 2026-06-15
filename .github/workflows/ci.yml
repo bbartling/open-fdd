@@ -181,6 +181,7 @@ jobs:
           OFDD_DESKTOP_DATA_DIR: ${{ github.workspace }}/workspace/data
           PYTHONPATH: ${{ github.workspace }}/workspace:${{ github.workspace }}/workspace/api:${{ github.workspace }}
         run: |
+          python -m pytest open_fdd/tests/validation -q
           python -m pytest tests/workspace_bridge -q
           python -m pytest tests/workspace_mcp -q
           python -m pytest tests/portfolio -q

@@ -214,7 +214,39 @@ def enrich_fault_alert(alert: dict[str, Any], model: dict[str, Any]) -> dict[str
         flagged_columns=list(cols) if isinstance(cols, list) else [],
     )
     ctx["severity"] = str(alert.get("severity") or "warning")
+
+    from .fault_insight_analytics import enrich_fault_insight, merge_rule_config
+
+    rule_id = str(alert.get("rule_id") or ctx.get("rule_id") or "")
+    rule_cfg = merge_rule_config(rule_id)
+    analytics = alert.get("analytics") if isinstance(alert.get("analytics"), dict) else {}
+    insight = enrich_fault_insight(
+        model=model,
+        site_id=site_id,
+        equipment_id=str(ctx["equipment"].get("id") or alert.get("equipment_id") or ""),
+        sensor_column=str(ctx.get("historian_column") or ""),
+        rule_id=rule_id,
+        analytics=analytics,
+        rule_config=rule_cfg,
+    )
+    if insight:
+        ctx["insight"] = insight
+        if rule_cfg and not analytics.get("bounds_low") and insight.get("rule_bounds_low") is not None:
+            analytics = dict(analytics)
+            try:
+                analytics["bounds_low"] = float(insight.get("rule_bounds_low") or insight.get("bounds_low"))
+            except (TypeError, ValueError):
+                pass
+        if rule_cfg and not analytics.get("bounds_high") and insight.get("rule_bounds_high") is not None:
+            analytics = dict(analytics)
+            try:
+                analytics["bounds_high"] = float(insight.get("rule_bounds_high") or insight.get("bounds_high"))
+            except (TypeError, ValueError):
+                pass
+
     out = dict(alert)
+    if analytics:
+        out["analytics"] = analytics
     out["model_context"] = ctx
     eq_name = str(ctx["equipment"].get("name") or "").strip()
     eq_id = str(ctx["equipment"].get("id") or "").strip()

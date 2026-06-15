@@ -28,11 +28,14 @@ REPO = Path(__file__).resolve().parents[1]
 API = REPO / "workspace" / "api"
 if str(API) not in sys.path:
     sys.path.insert(0, str(API))
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
 
 os.environ.setdefault("OPENFDD_REPO_ROOT", str(REPO))
 os.environ.setdefault("OPENFDD_WORKSPACE_DIR", str(REPO / "workspace"))
 os.environ.setdefault("OFDD_DESKTOP_DATA_DIR", str(REPO / "workspace" / "data"))
 
+from open_fdd.validation.bench_stack_preflight import validate_stack_preflight  # noqa: E402
 from openfdd_bridge.bench_contract import (  # noqa: E402
     AGNOSTIC_RULE_IDS,
     BACNET_DEVICE_ID,
@@ -286,6 +289,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     tolerate_stale = not args.strict_cross_source
+    stack: dict[str, Any] = {}
 
     print("\n==> Health")
     status, body = _fetch("GET", "/health")
@@ -303,6 +307,25 @@ def main() -> int:
         return 1
     ok("integrator login")
 
+    print("\n==> Stack preflight (health, building snapshot, 4 FDD rules, batch)")
+    model, rules = _model_and_rules(token)
+
+    def _api(method: str, path: str, body: dict | None = None) -> tuple[int, Any]:
+        return _fetch(method, path, token=token, body=body)
+
+    stack = validate_stack_preflight(_api, token, model=model, rules=rules)
+    if not stack.get("ok"):
+        for err in stack.get("errors") or []:
+            fail(f"stack preflight: {err}")
+    else:
+        rp = stack.get("rules") or {}
+        batch = next((c for c in stack.get("checks") or [] if c.get("name") == "fdd_batch"), {})
+        ok(
+            f"building snapshot + bench health — {rp.get('enabled_count', 0)} rules enabled "
+            f"({rp.get('arrow_rules', 0)} PyArrow, {rp.get('datafusion_sql_rules', 0)} DataFusion SQL), "
+            f"batch {batch.get('run_count', 0)} runs"
+        )
+
     print("\n==> Dual driver BRICK model + agnostic rules")
     _contract(token)
 
@@ -316,8 +339,9 @@ def main() -> int:
     print("\n==> SPARQL preset — rules by data source")
     _rules_by_data_source(token)
 
-    print("\n==> FDD batch (4 agnostic rules)")
-    _fdd_batch(token)
+    print("\n==> FDD batch (4 agnostic rules) — already checked in stack preflight")
+    if not any(c.get("name") == "fdd_batch" and c.get("ok") for c in (stack.get("checks") or [])):
+        _fdd_batch(token)
 
     print("")
     if FAILURES:

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+# Engine identifier surfaced in smoke reports and execution evidence.
+CONFIRMATION_ENGINE = "python_loop_over_arrow_mask"
+
 import datetime as _dt
 from typing import Any
 
@@ -9,6 +12,18 @@ import pyarrow as pa
 import pyarrow.compute as pc
 
 from .arrays import as_array
+
+
+def confirmation_window_configured(
+    min_true_rows: int | None = None,
+    min_elapsed_minutes: float | None = None,
+) -> bool:
+    """True when confirm_fault_mask would apply a window (not pass-through)."""
+    rows_needed = int(min_true_rows) if min_true_rows is not None and int(min_true_rows) > 1 else None
+    elapsed_needed = (
+        float(min_elapsed_minutes) if min_elapsed_minutes is not None and float(min_elapsed_minutes) > 0 else None
+    )
+    return rows_needed is not None or elapsed_needed is not None
 
 
 def _parse_timestamp(value: Any) -> _dt.datetime | None:

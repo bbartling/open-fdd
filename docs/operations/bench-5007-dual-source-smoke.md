@@ -1,3 +1,9 @@
+---
+title: Bench 5007 dual-source smoke
+parent: Operations
+nav_order: 21
+---
+
 # Bench 5007 dual-source smoke
 
 Validates BACnet MS/TP device **5007** and Niagara baskStream station **bench9065** on the same physical bench.

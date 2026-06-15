@@ -1,10 +1,10 @@
-"""Summarize fault episodes from FDD sweep rows for check-engine display."""
+"""Summarize fault episodes from FDD sweep rows for check-engine display (no pandas)."""
 
 from __future__ import annotations
 
+import datetime as _dt
+import statistics
 from typing import Any
-
-import pandas as pd
 
 
 def _parse_ts_ms(row: dict[str, Any]) -> int | None:
@@ -18,14 +18,27 @@ def _parse_ts_ms(row: dict[str, Any]) -> int | None:
         val = row.get(key)
         if val is None:
             continue
-        try:
-            ts = pd.to_datetime(val, utc=True, errors="coerce")
-            if pd.isna(ts):
-                continue
-            return int(ts.value // 1_000_000)
-        except (TypeError, ValueError):
-            continue
+        parsed = _parse_timestamp(val)
+        if parsed is not None:
+            return int(parsed.timestamp() * 1000)
     return None
+
+
+def _parse_timestamp(value: Any) -> _dt.datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, _dt.datetime):
+        return value if value.tzinfo else value.replace(tzinfo=_dt.timezone.utc)
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = _dt.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=_dt.timezone.utc)
 
 
 def _format_duration(seconds: float) -> str:
@@ -113,10 +126,9 @@ def summarize_fault_run(
         span_sec = max(0, (ts_list[-1] - ts_list[0]) / 1000.0)
         out["fault_span_sec"] = round(span_sec, 1)
         out["fault_span_label"] = _format_duration(span_sec)
-        # Estimate contiguous fault duration using median sample period
         if len(ts_list) >= 2:
             gaps = [ts_list[i] - ts_list[i - 1] for i in range(1, len(ts_list))]
-            period_ms = int(pd.Series(gaps).median()) if gaps else 60_000
+            period_ms = int(statistics.median(gaps)) if gaps else 60_000
             period_ms = max(period_ms, 1)
             out["sample_period_sec"] = round(period_ms / 1000.0, 1)
             out["estimated_fault_duration_sec"] = round(

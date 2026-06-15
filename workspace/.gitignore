@@ -26,6 +26,11 @@
 !dashboard/**
 !data/
 !data/**
+# Never commit bytecode under workspace data trees (rules_py, runtime, etc.)
+data/**/__pycache__/
+data/**/*.py[cod]
+data/**/*.pyc
+data/**/*.pyo
 # Runtime state (bridge / FDD loop — never commit; Docker may write as root)
 data/data_model.ttl
 data/model.json

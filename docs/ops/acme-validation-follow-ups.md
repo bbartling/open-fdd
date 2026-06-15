@@ -1,7 +1,7 @@
 ---
 title: ACME validation follow-ups
 parent: Operations
-nav_order: 26
+nav_exclude: true
 ---
 
 # ACME validation follow-ups

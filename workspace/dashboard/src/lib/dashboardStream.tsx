@@ -37,6 +37,49 @@ export type FaultAnalytics = {
   value_columns?: string[];
 };
 
+export type SensorInsight = {
+  column?: string;
+  label?: string;
+  brick_type?: string;
+  fdd_input?: string;
+  equipment_name?: string;
+  avg_overall?: number;
+  min_overall?: number;
+  max_overall?: number;
+  avg_while_fault?: number;
+  avg_while_ok?: number;
+  avg_while_motor_run?: number;
+  avg_while_motor_run_fault?: number;
+  fault_sample_pct?: number;
+  sample_count?: number;
+};
+
+export type FaultInsight = {
+  sensor_column?: string;
+  lookback_hours?: number;
+  sensor_count?: number;
+  sensors?: SensorInsight[];
+  bounds_low?: number;
+  bounds_high?: number;
+  avg_while_fault?: number;
+  avg_while_ok?: number;
+  avg_overall?: number;
+  avg_while_motor_run?: number;
+  avg_while_motor_run_fault?: number;
+  min_overall?: number;
+  max_overall?: number;
+  fault_sample_pct?: number;
+  motor_runtime_hours?: number;
+  motor_label?: string;
+  motor_equipment?: string;
+  rule_bounds_low?: number | string;
+  rule_bounds_high?: number | string;
+  rule_window_samples?: number | string;
+  rule_flatline_tolerance?: number | string;
+  value_unit?: string;
+  historian_source?: string;
+};
+
 export type FaultModelContext = {
   severity?: string;
   rule_id?: string;
@@ -58,6 +101,7 @@ export type FaultModelContext = {
   };
   bacnet_summary?: string;
   historian_column?: string;
+  insight?: FaultInsight;
 };
 
 export type FaultAlert = {
