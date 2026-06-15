@@ -16,9 +16,11 @@ from open_fdd.validation.bench_5007_long_fdd import (
 
 
 class BenchLongFddEvaluateBody(BaseModel):
-    site_id: str = "demo"
-    source: str = "bacnet_direct"
-    semantic_key: str = "duct-t"
+    """Read-only bench validation payload — smoke/long-FDD use; not a general SQL API."""
+
+    site_id: str = Field(default="demo", max_length=64)
+    source: str = Field(default="bacnet_direct", pattern="^(bacnet_direct|niagara_baskstream)$")
+    semantic_key: str = Field(default="duct-t", max_length=128)
     backend: str = Field(default="pyarrow", pattern="^(pyarrow|datafusion_sql)$")
     threshold: float = 80.0
     phase: str = "fault"

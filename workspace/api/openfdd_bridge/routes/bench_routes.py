@@ -130,8 +130,8 @@ def bench_poll_cadence(
 
 @router.post("/api/bench/long-fdd/evaluate", dependencies=[_READ])
 def bench_long_fdd_evaluate(body: BenchLongFddEvaluateBody) -> dict[str, Any]:
-    """Read-only FDD evaluation for Bench 5007 long smoke (source-specific historian)."""
-    from ..model_store import load_model
+    """Read-only Bench 5007 long-smoke FDD evaluation (validation use; no device writes)."""
+    from ..model_store import ModelStore
 
-    model = load_model()
+    model = ModelStore().load()
     return evaluate_long_fdd(body, model)
