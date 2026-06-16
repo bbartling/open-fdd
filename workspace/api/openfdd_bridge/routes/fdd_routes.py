@@ -19,12 +19,19 @@ def fdd_results(
     _user: dict = _AGENT,
 ) -> dict:
     """Latest FDD batch runs with per-rule analytics (tuning feedback)."""
+    from ..fdd_equipment import enrich_fdd_run_with_equipment
+    from ..model_service import ModelService
+
     doc = load_results()
+    model = ModelService().load()
     runs = [r for r in doc.get("runs", []) if isinstance(r, dict)]
     if site_id:
         sid = site_id.strip()
         runs = [r for r in runs if str(r.get("site_id") or "") in {"", sid}]
-    runs = runs[-limit:]
+    runs = [
+        enrich_fdd_run_with_equipment(dict(r), model, str(r.get("site_id") or "").strip())
+        for r in runs[-limit:]
+    ]
     flagged = sum(1 for r in runs if int(r.get("flagged") or 0) > 0)
     errors = sum(1 for r in runs if r.get("status") == "error")
     return {

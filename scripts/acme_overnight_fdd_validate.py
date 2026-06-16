@@ -103,6 +103,7 @@ def run_cycle(
         validate_fault_alert_schema,
         validate_fdd_run_schema,
     )
+    from openfdd_bridge.fdd_equipment import enrich_fdd_run_with_equipment  # noqa: E402
 
     user, password = resolve_credentials(auth_env, acme_secrets)
     client = ApiClient(base)
@@ -196,9 +197,12 @@ def run_cycle(
     runs = (fdd.get("runs") or []) if isinstance(fdd, dict) else []
     family_hits = []
     schema_errors: list[str] = []
-    for run in runs:
-        if not isinstance(run, dict):
+    for raw in runs:
+        if not isinstance(raw, dict):
             continue
+        run = enrich_fdd_run_with_equipment(
+            dict(raw), model_for_enrich, str(raw.get("site_id") or site_id).strip()
+        )
         rid = str(run.get("rule_id") or "")
         if any(f in rid for f in ACME_RULE_FAMILIES):
             family_hits.append(
