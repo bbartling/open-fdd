@@ -144,21 +144,26 @@ def fdd_issues() -> list[dict[str, Any]]:
         if not detail and analytics:
             detail = format_fault_detail(analytics, source=str(run.get("source") or ""))
         if not detail:
+            src_label = str(run.get("source") or "").strip()
+            if src_label == "demo" and site_id and site_id not in {"demo", "site", "test", "sample"}:
+                src_label = "historian (demo fallback — check feather ingest)"
             detail = (
                 f"{flagged}/{rows} samples flagged"
-                f"{' (' + str(run.get('source')) + ' data)' if run.get('source') else ''}."
+                f"{' (' + src_label + ')' if src_label else ''}."
             )
         cols = analytics.get("flagged_columns") or analytics.get("value_columns") or []
         equipment_names = list(run.get("equipment_names") or [])
         if not equipment_names:
             equipment_names = equipment_labels_for_columns(model, site_id, list(cols) if cols else None)
+        rule_id = str(run.get("rule_id") or "")
         issue: dict[str, Any] = {
-            "id": f"fdd-{run.get('rule_id')}-{run.get('site_id')}",
+            "id": f"fdd-{rule_id}-{site_id}",
             "severity": str(run.get("severity") or "warning"),
             "title": _fdd_alert_title(run, flagged=flagged, equipment_names=equipment_names),
             "detail": detail,
             "source": "fdd",
-            "rule_id": str(run.get("rule_id") or ""),
+            "code": rule_id,
+            "rule_id": rule_id,
             "rule_name": str(run.get("rule_name") or ""),
             "short_description": short_desc,
         }
@@ -173,5 +178,18 @@ def fdd_issues() -> list[dict[str, Any]]:
             issue["symptom"] = run.get("symptom")
         if analytics:
             issue["analytics"] = analytics
-        issues.append(enrich_fault_alert(issue, model))
+        enriched = enrich_fault_alert(issue, model)
+        ctx = enriched.get("model_context") if isinstance(enriched.get("model_context"), dict) else {}
+        ctx_eq = ctx.get("equipment") if isinstance(ctx.get("equipment"), dict) else {}
+        eq_name = str(ctx_eq.get("name") or enriched.get("equipment_name") or "").strip()
+        eq_id = str(ctx_eq.get("id") or enriched.get("equipment_id") or "").strip()
+        if eq_name and eq_name.lower() not in {"not mapped"}:
+            enriched["equipment_name"] = eq_name
+            if eq_name not in (enriched.get("title") or ""):
+                symptom = str(enriched.get("short_description") or enriched.get("symptom") or "").strip()
+                if symptom:
+                    enriched["title"] = f"{eq_name} — {symptom}"
+        if eq_id:
+            enriched["equipment_id"] = eq_id
+        issues.append(enriched)
     return issues

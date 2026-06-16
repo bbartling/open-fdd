@@ -219,13 +219,31 @@ export default function AgentPage() {
           <p className="agent-offline-banner">Checking local AI service…</p>
         ) : !chatEnabled ? (
           <div className="agent-unavailable-panel panel">
-            <h3 className="panel-title">Local AI unavailable</h3>
+            <h3 className="panel-title">Local AI chat unavailable on this host</h3>
             <p>
               {ctx.interactive_chat_disabled_reason ||
-                "Ollama is not running or this edge is CPU-only without a configured model tier. Use Building status, Rule Lab, MCP (/mcp), or an external agent (Cursor, OpenClaw) instead."}
+                "This edge is CPU-only — local Ollama chat is disabled. Building status, Rule Lab, BACnet, and FDD still run normally."}
             </p>
+            <ul className="agent-guidance-list">
+              <li>
+                <strong>Typical workflow:</strong> use an external agent (Cursor, OpenClaw, or Claude
+                Desktop/Code) with the Open-FDD MCP server pointed at this bridge.
+              </li>
+              <li>
+                <strong>MCP on CPU edges:</strong> you do not need the MCP sidecar container running on
+                the edge if there is no local GPU/Ollama — run MCP from your workstation against{" "}
+                <code>{typeof window !== "undefined" ? window.location.origin : "this site"}</code>.
+              </li>
+              <li>
+                <strong>Future GPU hosts:</strong> when a GPU is present and Ollama is configured, this
+                tab enables local operator chat automatically.
+              </li>
+            </ul>
             {ctx.gpu_available === false ? (
-              <p className="muted">GPU: not detected · RAM tier: {ctx.ollama_ram_tier || "—"}</p>
+              <p className="muted">
+                Hardware: CPU-only · RAM tier: {ctx.ollama_ram_tier || "—"} · Ollama:{" "}
+                {ollamaOk ? "reachable (insight only)" : "not running"}
+              </p>
             ) : null}
           </div>
         ) : null}

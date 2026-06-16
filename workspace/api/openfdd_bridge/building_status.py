@@ -66,12 +66,14 @@ def collect_status() -> dict[str, Any]:
 
 def _family_of(alert: dict[str, Any]) -> str:
     source = str(alert.get("source") or "").strip()
+    ctx = alert.get("model_context") if isinstance(alert.get("model_context"), dict) else {}
+    ctx_eq = ctx.get("equipment") if isinstance(ctx.get("equipment"), dict) else {}
     if source == "fdd":
-        eid = str(alert.get("equipment_id") or "").strip()
-        ename = str(alert.get("equipment_name") or "").strip()
+        eid = str(alert.get("equipment_id") or ctx_eq.get("id") or "").strip()
+        ename = str(alert.get("equipment_name") or ctx_eq.get("name") or "").strip()
         if eid:
             return f"EQ:{eid}"
-        if ename:
+        if ename and ename.lower() not in {"not mapped", ""}:
             return f"EQ:{ename}"
     if source == "poll_health":
         eid = str(alert.get("equipment_id") or "").strip()

@@ -67,9 +67,19 @@ def mcp_agent_hints() -> dict[str, Any]:
         "mcp_enabled": enabled,
         "mcp_rest_base": base if enabled else None,
         "bridge_base_url": bridge_base_url(),
+        "external_agents_recommended": (
+            "Cursor, OpenClaw, or Claude Desktop/Code with MCP pointed at this bridge — "
+            "typical on CPU-only edges without local Ollama."
+        ),
+        "edge_mcp_optional": (
+            "On CPU-only hosts you do not need the MCP sidecar on the edge; run MCP from your workstation."
+        ),
     }
     if not enabled:
-        hints["note"] = "MCP RAG off — set OFDD_MCP_ENABLED=1 in workspace/mcp.env.local and restart run_local.sh"
+        hints["note"] = (
+            "MCP RAG sidecar off on this host — set OFDD_MCP_ENABLED=1 in workspace/mcp.env.local "
+            "or run MCP from an external agent against the bridge REST/OpenAPI URLs."
+        )
         return hints
     hints.update(
         {
