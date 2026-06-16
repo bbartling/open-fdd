@@ -278,3 +278,10 @@ export function countBySeverity(cards: DisplayFault[]) {
     total: cards.length,
   };
 }
+
+/** Stable backend ids for BAS-style alarm clear/ack. */
+export function faultAlertIds(fault: DisplayFault): string[] {
+  const ids = fault.underlying.map((u) => String(u.id || "").trim()).filter(Boolean);
+  if (ids.length) return ids;
+  return [fault.id];
+}

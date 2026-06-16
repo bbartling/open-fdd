@@ -407,23 +407,71 @@
 }
 
 .bis-fault {
-  display: block;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
   width: 100%;
   text-align: left;
   border: 1px solid var(--bis-border);
   border-left-width: 5px;
   border-radius: 10px;
-  padding: 14px 16px;
-  cursor: pointer;
+  overflow: hidden;
   transition: transform 0.12s, box-shadow 0.12s;
   background: var(--bis-card-bg);
   color: inherit;
   font: inherit;
 }
 
+.bis-fault-main {
+  flex: 1;
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.bis-fault-main:hover {
+  background: color-mix(in srgb, var(--bis-border) 12%, transparent);
+}
+
 .bis-fault:hover {
   box-shadow: 0 4px 14px rgba(14, 30, 53, 0.08);
   transform: translateY(-1px);
+}
+
+.bis-fault-clear {
+  flex: 0 0 auto;
+  align-self: stretch;
+  min-width: 72px;
+  padding: 0 14px;
+  border: none;
+  border-left: 1px solid var(--bis-border);
+  background: color-mix(in srgb, var(--bis-border) 18%, var(--bis-card-bg));
+  color: var(--bis-text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.bis-fault-clear:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bis-red) 14%, var(--bis-card-bg));
+  color: var(--bis-red);
+}
+
+.bis-fault-clear:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.bis-fault-readonly-hint {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
 }
 
 .bis-fault-critical {
@@ -635,6 +683,16 @@
   background: var(--panel-soft);
   color: inherit;
   border: 1px solid var(--bis-border);
+}
+
+.bis-btn-clear {
+  background: color-mix(in srgb, var(--bis-red) 12%, var(--bis-card-bg));
+  color: var(--bis-red);
+  border: 1px solid color-mix(in srgb, var(--bis-red) 35%, var(--bis-border));
+}
+
+.bis-btn-clear:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bis-red) 22%, var(--bis-card-bg));
 }
 
 .bis-modal-backdrop {

@@ -9,7 +9,12 @@ redirect_from:
 
 The pandas **`RuleRunner`** + YAML **`type: expression`** cookbook was removed in **Open-FDD 3.x**.
 
-**Current documentation:** [Expression cookbook (Arrow-native)]({{ "/rule-cookbook/expression-cookbook/" | relative_url }})
+**Current documentation:**
+
+- [Expression cookbook (Arrow-native)]({{ "/rule-cookbook/expression-cookbook/" | relative_url }})
+- [Rule authoring (v1)]({{ "/rule-authoring/" | relative_url }}) — decision table, YAML distinction, legacy parity
+
+**YAML in repo:** `open_fdd/default_rules/` and `open_fdd/faults/catalog/` are **metadata** — not executed on the edge.
 
 Edge rules are Python modules with:
 

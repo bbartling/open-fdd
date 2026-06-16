@@ -87,6 +87,10 @@ def building_alerts_path() -> Path:
     return data_dir() / "building_alerts.json"
 
 
+def fault_alarm_latch_path() -> Path:
+    return data_dir() / "fault_alarm_latch.json"
+
+
 def resolve_workdir_under_repo(workdir: str | None) -> Path:
     """Codex/exec cwd must stay inside the repository."""
     repo = repo_root().resolve()

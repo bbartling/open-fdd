@@ -353,23 +353,32 @@ export default function JsonApiPage() {
   }
 
   async function deletePoint(pointId: string) {
-    if (!window.confirm("Remove this sensor?")) return;
+    setActionError("");
+    const prev = driverDevices;
+    setDriverDevices((list) =>
+      list.map((d) => ({
+        ...d,
+        points: d.points.filter((p) => p.point_id !== pointId),
+      })),
+    );
     try {
       await apiFetch(`/api/json-api/endpoint/${encodeURIComponent(pointId)}`, { method: "DELETE" });
-      await loadDriverTree();
     } catch (e) {
+      setDriverDevices(prev);
       setActionError(formatApiError(e));
     }
   }
 
   async function deleteDevice(device: JsonApiDevice) {
-    if (!window.confirm(`Remove all sensors on ${device.host}?`)) return;
+    setActionError("");
+    const prev = driverDevices;
+    setDriverDevices((list) => list.filter((d) => d.host !== device.host));
     try {
       for (const p of device.points) {
         await apiFetch(`/api/json-api/endpoint/${encodeURIComponent(p.point_id)}`, { method: "DELETE" });
       }
-      await loadDriverTree();
     } catch (e) {
+      setDriverDevices(prev);
       setActionError(formatApiError(e));
     }
   }

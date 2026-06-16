@@ -5,7 +5,9 @@ nav_order: 3
 
 # DataFusion SQL recipes
 
-Use when you need simple threshold, `CASE WHEN`, or SQL-readable rules. Requires `pip install open-fdd[datafusion]`. SQL runs **server-side only**.
+Use when you need simple threshold, `CASE WHEN`, or SQL-readable **stateless** rules. Requires `pip install 'open-fdd[datafusion]'` (optional extra in `pyproject.toml`). SQL runs **server-side only**.
+
+**Not for:** rolling windows, PID hunting, flatline detection, schedule logic, or ML prep — use [PyArrow recipes](python-recipes-arrow.md). See [decision table]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#pyarrow-vs-datafusion-sql).
 
 ## Temperature high
 

@@ -6,13 +6,19 @@ Catalog read endpoints stay public for analytics pages. Live status requires aut
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from ..building_status import faults_by_family
-from ..deps import require_user
+from ..deps import require_roles, require_user
+from ..fault_alarm_latch import clear_alarms
 from ..fault_catalog import catalog_graph, catalog_payload, catalog_tree, entry_for_code
 from ..fault_catalog_scope import build_applicable_payload, validate_scope_with_ollama
 
 router = APIRouter(prefix="/api/faults", tags=["faults"])
+
+
+class ClearFaultsBody(BaseModel):
+    alert_ids: list[str] = Field(default_factory=list, min_length=1)
 
 
 @router.get("/catalog")
@@ -60,3 +66,14 @@ def get_code(code: str) -> dict:
 def get_status(_user: dict = Depends(require_user)) -> dict:
     """Live GREEN/YELLOW/RED traffic + active faults grouped by equipment family."""
     return {"ok": True, **faults_by_family()}
+
+
+@router.post("/clear")
+def post_clear_faults(
+    body: ClearFaultsBody,
+    user: dict = Depends(require_roles("operator", "integrator", "agent")),
+) -> dict:
+    """Acknowledge/clear latched dashboard alarms (BAS-style)."""
+    username = str(user.get("sub") or user.get("username") or "operator")
+    result = clear_alarms(body.alert_ids, cleared_by=username)
+    return {"ok": True, **result, **faults_by_family()}

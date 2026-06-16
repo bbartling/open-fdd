@@ -2229,6 +2229,140 @@ textarea {
   color: var(--danger);
 }
 
+.host-ollama-panel.host-ollama-disabled {
+  opacity: 0.55;
+  filter: grayscale(0.35);
+}
+
+.host-ollama-panel.host-ollama-disabled .panel-title::after {
+  content: " · unavailable on this edge";
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.pooge-panel {
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger) 4%, var(--panel-bg));
+}
+
+.pooge-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.pooge-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.pooge-badge {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, var(--panel-bg));
+}
+
+.pooge-lead {
+  margin: 0 0 14px;
+  max-width: 72ch;
+}
+
+.pooge-mode-row {
+  margin-bottom: 12px;
+}
+
+.pooge-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.pooge-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px 16px;
+  margin-bottom: 16px;
+}
+
+.pooge-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  cursor: pointer;
+}
+
+.pooge-option span {
+  font-size: 0.92rem;
+}
+
+.pooge-confirm-field {
+  max-width: 420px;
+}
+
+.pooge-confirm-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.04em;
+}
+
+.pooge-actions {
+  margin-top: 4px;
+}
+
+.pooge-preview {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.pooge-preview h4 {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+}
+
+.pooge-target-list {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.pooge-target-list li {
+  margin-bottom: 6px;
+}
+
+.pooge-audit {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--input-bg);
+  font-size: 0.82rem;
+  overflow-x: auto;
+}
+
+.sql-code-editor-wrap {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.sql-code-editor-wrap .cm-editor {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
 .agent-chat-user {
   border-left: 3px solid var(--primary);
 }

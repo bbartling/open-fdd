@@ -172,10 +172,21 @@ function wsBaseUrl(): string {
 }
 
 async function fetchSnapshot(authenticated: boolean): Promise<DashboardSnapshot> {
-  if (!authenticated) {
-    throw new Error("Sign in required for building status");
+  const path = authenticated ? "/api/building/snapshot" : "/api/building/public-snapshot";
+  const base = getBridgeBase();
+  const url = `${base}${path}`;
+  const token = authenticated ? sessionStorage.getItem("ofdd_token") : null;
+  const res = await fetch(url, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `HTTP ${res.status}`);
   }
-  const snap = await apiFetch<DashboardSnapshot & { ok?: boolean }>("/api/building/snapshot");
+  const snap = (await res.json()) as DashboardSnapshot & { ok?: boolean };
   const { ok: _ok, ...body } = snap;
   return body as DashboardSnapshot;
 }

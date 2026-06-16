@@ -12,6 +12,9 @@ import {
 type Props = {
   fault: DisplayFault | null;
   onClose: () => void;
+  canClear?: boolean;
+  clearing?: boolean;
+  onClear?: (fault: DisplayFault) => void;
 };
 
 type SavedRuleMeta = {
@@ -21,7 +24,7 @@ type SavedRuleMeta = {
   config?: Record<string, unknown>;
 };
 
-export default function FaultDetailModal({ fault, onClose }: Props) {
+export default function FaultDetailModal({ fault, onClose, canClear, clearing, onClear }: Props) {
   const [ruleMeta, setRuleMeta] = useState<SavedRuleMeta | null>(null);
 
   useEffect(() => {
@@ -342,6 +345,16 @@ export default function FaultDetailModal({ fault, onClose }: Props) {
               <Link to="/bacnet" className="bis-btn bis-btn-primary" onClick={onClose}>
                 BACnet &amp; poll
               </Link>
+            ) : null}
+            {canClear && onClear ? (
+              <button
+                type="button"
+                className="bis-btn bis-btn-clear"
+                disabled={clearing}
+                onClick={() => onClear(fault)}
+              >
+                {clearing ? "Clearing…" : "Clear alarm"}
+              </button>
             ) : null}
             <button type="button" className="bis-btn bis-btn-secondary" onClick={onClose}>
               Close

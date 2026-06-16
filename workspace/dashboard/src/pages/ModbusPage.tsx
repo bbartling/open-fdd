@@ -228,25 +228,32 @@ export default function ModbusPage() {
   }
 
   async function deletePoint(pointId: string) {
-    if (!window.confirm("Remove this register from the driver?")) return;
     setActionError("");
+    const prev = driverDevices;
+    setDriverDevices((list) =>
+      list.map((d) => ({
+        ...d,
+        points: d.points.filter((p) => p.point_id !== pointId),
+      })),
+    );
     try {
       await apiFetch(`/api/modbus/register/${encodeURIComponent(pointId)}`, { method: "DELETE" });
-      await loadDriverTree();
     } catch (e) {
+      setDriverDevices(prev);
       setActionError(formatApiError(e));
     }
   }
 
   async function deleteDevice(device: ModbusDevice) {
-    if (!window.confirm(`Remove all registers on ${device.host}:${device.port}?`)) return;
     setActionError("");
+    const prev = driverDevices;
+    setDriverDevices((list) => list.filter((d) => d.host !== device.host || d.port !== device.port));
     try {
       for (const p of device.points) {
         await apiFetch(`/api/modbus/register/${encodeURIComponent(p.point_id)}`, { method: "DELETE" });
       }
-      await loadDriverTree();
     } catch (e) {
+      setDriverDevices(prev);
       setActionError(formatApiError(e));
     }
   }
