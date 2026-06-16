@@ -297,10 +297,28 @@ def get_building_insight(*, force: bool = False) -> dict[str, Any]:
         out["cached"] = True
         return out
 
-    status = collect_status()
-    # Fresh pandas analytics each insight cycle (15 min) so sensor fixes show in Ollama context.
-    zone_snapshot = get_zone_temp_snapshot(force=True)
-    device_snapshot = get_device_poll_snapshot(force=True)
+    try:
+        status = collect_status()
+        zone_snapshot = get_zone_temp_snapshot(force=True)
+        device_snapshot = get_device_poll_snapshot(force=True)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "sentence": "Building insight unavailable — status or analytics could not be loaded.",
+            "source": "error",
+            "error": str(exc)[:240],
+            "generated_at": now,
+            "next_refresh_at": now + min(300, interval),
+            "refresh_interval_s": interval,
+            "cached": False,
+            "ollama_ok": False,
+            "fault_sentences": [],
+            "fault_catalog": [],
+            "faults_linked": [],
+            "brick_model": {},
+            "root_cause_hints": [],
+        }
+
     fault_lines = fault_sentences_from_alerts(status.get("alerts") or [])
 
     sentence = ""

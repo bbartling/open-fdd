@@ -46,7 +46,7 @@ curl -fsSL -o /tmp/openfdd_edge_bootstrap.sh \
 bash /tmp/openfdd_edge_bootstrap.sh --start
 ```
 
-**Update an existing site** (backup workspace, pull `latest`, recreate containers):
+**Update an existing site** (backup workspace, pull **latest containers from GHCR**, recreate stack):
 
 ```bash
 cd ~/open-fdd
@@ -93,6 +93,16 @@ pytest open_fdd/tests -q
 ```
 
 Contributor layout: `AGENTS.md` and [developer docs](https://bbartling.github.io/open-fdd/developer/).
+
+**Cross-site smoke** (bensserver + edge parity, then ACME FDD validation):
+
+```bash
+OPENFDD_LIVE_ACME=1 ./scripts/smoke_sites_parity.sh --short      # ~30 min, 1 cycle
+OPENFDD_LIVE_ACME=1 ./scripts/smoke_sites_parity.sh --standard   # 2h window, 1 cycle
+OPENFDD_LIVE_ACME=1 ./scripts/smoke_sites_parity.sh --overnight  # 4×2h cycles (~12h)
+```
+
+Step 1 compares health, `git_sha`, image tag, and dashboard `index-*.js` bundle between local and edge. Step 2 runs read-only ACME BACnet/FDD/UI checks. Use `upgrade_edge_full.sh` on the edge so static UI matches GHCR.
 
 ---
 

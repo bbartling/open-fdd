@@ -2079,6 +2079,17 @@ textarea {
   border-color: color-mix(in srgb, var(--muted) 40%, var(--border));
 }
 
+.agent-guidance-list {
+  margin: 0.75rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.agent-guidance-list li {
+  margin-bottom: 0.5rem;
+}
+
 .dm-advanced-actions {
   gap: 0.5rem;
   flex-wrap: wrap;

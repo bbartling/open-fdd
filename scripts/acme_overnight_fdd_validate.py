@@ -242,6 +242,30 @@ def run_cycle(
     if fault_schema_errors_enriched:
         result["pass"] = False
 
+    st_ins, insight, _ = client.get_json("/openfdd-agent/building-insight")
+    result["checks"]["building_insight"] = {
+        "http": st_ins,
+        "ok": st_ins == 200 and not (isinstance(insight, dict) and insight.get("source") == "error"),
+        "error": str((insight or {}).get("error") or "")[:200] if isinstance(insight, dict) else "",
+    }
+    if st_ins >= 500:
+        result["pass"] = False
+
+    st_root, root_html, _ = client.request("GET", "/", auth=False)
+    asset = ""
+    if st_root == 200 and isinstance(root_html, str):
+        import re
+
+        m = re.search(r"/assets/(index-[^\"']+\.js)", root_html)
+        asset = m.group(1) if m else ""
+    result["checks"]["ui_bundle"] = {
+        "http": st_root,
+        "asset": asset,
+        "has_datafusion_ui": "datafusion_sql" in (root_html if isinstance(root_html, str) else ""),
+    }
+    if st_root != 200 or not asset:
+        result["pass"] = False
+
     # Harness quick validate (read-only)
     validator = AcmeLiveValidator(
         base=base,
@@ -365,7 +389,23 @@ def main() -> int:
         help="Sleep between cycles (0=back-to-back; 120 for true overnight spacing)",
     )
     parser.add_argument("--expected-tag", default=os.environ.get("OPENFDD_IMAGE_TAG", ""))
+    parser.add_argument("--short", action="store_true", help="1 cycle, 0.5h window (30 min smoke)")
+    parser.add_argument("--standard", action="store_true", help="1 cycle, 2h window (default validation)")
+    parser.add_argument("--overnight", action="store_true", help="4 cycles, 2h window, 120 min sleep")
     args = parser.parse_args()
+
+    if args.short:
+        args.cycles = 1
+        args.window_hours = 0.5
+        args.sleep_minutes = 0
+    elif args.overnight:
+        args.cycles = 4
+        args.window_hours = 2.0
+        args.sleep_minutes = float(os.environ.get("ACME_CYCLE_SLEEP_MINUTES", "120"))
+    elif args.standard:
+        args.cycles = 1
+        args.window_hours = 2.0
+        args.sleep_minutes = 0
 
     if os.environ.get("OPENFDD_LIVE_ACME") != "1":
         print("Set OPENFDD_LIVE_ACME=1 to run live read-only ACME cycles", file=sys.stderr)
