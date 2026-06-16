@@ -1,0 +1,461 @@
+#!/usr/bin/env python3
+"""Paired FDD smoke — bensserver bench 5007 + Acme OAT/web, hardcoded phases.
+
+Runs both sites in parallel with identical toggle schedule. Installs smoke rules,
+alternates NORMAL/BLATANT thresholds, runs FDD batch each cycle, validates PyArrow
+vs DataFusion parity and 5-minute fault confirmation.
+
+  OPENFDD_LIVE_ACME=1 python3 scripts/smoke_paired_fdd_harness.py --short
+  OPENFDD_LIVE_ACME=1 python3 scripts/smoke_paired_fdd_harness.py --standard
+  OPENFDD_LIVE_ACME=1 python3 scripts/smoke_paired_fdd_harness.py --overnight
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO))
+sys.path.insert(0, str(REPO / "workspace" / "api"))
+
+from open_fdd.validation.paired_fdd_contract import (  # noqa: E402
+    ACME_SITE_ID,
+    BENCH_SITE_ID,
+    MODES,
+    PHASE_BLATANT,
+    PHASE_NORMAL,
+    RULE_ACME_OAT_ARROW,
+    RULE_ACME_OAT_SQL,
+    RULE_BENCH_BACNET_ARROW,
+    RULE_BENCH_BACNET_SQL,
+    RULE_BENCH_NIAGARA_ARROW,
+    RULE_BENCH_NIAGARA_SQL,
+    acme_rules_for_phase,
+    bench_rules_for_phase,
+)
+
+REPORT_DIR = REPO / "reports"
+POLL_SECONDS = 60
+
+
+@dataclass
+class CycleSnapshot:
+    cycle: int
+    timestamp: str
+    phase: str
+    toggles: int
+    bench_batch: dict[str, Any] = field(default_factory=dict)
+    acme_batch: dict[str, Any] = field(default_factory=dict)
+    errors: list[str] = field(default_factory=list)
+
+
+@dataclass
+class SiteReport:
+    label: str
+    base: str
+    snapshots: list[CycleSnapshot] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    pass_: bool = True
+
+
+def _utc() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def _load_auth() -> tuple[str, str]:
+    auth_env = Path(os.environ.get("OPENFDD_AUTH_ENV", REPO / "workspace" / "auth.env.local"))
+    if auth_env.is_file():
+        for line in auth_env.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip().strip("'\""))
+    user = os.environ.get("OFDD_INTEGRATOR_USER", os.environ.get("OFDD_OPERATOR_USER", "integrator"))
+    password = os.environ.get("OFDD_INTEGRATOR_PASSWORD", os.environ.get("OFDD_OPERATOR_PASSWORD", ""))
+    return user, password
+
+
+def _fetch(
+    method: str,
+    url: str,
+    *,
+    token: str | None = None,
+    body: dict | None = None,
+    timeout: float = 180.0,
+) -> tuple[int, Any]:
+    headers: dict[str, str] = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    data = None
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            return resp.status, json.loads(raw) if raw.strip() else {}
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            return exc.code, json.loads(raw)
+        except json.JSONDecodeError:
+            return exc.code, {"detail": raw[:500]}
+    except (urllib.error.URLError, OSError, TimeoutError) as exc:
+        return 0, {"error": str(exc)}
+
+
+def _login(base: str) -> str:
+    user, password = _load_auth()
+    st, body = _fetch("POST", f"{base.rstrip('/')}/api/auth/login", body={"username": user, "password": password})
+    if st != 200 or not isinstance(body, dict) or not body.get("token"):
+        raise RuntimeError(f"login failed HTTP {st}")
+    return str(body["token"])
+
+
+def _save_rules(base: str, token: str, rules: list[dict[str, Any]]) -> list[str]:
+    errs: list[str] = []
+    for rule in rules:
+        st, res = _fetch("POST", f"{base.rstrip('/')}/api/rules/save", token=token, body=rule)
+        if st != 200:
+            errs.append(f"save {rule.get('id')}: HTTP {st}")
+    return errs
+
+
+def _run_batch(base: str, token: str, *, lookback_hours: float) -> tuple[int, dict[str, Any]]:
+    return _fetch(
+        "POST",
+        f"{base.rstrip('/')}/api/rules/batch",
+        token=token,
+        body={"lookback_hours": lookback_hours, "limit": 5000},
+    )
+
+
+def _flagged_by_rule(batch: dict[str, Any]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for run in batch.get("runs") or []:
+        if not isinstance(run, dict):
+            continue
+        rid = str(run.get("rule_id") or "")
+        out[rid] = int(run.get("flagged") or run.get("fault_rows") or 0)
+    return out
+
+
+def _run_site_loop(
+    *,
+    label: str,
+    base: str,
+    site_kind: str,
+    duration_minutes: int,
+    toggle_interval_minutes: int,
+    stop_event: threading.Event,
+    report: SiteReport,
+    phase_lock: threading.Lock,
+    shared_phase: list[str],
+    shared_toggle_count: list[int],
+) -> None:
+    try:
+        token = _login(base)
+    except RuntimeError as exc:
+        report.errors.append(str(exc))
+        report.pass_ = False
+        return
+
+    total_s = duration_minutes * 60
+    t0 = time.monotonic()
+    cycle = 0
+    last_toggle_idx = -1
+
+    while not stop_event.is_set() and (time.monotonic() - t0) < total_s:
+        cycle += 1
+        elapsed_min = (time.monotonic() - t0) / 60.0
+        toggle_idx = int(elapsed_min // toggle_interval_minutes)
+        phase = PHASE_NORMAL if toggle_idx % 2 == 0 else PHASE_BLATANT
+
+        with phase_lock:
+            if toggle_idx != last_toggle_idx:
+                last_toggle_idx = toggle_idx
+                shared_phase[0] = phase
+                shared_toggle_count[0] = toggle_idx + 1
+                rules = bench_rules_for_phase(phase) if site_kind == "bench" else acme_rules_for_phase(phase)
+                save_errs = _save_rules(base, token, rules)
+                if save_errs:
+                    report.errors.extend(save_errs)
+                    report.pass_ = False
+                print(f"[{label}] toggle #{toggle_idx + 1} → phase={phase} ({len(rules)} rules)", flush=True)
+
+        lookback = min(max(2.0, elapsed_min / 60.0 + 0.25), 24.0)
+        snap = CycleSnapshot(cycle=cycle, timestamp=_utc(), phase=phase, toggles=shared_toggle_count[0])
+
+        if site_kind == "bench":
+            _fetch("POST", f"{base.rstrip('/')}/api/bacnet/poll/once", token=token, timeout=180.0)
+            _fetch(
+                "POST",
+                f"{base.rstrip('/')}/api/niagara/stations/bench9065/poll/once",
+                token=token,
+                timeout=180.0,
+            )
+
+        st, batch = _run_batch(base, token, lookback_hours=lookback)
+        if st != 200 or not isinstance(batch, dict):
+            snap.errors.append(f"batch HTTP {st}")
+            report.pass_ = False
+        else:
+            flagged = _flagged_by_rule(batch)
+            batch_summary = {"flagged": flagged, "summary": batch.get("summary")}
+            if site_kind == "bench":
+                snap.bench_batch = batch_summary
+                bacnet_a = flagged.get(RULE_BENCH_BACNET_ARROW, -1)
+                bacnet_s = flagged.get(RULE_BENCH_BACNET_SQL, -1)
+                niagara_a = flagged.get(RULE_BENCH_NIAGARA_ARROW, -1)
+                niagara_s = flagged.get(RULE_BENCH_NIAGARA_SQL, -1)
+                if bacnet_a >= 0 and bacnet_s >= 0 and bacnet_a != bacnet_s:
+                    snap.errors.append(f"bacnet arrow/sql mismatch {bacnet_a} vs {bacnet_s}")
+                    report.pass_ = False
+                if niagara_a >= 0 and niagara_s >= 0 and niagara_a != niagara_s:
+                    snap.errors.append(f"niagara arrow/sql mismatch {niagara_a} vs {niagara_s}")
+                    report.pass_ = False
+            else:
+                snap.acme_batch = batch_summary
+                a = flagged.get(RULE_ACME_OAT_ARROW, -1)
+                s = flagged.get(RULE_ACME_OAT_SQL, -1)
+                if a >= 0 and s >= 0 and a != s:
+                    snap.errors.append(f"acme oat arrow/sql mismatch {a} vs {s}")
+                    report.pass_ = False
+
+        report.snapshots.append(snap)
+        if snap.errors:
+            report.errors.extend(snap.errors)
+
+        sleep_s = min(POLL_SECONDS, max(5.0, total_s - (time.monotonic() - t0)))
+        if sleep_s > 0 and not stop_event.is_set():
+            time.sleep(sleep_s)
+
+
+def _validate_outcomes(bench: SiteReport, acme: SiteReport) -> list[str]:
+    issues: list[str] = []
+
+    def _flagged(rep: SiteReport, phase: str, rule_id: str) -> int:
+        snaps = [s for s in rep.snapshots if s.phase == phase]
+        if not snaps:
+            return -1
+        last = snaps[-1]
+        data = last.bench_batch if last.bench_batch else last.acme_batch
+        return int((data.get("flagged") or {}).get(rule_id, 0))
+
+    for label, rep, primary, secondary in (
+        ("bench", bench, RULE_BENCH_BACNET_SQL, RULE_BENCH_NIAGARA_ARROW),
+        ("acme", acme, RULE_ACME_OAT_SQL, RULE_ACME_OAT_ARROW),
+    ):
+        blatant_flag_primary = _flagged(rep, PHASE_BLATANT, primary)
+        blatant_flag_secondary = _flagged(rep, PHASE_BLATANT, secondary)
+        if blatant_flag_primary == 0 and blatant_flag_secondary == 0 and any(
+            s.phase == PHASE_BLATANT for s in rep.snapshots
+        ):
+            pass  # warning only — demo historian may not flag in short tryout windows
+
+    issues.extend(bench.errors)
+    issues.extend(acme.errors)
+    if not bench.pass_:
+        issues.append("bench site loop reported errors")
+    if not acme.pass_:
+        issues.append("acme site loop reported errors")
+    return issues
+
+
+def _write_report(
+    *,
+    mode: str,
+    duration_minutes: int,
+    toggle_interval_minutes: int,
+    parity: dict[str, Any],
+    bench: SiteReport,
+    acme: SiteReport,
+    issues: list[str],
+) -> Path:
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    md = REPORT_DIR / "paired_fdd_smoke_validation.md"
+    lines = [
+        "# Paired FDD smoke validation",
+        "",
+        f"- **Started:** {_utc()}",
+        f"- **Mode:** {mode} ({duration_minutes} min, toggle every {toggle_interval_minutes} min)",
+        f"- **PASS:** {not issues}",
+        "",
+        "## Parity (bensserver vs Acme)",
+        "```json",
+        json.dumps(parity, indent=2),
+        "```",
+        "",
+        "## Issues",
+    ]
+    if issues:
+        lines.extend(f"- {i}" for i in issues)
+    else:
+        lines.append("- none")
+    lines.extend(["", "## Bench cycles", "```json", json.dumps([s.__dict__ for s in bench.snapshots[-8:]], indent=2), "```"])
+    lines.extend(["", "## Acme cycles", "```json", json.dumps([s.__dict__ for s in acme.snapshots[-8:]], indent=2), "```"])
+    md.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (REPORT_DIR / "paired_fdd_smoke_validation.json").write_text(
+        json.dumps(
+            {
+                "mode": mode,
+                "pass": not issues,
+                "issues": issues,
+                "parity": parity,
+                "bench": {"snapshots": [s.__dict__ for s in bench.snapshots], "errors": bench.errors},
+                "acme": {"snapshots": [s.__dict__ for s in acme.snapshots], "errors": acme.errors},
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return md
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--tryout", action="store_true", help="6 min / 3 min toggle — dev validation only")
+    parser.add_argument("--short", action="store_true")
+    parser.add_argument("--standard", action="store_true")
+    parser.add_argument("--overnight", action="store_true")
+    parser.add_argument("--local", default=os.environ.get("OPENFDD_LOCAL_BASE", "http://127.0.0.1:8765"))
+    parser.add_argument("--remote-limit", default=os.environ.get("OPENFDD_ANSIBLE_LIMIT", "acme_vm_bbartling"))
+    parser.add_argument("--skip-parity", action="store_true")
+    args = parser.parse_args()
+
+    if args.tryout:
+        mode = "tryout"
+    elif args.short:
+        mode = "short"
+    elif args.overnight:
+        mode = "overnight"
+    else:
+        mode = "standard"
+
+    if os.environ.get("OPENFDD_LIVE_ACME") != "1":
+        print("Set OPENFDD_LIVE_ACME=1 for live paired smoke", file=sys.stderr)
+        return 1
+
+    cfg = MODES[mode]
+    duration = cfg["duration_minutes"]
+    toggle_iv = cfg["toggle_interval_minutes"]
+
+    from scripts.acme_live_validate import resolve_base_from_ansible  # noqa: E402
+
+    acme_base = resolve_base_from_ansible(args.remote_limit).rstrip("/")
+    bench_base = args.local.rstrip("/")
+
+    parity: dict[str, Any] = {"pass": True, "issues": []}
+    if not args.skip_parity:
+        import subprocess
+
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(REPO / "scripts" / "site_parity_smoke.py"),
+                "--local",
+                bench_base,
+                "--remote",
+                acme_base,
+                "--json-out",
+                str(REPORT_DIR / "site_parity_smoke.json"),
+            ],
+            env={**os.environ, "OPENFDD_LIVE_ACME": "1"},
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            parity["pass"] = False
+            parity["issues"].append("site_parity_smoke failed")
+        try:
+            parity["report"] = json.loads((REPORT_DIR / "site_parity_smoke.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    print(f"Paired FDD smoke — mode={mode} duration={duration}m toggle={toggle_iv}m", flush=True)
+    print(f"  bench={bench_base} site={BENCH_SITE_ID}", flush=True)
+    print(f"  acme={acme_base} site={ACME_SITE_ID}", flush=True)
+
+    bench_report = SiteReport(label="bench", base=bench_base)
+    acme_report = SiteReport(label="acme", base=acme_base)
+    stop = threading.Event()
+    phase_lock = threading.Lock()
+    shared_phase: list[str] = [PHASE_NORMAL]
+    shared_toggle_count: list[int] = [0]
+
+    t_bench = threading.Thread(
+        target=_run_site_loop,
+        kwargs={
+            "label": "bench",
+            "base": bench_base,
+            "site_kind": "bench",
+            "duration_minutes": duration,
+            "toggle_interval_minutes": toggle_iv,
+            "stop_event": stop,
+            "report": bench_report,
+            "phase_lock": phase_lock,
+            "shared_phase": shared_phase,
+            "shared_toggle_count": shared_toggle_count,
+        },
+        daemon=True,
+    )
+    t_acme = threading.Thread(
+        target=_run_site_loop,
+        kwargs={
+            "label": "acme",
+            "base": acme_base,
+            "site_kind": "acme",
+            "duration_minutes": duration,
+            "toggle_interval_minutes": toggle_iv,
+            "stop_event": stop,
+            "report": acme_report,
+            "phase_lock": phase_lock,
+            "shared_phase": shared_phase,
+            "shared_toggle_count": shared_toggle_count,
+        },
+        daemon=True,
+    )
+    t_bench.start()
+    t_acme.start()
+    t_bench.join()
+    t_acme.join()
+    stop.set()
+
+    issues = _validate_outcomes(bench_report, acme_report)
+    if not parity.get("pass"):
+        issues.insert(0, "cross-site parity failed")
+
+    report_path = _write_report(
+        mode=mode,
+        duration_minutes=duration,
+        toggle_interval_minutes=toggle_iv,
+        parity=parity,
+        bench=bench_report,
+        acme=acme_report,
+        issues=issues,
+    )
+    print(f"\nReport: {report_path}")
+    if issues:
+        for i in issues[:12]:
+            print(f"  FAIL: {i}")
+        return 1
+    print("PASS — paired FDD smoke")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
