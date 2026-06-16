@@ -299,8 +299,6 @@ def get_building_insight(*, force: bool = False) -> dict[str, Any]:
 
     try:
         status = collect_status()
-        zone_snapshot = get_zone_temp_snapshot(force=True)
-        device_snapshot = get_device_poll_snapshot(force=True)
     except Exception as exc:
         return {
             "ok": False,
@@ -317,6 +315,29 @@ def get_building_insight(*, force: bool = False) -> dict[str, Any]:
             "faults_linked": [],
             "brick_model": {},
             "root_cause_hints": [],
+        }
+
+    try:
+        zone_snapshot = get_zone_temp_snapshot(force=True)
+    except Exception as exc:
+        zone_snapshot = {
+            "summary_sentence": "",
+            "error": str(exc)[:200],
+            "systems": [],
+            "worst_zones": [],
+            "struggling_zones": [],
+        }
+
+    try:
+        device_snapshot = get_device_poll_snapshot(force=True)
+    except Exception as exc:
+        device_snapshot = {
+            "summary_sentence": "",
+            "error": str(exc)[:200],
+            "healthy_count": 0,
+            "offline_equipment": [],
+            "flaky_equipment": [],
+            "degraded_equipment": [],
         }
 
     fault_lines = fault_sentences_from_alerts(status.get("alerts") or [])

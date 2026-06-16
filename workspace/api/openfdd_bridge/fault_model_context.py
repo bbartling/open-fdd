@@ -11,6 +11,7 @@ from .fdd_equipment import (
     equipment_from_rule_bindings,
     equipment_labels_for_columns,
     plain_symptom_from_rule_name,
+    site_display_name,
 )
 from .timeseries_api import historian_column_candidates, plot_column_name
 
@@ -125,6 +126,12 @@ def resolve_fault_model_context(
     if not ename and cols:
         names = equipment_labels_for_columns(model, site_id, cols)
         ename = names[0] if names else ""
+
+    if not ename and not eid and site_id:
+        ename = site_display_name(model, site_id)
+        eid = site_id
+        if not eq_type:
+            eq_type = "Building"
 
     eq = eq_index.get(eid) if eid else None
     if eq:
