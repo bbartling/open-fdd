@@ -67,7 +67,7 @@ Prereqs: local stack on `:8765`, Acme edge on matching GHCR image, `OPENFDD_LIVE
 
 ```bash
 OFDD_SKIP_UI_BUILD=1 ./scripts/run_local.sh start
-OPENFDD_IMAGE_TAG=3.1.4 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling
+OPENFDD_IMAGE_TAG=3.1.5 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling
 
 OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --tryout          # attached OK
 OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --short --detached
