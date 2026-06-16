@@ -47,6 +47,8 @@ if [[ "$DETACHED" == "1" ]]; then
   nohup "$0" "--${MODE}" "${CHILD[@]}" >>"$LOG" 2>&1 &
   echo $! >"$PIDFILE"
   echo "    pid: $(cat "$PIDFILE") (also in ${PIDFILE})"
+  echo "    status: /tmp/paired_fdd_smoke_${MODE}.status.json"
+  echo "    cycles: /tmp/paired_fdd_smoke_${MODE}_cycles.jsonl"
   echo "    tail -f ${LOG}"
   exit 0
 fi

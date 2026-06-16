@@ -49,14 +49,16 @@ OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --standard --detached
 OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --overnight --detached
 ```
 
-Logs: `/tmp/paired_fdd_smoke_<mode>_*.log` · PID file: `/tmp/paired_fdd_smoke_<mode>.pid` · `tail -f` the log to watch progress.
+Logs: `/tmp/paired_fdd_smoke_<mode>_*.log` · Status JSON: `/tmp/paired_fdd_smoke_<mode>.status.json` · Cycle log: `/tmp/paired_fdd_smoke_<mode>_cycles.jsonl` · PID file: `/tmp/paired_fdd_smoke_<mode>.pid`
 
-**Manual `nohup`** (equivalent):
+**Monitor outside Cursor** (tmux/SSH). The harness prints a **heartbeat every 5 minutes** (with smoke rule flagged counts and recent errors) and updates the status JSON after each 60s poll cycle. Do not run long `tail`/`watch` loops inside the IDE terminal — that can freeze Cursor.
 
 ```bash
-nohup env OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --overnight \
-  > /tmp/paired_fdd_overnight.log 2>&1 &
-echo $! > /tmp/paired_fdd_overnight.pid
+# One-shot checks (agent-safe)
+cat /tmp/paired_fdd_smoke_short.status.json
+wc -l /tmp/paired_fdd_smoke_short_cycles.jsonl
+kill -0 $(cat /tmp/paired_fdd_smoke_short.pid) && echo running || echo done
+grep -E 'PASS|FAIL|heartbeat' /tmp/paired_fdd_smoke_short_*.log | tail -5
 ```
 
 `--tryout` (6 min) may run attached for quick dev checks.

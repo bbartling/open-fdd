@@ -47,6 +47,84 @@ from open_fdd.validation.paired_fdd_contract import (  # noqa: E402
 
 REPORT_DIR = REPO / "reports"
 POLL_SECONDS = 60
+HEARTBEAT_SECONDS = 300
+
+
+def _status_path(mode: str) -> Path:
+    override = os.environ.get("OPENFDD_SMOKE_STATUS", "").strip()
+    if override:
+        return Path(override)
+    return Path(f"/tmp/paired_fdd_smoke_{mode}.status.json")
+
+
+def _write_status_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    tmp.replace(path)
+
+
+def _cycles_log_path(mode: str) -> Path:
+    override = os.environ.get("OPENFDD_SMOKE_CYCLES_LOG", "").strip()
+    if override:
+        return Path(override)
+    return Path(f"/tmp/paired_fdd_smoke_{mode}_cycles.jsonl")
+
+
+def _append_cycle_log(path: Path, record: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, default=str) + "\n")
+
+
+def _smoke_flagged(flagged: dict[str, Any]) -> dict[str, int]:
+    return {k: int(v) for k, v in flagged.items() if str(k).startswith("smoke-paired")}
+
+
+def _publish_status(
+    *,
+    status_path: Path,
+    status: dict[str, Any],
+    status_lock: threading.Lock,
+) -> dict[str, Any]:
+    with status_lock:
+        status["updated_at"] = _utc()
+        snap = dict(status)
+    _write_status_json(status_path, snap)
+    return snap
+
+
+def _heartbeat_loop(
+    *,
+    stop_event: threading.Event,
+    status_path: Path,
+    status: dict[str, Any],
+    status_lock: threading.Lock,
+    started_monotonic: float,
+    duration_minutes: int,
+) -> None:
+    while not stop_event.is_set():
+        if stop_event.wait(HEARTBEAT_SECONDS):
+            break
+        elapsed_min = (time.monotonic() - started_monotonic) / 60.0
+        with status_lock:
+            status["elapsed_minutes"] = round(elapsed_min, 1)
+        snap = _publish_status(status_path=status_path, status=status, status_lock=status_lock)
+        bench = snap.get("bench") or {}
+        acme = snap.get("acme") or {}
+        err_tail = snap.get("recent_errors") or []
+        err_hint = f" errors={len(err_tail)}" if err_tail else ""
+        print(
+            f"[smoke] heartbeat elapsed={elapsed_min:.1f}/{duration_minutes}m "
+            f"phase={snap.get('phase')} toggle={snap.get('toggle')} "
+            f"bench_cycle={bench.get('cycle', 0)} acme_cycle={acme.get('cycle', 0)} "
+            f"bench_smoke={bench.get('smoke_flagged') or {}} "
+            f"acme_smoke={acme.get('smoke_flagged') or {}} "
+            f"ok={snap.get('pass_so_far', True)}{err_hint}",
+            flush=True,
+        )
+        for err in err_tail[-3:]:
+            print(f"[smoke] heartbeat err: {err}", flush=True)
 
 
 @dataclass
@@ -168,6 +246,11 @@ def _run_site_loop(
     phase_lock: threading.Lock,
     shared_phase: list[str],
     shared_toggle_count: list[int],
+    status: dict[str, Any] | None = None,
+    status_lock: threading.Lock | None = None,
+    started_monotonic: float | None = None,
+    status_path: Path | None = None,
+    cycles_log_path: Path | None = None,
 ) -> None:
     try:
         token = _login(base)
@@ -253,6 +336,56 @@ def _run_site_loop(
         report.snapshots.append(snap)
         if snap.errors:
             report.errors.extend(snap.errors)
+
+        if status is not None and status_lock is not None:
+            flagged = {}
+            batch_summary = None
+            batch_data = snap.bench_batch if snap.bench_batch else snap.acme_batch
+            if batch_data:
+                flagged = dict(batch_data.get("flagged") or {})
+                batch_summary = batch_data.get("summary")
+            with status_lock:
+                status["phase"] = phase
+                status["toggle"] = shared_toggle_count[0]
+                if started_monotonic is not None:
+                    status["elapsed_minutes"] = round((time.monotonic() - started_monotonic) / 60.0, 1)
+                status[label] = {
+                    "cycle": cycle,
+                    "phase": phase,
+                    "ok": not snap.errors and report.pass_,
+                    "last_errors": snap.errors[-3:],
+                    "flagged": flagged,
+                    "smoke_flagged": _smoke_flagged(flagged),
+                    "batch_summary": batch_summary,
+                    "timestamp": snap.timestamp,
+                }
+                if snap.errors:
+                    recent = list(status.get("recent_errors") or [])
+                    for err in snap.errors:
+                        recent.append(f"[{label}] cycle={cycle}: {err}")
+                    status["recent_errors"] = recent[-20:]
+                status["pass_so_far"] = all(
+                    status.get(site, {}).get("ok", True)
+                    for site in ("bench", "acme")
+                    if isinstance(status.get(site), dict)
+                )
+            if status_path is not None:
+                _publish_status(status_path=status_path, status=status, status_lock=status_lock)
+            if cycles_log_path is not None:
+                _append_cycle_log(
+                    cycles_log_path,
+                    {
+                        "timestamp": snap.timestamp,
+                        "site": label,
+                        "cycle": cycle,
+                        "phase": phase,
+                        "toggle": shared_toggle_count[0],
+                        "flagged": flagged,
+                        "smoke_flagged": _smoke_flagged(flagged),
+                        "batch_summary": batch_summary,
+                        "errors": snap.errors,
+                    },
+                )
 
         sleep_s = min(POLL_SECONDS, max(5.0, total_s - (time.monotonic() - t0)))
         if sleep_s > 0 and not stop_event.is_set():
@@ -409,8 +542,46 @@ def main() -> int:
     acme_report = SiteReport(label="acme", base=acme_base)
     stop = threading.Event()
     phase_lock = threading.Lock()
+    status_lock = threading.Lock()
     shared_phase: list[str] = [PHASE_NORMAL]
     shared_toggle_count: list[int] = [0]
+    started_mono = time.monotonic()
+    status_path = _status_path(mode)
+    cycles_log_path = _cycles_log_path(mode)
+    shared_status: dict[str, Any] = {
+        "mode": mode,
+        "started_at": _utc(),
+        "duration_minutes": duration,
+        "toggle_interval_minutes": toggle_iv,
+        "elapsed_minutes": 0.0,
+        "phase": PHASE_NORMAL,
+        "toggle": 0,
+        "bench": {"cycle": 0, "ok": True},
+        "acme": {"cycle": 0, "ok": True},
+        "pass_so_far": True,
+        "recent_errors": [],
+        "status_file": str(status_path),
+        "cycles_log": str(cycles_log_path),
+        "log_hint": f"tail -f /tmp/paired_fdd_smoke_{mode}_*.log",
+        "bench_base": bench_base,
+        "acme_base": acme_base,
+        "pid": os.getpid(),
+    }
+    _write_status_json(status_path, shared_status)
+
+    t_heartbeat = threading.Thread(
+        target=_heartbeat_loop,
+        kwargs={
+            "stop_event": stop,
+            "status_path": status_path,
+            "status": shared_status,
+            "status_lock": status_lock,
+            "started_monotonic": started_mono,
+            "duration_minutes": duration,
+        },
+        daemon=True,
+    )
+    t_heartbeat.start()
 
     t_bench = threading.Thread(
         target=_run_site_loop,
@@ -425,6 +596,11 @@ def main() -> int:
             "phase_lock": phase_lock,
             "shared_phase": shared_phase,
             "shared_toggle_count": shared_toggle_count,
+            "status": shared_status,
+            "status_lock": status_lock,
+            "started_monotonic": started_mono,
+            "status_path": status_path,
+            "cycles_log_path": cycles_log_path,
         },
         daemon=True,
     )
@@ -441,6 +617,11 @@ def main() -> int:
             "phase_lock": phase_lock,
             "shared_phase": shared_phase,
             "shared_toggle_count": shared_toggle_count,
+            "status": shared_status,
+            "status_lock": status_lock,
+            "started_monotonic": started_mono,
+            "status_path": status_path,
+            "cycles_log_path": cycles_log_path,
         },
         daemon=True,
     )
@@ -453,6 +634,19 @@ def main() -> int:
     issues = _validate_outcomes(bench_report, acme_report)
     if not parity.get("pass"):
         issues.insert(0, "cross-site parity failed")
+
+    passed = not issues
+    with status_lock:
+        shared_status["finished_at"] = _utc()
+        shared_status["elapsed_minutes"] = round((time.monotonic() - started_mono) / 60.0, 1)
+        shared_status["pass"] = passed
+        shared_status["issues"] = issues[:20]
+        if issues:
+            recent = list(shared_status.get("recent_errors") or [])
+            for issue in issues[:10]:
+                recent.append(f"[final] {issue}")
+            shared_status["recent_errors"] = recent[-20:]
+        _write_status_json(status_path, dict(shared_status))
 
     report_path = _write_report(
         mode=mode,
