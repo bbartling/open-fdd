@@ -104,8 +104,14 @@ def zn_t_bounds_sql(low: float, high: float, column: str = BENCH_VALUE_COLUMN) -
 
 
 def oat_spread_sql(max_spread_f: float, local: str = "oa-t", web: str = "web-oat-t") -> str:
+    l = _sql_quote(local)
+    w = _sql_quote(web)
+    spread = float(max_spread_f)
     return (
-        f"SELECT *, abs({_sql_quote(local)} - {_sql_quote(web)}) > {float(max_spread_f)} AS fault "
+        "SELECT *, CASE "
+        f'WHEN {l} IS NOT NULL AND {w} IS NOT NULL '
+        f"AND abs({l} - {w}) > {spread} THEN true "
+        "ELSE false END AS fault "
         "FROM telemetry"
     )
 

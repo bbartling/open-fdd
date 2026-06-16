@@ -29,8 +29,8 @@ def test_bench_bounds_sql_matches_phases():
 def test_acme_spread_sql_tight_vs_normal():
     loose = oat_spread_sql(10.0)
     tight = oat_spread_sql(0.001)
-    assert "> 10.0" in loose
-    assert "> 0.001" in tight
+    assert "10.0" in loose and "IS NOT NULL" in loose
+    assert "0.001" in tight
 
 
 def test_bench_rules_include_both_backends():
