@@ -38,23 +38,21 @@ Use **GHCR** ([GitHub Container Registry](https://docs.github.com/en/packages/wo
 | [`ghcr.io/bbartling/openfdd-commission`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-commission) | BACnet discover, read, poll |
 | [`ghcr.io/bbartling/openfdd-mcp-rag`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp-rag) | MCP + doc-search |
 
-**Prefer pinned release tags in production** (not floating `latest`). Set `OPENFDD_IMAGE_TAG` / `--image-tag` / `NEW_TAG` to the current release (today **3.1.3** — bump these on every release):
+**New edge host** (no git clone — pulls `latest` from GHCR):
 
 ```bash
-# Bootstrap a new edge host (no git clone) — creates ~/open-fdd, auth.env.local, BACnet bind
 curl -fsSL -o /tmp/openfdd_edge_bootstrap.sh \
   https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_edge_bootstrap.sh
-OPENFDD_IMAGE_TAG=3.1.3 bash /tmp/openfdd_edge_bootstrap.sh --start --image-tag 3.1.3
-
-# Update an existing site — backup workspace, pull pinned GHCR tags, recreate containers
-cd ~/open-fdd
-./scripts/openfdd_site_backup.sh
-NEW_TAG=3.1.3 ./scripts/openfdd_site_update.sh
+bash /tmp/openfdd_edge_bootstrap.sh --start
 ```
 
-From a repo checkout: `./scripts/openfdd_edge_bootstrap.sh --start --image-tag 3.1.3`
+**Update an existing site** (backup workspace, pull `latest`, recreate containers):
 
-Edge bootstrap: [Run with Docker images](https://bbartling.github.io/open-fdd/quick-start/docker/) · Site updates: [Updating the stack](https://bbartling.github.io/open-fdd/quick-start/updating/)
+```bash
+cd ~/open-fdd
+./scripts/openfdd_site_backup.sh
+./scripts/openfdd_site_update.sh
+```
 
 ### Python package (PyPI)
 
