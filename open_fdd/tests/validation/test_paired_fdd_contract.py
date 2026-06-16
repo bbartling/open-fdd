@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from open_fdd.validation.paired_fdd_contract import (
+    ACME_LOCAL_OAT_POINT_ID,
     ACME_SPREAD_CFG,
     CONFIRMATION_CFG,
     PHASE_BLATANT,
@@ -46,4 +47,5 @@ def test_bench_rules_include_both_backends():
 def test_acme_rules_pair():
     rules = acme_rules_for_phase(PHASE_BLATANT)
     assert len(rules) == 2
+    assert rules[0]["bindings"]["point_ids"] == [ACME_LOCAL_OAT_POINT_ID]
     assert float(rules[0]["config"]["max_spread_f"]) == float(ACME_SPREAD_CFG[PHASE_BLATANT]["max_spread_f"])
