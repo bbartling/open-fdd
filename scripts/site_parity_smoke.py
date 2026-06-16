@@ -88,7 +88,7 @@ def _login(base: str, user: str, password: str) -> str | None:
 
 
 def resolve_remote_base(limit: str) -> str:
-    sys.path.insert(0, str(REPO / "workspace" / "api"))
+    sys.path.insert(0, str(REPO))
     from scripts.acme_live_validate import resolve_base_from_ansible  # noqa: E402
 
     return resolve_base_from_ansible(limit).rstrip("/")
@@ -105,9 +105,9 @@ def probe_site(label: str, base: str, *, token: str | None = None) -> SiteProbe:
     st2, stack = _fetch_json(f"{out.base}/health/stack", token=token)
     if st2 == 200 and isinstance(stack, dict):
         out.stack = stack
-    elif st2 == 401:
-        out.errors.append("health/stack requires auth (expected on some configs)")
-    elif st2 != 200:
+    elif st2 == 401 and token:
+        out.errors.append("health/stack auth failed (bad token?)")
+    elif st2 not in (200, 401):
         out.errors.append(f"health/stack HTTP {st2}")
 
     st3, html = _fetch_text(f"{out.base}/")
@@ -159,7 +159,6 @@ def main() -> int:
     args = parser.parse_args()
 
     remote_base = args.remote.strip() or resolve_remote_base(args.remote_limit)
-    local = probe_site("bensserver", args.local)
 
     token: str | None = None
     auth_env = REPO / "workspace" / "auth.env.local"
@@ -170,8 +169,9 @@ def main() -> int:
 
         user, password = resolve_credentials(auth_env, acme_secrets if acme_secrets.is_file() else None)
         if user and password:
-            token = _login(remote_base, user, password)
+            token = _login(args.local.rstrip("/"), user, password)
 
+    local = probe_site("bensserver", args.local, token=token)
     remote = probe_site("acme", remote_base, token=token)
     issues = compare(local, remote)
 
