@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ..building_alerts import load_alerts, replace_alerts
 from ..building_status import collect_status, public_dashboard_snapshot
 from ..deps import require_roles, require_user
 from ..portfolio_rollup import build_portfolio_rollup
+from ..security import clients_must_authenticate, public_dashboard_ws_allowed
 
 router = APIRouter(prefix="/api/building", tags=["building"])
 
@@ -31,6 +32,15 @@ class AlertsBody(BaseModel):
 @router.get("/snapshot")
 def building_snapshot(_user: dict = Depends(require_user)) -> dict:
     """Dashboard payload: stack status strip + live fault tree (authenticated)."""
+    snap = public_dashboard_snapshot()
+    return {"ok": True, **snap}
+
+
+@router.get("/public-snapshot")
+def building_public_snapshot() -> dict:
+    """Read-only dashboard faults for wall displays / anonymous viewers."""
+    if clients_must_authenticate() and not public_dashboard_ws_allowed():
+        raise HTTPException(status_code=401, detail="unauthorized")
     snap = public_dashboard_snapshot()
     return {"ok": True, **snap}
 

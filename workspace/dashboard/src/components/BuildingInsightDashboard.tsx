@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiFetch } from "../lib/api";
+import { apiFetch, hasToken } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import { useDashboardStream } from "../lib/dashboardStream";
-import { buildDisplayFaults, countBySeverity, type DisplayFault } from "../lib/displayFaults";
+import { buildDisplayFaults, countBySeverity, faultAlertIds, type DisplayFault } from "../lib/displayFaults";
 import { computeBuildingHealthIndex } from "../lib/healthScores";
 import BuildingStrip from "./buildingInsight/BuildingStrip";
 import ComfortZonePanel from "./buildingInsight/ComfortZonePanel";
@@ -32,6 +32,10 @@ export default function BuildingInsightDashboard() {
   const [insightError, setInsightError] = useState("");
   const [insightLoading, setInsightLoading] = useState(false);
   const [selectedFault, setSelectedFault] = useState<DisplayFault | null>(null);
+  const [canClearAlarms, setCanClearAlarms] = useState(false);
+  const [clearingId, setClearingId] = useState<string | null>(null);
+  const [clearError, setClearError] = useState("");
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
 
   const loadInsight = useCallback(async (force = false) => {
     setInsightLoading(true);
@@ -59,11 +63,51 @@ export default function BuildingInsightDashboard() {
       .catch(() => setBuildingMeta(null));
   }, [snapshot?.faults.alert_count]);
 
+  useEffect(() => {
+    if (!hasToken()) {
+      setCanClearAlarms(false);
+      return;
+    }
+    apiFetch<{ role?: string }>("/api/auth/me")
+      .then((me) => {
+        const role = String(me.role || "").toLowerCase();
+        setCanClearAlarms(role === "operator" || role === "integrator" || role === "agent");
+      })
+      .catch(() => setCanClearAlarms(false));
+  }, [snapshot?.faults.alert_count]);
+
+  const clearFault = useCallback(async (fault: DisplayFault) => {
+    setClearError("");
+    setClearingId(fault.id);
+    try {
+      await apiFetch("/api/faults/clear", {
+        method: "POST",
+        body: JSON.stringify({ alert_ids: faultAlertIds(fault) }),
+      });
+      setDismissedIds((prev) => {
+        const next = new Set(prev);
+        next.add(fault.id);
+        for (const id of faultAlertIds(fault)) next.add(id);
+        return next;
+      });
+      if (selectedFault?.id === fault.id) setSelectedFault(null);
+    } catch (e) {
+      setClearError(formatApiError(e));
+    } finally {
+      setClearingId(null);
+    }
+  }, [selectedFault?.id]);
+
   const faults = snapshot?.faults;
-  const displayFaults = useMemo(
-    () => buildDisplayFaults(faults?.families || []),
-    [faults?.families],
-  );
+  const displayFaults = useMemo(() => {
+    const built = buildDisplayFaults(faults?.families || []);
+    if (!dismissedIds.size) return built;
+    return built.filter(
+      (f) =>
+        !dismissedIds.has(f.id) &&
+        !f.underlying.some((u) => dismissedIds.has(String(u.id || ""))),
+    );
+  }, [faults?.families, dismissedIds]);
   const sevCounts = useMemo(() => countBySeverity(displayFaults), [displayFaults]);
 
   const poll = insight?.device_poll_health;
@@ -229,19 +273,36 @@ export default function BuildingInsightDashboard() {
           {displayFaults.length ? (
             <div className="bis-fault-list">
               {displayFaults.slice(0, 12).map((f) => (
-                <FaultCard key={f.id} fault={f} onSelect={setSelectedFault} />
+                <FaultCard
+                  key={f.id}
+                  fault={f}
+                  onSelect={setSelectedFault}
+                  canClear={canClearAlarms}
+                  clearing={clearingId === f.id}
+                  onClear={(fault) => void clearFault(fault)}
+                />
               ))}
             </div>
           ) : (
             <p className="bis-lead bis-ok-text">All clear — no open faults or model warnings.</p>
           )}
+          {clearError ? <p className="error">{clearError}</p> : null}
+          {!canClearAlarms && displayFaults.length ? (
+            <p className="muted bis-fault-readonly-hint">Sign in as operator to clear alarms.</p>
+          ) : null}
           {insightError ? <p className="error">{insightError}</p> : null}
         </div>
 
         <FddRulesInServicePanel />
       </div>
 
-      <FaultDetailModal fault={selectedFault} onClose={() => setSelectedFault(null)} />
+      <FaultDetailModal
+        fault={selectedFault}
+        onClose={() => setSelectedFault(null)}
+        canClear={canClearAlarms}
+        clearing={selectedFault ? clearingId === selectedFault.id : false}
+        onClear={(fault) => void clearFault(fault)}
+      />
     </div>
   );
 }

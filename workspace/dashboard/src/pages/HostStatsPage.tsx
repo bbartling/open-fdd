@@ -219,6 +219,13 @@ export default function HostStatsPage() {
   }
 
   async function runReset() {
+    if (
+      !window.confirm(
+        "Nuclear reset will permanently delete the selected edge data on this host. This cannot be undone. Continue?",
+      )
+    ) {
+      return;
+    }
     setResetBusy(true);
     try {
       const res = await apiFetch<PoogePreview>("/api/host/pooge/run", {
@@ -390,7 +397,9 @@ export default function HostStatsPage() {
             <div className="panel muted">Data disk metrics unavailable on this host.</div>
           )}
 
-          <div className="panel">
+          <div
+            className={`panel host-ollama-panel ${!stats.ollama.api_ok || !stats.ollama.interactive_chat_enabled ? "host-ollama-disabled" : ""}`}
+          >
             <h3 className="panel-title">Ollama (API health)</h3>
             <div className="host-ollama-grid">
               <div className="status-kv">
@@ -500,45 +509,70 @@ export default function HostStatsPage() {
             </div>
           ) : null}
 
-          <div className="panel danger-zone">
-            <h3 className="panel-title">Danger zone — nuclear reset</h3>
-            <p className="muted">
-              <strong>Clear edge data and polling scratch</strong> for temporary job-site devices. Integrator only.
-              Clears historian, driver poll buffers, optional model/rules — not OS packages or containers.
-              Type <code>RESET THIS EDGE</code> to run for real. Dry-run is on by default.
+          <div className="panel danger-zone pooge-panel">
+            <div className="pooge-header">
+              <div>
+                <h3 className="panel-title">Edge data reset</h3>
+                <p className="pooge-subtitle">Integrator-only · clears job-site scratch data, not OS packages</p>
+              </div>
+              <span className="pooge-badge">Danger zone</span>
+            </div>
+            <p className="muted pooge-lead">
+              Use when decommissioning temporary bench devices. Dry-run previews targets first. Type{" "}
+              <code>RESET THIS EDGE</code> to arm the live reset.
             </p>
-            <label>
-              <input type="checkbox" checked={resetDryRun} onChange={(e) => setResetDryRun(e.target.checked)} />
-              Dry-run preview (no deletes)
-            </label>
-            <div className="host-info-grid">
-              <label><input type="checkbox" checked={resetClearHistorian} onChange={(e) => setResetClearHistorian(e.target.checked)} /> Clear historian</label>
-              <label><input type="checkbox" checked={resetClearBacnet} onChange={(e) => setResetClearBacnet(e.target.checked)} /> Clear BACnet / Niagara poll scratch</label>
-              <label><input type="checkbox" checked={resetClearModel} onChange={(e) => setResetClearModel(e.target.checked)} /> Clear BRICK model</label>
-              <label><input type="checkbox" checked={resetClearRules} onChange={(e) => setResetClearRules(e.target.checked)} /> Clear rules &amp; FDD results</label>
-              <label><input type="checkbox" checked={resetClearExports} onChange={(e) => setResetClearExports(e.target.checked)} /> Clear exports</label>
+            <div className="pooge-mode-row">
+              <label className="pooge-toggle">
+                <input type="checkbox" checked={resetDryRun} onChange={(e) => setResetDryRun(e.target.checked)} />
+                <span>Dry-run preview (no deletes)</span>
+              </label>
             </div>
-            <div className="field">
+            <div className="pooge-options">
+              <label className="pooge-option"><input type="checkbox" checked={resetClearHistorian} onChange={(e) => setResetClearHistorian(e.target.checked)} /><span>Historian</span></label>
+              <label className="pooge-option"><input type="checkbox" checked={resetClearBacnet} onChange={(e) => setResetClearBacnet(e.target.checked)} /><span>BACnet / Niagara poll scratch</span></label>
+              <label className="pooge-option"><input type="checkbox" checked={resetClearModel} onChange={(e) => setResetClearModel(e.target.checked)} /><span>BRICK model</span></label>
+              <label className="pooge-option"><input type="checkbox" checked={resetClearRules} onChange={(e) => setResetClearRules(e.target.checked)} /><span>Rules &amp; FDD results</span></label>
+              <label className="pooge-option"><input type="checkbox" checked={resetClearExports} onChange={(e) => setResetClearExports(e.target.checked)} /><span>Exports</span></label>
+            </div>
+            <div className="field pooge-confirm-field">
               <label className="field-label">Confirmation phrase</label>
-              <input value={resetConfirm} onChange={(e) => setResetConfirm(e.target.value)} placeholder="RESET THIS EDGE" />
+              <input
+                className="pooge-confirm-input"
+                value={resetConfirm}
+                onChange={(e) => setResetConfirm(e.target.value)}
+                placeholder="RESET THIS EDGE"
+                autoComplete="off"
+                spellCheck={false}
+              />
             </div>
-            <div className="toolbar">
+            <div className="toolbar pooge-actions">
               <button type="button" className="secondary-btn" disabled={resetBusy} onClick={() => void previewReset()}>
                 Preview actions
               </button>
-              <button type="button" className="danger-btn" disabled={resetBusy || resetDryRun} onClick={() => void runReset()}>
-                Nuclear reset device data
+              <button
+                type="button"
+                className="danger-btn"
+                disabled={resetBusy || resetDryRun || resetConfirm.trim() !== "RESET THIS EDGE"}
+                onClick={() => void runReset()}
+              >
+                {resetBusy ? "Running…" : "Run nuclear reset"}
               </button>
             </div>
             {resetPreview?.targets?.length ? (
-              <ul className="muted">
-                {resetPreview.targets.map((t, i) => (
-                  <li key={i}>{t.label || t.action}{t.path ? ` — ${t.path}` : ""}</li>
-                ))}
-              </ul>
+              <div className="pooge-preview">
+                <h4>Preview targets</h4>
+                <ul className="pooge-target-list">
+                  {resetPreview.targets.map((t, i) => (
+                    <li key={i}>
+                      <strong>{t.label || t.action}</strong>
+                      {t.path ? <span className="mono muted"> {t.path}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : null}
             {resetPreview?.audit?.length ? (
-              <pre className="muted">{resetPreview.audit.join("\n")}</pre>
+              <pre className="pooge-audit muted">{resetPreview.audit.join("\n")}</pre>
             ) : null}
           </div>
 

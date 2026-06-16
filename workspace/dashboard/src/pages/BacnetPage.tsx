@@ -532,35 +532,35 @@ export default function BacnetPage() {
   }
 
   async function deletePoint(pointId: string) {
-    if (!window.confirm("Remove this point from the driver?")) return;
     setActionError("");
+    const prev = driverDevices;
+    setDriverDevices((devices) =>
+      devices.map((d) => ({
+        ...d,
+        points: d.points.filter((p) => p.point_id !== pointId),
+      })),
+    );
     try {
       await apiFetch(`/api/bacnet/driver/point/${encodeURIComponent(pointId)}`, { method: "DELETE" });
-      await loadDriverTree();
     } catch (e) {
+      setDriverDevices(prev);
       setActionError(formatApiError(e));
     }
   }
 
   async function deleteDevice(instance: number) {
-    if (!window.confirm(`Remove device ${instance} and all its points?`)) return;
     setActionError("");
+    const prev = driverDevices;
+    setDriverDevices((devices) => devices.filter((d) => d.device_instance !== instance));
     try {
       await apiFetch(`/api/bacnet/driver/device/${instance}`, { method: "DELETE" });
-      await loadDriverTree();
     } catch (e) {
+      setDriverDevices(prev);
       setActionError(formatApiError(e));
     }
   }
 
   async function clearRegistry() {
-    if (
-      !window.confirm(
-        "Clear ALL BACnet devices? This removes driver CSVs, poll samples, and BACnet rows from the data model. Sites and manually modeled equipment are kept.",
-      )
-    ) {
-      return;
-    }
     setActionError("");
     setStatusMsg("");
     try {

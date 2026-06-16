@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from .building_alerts import load_alerts, merge_auto_issues
+from .fault_alarm_latch import apply_alarm_latch
 from .device_poll_health import get_device_poll_snapshot, poll_health_alerts
 
 try:
@@ -46,7 +47,8 @@ def collect_status() -> dict[str, Any]:
     except Exception:
         override_alerts = []
 
-    all_alerts = merged["alerts"] + fdd_alerts + poll_alerts + override_alerts
+    live_alerts = merged["alerts"] + fdd_alerts + poll_alerts + override_alerts
+    all_alerts = apply_alarm_latch(live_alerts)
     status = merged["status"]
     if (fdd_alerts or poll_alerts or override_alerts) and status == "ok":
         status = "warning"
@@ -178,14 +180,5 @@ def dashboard_snapshot(*, redacted: bool = False) -> dict[str, Any]:
     stack = status["stack"]
     if redacted:
         stack = redact_stack_health(stack)
-        faults = {
-            "status": status["status"],
-            "traffic": status["traffic"],
-            "check_engine": status["status"] != "ok",
-            "alert_count": len(status.get("alerts", [])),
-            "model_configured": bool(status.get("model_configured")),
-            "families": [],
-        }
-    else:
-        faults = faults_by_family(status)
+    faults = faults_by_family(status)
     return {"stack": stack, "faults": faults}

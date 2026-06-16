@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import FddRuleTestPanel from "../components/FddRuleTestPanel";
 import PythonCodeEditor from "../components/PythonCodeEditor";
+import SqlCodeEditor from "../components/SqlCodeEditor";
 import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
 import { apiDownloadBlob, apiFetch, fetchAuthMe, getBridgeBase } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
@@ -1006,17 +1007,14 @@ export default function RuleLabPage() {
                 }}
               />
             </details>
-            <textarea
-              className="sql-rule-editor"
-              rows={16}
-              spellCheck={false}
+            <SqlCodeEditor
               value={sql}
-              disabled={busy || authRole === "operator"}
-              onChange={(e) => {
-                setSql(e.target.value);
+              onChange={(value) => {
+                setSql(value);
                 setMetaDirty(true);
               }}
-              placeholder={sqlThresholdTemplate("value")}
+              height="340px"
+              readOnly={busy || authRole === "operator"}
             />
             {sqlPreview?.ok === false && sqlPreview.datafusion_installed === false ? (
               <p className="error panel">

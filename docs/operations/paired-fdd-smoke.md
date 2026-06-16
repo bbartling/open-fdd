@@ -37,18 +37,42 @@ A condition must stay true for **~5 minutes** before it counts as a confirmed fa
 
 Toggles alternate **normal** ↔ **blatant** fault parameters via the rules API (same as an operator or AI agent adjusting thresholds mid-run).
 
+## Run detached (required for in-depth runs)
+
+Bench **5007** + **Acme** paired smoke runs for **30 minutes to 12 hours**. Always start **short**, **standard**, and **overnight** **detached** — from a plain terminal or via `--detached` — so Cursor, SSH, or IDE disconnects do not kill the harness.
+
+**Recommended** (wrapper re-invokes itself under `nohup`):
+
+```bash
+OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --short --detached
+OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --standard --detached
+OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --overnight --detached
+```
+
+Logs: `/tmp/paired_fdd_smoke_<mode>_*.log` · PID file: `/tmp/paired_fdd_smoke_<mode>.pid` · `tail -f` the log to watch progress.
+
+**Manual `nohup`** (equivalent):
+
+```bash
+nohup env OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --overnight \
+  > /tmp/paired_fdd_overnight.log 2>&1 &
+echo $! > /tmp/paired_fdd_overnight.pid
+```
+
+`--tryout` (6 min) may run attached for quick dev checks.
+
 ## Run
 
-Prereqs: local stack on `:8765`, Acme edge on latest image, `OPENFDD_LIVE_ACME=1`.
+Prereqs: local stack on `:8765`, Acme edge on matching GHCR image, `OPENFDD_LIVE_ACME=1`.
 
 ```bash
 OFDD_SKIP_UI_BUILD=1 ./scripts/run_local.sh start
-OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling
+OPENFDD_IMAGE_TAG=3.1.4 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling
 
-OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --tryout   # dev
-OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --short      # 30 min
-OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --standard   # 2 h
-OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --overnight  # 12 h
+OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --tryout          # attached OK
+OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --short --detached
+OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --standard --detached
+OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --overnight --detached
 ```
 
 `scripts/smoke_sites_parity.sh` delegates to this harness.
