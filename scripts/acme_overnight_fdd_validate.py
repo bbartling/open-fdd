@@ -245,7 +245,10 @@ def run_cycle(
     st_ins, insight, _ = client.get_json("/openfdd-agent/building-insight")
     result["checks"]["building_insight"] = {
         "http": st_ins,
-        "ok": st_ins == 200 and not (isinstance(insight, dict) and insight.get("source") == "error"),
+        "ok": st_ins == 200
+        and isinstance(insight, dict)
+        and insight.get("ok", True) is not False
+        and insight.get("source") != "error",
         "error": str((insight or {}).get("error") or "")[:200] if isinstance(insight, dict) else "",
     }
     if st_ins >= 500:

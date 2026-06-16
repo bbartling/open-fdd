@@ -166,6 +166,26 @@ class StorageChunk:
     size_bytes: int
 
 
+def _concat_arrow_tables(tables: list[Any]) -> Any:
+    """Merge feather shards; promote mixed int/float columns (e.g. web-oat-t)."""
+    import pyarrow as pa
+
+    if len(tables) == 1:
+        return tables[0]
+    try:
+        return pa.concat_tables(tables, promote_options="permissive")
+    except (pa.ArrowInvalid, TypeError, ValueError) as exc:
+        _log.warning("Arrow permissive concat failed (%s); falling back to pandas unify", exc)
+    frames = [t.to_pandas() for t in tables]
+    combined = pd.concat(frames, ignore_index=True, sort=False)
+    for col in combined.columns:
+        if col in {"timestamp", "site_id"}:
+            continue
+        if combined[col].dtype == object or str(combined[col].dtype).startswith(("int", "float", "Int", "Float")):
+            combined[col] = pd.to_numeric(combined[col], errors="coerce")
+    return pa.Table.from_pandas(combined, preserve_index=False)
+
+
 @dataclass
 class FeatherStore:
     root: Path = field(default_factory=lambda: data_dir() / "feather_store")
@@ -262,7 +282,6 @@ class FeatherStore:
             return None
         col_list = _column_list(columns)
         if _USE_FEATHER:
-            import pyarrow as pa
             import pyarrow.feather as feather
 
             _apply_arrow_thread_env()
@@ -274,9 +293,7 @@ class FeatherStore:
                     _log.warning("Skipping unreadable feather shard %s: %s", path, exc)
             if not tables:
                 return None
-            if len(tables) == 1:
-                return tables[0]
-            return pa.concat_tables(tables, promote_options="default")
+            return _concat_arrow_tables(tables)
 
         frames: list[pd.DataFrame] = []
         for path in files:
@@ -286,7 +303,13 @@ class FeatherStore:
                 _log.warning("Skipping unreadable feather shard %s: %s", path, exc)
         if not frames:
             return None
-        return pd.concat(frames, ignore_index=True)
+        combined = pd.concat(frames, ignore_index=True, sort=False)
+        for col in combined.columns:
+            if col in {"timestamp", "site_id"}:
+                continue
+            if combined[col].dtype == object or str(combined[col].dtype).startswith(("int", "float", "Int", "Float")):
+                combined[col] = pd.to_numeric(combined[col], errors="coerce")
+        return combined
 
     def write_shard(self, df: pd.DataFrame, *, source: str, site_id: str) -> Path:
         site = self.site_dir(source, site_id)

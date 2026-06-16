@@ -49,6 +49,14 @@ def _rules_by_id() -> dict[str, dict[str, Any]]:
     return _RULE_STORE_CACHE
 
 
+def site_display_name(model: dict[str, Any], site_id: str) -> str:
+    for site in model.get("sites") or []:
+        if isinstance(site, dict) and str(site.get("id") or "") == str(site_id or ""):
+            return str(site.get("name") or site_id or "Building").strip()
+    sid = str(site_id or "").strip()
+    return sid or "Building"
+
+
 def plain_symptom_from_rule_name(rule_name: str) -> str:
     """Source-agnostic symptom label (strip Niagara/BACnet bench prefixes)."""
     name = str(rule_name or "").strip()
@@ -187,6 +195,12 @@ def enrich_fdd_run_with_equipment(
             ids.append(eid)
     if not names and not ids:
         names, ids = equipment_from_rule_bindings(model, site_id, str(run.get("rule_id") or ""))
+    flagged = int(run.get("flagged") or run.get("fault_rows") or 0)
+    if flagged > 0 and not names and not ids:
+        label = site_display_name(model, site_id)
+        names = [label]
+        if site_id:
+            ids = [site_id]
     if not names and ids:
         eq_index = _equipment_index(model, site_id)
         for eid in ids:
