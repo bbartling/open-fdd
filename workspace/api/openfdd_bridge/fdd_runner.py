@@ -121,6 +121,8 @@ def _columns_for_site_rules(model: dict[str, Any], site_id: str, rules: list[dic
             "value_column",
             "column",
             "zone_avg_cols",
+            "local_oat_column",
+            "web_oat_column",
         ):
             raw = cfg.get(key)
             if isinstance(raw, str) and raw.strip():
