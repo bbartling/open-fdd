@@ -1,6 +1,6 @@
 # Publish Open-FDD edge images to GHCR.
 # Tags: vX.Y.Z / open-fdd-vX.Y.Z → versioned + minor + latest
-# workflow_dispatch → latest (maintainer manual)
+# workflow_dispatch → pyproject.toml version + minor + latest (optional image_tag override)
 # Ordinary branch pushes do NOT publish.
 
 name: Publish Docker images to GHCR
@@ -13,9 +13,9 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Local build tag before push (default latest)"
+        description: "Optional SemVer override (default reads version from pyproject.toml)"
         required: false
-        default: "latest"
+        default: ""
       keep_versions:
         description: "GHCR versions to retain per image"
         required: false
@@ -37,20 +37,28 @@ jobs:
       build_tag: ${{ steps.meta.outputs.build_tag }}
       publish_release_tags: ${{ steps.meta.outputs.publish_release_tags }}
     steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
       - id: meta
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            ver="${GITHUB_REF_NAME#v}"
-            echo "build_tag=${ver}" >> "$GITHUB_OUTPUT"
-            echo "publish_release_tags=1" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.ref }}" == refs/tags/open-fdd-v* ]]; then
-            ver="${GITHUB_REF_NAME#open-fdd-v}"
-            echo "build_tag=${ver}" >> "$GITHUB_OUTPUT"
+          chmod +x scripts/resolve_ghcr_publish_tag.sh
+          # shellcheck source=/dev/null
+          source scripts/resolve_ghcr_publish_tag.sh
+          ref="${GITHUB_REF_NAME}"
+          ver="$(resolve_ghcr_publish_tag "${ref}" "${{ inputs.image_tag || '' }}")"
+          if [[ -z "$ver" ]]; then
+            echo "Could not resolve GHCR publish version (pyproject.toml or image_tag)" >&2
+            exit 1
+          fi
+          echo "build_tag=${ver}" >> "$GITHUB_OUTPUT"
+          if ghcr_publish_release_tags_enabled "${ref}" "${{ github.event_name }}"; then
             echo "publish_release_tags=1" >> "$GITHUB_OUTPUT"
           else
-            echo "build_tag=${{ inputs.image_tag || 'latest' }}" >> "$GITHUB_OUTPUT"
             echo "publish_release_tags=0" >> "$GITHUB_OUTPUT"
           fi
+          echo "Publishing ghcr tags: ${ver}, latest (minor alias when release tags enabled)"
 
   docker:
     needs: resolve-tag
@@ -117,8 +125,13 @@ jobs:
           dst="${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:${minor}"
           docker buildx imagetools create -t "$dst" "$src"
 
-      - name: Verify manifest
-        run: docker manifest inspect "${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:${{ needs.resolve-tag.outputs.build_tag }}"
+      - name: Verify version and latest tags
+        if: needs.resolve-tag.outputs.publish_release_tags == '1'
+        run: |
+          ver="${{ needs.resolve-tag.outputs.build_tag }}"
+          img="${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}"
+          docker manifest inspect "${img}:${ver}"
+          docker manifest inspect "${img}:latest"
 
   prune:
     needs: docker

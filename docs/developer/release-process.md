@@ -65,7 +65,7 @@ docker manifest inspect ghcr.io/bbartling/openfdd-bridge:3.0.30
 ## 5. Manual workflow_dispatch
 
 - **PyPI:** `Publish open-fdd to PyPI` with `dry_run=true` (default) — build/test only
-- **Docker:** `Publish Docker images to GHCR` — publishes `:latest` (maintainer use)
+- **Docker:** `Publish Docker images to GHCR` — publishes `pyproject.toml` version + minor alias + `latest` (optional `image_tag` override)
 
 ## Package vs Docker
 

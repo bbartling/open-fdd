@@ -36,9 +36,9 @@ docker pull ghcr.io/bbartling/openfdd-mcp-rag:${OPENFDD_IMAGE_TAG}
 
 ## Publish
 
-Triggered by git tag `vX.Y.Z` → workflow **Publish Docker images to GHCR**.
+Triggered by git tag `vX.Y.Z` → workflow **Publish Docker images to GHCR** (tags `X.Y.Z`, `X.Y`, `latest`).
 
-Manual: Actions → workflow_dispatch (publishes `latest`).
+Manual: Actions → **Publish Docker images to GHCR** (`workflow_dispatch`) — reads `version` from `pyproject.toml` and publishes the same tags (`3.1.3`, `3.1`, `latest`). Optional `image_tag` input overrides the version.
 
 ## vs PyPI
 
