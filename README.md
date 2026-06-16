@@ -94,15 +94,16 @@ pytest open_fdd/tests -q
 
 Contributor layout: `AGENTS.md` and [developer docs](https://bbartling.github.io/open-fdd/developer/).
 
-**Cross-site smoke** (bensserver + edge parity, then ACME FDD validation):
+**Cross-site paired FDD smoke** (bensserver bench 5007 + Acme OAT/web, same hardcoded schedule):
 
 ```bash
-OPENFDD_LIVE_ACME=1 ./scripts/smoke_sites_parity.sh --short      # ~30 min, 1 cycle
-OPENFDD_LIVE_ACME=1 ./scripts/smoke_sites_parity.sh --standard   # 2h window, 1 cycle
-OPENFDD_LIVE_ACME=1 ./scripts/smoke_sites_parity.sh --overnight  # 4×2h cycles (~12h)
+OPENFDD_LIVE_ACME=1 ./scripts/smoke_sites_parity.sh --tryout    # 6 min dev check
+OPENFDD_LIVE_ACME=1 ./scripts/smoke_sites_parity.sh --short      # 30 min, toggle @15m
+OPENFDD_LIVE_ACME=1 ./scripts/smoke_sites_parity.sh --standard   # 2 h, toggle every 15m
+OPENFDD_LIVE_ACME=1 ./scripts/smoke_sites_parity.sh --overnight  # 12 h, toggle every 15m
 ```
 
-Step 1 compares health, `git_sha`, image tag, and dashboard `index-*.js` bundle between local and edge. Step 2 runs read-only ACME BACnet/FDD/UI checks. Use `upgrade_edge_full.sh` on the edge so static UI matches GHCR.
+Step 1: UI/API parity (`site_parity_smoke.py`). Step 2: hardcoded FDD phase toggles with PyArrow vs DataFusion SQL parity. See [paired FDD smoke](docs/operations/paired-fdd-smoke.md).
 
 ---
 

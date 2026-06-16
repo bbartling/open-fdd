@@ -43,3 +43,13 @@ FROM telemetry
 ```
 
 The runtime applies confirmation in `open_fdd.arrow_runtime.confirmation` for both backends.
+
+## Paired smoke default (5 minutes)
+
+The hardcoded paired FDD harness (`open_fdd/validation/paired_fdd_contract.py`) sets **5-minute confirmation** on every smoke rule:
+
+```json
+{"min_elapsed_minutes": 5, "min_true_rows": 5, "poll_interval_s": 60}
+```
+
+This suppresses false positives during bench 5007 / Acme OAT spread toggles. See [Paired FDD smoke](../operations/paired-fdd-smoke.md).
