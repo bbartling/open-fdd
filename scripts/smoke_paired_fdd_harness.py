@@ -149,7 +149,10 @@ def _flagged_by_rule(batch: dict[str, Any]) -> dict[str, int]:
         if not isinstance(run, dict):
             continue
         rid = str(run.get("rule_id") or "")
-        out[rid] = int(run.get("flagged") or run.get("fault_rows") or 0)
+        if run.get("error"):
+            out[rid] = -2
+        else:
+            out[rid] = int(run.get("flagged") or run.get("fault_rows") or 0)
     return out
 
 
@@ -207,6 +210,9 @@ def _run_site_loop(
                 token=token,
                 timeout=180.0,
             )
+        else:
+            _fetch("POST", f"{base.rstrip('/')}/api/bacnet/poll/once", token=token, timeout=180.0)
+            _fetch("POST", f"{base.rstrip('/')}/api/json-api/poll/once", token=token, timeout=180.0)
 
         st, batch = _run_batch(base, token, lookback_hours=lookback)
         if st != 200 or not isinstance(batch, dict):
@@ -224,8 +230,14 @@ def _run_site_loop(
                 if bacnet_a >= 0 and bacnet_s >= 0 and bacnet_a != bacnet_s:
                     snap.errors.append(f"bacnet arrow/sql mismatch {bacnet_a} vs {bacnet_s}")
                     report.pass_ = False
+                if bacnet_s == -2:
+                    snap.errors.append("bacnet sql backend error")
+                    report.pass_ = False
                 if niagara_a >= 0 and niagara_s >= 0 and niagara_a != niagara_s:
                     snap.errors.append(f"niagara arrow/sql mismatch {niagara_a} vs {niagara_s}")
+                    report.pass_ = False
+                if niagara_s == -2:
+                    snap.errors.append("niagara sql backend error")
                     report.pass_ = False
             else:
                 snap.acme_batch = batch_summary
@@ -233,6 +245,9 @@ def _run_site_loop(
                 s = flagged.get(RULE_ACME_OAT_SQL, -1)
                 if a >= 0 and s >= 0 and a != s:
                     snap.errors.append(f"acme oat arrow/sql mismatch {a} vs {s}")
+                    report.pass_ = False
+                if s == -2:
+                    snap.errors.append("acme oat sql backend error")
                     report.pass_ = False
 
         report.snapshots.append(snap)
