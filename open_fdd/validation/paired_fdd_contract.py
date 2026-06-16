@@ -28,7 +28,7 @@ BENCH_BOUNDS: dict[str, dict[str, float | str]] = {
     PHASE_BLATANT: {"low": 99.0, "high": 100.0, "value_column": BENCH_VALUE_COLUMN},
 }
 
-# Acme local OAT vs OpenWeather web-oat-t
+ACME_LOCAL_OAT_POINT_ID = "1100-unknown-2"
 ACME_SITE_ID = "acme"
 ACME_SPREAD_CFG: dict[str, dict[str, float | str]] = {
     PHASE_NORMAL: {
@@ -194,7 +194,7 @@ def acme_rules_for_phase(phase: str) -> list[dict[str, Any]]:
             "backend": "arrow",
             "code": OAT_SPREAD_ARROW_CODE,
             "config": cfg,
-            "bindings": {"brick_types": ["Outside_Air_Temperature_Sensor"]},
+            "bindings": {"point_ids": [ACME_LOCAL_OAT_POINT_ID]},
             "severity": "warning",
             "enabled": True,
         },
@@ -207,7 +207,7 @@ def acme_rules_for_phase(phase: str) -> list[dict[str, Any]]:
             "fault_column": "fault",
             "code": OAT_SPREAD_ARROW_CODE,
             "config": cfg,
-            "bindings": {"brick_types": ["Outside_Air_Temperature_Sensor"]},
+            "bindings": {"point_ids": [ACME_LOCAL_OAT_POINT_ID]},
             "severity": "warning",
             "enabled": True,
         },
