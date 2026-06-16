@@ -91,7 +91,7 @@ See [Fault confirmation]({{ "/rule-cookbook/fault-confirmation/" | relative_url 
 |-------|-----|
 | Start | [Quick Start]({{ "/quick-start/" | relative_url }}) · [Health check]({{ "/quick-start/health-check/" | relative_url }}) |
 | Drivers | [Driver framework]({{ "/drivers/" | relative_url }}) · [BACnet]({{ "/bacnet/" | relative_url }}) |
-| Rules | [Rule Cookbook]({{ "/rule-cookbook/" | relative_url }}) · [DataFusion SQL]({{ "/datafusion-sql-rules/" | relative_url }}) |
+| Rules | [Rule Cookbook]({{ "/rule-cookbook/" | relative_url }}) · [Rule authoring (v1)]({{ "/rule-authoring/" | relative_url }}) · [DataFusion SQL]({{ "/datafusion-sql-rules/" | relative_url }}) |
 | API | [API routes]({{ "/appendix/bridge_api/" | relative_url }}) |
 | Operations | [Operations]({{ "/ops/" | relative_url }}) · [Deployment validation]({{ "/ops/deployment-validation/" | relative_url }}) |
 | Architecture | [ADR: Rust-ready Arrow contract]({{ "/adr/adr-rust-ready-arrow-fdd-contract/" | relative_url }}) |

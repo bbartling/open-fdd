@@ -26,6 +26,8 @@ Open-FDD runs supervisory FDD over historian telemetry from BACnet, Niagara, JSO
 
 8. **Confirmation.** May use correctness-first Python streak loops today; future vectorized/window implementations must keep the same raw vs confirmed mask contract.
 
+Authoring guide: [Rule authoring (v1)]({{ "/rule-authoring/" | relative_url }}) · [Arrow rule contract]({{ "/rule-authoring/arrow-rule-contract/" | relative_url }}).
+
 ## Consequences
 
 - Rule Lab, batch FDD, and validation smokes share one mask contract.

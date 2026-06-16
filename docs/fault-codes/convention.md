@@ -54,4 +54,4 @@ In Rule Lab, set `fault_code` on the rule metadata. Batch FDD aggregates hits in
 
 Each catalog entry lists `cookbook_patterns` (e.g. `flatline_1h`, `mixing_envelope`, `rate_of_change`) — see [Expression cookbook (Arrow-native)]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}).
 
-Legacy pandas `type: expression` YAML rules are **not** used on the edge in 3.x; translate to `rules_py` Arrow modules and bind **`fault_code`** in Rule Lab.
+Legacy pandas `type: expression` YAML in `open_fdd/default_rules/` is **not executed** on the edge in 3.x — metadata for migration only. Translate to `rules_py` Arrow modules and bind **`fault_code`** in Rule Lab. See [Rule authoring — YAML]({{ "/rule-authoring/" | relative_url }}#yaml-in-the-repo-today).

@@ -26,6 +26,8 @@ def apply_faults_arrow(table, cfg, context=None):
 
 Cookbook helpers: `open_fdd.arrow_runtime.cookbook` (flatline, spread, OOB, after-hours fan).
 
+**v1 contract:** [`ArrowRuleResult`]({{ "/rule-authoring/arrow-rule-contract/" | relative_url }}) — input `pa.Table`, output boolean mask, confirmation applied by backend.
+
 Script-mode analytics rules receive `table` (PyArrow) and `cfg` in the sandbox — not pandas DataFrames.
 
 ## PyArrow-only policy (edge + Rule Lab)

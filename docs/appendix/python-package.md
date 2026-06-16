@@ -10,6 +10,7 @@ Install from PyPI (embeddable FDD runtime — not the Docker edge stack):
 
 ```bash
 pip install open-fdd
+pip install "open-fdd[datafusion]"   # optional DataFusion SQL rule backend
 pip install "open-fdd[analytics]"     # optional NumPy helpers
 pip install "open-fdd[ml]"            # optional sklearn for offline experiments
 ```

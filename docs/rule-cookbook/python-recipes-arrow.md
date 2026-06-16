@@ -640,9 +640,11 @@ Pass `occupied_start_hour`, `occupied_end_hour`, `tz_offset_hours` in Rule Lab `
 
 ---
 
-## FC4 — PID hunting (legacy GL36)
+## FC4 — PID hunting (modernized from legacy GL36)
 
-Ports pandas `FaultConditionFour` / `check_hunting` to Arrow. Two modes:
+Legacy pandas `FaultConditionFour` built hourly AHU operating-state transition counts. Open-FDD v1 **modernizes** FC4 into an Arrow-native **PID / control hunting** detector — sample-window rolling step counts, not pandas hourly `resample("H")`. See [Legacy FC4 documentation]({{ "/rule-authoring/legacy-pandas-parity/" | relative_url }}#fault-rule-4-fc4--modernized-hunting-detector).
+
+Ports gist `check_hunting` intent to Arrow. Two modes:
 
 | Mode | `cfg["hunting_mode"]` | Use on |
 |------|----------------------|--------|

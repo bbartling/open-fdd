@@ -16,13 +16,20 @@ pip install 'open-fdd[datafusion]'
 
 ## When to use SQL vs PyArrow
 
+See the full decision table in the [Expression cookbook — PyArrow vs DataFusion SQL]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#pyarrow-vs-datafusion-sql).
+
 | Use DataFusion SQL | Use PyArrow |
 | --- | --- |
-| Simple thresholds, `CASE WHEN`, boolean logic | Custom HVAC helpers, rolling windows, ML prep |
-| SQL-readable expressions for operators | Complex graph/feature work |
+| Simple thresholds, `CASE WHEN`, boolean logic | Rolling windows, flatline, rate-of-change, hunting |
+| SQL-readable expressions for operators | Custom HVAC helpers, sensor profiles, schedule gating |
 | Proving parity before Rust migration | Primary supported authoring path |
+| Stateless row-wise rules | ML prep, complex multi-signal logic |
 
-## Rule metadata
+### Do not use DataFusion SQL for
+
+Rolling windows, PID hunting, helper-heavy logic, ML features, file joins, browser execution, or pandas-style row loops. Use PyArrow helpers instead.
+
+## Rule metadata (saved rules)
 
 ```yaml
 id: zone_temp_high_sql

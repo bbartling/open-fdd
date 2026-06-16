@@ -9,9 +9,57 @@ redirect_from:
 
 # Expression cookbook (Arrow-native)
 
-Reference for **Open-FDD 3.x Rule Lab**: every rule is a Python module with **`apply_faults_arrow(table, cfg, context)`** using **`pyarrow.compute`** — **no pandas**, **no YAML expression files**, **no NumPy DataFrames on the IoT edge**.
+Reference for **Open-FDD 3.x Rule Lab**: every **executable** rule is a Python module with **`apply_faults_arrow(table, cfg, context)`** using **`pyarrow.compute`** — **no pandas**, **no NumPy DataFrames on the IoT edge**, **no pandas `RuleRunner`**.
 
-This is the **only** expression cookbook for Open-FDD 3.x. The pandas/YAML `RuleRunner` path is retired — use Arrow `apply_faults_arrow` and the operator bridge Rule Lab. Legacy GL36-style recipes map to **fixed [fault codes]({{ "/fault-codes/" | relative_url }})** and Arrow patterns below.
+**YAML today:** `open_fdd/faults/catalog/*.yaml` and `open_fdd/default_rules/**/*.yaml` hold **metadata and migration starters only** — not edge execution. See [Rule authoring — YAML distinction]({{ "/rule-authoring/" | relative_url }}#yaml-in-the-repo-today).
+
+Legacy GL36-style recipes map to **fixed [fault codes]({{ "/fault-codes/" | relative_url }})** and Arrow patterns below. Full migration matrix: [Legacy pandas parity]({{ "/rule-authoring/legacy-pandas-parity/" | relative_url }}).
+
+---
+
+## PyArrow vs DataFusion SQL
+
+Start here when choosing a backend. Both normalize to [`ArrowRuleResult`]({{ "/rule-authoring/arrow-rule-contract/" | relative_url }}).
+
+### Use PyArrow when
+
+| Need | Why PyArrow |
+|------|-------------|
+| Rolling windows | `arrow_rolling_min`, `arrow_rolling_sum`, streak helpers |
+| Flatline detection | `sensor_flatline_mask`, `flatline_1h_mask` |
+| Rate-of-change / spike | `rate_of_change_mask`, `arrow_abs_diff` |
+| PID hunting / command hunting | `pid_hunting_command_mask`, `pid_hunting_ahu_os_mask` |
+| Occupancy or schedule-aware logic | Hour/day masks, `_unoccupied_mask`, after-hours helpers |
+| Helper functions & sensor profiles | `open_fdd.arrow_runtime.cookbook`, `SENSOR_PROFILES` |
+| Unit normalization & null handling | `norm_cmd_array`, explicit `pc.fill_null` |
+| Edge runtime stability | Primary path — always installed |
+| Rust migration prep | Arrow semantics portable to a future Rust executor |
+
+### Use DataFusion SQL when
+
+| Need | Why SQL |
+|------|---------|
+| Simple row-wise threshold | `column > limit AS fault` |
+| Readable `CASE WHEN` logic | Operators can inspect SQL without Python |
+| SQL-readable previews | Rule Lab Validate SQL |
+| Future Rust/DataFusion port | Restricted SELECT from `telemetry` |
+| Non-Python reviewers | Same contract, different syntax |
+
+Install: `pip install 'open-fdd[datafusion]'` (defined in `pyproject.toml`).
+
+### Do not use DataFusion SQL for
+
+- Complex rolling windows or resample-style hourly logic
+- Custom helper-heavy HVAC logic
+- PID hunting with stateful window behavior (use PyArrow FC4 helpers)
+- ML feature preparation
+- Arbitrary file joins or multi-table SQL
+- Browser-side rule execution
+- Anything that behaves like old pandas row-loop / `DataFrame.apply` logic
+
+See also: [DataFusion SQL rules]({{ "/datafusion-sql-rules/" | relative_url }}) · [Rust readiness]({{ "/rule-authoring/rust-readiness/" | relative_url }}).
+
+---
 
 | Topic | Page |
 |-------|------|
@@ -170,7 +218,7 @@ ASHRAE Guideline 36-style rules from the old YAML cookbook, translated to Arrow.
 | Rule K — discharge above SP full cool | SAT > SP, full cooling | **AHU-C** | [Rule K]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-k--discharge-above-setpoint-in-full-cooling-ahu-c) |
 | Rule L — cooling coil ΔT when off | CHW drop when valves closed | **CH-C** | [Rule L]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-l--cooling-coil-δt-when-inactive-ch-c) |
 | Rule M — heating coil ΔT when off | HW rise when valves closed | **AHU-B** | [Rule M]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-m--heating-coil-δt-when-inactive-ahu-b) |
-| **FC4 — PID hunting** | Excessive command reversals or AHU OS changes | **AHU-G** / **VAV-F** / **CH-G** / **RTU-E** | [FC4 PID hunting]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#fc4--pid-hunting-legacy-gl36) |
+| **FC4 — PID hunting** | Excessive command reversals or AHU OS changes (**modernized** — not hourly pandas resample) | **AHU-G** / **VAV-F** / **CH-G** / **RTU-E** | [FC4 PID hunting]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#fc4--pid-hunting-legacy-gl36) · [Legacy FC4 notes]({{ "/rule-authoring/legacy-pandas-parity/" | relative_url }}#fault-rule-4-fc4--modernized-hunting-detector) |
 
 All rules A–M have **full `apply_faults_arrow` modules** in [Python recipes (full Arrow library)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}).
 
@@ -178,7 +226,7 @@ All rules A–M have **full `apply_faults_arrow` modules** in [Python recipes (f
 
 ## Starter pack (VAV / AHU baseline)
 
-Maps to legacy YAML starter filenames; use as first deploy bundle.
+Maps to legacy YAML starter filenames in `open_fdd/default_rules/` — **metadata only**; deploy Arrow modules in `rules_py`. Use as first deploy bundle.
 
 | Legacy YAML starter | Arrow approach | Fault code |
 |---------------------|----------------|------------|
@@ -256,7 +304,7 @@ curl -s http://127.0.0.1:8765/api/faults/catalog | jq '.families[].codes[] | sel
 
 ## Pandas YAML → Arrow checklist (commissioning)
 
-- [ ] Replace each `type: expression` YAML with a `rules_py` module
+- [ ] Replace each executable `type: expression` YAML with a `rules_py` module (keep YAML as reference if useful)
 - [ ] Map `inputs` Brick labels → feather column names in model/poll CSV
 - [ ] Set `fault_code` per rule (letter suffix)
 - [ ] Run Rule Lab kit on 7-day feather window; confirm flag rate sane
