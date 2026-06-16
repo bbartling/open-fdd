@@ -253,15 +253,19 @@ def run_cycle(
 
     st_root, root_html, _ = client.request("GET", "/", auth=False)
     asset = ""
+    has_datafusion_ui = False
     if st_root == 200 and isinstance(root_html, str):
         import re
 
         m = re.search(r"/assets/(index-[^\"']+\.js)", root_html)
         asset = m.group(1) if m else ""
+        if asset:
+            st_js, js_body, _ = client.request("GET", f"/assets/{asset}", auth=False)
+            has_datafusion_ui = st_js == 200 and "datafusion_sql" in (js_body or "")
     result["checks"]["ui_bundle"] = {
         "http": st_root,
         "asset": asset,
-        "has_datafusion_ui": "datafusion_sql" in (root_html if isinstance(root_html, str) else ""),
+        "has_datafusion_ui": has_datafusion_ui,
     }
     if st_root != 200 or not asset:
         result["pass"] = False
