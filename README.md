@@ -80,6 +80,25 @@ result = run_arrow_rule(high_sat, table, {"high": 85})
 print(result.true_count)  # 1
 ```
 
+**DataFusion SQL** (same telemetry table, optional `pip install 'open-fdd[datafusion]'`):
+
+```python
+from open_fdd.arrow_runtime import run_datafusion_sql_rule
+
+SQL = """
+SELECT
+  *,
+  "SAT" > 85.0 AS fault
+FROM telemetry
+"""
+
+result = run_datafusion_sql_rule(SQL, table, {"min_true_rows": 5, "poll_interval_s": 60})
+
+print(result.true_count)  # 1 — same confirmed count as PyArrow when cfg matches
+```
+
+Rule `config` fields such as `min_elapsed_minutes` and `min_true_rows` apply to **both** backends (fault confirmation / minimum duration). See [fault confirmation](docs/rule-cookbook/fault-confirmation.md).
+
 
 ---
 
