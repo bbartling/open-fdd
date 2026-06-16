@@ -48,6 +48,31 @@ def test_write_read_and_dedupe(store: FeatherStore):
     assert df["timestamp"].duplicated().sum() == 0
 
 
+def test_read_site_table_partial_column_projection(store: FeatherStore):
+    """Cross-source column lists must not drop shards missing unrelated columns."""
+    store.write_shard(
+        pd.DataFrame({"timestamp": pd.date_range("2025-01-01", periods=2, freq="1h", tz="UTC"), "oa-t": [70.0, 71.0]}),
+        source="bacnet",
+        site_id="acme",
+    )
+    store.write_shard(
+        pd.DataFrame(
+            {
+                "timestamp": pd.date_range("2025-01-01", periods=2, freq="1h", tz="UTC"),
+                "web-oat-t": [69.0, 72.0],
+            }
+        ),
+        source="json_api",
+        site_id="acme",
+    )
+    bacnet = store.read_site_table("acme", source="bacnet", columns=["timestamp", "oa-t", "web-oat-t"])
+    assert bacnet is not None
+    assert "oa-t" in bacnet.column_names
+    web = store.read_site_table("acme", source="json_api", columns=["timestamp", "oa-t", "web-oat-t"])
+    assert web is not None
+    assert "web-oat-t" in web.column_names
+
+
 def test_list_sites(store: FeatherStore):
     store.write_shard(_frame("2025-01-01", 3), source="bacnet", site_id="s1")
     store.write_shard(_frame("2025-01-01", 3), source="weather", site_id="s2")

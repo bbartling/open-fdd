@@ -78,7 +78,13 @@ def _read_df(path: Path, columns: list[str] | None = None) -> pd.DataFrame:
 
         _apply_arrow_thread_env()
         if columns:
-            table = feather.read_table(path, columns=_column_list(columns), use_threads=True)
+            col_list = _column_list(columns)
+            try:
+                table = feather.read_table(path, columns=col_list, use_threads=True)
+            except Exception:
+                table = feather.read_table(path, use_threads=True)
+                avail = [c for c in col_list if c in table.column_names]
+                table = table.select(avail) if avail else table
             return table.to_pandas()
         return pd.read_feather(path)
     df = pd.read_pickle(path)
@@ -288,7 +294,15 @@ class FeatherStore:
             tables: list[Any] = []
             for path in files:
                 try:
-                    tables.append(feather.read_table(path, columns=col_list, use_threads=True))
+                    if col_list:
+                        try:
+                            tables.append(feather.read_table(path, columns=col_list, use_threads=True))
+                        except Exception:
+                            table = feather.read_table(path, use_threads=True)
+                            avail = [c for c in col_list if c in table.column_names]
+                            tables.append(table.select(avail) if avail else table)
+                    else:
+                        tables.append(feather.read_table(path, use_threads=True))
                 except Exception as exc:  # noqa: BLE001
                     _log.warning("Skipping unreadable feather shard %s: %s", path, exc)
             if not tables:
