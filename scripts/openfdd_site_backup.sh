@@ -83,20 +83,12 @@ if [[ "$BACKUP_INCLUDE_POLL_SAMPLES" != "1" ]]; then
 fi
 
 echo "Archiving workspace/…"
-run_tar() {
-  tar "${TAR_OPTS[@]}" workspace 2>"$BACKUP_ROOT/tar.stderr"
-}
-
-run_tar_with_timeout() {
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "${BACKUP_TIMEOUT_SECS}" run_tar
-  else
-    run_tar
-  fi
-}
-
 set +e
-run_tar_with_timeout
+if command -v timeout >/dev/null 2>&1; then
+  timeout "${BACKUP_TIMEOUT_SECS}" tar "${TAR_OPTS[@]}" workspace 2>"$BACKUP_ROOT/tar.stderr"
+else
+  tar "${TAR_OPTS[@]}" workspace 2>"$BACKUP_ROOT/tar.stderr"
+fi
 rc=$?
 set -e
 

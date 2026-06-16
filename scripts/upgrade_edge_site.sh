@@ -97,7 +97,7 @@ if [[ "$SKIP_BACKUP" == "0" ]]; then
   if [[ "$FAST_BACKUP" == "1" ]]; then
     BACKUP_ENV+=" BACKUP_INCLUDE_POLL_SAMPLES=0"
   fi
-  BACKUP_ENV+=" ./scripts/openfdd_site_backup.sh"
+  BACKUP_ENV+=" && ./scripts/openfdd_site_backup.sh"
   echo "    async budget: ${BACKUP_ASYNC_SECS}s (poll every 15s)"
   if ! "${APB}" -i "$INV" "$LIMIT" "${ANSIBLE_SSH_OPTS[@]}" "${ANSIBLE_ASYNC_OPTS[@]}" \
     -m shell -a "$BACKUP_ENV"; then
