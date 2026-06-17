@@ -923,6 +923,54 @@ textarea {
   margin-bottom: 0.65rem;
 }
 
+.niagara-commission-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.2fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .niagara-commission-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.niagara-browse-tree {
+  max-height: 22rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.25rem 0;
+}
+
+.niagara-browse-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  cursor: context-menu;
+}
+
+.niagara-browse-building {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.niagara-browse-device {
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+}
+
+.niagara-commission-building > .bacnet-tree-type-head {
+  font-weight: 600;
+}
+
+.niagara-commission-device {
+  margin-left: 0.35rem;
+}
+
 .bacnet-bulk-toolbar {
   padding: 0.65rem 0.75rem;
   border: 1px solid var(--border);

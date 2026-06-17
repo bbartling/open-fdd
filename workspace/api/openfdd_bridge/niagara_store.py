@@ -47,6 +47,7 @@ DEFAULT_STATION: dict[str, Any] = {
     "default_points_root": "",
     "follow_external": False,
     "include_proxy_ext": False,
+    "commission_profile": {"version": 1, "buildings": [], "devices": []},
 }
 
 

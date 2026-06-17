@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ActionButton from "../components/ActionButton";
+import NiagaraBrowseTree from "../components/NiagaraBrowseTree";
+import NiagaraCommissionTree from "../components/NiagaraCommissionTree";
 import NiagaraPointsTree, { type NiagaraDevice, type NiagaraPoint } from "../components/NiagaraPointsTree";
 import NiagaraTreeLegend from "../components/NiagaraTreeLegend";
 import PageHeader from "../components/PageHeader";
@@ -30,6 +32,16 @@ import {
   type NiagaraTreeNode,
 } from "../lib/niagara-api";
 import { STANDARD_POLL_INTERVALS } from "../lib/pollIntervals";
+import {
+  addBuilding,
+  addDevice,
+  emptyProfile,
+  organizeStationPoints,
+  profileSummary,
+  removeBuilding,
+  removeDevice,
+  type NiagaraCommissionProfile,
+} from "../lib/niagaraCommissionProfile";
 
 const STATION_URL_PLACEHOLDER = "https://niagara.example.local";
 
@@ -71,6 +83,8 @@ export default function NiagaraPage() {
   const [log, setLog] = useState("");
   const [treeLoading, setTreeLoading] = useState(false);
   const [pending, setPending] = useState(false);
+  const [connectionOk, setConnectionOk] = useState<boolean | null>(null);
+  const [commissionProfile, setCommissionProfile] = useState<NiagaraCommissionProfile>(() => emptyProfile());
 
   const selectedStation = useMemo(
     () => stations.find((s) => s.id === selectedStationId) ?? null,
@@ -157,6 +171,9 @@ export default function NiagaraPage() {
     setForm(station);
     setBrowseBase(station.default_points_root || station.root_ord || "slot:/Drivers");
     setFollowExternal(Boolean(station.follow_external));
+    const raw = (station as NiagaraStation & { commission_profile?: NiagaraCommissionProfile }).commission_profile;
+    setCommissionProfile(raw?.buildings?.length ? raw : emptyProfile());
+    setConnectionOk(null);
   }
 
   async function handleSaveStation() {
@@ -167,7 +184,11 @@ export default function NiagaraPage() {
     setPending(true);
     setActionError("");
     try {
-      const payload = { ...form, id: selectedStationId || form.id };
+      const payload = {
+        ...form,
+        id: selectedStationId || form.id,
+        commission_profile: commissionProfile,
+      };
       const res = await saveNiagaraStation(payload as NiagaraStation);
       setLog(`Saved station ${res.station.name} (${res.station.id}).`);
       await loadStations();
@@ -205,22 +226,27 @@ export default function NiagaraPage() {
     setPending(true);
     try {
       const res = await testNiagaraStation(selectedStationId);
+      setConnectionOk(true);
       setLog(`Test OK — user ${res.authenticated_user ?? "unknown"}.`);
     } catch (e) {
+      setConnectionOk(false);
       setActionError(formatApiError(e));
     } finally {
       setPending(false);
     }
   }
 
-  async function handleDiscover() {
+  async function handleDiscover(baseOrd?: string) {
     if (!selectedStationId) {
       setActionError("Save the station first.");
       return;
     }
     setPending(true);
     try {
-      const base = form.default_points_root || form.root_ord || browseBase;
+      const base = baseOrd || form.default_points_root || form.root_ord || browseBase;
+      if (baseOrd) {
+        setForm((f) => ({ ...f, default_points_root: baseOrd }));
+      }
       const res = await discoverNiagaraPoints(selectedStationId, {
         base,
         follow_external: followExternal,
@@ -365,6 +391,44 @@ export default function NiagaraPage() {
     setSelectedPointOrds(new Set());
   }
 
+  async function handleSaveProfile() {
+    await handleSaveStation();
+    setLog(`Saved import profile — ${profileSummary(commissionProfile)}.`);
+  }
+
+  function handleAddBuilding(node: NiagaraTreeNode) {
+    setCommissionProfile((p) => addBuilding(p, node, { site_id: form.name ? slugId(form.name) : undefined }));
+    setLog(`Added building: ${node.name || node.ord}`);
+  }
+
+  function handleAddDevice(node: NiagaraTreeNode, buildingId: string) {
+    setCommissionProfile((p) => addDevice(p, node, buildingId, treeNodes));
+    setLog(`Added device: ${node.name || node.ord}`);
+  }
+
+  function slugId(text: string): string {
+    return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
+  }
+
+  const activeStationDevice = useMemo(
+    () => driverDevices.find((d) => d.station_id === selectedStationId) ?? driverDevices[0],
+    [driverDevices, selectedStationId],
+  );
+
+  const organizedStation = useMemo(() => {
+    if (!activeStationDevice) return null;
+    return organizeStationPoints({
+      station_id: activeStationDevice.station_id,
+      station_name: activeStationDevice.station_name,
+      station_url: activeStationDevice.station_url,
+      points: activeStationDevice.points,
+      profile: commissionProfile,
+      poll_running: Boolean(pollStatus?.running && pollStatus.station_id === selectedStationId),
+    });
+  }, [activeStationDevice, commissionProfile, pollStatus, selectedStationId]);
+
+  const useCommissionTree = commissionProfile.buildings.length > 0;
+
   const selectedPointsFlat: NiagaraPoint[] = useMemo(() => {
     const out: NiagaraPoint[] = [];
     for (const d of driverDevices) {
@@ -389,7 +453,7 @@ export default function NiagaraPage() {
     <div className="page page-wide niagara-page">
       <PageHeader
         title="Niagara"
-        subtitle="Supervisory read-only driver — same layout as BACnet/Modbus. Configure station URL and credentials on the edge host (niagara.env.local)."
+        subtitle="Connect station → map folder buildings/devices → discover points for BRICK bindings and polling (BACnet-style tree)."
       />
       <TabDebugPanel tab="niagara" />
 
@@ -403,6 +467,72 @@ export default function NiagaraPage() {
       ) : null}
 
       {loadError ? <div className="panel error-panel">{loadError}</div> : null}
+
+      <div className="panel">
+        <h3 className="panel-title">Station connect</h3>
+        {!form.password_env || selectedStation?.password_configured === false ? (
+          <p className="muted" style={{ marginTop: 0 }}>
+            Password env: <code>workspace/niagara.env.local</code> → restart bridge after changes.
+          </p>
+        ) : null}
+        <div className="host-info-grid">
+          <div>
+            <span className="status-kv-label">Connector</span>
+            <div className={health?.dependencies_ok !== false ? "ok" : "error"}>
+              {health?.dependencies_ok !== false ? "ready" : "deps missing"}
+            </div>
+          </div>
+          <div>
+            <span className="status-kv-label">Connection test</span>
+            <div className={connectionOk === null ? "muted" : connectionOk ? "ok" : "error"}>
+              {connectionOk === null ? "not tested" : connectionOk ? "OK" : "failed"}
+            </div>
+          </div>
+          <div>
+            <span className="status-kv-label">Import profile</span>
+            <div>{profileSummary(commissionProfile)}</div>
+          </div>
+        </div>
+        <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", margin: "0.75rem 0" }}>
+          {stations.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className={s.id === selectedStationId ? "primary-btn" : "secondary-btn"}
+              onClick={() => selectStation(s)}
+            >
+              {s.name}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => {
+              setSelectedStationId("");
+              setForm(emptyForm());
+              setCommissionProfile(emptyProfile());
+              setBrowseBase("slot:/Drivers");
+            }}
+          >
+            + New station
+          </button>
+        </div>
+        <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+          <ActionButton pending={pending} onClick={() => void handleSaveStation()}>
+            Save station
+          </ActionButton>
+          <ActionButton secondary pending={pending} onClick={() => void handleTest()} disabled={!selectedStationId}>
+            Test connection
+          </ActionButton>
+          <ActionButton secondary pending={pending} onClick={() => void handleSaveProfile()} disabled={!selectedStationId}>
+            Save import profile
+          </ActionButton>
+          <ActionButton secondary pending={pending} onClick={() => void handleBrowse()} disabled={!selectedStationId}>
+            Preview folder tree
+          </ActionButton>
+        </div>
+      </div>
+
       {pollStatus && selectedStationId ? (
         <div className="panel">
           <div className="status-bar">
@@ -462,92 +592,67 @@ export default function NiagaraPage() {
         </div>
       ) : null}
 
-      <div className="panel">
-        <h3 className="panel-title">Station tree browse (building boundary)</h3>
-        <p className="muted" style={{ marginTop: 0 }}>
-          Choose a Niagara folder as the <strong>building boundary</strong>, preview nodes, then set{" "}
-          <code>default_points_root</code> before discover/import. Save an import profile in station settings;
-          use <strong>Poll once</strong> as a dry-run poll after discovery.
-        </p>
-        <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.65rem" }}>
-          <label className="field-inline">
-            Base ORD
-            <input
-              value={browseBase}
-              onChange={(e) => setBrowseBase(e.target.value)}
-              placeholder="slot:/Drivers"
-              style={{ minWidth: "16rem" }}
-            />
-          </label>
-          <label className="field-inline">
-            Depth
-            <input
-              type="number"
-              min={1}
-              max={12}
-              value={browseDepth}
-              onChange={(e) => setBrowseDepth(Number(e.target.value) || 3)}
-              style={{ width: "4rem" }}
-            />
-          </label>
-          <label className="field-inline">
-            <input
-              type="checkbox"
-              checked={followExternal}
-              onChange={(e) => setFollowExternal(e.target.checked)}
-            />{" "}
-            Follow external
-          </label>
-          <ActionButton secondary pending={pending} disabled={!selectedStationId} onClick={() => void handleBrowse()}>
-            Preview folder tree
-          </ActionButton>
-          <ActionButton
-            secondary
-            disabled={!treeNodes.length}
-            onClick={() => {
-              const first = treeNodes[0]?.ord || browseBase;
-              setForm((f) => ({ ...f, default_points_root: first }));
-              setLog(`Set default_points_root → ${first}`);
-            }}
-          >
-            Use first node as points root
-          </ActionButton>
-        </div>
-        {treeNodes.length ? (
-          <div className="console" style={{ maxHeight: "14rem", overflow: "auto" }}>
-            {treeNodes.slice(0, 200).map((n) => (
-              <div key={n.ord}>
-                <button
-                  type="button"
-                  className="link-btn"
-                  onClick={() => {
-                    setForm((f) => ({ ...f, default_points_root: n.ord }));
-                    setLog(`Set default_points_root → ${n.ord} (${n.name ?? "folder"})`);
-                  }}
-                >
-                  {n.ord}
-                </button>
-                <span className="muted"> — {n.name ?? n.type ?? "node"}</span>
-              </div>
-            ))}
-            {treeNodes.length > 200 ? (
-              <p className="muted">Showing 200 of {treeNodes.length} nodes — narrow base ORD or depth.</p>
-            ) : null}
-          </div>
-        ) : (
-          <p className="muted">No browse results yet. Large sites: increase max_nodes in station settings if truncated.</p>
-        )}
-      </div>
-
-      <div className="panel">
-        <h3 className="panel-title">Devices &amp; points</h3>
-        <NiagaraTreeLegend />
-        <div className="row row-spread" style={{ marginTop: "0.65rem" }}>
-          <p className="muted" style={{ flex: 1, margin: 0 }}>
-            Check boxes to multi-select points for bulk read or export. Right-click a station or point for refresh and
-            copy actions.
+      <div className="niagara-commission-grid">
+        <div className="panel">
+          <h3 className="panel-title">Station tree browse</h3>
+          <p className="muted" style={{ marginTop: 0 }}>
+            <strong>Right-click</strong> a folder → add as <strong>building</strong> or <strong>device</strong>. Left-click
+            sets <code>default_points_root</code>. Example: BacnetNetwork = building, BENS BENCHTEST BOX = device.
           </p>
+          <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.65rem" }}>
+            <label className="field-inline">
+              Base ORD
+              <input
+                value={browseBase}
+                onChange={(e) => setBrowseBase(e.target.value)}
+                placeholder="slot:/Drivers/BacnetNetwork"
+                style={{ minWidth: "16rem" }}
+              />
+            </label>
+            <label className="field-inline">
+              Depth
+              <input
+                type="number"
+                min={1}
+                max={12}
+                value={browseDepth}
+                onChange={(e) => setBrowseDepth(Number(e.target.value) || 3)}
+                style={{ width: "4rem" }}
+              />
+            </label>
+            <label className="field-inline">
+              <input
+                type="checkbox"
+                checked={followExternal}
+                onChange={(e) => setFollowExternal(e.target.checked)}
+              />{" "}
+              Follow external
+            </label>
+          </div>
+          <NiagaraBrowseTree
+            nodes={treeNodes}
+            profile={commissionProfile}
+            onAddBuilding={handleAddBuilding}
+            onAddDevice={handleAddDevice}
+            onSetPointsRoot={(ord) => {
+              setForm((f) => ({ ...f, default_points_root: ord }));
+              setLog(`Points root → ${ord}`);
+            }}
+            onDiscoverUnder={(ord) => void handleDiscover(ord)}
+            onCopy={(text) => {
+              void navigator.clipboard.writeText(text);
+              setLog("Copied ORD to clipboard.");
+            }}
+          />
         </div>
+
+        <div className="panel">
+          <h3 className="panel-title">Devices &amp; points</h3>
+          <NiagaraTreeLegend />
+          <p className="muted" style={{ marginTop: "0.5rem" }}>
+            Commission tree maps folder ORDs to BRICK <code>site_id</code> / <code>equipment_id</code> for rule bindings.
+            Select points for bulk read/export; use <strong>Poll once</strong> as dry-run.
+          </p>
         {driverDevices.length > 0 ? (
           <div className="bacnet-bulk-toolbar">
             <span className="muted">{selectedPointOrds.size} point(s) selected</span>
@@ -585,6 +690,31 @@ export default function NiagaraPage() {
         ) : null}
         {treeLoading && driverDevices.length === 0 ? (
           <Spinner label="Loading driver tree…" />
+        ) : useCommissionTree && organizedStation ? (
+          <NiagaraCommissionTree
+            station={organizedStation}
+            selectedPointOrds={selectedPointOrds}
+            onTogglePointSelection={togglePointOrd}
+            onRefreshPoint={async (point) => {
+              if (!selectedStationId) return;
+              setPending(true);
+              try {
+                await readNiagaraPoints(selectedStationId, [point.point_ord], true);
+                await loadDriverTree();
+              } catch (e) {
+                setActionError(formatApiError(e));
+              } finally {
+                setPending(false);
+              }
+            }}
+            onDiscoverDevice={(ord) => void handleDiscover(ord)}
+            onRemoveBuilding={(id) => setCommissionProfile((p) => removeBuilding(p, id))}
+            onRemoveDevice={(id) => setCommissionProfile((p) => removeDevice(p, id))}
+            onCopy={(text) => {
+              void navigator.clipboard.writeText(text);
+              setLog("Copied to clipboard.");
+            }}
+          />
         ) : (
           <NiagaraPointsTree
             devices={driverDevices}
@@ -627,6 +757,7 @@ export default function NiagaraPage() {
             <Spinner label="Refreshing tree…" />
           </p>
         ) : null}
+        </div>
       </div>
 
       <div className="panel">
@@ -638,7 +769,7 @@ export default function NiagaraPage() {
 
       <details className="panel">
         <summary className="panel-title" style={{ display: "inline", cursor: "pointer" }}>
-          Station connection
+          Advanced station settings
         </summary>
         {!form.password_env || selectedStation?.password_configured === false ? (
           <p className="muted" style={{ marginTop: "0.5rem" }}>
