@@ -48,6 +48,21 @@ OFDD_SKIP_UI_BUILD=1 ./scripts/run_local.sh start
 
 ## Run detached (required for in-depth runs)
 
+**Do not run long smokes attached from Cursor** — they crash the IDE when agents poll/wait. Use the systemd-isolated launcher (no terminal parent):
+
+```bash
+# benserver bench only (recommended for local UI iteration)
+./scripts/run_paired_fdd_smoke_isolated.sh --short --bench-only
+
+# bench + Acme FDD (skips UI bundle parity by default)
+OPENFDD_LIVE_ACME=1 ./scripts/run_paired_fdd_smoke_isolated.sh --short
+
+# Poll status — read-only, safe for agents (never tail -f / wait)
+./scripts/smoke_paired_fdd_status.sh --mode short
+```
+
+Legacy wrapper (also uses isolated launcher when `--detached`):
+
 ```bash
 OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --short --detached
 OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --standard --detached

@@ -36,21 +36,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$DETACHED" == "1" ]]; then
-  LOG="/tmp/paired_fdd_smoke_${MODE}_$(date -u +%Y%m%d_%H%M%S).log"
-  PIDFILE="/tmp/paired_fdd_smoke_${MODE}.pid"
   CHILD=()
   for arg in "${EXTRA[@]}"; do
     [[ "$arg" != "--detached" ]] && CHILD+=("$arg")
   done
-  echo "==> Detached paired FDD smoke (mode=${MODE})"
-  echo "    log: ${LOG}"
-  nohup "$0" "--${MODE}" "${CHILD[@]}" >>"$LOG" 2>&1 &
-  echo $! >"$PIDFILE"
-  echo "    pid: $(cat "$PIDFILE") (also in ${PIDFILE})"
-  echo "    status: /tmp/paired_fdd_smoke_${MODE}.status.json"
-  echo "    cycles: /tmp/paired_fdd_smoke_${MODE}_cycles.jsonl"
-  echo "    tail -f ${LOG}"
-  exit 0
+  exec "${ROOT}/scripts/run_paired_fdd_smoke_isolated.sh" "--${MODE}" "${CHILD[@]}"
 fi
 
 PYTHON="${ROOT}/.venv/bin/python3"

@@ -426,7 +426,7 @@ def _dedupe_issues(errors: list[str]) -> list[str]:
     return out
 
 
-def _validate_outcomes(bench: SiteReport, acme: SiteReport) -> list[str]:
+def _validate_outcomes(bench: SiteReport, acme: SiteReport, *, bench_only: bool = False) -> list[str]:
     issues: list[str] = []
 
     def _flagged(rep: SiteReport, phase: str, rule_id: str) -> int:
@@ -437,10 +437,13 @@ def _validate_outcomes(bench: SiteReport, acme: SiteReport) -> list[str]:
         data = last.bench_batch if last.bench_batch else last.acme_batch
         return int((data.get("flagged") or {}).get(rule_id, 0))
 
-    for label, rep, primary, secondary in (
+    site_checks: list[tuple[str, SiteReport, str, str]] = [
         ("bench", bench, RULE_BENCH_BACNET_SQL, RULE_BENCH_NIAGARA_ARROW),
-        ("acme", acme, RULE_ACME_OAT_SQL, RULE_ACME_OAT_ARROW),
-    ):
+    ]
+    if not bench_only:
+        site_checks.append(("acme", acme, RULE_ACME_OAT_SQL, RULE_ACME_OAT_ARROW))
+
+    for label, rep, primary, secondary in site_checks:
         blatant_flag_primary = _flagged(rep, PHASE_BLATANT, primary)
         blatant_flag_secondary = _flagged(rep, PHASE_BLATANT, secondary)
         if blatant_flag_primary == 0 and blatant_flag_secondary == 0 and any(
@@ -449,10 +452,11 @@ def _validate_outcomes(bench: SiteReport, acme: SiteReport) -> list[str]:
             pass  # warning only — demo historian may not flag in short tryout windows
 
     issues.extend(_dedupe_issues(bench.errors))
-    issues.extend(_dedupe_issues(acme.errors))
+    if not bench_only:
+        issues.extend(_dedupe_issues(acme.errors))
     if not bench.pass_:
         issues.append("bench site loop reported errors")
-    if not acme.pass_:
+    if not bench_only and not acme.pass_:
         issues.append("acme site loop reported errors")
     return issues
 
@@ -517,7 +521,20 @@ def main() -> int:
     parser.add_argument("--local", default=os.environ.get("OPENFDD_LOCAL_BASE", "http://127.0.0.1:8765"))
     parser.add_argument("--remote-limit", default=os.environ.get("OPENFDD_ANSIBLE_LIMIT", "acme_vm_bbartling"))
     parser.add_argument("--skip-parity", action="store_true")
+    parser.add_argument(
+        "--bench-only",
+        action="store_true",
+        help="benserver bench 5007 only — no Acme loop, no cross-site UI parity",
+    )
     args = parser.parse_args()
+
+    bench_only = args.bench_only or os.environ.get("OPENFDD_SMOKE_BENCH_ONLY") == "1"
+    if bench_only:
+        args.skip_parity = True
+
+    if not bench_only and os.environ.get("OPENFDD_LIVE_ACME") != "1":
+        print("Set OPENFDD_LIVE_ACME=1 for live paired smoke (or use --bench-only)", file=sys.stderr)
+        return 1
 
     if args.tryout:
         mode = "tryout"
@@ -528,17 +545,15 @@ def main() -> int:
     else:
         mode = "standard"
 
-    if os.environ.get("OPENFDD_LIVE_ACME") != "1":
-        print("Set OPENFDD_LIVE_ACME=1 for live paired smoke", file=sys.stderr)
-        return 1
-
     cfg = MODES[mode]
     duration = cfg["duration_minutes"]
     toggle_iv = cfg["toggle_interval_minutes"]
 
-    from scripts.acme_live_validate import resolve_base_from_ansible  # noqa: E402
+    acme_base = ""
+    if not bench_only:
+        from scripts.acme_live_validate import resolve_base_from_ansible  # noqa: E402
 
-    acme_base = resolve_base_from_ansible(args.remote_limit).rstrip("/")
+        acme_base = resolve_base_from_ansible(args.remote_limit).rstrip("/")
     bench_base = args.local.rstrip("/")
 
     parity: dict[str, Any] = {"pass": True, "issues": []}
@@ -570,7 +585,10 @@ def main() -> int:
 
     print(f"Paired FDD smoke — mode={mode} duration={duration}m toggle={toggle_iv}m", flush=True)
     print(f"  bench={bench_base} site={BENCH_SITE_ID}", flush=True)
-    print(f"  acme={acme_base} site={ACME_SITE_ID}", flush=True)
+    if bench_only:
+        print("  acme=skipped (--bench-only)", flush=True)
+    else:
+        print(f"  acme={acme_base} site={ACME_SITE_ID}", flush=True)
 
     bench_report = SiteReport(label="bench", base=bench_base)
     acme_report = SiteReport(label="acme", base=acme_base)
@@ -600,7 +618,8 @@ def main() -> int:
         "cycles_log": str(cycles_log_path),
         "log_hint": f"tail -f /tmp/paired_fdd_smoke_{mode}_*.log",
         "bench_base": bench_base,
-        "acme_base": acme_base,
+        "acme_base": acme_base or None,
+        "bench_only": bench_only,
         "pid": os.getpid(),
         **bench_auth.to_dict(),
     }
@@ -665,12 +684,13 @@ def main() -> int:
         daemon=True,
     )
     t_bench.start()
-    t_acme.start()
+    if not bench_only:
+        t_acme.start()
+        t_acme.join()
     t_bench.join()
-    t_acme.join()
     stop.set()
 
-    issues = _validate_outcomes(bench_report, acme_report)
+    issues = _validate_outcomes(bench_report, acme_report, bench_only=bench_only)
     if not parity.get("pass"):
         issues.insert(0, "cross-site parity failed")
 
