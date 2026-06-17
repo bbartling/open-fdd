@@ -604,6 +604,7 @@ def generate_rcx_docx(
     }
     report_ctx = build_rcx_report_context(site_id=sid, hours=preview.get("window", {}).get("hours") or hours)
     bundles = (preview.get("report_bundles") or {}).get("bundles") or []
+    equipment_charts = (preview.get("report_bundles") or {}).get("equipment_charts") or []
     equipment_bundle = None
     if charts:
         for b in bundles:
@@ -624,6 +625,9 @@ def generate_rcx_docx(
         chart_previews=preview.get("chart_previews") or [],
         report_context=report_ctx,
         equipment_bundle=equipment_bundle,
+        equipment_charts=equipment_charts,
+        available_charts=preview.get("available_charts") or [],
+        disabled_charts=preview.get("disabled_charts") or [],
     )
     start_s = (preview.get("window") or {}).get("start", "")[:10]
     end_s = (preview.get("window") or {}).get("end", "")[:10]

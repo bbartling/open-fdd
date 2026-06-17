@@ -73,7 +73,7 @@ def test_rcx_docx_contains_sections_and_chart():
         window={"start": "2026-01-01T00:00:00Z", "end": "2026-01-02T00:00:00Z"},
         fault_rows=fault_rows,
         overview={"active_faults": 1, "total_fault_hours": 2.5},
-        sections=["executive_summary", "fault_analytics"],
+        sections=["executive_summary", "fault_analytics", "fdd_rule_trends"],
         charts=["fault_hours_by_equipment", "active_faults_table"],
     )
     assert payload[:2] == b"PK"

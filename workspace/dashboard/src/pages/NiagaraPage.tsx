@@ -51,7 +51,7 @@ const emptyForm = (): Partial<NiagaraStation> => ({
   username: "",
   password_env: "",
   verify_tls: false,
-  enabled: false,
+  enabled: true,
   root_ord: "slot:/Drivers",
   default_points_root: "",
   poll_interval_seconds: 60,
@@ -470,11 +470,6 @@ export default function NiagaraPage() {
 
       <div className="panel">
         <h3 className="panel-title">Station connect</h3>
-        {!form.password_env || selectedStation?.password_configured === false ? (
-          <p className="muted" style={{ marginTop: 0 }}>
-            Password env: <code>workspace/niagara.env.local</code> → restart bridge after changes.
-          </p>
-        ) : null}
         <div className="host-info-grid">
           <div>
             <span className="status-kv-label">Connector</span>
@@ -492,44 +487,10 @@ export default function NiagaraPage() {
             <span className="status-kv-label">Import profile</span>
             <div>{profileSummary(commissionProfile)}</div>
           </div>
-        </div>
-        <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", margin: "0.75rem 0" }}>
-          {stations.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className={s.id === selectedStationId ? "primary-btn" : "secondary-btn"}
-              onClick={() => selectStation(s)}
-            >
-              {s.name}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="secondary-btn"
-            onClick={() => {
-              setSelectedStationId("");
-              setForm(emptyForm());
-              setCommissionProfile(emptyProfile());
-              setBrowseBase("slot:/Drivers");
-            }}
-          >
-            + New station
-          </button>
-        </div>
-        <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
-          <ActionButton pending={pending} onClick={() => void handleSaveStation()}>
-            Save station
-          </ActionButton>
-          <ActionButton secondary pending={pending} onClick={() => void handleTest()} disabled={!selectedStationId}>
-            Test connection
-          </ActionButton>
-          <ActionButton secondary pending={pending} onClick={() => void handleSaveProfile()} disabled={!selectedStationId}>
-            Save import profile
-          </ActionButton>
-          <ActionButton secondary pending={pending} onClick={() => void handleBrowse()} disabled={!selectedStationId}>
-            Preview folder tree
-          </ActionButton>
+          <div>
+            <span className="status-kv-label">Active station</span>
+            <div>{selectedStationId ? selectedStation?.name ?? selectedStationId : "— new (save below)"}</div>
+          </div>
         </div>
       </div>
 
@@ -592,7 +553,7 @@ export default function NiagaraPage() {
         </div>
       ) : null}
 
-      <div className="niagara-commission-grid">
+      <div className="niagara-page-stack">
         <div className="panel">
           <h3 className="panel-title">Station tree browse</h3>
           <p className="muted" style={{ marginTop: 0 }}>
@@ -628,6 +589,9 @@ export default function NiagaraPage() {
               />{" "}
               Follow external
             </label>
+            <ActionButton secondary pending={pending} onClick={() => void handleBrowse()} disabled={!selectedStationId}>
+              Preview folder tree
+            </ActionButton>
           </div>
           <NiagaraBrowseTree
             nodes={treeNodes}
@@ -644,6 +608,247 @@ export default function NiagaraPage() {
               setLog("Copied ORD to clipboard.");
             }}
           />
+        </div>
+
+        <div className="panel">
+          <h3 className="panel-title">Niagara station</h3>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Configure baskStream connection like the JSON API driver. Use <strong>+ New station</strong> then fill every
+            field below and <strong>Save station</strong> before Test connection. Password lives in{" "}
+            <code>workspace/niagara.env.local</code>.
+          </p>
+          {!form.password_env || selectedStation?.password_configured === false ? (
+            <p className="muted panel-warn" style={{ padding: "0.5rem 0.75rem", borderRadius: 8 }}>
+              Password env not configured on the bridge — set the variable named in the field below and restart the stack.
+            </p>
+          ) : null}
+          <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+            {stations.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className={s.id === selectedStationId ? "primary-btn" : "secondary-btn"}
+                onClick={() => selectStation(s)}
+              >
+                {s.name}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => {
+                setSelectedStationId("");
+                setForm(emptyForm());
+                setCommissionProfile(emptyProfile());
+                setBrowseBase("slot:/Drivers");
+                setConnectionOk(null);
+                setLog("New station — fill the form below and Save station.");
+              }}
+            >
+              + New station
+            </button>
+            {import.meta.env.DEV ? (
+              <button type="button" className="secondary-btn" onClick={() => void loadDevBenchTemplate()}>
+                Load dev bench template
+              </button>
+            ) : null}
+          </div>
+          <div className="form-grid">
+            <div className="field">
+              <label className="field-label" htmlFor="niagara-name">
+                Name
+              </label>
+              <input
+                id="niagara-name"
+                value={form.name ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Niagara station name"
+              />
+            </div>
+            <div className="field" style={{ gridColumn: "span 2" }}>
+              <label className="field-label" htmlFor="niagara-url">
+                Station URL
+              </label>
+              <input
+                id="niagara-url"
+                value={form.station_url ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, station_url: e.target.value }))}
+                placeholder={STATION_URL_PLACEHOLDER}
+              />
+            </div>
+            <div className="field">
+              <label className="field-label" htmlFor="niagara-user">
+                Username
+              </label>
+              <input
+                id="niagara-user"
+                value={form.username ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+              />
+            </div>
+            <div className="field">
+              <label className="field-label" htmlFor="niagara-pass-env">
+                Password env var
+              </label>
+              <input
+                id="niagara-pass-env"
+                value={form.password_env ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, password_env: e.target.value }))}
+                placeholder="edge password env var"
+              />
+            </div>
+            <div className="field">
+              <label className="field-label" htmlFor="niagara-poll">
+                Poll interval
+              </label>
+              <select
+                id="niagara-poll"
+                value={form.poll_interval_seconds ?? 60}
+                onChange={(e) => setForm((f) => ({ ...f, poll_interval_seconds: Number(e.target.value) }))}
+              >
+                {STANDARD_POLL_INTERVALS.map((p) => (
+                  <option key={p.seconds} value={p.seconds}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label className="field-label" htmlFor="niagara-batch">
+                Read batch size
+              </label>
+              <input
+                id="niagara-batch"
+                type="number"
+                min={1}
+                max={200}
+                value={form.read_batch_size ?? 50}
+                onChange={(e) => setForm((f) => ({ ...f, read_batch_size: Number(e.target.value) }))}
+              />
+            </div>
+            <div className="field">
+              <label className="field-label" htmlFor="niagara-browse-depth">
+                Browse depth
+              </label>
+              <input
+                id="niagara-browse-depth"
+                type="number"
+                min={1}
+                max={12}
+                value={form.browse_depth ?? 4}
+                onChange={(e) => setForm((f) => ({ ...f, browse_depth: Number(e.target.value) }))}
+              />
+            </div>
+            <div className="field">
+              <label className="field-label" htmlFor="niagara-max-nodes">
+                Max nodes
+              </label>
+              <input
+                id="niagara-max-nodes"
+                type="number"
+                min={100}
+                max={20000}
+                value={form.max_nodes ?? 2000}
+                onChange={(e) => setForm((f) => ({ ...f, max_nodes: Number(e.target.value) }))}
+              />
+            </div>
+            <div className="field" style={{ gridColumn: "1 / -1" }}>
+              <label className="field-label" htmlFor="niagara-root-ord">
+                Root ORD (browse)
+              </label>
+              <input
+                id="niagara-root-ord"
+                value={form.root_ord ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, root_ord: e.target.value }))}
+                placeholder="slot:/Drivers"
+              />
+            </div>
+            <div className="field" style={{ gridColumn: "1 / -1" }}>
+              <label className="field-label" htmlFor="niagara-points-root">
+                Default points root (discover/poll)
+              </label>
+              <input
+                id="niagara-points-root"
+                value={form.default_points_root ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, default_points_root: e.target.value }))}
+                placeholder="slot:/Drivers/BacnetNetwork/DEVICE$20NAME/points"
+              />
+              <p className="muted">Preserve $20 / $2d encoding exactly — do not URL-decode ORDs.</p>
+            </div>
+            <div className="field">
+              <label className="checkbox-row" htmlFor="niagara-enabled">
+                <input
+                  id="niagara-enabled"
+                  type="checkbox"
+                  checked={form.enabled !== false}
+                  onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
+                />
+                Station enabled
+              </label>
+            </div>
+            <div className="field">
+              <label className="checkbox-row" htmlFor="niagara-verify-tls">
+                <input
+                  id="niagara-verify-tls"
+                  type="checkbox"
+                  checked={Boolean(form.verify_tls)}
+                  onChange={(e) => setForm((f) => ({ ...f, verify_tls: e.target.checked }))}
+                />
+                Verify TLS
+              </label>
+            </div>
+            <div className="field">
+              <label className="checkbox-row" htmlFor="niagara-proxy-ext">
+                <input
+                  id="niagara-proxy-ext"
+                  type="checkbox"
+                  checked={Boolean(form.include_proxy_ext)}
+                  onChange={(e) => setForm((f) => ({ ...f, include_proxy_ext: e.target.checked }))}
+                />
+                Include proxy extensions
+              </label>
+            </div>
+            <div className="field">
+              <label className="checkbox-row" htmlFor="niagara-follow-ext">
+                <input
+                  id="niagara-follow-ext"
+                  type="checkbox"
+                  checked={Boolean(form.follow_external)}
+                  onChange={(e) => setForm((f) => ({ ...f, follow_external: e.target.checked }))}
+                />
+                Follow external links
+              </label>
+            </div>
+          </div>
+          <div className="row" style={{ marginTop: "0.75rem", gap: "0.5rem", flexWrap: "wrap" }}>
+            <ActionButton pending={pending} pendingLabel="Saving…" onClick={() => void handleSaveStation()}>
+              Save station
+            </ActionButton>
+            <ActionButton
+              secondary
+              pending={pending}
+              onClick={() => void handleTest()}
+              disabled={!form.name || !form.station_url}
+            >
+              Test connection
+            </ActionButton>
+            <ActionButton secondary pending={pending} onClick={() => void handleSaveProfile()}>
+              Save import profile
+            </ActionButton>
+            <ActionButton
+              secondary
+              pending={pending}
+              onClick={() => void handleDiscover()}
+              disabled={!selectedStationId}
+            >
+              Discover points
+            </ActionButton>
+            {selectedStationId ? (
+              <ActionButton secondary danger pending={pending} onClick={() => void handleDeleteStation()}>
+                Delete station
+              </ActionButton>
+            ) : null}
+          </div>
         </div>
 
         <div className="panel">
@@ -766,155 +971,6 @@ export default function NiagaraPage() {
         {actionError ? <p className="error">{actionError}</p> : null}
         <pre className="console">{log || "Ready."}</pre>
       </div>
-
-      <details className="panel">
-        <summary className="panel-title" style={{ display: "inline", cursor: "pointer" }}>
-          Advanced station settings
-        </summary>
-        {!form.password_env || selectedStation?.password_configured === false ? (
-          <p className="muted" style={{ marginTop: "0.5rem" }}>
-            Station password is not configured on the edge — add the password environment variable in{" "}
-            <code>workspace/niagara.env.local</code> and restart the bridge.
-          </p>
-        ) : null}
-        <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", margin: "0.75rem 0" }}>
-          {stations.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className={s.id === selectedStationId ? "primary-btn" : "secondary-btn"}
-              onClick={() => selectStation(s)}
-            >
-              {s.name}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="secondary-btn"
-            onClick={() => {
-              setSelectedStationId("");
-              setForm(emptyForm());
-              setBrowseBase("slot:/Drivers");
-            }}
-          >
-            + New station
-          </button>
-          {import.meta.env.DEV ? (
-            <button type="button" className="secondary-btn" onClick={() => void loadDevBenchTemplate()}>
-              Load dev bench template
-            </button>
-          ) : null}
-        </div>
-        <div className="form-grid">
-          <div className="field">
-            <label className="field-label">Name</label>
-            <input value={form.name ?? ""} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label className="field-label">Station URL</label>
-            <input
-              value={form.station_url ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, station_url: e.target.value }))}
-              placeholder={STATION_URL_PLACEHOLDER}
-            />
-          </div>
-          <div className="field">
-            <label className="field-label">Username</label>
-            <input value={form.username ?? ""} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label className="field-label">Password env var</label>
-            <input
-              value={form.password_env ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, password_env: e.target.value }))}
-              placeholder="edge password env var"
-            />
-          </div>
-          <div className="field">
-            <label className="field-label">
-              <input
-                type="checkbox"
-                checked={Boolean(form.verify_tls)}
-                onChange={(e) => setForm((f) => ({ ...f, verify_tls: e.target.checked }))}
-              />{" "}
-              Verify TLS
-            </label>
-          </div>
-          <div className="field">
-            <label className="field-label">Poll interval</label>
-            <select
-              value={form.poll_interval_seconds ?? 60}
-              onChange={(e) => setForm((f) => ({ ...f, poll_interval_seconds: Number(e.target.value) }))}
-            >
-              {STANDARD_POLL_INTERVALS.map((p) => (
-                <option key={p.seconds} value={p.seconds}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field" style={{ gridColumn: "1 / -1" }}>
-            <label className="field-label">Root ORD (browse)</label>
-            <input value={form.root_ord ?? ""} onChange={(e) => setForm((f) => ({ ...f, root_ord: e.target.value }))} />
-          </div>
-          <div className="field" style={{ gridColumn: "1 / -1" }}>
-            <label className="field-label">Default points root (discover/poll)</label>
-            <input
-              value={form.default_points_root ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, default_points_root: e.target.value }))}
-              placeholder="slot:/Drivers/BacnetNetwork/DEVICE$20NAME/points"
-            />
-            <p className="muted">Preserve $20 / $2d encoding exactly — do not URL-decode ORDs.</p>
-          </div>
-          <div className="field">
-            <label className="field-label">Read batch size</label>
-            <input
-              type="number"
-              min={1}
-              max={200}
-              value={form.read_batch_size ?? 50}
-              onChange={(e) => setForm((f) => ({ ...f, read_batch_size: Number(e.target.value) }))}
-            />
-          </div>
-          <div className="field">
-            <label className="field-label">
-              <input
-                type="checkbox"
-                checked={Boolean(form.include_proxy_ext)}
-                onChange={(e) => setForm((f) => ({ ...f, include_proxy_ext: e.target.checked }))}
-              />{" "}
-              Include proxy extensions (advanced)
-            </label>
-          </div>
-          <div className="field">
-            <label className="field-label">
-              <input
-                type="checkbox"
-                checked={Boolean(form.follow_external)}
-                onChange={(e) => setForm((f) => ({ ...f, follow_external: e.target.checked }))}
-              />{" "}
-              Follow external station links (debug)
-            </label>
-          </div>
-        </div>
-
-        <div className="row" style={{ marginTop: "0.75rem", gap: "0.5rem", flexWrap: "wrap" }}>
-          <ActionButton pending={pending} pendingLabel="…" onClick={() => void handleSaveStation()}>
-            Save station
-          </ActionButton>
-          <ActionButton secondary pending={pending} onClick={() => void handleTest()} disabled={!selectedStationId}>
-            Test connection
-          </ActionButton>
-          <ActionButton secondary pending={pending} onClick={() => void handleDiscover()} disabled={!selectedStationId}>
-            Discover points
-          </ActionButton>
-          {selectedStationId ? (
-            <ActionButton secondary danger pending={pending} onClick={() => void handleDeleteStation()}>
-              Delete
-            </ActionButton>
-          ) : null}
-        </div>
-      </details>
     </div>
   );
 }

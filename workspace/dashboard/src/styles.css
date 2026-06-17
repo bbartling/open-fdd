@@ -923,17 +923,16 @@ textarea {
   margin-bottom: 0.65rem;
 }
 
-.niagara-commission-grid {
-  display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.2fr);
+.niagara-page-stack {
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
-  align-items: start;
 }
 
-@media (max-width: 960px) {
-  .niagara-commission-grid {
-    grid-template-columns: 1fr;
-  }
+.niagara-commission-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .niagara-browse-tree {

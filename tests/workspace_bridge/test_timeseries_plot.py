@@ -29,10 +29,10 @@ def _bench_model() -> dict:
 
 
 def _bench_rules_store_path() -> Path | None:
-    """Committed bench rules (workspace copy is gitignored runtime)."""
+    """Committed bench rules — prefer edge_config over gitignored workspace runtime copy."""
     for path in (
-        REPO / "workspace" / "data" / "rules_store.json",
         REPO / "edge_config" / "demo" / "bens-office" / "rules_store.json",
+        REPO / "workspace" / "data" / "rules_store.json",
     ):
         if path.is_file():
             return path

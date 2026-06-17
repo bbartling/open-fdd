@@ -74,8 +74,10 @@ SECTION_SPECS = [
     {"id": "analyst_insights", "label": "Analyst insights (plain language)"},
     {"id": "runtime_analytics", "label": "Runtime analytics"},
     {"id": "model_health", "label": "BACnet / model health"},
+    {"id": "fdd_rule_trends", "label": "FDD rule trend screenshots"},
     {"id": "recommendations", "label": "Recommendations"},
     {"id": "appendix_faults", "label": "Appendix: raw fault table"},
+    {"id": "appendix_missing_roles", "label": "Appendix: missing point roles"},
 ]
 
 TREND_CHART_IDS = {

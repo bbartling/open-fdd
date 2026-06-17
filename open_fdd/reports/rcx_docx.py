@@ -6,6 +6,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 from open_fdd.reports.fault_hours import aggregate_fault_hours
+from open_fdd.reports.rcx_placeholders import (
+    SCREENSHOT_LABEL,
+    chart_placeholder_spec,
+    disabled_chart_notes,
+    rule_sensor_placeholder,
+)
 
 DEFAULT_SECTIONS = [
     "executive_summary",
@@ -17,12 +23,11 @@ DEFAULT_SECTIONS = [
     "analyst_insights",
     "runtime_analytics",
     "model_health",
+    "fdd_rule_trends",
     "recommendations",
     "appendix_faults",
     "appendix_missing_roles",
 ]
-
-SCREENSHOT_LABEL = "[ INSERT SCREENSHOT HERE ]"
 
 
 def _recommendations(rows: list[dict[str, Any]], warnings: list[str]) -> list[str]:
@@ -43,10 +48,12 @@ def _recommendations(rows: list[dict[str, Any]], warnings: list[str]) -> list[st
     return recs[:12]
 
 
-def _screenshot_placeholder(doc, *, title: str, subtitle: str = "") -> None:
+def _screenshot_placeholder(doc, *, title: str, subtitle: str = "", instruction: str = "") -> None:
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Pt, RGBColor
 
+    if instruction:
+        doc.add_paragraph(instruction)
     doc.add_paragraph()
     box = doc.add_paragraph()
     box.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -87,6 +94,9 @@ def build_rcx_docx(
     chart_previews: list[dict[str, Any]] | None = None,
     report_context: dict[str, Any] | None = None,
     equipment_bundle: dict[str, Any] | None = None,
+    equipment_charts: list[dict[str, Any]] | None = None,
+    available_charts: list[dict[str, Any]] | None = None,
+    disabled_charts: list[dict[str, Any]] | None = None,
 ) -> bytes:
     from docx import Document
     from docx.shared import Inches, Pt
@@ -163,16 +173,32 @@ def build_rcx_docx(
     if "trend_charts" in enabled_sections:
         doc.add_heading("Trend charts (engineer screenshots)", level=1)
         doc.add_paragraph(
-            "Use the RCx Report Builder Plotly gallery or Trend plot tab. "
-            "When the trend looks correct, snip the chart and paste into each placeholder below."
+            "BRICK model resolves historian columns per equipment type (AHU, VAV, zone, plant). "
+            "Open RCx Report Builder → Render chart gallery, or Trend plot with the listed columns. "
+            "Snip each chart and paste into the placeholder below it."
         )
-        eq_charts = equipment_bundle.get("chart_ids") if isinstance(equipment_bundle, dict) else None
-        if eq_charts:
-            for cid in eq_charts:
-                _screenshot_placeholder(doc, title=str(cid), subtitle="Equipment trend — paste Plotly snip")
-        else:
-            for spec_id in charts or ["ahu_sat_vs_setpoint", "ahu_duct_static_vs_setpoint", "vav_zone_temp"]:
-                _screenshot_placeholder(doc, title=str(spec_id), subtitle="Building trend — paste Plotly snip")
+        bundle_chart_ids = equipment_bundle.get("chart_ids") if isinstance(equipment_bundle, dict) else None
+        chart_ids = list(charts or bundle_chart_ids or ["ahu_sat_vs_setpoint", "ahu_duct_static_vs_setpoint", "vav_zone_temp"])
+        for cid in chart_ids:
+            spec = chart_placeholder_spec(
+                str(cid),
+                equipment_charts=equipment_charts,
+                catalog=available_charts,
+                chart_previews=chart_previews,
+            )
+            if spec.get("equipment_type") and spec.get("equipment_type") != "building":
+                doc.add_paragraph(f"System type: {spec.get('equipment_type')}")
+            _screenshot_placeholder(
+                doc,
+                title=str(spec.get("title") or cid),
+                subtitle=str(spec.get("subtitle") or ""),
+                instruction=str(spec.get("instruction") or ""),
+            )
+        gap_notes = disabled_chart_notes(disabled_charts)
+        if gap_notes:
+            doc.add_paragraph("Charts not included (model / historian gaps):")
+            for note in gap_notes[:12]:
+                doc.add_paragraph(f"• {note}")
 
     if "fault_analytics" in enabled_sections:
         doc.add_heading("Fault analytics", level=1)
@@ -294,39 +320,33 @@ def build_rcx_docx(
                         f"priority {ov_row.get('priority') or '—'}"
                     )
 
-    doc.add_heading("FDD rule trend screenshots", level=1)
-    doc.add_paragraph(
-        "For each assigned Rule Lab rule, paste a trend screenshot for the bound sensor columns "
-        "(required even when no fault is active in the lookback window)."
-    )
-    if assigned_rules:
-        for rule in assigned_rules:
-            doc.add_heading(str(rule.get("rule_name") or rule.get("rule_id")), level=2)
-            doc.add_paragraph(
-                f"Fault code: {rule.get('fault_code') or '—'} · Severity: {rule.get('severity') or '—'}"
-            )
-            sensors = rule.get("sensors") if isinstance(rule.get("sensors"), list) else []
-            if sensors:
-                for s in sensors:
-                    if not isinstance(s, dict):
-                        continue
-                    label = str(s.get("label") or s.get("column") or "sensor")
-                    col = str(s.get("column") or "")
-                    brick = str(s.get("brick_type") or "")
-                    doc.add_paragraph(f"Sensor: {label} ({col}) {brick}")
+    if "fdd_rule_trends" in enabled_sections:
+        doc.add_heading("FDD rule trend screenshots", level=1)
+        doc.add_paragraph(
+            "For each assigned Rule Lab rule, paste a trend screenshot for the bound sensor columns "
+            "(required even when no fault is active in the lookback window)."
+        )
+        if assigned_rules:
+            for rule in assigned_rules:
+                if not isinstance(rule, dict):
+                    continue
+                doc.add_heading(str(rule.get("rule_name") or rule.get("rule_id")), level=2)
+                doc.add_paragraph(
+                    f"Fault code: {rule.get('fault_code') or '—'} · Severity: {rule.get('severity') or '—'}"
+                )
+                for sensor in rule_sensor_placeholder(rule):
+                    label = sensor.get("label") or "sensor"
+                    col = sensor.get("column") or ""
+                    brick = sensor.get("brick_type") or ""
+                    doc.add_paragraph(f"Sensor: {label} ({col}) {brick}".strip())
+                    doc.add_paragraph(sensor.get("instruction") or "")
                     _screenshot_placeholder(
                         doc,
                         title=f"{rule.get('rule_name')} — {label}",
-                        subtitle=f"Historian column: {col}",
+                        subtitle=f"Historian column: {col}" if col else "Bind points in Model & assignments",
                     )
-            else:
-                _screenshot_placeholder(
-                    doc,
-                    title=str(rule.get("rule_name") or "Rule trend"),
-                    subtitle="Bind points in Model & assignments",
-                )
-    else:
-        doc.add_paragraph("No enabled Rule Lab rules found for this site.")
+        else:
+            doc.add_paragraph("No enabled Rule Lab rules found for this site.")
 
     if "recommendations" in enabled_sections:
         doc.add_heading("Recommendations", level=1)
@@ -335,9 +355,22 @@ def build_rcx_docx(
 
     if "analyst_insights" in enabled_sections:
         doc.add_heading("Analyst insights", level=1)
-        doc.add_paragraph(
-            "Plain-language interpretation — add field notes here after reviewing trends and fault evidence."
-        )
+        narratives: list[str] = []
+        for prev in chart_previews or []:
+            if not isinstance(prev, dict):
+                continue
+            text = str(prev.get("narrative") or "").strip()
+            if text:
+                title = str(prev.get("title") or prev.get("chart_id") or "Chart")
+                narratives.append(f"{title}: {text}")
+        if narratives:
+            doc.add_paragraph("Programmatic chart narratives from the selected window:")
+            for para in narratives[:8]:
+                doc.add_paragraph(f"• {para}")
+        else:
+            doc.add_paragraph(
+                "Plain-language interpretation — add field notes here after reviewing trends and fault evidence."
+            )
 
     if "appendix_faults" in enabled_sections:
         doc.add_heading("Appendix: fault table", level=1)
@@ -350,11 +383,17 @@ def build_rcx_docx(
     if "appendix_missing_roles" in enabled_sections:
         doc.add_heading("Appendix: missing point roles", level=1)
         missing = ov.get("missing_roles") if isinstance(ov.get("missing_roles"), list) else []
+        gap_notes = disabled_chart_notes(disabled_charts)
         if missing:
+            doc.add_paragraph("Model issues from mechanical summary:")
             for m in missing[:40]:
                 doc.add_paragraph(f"• {m}")
-        else:
-            doc.add_paragraph("None recorded.")
+        if gap_notes:
+            doc.add_paragraph("Charts disabled due to missing BRICK roles or historian data:")
+            for note in gap_notes[:40]:
+                doc.add_paragraph(f"• {note}")
+        if not missing and not gap_notes:
+            doc.add_paragraph("None recorded — all selected chart roles resolved.")
 
     if equipment_notes:
         doc.add_heading("Equipment notes", level=1)

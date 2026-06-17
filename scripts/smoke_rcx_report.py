@@ -34,10 +34,15 @@ def main() -> int:
         sections=DEFAULT_SECTIONS,
         report_context=report_context,
         overview={"active_faults": len(fault_rows), "total_fault_hours": 4.5},
+        charts=["ahu_sat_vs_setpoint"],
+        available_charts=json.loads((FIXTURE_DIR / "chart_catalog.json").read_text(encoding="utf-8"))["available_charts"],
+        equipment_charts=json.loads((FIXTURE_DIR / "chart_catalog.json").read_text(encoding="utf-8"))["equipment_charts"],
     )
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = args.out or OUT_DIR / f"rcx_smoke_{args.site_id}.docx"
     out.write_bytes(blob)
+    if len(blob) < 10_000:
+        raise SystemError(f"DOCX unexpectedly small ({len(blob)} bytes)")
     print(f"OK — wrote {out} ({len(blob)} bytes)")
     return 0
 
