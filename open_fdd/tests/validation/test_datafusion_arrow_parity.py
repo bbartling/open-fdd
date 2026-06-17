@@ -80,8 +80,11 @@ def test_zn_t_null_and_missing_column():
     cfg = phase_config("bench", "normal")
     sql = zn_t_bounds_sql(float(cfg["low"]), float(cfg["high"]))
     arrow_mask, sql_mask = _run_pair(table=table, arrow_code=ZN_T_BOUNDS_ARROW_CODE, sql=sql, cfg=cfg)
-    assert mask_value_counts(arrow_mask)["null_count"] >= 0
     assert compare_fault_masks(arrow_mask, sql_mask)["pass"]
+    counts = mask_value_counts(arrow_mask)
+    assert counts["row_count"] == 1
+    assert counts["true_count"] == 0
+    assert counts["false_count"] == 1
 
 
 def test_oat_spread_parity_with_nulls():
