@@ -929,6 +929,268 @@ textarea {
   gap: 1rem;
 }
 
+.niagara-page-stack > .panel {
+  margin-bottom: 0;
+}
+
+.niagara-station-rail-top {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--bg) 35%, transparent);
+}
+
+.niagara-rail-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.65rem;
+}
+
+.niagara-rail-toolbar .niagara-rail-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.niagara-rail-toolbar .niagara-rail-hint {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.niagara-rail-toolbar .niagara-rail-new {
+  width: auto;
+  margin-left: auto;
+}
+
+.niagara-rail-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.65rem;
+}
+
+.niagara-rail-head .panel-title {
+  margin: 0;
+}
+
+.niagara-rail-count {
+  font-size: 0.85rem;
+}
+
+.niagara-rail-hint {
+  font-size: 0.8rem;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.niagara-rail-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.niagara-rail-mark.live {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+}
+
+.niagara-rail-mark.ok {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.niagara-rail-mark.err,
+.niagara-rail-mark.off {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+}
+
+.niagara-rail-mark.idle {
+  color: var(--muted);
+  background: var(--panel-soft);
+}
+
+.niagara-rail-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+  flex: 1 1 16rem;
+  min-width: min(100%, 18rem);
+  max-width: 28rem;
+}
+
+.niagara-rail-arrow {
+  min-width: 2rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.niagara-rail-card-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.niagara-rail-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.5rem 0.65rem;
+  background: var(--panel-soft);
+  height: 100%;
+}
+
+.niagara-rail-card.active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel-soft));
+}
+
+.niagara-rail-card.draft {
+  border-style: dashed;
+}
+
+.niagara-rail-card-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.niagara-rail-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.1rem;
+  min-width: 0;
+}
+
+.niagara-rail-card-head .niagara-rail-card-meta {
+  margin-top: 0;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.niagara-rail-card-url {
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.niagara-rail-card-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.niagara-rail-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.niagara-rail-chip {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--panel-soft);
+}
+
+.niagara-rail-chip.active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel-soft));
+}
+
+.niagara-rail-chip-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.45rem 0.3rem 0.35rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  max-width: 14rem;
+}
+
+.niagara-rail-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.niagara-rail-chip-pts {
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.niagara-rail-chip-delete {
+  border: none;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  width: 1.65rem;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.niagara-rail-chip-delete:hover:not(:disabled) {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 8%, transparent);
+}
+
+.niagara-station-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.niagara-station-header h3 {
+  margin: 0;
+}
+
+.niagara-station-sub {
+  font-size: 0.85rem;
+  margin-top: 0.2rem;
+}
+
+.niagara-poll-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  padding: 0.65rem 0.75rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  font-size: 0.9rem;
+}
+
+.niagara-poll-strip .status-kv {
+  min-width: 5rem;
+}
+
 .niagara-commission-grid {
   display: flex;
   flex-direction: column;
@@ -2034,7 +2296,7 @@ textarea {
 }
 
 .tab-debug {
-  margin: 8px 0 12px;
+  padding: 12px 16px;
 }
 
 .tab-debug-toggle {
@@ -2042,11 +2304,9 @@ textarea {
 }
 
 .tab-debug-body {
-  margin-top: 8px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel-soft);
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
   max-height: 180px;
   overflow: auto;
 }

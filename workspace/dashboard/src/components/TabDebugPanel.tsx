@@ -108,7 +108,7 @@ export function TabDebugPanel({ tab }: PanelProps) {
   const errors = entries.filter((e) => e.level === "error").length;
 
   return (
-    <div className="tab-debug">
+    <div className="panel tab-debug">
       <button type="button" className="secondary-btn tab-debug-toggle" onClick={() => setOpen(!open)}>
         Debug {errors ? `(${errors} err)` : ""}
       </button>
