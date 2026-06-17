@@ -29,6 +29,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "workspace" / "api"))
 
+from open_fdd.validation.paired_fdd_parity import compare_batch_runs  # noqa: E402
 from open_fdd.validation.paired_fdd_contract import (  # noqa: E402
     ACME_SITE_ID,
     BENCH_SITE_ID,
@@ -45,7 +46,8 @@ from open_fdd.validation.paired_fdd_contract import (  # noqa: E402
     bench_rules_for_phase,
 )
 
-REPORT_DIR = REPO / "reports"
+from scripts.smoke_paired_fdd_auth import AuthStats, SmokeAuthSession  # noqa: E402
+
 POLL_SECONDS = 60
 HEARTBEAT_SECONDS = 300
 
@@ -195,30 +197,56 @@ def _fetch(
         return 0, {"error": str(exc)}
 
 
-def _login(base: str) -> str:
-    user, password = _load_auth()
-    st, body = _fetch("POST", f"{base.rstrip('/')}/api/auth/login", body={"username": user, "password": password})
-    if st != 200 or not isinstance(body, dict) or not body.get("token"):
-        raise RuntimeError(f"login failed HTTP {st}")
-    return str(body["token"])
+def _runs_by_id(batch: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for run in batch.get("runs") or []:
+        if isinstance(run, dict):
+            out[str(run.get("rule_id") or "")] = run
+    return out
 
 
-def _save_rules(base: str, token: str, rules: list[dict[str, Any]]) -> list[str]:
+def _smoke_rule_pairs(site_kind: str) -> list[tuple[str, str]]:
+    if site_kind == "bench":
+        return [
+            (RULE_BENCH_BACNET_ARROW, RULE_BENCH_BACNET_SQL),
+            (RULE_BENCH_NIAGARA_ARROW, RULE_BENCH_NIAGARA_SQL),
+        ]
+    return [(RULE_ACME_OAT_ARROW, RULE_ACME_OAT_SQL)]
+
+
+def _parity_issues_from_batch(site_kind: str, batch: dict[str, Any]) -> list[str]:
+    runs = _runs_by_id(batch)
+    issues: list[str] = []
+    for arrow_id, sql_id in _smoke_rule_pairs(site_kind):
+        arrow_run = runs.get(arrow_id)
+        sql_run = runs.get(sql_id)
+        if not arrow_run or not sql_run:
+            continue
+        if sql_run.get("error"):
+            issues.append(f"{sql_id} backend error")
+        issues.extend(compare_batch_runs(arrow_run, sql_run))
+    return issues
+
+
+def _save_rules(session: SmokeAuthSession, rules: list[dict[str, Any]]) -> list[str]:
     errs: list[str] = []
     for rule in rules:
-        st, res = _fetch("POST", f"{base.rstrip('/')}/api/rules/save", token=token, body=rule)
+        st, _res = session.fetch("POST", "/api/rules/save", body=rule)
         if st != 200:
+            if st == 401 and session.stats.auth_failure:
+                errs.append(f"save {rule.get('id')}: auth failure")
+                break
             errs.append(f"save {rule.get('id')}: HTTP {st}")
     return errs
 
 
-def _run_batch(base: str, token: str, *, lookback_hours: float) -> tuple[int, dict[str, Any]]:
-    return _fetch(
+def _run_batch(session: SmokeAuthSession, *, lookback_hours: float) -> tuple[int, dict[str, Any]]:
+    st, body = session.fetch(
         "POST",
-        f"{base.rstrip('/')}/api/rules/batch",
-        token=token,
+        "/api/rules/batch",
         body={"lookback_hours": lookback_hours, "limit": 5000},
     )
+    return st, body if isinstance(body, dict) else {}
 
 
 def _flagged_by_rule(batch: dict[str, Any]) -> dict[str, int]:
@@ -251,9 +279,12 @@ def _run_site_loop(
     started_monotonic: float | None = None,
     status_path: Path | None = None,
     cycles_log_path: Path | None = None,
+    auth_stats: AuthStats | None = None,
 ) -> None:
+    stats = auth_stats or AuthStats()
+    session = SmokeAuthSession(base=base, label=label, stats=stats, stats_lock=threading.Lock())
     try:
-        token = _login(base)
+        session.login(reason="initial")
     except RuntimeError as exc:
         report.errors.append(str(exc))
         report.pass_ = False
@@ -265,6 +296,10 @@ def _run_site_loop(
     last_toggle_idx = -1
 
     while not stop_event.is_set() and (time.monotonic() - t0) < total_s:
+        if session.stats.auth_failure:
+            report.errors.append(f"{label}: unrecoverable auth failure")
+            report.pass_ = False
+            break
         cycle += 1
         elapsed_min = (time.monotonic() - t0) / 60.0
         toggle_idx = int(elapsed_min // toggle_interval_minutes)
@@ -276,7 +311,7 @@ def _run_site_loop(
                 shared_phase[0] = phase
                 shared_toggle_count[0] = toggle_idx + 1
                 rules = bench_rules_for_phase(phase) if site_kind == "bench" else acme_rules_for_phase(phase)
-                save_errs = _save_rules(base, token, rules)
+                save_errs = _save_rules(session, rules)
                 if save_errs:
                     report.errors.extend(save_errs)
                     report.pass_ = False
@@ -286,52 +321,30 @@ def _run_site_loop(
         snap = CycleSnapshot(cycle=cycle, timestamp=_utc(), phase=phase, toggles=shared_toggle_count[0])
 
         if site_kind == "bench":
-            _fetch("POST", f"{base.rstrip('/')}/api/bacnet/poll/once", token=token, timeout=180.0)
-            _fetch(
-                "POST",
-                f"{base.rstrip('/')}/api/niagara/stations/bench9065/poll/once",
-                token=token,
-                timeout=180.0,
-            )
+            session.fetch("POST", "/api/bacnet/poll/once", timeout=180.0)
+            session.fetch("POST", "/api/niagara/stations/bench9065/poll/once", timeout=180.0)
         else:
-            _fetch("POST", f"{base.rstrip('/')}/api/bacnet/poll/once", token=token, timeout=180.0)
-            _fetch("POST", f"{base.rstrip('/')}/api/json-api/poll/once", token=token, timeout=180.0)
+            session.fetch("POST", "/api/bacnet/poll/once", timeout=180.0)
+            session.fetch("POST", "/api/json-api/poll/once", timeout=180.0)
 
-        st, batch = _run_batch(base, token, lookback_hours=lookback)
+        st, batch = _run_batch(session, lookback_hours=lookback)
         if st != 200 or not isinstance(batch, dict):
-            snap.errors.append(f"batch HTTP {st}")
+            if st == 401 and session.stats.auth_failure:
+                snap.errors.append("auth failure (unrecoverable 401)")
+            else:
+                snap.errors.append(f"batch HTTP {st}")
             report.pass_ = False
         else:
             flagged = _flagged_by_rule(batch)
             batch_summary = {"flagged": flagged, "summary": batch.get("summary")}
+            parity_issues = _parity_issues_from_batch(site_kind, batch)
+            if parity_issues:
+                snap.errors.extend(parity_issues[:6])
+                report.pass_ = False
             if site_kind == "bench":
                 snap.bench_batch = batch_summary
-                bacnet_a = flagged.get(RULE_BENCH_BACNET_ARROW, -1)
-                bacnet_s = flagged.get(RULE_BENCH_BACNET_SQL, -1)
-                niagara_a = flagged.get(RULE_BENCH_NIAGARA_ARROW, -1)
-                niagara_s = flagged.get(RULE_BENCH_NIAGARA_SQL, -1)
-                if bacnet_a >= 0 and bacnet_s >= 0 and bacnet_a != bacnet_s:
-                    snap.errors.append(f"bacnet arrow/sql mismatch {bacnet_a} vs {bacnet_s}")
-                    report.pass_ = False
-                if bacnet_s == -2:
-                    snap.errors.append("bacnet sql backend error")
-                    report.pass_ = False
-                if niagara_a >= 0 and niagara_s >= 0 and niagara_a != niagara_s:
-                    snap.errors.append(f"niagara arrow/sql mismatch {niagara_a} vs {niagara_s}")
-                    report.pass_ = False
-                if niagara_s == -2:
-                    snap.errors.append("niagara sql backend error")
-                    report.pass_ = False
             else:
                 snap.acme_batch = batch_summary
-                a = flagged.get(RULE_ACME_OAT_ARROW, -1)
-                s = flagged.get(RULE_ACME_OAT_SQL, -1)
-                if a >= 0 and s >= 0 and a != s:
-                    snap.errors.append(f"acme oat arrow/sql mismatch {a} vs {s}")
-                    report.pass_ = False
-                if s == -2:
-                    snap.errors.append("acme oat sql backend error")
-                    report.pass_ = False
 
         report.snapshots.append(snap)
         if snap.errors:
@@ -392,6 +405,26 @@ def _run_site_loop(
             time.sleep(sleep_s)
 
 
+def _dedupe_issues(errors: list[str]) -> list[str]:
+    """Collapse repeated auth/HTTP errors for final reports."""
+    counts: dict[str, int] = {}
+    order: list[str] = []
+    for err in errors:
+        key = err
+        if "HTTP 401" in err:
+            key = "batch HTTP 401 (aggregated)"
+        elif "auth failure" in err:
+            key = "auth failure (aggregated)"
+        counts[key] = counts.get(key, 0) + 1
+        if key not in order:
+            order.append(key)
+    out: list[str] = []
+    for key in order:
+        n = counts[key]
+        out.append(f"{key} ×{n}" if n > 1 and "aggregated" in key else key)
+    return out
+
+
 def _validate_outcomes(bench: SiteReport, acme: SiteReport) -> list[str]:
     issues: list[str] = []
 
@@ -414,8 +447,8 @@ def _validate_outcomes(bench: SiteReport, acme: SiteReport) -> list[str]:
         ):
             pass  # warning only — demo historian may not flag in short tryout windows
 
-    issues.extend(bench.errors)
-    issues.extend(acme.errors)
+    issues.extend(_dedupe_issues(bench.errors))
+    issues.extend(_dedupe_issues(acme.errors))
     if not bench.pass_:
         issues.append("bench site loop reported errors")
     if not acme.pass_:
@@ -548,6 +581,8 @@ def main() -> int:
     started_mono = time.monotonic()
     status_path = _status_path(mode)
     cycles_log_path = _cycles_log_path(mode)
+    bench_auth = AuthStats()
+    acme_auth = AuthStats()
     shared_status: dict[str, Any] = {
         "mode": mode,
         "started_at": _utc(),
@@ -566,6 +601,7 @@ def main() -> int:
         "bench_base": bench_base,
         "acme_base": acme_base,
         "pid": os.getpid(),
+        **bench_auth.to_dict(),
     }
     _write_status_json(status_path, shared_status)
 
@@ -601,6 +637,7 @@ def main() -> int:
             "started_monotonic": started_mono,
             "status_path": status_path,
             "cycles_log_path": cycles_log_path,
+            "auth_stats": bench_auth,
         },
         daemon=True,
     )
@@ -622,6 +659,7 @@ def main() -> int:
             "started_monotonic": started_mono,
             "status_path": status_path,
             "cycles_log_path": cycles_log_path,
+            "auth_stats": acme_auth,
         },
         daemon=True,
     )
@@ -636,11 +674,21 @@ def main() -> int:
         issues.insert(0, "cross-site parity failed")
 
     passed = not issues
+    auth_summary = {
+        "bench": bench_auth.to_dict(),
+        "acme": acme_auth.to_dict(),
+        "auth_refresh_count": bench_auth.refresh_count + acme_auth.refresh_count,
+        "auth_401_count": bench_auth.http_401_count + acme_auth.http_401_count,
+        "auth_recovered_count": bench_auth.recovered_count + acme_auth.recovered_count,
+        "auth_unrecovered_count": bench_auth.unrecovered_count + acme_auth.unrecovered_count,
+    }
     with status_lock:
         shared_status["finished_at"] = _utc()
         shared_status["elapsed_minutes"] = round((time.monotonic() - started_mono) / 60.0, 1)
         shared_status["pass"] = passed
         shared_status["issues"] = issues[:20]
+        shared_status["auth"] = auth_summary
+        shared_status.update(auth_summary)
         if issues:
             recent = list(shared_status.get("recent_errors") or [])
             for issue in issues[:10]:
