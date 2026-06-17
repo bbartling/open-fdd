@@ -7,4 +7,5 @@ PYTHON="${ROOT}/.venv/bin/python3"
 [[ -x "$PYTHON" ]] || PYTHON="$(command -v python3)"
 export OPENFDD_REPO_ROOT="${OPENFDD_REPO_ROOT:-$ROOT}"
 export PYTHONPATH="${PYTHONPATH:-$ROOT:$ROOT/workspace/api}"
+export OPENFDD_SMOKE_WORKER=1
 exec "$PYTHON" "${ROOT}/scripts/smoke_paired_fdd_harness.py" "$@"

@@ -5,9 +5,11 @@ Runs both sites in parallel with identical toggle schedule. Installs smoke rules
 alternates NORMAL/BLATANT thresholds, runs FDD batch each cycle, validates PyArrow
 vs DataFusion parity and 5-minute fault confirmation.
 
-  OPENFDD_LIVE_ACME=1 python3 scripts/smoke_paired_fdd_harness.py --short
-  OPENFDD_LIVE_ACME=1 python3 scripts/smoke_paired_fdd_harness.py --standard
-  OPENFDD_LIVE_ACME=1 python3 scripts/smoke_paired_fdd_harness.py --overnight
+CURSOR AGENTS: do not invoke this file directly (IDE crash on long blocking waits).
+Use scripts/run_paired_fdd_smoke_isolated.sh + smoke_paired_fdd_status.sh instead.
+See docs/operations/cursor-agent-safeguards.md.
+
+  OPENFDD_LIVE_ACME=1 python3 scripts/smoke_paired_fdd_harness.py --short --bench-only
 """
 
 from __future__ import annotations
@@ -531,6 +533,15 @@ def main() -> int:
     bench_only = args.bench_only or os.environ.get("OPENFDD_SMOKE_BENCH_ONLY") == "1"
     if bench_only:
         args.skip_parity = True
+
+    if os.environ.get("CURSOR_AGENT") and os.environ.get("OPENFDD_SMOKE_WORKER") != "1":
+        print(
+            "REFUSED: smoke_paired_fdd_harness.py must not run attached from a Cursor agent "
+            "(crashes IDE). Use scripts/run_paired_fdd_smoke_isolated.sh + "
+            "scripts/smoke_paired_fdd_status.sh",
+            file=sys.stderr,
+        )
+        return 2
 
     if not bench_only and os.environ.get("OPENFDD_LIVE_ACME") != "1":
         print("Set OPENFDD_LIVE_ACME=1 for live paired smoke (or use --bench-only)", file=sys.stderr)

@@ -44,3 +44,45 @@ Skip UI rebuild when unchanged:
 ```bash
 ./scripts/run_local.sh restart --ui-skip
 ```
+
+## Cursor agent safeguards
+
+Long smokes and full `tests/workspace_bridge` pytest **must not** run attached from Cursor agents (IDE crash). Use isolated launchers + status polls only:
+
+| Launch | Poll |
+|--------|------|
+| `run_paired_fdd_smoke_isolated.sh` | `smoke_paired_fdd_status.sh` |
+| `run_workspace_bridge_pytest_isolated.sh` | `workspace_bridge_pytest_status.sh` |
+
+`smoke_paired_fdd_harness.sh` defaults to the isolated launcher. Humans in tmux: `--attached`.
+
+See [docs/operations/cursor-agent-safeguards.md](../docs/operations/cursor-agent-safeguards.md).
+
+## Paired FDD / bench smokes
+
+| Script | Purpose |
+|--------|---------|
+| **`run_paired_fdd_smoke_isolated.sh`** | systemd-isolated paired FDD smoke (preferred) |
+| **`smoke_paired_fdd_status.sh`** | Read-only status poll |
+| **`smoke_paired_fdd_harness.sh`** | Wrapper → isolated by default; `--attached` for tmux |
+| **`smoke_benserver_bench.py`** | Quick bench BACnet+Niagara+rules smoke |
+| **`smoke_bench_5007_long_fdd.py`** | Long FDD validation (2h default) |
+| **`bundle_paired_fdd_smoke_report.sh`** | Zip smoke logs for download |
+
+## Legacy / manual-only scripts (not dead — keep for operators)
+
+These have **no CI or doc automation** references; run manually when needed:
+
+| Script | Notes |
+|--------|-------|
+| **`merge_poll_discovery_gap.py`** | One-off: merge BACnet discovery into `points.csv` — no callers in repo |
+| **`smoke_rule_lab_robust.py`** | Manual Rule Lab stress — not wired to CI |
+| **`openfdd_easy_pooge.sh`** | Guarded edge reset CLI — invoke explicitly; not linked from docs |
+| **`smoke_sites_parity.sh`** | Thin alias → `smoke_paired_fdd_harness.sh` (prefer isolated launcher) |
+
+Thin wrappers (keep — document entry points):
+
+| Script | Delegates to |
+|--------|----------------|
+| `smoke_bench_5007_dual_source.sh` | `smoke_benserver_bench.py` |
+| `smoke_sites_parity.sh` | `smoke_paired_fdd_harness.sh` |

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Thin wrapper — see smoke_paired_fdd_harness.sh
-# short / standard / overnight default to --detached (bench 5007 + Acme in-depth runs).
+# Thin wrapper — prefer run_paired_fdd_smoke_isolated.sh (see cursor-agent-safeguards.md).
+# short / standard / overnight default to isolated launcher (not attached).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"

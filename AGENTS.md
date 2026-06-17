@@ -71,6 +71,19 @@ python3 scripts/run_overnight_bench_smoke.py --dry-run
 
 Docs: [bench-bacnet-vs-niagara.md](docs/bench-bacnet-vs-niagara.md), [niagara-baskstream-connector.md](docs/niagara-baskstream-connector.md).
 
+## Cursor / long-running jobs (do not crash the IDE)
+
+**Agents must not** block-wait on smokes or full `pytest tests/workspace_bridge` (~4 min+). That crashes Cursor.
+
+| Safe launch | Safe poll |
+|-------------|-----------|
+| `./scripts/run_paired_fdd_smoke_isolated.sh --short --bench-only` | `./scripts/smoke_paired_fdd_status.sh --mode short` |
+| `./scripts/run_workspace_bridge_pytest_isolated.sh` | `./scripts/workspace_bridge_pytest_status.sh` |
+
+- Default `smoke_paired_fdd_harness.sh` → isolated launcher (unless human passes `--attached` outside Cursor).
+- `smoke_paired_fdd_harness.py` refuses direct runs when `CURSOR_AGENT` is set (worker sets `OPENFDD_SMOKE_WORKER=1`).
+- Full doc: [docs/operations/cursor-agent-safeguards.md](docs/operations/cursor-agent-safeguards.md).
+
 ## Model routing policy
 
 When analyzing **test results** (CI logs, pytest output, Vitest, smoke/e2e), **classify the task before processing**. Default to the **primary (fast) model** unless the failure is ambiguous or multi-layered.
