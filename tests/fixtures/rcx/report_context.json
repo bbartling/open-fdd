@@ -1,0 +1,14 @@
+{
+  "assigned_rules": [
+    {
+      "rule_id": "temp-out-of-bounds",
+      "rule_name": "Zone temperature out of bounds",
+      "equipment": "AHU-C",
+      "point_ids": ["5007-analog-input-10014"]
+    }
+  ],
+  "motor_runtime": [
+    {"equipment": "AHU-C", "runtime_hours": 18.5, "status": "running"}
+  ],
+  "overrides": {"overrides": []}
+}
