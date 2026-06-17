@@ -463,6 +463,83 @@ export default function NiagaraPage() {
       ) : null}
 
       <div className="panel">
+        <h3 className="panel-title">Station tree browse (building boundary)</h3>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Choose a Niagara folder as the <strong>building boundary</strong>, preview nodes, then set{" "}
+          <code>default_points_root</code> before discover/import. Save an import profile in station settings;
+          use <strong>Poll once</strong> as a dry-run poll after discovery.
+        </p>
+        <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.65rem" }}>
+          <label className="field-inline">
+            Base ORD
+            <input
+              value={browseBase}
+              onChange={(e) => setBrowseBase(e.target.value)}
+              placeholder="slot:/Drivers"
+              style={{ minWidth: "16rem" }}
+            />
+          </label>
+          <label className="field-inline">
+            Depth
+            <input
+              type="number"
+              min={1}
+              max={12}
+              value={browseDepth}
+              onChange={(e) => setBrowseDepth(Number(e.target.value) || 3)}
+              style={{ width: "4rem" }}
+            />
+          </label>
+          <label className="field-inline">
+            <input
+              type="checkbox"
+              checked={followExternal}
+              onChange={(e) => setFollowExternal(e.target.checked)}
+            />{" "}
+            Follow external
+          </label>
+          <ActionButton secondary pending={pending} disabled={!selectedStationId} onClick={() => void handleBrowse()}>
+            Preview folder tree
+          </ActionButton>
+          <ActionButton
+            secondary
+            disabled={!treeNodes.length}
+            onClick={() => {
+              const first = treeNodes[0]?.ord || browseBase;
+              setForm((f) => ({ ...f, default_points_root: first }));
+              setLog(`Set default_points_root → ${first}`);
+            }}
+          >
+            Use first node as points root
+          </ActionButton>
+        </div>
+        {treeNodes.length ? (
+          <div className="console" style={{ maxHeight: "14rem", overflow: "auto" }}>
+            {treeNodes.slice(0, 200).map((n) => (
+              <div key={n.ord}>
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={() => {
+                    setForm((f) => ({ ...f, default_points_root: n.ord }));
+                    setLog(`Set default_points_root → ${n.ord} (${n.name ?? "folder"})`);
+                  }}
+                >
+                  {n.ord}
+                </button>
+                <span className="muted"> — {n.name ?? n.type ?? "node"}</span>
+              </div>
+            ))}
+            {treeNodes.length > 200 ? (
+              <p className="muted">Showing 200 of {treeNodes.length} nodes — narrow base ORD or depth.</p>
+            ) : null}
+          </div>
+        ) : (
+          <p className="muted">No browse results yet. Large sites: increase max_nodes in station settings if truncated.</p>
+        )}
+      </div>
+
+      <div className="panel">
         <h3 className="panel-title">Devices &amp; points</h3>
         <NiagaraTreeLegend />
         <div className="row row-spread" style={{ marginTop: "0.65rem" }}>

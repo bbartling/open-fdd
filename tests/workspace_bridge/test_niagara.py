@@ -414,3 +414,39 @@ def test_poll_station_once_batches(monkeypatch):
         assert len(reads) == 2
 
     asyncio.run(run())
+
+
+def test_niagara_tree_route_mock(authed_client: TestClient, operator_headers: dict[str, str], monkeypatch):
+    station = upsert_station(
+        {
+            "id": "tree-test",
+            "name": "Tree Test",
+            "station_url": "https://niagara.example.test",
+            "username": "admin",
+            "password_env": "OPENFDD_NIAGARA_ADMIN_PASSWORD",
+            "enabled": True,
+            "root_ord": "slot:/Drivers",
+        }
+    )
+
+    async def fake_browse(station_id, *, base, depth=3, follow_external=None, **kwargs):
+        return {
+            "base": base,
+            "count": 2,
+            "nodes": [
+                {"ord": f"{base}/BldgA", "name": "BldgA", "type": "folder", "parent_ord": base},
+                {"ord": f"{base}/BldgB", "name": "BldgB", "type": "folder", "parent_ord": base},
+            ],
+            "truncated": False,
+        }
+
+    monkeypatch.setattr("openfdd_bridge.routes.niagara_routes.browse_tree", fake_browse)
+    res = authed_client.get(
+        f"/api/niagara/stations/{station['id']}/tree",
+        params={"base": "slot:/Drivers", "depth": 3},
+        headers=operator_headers,
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["count"] == 2
+    assert body["nodes"][0]["name"] == "BldgA"
