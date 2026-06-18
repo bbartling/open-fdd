@@ -15,5 +15,9 @@ if [[ -f edge_config/demo/bens-office/commission.env ]]; then
 fi
 "${VENV}/bin/python" scripts/setup_bench_afdd.py
 "${VENV}/bin/python" -c "from openfdd_bridge.ttl_service import TtlService; TtlService().sync()"
-"${VENV}/bin/python" "${ROOT}/scripts/seed_bench_poll_samples.py"
-echo "OK — host bench ready (feather ingested from workspace/bacnet/polls/samples.csv)"
+"${VENV}/bin/python" - <<'PY'
+from openfdd_bridge.bench_b5007_poll import enable_bench_5007_poll
+import json
+print(json.dumps(enable_bench_5007_poll(poll_interval_s=60, start_commission=True), indent=2)[:800])
+PY
+echo "OK — host bench ready (4x 5007 points @ 60s; run scripts/host_bench_poll_supervisor.py for continuous poll)"

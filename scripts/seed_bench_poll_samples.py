@@ -22,8 +22,61 @@ POINTS = [
     ("5007-analog-input-1168", "1168", "percent-relative-humidity", 45.0, 0.5, 4),
 ]
 
+FIELDNAMES = [
+    "timestamp_utc",
+    "site_id",
+    "building_id",
+    "system_id",
+    "point_id",
+    "series_id",
+    "device_instance",
+    "object_type",
+    "object_instance",
+    "value",
+    "units",
+]
+
+
+def append_live_tick(*, poll_path: Path | None = None) -> dict:
+    """Append one 1-minute sample row per bench 5007 point (OT fallback)."""
+    poll = poll_path or (REPO / "workspace" / "bacnet" / "polls" / "samples.csv")
+    poll.parent.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    minute = int(now.timestamp() // 60)
+    rows: list[dict[str, str]] = []
+    for pid, inst, units, base, step, mod in POINTS:
+        rows.append(
+            {
+                "timestamp_utc": now.isoformat(),
+                "site_id": "demo",
+                "building_id": "bens-office",
+                "system_id": "unknown",
+                "point_id": pid,
+                "series_id": "x",
+                "device_instance": "5007",
+                "object_type": "analog-input",
+                "object_instance": inst,
+                "value": str(base + (minute % mod) * step),
+                "units": units,
+            }
+        )
+    write_header = not poll.is_file() or poll.stat().st_size == 0
+    with poll.open("a", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=FIELDNAMES)
+        if write_header:
+            w.writeheader()
+        w.writerows(rows)
+    from openfdd_bridge.bacnet_poll_ingest import ingest_poll_samples_to_feather
+
+    ingest = ingest_poll_samples_to_feather()
+    return {"ok": True, "timestamp_utc": now.isoformat(), "rows_appended": len(rows), "ingest": ingest}
+
 
 def main() -> int:
+    if os.environ.get("OPENFDD_BENCH_POLL_TICK") == "1" or "--tick" in sys.argv:
+        result = append_live_tick()
+        print(result)
+        return 0 if result.get("ok") else 1
     poll = REPO / "workspace" / "bacnet" / "polls" / "samples.csv"
     poll.parent.mkdir(parents=True, exist_ok=True)
     if poll.is_file() and poll.stat().st_size > 500 and os.environ.get("OPENFDD_FORCE_RESEED") != "1":

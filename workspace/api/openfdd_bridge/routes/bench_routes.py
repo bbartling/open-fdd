@@ -8,6 +8,13 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from ..bench_b5007_poll import (
+    BENCH_DEVICE_INSTANCE,
+    bench_5007_poll_status,
+    enable_bench_5007_poll,
+    ensure_commission_agent,
+    trigger_poll_once,
+)
 from ..bench_validator import (
     load_bench_mapping,
     poll_cadence_report,
@@ -31,6 +38,45 @@ class BenchValidateBody(BaseModel):
     poll_interval_s: int = Field(default=60, ge=15, le=3600)
     write_report: bool = False
     report_label: str = "checkpoint"
+
+
+class BenchB5007PollEnableBody(BaseModel):
+    poll_interval_s: int = Field(default=60, ge=60, le=3600)
+    start_commission: bool = True
+
+
+@router.post("/api/bench/bacnet/poll/enable", dependencies=[_POLL])
+def bench_bacnet_poll_enable(body: BenchB5007PollEnableBody | None = None) -> dict[str, Any]:
+    """Enable 1-minute BACnet poll on bench device 5007 (four model points)."""
+    body = body or BenchB5007PollEnableBody()
+    if body.poll_interval_s not in (60, 300, 900, 1800, 3600):
+        body.poll_interval_s = 60
+    return enable_bench_5007_poll(
+        poll_interval_s=body.poll_interval_s,
+        start_commission=body.start_commission,
+    )
+
+
+@router.get("/api/bench/bacnet/poll/status", dependencies=[_READ])
+def bench_bacnet_poll_status() -> dict[str, Any]:
+    """Poll config + commission loop status for bench BACnet device 5007."""
+    return bench_5007_poll_status()
+
+
+@router.post("/api/bench/bacnet/poll/once", dependencies=[_POLL])
+def bench_bacnet_poll_once() -> dict[str, Any]:
+    """Trigger one BACnet RPM poll cycle and ingest samples to feather."""
+    if not bench_5007_poll_status().get("commission_reachable"):
+        started = ensure_commission_agent()
+        if not started.get("ok"):
+            raise HTTPException(status_code=503, detail=started)
+    return trigger_poll_once()
+
+
+@router.post("/api/bench/bacnet/poll/start-commission", dependencies=[_POLL])
+def bench_bacnet_start_commission() -> dict[str, Any]:
+    """Start local commission agent (BACnet poll loop on :8767)."""
+    return ensure_commission_agent()
 
 
 @router.get("/api/bench/health", dependencies=[_READ])
