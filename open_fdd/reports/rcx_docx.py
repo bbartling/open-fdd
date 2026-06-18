@@ -97,6 +97,7 @@ def build_rcx_docx(
     equipment_charts: list[dict[str, Any]] | None = None,
     available_charts: list[dict[str, Any]] | None = None,
     disabled_charts: list[dict[str, Any]] | None = None,
+    ai_insights: dict[str, Any] | None = None,
 ) -> bytes:
     from docx import Document
     from docx.shared import Inches, Pt
@@ -354,23 +355,64 @@ def build_rcx_docx(
             doc.add_paragraph(f"• {rec}")
 
     if "analyst_insights" in enabled_sections:
-        doc.add_heading("Analyst insights", level=1)
-        narratives: list[str] = []
-        for prev in chart_previews or []:
-            if not isinstance(prev, dict):
-                continue
-            text = str(prev.get("narrative") or "").strip()
-            if text:
-                title = str(prev.get("title") or prev.get("chart_id") or "Chart")
-                narratives.append(f"{title}: {text}")
-        if narratives:
-            doc.add_paragraph("Programmatic chart narratives from the selected window:")
-            for para in narratives[:8]:
-                doc.add_paragraph(f"• {para}")
+        doc.add_heading("AI analyst assessment", level=1)
+        ai = ai_insights if isinstance(ai_insights, dict) else {}
+        source = str(ai.get("source") or "deterministic")
+        doc.add_paragraph(
+            f"Automated interpretation of PyArrow historian trends, BRICK model context, "
+            f"Rule Lab bindings, and BACnet override scan ({source} engine)."
+        )
+
+        paragraphs = [str(p).strip() for p in (ai.get("paragraphs") or []) if str(p).strip()]
+        if paragraphs:
+            for para in paragraphs[:10]:
+                doc.add_paragraph(para)
         else:
-            doc.add_paragraph(
-                "Plain-language interpretation — add field notes here after reviewing trends and fault evidence."
-            )
+            narratives: list[str] = []
+            for prev in chart_previews or []:
+                if not isinstance(prev, dict):
+                    continue
+                text = str(prev.get("narrative") or "").strip()
+                if text:
+                    title = str(prev.get("title") or prev.get("chart_id") or "Chart")
+                    narratives.append(f"{title}: {text}")
+            if narratives:
+                doc.add_paragraph("Programmatic chart narratives from the selected window:")
+                for para in narratives[:8]:
+                    doc.add_paragraph(f"• {para}")
+            else:
+                doc.add_paragraph(
+                    "Plain-language interpretation — add field notes here after reviewing trends and fault evidence."
+                )
+
+        chart_insights = ai.get("chart_insights") if isinstance(ai.get("chart_insights"), list) else []
+        if chart_insights:
+            doc.add_heading("Trend plot interpretation", level=2)
+            for ci in chart_insights[:8]:
+                if not isinstance(ci, dict):
+                    continue
+                title = str(ci.get("title") or "Chart")
+                narrative = str(ci.get("narrative") or "").strip()
+                if narrative:
+                    doc.add_paragraph(f"{title}: {narrative}")
+                for bullet in (ci.get("stats_bullets") or [])[:4]:
+                    doc.add_paragraph(f"  • {bullet}")
+
+        rule_notes = ai.get("rule_assessments") if isinstance(ai.get("rule_assessments"), list) else []
+        if rule_notes:
+            doc.add_heading("FDD rule lab assessment", level=2)
+            for note in rule_notes[:8]:
+                doc.add_paragraph(f"• {note}")
+
+        override_notes = ai.get("override_notes") if isinstance(ai.get("override_notes"), list) else []
+        if override_notes:
+            doc.add_heading("BACnet override hygiene", level=2)
+            for note in override_notes[:6]:
+                doc.add_paragraph(note)
+
+        err = str(ai.get("error") or "").strip()
+        if err and source != "ollama":
+            doc.add_paragraph(f"(AI engine note: {err[:200]})")
 
     if "appendix_faults" in enabled_sections:
         doc.add_heading("Appendix: fault table", level=1)

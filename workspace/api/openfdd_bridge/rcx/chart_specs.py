@@ -71,7 +71,7 @@ SECTION_SPECS = [
     {"id": "fault_analytics", "label": "Fault analytics"},
     {"id": "ahu_analytics", "label": "AHU analytics"},
     {"id": "vav_analytics", "label": "VAV zone analytics"},
-    {"id": "analyst_insights", "label": "Analyst insights (plain language)"},
+    {"id": "analyst_insights", "label": "AI analyst assessment"},
     {"id": "runtime_analytics", "label": "Runtime analytics"},
     {"id": "model_health", "label": "BACnet / model health"},
     {"id": "fdd_rule_trends", "label": "FDD rule trend screenshots"},

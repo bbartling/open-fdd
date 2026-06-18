@@ -68,6 +68,21 @@ def test_rcx_docx_fixture_sections(fault_rows, report_context, chart_catalog):
                 "narrative": "SAT tracking looks reasonable at this resolution.",
             }
         ],
+        ai_insights={
+            "source": "deterministic",
+            "paragraphs": [
+                "Demo building shows solid SAT tracking with low fault duty in this window.",
+            ],
+            "chart_insights": [
+                {
+                    "title": "SAT vs setpoint",
+                    "narrative": "SAT tracking looks reasonable at this resolution.",
+                    "stats_bullets": ["Dataset span: 1 day(s)"],
+                }
+            ],
+            "rule_assessments": ["2 of 2 enabled rule(s) have historian sensor bindings."],
+            "override_notes": ["No active BACnet priority-array overrides were recorded."],
+        },
     )
     doc = Document(io.BytesIO(blob))
     text = _doc_text(doc)
@@ -82,6 +97,9 @@ def test_rcx_docx_fixture_sections(fault_rows, report_context, chart_catalog):
     assert "supply_fan_status_local" in text
     assert "Weekly est" in text
     assert "SAT tracking looks reasonable" in text
+    assert "AI analyst assessment" in text
+    assert "FDD rule lab assessment" in text
+    assert "BACnet override hygiene" in text
     assert "zone_cooling_setpoint" in text
     assert "Traceback" not in text
 
