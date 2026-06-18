@@ -73,6 +73,7 @@ _run_systemd() {
 }
 
 if command -v systemd-run >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
+  systemctl --user reset-failed "$UNIT" 2>/dev/null || true
   _run_systemd
   LAUNCHER="systemd-run --user (unit=${UNIT})"
 else
