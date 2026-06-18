@@ -471,6 +471,58 @@ def _tool_app_rebuild_dashboard(_args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _tool_rcx_generate_report(args: dict[str, Any]) -> dict[str, Any]:
+    from .rcx.rcx_intent import generate_rcx_report_from_intent
+
+    sensors = args.get("sensors")
+    if isinstance(sensors, str):
+        sensor_list = [sensors]
+    elif isinstance(sensors, list):
+        sensor_list = [str(s) for s in sensors if str(s).strip()]
+    else:
+        sensor_list = None
+    try:
+        hours = int(args.get("hours") or 168)
+    except (TypeError, ValueError) as exc:
+        raise ToolError(f"invalid hours: {args.get('hours')!r}") from exc
+    return generate_rcx_report_from_intent(
+        site_id=str(args.get("site_id") or ""),
+        hours=hours,
+        start=str(args.get("start") or "") or None,
+        end=str(args.get("end") or "") or None,
+        sensors=sensor_list,
+        sensor_columns=args.get("sensor_columns") if isinstance(args.get("sensor_columns"), list) else None,
+        show_fault_overlays=str(args.get("show_fault_overlays", "true")).lower() not in {"0", "false", "no"},
+        include_analytics=str(args.get("include_analytics", "true")).lower() not in {"0", "false", "no"},
+        include_previews=str(args.get("include_previews", "true")).lower() not in {"0", "false", "no"},
+        save_to_volume=str(args.get("save_to_volume", "true")).lower() not in {"0", "false", "no"},
+    )
+
+
+def _tool_rcx_plan_report(args: dict[str, Any]) -> dict[str, Any]:
+    from .rcx.rcx_intent import plan_rcx_report_intent
+
+    sensors = args.get("sensors")
+    if isinstance(sensors, str):
+        sensor_list = [sensors]
+    elif isinstance(sensors, list):
+        sensor_list = [str(s) for s in sensors if str(s).strip()]
+    else:
+        sensor_list = None
+    try:
+        hours = int(args.get("hours") or 168)
+    except (TypeError, ValueError) as exc:
+        raise ToolError(f"invalid hours: {args.get('hours')!r}") from exc
+    return plan_rcx_report_intent(
+        site_id=str(args.get("site_id") or ""),
+        hours=hours,
+        start=str(args.get("start") or "") or None,
+        end=str(args.get("end") or "") or None,
+        sensors=sensor_list,
+        show_fault_overlays=str(args.get("show_fault_overlays", "true")).lower() not in {"0", "false", "no"},
+    )
+
+
 _READ_ONLY_TOOLS = frozenset(
     {
         "model.graph",
@@ -484,6 +536,7 @@ _READ_ONLY_TOOLS = frozenset(
         "building.operational_brief",
         "building.tuning_brief",
         "analytics.poll_throughput",
+        "rcx.plan_report",
         "fdd.results",
         "ops.logs",
         "site.memory_get",
@@ -502,6 +555,7 @@ _WRITE_TOOLS = frozenset(
         "building.checkin",
         "building.tuning_brief",
         "building.apply_tuning",
+        "rcx.generate_report",
         "site.memory_put",
         "app.edit_file",
         "app.rebuild_dashboard",
@@ -530,6 +584,8 @@ _TOOLS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "building.tuning_brief": _tool_building_tuning_brief,
     "building.apply_tuning": _tool_building_apply_tuning,
     "analytics.poll_throughput": _tool_analytics_poll_throughput,
+    "rcx.plan_report": _tool_rcx_plan_report,
+    "rcx.generate_report": _tool_rcx_generate_report,
     "fdd.results": _tool_fdd_results,
     "ops.logs": _tool_ops_logs,
     "site.memory_get": _tool_site_memory_get,
@@ -658,6 +714,16 @@ def tool_specs() -> list[dict[str, Any]]:
             "name": "analytics.poll_throughput",
             "args": ["window_minutes?"],
             "writes": "read-only — expected vs observed BACnet samples/min",
+        },
+        {
+            "name": "rcx.plan_report",
+            "args": ["site_id?", "hours?", "sensors?", "show_fault_overlays?"],
+            "writes": "read-only — RCx sections/charts/sensor column plan",
+        },
+        {
+            "name": "rcx.generate_report",
+            "args": ["site_id?", "hours?", "sensors?", "show_fault_overlays?", "save_to_volume?"],
+            "writes": "DOCX under data/reports/rcx + chart preview metadata",
         },
         {"name": "fdd.results", "args": ["site_id?", "limit?"], "writes": "read-only — fdd_results.json runs"},
         {

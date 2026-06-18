@@ -574,6 +574,7 @@ def generate_rcx_docx(
     show_fault_overlays: bool = True,
     bundle_ids: list[str] | None = None,
     equipment_ids: list[str] | None = None,
+    include_previews: bool = False,
 ) -> tuple[bytes, str]:
     preview = build_rcx_preview(
         site_id=site_id,
@@ -583,8 +584,9 @@ def generate_rcx_docx(
         chart_ids=charts,
         custom_columns=custom_columns,
         show_fault_overlays=show_fault_overlays,
-        catalog_only=True,
-        include_previews=False,
+        catalog_only=not include_previews,
+        include_previews=include_previews,
+        gallery_mode=include_previews,
         bundle_ids=bundle_ids,
         equipment_ids=equipment_ids,
     )
