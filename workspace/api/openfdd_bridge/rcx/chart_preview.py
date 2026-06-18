@@ -29,6 +29,7 @@ from .report_bundles import (
     chart_ids_for_bundles,
     equipment_charts_for_ids,
 )
+from .report_profile import select_report_profile
 from .rcx_narrative import build_chart_narrative
 from .rcx_stats import summarize_readings
 from .trend_charts import (
@@ -384,6 +385,13 @@ def build_rcx_preview(
 
     suggested_chart_ids = chart_ids_for_bundles(bundles, bundle_ids or report_model.get("default_bundle_ids") or [])
 
+    report_profile = select_report_profile(
+        mechanical_summary=mech,
+        report_bundles=report_model,
+        equipment=tree.get("equipment") if isinstance(tree.get("equipment"), list) else [],
+        points=tree.get("points") if isinstance(tree.get("points"), list) else [],
+    )
+
     base_payload = {
         "site_id": sid,
         "site": sid,
@@ -401,6 +409,7 @@ def build_rcx_preview(
         "fault_overlays": [],
         "chart_previews": [],
         "report_bundles": report_model,
+        "report_profile": report_profile,
         "diagnostics": _build_diagnostics(
             tree, available=available, disabled=disabled, fault_summary=fault_summary
         ),
@@ -658,6 +667,7 @@ def generate_rcx_docx(
         chart_previews=preview.get("chart_previews") or [],
         report_context=report_ctx,
         mechanical_summary=mech,
+        report_profile=preview.get("report_profile"),
     )
 
     blob = build_rcx_docx(

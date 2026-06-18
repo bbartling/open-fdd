@@ -71,6 +71,15 @@ def test_rcx_intent_preview_endpoint(
     assert "charts" in body
     assert "sections" in body
     assert body.get("sensors", {}).get("columns")
+    rp = body.get("report_profile") or {}
+    assert rp.get("profile_id") in {
+        "zone_monitoring",
+        "ahu_standalone",
+        "ahu_vav",
+        "ahu_vav_plant",
+        "ahu_vav_full",
+    }
+    assert rp.get("profile_label")
 
 
 @patch("openfdd_bridge.rcx.chart_preview.query_model_tree", return_value=_bench_tree())

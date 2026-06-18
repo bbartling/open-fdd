@@ -8,6 +8,7 @@ from typing import Any
 from .chart_preview import build_rcx_preview, generate_rcx_docx
 from .chart_specs import suggest_charts_for_faults
 from .rcx_points import list_report_points
+from .report_profile import plan_report_from_model
 
 DEFAULT_INTENT_SECTIONS = [
     "executive_summary",
@@ -148,14 +149,28 @@ def plan_rcx_report_intent(
     available = preview.get("available_charts") or []
     available_ids = {str(c.get("chart_id") or "") for c in available if c.get("chart_id")}
     fault_rows = preview.get("fault_rows") or []
+    mech = preview.get("mechanical_summary") or {}
 
-    charts: list[str] = []
-    if columns:
-        charts.extend(f"custom_{col}" for col in columns)
-    suggested = suggest_charts_for_faults(fault_rows, available_ids=available_ids)
-    for cid in suggested:
-        if cid not in charts:
-            charts.append(cid)
+    tree: dict[str, Any] = {}
+    try:
+        from ..model_sparql import query_model_tree
+
+        tree = query_model_tree()
+    except Exception:
+        pass
+
+    model_plan = plan_report_from_model(
+        mechanical_summary=mech,
+        report_bundles=preview.get("report_bundles"),
+        equipment=tree.get("equipment") if isinstance(tree.get("equipment"), list) else [],
+        points=tree.get("points") if isinstance(tree.get("points"), list) else [],
+        fault_rows=fault_rows,
+        available_chart_ids=available_ids,
+        custom_columns=columns or None,
+        include_analytics=include_analytics,
+    )
+
+    charts = list(model_plan.get("charts") or [])
     if bundle_ids:
         from .report_bundles import chart_ids_for_bundles
 
@@ -164,9 +179,7 @@ def plan_rcx_report_intent(
             if cid not in charts:
                 charts.append(cid)
 
-    sections = list(DEFAULT_INTENT_SECTIONS)
-    if not include_analytics:
-        sections = [s for s in sections if s not in {"fault_analytics", "appendix_faults"}]
+    sections = list(model_plan.get("sections") or DEFAULT_INTENT_SECTIONS)
 
     ready = bool(preview.get("available_charts")) or bool(columns)
     warnings = list(preview.get("warnings") or [])
@@ -188,6 +201,14 @@ def plan_rcx_report_intent(
         "available_chart_count": len(available),
         "disabled_chart_count": len(preview.get("disabled_charts") or []),
         "mechanical_summary": preview.get("mechanical_summary"),
+        "report_profile": {
+            "profile_id": model_plan.get("profile_id"),
+            "profile_label": model_plan.get("profile_label"),
+            "report_type": model_plan.get("report_type"),
+            "emphasis": model_plan.get("emphasis"),
+            "rationale": model_plan.get("rationale"),
+            "topology": model_plan.get("topology"),
+        },
         "warnings": warnings,
         "suggested_chart_ids": preview.get("suggested_chart_ids") or [],
     }

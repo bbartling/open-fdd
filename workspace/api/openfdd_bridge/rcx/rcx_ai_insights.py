@@ -124,6 +124,7 @@ def compact_rcx_context(
     chart_previews: list[dict[str, Any]],
     report_context: dict[str, Any],
     mechanical_summary: dict[str, Any] | None,
+    report_profile: dict[str, Any] | None = None,
 ) -> str:
     """Arrow-native JSON context for RCx AI assessment (no pandas)."""
     ov = overview or {}
@@ -157,7 +158,8 @@ def compact_rcx_context(
         pass
 
     payload: dict[str, Any] = {
-        "report_type": "rcx_docx",
+        "report_type": (report_profile or {}).get("report_type") or "rcx_docx",
+        "report_profile": report_profile or {},
         "site_id": site_id,
         "site_name": site_name,
         "window": window,
@@ -316,6 +318,7 @@ def build_fallback_insights(
     chart_previews: list[dict[str, Any]],
     report_context: dict[str, Any],
     mechanical_summary: dict[str, Any] | None,
+    report_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Deterministic RCx narrative when Ollama is disabled or unreachable."""
     ov = overview or {}
@@ -325,16 +328,31 @@ def build_fallback_insights(
     overrides = ctx.get("overrides") if isinstance(ctx.get("overrides"), dict) else {}
     win_h = float(window.get("hours") or 0)
 
+    profile = report_profile if isinstance(report_profile, dict) else {}
+    pid = str(profile.get("profile_id") or "")
+    profile_label = str(profile.get("profile_label") or "RCx assessment")
+
     paragraphs: list[str] = []
     narrative = str(mech.get("narrative") or "").strip()
     ahu_n = counts.get("ahus") or counts.get("ahu") or "—"
     vav_n = counts.get("vavs") or counts.get("vav") or "—"
     zone_n = counts.get("zones") or "—"
-    arch = (
-        f"{site_name} is modeled with {ahu_n} AHU(s), {vav_n} VAV(s), and {zone_n} zone(s) "
-        "in the BRICK graph. PyArrow historian stats in this report window quantify how those "
-        "systems actually performed — not just how they were commissioned on paper."
-    )
+
+    if pid == "zone_monitoring":
+        topo = profile.get("topology") if isinstance(profile.get("topology"), dict) else {}
+        zpts = topo.get("zone_temp_points") or zone_n
+        arch = (
+            f"{site_name} is configured for {profile_label.lower()}: the BRICK model emphasizes "
+            f"zone/space temperature and environmental sensors ({zpts} zone-temp point(s) in scope) "
+            "without a modeled central AHU. This report focuses on comfort drift, sensor health, "
+            "and outdoor-air context rather than duct-static or economizer diagnostics."
+        )
+    else:
+        arch = (
+            f"{site_name} is modeled with {ahu_n} AHU(s), {vav_n} VAV(s), and {zone_n} zone(s) "
+            "in the BRICK graph ({profile_label}). PyArrow historian stats quantify how those "
+            "systems performed in this window — aligned with legacy ASHRAE G36-style fault analytics."
+        ).replace("{profile_label}", profile_label)
     if narrative:
         arch += f" {narrative[:320]}"
     paragraphs.append(arch)
@@ -404,6 +422,8 @@ def build_fallback_insights(
 
     return {
         "source": "deterministic",
+        "profile_id": pid,
+        "profile_label": profile_label,
         "paragraphs": paragraphs[:8],
         "chart_insights": chart_insights[:8],
         "rule_assessments": rule_notes,
@@ -412,14 +432,34 @@ def build_fallback_insights(
     }
 
 
-def _ollama_rcx_assessment(context: str) -> tuple[list[str], str]:
+def _ollama_rcx_assessment(context: str, *, report_profile: dict[str, Any] | None = None) -> tuple[list[str], str]:
     days = analytics_lookback_days()
+    profile = report_profile if isinstance(report_profile, dict) else {}
+    pid = str(profile.get("profile_id") or "")
+    emphasis = profile.get("emphasis") if isinstance(profile.get("emphasis"), list) else []
+    emphasis_txt = ", ".join(str(e) for e in emphasis[:6]) if emphasis else "general HVAC health"
+
+    profile_hint = ""
+    if pid == "zone_monitoring":
+        profile_hint = (
+            " This is a ZONE MONITORING report — lead with zone temperature comfort, sensor flatlines, "
+            "outdoor-air context, and poll reliability. Do not discuss AHU duct static or VAV airflow "
+            "unless the JSON shows those points exist."
+        )
+    elif pid in ("ahu_vav", "ahu_vav_plant", "ahu_vav_full"):
+        profile_hint = (
+            " This is a full AHU/VAV central report — match legacy OpenFDD FC1–FC13 depth: fault duty %, "
+            "motor runtime vs occupancy, setpoint tracking, economizer/OA fraction, valve leakage hints, "
+            "and time-of-day fault patterns when stats support it."
+        )
+
     system = (
         "You are a senior HVAC retro-commissioning (RCx) engineer writing the client-facing "
         "'AI Analyst Assessment' section of a DOCX report. Facts come only from the JSON snapshot "
         f"(PyArrow historian stats, BRICK model, Rule Lab, BACnet overrides). Lookback is ~{days} days. "
+        f"Report profile emphasis: {emphasis_txt}.{profile_hint} "
         "Write 5–7 short paragraphs of plain English (no markdown, no bullet lists). "
-        "Cover: (1) building HVAC architecture and system types from mechanical_summary and brick_model feeds; "
+        "Cover: (1) building HVAC architecture and system types from mechanical_summary, report_profile, brick_model; "
         "(2) operational health — faults, zone_temps, device_poll_health; "
         "(3) interpret chart_previews stats (fault_percent, series min/max/mean) — use legacy_fault_threshold_pct "
         "5% as 'high fault duty' guidance per ASHRAE G36 thinking; "
@@ -462,6 +502,7 @@ def generate_rcx_ai_insights(
     chart_previews: list[dict[str, Any]],
     report_context: dict[str, Any],
     mechanical_summary: dict[str, Any] | None,
+    report_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build AI analyst assessment for DOCX (Ollama when enabled, else deterministic)."""
     fallback = build_fallback_insights(
@@ -472,6 +513,7 @@ def generate_rcx_ai_insights(
         chart_previews=chart_previews,
         report_context=report_context,
         mechanical_summary=mechanical_summary,
+        report_profile=report_profile,
     )
 
     if not ollama_client.should_use_ollama_for_insight():
@@ -486,8 +528,9 @@ def generate_rcx_ai_insights(
         chart_previews=chart_previews,
         report_context=report_context,
         mechanical_summary=mechanical_summary,
+        report_profile=report_profile,
     )
-    paragraphs, err = _ollama_rcx_assessment(context)
+    paragraphs, err = _ollama_rcx_assessment(context, report_profile=report_profile)
     if paragraphs:
         out = dict(fallback)
         out["source"] = "ollama"
