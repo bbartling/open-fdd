@@ -57,6 +57,30 @@ def test_compute_zone_metrics_day_night():
     assert "Zone temps:" in metrics["summary_sentence"]
 
 
+def test_compute_zone_metrics_excludes_offline_and_zero_reads():
+    model = _bench_model()
+    topo = discover_topology(model, "demo")
+    n = 96
+    ts = pd.date_range("2025-06-02 08:00:00", periods=n, freq="15min", tz="UTC")
+    good = [72.0 + (i % 4) * 0.2 for i in range(n)]
+    bad = [0.0 if i > n // 2 else 72.0 for i in range(n)]
+    df = pd.DataFrame({"timestamp": ts, "stat_zn-t": bad, "oa-t": good})
+    device_snapshot = {
+        "equipment": [
+            {
+                "equipment_id": "bench",
+                "status": "offline",
+                "points": [{"column": "stat_zn-t", "stale": True, "valid_ratio": 0.05}],
+            }
+        ]
+    }
+    metrics = compute_zone_metrics(df, topo, model, "demo", device_snapshot=device_snapshot)
+    stat = next(z for z in metrics["zones"] if z["column"] == "stat_zn-t")
+    assert stat.get("day_avg_f") is None
+    assert stat.get("night_avg_f") is None
+    assert stat.get("excluded_offline") is True
+
+
 def test_recovery_with_fan_startup():
     model = {
         "sites": [{"id": "s1", "name": "Test"}],

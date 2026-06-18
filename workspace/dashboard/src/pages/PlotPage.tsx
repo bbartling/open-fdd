@@ -16,6 +16,13 @@ import {
   type SavedRule,
 } from "../lib/ruleBindings";
 import {
+  HISTORY_PRESETS,
+  historyLabel,
+  historyQueryParams,
+  resolveHistoryPreset,
+  type WindowSelection,
+} from "../lib/time-window";
+import {
   defaultKeysForEquipment,
   useTelemetryCatalog,
   type SeriesOption,
@@ -71,7 +78,9 @@ export default function PlotPage() {
   const [enabledFaults, setEnabledFaults] = useState<Set<string>>(new Set());
   const [faultPanels, setFaultPanels] = useState<PlotReadingsResponse["fault_panels"]>([]);
   const [plotData, setPlotData] = useState<PlotReadingsResponse | null>(null);
-  const [hours, setHours] = useState(24);
+  const [windowSel, setWindowSel] = useState<WindowSelection>(() => resolveHistoryPreset("24h"));
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
   const [rollingAvgMinutes, setRollingAvgMinutes] = useState(() =>
     normalizeRollingMinutes(localStorage.getItem(ROLLING_STORAGE_KEY) || "5"),
   );
@@ -163,7 +172,7 @@ export default function PlotPage() {
           traces as Plotly.Data[],
           {
             ...layout,
-            title: `Feather · ${data.site_id ?? siteId} · ${data.hours ?? hours}h`,
+            title: `Feather · ${data.site_id ?? siteId} · ${historyLabel(windowSel, customStart, customEnd)}`,
             height: 460,
           },
           { responsive: true, displayModeBar: true },
@@ -174,7 +183,7 @@ export default function PlotPage() {
         throw e;
       }
     },
-    [enabledFaults, showBounds, showRollingAvg, theme, siteId, hours],
+    [enabledFaults, showBounds, showRollingAvg, theme, siteId, windowSel, customStart, customEnd],
   );
 
   useEffect(() => {
@@ -196,19 +205,17 @@ export default function PlotPage() {
     setError("");
     const keys = selectedSig ? selectedSig.split(",") : [];
     const cols = [...new Set(keys.map((k) => optionByKey.get(k)?.column ?? k))];
-    PLOT_LOG("fetch readings", { siteId, keys: keys.length, cols, hours, includeFaults });
+    PLOT_LOG("fetch readings", { siteId, keys: keys.length, cols, windowSel, includeFaults });
     const t0 = performance.now();
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
-      const qs = new URLSearchParams({
-        site_id: siteId,
-        columns: keys.join(","),
-        hours: String(hours),
-        include_faults: String(includeFaults),
-        rolling_avg_minutes: String(normalizeRollingMinutes(rollingAvgMinutes)),
-        show_rolling_avg: String(showRollingAvg),
-      });
+      const qs = historyQueryParams(windowSel, customStart, customEnd);
+      qs.set("site_id", siteId);
+      qs.set("columns", keys.join(","));
+      qs.set("include_faults", String(includeFaults));
+      qs.set("rolling_avg_minutes", String(normalizeRollingMinutes(rollingAvgMinutes)));
+      qs.set("show_rolling_avg", String(showRollingAvg));
       if (includeFaults && scopedRuleIds.length) {
         qs.set("fault_rules", scopedRuleIds.join(","));
       }
@@ -253,7 +260,7 @@ export default function PlotPage() {
       window.clearTimeout(timer);
       if (gen === fetchGen.current) setChartLoading(false);
     }
-  }, [siteId, selectedSig, hours, includeFaults, rollingAvgMinutes, showRollingAvg, optionByKey, scopedRuleIdsSig]);
+  }, [siteId, selectedSig, windowSel, customStart, customEnd, includeFaults, rollingAvgMinutes, showRollingAvg, optionByKey, scopedRuleIdsSig]);
 
   useEffect(() => {
     if (!selectedSig || !siteId) return;
@@ -264,7 +271,7 @@ export default function PlotPage() {
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
-  }, [siteId, hours, includeFaults, rollingAvgMinutes, showRollingAvg, selectedSig, scopedRuleIdsSig, refreshChart]);
+  }, [siteId, windowSel, customStart, customEnd, includeFaults, rollingAvgMinutes, showRollingAvg, selectedSig, scopedRuleIdsSig, refreshChart]);
 
   useEffect(() => {
     return () => {
@@ -334,12 +341,10 @@ export default function PlotPage() {
   async function downloadPlotCsv() {
     if (!siteId || !selected.size) return;
     const keys = [...selected];
-    const qs = new URLSearchParams({
-      site_id: siteId,
-      columns: keys.join(","),
-      hours: String(hours),
-      include_faults: String(includeFaults),
-    });
+    const qs = historyQueryParams(windowSel, customStart, customEnd);
+    qs.set("site_id", siteId);
+    qs.set("columns", keys.join(","));
+    qs.set("include_faults", String(includeFaults));
     const base = getBridgeBase();
     const token = sessionStorage.getItem("ofdd_token");
     const res = await fetch(`${base}/api/timeseries/export.csv?${qs}`, {
@@ -350,7 +355,7 @@ export default function PlotPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `openfdd_timeseries_${siteId}_${hours}h.csv`;
+    a.download = `openfdd_timeseries_${siteId}_${windowSel.presetId}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     setStatus(
@@ -384,14 +389,38 @@ export default function PlotPage() {
             <label className="field-label" htmlFor="plot-hours">
               History
             </label>
-            <select id="plot-hours" value={hours} onChange={(e) => setHours(Number(e.target.value))}>
-              <option value={1}>1 h</option>
-              <option value={6}>6 h</option>
-              <option value={24}>24 h</option>
-              <option value={72}>3 d</option>
-              <option value={168}>7 d</option>
+            <select
+              id="plot-hours"
+              value={windowSel.presetId}
+              onChange={(e) => {
+                const id = e.target.value;
+                if (id === "custom") {
+                  setWindowSel({ presetId: "custom", hours: 168 });
+                  return;
+                }
+                setWindowSel(resolveHistoryPreset(id));
+              }}
+            >
+              {HISTORY_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+              <option value="custom">Custom range…</option>
             </select>
           </div>
+          {windowSel.presetId === "custom" ? (
+            <div className="field rcx-date-row" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+              <label className="field">
+                <span className="field-label">Start</span>
+                <input type="datetime-local" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+              </label>
+              <label className="field">
+                <span className="field-label">End</span>
+                <input type="datetime-local" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+              </label>
+            </div>
+          ) : null}
           <label
             className="checkbox-inline"
             title="Evaluates rules bound to selected points, device, or BRICK class — unbound rules also run site-wide"
@@ -558,7 +587,7 @@ export default function PlotPage() {
           { label: "Site", value: siteId || "—" },
           { label: "Equipment", value: equipmentId || "—" },
           { label: "Selected keys", value: selected.size ? [...selected].join(", ") : "—" },
-          { label: "Hours", value: String(hours) },
+          { label: "History", value: historyLabel(windowSel, customStart, customEnd) },
           { label: "Series returned", value: plotData ? String(Object.keys(plotData.series ?? {}).length) : "0" },
           { label: "Timestamps", value: plotData ? String(plotData.timestamps?.length ?? 0) : "0" },
           { label: "Last error", value: error || catalogError || "—" },

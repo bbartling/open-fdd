@@ -6,64 +6,24 @@ import {
   type RcxBundle,
   type RcxPreviewResponse,
 } from "../lib/analytics-api";
+import {
+  HISTORY_PRESETS,
+  resolveHistoryPreset,
+  type WindowSelection,
+} from "../lib/time-window";
 
-type WindowPreset = {
-  id: string;
-  label: string;
-  hours?: number;
-  range?: () => { start: string; end: string };
-};
-
-function startOfMonth(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
-}
-
-function endOfMonth(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-}
-
-const WINDOW_PRESETS: WindowPreset[] = [
+const RCX_WINDOW_PRESETS = [
   { id: "2h", label: "2 hours", hours: 2 },
-  { id: "24h", label: "24 hours", hours: 24 },
-  { id: "7d", label: "7 days", hours: 168 },
-  { id: "30d", label: "1 month", hours: 720 },
-  {
-    id: "last-month",
-    label: "Last month",
-    range: () => {
-      const now = new Date();
-      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      return { start: startOfMonth(prev).toISOString(), end: endOfMonth(prev).toISOString() };
-    },
-  },
-  {
-    id: "ytd",
-    label: "Year to date",
-    range: () => {
-      const now = new Date();
-      return { start: new Date(now.getFullYear(), 0, 1).toISOString(), end: now.toISOString() };
-    },
-  },
+  ...HISTORY_PRESETS.filter((p) => ["24h", "7d", "30d", "mtd", "last-month", "ytd"].includes(p.id)),
 ];
 
-type WindowSelection = {
-  presetId: string;
-  hours: number;
-  start?: string;
-  end?: string;
-};
-
-function resolvePreset(id: string): WindowSelection {
-  const preset = WINDOW_PRESETS.find((p) => p.id === id) || WINDOW_PRESETS[2];
-  if (preset.range) {
-    const { start, end } = preset.range();
-    return { presetId: preset.id, hours: 168, start, end };
-  }
-  return { presetId: preset.id, hours: preset.hours ?? 168 };
+function resolveRcxPreset(id: string): WindowSelection {
+  if (id === "2h") return { presetId: "2h", hours: 2 };
+  return resolveHistoryPreset(id);
 }
 
 export default function RcxReportBuilderPage() {
-  const [windowSel, setWindowSel] = useState<WindowSelection>(() => resolvePreset("7d"));
+  const [windowSel, setWindowSel] = useState<WindowSelection>(() => resolveRcxPreset("7d"));
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [preview, setPreview] = useState<RcxPreviewResponse | null>(null);
@@ -124,7 +84,7 @@ export default function RcxReportBuilderPage() {
       setWindowSel({ presetId: "custom", hours: 168 });
       return;
     }
-    setWindowSel(resolvePreset(id));
+    setWindowSel(resolveRcxPreset(id));
   }
 
   function toggle(setter: Dispatch<SetStateAction<Set<string>>>, id: string) {
@@ -178,7 +138,7 @@ export default function RcxReportBuilderPage() {
         <div className="rcx-toolbar-block">
           <span className="rcx-toolbar-label">Time range</span>
           <div className="toolbar-row rcx-window-chips">
-            {WINDOW_PRESETS.map((w) => (
+            {RCX_WINDOW_PRESETS.map((w) => (
               <button
                 key={w.id}
                 type="button"

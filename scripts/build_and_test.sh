@@ -37,6 +37,7 @@ else
     || cp "${ROOT}/workspace/data/bench_import_model.json" "$TEST_DATA/model.json" 2>/dev/null \
     || echo '{"sites":[],"equipment":[],"points":[]}' >"$TEST_DATA/model.json"
 fi
+cp "${ROOT}/workspace/data/bench_bacnet_vs_niagara.yaml" "$TEST_DATA/bench_bacnet_vs_niagara.yaml" 2>/dev/null || true
 export OFDD_DESKTOP_DATA_DIR="$TEST_DATA"
 # Inherit no credentials from workspace/auth.env.local — tests expect auth off unless they reload the app.
 unset OFDD_AUTH_SECRET OFDD_OPERATOR_USER OFDD_OPERATOR_PASSWORD \

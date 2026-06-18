@@ -18,11 +18,9 @@ from .driver_point_contract import (
 )
 from .paths import bacnet_poll_csv, data_dir, repo_root
 
-_DEFAULT_CONFIG = data_dir() / "bench_bacnet_vs_niagara.yaml"
-
 
 def load_bench_mapping(path: Path | None = None) -> dict[str, Any]:
-    cfg_path = path or _DEFAULT_CONFIG
+    cfg_path = path or (data_dir() / "bench_bacnet_vs_niagara.yaml")
     if not cfg_path.is_file():
         raise FileNotFoundError(f"bench mapping not found: {cfg_path}")
     raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))

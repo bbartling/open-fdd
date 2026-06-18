@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { apiFetch, fetchWsTicket, getBridgeBase, hasToken } from "./api";
+import { apiFetch, fetchAuthStatus, fetchWsTicket, getBridgeBase, hasToken } from "./api";
 import type { Traffic } from "../components/TrafficLight";
 
 export type ServiceStatus = "green" | "yellow" | "red" | "gray";
@@ -196,6 +196,13 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
   const [error, setError] = useState("");
   const [live, setLive] = useState(false);
   const [authenticated, setAuthenticated] = useState(hasToken());
+  const [authRequired, setAuthRequired] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetchAuthStatus()
+      .then((s) => setAuthRequired(s.auth_required))
+      .catch(() => setAuthRequired(true));
+  }, []);
 
   useEffect(() => {
     const sync = () => setAuthenticated(hasToken());
@@ -219,6 +226,10 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
     };
 
     const poll = () => {
+      if (authRequired && !authenticated) {
+        if (!cancelled) setError("Sign in to load building status.");
+        return;
+      }
       fetchSnapshot(authenticated)
         .then(apply)
         .catch((e) => {
@@ -280,7 +291,7 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
       window.clearInterval(pollId);
       if (fallbackTimer) window.clearTimeout(fallbackTimer);
     };
-  }, [pollMs, authenticated]);
+  }, [pollMs, authenticated, authRequired]);
 
   const value = useMemo(() => ({ snapshot, error, live }), [snapshot, error, live]);
   return <DashboardStreamContext.Provider value={value}>{children}</DashboardStreamContext.Provider>;

@@ -9,6 +9,7 @@ export type NiagaraStation = {
   station_url: string;
   username: string;
   password_env: string;
+  password?: string;
   password_configured?: boolean;
   verify_tls: boolean;
   enabled: boolean;

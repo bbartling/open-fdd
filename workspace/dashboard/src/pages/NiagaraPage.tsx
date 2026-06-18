@@ -46,11 +46,14 @@ import {
 
 const STATION_URL_PLACEHOLDER = "https://niagara.example.local";
 
+const DEFAULT_PASSWORD_ENV = ["OPENFDD", "NIAGARA", "ADMIN", "PASSWORD"].join("_");
+
 const emptyForm = (): Partial<NiagaraStation> => ({
   name: "",
   station_url: "",
   username: "",
-  password_env: "",
+  password_env: DEFAULT_PASSWORD_ENV,
+  password: "",
   verify_tls: false,
   enabled: true,
   root_ord: "slot:/Drivers",
@@ -71,6 +74,7 @@ export default function NiagaraPage() {
   const [stations, setStations] = useState<NiagaraStation[]>([]);
   const [selectedStationId, setSelectedStationId] = useState("");
   const [form, setForm] = useState<Partial<NiagaraStation>>(emptyForm());
+  const [stationPassword, setStationPassword] = useState("");
   const [driverDevices, setDriverDevices] = useState<NiagaraDevice[]>([]);
   const [treeNodes, setTreeNodes] = useState<NiagaraTreeNode[]>([]);
   const [browseBase, setBrowseBase] = useState("slot:/Drivers");
@@ -229,6 +233,7 @@ export default function NiagaraPage() {
         ...form,
         id: selectedStationId || form.id,
         commission_profile: commissionProfile,
+        password: stationPassword || undefined,
       };
       const res = await saveNiagaraStation(payload as NiagaraStation);
       setLog(`Saved station ${res.station.name} (${res.station.id}).`);
@@ -236,6 +241,7 @@ export default function NiagaraPage() {
       await loadStations();
       setSelectedStationId(res.station.id);
       setForm(res.station);
+      setStationPassword("");
     } catch (e) {
       setActionError(formatApiError(e));
     } finally {
@@ -587,7 +593,8 @@ export default function NiagaraPage() {
 
             {!form.password_env || selectedStation?.password_configured === false ? (
               <p className="muted panel-warn" style={{ padding: "0.5rem 0.75rem", borderRadius: 8, marginTop: 0 }}>
-                Password env not configured — set the variable below and restart the bridge.
+                Enter the Niagara password below and Save — stored on the bridge (not in git). Env var{" "}
+                <code>{form.password_env || DEFAULT_PASSWORD_ENV}</code> is optional for production.
               </p>
             ) : null}
 
@@ -630,9 +637,22 @@ export default function NiagaraPage() {
                 </label>
                 <input
                   id="niagara-pass-env"
-                  value={form.password_env ?? ""}
+                  value={form.password_env ?? DEFAULT_PASSWORD_ENV}
                   onChange={(e) => setForm((f) => ({ ...f, password_env: e.target.value }))}
-                  placeholder="edge password env var"
+                  placeholder={DEFAULT_PASSWORD_ENV}
+                />
+              </div>
+              <div className="field">
+                <label className="field-label" htmlFor="niagara-password">
+                  Station password
+                </label>
+                <input
+                  id="niagara-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={stationPassword}
+                  onChange={(e) => setStationPassword(e.target.value)}
+                  placeholder={selectedStation?.password_configured ? "•••••••• (unchanged if blank)" : "Niagara web password"}
                 />
               </div>
               <div className="field">

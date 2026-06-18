@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Query, Response
 
 from ..deps import require_user
@@ -44,7 +46,9 @@ def timeseries_plot(
 def timeseries_readings(
     site_id: str = Query(..., min_length=1),
     columns: str = Query(default="", description="Comma-separated column names"),
-    hours: int = Query(default=24, ge=1, le=168),
+    hours: int = Query(default=24, ge=1, le=8760),
+    start: Annotated[str | None, Query()] = None,
+    end: Annotated[str | None, Query()] = None,
     source: str = Query(default="bacnet"),
     limit: int = Query(default=4000, ge=100, le=8000),
     include_faults: bool = Query(default=True),
@@ -62,6 +66,8 @@ def timeseries_readings(
             cols,
             source=source,
             hours=hours,
+            start=start,
+            end=end,
             limit=limit,
             include_faults=include_faults,
             rule_ids=rule_ids or None,
@@ -75,7 +81,9 @@ def timeseries_readings(
 def timeseries_export_csv(
     site_id: str = Query(..., min_length=1),
     columns: str = Query(default="", description="Comma-separated column names"),
-    hours: int = Query(default=24, ge=1, le=168),
+    hours: int = Query(default=24, ge=1, le=8760),
+    start: Annotated[str | None, Query()] = None,
+    end: Annotated[str | None, Query()] = None,
     source: str = Query(default="bacnet"),
     limit: int = Query(default=8000, ge=100, le=8000),
     include_faults: bool = Query(default=True),
@@ -90,6 +98,8 @@ def timeseries_export_csv(
         cols,
         source=source,
         hours=hours,
+        start=start,
+        end=end,
         limit=limit,
         max_chart_points=limit,
         include_faults=include_faults,
