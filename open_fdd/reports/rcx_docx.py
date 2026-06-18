@@ -414,6 +414,64 @@ def build_rcx_docx(
         if err and source != "ollama":
             doc.add_paragraph(f"(AI engine note: {err[:200]})")
 
+    if "smoke_validation" in enabled_sections:
+        doc.add_heading("Half-hour smoke validation (bench 5007)", level=1)
+        smoke = ctx.get("smoke_validation") if isinstance(ctx.get("smoke_validation"), dict) else {}
+        doc.add_paragraph(
+            "Automated bench smoke: PyArrow vs DataFusion SQL parity on device 5007, "
+            "API/UI health probes, and BACnet P8 supervisory override scan mechanism."
+        )
+        _kv_table(
+            doc,
+            [
+                ("Smoke PASS", str(smoke.get("pass"))),
+                ("Mode", str(smoke.get("mode") or "—")),
+                ("Health probe cycles", str(smoke.get("health_probe_count") or 0)),
+                ("Override scan OK", str(smoke.get("override_scan_ok"))),
+                ("Generated", str(smoke.get("generated_at") or "—")[:19]),
+            ],
+        )
+        issues = smoke.get("issues") if isinstance(smoke.get("issues"), list) else []
+        if issues:
+            doc.add_paragraph("Smoke issues:")
+            for issue in issues[:12]:
+                doc.add_paragraph(f"• {issue}")
+        else:
+            doc.add_paragraph("No smoke issues recorded.")
+
+        ov_scan = smoke.get("override_scan") if isinstance(smoke.get("override_scan"), dict) else {}
+        ov_status = ov_scan.get("status") if isinstance(ov_scan.get("status"), dict) else {}
+        if ov_status:
+            doc.add_heading("BACnet override scan (hourly rotation)", level=2)
+            _kv_table(
+                doc,
+                [
+                    ("Scan interval (s)", str(ov_status.get("scan_interval_s") or "—")),
+                    ("Devices in rotation", str(ov_status.get("device_count") or "—")),
+                    ("Cursor", str(ov_status.get("cursor") or "—")),
+                    ("Last scan device", str(ov_status.get("last_scan_device") or "—")),
+                    ("Full rotation (h)", str(ov_status.get("full_rotation_hours") or "—")),
+                    ("Operator priority", f"P{ov_status.get('operator_priority') or 8}"),
+                ],
+            )
+
+        final_hp = smoke.get("health_probes_final") if isinstance(smoke.get("health_probes_final"), dict) else {}
+        probes = final_hp.get("probes") if isinstance(final_hp.get("probes"), list) else []
+        if probes:
+            doc.add_heading("Health probes (final cycle)", level=2)
+            for probe in probes[:8]:
+                if not isinstance(probe, dict):
+                    continue
+                mark = "OK" if probe.get("ok") else "FAIL"
+                doc.add_paragraph(f"{mark} — {probe.get('name')}: {probe.get('detail') or ''}")
+
+        flagged = smoke.get("last_flagged") if isinstance(smoke.get("last_flagged"), dict) else {}
+        if flagged:
+            doc.add_heading("PyArrow vs SQL smoke rules (last cycle)", level=2)
+            for rid, cnt in sorted(flagged.items()):
+                if str(rid).startswith("smoke-paired"):
+                    doc.add_paragraph(f"  {rid}: flagged={cnt}")
+
     if "appendix_faults" in enabled_sections:
         doc.add_heading("Appendix: fault table", level=1)
         for row in fault_rows:

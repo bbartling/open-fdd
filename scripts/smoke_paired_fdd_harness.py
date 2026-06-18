@@ -55,6 +55,116 @@ POLL_SECONDS = 60
 HEARTBEAT_SECONDS = 300
 
 
+def _health_probes_enabled(*, mode: str, bench_only: bool) -> bool:
+    raw = os.environ.get("OPENFDD_SMOKE_HEALTH_PROBES", "").strip().lower()
+    if raw in ("0", "false", "no"):
+        return False
+    if raw in ("1", "true", "yes"):
+        return True
+    return mode == "short" and bench_only
+
+
+def _health_history_path() -> Path:
+    override = os.environ.get("OPENFDD_SMOKE_HEALTH_JSON", "").strip()
+    if override:
+        return Path(override)
+    return REPORT_DIR / "bench_5007_half_hour_health.json"
+
+
+def _append_health_history(snapshot: dict[str, Any]) -> None:
+    path = _health_history_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc: dict[str, Any] = {"history": []}
+    if path.is_file():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                doc = loaded
+        except (OSError, json.JSONDecodeError):
+            pass
+    history = doc.get("history") if isinstance(doc.get("history"), list) else []
+    history.append(snapshot)
+    doc["history"] = history[-48:]
+    doc["updated_at"] = _utc()
+    path.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+
+
+def _health_probe_loop(
+    *,
+    stop_event: threading.Event,
+    base: str,
+    status: dict[str, Any],
+    status_lock: threading.Lock,
+    status_path: Path,
+    auth_stats: AuthStats,
+) -> None:
+    from open_fdd.validation.smoke_health_probes import run_health_battery  # noqa: E402
+
+    stats = auth_stats
+    session = SmokeAuthSession(base=base, label="health", stats=stats, stats_lock=threading.Lock())
+    try:
+        session.login(reason="health-probes")
+    except RuntimeError as exc:
+        with status_lock:
+            status["health_probe_error"] = str(exc)
+            recent = list(status.get("recent_errors") or [])
+            recent.append(f"[health] login failed: {exc}")
+            status["recent_errors"] = recent[-20:]
+        _publish_status(status_path=status_path, status=status, status_lock=status_lock)
+        return
+
+    prior_override: dict[str, Any] | None = None
+    while not stop_event.is_set():
+        if session.stats.auth_failure:
+            break
+        snap = run_health_battery(
+            base=base,
+            token=session.token,
+            repo_root=REPO,
+            prior_override_status=prior_override,
+        )
+        for probe in snap.get("probes") or []:
+            if isinstance(probe, dict) and probe.get("name") == "bacnet_override_scan":
+                data = probe.get("data") if isinstance(probe.get("data"), dict) else {}
+                st_body = data.get("status") if isinstance(data.get("status"), dict) else {}
+                if st_body:
+                    prior_override = st_body
+        _append_health_history(snap)
+        with status_lock:
+            status["health_probes"] = snap
+            if not snap.get("pass"):
+                status["pass_so_far"] = False
+                recent = list(status.get("recent_errors") or [])
+                for probe in snap.get("probes") or []:
+                    if isinstance(probe, dict) and not probe.get("ok"):
+                        recent.append(f"[health] {probe.get('name')}: {probe.get('detail')}")
+                status["recent_errors"] = recent[-20:]
+        _publish_status(status_path=status_path, status=status, status_lock=status_lock)
+        print(
+            f"[smoke] health pass={snap.get('pass')} probes={len(snap.get('probes') or [])}",
+            flush=True,
+        )
+        if stop_event.wait(HEARTBEAT_SECONDS):
+            break
+
+
+def _maybe_generate_rcx_report(*, mode: str, bench_only: bool, passed: bool) -> Path | None:
+    if os.environ.get("OPENFDD_SMOKE_RCX_REPORT", "1").strip().lower() in ("0", "false", "no"):
+        return None
+    if not (mode == "short" and bench_only):
+        return None
+    try:
+        from open_fdd.validation.smoke_rcx_report import generate_smoke_rcx_docx  # noqa: E402
+
+        blob, out = generate_smoke_rcx_docx(reports_dir=REPORT_DIR, site_id=BENCH_SITE_ID)
+        out.write_bytes(blob)
+        print(f"[smoke] RCx report: {out} ({len(blob)} bytes) pass={passed}", flush=True)
+        return out
+    except Exception as exc:
+        print(f"[smoke] RCx report generation failed: {exc}", flush=True)
+        return None
+
+
 def _status_path(mode: str) -> Path:
     override = os.environ.get("OPENFDD_SMOKE_STATUS", "").strip()
     if override:
@@ -650,6 +760,23 @@ def main() -> int:
     )
     t_heartbeat.start()
 
+    health_enabled = _health_probes_enabled(mode=mode, bench_only=bench_only)
+    if health_enabled:
+        t_health = threading.Thread(
+            target=_health_probe_loop,
+            kwargs={
+                "stop_event": stop,
+                "base": bench_base,
+                "status": shared_status,
+                "status_lock": status_lock,
+                "status_path": status_path,
+                "auth_stats": bench_auth,
+            },
+            daemon=True,
+        )
+        t_health.start()
+        print("[smoke] health probes enabled (API, overrides, frontend, logs)", flush=True)
+
     t_bench = threading.Thread(
         target=_run_site_loop,
         kwargs={
@@ -705,6 +832,20 @@ def main() -> int:
     if not parity.get("pass"):
         issues.insert(0, "cross-site parity failed")
 
+    if health_enabled:
+        health_path = _health_history_path()
+        if health_path.is_file():
+            try:
+                health_doc = json.loads(health_path.read_text(encoding="utf-8"))
+                for snap in reversed(health_doc.get("history") or []):
+                    if isinstance(snap, dict) and not snap.get("pass"):
+                        issues.append("health probe cycle failed")
+                        break
+            except (OSError, json.JSONDecodeError):
+                issues.append("health probe history unreadable")
+        else:
+            issues.append("no health probe history recorded")
+
     passed = not issues
     auth_summary = {
         "bench": bench_auth.to_dict(),
@@ -737,7 +878,10 @@ def main() -> int:
         acme=acme_report,
         issues=issues,
     )
+    rcx_path = _maybe_generate_rcx_report(mode=mode, bench_only=bench_only, passed=passed)
     print(f"\nReport: {report_path}")
+    if rcx_path:
+        print(f"RCx DOCX: {rcx_path}")
     if issues:
         for i in issues[:12]:
             print(f"  FAIL: {i}")

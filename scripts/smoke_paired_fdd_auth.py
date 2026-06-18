@@ -131,6 +131,10 @@ class SmokeAuthSession:
         self._exp: float | None = None
         self._login_lock = threading.Lock()
 
+    @property
+    def token(self) -> str | None:
+        return self._token
+
     def login(self, *, reason: str = "initial") -> None:
         user, password = load_auth_credentials()
         st, body = raw_fetch(

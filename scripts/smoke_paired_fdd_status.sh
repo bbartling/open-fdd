@@ -47,6 +47,10 @@ for issue in (s.get("issues") or [])[:5]:
     print(f"issue: {issue}")
 if s.get("finished_at"):
     print(f"finished_at={s.get('finished_at')}")
+    hp = s.get("health_probes") if isinstance(s.get("health_probes"), dict) else {}
+    if hp:
+        print(f"health_pass={hp.get('pass')}")
     sys.exit(0 if s.get("pass") else 1)
-sys.exit(0)
+print("status=running")
+sys.exit(2)
 PY

@@ -28,6 +28,13 @@ Launch in **systemd user unit** (or `setsid`), then **poll status once** — nev
 ./scripts/smoke_paired_fdd_status.sh --mode short
 ```
 
+### Bench 5007 half-hour smoke (FDD + health + RCx)
+
+```bash
+./scripts/smoke_bench_5007_half_hour.sh
+./scripts/smoke_bench_5007_half_hour_status.sh
+```
+
 ### workspace_bridge pytest (CI parity)
 
 ```bash
