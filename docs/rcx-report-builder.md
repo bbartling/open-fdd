@@ -12,9 +12,12 @@ The **RCx Report Builder** (`/analytics/rcx`) collects a read-only snapshot from
 
 ## Implementation
 
-- Preview/readiness: `workspace/api/openfdd_bridge/dashboard_analytics.py`
+- Preview/readiness: `workspace/api/openfdd_bridge/rcx/chart_preview.py`
+- Placeholder hints (BRICK roles → columns → paste instructions): `open_fdd/reports/rcx_placeholders.py`
 - DOCX builder: `open_fdd/reports/rcx_docx.py`
 - Charts: `open_fdd/reports/charts.py` (matplotlib → BytesIO, no temp PNGs)
+
+Each DOCX placeholder includes system type (AHU/VAV/zone/plant), historian column names from the BRICK model, and disabled-chart gaps in the appendix. FDD rule sections list bound sensor columns per Rule Lab assignment.
 
 ## Safety
 

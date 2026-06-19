@@ -1,5 +1,6 @@
-#!/usr/bin/env python3
-"""Merge discovery-enabled BACnet points missing from points.csv (poll driver list)."""
+#!/usr/bin/env bash
+# One-off maintainer tool — not referenced by CI or other scripts.
+# Merge discovery-enabled BACnet points missing from points.csv (poll driver list).
 
 from __future__ import annotations
 

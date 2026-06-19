@@ -19,6 +19,7 @@ cd "$ROOT"
 MODE="standard"
 EXTRA=()
 DETACHED=0
+ATTACHED=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -27,6 +28,7 @@ while [[ $# -gt 0 ]]; do
     --standard) MODE="standard"; shift ;;
     --overnight) MODE="overnight"; shift ;;
     --detached) DETACHED=1; shift ;;
+    --attached) ATTACHED=1; shift ;;
     -h|--help)
       sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -35,21 +37,21 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$DETACHED" == "1" ]]; then
-  LOG="/tmp/paired_fdd_smoke_${MODE}_$(date -u +%Y%m%d_%H%M%S).log"
-  PIDFILE="/tmp/paired_fdd_smoke_${MODE}.pid"
+# Cursor/IDE: never run the Python harness attached (crashes on 6m–12h waits).
+# Default: systemd-isolated launcher. Humans in tmux/SSH: pass --attached explicitly.
+if [[ "$ATTACHED" != "1" ]]; then
+  # shellcheck source=scripts/lib/cursor_agent_guard.sh
+  source "${ROOT}/scripts/lib/cursor_agent_guard.sh" 2>/dev/null || true
   CHILD=()
   for arg in "${EXTRA[@]}"; do
-    [[ "$arg" != "--detached" ]] && CHILD+=("$arg")
+    [[ "$arg" != "--detached" && "$arg" != "--attached" ]] && CHILD+=("$arg")
   done
-  echo "==> Detached paired FDD smoke (mode=${MODE})"
-  echo "    log: ${LOG}"
-  nohup "$0" "--${MODE}" "${CHILD[@]}" >>"$LOG" 2>&1 &
-  echo $! >"$PIDFILE"
-  echo "    pid: $(cat "$PIDFILE") (also in ${PIDFILE})"
-  echo "    tail -f ${LOG}"
-  exit 0
+  exec "${ROOT}/scripts/run_paired_fdd_smoke_isolated.sh" "--${MODE}" "${CHILD[@]}"
 fi
+
+# shellcheck source=scripts/lib/cursor_agent_guard.sh
+source "${ROOT}/scripts/lib/cursor_agent_guard.sh"
+cursor_agent_guard_require_attached_flag 1 "paired FDD smoke" || exit 1
 
 PYTHON="${ROOT}/.venv/bin/python3"
 [[ -x "$PYTHON" ]] || PYTHON="$(command -v python3)"

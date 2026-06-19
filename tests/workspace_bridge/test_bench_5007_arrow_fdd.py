@@ -42,8 +42,11 @@ def _reload_bridge() -> None:
             del sys.modules[name]
 
 
-def _bench_rules_store_path() -> Path | None:
-    for path in (REPO / "workspace" / "data" / "rules_store.json",):
+def _bench_rules_store_path() -> Path:
+    for path in (
+        REPO / "edge_config" / "demo" / "bens-office" / "rules_store.json",
+        REPO / "workspace" / "data" / "rules_store.json",
+    ):
         if path.is_file():
             return path
     return REPO / "edge_config" / "demo" / "bens-office" / "rules_store.json"

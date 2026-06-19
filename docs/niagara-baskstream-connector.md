@@ -65,3 +65,17 @@ Disable background worker: `OFDD_DISABLE_NIAGARA_POLL_WORKER=1`.
 | Expected points | ~10 BACnet components (proxy extensions excluded by default) |
 
 Validate: **Test connection** → **Discover** → **Read selected** / **Poll once**. Values should match the standalone `baskstream_cli.py values` output (OA-T, DUCT-T, STAT ZN-T, etc.).
+
+## Large sites / multi-building stations (#315)
+
+A single Niagara station may contain many buildings. Use **folder ORDs as building boundaries**:
+
+1. **Station tree browse** (Niagara tab) — preview `slot:/Drivers/...` hierarchy before discover.
+2. **Right-click** a folder → **Add as building** or **Add as device** (BACnet-style commission tree).
+3. Set **`default_points_root`** to the chosen device `…/points` folder (auto-suggested when adding a device).
+3. **Discover points** under that root only; tune `browse_depth` and `max_nodes` in station settings for massive trees.
+4. **Poll once** as a dry-run poll; review Activity log and point counts before enabling background poll.
+5. Map folders to Open-FDD site/building context via commissioning export/import (`open_fdd/validation/niagara_folder_mapping.py` helpers).
+
+Truncated browse (`max_nodes` hit) returns partial trees — narrow the base ORD or increase `max_nodes` in station config.
+

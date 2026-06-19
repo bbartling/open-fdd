@@ -294,7 +294,7 @@ def build_report_bundles(
 
     families: dict[str, dict[str, Any]] = {
         "building": {"label": "Building overview", "count": 0},
-        "zone": {"label": "Zone / box reports (FCU, VAV, bench)", "count": 0},
+        "zone": {"label": "Zone / sensor device reports", "count": 0},
         "ahu": {"label": "AHU reports", "count": 0},
         "vav": {"label": "VAV reports", "count": 0},
         "hws": {"label": "HWS / boiler plant reports", "count": 0},

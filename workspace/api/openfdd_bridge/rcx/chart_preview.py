@@ -29,6 +29,7 @@ from .report_bundles import (
     chart_ids_for_bundles,
     equipment_charts_for_ids,
 )
+from .report_profile import select_report_profile
 from .rcx_narrative import build_chart_narrative
 from .rcx_stats import summarize_readings
 from .trend_charts import (
@@ -207,6 +208,7 @@ def build_rcx_preview(
     custom_columns: list[str] | None = None,
     show_fault_overlays: bool = True,
     include_previews: bool = True,
+    include_chart_stats: bool = False,
     catalog_only: bool = False,
     gallery_mode: bool = False,
     scope: str = "building",
@@ -296,8 +298,9 @@ def build_rcx_preview(
         return _readings_for_columns(columns_for_roles(tree, roles, equipment_ids=equipment_ids))
 
     render_previews = include_previews and not catalog_only
+    collect_stats = include_chart_stats or render_previews
     batch_readings: dict[str, Any] = {}
-    if render_previews:
+    if collect_stats:
         cols_needed: list[str] = []
         for spec in CHART_SPECS:
             cid = spec["chart_id"]
@@ -337,10 +340,10 @@ def build_rcx_preview(
                 tree, spec.get("required_roles") or [], equipment_ids=equipment_ids
             )
             trend_ok = bool(cols)
-            if render_previews and cols:
+            if collect_stats and cols:
                 sub = _subset_readings(batch_readings, cols) if batch_readings else _readings_for_columns(cols)
                 trend_ok = (sub.get("row_count") or 0) > 0
-        elif render_previews:
+        elif collect_stats:
             trend_ok = bool((batch_readings.get("row_count") or 0) > 0)
         else:
             trend_ok = True
@@ -382,6 +385,13 @@ def build_rcx_preview(
 
     suggested_chart_ids = chart_ids_for_bundles(bundles, bundle_ids or report_model.get("default_bundle_ids") or [])
 
+    report_profile = select_report_profile(
+        mechanical_summary=mech,
+        report_bundles=report_model,
+        equipment=tree.get("equipment") if isinstance(tree.get("equipment"), list) else [],
+        points=tree.get("points") if isinstance(tree.get("points"), list) else [],
+    )
+
     base_payload = {
         "site_id": sid,
         "site": sid,
@@ -399,6 +409,7 @@ def build_rcx_preview(
         "fault_overlays": [],
         "chart_previews": [],
         "report_bundles": report_model,
+        "report_profile": report_profile,
         "diagnostics": _build_diagnostics(
             tree, available=available, disabled=disabled, fault_summary=fault_summary
         ),
@@ -408,60 +419,94 @@ def build_rcx_preview(
         ],
     }
 
-    if not render_previews:
+    if not render_previews and not include_chart_stats:
         return base_payload
 
     by_sev = overview.get("faults_by_severity") or faults_data.get("fault_count_by_severity") or []
+    def _append_preview(
+        *,
+        chart_id: str,
+        title: str,
+        readings: dict[str, Any],
+        plotted: dict[str, Any] | None = None,
+        warnings: list[str] | None = None,
+    ) -> None:
+        if render_previews and plotted is not None:
+            previews.append(
+                _plotly_preview(
+                    chart_id=chart_id,
+                    title=title,
+                    plotted=plotted,
+                    readings=readings,
+                    fault_summary=fault_summary,
+                    warnings=warnings,
+                    gallery_mode=gallery_mode,
+                )
+            )
+        elif include_chart_stats:
+            previews.append(
+                _enrich_preview(
+                    {
+                        "chart_id": chart_id,
+                        "title": title,
+                        "row_count": readings.get("row_count") or 0,
+                    },
+                    readings,
+                    fault_summary=fault_summary,
+                )
+            )
+
     if has_faults and (not chart_ids or "fault_hours_by_severity" in (chart_ids or [])):
         labels = [r.get("group", "") for r in by_sev]
         values = [float(r.get("elapsed_hours") or 0) for r in by_sev]
-        plotted = build_bar_figure(title="Fault hours by severity", labels=labels, values=values, plotly=not gallery_mode)
-        previews.append(
-            _plotly_preview(
-                chart_id="fault_hours_by_severity",
-                title="Fault hours by severity",
-                plotted=plotted,
-                readings={"timestamps": [], "series": {}, "row_count": len(fault_rows)},
-                fault_summary=fault_summary,
-                gallery_mode=gallery_mode,
+        readings = {"timestamps": [], "series": {}, "row_count": len(fault_rows)}
+        plotted = None
+        if render_previews:
+            plotted = build_bar_figure(
+                title="Fault hours by severity", labels=labels, values=values, plotly=not gallery_mode
             )
+        _append_preview(
+            chart_id="fault_hours_by_severity",
+            title="Fault hours by severity",
+            readings=readings,
+            plotted=plotted,
         )
 
     by_eq = overview.get("fault_hours_by_equipment") or faults_data.get("fault_hours_by_equipment") or []
     if has_faults and (not chart_ids or "fault_hours_by_equipment" in (chart_ids or [])):
         labels = [str(r.get("group", ""))[:20] for r in by_eq[:12]]
         values = [float(r.get("elapsed_hours") or 0) for r in by_eq[:12]]
-        plotted = build_bar_figure(title="Fault hours by equipment", labels=labels, values=values, plotly=not gallery_mode)
-        previews.append(
-            _plotly_preview(
-                chart_id="fault_hours_by_equipment",
-                title="Fault hours by equipment",
-                plotted=plotted,
-                readings={"timestamps": [], "series": {}, "row_count": len(fault_rows)},
-                fault_summary=fault_summary,
-                gallery_mode=gallery_mode,
+        readings = {"timestamps": [], "series": {}, "row_count": len(fault_rows)}
+        plotted = None
+        if render_previews:
+            plotted = build_bar_figure(
+                title="Fault hours by equipment", labels=labels, values=values, plotly=not gallery_mode
             )
+        _append_preview(
+            chart_id="fault_hours_by_equipment",
+            title="Fault hours by equipment",
+            readings=readings,
+            plotted=plotted,
         )
 
     if not chart_ids or "building_inventory" in (chart_ids or []):
         if "building_inventory" in available_ids:
             mh = build_model_health()
             inv_counts = mech.get("counts") if isinstance(mech.get("counts"), dict) else {}
-            plotted = build_building_inventory_figure(
-                counts=inv_counts,
-                fault_summary=fault_summary,
-                model_health=mh if isinstance(mh, dict) else {},
-                plotly=not gallery_mode,
-            )
-            previews.append(
-                _plotly_preview(
-                    chart_id="building_inventory",
-                    title="Building inventory & active faults",
-                    plotted=plotted,
-                    readings={"timestamps": [], "series": {}, "row_count": 0},
+            readings = {"timestamps": [], "series": {}, "row_count": 0}
+            plotted = None
+            if render_previews:
+                plotted = build_building_inventory_figure(
+                    counts=inv_counts,
                     fault_summary=fault_summary,
-                    gallery_mode=gallery_mode,
+                    model_health=mh if isinstance(mh, dict) else {},
+                    plotly=not gallery_mode,
                 )
+            _append_preview(
+                chart_id="building_inventory",
+                title="Building inventory & active faults",
+                readings=readings,
+                plotted=plotted,
             )
 
     for chart_id, roles in TREND_CHARTS.items():
@@ -477,19 +522,17 @@ def build_rcx_preview(
         readings = _subset_readings(batch_readings, cols) if batch_readings else _readings_for_columns(cols)
         title = next((s["title"] for s in CHART_SPECS if s["chart_id"] == chart_id), chart_id)
         partial = [s.get("partial_note") for s in available if s.get("chart_id") == chart_id]
-        plotted = build_trend_figure(
-            readings, title=title, show_faults=show_fault_overlays, plotly=not gallery_mode
-        )
-        previews.append(
-            _plotly_preview(
-                chart_id=chart_id,
-                title=title,
-                plotted=plotted,
-                readings=readings,
-                fault_summary=fault_summary,
-                warnings=[partial[0]] if partial and partial[0] else [],
-                gallery_mode=gallery_mode,
+        plotted = None
+        if render_previews:
+            plotted = build_trend_figure(
+                readings, title=title, show_faults=show_fault_overlays, plotly=not gallery_mode
             )
+        _append_preview(
+            chart_id=chart_id,
+            title=title,
+            readings=readings,
+            plotted=plotted,
+            warnings=[partial[0]] if partial and partial[0] else [],
         )
 
     for eq_chart in equipment_charts_for_ids(equipment_charts, chart_ids or []):
@@ -498,18 +541,16 @@ def build_rcx_preview(
             continue
         readings = _subset_readings(batch_readings, cols) if batch_readings else _readings_for_columns(cols)
         title = str(eq_chart.get("title") or eq_chart.get("chart_id"))
-        plotted = build_trend_figure(
-            readings, title=title, show_faults=show_fault_overlays, plotly=not gallery_mode
-        )
-        previews.append(
-            _plotly_preview(
-                chart_id=str(eq_chart.get("chart_id")),
-                title=title,
-                plotted=plotted,
-                readings=readings,
-                fault_summary=fault_summary,
-                gallery_mode=gallery_mode,
+        plotted = None
+        if render_previews:
+            plotted = build_trend_figure(
+                readings, title=title, show_faults=show_fault_overlays, plotly=not gallery_mode
             )
+        _append_preview(
+            chart_id=str(eq_chart.get("chart_id")),
+            title=title,
+            readings=readings,
+            plotted=plotted,
         )
 
     for col in custom_columns or []:
@@ -522,18 +563,16 @@ def build_rcx_preview(
         labels = readings.get("labels") if isinstance(readings.get("labels"), dict) else {}
         title = str(labels.get(col) or col)
         chart_key = f"custom_{col}"
-        plotted = build_trend_figure(
-            readings, title=title, show_faults=show_fault_overlays, plotly=not gallery_mode
-        )
-        previews.append(
-            _plotly_preview(
-                chart_id=chart_key,
-                title=f"Custom: {title}",
-                plotted=plotted,
-                readings=readings,
-                fault_summary=fault_summary,
-                gallery_mode=gallery_mode,
+        plotted = None
+        if render_previews:
+            plotted = build_trend_figure(
+                readings, title=title, show_faults=show_fault_overlays, plotly=not gallery_mode
             )
+        _append_preview(
+            chart_id=chart_key,
+            title=f"Custom: {title}",
+            readings=readings,
+            plotted=plotted,
         )
         available.append(
             {
@@ -574,6 +613,8 @@ def generate_rcx_docx(
     show_fault_overlays: bool = True,
     bundle_ids: list[str] | None = None,
     equipment_ids: list[str] | None = None,
+    include_previews: bool = False,
+    include_chart_stats: bool = True,
 ) -> tuple[bytes, str]:
     preview = build_rcx_preview(
         site_id=site_id,
@@ -583,8 +624,10 @@ def generate_rcx_docx(
         chart_ids=charts,
         custom_columns=custom_columns,
         show_fault_overlays=show_fault_overlays,
-        catalog_only=True,
-        include_previews=False,
+        catalog_only=not include_previews,
+        include_previews=include_previews,
+        include_chart_stats=include_chart_stats or include_previews,
+        gallery_mode=include_previews,
         bundle_ids=bundle_ids,
         equipment_ids=equipment_ids,
     )
@@ -604,6 +647,7 @@ def generate_rcx_docx(
     }
     report_ctx = build_rcx_report_context(site_id=sid, hours=preview.get("window", {}).get("hours") or hours)
     bundles = (preview.get("report_bundles") or {}).get("bundles") or []
+    equipment_charts = (preview.get("report_bundles") or {}).get("equipment_charts") or []
     equipment_bundle = None
     if charts:
         for b in bundles:
@@ -611,6 +655,20 @@ def generate_rcx_docx(
             if any(c in chart_ids for c in charts):
                 equipment_bundle = b
                 break
+
+    from .rcx_ai_insights import generate_rcx_ai_insights
+
+    ai_insights = generate_rcx_ai_insights(
+        site_id=sid,
+        site_name=site_name,
+        window=preview.get("window") or {},
+        fault_rows=fault_rows,
+        overview=overview,
+        chart_previews=preview.get("chart_previews") or [],
+        report_context=report_ctx,
+        mechanical_summary=mech,
+        report_profile=preview.get("report_profile"),
+    )
 
     blob = build_rcx_docx(
         site_id=sid,
@@ -624,6 +682,10 @@ def generate_rcx_docx(
         chart_previews=preview.get("chart_previews") or [],
         report_context=report_ctx,
         equipment_bundle=equipment_bundle,
+        equipment_charts=equipment_charts,
+        available_charts=preview.get("available_charts") or [],
+        disabled_charts=preview.get("disabled_charts") or [],
+        ai_insights=ai_insights,
     )
     start_s = (preview.get("window") or {}).get("start", "")[:10]
     end_s = (preview.get("window") or {}).get("end", "")[:10]

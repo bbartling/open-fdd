@@ -392,7 +392,10 @@ def gpu_available() -> bool:
 
 
 def interactive_chat_enabled() -> bool:
-    """Agent tab chat — disabled on CPU-only hosts (too slow for operators)."""
+    """Agent tab chat — disabled when Ollama is off or on CPU-only hosts."""
+    flag = os.environ.get("OFDD_OLLAMA_ENABLED", "").strip().lower()
+    if flag in {"0", "false", "no"}:
+        return False
     if os.environ.get("OFDD_AGENT_CHAT_WITHOUT_GPU", "").strip().lower() in {"1", "true", "yes"}:
         return health(timeout=4.0).get("ok") is True
     return gpu_available() and health(timeout=4.0).get("ok") is True
@@ -408,7 +411,10 @@ def should_use_ollama() -> bool:
 
 
 def should_use_ollama_for_insight() -> bool:
-    """Home dashboard one-liner — skip slow CPU inference; analytics still refresh."""
+    """Home dashboard one-liner — skip when Ollama disabled or slow CPU inference."""
+    flag = os.environ.get("OFDD_OLLAMA_ENABLED", "").strip().lower()
+    if flag in {"0", "false", "no"}:
+        return False
     if not health(timeout=6.0).get("ok"):
         return False
     if os.environ.get("OFDD_INSIGHT_USE_OLLAMA_WITHOUT_GPU", "").strip().lower() in {"1", "true", "yes"}:

@@ -6,6 +6,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 from open_fdd.reports.fault_hours import aggregate_fault_hours
+from open_fdd.reports.rcx_placeholders import (
+    SCREENSHOT_LABEL,
+    chart_placeholder_spec,
+    disabled_chart_notes,
+    rule_sensor_placeholder,
+)
 
 DEFAULT_SECTIONS = [
     "executive_summary",
@@ -17,12 +23,11 @@ DEFAULT_SECTIONS = [
     "analyst_insights",
     "runtime_analytics",
     "model_health",
+    "fdd_rule_trends",
     "recommendations",
     "appendix_faults",
     "appendix_missing_roles",
 ]
-
-SCREENSHOT_LABEL = "[ INSERT SCREENSHOT HERE ]"
 
 
 def _recommendations(rows: list[dict[str, Any]], warnings: list[str]) -> list[str]:
@@ -43,10 +48,12 @@ def _recommendations(rows: list[dict[str, Any]], warnings: list[str]) -> list[st
     return recs[:12]
 
 
-def _screenshot_placeholder(doc, *, title: str, subtitle: str = "") -> None:
+def _screenshot_placeholder(doc, *, title: str, subtitle: str = "", instruction: str = "") -> None:
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Pt, RGBColor
 
+    if instruction:
+        doc.add_paragraph(instruction)
     doc.add_paragraph()
     box = doc.add_paragraph()
     box.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -87,6 +94,10 @@ def build_rcx_docx(
     chart_previews: list[dict[str, Any]] | None = None,
     report_context: dict[str, Any] | None = None,
     equipment_bundle: dict[str, Any] | None = None,
+    equipment_charts: list[dict[str, Any]] | None = None,
+    available_charts: list[dict[str, Any]] | None = None,
+    disabled_charts: list[dict[str, Any]] | None = None,
+    ai_insights: dict[str, Any] | None = None,
 ) -> bytes:
     from docx import Document
     from docx.shared import Inches, Pt
@@ -163,16 +174,32 @@ def build_rcx_docx(
     if "trend_charts" in enabled_sections:
         doc.add_heading("Trend charts (engineer screenshots)", level=1)
         doc.add_paragraph(
-            "Use the RCx Report Builder Plotly gallery or Trend plot tab. "
-            "When the trend looks correct, snip the chart and paste into each placeholder below."
+            "BRICK model resolves historian columns per equipment type (AHU, VAV, zone, plant). "
+            "Open RCx Report Builder → Render chart gallery, or Trend plot with the listed columns. "
+            "Snip each chart and paste into the placeholder below it."
         )
-        eq_charts = equipment_bundle.get("chart_ids") if isinstance(equipment_bundle, dict) else None
-        if eq_charts:
-            for cid in eq_charts:
-                _screenshot_placeholder(doc, title=str(cid), subtitle="Equipment trend — paste Plotly snip")
-        else:
-            for spec_id in charts or ["ahu_sat_vs_setpoint", "ahu_duct_static_vs_setpoint", "vav_zone_temp"]:
-                _screenshot_placeholder(doc, title=str(spec_id), subtitle="Building trend — paste Plotly snip")
+        bundle_chart_ids = equipment_bundle.get("chart_ids") if isinstance(equipment_bundle, dict) else None
+        chart_ids = list(charts or bundle_chart_ids or ["ahu_sat_vs_setpoint", "ahu_duct_static_vs_setpoint", "vav_zone_temp"])
+        for cid in chart_ids:
+            spec = chart_placeholder_spec(
+                str(cid),
+                equipment_charts=equipment_charts,
+                catalog=available_charts,
+                chart_previews=chart_previews,
+            )
+            if spec.get("equipment_type") and spec.get("equipment_type") != "building":
+                doc.add_paragraph(f"System type: {spec.get('equipment_type')}")
+            _screenshot_placeholder(
+                doc,
+                title=str(spec.get("title") or cid),
+                subtitle=str(spec.get("subtitle") or ""),
+                instruction=str(spec.get("instruction") or ""),
+            )
+        gap_notes = disabled_chart_notes(disabled_charts)
+        if gap_notes:
+            doc.add_paragraph("Charts not included (model / historian gaps):")
+            for note in gap_notes[:12]:
+                doc.add_paragraph(f"• {note}")
 
     if "fault_analytics" in enabled_sections:
         doc.add_heading("Fault analytics", level=1)
@@ -294,39 +321,33 @@ def build_rcx_docx(
                         f"priority {ov_row.get('priority') or '—'}"
                     )
 
-    doc.add_heading("FDD rule trend screenshots", level=1)
-    doc.add_paragraph(
-        "For each assigned Rule Lab rule, paste a trend screenshot for the bound sensor columns "
-        "(required even when no fault is active in the lookback window)."
-    )
-    if assigned_rules:
-        for rule in assigned_rules:
-            doc.add_heading(str(rule.get("rule_name") or rule.get("rule_id")), level=2)
-            doc.add_paragraph(
-                f"Fault code: {rule.get('fault_code') or '—'} · Severity: {rule.get('severity') or '—'}"
-            )
-            sensors = rule.get("sensors") if isinstance(rule.get("sensors"), list) else []
-            if sensors:
-                for s in sensors:
-                    if not isinstance(s, dict):
-                        continue
-                    label = str(s.get("label") or s.get("column") or "sensor")
-                    col = str(s.get("column") or "")
-                    brick = str(s.get("brick_type") or "")
-                    doc.add_paragraph(f"Sensor: {label} ({col}) {brick}")
+    if "fdd_rule_trends" in enabled_sections:
+        doc.add_heading("FDD rule trend screenshots", level=1)
+        doc.add_paragraph(
+            "For each assigned Rule Lab rule, paste a trend screenshot for the bound sensor columns "
+            "(required even when no fault is active in the lookback window)."
+        )
+        if assigned_rules:
+            for rule in assigned_rules:
+                if not isinstance(rule, dict):
+                    continue
+                doc.add_heading(str(rule.get("rule_name") or rule.get("rule_id")), level=2)
+                doc.add_paragraph(
+                    f"Fault code: {rule.get('fault_code') or '—'} · Severity: {rule.get('severity') or '—'}"
+                )
+                for sensor in rule_sensor_placeholder(rule):
+                    label = sensor.get("label") or "sensor"
+                    col = sensor.get("column") or ""
+                    brick = sensor.get("brick_type") or ""
+                    doc.add_paragraph(f"Sensor: {label} ({col}) {brick}".strip())
+                    doc.add_paragraph(sensor.get("instruction") or "")
                     _screenshot_placeholder(
                         doc,
                         title=f"{rule.get('rule_name')} — {label}",
-                        subtitle=f"Historian column: {col}",
+                        subtitle=f"Historian column: {col}" if col else "Bind points in Model & assignments",
                     )
-            else:
-                _screenshot_placeholder(
-                    doc,
-                    title=str(rule.get("rule_name") or "Rule trend"),
-                    subtitle="Bind points in Model & assignments",
-                )
-    else:
-        doc.add_paragraph("No enabled Rule Lab rules found for this site.")
+        else:
+            doc.add_paragraph("No enabled Rule Lab rules found for this site.")
 
     if "recommendations" in enabled_sections:
         doc.add_heading("Recommendations", level=1)
@@ -334,10 +355,122 @@ def build_rcx_docx(
             doc.add_paragraph(f"• {rec}")
 
     if "analyst_insights" in enabled_sections:
-        doc.add_heading("Analyst insights", level=1)
+        doc.add_heading("AI analyst assessment", level=1)
+        ai = ai_insights if isinstance(ai_insights, dict) else {}
+        source = str(ai.get("source") or "deterministic")
         doc.add_paragraph(
-            "Plain-language interpretation — add field notes here after reviewing trends and fault evidence."
+            f"Automated interpretation of PyArrow historian trends, BRICK model context, "
+            f"Rule Lab bindings, and BACnet override scan ({source} engine)."
         )
+
+        paragraphs = [str(p).strip() for p in (ai.get("paragraphs") or []) if str(p).strip()]
+        if paragraphs:
+            for para in paragraphs[:10]:
+                doc.add_paragraph(para)
+        else:
+            narratives: list[str] = []
+            for prev in chart_previews or []:
+                if not isinstance(prev, dict):
+                    continue
+                text = str(prev.get("narrative") or "").strip()
+                if text:
+                    title = str(prev.get("title") or prev.get("chart_id") or "Chart")
+                    narratives.append(f"{title}: {text}")
+            if narratives:
+                doc.add_paragraph("Programmatic chart narratives from the selected window:")
+                for para in narratives[:8]:
+                    doc.add_paragraph(f"• {para}")
+            else:
+                doc.add_paragraph(
+                    "Plain-language interpretation — add field notes here after reviewing trends and fault evidence."
+                )
+
+        chart_insights = ai.get("chart_insights") if isinstance(ai.get("chart_insights"), list) else []
+        if chart_insights:
+            doc.add_heading("Trend plot interpretation", level=2)
+            for ci in chart_insights[:8]:
+                if not isinstance(ci, dict):
+                    continue
+                title = str(ci.get("title") or "Chart")
+                narrative = str(ci.get("narrative") or "").strip()
+                if narrative:
+                    doc.add_paragraph(f"{title}: {narrative}")
+                for bullet in (ci.get("stats_bullets") or [])[:4]:
+                    doc.add_paragraph(f"  • {bullet}")
+
+        rule_notes = ai.get("rule_assessments") if isinstance(ai.get("rule_assessments"), list) else []
+        if rule_notes:
+            doc.add_heading("FDD rule lab assessment", level=2)
+            for note in rule_notes[:8]:
+                doc.add_paragraph(f"• {note}")
+
+        override_notes = ai.get("override_notes") if isinstance(ai.get("override_notes"), list) else []
+        if override_notes:
+            doc.add_heading("BACnet override hygiene", level=2)
+            for note in override_notes[:6]:
+                doc.add_paragraph(note)
+
+        err = str(ai.get("error") or "").strip()
+        if err and source != "ollama":
+            doc.add_paragraph(f"(AI engine note: {err[:200]})")
+
+    if "smoke_validation" in enabled_sections:
+        doc.add_heading("Half-hour smoke validation (bench 5007)", level=1)
+        smoke = ctx.get("smoke_validation") if isinstance(ctx.get("smoke_validation"), dict) else {}
+        doc.add_paragraph(
+            "Automated bench smoke: PyArrow vs DataFusion SQL parity on device 5007, "
+            "API/UI health probes, and BACnet P8 supervisory override scan mechanism."
+        )
+        _kv_table(
+            doc,
+            [
+                ("Smoke PASS", str(smoke.get("pass"))),
+                ("Mode", str(smoke.get("mode") or "—")),
+                ("Health probe cycles", str(smoke.get("health_probe_count") or 0)),
+                ("Override scan OK", str(smoke.get("override_scan_ok"))),
+                ("Generated", str(smoke.get("generated_at") or "—")[:19]),
+            ],
+        )
+        issues = smoke.get("issues") if isinstance(smoke.get("issues"), list) else []
+        if issues:
+            doc.add_paragraph("Smoke issues:")
+            for issue in issues[:12]:
+                doc.add_paragraph(f"• {issue}")
+        else:
+            doc.add_paragraph("No smoke issues recorded.")
+
+        ov_scan = smoke.get("override_scan") if isinstance(smoke.get("override_scan"), dict) else {}
+        ov_status = ov_scan.get("status") if isinstance(ov_scan.get("status"), dict) else {}
+        if ov_status:
+            doc.add_heading("BACnet override scan (hourly rotation)", level=2)
+            _kv_table(
+                doc,
+                [
+                    ("Scan interval (s)", str(ov_status.get("scan_interval_s") or "—")),
+                    ("Devices in rotation", str(ov_status.get("device_count") or "—")),
+                    ("Cursor", str(ov_status.get("cursor") or "—")),
+                    ("Last scan device", str(ov_status.get("last_scan_device") or "—")),
+                    ("Full rotation (h)", str(ov_status.get("full_rotation_hours") or "—")),
+                    ("Operator priority", f"P{ov_status.get('operator_priority') or 8}"),
+                ],
+            )
+
+        final_hp = smoke.get("health_probes_final") if isinstance(smoke.get("health_probes_final"), dict) else {}
+        probes = final_hp.get("probes") if isinstance(final_hp.get("probes"), list) else []
+        if probes:
+            doc.add_heading("Health probes (final cycle)", level=2)
+            for probe in probes[:8]:
+                if not isinstance(probe, dict):
+                    continue
+                mark = "OK" if probe.get("ok") else "FAIL"
+                doc.add_paragraph(f"{mark} — {probe.get('name')}: {probe.get('detail') or ''}")
+
+        flagged = smoke.get("last_flagged") if isinstance(smoke.get("last_flagged"), dict) else {}
+        if flagged:
+            doc.add_heading("PyArrow vs SQL smoke rules (last cycle)", level=2)
+            for rid, cnt in sorted(flagged.items()):
+                if str(rid).startswith("smoke-paired"):
+                    doc.add_paragraph(f"  {rid}: flagged={cnt}")
 
     if "appendix_faults" in enabled_sections:
         doc.add_heading("Appendix: fault table", level=1)
@@ -350,11 +483,17 @@ def build_rcx_docx(
     if "appendix_missing_roles" in enabled_sections:
         doc.add_heading("Appendix: missing point roles", level=1)
         missing = ov.get("missing_roles") if isinstance(ov.get("missing_roles"), list) else []
+        gap_notes = disabled_chart_notes(disabled_charts)
         if missing:
+            doc.add_paragraph("Model issues from mechanical summary:")
             for m in missing[:40]:
                 doc.add_paragraph(f"• {m}")
-        else:
-            doc.add_paragraph("None recorded.")
+        if gap_notes:
+            doc.add_paragraph("Charts disabled due to missing BRICK roles or historian data:")
+            for note in gap_notes[:40]:
+                doc.add_paragraph(f"• {note}")
+        if not missing and not gap_notes:
+            doc.add_paragraph("None recorded — all selected chart roles resolved.")
 
     if equipment_notes:
         doc.add_heading("Equipment notes", level=1)

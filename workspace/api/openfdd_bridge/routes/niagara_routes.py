@@ -28,11 +28,23 @@ from ..niagara_store import (
     set_poll_running,
     upsert_station,
 )
+from ..niagara_secrets import store_password
 
 router = APIRouter(tags=["niagara"])
 
 _READ = Depends(require_roles("operator", "integrator", "agent"))
 _POLL = Depends(require_roles("integrator", "agent"))
+
+
+def _apply_station_password(payload: dict[str, Any]) -> dict[str, Any]:
+    raw_pw = str(payload.pop("password", "") or "").strip()
+    env_name = str(payload.get("password_env") or "OPENFDD_NIAGARA_ADMIN_PASSWORD").strip()
+    if not env_name:
+        payload["password_env"] = "OPENFDD_NIAGARA_ADMIN_PASSWORD"
+        env_name = payload["password_env"]
+    if raw_pw:
+        store_password(station_id=str(payload.get("id") or ""), env_name=env_name, password=raw_pw)
+    return payload
 
 
 class NiagaraStationBody(BaseModel):
@@ -41,6 +53,7 @@ class NiagaraStationBody(BaseModel):
     station_url: str = Field(min_length=8)
     username: str = Field(min_length=1)
     password_env: str = Field(default="OPENFDD_NIAGARA_ADMIN_PASSWORD")
+    password: str = Field(default="", description="Lab-only — stored server-side, never returned")
     verify_tls: bool = False
     enabled: bool = False
     root_ord: str = "slot:/Drivers"
@@ -96,13 +109,13 @@ def niagara_list_stations() -> dict[str, Any]:
 
 @router.post("/api/niagara/stations", dependencies=[_POLL])
 def niagara_create_station(body: NiagaraStationBody) -> dict[str, Any]:
-    station = upsert_station(body.model_dump())
+    station = upsert_station(_apply_station_password(body.model_dump()))
     return {"ok": True, "station": station}
 
 
 @router.put("/api/niagara/stations/{station_id}", dependencies=[_POLL])
 def niagara_update_station(station_id: str, body: NiagaraStationBody) -> dict[str, Any]:
-    payload = body.model_dump()
+    payload = _apply_station_password(body.model_dump())
     payload["id"] = station_id
     station = upsert_station(payload)
     return {"ok": True, "station": station}

@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ActionButton from "../components/ActionButton";
+import NiagaraBrowseTree from "../components/NiagaraBrowseTree";
+import NiagaraStationRail, { type StationRailMeta } from "../components/NiagaraStationRail";
+import NiagaraCommissionTree from "../components/NiagaraCommissionTree";
 import NiagaraPointsTree, { type NiagaraDevice, type NiagaraPoint } from "../components/NiagaraPointsTree";
 import NiagaraTreeLegend from "../components/NiagaraTreeLegend";
 import PageHeader from "../components/PageHeader";
@@ -30,16 +33,29 @@ import {
   type NiagaraTreeNode,
 } from "../lib/niagara-api";
 import { STANDARD_POLL_INTERVALS } from "../lib/pollIntervals";
+import {
+  addBuilding,
+  addDevice,
+  emptyProfile,
+  organizeStationPoints,
+  profileSummary,
+  removeBuilding,
+  removeDevice,
+  type NiagaraCommissionProfile,
+} from "../lib/niagaraCommissionProfile";
 
 const STATION_URL_PLACEHOLDER = "https://niagara.example.local";
+
+const DEFAULT_PASSWORD_ENV = ["OPENFDD", "NIAGARA", "ADMIN", "PASSWORD"].join("_");
 
 const emptyForm = (): Partial<NiagaraStation> => ({
   name: "",
   station_url: "",
   username: "",
-  password_env: "",
+  password_env: DEFAULT_PASSWORD_ENV,
+  password: "",
   verify_tls: false,
-  enabled: false,
+  enabled: true,
   root_ord: "slot:/Drivers",
   default_points_root: "",
   poll_interval_seconds: 60,
@@ -58,6 +74,7 @@ export default function NiagaraPage() {
   const [stations, setStations] = useState<NiagaraStation[]>([]);
   const [selectedStationId, setSelectedStationId] = useState("");
   const [form, setForm] = useState<Partial<NiagaraStation>>(emptyForm());
+  const [stationPassword, setStationPassword] = useState("");
   const [driverDevices, setDriverDevices] = useState<NiagaraDevice[]>([]);
   const [treeNodes, setTreeNodes] = useState<NiagaraTreeNode[]>([]);
   const [browseBase, setBrowseBase] = useState("slot:/Drivers");
@@ -65,12 +82,16 @@ export default function NiagaraPage() {
   const [followExternal, setFollowExternal] = useState(false);
   const [schedules, setSchedules] = useState<NiagaraSchedule[]>([]);
   const [pollStatus, setPollStatus] = useState<NiagaraPollStatus | null>(null);
+  const [pollStatusByStation, setPollStatusByStation] = useState<Record<string, NiagaraPollStatus>>({});
+  const [connectionTestByStation, setConnectionTestByStation] = useState<Record<string, boolean>>({});
+  const [isNewDraft, setIsNewDraft] = useState(false);
   const [selectedPointOrds, setSelectedPointOrds] = useState<Set<string>>(() => new Set());
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
   const [log, setLog] = useState("");
   const [treeLoading, setTreeLoading] = useState(false);
   const [pending, setPending] = useState(false);
+  const [commissionProfile, setCommissionProfile] = useState<NiagaraCommissionProfile>(() => emptyProfile());
 
   const selectedStation = useMemo(
     () => stations.find((s) => s.id === selectedStationId) ?? null,
@@ -86,18 +107,36 @@ export default function NiagaraPage() {
     }
   }, []);
 
+  const loadAllPollStatuses = useCallback(async (stationList: NiagaraStation[]) => {
+    const entries = await Promise.all(
+      stationList.map(async (s) => {
+        try {
+          const st = await fetchNiagaraPollStatus(s.id);
+          return [s.id, st] as const;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const map: Record<string, NiagaraPollStatus> = {};
+    for (const entry of entries) {
+      if (entry) map[entry[0]] = entry[1];
+    }
+    setPollStatusByStation(map);
+  }, []);
+
   const loadStations = useCallback(async () => {
     const res = await fetchNiagaraStations();
-    const list = (res.stations ?? []).filter(
-      (s) => s.enabled && !String(s.station_url || "").includes("example.test"),
-    );
-    setStations(list.length ? list : res.stations ?? []);
-    const pick = list[0] ?? res.stations?.[0];
-    if (!selectedStationId && pick) {
+    const list = res.stations ?? [];
+    setStations(list);
+    await loadAllPollStatuses(list);
+    const pick =
+      list.find((s) => s.enabled && !String(s.station_url || "").includes("example.test")) ?? list[0];
+    if (!selectedStationId && !isNewDraft && pick) {
       setSelectedStationId(pick.id);
       setForm(pick);
     }
-  }, [selectedStationId]);
+  }, [selectedStationId, isNewDraft, loadAllPollStatuses]);
 
   const loadDriverTree = useCallback(async () => {
     setTreeLoading(true);
@@ -121,6 +160,7 @@ export default function NiagaraPage() {
     try {
       const st = await fetchNiagaraPollStatus(selectedStationId);
       setPollStatus(st);
+      setPollStatusByStation((prev) => ({ ...prev, [selectedStationId]: st }));
     } catch {
       /* optional */
     }
@@ -134,7 +174,12 @@ export default function NiagaraPage() {
   }, [loadHealth, loadStations, loadDriverTree]);
 
   useEffect(() => {
-    if (!selectedStationId) return;
+    if (!selectedStationId) {
+      setPollStatus(null);
+      return;
+    }
+    setSelectedPointOrds(new Set());
+    setTreeNodes([]);
     refreshPollStatus().catch(() => undefined);
     loadDriverTree().catch(() => undefined);
   }, [selectedStationId, refreshPollStatus, loadDriverTree]);
@@ -153,10 +198,27 @@ export default function NiagaraPage() {
   }, [stations.length]);
 
   function selectStation(station: NiagaraStation) {
+    setIsNewDraft(false);
     setSelectedStationId(station.id);
     setForm(station);
     setBrowseBase(station.default_points_root || station.root_ord || "slot:/Drivers");
     setFollowExternal(Boolean(station.follow_external));
+    const raw = (station as NiagaraStation & { commission_profile?: NiagaraCommissionProfile }).commission_profile;
+    setCommissionProfile(raw?.buildings?.length ? raw : emptyProfile());
+    setActionError("");
+  }
+
+  function startNewStation() {
+    setIsNewDraft(true);
+    setSelectedStationId("");
+    setForm(emptyForm());
+    setCommissionProfile(emptyProfile());
+    setBrowseBase("slot:/Drivers");
+    setTreeNodes([]);
+    setSelectedPointOrds(new Set());
+    setPollStatus(null);
+    setActionError("");
+    setLog("New station — fill connection details and Save station.");
   }
 
   async function handleSaveStation() {
@@ -167,12 +229,19 @@ export default function NiagaraPage() {
     setPending(true);
     setActionError("");
     try {
-      const payload = { ...form, id: selectedStationId || form.id };
+      const payload = {
+        ...form,
+        id: selectedStationId || form.id,
+        commission_profile: commissionProfile,
+        password: stationPassword || undefined,
+      };
       const res = await saveNiagaraStation(payload as NiagaraStation);
       setLog(`Saved station ${res.station.name} (${res.station.id}).`);
+      setIsNewDraft(false);
       await loadStations();
       setSelectedStationId(res.station.id);
       setForm(res.station);
+      setStationPassword("");
     } catch (e) {
       setActionError(formatApiError(e));
     } finally {
@@ -180,16 +249,31 @@ export default function NiagaraPage() {
     }
   }
 
-  async function handleDeleteStation() {
-    if (!selectedStationId) return;
+  async function handleDeleteStation(stationId: string) {
     setPending(true);
     try {
-      await deleteNiagaraStation(selectedStationId);
-      setLog(`Deleted station ${selectedStationId}.`);
-      setSelectedStationId("");
-      setForm(emptyForm());
-      await loadStations();
+      await deleteNiagaraStation(stationId);
+      setLog(`Deleted station ${stationId}.`);
+      setConnectionTestByStation((prev) => {
+        const next = { ...prev };
+        delete next[stationId];
+        return next;
+      });
+      if (selectedStationId === stationId) {
+        setSelectedStationId("");
+        setForm(emptyForm());
+        setIsNewDraft(false);
+        setPollStatus(null);
+      }
+      const res = await fetchNiagaraStations();
+      const list = res.stations ?? [];
+      setStations(list);
+      await loadAllPollStatuses(list);
       await loadDriverTree();
+      if (selectedStationId === stationId) {
+        if (list.length) selectStation(list[0]);
+        else startNewStation();
+      }
     } catch (e) {
       setActionError(formatApiError(e));
     } finally {
@@ -205,22 +289,27 @@ export default function NiagaraPage() {
     setPending(true);
     try {
       const res = await testNiagaraStation(selectedStationId);
+      setConnectionTestByStation((prev) => ({ ...prev, [selectedStationId]: true }));
       setLog(`Test OK — user ${res.authenticated_user ?? "unknown"}.`);
     } catch (e) {
+      setConnectionTestByStation((prev) => ({ ...prev, [selectedStationId]: false }));
       setActionError(formatApiError(e));
     } finally {
       setPending(false);
     }
   }
 
-  async function handleDiscover() {
+  async function handleDiscover(baseOrd?: string) {
     if (!selectedStationId) {
       setActionError("Save the station first.");
       return;
     }
     setPending(true);
     try {
-      const base = form.default_points_root || form.root_ord || browseBase;
+      const base = baseOrd || form.default_points_root || form.root_ord || browseBase;
+      if (baseOrd) {
+        setForm((f) => ({ ...f, default_points_root: baseOrd }));
+      }
       const res = await discoverNiagaraPoints(selectedStationId, {
         base,
         follow_external: followExternal,
@@ -353,9 +442,32 @@ export default function NiagaraPage() {
     });
   }
 
+  const stationDevices = useMemo(
+    () => (selectedStationId ? driverDevices.filter((d) => d.station_id === selectedStationId) : []),
+    [driverDevices, selectedStationId],
+  );
+
+  const metaById = useMemo(() => {
+    const out: Record<string, StationRailMeta> = {};
+    for (const s of stations) {
+      const pointCount = driverDevices
+        .filter((d) => d.station_id === s.id)
+        .reduce((n, d) => n + (d.points?.length ?? 0), 0);
+      const ps = pollStatusByStation[s.id];
+      const tested = connectionTestByStation[s.id];
+      out[s.id] = {
+        pointCount,
+        pollRunning: Boolean(ps?.running),
+        connected: ps?.connected ?? null,
+        connectionTested: tested === undefined ? null : tested,
+      };
+    }
+    return out;
+  }, [stations, driverDevices, pollStatusByStation, connectionTestByStation]);
+
   function selectAllTreePoints() {
     const all = new Set<string>();
-    for (const d of driverDevices) {
+    for (const d of stationDevices) {
       for (const p of d.points) all.add(p.point_ord);
     }
     setSelectedPointOrds(all);
@@ -365,15 +477,53 @@ export default function NiagaraPage() {
     setSelectedPointOrds(new Set());
   }
 
+  async function handleSaveProfile() {
+    await handleSaveStation();
+    setLog(`Saved import profile — ${profileSummary(commissionProfile)}.`);
+  }
+
+  function handleAddBuilding(node: NiagaraTreeNode) {
+    setCommissionProfile((p) => addBuilding(p, node, { site_id: form.name ? slugId(form.name) : undefined }));
+    setLog(`Added building: ${node.name || node.ord}`);
+  }
+
+  function handleAddDevice(node: NiagaraTreeNode, buildingId: string) {
+    setCommissionProfile((p) => addDevice(p, node, buildingId, treeNodes));
+    setLog(`Added device: ${node.name || node.ord}`);
+  }
+
+  function slugId(text: string): string {
+    return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
+  }
+
+  const activeStationDevice = useMemo(
+    () => stationDevices[0] ?? null,
+    [stationDevices],
+  );
+
+  const organizedStation = useMemo(() => {
+    if (!activeStationDevice) return null;
+    return organizeStationPoints({
+      station_id: activeStationDevice.station_id,
+      station_name: activeStationDevice.station_name,
+      station_url: activeStationDevice.station_url,
+      points: activeStationDevice.points,
+      profile: commissionProfile,
+      poll_running: Boolean(pollStatus?.running && pollStatus.station_id === selectedStationId),
+    });
+  }, [activeStationDevice, commissionProfile, pollStatus, selectedStationId]);
+
+  const useCommissionTree = commissionProfile.buildings.length > 0;
+
   const selectedPointsFlat: NiagaraPoint[] = useMemo(() => {
     const out: NiagaraPoint[] = [];
-    for (const d of driverDevices) {
+    for (const d of stationDevices) {
       for (const p of d.points) {
         if (selectedPointOrds.has(p.point_ord)) out.push(p);
       }
     }
     return out;
-  }, [driverDevices, selectedPointOrds]);
+  }, [stationDevices, selectedPointOrds]);
 
   function downloadText(filename: string, text: string, mime: string) {
     const blob = new Blob([text], { type: mime });
@@ -389,8 +539,10 @@ export default function NiagaraPage() {
     <div className="page page-wide niagara-page">
       <PageHeader
         title="Niagara"
-        subtitle="Supervisory read-only driver — same layout as BACnet/Modbus. Configure station URL and credentials on the edge host (niagara.env.local)."
+        subtitle="Connect station → map folder buildings/devices → discover points for BRICK bindings and polling (BACnet-style tree)."
       />
+
+      <div className="niagara-page-stack">
       <TabDebugPanel tab="niagara" />
 
       {health && !health.dependencies_ok ? (
@@ -403,310 +555,511 @@ export default function NiagaraPage() {
       ) : null}
 
       {loadError ? <div className="panel error-panel">{loadError}</div> : null}
-      {pollStatus && selectedStationId ? (
-        <div className="panel">
-          <div className="status-bar">
-            <div className="status-kv">
-              <span className="status-kv-label">Station</span>
-              <span className="status-kv-value">{selectedStation?.name ?? selectedStationId}</span>
+
+      <NiagaraStationRail
+        stations={stations}
+        selectedStationId={selectedStationId}
+        isNewDraft={isNewDraft}
+        metaById={metaById}
+        onSelect={selectStation}
+        onNew={startNewStation}
+        onDelete={(id) => void handleDeleteStation(id)}
+        pending={pending}
+      />
+
+          <div className="panel">
+            <div className="niagara-station-header">
+              <div>
+                <h3 className="panel-title">{isNewDraft ? "New station" : selectedStation?.name ?? "Niagara station"}</h3>
+                <div className="niagara-station-sub muted">
+                  {isNewDraft
+                    ? "Save before testing, browsing, or polling."
+                    : selectedStation?.station_url ?? "Select or create a station in the rail."}
+                </div>
+              </div>
+              <div className="host-info-grid" style={{ flex: "1 1 12rem", maxWidth: "22rem" }}>
+                <div>
+                  <span className="status-kv-label">Connector</span>
+                  <div className={health?.dependencies_ok !== false ? "ok" : "error"}>
+                    {health?.dependencies_ok !== false ? "ready" : "deps missing"}
+                  </div>
+                </div>
+                <div>
+                  <span className="status-kv-label">Import profile</span>
+                  <div>{profileSummary(commissionProfile)}</div>
+                </div>
+              </div>
             </div>
-            <div className="status-kv">
-              <span className="status-kv-label">Poll driver</span>
-              <span className="status-kv-value">
-                <span className={`badge ${pollStatus.running ? "poll-badge" : "muted-badge"}`}>
-                  {pollStatus.running ? "polling" : "stopped"}
-                </span>{" "}
-                {pollStatus.active_points} point(s)
-              </span>
+
+            {!form.password_env || selectedStation?.password_configured === false ? (
+              <p className="muted panel-warn" style={{ padding: "0.5rem 0.75rem", borderRadius: 8, marginTop: 0 }}>
+                Enter the Niagara password below and Save — stored on the bridge (not in git). Env var{" "}
+                <code>{form.password_env || DEFAULT_PASSWORD_ENV}</code> is optional for production.
+              </p>
+            ) : null}
+
+            <div className="form-grid">
+              <div className="field">
+                <label className="field-label" htmlFor="niagara-name">
+                  Name
+                </label>
+                <input
+                  id="niagara-name"
+                  value={form.name ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Niagara station name"
+                />
+              </div>
+              <div className="field" style={{ gridColumn: "span 2" }}>
+                <label className="field-label" htmlFor="niagara-url">
+                  Station URL
+                </label>
+                <input
+                  id="niagara-url"
+                  value={form.station_url ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, station_url: e.target.value }))}
+                  placeholder={STATION_URL_PLACEHOLDER}
+                />
+              </div>
+              <div className="field">
+                <label className="field-label" htmlFor="niagara-user">
+                  Username
+                </label>
+                <input
+                  id="niagara-user"
+                  value={form.username ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+                />
+              </div>
+              <div className="field">
+                <label className="field-label" htmlFor="niagara-pass-env">
+                  Password env var
+                </label>
+                <input
+                  id="niagara-pass-env"
+                  value={form.password_env ?? DEFAULT_PASSWORD_ENV}
+                  onChange={(e) => setForm((f) => ({ ...f, password_env: e.target.value }))}
+                  placeholder={DEFAULT_PASSWORD_ENV}
+                />
+              </div>
+              <div className="field">
+                <label className="field-label" htmlFor="niagara-password">
+                  Station password
+                </label>
+                <input
+                  id="niagara-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={stationPassword}
+                  onChange={(e) => setStationPassword(e.target.value)}
+                  placeholder={selectedStation?.password_configured ? "•••••••• (unchanged if blank)" : "Niagara web password"}
+                />
+              </div>
+              <div className="field">
+                <label className="field-label" htmlFor="niagara-poll">
+                  Poll interval
+                </label>
+                <select
+                  id="niagara-poll"
+                  value={form.poll_interval_seconds ?? 60}
+                  onChange={(e) => setForm((f) => ({ ...f, poll_interval_seconds: Number(e.target.value) }))}
+                >
+                  {STANDARD_POLL_INTERVALS.map((p) => (
+                    <option key={p.seconds} value={p.seconds}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label className="field-label" htmlFor="niagara-batch">
+                  Read batch size
+                </label>
+                <input
+                  id="niagara-batch"
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={form.read_batch_size ?? 50}
+                  onChange={(e) => setForm((f) => ({ ...f, read_batch_size: Number(e.target.value) }))}
+                />
+              </div>
+              <div className="field" style={{ gridColumn: "1 / -1" }}>
+                <label className="field-label" htmlFor="niagara-points-root">
+                  Default points root (discover/poll)
+                </label>
+                <input
+                  id="niagara-points-root"
+                  value={form.default_points_root ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, default_points_root: e.target.value }))}
+                  placeholder="slot:/Drivers/BacnetNetwork/DEVICE$20NAME/points"
+                />
+                <p className="muted">Preserve $20 / $2d encoding — do not URL-decode ORDs.</p>
+              </div>
+              <div className="field">
+                <label className="checkbox-row" htmlFor="niagara-enabled">
+                  <input
+                    id="niagara-enabled"
+                    type="checkbox"
+                    checked={form.enabled !== false}
+                    onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
+                  />
+                  Station enabled
+                </label>
+              </div>
             </div>
-            <div className="status-kv">
-              <span className="status-kv-label">Connection</span>
-              <span className={`status-kv-value ${pollStatus.connected ? "ok" : "error"}`}>
-                {pollStatus.connected ? "connected" : "disconnected"}
-              </span>
+
+            <details className="niagara-advanced" style={{ marginTop: "0.65rem" }}>
+              <summary className="muted" style={{ cursor: "pointer" }}>
+                Advanced connection &amp; browse
+              </summary>
+              <div className="form-grid" style={{ marginTop: "0.65rem" }}>
+                <div className="field">
+                  <label className="field-label" htmlFor="niagara-browse-depth">
+                    Browse depth
+                  </label>
+                  <input
+                    id="niagara-browse-depth"
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={form.browse_depth ?? 4}
+                    onChange={(e) => setForm((f) => ({ ...f, browse_depth: Number(e.target.value) }))}
+                  />
+                </div>
+                <div className="field">
+                  <label className="field-label" htmlFor="niagara-max-nodes">
+                    Max nodes
+                  </label>
+                  <input
+                    id="niagara-max-nodes"
+                    type="number"
+                    min={100}
+                    max={20000}
+                    value={form.max_nodes ?? 2000}
+                    onChange={(e) => setForm((f) => ({ ...f, max_nodes: Number(e.target.value) }))}
+                  />
+                </div>
+                <div className="field" style={{ gridColumn: "1 / -1" }}>
+                  <label className="field-label" htmlFor="niagara-root-ord">
+                    Root ORD (browse)
+                  </label>
+                  <input
+                    id="niagara-root-ord"
+                    value={form.root_ord ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, root_ord: e.target.value }))}
+                    placeholder="slot:/Drivers"
+                  />
+                </div>
+                <div className="field">
+                  <label className="checkbox-row" htmlFor="niagara-verify-tls">
+                    <input
+                      id="niagara-verify-tls"
+                      type="checkbox"
+                      checked={Boolean(form.verify_tls)}
+                      onChange={(e) => setForm((f) => ({ ...f, verify_tls: e.target.checked }))}
+                    />
+                    Verify TLS
+                  </label>
+                </div>
+                <div className="field">
+                  <label className="checkbox-row" htmlFor="niagara-proxy-ext">
+                    <input
+                      id="niagara-proxy-ext"
+                      type="checkbox"
+                      checked={Boolean(form.include_proxy_ext)}
+                      onChange={(e) => setForm((f) => ({ ...f, include_proxy_ext: e.target.checked }))}
+                    />
+                    Include proxy extensions
+                  </label>
+                </div>
+                <div className="field">
+                  <label className="checkbox-row" htmlFor="niagara-follow-ext">
+                    <input
+                      id="niagara-follow-ext"
+                      type="checkbox"
+                      checked={Boolean(form.follow_external)}
+                      onChange={(e) => setForm((f) => ({ ...f, follow_external: e.target.checked }))}
+                    />
+                    Follow external links
+                  </label>
+                </div>
+              </div>
+            </details>
+
+            <div className="row" style={{ marginTop: "0.75rem", gap: "0.5rem", flexWrap: "wrap" }}>
+              <ActionButton pending={pending} pendingLabel="Saving…" onClick={() => void handleSaveStation()}>
+                Save station
+              </ActionButton>
+              <ActionButton
+                secondary
+                pending={pending}
+                onClick={() => void handleTest()}
+                disabled={!selectedStationId || !form.name || !form.station_url}
+              >
+                Test connection
+              </ActionButton>
+              <ActionButton secondary pending={pending} onClick={() => void handleSaveProfile()}>
+                Save import profile
+              </ActionButton>
+              {import.meta.env.DEV ? (
+                <button type="button" className="secondary-btn" onClick={() => void loadDevBenchTemplate()}>
+                  Load dev bench template
+                </button>
+              ) : null}
             </div>
-            {pollStatus.last_success ? (
-              <div className="status-kv">
-                <span className="status-kv-label">Last sample</span>
-                <span className="status-kv-value">
-                  {formatPollSampleAt({ at: pollStatus.last_success }) ?? pollStatus.last_success}
-                  {pollStatus.last_poll_duration_ms ? (
-                    <span className="muted" style={{ display: "block", fontSize: "0.85em" }}>
-                      {pollStatus.last_poll_duration_ms} ms · {pollStatus.batch_count} batch(es)
+
+            {selectedStationId && pollStatus ? (
+              <div className="niagara-poll-strip" style={{ marginTop: "0.85rem" }}>
+                <div className="status-kv">
+                  <span className="status-kv-label">Poll</span>
+                  <span className="status-kv-value">
+                    <span className={`badge ${pollStatus.running ? "poll-badge" : "muted-badge"}`}>
+                      {pollStatus.running ? "polling" : "stopped"}
+                    </span>{" "}
+                    {pollStatus.active_points} pt
+                  </span>
+                </div>
+                <div className="status-kv">
+                  <span className="status-kv-label">Link</span>
+                  <span className={`status-kv-value ${pollStatus.connected ? "ok" : "error"}`}>
+                    {pollStatus.connected ? "connected" : "disconnected"}
+                  </span>
+                </div>
+                {connectionTestByStation[selectedStationId] !== undefined ? (
+                  <div className="status-kv">
+                    <span className="status-kv-label">Test</span>
+                    <span className={`status-kv-value ${connectionTestByStation[selectedStationId] ? "ok" : "error"}`}>
+                      {connectionTestByStation[selectedStationId] ? "OK" : "failed"}
                     </span>
-                  ) : null}
-                </span>
+                  </div>
+                ) : null}
+                {pollStatus.last_success ? (
+                  <div className="status-kv">
+                    <span className="status-kv-label">Last sample</span>
+                    <span className="status-kv-value">
+                      {formatPollSampleAt({ at: pollStatus.last_success }) ?? pollStatus.last_success}
+                      {pollStatus.last_poll_duration_ms ? (
+                        <span className="muted" style={{ display: "block", fontSize: "0.85em" }}>
+                          {pollStatus.last_poll_duration_ms} ms · {pollStatus.batch_count} batch(es)
+                        </span>
+                      ) : null}
+                    </span>
+                  </div>
+                ) : null}
+                {pollStatus.last_error ? (
+                  <div className="status-kv">
+                    <span className="status-kv-label">Error</span>
+                    <span className="status-kv-value error">{pollStatus.last_error}</span>
+                  </div>
+                ) : null}
+                <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", width: "100%" }}>
+                  <ActionButton secondary pending={pending} onClick={() => void handlePollStart()} disabled={pollStatus.running}>
+                    Start poll
+                  </ActionButton>
+                  <ActionButton secondary pending={pending} onClick={() => void handlePollStop()} disabled={!pollStatus.running}>
+                    Stop poll
+                  </ActionButton>
+                  <ActionButton secondary pending={pending} onClick={() => void handlePollOnce()}>
+                    Poll once
+                  </ActionButton>
+                  <ActionButton secondary pending={pending} onClick={() => void handleDiscover()}>
+                    Discover points
+                  </ActionButton>
+                </div>
+              </div>
+            ) : selectedStationId ? (
+              <div className="row" style={{ marginTop: "0.85rem", gap: "0.5rem", flexWrap: "wrap" }}>
+                <ActionButton secondary pending={pending} onClick={() => void handleDiscover()}>
+                  Discover points
+                </ActionButton>
               </div>
             ) : null}
-            {pollStatus.last_error ? (
-              <div className="status-kv">
-                <span className="status-kv-label">Error</span>
-                <span className="status-kv-value error">{pollStatus.last_error}</span>
-              </div>
-            ) : null}
           </div>
-          <div className="row" style={{ marginTop: "0.65rem", gap: "0.5rem", flexWrap: "wrap" }}>
-            <ActionButton secondary pending={pending} onClick={() => void handlePollStart()} disabled={pollStatus.running}>
-              Start poll
-            </ActionButton>
-            <ActionButton secondary pending={pending} onClick={() => void handlePollStop()} disabled={!pollStatus.running}>
-              Stop poll
-            </ActionButton>
-            <ActionButton secondary pending={pending} onClick={() => void handlePollOnce()}>
-              Poll once
-            </ActionButton>
-            <ActionButton secondary pending={pending} onClick={() => void handleDiscover()} disabled={!selectedStationId}>
-              Discover points
-            </ActionButton>
-          </div>
-        </div>
-      ) : null}
 
-      <div className="panel">
-        <h3 className="panel-title">Devices &amp; points</h3>
-        <NiagaraTreeLegend />
-        <div className="row row-spread" style={{ marginTop: "0.65rem" }}>
-          <p className="muted" style={{ flex: 1, margin: 0 }}>
-            Check boxes to multi-select points for bulk read or export. Right-click a station or point for refresh and
-            copy actions.
-          </p>
-        </div>
-        {driverDevices.length > 0 ? (
-          <div className="bacnet-bulk-toolbar">
-            <span className="muted">{selectedPointOrds.size} point(s) selected</span>
-            <button type="button" className="secondary-btn" onClick={selectAllTreePoints}>
-              Select all points
-            </button>
-            <button type="button" className="secondary-btn" onClick={clearPointSelection}>
-              Clear selection
-            </button>
-            <ActionButton
-              secondary
-              pending={pending}
-              disabled={!selectedPointOrds.size}
-              onClick={() => void handleReadSelected()}
-            >
-              Read selected ({selectedPointOrds.size})
-            </ActionButton>
-            <ActionButton
-              secondary
-              disabled={!selectedPointsFlat.length}
-              onClick={() => downloadText("niagara-points.csv", exportPointsCsv(selectedPointsFlat), "text/csv")}
-            >
-              Export CSV
-            </ActionButton>
-            <ActionButton
-              secondary
-              disabled={!selectedPointsFlat.length}
-              onClick={() =>
-                downloadText("niagara-points.json", exportPointsJson(selectedPointsFlat), "application/json")
-              }
-            >
-              Export JSON
-            </ActionButton>
-          </div>
-        ) : null}
-        {treeLoading && driverDevices.length === 0 ? (
-          <Spinner label="Loading driver tree…" />
-        ) : (
-          <NiagaraPointsTree
-            devices={driverDevices}
-            selectedPointOrds={selectedPointOrds}
-            onTogglePointSelection={togglePointOrd}
-            onToggleDeviceSelection={toggleDeviceSelection}
-            onToggleTypeSelection={toggleTypeSelection}
-            onRefreshDevice={async (device) => {
-            const ords = device.points.map((p) => p.point_ord);
-            if (!ords.length) return;
-            setPending(true);
-            try {
-              await readNiagaraPoints(device.station_id, ords, true);
-              await loadDriverTree();
-            } catch (e) {
-              setActionError(formatApiError(e));
-            } finally {
-              setPending(false);
-            }
-          }}
-          onRefreshPoint={async (device, point) => {
-            setPending(true);
-            try {
-              await readNiagaraPoints(device.station_id, [point.point_ord], true);
-              await loadDriverTree();
-            } catch (e) {
-              setActionError(formatApiError(e));
-            } finally {
-              setPending(false);
-            }
-          }}
-            onDiscoverDevice={async (device) => {
-              setSelectedStationId(device.station_id);
-              await handleDiscover();
-            }}
-          />
-        )}
-        {treeLoading && driverDevices.length > 0 ? (
-          <p className="muted">
-            <Spinner label="Refreshing tree…" />
-          </p>
-        ) : null}
-      </div>
-
-      <div className="panel">
-        <h3>Activity</h3>
-        {pending ? <p className="muted"><Spinner label="Niagara operation in progress…" /></p> : null}
-        {actionError ? <p className="error">{actionError}</p> : null}
-        <pre className="console">{log || "Ready."}</pre>
-      </div>
-
-      <details className="panel">
-        <summary className="panel-title" style={{ display: "inline", cursor: "pointer" }}>
-          Station connection
-        </summary>
-        {!form.password_env || selectedStation?.password_configured === false ? (
-          <p className="muted" style={{ marginTop: "0.5rem" }}>
-            Station password is not configured on the edge — add the password environment variable in{" "}
-            <code>workspace/niagara.env.local</code> and restart the bridge.
-          </p>
-        ) : null}
-        <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", margin: "0.75rem 0" }}>
-          {stations.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className={s.id === selectedStationId ? "primary-btn" : "secondary-btn"}
-              onClick={() => selectStation(s)}
-            >
-              {s.name}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="secondary-btn"
-            onClick={() => {
-              setSelectedStationId("");
-              setForm(emptyForm());
-              setBrowseBase("slot:/Drivers");
-            }}
-          >
-            + New station
-          </button>
-          {import.meta.env.DEV ? (
-            <button type="button" className="secondary-btn" onClick={() => void loadDevBenchTemplate()}>
-              Load dev bench template
-            </button>
-          ) : null}
-        </div>
-        <div className="form-grid">
-          <div className="field">
-            <label className="field-label">Name</label>
-            <input value={form.name ?? ""} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label className="field-label">Station URL</label>
-            <input
-              value={form.station_url ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, station_url: e.target.value }))}
-              placeholder={STATION_URL_PLACEHOLDER}
-            />
-          </div>
-          <div className="field">
-            <label className="field-label">Username</label>
-            <input value={form.username ?? ""} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label className="field-label">Password env var</label>
-            <input
-              value={form.password_env ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, password_env: e.target.value }))}
-              placeholder="edge password env var"
-            />
-          </div>
-          <div className="field">
-            <label className="field-label">
-              <input
-                type="checkbox"
-                checked={Boolean(form.verify_tls)}
-                onChange={(e) => setForm((f) => ({ ...f, verify_tls: e.target.checked }))}
-              />{" "}
-              Verify TLS
-            </label>
-          </div>
-          <div className="field">
-            <label className="field-label">Poll interval</label>
-            <select
-              value={form.poll_interval_seconds ?? 60}
-              onChange={(e) => setForm((f) => ({ ...f, poll_interval_seconds: Number(e.target.value) }))}
-            >
-              {STANDARD_POLL_INTERVALS.map((p) => (
-                <option key={p.seconds} value={p.seconds}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field" style={{ gridColumn: "1 / -1" }}>
-            <label className="field-label">Root ORD (browse)</label>
-            <input value={form.root_ord ?? ""} onChange={(e) => setForm((f) => ({ ...f, root_ord: e.target.value }))} />
-          </div>
-          <div className="field" style={{ gridColumn: "1 / -1" }}>
-            <label className="field-label">Default points root (discover/poll)</label>
-            <input
-              value={form.default_points_root ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, default_points_root: e.target.value }))}
-              placeholder="slot:/Drivers/BacnetNetwork/DEVICE$20NAME/points"
-            />
-            <p className="muted">Preserve $20 / $2d encoding exactly — do not URL-decode ORDs.</p>
-          </div>
-          <div className="field">
-            <label className="field-label">Read batch size</label>
-            <input
-              type="number"
-              min={1}
-              max={200}
-              value={form.read_batch_size ?? 50}
-              onChange={(e) => setForm((f) => ({ ...f, read_batch_size: Number(e.target.value) }))}
-            />
-          </div>
-          <div className="field">
-            <label className="field-label">
-              <input
-                type="checkbox"
-                checked={Boolean(form.include_proxy_ext)}
-                onChange={(e) => setForm((f) => ({ ...f, include_proxy_ext: e.target.checked }))}
-              />{" "}
-              Include proxy extensions (advanced)
-            </label>
-          </div>
-          <div className="field">
-            <label className="field-label">
-              <input
-                type="checkbox"
-                checked={Boolean(form.follow_external)}
-                onChange={(e) => setForm((f) => ({ ...f, follow_external: e.target.checked }))}
-              />{" "}
-              Follow external station links (debug)
-            </label>
-          </div>
-        </div>
-
-        <div className="row" style={{ marginTop: "0.75rem", gap: "0.5rem", flexWrap: "wrap" }}>
-          <ActionButton pending={pending} pendingLabel="…" onClick={() => void handleSaveStation()}>
-            Save station
-          </ActionButton>
-          <ActionButton secondary pending={pending} onClick={() => void handleTest()} disabled={!selectedStationId}>
-            Test connection
-          </ActionButton>
-          <ActionButton secondary pending={pending} onClick={() => void handleDiscover()} disabled={!selectedStationId}>
-            Discover points
-          </ActionButton>
           {selectedStationId ? (
-            <ActionButton secondary danger pending={pending} onClick={() => void handleDeleteStation()}>
-              Delete
-            </ActionButton>
-          ) : null}
+            <>
+              <div className="panel">
+                <h3 className="panel-title">Station tree browse</h3>
+                <p className="muted" style={{ marginTop: 0 }}>
+                  <strong>Right-click</strong> folder → building or device. Left-click sets points root.
+                </p>
+                <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.65rem" }}>
+                  <label className="field-inline">
+                    Base ORD
+                    <input
+                      value={browseBase}
+                      onChange={(e) => setBrowseBase(e.target.value)}
+                      placeholder="slot:/Drivers/BacnetNetwork"
+                      style={{ minWidth: "16rem" }}
+                    />
+                  </label>
+                  <label className="field-inline">
+                    Depth
+                    <input
+                      type="number"
+                      min={1}
+                      max={12}
+                      value={browseDepth}
+                      onChange={(e) => setBrowseDepth(Number(e.target.value) || 3)}
+                      style={{ width: "4rem" }}
+                    />
+                  </label>
+                  <label className="field-inline">
+                    <input
+                      type="checkbox"
+                      checked={followExternal}
+                      onChange={(e) => setFollowExternal(e.target.checked)}
+                    />{" "}
+                    Follow external
+                  </label>
+                  <ActionButton secondary pending={pending} onClick={() => void handleBrowse()}>
+                    Preview folder tree
+                  </ActionButton>
+                </div>
+                <NiagaraBrowseTree
+                  nodes={treeNodes}
+                  profile={commissionProfile}
+                  onAddBuilding={handleAddBuilding}
+                  onAddDevice={handleAddDevice}
+                  onSetPointsRoot={(ord) => {
+                    setForm((f) => ({ ...f, default_points_root: ord }));
+                    setLog(`Points root → ${ord}`);
+                  }}
+                  onDiscoverUnder={(ord) => void handleDiscover(ord)}
+                  onCopy={(text) => {
+                    void navigator.clipboard.writeText(text);
+                    setLog("Copied ORD to clipboard.");
+                  }}
+                />
+              </div>
+
+              <div className="panel">
+                <h3 className="panel-title">Devices &amp; points</h3>
+                <NiagaraTreeLegend />
+                <p className="muted" style={{ marginTop: "0.5rem" }}>
+                  Points for <strong>{selectedStation?.name}</strong> only. Map folders to BRICK IDs; select for read/export.
+                </p>
+                {stationDevices.length > 0 ? (
+                  <div className="bacnet-bulk-toolbar">
+                    <span className="muted">{selectedPointOrds.size} point(s) selected</span>
+                    <button type="button" className="secondary-btn" onClick={selectAllTreePoints}>
+                      Select all points
+                    </button>
+                    <button type="button" className="secondary-btn" onClick={clearPointSelection}>
+                      Clear selection
+                    </button>
+                    <ActionButton
+                      secondary
+                      pending={pending}
+                      disabled={!selectedPointOrds.size}
+                      onClick={() => void handleReadSelected()}
+                    >
+                      Read selected ({selectedPointOrds.size})
+                    </ActionButton>
+                    <ActionButton
+                      secondary
+                      disabled={!selectedPointsFlat.length}
+                      onClick={() => downloadText("niagara-points.csv", exportPointsCsv(selectedPointsFlat), "text/csv")}
+                    >
+                      Export CSV
+                    </ActionButton>
+                    <ActionButton
+                      secondary
+                      disabled={!selectedPointsFlat.length}
+                      onClick={() =>
+                        downloadText("niagara-points.json", exportPointsJson(selectedPointsFlat), "application/json")
+                      }
+                    >
+                      Export JSON
+                    </ActionButton>
+                  </div>
+                ) : null}
+                {treeLoading && stationDevices.length === 0 ? (
+                  <Spinner label="Loading driver tree…" />
+                ) : useCommissionTree && organizedStation ? (
+                  <NiagaraCommissionTree
+                    station={organizedStation}
+                    selectedPointOrds={selectedPointOrds}
+                    onTogglePointSelection={togglePointOrd}
+                    onRefreshPoint={async (point) => {
+                      if (!selectedStationId) return;
+                      setPending(true);
+                      try {
+                        await readNiagaraPoints(selectedStationId, [point.point_ord], true);
+                        await loadDriverTree();
+                      } catch (e) {
+                        setActionError(formatApiError(e));
+                      } finally {
+                        setPending(false);
+                      }
+                    }}
+                    onDiscoverDevice={(ord) => void handleDiscover(ord)}
+                    onRemoveBuilding={(id) => setCommissionProfile((p) => removeBuilding(p, id))}
+                    onRemoveDevice={(id) => setCommissionProfile((p) => removeDevice(p, id))}
+                    onCopy={(text) => {
+                      void navigator.clipboard.writeText(text);
+                      setLog("Copied to clipboard.");
+                    }}
+                  />
+                ) : stationDevices.length > 0 ? (
+                  <NiagaraPointsTree
+                    devices={stationDevices}
+                    selectedPointOrds={selectedPointOrds}
+                    onTogglePointSelection={togglePointOrd}
+                    onToggleDeviceSelection={toggleDeviceSelection}
+                    onToggleTypeSelection={toggleTypeSelection}
+                    onRefreshDevice={async (device) => {
+                      const ords = device.points.map((p) => p.point_ord);
+                      if (!ords.length) return;
+                      setPending(true);
+                      try {
+                        await readNiagaraPoints(device.station_id, ords, true);
+                        await loadDriverTree();
+                      } catch (e) {
+                        setActionError(formatApiError(e));
+                      } finally {
+                        setPending(false);
+                      }
+                    }}
+                    onRefreshPoint={async (device, point) => {
+                      setPending(true);
+                      try {
+                        await readNiagaraPoints(device.station_id, [point.point_ord], true);
+                        await loadDriverTree();
+                      } catch (e) {
+                        setActionError(formatApiError(e));
+                      } finally {
+                        setPending(false);
+                      }
+                    }}
+                    onDiscoverDevice={async () => {
+                      await handleDiscover();
+                    }}
+                  />
+                ) : (
+                  <p className="muted">No points yet — use Discover points above.</p>
+                )}
+                {treeLoading && stationDevices.length > 0 ? (
+                  <p className="muted">
+                    <Spinner label="Refreshing tree…" />
+                  </p>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <div className="panel muted">
+              <p style={{ margin: 0 }}>Save a station to browse the folder tree and view points.</p>
+            </div>
+          )}
+
+        <div className="panel">
+          <h3>Activity</h3>
+          {pending ? <p className="muted"><Spinner label="Niagara operation in progress…" /></p> : null}
+          {actionError ? <p className="error">{actionError}</p> : null}
+          <pre className="console">{log || "Ready."}</pre>
         </div>
-      </details>
+      </div>
     </div>
   );
 }

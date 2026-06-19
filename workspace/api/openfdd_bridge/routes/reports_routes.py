@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from ..deps import require_user
 from ..rcx.chart_preview import build_rcx_preview, generate_rcx_docx
+from ..rcx.rcx_intent import generate_rcx_report_from_intent, plan_rcx_report_intent
 from ..rcx.rcx_points import list_report_point_tree, list_report_points
 from ..rcx.report_store import list_reports, resolve_report, save_report
 from ..rcx.workspace import get_workspace
@@ -37,6 +38,25 @@ class RcxGenerateRequest(RcxPreviewRequest):
     sections: list[str] = Field(default_factory=list)
     charts: list[str] = Field(default_factory=list)
     save_to_volume: bool = True
+    include_previews: bool = False
+
+
+class RcxIntentRequest(BaseModel):
+    site_id: str = ""
+    hours: int = Field(default=168, ge=2, le=8760)
+    start: str | None = None
+    end: str | None = None
+    sensors: list[str] = Field(default_factory=list, description="Labels, columns, or point ids")
+    sensor_columns: list[str] = Field(default_factory=list)
+    show_fault_overlays: bool = True
+    bundle_ids: list[str] = Field(default_factory=list)
+    equipment_ids: list[str] = Field(default_factory=list)
+    sections: list[str] = Field(default_factory=list)
+    charts: list[str] = Field(default_factory=list)
+    include_analytics: bool = True
+    include_previews: bool = True
+    save_to_volume: bool = True
+    return_docx: bool = False
 
 
 @router.get("/workspace")
@@ -110,6 +130,7 @@ def rcx_generate(body: RcxGenerateRequest, _user: dict = Depends(require_user)) 
             show_fault_overlays=body.show_fault_overlays,
             bundle_ids=bundle_ids or None,
             equipment_ids=body.equipment_ids or None,
+            include_previews=body.include_previews,
         )
     except ModuleNotFoundError as exc:
         raise HTTPException(
@@ -124,6 +145,61 @@ def rcx_generate(body: RcxGenerateRequest, _user: dict = Depends(require_user)) 
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@router.post("/generate-intent")
+def rcx_generate_intent(body: RcxIntentRequest, _user: dict = Depends(require_user)):
+    """Single-shot RCx report from natural-language sensor list (chat/agent friendly)."""
+    try:
+        result = generate_rcx_report_from_intent(
+            site_id=body.site_id,
+            hours=body.hours,
+            start=body.start,
+            end=body.end,
+            sensors=body.sensors or None,
+            sensor_columns=body.sensor_columns or None,
+            show_fault_overlays=body.show_fault_overlays,
+            bundle_ids=body.bundle_ids or None,
+            equipment_ids=body.equipment_ids or None,
+            sections=body.sections or None,
+            charts=body.charts or None,
+            include_analytics=body.include_analytics,
+            include_previews=body.include_previews,
+            save_to_volume=body.save_to_volume,
+        )
+    except ModuleNotFoundError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Report generation requires python-docx (install bridge requirements).",
+        ) from exc
+
+    if body.return_docx:
+        from ..rcx.report_store import resolve_report
+
+        path = resolve_report(result["filename"])
+        return FileResponse(
+            path,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            filename=path.name,
+        )
+    return result
+
+
+@router.post("/intent/preview")
+def rcx_intent_preview(body: RcxIntentRequest, _user: dict = Depends(require_user)) -> dict[str, Any]:
+    """Plan RCx report (sections, charts, sensor resolution) without generating DOCX."""
+    return plan_rcx_report_intent(
+        site_id=body.site_id,
+        hours=body.hours,
+        start=body.start,
+        end=body.end,
+        sensors=body.sensors or None,
+        sensor_columns=body.sensor_columns or None,
+        show_fault_overlays=body.show_fault_overlays,
+        bundle_ids=body.bundle_ids or None,
+        equipment_ids=body.equipment_ids or None,
+        include_analytics=body.include_analytics,
     )
 
 

@@ -1,6 +1,7 @@
 /** Niagara baskStream REST helpers (browser → Open-FDD bridge only). */
 
 import { apiFetch } from "./api";
+import type { NiagaraCommissionProfile } from "./niagaraCommissionProfile";
 
 export type NiagaraStation = {
   id: string;
@@ -8,6 +9,7 @@ export type NiagaraStation = {
   station_url: string;
   username: string;
   password_env: string;
+  password?: string;
   password_configured?: boolean;
   verify_tls: boolean;
   enabled: boolean;
@@ -21,6 +23,7 @@ export type NiagaraStation = {
   default_points_root: string;
   follow_external: boolean;
   include_proxy_ext: boolean;
+  commission_profile?: NiagaraCommissionProfile;
 };
 
 export type NiagaraPoint = {

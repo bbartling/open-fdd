@@ -85,15 +85,23 @@ def is_chiller(eq: dict[str, Any]) -> bool:
 
 
 def is_zone_box(eq: dict[str, Any]) -> bool:
-    """Generic zone-level equipment (FCU/VAV box, lab BACnet device, zone sensors)."""
+    """Zone-level equipment: FCU, standalone sensor device, lab box, Niagara/BACnet leaf."""
     et = effective_equipment_type(eq).upper()
-    name = str(eq.get("name") or "").lower()
-    eid = _equipment_key(eq)
     if is_ahu(eq) or is_vav(eq) or is_chiller(eq) or is_hws(eq):
         return False
-    if "BACNET_DEVICE" in et or "LABORATORY" in et or "BRICK" in et:
-        return True
-    if "bench" in eid or "5007" in eid or "bens" in name:
+    if any(
+        tok in et
+        for tok in (
+            "BACNET_DEVICE",
+            "NIAGARA",
+            "LABORATORY",
+            "ROOM",
+            "FCU",
+            "FAN_COIL",
+            "CONTROLLER",
+            "SENSOR",
+        )
+    ):
         return True
     return is_zone(eq)
 

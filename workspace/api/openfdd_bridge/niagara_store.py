@@ -47,6 +47,7 @@ DEFAULT_STATION: dict[str, Any] = {
     "default_points_root": "",
     "follow_external": False,
     "include_proxy_ext": False,
+    "commission_profile": {"version": 1, "buildings": [], "devices": []},
 }
 
 
@@ -71,7 +72,13 @@ def _ensure_dirs() -> None:
     (workspace_dir() / "niagara" / "polls").mkdir(parents=True, exist_ok=True)
 
 
+from .niagara_secrets import resolve_stored_password, store_password
+
+
 def resolve_password(station: dict[str, Any]) -> str:
+    stored = resolve_stored_password(station)
+    if stored:
+        return stored
     env_name = str(station.get("password_env") or "OPENFDD_NIAGARA_ADMIN_PASSWORD").strip()
     return os.environ.get(env_name, "")
 
@@ -151,9 +158,12 @@ def upsert_station(payload: dict[str, Any]) -> dict[str, Any]:
     if url:
         payload = {**payload, "station_url": validate_station_url(url)}
     sid = str(payload.get("id") or "").strip() or _slug(str(payload.get("name") or "station"))
+    raw_pw = str(payload.pop("password", "") or "").strip()
+    env_name = str(payload.get("password_env") or "OPENFDD_NIAGARA_ADMIN_PASSWORD").strip()
     rows = _load_raw_stations()
     merged = {**DEFAULT_STATION, **payload, "id": sid}
-    merged.pop("password", None)
+    if raw_pw:
+        store_password(station_id=sid, env_name=env_name, password=raw_pw)
     found = False
     for i, row in enumerate(rows):
         if str(row.get("id")) == sid:

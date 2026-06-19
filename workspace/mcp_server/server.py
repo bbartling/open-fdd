@@ -29,8 +29,8 @@ mcp = FastMCP(
         "use tools and resources here, not scrape HTML. "
         "Start with resource openfdd://agent-guide for the consolidated data map. "
         "Read-only: health_check, portfolio_rollup, list_rules, get_building_status, get_fdd_results, "
-        "search_model, get_equipment_context, search_docs. "
-        "Writes (run_fdd_batch, save_rule, apply_fdd_tuning) require human_approved=true. "
+        "search_model, get_equipment_context, search_docs, rcx_plan_report, rcx_report_points. "
+        "Writes (run_fdd_batch, save_rule, apply_fdd_tuning, rcx_generate_report) require human_approved=true. "
         "BACnet polling: poll only FDD-minimal points required by enabled rules — never bulk-enable all objects."
     ),
 )
@@ -500,6 +500,119 @@ def get_doc_section(path_or_id: str) -> str:
         return _err_text(exc)
 
 
+@mcp.tool()
+def rcx_plan_report(
+    site_id: str,
+    hours: int = 168,
+    start: str = "",
+    end: str = "",
+    sensors: list[str] | None = None,
+    sensor_columns: list[str] | None = None,
+    show_fault_overlays: bool = True,
+    bundle_ids: list[str] | None = None,
+    equipment_ids: list[str] | None = None,
+    include_analytics: bool = True,
+) -> str:
+    """Plan RCx DOCX from BRICK model: profile, sections, charts, sensor resolution (no file write)."""
+    try:
+        body: dict[str, Any] = {
+            "site_id": site_id,
+            "hours": min(max(2, int(hours)), 8760),
+            "show_fault_overlays": show_fault_overlays,
+            "include_analytics": include_analytics,
+        }
+        if start:
+            body["start"] = start
+        if end:
+            body["end"] = end
+        if sensors:
+            body["sensors"] = sensors
+        if sensor_columns:
+            body["sensor_columns"] = sensor_columns
+        if bundle_ids:
+            body["bundle_ids"] = bundle_ids
+        if equipment_ids:
+            body["equipment_ids"] = equipment_ids
+        payload = _BRIDGE.post(site_id, "/api/reports/rcx/intent/preview", body)
+        return json.dumps(payload)
+    except Exception as exc:
+        return _err_text(exc)
+
+
+@mcp.tool()
+def rcx_generate_report(
+    site_id: str,
+    hours: int = 168,
+    start: str = "",
+    end: str = "",
+    sensors: list[str] | None = None,
+    sensor_columns: list[str] | None = None,
+    sections: list[str] | None = None,
+    charts: list[str] | None = None,
+    show_fault_overlays: bool = True,
+    bundle_ids: list[str] | None = None,
+    equipment_ids: list[str] | None = None,
+    include_analytics: bool = True,
+    include_previews: bool = True,
+    save_to_volume: bool = True,
+) -> str:
+    """Generate RCx DOCX from model profile + optional sensor/chart overrides (writes to report volume)."""
+    try:
+        body: dict[str, Any] = {
+            "site_id": site_id,
+            "hours": min(max(2, int(hours)), 8760),
+            "show_fault_overlays": show_fault_overlays,
+            "include_analytics": include_analytics,
+            "include_previews": include_previews,
+            "save_to_volume": save_to_volume,
+            "return_docx": False,
+        }
+        if start:
+            body["start"] = start
+        if end:
+            body["end"] = end
+        if sensors:
+            body["sensors"] = sensors
+        if sensor_columns:
+            body["sensor_columns"] = sensor_columns
+        if sections:
+            body["sections"] = sections
+        if charts:
+            body["charts"] = charts
+        if bundle_ids:
+            body["bundle_ids"] = bundle_ids
+        if equipment_ids:
+            body["equipment_ids"] = equipment_ids
+        payload = _BRIDGE.post(site_id, "/api/reports/rcx/generate-intent", body)
+        return json.dumps(payload)
+    except Exception as exc:
+        return _err_text(exc)
+
+
+@mcp.tool()
+def rcx_list_reports(site_id: str, limit: int = 50) -> str:
+    """List persisted RCx DOCX reports on the edge volume."""
+    try:
+        payload = _BRIDGE.get(site_id, "/api/reports/rcx/list", params={"limit": min(max(1, int(limit)), 200)})
+        return json.dumps(payload)
+    except Exception as exc:
+        return _err_text(exc)
+
+
+@mcp.tool()
+def rcx_report_points(site_id: str, limit: int = 500) -> str:
+    """Historian point catalog for RCx sensor selection (columns, labels, brick types)."""
+    try:
+        payload = _BRIDGE.get(
+            site_id,
+            "/api/reports/rcx/points",
+            params={"site_id": site_id, "limit": min(max(10, int(limit)), 2000)},
+        )
+        return json.dumps(payload)
+    except Exception as exc:
+        return _err_text(exc)
+
+
 # --- Resources ---
 
 
@@ -539,6 +652,12 @@ def _agent_guide_payload() -> dict[str, Any]:
             "tuning": ["get_tuning_brief", "preview_fdd_tuning", "apply_fdd_tuning"],
             "docs": ["search_docs", "get_doc_section", "search_rule_cookbook"],
             "bacnet": ["bacnet_override_status"],
+            "rcx_reports": [
+                "rcx_plan_report",
+                "rcx_generate_report",
+                "rcx_list_reports",
+                "rcx_report_points",
+            ],
         },
         "resources": [
             "openfdd://agent-guide",
@@ -554,7 +673,8 @@ def _agent_guide_payload() -> dict[str, Any]:
             "2. health_check → get_building_status → list_rules",
             "3. get_equipment_context / search_model for scope",
             "4. search_docs or search_rule_cookbook for procedures",
-            "5. Human approval before run_fdd_batch, save_rule, apply_fdd_tuning",
+            "5. rcx_plan_report (model-driven sections/charts) → rcx_generate_report for DOCX",
+            "6. Human approval before run_fdd_batch, save_rule, apply_fdd_tuning",
         ],
         "auth": {
             "bridge": "OFDD_INTEGRATOR_USER / OFDD_INTEGRATOR_PASSWORD from workspace/auth.env.local on edge hosts",

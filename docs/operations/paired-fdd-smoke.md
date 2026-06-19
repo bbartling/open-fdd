@@ -5,7 +5,7 @@ nav_order: 12
 
 # Paired FDD smoke
 
-Hardcoded cross-site validation: **bensserver bench 5007** and **Acme** run the **same schedule** with mid-test fault-parameter toggles. PyArrow and DataFusion SQL rules must agree on flagged row counts.
+Hardcoded cross-site validation: **bensserver bench 5007** and **Acme** run the **same schedule** with mid-test fault-parameter toggles. PyArrow and DataFusion SQL rules must agree on flagged counts **and** row-level fault masks (CI golden fixtures).
 
 ## What is tested
 
@@ -37,56 +37,106 @@ A condition must stay true for **~5 minutes** before it counts as a confirmed fa
 
 Toggles alternate **normal** ↔ **blatant** fault parameters via the rules API (same as an operator or AI agent adjusting thresholds mid-run).
 
-## Run detached (required for in-depth runs)
+## Run (local bench)
 
-Bench **5007** + **Acme** paired smoke runs for **30 minutes to 12 hours**. Always start **short**, **standard**, and **overnight** **detached** — from a plain terminal or via `--detached` — so Cursor, SSH, or IDE disconnects do not kill the harness.
-
-**Recommended** (wrapper re-invokes itself under `nohup`):
-
-```bash
-OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --short --detached
-OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --standard --detached
-OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --overnight --detached
-```
-
-Logs: `/tmp/paired_fdd_smoke_<mode>_*.log` · PID file: `/tmp/paired_fdd_smoke_<mode>.pid` · `tail -f` the log to watch progress.
-
-**Manual `nohup`** (equivalent):
-
-```bash
-nohup env OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --overnight \
-  > /tmp/paired_fdd_overnight.log 2>&1 &
-echo $! > /tmp/paired_fdd_overnight.pid
-```
-
-`--tryout` (6 min) may run attached for quick dev checks.
-
-## Run
-
-Prereqs: local stack on `:8765`, Acme edge on matching GHCR image, `OPENFDD_LIVE_ACME=1`.
+Prereqs: local stack on `:8765`.
 
 ```bash
 OFDD_SKIP_UI_BUILD=1 ./scripts/run_local.sh start
-OPENFDD_IMAGE_TAG=3.1.5 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling
+./scripts/smoke_paired_fdd_harness.sh --tryout
+```
 
-OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --tryout          # attached OK
+## Run detached (required for in-depth runs)
+
+**Do not run long smokes attached from Cursor** — they crash the IDE when agents poll/wait. Use the systemd-isolated launcher (no terminal parent):
+
+```bash
+# benserver bench only (recommended for local UI iteration)
+./scripts/run_paired_fdd_smoke_isolated.sh --short --bench-only
+
+# bench + Acme FDD (skips UI bundle parity by default)
+OPENFDD_LIVE_ACME=1 ./scripts/run_paired_fdd_smoke_isolated.sh --short
+
+# Poll status — read-only, safe for agents (never tail -f / wait)
+./scripts/smoke_paired_fdd_status.sh --mode short
+```
+
+Legacy wrapper (also uses isolated launcher when `--detached`):
+
+```bash
 OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --short --detached
 OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --standard --detached
 OPENFDD_LIVE_ACME=1 ./scripts/smoke_paired_fdd_harness.sh --overnight --detached
 ```
 
-`scripts/smoke_sites_parity.sh` delegates to this harness.
+`OPENFDD_LIVE_ACME=1` is required for live Acme paired runs (site parity + remote loop).
+
+Logs: `/tmp/paired_fdd_smoke_<mode>_*.log` · Status JSON: `/tmp/paired_fdd_smoke_<mode>.status.json` · Cycle log: `/tmp/paired_fdd_smoke_<mode>_cycles.jsonl`
+
+**Monitor outside Cursor** (tmux/SSH). Heartbeat every 5 minutes; status JSON updates each poll cycle.
+
+```bash
+cat /tmp/paired_fdd_smoke_overnight.status.json
+grep heartbeat /tmp/paired_fdd_smoke_overnight_*.log | tail -3
+```
+
+Bundle for download:
+
+```bash
+./scripts/bundle_paired_fdd_smoke_report.sh --mode overnight
+# Windows: scp ben@bensserver:/tmp/paired_fdd_smoke_bundle.zip C:\Users\ben\Downloads\
+```
+
+## Auth refresh (overnight harness)
+
+The harness uses `scripts/smoke_paired_fdd_auth.py`:
+
+1. Decodes JWT `exp` (no signature verification) and re-logins before expiry (~2 min skew).
+2. On HTTP **401**, retries the request **once** after re-login.
+3. Successful retry is an **auth_refresh_event** (not an FDD failure).
+4. Unrecoverable 401 stops the site loop and sets `auth_failure` in status JSON.
+
+Status/report fields: `auth_refresh_count`, `auth_401_count`, `auth_first_401_at`, `auth_recovered_count`, `auth_unrecovered_count`, `first_unrecoverable_auth_failure_at`.
+
+**Security-negative checks preserved:** expired, tampered, missing, or wrong-role tokens still fail. The harness does not disable auth or log tokens/secrets.
+
+## Arrow vs DataFusion SQL parity
+
+**Live harness:** compares paired batch runs (flagged/rows counts + analytics when present) via `open_fdd/validation/paired_fdd_parity.py`.
+
+**CI (no live site):** `open_fdd/tests/validation/test_datafusion_arrow_parity.py` runs golden tables through PyArrow + DataFusion and asserts identical fault masks (`true_count`, `false_count`, `null_count`, row-level match).
+
+Live Acme tests remain behind `OPENFDD_LIVE_ACME=1`.
+
+## RCx report smoke
+
+Fixture-driven DOCX validation (no live historian):
+
+```bash
+python3 scripts/smoke_rcx_report.py
+python3 -m pytest open_fdd/tests/reports/test_rcx_docx_fixtures.py -q
+```
+
+Live edge RCx: `POST /api/reports/rcx/generate` on a running stack (integrator auth required).
+
+## Niagara massive-site / folder mapping (#315)
+
+UI: **Niagara** tab → **Station tree browse** — pick a folder as building boundary, set `default_points_root`, preview before discover.
+
+Helpers: `open_fdd/validation/niagara_folder_mapping.py` · tests: `open_fdd/tests/validation/test_niagara_folder_mapping.py`
+
+Dry-run poll: use **Poll once** after discovery; check Activity log and driver tree counts.
 
 ## Reports
 
-- `reports/paired_fdd_smoke_validation.md`
-- `reports/paired_fdd_smoke_validation.json`
-- `reports/site_parity_smoke.json` (UI bundle + API revision parity)
+- `reports/paired_fdd_smoke_validation.md` / `.json`
+- `reports/site_parity_smoke.json`
 
 ## Pass criteria
 
-- Site parity smoke passes (matching UI hash, no 401 on health endpoints).
-- No PyArrow vs SQL flagged-count mismatch per cycle.
-- No save/batch API errors in either site loop.
+- Site parity smoke passes (matching UI hash, health OK).
+- No PyArrow vs SQL parity mismatch per cycle (counts + batch analytics).
+- No unrecoverable auth failures during the run.
+- Auth refresh events are allowed and not counted as FDD failures.
 
-Blatant-phase fault counts may be zero on Acme when the historian is still on demo fallback — check feather ingest and live OAT columns before overnight runs.
+`scripts/smoke_sites_parity.sh` delegates to this harness.

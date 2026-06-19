@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "updated_at": "2026-06-18T18:26:07.069400+00:00",
+  "alarms": {
+    "poll-offline-bacnet-5007": {
+      "first_seen": "2026-06-18T18:07:29.355697+00:00",
+      "last_seen": "2026-06-18T18:07:29.355697+00:00",
+      "alert": {
+        "id": "poll-offline-bacnet-5007",
+        "severity": "critical",
+        "title": "BACnet MS/TP device 5007: no recent telemetry",
+        "detail": "All 4 mapped point(s) are stale or FDD-flagged in the last 14 days. BACnet polling may be down or points are not ingesting into the historian.",
+        "source": "poll_health",
+        "equipment_family": "POLL",
+        "equipment_id": "bacnet-5007",
+        "equipment_name": "BACnet MS/TP device 5007"
+      }
+    },
+    "poll-offline-niagara-bench9065": {
+      "first_seen": "2026-06-18T18:07:29.355697+00:00",
+      "last_seen": "2026-06-18T18:07:29.355697+00:00",
+      "alert": {
+        "id": "poll-offline-niagara-bench9065",
+        "severity": "critical",
+        "title": "Niagara station bench9065: no recent telemetry",
+        "detail": "All 6 mapped point(s) are stale or FDD-flagged in the last 14 days. BACnet polling may be down or points are not ingesting into the historian.",
+        "source": "poll_health",
+        "equipment_family": "POLL",
+        "equipment_id": "niagara-bench9065",
+        "equipment_name": "Niagara station bench9065"
+      }
+    },
+    "fdd-err-temp-out-of-bounds-demo": {
+      "first_seen": "2026-06-18T18:26:07.069165+00:00",
+      "last_seen": "2026-06-18T18:26:07.069165+00:00",
+      "alert": {
+        "id": "fdd-err-temp-out-of-bounds-demo",
+        "severity": "warning",
+        "title": "Rule 'Temperature out of bounds' failed on demo",
+        "detail": "'Field \"\" does not exist in schema'",
+        "source": "fdd",
+        "rule_id": "temp-out-of-bounds",
+        "rule_name": "Temperature out of bounds",
+        "short_description": "Temperature reading is outside the configured range."
+      }
+    },
+    "fdd-err-humidity-out-of-bounds-demo": {
+      "first_seen": "2026-06-18T18:26:07.069165+00:00",
+      "last_seen": "2026-06-18T18:26:07.069165+00:00",
+      "alert": {
+        "id": "fdd-err-humidity-out-of-bounds-demo",
+        "severity": "warning",
+        "title": "Rule 'Humidity out of bounds' failed on demo",
+        "detail": "'Field \"\" does not exist in schema'",
+        "source": "fdd",
+        "rule_id": "humidity-out-of-bounds",
+        "rule_name": "Humidity out of bounds",
+        "short_description": "Humidity reading is outside the configured range."
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "equipment": "AHU-C",
+    "equipment_type": "AHU",
+    "fault_code": "SAT-FLAT",
+    "fault_name": "AHU SAT flatline 1h",
+    "severity": "warning",
+    "elapsed_hours": 2.5,
+    "samples_flagged": 4,
+    "samples_evaluated": 24
+  },
+  {
+    "equipment": "VAV-12",
+    "equipment_type": "VAV",
+    "fault_code": "ZONE-COMFORT",
+    "fault_name": "Zone comfort deviation",
+    "severity": "warning",
+    "elapsed_hours": 2.0,
+    "samples_flagged": 6,
+    "samples_evaluated": 24
+  }
+]

@@ -262,15 +262,36 @@ def evaluate_fault_plots(
     )
 
 
-def _prepare_frame(site_id: str, *, source: str, hours: int, limit: int) -> pd.DataFrame | None:
+def _prepare_frame(
+    site_id: str,
+    *,
+    source: str,
+    hours: int,
+    limit: int,
+    start: str | None = None,
+    end: str | None = None,
+) -> pd.DataFrame | None:
     df = load_site_frame(site_id, source=source)
     if df is None or df.empty:
         return None
     if "timestamp" in df.columns:
         df = df.copy()
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
-        cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=max(1, hours))
-        df = df[df["timestamp"] >= cutoff]
+        if start and end:
+            try:
+                t0 = pd.Timestamp(start)
+                t1 = pd.Timestamp(end)
+                if t0.tzinfo is None:
+                    t0 = t0.tz_localize("UTC")
+                if t1.tzinfo is None:
+                    t1 = t1.tz_localize("UTC")
+                df = df[(df["timestamp"] >= t0) & (df["timestamp"] <= t1)]
+            except (TypeError, ValueError):
+                cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=max(1, hours))
+                df = df[df["timestamp"] >= cutoff]
+        else:
+            cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=max(1, hours))
+            df = df[df["timestamp"] >= cutoff]
     df = df.sort_values("timestamp") if "timestamp" in df.columns else df
     if limit and len(df) > limit:
         df = df.tail(limit)
@@ -323,6 +344,8 @@ def read_plot_readings(
     *,
     source: str = "bacnet",
     hours: int = 24,
+    start: str | None = None,
+    end: str | None = None,
     limit: int = CHART_MAX_POINTS,
     max_chart_points: int | None = None,
     include_faults: bool = True,
@@ -344,7 +367,7 @@ def read_plot_readings(
         hours,
         include_faults,
     )
-    df = _prepare_frame(site_id, source=source, hours=hours, limit=limit)
+    df = _prepare_frame(site_id, source=source, hours=hours, limit=limit, start=start, end=end)
     if df is None or df.empty:
         return {
             "site_id": site_id,

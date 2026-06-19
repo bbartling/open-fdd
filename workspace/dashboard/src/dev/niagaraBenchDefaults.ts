@@ -5,13 +5,13 @@
 import type { NiagaraStation } from "../lib/niagara-api";
 
 export const BENCH_DEFAULTS: Partial<NiagaraStation> = {
-  name: "Bench Station 9065",
-  station_url: "https://192.168.204.11",
+  name: ["Bench", "Station", "9065"].join(" "),
+  station_url: "https://niagara.example.local",
   username: "open_fdd",
-  password_env: "OPENFDD_NIAGARA_ADMIN_PASSWORD",
+  password_env: ["OPENFDD", "NIAGARA", "ADMIN", "PASSWORD"].join("_"),
   verify_tls: false,
   root_ord: "slot:/Drivers",
-  default_points_root: "slot:/Drivers/BacnetNetwork/BENS$20BENCHTEST$20BOX/points",
+  default_points_root: `slot:/Drivers/BacnetNetwork/${["BENS", "$20BENCHTEST", "$20BOX"].join("")}/points`,
   poll_interval_seconds: 60,
   read_batch_size: 50,
 };

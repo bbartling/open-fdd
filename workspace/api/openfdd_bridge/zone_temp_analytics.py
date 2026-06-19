@@ -269,6 +269,49 @@ def _column_series(frame: pd.DataFrame, col: str) -> pd.Series:
     return pd.to_numeric(data, errors="coerce")
 
 
+def _column_health_map(device_snapshot: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    if not isinstance(device_snapshot, dict):
+        return out
+    for eq in device_snapshot.get("equipment") or []:
+        if not isinstance(eq, dict):
+            continue
+        eq_status = str(eq.get("status") or "")
+        for pt in eq.get("points") or []:
+            if not isinstance(pt, dict):
+                continue
+            col = str(pt.get("column") or "").strip()
+            if not col:
+                continue
+            out[col] = {**pt, "equipment_status": eq_status}
+    return out
+
+
+def _zone_temp_plausible(s: pd.Series, *, min_f: float = 50.0, max_f: float = 105.0) -> pd.Series:
+    numeric = pd.to_numeric(s, errors="coerce")
+    return numeric.notna() & (numeric != 0) & (numeric >= min_f) & (numeric <= max_f)
+
+
+def _zone_samples_for_averages(
+    s: pd.Series,
+    occupied: pd.Series,
+    *,
+    column_health: dict[str, Any] | None,
+) -> tuple[pd.Series, pd.Series]:
+    """Return day/night sample series with offline and implausible values excluded."""
+    if column_health:
+        eq_status = str(column_health.get("equipment_status") or "")
+        valid_ratio = float(column_health.get("valid_ratio") or 1.0)
+        if eq_status == "offline" or (column_health.get("stale") and valid_ratio < 0.2):
+            empty = pd.Series(dtype=float)
+            return empty, empty
+    plausible = _zone_temp_plausible(s)
+    masked = s.where(plausible)
+    day = masked[occupied].dropna()
+    night = masked[~occupied].dropna()
+    return day, night
+
+
 def _fan_on_series(series: pd.Series, *, threshold: float = 5.0) -> pd.Series:
     s = pd.to_numeric(series, errors="coerce")
     if s.dropna().empty:
@@ -478,6 +521,7 @@ def compute_zone_metrics(
     site_id: str,
     *,
     site_tz: str | None = None,
+    device_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compute day/night averages and optional recovery rates per zone / AHU."""
     zone_df = build_zone_dataframe(df, topology)
@@ -495,14 +539,17 @@ def compute_zone_metrics(
     tz_name = site_tz or _site_timezone(model, site_id)
     ts = zone_df["timestamp"]
     occupied = _occupied_mask(ts, tz_name)
+    col_health = _column_health_map(device_snapshot)
     zones_out: list[dict[str, Any]] = []
     for zp in topology.get("zone_points") or []:
         col = zp["column"]
         if col not in zone_df.columns:
             continue
         s = _column_series(zone_df, col)
-        day = s[occupied].dropna()
-        night = s[~occupied].dropna()
+        day, night = _zone_samples_for_averages(s, occupied, column_health=col_health.get(col))
+        excluded = bool(col_health.get(col, {}).get("stale")) or str(
+            col_health.get(col, {}).get("equipment_status") or ""
+        ) == "offline"
         zones_out.append(
             {
                 **zp,
@@ -512,6 +559,8 @@ def compute_zone_metrics(
                 if not day.empty and not night.empty
                 else None,
                 "samples": int(s.notna().sum()),
+                "samples_used": int(day.notna().sum() + night.notna().sum()),
+                "excluded_offline": excluded,
             }
         )
 
@@ -768,11 +817,11 @@ def get_zone_temp_snapshot(*, site_id: str | None = None, force: bool = False) -
     topology = discover_topology(model, sid, available_columns=available)
 
     site_tz = _site_timezone(model, sid)
-    metrics = compute_zone_metrics(df, topology, model, sid, site_tz=site_tz)
     from .device_poll_health import get_device_poll_snapshot
     from .zone_energy_research import build_zone_energy_research
 
     device_snapshot = get_device_poll_snapshot(site_id=sid, force=force)
+    metrics = compute_zone_metrics(df, topology, model, sid, site_tz=site_tz, device_snapshot=device_snapshot)
     zone_df = build_zone_dataframe(df, topology)
     occupied_mask = None
     if not zone_df.empty and "timestamp" in zone_df.columns:
