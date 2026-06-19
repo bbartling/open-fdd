@@ -1,0 +1,30 @@
+# Copy to .github/workflows/ghcr-multiarch-publish.yml (requires workflow OAuth scope to push).
+# Then: gh workflow run "Publish multi-arch GHCR images" -f image_tag=3.1.6
+name: Publish multi-arch GHCR images
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "GHCR tag (e.g. 3.1.6)"
+        required: true
+        default: "3.1.6"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Build dashboard for bridge image
+        run: ./scripts/build_operator_dashboard.sh prod
+
+      - uses: ./.github/actions/publish-multiarch
+        with:
+          image_tag: ${{ inputs.image_tag }}
