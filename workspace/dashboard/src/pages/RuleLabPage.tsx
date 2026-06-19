@@ -810,13 +810,14 @@ export default function RuleLabPage() {
           </button>
         </div>
 
-        <div className="form-grid">
-          <div className="field">
+        <div className="form-grid rule-lab-meta-grid">
+          <div className="field form-grid-span">
             <label className="field-label" htmlFor="rule-name">
               Name
             </label>
             <input
               id="rule-name"
+              className="rule-lab-text-input"
               value={ruleName}
               disabled={creatingNew}
               onChange={(e) => {
@@ -960,6 +961,7 @@ export default function RuleLabPage() {
               </label>
               <input
                 id="fault-column"
+                className="rule-lab-text-input"
                 value={faultColumn}
                 disabled={busy}
                 onChange={(e) => {

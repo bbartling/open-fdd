@@ -8,7 +8,7 @@ import { useTheme } from "../contexts/theme-context";
 import { apiFetch, getBridgeBase } from "../lib/api";
 import { copyToClipboard } from "../lib/clipboard";
 import { formatApiError } from "../lib/formatApiError";
-import { buildPlotTraces, type PlotReadingsResponse } from "../lib/plot-chart";
+import { buildPlotTraces, parsePlotAxisLimit, type PlotReadingsResponse } from "../lib/plot-chart";
 import { parsePlotSearch } from "../lib/plot-url";
 import {
   fetchSavedRules,
@@ -88,6 +88,15 @@ export default function PlotPage() {
     () => localStorage.getItem("ofdd_plot_show_rolling_avg") !== "0",
   );
   const [showBounds, setShowBounds] = useState(true);
+  const [yLeftAuto, setYLeftAuto] = useState(true);
+  const [yLeftMin, setYLeftMin] = useState("");
+  const [yLeftMax, setYLeftMax] = useState("");
+  const [yRightAuto, setYRightAuto] = useState(true);
+  const [yRightMin, setYRightMin] = useState("");
+  const [yRightMax, setYRightMax] = useState("");
+  const [yFaultAuto, setYFaultAuto] = useState(true);
+  const [yFaultMin, setYFaultMin] = useState("");
+  const [yFaultMax, setYFaultMax] = useState("");
   const [includeFaults, setIncludeFaults] = useState(() => urlState.autoFddOverlay === true);
   const [savedRules, setSavedRules] = useState<SavedRule[]>([]);
   const [status, setStatus] = useState("");
@@ -145,6 +154,27 @@ export default function PlotPage() {
   const selectedSig = setSignature(selected);
   const scopedRuleIdsSig = scopedRuleIds.join(",");
 
+  const hasRhSeries = useMemo(() => {
+    if (!plotData?.series) return false;
+    const kinds = plotData.series_kinds ?? {};
+    return Object.keys(plotData.series).some((k) => kinds[k] === "humidity");
+  }, [plotData]);
+
+  const showFaultLane = (faultPanels?.length ?? 0) > 0 && enabledFaults.size > 0;
+
+  const yLeftLimit = useMemo(
+    () => (yLeftAuto ? null : parsePlotAxisLimit(yLeftMin, yLeftMax)),
+    [yLeftAuto, yLeftMin, yLeftMax],
+  );
+  const yRightLimit = useMemo(
+    () => (yRightAuto ? null : parsePlotAxisLimit(yRightMin, yRightMax)),
+    [yRightAuto, yRightMin, yRightMax],
+  );
+  const yFaultLimit = useMemo(
+    () => (yFaultAuto ? null : parsePlotAxisLimit(yFaultMin, yFaultMax)),
+    [yFaultAuto, yFaultMin, yFaultMax],
+  );
+
   useEffect(() => {
     if (!equipmentId || catalog.seriesOptions.length === 0) return;
     const keys = defaultKeysForEquipment(catalog.seriesOptions, equipmentId, 6);
@@ -166,6 +196,9 @@ export default function PlotPage() {
           showBounds,
           showRollingAvg,
           theme,
+          yLeftLimit,
+          yRightLimit: hasRhSeries ? yRightLimit : showFaultLane && !hasRhSeries ? yFaultLimit : null,
+          yFaultLimit: hasRhSeries && showFaultLane ? yFaultLimit : null,
         });
         await Plotly.react(
           chartRef.current,
@@ -183,7 +216,7 @@ export default function PlotPage() {
         throw e;
       }
     },
-    [enabledFaults, showBounds, showRollingAvg, theme, siteId, windowSel, customStart, customEnd],
+    [enabledFaults, showBounds, showRollingAvg, theme, siteId, windowSel, customStart, customEnd, yLeftLimit, yRightLimit, yFaultLimit, hasRhSeries, showFaultLane],
   );
 
   useEffect(() => {
@@ -464,7 +497,135 @@ export default function PlotPage() {
             <input type="checkbox" checked={showBounds} onChange={(e) => setShowBounds(e.target.checked)} />
             OOB guide lines
           </label>
-          <div className="form-row-actions">
+        </div>
+        <details className="plot-axis-limits ui-advanced-fold">
+          <summary>Y-axis limits (optional)</summary>
+          <div className="plot-axis-grid">
+            <div className="plot-axis-row">
+              <span className="plot-axis-label">Left Y (temperature)</span>
+              <label className="checkbox-inline plot-axis-auto">
+                <input type="checkbox" checked={yLeftAuto} onChange={(e) => setYLeftAuto(e.target.checked)} />
+                Auto
+              </label>
+              <label className="field plot-axis-field">
+                <span className="field-label">Min</span>
+                <input
+                  type="number"
+                  step="any"
+                  value={yLeftMin}
+                  disabled={yLeftAuto}
+                  placeholder="auto"
+                  onChange={(e) => setYLeftMin(e.target.value)}
+                />
+              </label>
+              <label className="field plot-axis-field">
+                <span className="field-label">Max</span>
+                <input
+                  type="number"
+                  step="any"
+                  value={yLeftMax}
+                  disabled={yLeftAuto}
+                  placeholder="auto"
+                  onChange={(e) => setYLeftMax(e.target.value)}
+                />
+              </label>
+            </div>
+            {hasRhSeries || plotData == null ? (
+              <div className="plot-axis-row">
+                <span className="plot-axis-label">Right Y (% RH)</span>
+                <label className="checkbox-inline plot-axis-auto">
+                  <input type="checkbox" checked={yRightAuto} onChange={(e) => setYRightAuto(e.target.checked)} />
+                  Auto
+                </label>
+                <label className="field plot-axis-field">
+                  <span className="field-label">Min</span>
+                  <input
+                    type="number"
+                    step="any"
+                    value={yRightMin}
+                    disabled={yRightAuto}
+                    placeholder="auto"
+                    onChange={(e) => setYRightMin(e.target.value)}
+                  />
+                </label>
+                <label className="field plot-axis-field">
+                  <span className="field-label">Max</span>
+                  <input
+                    type="number"
+                    step="any"
+                    value={yRightMax}
+                    disabled={yRightAuto}
+                    placeholder="auto"
+                    onChange={(e) => setYRightMax(e.target.value)}
+                  />
+                </label>
+              </div>
+            ) : null}
+            {showFaultLane && !hasRhSeries ? (
+              <div className="plot-axis-row">
+                <span className="plot-axis-label">Right Y (faults 0/1)</span>
+                <label className="checkbox-inline plot-axis-auto">
+                  <input type="checkbox" checked={yFaultAuto} onChange={(e) => setYFaultAuto(e.target.checked)} />
+                  Auto
+                </label>
+                <label className="field plot-axis-field">
+                  <span className="field-label">Min</span>
+                  <input
+                    type="number"
+                    step="any"
+                    value={yFaultMin}
+                    disabled={yFaultAuto}
+                    placeholder="auto"
+                    onChange={(e) => setYFaultMin(e.target.value)}
+                  />
+                </label>
+                <label className="field plot-axis-field">
+                  <span className="field-label">Max</span>
+                  <input
+                    type="number"
+                    step="any"
+                    value={yFaultMax}
+                    disabled={yFaultAuto}
+                    placeholder="auto"
+                    onChange={(e) => setYFaultMax(e.target.value)}
+                  />
+                </label>
+              </div>
+            ) : null}
+            {showFaultLane && hasRhSeries ? (
+              <div className="plot-axis-row">
+                <span className="plot-axis-label">Far right Y (faults 0/1)</span>
+                <label className="checkbox-inline plot-axis-auto">
+                  <input type="checkbox" checked={yFaultAuto} onChange={(e) => setYFaultAuto(e.target.checked)} />
+                  Auto
+                </label>
+                <label className="field plot-axis-field">
+                  <span className="field-label">Min</span>
+                  <input
+                    type="number"
+                    step="any"
+                    value={yFaultMin}
+                    disabled={yFaultAuto}
+                    placeholder="auto"
+                    onChange={(e) => setYFaultMin(e.target.value)}
+                  />
+                </label>
+                <label className="field plot-axis-field">
+                  <span className="field-label">Max</span>
+                  <input
+                    type="number"
+                    step="any"
+                    value={yFaultMax}
+                    disabled={yFaultAuto}
+                    placeholder="auto"
+                    onChange={(e) => setYFaultMax(e.target.value)}
+                  />
+                </label>
+              </div>
+            ) : null}
+          </div>
+        </details>
+        <div className="form-row-actions plot-toolbar-actions">
             <button type="button" disabled={chartLoading || !selected.size} onClick={() => void refreshChart()}>
               {chartLoading ? "Loading…" : "Refresh chart"}
             </button>
@@ -478,7 +639,6 @@ export default function PlotPage() {
               Export CSV
             </button>
           </div>
-        </div>
       </div>
 
       <div className="plot-series-picker panel">

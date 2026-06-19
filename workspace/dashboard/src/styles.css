@@ -2236,17 +2236,25 @@ textarea {
 }
 
 .dm-io-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: stretch;
 }
 
 .dm-io-panel {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-height: 420px;
+  min-height: 0;
+}
+
+.dm-io-panel--export .dm-json-editor {
+  min-height: 360px;
+}
+
+.dm-io-panel--import .dm-json-editor {
+  min-height: 280px;
 }
 
 .dm-io-head {
@@ -3884,5 +3892,93 @@ button.linkish {
 
 .rule-lab-actions {
   margin-top: 0.75rem;
+}
+
+.rule-lab-page .rule-lab-meta-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.rule-lab-page .rule-lab-text-input,
+.rule-lab-page .fdd-rule-test-panel input:not([type="checkbox"]),
+.rule-lab-page .fdd-rule-test-panel select,
+.rule-lab-page .rule-switcher-select,
+.rule-lab-page .cfg-param-row input,
+.rule-lab-page .cfg-preset-select {
+  width: 100%;
+  min-width: 0;
+  font-size: 0.95rem;
+}
+
+.rule-lab-page .rule-lab-rule-row {
+  width: 100%;
+}
+
+.rule-lab-page .rule-switcher-group {
+  flex: 1 1 420px;
+  min-width: min(100%, 320px);
+}
+
+.rule-lab-page .rule-switcher-select {
+  padding: 10px 12px;
+  line-height: 1.4;
+}
+
+.rule-lab-page .cfg-param-row {
+  grid-template-columns: minmax(10rem, 1fr) minmax(10rem, 1fr) 40px;
+}
+
+.rule-lab-page .cfg-preset-select {
+  max-width: none;
+  min-width: 14rem;
+}
+
+.plot-axis-limits {
+  margin-top: 12px;
+}
+
+.plot-axis-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.plot-axis-row {
+  display: grid;
+  grid-template-columns: minmax(9rem, 1.2fr) auto minmax(6rem, 1fr) minmax(6rem, 1fr);
+  gap: 10px 12px;
+  align-items: end;
+}
+
+.plot-axis-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  padding-bottom: 10px;
+}
+
+.plot-axis-auto {
+  padding-bottom: 10px;
+  white-space: nowrap;
+}
+
+.plot-axis-field {
+  min-width: 0;
+}
+
+.plot-toolbar-actions {
+  margin-top: 12px;
+}
+
+@media (max-width: 900px) {
+  .plot-axis-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .plot-axis-label,
+  .plot-axis-auto {
+    grid-column: 1 / -1;
+    padding-bottom: 0;
+  }
 }
 

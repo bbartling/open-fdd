@@ -163,7 +163,7 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
 
   return (
     <div className="dm-io-grid">
-      <section className="dm-io-panel panel">
+      <section className="dm-io-panel dm-io-panel--export panel">
         <header className="dm-io-head">
           <h3 className="panel-title">Export for AI</h3>
           <div className="row">
@@ -228,7 +228,7 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
         />
       </section>
 
-      <section className="dm-io-panel panel">
+      <section className="dm-io-panel dm-io-panel--import panel">
         <header className="dm-io-head">
           <h3 className="panel-title">Upload AI-enhanced model</h3>
           <label className="secondary-btn file-upload-btn">
