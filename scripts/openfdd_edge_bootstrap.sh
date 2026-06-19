@@ -8,6 +8,7 @@
 # Options:
 #   --start          docker compose pull && up -d after bootstrap
 #   --image-tag TAG  default: latest
+#   --platform PLAT  auto (default), linux/arm64, linux/amd64 — or OPENFDD_DOCKER_PLATFORM
 #   --repo-ref REF   GitHub branch for compose.edge.yml (tries master, then this ref)
 #   --root PATH      default: ~/open-fdd
 #   --force-auth     regenerate workspace/auth.env.local
@@ -28,6 +29,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --start) DO_START=true; shift ;;
     --image-tag) OPENFDD_IMAGE_TAG="$2"; shift 2 ;;
+    --platform) OPENFDD_DOCKER_PLATFORM="$2"; shift 2 ;;
     --repo-ref) OPENFDD_REPO_REF="$2"; shift 2 ;;
     --root) OPENFDD_ROOT="$2"; shift 2 ;;
     --force-auth) FORCE_AUTH=true; shift ;;
@@ -266,7 +268,10 @@ _check_docker() {
   echo "    Host CPU: ${arch}"
   case "$arch" in
     aarch64|arm64)
-      echo "    Raspberry Pi / ARM64 — requires GHCR images with linux/arm64 manifest"
+      echo "    Raspberry Pi / ARM64 — auto-selects linux/arm64 GHCR manifests"
+      ;;
+    x86_64|amd64)
+      echo "    x86_64 — auto-selects linux/amd64 GHCR manifests"
       ;;
   esac
   if ! groups | grep -q '\bdocker\b'; then
@@ -281,11 +286,22 @@ _check_docker() {
 _pull_and_start() {
   cd "$OPENFDD_ROOT"
   export OPENFDD_IMAGE_TAG
-  if [[ -x "${OPENFDD_ROOT}/scripts/openfdd_check_ghcr_platform.sh" ]]; then
-    echo "==> Verifying GHCR images for $(uname -m)"
-    OPENFDD_IMAGE_TAG="$OPENFDD_IMAGE_TAG" "${OPENFDD_ROOT}/scripts/openfdd_check_ghcr_platform.sh"
+  local platform
+  if [[ -f "${OPENFDD_ROOT}/scripts/openfdd_site_lib.sh" ]]; then
+    # shellcheck source=openfdd_site_lib.sh
+    source "${OPENFDD_ROOT}/scripts/openfdd_site_lib.sh"
+    platform="$(openfdd_export_docker_platform)"
+  else
+    platform="${OPENFDD_DOCKER_PLATFORM:-linux/$(uname -m)}"
+    export OPENFDD_DOCKER_PLATFORM="$platform"
+    export DOCKER_DEFAULT_PLATFORM="$platform"
   fi
-  echo "==> Pulling images (tag=${OPENFDD_IMAGE_TAG})"
+  if [[ -x "${OPENFDD_ROOT}/scripts/openfdd_check_ghcr_platform.sh" ]]; then
+    echo "==> Verifying GHCR images for ${platform} (host $(uname -m))"
+    OPENFDD_IMAGE_TAG="$OPENFDD_IMAGE_TAG" OPENFDD_DOCKER_PLATFORM="$platform" \
+      "${OPENFDD_ROOT}/scripts/openfdd_check_ghcr_platform.sh"
+  fi
+  echo "==> Pulling images (tag=${OPENFDD_IMAGE_TAG}, platform=${platform})"
   docker compose pull
   docker compose up -d
   docker compose ps
@@ -369,6 +385,7 @@ echo "=== Bootstrap complete ==="
 echo "  Site root:     ${OPENFDD_ROOT}"
 echo "  Compose file:  ${COMPOSE_PATH}"
 echo "  Image tag:     ${OPENFDD_IMAGE_TAG}"
+echo "  Platform:      ${OPENFDD_DOCKER_PLATFORM:-auto (host $(uname -m))}"
 echo "  BACnet NIC:    ${BACNET_IFACE:-unknown}"
 echo "  BACnet bind:   ${BACNET_BIND}"
 echo "  Auth file:     ${AUTH_PATH}"
@@ -388,7 +405,7 @@ fi
 echo ""
 if [[ "$DO_START" != true ]]; then
   echo "Start stack:"
-  echo "  cd ${OPENFDD_ROOT} && docker compose pull && docker compose up -d"
+  echo "  cd ${OPENFDD_ROOT} && ./scripts/openfdd_check_ghcr_platform.sh && docker compose pull && docker compose up -d"
   echo "Or re-run: bash $0 --start"
 fi
 echo ""

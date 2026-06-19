@@ -18,6 +18,34 @@ Deploy Open-FDD on a Linux edge host using **three published GHCR images**. No g
 
 Edge hosts pull **`latest`** from GHCR (three images: bridge, commission, mcp-rag). The retired **`openfdd-bacnet-poll`** image is no longer published.
 
+## CPU architecture (auto-detect)
+
+Open-FDD GHCR images are **multi-arch** (`linux/amd64` + `linux/arm64`) from release **3.1.6** onward. Bootstrap and site-update scripts detect the host CPU and set `DOCKER_DEFAULT_PLATFORM` automatically:
+
+| `uname -m` | Platform pulled |
+|------------|-----------------|
+| `x86_64`, `amd64` | `linux/amd64` |
+| `aarch64`, `arm64` | `linux/arm64` |
+
+Verify manifests before pull (especially on Raspberry Pi):
+
+```bash
+cd ~/open-fdd
+./scripts/openfdd_check_ghcr_platform.sh
+./scripts/openfdd_check_ghcr_platform.sh --platform linux/arm64   # explicit check
+OPENFDD_IMAGE_TAG=3.1.6 ./scripts/openfdd_check_ghcr_platform.sh
+```
+
+Override (QEMU / lab only):
+
+| Variable / flag | Example |
+|-----------------|---------|
+| `OPENFDD_DOCKER_PLATFORM` | `OPENFDD_DOCKER_PLATFORM=linux/amd64 docker compose pull` |
+| Bootstrap `--platform` | `bash …/openfdd_edge_bootstrap.sh --start --platform linux/arm64` |
+| Site update | `OPENFDD_DOCKER_PLATFORM=linux/amd64 ./scripts/openfdd_site_update.sh` |
+
+ARM64 pull errors → [Raspberry Pi edge bootstrap]({{ "/quick-start/raspberry-pi-edge/" | relative_url }}).
+
 ## 1. Install and validate Docker
 
 ```bash
@@ -109,6 +137,7 @@ Options:
 |------|---------|
 | `--start` | `docker compose pull && up -d` after layout; curls `http://127.0.0.1:8765/health` |
 | `--image-tag TAG` | default `latest` |
+| `--platform PLAT` | `auto` (default), `linux/arm64`, `linux/amd64` — or set `OPENFDD_DOCKER_PLATFORM` |
 | `--repo-ref BRANCH` | branch for `compose.edge.yml` if not on `master` yet |
 | `--force-auth` | regenerate `auth.env.local` (restarts bridge if stack is up) |
 | `--restart` | recreate bridge to reload `auth.env.local`; curls `/health` after |
@@ -131,6 +160,7 @@ Use this only if you ran bootstrap **without** `--start` and want to bring the s
 
 ```bash
 cd ~/open-fdd
+./scripts/openfdd_check_ghcr_platform.sh
 docker compose pull
 docker compose up -d
 docker compose ps

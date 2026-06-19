@@ -8,6 +8,50 @@ openfdd_site_root_from_caller() {
   cd "$(dirname "$caller")/.." && pwd
 }
 
+# Docker image platform: auto-detect host CPU unless OPENFDD_DOCKER_PLATFORM is set.
+# Values: auto (default), linux/arm64, linux/amd64, or aliases arm64|amd64|aarch64|x86_64.
+openfdd_detect_docker_platform() {
+  case "$(uname -m)" in
+    aarch64|arm64) echo "linux/arm64" ;;
+    x86_64|amd64) echo "linux/amd64" ;;
+    *) echo "linux/$(uname -m)" ;;
+  esac
+}
+
+openfdd_normalize_docker_platform() {
+  local raw="${1:-auto}"
+  case "$raw" in
+    ""|auto) openfdd_detect_docker_platform ;;
+    linux/arm64|arm64|aarch64) echo "linux/arm64" ;;
+    linux/amd64|amd64|x86_64) echo "linux/amd64" ;;
+    linux/*) echo "$raw" ;;
+    *)
+      echo "ERROR: unknown platform: $raw (use auto, linux/arm64, or linux/amd64)" >&2
+      return 1
+      ;;
+  esac
+}
+
+openfdd_resolve_docker_platform() {
+  openfdd_normalize_docker_platform "${OPENFDD_DOCKER_PLATFORM:-auto}"
+}
+
+openfdd_platform_arch() {
+  local platform="${1:-}"
+  if [[ -z "$platform" ]]; then
+    platform="$(openfdd_resolve_docker_platform)" || return 1
+  fi
+  printf '%s' "${platform#linux/}"
+}
+
+openfdd_export_docker_platform() {
+  local platform
+  platform="$(openfdd_resolve_docker_platform)" || return 1
+  export OPENFDD_DOCKER_PLATFORM="$platform"
+  export DOCKER_DEFAULT_PLATFORM="$platform"
+  printf '%s' "$platform"
+}
+
 openfdd_resolve_compose_file() {
   local root="$1"
   local compose="${COMPOSE_FILE:-}"

@@ -40,7 +40,14 @@ Creates:
 | `~/open-fdd/workspace/` | Persistent site state (historian, model, auth) |
 | `~/open-fdd/scripts/openfdd_site_*.sh` | Backup and update helpers |
 
-Options: `--image-tag`, `--root`, `--force-auth`, `--restart`. See script header (`--help`).
+Options: `--image-tag`, `--platform`, `--root`, `--force-auth`, `--restart`. See script header (`--help`).
+
+Scripts auto-detect CPU (`x86_64` → `linux/amd64`, `aarch64` → `linux/arm64`). Verify GHCR manifests:
+
+```bash
+cd ~/open-fdd
+./scripts/openfdd_check_ghcr_platform.sh
+```
 
 After bootstrap → [Health check]({{ "/quick-start/health-check/" | relative_url }}).
 
@@ -92,6 +99,7 @@ export NEW_TAG=3.1.6
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `NEW_TAG` / `OPENFDD_IMAGE_TAG` | `latest` | GHCR image tag |
+| `OPENFDD_DOCKER_PLATFORM` | `auto` | `linux/arm64`, `linux/amd64`, or auto-detect from `uname -m` |
 | `BACKUP_ROOT` | `~/openfdd-backups/latest` | Backup used for validation / restore |
 | `SKIP_DOCKER_MAINTENANCE` | `0` | Set `1` to skip prune |
 | `PURGE_BACKUP_AFTER_SUCCESS` | `1` | Set `0` to keep backup after upgrade |
@@ -138,7 +146,7 @@ If scripts are missing:
 ```bash
 mkdir -p ~/open-fdd/scripts
 BASE=https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts
-for f in openfdd_site_lib.sh openfdd_site_backup.sh openfdd_site_update.sh; do
+for f in openfdd_site_lib.sh openfdd_site_backup.sh openfdd_site_update.sh openfdd_check_ghcr_platform.sh; do
   curl -fsSL -o ~/open-fdd/scripts/"$f" "$BASE/$f"
 done
 chmod +x ~/open-fdd/scripts/openfdd_site_*.sh

@@ -21,6 +21,7 @@ Open-FDD is an **edge FDD platform**: BACnet / Niagara / JSON API drivers ingest
 | **`workspace/`** | Model, rules, feather store, auth env — persist across image upgrades |
 | **Auth** | `workspace/auth.env.local` (gitignored); JWT via `POST /api/auth/login` |
 | **Update** | [Edge site lifecycle]({{ "/quick-start/site-lifecycle/" | relative_url }}) · [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) · pin `OPENFDD_IMAGE_TAG` |
+| **CPU / platform** | Auto-detect: `x86_64` → `linux/amd64`, `aarch64` → `linux/arm64`. Check: `./scripts/openfdd_check_ghcr_platform.sh`. Override: `OPENFDD_DOCKER_PLATFORM` or bootstrap `--platform`. Pi: [Raspberry Pi edge]({{ "/quick-start/raspberry-pi-edge/" | relative_url }}) |
 
 Rebuild MCP index after doc changes: `./scripts/build_mcp_rag_index.sh`.
 

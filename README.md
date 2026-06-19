@@ -38,6 +38,32 @@
 | [`ghcr.io/bbartling/openfdd-commission`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-commission) | BACnet discover, read, poll |
 | [`ghcr.io/bbartling/openfdd-mcp-rag`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp-rag) | MCP + doc-search |
 
+GHCR publishes **multi-arch** images (`linux/amd64` + `linux/arm64`) from release **3.1.6** onward. Edge scripts **auto-detect** the host CPU and pull the matching manifest — no manual platform flag on a normal x86 or 64-bit Raspberry Pi install.
+
+| Host CPU (`uname -m`) | Docker platform | Typical hardware |
+|-----------------------|-----------------|------------------|
+| `x86_64`, `amd64` | `linux/amd64` | Intel/AMD servers, VMs |
+| `aarch64`, `arm64` | `linux/arm64` | Raspberry Pi 4/5 (64-bit OS) |
+
+Verify before pull (optional but recommended on Pi):
+
+```bash
+cd ~/open-fdd
+./scripts/openfdd_check_ghcr_platform.sh
+```
+
+Override platform (lab / QEMU emulation only):
+
+```bash
+# Force amd64 images on ARM64 (slow — see docs/quick-start/raspberry-pi-edge.md)
+OPENFDD_DOCKER_PLATFORM=linux/amd64 docker compose pull
+
+# Bootstrap or update with explicit platform
+bash /tmp/openfdd_edge_bootstrap.sh --start --platform linux/arm64
+NEW_TAG=3.1.6 OPENFDD_DOCKER_PLATFORM=linux/amd64 ./scripts/openfdd_site_update.sh
+```
+
+Pi-specific troubleshooting: [Raspberry Pi edge bootstrap](docs/quick-start/raspberry-pi-edge.md).
 
 ### Manual Installation
 
@@ -66,7 +92,7 @@ cd ~/open-fdd
 
 | Area | Examples |
 |------|----------|
-| **Edge deploy** | `openfdd_edge_bootstrap.sh`, `openfdd_site_backup.sh`, `openfdd_site_update.sh`, health checks |
+| **Edge deploy** | `openfdd_edge_bootstrap.sh`, `openfdd_site_backup.sh`, `openfdd_site_update.sh`, `openfdd_check_ghcr_platform.sh`, health checks |
 | **Drivers** | BACnet discover/poll/bind, Niagara station setup, JSON API endpoints |
 | **Model & rules** | BRICK sites/equipment/points, Rule Lab save/bind, batch FDD, tuning brief/apply |
 | **Operations** | Building check-in, zone temps, device poll health, BACnet P8 override scans |
@@ -425,6 +451,7 @@ Restore ALL historian data (no cap):
 
 Useful env vars:
   NEW_TAG=latest                    GHCR tag (or OPENFDD_IMAGE_TAG)
+  OPENFDD_DOCKER_PLATFORM=auto      linux/arm64 | linux/amd64 (default: auto-detect host)
   BACKUP_INCLUDE_POLL_SAMPLES=0     fast backup (skip poll CSV history)
   SKIP_DOCKER_MAINTENANCE=1         skip prune
   PURGE_BACKUP_AFTER_SUCCESS=0      keep backup after successful upgrade
