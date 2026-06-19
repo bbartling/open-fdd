@@ -8,6 +8,8 @@ nav_order: 5
 
 Open-FDD edge deploy on **Raspberry Pi 4/5 (64-bit)** uses the same bootstrap as x86 Linux. Docker must be installed; the host must be **aarch64 / arm64** (not 32-bit Raspberry Pi OS).
 
+Bootstrap and update scripts **auto-detect** `linux/arm64` on Pi hosts. No `--platform` flag is required when GHCR publishes ARM64 manifests for your tag (3.1.6+).
+
 ## One-liner
 
 ```bash
@@ -29,6 +31,7 @@ Error response from daemon: no matching manifest for linux/arm64/v8 in the manif
 ```bash
 cd ~/open-fdd
 ./scripts/openfdd_check_ghcr_platform.sh
+# explicit: ./scripts/openfdd_check_ghcr_platform.sh --platform linux/arm64
 ```
 
 Or manually:
@@ -57,8 +60,8 @@ sudo apt install -y qemu-user-static binfmt-support
 docker run --privileged --rm tonistiigi/binfmt --install amd64
 
 cd ~/open-fdd
-DOCKER_DEFAULT_PLATFORM=linux/amd64 docker compose pull
-DOCKER_DEFAULT_PLATFORM=linux/amd64 docker compose up -d
+OPENFDD_DOCKER_PLATFORM=linux/amd64 docker compose pull
+OPENFDD_DOCKER_PLATFORM=linux/amd64 docker compose up -d
 
 docker compose ps
 curl -sf http://127.0.0.1:8765/health | jq .

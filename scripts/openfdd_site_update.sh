@@ -14,6 +14,7 @@
 #
 # Env:
 #   NEW_TAG / OPENFDD_IMAGE_TAG     Image tag (default: latest)
+#   OPENFDD_DOCKER_PLATFORM         auto (default), linux/arm64, linux/amd64
 #   BACKUP_ROOT                     Backup dir (default: ~/openfdd-backups/latest)
 #   SKIP_DOCKER_MAINTENANCE=1         Skip image/container prune
 #   RESTORE_WORKSPACE=0|1           Extract backup over workspace/ (default: 0)
@@ -55,7 +56,9 @@ IMAGES=(
 ARCHIVE="$(openfdd_backup_archive_path "$BACKUP_ROOT")"
 
 echo "=== Open-FDD site update → ${NEW_TAG} ==="
+PLATFORM="$(openfdd_export_docker_platform)"
 echo "Compose file:     $COMPOSE_FILE"
+echo "Docker platform:  ${PLATFORM} (host $(uname -m))"
 echo "Backup root:        $BACKUP_ROOT"
 echo "Restore workspace: $RESTORE_WORKSPACE"
 echo "Feather cap (GiB):  $([[ "$RESTORE_WORKSPACE" == "1" ]] && echo "${RESTORE_FEATHER_MAX_GIB} (0=all)" || echo n/a)"
@@ -80,11 +83,16 @@ if [[ "$SKIP_DOCKER_MAINTENANCE" != "1" ]]; then
   echo ""
 fi
 
-echo "==> Verify images exist on GHCR"
-for img in "${IMAGES[@]}"; do
-  docker manifest inspect "$img" >/dev/null
-  echo "  OK $img"
-done
+echo "==> Verify images exist on GHCR (${PLATFORM})"
+if [[ -x "$ROOT/scripts/openfdd_check_ghcr_platform.sh" ]]; then
+  OPENFDD_IMAGE_TAG="$NEW_TAG" OPENFDD_DOCKER_PLATFORM="$PLATFORM" \
+    "$ROOT/scripts/openfdd_check_ghcr_platform.sh"
+else
+  for img in "${IMAGES[@]}"; do
+    docker manifest inspect "$img" >/dev/null
+    echo "  OK $img"
+  done
+fi
 
 if [[ -f "$ROOT/docker-compose.yml" ]] && grep -q 'OPENFDD_IMAGE_TAG\|2026\.[0-9]' "$ROOT/docker-compose.yml" 2>/dev/null; then
   cp "$ROOT/docker-compose.yml" "$ROOT/docker-compose.yml.bak.$(date +%Y%m%d-%H%M%S)"
