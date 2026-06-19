@@ -25,7 +25,9 @@ Open-FDD is an open-source **building edge platform** for BACnet integration, fe
 | Path | Go to |
 |------|-------|
 | **Try it** | [Quick Start — Run with Docker]({{ "/quick-start/docker/" | relative_url }}) |
+| **Write FDD rules** | [Rule Cookbook — PyArrow & DataFusion SQL]({{ "/rule-cookbook/dual-backend-rules/" | relative_url }}) |
 | **Operate it** | [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) · [Operations]({{ "/ops/" | relative_url }}) |
+| **API reference** | [Appendix — REST API]({{ "/appendix/bridge_api/" | relative_url }}) · [Dashboard routes]({{ "/appendix/dashboard-routes/" | relative_url }}) |
 | **Develop it** | [Developer Guide]({{ "/developer/" | relative_url }}) · [Architecture]({{ "/architecture/" | relative_url }}) |
 
 ## v3 edge stack
@@ -106,367 +108,6 @@ Existing code to extend (do not rewrite):
 ## Safety
 
 Central is read-only toward edges. No BACnet writes, commands, or BAS changes from Central.
-
-
-# Arrow rule contract (v1)
-
-# Arrow rule contract (v1)
-
-Stable v1 batch FDD, Rule Lab preview, and validation smokes share one execution contract.
-
-## Entrypoint
-
-```python
-def apply_faults_arrow(table: pa.Table, cfg: dict | None = None, context: dict | None = None):
-    ...
-```
-
-| Parameter | Type | Notes |
-|-----------|------|-------|
-| `table` | `pyarrow.Table` | Historian telemetry for one site/window |
-| `cfg` | `dict` | Rule thresholds, column names, confirmation settings |
-| `context` | `dict` \| `None` | Optional bridge metadata (`site_id`, equipment hints) |
-
-## Return type (authoring)
-
-`apply_faults_arrow` must return a **boolean** `pyarrow.Array` or `pyarrow.ChunkedArray`:
-
-- Length **must equal** `table.num_rows`
-- `True` = raw fault sample (before confirmation)
-- Non-boolean returns are cast to bool by the backend
-- Null slots in the mask are counted; prefer explicit `False` for missing inputs
-
-The backend normalizes via `open_fdd.arrow_runtime.backend.normalize_fault_mask`.
-
-## Runtime result (`ArrowRuleResult`)
-
-After execution, `run_arrow_rule()` produces `ArrowRuleResult`:
-
-| Field | Meaning |
-|-------|---------|
-| `rule_id` | Saved rule id |
-| `backend` | `"arrow"` or `"datafusion_sql"` |
-| `row_count` | Input table rows |
-| `true_count` / `false_count` / `null_count` | Mask statistics |
-| `duration_ms` | Wall time |
-| `fault_mask` | **Confirmed** boolean mask (see below) |
-| `warnings` / `errors` | Lint/runtime messages |
-| `summary` | Execution evidence, site id, backend path |
-| `preview` | Sample fault rows for Rule Lab UI |
-
-Use `.as_dict()` for API JSON. Both PyArrow and DataFusion SQL backends normalize to this shape.
-
-## Raw mask vs confirmation
-
-1. Rule returns **raw** boolean mask (`apply_faults_arrow` or SQL `fault` column).
-2. Backend applies **fault confirmation** when `cfg` includes `min_true_rows` and/or `min_elapsed_minutes` (see [Fault confirmation]({{ "/rule-cookbook/fault-confirmation/" | relative_url }})).
-3. `ArrowRuleResult.fault_mask` is the **post-confirmation** mask used for batch counts and dashboard alerts.
-
-Confirmation is backend-owned — rules should not implement debounce logic unless documenting a special case.
-
-## DataFusion SQL rules
-
-SQL modules still expose `apply_faults_arrow`; the body delegates to `open_fdd.arrow_runtime.datafusion_backend`. Metadata:
-
-```yaml
-backend: datafusion_sql
-fault_column: fault
-sql: |
-  SELECT *, "stat_zn-t" > 76.0 AS fault FROM telemetry
-```
-
-Same `ArrowRuleResult` after SQL execution and confirmation.
-
-## Lint & forbidden imports
-
-Edge fault rules allow: `pyarrow`, `pyarrow.compute`, `open_fdd.arrow_runtime.*`, `datetime`, `math`.
-
-Forbidden in production fault rules: `pandas`, `numpy` (for rule logic), file I/O, network calls.
-
-See `lint_arrow_rule()` in `open_fdd.arrow_runtime.backend`.
-
-## Chunked execution
-
-Large tables may run via `run_arrow_rule_chunked()` — masks are concatenated; contract unchanged.
-
-## Related
-
-- [Data types & units]({{ "/rule-authoring/data-types-and-units/" | relative_url }})
-- [ADR: Rust-ready Arrow FDD contract]({{ "/adr/adr-rust-ready-arrow-fdd-contract/" | relative_url }})
-- [Developer: Arrow-native runtime]({{ "/developer/arrow-native-runtime/" | relative_url }})
-
-
-# Data types and units
-
-# Data types and units
-
-Rules read **columnar historian tables** produced by BACnet / Niagara / JSON API ingest. Author against **Feather column names** (`oa-t`, `stat_zn-t`, …) or BRICK `fdd_input` aliases resolved in the bridge.
-
-## Required table shape
-
-| Column / convention | Expectation |
-|---------------------|-------------|
-| `timestamp` | UTC or site-local consistent ordering; monotonic within a batch window |
-| Point columns | One float (or castable) column per bound historian point |
-| `site_id` | Optional in table; often passed via `cfg` / `context` |
-| Row count | One row per poll sample — irregular spacing is normal |
-
-Missing columns: cookbook helpers typically return an all-`False` mask or zero-filled stand-ins — check helper docs before assuming a fault.
-
-## Numeric casting and nulls
-
-| Legacy (pandas gist) | Modern Arrow |
-|----------------------|--------------|
-| `HelperUtils.convert_to_float` | `pc.cast(col, pa.float64())` or ingest-time typing |
-| `HelperUtils.check_datatype_float` | Rule Lab lint + bridge ingest validation |
-| `HelperUtils.check_datatype_int` | Validate integer **cfg** fields (`int(cfg["window_samples"])`) |
-| `np.maximum` / `np.minimum` | `pc.max` / `pc.min` |
-| `series.rolling(n).min()` | `arrow_rolling_min` in `open_fdd.arrow_runtime.windows` |
-| `series.diff()` | `arrow_diff` / `arrow_abs_diff` |
-| `df.resample("H")` | **Not ported 1:1** — use sample-window rolling helpers instead |
-
-**Null behavior:** comparisons involving null produce null; backend cast may treat null as false in the final mask. Prefer `pc.fill_null` or explicit guards when null should mean “no fault.”
-
-## Command normalization
-
-BACnet analog outputs often arrive as **0–100 %**. Open-FDD normalizes with `norm_cmd_array()`:
-
-- Values **> 1.0** → divide by 100 (0–1 fraction)
-- Values **≤ 1.0** → used as-is (already fractional)
-
-Legacy gist: `check_range_less_than_one` / `float_max_check_err` (command max ≤ 1.0 after conversion).
-
-Configure per rule:
-
-```python
-cfg = {"min_active_command": 0.02, "min_command_delta": 0.03}
-```
-
-## Boolean / status columns
-
-| Signal | Typical handling |
-|--------|------------------|
-| Fan status / run command | Normalize as command; gate with `pc.greater(fan, 0.01)` |
-| Occupancy | Boolean column or hour-of-week mask via cookbook schedule helpers |
-| Enable / alarm state | Cast to bool; combine with `pc.and_` |
-| Binary points | `pc.equal(col, 1)` or cast from 0/1 floats |
-
-## Sensor profiles and units
-
-Default bounds, flatline tolerance, and rate limits live in `open_fdd.arrow_runtime.sensor_catalog.SENSOR_PROFILES`.
-
-| Profile key | Quantity | Default unit | Example fault codes |
-|-------------|----------|--------------|---------------------|
-| `zone_temp` | Temperature | °F | VAV-C |
-| `supply_air_temp` | Temperature | °F | AHU-C, RTU-C |
-| `outdoor_air_temp` | Temperature | °F | BLD-B |
-| `mixed_air_temp` | Temperature | °F | AHU-D |
-| `return_air_temp` | Temperature | °F | AHU-D |
-| `duct_static_pressure` | Pressure | in H₂O | AHU-A |
-| `zone_humidity` | Relative humidity | % RH | BLD-B |
-| `co2` | CO₂ | ppm | BLD-B |
-
-Override via rule `cfg` (`bounds_low`, `bounds_high`, `flatline_tolerance`, `window_samples`, `max_per_hour`). Metric sites: set `cfg["temp_unit"] = "metric"` or scale constants (see [Expression cookbook]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#metric-c-equivalents)).
-
-## Time and windows
-
-| Setting | Meaning |
-|---------|---------|
-| `window_samples` | Rolling window in **poll samples** (not wall-clock unless derived) |
-| `rolling_avg_minutes` | Converted to samples using `poll_interval_s` / median poll interval |
-| `hunting_window_hours` | Used by PID hunting helpers to derive sample count |
-| `min_true_rows` | Confirmation: consecutive true samples required |
-| `min_elapsed_minutes` | Confirmation: minimum wall time with fault true |
-
-Irregular timestamps: rolling helpers operate on row order within the loaded table — ensure lookback windows include enough samples for your poll cadence.
-
-## Raw fault vs confirmed fault
-
-| Stage | Where |
-|-------|-------|
-| Raw mask | Return value of `apply_faults_arrow` |
-| Confirmed mask | `ArrowRuleResult.fault_mask` after `apply_fault_confirmation_from_cfg` |
-
-Document both when tuning — a rule may fire briefly but not meet confirmation.
-
-## Related
-
-- [Expression cookbook — sensor validation]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#sensor-validation-bounds-flatline-rate-of-change)
-- [Fault confirmation]({{ "/rule-cookbook/fault-confirmation/" | relative_url }})
-- [Legacy pandas parity]({{ "/rule-authoring/legacy-pandas-parity/" | relative_url }})
-
-
-# Legacy pandas parity
-
-# Legacy pandas parity matrix
-
-Maps the historical **pandas gist** fault classes to Open-FDD **v1 Arrow** (and optional SQL) equivalents.
-
-**Source gist (legacy, not maintained):** [FaultConditionOne–Fifteen](https://gist.github.com/bbartling/11cb1cb1295a1bfba5c167efa02122ef)
-
-**Status legend**
-
-| Status | Meaning |
-|--------|---------|
-| **exact parity** | Regression test proves equivalent flag behavior on fixture data |
-| **modernized** | Same intent; Arrow implementation differs (documented) |
-| **retired** | No v1 edge path — catalog/metadata only |
-| **pending** | Not yet ported to Arrow module + test |
-
-Do **not** claim exact parity without a named test file.
-
----
-
-## Helper utilities
-
-| Legacy | Summary | Modern equivalent | Status | Tests |
-|--------|---------|-------------------|--------|-------|
-| `HelperUtils.convert_to_float` | Cast column to float | Ingest typing + `pc.cast(..., pa.float64())` | modernized | ingest / lint |
-| `HelperUtils.isfloat` / float checks | Validate analog columns | Rule Lab lint + bridge validation | modernized | `test_rule_kit` |
-| `check_range_less_than_one` | Command must be ≤ 1 after scaling | `norm_cmd_array()` | modernized | `test_cookbook.py` |
-| `np.maximum` / `np.minimum` | Element-wise min/max | `pc.max` / `pc.min` | modernized | cookbook tests |
-| pandas `rolling` / `resample` | Window aggregates | `arrow_rolling_*`, `arrow_rolling_sum` | modernized | `test_windows.py` |
-
----
-
-## GL36 fault conditions (gist classes)
-
-| Legacy | Legacy behavior (summary) | Modern helper / module | Fault code | Status | Test coverage |
-|--------|---------------------------|------------------------|------------|--------|---------------|
-| **FC1** `FaultConditionOne` | Duct static below SP at high supply VFD | `duct_static_low_at_full_fan` pattern — [Rule A]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}) | **AHU-A** | modernized | python-recipes modules; bench smokes |
-| **FC2** `FaultConditionTwo` | MAT below min(RAT−Δ, OAT−Δ) with fan on | `mixing_envelope` / Rules B & C | **AHU-D** | modernized | cookbook / bench |
-| **FC3** `FaultConditionThree` | MAT above max(RAT+Δ, OAT+Δ) with fan on | `mixing_envelope` high side | **AHU-D** | modernized | cookbook / bench |
-| **FC4** `FaultConditionFour` | Hourly AHU OS mode edges > `delta_os_max` | `pid_hunting_command_mask`, `pid_hunting_ahu_os_mask`, `pid_hunting_fc4.py` | **AHU-G**, **VAV-F**, **CH-G**, **RTU-E** | **modernized** | `test_legacy_fc4_parity_or_modernization.py`, `test_cookbook.py` |
-| **FC5** `FaultConditionFive` | SAT low vs MAT when heating | Rule D pattern | **AHU-B** | modernized | python-recipes-arrow |
-| **FC6** `FaultConditionSix` | SAT high vs MAT when cooling (multi-mode) | Rules J/K patterns | **AHU-B**, **AHU-C** | modernized | python-recipes-arrow |
-| **FC7** `FaultConditionSeven` | SAT low, full heating valve | Rule E | **AHU-C** | modernized | python-recipes-arrow |
-| **FC8** `FaultConditionEight` | Econ + mech cooling, MAT ≠ OAT | Rule H | **AHU-E** | modernized | python-recipes-arrow |
-| **FC9** `FaultConditionNine` | Econ-only, MAT ≠ OAT | Rule I | **AHU-E** | modernized | python-recipes-arrow |
-| **FC10** `FaultConditionTen` | Ambient warm, free cooling available | Rule G | **AHU-E** | modernized | python-recipes-arrow |
-| **FC11** `FaultConditionEleven` | SAT ≠ MAT in econ mode | Rule F | **AHU-E** | modernized | python-recipes-arrow |
-| **FC12** `FaultConditionTwelve` | Cooling coil ΔT when valves closed | Rule L | **CH-C** | modernized | python-recipes-arrow |
-| **FC13** `FaultConditionThirteen` | Heating coil ΔT when valves closed | Rule M | **AHU-B** | modernized | python-recipes-arrow |
-| **FC14** `FaultConditionFourteen` | Complex multi-mode SAT/MAT (gist) | Split into Rules D/E/F/J/K modules | **AHU-B**, **AHU-C**, **AHU-E** | modernized | python-recipes-arrow |
-| **FC15** `FaultConditionFifteen` | VAV / zone specific (gist) | VAV bounds, flatline, damper rules | **VAV-C**, **VAV-D** | modernized | starter pack / bench |
-
----
-
-## Fault Rule 4 (FC4) — modernized hunting detector
-
-### Legacy (pandas gist)
-
-1. Derive four boolean AHU operating modes (heating, econ-only cooling, econ+mech, mech-only).
-2. Cast modes to integers, **resample hourly**, count rising edges per mode.
-3. Flag when any hourly transition count exceeds `delta_os_max`.
-
-### Modern (Open-FDD v1)
-
-Legacy FC4 has been **modernized** into an Arrow-native **PID / control hunting** detector:
-
-| Mode | API | Detects |
-|------|-----|---------|
-| `command` (default) | `pid_hunting_command_mask` | Excessive significant steps on one analog command (damper, valve, VFD, cooling %) |
-| `ahu_os` | `pid_hunting_ahu_os_mask` | Excessive changes in a 4-bit operating-state bitmap (economizer, fan, heat, cool) |
-
-Configuration: `delta_os_max`, `hunting_window_samples` or `hunting_window_hours`, `min_active_command`, `min_command_delta`, column names in `cfg`.
-
-**There is no strict legacy compatibility mode** that reproduces pandas hourly `resample("H")` edge counting by default. If exact hourly OS-edge parity is required later, it would need a dedicated legacy mode plus regression fixtures from the gist — not claimed today.
-
-Recommended module: `workspace/data/rules_py/pid_hunting_fc4.py` with `cfg["hunting_mode"]` of `command` or `ahu_os`.
-
----
-
-## Default YAML starter pack (`open_fdd/default_rules/`)
-
-| YAML file | Executable in v1? | Arrow replacement |
-|-----------|-------------------|-------------------|
-| `01_vav_zone_temp_bounds_occupied.yaml` | No — metadata only | `sensor_bounds_mask` + occupied gate → **VAV-C** |
-| `02_vav_zone_temp_flatline_occupied.yaml` | No | `sensor_flatline_mask` → **VAV-C** |
-| `03_vav_damper_command_extreme_flatline.yaml` | No | `flatline_1h_mask` on damper cmd → **VAV-D** |
-| `04_ahu_runtime_outside_schedule.yaml` | No | schedule / after-hours helpers → **BLD-C** |
-| `05_ahu_duct_static_pressure_not_maintained.yaml` | No | Rule A module → **AHU-A** |
-| `06_ahu_internal_temp_sensor_bounds.yaml` | No | `sensor_bounds_mask` → **AHU-C** |
-| `07_ahu_internal_temp_sensor_flatline.yaml` | No | `sensor_flatline_mask` → **AHU-C** |
-
-YAML retains **inputs**, **params**, and legacy **expression** text for migration reference only.
-
----
-
-## Fault code mapping
-
-| Legacy | Modern |
-|--------|--------|
-| Numeric `VAV-03`, `AHU-03` | Letter codes `VAV-C`, `AHU-C` |
-| `fc4_flag`, `FC4` | **AHU-G** / **VAV-F** / **CH-G** / **RTU-E** (equipment-specific assignment) |
-| `flag:` in YAML | `fault_code` in Rule Lab metadata |
-
-Bridge `LEGACY_CODE_MAP` resolves old portfolio strings where needed.
-
----
-
-## Related
-
-- [Expression cookbook — GL36 table]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#gl36-inspired-ahu-rules-legacy-expression--fault-code)
-- [Python recipes (full library)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }})
-- [Arrow rule contract]({{ "/rule-authoring/arrow-rule-contract/" | relative_url }})
-
-
-# Rust readiness checklist
-
-# Rust readiness checklist
-
-Open-FDD v1 keeps a **table-in, boolean-mask-out** contract so a future Rust or DataFusion-native executor can replace Python wrappers without changing Rule Lab metadata or driver ingest.
-
-Use this checklist when authoring or reviewing rules for stable v1 and Rust migration prep.
-
-## Rule style
-
-- [ ] **No pandas** in edge fault rules — PyArrow columns only
-- [ ] **No NumPy** for core detection logic (optional in central analytics extras only)
-- [ ] **No Python row loops** over samples for hot-path fault detection — use `pyarrow.compute` and `open_fdd.arrow_runtime.windows`
-- [ ] **Arrow arrays in, boolean mask out** — length equals input row count
-- [ ] **Explicit config schema** — document `cfg` keys in rule module docstring
-- [ ] **Deterministic null behavior** — document how missing columns / nulls are treated
-- [ ] **No hidden global state** — pure functions of `(table, cfg, context)`
-- [ ] **Stable fault-code metadata** — letter codes from [fault catalog]({{ "/fault-codes/" | relative_url }})
-- [ ] **Small fixture tests** — fixed `pa.table(...)` inputs with expected mask slices
-- [ ] **DataFusion SQL rules stay restricted** — single `SELECT` from `telemetry`, boolean `fault` column, no DDL/DML
-
-## Backend choice
-
-| Prefer PyArrow | Prefer DataFusion SQL |
-|----------------|----------------------|
-| Rolling windows, hunting, flatline | Simple threshold / CASE |
-| Schedule / occupancy gating | Operator-readable SQL preview |
-| Sensor profile helpers | Parity proof before Rust port |
-| ML feature prep (future) | Stateless row-wise logic |
-
-See [PyArrow vs DataFusion decision table]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#pyarrow-vs-datafusion-sql).
-
-## Do not use DataFusion SQL for
-
-- Complex rolling windows or resample-style logic
-- PID / control hunting with stateful window counts (use PyArrow helpers)
-- Custom helper-heavy HVAC logic
-- ML feature preparation pipelines
-- Arbitrary file joins or external tables
-- Browser-side execution
-- Pandas-style row iteration
-
-## Confirmation and evidence
-
-- [ ] Raw mask produced by rule; confirmation via `min_true_rows` / `min_elapsed_minutes` in `cfg`
-- [ ] Batch results include execution evidence (`computation_path`, backend id) for smokes
-
-## Packaging
-
-- [ ] Edge Docker image includes PyArrow runtime
-- [ ] DataFusion optional: `pip install 'open-fdd[datafusion]'` — matches `pyproject.toml` `[project.optional-dependencies] datafusion`
-
-## Related ADRs
-
-- [ADR: Rust-ready Arrow FDD contract]({{ "/adr/adr-rust-ready-arrow-fdd-contract/" | relative_url }})
-- [ADR: DataFusion Rust-ready rule backend]({{ "/adr/adr-datafusion-rust-ready-rule-backend/" | relative_url }})
 
 
 # Run with Docker images
@@ -724,7 +365,9 @@ Run Open-FDD on a Linux edge host using **three GHCR Docker images**. No git clo
 |------|------|
 | 1 | [Run with Docker images]({{ "/quick-start/docker/" | relative_url }}) — bootstrap script + `docker compose up` |
 | 2 | [First login and health check]({{ "/quick-start/health-check/" | relative_url }}) |
-| 3 | [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) — backup + pull |
+| 3 | [Edge site lifecycle]({{ "/quick-start/site-lifecycle/" | relative_url }}) — backup, update, restore |
+| 4 | [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) — operator checklist |
+| — | [Raspberry Pi edge]({{ "/quick-start/raspberry-pi-edge/" | relative_url }}) — ARM64 / OpenClaw |
 
 **One-liner bootstrap** (edge host):
 
@@ -745,26 +388,15 @@ bash /tmp/openfdd_edge_bootstrap.sh --start
 
 # Updating the stack
 
-Upgrade GHCR images on the edge host: **backup `workspace/`, pull new tags, recreate containers**. No git pull on the host.
+Upgrade GHCR images on the edge host: **backup `workspace/`, safe Docker maintenance, pull new tags, validate, purge backup**. No git pull on the host.
+
+Full reference: [Edge site lifecycle]({{ "/quick-start/site-lifecycle/" | relative_url }}).
 
 ## Before you start
 
 1. SSH to the edge host (`cd ~/open-fdd`).
 2. Pick a tag from [GitHub Packages](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge) — default is **`latest`**.
 3. Short maintenance window (containers restart briefly; `restart: unless-stopped` brings them back after reboot).
-
-## Fetch helper scripts (no git clone)
-
-If you bootstrapped with `openfdd_edge_bootstrap.sh`, scripts are already under `~/open-fdd/scripts/`. Otherwise:
-
-```bash
-mkdir -p ~/open-fdd/scripts
-curl -fsSL -o ~/open-fdd/scripts/openfdd_site_backup.sh \
-  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_site_backup.sh
-curl -fsSL -o ~/open-fdd/scripts/openfdd_site_update.sh \
-  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_site_update.sh
-chmod +x ~/open-fdd/scripts/openfdd_site_*.sh
-```
 
 ## One-command upgrade (recommended)
 
@@ -774,86 +406,293 @@ cd ~/open-fdd
 ./scripts/openfdd_site_update.sh
 ```
 
-Pulls **`:latest`** by default, verifies all three images exist on GHCR, recreates containers, and hits `/health`.
+The update script prunes unused Docker images, pulls **`:latest`** (or `NEW_TAG`), recreates containers, validates `/health`, and **removes the backup directory on success**.
 
-## Step by step
+## Environment variables
 
-### 1. Backup site state
+| Variable | Default | Use |
+|----------|---------|-----|
+| `NEW_TAG` | `latest` | Pin GHCR tag |
+| `BACKUP_INCLUDE_POLL_SAMPLES=0` | `1` | Fast backup (skip poll CSV history) |
+| `SKIP_DOCKER_MAINTENANCE=1` | `0` | Skip image prune |
+| `PURGE_BACKUP_AFTER_SUCCESS=0` | `1` | Keep backup after upgrade |
+| `RESTORE_WORKSPACE=1` | `0` | Restore `workspace/` from backup before recreate |
+| `RESTORE_FEATHER_MAX_GIB` | `200` | Historian cap on restore; `0` = all data |
 
-```bash
-cd ~/open-fdd
-./scripts/openfdd_site_backup.sh
-```
-
-Archives `workspace/` (feather, BACnet CSVs, model, auth) under `~/openfdd-backups/<timestamp>/`.
-
-Custom backup location:
-
-```bash
-BACKUP_ROOT=~/openfdd-backups/manual ./scripts/openfdd_site_backup.sh
-```
-
-### 2. Verify images (optional)
-
-```bash
-export NEW_TAG="${NEW_TAG:-latest}"
-
-docker manifest inspect ghcr.io/bbartling/openfdd-bridge:${NEW_TAG} >/dev/null &&
-docker manifest inspect ghcr.io/bbartling/openfdd-commission:${NEW_TAG} >/dev/null &&
-docker manifest inspect ghcr.io/bbartling/openfdd-mcp-rag:${NEW_TAG} >/dev/null &&
-echo "All images exist for ${NEW_TAG}"
-```
-
-### 3. Pull and recreate
-
-```bash
-cd ~/open-fdd
-./scripts/openfdd_site_update.sh
-```
-
-**Manual equivalent** (same as the script):
-
-```bash
-cd ~/open-fdd
-docker compose pull
-docker compose up -d --force-recreate
-docker compose ps
-curl -sf http://127.0.0.1:8765/health && echo
-```
-
-### 4. Verify
+## Verify
 
 ```bash
 docker compose ps
 curl -sf http://127.0.0.1:8765/health | jq .
-tail -1 workspace/bacnet/polls/samples.csv
 ls -lah workspace/data/feather_store/
 ```
 
 → [Health check]({{ "/quick-start/health-check/" | relative_url }})
 
-## Dashboard UI updates
-
-If the release changed the React UI, copy a new `workspace/api/static/app/` build onto the host before or after the image pull. Image pull alone may not change the browser bundle hash.
-
 ## Rollback
 
-Restore `docker-compose.yml` from backup and pull again, or re-run bootstrap from a known-good `master` commit. GHCR keeps only the **three newest** versions per image; early sites should rely on **`latest`** plus `workspace/` backups.
+**Images:** restore `docker-compose.yml` from `.bak.*` snapshot or re-run with a known-good `NEW_TAG`.
 
-`workspace/` is untouched by image-only upgrades.
-
-## Safe cleanup
+**Data:** if validation failed, backup is still at `~/openfdd-backups/latest`. Restore with:
 
 ```bash
-docker image prune -f
+RESTORE_WORKSPACE=1 ./scripts/openfdd_site_update.sh
 ```
 
 > Never run `docker compose down -v`, `docker volume prune`, or delete `workspace/` on a live site.
 
 ## Next steps
 
-→ [Run with Docker images]({{ "/quick-start/docker/" | relative_url }}) — bootstrap a new host  
+→ [Edge site lifecycle]({{ "/quick-start/site-lifecycle/" | relative_url }})  
+→ [Run with Docker images]({{ "/quick-start/docker/" | relative_url }})  
 → [Health check]({{ "/quick-start/health-check/" | relative_url }})
+
+
+# Edge site lifecycle
+
+# Edge site lifecycle
+
+Professional reference for **bootstrap**, **backup**, **image update**, and **restore** on a production edge host. No git clone required on the host — scripts and GHCR images come from GitHub.
+
+## Overview
+
+| Phase | Script | What it does |
+|-------|--------|--------------|
+| **First install** | `openfdd_edge_bootstrap.sh` | Layout, compose, auth, BACnet bind, optional `docker compose up` |
+| **Pre-upgrade safety** | `openfdd_site_backup.sh` | Rolling archive of `workspace/` to `~/openfdd-backups/latest` |
+| **Upgrade** | `openfdd_site_update.sh` | Safe Docker prune, GHCR pull, health validation, **purge backup on success** |
+| **Recovery** | `openfdd_site_update.sh` with `RESTORE_WORKSPACE=1` | Restore `workspace/` from backup (optional historian cap) |
+
+> **Never on live sites:** `docker compose down -v`, `docker volume prune`, or deleting `workspace/`. Historian data lives in the bind-mounted `workspace/data/feather_store/`.
+
+---
+
+## 1. Bootstrap (new host)
+
+One-shot install from GHCR — does **not** clone the repository:
+
+```bash
+curl -fsSL -o /tmp/openfdd_edge_bootstrap.sh \
+  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_edge_bootstrap.sh
+bash /tmp/openfdd_edge_bootstrap.sh --start
+```
+
+Creates:
+
+| Path | Purpose |
+|------|---------|
+| `~/open-fdd/docker-compose.yml` | Bridge, commission, MCP stack |
+| `~/open-fdd/workspace/` | Persistent site state (historian, model, auth) |
+| `~/open-fdd/scripts/openfdd_site_*.sh` | Backup and update helpers |
+
+Options: `--image-tag`, `--root`, `--force-auth`, `--restart`. See script header (`--help`).
+
+After bootstrap → [Health check]({{ "/quick-start/health-check/" | relative_url }}).
+
+---
+
+## 2. Backup before every upgrade
+
+```bash
+cd ~/open-fdd
+./scripts/openfdd_site_backup.sh
+```
+
+Default destination: **`~/openfdd-backups/latest`** (overwritten each run — one rolling copy).
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `BACKUP_ROOT` | `~/openfdd-backups/latest` | Output directory |
+| `BACKUP_INCLUDE_POLL_SAMPLES` | `1` | Set `0` to skip large `workspace/bacnet/polls/` |
+| `BACKUP_TIMEOUT_SECS` | `1800` | `tar` timeout |
+| `BACKUP_TAR_XATTRS` | `0` | Set `1` for `--xattrs --acls` |
+
+Archive: `workspace-full.tgz` plus `backup-manifest.txt` and Docker state snapshots.
+
+---
+
+## 3. Upgrade (recommended flow)
+
+```bash
+cd ~/open-fdd
+./scripts/openfdd_site_backup.sh
+./scripts/openfdd_site_update.sh
+```
+
+`openfdd_site_update.sh` performs:
+
+1. **Verify backup** — integrity check on `workspace-full.tgz`
+2. **Safe Docker maintenance** — prune stopped containers, dangling images, and **unused images** (never volumes)
+3. **Pull & recreate** — all three GHCR services for `NEW_TAG` (default `latest`)
+4. **Validate** — `workspace/` layout + `GET /health`
+5. **Purge backup** — removes `BACKUP_ROOT` after successful validation (frees disk)
+
+Pin a release tag:
+
+```bash
+export NEW_TAG=3.1.6
+./scripts/openfdd_site_update.sh
+```
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `NEW_TAG` / `OPENFDD_IMAGE_TAG` | `latest` | GHCR image tag |
+| `BACKUP_ROOT` | `~/openfdd-backups/latest` | Backup used for validation / restore |
+| `SKIP_DOCKER_MAINTENANCE` | `0` | Set `1` to skip prune |
+| `PURGE_BACKUP_AFTER_SUCCESS` | `1` | Set `0` to keep backup after upgrade |
+| `REQUIRE_BACKUP` | same as purge | Set `0` to upgrade without a prior backup |
+
+If validation fails, the backup is **kept** and the script prints a restore command.
+
+---
+
+## 4. Restore from backup
+
+Use when `workspace/` was corrupted, or you need to roll back **data** (not just images).
+
+```bash
+cd ~/open-fdd
+RESTORE_WORKSPACE=1 ./scripts/openfdd_site_update.sh
+```
+
+This stops containers, extracts the backup, applies an optional historian cap, recreates containers, validates, and purges the backup on success.
+
+### Historian size cap on restore
+
+Large sites may not need full feather history on a small edge disk. Default: **keep the newest ~200 GiB** of `feather_store` shard files; drop oldest `shard-*.feather` files until under cap.
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `RESTORE_FEATHER_MAX_GIB` | `200` | Max historian size after restore |
+| `RESTORE_FEATHER_MAX_GIB=0` | — | Restore **all** feather data (no cap) |
+
+Example — full historian restore:
+
+```bash
+RESTORE_WORKSPACE=1 RESTORE_FEATHER_MAX_GIB=0 ./scripts/openfdd_site_update.sh
+```
+
+Runtime historian caps (ongoing poll) use `OFDD_FEATHER_MAX_GIB` in bridge env — see [Configuration reference]({{ "/appendix/configuration/" | relative_url }}).
+
+---
+
+## 5. Fetch scripts without bootstrap
+
+If scripts are missing:
+
+```bash
+mkdir -p ~/open-fdd/scripts
+BASE=https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts
+for f in openfdd_site_lib.sh openfdd_site_backup.sh openfdd_site_update.sh; do
+  curl -fsSL -o ~/open-fdd/scripts/"$f" "$BASE/$f"
+done
+chmod +x ~/open-fdd/scripts/openfdd_site_*.sh
+```
+
+---
+
+## Related
+
+- [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) — operator checklist
+- [Backup and restore]({{ "/ops/backup-restore/" | relative_url }}) — Ansible / bensserver paths
+- [Health check]({{ "/quick-start/health-check/" | relative_url }})
+- [REST API reference]({{ "/appendix/bridge_api/" | relative_url }})
+
+
+# Raspberry Pi edge bootstrap
+
+# Raspberry Pi edge bootstrap
+
+Open-FDD edge deploy on **Raspberry Pi 4/5 (64-bit)** uses the same bootstrap as x86 Linux. Docker must be installed; the host must be **aarch64 / arm64** (not 32-bit Raspberry Pi OS).
+
+## One-liner
+
+```bash
+curl -fsSL -o /tmp/openfdd_edge_bootstrap.sh \
+  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_edge_bootstrap.sh
+bash /tmp/openfdd_edge_bootstrap.sh --start
+```
+
+## Error: `no matching manifest for linux/arm64/v8`
+
+This means **GHCR does not yet have an ARM64 build** for that image tag (not a Docker install problem).
+
+```text
+Error response from daemon: no matching manifest for linux/arm64/v8 in the manifest list entries
+```
+
+### Confirm
+
+```bash
+cd ~/open-fdd
+./scripts/openfdd_check_ghcr_platform.sh
+```
+
+Or manually:
+
+```bash
+docker buildx imagetools inspect ghcr.io/bbartling/openfdd-bridge:latest | grep -E 'linux/arm64|linux/amd64'
+```
+
+You need **`linux/arm64`** on all three: `openfdd-bridge`, `openfdd-commission`, `openfdd-mcp-rag`.
+
+### Option A — Native ARM64 images (recommended)
+
+Open-FDD publishes **multi-arch** images (`amd64` + `arm64`) from the GitHub **Publish Docker images to GHCR** workflow. After a release that includes ARM64:
+
+```bash
+bash /tmp/openfdd_edge_bootstrap.sh --start
+```
+
+### Option B — QEMU emulation (lab only, slow)
+
+Use only while waiting for ARM64 publish:
+
+```bash
+sudo apt update
+sudo apt install -y qemu-user-static binfmt-support
+docker run --privileged --rm tonistiigi/binfmt --install amd64
+
+cd ~/open-fdd
+DOCKER_DEFAULT_PLATFORM=linux/amd64 docker compose pull
+DOCKER_DEFAULT_PLATFORM=linux/amd64 docker compose up -d
+
+docker compose ps
+curl -sf http://127.0.0.1:8765/health | jq .
+```
+
+Expect slower startup and higher CPU use. Not recommended for production BACnet polling.
+
+### Option C — Build on the Pi
+
+```bash
+git clone https://github.com/bbartling/open-fdd.git
+cd open-fdd
+./scripts/docker_build.sh
+# point compose at local tags — see scripts/docker_build.sh header
+```
+
+## OpenClaw / AI agent on Pi
+
+1. Bootstrap must finish with **`docker compose ps`** showing bridge, commission, mcp-rag **Up**.
+2. Agent needs **terminal/shell** access on the Pi (not chat-only) to run `docker` and `curl`.
+3. Use the [README OpenClaw bootstrap prompt](https://github.com/bbartling/open-fdd/blob/master/README.md#ai-agent-prompt) — it checks `uname -m` and GHCR pull before declaring success.
+4. Login: `integrator` / password in `~/open-fdd/workspace/auth.env.local` (never paste passwords into chat).
+
+## Validate
+
+```bash
+docker compose ps
+curl -sf http://127.0.0.1:8765/health | jq .
+grep BACNET_BIND ~/open-fdd/workspace/bacnet/commissioning/commission.env
+```
+
+Dashboard: `http://<pi-ip>:8765/` (or Caddy on `:80` when configured).
+
+## Related
+
+- [Edge site lifecycle]({{ "/quick-start/site-lifecycle/" | relative_url }})
+- [Run with Docker]({{ "/quick-start/docker/" | relative_url }})
 
 
 # Local development
@@ -990,57 +829,6 @@ Fix any template or link errors before opening a PR that touches `docs/`.
 ## Security-related CI
 
 `ci.yml` includes bridge security tests (`tests/workspace_bridge/test_security.py`). That complements — but does not replace — LAN [ZAP + Nmap scans]({{ "/security/zap-baseline/" | relative_url }}) on each patch revision. See [Security testing cycle]({{ "/developer/security-testing/" | relative_url }}).
-
-
-# DataFusion SQL rule recipes
-
-# DataFusion SQL recipes
-
-Use when you need simple threshold, `CASE WHEN`, or SQL-readable **stateless** rules. Requires `pip install 'open-fdd[datafusion]'` (optional extra in `pyproject.toml`). SQL runs **server-side only**.
-
-**Not for:** rolling windows, PID hunting, flatline detection, schedule logic, or ML prep — use [PyArrow recipes](python-recipes-arrow.md). See [decision table]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#pyarrow-vs-datafusion-sql).
-
-## Temperature high
-
-```sql
-SELECT
-  *,
-  "duct-t" > 80.0 AS fault
-FROM telemetry
-```
-
-Quote hyphenated historian columns.
-
-## Humidity high
-
-```sql
-SELECT
-  *,
-  "oa-h" > 70.0 AS fault
-FROM telemetry
-```
-
-## Occupied + temperature
-
-```sql
-SELECT
-  *,
-  CASE
-    WHEN occupied = true AND "stat_zn-t" > 76.0 THEN true
-    ELSE false
-  END AS fault
-FROM telemetry
-```
-
-## With fault confirmation
-
-Add to rule `config`:
-
-```json
-{"min_true_rows": 5, "poll_interval_s": 60}
-```
-
-PyArrow remains better for rolling windows, custom helpers, and ML prep. See [PyArrow recipes](python-recipes-arrow.md).
 
 
 # Contributing
@@ -1299,17 +1087,310 @@ Baseline ZAP does **not** exercise integrator login or protected `/api/*` routes
 The `scripts/security/` folder is part of the public repo so any fork can run the same LAN smoke against their bench. PRs that change Caddy, auth, or `security_headers.py` should update [ZAP baseline]({{ "/security/zap-baseline/" | relative_url }}) and re-run the scan scripts.
 
 
+# System overview
+
+# System overview
+
+```
+┌─────────────┐     ┌──────────────────────────┐     ┌─────────────────┐
+│  BACnet OT  │────▶│  commission container    │────▶│ samples.csv     │
+│   devices   │     │  discover/read/write     │     │ (poll output)   │
+└─────────────┘     │  + poll loop (RPM)       │     └────────┬────────┘
+                    └──────────────────────────┘              │
+                                                              ▼
+                    ┌──────────────────────────┐     ┌─────────────────┐
+                    │  bridge container          │◀────│ feather historian│
+                    │  ingest worker + API + UI  │     │ workspace/data  │
+                    └─────────────┬──────────────┘     └─────────────────┘
+                                  │
+┌─────────────┐     ┌─────────────▼──────────────┐
+│  Operator   │◀───▶│  FastAPI + React dashboard │
+│  browser    │     │  Rule Lab / FDD / faults   │
+└─────────────┘     └────────────────────────────┘
+        ▲
+   Caddy :80 (host, optional)
+```
+
+## Docker edge stack (production)
+
+Three GHCR images — see [Containers]({{ "/architecture/containers/" | relative_url }}):
+
+| Container | BACnet OT | Operator LAN |
+|-----------|-----------|--------------|
+| **bridge** | No (HTTP only) | Yes, via Caddy `:80` or loopback `:8765` |
+| **commission** | Yes (host network, `:47808`) | No (internal `:8767`) |
+| **mcp-rag** | No | No (internal `:8090`) |
+
+BACnet **polling** is not a separate container — it runs inside **commission**. The bridge only **ingests** poll CSV into feather.
+
+## Components
+
+| Layer | Responsibility |
+|-------|----------------|
+| **Operator Bridge** | Auth, REST/WebSocket API, compiled dashboard, Rule Lab, historian ingest |
+| **BACnet commission** | Who-Is, read/write (gated), **scheduled poll loop** → `samples.csv` |
+| **Historian** | Feather files per point; local-first retention |
+| **FDD runner** | `workspace/data/rules_py/*.py` on timer or `POST /api/rules/batch` |
+| **Model** | Brick TTL + `model.json` bindings (`fdd_input`, equipment tree) |
+| **MCP RAG** | Optional doc retrieval for agent tools |
+| **Caddy** | Host reverse proxy `:80` → bridge (typical edge) |
+| **Ollama** | Optional host LLM for building insight (not required for FDD) |
+
+## Deployment
+
+IT operators: [Quick Start — Docker]({{ "/quick-start/docker/" | relative_url }}). Modes and Caddy: [Deployment modes]({{ "/architecture/deployment-modes/" | relative_url }}).
+
+## Optional PyPI-only path
+
+`pip install open-fdd` ships Arrow runtime + playground lint helpers **without** the Operator Bridge UI. Use for offline rule tests or CI. See [Appendix — Python package]({{ "/appendix/python-package/" | relative_url }}).
+
+
+# PyArrow & DataFusion SQL rules
+
+# PyArrow & DataFusion SQL rules
+
+Open-FDD evaluates faults on a **single PyArrow historian table** (`telemetry`). You author rules in **one of two backends**:
+
+| Backend | Rule Lab field | Best for |
+|---------|----------------|----------|
+| **PyArrow** | `apply_faults_arrow(table, cfg, context)` | Rolling windows, flatline, rate-of-change, hunting, schedule gates, multi-column HVAC logic |
+| **DataFusion SQL** | `backend: datafusion_sql` + `sql:` | Simple thresholds, spreads, boolean `CASE WHEN`, SQL-readable rules for operators |
+
+Both backends share the same **confirmation window** (`min_true_rows`, `poll_interval_s`, `min_elapsed_minutes`) and produce the same boolean fault mask for batch FDD.
+
+Install SQL support (optional):
+
+```bash
+pip install 'open-fdd[datafusion]'
+```
+
+---
+
+## Mini tutorial — same rule, both backends
+
+**Goal:** Flag when outside-air temperature (`oa-t`) is above **85 °F**.
+
+Historian column: `oa-t` (from BRICK `fdd_input` / point binding). Poll interval: **60 s**. Confirmation: **5 consecutive true rows** (~5 minutes).
+
+### PyArrow
+
+Save in Rule Lab or `workspace/data/rules_py/oa_t_high.py`:
+
+```python
+import pyarrow.compute as pc
+
+
+def apply_faults_arrow(table, cfg, context=None):
+    col = str((cfg or {}).get("value_column") or "oa-t")
+    high = float((cfg or {}).get("high", 85.0))
+    vals = pc.cast(table[col], "float64")
+    return pc.greater(vals, high)
+```
+
+Rule metadata:
+
+```json
+{
+  "id": "oa-t-high-arrow",
+  "backend": "arrow",
+  "config": { "high": 85.0, "value_column": "oa-t" },
+  "fault_code": "BLD-B"
+}
+```
+
+### DataFusion SQL
+
+Same logic as SQL — register with `backend: datafusion_sql`:
+
+```sql
+SELECT
+  *,
+  "oa-t" > 85.0 AS fault
+FROM telemetry
+```
+
+Rule metadata:
+
+```json
+{
+  "id": "oa-t-high-sql",
+  "backend": "datafusion_sql",
+  "fault_column": "fault",
+  "sql": "SELECT *, \"oa-t\" > 85.0 AS fault FROM telemetry"
+}
+```
+
+### Prove parity
+
+In **Rule Lab → Compare backends**, run the PyArrow and SQL rules on the same lookback window. Masks must match row-for-row (see bench rules `bench-oa-temp-high-arrow` / `bench-oa-temp-high-sql`).
+
+CLI / CI:
+
+```bash
+pytest open_fdd/tests/validation/test_datafusion_arrow_parity.py -q
+```
+
+---
+
+## When to use which backend
+
+### Prefer **DataFusion SQL**
+
+- One or two column comparisons (`>`, `<`, `BETWEEN`, `ABS(a - b)`)
+- Operator-facing rules that should read like SQL
+- Stateless row-wise logic (no rolling window)
+- Proving a rule before a future Rust port
+
+### Prefer **PyArrow**
+
+- Rolling min/max/sum, flatline detection, rate-of-change
+- PID hunting / excessive command reversals
+- Schedule or occupancy gating combined with sensor logic
+- Reuse of cookbook helpers (`sensor_bounds_mask`, `arrow_rolling_min`, etc.)
+- Anything not expressible in a single `SELECT … FROM telemetry`
+
+### Do not use SQL for
+
+- Rolling windows, hunting detectors, file I/O, joins to external tables, or ML features — use PyArrow modules instead.
+
+SQL is linted server-side: single statement, `FROM telemetry` only, boolean `fault` column required. See [Arrow rule contract]({{ "/rule-authoring/arrow-rule-contract/" | relative_url }}).
+
+---
+
+## Workflow
+
+1. Bind points in **Model** → assign rule in **Rule Lab**.
+2. Set `fault_code` from [Fault codes]({{ "/fault-codes/" | relative_url }}).
+3. Configure confirmation in rule `config` — [Fault confirmation]({{ "/rule-cookbook/fault-confirmation/" | relative_url }}).
+4. Run `POST /api/rules/batch` or wait for the scheduled FDD loop.
+5. View results on the dashboard or in `fdd_results.json`.
+
+---
+
+## More recipes
+
+| Topic | Page |
+|-------|------|
+| Full Arrow helper library | [Python recipes (Arrow)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}) |
+| Additional SQL patterns | [DataFusion SQL recipes]({{ "/rule-cookbook/datafusion-sql-recipes/" | relative_url }}) |
+| GL36 / AHU patterns | [GL36 & sensor patterns]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}) |
+| Contract & types | [Rule authoring]({{ "/rule-authoring/" | relative_url }}) |
+
+
+# Deployment modes
+
+# Deployment modes
+
+How Open-FDD is typically run: local development, lab LAN trials, and production edge on a trusted OT/IT network. Open-FDD is designed for **building LAN or OT edge** deployment — not direct exposure to the public internet.
+
+## Mode summary
+
+| Mode | Stack | BACnet | Front door | Auth |
+|------|-------|--------|------------|------|
+| **Local dev** | Compose on control machine | Optional bench simulator | `127.0.0.1:8765` | `OFDD_AUTH_DISABLED=1` optional on loopback |
+| **Lab LAN** | Three GHCR containers | Real or simulator VLAN | Caddy `:80` or direct `:8765` | Required unless explicit insecure lab flags |
+| **Edge production** | Three GHCR containers + host Caddy | OT NIC via **commission** | **Caddy** `:80` or `:443` → loopback bridge | **Required** — `workspace/auth.env.local` |
+
+## v3 container stack (all edge modes)
+
+| Image | Role |
+|-------|------|
+| `openfdd-bridge` | Operator Bridge API, dashboard, **feather historian ingest** |
+| `openfdd-commission` | BACnet discover/read/write + **poll loop** |
+| `openfdd-mcp-rag` | Doc-search sidecar for agent tools |
+
+> **`openfdd-bacnet-poll` is retired.** BACnet polling runs inside **commission** only. Do not run the legacy poll container or `openfdd-bacnet-poll` systemd unit alongside Docker commission — that double-polls the OT network.
+
+See [Containers]({{ "/architecture/containers/" | relative_url }}) for ports, networks, and persistence.
+
+## Caddy HTTP (typical edge)
+
+- Caddy listens on building LAN `:80`
+- Reverse-proxies to bridge at `127.0.0.1:8765`
+- Bridge stays loopback-only; operators bookmark `http://<edge-ip>/`
+
+Bootstrap and compose: [Quick Start — Docker]({{ "/quick-start/docker/" | relative_url }}).
+
+## Caddy TLS (OT LAN)
+
+For HTTPS on the edge LAN (self-signed or site CA):
+
+1. Generate certs: `./scripts/setup_caddy_certs.sh` (control machine) or site PKI
+2. Start with `OFDD_CADDY_MODE=tls`
+3. Trust the CA on operator PCs
+
+Details: [TLS and certificates]({{ "/security/tls-and-certs/" | relative_url }}). Security headers are set by the **Operator Bridge**; Caddy adds **HSTS** only in TLS mode.
+
+## BACnet data path
+
+```text
+OT devices ──UDP 47808──▶ commission (poll loop) ──▶ samples.csv
+                                              │
+                                              ▼
+                                    bridge (ingest) ──▶ feather historian
+```
+
+The bridge thread named `bacnet_poll_worker` is **ingest only** — it does not bind BACnet.
+
+## What not to do on production edges
+
+- Port-forward `:8765` to the public internet without TLS and strong auth
+- Run `docker compose down -v` or delete `workspace/` on a live site
+- Deploy the retired `openfdd-bacnet-poll` image alongside commission
+
+## Related
+
+| Topic | Page |
+|-------|------|
+| First deploy | [Quick Start — Docker]({{ "/quick-start/docker/" | relative_url }}) |
+| Upgrade | [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) |
+| LAN security | [LAN hardening]({{ "/security/lan-hardening/" | relative_url }}) |
+| Lab example site | [Examples — GL36 lab note]({{ "/examples/acme-gl36-lab/" | relative_url }}) |
+
+
+# Rule authoring
+
+# Rule authoring
+
+Production FDD on the edge uses **PyArrow tables** from the feather historian. Optional **DataFusion SQL** covers simple stateless rules. Both backends share confirmation settings and batch execution.
+
+| Page | Purpose |
+|------|---------|
+| [**PyArrow & DataFusion SQL**]({{ "/rule-cookbook/dual-backend-rules/" | relative_url }}) | Tutorial + backend decision guide |
+| [Arrow rule contract]({{ "/rule-authoring/arrow-rule-contract/" | relative_url }}) | `apply_faults_arrow`, `ArrowRuleResult`, lint rules |
+| [Data types & units]({{ "/rule-authoring/data-types-and-units/" | relative_url }}) | Columns, nulls, command 0–1, sensor profiles |
+| [Rust readiness]({{ "/rule-authoring/rust-readiness/" | relative_url }}) | Portable rule checklist |
+
+## Packaging
+
+```bash
+pip install open-fdd              # PyArrow runtime (required)
+pip install 'open-fdd[datafusion]' # optional SQL backend
+```
+
+## YAML files in the repo
+
+| Location | Role |
+|----------|------|
+| `open_fdd/faults/catalog/*.yaml` | Fault-code **metadata** (not executable) |
+| `open_fdd/default_rules/**/*.yaml` | Starter **metadata** — implement as `rules_py` Arrow/SQL modules |
+| `workspace/data/rules_py/*.py` | **Executable** production rules |
+
+## Fault codes
+
+Assign letter codes (`VAV-C`, `AHU-A`, …) from the [Fault codes]({{ "/fault-codes/" | relative_url }}) reference — not legacy numeric `VAV-03` strings.
+
+
 # Python recipes (full Arrow library)
 
 # Python recipes — full Arrow library
 
-Copy-paste **`apply_faults_arrow`** modules for Rule Lab. Replaces the legacy pandas/YAML Expression Rule Cookbook.
+Copy-paste **`apply_faults_arrow`** modules for Rule Lab. PyArrow + `pyarrow.compute` only.
 
-- **No pandas** on the edge — PyArrow + `pyarrow.compute` only
 - Set **`fault_code`** in Rule Lab metadata (letter codes or Grade-A `AHU-ECON-001`)
 - Map historian column names in the data model / rule bindings (`ma-t`, `oa-t`, `stat_zn-t`, …)
 
-Quick patterns: [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}) · Index: [Expression cookbook (Arrow-native)]({{ "/rule-cookbook/expression-cookbook/" | relative_url }})
+Backend choice: [PyArrow & DataFusion SQL]({{ "/rule-cookbook/dual-backend-rules/" | relative_url }}) · Patterns: [GL36 & sensor patterns]({{ "/rule-cookbook/expression-cookbook/" | relative_url }})
 
 ---
 
@@ -1937,9 +2018,9 @@ Pass `occupied_start_hour`, `occupied_end_hour`, `tz_offset_hours` in Rule Lab `
 
 ---
 
-## FC4 — PID hunting (modernized from legacy GL36)
+## FC4 — PID hunting
 
-Legacy pandas `FaultConditionFour` built hourly AHU operating-state transition counts. Open-FDD v1 **modernizes** FC4 into an Arrow-native **PID / control hunting** detector — sample-window rolling step counts, not pandas hourly `resample("H")`. See [Legacy FC4 documentation]({{ "/rule-authoring/legacy-pandas-parity/" | relative_url }}#fault-rule-4-fc4--modernized-hunting-detector).
+Open-FDD implements GL36-style FC4 as an Arrow-native **PID / control hunting** detector — sample-window rolling step counts on the historian poll interval.
 
 Ports gist `check_hunting` intent to Arrow. Two modes:
 
@@ -1994,183 +2075,7 @@ Legacy interlink: `LEGACY_CODE_MAP["FC4"]` → **AHU-G**; per-loop VAV/plant rul
 4. Quick-test on 3–24 h feather window
 5. Ship via `setup_gl36_fdd.py` or Rule Lab save
 
-**See also:** [Expression cookbook]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}) · [Fault codes]({{ "/fault-codes/" | relative_url }}) · [Rule Lab]({{ "/operator-bridge/rule-lab/" | relative_url }})
-
-
-# System overview
-
-# System overview
-
-```
-┌─────────────┐     ┌──────────────────────────┐     ┌─────────────────┐
-│  BACnet OT  │────▶│  commission container    │────▶│ samples.csv     │
-│   devices   │     │  discover/read/write     │     │ (poll output)   │
-└─────────────┘     │  + poll loop (RPM)       │     └────────┬────────┘
-                    └──────────────────────────┘              │
-                                                              ▼
-                    ┌──────────────────────────┐     ┌─────────────────┐
-                    │  bridge container          │◀────│ feather historian│
-                    │  ingest worker + API + UI  │     │ workspace/data  │
-                    └─────────────┬──────────────┘     └─────────────────┘
-                                  │
-┌─────────────┐     ┌─────────────▼──────────────┐
-│  Operator   │◀───▶│  FastAPI + React dashboard │
-│  browser    │     │  Rule Lab / FDD / faults   │
-└─────────────┘     └────────────────────────────┘
-        ▲
-   Caddy :80 (host, optional)
-```
-
-## Docker edge stack (production)
-
-Three GHCR images — see [Containers]({{ "/architecture/containers/" | relative_url }}):
-
-| Container | BACnet OT | Operator LAN |
-|-----------|-----------|--------------|
-| **bridge** | No (HTTP only) | Yes, via Caddy `:80` or loopback `:8765` |
-| **commission** | Yes (host network, `:47808`) | No (internal `:8767`) |
-| **mcp-rag** | No | No (internal `:8090`) |
-
-BACnet **polling** is not a separate container — it runs inside **commission**. The bridge only **ingests** poll CSV into feather.
-
-## Components
-
-| Layer | Responsibility |
-|-------|----------------|
-| **Operator Bridge** | Auth, REST/WebSocket API, compiled dashboard, Rule Lab, historian ingest |
-| **BACnet commission** | Who-Is, read/write (gated), **scheduled poll loop** → `samples.csv` |
-| **Historian** | Feather files per point; local-first retention |
-| **FDD runner** | `workspace/data/rules_py/*.py` on timer or `POST /api/rules/batch` |
-| **Model** | Brick TTL + `model.json` bindings (`fdd_input`, equipment tree) |
-| **MCP RAG** | Optional doc retrieval for agent tools |
-| **Caddy** | Host reverse proxy `:80` → bridge (typical edge) |
-| **Ollama** | Optional host LLM for building insight (not required for FDD) |
-
-## Deployment
-
-IT operators: [Quick Start — Docker]({{ "/quick-start/docker/" | relative_url }}). Modes and Caddy: [Deployment modes]({{ "/architecture/deployment-modes/" | relative_url }}).
-
-## Optional PyPI-only path
-
-`pip install open-fdd` ships Arrow runtime + playground lint helpers **without** the Operator Bridge UI. Use for offline rule tests or CI. See [Appendix — Python package]({{ "/appendix/python-package/" | relative_url }}).
-
-
-# Rule authoring (v1)
-
-# Rule authoring (stable v1)
-
-Open-FDD **v1 executable FDD** runs on **PyArrow tables** at the edge. Optional **DataFusion SQL** covers simple, stateless rules. The old **pandas row-loop / YAML expression** runtime is **retired** for production batch FDD.
-
-| Page | Purpose |
-|------|---------|
-| [PyArrow vs DataFusion SQL]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#pyarrow-vs-datafusion-sql) | Decision table — start here |
-| [Arrow rule contract]({{ "/rule-authoring/arrow-rule-contract/" | relative_url }}) | `apply_faults_arrow`, `ArrowRuleResult`, confirmation |
-| [Data types & units]({{ "/rule-authoring/data-types-and-units/" | relative_url }}) | Table shape, nulls, commands, sensor profiles |
-| [Legacy pandas parity]({{ "/rule-authoring/legacy-pandas-parity/" | relative_url }}) | Gist FC1–FC15 → modern Arrow mapping |
-| [Rust readiness]({{ "/rule-authoring/rust-readiness/" | relative_url }}) | Checklist for portable rules |
-| [Expression cookbook]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}) | Sensor profiles, GL36 patterns, starter pack |
-| [DataFusion SQL rules]({{ "/datafusion-sql-rules/" | relative_url }}) | Optional SQL backend install & safety |
-
-## YAML in the repo today
-
-Two different YAML uses — do not conflate them:
-
-| YAML location | Role in v1 | Executable on edge? |
-|---------------|------------|---------------------|
-| `open_fdd/faults/catalog/*.yaml` | **Fault-code metadata** — letter codes, descriptions, standards crosswalk | No — catalog only |
-| `open_fdd/default_rules/**/*.yaml` | **Starter rule metadata** — inputs, params, legacy expression text for migration reference | **No** — translate to `rules_py` Arrow modules |
-| Rule Lab saved rules (`workspace/data/rules_py/`) | **Production rules** — `apply_faults_arrow` or `backend: datafusion_sql` | **Yes** |
-
-**Retired:** pandas-era `type: expression` / `type: hunting` packs executed by `open_fdd.engine.RuleRunner`. That engine is not shipped on PyPI 3.x.
-
-## Install extras (packaging)
-
-| Extra | Purpose |
-|-------|---------|
-| `pip install open-fdd` | PyArrow runtime, lint, tests |
-| `pip install 'open-fdd[datafusion]'` | Optional DataFusion SQL backend (`datafusion>=40`) |
-| `pip install 'open-fdd[pandas]'` | **Dev/central analytics only** — not edge FDD |
-
-See [pyproject.toml](https://github.com/bbartling/open-fdd/blob/master/pyproject.toml) — the `datafusion` optional dependency group is defined and matches docs.
-
-## Legacy reference
-
-The historical pandas fault classes live in this gist (reference only):
-
-[bbartling/11cb1cb1295a1bfba5c167efa02122ef](https://gist.github.com/bbartling/11cb1cb1295a1bfba5c167efa02122ef)
-
-Use the [legacy parity matrix]({{ "/rule-authoring/legacy-pandas-parity/" | relative_url }}) for migration — not the gist — when binding modern fault codes and tests.
-
-
-# Deployment modes
-
-# Deployment modes
-
-How Open-FDD is typically run: local development, lab LAN trials, and production edge on a trusted OT/IT network. Open-FDD is designed for **building LAN or OT edge** deployment — not direct exposure to the public internet.
-
-## Mode summary
-
-| Mode | Stack | BACnet | Front door | Auth |
-|------|-------|--------|------------|------|
-| **Local dev** | Compose on control machine | Optional bench simulator | `127.0.0.1:8765` | `OFDD_AUTH_DISABLED=1` optional on loopback |
-| **Lab LAN** | Three GHCR containers | Real or simulator VLAN | Caddy `:80` or direct `:8765` | Required unless explicit insecure lab flags |
-| **Edge production** | Three GHCR containers + host Caddy | OT NIC via **commission** | **Caddy** `:80` or `:443` → loopback bridge | **Required** — `workspace/auth.env.local` |
-
-## v3 container stack (all edge modes)
-
-| Image | Role |
-|-------|------|
-| `openfdd-bridge` | Operator Bridge API, dashboard, **feather historian ingest** |
-| `openfdd-commission` | BACnet discover/read/write + **poll loop** |
-| `openfdd-mcp-rag` | Doc-search sidecar for agent tools |
-
-> **`openfdd-bacnet-poll` is retired.** BACnet polling runs inside **commission** only. Do not run the legacy poll container or `openfdd-bacnet-poll` systemd unit alongside Docker commission — that double-polls the OT network.
-
-See [Containers]({{ "/architecture/containers/" | relative_url }}) for ports, networks, and persistence.
-
-## Caddy HTTP (typical edge)
-
-- Caddy listens on building LAN `:80`
-- Reverse-proxies to bridge at `127.0.0.1:8765`
-- Bridge stays loopback-only; operators bookmark `http://<edge-ip>/`
-
-Bootstrap and compose: [Quick Start — Docker]({{ "/quick-start/docker/" | relative_url }}).
-
-## Caddy TLS (OT LAN)
-
-For HTTPS on the edge LAN (self-signed or site CA):
-
-1. Generate certs: `./scripts/setup_caddy_certs.sh` (control machine) or site PKI
-2. Start with `OFDD_CADDY_MODE=tls`
-3. Trust the CA on operator PCs
-
-Details: [TLS and certificates]({{ "/security/tls-and-certs/" | relative_url }}). Security headers are set by the **Operator Bridge**; Caddy adds **HSTS** only in TLS mode.
-
-## BACnet data path
-
-```text
-OT devices ──UDP 47808──▶ commission (poll loop) ──▶ samples.csv
-                                              │
-                                              ▼
-                                    bridge (ingest) ──▶ feather historian
-```
-
-The bridge thread named `bacnet_poll_worker` is **ingest only** — it does not bind BACnet.
-
-## What not to do on production edges
-
-- Port-forward `:8765` to the public internet without TLS and strong auth
-- Run `docker compose down -v` or delete `workspace/` on a live site
-- Deploy the retired `openfdd-bacnet-poll` image alongside commission
-
-## Related
-
-| Topic | Page |
-|-------|------|
-| First deploy | [Quick Start — Docker]({{ "/quick-start/docker/" | relative_url }}) |
-| Upgrade | [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) |
-| LAN security | [LAN hardening]({{ "/security/lan-hardening/" | relative_url }}) |
-| Lab example site | [Examples — GL36 lab note]({{ "/examples/acme-gl36-lab/" | relative_url }}) |
+**See also:** [GL36 & sensor patterns]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}) · [Fault codes]({{ "/fault-codes/" | relative_url }}) · [Rule Lab]({{ "/operator-bridge/rule-lab/" | relative_url }})
 
 
 # Containers
@@ -2272,6 +2177,60 @@ State lives on the **host** under `workspace/` (bind mount). Containers are repl
 | **FDD loop timer** | Optional `openfdd-fdd-loop.timer` on host (`docker exec` batch) |
 
 
+# Fault confirmation / minimum duration
+
+# Fault confirmation
+
+A raw rule condition can flicker true for one sample. **Fault confirmation** delays the final fault mask until the condition stays true for N consecutive rows or N minutes.
+
+## Config fields
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `min_true_rows` | int | Consecutive true samples required |
+| `min_elapsed_minutes` | float | Elapsed time from streak start (uses `timestamp`) |
+| `poll_interval_s` | float | Fallback when timestamps missing |
+| `timestamp_column` | str | Default `timestamp` |
+
+## Example
+
+At **60-second polling**, `min_true_rows: 5` means the condition must persist about **5 minutes** before `fault` becomes true.
+
+PyArrow:
+
+```python
+def apply_faults_arrow(table, cfg, context=None):
+    return pc.greater(table["duct-t"], 80.0)
+```
+
+Rule config:
+
+```json
+{"min_true_rows": 5, "poll_interval_s": 60}
+```
+
+DataFusion SQL (same config — confirmation runs after SQL):
+
+```sql
+SELECT
+  *,
+  "duct-t" > 80.0 AS fault
+FROM telemetry
+```
+
+The runtime applies confirmation in `open_fdd.arrow_runtime.confirmation` for both backends.
+
+## Paired smoke default (5 minutes)
+
+The hardcoded paired FDD harness (`open_fdd/validation/paired_fdd_contract.py`) sets **5-minute confirmation** on every smoke rule:
+
+```json
+{"min_elapsed_minutes": 5, "min_true_rows": 5, "poll_interval_s": 60}
+```
+
+This suppresses false positives during bench 5007 / Acme OAT spread toggles. See [Paired FDD smoke](../operations/paired-fdd-smoke.md).
+
+
 # Data flow
 
 # Data flow
@@ -2346,39 +2305,15 @@ Open-FDD v3 edge: **three Docker containers** (`bridge`, `commission`, `mcp-rag`
 **BACnet polling:** [Polling]({{ "/bacnet/polling/" | relative_url }}) — commission container only.
 
 
-# Fault confirmation / minimum duration
+# DataFusion SQL recipes
 
-# Fault confirmation
+# DataFusion SQL recipes
 
-A raw rule condition can flicker true for one sample. **Fault confirmation** delays the final fault mask until the condition stays true for N consecutive rows or N minutes.
+Additional SQL patterns beyond the [PyArrow & DataFusion tutorial]({{ "/rule-cookbook/dual-backend-rules/" | relative_url }}). Requires `pip install 'open-fdd[datafusion]'`. SQL runs **server-side only**.
 
-## Config fields
+**Not for:** rolling windows, PID hunting, flatline, or schedule logic — use [Python recipes (Arrow)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}).
 
-| Field | Type | Meaning |
-|-------|------|---------|
-| `min_true_rows` | int | Consecutive true samples required |
-| `min_elapsed_minutes` | float | Elapsed time from streak start (uses `timestamp`) |
-| `poll_interval_s` | float | Fallback when timestamps missing |
-| `timestamp_column` | str | Default `timestamp` |
-
-## Example
-
-At **60-second polling**, `min_true_rows: 5` means the condition must persist about **5 minutes** before `fault` becomes true.
-
-PyArrow:
-
-```python
-def apply_faults_arrow(table, cfg, context=None):
-    return pc.greater(table["duct-t"], 80.0)
-```
-
-Rule config:
-
-```json
-{"min_true_rows": 5, "poll_interval_s": 60}
-```
-
-DataFusion SQL (same config — confirmation runs after SQL):
+## Temperature high
 
 ```sql
 SELECT
@@ -2387,188 +2322,92 @@ SELECT
 FROM telemetry
 ```
 
-The runtime applies confirmation in `open_fdd.arrow_runtime.confirmation` for both backends.
+Quote hyphenated historian columns.
 
-## Paired smoke default (5 minutes)
+## Humidity high
 
-The hardcoded paired FDD harness (`open_fdd/validation/paired_fdd_contract.py`) sets **5-minute confirmation** on every smoke rule:
+```sql
+SELECT
+  *,
+  "oa-h" > 70.0 AS fault
+FROM telemetry
+```
+
+## Occupied + temperature
+
+```sql
+SELECT
+  *,
+  CASE
+    WHEN occupied = true AND "stat_zn-t" > 76.0 THEN true
+    ELSE false
+  END AS fault
+FROM telemetry
+```
+
+## With fault confirmation
+
+Add to rule `config`:
 
 ```json
-{"min_elapsed_minutes": 5, "min_true_rows": 5, "poll_interval_s": 60}
+{"min_true_rows": 5, "poll_interval_s": 60}
 ```
 
-This suppresses false positives during bench 5007 / Acme OAT spread toggles. See [Paired FDD smoke](../operations/paired-fdd-smoke.md).
+PyArrow remains better for rolling windows, custom helpers, and ML prep. See [PyArrow recipes](python-recipes-arrow.md).
 
 
 # Rule Cookbook
 
 # Rule Cookbook
 
-Practical patterns for **Arrow-native Rule Lab** on feather historian PyArrow tables — **no pandas on the IoT edge**.
+Arrow-native fault rules for the Operator Bridge historian. Production rules live in `workspace/data/rules_py/` and run via `POST /api/rules/batch`.
 
-**Start here:** [Rule authoring (v1)]({{ "/rule-authoring/" | relative_url }}) — PyArrow vs SQL decision table, Arrow contract, legacy parity, Rust checklist.
+## Start here
 
-| Page | Use when |
-|------|----------|
-| [Rule authoring (v1)]({{ "/rule-authoring/" | relative_url }}) | v1 contract, YAML distinction, migration from pandas gist |
-| [Rule Lab quick start]({{ "/operator-bridge/rule-lab/" | relative_url }}) | Test a rule against live/recent site data in the dashboard |
-| [PyArrow rule recipes]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}) | Full Python + Arrow logic, rolling windows, helpers, ML-ready features |
-| [DataFusion SQL recipes]({{ "/rule-cookbook/datafusion-sql-recipes/" | relative_url }}) | Simple threshold, CASE WHEN, SQL-readable rules (optional `open-fdd[datafusion]`) |
-| [Fault confirmation]({{ "/rule-cookbook/fault-confirmation/" | relative_url }}) | Condition must stay true for N rows or N minutes |
-| [Windowing & debugging]({{ "/rule-cookbook/windowing-debugging/" | relative_url }}) | Lookback windows, chunked runs, batch runtime, Rule Lab console |
-| [Expression cookbook]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}) | Sensor profile reference (Arrow-native) |
-| [GL36 algorithm stubs]({{ "/rule-cookbook/gl36-algorithm-stubs/" | relative_url }}) | Advanced supervisory patterns (doc-only where not executable) |
-
-**PyArrow** is the primary path for complex HVAC FDD and ML prep. **DataFusion SQL** is optional, Rust-ready, and best for simple expression-style rules.
-
-Programmatic sensor defaults: `open_fdd.arrow_runtime.sensor_catalog.SENSOR_PROFILES`.
-
-```python
-import pyarrow.compute as pc
-from open_fdd.arrow_runtime.cookbook import sensor_bounds_mask
-
-def apply_faults_arrow(table, cfg, context=None):
-    return sensor_bounds_mask(table, "zone_temp", cfg, min_true_rows=5)
-```
-
-
-# Windowing & debugging
-
-# Windowing & debugging
-
-## Lookback vs rolling window
-
-| | **Historian lookback** | **Rolling window** |
-|---|------------------------|-------------------|
-| Set by | Batch `lookback_hours`, FDD loop, Quick test UI | `WINDOW_SAMPLES` constant in `rule.py` |
-| Typical | 1 h scheduled; 24 h Update all | 12 samples ≈ 1 h @ 5 min poll |
-| Validate with | `_kit_lookback_stats(table)` — see [Lookback window helper]({{ "/rule-cookbook/lookback-window/" | relative_url }}) | Rule logic + console `flagged` count |
-
-## Rolling windows (Arrow)
-
-Use `open_fdd.arrow_runtime.windows` for sample-based rolling min/max and consecutive-true streaks:
-
-```python
-from open_fdd.arrow_runtime.windows import arrow_rolling_min, arrow_rolling_max, arrow_consecutive_true
-```
-
-Cookbook masks (`flatline_1h_mask`, `spread_1h_mask`, `oob_mask`) default to ~12 samples (~1 h at 5 min poll).
-
-Bench rules use constants: `WINDOW_SAMPLES`, `FLATLINE_TOLERANCE`, `OAT_LOW` / `OAT_HIGH`, etc. Legacy `cfg` keys still work for uploaded rules that read `cfg.get(...)`.
-
-## Rule Lab console
-
-Quick-test and batch responses include `backend: arrow`, `ms`, and flagged row counts. Arrow summary events appear in the event console on fault hits.
-
-
-# Expression cookbook (Arrow-native)
-
-# Expression cookbook (Arrow-native)
-
-Reference for **Open-FDD 3.x Rule Lab**: every **executable** rule is a Python module with **`apply_faults_arrow(table, cfg, context)`** using **`pyarrow.compute`** — **no pandas**, **no NumPy DataFrames on the IoT edge**, **no pandas `RuleRunner`**.
-
-**YAML today:** `open_fdd/faults/catalog/*.yaml` and `open_fdd/default_rules/**/*.yaml` hold **metadata and migration starters only** — not edge execution. See [Rule authoring — YAML distinction]({{ "/rule-authoring/" | relative_url }}#yaml-in-the-repo-today).
-
-Legacy GL36-style recipes map to **fixed [fault codes]({{ "/fault-codes/" | relative_url }})** and Arrow patterns below. Full migration matrix: [Legacy pandas parity]({{ "/rule-authoring/legacy-pandas-parity/" | relative_url }}).
-
----
-
-## PyArrow vs DataFusion SQL
-
-Start here when choosing a backend. Both normalize to [`ArrowRuleResult`]({{ "/rule-authoring/arrow-rule-contract/" | relative_url }}).
-
-### Use PyArrow when
-
-| Need | Why PyArrow |
-|------|-------------|
-| Rolling windows | `arrow_rolling_min`, `arrow_rolling_sum`, streak helpers |
-| Flatline detection | `sensor_flatline_mask`, `flatline_1h_mask` |
-| Rate-of-change / spike | `rate_of_change_mask`, `arrow_abs_diff` |
-| PID hunting / command hunting | `pid_hunting_command_mask`, `pid_hunting_ahu_os_mask` |
-| Occupancy or schedule-aware logic | Hour/day masks, `_unoccupied_mask`, after-hours helpers |
-| Helper functions & sensor profiles | `open_fdd.arrow_runtime.cookbook`, `SENSOR_PROFILES` |
-| Unit normalization & null handling | `norm_cmd_array`, explicit `pc.fill_null` |
-| Edge runtime stability | Primary path — always installed |
-| Rust migration prep | Arrow semantics portable to a future Rust executor |
-
-### Use DataFusion SQL when
-
-| Need | Why SQL |
+| Page | Content |
 |------|---------|
-| Simple row-wise threshold | `column > limit AS fault` |
-| Readable `CASE WHEN` logic | Operators can inspect SQL without Python |
-| SQL-readable previews | Rule Lab Validate SQL |
-| Future Rust/DataFusion port | Restricted SELECT from `telemetry` |
-| Non-Python reviewers | Same contract, different syntax |
+| [**PyArrow & DataFusion SQL**]({{ "/rule-cookbook/dual-backend-rules/" | relative_url }}) | **Same-rule tutorial**, when to use each backend, parity testing |
+| [Rule authoring]({{ "/rule-authoring/" | relative_url }}) | Contract, types, Rust readiness |
+| [Fault confirmation]({{ "/rule-cookbook/fault-confirmation/" | relative_url }}) | `min_true_rows`, duration, poll interval |
+| [Python recipes (Arrow)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}) | Copy-paste `apply_faults_arrow` modules |
+| [DataFusion SQL recipes]({{ "/rule-cookbook/datafusion-sql-recipes/" | relative_url }}) | SQL threshold & spread patterns |
+| [GL36 & sensor patterns]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}) | AHU/VAV/RTU fault-code mapping |
+| [Windowing & debugging]({{ "/rule-cookbook/windowing-debugging/" | relative_url }}) | Lookback, nulls, test tips |
+| [Central plants]({{ "/rule-cookbook/central-plants/" | relative_url }}) | CHW / CTW / boiler patterns |
 
-Install: `pip install 'open-fdd[datafusion]'` (defined in `pyproject.toml`).
+## Rule Lab
 
-### Do not use DataFusion SQL for
+Author and test in the dashboard **Rule Lab** tab (`/rule-lab`): lint, preview on historian window, compare PyArrow vs SQL masks.
 
-- Complex rolling windows or resample-style hourly logic
-- Custom helper-heavy HVAC logic
-- PID hunting with stateful window behavior (use PyArrow FC4 helpers)
-- ML feature preparation
-- Arbitrary file joins or multi-table SQL
-- Browser-side rule execution
-- Anything that behaves like old pandas row-loop / `DataFrame.apply` logic
+API: [Appendix — REST API]({{ "/appendix/bridge_api/" | relative_url }}) (Rules & FDD, Rule Lab sections).
 
-See also: [DataFusion SQL rules]({{ "/datafusion-sql-rules/" | relative_url }}) · [Rust readiness]({{ "/rule-authoring/rust-readiness/" | relative_url }}).
 
----
+# GL36 & sensor patterns
 
-| Topic | Page |
-|-------|------|
-| **Full copy-paste library (GL36 A–M, VAV, plant)** | **[Python recipes (full Arrow library)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }})** |
-| Quick templates | [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}) |
-| Shared imports | [Python recipes]({{ "/rule-cookbook/python-recipes/" | relative_url }}) |
-| Console window stats | [Lookback window]({{ "/rule-cookbook/lookback-window/" | relative_url }}) |
-| Fault code catalog | [Fault codes]({{ "/fault-codes/" | relative_url }}) |
-| Programmatic defaults | `open_fdd.arrow_runtime.sensor_catalog` |
+# GL36 & sensor patterns
+
+Fault-code mapping and sensor-validation patterns for **PyArrow** rules. For backend choice and a side-by-side tutorial, see [PyArrow & DataFusion SQL]({{ "/rule-cookbook/dual-backend-rules/" | relative_url }}).
+
+Executable modules live in `workspace/data/rules_py/`. Copy-paste sources: [Python recipes (Arrow)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}).
 
 ---
 
-## Legacy → modern translation
+## Rule structure
 
-| Legacy (pandas / YAML) | Arrow-native (3.x) |
-|------------------------|---------------------|
-| `type: expression` + `expression:` string | `apply_faults_arrow()` in `rules_py/*.py` |
-| `type: hunting` (GL36 **FC4**) | `pid_hunting_fc4.py` → **AHU-G** / **VAV-F** / **CH-G** / **RTU-E** |
-| `RuleRunner.run(df, column_map=…)` | Rule Lab batch on **feather PyArrow table** |
-| `np.maximum(a, b)` | `pc.max(a, b)` |
-| `series.rolling(n).min()` | `arrow_rolling_min(vals, n)` from `open_fdd.arrow_runtime.windows` |
-| `series.diff().abs()` | `arrow_abs_diff(vals, 1)` |
-| `normalize_cmd(x)` | `norm_cmd_array()` / `pc.if_else(pc.greater(x, 1), pc.divide(x, 100), x)` |
-| `params.max_temp` in YAML | Module constant or `cfg["bounds_high"]` |
-| `flag: rule_a_flag` | Rule metadata **`fault_code`** → `AHU-A` … `VAV-C` |
-| Numeric codes `VAV-03` | Letter codes **`VAV-C`** (see `LEGACY_CODE_MAP` in bridge) |
-| Pandas `FC4` / `fc4_flag` | `LEGACY_CODE_MAP`: `FC4` → **AHU-G** |
-
-**Edge constraint:** Docker / BACnet poll path never imports pandas. Central portfolio Dash may use pandas for CSV analytics only.
-
----
-
-## How Arrow rules are structured
-
-1. **Historian columns** — Feather column names from BACnet poll (`oa-t`, `sa-t`, `stat_zn-t`, …) or Brick labels via model export.
-2. **Module constants** — Thresholds at top of file (bench style) or read from `cfg` for site tuning.
+1. **Historian columns** — Feather names from BACnet poll (`oa-t`, `sa-t`, `stat_zn-t`, …) or BRICK labels via model export.
+2. **Module constants** — Thresholds at top of file or read from `cfg` for site tuning.
 3. **`apply_faults_arrow`** — Returns a **boolean PyArrow array** (True = fault sample).
-4. **`fault_code`** — Set in Rule Lab metadata; must exist in `GET /api/faults/catalog`.
+4. **`fault_code`** — Set in Rule Lab; must exist in `GET /api/faults/catalog`.
 
 ```python
 import pyarrow.compute as pc
 from open_fdd.arrow_runtime.cookbook import sensor_bounds_mask
-
-FAULT_CODE = "VAV-C"  # metadata in Rule Lab UI
-
 
 def apply_faults_arrow(table, cfg, context=None):
     return sensor_bounds_mask(table, "zone_temp", cfg)
 ```
 
 ### Command scaling (0–1 vs 0–100 %)
-
-BACnet often exposes **0–100** for damper/VFD commands. Scale explicitly:
 
 ```python
 def _norm_cmd(col):
@@ -2577,21 +2416,21 @@ def _norm_cmd(col):
 
 ### Occupied hours (schedule gating)
 
-Use `open_fdd.arrow_runtime.cookbook._unoccupied_mask` or compare local hour from `timestamp` column. Example: **fan on when unoccupied** → **BLD-C** / `schedule_compare`.
+Use `open_fdd.arrow_runtime.cookbook._unoccupied_mask` or compare local hour from `timestamp`. Fan on when unoccupied → **BLD-C**.
 
 ---
 
 ## Sensor validation (bounds, flatline, rate of change)
 
-Use **`open_fdd.arrow_runtime.sensor_catalog.SENSOR_PROFILES`** for defaults, or copy constants into `rules_py`. Tune per site in Rule Lab `cfg` or building-agent tuning brief.
+Use **`open_fdd.arrow_runtime.sensor_catalog.SENSOR_PROFILES`** for defaults, or tune per site in Rule Lab `cfg`.
 
-### Bounds (out of range) — `oob_rolling`
+### Bounds (out of range)
 
-| Sensor kind | Min | Max | Flatline tol | Max Δ / hour | Max Δ / 15 min | Typical fault code |
-|-------------|-----|-----|--------------|--------------|----------------|-------------------|
+| Sensor kind | Min | Max | Flatline tol | Max Δ / hour | Max Δ / 15 min | Fault code |
+|-------------|-----|-----|--------------|--------------|----------------|------------|
 | Zone temp (°F) | 55 | 90 | 0.10 | 4.0 | 2.0 | **VAV-C** |
 | Supply air temp | 50 | 110 | 0.15 | 8.0 | 3.0 | **AHU-C**, **RTU-C** |
-| Return air temp | 55 | 95 | 0.10 | 3.0 | 1.5 | **AHU-D** (also mixing) |
+| Return air temp | 55 | 95 | 0.10 | 3.0 | 1.5 | **AHU-D** |
 | Mixed air temp | 40 | 110 | 0.15 | 6.0 | 2.5 | **AHU-D** |
 | Outdoor air temp | −40 | 130 | 0.10 | 12.0 | 6.0 | **BLD-B** |
 | Duct static (inH₂O) | −0.5 | 3.0 | 0.02 | 0.5 | 0.25 | **AHU-A** |
@@ -2599,16 +2438,14 @@ Use **`open_fdd.arrow_runtime.sensor_catalog.SENSOR_PROFILES`** for defaults, or
 | Chilled water (°F) | 40 | 90 | 0.10 | 4.0 | 2.0 | **CH-D** |
 | Hot water (°F) | 70 | 200 | 0.15 | 6.0 | 3.0 | **CH-D** |
 | Condenser water (°F) | 50 | 110 | 0.15 | 5.0 | 2.5 | **CH-A** |
-| CO₂ (ppm, occupied) | 400 | 1000 | 5.0 | 200 | 80 | **VAV-B** (ventilation) |
+| CO₂ (ppm, occupied) | 400 | 1000 | 5.0 | 200 | 80 | **VAV-B** |
 | Discharge air temp | 45 | 120 | 0.15 | 10.0 | 4.0 | **VAV-E**, **HP-D** |
 
-**Return air** uses a **narrow band** vs zone/OAT because RAT should track building return conditions, not outdoor extremes. When OAT/RAT/MAT are all present, prefer **mixing envelope** (below) over RAT bounds alone.
+When OAT/RAT/MAT are all present, prefer **mixing envelope** over RAT bounds alone.
 
-**CO₂ upper bound** is an occupied ventilation target; unoccupied rules may use 400–2000 ppm per policy.
+### Flatline (stuck sensor)
 
-### Flatline (stuck sensor) — `flatline_1h`
-
-Default **12 samples ≈ 1 hour** at 5-minute poll. True when rolling max − min ≤ tolerance.
+Default **12 samples ≈ 1 hour** at 5-minute poll.
 
 ```python
 from open_fdd.arrow_runtime.cookbook import sensor_flatline_mask
@@ -2617,11 +2454,7 @@ def apply_faults_arrow(table, cfg, context=None):
     return sensor_flatline_mask(table, "outdoor_air_temp", cfg)  # BLD-B
 ```
 
-Bench references: `workspace/data/rules_py/bench_oa-t_flatline_1h.py`, `bench_stat_zn-t_flatline_1h.py`.
-
-### Rate of change (spike) — `rate_of_change`
-
-Flags physically impossible step changes (comms glitch, substituted value).
+### Rate of change (spike)
 
 ```python
 from open_fdd.arrow_runtime.cookbook import rate_of_change_mask
@@ -2629,15 +2462,11 @@ from open_fdd.arrow_runtime.sensor_catalog import cfg_from_profile
 
 def apply_faults_arrow(table, cfg, context=None):
     merged = cfg_from_profile("outdoor_air_temp", cfg)
-    merged["samples_per_hour"] = 12  # 5-min poll
+    merged["samples_per_hour"] = 12
     return rate_of_change_mask(table, merged, col="oa-t")
 ```
 
-Legacy **weather_temp_spike** (`spike_limit: 16` °F per step) → **BLD-B** with `max_per_15min: 6` or stricter per-step limit.
-
-### Mixing envelope (MAT vs OAT/RAT) — `mixing_envelope`
-
-Legacy GL36 **Rule B / C** and **AHU-D**. MAT should sit between OAT and RAT (± tolerance) while fan runs.
+### Mixing envelope (MAT vs OAT/RAT)
 
 ```python
 from open_fdd.arrow_runtime.cookbook import mixing_envelope_mask
@@ -2655,119 +2484,73 @@ def apply_faults_arrow(table, cfg, context=None):
 
 ---
 
-## GL36-inspired AHU rules (legacy expression → fault code)
+## GL36-inspired AHU rules
 
-ASHRAE Guideline 36-style rules from the old YAML cookbook, translated to Arrow. Assign **`fault_code`** per row in Rule Lab.
+ASHRAE Guideline 36-style patterns. Assign **`fault_code`** in Rule Lab.
 
-| Legacy rule | Summary | Code | Full Arrow module |
-|-------------|---------|------|-------------------|
-| Rule A — duct static low @ full fan | SP below SP setpoint at high VFD | **AHU-A** | [Rule A]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-a--duct-static-low-at-full-fan-speed-ahu-a) |
-| Rule B — blend below band | MAT below OAT/RAT envelope | **AHU-D** | [Rules B & C]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
-| Rule C — blend above band | MAT above OAT/RAT envelope | **AHU-D** | [Rules B & C]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
-| Rule D — discharge cold when heating | SAT low vs MAT, heat valve open | **AHU-B** | [Rule D]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-d--discharge-cold-when-heating-commanded-ahu-b) |
-| Rule E — SAT low, full heating | SAT below SP, valve > 90% | **AHU-C** | [Rule E]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-e--sat-too-low-with-full-heating-ahu-c) |
-| Rule F — SAT/MAT mismatch econ | Econ mode, SAT ≠ MAT | **AHU-E** | [Rule F]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-f--satmat-mismatch-in-economizer-mode-ahu-e) |
-| Rule G — ambient warm free cool | OAT > SAT SP, econ open, cool off | **AHU-E** | [Rule G]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-g--ambient-too-warm-for-free-cooling-ahu-e) |
-| Rule H — OAT/MAT mismatch econ+mech | Mech + econ, MAT ≠ OAT | **AHU-E** | [Rule H]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-h--oatmat-mismatch-econ--mech-cooling-ahu-e) |
-| Rule I — OAT/MAT mismatch econ-only | Econ only, MAT ≠ OAT | **AHU-E** | [Rule I]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-i--oatmat-mismatch-economizer-only-ahu-e) |
-| Rule J — discharge above blend cooling | SAT > MAT in cooling | **AHU-B** | [Rule J]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-j--discharge-above-blended-in-cooling-ahu-b) |
-| Rule K — discharge above SP full cool | SAT > SP, full cooling | **AHU-C** | [Rule K]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-k--discharge-above-setpoint-in-full-cooling-ahu-c) |
-| Rule L — cooling coil ΔT when off | CHW drop when valves closed | **CH-C** | [Rule L]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-l--cooling-coil-δt-when-inactive-ch-c) |
-| Rule M — heating coil ΔT when off | HW rise when valves closed | **AHU-B** | [Rule M]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-m--heating-coil-δt-when-inactive-ahu-b) |
-| **FC4 — PID hunting** | Excessive command reversals or AHU OS changes (**modernized** — not hourly pandas resample) | **AHU-G** / **VAV-F** / **CH-G** / **RTU-E** | [FC4 PID hunting]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#fc4--pid-hunting-legacy-gl36) · [Legacy FC4 notes]({{ "/rule-authoring/legacy-pandas-parity/" | relative_url }}#fault-rule-4-fc4--modernized-hunting-detector) |
-
-All rules A–M have **full `apply_faults_arrow` modules** in [Python recipes (full Arrow library)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}).
+| Rule | Summary | Code | Module |
+|------|---------|------|--------|
+| A — duct static low @ full fan | SP below setpoint at high VFD | **AHU-A** | [Rule A]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-a--duct-static-low-at-full-fan-speed-ahu-a) |
+| B — blend below band | MAT below OAT/RAT envelope | **AHU-D** | [Rules B & C]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
+| C — blend above band | MAT above OAT/RAT envelope | **AHU-D** | [Rules B & C]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
+| D — discharge cold when heating | SAT low vs MAT, heat valve open | **AHU-B** | [Rule D]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-d--discharge-cold-when-heating-commanded-ahu-b) |
+| E — SAT low, full heating | SAT below SP, valve > 90% | **AHU-C** | [Rule E]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-e--sat-too-low-with-full-heating-ahu-c) |
+| F — SAT/MAT mismatch econ | Econ mode, SAT ≠ MAT | **AHU-E** | [Rule F]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-f--satmat-mismatch-in-economizer-mode-ahu-e) |
+| G — ambient warm free cool | OAT > SAT SP, econ open, cool off | **AHU-E** | [Rule G]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-g--ambient-too-warm-for-free-cooling-ahu-e) |
+| H — OAT/MAT mismatch econ+mech | Mech + econ, MAT ≠ OAT | **AHU-E** | [Rule H]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-h--oatmat-mismatch-econ--mech-cooling-ahu-e) |
+| I — OAT/MAT mismatch econ-only | Econ only, MAT ≠ OAT | **AHU-E** | [Rule I]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-i--oatmat-mismatch-economizer-only-ahu-e) |
+| J — discharge above blend cooling | SAT > MAT in cooling | **AHU-B** | [Rule J]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-j--discharge-above-blended-in-cooling-ahu-b) |
+| K — discharge above SP full cool | SAT > SP, full cooling | **AHU-C** | [Rule K]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-k--discharge-above-setpoint-in-full-cooling-ahu-c) |
+| L — cooling coil ΔT when off | CHW drop when valves closed | **CH-C** | [Rule L]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-l--cooling-coil-δt-when-inactive-ch-c) |
+| M — heating coil ΔT when off | HW rise when valves closed | **AHU-B** | [Rule M]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-m--heating-coil-δt-when-inactive-ahu-b) |
+| FC4 — PID hunting | Excessive command reversals | **AHU-G** / **VAV-F** / **CH-G** / **RTU-E** | [FC4]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#fc4--pid-hunting-legacy-gl36) |
 
 ---
 
-## Starter pack (VAV / AHU baseline)
+## Baseline deploy bundle
 
-Maps to legacy YAML starter filenames in `open_fdd/default_rules/` — **metadata only**; deploy Arrow modules in `rules_py`. Use as first deploy bundle.
+| Pattern | Arrow approach | Fault code |
+|---------|----------------|------------|
+| Zone temp bounds (occupied) | `sensor_bounds_mask` + occupied mask | **VAV-C** |
+| Zone temp flatline (occupied) | `sensor_flatline_mask` + occupied | **VAV-C** |
+| Damper command flatline | `flatline_1h_mask` on damper cmd | **VAV-D** |
+| Runtime outside schedule | `after_hours_fan_satisfied_mask` | **BLD-C** |
+| Duct static not maintained | [Rule A]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-a--duct-static-low-at-full-fan-speed-ahu-a) | **AHU-A** |
+| Internal temp bounds / flatline | `sensor_bounds_mask` / `sensor_flatline_mask` on SAT | **AHU-C** |
 
-| Legacy YAML starter | Arrow approach | Fault code |
-|---------------------|----------------|------------|
-| `01_vav_zone_temp_bounds_occupied` | `sensor_bounds_mask(..., "zone_temp")` + occupied mask | **VAV-C** |
-| `02_vav_zone_temp_flatline_occupied` | `sensor_flatline_mask(..., "zone_temp")` + occupied | **VAV-C** |
-| `03_vav_damper_command_extreme_flatline` | `flatline_1h_mask` on damper cmd column | **VAV-D** |
-| `04_ahu_runtime_outside_schedule` | `after_hours_fan_satisfied_mask` / run-hours script | **BLD-C** |
-| `05_ahu_duct_static_pressure_not_maintained` | [Rule A]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-a--duct-static-low-at-full-fan-speed-ahu-a) | **AHU-A** |
-| `06_ahu_internal_temp_sensor_bounds` | `sensor_bounds_mask` on SAT/MAT | **AHU-C** |
-| `07_ahu_internal_temp_sensor_flatline` | `sensor_flatline_mask` on SAT | **AHU-C** |
+Economizer starters: [economizer section]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#economizer-starters).
 
-### Economizer starters
-
-Full modules: [economizer section]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#economizer-starters) (`ahu_econ_100oa_temp_tracking_fault`, `ahu_mech_cooling_when_free_cooling_available`, `ahu_oa_damper_excess_open_extreme_ambient`).
-
----
-
-## VAV, central plant, heat pump
-
-Full modules: [VAV]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#vav-zones) · [Central plant]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#central-plant) · [Heat pumps]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#heat-pumps).
-
-Rolling persistence: `arrow_rolling_min` + `pc.and_` (replaces pandas `.rolling(n).min()`).
-
----
-
-## Opportunistic / ventilation
-
-Full modules: [Opportunistic section]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#opportunistic--ventilation) · [Weather]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#weather-station).
+VAV, plant, heat pump: [VAV]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#vav-zones) · [Central plant]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#central-plant) · [Heat pumps]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#heat-pumps).
 
 ---
 
 ## Data quality vs equipment faults
 
-| Symptom | Pattern | Code | Do not confuse with |
-|---------|---------|------|---------------------|
-| Flatline 1 h | `flatline_1h` | **VAV-C**, **AHU-C**, **BLD-B** | Equipment off / damper closed |
-| OOB sample | `oob_rolling` | sensor-specific | True process excursion |
-| Spike between polls | `rate_of_change` | **BLD-B** | Fast legitimate weather front |
-| No new samples | `stale_points` | **BLD-D** | Equipment fault |
-| MAT ∉ [OAT, RAT] | `mixing_envelope` | **AHU-D** | Stratification during startup |
+| Symptom | Pattern | Code |
+|---------|---------|------|
+| Flatline 1 h | `flatline_1h` | **VAV-C**, **AHU-C**, **BLD-B** |
+| OOB sample | `oob_rolling` | sensor-specific |
+| Spike between polls | `rate_of_change` | **BLD-B** |
+| No new samples | `stale_points` | **BLD-D** |
+| MAT ∉ [OAT, RAT] | `mixing_envelope` | **AHU-D** |
 
-Always gate sensor faults with **fan on**, **valve open**, or **occupied** where appropriate — see [Sensor & data quality]({{ "/fault-codes/sensor-quality/" | relative_url }}).
+Gate sensor faults with **fan on**, **valve open**, or **occupied** where appropriate — [Sensor & data quality]({{ "/fault-codes/sensor-quality/" | relative_url }}).
 
 ---
 
 ## Metric (°C) equivalents
 
-Set `cfg["temp_unit"] = "metric"` in Rule Lab or scale constants:
-
-| Imperial | Metric (approx) |
-|----------|-----------------|
-| 55 °F | 12.8 °C |
-| 90 °F | 32.2 °C |
-| 50 °F | 10.0 °C |
-| 110 °F | 43.3 °C |
-| 2.0 °F tol | 1.1 °C |
-| 0.15 inH₂O | ~37 Pa |
-
-`open_fdd.playground.temp_units` documents UI field keys for °F/°C toggle.
+Set `cfg["temp_unit"] = "metric"` or scale constants: 55 °F ≈ 12.8 °C, 90 °F ≈ 32.2 °C, 2.0 °F tol ≈ 1.1 °C.
 
 ---
 
-## Binding rules to the fault catalog
+## Binding to the fault catalog
 
-1. Pick a **letter code** from [Fault codes]({{ "/fault-codes/" | relative_url }}) — never invent suffixes.
-2. In Rule Lab, set **fault_code** on the rule row.
-3. Batch FDD aggregates into `GET /api/faults/status` and portfolio rollup.
-4. Legacy numeric codes (`AHU-03`) migrate via `LEGACY_CODE_MAP` in the bridge.
+1. Pick a **letter code** from [Fault codes]({{ "/fault-codes/" | relative_url }}).
+2. Set **fault_code** in Rule Lab.
+3. Batch FDD aggregates into `GET /api/faults/status`.
 
-```bash
-curl -s http://127.0.0.1:8765/api/faults/catalog | jq '.families[].codes[] | select(.code=="VAV-C")'
-```
-
----
-
-## Pandas YAML → Arrow checklist (commissioning)
-
-- [ ] Replace each executable `type: expression` YAML with a `rules_py` module (keep YAML as reference if useful)
-- [ ] Map `inputs` Brick labels → feather column names in model/poll CSV
-- [ ] Set `fault_code` per rule (letter suffix)
-- [ ] Run Rule Lab kit on 7-day feather window; confirm flag rate sane
-- [ ] Apply sensor_catalog defaults; tune bounds for site climate
-- [ ] Enable building-agent check-in; verify faults in portfolio rollup
-
-**Next:** [Python recipes (full Arrow library)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}) · [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}) · [Fault codes]({{ "/fault-codes/" | relative_url }}) · [Rule Lab]({{ "/operator-bridge/rule-lab/" | relative_url }})
+**Next:** [Python recipes (Arrow)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}) · [Rule Lab]({{ "/operator-bridge/rule-lab/" | relative_url }})
 
 
 # GL36 algorithm stubs
@@ -2941,6 +2724,35 @@ def apply_faults_arrow(table, cfg, context=None):
 3. Run `python run_test.py` from a downloaded kit and confirm `_kit_lookback_stats` prints expected `start` / `stop` / `span`.
 
 Reference implementation (Niagara Java): [README_TRIM_RESPOND.md](https://github.com/bbartling/niagara4-vibe-code-addict/blob/develop/README_TRIM_RESPOND.md).
+
+
+# Windowing & debugging
+
+# Windowing & debugging
+
+## Lookback vs rolling window
+
+| | **Historian lookback** | **Rolling window** |
+|---|------------------------|-------------------|
+| Set by | Batch `lookback_hours`, FDD loop, Quick test UI | `WINDOW_SAMPLES` constant in `rule.py` |
+| Typical | 1 h scheduled; 24 h Update all | 12 samples ≈ 1 h @ 5 min poll |
+| Validate with | `_kit_lookback_stats(table)` — see [Lookback window helper]({{ "/rule-cookbook/lookback-window/" | relative_url }}) | Rule logic + console `flagged` count |
+
+## Rolling windows (Arrow)
+
+Use `open_fdd.arrow_runtime.windows` for sample-based rolling min/max and consecutive-true streaks:
+
+```python
+from open_fdd.arrow_runtime.windows import arrow_rolling_min, arrow_rolling_max, arrow_consecutive_true
+```
+
+Cookbook masks (`flatline_1h_mask`, `spread_1h_mask`, `oob_mask`) default to ~12 samples (~1 h at 5 min poll).
+
+Bench rules use constants: `WINDOW_SAMPLES`, `FLATLINE_TOLERANCE`, `OAT_LOW` / `OAT_HIGH`, etc. Legacy `cfg` keys still work for uploaded rules that read `cfg.get(...)`.
+
+## Rule Lab console
+
+Quick-test and batch responses include `backend: arrow`, `ms`, and flagged row counts. Arrow summary events appear in the event console on fault hits.
 
 
 # Central plants (CHW / CTW / BLR)
@@ -4088,9 +3900,9 @@ In Rule Lab, set `fault_code` on the rule metadata. Batch FDD aggregates hits in
 
 ## Cookbook mapping
 
-Each catalog entry lists `cookbook_patterns` (e.g. `flatline_1h`, `mixing_envelope`, `rate_of_change`) — see [Expression cookbook (Arrow-native)]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}).
+Each catalog entry lists `cookbook_patterns` (e.g. `flatline_1h`, `mixing_envelope`, `rate_of_change`) — see [GL36 & sensor patterns]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}).
 
-Legacy pandas `type: expression` YAML in `open_fdd/default_rules/` is **not executed** on the edge in 3.x — metadata for migration only. Translate to `rules_py` Arrow modules and bind **`fault_code`** in Rule Lab. See [Rule authoring — YAML]({{ "/rule-authoring/" | relative_url }}#yaml-in-the-repo-today).
+Executable rules are PyArrow or DataFusion SQL modules in `workspace/data/rules_py/`. YAML under `open_fdd/default_rules/` is catalog metadata only — see [Rule authoring]({{ "/rule-authoring/" | relative_url }}#yaml-files-in-the-repo).
 
 
 # Live site update
@@ -4286,6 +4098,8 @@ Export full catalog: `python3 -c "from open_fdd.faults.catalog import catalog_ex
 
 `workspace/` on the edge host is the **live site state** — feather historian, BACnet commissioning files, BRICK model, FDD rules, auth, and dashboard static bundle. Container images are replaceable; **backup `workspace/` before every upgrade.**
 
+Canonical operator flow: [Edge site lifecycle]({{ "/quick-start/site-lifecycle/" | relative_url }}).
+
 ## Quick backup (edge host)
 
 ```bash
@@ -4293,58 +4107,35 @@ cd ~/open-fdd
 ./scripts/openfdd_site_backup.sh
 ```
 
-Archives default to **`~/openfdd-backups/latest`** on the edge host (overwrites each run — one rolling copy for rigorous testing).
+Archives default to **`~/openfdd-backups/latest`** (overwrites each run).
 
-```bash
-cd ~/open-fdd
-./scripts/openfdd_site_backup.sh
-```
-
-Custom location (also overwritten each run unless you use a new path):
-
-```bash
-BACKUP_ROOT=~/openfdd-backups/manual ./scripts/openfdd_site_backup.sh
-```
-
-Fast pre-upgrade backup (skips large `workspace/bacnet/polls/` CSV history; feather/model/rules kept):
+Fast pre-upgrade backup (skips large `workspace/bacnet/polls/` CSV history):
 
 ```bash
 BACKUP_INCLUDE_POLL_SAMPLES=0 ./scripts/openfdd_site_backup.sh
 ```
 
-On **bensserver**, site packs under `edge_backup/local/<site>/<building>/` are likewise overwritten by `edge_site_backup.sh` — no timestamp pile-up during validation.
-
-From bensserver for any edge host (Ansible — backup runs **on the edge**, no workspace transfer over Tailscale):
+Custom location:
 
 ```bash
-OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling
-OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling --fast-backup
+BACKUP_ROOT=~/openfdd-backups/manual ./scripts/openfdd_site_backup.sh
 ```
 
-Acme wrapper (same flow):
+## Upgrade + automatic backup purge
 
-```bash
-OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_acme_site.sh --fast-backup
-```
+After a successful `./scripts/openfdd_site_update.sh`, the backup directory is **removed** by default once health and workspace layout checks pass. Set `PURGE_BACKUP_AFTER_SUCCESS=0` to retain archives.
 
-## Manual backup (SSH)
-
-Container processes may write files as **`root:root`** with mode **`0600`**. Use `sudo` for a full archive:
+## Restore from backup
 
 ```bash
 cd ~/open-fdd
+RESTORE_WORKSPACE=1 ./scripts/openfdd_site_update.sh
+```
 
-export BACKUP_ROOT="$HOME/openfdd-backups/$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$BACKUP_ROOT"
+Default historian cap on restore: **200 GiB** of newest feather shards. Full restore:
 
-cp docker-compose.yml "$BACKUP_ROOT/docker-compose.yml.before"
-docker compose ps > "$BACKUP_ROOT/docker-compose-ps-before.txt"
-docker compose config --images > "$BACKUP_ROOT/docker-images-before.txt"
-
-sudo tar --xattrs --acls -czf "$BACKUP_ROOT/workspace-full.tgz" workspace
-sudo chown "$USER:$USER" "$BACKUP_ROOT/workspace-full.tgz"
-
-du -h "$BACKUP_ROOT/workspace-full.tgz"
+```bash
+RESTORE_WORKSPACE=1 RESTORE_FEATHER_MAX_GIB=0 ./scripts/openfdd_site_update.sh
 ```
 
 ## What to protect
@@ -4358,15 +4149,18 @@ du -h "$BACKUP_ROOT/workspace-full.tgz"
 | `workspace/auth.env.local` | Login secrets |
 | `workspace/api/static/app/` | Dashboard bundle (if deployed separately) |
 
-## Restore after a bad upgrade
+## Ansible / bensserver
 
-1. Stop containers: `docker compose stop` (do **not** use `down -v`)
-2. Restore `docker-compose.yml` from backup
-3. If data corruption: extract selective files from `workspace-full.tgz` — model, rules, feather shards
-4. `docker compose pull && docker compose up -d --force-recreate`
-5. Verify: [Deployment validation]({{ "/ops/deployment-validation/" | relative_url }})
+From bensserver for any edge host (backup runs **on the edge**, no workspace transfer over Tailscale):
+
+```bash
+OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling
+OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling --fast-backup
+```
 
 ## Safe cleanup
+
+Handled automatically by `openfdd_site_update.sh` (stopped containers, dangling/unused images). Manual:
 
 ```bash
 docker image prune -f
@@ -4376,6 +4170,7 @@ docker image prune -f
 
 ## Related
 
+- [Edge site lifecycle]({{ "/quick-start/site-lifecycle/" | relative_url }})
 - [Updating the stack]({{ "/quick-start/updating/" | relative_url }})
 - [Live site update]({{ "/ops/live_site_update/" | relative_url }})
 
@@ -4620,7 +4415,7 @@ grep -R "apply_faults_arrow" workspace/data/rules_py | wc -l
 
 # Sensor and data quality
 
-Sensor faults use cookbook patterns **`flatline_1h`**, **`oob_rolling`**, **`rate_of_change`**, and **`mixing_envelope`**. Full thresholds: [Expression cookbook — sensor validation]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#sensor-validation-bounds-flatline-rate-of-change).
+Sensor faults use cookbook patterns **`flatline_1h`**, **`oob_rolling`**, **`rate_of_change`**, and **`mixing_envelope`**. Full thresholds: [GL36 & sensor patterns]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#sensor-validation-bounds-flatline-rate-of-change).
 
 ## Catalog codes
 
@@ -5197,9 +4992,9 @@ Artifacts:
 
 | File | Content |
 |------|---------|
-| `reports/paired_fdd_smoke_validation.{md,json}` | FDD parity cycles |
-| `reports/bench_5007_half_hour_health.json` | Health probe history |
-| `reports/bench_5007_half_hour_smoke_rcx_*.docx` | RCx report with smoke section |
+| `workspace/reports/artifacts/paired_fdd_smoke_validation.{md,json}` | FDD parity cycles |
+| `workspace/reports/artifacts/bench_5007_half_hour_health.json` | Health probe history |
+| `workspace/reports/rcx/bench_5007_half_hour_smoke_rcx_*.docx` | RCx report with smoke section |
 
 Regenerate RCx only:
 
@@ -5393,7 +5188,7 @@ Open-FDD is an **edge FDD platform**: BACnet / Niagara / JSON API drivers ingest
 | **Host Caddy** | `:80` / `:443` front door to bridge |
 | **`workspace/`** | Model, rules, feather store, auth env — persist across image upgrades |
 | **Auth** | `workspace/auth.env.local` (gitignored); JWT via `POST /api/auth/login` |
-| **Update** | [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) · [Live site update]({{ "/ops/live_site_update/" | relative_url }}) · pin `OPENFDD_IMAGE_TAG` |
+| **Update** | [Edge site lifecycle]({{ "/quick-start/site-lifecycle/" | relative_url }}) · [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) · pin `OPENFDD_IMAGE_TAG` |
 
 Rebuild MCP index after doc changes: `./scripts/build_mcp_rag_index.sh`.
 
@@ -5464,8 +5259,8 @@ See [Fault confirmation]({{ "/rule-cookbook/fault-confirmation/" | relative_url 
 |-------|-----|
 | Start | [Quick Start]({{ "/quick-start/" | relative_url }}) · [Health check]({{ "/quick-start/health-check/" | relative_url }}) |
 | Drivers | [Driver framework]({{ "/drivers/" | relative_url }}) · [BACnet]({{ "/bacnet/" | relative_url }}) |
-| Rules | [Rule Cookbook]({{ "/rule-cookbook/" | relative_url }}) · [Rule authoring (v1)]({{ "/rule-authoring/" | relative_url }}) · [DataFusion SQL]({{ "/datafusion-sql-rules/" | relative_url }}) |
-| API | [API routes]({{ "/appendix/bridge_api/" | relative_url }}) |
+| Rules | [Rule Cookbook — PyArrow & DataFusion]({{ "/rule-cookbook/dual-backend-rules/" | relative_url }}) · [Rule authoring]({{ "/rule-authoring/" | relative_url }}) |
+| API | [REST API reference]({{ "/appendix/bridge_api/" | relative_url }}) · [Dashboard routes]({{ "/appendix/dashboard-routes/" | relative_url }}) |
 | Operations | [Operations]({{ "/ops/" | relative_url }}) · [Deployment validation]({{ "/ops/deployment-validation/" | relative_url }}) |
 | Architecture | [ADR: Rust-ready Arrow contract]({{ "/adr/adr-rust-ready-arrow-fdd-contract/" | relative_url }}) |
 | MCP | [MCP server]({{ "/ai/mcp-server/" | relative_url }}) |
@@ -6117,417 +5912,6 @@ LAN deployment security for the Operator Bridge and BACnet write guard. Open-FDD
 | [Logging and audit]({{ "/ops/logging/" | relative_url }}) | Auth audit trail, rotation, SIEM |
 
 
-# API routes
-
-# API routes
-
-REST API served by **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Production: Caddy on `:80` proxies to the bridge.
-
-**OpenAPI:** `GET /docs` and `GET /redoc` when the bridge runs.
-
-**Auth:** JWT via `POST /api/auth/login`. Most routes require `Authorization: Bearer <token>`. Roles: `viewer`, `operator`, `integrator`, `commission`, `agent`, `admin`. BACnet writes require commission role + [write safety]({{ "/bacnet/write-safety/" | relative_url }}). Dev: `OFDD_AUTH_DISABLED` on loopback only.
-
-**WebSocket:** `WS /ws/dashboard` — `POST /api/auth/ws-ticket`, then pass the ticket via `Sec-WebSocket-Protocol: ofdd.ws, <ticket>`. Query `?ticket=` is dev-only when `OFDD_WS_ALLOW_QUERY_TICKET=1`. Tickets are short-lived and not interchangeable with the Bearer token.
-
----
-
-## Health & audit
-
-| Method | Path | Role | Description |
-|--------|------|------|-------------|
-| GET | `/health` | public | Minimal liveness (`ok`, `service`, `version`, `auth_required`) |
-| GET | `/health/stack` | auth | Stack traffic-light (verbose URLs/bind with `OFDD_DEBUG_DIAGNOSTICS`) |
-| POST | `/api/auth/ws-ticket` | auth | Short-lived WebSocket ticket |
-| GET | `/api/audit/summary` | auth | Audit counters |
-| GET | `/api/audit/events` | auth | Audit log (query params) |
-| GET | `/api/audit/errors` | auth | Recent API errors |
-
-\*Exact public set depends on `OFDD_AUTH_DISABLED` and middleware.
-
----
-
-## Auth
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/auth/login` | Username/password → JWT |
-| GET | `/api/auth/me` | Current user |
-| GET | `/api/auth/status` | Auth mode / lockout hints |
-
----
-
-## Rules & FDD
-
-| Method | Path | Role | Description |
-|--------|------|------|-------------|
-| GET | `/api/rules/saved` | user | Rule index |
-| POST | `/api/rules/save` | operator+ | Create/update rule metadata |
-| GET | `/api/rules/saved/{id}/source` | user | Python source |
-| PUT | `/api/rules/saved/{id}/source` | operator+ | Write `.py` file |
-| GET | `/api/rules/assignments` | user | Point bindings |
-| POST | `/api/rules/bind` | integrator+ | Bind rule to point |
-| POST | `/api/rules/bindings` | integrator+ | Bulk bindings |
-| POST | `/api/rules/batch` | operator+ | Run all enabled rules → `fdd_results.json` |
-| GET/POST | `/api/rules/drafts` | user | Draft rules |
-
----
-
-## Rule Lab playground
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/playground/lint` | AST lint Python rule |
-| POST | `/api/playground/test-rule` | Run `apply_faults_arrow()` on feather PyArrow window |
-| POST | `/api/playground/run-script` | Execute script mode |
-| GET | `/api/playground/sample-frame` | Sample DataFrame for editor |
-
----
-
-## BRICK / data model
-
-| Method | Path | Role | Description |
-|--------|------|------|-------------|
-| GET | `/api/model/sites` | user | Site list |
-| GET | `/api/model/tree` | user | Equipment tree (SPARQL) |
-| GET | `/api/model/graph` | user | RDF graph fragment |
-| GET | `/api/model/scope` | user | Scoped query |
-| GET | `/api/model/export` | user | Export TTL/JSON |
-| GET | `/api/model/commissioning-export` | user | Full commissioning bundle (points + `fdd_rule_ids` + `fdd_rules`) |
-| POST | `/api/model/commissioning-import` | integrator+ | Bulk import; validate in UI dry-run first |
-| GET | `/api/model/health` | user | Model point/equipment counts |
-| GET | `/api/model/ttl` | user | TTL metadata |
-| POST | `/api/model/sync-ttl` | integrator+ | Regenerate TTL from JSON |
-| POST | `/api/model/import` | integrator+ | Import model payload |
-| POST | `/api/model/sites` | integrator+ | Create site |
-| GET/POST | `/api/model/bacnet-sync` | integrator+ | BACnet ↔ model sync state |
-| GET | `/api/model/fdd-query-presets` | user | Saved FDD query presets |
-| GET | `/api/model/fdd-coverage` | user | Rule coverage summary |
-| POST | `/api/model/sparql` | user | SPARQL query (scoped) |
-
----
-
-## Rule Lab (dashboard)
-
-| Method | Path | Role | Description |
-|--------|------|------|-------------|
-| POST | `/api/rules/lab/validate` | operator+ | Validate rule source |
-| POST | `/api/rules/lab/preview` | operator+ | Preview rule on historian window |
-| POST | `/api/rules/lab/compare` | operator+ | Compare two rule versions |
-| POST | `/api/rules/lab/lint-sql` | operator+ | DataFusion SQL safety lint |
-| POST | `/api/rules/lab/save` | operator+ | Save Rule Lab draft |
-
-Mounted at `/api/rules/lab` — see OpenAPI `/docs`.
-
----
-
-## Bench validation (read-only)
-
-| Method | Path | Role | Description |
-|--------|------|------|-------------|
-| GET | `/api/bench/health` | operator+ | Bench harness health |
-| GET | `/api/bench/mapping` | operator+ | Semantic cross-source mapping |
-| GET | `/api/bench/poll-status` | operator+ | BACnet + Niagara poll heartbeat |
-| POST | `/api/bench/validate/bacnet-vs-niagara` | operator+ | Dual-source equivalence check |
-| POST | `/api/bench/long-fdd/evaluate` | operator+ | Long FDD smoke evaluate (PyArrow/DataFusion) |
-
-See [Bench 5007 long FDD smoke]({{ "/operations/bench-5007-long-fdd-smoke/" | relative_url }}).
-
----
-
-## Niagara baskStream
-
-| Method | Path | Role | Description |
-|--------|------|------|-------------|
-| GET | `/api/niagara/health` | read | Connector health |
-| GET | `/api/niagara/stations` | read | Configured stations |
-| POST | `/api/niagara/stations/{id}/discover` | read | Discover points |
-| POST | `/api/niagara/stations/{id}/poll/once` | poll | One poll cycle |
-| GET | `/api/niagara/stations/{id}/poll/status` | read | Poll worker status |
-| GET | `/api/niagara/driver/tree` | read | Driver commissioning tree |
-
-Read-only by default. See [Niagara baskStream connector]({{ "/niagara-baskstream-connector/" | relative_url }}).
-
----
-
-## BACnet
-
-| Method | Path | Role | Description |
-|--------|------|------|-------------|
-| GET | `/config/bacnet` | read | Commission URL / config |
-| GET | `/api/bacnet/commission/status` | read | Commission agent health |
-| GET | `/api/bacnet/server/points` | read | Server point table |
-| GET | `/api/bacnet/inventory` | read | Discovered inventory |
-| POST | `/api/bacnet/whois` | commission | Who-Is |
-| POST | `/api/bacnet/discover` | commission | Discover devices |
-| POST | `/api/bacnet/read` | commission | Read property |
-| POST | `/api/bacnet/read-multiple` | commission | RPM read |
-| POST | `/api/bacnet/write` | write | Supervisory write (gated) |
-| POST | `/api/bacnet/import-to-model` | integrator | Inventory → BRICK |
-| POST | `/api/bacnet/driver/sync-discovery` | commission | Sync driver tree |
-| POST | `/api/bacnet/poll/once` | commission | Trigger poll cycle |
-| GET | `/api/bacnet/poll/status` | read | Poll worker status |
-| POST | `/ingest/bacnet` | read | Ingest samples into feather |
-
-Bind address: `BACNET_BIND` in commission env — see [BACnet network setup]({{ "/bacnet/network-setup/" | relative_url }}). Operator guide: [Discover and read]({{ "/bacnet/discover-read/" | relative_url }}).
-
-| PATCH | `/api/bacnet/driver/point` | commission | Enable poll + interval on point |
-| PATCH | `/api/bacnet/driver/device` | commission | Enable poll for all points on device |
-| PATCH | `/api/bacnet/driver/device/remap` | commission | Change instance and/or address |
-| DELETE | `/api/bacnet/driver/point/{point_id}` | commission | Remove point from registry |
-| DELETE | `/api/bacnet/driver/device/{device_instance}` | commission | Remove device |
-| DELETE | `/api/bacnet/driver/registry` | commission | Clear CSVs + model sync |
-
----
-
-## Faults (check-engine)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/faults/catalog` | Fixed fault codes |
-| GET | `/api/faults/status` | GREEN/YELLOW/RED aggregate |
-| GET | `/api/faults/tree` | Fault tree by equipment |
-| GET | `/api/faults/code/{code}` | Code metadata |
-
----
-
-## Timeseries & sites
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/timeseries/sites` | Feather sites |
-| GET | `/api/timeseries/series` | Series metadata |
-| GET | `/api/timeseries/plot` | Plot payload |
-| GET | `/api/timeseries/readings` | Raw readings |
-| GET | `/api/sites` | Site list |
-| GET | `/api/sites/{site_id}/frame` | Wide frame for site |
-
----
-
-## Building & host
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/building/status` | Building summary |
-| GET | `/api/building/alerts` | Active alerts |
-| GET | `/api/host/stats` | CPU/mem/disk |
-
----
-
-## Local agent (Ollama)
-
-Prefix **`/openfdd-agent`**. Role **`agent`** for tool execution.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/openfdd-agent/context` | Composed prompt context |
-| GET | `/openfdd-agent/tools` | Tool manifest |
-| POST | `/openfdd-agent/tool` | Execute tool (e.g. `rules.save`) |
-| GET | `/openfdd-agent/ollama/health` | Ollama reachability |
-| GET | `/openfdd-agent/building-insight` | Check-engine narrative context |
-| GET | `/openfdd-agent/zone-temps` | Zone temperature insight |
-| POST | `/openfdd-agent/chat` | Chat completion (catalog-bound) |
-
-Optional host Ollama for building insight — not required for core FDD. Configure via compose profile or host service; see [Architecture overview]({{ "/architecture/overview/" | relative_url }}).
-
----
-
-## Modbus
-
-| Method | Path | Role | Description |
-|--------|------|------|-------------|
-| GET | `/api/modbus/driver/tree` | operator+ | Commissioning tree |
-| GET | `/api/modbus/poll/status` | operator+ | Poll worker status |
-| POST | `/api/modbus/poll/once` | integrator+ | Force poll cycle |
-| POST | `/api/modbus/read_registers` | operator+ | One-shot register read |
-| POST | `/api/modbus/read_and_store` | operator+ | Read + CSV + feather (`source=modbus`) |
-| POST | `/api/modbus/refresh` | operator+ | Re-read one register |
-| PATCH | `/api/modbus/register/poll` | integrator+ | Enable poll interval |
-
-See [Driver framework]({{ "/drivers/" | relative_url }}).
-
----
-
-## JSON API (HTTP/HTTPS)
-
-| Method | Path | Role | Description |
-|--------|------|------|-------------|
-| GET | `/api/json-api/env/status` | operator+ | Env var configured flags (no secret values) |
-| POST | `/api/json-api/presets/openweather` | integrator+ | Register 3-point OpenWeather bundle + optional poll |
-| GET | `/api/json-api/driver/tree` | operator+ | Endpoints grouped by host |
-| GET | `/api/json-api/poll/status` | operator+ | Poll worker status |
-| POST | `/api/json-api/poll/once` | integrator+ | Force poll cycle |
-| POST | `/api/json-api/request` | operator+ | One-shot GET/POST (no store) |
-| POST | `/api/json-api/read_and_store` | operator+ | Request + CSV + feather (`source=json_api`) |
-| POST | `/api/json-api/refresh` | operator+ | Re-fetch endpoint |
-| PATCH | `/api/json-api/endpoint/poll` | integrator+ | Enable poll interval |
-| DELETE | `/api/json-api/endpoint/{point_id}` | integrator+ | Remove endpoint |
-
-**Outbound auth:** `auth_type` = `none` \| `bearer` \| `basic`; optional `verify_tls` (default true). See [JSON API driver]({{ "/drivers/json-api/" | relative_url }}).
-
----
-
-## PyPI package (separate)
-
-Library-only HTTP is **not** bundled. See [Python package]({{ "/appendix/python-package/" | relative_url }}) for `open_fdd.arrow_runtime` (Arrow rules offline).
-
----
-
-## Errors
-
-JSON error bodies; stack traces hidden unless `OFDD_DEBUG_TRACEBACKS=1`. See [LAN hardening]({{ "/security/lan-hardening/" | relative_url }}).
-
-
-# Python package
-
-# Python package (`open-fdd`)
-
-Install from PyPI (embeddable FDD runtime — not the Docker edge stack):
-
-```bash
-pip install open-fdd
-pip install "open-fdd[datafusion]"   # optional DataFusion SQL rule backend
-pip install "open-fdd[analytics]"     # optional NumPy helpers
-pip install "open-fdd[ml]"            # optional sklearn for offline experiments
-```
-
-## Modules
-
-| Module | Purpose |
-|--------|---------|
-| `open_fdd.arrow_runtime` | **Default** — `apply_faults_arrow` on PyArrow Tables, cookbook masks, column maps |
-| `open_fdd.playground` | Rule Lab lint/compile helpers for Arrow rules |
-
-Retired in 3.0.1+: `open_fdd.engine` (YAML/pandas `RuleRunner`) is **not** shipped on PyPI. Use Operator Bridge Rule Lab or import rules from `workspace/data/rules_py/`.
-
-## When to use package-only
-
-| Scenario | Use |
-|----------|-----|
-| Lint/test Arrow rules offline | `open_fdd.arrow_runtime` + `open_fdd.playground` |
-| Graph ML experiments (Layer B) | `open-fdd[ml]` in `experiments/` (see issue #211) |
-| Full building operator stack | **Docker** Operator Bridge |
-
-## Versioning
-
-Publish: git tag `vX.Y.Z` (or legacy `open-fdd-vX.Y.Z`) → GitHub Actions **Publish open-fdd to PyPI**. See [Release process]({{ "/developer/release-process/" | relative_url }}).
-
-```python
-import open_fdd
-print(open_fdd.__version__)
-```
-
-## Offline Arrow example
-
-```python
-import pyarrow as pa
-import pyarrow.compute as pc
-from open_fdd.arrow_runtime import run_arrow_rule
-
-code = '''
-import pyarrow.compute as pc
-
-def apply_faults_arrow(table, cfg, context=None):
-    return pc.greater(table["SAT"], float(cfg["high"]))
-'''
-table = pa.table({"SAT": [70.0, 90.0, 88.0]})
-result = run_arrow_rule(code, table, {"high": 85})
-print(result.flagged_count)
-```
-
-API surface: `open_fdd/arrow_runtime` docstrings and [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}).
-
-
-# Configuration reference
-
-# Configuration reference
-
-## Bridge / auth
-
-| Variable | Default | Notes |
-|----------|---------|-------|
-| `OFDD_BRIDGE_HOST` | `127.0.0.1` | `0.0.0.0` for LAN |
-| `OFDD_AUTH_SECRET` | — | Required for LAN |
-| `OFDD_AUTH_DISABLED` | `0` | Localhost dev only |
-| `OFDD_INSECURE_LAN_DEV` | `0` | Lab only with auth disabled |
-
-## BACnet
-
-| Variable | Notes |
-|----------|-------|
-| `BACNET_BIND` | `ip/mask:47808` in `commission.env` |
-| `OFDD_BACNET_WRITE_ENABLED` | Default off — site-specific name may vary |
-
-## Docker edge
-
-| Variable | Notes |
-|----------|-------|
-| `OPENFDD_IMAGE_TAG` | GHCR tag for Ansible deploy |
-| `openfdd_docker_pull_from_ghcr` | Ansible host_var |
-
-Rule Lab Python rules use `rules_store.json` + `workspace/data/rules_py/*.py`. Legacy YAML schema (`docs/config_schema.json`) is archived — not used by Operator Bridge 3.0.1+.
-
-
-# Glossary
-
-# Glossary
-
-| Term | Definition |
-|------|------------|
-| **Operator Bridge** | FastAPI service serving API + static dashboard |
-| **Rule Lab** | UI and APIs for Arrow `apply_faults_arrow()` rules |
-| **Feather store** | On-disk columnar historian under `workspace/data/feather_store/` |
-| **fdd_input** | Brick tag linking a point to a rule binding role |
-| **Check-engine** | Building-level GREEN/YELLOW/RED fault summary |
-| **Commission** | BACnet discovery/read (and optional write) agent container |
-| **Poll driver** | Scheduled BACnet RPM reads into historian |
-| **GHCR** | GitHub Container Registry — `ghcr.io/bbartling/openfdd-*` |
-
-
-# Workspace env files
-
-# Workspace env files
-
-All live under `workspace/`. Copy from `*.example` templates; committed `*.local` files are gitignored.
-
-| File | Loaded by | Purpose |
-|------|-----------|---------|
-| `auth.env.local` | `run_local.sh`, Docker compose, Ansible | JWT secret (`OFDD_AUTH_SECRET`), integrator/operator/agent passwords, `OFDD_AUTH_DISABLED` for localhost dev only |
-| `data.env.local` | `run_local.sh`, bridge, feather maintain | Feather historian caps (`OFDD_FEATHER_*`), audit/error log rotation (`OFDD_LOG_*`), BACnet discovery mutation toggle |
-| `json_api.env.local` | bridge, Ansible edge sync | API keys for JSON API driver `${ENV:VAR}` substitution (e.g. `OPENWEATHER_API_KEY`) |
-| `ollama.env.local` | `run_local.sh`, bridge | Ollama base URL, model name, RAM tier, GPU mode, timeouts — see [Ollama and analytics]({{ "/operator-bridge/ollama-analytics/" | relative_url }}) |
-| `mcp.env.local` | `run_local.sh`, MCP sidecar | Enable MCP RAG REST (`OFDD_MCP_*`), index path |
-| `caddy.env.local` | `run_local.sh`, Ansible edge | Reverse proxy mode (`http` / `tls` / `off`), TLS CN, port overrides |
-| `pentest.env.local` | `pentest_production_stack.sh` | Production-like LAN scan stack: CORS, auth, passive BACnet defaults |
-
-## Ansible / edge extras
-
-| Path | Purpose |
-|------|-------|
-| `infra/ansible/secrets/<host>.env.local` | SSH deploy credentials, GHCR pull tokens, site-specific BACnet bind — maintainers only |
-
-## Related docs
-
-- [Secrets and auth]({{ "/security/secrets-auth/" | relative_url }}) — required production variables
-- [Logging and audit]({{ "/ops/logging/" | relative_url }}) — `OFDD_LOG_*` detail
-- [JSON API driver]({{ "/drivers/json-api/" | relative_url }}) — `${ENV:VAR}` pattern
-- [Configuration reference]({{ "/appendix/configuration/" | relative_url }}) — bridge runtime flags not in env files
-
-
-# Appendix
-
-# Appendix
-
-Reference material for integrators and library users.
-
-| Page | Content |
-|------|---------|
-| [API routes]({{ "/appendix/bridge_api/" | relative_url }}) | Operator Bridge REST/WebSocket |
-| [Python package]({{ "/appendix/python-package/" | relative_url }}) | PyPI `open-fdd` |
-| [Configuration reference]({{ "/appendix/configuration/" | relative_url }}) | Key env variables |
-| [Workspace env files]({{ "/appendix/workspace-env-files/" | relative_url }}) | `workspace/*.env.local` inventory |
-| [Glossary]({{ "/appendix/glossary/" | relative_url }}) | Terms |
-
-
 # GL36 lab site (Acme)
 
 # GL36 lab site (Acme)
@@ -6798,6 +6182,590 @@ Dry-run poll: use **Poll once** after discovery; check Activity log and driver t
 `scripts/smoke_sites_parity.sh` delegates to this harness.
 
 
+# REST API reference
+
+# REST API reference
+
+HTTP and WebSocket surface for **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Production: Caddy on `:80` proxies to the bridge.
+
+Dashboard SPA paths: [Dashboard routes]({{ "/appendix/dashboard-routes/" | relative_url }}).
+
+**OpenAPI:** `GET /docs` and `GET /redoc` when the bridge runs.
+
+**Auth:** JWT via `POST /api/auth/login`. Most routes require `Authorization: Bearer <token>`. Roles: `viewer`, `operator`, `integrator`, `commission`, `agent`, `admin`. BACnet writes require commission role + [write safety]({{ "/bacnet/write-safety/" | relative_url }}). Dev: `OFDD_AUTH_DISABLED` on loopback only.
+
+**WebSocket:** `WS /ws/dashboard` — `POST /api/auth/ws-ticket`, then pass the ticket via `Sec-WebSocket-Protocol: ofdd.ws, <ticket>`. Query `?ticket=` is dev-only when `OFDD_WS_ALLOW_QUERY_TICKET=1`. Tickets are short-lived and not interchangeable with the Bearer token.
+
+---
+
+## Health & audit
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/health` | public | Minimal liveness (`ok`, `service`, `version`, `auth_required`) |
+| GET | `/health/stack` | auth | Stack traffic-light (verbose URLs/bind with `OFDD_DEBUG_DIAGNOSTICS`) |
+| POST | `/api/auth/ws-ticket` | auth | Short-lived WebSocket ticket |
+| GET | `/api/audit/summary` | auth | Audit counters |
+| GET | `/api/audit/events` | auth | Audit log (query params) |
+| GET | `/api/audit/errors` | auth | Recent API errors |
+
+\*Exact public set depends on `OFDD_AUTH_DISABLED` and middleware.
+
+---
+
+## Auth
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/auth/login` | Username/password → JWT |
+| GET | `/api/auth/me` | Current user |
+| GET | `/api/auth/status` | Auth mode / lockout hints |
+
+---
+
+## Rules & FDD
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/rules/saved` | user | Rule index |
+| POST | `/api/rules/save` | operator+ | Create/update rule metadata |
+| GET | `/api/rules/saved/{id}/source` | user | Python source |
+| PUT | `/api/rules/saved/{id}/source` | operator+ | Write `.py` file |
+| GET | `/api/rules/assignments` | user | Point bindings |
+| POST | `/api/rules/bind` | integrator+ | Bind rule to point |
+| POST | `/api/rules/bindings` | integrator+ | Bulk bindings |
+| POST | `/api/rules/batch` | operator+ | Run all enabled rules → `fdd_results.json` |
+| GET/POST | `/api/rules/drafts` | user | Draft rules |
+
+---
+
+## Rule Lab playground
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/playground/lint` | AST lint Python rule |
+| POST | `/api/playground/test-rule` | Run `apply_faults_arrow()` on feather PyArrow window |
+| POST | `/api/playground/run-script` | Execute script mode |
+| GET | `/api/playground/sample-frame` | Sample DataFrame for editor |
+
+---
+
+## BRICK / data model
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/model/sites` | user | Site list |
+| GET | `/api/model/tree` | user | Equipment tree (SPARQL) |
+| GET | `/api/model/graph` | user | RDF graph fragment |
+| GET | `/api/model/scope` | user | Scoped query |
+| GET | `/api/model/export` | user | Export TTL/JSON |
+| GET | `/api/model/commissioning-export` | user | Full commissioning bundle (points + `fdd_rule_ids` + `fdd_rules`) |
+| POST | `/api/model/commissioning-import` | integrator+ | Bulk import; validate in UI dry-run first |
+| GET | `/api/model/health` | user | Model point/equipment counts |
+| GET | `/api/model/ttl` | user | TTL metadata |
+| POST | `/api/model/sync-ttl` | integrator+ | Regenerate TTL from JSON |
+| POST | `/api/model/import` | integrator+ | Import model payload |
+| POST | `/api/model/sites` | integrator+ | Create site |
+| GET/POST | `/api/model/bacnet-sync` | integrator+ | BACnet ↔ model sync state |
+| GET | `/api/model/fdd-query-presets` | user | Saved FDD query presets |
+| GET | `/api/model/fdd-coverage` | user | Rule coverage summary |
+| POST | `/api/model/sparql` | user | SPARQL query (scoped) |
+
+---
+
+## Rule Lab (dashboard)
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| POST | `/api/rules/lab/validate` | operator+ | Validate rule source |
+| POST | `/api/rules/lab/preview` | operator+ | Preview rule on historian window |
+| POST | `/api/rules/lab/compare` | operator+ | Compare two rule versions |
+| POST | `/api/rules/lab/lint-sql` | operator+ | DataFusion SQL safety lint |
+| POST | `/api/rules/lab/save` | operator+ | Save Rule Lab draft |
+
+Mounted at `/api/rules/lab` — see OpenAPI `/docs`.
+
+---
+
+## Bench validation (read-only)
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/bench/health` | operator+ | Bench harness health |
+| GET | `/api/bench/mapping` | operator+ | Semantic cross-source mapping |
+| GET | `/api/bench/poll-status` | operator+ | BACnet + Niagara poll heartbeat |
+| POST | `/api/bench/validate/bacnet-vs-niagara` | operator+ | Dual-source equivalence check |
+| POST | `/api/bench/long-fdd/evaluate` | operator+ | Long FDD smoke evaluate (PyArrow/DataFusion) |
+
+See [Bench 5007 long FDD smoke]({{ "/operations/bench-5007-long-fdd-smoke/" | relative_url }}).
+
+---
+
+## Niagara baskStream
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/niagara/health` | read | Connector health |
+| GET | `/api/niagara/stations` | read | Configured stations |
+| POST | `/api/niagara/stations/{id}/discover` | read | Discover points |
+| POST | `/api/niagara/stations/{id}/poll/once` | poll | One poll cycle |
+| GET | `/api/niagara/stations/{id}/poll/status` | read | Poll worker status |
+| GET | `/api/niagara/driver/tree` | read | Driver commissioning tree |
+
+Read-only by default. See [Niagara baskStream connector]({{ "/niagara-baskstream-connector/" | relative_url }}).
+
+---
+
+## BACnet
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/config/bacnet` | read | Commission URL / config |
+| GET | `/api/bacnet/commission/status` | read | Commission agent health |
+| GET | `/api/bacnet/server/points` | read | Server point table |
+| GET | `/api/bacnet/inventory` | read | Discovered inventory |
+| POST | `/api/bacnet/whois` | commission | Who-Is |
+| POST | `/api/bacnet/discover` | commission | Discover devices |
+| POST | `/api/bacnet/read` | commission | Read property |
+| POST | `/api/bacnet/read-multiple` | commission | RPM read |
+| POST | `/api/bacnet/write` | write | Supervisory write (gated) |
+| POST | `/api/bacnet/import-to-model` | integrator | Inventory → BRICK |
+| POST | `/api/bacnet/driver/sync-discovery` | commission | Sync driver tree |
+| POST | `/api/bacnet/poll/once` | commission | Trigger poll cycle |
+| GET | `/api/bacnet/poll/status` | read | Poll worker status |
+| POST | `/ingest/bacnet` | read | Ingest samples into feather |
+
+Bind address: `BACNET_BIND` in commission env — see [BACnet network setup]({{ "/bacnet/network-setup/" | relative_url }}). Operator guide: [Discover and read]({{ "/bacnet/discover-read/" | relative_url }}).
+
+| PATCH | `/api/bacnet/driver/point` | commission | Enable poll + interval on point |
+| PATCH | `/api/bacnet/driver/device` | commission | Enable poll for all points on device |
+| PATCH | `/api/bacnet/driver/device/remap` | commission | Change instance and/or address |
+| DELETE | `/api/bacnet/driver/point/{point_id}` | commission | Remove point from registry |
+| DELETE | `/api/bacnet/driver/device/{device_instance}` | commission | Remove device |
+| DELETE | `/api/bacnet/driver/registry` | commission | Clear CSVs + model sync |
+
+---
+
+## Faults (check-engine)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/faults/catalog` | Fixed fault codes |
+| GET | `/api/faults/status` | GREEN/YELLOW/RED aggregate |
+| GET | `/api/faults/tree` | Fault tree by equipment |
+| GET | `/api/faults/code/{code}` | Code metadata |
+
+---
+
+## Timeseries & sites
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/timeseries/sites` | Feather sites |
+| GET | `/api/timeseries/series` | Series metadata |
+| GET | `/api/timeseries/plot` | Plot payload |
+| GET | `/api/timeseries/readings` | Raw readings |
+| GET | `/api/sites` | Site list |
+| GET | `/api/sites/{site_id}/frame` | Wide frame for site |
+
+---
+
+## Building & host
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/building/status` | Building summary |
+| GET | `/api/building/alerts` | Active alerts |
+| GET | `/api/host/stats` | CPU/mem/disk |
+
+---
+
+## Local agent (Ollama)
+
+Prefix **`/openfdd-agent`**. Role **`agent`** for tool execution.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/openfdd-agent/context` | Composed prompt context |
+| GET | `/openfdd-agent/tools` | Tool manifest |
+| POST | `/openfdd-agent/tool` | Execute tool (e.g. `rules.save`) |
+| GET | `/openfdd-agent/ollama/health` | Ollama reachability |
+| GET | `/openfdd-agent/building-insight` | Check-engine narrative context |
+| GET | `/openfdd-agent/zone-temps` | Zone temperature insight |
+| POST | `/openfdd-agent/chat` | Chat completion (catalog-bound) |
+
+Optional host Ollama for building insight — not required for core FDD. Configure via compose profile or host service; see [Architecture overview]({{ "/architecture/overview/" | relative_url }}).
+
+---
+
+## Modbus
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/modbus/driver/tree` | operator+ | Commissioning tree |
+| GET | `/api/modbus/poll/status` | operator+ | Poll worker status |
+| POST | `/api/modbus/poll/once` | integrator+ | Force poll cycle |
+| POST | `/api/modbus/read_registers` | operator+ | One-shot register read |
+| POST | `/api/modbus/read_and_store` | operator+ | Read + CSV + feather (`source=modbus`) |
+| POST | `/api/modbus/refresh` | operator+ | Re-read one register |
+| PATCH | `/api/modbus/register/poll` | integrator+ | Enable poll interval |
+
+See [Driver framework]({{ "/drivers/" | relative_url }}).
+
+---
+
+## JSON API (HTTP/HTTPS)
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/json-api/env/status` | operator+ | Env var configured flags (no secret values) |
+| POST | `/api/json-api/presets/openweather` | integrator+ | Register 3-point OpenWeather bundle + optional poll |
+| GET | `/api/json-api/driver/tree` | operator+ | Endpoints grouped by host |
+| GET | `/api/json-api/poll/status` | operator+ | Poll worker status |
+| POST | `/api/json-api/poll/once` | integrator+ | Force poll cycle |
+| POST | `/api/json-api/request` | operator+ | One-shot GET/POST (no store) |
+| POST | `/api/json-api/read_and_store` | operator+ | Request + CSV + feather (`source=json_api`) |
+| POST | `/api/json-api/refresh` | operator+ | Re-fetch endpoint |
+| PATCH | `/api/json-api/endpoint/poll` | integrator+ | Enable poll interval |
+| DELETE | `/api/json-api/endpoint/{point_id}` | integrator+ | Remove endpoint |
+
+**Outbound auth:** `auth_type` = `none` \| `bearer` \| `basic`; optional `verify_tls` (default true). See [JSON API driver]({{ "/drivers/json-api/" | relative_url }}).
+
+---
+
+## PyPI package (separate)
+
+Library-only HTTP is **not** bundled. See [Python package]({{ "/appendix/python-package/" | relative_url }}) for `open_fdd.arrow_runtime` (Arrow rules offline).
+
+---
+
+## Errors
+
+JSON error bodies; stack traces hidden unless `OFDD_DEBUG_TRACEBACKS=1`. See [LAN hardening]({{ "/security/lan-hardening/" | relative_url }}).
+
+
+# Dashboard routes
+
+# Dashboard routes
+
+Single-page app served by **openfdd-bridge** at `/` (production: Caddy on `:80`). All paths below are relative to the site root unless noted.
+
+**Auth:** Routes under `RequireAuth` need a valid JWT (login at `/login`). Role gates are enforced on API calls from each tab.
+
+---
+
+## Public
+
+| Path | Page | Notes |
+|------|------|-------|
+| `/login` | Login | JWT session; redirects to `/` when authenticated |
+
+---
+
+## Main workspace (authenticated)
+
+| Path | Tab / page | Purpose |
+|------|------------|---------|
+| `/` | Home | Overview, fault analytics, equipment, model health (hash sections) |
+| `/rule-lab` | Rule Lab | Author, lint, preview, compare PyArrow vs SQL rules |
+| `/model` | Data model | BRICK model, point bindings, FDD assignments |
+| `/plot` | Plot | Timeseries plot from feather historian |
+| `/bacnet` | BACnet | Commission UI, inventory, driver tree |
+| `/modbus` | Modbus | Modbus driver (when enabled) |
+| `/niagara` | Niagara | baskStream connector stations & poll |
+| `/json-api` | JSON API | External JSON ingest driver |
+| `/agent` | Building agent | Ollama / agent check-in |
+| `/host` | Host stats | Container and host metrics |
+
+---
+
+## Analytics & RCx
+
+| Path | Destination | Notes |
+|------|-------------|-------|
+| `/analytics` | `/#overview` | Redirect to home overview |
+| `/analytics/faults` | `/#fault-analytics` | Fault analytics hash |
+| `/analytics/equipment` | `/#equipment` | Equipment hash |
+| `/analytics/health` | `/#model-health` | Model health hash |
+| `/analytics/rcx` | RCx report builder | Generate, list, preview, delete DOCX reports |
+
+---
+
+## Legacy redirects
+
+| Path | Redirects to |
+|------|----------------|
+| `/algorithms` | `/` |
+| `/data-model` | `/model` |
+| `/fdd-assignments` | `/model` |
+| `/fdd` | `/model` |
+| `/faults` | `/#fault-analytics` |
+
+---
+
+## Home hash sections
+
+The home page uses URL fragments for deep links:
+
+| Hash | Section |
+|------|---------|
+| `#overview` | Dashboard overview |
+| `#fault-analytics` | Fault tree and analytics |
+| `#equipment` | Equipment rollup |
+| `#model-health` | Model / data health |
+
+---
+
+## Static assets
+
+| Path | Content |
+|------|---------|
+| `/assets/*` | Built dashboard JS/CSS (Vite) |
+| `/docs`, `/redoc` | OpenAPI (bridge process, not SPA) |
+
+API calls from the dashboard use paths documented in [REST API reference]({{ "/appendix/bridge_api/" | relative_url }}).
+
+
+# Python package
+
+# Python package (`open-fdd`)
+
+Install from PyPI (embeddable FDD runtime — not the Docker edge stack):
+
+```bash
+pip install open-fdd
+pip install "open-fdd[datafusion]"   # optional DataFusion SQL rule backend
+pip install "open-fdd[analytics]"     # optional NumPy helpers
+pip install "open-fdd[ml]"            # optional sklearn for offline experiments
+```
+
+## Modules
+
+| Module | Purpose |
+|--------|---------|
+| `open_fdd.arrow_runtime` | **Default** — `apply_faults_arrow` on PyArrow Tables, cookbook masks, column maps |
+| `open_fdd.playground` | Rule Lab lint/compile helpers for Arrow rules |
+
+Retired in 3.0.1+: `open_fdd.engine` (YAML/pandas `RuleRunner`) is **not** shipped on PyPI. Use Operator Bridge Rule Lab or import rules from `workspace/data/rules_py/`.
+
+## When to use package-only
+
+| Scenario | Use |
+|----------|-----|
+| Lint/test Arrow rules offline | `open_fdd.arrow_runtime` + `open_fdd.playground` |
+| Graph ML experiments (Layer B) | `open-fdd[ml]` in `experiments/` (see issue #211) |
+| Full building operator stack | **Docker** Operator Bridge |
+
+## Versioning
+
+Publish: git tag `vX.Y.Z` (or legacy `open-fdd-vX.Y.Z`) → GitHub Actions **Publish open-fdd to PyPI**. See [Release process]({{ "/developer/release-process/" | relative_url }}).
+
+```python
+import open_fdd
+print(open_fdd.__version__)
+```
+
+## Offline Arrow example
+
+```python
+import pyarrow as pa
+import pyarrow.compute as pc
+from open_fdd.arrow_runtime import run_arrow_rule
+
+code = '''
+import pyarrow.compute as pc
+
+def apply_faults_arrow(table, cfg, context=None):
+    return pc.greater(table["SAT"], float(cfg["high"]))
+'''
+table = pa.table({"SAT": [70.0, 90.0, 88.0]})
+result = run_arrow_rule(code, table, {"high": 85})
+print(result.flagged_count)
+```
+
+API surface: `open_fdd/arrow_runtime` docstrings and [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}).
+
+
+# Configuration reference
+
+# Configuration reference
+
+## Bridge / auth
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `OFDD_BRIDGE_HOST` | `127.0.0.1` | `0.0.0.0` for LAN |
+| `OFDD_AUTH_SECRET` | — | Required for LAN |
+| `OFDD_AUTH_DISABLED` | `0` | Localhost dev only |
+| `OFDD_INSECURE_LAN_DEV` | `0` | Lab only with auth disabled |
+
+## BACnet
+
+| Variable | Notes |
+|----------|-------|
+| `BACNET_BIND` | `ip/mask:47808` in `commission.env` |
+| `OFDD_BACNET_WRITE_ENABLED` | Default off — site-specific name may vary |
+
+## Docker edge
+
+| Variable | Notes |
+|----------|-------|
+| `OPENFDD_IMAGE_TAG` | GHCR tag for Ansible deploy |
+| `openfdd_docker_pull_from_ghcr` | Ansible host_var |
+
+Rule Lab Python rules use `rules_store.json` + `workspace/data/rules_py/*.py`. Legacy YAML schema (`docs/config_schema.json`) is archived — not used by Operator Bridge 3.0.1+.
+
+
+# Glossary
+
+# Glossary
+
+| Term | Definition |
+|------|------------|
+| **Operator Bridge** | FastAPI service serving API + static dashboard |
+| **Rule Lab** | UI and APIs for Arrow `apply_faults_arrow()` rules |
+| **Feather store** | On-disk columnar historian under `workspace/data/feather_store/` |
+| **fdd_input** | Brick tag linking a point to a rule binding role |
+| **Check-engine** | Building-level GREEN/YELLOW/RED fault summary |
+| **Commission** | BACnet discovery/read (and optional write) agent container |
+| **Poll driver** | Scheduled BACnet RPM reads into historian |
+| **GHCR** | GitHub Container Registry — `ghcr.io/bbartling/openfdd-*` |
+
+
+# Workspace env files
+
+# Workspace env files
+
+All live under `workspace/`. Copy from `*.example` templates; committed `*.local` files are gitignored.
+
+| File | Loaded by | Purpose |
+|------|-----------|---------|
+| `auth.env.local` | `run_local.sh`, Docker compose, Ansible | JWT secret (`OFDD_AUTH_SECRET`), integrator/operator/agent passwords, `OFDD_AUTH_DISABLED` for localhost dev only |
+| `data.env.local` | `run_local.sh`, bridge, feather maintain | Feather historian caps (`OFDD_FEATHER_*`), audit/error log rotation (`OFDD_LOG_*`), BACnet discovery mutation toggle |
+| `json_api.env.local` | bridge, Ansible edge sync | API keys for JSON API driver `${ENV:VAR}` substitution (e.g. `OPENWEATHER_API_KEY`) |
+| `ollama.env.local` | `run_local.sh`, bridge | Ollama base URL, model name, RAM tier, GPU mode, timeouts — see [Ollama and analytics]({{ "/operator-bridge/ollama-analytics/" | relative_url }}) |
+| `mcp.env.local` | `run_local.sh`, MCP sidecar | Enable MCP RAG REST (`OFDD_MCP_*`), index path |
+| `caddy.env.local` | `run_local.sh`, Ansible edge | Reverse proxy mode (`http` / `tls` / `off`), TLS CN, port overrides |
+| `pentest.env.local` | `pentest_production_stack.sh` | Production-like LAN scan stack: CORS, auth, passive BACnet defaults |
+
+## Ansible / edge extras
+
+| Path | Purpose |
+|------|-------|
+| `infra/ansible/secrets/<host>.env.local` | SSH deploy credentials, GHCR pull tokens, site-specific BACnet bind — maintainers only |
+
+## Related docs
+
+- [Secrets and auth]({{ "/security/secrets-auth/" | relative_url }}) — required production variables
+- [Logging and audit]({{ "/ops/logging/" | relative_url }}) — `OFDD_LOG_*` detail
+- [JSON API driver]({{ "/drivers/json-api/" | relative_url }}) — `${ENV:VAR}` pattern
+- [Configuration reference]({{ "/appendix/configuration/" | relative_url }}) — bridge runtime flags not in env files
+
+
+# Appendix
+
+# Appendix
+
+Reference material — **REST API** and **dashboard routes** for integrators. Narrative guides live in the main sections above.
+
+| Page | Content |
+|------|---------|
+| [REST API reference]({{ "/appendix/bridge_api/" | relative_url }}) | Operator Bridge HTTP & WebSocket |
+| [Dashboard routes]({{ "/appendix/dashboard-routes/" | relative_url }}) | SPA paths and tab map |
+| [Configuration reference]({{ "/appendix/configuration/" | relative_url }}) | Key env variables |
+| [Workspace env files]({{ "/appendix/workspace-env-files/" | relative_url }}) | `workspace/*.env.local` inventory |
+| [Python package]({{ "/appendix/python-package/" | relative_url }}) | PyPI `open-fdd` |
+| [Glossary]({{ "/appendix/glossary/" | relative_url }}) | Terms |
+
+
+# Arrow rule contract (v1)
+
+# Arrow rule contract (v1)
+
+Stable v1 batch FDD, Rule Lab preview, and validation smokes share one execution contract.
+
+## Entrypoint
+
+```python
+def apply_faults_arrow(table: pa.Table, cfg: dict | None = None, context: dict | None = None):
+    ...
+```
+
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `table` | `pyarrow.Table` | Historian telemetry for one site/window |
+| `cfg` | `dict` | Rule thresholds, column names, confirmation settings |
+| `context` | `dict` \| `None` | Optional bridge metadata (`site_id`, equipment hints) |
+
+## Return type (authoring)
+
+`apply_faults_arrow` must return a **boolean** `pyarrow.Array` or `pyarrow.ChunkedArray`:
+
+- Length **must equal** `table.num_rows`
+- `True` = raw fault sample (before confirmation)
+- Non-boolean returns are cast to bool by the backend
+- Null slots in the mask are counted; prefer explicit `False` for missing inputs
+
+The backend normalizes via `open_fdd.arrow_runtime.backend.normalize_fault_mask`.
+
+## Runtime result (`ArrowRuleResult`)
+
+After execution, `run_arrow_rule()` produces `ArrowRuleResult`:
+
+| Field | Meaning |
+|-------|---------|
+| `rule_id` | Saved rule id |
+| `backend` | `"arrow"` or `"datafusion_sql"` |
+| `row_count` | Input table rows |
+| `true_count` / `false_count` / `null_count` | Mask statistics |
+| `duration_ms` | Wall time |
+| `fault_mask` | **Confirmed** boolean mask (see below) |
+| `warnings` / `errors` | Lint/runtime messages |
+| `summary` | Execution evidence, site id, backend path |
+| `preview` | Sample fault rows for Rule Lab UI |
+
+Use `.as_dict()` for API JSON. Both PyArrow and DataFusion SQL backends normalize to this shape.
+
+## Raw mask vs confirmation
+
+1. Rule returns **raw** boolean mask (`apply_faults_arrow` or SQL `fault` column).
+2. Backend applies **fault confirmation** when `cfg` includes `min_true_rows` and/or `min_elapsed_minutes` (see [Fault confirmation]({{ "/rule-cookbook/fault-confirmation/" | relative_url }})).
+3. `ArrowRuleResult.fault_mask` is the **post-confirmation** mask used for batch counts and dashboard alerts.
+
+Confirmation is backend-owned — rules should not implement debounce logic unless documenting a special case.
+
+## DataFusion SQL rules
+
+SQL modules still expose `apply_faults_arrow`; the body delegates to `open_fdd.arrow_runtime.datafusion_backend`. Metadata:
+
+```yaml
+backend: datafusion_sql
+fault_column: fault
+sql: |
+  SELECT *, "stat_zn-t" > 76.0 AS fault FROM telemetry
+```
+
+Same `ArrowRuleResult` after SQL execution and confirmation.
+
+## Lint & forbidden imports
+
+Edge fault rules allow: `pyarrow`, `pyarrow.compute`, `open_fdd.arrow_runtime.*`, `datetime`, `math`.
+
+Forbidden in production fault rules: `pandas`, `numpy` (for rule logic), file I/O, network calls.
+
+See `lint_arrow_rule()` in `open_fdd.arrow_runtime.backend`.
+
+## Chunked execution
+
+Large tables may run via `run_arrow_rule_chunked()` — masks are concatenated; contract unchanged.
+
+## Related
+
+- [Data types & units]({{ "/rule-authoring/data-types-and-units/" | relative_url }})
+- [ADR: Rust-ready Arrow FDD contract]({{ "/adr/adr-rust-ready-arrow-fdd-contract/" | relative_url }})
+- [Developer: Arrow-native runtime]({{ "/developer/arrow-native-runtime/" | relative_url }})
+
+
 # Arrow-native runtime
 
 # Arrow-native runtime
@@ -6846,6 +6814,164 @@ Fault rules: `apply_faults_arrow(table, cfg, context=None)`. Analytics scripts: 
 | `open_fdd.arrow_runtime.cookbook` | Shared fault masks |
 | `open_fdd.arrow_runtime.windows` | Rolling min/max, consecutive-true |
 | `open_fdd.playground.arrow_templates` | Rule Lab starter templates |
+
+
+# Data types and units
+
+# Data types and units
+
+Rules read **columnar historian tables** produced by BACnet / Niagara / JSON API ingest. Author against **Feather column names** (`oa-t`, `stat_zn-t`, …) or BRICK `fdd_input` aliases resolved in the bridge.
+
+## Required table shape
+
+| Column / convention | Expectation |
+|---------------------|-------------|
+| `timestamp` | UTC or site-local consistent ordering; monotonic within a batch window |
+| Point columns | One float (or castable) column per bound historian point |
+| `site_id` | Optional in table; often passed via `cfg` / `context` |
+| Row count | One row per poll sample — irregular spacing is normal |
+
+Missing columns: cookbook helpers typically return an all-`False` mask or zero-filled stand-ins — check helper docs before assuming a fault.
+
+## Numeric casting and nulls
+
+| Older off-repo gist | Arrow in Open-FDD |
+|----------------------|--------------|
+| `HelperUtils.convert_to_float` | `pc.cast(col, pa.float64())` or ingest-time typing |
+| `HelperUtils.check_datatype_float` | Rule Lab lint + bridge ingest validation |
+| `HelperUtils.check_datatype_int` | Validate integer **cfg** fields (`int(cfg["window_samples"])`) |
+| `np.maximum` / `np.minimum` | `pc.max` / `pc.min` |
+| `series.rolling(n).min()` | `arrow_rolling_min` in `open_fdd.arrow_runtime.windows` |
+| `series.diff()` | `arrow_diff` / `arrow_abs_diff` |
+| `df.resample("H")` | **Not ported 1:1** — use sample-window rolling helpers instead |
+
+**Null behavior:** comparisons involving null produce null; backend cast may treat null as false in the final mask. Prefer `pc.fill_null` or explicit guards when null should mean “no fault.”
+
+## Command normalization
+
+BACnet analog outputs often arrive as **0–100 %**. Open-FDD normalizes with `norm_cmd_array()`:
+
+- Values **> 1.0** → divide by 100 (0–1 fraction)
+- Values **≤ 1.0** → used as-is (already fractional)
+
+Legacy gist: `check_range_less_than_one` / `float_max_check_err` (command max ≤ 1.0 after conversion).
+
+Configure per rule:
+
+```python
+cfg = {"min_active_command": 0.02, "min_command_delta": 0.03}
+```
+
+## Boolean / status columns
+
+| Signal | Typical handling |
+|--------|------------------|
+| Fan status / run command | Normalize as command; gate with `pc.greater(fan, 0.01)` |
+| Occupancy | Boolean column or hour-of-week mask via cookbook schedule helpers |
+| Enable / alarm state | Cast to bool; combine with `pc.and_` |
+| Binary points | `pc.equal(col, 1)` or cast from 0/1 floats |
+
+## Sensor profiles and units
+
+Default bounds, flatline tolerance, and rate limits live in `open_fdd.arrow_runtime.sensor_catalog.SENSOR_PROFILES`.
+
+| Profile key | Quantity | Default unit | Example fault codes |
+|-------------|----------|--------------|---------------------|
+| `zone_temp` | Temperature | °F | VAV-C |
+| `supply_air_temp` | Temperature | °F | AHU-C, RTU-C |
+| `outdoor_air_temp` | Temperature | °F | BLD-B |
+| `mixed_air_temp` | Temperature | °F | AHU-D |
+| `return_air_temp` | Temperature | °F | AHU-D |
+| `duct_static_pressure` | Pressure | in H₂O | AHU-A |
+| `zone_humidity` | Relative humidity | % RH | BLD-B |
+| `co2` | CO₂ | ppm | BLD-B |
+
+Override via rule `cfg` (`bounds_low`, `bounds_high`, `flatline_tolerance`, `window_samples`, `max_per_hour`). Metric sites: set `cfg["temp_unit"] = "metric"` or scale constants (see [Expression cookbook]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#metric-c-equivalents)).
+
+## Time and windows
+
+| Setting | Meaning |
+|---------|---------|
+| `window_samples` | Rolling window in **poll samples** (not wall-clock unless derived) |
+| `rolling_avg_minutes` | Converted to samples using `poll_interval_s` / median poll interval |
+| `hunting_window_hours` | Used by PID hunting helpers to derive sample count |
+| `min_true_rows` | Confirmation: consecutive true samples required |
+| `min_elapsed_minutes` | Confirmation: minimum wall time with fault true |
+
+Irregular timestamps: rolling helpers operate on row order within the loaded table — ensure lookback windows include enough samples for your poll cadence.
+
+## Raw fault vs confirmed fault
+
+| Stage | Where |
+|-------|-------|
+| Raw mask | Return value of `apply_faults_arrow` |
+| Confirmed mask | `ArrowRuleResult.fault_mask` after `apply_fault_confirmation_from_cfg` |
+
+Document both when tuning — a rule may fire briefly but not meet confirmation.
+
+## Related
+
+- [GL36 & sensor patterns — sensor validation]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#sensor-validation-bounds-flatline-rate-of-change)
+- [Fault confirmation]({{ "/rule-cookbook/fault-confirmation/" | relative_url }})
+- [PyArrow & DataFusion SQL]({{ "/rule-cookbook/dual-backend-rules/" | relative_url }})
+
+
+# Rust readiness checklist
+
+# Rust readiness checklist
+
+Open-FDD v1 keeps a **table-in, boolean-mask-out** contract so a future Rust or DataFusion-native executor can replace Python wrappers without changing Rule Lab metadata or driver ingest.
+
+Use this checklist when authoring or reviewing rules for stable v1 and Rust migration prep.
+
+## Rule style
+
+- [ ] **No pandas** in edge fault rules — PyArrow columns only
+- [ ] **No NumPy** for core detection logic (optional in central analytics extras only)
+- [ ] **No Python row loops** over samples for hot-path fault detection — use `pyarrow.compute` and `open_fdd.arrow_runtime.windows`
+- [ ] **Arrow arrays in, boolean mask out** — length equals input row count
+- [ ] **Explicit config schema** — document `cfg` keys in rule module docstring
+- [ ] **Deterministic null behavior** — document how missing columns / nulls are treated
+- [ ] **No hidden global state** — pure functions of `(table, cfg, context)`
+- [ ] **Stable fault-code metadata** — letter codes from [fault catalog]({{ "/fault-codes/" | relative_url }})
+- [ ] **Small fixture tests** — fixed `pa.table(...)` inputs with expected mask slices
+- [ ] **DataFusion SQL rules stay restricted** — single `SELECT` from `telemetry`, boolean `fault` column, no DDL/DML
+
+## Backend choice
+
+| Prefer PyArrow | Prefer DataFusion SQL |
+|----------------|----------------------|
+| Rolling windows, hunting, flatline | Simple threshold / CASE |
+| Schedule / occupancy gating | Operator-readable SQL preview |
+| Sensor profile helpers | Parity proof before Rust port |
+| ML feature prep (future) | Stateless row-wise logic |
+
+See [PyArrow vs DataFusion decision table]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#pyarrow-vs-datafusion-sql).
+
+## Do not use DataFusion SQL for
+
+- Complex rolling windows or resample-style logic
+- PID / control hunting with stateful window counts (use PyArrow helpers)
+- Custom helper-heavy HVAC logic
+- ML feature preparation pipelines
+- Arbitrary file joins or external tables
+- Browser-side execution
+- Pandas-style row iteration
+
+## Confirmation and evidence
+
+- [ ] Raw mask produced by rule; confirmation via `min_true_rows` / `min_elapsed_minutes` in `cfg`
+- [ ] Batch results include execution evidence (`computation_path`, backend id) for smokes
+
+## Packaging
+
+- [ ] Edge Docker image includes PyArrow runtime
+- [ ] DataFusion optional: `pip install 'open-fdd[datafusion]'` — matches `pyproject.toml` `[project.optional-dependencies] datafusion`
+
+## Related ADRs
+
+- [ADR: Rust-ready Arrow FDD contract]({{ "/adr/adr-rust-ready-arrow-fdd-contract/" | relative_url }})
+- [ADR: DataFusion Rust-ready rule backend]({{ "/adr/adr-datafusion-rust-ready-rule-backend/" | relative_url }})
 
 
 # Release process
@@ -7553,77 +7679,6 @@ cd workspace/dashboard && npm test
 ```
 
 Live BACnet is not required. Gate live ACME validation with `OPENFDD_LIVE_ACME=1`.
-
-
-# Datafusion Sql Rules
-
-# DataFusion SQL rules (optional)
-
-Open-FDD v3 remains **PyArrow-first**. Rules implement `apply_faults_arrow(table, cfg, context=None)` and return a boolean Arrow mask.
-
-The optional **DataFusion SQL** backend (`backend: datafusion_sql`) is a future-Rust-prep seam:
-
-- Input: PyArrow `Table` registered as `telemetry`
-- Rule body: a restricted `SELECT` that adds a boolean `fault` column
-- Output: the same `ArrowRuleResult` shape as PyArrow rules
-
-Install:
-
-```bash
-pip install 'open-fdd[datafusion]'
-```
-
-## When to use SQL vs PyArrow
-
-See the full decision table in the [Expression cookbook — PyArrow vs DataFusion SQL]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#pyarrow-vs-datafusion-sql).
-
-| Use DataFusion SQL | Use PyArrow |
-| --- | --- |
-| Simple thresholds, `CASE WHEN`, boolean logic | Rolling windows, flatline, rate-of-change, hunting |
-| SQL-readable expressions for operators | Custom HVAC helpers, sensor profiles, schedule gating |
-| Proving parity before Rust migration | Primary supported authoring path |
-| Stateless row-wise rules | ML prep, complex multi-signal logic |
-
-### Do not use DataFusion SQL for
-
-Rolling windows, PID hunting, helper-heavy logic, ML features, file joins, browser execution, or pandas-style row loops. Use PyArrow helpers instead.
-
-## Rule metadata (saved rules)
-
-```yaml
-id: zone_temp_high_sql
-name: Zone temperature high — SQL
-backend: datafusion_sql
-fault_column: fault
-sql: |
-  SELECT
-    *,
-    zone_temp > 75.0 AS fault
-  FROM telemetry
-```
-
-## Safety
-
-SQL rules are **not** a database console. The linter rejects:
-
-- Multiple statements, DDL/DML
-- Reads other than `FROM telemetry`
-- File paths and external URLs
-- Missing or non-boolean `fault` column
-- Row counts that differ from input telemetry
-- Wrong fault column alias (e.g. `not_fault` when `fault` is required)
-
-Server-side execution only — the Rules Lab browser editor never runs SQL locally.
-
-## Rules Lab
-
-In **Rule Lab**, choose **PyArrow** or **DataFusion SQL**:
-
-- **Validate SQL** — lint + optional server preview on latest historian sample
-- **Run Preview** — bounded sample against site telemetry
-- **Compare backends** — prove an equivalent SQL rule matches a PyArrow rule mask
-
-See [ADR: DataFusion Rust-ready backend](adr/adr-datafusion-rust-ready-rule-backend.md).
 
 
 # Dashboard Rcx Makeover Inventory
@@ -8394,7 +8449,8 @@ The **RCx Report Builder** (`/analytics/rcx`) collects a read-only snapshot from
 2. Click **Collect Data / Preview** — calls `POST /api/reports/rcx/preview`.
 3. Review available vs disabled charts (disabled charts show missing point roles or no fault data).
 4. Select sections and charts.
-5. Click **Generate DOCX** — `POST /api/reports/rcx/generate` returns `application/vnd.openxmlformats-officedocument.wordprocessingml.document`.
+5. Click **Generate DOCX** — `POST /api/reports/rcx/generate` returns `application/vnd.openxmlformats-officedocument.wordprocessingml.document` and saves to `workspace/reports/rcx/`.
+6. Use **Saved RCx reports** on the same tab to preview, download, or delete prior DOCX files (UI or agent-generated).
 
 ## Implementation
 
@@ -8500,6 +8556,31 @@ python scripts/inspect_bench_5007_long_fdd_report.py workspace/reports/bench_500
 ## Smoke
 
 Detached paired FDD harness default for short / standard / overnight — see [paired FDD smoke](../operations/paired-fdd-smoke.md).
+
+
+# Release 3.1.6
+
+# Release 3.1.6
+
+## Dashboard & operator UX
+
+- Building summary: BACnet P8 override table (top 8), per-device coverage, hourly scan health
+- Rule Lab: column preview for PyArrow + DataFusion SQL; SQL actions above editor
+- Niagara tab: test URL/password before save, folder tree checkboxes, saved-folder discover, schedules panel
+
+## BACnet & RCx
+
+- Override scan health probes (`scan_health` staleness, errors)
+- RCx DOCX: override tables, per-device breakdown, scan status in model health
+
+## Platform
+
+- GHCR Docker images: **linux/amd64** + **linux/arm64** (Raspberry Pi edge)
+- Niagara `commission_profile` persistence; `discover-profile` and `test-draft` APIs
+
+## Smoke
+
+Paired FDD harness and override scan validation unchanged — see [paired FDD smoke](../operations/paired-fdd-smoke.md).
 
 
 # Scope
