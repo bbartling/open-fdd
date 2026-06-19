@@ -51,7 +51,7 @@ _download_helper_scripts() {
   mkdir -p "$scripts_dir"
   local refs=(master "${OPENFDD_REPO_REF}" fix/security-hardening-log-rotation)
   local name ref dest
-  for name in openfdd_site_lib.sh openfdd_site_backup.sh openfdd_site_update.sh; do
+  for name in openfdd_site_lib.sh openfdd_site_backup.sh openfdd_site_update.sh openfdd_check_ghcr_platform.sh; do
     dest="${scripts_dir}/${name}"
     for ref in "${refs[@]}"; do
       if _github_raw "$ref" "scripts/${name}" "$dest" && [[ -s "$dest" ]]; then
@@ -261,6 +261,14 @@ _check_docker() {
   echo "==> Checking Docker"
   docker --version
   docker compose version
+  local arch
+  arch="$(uname -m)"
+  echo "    Host CPU: ${arch}"
+  case "$arch" in
+    aarch64|arm64)
+      echo "    Raspberry Pi / ARM64 — requires GHCR images with linux/arm64 manifest"
+      ;;
+  esac
   if ! groups | grep -q '\bdocker\b'; then
     echo "WARN: user not in docker group — run: sudo usermod -aG docker \$USER && newgrp docker" >&2
   fi
@@ -273,6 +281,10 @@ _check_docker() {
 _pull_and_start() {
   cd "$OPENFDD_ROOT"
   export OPENFDD_IMAGE_TAG
+  if [[ -x "${OPENFDD_ROOT}/scripts/openfdd_check_ghcr_platform.sh" ]]; then
+    echo "==> Verifying GHCR images for $(uname -m)"
+    OPENFDD_IMAGE_TAG="$OPENFDD_IMAGE_TAG" "${OPENFDD_ROOT}/scripts/openfdd_check_ghcr_platform.sh"
+  fi
   echo "==> Pulling images (tag=${OPENFDD_IMAGE_TAG})"
   docker compose pull
   docker compose up -d

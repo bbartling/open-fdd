@@ -100,6 +100,8 @@ Important project facts:
   - ghcr.io/bbartling/openfdd-mcp-rag:latest
 - The official bootstrap script is:
   https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_edge_bootstrap.sh
+- Raspberry Pi / ARM64: GHCR images must include `linux/arm64`. If pull fails with `no matching manifest for linux/arm64/v8`, see docs/quick-start/raspberry-pi-edge.md — do not treat it as a Docker install failure.
+- Platform check script (after bootstrap downloads scripts): `~/open-fdd/scripts/openfdd_check_ghcr_platform.sh`
 - Default site root should be:
   ~/open-fdd
 - The persistent workspace must not be deleted after creation:
@@ -157,6 +159,16 @@ Validate:
 docker --version
 docker compose version
 docker run --rm hello-world
+
+Step 2b — GHCR architecture check (ARM64 / Pi only)
+If `uname -m` is `aarch64` or `arm64`, verify GHCR publishes ARM64 before blaming Docker:
+docker buildx imagetools inspect ghcr.io/bbartling/openfdd-bridge:latest | grep -E 'linux/arm64|linux/amd64' || true
+docker buildx imagetools inspect ghcr.io/bbartling/openfdd-mcp-rag:latest | grep -E 'linux/arm64|linux/amd64' || true
+
+If `linux/arm64` is missing and bootstrap fails with `no matching manifest for linux/arm64/v8`:
+- Report clearly: published images are amd64-only for that tag; Pi Docker is fine.
+- Offer: (1) wait for multi-arch GHCR publish, (2) QEMU amd64 emulation (slow, lab only), (3) local `./scripts/docker_build.sh` on the Pi.
+- Full steps: https://bbartling.github.io/open-fdd/quick-start/raspberry-pi-edge/
 
 Step 3 — Bootstrap Open-FDD edge
 Download and run the official bootstrap:

@@ -174,10 +174,17 @@ a {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  max-width: 1480px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .page {
-  max-width: 980px;
+  max-width: 100%;
+}
+
+.page-wide {
+  max-width: 100%;
 }
 
 .page.page-agent {
@@ -189,12 +196,51 @@ a {
   width: 100%;
 }
 
-.page-wide {
-  max-width: 1180px;
-}
-
 .page-header {
   margin-bottom: 1.25rem;
+}
+
+.page-header-bis {
+  padding: 18px 22px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--bis-navy-2, #1a2842) 0%, var(--bis-navy, #0e1e35) 100%);
+  color: #e8edf5;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 3px rgba(14, 30, 53, 0.08);
+}
+
+.page-header-bis-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+}
+
+.page-header-bis .title {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 600;
+  color: #e8edf5;
+  letter-spacing: -0.01em;
+}
+
+.page-header-bis .page-subtitle {
+  margin: 4px 0 0;
+  max-width: 62ch;
+  line-height: 1.45;
+  font-size: 0.8rem;
+  color: #a8b3cb;
+}
+
+.page-header-bis .page-subtitle a {
+  color: #c5d4f0;
+}
+
+.page-header-bis .page-meta {
+  margin-top: 0;
+  font-size: 0.85rem;
+  color: #a8b3cb;
 }
 
 .page-header .title {
@@ -213,13 +259,6 @@ a {
 
 .page-meta {
   margin-top: 10px;
-}
-
-.panel-title {
-  margin: 0 0 14px;
-  font-size: 0.95rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
 }
 
 .field {
@@ -305,6 +344,10 @@ a {
   flex-wrap: wrap;
   gap: 18px 28px;
   align-items: flex-start;
+  padding: 14px 18px;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
 
 .status-kv {
@@ -332,8 +375,17 @@ a {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 16px;
+  padding: 20px 22px;
   margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(14, 30, 53, 0.04);
+}
+
+.panel-title {
+  margin: 0 0 14px;
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--muted);
 }
 
 .title {

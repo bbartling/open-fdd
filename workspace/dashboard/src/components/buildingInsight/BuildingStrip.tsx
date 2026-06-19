@@ -21,8 +21,9 @@ export default function BuildingStrip({
   live,
   lastSyncLabel,
 }: Props) {
+  const extended = operatorOverrideCount > 0;
   return (
-    <section className="bis-building-strip">
+    <section className={`bis-building-strip${extended ? " bis-building-strip--extended" : ""}`}>
       <div className="bis-b-name">
         <div className="bis-b-icon" aria-hidden>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">

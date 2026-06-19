@@ -14,6 +14,7 @@ Run Open-FDD on a Linux edge host using **three GHCR Docker images**. No git clo
 | 2 | [First login and health check]({{ "/quick-start/health-check/" | relative_url }}) |
 | 3 | [Edge site lifecycle]({{ "/quick-start/site-lifecycle/" | relative_url }}) — backup, update, restore |
 | 4 | [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) — operator checklist |
+| — | [Raspberry Pi edge]({{ "/quick-start/raspberry-pi-edge/" | relative_url }}) — ARM64 / OpenClaw |
 
 **One-liner bootstrap** (edge host):
 

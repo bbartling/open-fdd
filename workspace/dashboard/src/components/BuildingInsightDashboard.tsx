@@ -199,7 +199,7 @@ export default function BuildingInsightDashboard() {
         faultBreakdown={faultBreakdown}
         operatorOverrideCount={operatorOverrideCount}
         live={live}
-        lastSyncLabel={live ? "Live" : "Polling"}
+        lastSyncLabel="BACnet poll cycle"
       />
 
       <div className="bis-row bis-row-2">
