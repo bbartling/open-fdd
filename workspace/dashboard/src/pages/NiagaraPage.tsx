@@ -557,8 +557,8 @@ export default function NiagaraPage() {
       <div className="panel ui-compact-hint">
         <p className="muted" style={{ margin: 0 }}>
           Niagara login uses <code>workspace/niagara.env.local</code> (copy from{" "}
-          <code>niagara.env.example</code>) or the password field when saving a station. Restart the bridge after
-          adding the env file.
+          <code>niagara.env.example</code>) or the password field when saving a station. Set the admin password env
+          named in that example file, then restart the bridge.
         </p>
       </div>
 
