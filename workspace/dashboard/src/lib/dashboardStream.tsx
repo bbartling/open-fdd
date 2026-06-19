@@ -212,10 +212,31 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
   }, []);
 
   useEffect(() => {
+    if (authRequired === null) return;
+
     let cancelled = false;
     let ws: WebSocket | null = null;
     let pollId = 0;
     let gotData = false;
+    let wsAttempt = 0;
+
+    const detachWs = (socket: WebSocket) => {
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onerror = null;
+      socket.onclose = null;
+    };
+
+    const teardownWs = (socket: WebSocket | null) => {
+      if (!socket) return;
+      detachWs(socket);
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.close(1000, "teardown");
+      } else if (socket.readyState === WebSocket.CONNECTING) {
+        // Defer close until open — avoids StrictMode "closed before connection established" noise.
+        socket.onopen = () => socket.close(1000, "teardown");
+      }
+    };
 
     const apply = (data: DashboardSnapshot) => {
       if (!cancelled) {
@@ -247,29 +268,43 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
 
     const connectWs = async () => {
       if (cancelled) return;
-      const ticket = await fetchWsTicket();
-      if (cancelled) return;
+      const attempt = ++wsAttempt;
       try {
+        const ticket = authenticated ? await fetchWsTicket() : null;
+        if (cancelled || attempt !== wsAttempt) return;
+        if (authenticated && authRequired && !ticket) {
+          startPolling();
+          return;
+        }
         const url = new URL(wsBaseUrl());
-        ws = ticket
+        const socket = ticket
           ? new WebSocket(url.toString(), ["ofdd.ws", ticket])
           : new WebSocket(url.toString());
-        ws.onopen = () => {
-          if (!cancelled) setLive(true);
+        ws = socket;
+        socket.onopen = () => {
+          if (cancelled || attempt !== wsAttempt) {
+            teardownWs(socket);
+            return;
+          }
+          setLive(true);
         };
-        ws.onmessage = (ev) => {
+        socket.onmessage = (ev) => {
           try {
             apply(JSON.parse(ev.data) as DashboardSnapshot);
           } catch {
             /* ignore malformed frame */
           }
         };
-        ws.onerror = () => ws?.close();
-        ws.onclose = () => {
-          if (!cancelled) startPolling();
+        socket.onerror = () => {
+          if (attempt === wsAttempt) socket.close();
+        };
+        socket.onclose = () => {
+          if (cancelled || attempt !== wsAttempt) return;
+          setLive(false);
+          startPolling();
         };
       } catch {
-        if (!cancelled) startPolling();
+        if (!cancelled && attempt === wsAttempt) startPolling();
       }
     };
 
@@ -287,7 +322,9 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
 
     return () => {
       cancelled = true;
-      ws?.close();
+      wsAttempt += 1;
+      teardownWs(ws);
+      ws = null;
       window.clearInterval(pollId);
       if (fallbackTimer) window.clearTimeout(fallbackTimer);
     };

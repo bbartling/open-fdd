@@ -554,6 +554,14 @@ export default function NiagaraPage() {
         </div>
       ) : null}
 
+      <div className="panel ui-compact-hint">
+        <p className="muted" style={{ margin: 0 }}>
+          Niagara login uses <code>workspace/niagara.env.local</code> (copy from{" "}
+          <code>niagara.env.example</code>) or the password field when saving a station. Restart the bridge after
+          adding the env file.
+        </p>
+      </div>
+
       {loadError ? <div className="panel error-panel">{loadError}</div> : null}
 
       <NiagaraStationRail

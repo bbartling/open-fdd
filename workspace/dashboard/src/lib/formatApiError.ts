@@ -38,5 +38,11 @@ export function formatApiError(error: unknown): string {
   if (raw.includes("commission agent unreachable")) {
     return "Field commission service is unreachable — run ./scripts/run_local.sh restart";
   }
+  if (/password env .+ is not set/i.test(raw)) {
+    return "Niagara password not configured — set OPENFDD_NIAGARA_ADMIN_PASSWORD in workspace/niagara.env.local (or re-save the station with the password field), then restart the bridge.";
+  }
+  if (raw.includes("502") && /niagara|baskstream|station_url|ConnectError|SSL|certificate/i.test(raw)) {
+    return `${mapForbidden(raw)} — check station URL, TLS verify setting, and that the bridge host can reach the Niagara box on the LAN.`;
+  }
   return mapForbidden(raw);
 }
