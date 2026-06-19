@@ -47,6 +47,8 @@ def test_probe_bacnet_override_scan_interval(mock_fetch):
         "operator_priority": 8,
         "full_rotation_hours": 3.0,
         "last_scan_device": 5007,
+        "last_scan_at": "2026-06-19T14:00:00+00:00",
+        "scan_health": {"ok": True, "status": "healthy", "detail": "ok"},
     }
     mock_fetch.side_effect = [
         (200, body),
