@@ -141,6 +141,9 @@ echo "  workspace/bacnet/commissioning/   BACnet bind, points.csv"
 echo "  workspace/bacnet/polls/           poll samples.csv (optional in fast mode)"
 echo "  workspace/auth.env.local          login secrets"
 echo "  workspace/api/static/app/         dashboard bundle (if rsync'd)"
+echo ""
+echo "Next: ./scripts/openfdd_site_update.sh"
+echo "  (safe Docker prune, image pull, validate, purge backup on success)"
 
 # Drop legacy timestamped dirs — keep only the rolling latest backup.
 legacy_root="$(dirname "$BACKUP_ROOT")"

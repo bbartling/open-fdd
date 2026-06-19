@@ -5,6 +5,7 @@ type Props = {
   pointCount?: number;
   activeFaults: number;
   faultBreakdown: string;
+  operatorOverrideCount?: number;
   live?: boolean;
   lastSyncLabel?: string;
 };
@@ -16,6 +17,7 @@ export default function BuildingStrip({
   pointCount,
   activeFaults,
   faultBreakdown,
+  operatorOverrideCount = 0,
   live,
   lastSyncLabel,
 }: Props) {
@@ -64,6 +66,13 @@ export default function BuildingStrip({
         <div className={`value ${activeFaults > 0 ? "bis-warn-value" : ""}`}>{activeFaults}</div>
         <div className="sub">{faultBreakdown || "all clear"}</div>
       </div>
+      {operatorOverrideCount > 0 ? (
+        <div className="bis-b-stat bis-b-stat-alert">
+          <div className="label">P8 overrides</div>
+          <div className="value bis-warn-value">{operatorOverrideCount}</div>
+          <div className="sub">BACnet operator writes</div>
+        </div>
+      ) : null}
     </section>
   );
 }

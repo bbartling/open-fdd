@@ -731,15 +731,7 @@ export default function RuleLabPage() {
 
   return (
     <div className="page page-wide rule-lab-page">
-      <PageHeader
-        title="Rule Lab"
-        subtitle={
-          <>
-            Build and test FDD rules against recent site data. Choose a rule type below — pin assignments on the{" "}
-            <a href="/model">Data Model</a> tab or test by equipment in the panel below.
-          </>
-        }
-      />
+      <PageHeader title="Rule Lab" subtitle="Author, test, and save fault rules." />
 
       {authRole === "operator" ? (
         <p className="error panel">
@@ -817,19 +809,6 @@ export default function RuleLabPage() {
             DataFusion SQL
           </button>
         </div>
-        <p className="muted rule-lab-type-hint">
-          {ruleBackend === "datafusion_sql" ? (
-            <>
-              <strong>DataFusion SQL</strong> — simple threshold, CASE WHEN, and SQL-readable rules. Runs{" "}
-              <strong>server-side only</strong> (<code>pip install open-fdd[datafusion]</code>).
-            </>
-          ) : (
-            <>
-              <strong>PyArrow rule.py</strong> — full HVAC logic, rolling windows, helper libraries, and ML-ready Python
-              workflows.
-            </>
-          )}
-        </p>
 
         <div className="form-grid">
           <div className="field">
@@ -847,21 +826,6 @@ export default function RuleLabPage() {
             />
           </div>
         </div>
-
-        <p className="muted rule-lab-hint">
-          {ruleBackend === "datafusion_sql" ? (
-            <>
-              Use the Arrow table <code>telemetry</code>. Return one boolean column named <code>fault</code> (configurable
-              in Advanced). Set <code>min_true_rows</code> in rule config for fault confirmation (e.g. 5 rows at 60s poll ≈
-              5 minutes).
-            </>
-          ) : (
-            <>
-              Download kit → edit <code>rule.py</code> locally → upload. Set <code>min_true_rows</code> or{" "}
-              <code>min_elapsed_minutes</code> in config for fault confirmation.
-            </>
-          )}
-        </p>
 
         <div className="toolbar rule-lab-actions">
           {ruleBackend === "arrow" ? (
@@ -986,16 +950,13 @@ export default function RuleLabPage() {
       <FddRuleTestPanel rules={saved} disabled={busy || authRole === "operator"} />
 
       <div className="panel rule-lab-readonly-panel">
-        <h3 className="panel-title">{ruleBackend === "datafusion_sql" ? "SQL fault expression" : "Rule source"}</h3>
+        <h3 className="panel-title">{ruleBackend === "datafusion_sql" ? "SQL expression" : "Rule source"}</h3>
         {ruleBackend === "datafusion_sql" ? (
           <>
-            <p className="muted">
-              Use the Arrow table named <code>telemetry</code>. Return one boolean column named <code>fault</code>.
-            </p>
-            <details className="rule-lab-advanced">
-              <summary>Advanced</summary>
+            <details className="rule-lab-advanced ui-advanced-fold">
+              <summary>Options</summary>
               <label className="field-label" htmlFor="fault-column">
-                Fault column name
+                Fault column
               </label>
               <input
                 id="fault-column"
@@ -1034,10 +995,7 @@ export default function RuleLabPage() {
             />
           </div>
         ) : (
-          <p className="muted">
-            No rule loaded. Download a dev kit with real feather sample data, edit <code>rule.py</code> locally with{" "}
-            <code>pip install open-fdd pyarrow</code>, then upload when lint passes.
-          </p>
+          <p className="ui-empty-hint">Upload a rule kit or select a saved rule.</p>
         )}
         {activeLintIssues.length > 0 && activeSyntaxOk === false ? (
           <ul className="rule-lint-list">

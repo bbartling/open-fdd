@@ -8,6 +8,8 @@ nav_order: 2
 
 `workspace/` on the edge host is the **live site state** — feather historian, BACnet commissioning files, BRICK model, FDD rules, auth, and dashboard static bundle. Container images are replaceable; **backup `workspace/` before every upgrade.**
 
+Canonical operator flow: [Edge site lifecycle]({{ "/quick-start/site-lifecycle/" | relative_url }}).
+
 ## Quick backup (edge host)
 
 ```bash
@@ -15,58 +17,35 @@ cd ~/open-fdd
 ./scripts/openfdd_site_backup.sh
 ```
 
-Archives default to **`~/openfdd-backups/latest`** on the edge host (overwrites each run — one rolling copy for rigorous testing).
+Archives default to **`~/openfdd-backups/latest`** (overwrites each run).
 
-```bash
-cd ~/open-fdd
-./scripts/openfdd_site_backup.sh
-```
-
-Custom location (also overwritten each run unless you use a new path):
-
-```bash
-BACKUP_ROOT=~/openfdd-backups/manual ./scripts/openfdd_site_backup.sh
-```
-
-Fast pre-upgrade backup (skips large `workspace/bacnet/polls/` CSV history; feather/model/rules kept):
+Fast pre-upgrade backup (skips large `workspace/bacnet/polls/` CSV history):
 
 ```bash
 BACKUP_INCLUDE_POLL_SAMPLES=0 ./scripts/openfdd_site_backup.sh
 ```
 
-On **bensserver**, site packs under `edge_backup/local/<site>/<building>/` are likewise overwritten by `edge_site_backup.sh` — no timestamp pile-up during validation.
-
-From bensserver for any edge host (Ansible — backup runs **on the edge**, no workspace transfer over Tailscale):
+Custom location:
 
 ```bash
-OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling
-OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling --fast-backup
+BACKUP_ROOT=~/openfdd-backups/manual ./scripts/openfdd_site_backup.sh
 ```
 
-Acme wrapper (same flow):
+## Upgrade + automatic backup purge
 
-```bash
-OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_acme_site.sh --fast-backup
-```
+After a successful `./scripts/openfdd_site_update.sh`, the backup directory is **removed** by default once health and workspace layout checks pass. Set `PURGE_BACKUP_AFTER_SUCCESS=0` to retain archives.
 
-## Manual backup (SSH)
-
-Container processes may write files as **`root:root`** with mode **`0600`**. Use `sudo` for a full archive:
+## Restore from backup
 
 ```bash
 cd ~/open-fdd
+RESTORE_WORKSPACE=1 ./scripts/openfdd_site_update.sh
+```
 
-export BACKUP_ROOT="$HOME/openfdd-backups/$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$BACKUP_ROOT"
+Default historian cap on restore: **200 GiB** of newest feather shards. Full restore:
 
-cp docker-compose.yml "$BACKUP_ROOT/docker-compose.yml.before"
-docker compose ps > "$BACKUP_ROOT/docker-compose-ps-before.txt"
-docker compose config --images > "$BACKUP_ROOT/docker-images-before.txt"
-
-sudo tar --xattrs --acls -czf "$BACKUP_ROOT/workspace-full.tgz" workspace
-sudo chown "$USER:$USER" "$BACKUP_ROOT/workspace-full.tgz"
-
-du -h "$BACKUP_ROOT/workspace-full.tgz"
+```bash
+RESTORE_WORKSPACE=1 RESTORE_FEATHER_MAX_GIB=0 ./scripts/openfdd_site_update.sh
 ```
 
 ## What to protect
@@ -80,15 +59,18 @@ du -h "$BACKUP_ROOT/workspace-full.tgz"
 | `workspace/auth.env.local` | Login secrets |
 | `workspace/api/static/app/` | Dashboard bundle (if deployed separately) |
 
-## Restore after a bad upgrade
+## Ansible / bensserver
 
-1. Stop containers: `docker compose stop` (do **not** use `down -v`)
-2. Restore `docker-compose.yml` from backup
-3. If data corruption: extract selective files from `workspace-full.tgz` — model, rules, feather shards
-4. `docker compose pull && docker compose up -d --force-recreate`
-5. Verify: [Deployment validation]({{ "/ops/deployment-validation/" | relative_url }})
+From bensserver for any edge host (backup runs **on the edge**, no workspace transfer over Tailscale):
+
+```bash
+OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling
+OPENFDD_IMAGE_TAG=3.1.3 ./scripts/upgrade_edge_site.sh --limit acme_vm_bbartling --fast-backup
+```
 
 ## Safe cleanup
+
+Handled automatically by `openfdd_site_update.sh` (stopped containers, dangling/unused images). Manual:
 
 ```bash
 docker image prune -f
@@ -99,5 +81,6 @@ docker image prune -f
 
 ## Related
 
+- [Edge site lifecycle]({{ "/quick-start/site-lifecycle/" | relative_url }})
 - [Updating the stack]({{ "/quick-start/updating/" | relative_url }})
 - [Live site update]({{ "/ops/live_site_update/" | relative_url }})

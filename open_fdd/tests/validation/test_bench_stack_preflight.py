@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from open_fdd.validation.bench_stack_preflight import (
     BENCH_RULE_IDS,
     validate_rules_in_service,
@@ -41,7 +43,7 @@ def _load_bench_rules() -> list[dict]:
 
 
 def test_validate_rules_in_service_matches_ui_counts():
-    rules = _load_bench_rules()
+    rules = _bench_rules_fixture()
     report = validate_rules_in_service(rules)
     assert report["ok"] is True
     assert report["enabled_count"] == 4
@@ -53,6 +55,20 @@ def test_validate_rules_in_service_matches_ui_counts():
     assert by_id["humidity-out-of-bounds"]["point_bindings"] == 2
 
 
+def test_validate_rules_in_service_live_store_includes_bench_rules():
+    """Optional host check — skip when local rules_store is not the bench contract."""
+    if not RULES_STORE.is_file():
+        pytest.skip("no live rules_store.json")
+    rules = _load_bench_rules()
+    report = validate_rules_in_service(rules)
+    if not report["ok"]:
+        pytest.skip(f"live rules_store mismatch: {report.get('errors')}")
+    assert report["bound_count"] == 4
+    by_id = {c["rule_id"]: c for c in report["checks"]}
+    for rid in BENCH_RULE_IDS:
+        assert rid in by_id
+
+
 def test_validate_rules_in_service_fails_when_rule_missing():
     rules = [{"id": "temp-out-of-bounds", "enabled": True, "bindings": {"point_ids": ["a"] * 6}}]
     report = validate_rules_in_service(rules)
@@ -61,7 +77,7 @@ def test_validate_rules_in_service_fails_when_rule_missing():
 
 
 def test_validate_stack_preflight_happy_path():
-    rules = _load_bench_rules()
+    rules = _bench_rules_fixture()
 
     def fetch(method: str, path: str, body: dict | None = None):
         if path == "/health":

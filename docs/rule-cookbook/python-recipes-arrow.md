@@ -1,18 +1,17 @@
 ---
 title: Python recipes (full Arrow library)
 parent: Rule Cookbook
-nav_order: 0
+nav_order: 2
 ---
 
 # Python recipes — full Arrow library
 
-Copy-paste **`apply_faults_arrow`** modules for Rule Lab. Replaces the legacy pandas/YAML Expression Rule Cookbook.
+Copy-paste **`apply_faults_arrow`** modules for Rule Lab. PyArrow + `pyarrow.compute` only.
 
-- **No pandas** on the edge — PyArrow + `pyarrow.compute` only
 - Set **`fault_code`** in Rule Lab metadata (letter codes or Grade-A `AHU-ECON-001`)
 - Map historian column names in the data model / rule bindings (`ma-t`, `oa-t`, `stat_zn-t`, …)
 
-Quick patterns: [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}) · Index: [Expression cookbook (Arrow-native)]({{ "/rule-cookbook/expression-cookbook/" | relative_url }})
+Backend choice: [PyArrow & DataFusion SQL]({{ "/rule-cookbook/dual-backend-rules/" | relative_url }}) · Patterns: [GL36 & sensor patterns]({{ "/rule-cookbook/expression-cookbook/" | relative_url }})
 
 ---
 
@@ -640,9 +639,9 @@ Pass `occupied_start_hour`, `occupied_end_hour`, `tz_offset_hours` in Rule Lab `
 
 ---
 
-## FC4 — PID hunting (modernized from legacy GL36)
+## FC4 — PID hunting
 
-Legacy pandas `FaultConditionFour` built hourly AHU operating-state transition counts. Open-FDD v1 **modernizes** FC4 into an Arrow-native **PID / control hunting** detector — sample-window rolling step counts, not pandas hourly `resample("H")`. See [Legacy FC4 documentation]({{ "/rule-authoring/legacy-pandas-parity/" | relative_url }}#fault-rule-4-fc4--modernized-hunting-detector).
+Open-FDD implements GL36-style FC4 as an Arrow-native **PID / control hunting** detector — sample-window rolling step counts on the historian poll interval.
 
 Ports gist `check_hunting` intent to Arrow. Two modes:
 
@@ -697,4 +696,4 @@ Legacy interlink: `LEGACY_CODE_MAP["FC4"]` → **AHU-G**; per-loop VAV/plant rul
 4. Quick-test on 3–24 h feather window
 5. Ship via `setup_gl36_fdd.py` or Rule Lab save
 
-**See also:** [Expression cookbook]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}) · [Fault codes]({{ "/fault-codes/" | relative_url }}) · [Rule Lab]({{ "/operator-bridge/rule-lab/" | relative_url }})
+**See also:** [GL36 & sensor patterns]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}) · [Fault codes]({{ "/fault-codes/" | relative_url }}) · [Rule Lab]({{ "/operator-bridge/rule-lab/" | relative_url }})

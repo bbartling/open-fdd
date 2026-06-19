@@ -5,38 +5,35 @@ import { EditorView } from "@codemirror/view";
 import { useMemo } from "react";
 import { useTheme } from "../contexts/theme-context";
 
-const lightEditorTheme = EditorView.theme(
+const lightSqlTheme = EditorView.theme(
   {
     "&": {
-      backgroundColor: "#0f172a",
-      color: "#e2e8f0",
+      backgroundColor: "#f1f5f9",
+      color: "#0f172a",
     },
     ".cm-content": {
-      caretColor: "#38bdf8",
-      fontSize: "14px",
-      lineHeight: "1.55",
+      caretColor: "#0369a1",
+      fontSize: "15px",
+      lineHeight: "1.6",
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
     },
     ".cm-cursor, .cm-dropCursor": {
-      borderLeftColor: "#38bdf8",
+      borderLeftColor: "#0369a1",
     },
     "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
-      backgroundColor: "#1e3a5f !important",
+      backgroundColor: "#bae6fd !important",
     },
     ".cm-gutters": {
-      backgroundColor: "#0b1220",
-      color: "#64748b",
-      borderRight: "1px solid #1e293b",
+      backgroundColor: "#e2e8f0",
+      color: "#475569",
+      borderRight: "1px solid #cbd5e1",
     },
     ".cm-activeLineGutter": {
-      backgroundColor: "#111827",
+      backgroundColor: "#dbeafe",
     },
     ".cm-activeLine": {
-      backgroundColor: "#111827",
+      backgroundColor: "#e0f2fe",
     },
-    ".cm-keyword": { color: "#7dd3fc" },
-    ".cm-string": { color: "#86efac" },
-    ".cm-number": { color: "#fcd34d" },
-    ".cm-comment": { color: "#64748b", fontStyle: "italic" },
   },
   { dark: false },
 );
@@ -44,8 +41,9 @@ const lightEditorTheme = EditorView.theme(
 const darkSqlTheme = EditorView.theme(
   {
     ".cm-content": {
-      fontSize: "14px",
-      lineHeight: "1.55",
+      fontSize: "15px",
+      lineHeight: "1.6",
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
     },
   },
   { dark: true },
@@ -64,14 +62,14 @@ export default function SqlCodeEditor({ value, onChange, height = "320px", readO
   const extensions = useMemo(
     () => [
       sql(),
-      theme === "dark" ? [oneDark, darkSqlTheme] : lightEditorTheme,
+      theme === "dark" ? [oneDark, darkSqlTheme] : lightSqlTheme,
       EditorView.lineWrapping,
     ],
     [theme],
   );
 
   return (
-    <div className="sql-code-editor-wrap">
+    <div className="sql-code-editor-wrap code-editor-surface">
       <CodeMirror
         value={value}
         height={height}

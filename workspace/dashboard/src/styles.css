@@ -3621,6 +3621,132 @@ button.linkish {
   gap: 1rem;
 }
 
+.rcx-library-panel {
+  margin-top: 0.5rem;
+}
+
+.rcx-library-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.rcx-library-sub {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+}
+
+.rcx-report-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.rcx-report-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.75rem 1rem;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+
+.rcx-report-icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 8px;
+  background: linear-gradient(145deg, #2b579a, #1e3f73);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rcx-report-name {
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.rcx-report-detail {
+  font-size: 0.85rem;
+  margin-top: 0.15rem;
+}
+
+.rcx-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.btn.small {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.85rem;
+}
+
+.btn.small.danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+.rcx-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(10, 14, 22, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.rcx-preview-modal {
+  width: min(960px, 100%);
+  max-height: 92vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.rcx-preview-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.rcx-preview-hint {
+  font-size: 0.85rem;
+  margin: 0 0 0.75rem;
+}
+
+.rcx-preview-body {
+  overflow: auto;
+  flex: 1;
+  min-height: 12rem;
+  max-height: 70vh;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  background: #fff;
+}
+
+.rcx-preview-body.docx section.docx-preview-page {
+  margin-bottom: 1rem;
+}
+
 .error-panel,
 .error-text {
   color: var(--danger);
@@ -3651,5 +3777,60 @@ button.linkish {
 .data-table th {
   color: var(--muted);
   font-weight: 600;
+}
+
+.page .muted,
+.panel .muted {
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.ui-advanced-fold {
+  margin: 0.35rem 0 0.75rem;
+  font-size: 0.88rem;
+}
+
+.ui-advanced-fold > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+  list-style: none;
+}
+
+.ui-advanced-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ui-help-text,
+.ui-empty-hint,
+.ui-compact-hint,
+.ui-sr-lead {
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--muted);
+  margin: 0 0 0.75rem;
+}
+
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.code-editor-surface {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 0.5rem;
+}
+
+.rule-lab-page .panel-title {
+  margin-bottom: 0.65rem;
+}
+
+.rule-lab-actions {
+  margin-top: 0.75rem;
 }
 

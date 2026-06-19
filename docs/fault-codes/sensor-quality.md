@@ -6,7 +6,7 @@ nav_order: 5
 
 # Sensor and data quality
 
-Sensor faults use cookbook patterns **`flatline_1h`**, **`oob_rolling`**, **`rate_of_change`**, and **`mixing_envelope`**. Full thresholds: [Expression cookbook — sensor validation]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#sensor-validation-bounds-flatline-rate-of-change).
+Sensor faults use cookbook patterns **`flatline_1h`**, **`oob_rolling`**, **`rate_of_change`**, and **`mixing_envelope`**. Full thresholds: [GL36 & sensor patterns]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#sensor-validation-bounds-flatline-rate-of-change).
 
 ## Catalog codes
 

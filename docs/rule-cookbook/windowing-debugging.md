@@ -1,7 +1,7 @@
 ---
 title: Windowing & debugging
 parent: Rule Cookbook
-nav_order: 4
+nav_order: 6
 ---
 
 # Windowing & debugging

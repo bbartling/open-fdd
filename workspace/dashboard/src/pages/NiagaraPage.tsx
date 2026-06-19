@@ -591,10 +591,9 @@ export default function NiagaraPage() {
               </div>
             </div>
 
-            {!form.password_env || selectedStation?.password_configured === false ? (
-              <p className="muted panel-warn" style={{ padding: "0.5rem 0.75rem", borderRadius: 8, marginTop: 0 }}>
-                Enter the Niagara password below and Save — stored on the bridge (not in git). Env var{" "}
-                <code>{form.password_env || DEFAULT_PASSWORD_ENV}</code> is optional for production.
+            {!selectedStation?.password_configured ? (
+              <p className="panel-warn ui-compact-hint">
+                Enter the station password and Save — stored securely on the bridge host.
               </p>
             ) : null}
 
@@ -632,19 +631,8 @@ export default function NiagaraPage() {
                 />
               </div>
               <div className="field">
-                <label className="field-label" htmlFor="niagara-pass-env">
-                  Password env var
-                </label>
-                <input
-                  id="niagara-pass-env"
-                  value={form.password_env ?? DEFAULT_PASSWORD_ENV}
-                  onChange={(e) => setForm((f) => ({ ...f, password_env: e.target.value }))}
-                  placeholder={DEFAULT_PASSWORD_ENV}
-                />
-              </div>
-              <div className="field">
                 <label className="field-label" htmlFor="niagara-password">
-                  Station password
+                  Password
                 </label>
                 <input
                   id="niagara-password"

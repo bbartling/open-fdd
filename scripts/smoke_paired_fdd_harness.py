@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
-REPORT_DIR = REPO / "reports"
+REPORT_DIR = REPO / "workspace" / "reports" / "artifacts"
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "workspace" / "api"))
 

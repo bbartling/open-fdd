@@ -35,7 +35,6 @@ export default function BuildingInsightDashboard() {
   const [canClearAlarms, setCanClearAlarms] = useState(false);
   const [clearingId, setClearingId] = useState<string | null>(null);
   const [clearError, setClearError] = useState("");
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
 
   const loadInsight = useCallback(async (force = false) => {
     setInsightLoading(true);
@@ -84,12 +83,6 @@ export default function BuildingInsightDashboard() {
         method: "POST",
         body: JSON.stringify({ alert_ids: faultAlertIds(fault) }),
       });
-      setDismissedIds((prev) => {
-        const next = new Set(prev);
-        next.add(fault.id);
-        for (const id of faultAlertIds(fault)) next.add(id);
-        return next;
-      });
       if (selectedFault?.id === fault.id) setSelectedFault(null);
     } catch (e) {
       setClearError(formatApiError(e));
@@ -99,15 +92,11 @@ export default function BuildingInsightDashboard() {
   }, [selectedFault?.id]);
 
   const faults = snapshot?.faults;
-  const displayFaults = useMemo(() => {
-    const built = buildDisplayFaults(faults?.families || []);
-    if (!dismissedIds.size) return built;
-    return built.filter(
-      (f) =>
-        !dismissedIds.has(f.id) &&
-        !f.underlying.some((u) => dismissedIds.has(String(u.id || ""))),
-    );
-  }, [faults?.families, dismissedIds]);
+  const displayFaults = useMemo(() => buildDisplayFaults(faults?.families || []), [faults?.families]);
+  const operatorOverrideCount = useMemo(
+    () => displayFaults.find((f) => f.id === "group-bacnet-overrides")?.underlying.length ?? 0,
+    [displayFaults],
+  );
   const sevCounts = useMemo(() => countBySeverity(displayFaults), [displayFaults]);
 
   const poll = insight?.device_poll_health;
@@ -203,22 +192,21 @@ export default function BuildingInsightDashboard() {
     <div className="bis-dashboard">
       <BuildingStrip
         siteName="Active site"
-        siteDetail={`${days}-day analytics · Open FDD`}
+        siteDetail={`${days}-day analytics`}
         equipmentCount={equipmentCount}
         pointCount={pointCount}
         activeFaults={sevCounts.total}
         faultBreakdown={faultBreakdown}
+        operatorOverrideCount={operatorOverrideCount}
         live={live}
-        lastSyncLabel={live ? "WebSocket" : "HTTP poll"}
+        lastSyncLabel={live ? "Live" : "Polling"}
       />
 
       <div className="bis-row bis-row-2">
         <div className="bis-card bis-health-card">
-          <h3>Building health index</h3>
-          <h2>Comfort · Efficiency · Reliability</h2>
-          <p className="bis-card-sub">
-            Ordered for operators: comfort first, then efficiency, then reliability and data model
-            completeness.
+          <h3>Building health</h3>
+          <p className="bis-card-sub bis-card-sub-compact">
+            Comfort · efficiency · reliability
           </p>
           <div className={`bis-overall-pill ${pillClass}`}>
             <span className="bis-pill-dot" />
@@ -256,10 +244,6 @@ export default function BuildingInsightDashboard() {
           <div className="bis-card-head-row">
             <div>
               <h3>Prioritized issues</h3>
-              <h2>
-                Plain-language alerts{" "}
-                <span className="bis-hint">click for detail</span>
-              </h2>
             </div>
             <button
               type="button"
@@ -287,9 +271,6 @@ export default function BuildingInsightDashboard() {
             <p className="bis-lead bis-ok-text">All clear — no open faults or model warnings.</p>
           )}
           {clearError ? <p className="error">{clearError}</p> : null}
-          {!canClearAlarms && displayFaults.length ? (
-            <p className="muted bis-fault-readonly-hint">Sign in as operator to clear alarms.</p>
-          ) : null}
           {insightError ? <p className="error">{insightError}</p> : null}
         </div>
 

@@ -42,11 +42,20 @@ def test_clear_removes_from_active(latch_file):
     assert active == []
 
 
-def test_re_alarm_after_clear_when_live_returns(latch_file):
+def test_clear_stays_suppressed_while_same_episode_still_live(latch_file):
     fault_alarm_latch.apply_alarm_latch([_alert("fdd-1")])
     fault_alarm_latch.clear_alarms(["fdd-1"], cleared_by="tech")
     active = fault_alarm_latch.apply_alarm_latch([_alert("fdd-1", "Still bad")])
+    assert active == []
+
+
+def test_re_alarm_after_clear_when_episode_restarts(latch_file):
+    fault_alarm_latch.apply_alarm_latch([_alert("fdd-1")])
+    fault_alarm_latch.clear_alarms(["fdd-1"], cleared_by="tech")
+    fault_alarm_latch.apply_alarm_latch([_alert("fdd-1", "Still bad")])
+    assert fault_alarm_latch.apply_alarm_latch([]) == []
+    active = fault_alarm_latch.apply_alarm_latch([_alert("fdd-1", "Fault again")])
     assert len(active) == 1
-    assert active[0]["title"] == "Still bad"
+    assert active[0]["title"] == "Fault again"
     doc = json.loads(latch_file.read_text())
     assert "cleared_at" not in doc["alarms"]["fdd-1"]

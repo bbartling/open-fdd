@@ -21,7 +21,9 @@ Open-FDD is an open-source **building edge platform** for BACnet integration, fe
 | Path | Go to |
 |------|-------|
 | **Try it** | [Quick Start — Run with Docker]({{ "/quick-start/docker/" | relative_url }}) |
+| **Write FDD rules** | [Rule Cookbook — PyArrow & DataFusion SQL]({{ "/rule-cookbook/dual-backend-rules/" | relative_url }}) |
 | **Operate it** | [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) · [Operations]({{ "/ops/" | relative_url }}) |
+| **API reference** | [Appendix — REST API]({{ "/appendix/bridge_api/" | relative_url }}) · [Dashboard routes]({{ "/appendix/dashboard-routes/" | relative_url }}) |
 | **Develop it** | [Developer Guide]({{ "/developer/" | relative_url }}) · [Architecture]({{ "/architecture/" | relative_url }}) |
 
 ## v3 edge stack

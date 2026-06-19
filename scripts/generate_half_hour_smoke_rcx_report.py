@@ -16,7 +16,7 @@ from open_fdd.validation.smoke_rcx_report import generate_smoke_rcx_docx  # noqa
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--reports-dir", type=Path, default=REPO / "reports")
+    parser.add_argument("--reports-dir", type=Path, default=REPO / "workspace" / "reports" / "artifacts")
     parser.add_argument("--site-id", default="demo")
     parser.add_argument("--site-name", default="Bench Demo Site")
     parser.add_argument("--hours", type=int, default=24)

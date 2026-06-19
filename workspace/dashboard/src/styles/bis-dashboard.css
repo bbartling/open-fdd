@@ -37,8 +37,8 @@
 
 .bis-building-strip {
   display: grid;
-  grid-template-columns: 1.4fr repeat(4, 1fr);
-  gap: 20px;
+  grid-template-columns: 1.5fr repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 16px 20px;
   align-items: center;
   padding: 20px 24px;
   border-radius: 12px;
@@ -886,6 +886,19 @@
   margin: 10px 0 8px;
   font-size: 0.88rem;
   line-height: 1.45;
+}
+
+.bis-b-stat-alert .value {
+  color: #fecaca;
+}
+
+.bis-b-stat-alert .label {
+  color: #fca5a5;
+}
+
+.bis-card-sub-compact {
+  margin: 0 0 12px;
+  font-size: 0.92rem;
 }
 
 .bis-muted-inline {

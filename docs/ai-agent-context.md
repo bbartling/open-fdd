@@ -20,7 +20,7 @@ Open-FDD is an **edge FDD platform**: BACnet / Niagara / JSON API drivers ingest
 | **Host Caddy** | `:80` / `:443` front door to bridge |
 | **`workspace/`** | Model, rules, feather store, auth env — persist across image upgrades |
 | **Auth** | `workspace/auth.env.local` (gitignored); JWT via `POST /api/auth/login` |
-| **Update** | [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) · [Live site update]({{ "/ops/live_site_update/" | relative_url }}) · pin `OPENFDD_IMAGE_TAG` |
+| **Update** | [Edge site lifecycle]({{ "/quick-start/site-lifecycle/" | relative_url }}) · [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) · pin `OPENFDD_IMAGE_TAG` |
 
 Rebuild MCP index after doc changes: `./scripts/build_mcp_rag_index.sh`.
 
@@ -91,8 +91,8 @@ See [Fault confirmation]({{ "/rule-cookbook/fault-confirmation/" | relative_url 
 |-------|-----|
 | Start | [Quick Start]({{ "/quick-start/" | relative_url }}) · [Health check]({{ "/quick-start/health-check/" | relative_url }}) |
 | Drivers | [Driver framework]({{ "/drivers/" | relative_url }}) · [BACnet]({{ "/bacnet/" | relative_url }}) |
-| Rules | [Rule Cookbook]({{ "/rule-cookbook/" | relative_url }}) · [Rule authoring (v1)]({{ "/rule-authoring/" | relative_url }}) · [DataFusion SQL]({{ "/datafusion-sql-rules/" | relative_url }}) |
-| API | [API routes]({{ "/appendix/bridge_api/" | relative_url }}) |
+| Rules | [Rule Cookbook — PyArrow & DataFusion]({{ "/rule-cookbook/dual-backend-rules/" | relative_url }}) · [Rule authoring]({{ "/rule-authoring/" | relative_url }}) |
+| API | [REST API reference]({{ "/appendix/bridge_api/" | relative_url }}) · [Dashboard routes]({{ "/appendix/dashboard-routes/" | relative_url }}) |
 | Operations | [Operations]({{ "/ops/" | relative_url }}) · [Deployment validation]({{ "/ops/deployment-validation/" | relative_url }}) |
 | Architecture | [ADR: Rust-ready Arrow contract]({{ "/adr/adr-rust-ready-arrow-fdd-contract/" | relative_url }}) |
 | MCP | [MCP server]({{ "/ai/mcp-server/" | relative_url }}) |

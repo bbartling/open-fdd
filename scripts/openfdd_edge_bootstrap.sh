@@ -51,7 +51,7 @@ _download_helper_scripts() {
   mkdir -p "$scripts_dir"
   local refs=(master "${OPENFDD_REPO_REF}" fix/security-hardening-log-rotation)
   local name ref dest
-  for name in openfdd_site_backup.sh openfdd_site_update.sh; do
+  for name in openfdd_site_lib.sh openfdd_site_backup.sh openfdd_site_update.sh; do
     dest="${scripts_dir}/${name}"
     for ref in "${refs[@]}"; do
       if _github_raw "$ref" "scripts/${name}" "$dest" && [[ -s "$dest" ]]; then

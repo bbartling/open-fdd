@@ -12,7 +12,8 @@ Run Open-FDD on a Linux edge host using **three GHCR Docker images**. No git clo
 |------|------|
 | 1 | [Run with Docker images]({{ "/quick-start/docker/" | relative_url }}) — bootstrap script + `docker compose up` |
 | 2 | [First login and health check]({{ "/quick-start/health-check/" | relative_url }}) |
-| 3 | [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) — backup + pull |
+| 3 | [Edge site lifecycle]({{ "/quick-start/site-lifecycle/" | relative_url }}) — backup, update, restore |
+| 4 | [Updating the stack]({{ "/quick-start/updating/" | relative_url }}) — operator checklist |
 
 **One-liner bootstrap** (edge host):
 

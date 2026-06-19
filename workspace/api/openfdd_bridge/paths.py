@@ -30,6 +30,21 @@ def data_dir() -> Path:
     return (workspace_dir() / "data").resolve()
 
 
+def reports_root() -> Path:
+    """Single edge reports tree — RCx DOCX, smoke artifacts, validation exports."""
+    path = workspace_dir() / "reports"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def rcx_reports_dir() -> Path:
+    return reports_root() / "rcx"
+
+
+def smoke_artifacts_dir() -> Path:
+    return reports_root() / "artifacts"
+
+
 def bacnet_poll_csv() -> Path:
     return workspace_dir() / "bacnet" / "polls" / "samples.csv"
 
