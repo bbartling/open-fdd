@@ -12,10 +12,12 @@ from ..niagara_service import (
     browse_tree,
     close_persistent_client,
     discover_points,
+    discover_profile_points,
     list_schedules,
     poll_station_once,
     read_point_ords,
     test_station,
+    test_station_draft,
 )
 from ..niagara_store import (
     delete_station,
@@ -47,6 +49,12 @@ def _apply_station_password(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+class NiagaraCommissionProfileBody(BaseModel):
+    version: int = 1
+    buildings: list[dict[str, Any]] = Field(default_factory=list)
+    devices: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class NiagaraStationBody(BaseModel):
     id: str = ""
     name: str = Field(min_length=1)
@@ -66,6 +74,7 @@ class NiagaraStationBody(BaseModel):
     default_points_root: str = ""
     follow_external: bool = False
     include_proxy_ext: bool = False
+    commission_profile: NiagaraCommissionProfileBody | None = None
 
     @field_validator("station_url")
     @classmethod
@@ -82,6 +91,27 @@ class NiagaraDiscoverBody(BaseModel):
     query: str = ""
     follow_external: Optional[bool] = None
     include_proxy_ext: Optional[bool] = None
+
+
+class NiagaraDiscoverProfileBody(BaseModel):
+    device_ids: list[str] = Field(default_factory=list)
+    follow_external: Optional[bool] = None
+    include_proxy_ext: Optional[bool] = None
+
+
+class NiagaraTestDraftBody(BaseModel):
+    station_url: str = Field(min_length=8)
+    username: str = Field(min_length=1)
+    password: str = Field(default="")
+    verify_tls: bool = False
+
+    @field_validator("station_url")
+    @classmethod
+    def strip_url(cls, value: str) -> str:
+        text = (value or "").strip().rstrip("/")
+        if not text.startswith(("http://", "https://")):
+            raise ValueError("station_url must start with http:// or https://")
+        return text
 
 
 class NiagaraReadBody(BaseModel):
@@ -129,6 +159,20 @@ async def niagara_delete_station(station_id: str) -> dict[str, Any]:
     return {"ok": True, "station_id": station_id}
 
 
+@router.post("/api/niagara/stations/test-draft", dependencies=[_READ])
+async def niagara_test_station_draft(body: NiagaraTestDraftBody) -> dict[str, Any]:
+    """Test SCRAM login before saving a station (baskStream parity with python-tools CLI)."""
+    try:
+        return await test_station_draft(
+            station_url=body.station_url,
+            username=body.username,
+            password=body.password,
+            verify_tls=body.verify_tls,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
+
+
 @router.post("/api/niagara/stations/{station_id}/test", dependencies=[_READ])
 async def niagara_test_station(station_id: str) -> dict[str, Any]:
     try:
@@ -148,6 +192,23 @@ async def niagara_discover(station_id: str, body: NiagaraDiscoverBody | None = N
             base=body.base,
             depth=body.depth,
             query=body.query,
+            follow_external=body.follow_external,
+            include_proxy_ext=body.include_proxy_ext,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
+
+
+@router.post("/api/niagara/stations/{station_id}/discover-profile", dependencies=[_READ])
+async def niagara_discover_profile(station_id: str, body: NiagaraDiscoverProfileBody | None = None) -> dict[str, Any]:
+    """Discover points under each saved commission-profile device folder."""
+    body = body or NiagaraDiscoverProfileBody()
+    try:
+        return await discover_profile_points(
+            station_id,
+            device_ids=body.device_ids or None,
             follow_external=body.follow_external,
             include_proxy_ext=body.include_proxy_ext,
         )

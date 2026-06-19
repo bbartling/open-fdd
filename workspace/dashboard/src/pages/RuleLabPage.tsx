@@ -3,6 +3,7 @@ import PageHeader from "../components/PageHeader";
 import FddRuleTestPanel from "../components/FddRuleTestPanel";
 import PythonCodeEditor from "../components/PythonCodeEditor";
 import SqlCodeEditor from "../components/SqlCodeEditor";
+import RuleLabDataContext from "../components/RuleLabDataContext";
 import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
 import { apiDownloadBlob, apiFetch, fetchAuthMe, getBridgeBase } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
@@ -681,6 +682,22 @@ export default function RuleLabPage() {
     }
   }
 
+  function insertSqlColumn(sqlRef: string, columnName: string) {
+    setSql((prev) => {
+      if (!prev.trim()) return sqlThresholdTemplate(columnName);
+      if (/\bvalue\b/.test(prev)) return prev.replace(/\bvalue\b/, sqlRef);
+      if (prev.includes("FROM telemetry") && !prev.includes(sqlRef)) {
+        return prev.replace(/FROM telemetry/i, `FROM telemetry WHERE ${sqlRef} IS NOT NULL`);
+      }
+      return prev;
+    });
+    setMetaDirty(true);
+  }
+
+  function insertArrowColumn(arrowRef: string) {
+    appendConsole(`Column reference: ${arrowRef} — use inside apply_faults_arrow(table, cfg, context)`);
+  }
+
   async function removeRule() {
     if (!activeRuleId) return;
     if (!window.confirm(`Delete rule "${ruleName}"?`)) return;
@@ -850,9 +867,84 @@ export default function RuleLabPage() {
               >
                 Upload rule.py
               </button>
+              <input
+                ref={uploadRef}
+                type="file"
+                accept=".py,text/x-python,application/x-python-code"
+                hidden
+                onChange={(e) => void onUploadFile(e.target.files?.[0] ?? null)}
+              />
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || !code.trim()}
+                onClick={() => void lintNow()}
+              >
+                Lint
+              </button>
+              <button
+                type="button"
+                disabled={busy || activeSyntaxOk === false || !code.trim()}
+                onClick={() => void testRun()}
+              >
+                Quick test
+              </button>
+              <button
+                type="button"
+                disabled={busy || authRole === "operator" || creatingNew || !metaDirty}
+                onClick={() => void saveMetadata()}
+              >
+                Save name
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={busy || authRole === "operator" || !code.trim()}
+                onClick={() => void updateAllRecords()}
+              >
+                Update all records
+              </button>
+              {metaDirty ? <span className="muted dirty-hint">Unsaved name</span> : null}
             </>
-          ) : (
-            <>
+          ) : null}
+        </div>
+      </div>
+
+      {sourcePath ? (
+        <details className="muted code-path">
+          <summary>Rule file metadata</summary>
+          <code>{sourcePath.split("/").pop() || "rule.py"}</code>
+        </details>
+      ) : null}
+
+      <FddRuleTestPanel rules={saved} disabled={busy || authRole === "operator"} />
+
+      <div className="panel rule-lab-readonly-panel">
+        <div className="rule-lab-editor-head">
+          <h3 className="panel-title">{ruleBackend === "datafusion_sql" ? "SQL expression" : "Rule source"}</h3>
+          {ruleBackend === "datafusion_sql" && metaDirty ? (
+            <span className="muted dirty-hint rule-lab-unsaved-hint">Unsaved name</span>
+          ) : null}
+        </div>
+        {ruleBackend === "datafusion_sql" ? (
+          <>
+            <details className="rule-lab-advanced ui-advanced-fold">
+              <summary>Options</summary>
+              <label className="field-label" htmlFor="fault-column">
+                Fault column
+              </label>
+              <input
+                id="fault-column"
+                className="rule-lab-text-input"
+                value={faultColumn}
+                disabled={busy}
+                onChange={(e) => {
+                  setFaultColumn(e.target.value);
+                  setMetaDirty(true);
+                }}
+              />
+            </details>
+            <div className="toolbar rule-lab-sql-actions">
               <button
                 type="button"
                 className="secondary"
@@ -888,88 +980,58 @@ export default function RuleLabPage() {
               >
                 CASE template
               </button>
-              <button type="button" className="secondary" disabled={busy || authRole === "operator"} onClick={() => void saveSqlRule()}>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || authRole === "operator"}
+                onClick={() => void saveSqlRule()}
+              >
                 Save rule
               </button>
-              <button type="button" className="secondary" disabled={busy || !code.trim() || !sql.trim()} onClick={() => void compareBackends()}>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || !code.trim() || !sql.trim()}
+                onClick={() => void compareBackends()}
+              >
                 Compare PyArrow vs SQL
               </button>
-            </>
-          )}
-          <input
-            ref={uploadRef}
-            type="file"
-            accept=".py,text/x-python,application/x-python-code"
-            hidden
-            onChange={(e) => void onUploadFile(e.target.files?.[0] ?? null)}
-          />
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy || (ruleBackend === "arrow" ? !code.trim() : !sql.trim())}
-            onClick={() => void lintNow()}
-          >
-            {ruleBackend === "datafusion_sql" ? "Check SQL" : "Lint"}
-          </button>
-          <button
-            type="button"
-            disabled={
-              busy ||
-              activeSyntaxOk === false ||
-              (ruleBackend === "arrow" ? !code.trim() : !sql.trim())
-            }
-            onClick={() => void testRun()}
-          >
-            {ruleBackend === "datafusion_sql" ? "Test on recent data" : "Quick test"}
-          </button>
-          <button
-            type="button"
-            disabled={busy || authRole === "operator" || creatingNew || !metaDirty}
-            onClick={() => void saveMetadata()}
-          >
-            Save name
-          </button>
-          <button
-            type="button"
-            className="primary"
-            disabled={busy || authRole === "operator" || (ruleBackend === "arrow" ? !code.trim() : false)}
-            onClick={() => void updateAllRecords()}
-          >
-            Update all records
-          </button>
-          {metaDirty ? <span className="muted dirty-hint">Unsaved name</span> : null}
-        </div>
-      </div>
-
-      {sourcePath ? (
-        <details className="muted code-path">
-          <summary>Rule file metadata</summary>
-          <code>{sourcePath.split("/").pop() || "rule.py"}</code>
-        </details>
-      ) : null}
-
-      <FddRuleTestPanel rules={saved} disabled={busy || authRole === "operator"} />
-
-      <div className="panel rule-lab-readonly-panel">
-        <h3 className="panel-title">{ruleBackend === "datafusion_sql" ? "SQL expression" : "Rule source"}</h3>
-        {ruleBackend === "datafusion_sql" ? (
-          <>
-            <details className="rule-lab-advanced ui-advanced-fold">
-              <summary>Options</summary>
-              <label className="field-label" htmlFor="fault-column">
-                Fault column
-              </label>
-              <input
-                id="fault-column"
-                className="rule-lab-text-input"
-                value={faultColumn}
-                disabled={busy}
-                onChange={(e) => {
-                  setFaultColumn(e.target.value);
-                  setMetaDirty(true);
-                }}
-              />
-            </details>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || !sql.trim()}
+                onClick={() => void lintNow()}
+              >
+                Check SQL
+              </button>
+              <button
+                type="button"
+                disabled={busy || activeSyntaxOk === false || !sql.trim()}
+                onClick={() => void testRun()}
+              >
+                Test on recent data
+              </button>
+              <button
+                type="button"
+                disabled={busy || authRole === "operator" || creatingNew || !metaDirty}
+                onClick={() => void saveMetadata()}
+              >
+                Save name
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={busy || authRole === "operator"}
+                onClick={() => void updateAllRecords()}
+              >
+                Update all records
+              </button>
+            </div>
+            <RuleLabDataContext
+              backend="datafusion_sql"
+              siteId={activeSiteId}
+              onInsertSql={insertSqlColumn}
+            />
             <SqlCodeEditor
               value={sql}
               onChange={(value) => {
@@ -986,7 +1048,10 @@ export default function RuleLabPage() {
               </p>
             ) : null}
           </>
-        ) : code.trim() ? (
+        ) : (
+          <>
+            <RuleLabDataContext backend="arrow" siteId={activeSiteId} onInsertArrow={insertArrowColumn} />
+            {code.trim() ? (
           <div className="rule-readonly-editor">
             <PythonCodeEditor
               value={code}
@@ -998,6 +1063,8 @@ export default function RuleLabPage() {
           </div>
         ) : (
           <p className="ui-empty-hint">Upload a rule kit or select a saved rule.</p>
+        )}
+          </>
         )}
         {activeLintIssues.length > 0 && activeSyntaxOk === false ? (
           <ul className="rule-lint-list">

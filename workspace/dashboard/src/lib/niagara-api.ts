@@ -125,6 +125,18 @@ export async function testNiagaraStation(stationId: string) {
   );
 }
 
+export async function testNiagaraDraft(body: {
+  station_url: string;
+  username: string;
+  password: string;
+  verify_tls?: boolean;
+}) {
+  return apiFetch<{ ok: boolean; authenticated_user?: string; capabilities?: unknown }>(
+    "/api/niagara/stations/test-draft",
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
 export async function discoverNiagaraPoints(
   stationId: string,
   body?: { base?: string; depth?: number; query?: string; follow_external?: boolean; include_proxy_ext?: boolean },
@@ -133,6 +145,22 @@ export async function discoverNiagaraPoints(
     `/api/niagara/stations/${encodeURIComponent(stationId)}/discover`,
     { method: "POST", body: JSON.stringify(body ?? {}) },
   );
+}
+
+export async function discoverNiagaraProfile(
+  stationId: string,
+  body?: { device_ids?: string[]; follow_external?: boolean; include_proxy_ext?: boolean },
+) {
+  return apiFetch<{
+    station_id: string;
+    count: number;
+    devices_scanned: number;
+    devices: { device_id?: string; label?: string; folder_ord?: string; points_root?: string; count?: number }[];
+    points: NiagaraPoint[];
+  }>(`/api/niagara/stations/${encodeURIComponent(stationId)}/discover-profile`, {
+    method: "POST",
+    body: JSON.stringify(body ?? {}),
+  });
 }
 
 export async function fetchNiagaraTree(stationId: string, base: string, depth = 3, followExternal?: boolean) {

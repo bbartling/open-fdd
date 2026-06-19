@@ -159,6 +159,17 @@ def probe_bacnet_override_scan(
         if cursor != prev_cursor or str(body.get("last_scan_at") or "") != prev_scan:
             rotated = True
 
+    last_scan_at = str(body.get("last_scan_at") or "").strip()
+    last_error = str(body.get("last_error") or "").strip()
+    scan_health = body.get("scan_health") if isinstance(body.get("scan_health"), dict) else {}
+    if scan_health.get("ok") is False:
+        detail = str(scan_health.get("detail") or scan_health.get("status") or "unhealthy")
+        issues.append(f"scan_health: {detail}")
+    elif device_count >= 1 and not last_scan_at:
+        issues.append("override scan has never completed (missing last_scan_at)")
+    elif device_count >= 1 and last_error and not rotated:
+        issues.append(f"last_error present: {last_error[:120]}")
+
     rcx_ctx_st, rcx_ctx = _fetch(
         "GET",
         f"{base}/api/reports/rcx/workspace?site_id=demo&hours=24",

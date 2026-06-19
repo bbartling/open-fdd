@@ -1259,13 +1259,91 @@ textarea {
 
 .niagara-browse-row {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 0.35rem;
   width: 100%;
   text-align: left;
   border: none;
   background: transparent;
+}
+
+.niagara-browse-row-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  border: none;
+  background: transparent;
+  text-align: left;
   cursor: context-menu;
+  padding: 0.35rem 0.5rem 0.35rem 0;
+}
+
+.niagara-browse-check {
+  display: flex;
+  align-items: center;
+  padding: 0.35rem 0 0.35rem 0.5rem;
+}
+
+.niagara-browse-check-spacer {
+  width: 1.6rem;
+  flex-shrink: 0;
+}
+
+.niagara-browse-selected {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.niagara-browse-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel);
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.niagara-wizard-step {
+  border-left: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.niagara-step-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.niagara-saved-building {
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.35rem 0.75rem 0.75rem;
+}
+
+.niagara-saved-building summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  cursor: pointer;
+  padding: 0.35rem 0;
+}
+
+.niagara-saved-building-title {
+  font-weight: 600;
+}
+
+.niagara-saved-device-table {
+  margin-top: 0.5rem;
+  font-size: 0.88rem;
+}
+
+.niagara-schedules-table code {
+  font-size: 0.78rem;
+  word-break: break-all;
 }
 
 .niagara-browse-building {
@@ -3930,6 +4008,141 @@ button.linkish {
 .rule-lab-page .cfg-preset-select {
   max-width: none;
   min-width: 14rem;
+}
+
+.rule-lab-editor-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 0.5rem;
+}
+
+.rule-lab-editor-head .panel-title {
+  margin-bottom: 0;
+}
+
+.rule-lab-unsaved-hint {
+  font-size: 0.85rem;
+}
+
+.rule-lab-sql-actions {
+  margin: 0.5rem 0 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.rule-lab-data-context {
+  margin: 0.75rem 0 1rem;
+  padding: 12px 14px;
+}
+
+.rule-lab-data-context-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-bottom: 8px;
+}
+
+.rule-lab-data-context-title {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+}
+
+.rule-lab-data-context-lead {
+  margin: 0;
+  font-size: 0.85rem;
+  max-width: 52rem;
+}
+
+.rule-lab-data-context-meta,
+.rule-lab-data-context-foot {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+}
+
+.rule-lab-col-group {
+  margin-bottom: 10px;
+}
+
+.rule-lab-col-group-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, #64748b);
+  margin-bottom: 6px;
+}
+
+.rule-lab-col-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rule-lab-col-chip {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel-soft, #f8fafc);
+}
+
+.rule-lab-col-chip-main {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  min-width: 6rem;
+}
+
+.rule-lab-col-chip-main:hover {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.rule-lab-col-chip-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.rule-lab-col-chip-code {
+  font-size: 0.75rem;
+}
+
+.rule-lab-col-chip-kind {
+  font-size: 0.72rem;
+  color: var(--muted, #64748b);
+}
+
+.rule-lab-col-chip-copy {
+  border: 0;
+  border-left: 1px solid var(--border, #cbd5e1);
+  background: transparent;
+  padding: 0 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.rule-lab-col-table-fold {
+  margin-top: 8px;
+}
+
+.rule-lab-col-table-wrap {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
+.rule-lab-col-table code {
+  font-size: 0.78rem;
 }
 
 .plot-axis-limits {

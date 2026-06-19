@@ -416,6 +416,45 @@ def test_poll_station_once_batches(monkeypatch):
     asyncio.run(run())
 
 
+def test_upsert_preserves_commission_profile(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    monkeypatch.setattr("openfdd_bridge.niagara_store.niagara_stations_path", lambda: tmp_path / "stations.json")
+    monkeypatch.setattr("openfdd_bridge.niagara_store._ensure_dirs", lambda: None)
+    profile = {
+        "version": 1,
+        "buildings": [{"id": "b1", "label": "Building", "folder_ord": "slot:/Drivers/B1"}],
+        "devices": [],
+    }
+    created = upsert_station(
+        {
+            "id": "prof-test",
+            "name": "Profile Test",
+            "station_url": "https://niagara.example.test",
+            "username": "admin",
+            "commission_profile": profile,
+        }
+    )
+    assert created["commission_profile"]["buildings"][0]["id"] == "b1"
+    updated = upsert_station(
+        {
+            "id": "prof-test",
+            "name": "Profile Test Renamed",
+            "station_url": "https://niagara.example.test",
+            "username": "admin",
+        }
+    )
+    assert updated["name"] == "Profile Test Renamed"
+    assert updated["commission_profile"]["buildings"][0]["id"] == "b1"
+
+
+def test_niagara_test_draft_route_validation(authed_client: TestClient, operator_headers: dict[str, str]):
+    bad = authed_client.post(
+        "/api/niagara/stations/test-draft",
+        headers=operator_headers,
+        json={"station_url": "ftp://bad", "username": "admin", "password": "x"},
+    )
+    assert bad.status_code == 422
+
+
 def test_niagara_tree_route_mock(authed_client: TestClient, operator_headers: dict[str, str], monkeypatch):
     station = upsert_station(
         {

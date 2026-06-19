@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from ..deps import require_user
 from ..fdd_row_prep import normalize_rolling_avg_minutes
 from ..plot_readings import build_plot_csv_text, read_plot_readings
+from ..rules_lab import build_rule_lab_data_context
 from ..timeseries_api import list_plot_series, list_plot_sites, read_plot_series
 
 router = APIRouter(prefix="/api/timeseries", tags=["timeseries"])
@@ -24,6 +25,17 @@ def timeseries_series(
     _user: dict = Depends(require_user),
 ) -> dict:
     return {"ok": True, **list_plot_series(site_id, source=source)}
+
+
+@router.get("/rule-lab-context")
+def timeseries_rule_lab_context(
+    site_id: str = Query(..., min_length=1),
+    limit: int = Query(default=200, ge=1, le=2000),
+    lookback_hours: float = Query(default=24, ge=0, le=720),
+    _user: dict = Depends(require_user),
+) -> dict:
+    """Historian columns available to PyArrow rules and ``FROM telemetry`` SQL."""
+    return {"ok": True, **build_rule_lab_data_context(site_id=site_id, limit=limit, lookback_hours=lookback_hours)}
 
 
 @router.get("/plot")

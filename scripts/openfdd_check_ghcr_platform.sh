@@ -2,7 +2,7 @@
 # Verify GHCR Open-FDD images publish a manifest for this host CPU.
 #
 #   ./scripts/openfdd_check_ghcr_platform.sh
-#   OPENFDD_IMAGE_TAG=3.1.5 ./scripts/openfdd_check_ghcr_platform.sh
+#   OPENFDD_IMAGE_TAG=3.1.6 ./scripts/openfdd_check_ghcr_platform.sh
 set -euo pipefail
 
 TAG="${OPENFDD_IMAGE_TAG:-latest}"

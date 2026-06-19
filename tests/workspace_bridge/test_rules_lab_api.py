@@ -131,6 +131,65 @@ def test_lint_rejects_wrong_fault_column_name():
     assert lint["ok"] is False
 
 
+def test_build_rule_lab_data_context_shapes_columns(monkeypatch: pytest.MonkeyPatch):
+    from openfdd_bridge import rules_lab
+
+    table = pa.table(
+        {
+            "timestamp": pa.array([1, 2]),
+            "zone_temp": pa.array([72.0, 76.0]),
+            "oa-h": pa.array([50.0, 55.0]),
+        }
+    )
+
+    def fake_load(site_id: str, *, limit: int = 500, lookback_hours: float = 24):
+        return table, "synthetic"
+
+    def fake_series(site_id: str, source: str = "bacnet"):
+        return {
+            "labels": {"zone_temp": "Zone temp", "oa-h": "OA humidity"},
+            "kinds": {"zone_temp": "temperature", "oa-h": "humidity"},
+            "series_options": [],
+            "equipment_groups": [],
+        }
+
+    monkeypatch.setattr(rules_lab, "load_lab_sample_table", fake_load)
+    monkeypatch.setattr("openfdd_bridge.timeseries_api.list_plot_series", fake_series)
+
+    ctx = rules_lab.build_rule_lab_data_context(site_id="bench9065", limit=10)
+    assert ctx["site_id"] == "bench9065"
+    assert ctx["sql_table"] == "telemetry"
+    assert ctx["row_count"] == 2
+    names = [c["name"] for c in ctx["columns"]]
+    assert "zone_temp" in names
+    assert any(c["name"] == "oa-h" and c["sql_ref"] == '"oa-h"' for c in ctx["columns"])
+    assert any(c["arrow_ref"] == "table['zone_temp']" for c in ctx["columns"])
+
+
+def test_rule_lab_context_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from openfdd_bridge.routes import timeseries_routes
+
+    monkeypatch.setattr(
+        timeseries_routes,
+        "build_rule_lab_data_context",
+        lambda **kwargs: {
+            "site_id": kwargs["site_id"],
+            "data_source": "test",
+            "row_count": 1,
+            "sql_table": "telemetry",
+            "columns": [{"name": "SAT", "label": "SAT", "kind": "temperature", "sql_ref": "SAT", "arrow_ref": "table['SAT']"}],
+            "series_options": [],
+            "equipment_groups": [],
+        },
+    )
+    r = client.get("/api/timeseries/rule-lab-context?site_id=bench9065")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["sql_table"] == "telemetry"
+    assert body["columns"][0]["name"] == "SAT"
+
+
 @pytest.mark.skipif(not datafusion_available(), reason="datafusion optional extra not installed")
 def test_sql_rule_participates_in_batch(client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "data"))

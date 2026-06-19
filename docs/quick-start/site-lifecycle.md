@@ -85,7 +85,7 @@ cd ~/open-fdd
 Pin a release tag:
 
 ```bash
-export NEW_TAG=3.1.5
+export NEW_TAG=3.1.6
 ./scripts/openfdd_site_update.sh
 ```
 

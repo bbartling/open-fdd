@@ -6,6 +6,7 @@ import { useDashboardStream } from "../lib/dashboardStream";
 import { buildDisplayFaults, countBySeverity, faultAlertIds, type DisplayFault } from "../lib/displayFaults";
 import { computeBuildingHealthIndex } from "../lib/healthScores";
 import BuildingStrip from "./buildingInsight/BuildingStrip";
+import BacnetOverridesSummary from "./buildingInsight/BacnetOverridesSummary";
 import ComfortZonePanel from "./buildingInsight/ComfortZonePanel";
 import FaultCard from "./buildingInsight/FaultCard";
 import FddRulesInServicePanel from "./buildingInsight/FddRulesInServicePanel";
@@ -23,12 +24,19 @@ type BuildingStatusResponse = {
   alert_count?: number;
 };
 
+type OverrideSummaryLite = {
+  operator_override_points?: number;
+  scan_health?: { ok?: boolean; detail?: string; device_count?: number };
+  scan?: { device_count?: number };
+};
+
 const INSIGHT_POLL_MS = 15 * 60 * 1000;
 
 export default function BuildingInsightDashboard() {
   const { snapshot, error: streamError, live } = useDashboardStream();
   const [insight, setInsight] = useState<InsightResponse | null>(null);
   const [buildingMeta, setBuildingMeta] = useState<BuildingStatusResponse | null>(null);
+  const [overrideSummary, setOverrideSummary] = useState<OverrideSummaryLite | null>(null);
   const [insightError, setInsightError] = useState("");
   const [insightLoading, setInsightLoading] = useState(false);
   const [selectedFault, setSelectedFault] = useState<DisplayFault | null>(null);
@@ -63,6 +71,12 @@ export default function BuildingInsightDashboard() {
   }, [snapshot?.faults.alert_count]);
 
   useEffect(() => {
+    apiFetch<OverrideSummaryLite>("/api/bacnet/overrides/summary?preview_limit=8")
+      .then(setOverrideSummary)
+      .catch(() => setOverrideSummary(null));
+  }, [snapshot?.faults.alert_count]);
+
+  useEffect(() => {
     if (!hasToken()) {
       setCanClearAlarms(false);
       return;
@@ -94,8 +108,11 @@ export default function BuildingInsightDashboard() {
   const faults = snapshot?.faults;
   const displayFaults = useMemo(() => buildDisplayFaults(faults?.families || []), [faults?.families]);
   const operatorOverrideCount = useMemo(
-    () => displayFaults.find((f) => f.id === "group-bacnet-overrides")?.underlying.length ?? 0,
-    [displayFaults],
+    () =>
+      overrideSummary?.operator_override_points ??
+      displayFaults.find((f) => f.id === "group-bacnet-overrides")?.underlying.length ??
+      0,
+    [displayFaults, overrideSummary?.operator_override_points],
   );
   const sevCounts = useMemo(() => countBySeverity(displayFaults), [displayFaults]);
 
@@ -198,6 +215,9 @@ export default function BuildingInsightDashboard() {
         activeFaults={sevCounts.total}
         faultBreakdown={faultBreakdown}
         operatorOverrideCount={operatorOverrideCount}
+        overrideScanHealthy={overrideSummary?.scan_health?.ok ?? null}
+        overrideScanLabel={overrideSummary?.scan_health?.detail}
+        overrideDeviceCount={overrideSummary?.scan?.device_count ?? overrideSummary?.scan_health?.device_count}
         live={live}
         lastSyncLabel="BACnet poll cycle"
       />
@@ -237,6 +257,10 @@ export default function BuildingInsightDashboard() {
           opportunities={insight?.zone_temps?.research?.opportunities}
           lookbackDays={days}
         />
+      </div>
+
+      <div className="bis-row bis-row-mt">
+        <BacnetOverridesSummary fallbackCount={operatorOverrideCount} />
       </div>
 
       <div className="bis-row bis-row-2 bis-row-mt">
