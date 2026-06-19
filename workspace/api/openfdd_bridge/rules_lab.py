@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -45,6 +46,57 @@ def load_lab_sample_table(
         table = pa.Table.from_pandas(table)
     table = _trim_table(table, limit=limit, lookback_hours=lookback_hours)
     return table, origin
+
+
+def _sql_column_ref(name: str) -> str:
+    if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", name):
+        return name
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _column_kind(name: str, kinds: dict[str, str]) -> str:
+    if name in kinds:
+        return kinds[name]
+    if name in ("timestamp", "ts"):
+        return "time"
+    if name in ("site_id", "equipment_id"):
+        return "meta"
+    return "value"
+
+
+def build_rule_lab_data_context(
+    *,
+    site_id: str,
+    limit: int = 200,
+    lookback_hours: float = 24,
+) -> dict[str, Any]:
+    """Column names and usage hints for PyArrow + DataFusion SQL rules."""
+    from .timeseries_api import list_plot_series
+
+    table, origin = load_lab_sample_table(site_id, limit=limit, lookback_hours=lookback_hours)
+    meta = list_plot_series(site_id)
+    labels = dict(meta.get("labels") or {})
+    kinds = dict(meta.get("kinds") or {})
+    columns: list[dict[str, str]] = []
+    for name in table.column_names:
+        columns.append(
+            {
+                "name": name,
+                "label": str(labels.get(name) or name),
+                "kind": _column_kind(name, kinds),
+                "sql_ref": _sql_column_ref(name),
+                "arrow_ref": f'table[{name!r}]',
+            }
+        )
+    return {
+        "site_id": site_id,
+        "data_source": origin,
+        "row_count": int(table.num_rows),
+        "sql_table": "telemetry",
+        "columns": columns,
+        "series_options": meta.get("series_options") or [],
+        "equipment_groups": meta.get("equipment_groups") or [],
+    }
 
 
 def _result_payload(result, *, site_id: str = "", data_source: str = "") -> dict[str, Any]:

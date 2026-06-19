@@ -101,6 +101,38 @@ async def test_station(station_id: str) -> dict[str, Any]:
         await client.close()
 
 
+async def test_station_draft(
+    *,
+    station_url: str,
+    username: str,
+    password: str,
+    verify_tls: bool = False,
+) -> dict[str, Any]:
+    """Login test without a saved station row (parity with baskstream_cli health)."""
+    from .niagara_store import validate_station_url
+
+    url = validate_station_url(station_url)
+    if not str(password or "").strip():
+        raise NiagaraBaskStreamError("password is required for draft connection test")
+    client = AsyncNiagaraBaskStreamClient(url, verify_tls=verify_tls)
+    try:
+        await client.login(username, password)
+        health = await client.health()
+        caps = await client.capabilities()
+        ping = await client.ping()
+        return {
+            "ok": True,
+            "health": health,
+            "capabilities": caps,
+            "ping": ping,
+            "authenticated_user": health.get("authenticatedUser"),
+        }
+    except NiagaraBaskStreamError as exc:
+        raise NiagaraBaskStreamError(friendly_error(exc, station_url=url)) from exc
+    finally:
+        await client.close()
+
+
 async def _async_walk_tree(
     client: AsyncNiagaraBaskStreamClient,
     base: str,
@@ -223,6 +255,68 @@ async def discover_points(
         return {"station_id": station_id, "base": root, "count": len(points), "points": points}
     finally:
         await client.close()
+
+
+async def discover_profile_points(
+    station_id: str,
+    *,
+    device_ids: list[str] | None = None,
+    follow_external: bool | None = None,
+    include_proxy_ext: bool | None = None,
+) -> dict[str, Any]:
+    """Discover points under each commission-profile device folder and merge into cache."""
+    station = _station_or_raise(station_id)
+    profile = station.get("commission_profile") if isinstance(station.get("commission_profile"), dict) else {}
+    devices = profile.get("devices") if isinstance(profile.get("devices"), list) else []
+    if device_ids:
+        wanted = {str(x) for x in device_ids}
+        devices = [d for d in devices if isinstance(d, dict) and str(d.get("id") or "") in wanted]
+    if not devices:
+        raise NiagaraBaskStreamError("commission profile has no device folders — browse tree and save folders first")
+
+    merged_by_ord: dict[str, dict[str, Any]] = {
+        str(p.get("point_ord") or ""): p for p in load_points_cache(station_id) if p.get("point_ord")
+    }
+    scanned: list[dict[str, Any]] = []
+    for dev in devices:
+        if not isinstance(dev, dict):
+            continue
+        root = str(dev.get("points_root") or dev.get("folder_ord") or "").strip()
+        if not root:
+            continue
+        result = await discover_points(
+            station_id,
+            base=root,
+            follow_external=follow_external,
+            include_proxy_ext=include_proxy_ext,
+        )
+        for point in result.get("points") or []:
+            if isinstance(point, dict) and point.get("point_ord"):
+                point = {
+                    **point,
+                    "device_ord": dev.get("folder_ord") or root,
+                    "device_name": dev.get("label") or dev.get("id") or root.rsplit("/", 1)[-1],
+                }
+                merged_by_ord[str(point["point_ord"])] = point
+        scanned.append(
+            {
+                "device_id": dev.get("id"),
+                "label": dev.get("label"),
+                "folder_ord": dev.get("folder_ord"),
+                "points_root": root,
+                "count": int(result.get("count") or 0),
+            }
+        )
+
+    merged = list(merged_by_ord.values())
+    save_points_cache(station_id, merged)
+    return {
+        "station_id": station_id,
+        "count": len(merged),
+        "devices_scanned": len(scanned),
+        "devices": scanned,
+        "points": merged,
+    }
 
 
 async def read_point_ords(

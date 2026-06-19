@@ -215,10 +215,7 @@ export default function FddRuleTestPanel({ rules, disabled }: Props) {
 
   return (
     <section className="panel fdd-rule-test-panel">
-      <h3 className="panel-title">Equipment-scoped test &amp; export</h3>
-      <p className="muted">
-        Select equipment and sensor, then test one rule or export a kit zip with samples, config, and helper source.
-      </p>
+      <h3 className="panel-title">Test on equipment</h3>
       <div className="form-grid">
         <div className="field form-grid-span">
           <label className="field-label" htmlFor="fdd-test-rule">

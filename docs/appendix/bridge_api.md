@@ -1,12 +1,14 @@
 ---
-title: API routes
+title: REST API reference
 parent: Appendix
 nav_order: 1
 ---
 
-# API routes
+# REST API reference
 
-REST API served by **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Production: Caddy on `:80` proxies to the bridge.
+HTTP and WebSocket surface for **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Production: Caddy on `:80` proxies to the bridge.
+
+Dashboard SPA paths: [Dashboard routes]({{ "/appendix/dashboard-routes/" | relative_url }}).
 
 **OpenAPI:** `GET /docs` and `GET /redoc` when the bridge runs.
 

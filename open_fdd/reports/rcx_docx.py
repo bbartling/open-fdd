@@ -80,6 +80,18 @@ def _kv_table(doc, rows: list[tuple[str, str]]) -> None:
         table.rows[i].cells[1].text = str(v)
 
 
+def _grid_table(doc, headers: list[str], rows: list[list[str]]) -> None:
+    if not headers:
+        return
+    table = doc.add_table(rows=1 + len(rows), cols=len(headers))
+    table.style = "Table Grid"
+    for i, header in enumerate(headers):
+        table.rows[0].cells[i].text = header
+    for r_idx, row in enumerate(rows):
+        for c_idx, cell in enumerate(row):
+            table.rows[r_idx + 1].cells[c_idx].text = str(cell)
+
+
 def build_rcx_docx(
     *,
     site_id: str,
@@ -291,34 +303,107 @@ def build_rcx_docx(
             ],
         )
         if override_list:
-            doc.add_paragraph(f"Active BACnet operator overrides (P8): {len(override_list)}")
+            p8_rows = [
+                row
+                for row in override_list
+                if isinstance(row, dict) and (row.get("operator_p8") or row.get("operator_override"))
+            ]
+            if not p8_rows:
+                p8_rows = [row for row in override_list if isinstance(row, dict)]
+            doc.add_paragraph(f"Active BACnet operator overrides (P8): {len(p8_rows)}")
             by_device: dict[str, int] = {}
-            for ov_row in override_list:
-                if isinstance(ov_row, dict):
-                    dev = str(
-                        ov_row.get("device_name")
-                        or ov_row.get("device_id")
-                        or ov_row.get("device")
-                        or ov_row.get("device_instance")
-                        or "—"
-                    )
-                    by_device[dev] = by_device.get(dev, 0) + 1
+            for ov_row in p8_rows:
+                dev = str(
+                    ov_row.get("device_label")
+                    or ov_row.get("device_name")
+                    or ov_row.get("device_id")
+                    or ov_row.get("device")
+                    or ov_row.get("device_instance")
+                    or "—"
+                )
+                by_device[dev] = by_device.get(dev, 0) + 1
             if by_device:
-                doc.add_paragraph("Devices with overrides:")
-                for dev, cnt in sorted(by_device.items(), key=lambda x: (-x[1], x[0]))[:12]:
+                doc.add_paragraph("Devices with P8 overrides:")
+                for dev, cnt in sorted(by_device.items(), key=lambda x: (-x[1], x[0]))[:16]:
                     doc.add_paragraph(f"  {dev}: {cnt} point(s)")
-            for ov_row in override_list[:12]:
+
+            preview_rows = ctx.get("override_preview") if isinstance(ctx.get("override_preview"), list) else p8_rows[:8]
+            table_rows: list[list[str]] = []
+            for ov_row in preview_rows[:8]:
+                if not isinstance(ov_row, dict):
+                    continue
+                table_rows.append(
+                    [
+                        str(ov_row.get("device_instance") or ov_row.get("device") or "—"),
+                        str(ov_row.get("device_address") or "—"),
+                        str(ov_row.get("object_name") or ov_row.get("point") or ov_row.get("object") or "—"),
+                        str(ov_row.get("value_text") or ov_row.get("value") or "—"),
+                        str(ov_row.get("scanned_at") or "—")[:19],
+                    ]
+                )
+            if table_rows:
+                doc.add_paragraph("Current P8 overrides (up to 8 shown on dashboard):")
+                _grid_table(
+                    doc,
+                    ["Device", "Address", "Point", "Value", "Last scan (UTC)"],
+                    table_rows,
+                )
+
+            by_device_rows = ctx.get("override_by_device") if isinstance(ctx.get("override_by_device"), list) else []
+            device_table: list[list[str]] = []
+            for dev_row in by_device_rows[:24]:
+                if not isinstance(dev_row, dict):
+                    continue
+                device_table.append(
+                    [
+                        str(dev_row.get("device_instance") or "—"),
+                        str(dev_row.get("device_address") or "—"),
+                        str(dev_row.get("operator_override_count") or 0),
+                        str(dev_row.get("total_override_count") or 0),
+                        str(dev_row.get("last_scanned_at") or "—")[:19],
+                    ]
+                )
+            if device_table:
+                doc.add_paragraph("Override scan coverage by BACnet device:")
+                _grid_table(
+                    doc,
+                    ["Device", "Address", "P8 points", "All priorities", "Last scanned (UTC)"],
+                    device_table,
+                )
+
+            scan_health = ctx.get("override_scan_health") if isinstance(ctx.get("override_scan_health"), dict) else {}
+            scan = ctx.get("override_scan") if isinstance(ctx.get("override_scan"), dict) else {}
+            if scan_health or scan:
+                doc.add_paragraph("Hourly supervisory override scan:")
+                _kv_table(
+                    doc,
+                    [
+                        (label, str(value))
+                        for label, value in (
+                            ("Scan health", scan_health.get("status") or "—"),
+                            ("Detail", scan_health.get("detail") or "—"),
+                            ("Interval (s)", scan.get("scan_interval_s") or "—"),
+                            ("Devices in rotation", scan.get("device_count") or "—"),
+                            ("Full rotation (h)", scan.get("full_rotation_hours") or "—"),
+                            ("Last scan device", scan.get("last_scan_device") or "—"),
+                            ("Last scan (UTC)", str(scan.get("last_scan_at") or "—")[:19]),
+                        )
+                        if value not in (None, "", "—")
+                    ],
+                )
+            for ov_row in p8_rows[:12]:
                 if isinstance(ov_row, dict):
                     dev = str(
-                        ov_row.get("device_name")
+                        ov_row.get("device_label")
+                        or ov_row.get("device_name")
                         or ov_row.get("device_id")
                         or ov_row.get("device")
                         or ov_row.get("device_instance")
                         or "—"
                     )
+                    point = str(ov_row.get("object_name") or ov_row.get("point") or ov_row.get("object") or "")
                     doc.add_paragraph(
-                        f"  {dev} · {ov_row.get('object') or ov_row.get('object_id') or ''} "
-                        f"priority {ov_row.get('priority') or '—'}"
+                        f"  {dev} · {point} priority {ov_row.get('priority') or ov_row.get('priority_level') or '—'}"
                     )
 
     if "fdd_rule_trends" in enabled_sections:

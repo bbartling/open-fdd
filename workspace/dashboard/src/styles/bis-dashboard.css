@@ -36,27 +36,59 @@
 }
 
 .bis-building-strip {
-  display: grid;
-  grid-template-columns: 1.4fr repeat(4, 1fr);
-  gap: 20px;
-  align-items: center;
-  padding: 20px 24px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  padding: 0;
   border-radius: 12px;
   background: linear-gradient(135deg, var(--bis-navy-2) 0%, var(--bis-navy) 100%);
   color: #e8edf5;
   border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-@media (max-width: 1100px) {
-  .bis-building-strip {
-    grid-template-columns: 1fr 1fr;
-  }
+  overflow-x: auto;
 }
 
 .bis-b-name {
   display: flex;
   align-items: center;
   gap: 14px;
+  flex: 0 0 auto;
+  min-width: 11rem;
+  padding: 18px 22px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.bis-b-stat {
+  flex: 1 1 0;
+  min-width: 6.75rem;
+  padding: 18px 16px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.bis-b-stat:last-child {
+  border-right: none;
+}
+
+.bis-building-strip--extended .bis-b-stat {
+  min-width: 6rem;
+}
+
+@media (max-width: 720px) {
+  .bis-building-strip {
+    flex-wrap: wrap;
+  }
+
+  .bis-b-name {
+    flex: 1 1 100%;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .bis-b-stat {
+    flex: 1 1 calc(50% - 1px);
+    min-width: 7rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
 }
 
 .bis-b-icon {
@@ -888,8 +920,166 @@
   line-height: 1.45;
 }
 
+.bis-b-stat-alert .value {
+  color: #fecaca;
+}
+
+.bis-b-stat-alert .label {
+  color: #fca5a5;
+}
+
+.bis-card-sub-compact {
+  margin: 0 0 12px;
+  font-size: 0.92rem;
+}
+
 .bis-muted-inline {
   font-size: 0.78rem;
   color: var(--bis-muted);
   font-weight: 400;
+}
+
+.bis-override-card {
+  width: 100%;
+}
+
+.bis-override-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.bis-override-health {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.bis-override-health--ok {
+  background: var(--bis-green-soft);
+  color: var(--bis-green);
+}
+
+.bis-override-health--warn {
+  background: var(--bis-yellow-soft);
+  color: var(--bis-yellow);
+}
+
+.bis-override-health--err {
+  background: var(--bis-red-soft);
+  color: var(--bis-red);
+}
+
+.bis-override-health--muted {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--bis-muted);
+}
+
+.bis-override-meta-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px 16px;
+  margin: 0 0 12px;
+}
+
+.bis-override-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--bis-border);
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.bis-override-stat .label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bis-muted);
+}
+
+.bis-override-scan-detail {
+  margin: 0 0 12px;
+  font-size: 0.86rem;
+}
+
+.bis-override-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+}
+
+.bis-override-section-head--spaced {
+  margin-top: 16px;
+}
+
+.bis-override-section-head h4 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.bis-inline-link {
+  font-size: 0.85rem;
+  color: var(--bis-orange);
+  text-decoration: none;
+}
+
+.bis-inline-link:hover {
+  text-decoration: underline;
+}
+
+.bis-override-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--bis-border);
+  border-radius: 10px;
+}
+
+.bis-override-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.bis-override-table th,
+.bis-override-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--bis-border);
+  vertical-align: top;
+}
+
+.bis-override-table th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bis-muted);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.bis-override-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.bis-override-row-alert {
+  background: rgba(240, 101, 30, 0.06);
+}
+
+.bis-override-sub {
+  font-size: 0.76rem;
+  margin-top: 2px;
+}
+
+.bis-btn-ghost {
+  background: transparent;
+  border: 1px solid var(--bis-border);
+  color: inherit;
 }

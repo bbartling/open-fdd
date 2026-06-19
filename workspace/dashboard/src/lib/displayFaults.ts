@@ -55,7 +55,7 @@ function groupBacnetOverrides(alerts: FaultAlert[]): DisplayFault | null {
   if (!hits.length) return null;
   const lines = hits.slice(0, 6).map((a) => String(a.title || "").replace(/^OVERRIDE\s*/i, ""));
   const extra = hits.length > 6 ? ` (+${hits.length - 6} more)` : "";
-  const worst = hits.some((a) => a.severity === "critical") ? "critical" : "medium";
+  const worst = hits.length > 0 ? "critical" : "medium";
   return {
     id: "group-bacnet-overrides",
     severity: worst,

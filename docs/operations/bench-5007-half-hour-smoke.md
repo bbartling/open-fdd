@@ -29,9 +29,9 @@ Artifacts:
 
 | File | Content |
 |------|---------|
-| `reports/paired_fdd_smoke_validation.{md,json}` | FDD parity cycles |
-| `reports/bench_5007_half_hour_health.json` | Health probe history |
-| `reports/bench_5007_half_hour_smoke_rcx_*.docx` | RCx report with smoke section |
+| `workspace/reports/artifacts/paired_fdd_smoke_validation.{md,json}` | FDD parity cycles |
+| `workspace/reports/artifacts/bench_5007_half_hour_health.json` | Health probe history |
+| `workspace/reports/rcx/bench_5007_half_hour_smoke_rcx_*.docx` | RCx report with smoke section |
 
 Regenerate RCx only:
 

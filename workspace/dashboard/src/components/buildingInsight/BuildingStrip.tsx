@@ -5,6 +5,10 @@ type Props = {
   pointCount?: number;
   activeFaults: number;
   faultBreakdown: string;
+  operatorOverrideCount?: number;
+  overrideScanHealthy?: boolean | null;
+  overrideScanLabel?: string;
+  overrideDeviceCount?: number;
   live?: boolean;
   lastSyncLabel?: string;
 };
@@ -16,11 +20,19 @@ export default function BuildingStrip({
   pointCount,
   activeFaults,
   faultBreakdown,
+  operatorOverrideCount = 0,
+  overrideScanHealthy = null,
+  overrideScanLabel,
+  overrideDeviceCount,
   live,
   lastSyncLabel,
 }: Props) {
+  const extended = operatorOverrideCount > 0 || overrideScanHealthy === false;
+  const scanSub =
+    overrideScanLabel ||
+    (overrideDeviceCount != null ? `${overrideDeviceCount} device(s) in hourly scan` : "Hourly supervisory scan");
   return (
-    <section className="bis-building-strip">
+    <section className={`bis-building-strip${extended ? " bis-building-strip--extended" : ""}`}>
       <div className="bis-b-name">
         <div className="bis-b-icon" aria-hidden>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -64,6 +76,20 @@ export default function BuildingStrip({
         <div className={`value ${activeFaults > 0 ? "bis-warn-value" : ""}`}>{activeFaults}</div>
         <div className="sub">{faultBreakdown || "all clear"}</div>
       </div>
+      <div className="bis-b-stat">
+        <div className="label">Override scan</div>
+        <div className={`value ${overrideScanHealthy === false ? "bis-warn-value" : ""}`}>
+          {overrideScanHealthy == null ? "—" : overrideScanHealthy ? "Healthy" : "Check"}
+        </div>
+        <div className="sub">{scanSub}</div>
+      </div>
+      {operatorOverrideCount > 0 ? (
+        <div className="bis-b-stat bis-b-stat-alert">
+          <div className="label">P8 overrides</div>
+          <div className="value bis-warn-value">{operatorOverrideCount}</div>
+          <div className="sub">operator manual writes</div>
+        </div>
+      ) : null}
     </section>
   );
 }

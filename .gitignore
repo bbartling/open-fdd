@@ -18,8 +18,11 @@ docker/dist/
 *.pyo
 *$py.class
 *.docx
-/reports
+/workspace/reports/**
+!workspace/reports/.gitkeep
+!workspace/reports/rcx/.gitkeep
 workspace/reports/bench_5007_long_fdd_*
+/reports
 *.csv
 !examples/*.csv
 !examples/data/*.csv
@@ -254,6 +257,15 @@ workspace/logs/
 /workspace/data/runtime_metrics.json
 /workspace/data/model.json
 /workspace/data/feather_store/
+/workspace/data/bacnet_ingest_state.json
+/workspace/data/fault_alarm_latch.json
+/workspace/data/niagara/niagara_stations.json
+/workspace/data/*.log
+/workspace/data/*.pid
+/workspace/data/bench_poll_supervisor.log
+/workspace/data/commission_agent.log
+/workspace/data/commission_agent.pid
+/workspace/data/rules_py/smoke_paired_*
 /workspace/**/*.feather
 /workspace/data/playground/draft_rules.json
 

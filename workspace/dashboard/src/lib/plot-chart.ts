@@ -28,6 +28,38 @@ export function faultBoolY(flags: number[]): number[] {
   return flags.map((f) => (f ? 1 : 0));
 }
 
+export type PlotAxisLimit = { min?: number; max?: number };
+
+export function parsePlotAxisLimit(minRaw: string, maxRaw: string): PlotAxisLimit | null {
+  const minText = minRaw.trim();
+  const maxText = maxRaw.trim();
+  if (!minText && !maxText) return null;
+  const min = minText ? Number(minText) : undefined;
+  const max = maxText ? Number(maxText) : undefined;
+  if (minText && !Number.isFinite(min)) return null;
+  if (maxText && !Number.isFinite(max)) return null;
+  if (min != null && max != null && min >= max) return null;
+  return { min, max };
+}
+
+function applyAxisRange(
+  axis: Partial<Plotly.LayoutAxis>,
+  limit: PlotAxisLimit | null | undefined,
+): Partial<Plotly.LayoutAxis> {
+  if (!limit || (limit.min == null && limit.max == null)) {
+    return axis;
+  }
+  const next = { ...axis, autorange: false as const };
+  if (limit.min != null && limit.max != null) {
+    next.range = [limit.min, limit.max];
+  } else if (limit.min != null) {
+    next.range = [limit.min, limit.max ?? limit.min + 1];
+  } else if (limit.max != null) {
+    next.range = [(limit.max ?? 0) - 1, limit.max];
+  }
+  return next;
+}
+
 export function buildPlotTraces(
   data: PlotReadingsResponse,
   opts: {
@@ -35,6 +67,9 @@ export function buildPlotTraces(
     showBounds: boolean;
     showRollingAvg: boolean;
     theme: ChartTheme;
+    yLeftLimit?: PlotAxisLimit | null;
+    yRightLimit?: PlotAxisLimit | null;
+    yFaultLimit?: PlotAxisLimit | null;
   },
 ): { traces: Plotly.Data[]; layout: Partial<Plotly.Layout>; shapes: Partial<Plotly.Shape>[] } {
   const x = (data.timestamps ?? []).map((t) => {
@@ -129,37 +164,46 @@ export function buildPlotTraces(
     ...themed,
     hovermode: "x unified",
     xaxis: { ...themed.xaxis, title: "Time (UTC)", automargin: true },
-    yaxis: {
-      ...themed.yaxis,
-      title: hasTemp ? "Temperature" : "Value",
-      side: "left",
-      automargin: true,
-    },
+    yaxis: applyAxisRange(
+      {
+        ...themed.yaxis,
+        title: hasTemp ? "Temperature" : "Value",
+        side: "left",
+        automargin: true,
+      },
+      opts.yLeftLimit,
+    ),
   };
   layout.margin = { ...themed.margin, r: showFaultAxis ? 88 : themed.margin.r };
 
   if (hasRh) {
-    layout.yaxis2 = {
-      ...themed.yaxis,
-      title: "% RH",
-      side: "right",
-      overlaying: "y",
-      automargin: true,
-    };
+    layout.yaxis2 = applyAxisRange(
+      {
+        ...themed.yaxis,
+        title: "% RH",
+        side: "right",
+        overlaying: "y",
+        automargin: true,
+      },
+      opts.yRightLimit,
+    );
   }
 
   if (showFaultAxis) {
-    const faultLayout: Partial<Plotly.LayoutAxis> = {
-      ...themed.yaxis,
-      title: "Faults (0/1)",
-      side: "right",
-      overlaying: "y",
-      range: [-0.08, 1.08],
-      tickvals: [0, 1],
-      ticktext: ["OK", "FAULT"],
-      showgrid: false,
-      automargin: true,
-    };
+    const faultLayout: Partial<Plotly.LayoutAxis> = applyAxisRange(
+      {
+        ...themed.yaxis,
+        title: "Faults (0/1)",
+        side: "right",
+        overlaying: "y",
+        range: [-0.08, 1.08],
+        tickvals: [0, 1],
+        ticktext: ["OK", "FAULT"],
+        showgrid: false,
+        automargin: true,
+      },
+      opts.yFaultLimit,
+    );
     if (hasRh) {
       layout.yaxis3 = { ...faultLayout, position: 0.98 };
     } else {

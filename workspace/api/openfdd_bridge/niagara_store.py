@@ -161,13 +161,16 @@ def upsert_station(payload: dict[str, Any]) -> dict[str, Any]:
     raw_pw = str(payload.pop("password", "") or "").strip()
     env_name = str(payload.get("password_env") or "OPENFDD_NIAGARA_ADMIN_PASSWORD").strip()
     rows = _load_raw_stations()
-    merged = {**DEFAULT_STATION, **payload, "id": sid}
+    existing = next((r for r in rows if str(r.get("id")) == sid), None)
+    if existing and payload.get("commission_profile") is None:
+        payload = {**payload, "commission_profile": existing.get("commission_profile") or DEFAULT_STATION["commission_profile"]}
+    merged = {**DEFAULT_STATION, **(existing or {}), **payload, "id": sid}
     if raw_pw:
         store_password(station_id=sid, env_name=env_name, password=raw_pw)
     found = False
     for i, row in enumerate(rows):
         if str(row.get("id")) == sid:
-            rows[i] = {**row, **merged}
+            rows[i] = merged
             found = True
             break
     if not found:

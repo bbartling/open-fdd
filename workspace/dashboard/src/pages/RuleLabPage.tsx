@@ -3,6 +3,7 @@ import PageHeader from "../components/PageHeader";
 import FddRuleTestPanel from "../components/FddRuleTestPanel";
 import PythonCodeEditor from "../components/PythonCodeEditor";
 import SqlCodeEditor from "../components/SqlCodeEditor";
+import RuleLabDataContext from "../components/RuleLabDataContext";
 import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
 import { apiDownloadBlob, apiFetch, fetchAuthMe, getBridgeBase } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
@@ -681,6 +682,22 @@ export default function RuleLabPage() {
     }
   }
 
+  function insertSqlColumn(sqlRef: string, columnName: string) {
+    setSql((prev) => {
+      if (!prev.trim()) return sqlThresholdTemplate(columnName);
+      if (/\bvalue\b/.test(prev)) return prev.replace(/\bvalue\b/, sqlRef);
+      if (prev.includes("FROM telemetry") && !prev.includes(sqlRef)) {
+        return prev.replace(/FROM telemetry/i, `FROM telemetry WHERE ${sqlRef} IS NOT NULL`);
+      }
+      return prev;
+    });
+    setMetaDirty(true);
+  }
+
+  function insertArrowColumn(arrowRef: string) {
+    appendConsole(`Column reference: ${arrowRef} — use inside apply_faults_arrow(table, cfg, context)`);
+  }
+
   async function removeRule() {
     if (!activeRuleId) return;
     if (!window.confirm(`Delete rule "${ruleName}"?`)) return;
@@ -731,15 +748,7 @@ export default function RuleLabPage() {
 
   return (
     <div className="page page-wide rule-lab-page">
-      <PageHeader
-        title="Rule Lab"
-        subtitle={
-          <>
-            Build and test FDD rules against recent site data. Choose a rule type below — pin assignments on the{" "}
-            <a href="/model">Data Model</a> tab or test by equipment in the panel below.
-          </>
-        }
-      />
+      <PageHeader title="Rule Lab" subtitle="Author, test, and save fault rules." />
 
       {authRole === "operator" ? (
         <p className="error panel">
@@ -817,27 +826,15 @@ export default function RuleLabPage() {
             DataFusion SQL
           </button>
         </div>
-        <p className="muted rule-lab-type-hint">
-          {ruleBackend === "datafusion_sql" ? (
-            <>
-              <strong>DataFusion SQL</strong> — simple threshold, CASE WHEN, and SQL-readable rules. Runs{" "}
-              <strong>server-side only</strong> (<code>pip install open-fdd[datafusion]</code>).
-            </>
-          ) : (
-            <>
-              <strong>PyArrow rule.py</strong> — full HVAC logic, rolling windows, helper libraries, and ML-ready Python
-              workflows.
-            </>
-          )}
-        </p>
 
-        <div className="form-grid">
-          <div className="field">
+        <div className="form-grid rule-lab-meta-grid">
+          <div className="field form-grid-span">
             <label className="field-label" htmlFor="rule-name">
               Name
             </label>
             <input
               id="rule-name"
+              className="rule-lab-text-input"
               value={ruleName}
               disabled={creatingNew}
               onChange={(e) => {
@@ -847,21 +844,6 @@ export default function RuleLabPage() {
             />
           </div>
         </div>
-
-        <p className="muted rule-lab-hint">
-          {ruleBackend === "datafusion_sql" ? (
-            <>
-              Use the Arrow table <code>telemetry</code>. Return one boolean column named <code>fault</code> (configurable
-              in Advanced). Set <code>min_true_rows</code> in rule config for fault confirmation (e.g. 5 rows at 60s poll ≈
-              5 minutes).
-            </>
-          ) : (
-            <>
-              Download kit → edit <code>rule.py</code> locally → upload. Set <code>min_true_rows</code> or{" "}
-              <code>min_elapsed_minutes</code> in config for fault confirmation.
-            </>
-          )}
-        </p>
 
         <div className="toolbar rule-lab-actions">
           {ruleBackend === "arrow" ? (
@@ -885,9 +867,84 @@ export default function RuleLabPage() {
               >
                 Upload rule.py
               </button>
+              <input
+                ref={uploadRef}
+                type="file"
+                accept=".py,text/x-python,application/x-python-code"
+                hidden
+                onChange={(e) => void onUploadFile(e.target.files?.[0] ?? null)}
+              />
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || !code.trim()}
+                onClick={() => void lintNow()}
+              >
+                Lint
+              </button>
+              <button
+                type="button"
+                disabled={busy || activeSyntaxOk === false || !code.trim()}
+                onClick={() => void testRun()}
+              >
+                Quick test
+              </button>
+              <button
+                type="button"
+                disabled={busy || authRole === "operator" || creatingNew || !metaDirty}
+                onClick={() => void saveMetadata()}
+              >
+                Save name
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={busy || authRole === "operator" || !code.trim()}
+                onClick={() => void updateAllRecords()}
+              >
+                Update all records
+              </button>
+              {metaDirty ? <span className="muted dirty-hint">Unsaved name</span> : null}
             </>
-          ) : (
-            <>
+          ) : null}
+        </div>
+      </div>
+
+      {sourcePath ? (
+        <details className="muted code-path">
+          <summary>Rule file metadata</summary>
+          <code>{sourcePath.split("/").pop() || "rule.py"}</code>
+        </details>
+      ) : null}
+
+      <FddRuleTestPanel rules={saved} disabled={busy || authRole === "operator"} />
+
+      <div className="panel rule-lab-readonly-panel">
+        <div className="rule-lab-editor-head">
+          <h3 className="panel-title">{ruleBackend === "datafusion_sql" ? "SQL expression" : "Rule source"}</h3>
+          {ruleBackend === "datafusion_sql" && metaDirty ? (
+            <span className="muted dirty-hint rule-lab-unsaved-hint">Unsaved name</span>
+          ) : null}
+        </div>
+        {ruleBackend === "datafusion_sql" ? (
+          <>
+            <details className="rule-lab-advanced ui-advanced-fold">
+              <summary>Options</summary>
+              <label className="field-label" htmlFor="fault-column">
+                Fault column
+              </label>
+              <input
+                id="fault-column"
+                className="rule-lab-text-input"
+                value={faultColumn}
+                disabled={busy}
+                onChange={(e) => {
+                  setFaultColumn(e.target.value);
+                  setMetaDirty(true);
+                }}
+              />
+            </details>
+            <div className="toolbar rule-lab-sql-actions">
               <button
                 type="button"
                 className="secondary"
@@ -923,90 +980,58 @@ export default function RuleLabPage() {
               >
                 CASE template
               </button>
-              <button type="button" className="secondary" disabled={busy || authRole === "operator"} onClick={() => void saveSqlRule()}>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || authRole === "operator"}
+                onClick={() => void saveSqlRule()}
+              >
                 Save rule
               </button>
-              <button type="button" className="secondary" disabled={busy || !code.trim() || !sql.trim()} onClick={() => void compareBackends()}>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || !code.trim() || !sql.trim()}
+                onClick={() => void compareBackends()}
+              >
                 Compare PyArrow vs SQL
               </button>
-            </>
-          )}
-          <input
-            ref={uploadRef}
-            type="file"
-            accept=".py,text/x-python,application/x-python-code"
-            hidden
-            onChange={(e) => void onUploadFile(e.target.files?.[0] ?? null)}
-          />
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy || (ruleBackend === "arrow" ? !code.trim() : !sql.trim())}
-            onClick={() => void lintNow()}
-          >
-            {ruleBackend === "datafusion_sql" ? "Check SQL" : "Lint"}
-          </button>
-          <button
-            type="button"
-            disabled={
-              busy ||
-              activeSyntaxOk === false ||
-              (ruleBackend === "arrow" ? !code.trim() : !sql.trim())
-            }
-            onClick={() => void testRun()}
-          >
-            {ruleBackend === "datafusion_sql" ? "Test on recent data" : "Quick test"}
-          </button>
-          <button
-            type="button"
-            disabled={busy || authRole === "operator" || creatingNew || !metaDirty}
-            onClick={() => void saveMetadata()}
-          >
-            Save name
-          </button>
-          <button
-            type="button"
-            className="primary"
-            disabled={busy || authRole === "operator" || (ruleBackend === "arrow" ? !code.trim() : false)}
-            onClick={() => void updateAllRecords()}
-          >
-            Update all records
-          </button>
-          {metaDirty ? <span className="muted dirty-hint">Unsaved name</span> : null}
-        </div>
-      </div>
-
-      {sourcePath ? (
-        <details className="muted code-path">
-          <summary>Rule file metadata</summary>
-          <code>{sourcePath.split("/").pop() || "rule.py"}</code>
-        </details>
-      ) : null}
-
-      <FddRuleTestPanel rules={saved} disabled={busy || authRole === "operator"} />
-
-      <div className="panel rule-lab-readonly-panel">
-        <h3 className="panel-title">{ruleBackend === "datafusion_sql" ? "SQL fault expression" : "Rule source"}</h3>
-        {ruleBackend === "datafusion_sql" ? (
-          <>
-            <p className="muted">
-              Use the Arrow table named <code>telemetry</code>. Return one boolean column named <code>fault</code>.
-            </p>
-            <details className="rule-lab-advanced">
-              <summary>Advanced</summary>
-              <label className="field-label" htmlFor="fault-column">
-                Fault column name
-              </label>
-              <input
-                id="fault-column"
-                value={faultColumn}
-                disabled={busy}
-                onChange={(e) => {
-                  setFaultColumn(e.target.value);
-                  setMetaDirty(true);
-                }}
-              />
-            </details>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || !sql.trim()}
+                onClick={() => void lintNow()}
+              >
+                Check SQL
+              </button>
+              <button
+                type="button"
+                disabled={busy || activeSyntaxOk === false || !sql.trim()}
+                onClick={() => void testRun()}
+              >
+                Test on recent data
+              </button>
+              <button
+                type="button"
+                disabled={busy || authRole === "operator" || creatingNew || !metaDirty}
+                onClick={() => void saveMetadata()}
+              >
+                Save name
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={busy || authRole === "operator"}
+                onClick={() => void updateAllRecords()}
+              >
+                Update all records
+              </button>
+            </div>
+            <RuleLabDataContext
+              backend="datafusion_sql"
+              siteId={activeSiteId}
+              onInsertSql={insertSqlColumn}
+            />
             <SqlCodeEditor
               value={sql}
               onChange={(value) => {
@@ -1023,7 +1048,10 @@ export default function RuleLabPage() {
               </p>
             ) : null}
           </>
-        ) : code.trim() ? (
+        ) : (
+          <>
+            <RuleLabDataContext backend="arrow" siteId={activeSiteId} onInsertArrow={insertArrowColumn} />
+            {code.trim() ? (
           <div className="rule-readonly-editor">
             <PythonCodeEditor
               value={code}
@@ -1034,10 +1062,9 @@ export default function RuleLabPage() {
             />
           </div>
         ) : (
-          <p className="muted">
-            No rule loaded. Download a dev kit with real feather sample data, edit <code>rule.py</code> locally with{" "}
-            <code>pip install open-fdd pyarrow</code>, then upload when lint passes.
-          </p>
+          <p className="ui-empty-hint">Upload a rule kit or select a saved rule.</p>
+        )}
+          </>
         )}
         {activeLintIssues.length > 0 && activeSyntaxOk === false ? (
           <ul className="rule-lint-list">

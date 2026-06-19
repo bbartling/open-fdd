@@ -135,6 +135,41 @@ export async function fetchRcxPreview(body: {
   return normalizePreview(raw);
 }
 
+export type RcxSavedReport = {
+  filename: string;
+  size_bytes: number;
+  saved_at: string;
+  download_path?: string;
+  preview_path?: string;
+};
+
+export async function fetchRcxReportList(limit = 50): Promise<{ reports: RcxSavedReport[]; count: number }> {
+  return apiFetch(`/api/reports/rcx/list?limit=${limit}`);
+}
+
+export function rcxReportDownloadUrl(filename: string): string {
+  return `${getBridgeBase()}/api/reports/rcx/download/${encodeURIComponent(filename)}`;
+}
+
+export async function fetchRcxReportBlob(filename: string): Promise<Blob> {
+  const res = await fetch(rcxReportDownloadUrl(filename), { headers: authHeaders() });
+  if (!res.ok) {
+    throw new Error(`Download failed (${res.status})`);
+  }
+  return res.blob();
+}
+
+export async function deleteRcxReport(filename: string): Promise<void> {
+  const res = await fetch(`${getBridgeBase()}/api/reports/rcx/${encodeURIComponent(filename)}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Delete failed (${res.status})`);
+  }
+}
+
 export async function downloadRcxReport(body: {
   site_id?: string;
   hours?: number;
@@ -156,5 +191,5 @@ export async function downloadRcxReport(body: {
     const text = await res.text();
     throw new Error(text || `Report failed (${res.status})`);
   }
-  return res.blob();
+  return { blob: await res.blob(), savedFilename: res.headers.get("X-OpenFDD-Saved-Filename") };
 }

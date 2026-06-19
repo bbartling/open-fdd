@@ -508,14 +508,29 @@ def bacnet_override_status() -> dict:
     if code != 200:
         raise _proxy_error(code, payload)
     try:
-        from bacnet_toolshed.override_registry import export_csv_text, scan_status
+        from bacnet_toolshed.override_registry import assess_override_scan_health, export_csv_text, scan_status
 
         if isinstance(payload, dict):
-            payload = {**scan_status(), **payload}
+            merged = {**scan_status(), **payload}
+            merged["scan_health"] = assess_override_scan_health(merged)
+            payload = merged
         payload["export_row_count"] = max(0, export_csv_text().count("\n") - 1)
     except Exception:
         pass
     return payload  # type: ignore[return-value]
+
+
+@router.get("/api/bacnet/overrides/summary", dependencies=[_READ])
+def bacnet_override_summary(
+    preview_limit: int = Query(default=8, ge=1, le=64),
+) -> dict:
+    """Current P8 overrides + per-device table for building summary and RCx."""
+    try:
+        from bacnet_toolshed.override_registry import override_dashboard_summary
+
+        return override_dashboard_summary(preview_limit=preview_limit)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.get("/api/bacnet/overrides/export", dependencies=[_READ])

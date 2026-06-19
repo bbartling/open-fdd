@@ -60,7 +60,48 @@ def test_save_device_scan_and_export(registry_tmp, monkeypatch: pytest.MonkeyPat
     all_alerts = reg.override_alerts(operator_only=False)
     assert len(all_alerts) == 2
     llm = reg.slim_overrides_for_llm()
-    assert llm["override_count"] == 2
+    assert llm["override_count"] == 1
+    assert llm["total_override_points"] == 2
+    assert llm["scan_health"]["status"] in {"healthy", "stale", "no_devices", "error"}
+
+
+def test_override_dashboard_summary_preview_limit(registry_tmp, monkeypatch: pytest.MonkeyPatch):
+    reg = registry_tmp
+    monkeypatch.setattr(reg, "list_devices_for_scan", lambda: [{"device_instance": 5007, "device_address": "2000:7"}])
+    reg.save_device_scan(
+        {
+            "device_id": 5007,
+            "address": "2000:7",
+            "summary": {"points_with_override_count": 2},
+            "points_with_overrides": [
+                {
+                    "object_identifier": "analog-input,1",
+                    "object_name": "SAT",
+                    "override_priority_levels": [8],
+                    "overrides": [{"priority_level": 8, "type": "real", "value": 75.0}],
+                },
+                {
+                    "object_identifier": "analog-input,2",
+                    "object_name": "RAT",
+                    "override_priority_levels": [8],
+                    "overrides": [{"priority_level": 8, "type": "real", "value": 68.0}],
+                },
+            ],
+        }
+    )
+    summary = reg.override_dashboard_summary(preview_limit=8)
+    assert summary["operator_override_points"] == 2
+    assert len(summary["preview"]) == 2
+    assert summary["by_device"][0]["device_instance"] == 5007
+    assert summary["scan_health"]["ok"] is True
+
+
+def test_assess_override_scan_health_stale_when_no_scan(registry_tmp, monkeypatch: pytest.MonkeyPatch):
+    reg = registry_tmp
+    monkeypatch.setattr(reg, "list_devices_for_scan", lambda: [{"device_instance": 1, "device_address": "x"}])
+    health = reg.assess_override_scan_health(reg.scan_status())
+    assert health["ok"] is False
+    assert health["status"] == "stale"
 
 
 def test_advance_cursor_rotates(registry_tmp):

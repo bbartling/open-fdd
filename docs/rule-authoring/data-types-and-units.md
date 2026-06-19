@@ -21,7 +21,7 @@ Missing columns: cookbook helpers typically return an all-`False` mask or zero-f
 
 ## Numeric casting and nulls
 
-| Legacy (pandas gist) | Modern Arrow |
+| Older off-repo gist | Arrow in Open-FDD |
 |----------------------|--------------|
 | `HelperUtils.convert_to_float` | `pc.cast(col, pa.float64())` or ingest-time typing |
 | `HelperUtils.check_datatype_float` | Rule Lab lint + bridge ingest validation |
@@ -97,6 +97,6 @@ Document both when tuning — a rule may fire briefly but not meet confirmation.
 
 ## Related
 
-- [Expression cookbook — sensor validation]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#sensor-validation-bounds-flatline-rate-of-change)
+- [GL36 & sensor patterns — sensor validation]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}#sensor-validation-bounds-flatline-rate-of-change)
 - [Fault confirmation]({{ "/rule-cookbook/fault-confirmation/" | relative_url }})
-- [Legacy pandas parity]({{ "/rule-authoring/legacy-pandas-parity/" | relative_url }})
+- [PyArrow & DataFusion SQL]({{ "/rule-cookbook/dual-backend-rules/" | relative_url }})

@@ -1,6 +1,7 @@
 ---
 title: Fault confirmation / minimum duration
-nav_order: 4
+parent: Rule Cookbook
+nav_order: 3
 ---
 
 # Fault confirmation

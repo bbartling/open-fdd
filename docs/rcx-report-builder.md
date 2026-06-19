@@ -8,7 +8,8 @@ The **RCx Report Builder** (`/analytics/rcx`) collects a read-only snapshot from
 2. Click **Collect Data / Preview** — calls `POST /api/reports/rcx/preview`.
 3. Review available vs disabled charts (disabled charts show missing point roles or no fault data).
 4. Select sections and charts.
-5. Click **Generate DOCX** — `POST /api/reports/rcx/generate` returns `application/vnd.openxmlformats-officedocument.wordprocessingml.document`.
+5. Click **Generate DOCX** — `POST /api/reports/rcx/generate` returns `application/vnd.openxmlformats-officedocument.wordprocessingml.document` and saves to `workspace/reports/rcx/`.
+6. Use **Saved RCx reports** on the same tab to preview, download, or delete prior DOCX files (UI or agent-generated).
 
 ## Implementation
 

@@ -66,7 +66,12 @@ def stable_alert_id(alert: dict[str, Any]) -> str:
 
 
 def apply_alarm_latch(live_alerts: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Merge live alerts into a latched store; return active (uncleared) alarms."""
+    """Merge live alerts into a latched store; return active (uncleared) alarms.
+
+    Operator **clear** suppresses an alarm until the fault episode ends (condition not
+    live) and then becomes active again — not while the same episode is still live.
+    Unacknowledged alarms remain visible after the live condition clears (classic BAS latch).
+    """
     doc = load_latch()
     alarms: dict[str, Any] = doc.setdefault("alarms", {})
     now = _now_iso()
@@ -77,16 +82,30 @@ def apply_alarm_latch(live_alerts: list[dict[str, Any]]) -> list[dict[str, Any]]
         aid = stable_alert_id(alert)
         live_by_id[aid] = alert
 
+    was_live: dict[str, bool] = {
+        aid: bool(entry.get("condition_live", False)) for aid, entry in alarms.items()
+    }
+
+    for entry in alarms.values():
+        entry["condition_live"] = False
+
     for aid, alert in live_by_id.items():
         entry = alarms.get(aid)
         if entry is None:
-            alarms[aid] = {"first_seen": now, "last_seen": now, "alert": alert}
+            alarms[aid] = {
+                "first_seen": now,
+                "last_seen": now,
+                "alert": alert,
+                "condition_live": True,
+            }
             continue
         entry["last_seen"] = now
         entry["alert"] = alert
+        entry["condition_live"] = True
         if entry.get("cleared_at"):
-            entry.pop("cleared_at", None)
-            entry.pop("cleared_by", None)
+            if not was_live.get(aid, False):
+                entry.pop("cleared_at", None)
+                entry.pop("cleared_by", None)
 
     active: list[dict[str, Any]] = []
     for aid, entry in alarms.items():
@@ -115,6 +134,7 @@ def clear_alarms(alert_ids: list[str], *, cleared_by: str) -> dict[str, Any]:
                 "first_seen": now,
                 "last_seen": now,
                 "alert": {"id": aid, "title": "Cleared alarm", "source": "operator"},
+                "condition_live": False,
             }
             alarms[aid] = entry
         entry["cleared_at"] = now

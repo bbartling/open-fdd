@@ -1,5 +1,5 @@
 ---
-title: Expression cookbook (Arrow-native)
+title: GL36 & sensor patterns
 parent: Rule Cookbook
 nav_order: 5
 redirect_from:
@@ -7,112 +7,30 @@ redirect_from:
   - /expression_rule_cookbook.html
 ---
 
-# Expression cookbook (Arrow-native)
+# GL36 & sensor patterns
 
-Reference for **Open-FDD 3.x Rule Lab**: every **executable** rule is a Python module with **`apply_faults_arrow(table, cfg, context)`** using **`pyarrow.compute`** — **no pandas**, **no NumPy DataFrames on the IoT edge**, **no pandas `RuleRunner`**.
+Fault-code mapping and sensor-validation patterns for **PyArrow** rules. For backend choice and a side-by-side tutorial, see [PyArrow & DataFusion SQL]({{ "/rule-cookbook/dual-backend-rules/" | relative_url }}).
 
-**YAML today:** `open_fdd/faults/catalog/*.yaml` and `open_fdd/default_rules/**/*.yaml` hold **metadata and migration starters only** — not edge execution. See [Rule authoring — YAML distinction]({{ "/rule-authoring/" | relative_url }}#yaml-in-the-repo-today).
-
-Legacy GL36-style recipes map to **fixed [fault codes]({{ "/fault-codes/" | relative_url }})** and Arrow patterns below. Full migration matrix: [Legacy pandas parity]({{ "/rule-authoring/legacy-pandas-parity/" | relative_url }}).
+Executable modules live in `workspace/data/rules_py/`. Copy-paste sources: [Python recipes (Arrow)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}).
 
 ---
 
-## PyArrow vs DataFusion SQL
+## Rule structure
 
-Start here when choosing a backend. Both normalize to [`ArrowRuleResult`]({{ "/rule-authoring/arrow-rule-contract/" | relative_url }}).
-
-### Use PyArrow when
-
-| Need | Why PyArrow |
-|------|-------------|
-| Rolling windows | `arrow_rolling_min`, `arrow_rolling_sum`, streak helpers |
-| Flatline detection | `sensor_flatline_mask`, `flatline_1h_mask` |
-| Rate-of-change / spike | `rate_of_change_mask`, `arrow_abs_diff` |
-| PID hunting / command hunting | `pid_hunting_command_mask`, `pid_hunting_ahu_os_mask` |
-| Occupancy or schedule-aware logic | Hour/day masks, `_unoccupied_mask`, after-hours helpers |
-| Helper functions & sensor profiles | `open_fdd.arrow_runtime.cookbook`, `SENSOR_PROFILES` |
-| Unit normalization & null handling | `norm_cmd_array`, explicit `pc.fill_null` |
-| Edge runtime stability | Primary path — always installed |
-| Rust migration prep | Arrow semantics portable to a future Rust executor |
-
-### Use DataFusion SQL when
-
-| Need | Why SQL |
-|------|---------|
-| Simple row-wise threshold | `column > limit AS fault` |
-| Readable `CASE WHEN` logic | Operators can inspect SQL without Python |
-| SQL-readable previews | Rule Lab Validate SQL |
-| Future Rust/DataFusion port | Restricted SELECT from `telemetry` |
-| Non-Python reviewers | Same contract, different syntax |
-
-Install: `pip install 'open-fdd[datafusion]'` (defined in `pyproject.toml`).
-
-### Do not use DataFusion SQL for
-
-- Complex rolling windows or resample-style hourly logic
-- Custom helper-heavy HVAC logic
-- PID hunting with stateful window behavior (use PyArrow FC4 helpers)
-- ML feature preparation
-- Arbitrary file joins or multi-table SQL
-- Browser-side rule execution
-- Anything that behaves like old pandas row-loop / `DataFrame.apply` logic
-
-See also: [DataFusion SQL rules]({{ "/datafusion-sql-rules/" | relative_url }}) · [Rust readiness]({{ "/rule-authoring/rust-readiness/" | relative_url }}).
-
----
-
-| Topic | Page |
-|-------|------|
-| **Full copy-paste library (GL36 A–M, VAV, plant)** | **[Python recipes (full Arrow library)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }})** |
-| Quick templates | [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}) |
-| Shared imports | [Python recipes]({{ "/rule-cookbook/python-recipes/" | relative_url }}) |
-| Console window stats | [Lookback window]({{ "/rule-cookbook/lookback-window/" | relative_url }}) |
-| Fault code catalog | [Fault codes]({{ "/fault-codes/" | relative_url }}) |
-| Programmatic defaults | `open_fdd.arrow_runtime.sensor_catalog` |
-
----
-
-## Legacy → modern translation
-
-| Legacy (pandas / YAML) | Arrow-native (3.x) |
-|------------------------|---------------------|
-| `type: expression` + `expression:` string | `apply_faults_arrow()` in `rules_py/*.py` |
-| `type: hunting` (GL36 **FC4**) | `pid_hunting_fc4.py` → **AHU-G** / **VAV-F** / **CH-G** / **RTU-E** |
-| `RuleRunner.run(df, column_map=…)` | Rule Lab batch on **feather PyArrow table** |
-| `np.maximum(a, b)` | `pc.max(a, b)` |
-| `series.rolling(n).min()` | `arrow_rolling_min(vals, n)` from `open_fdd.arrow_runtime.windows` |
-| `series.diff().abs()` | `arrow_abs_diff(vals, 1)` |
-| `normalize_cmd(x)` | `norm_cmd_array()` / `pc.if_else(pc.greater(x, 1), pc.divide(x, 100), x)` |
-| `params.max_temp` in YAML | Module constant or `cfg["bounds_high"]` |
-| `flag: rule_a_flag` | Rule metadata **`fault_code`** → `AHU-A` … `VAV-C` |
-| Numeric codes `VAV-03` | Letter codes **`VAV-C`** (see `LEGACY_CODE_MAP` in bridge) |
-| Pandas `FC4` / `fc4_flag` | `LEGACY_CODE_MAP`: `FC4` → **AHU-G** |
-
-**Edge constraint:** Docker / BACnet poll path never imports pandas. Central portfolio Dash may use pandas for CSV analytics only.
-
----
-
-## How Arrow rules are structured
-
-1. **Historian columns** — Feather column names from BACnet poll (`oa-t`, `sa-t`, `stat_zn-t`, …) or Brick labels via model export.
-2. **Module constants** — Thresholds at top of file (bench style) or read from `cfg` for site tuning.
+1. **Historian columns** — Feather names from BACnet poll (`oa-t`, `sa-t`, `stat_zn-t`, …) or BRICK labels via model export.
+2. **Module constants** — Thresholds at top of file or read from `cfg` for site tuning.
 3. **`apply_faults_arrow`** — Returns a **boolean PyArrow array** (True = fault sample).
-4. **`fault_code`** — Set in Rule Lab metadata; must exist in `GET /api/faults/catalog`.
+4. **`fault_code`** — Set in Rule Lab; must exist in `GET /api/faults/catalog`.
 
 ```python
 import pyarrow.compute as pc
 from open_fdd.arrow_runtime.cookbook import sensor_bounds_mask
-
-FAULT_CODE = "VAV-C"  # metadata in Rule Lab UI
-
 
 def apply_faults_arrow(table, cfg, context=None):
     return sensor_bounds_mask(table, "zone_temp", cfg)
 ```
 
 ### Command scaling (0–1 vs 0–100 %)
-
-BACnet often exposes **0–100** for damper/VFD commands. Scale explicitly:
 
 ```python
 def _norm_cmd(col):
@@ -121,21 +39,21 @@ def _norm_cmd(col):
 
 ### Occupied hours (schedule gating)
 
-Use `open_fdd.arrow_runtime.cookbook._unoccupied_mask` or compare local hour from `timestamp` column. Example: **fan on when unoccupied** → **BLD-C** / `schedule_compare`.
+Use `open_fdd.arrow_runtime.cookbook._unoccupied_mask` or compare local hour from `timestamp`. Fan on when unoccupied → **BLD-C**.
 
 ---
 
 ## Sensor validation (bounds, flatline, rate of change)
 
-Use **`open_fdd.arrow_runtime.sensor_catalog.SENSOR_PROFILES`** for defaults, or copy constants into `rules_py`. Tune per site in Rule Lab `cfg` or building-agent tuning brief.
+Use **`open_fdd.arrow_runtime.sensor_catalog.SENSOR_PROFILES`** for defaults, or tune per site in Rule Lab `cfg`.
 
-### Bounds (out of range) — `oob_rolling`
+### Bounds (out of range)
 
-| Sensor kind | Min | Max | Flatline tol | Max Δ / hour | Max Δ / 15 min | Typical fault code |
-|-------------|-----|-----|--------------|--------------|----------------|-------------------|
+| Sensor kind | Min | Max | Flatline tol | Max Δ / hour | Max Δ / 15 min | Fault code |
+|-------------|-----|-----|--------------|--------------|----------------|------------|
 | Zone temp (°F) | 55 | 90 | 0.10 | 4.0 | 2.0 | **VAV-C** |
 | Supply air temp | 50 | 110 | 0.15 | 8.0 | 3.0 | **AHU-C**, **RTU-C** |
-| Return air temp | 55 | 95 | 0.10 | 3.0 | 1.5 | **AHU-D** (also mixing) |
+| Return air temp | 55 | 95 | 0.10 | 3.0 | 1.5 | **AHU-D** |
 | Mixed air temp | 40 | 110 | 0.15 | 6.0 | 2.5 | **AHU-D** |
 | Outdoor air temp | −40 | 130 | 0.10 | 12.0 | 6.0 | **BLD-B** |
 | Duct static (inH₂O) | −0.5 | 3.0 | 0.02 | 0.5 | 0.25 | **AHU-A** |
@@ -143,16 +61,14 @@ Use **`open_fdd.arrow_runtime.sensor_catalog.SENSOR_PROFILES`** for defaults, or
 | Chilled water (°F) | 40 | 90 | 0.10 | 4.0 | 2.0 | **CH-D** |
 | Hot water (°F) | 70 | 200 | 0.15 | 6.0 | 3.0 | **CH-D** |
 | Condenser water (°F) | 50 | 110 | 0.15 | 5.0 | 2.5 | **CH-A** |
-| CO₂ (ppm, occupied) | 400 | 1000 | 5.0 | 200 | 80 | **VAV-B** (ventilation) |
+| CO₂ (ppm, occupied) | 400 | 1000 | 5.0 | 200 | 80 | **VAV-B** |
 | Discharge air temp | 45 | 120 | 0.15 | 10.0 | 4.0 | **VAV-E**, **HP-D** |
 
-**Return air** uses a **narrow band** vs zone/OAT because RAT should track building return conditions, not outdoor extremes. When OAT/RAT/MAT are all present, prefer **mixing envelope** (below) over RAT bounds alone.
+When OAT/RAT/MAT are all present, prefer **mixing envelope** over RAT bounds alone.
 
-**CO₂ upper bound** is an occupied ventilation target; unoccupied rules may use 400–2000 ppm per policy.
+### Flatline (stuck sensor)
 
-### Flatline (stuck sensor) — `flatline_1h`
-
-Default **12 samples ≈ 1 hour** at 5-minute poll. True when rolling max − min ≤ tolerance.
+Default **12 samples ≈ 1 hour** at 5-minute poll.
 
 ```python
 from open_fdd.arrow_runtime.cookbook import sensor_flatline_mask
@@ -161,11 +77,7 @@ def apply_faults_arrow(table, cfg, context=None):
     return sensor_flatline_mask(table, "outdoor_air_temp", cfg)  # BLD-B
 ```
 
-Bench references: `workspace/data/rules_py/bench_oa-t_flatline_1h.py`, `bench_stat_zn-t_flatline_1h.py`.
-
-### Rate of change (spike) — `rate_of_change`
-
-Flags physically impossible step changes (comms glitch, substituted value).
+### Rate of change (spike)
 
 ```python
 from open_fdd.arrow_runtime.cookbook import rate_of_change_mask
@@ -173,15 +85,11 @@ from open_fdd.arrow_runtime.sensor_catalog import cfg_from_profile
 
 def apply_faults_arrow(table, cfg, context=None):
     merged = cfg_from_profile("outdoor_air_temp", cfg)
-    merged["samples_per_hour"] = 12  # 5-min poll
+    merged["samples_per_hour"] = 12
     return rate_of_change_mask(table, merged, col="oa-t")
 ```
 
-Legacy **weather_temp_spike** (`spike_limit: 16` °F per step) → **BLD-B** with `max_per_15min: 6` or stricter per-step limit.
-
-### Mixing envelope (MAT vs OAT/RAT) — `mixing_envelope`
-
-Legacy GL36 **Rule B / C** and **AHU-D**. MAT should sit between OAT and RAT (± tolerance) while fan runs.
+### Mixing envelope (MAT vs OAT/RAT)
 
 ```python
 from open_fdd.arrow_runtime.cookbook import mixing_envelope_mask
@@ -199,116 +107,70 @@ def apply_faults_arrow(table, cfg, context=None):
 
 ---
 
-## GL36-inspired AHU rules (legacy expression → fault code)
+## GL36-inspired AHU rules
 
-ASHRAE Guideline 36-style rules from the old YAML cookbook, translated to Arrow. Assign **`fault_code`** per row in Rule Lab.
+ASHRAE Guideline 36-style patterns. Assign **`fault_code`** in Rule Lab.
 
-| Legacy rule | Summary | Code | Full Arrow module |
-|-------------|---------|------|-------------------|
-| Rule A — duct static low @ full fan | SP below SP setpoint at high VFD | **AHU-A** | [Rule A]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-a--duct-static-low-at-full-fan-speed-ahu-a) |
-| Rule B — blend below band | MAT below OAT/RAT envelope | **AHU-D** | [Rules B & C]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
-| Rule C — blend above band | MAT above OAT/RAT envelope | **AHU-D** | [Rules B & C]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
-| Rule D — discharge cold when heating | SAT low vs MAT, heat valve open | **AHU-B** | [Rule D]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-d--discharge-cold-when-heating-commanded-ahu-b) |
-| Rule E — SAT low, full heating | SAT below SP, valve > 90% | **AHU-C** | [Rule E]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-e--sat-too-low-with-full-heating-ahu-c) |
-| Rule F — SAT/MAT mismatch econ | Econ mode, SAT ≠ MAT | **AHU-E** | [Rule F]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-f--satmat-mismatch-in-economizer-mode-ahu-e) |
-| Rule G — ambient warm free cool | OAT > SAT SP, econ open, cool off | **AHU-E** | [Rule G]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-g--ambient-too-warm-for-free-cooling-ahu-e) |
-| Rule H — OAT/MAT mismatch econ+mech | Mech + econ, MAT ≠ OAT | **AHU-E** | [Rule H]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-h--oatmat-mismatch-econ--mech-cooling-ahu-e) |
-| Rule I — OAT/MAT mismatch econ-only | Econ only, MAT ≠ OAT | **AHU-E** | [Rule I]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-i--oatmat-mismatch-economizer-only-ahu-e) |
-| Rule J — discharge above blend cooling | SAT > MAT in cooling | **AHU-B** | [Rule J]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-j--discharge-above-blended-in-cooling-ahu-b) |
-| Rule K — discharge above SP full cool | SAT > SP, full cooling | **AHU-C** | [Rule K]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-k--discharge-above-setpoint-in-full-cooling-ahu-c) |
-| Rule L — cooling coil ΔT when off | CHW drop when valves closed | **CH-C** | [Rule L]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-l--cooling-coil-δt-when-inactive-ch-c) |
-| Rule M — heating coil ΔT when off | HW rise when valves closed | **AHU-B** | [Rule M]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-m--heating-coil-δt-when-inactive-ahu-b) |
-| **FC4 — PID hunting** | Excessive command reversals or AHU OS changes (**modernized** — not hourly pandas resample) | **AHU-G** / **VAV-F** / **CH-G** / **RTU-E** | [FC4 PID hunting]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#fc4--pid-hunting-legacy-gl36) · [Legacy FC4 notes]({{ "/rule-authoring/legacy-pandas-parity/" | relative_url }}#fault-rule-4-fc4--modernized-hunting-detector) |
-
-All rules A–M have **full `apply_faults_arrow` modules** in [Python recipes (full Arrow library)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}).
+| Rule | Summary | Code | Module |
+|------|---------|------|--------|
+| A — duct static low @ full fan | SP below setpoint at high VFD | **AHU-A** | [Rule A]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-a--duct-static-low-at-full-fan-speed-ahu-a) |
+| B — blend below band | MAT below OAT/RAT envelope | **AHU-D** | [Rules B & C]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
+| C — blend above band | MAT above OAT/RAT envelope | **AHU-D** | [Rules B & C]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rules-b--c--blended-air-outside-oatr-at-band-ahu-d) |
+| D — discharge cold when heating | SAT low vs MAT, heat valve open | **AHU-B** | [Rule D]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-d--discharge-cold-when-heating-commanded-ahu-b) |
+| E — SAT low, full heating | SAT below SP, valve > 90% | **AHU-C** | [Rule E]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-e--sat-too-low-with-full-heating-ahu-c) |
+| F — SAT/MAT mismatch econ | Econ mode, SAT ≠ MAT | **AHU-E** | [Rule F]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-f--satmat-mismatch-in-economizer-mode-ahu-e) |
+| G — ambient warm free cool | OAT > SAT SP, econ open, cool off | **AHU-E** | [Rule G]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-g--ambient-too-warm-for-free-cooling-ahu-e) |
+| H — OAT/MAT mismatch econ+mech | Mech + econ, MAT ≠ OAT | **AHU-E** | [Rule H]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-h--oatmat-mismatch-econ--mech-cooling-ahu-e) |
+| I — OAT/MAT mismatch econ-only | Econ only, MAT ≠ OAT | **AHU-E** | [Rule I]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-i--oatmat-mismatch-economizer-only-ahu-e) |
+| J — discharge above blend cooling | SAT > MAT in cooling | **AHU-B** | [Rule J]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-j--discharge-above-blended-in-cooling-ahu-b) |
+| K — discharge above SP full cool | SAT > SP, full cooling | **AHU-C** | [Rule K]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-k--discharge-above-setpoint-in-full-cooling-ahu-c) |
+| L — cooling coil ΔT when off | CHW drop when valves closed | **CH-C** | [Rule L]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-l--cooling-coil-δt-when-inactive-ch-c) |
+| M — heating coil ΔT when off | HW rise when valves closed | **AHU-B** | [Rule M]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-m--heating-coil-δt-when-inactive-ahu-b) |
+| FC4 — PID hunting | Excessive command reversals | **AHU-G** / **VAV-F** / **CH-G** / **RTU-E** | [FC4]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#fc4--pid-hunting-legacy-gl36) |
 
 ---
 
-## Starter pack (VAV / AHU baseline)
+## Baseline deploy bundle
 
-Maps to legacy YAML starter filenames in `open_fdd/default_rules/` — **metadata only**; deploy Arrow modules in `rules_py`. Use as first deploy bundle.
+| Pattern | Arrow approach | Fault code |
+|---------|----------------|------------|
+| Zone temp bounds (occupied) | `sensor_bounds_mask` + occupied mask | **VAV-C** |
+| Zone temp flatline (occupied) | `sensor_flatline_mask` + occupied | **VAV-C** |
+| Damper command flatline | `flatline_1h_mask` on damper cmd | **VAV-D** |
+| Runtime outside schedule | `after_hours_fan_satisfied_mask` | **BLD-C** |
+| Duct static not maintained | [Rule A]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-a--duct-static-low-at-full-fan-speed-ahu-a) | **AHU-A** |
+| Internal temp bounds / flatline | `sensor_bounds_mask` / `sensor_flatline_mask` on SAT | **AHU-C** |
 
-| Legacy YAML starter | Arrow approach | Fault code |
-|---------------------|----------------|------------|
-| `01_vav_zone_temp_bounds_occupied` | `sensor_bounds_mask(..., "zone_temp")` + occupied mask | **VAV-C** |
-| `02_vav_zone_temp_flatline_occupied` | `sensor_flatline_mask(..., "zone_temp")` + occupied | **VAV-C** |
-| `03_vav_damper_command_extreme_flatline` | `flatline_1h_mask` on damper cmd column | **VAV-D** |
-| `04_ahu_runtime_outside_schedule` | `after_hours_fan_satisfied_mask` / run-hours script | **BLD-C** |
-| `05_ahu_duct_static_pressure_not_maintained` | [Rule A]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#rule-a--duct-static-low-at-full-fan-speed-ahu-a) | **AHU-A** |
-| `06_ahu_internal_temp_sensor_bounds` | `sensor_bounds_mask` on SAT/MAT | **AHU-C** |
-| `07_ahu_internal_temp_sensor_flatline` | `sensor_flatline_mask` on SAT | **AHU-C** |
+Economizer starters: [economizer section]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#economizer-starters).
 
-### Economizer starters
-
-Full modules: [economizer section]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#economizer-starters) (`ahu_econ_100oa_temp_tracking_fault`, `ahu_mech_cooling_when_free_cooling_available`, `ahu_oa_damper_excess_open_extreme_ambient`).
-
----
-
-## VAV, central plant, heat pump
-
-Full modules: [VAV]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#vav-zones) · [Central plant]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#central-plant) · [Heat pumps]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#heat-pumps).
-
-Rolling persistence: `arrow_rolling_min` + `pc.and_` (replaces pandas `.rolling(n).min()`).
-
----
-
-## Opportunistic / ventilation
-
-Full modules: [Opportunistic section]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#opportunistic--ventilation) · [Weather]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#weather-station).
+VAV, plant, heat pump: [VAV]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#vav-zones) · [Central plant]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#central-plant) · [Heat pumps]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}#heat-pumps).
 
 ---
 
 ## Data quality vs equipment faults
 
-| Symptom | Pattern | Code | Do not confuse with |
-|---------|---------|------|---------------------|
-| Flatline 1 h | `flatline_1h` | **VAV-C**, **AHU-C**, **BLD-B** | Equipment off / damper closed |
-| OOB sample | `oob_rolling` | sensor-specific | True process excursion |
-| Spike between polls | `rate_of_change` | **BLD-B** | Fast legitimate weather front |
-| No new samples | `stale_points` | **BLD-D** | Equipment fault |
-| MAT ∉ [OAT, RAT] | `mixing_envelope` | **AHU-D** | Stratification during startup |
+| Symptom | Pattern | Code |
+|---------|---------|------|
+| Flatline 1 h | `flatline_1h` | **VAV-C**, **AHU-C**, **BLD-B** |
+| OOB sample | `oob_rolling` | sensor-specific |
+| Spike between polls | `rate_of_change` | **BLD-B** |
+| No new samples | `stale_points` | **BLD-D** |
+| MAT ∉ [OAT, RAT] | `mixing_envelope` | **AHU-D** |
 
-Always gate sensor faults with **fan on**, **valve open**, or **occupied** where appropriate — see [Sensor & data quality]({{ "/fault-codes/sensor-quality/" | relative_url }}).
+Gate sensor faults with **fan on**, **valve open**, or **occupied** where appropriate — [Sensor & data quality]({{ "/fault-codes/sensor-quality/" | relative_url }}).
 
 ---
 
 ## Metric (°C) equivalents
 
-Set `cfg["temp_unit"] = "metric"` in Rule Lab or scale constants:
-
-| Imperial | Metric (approx) |
-|----------|-----------------|
-| 55 °F | 12.8 °C |
-| 90 °F | 32.2 °C |
-| 50 °F | 10.0 °C |
-| 110 °F | 43.3 °C |
-| 2.0 °F tol | 1.1 °C |
-| 0.15 inH₂O | ~37 Pa |
-
-`open_fdd.playground.temp_units` documents UI field keys for °F/°C toggle.
+Set `cfg["temp_unit"] = "metric"` or scale constants: 55 °F ≈ 12.8 °C, 90 °F ≈ 32.2 °C, 2.0 °F tol ≈ 1.1 °C.
 
 ---
 
-## Binding rules to the fault catalog
+## Binding to the fault catalog
 
-1. Pick a **letter code** from [Fault codes]({{ "/fault-codes/" | relative_url }}) — never invent suffixes.
-2. In Rule Lab, set **fault_code** on the rule row.
-3. Batch FDD aggregates into `GET /api/faults/status` and portfolio rollup.
-4. Legacy numeric codes (`AHU-03`) migrate via `LEGACY_CODE_MAP` in the bridge.
+1. Pick a **letter code** from [Fault codes]({{ "/fault-codes/" | relative_url }}).
+2. Set **fault_code** in Rule Lab.
+3. Batch FDD aggregates into `GET /api/faults/status`.
 
-```bash
-curl -s http://127.0.0.1:8765/api/faults/catalog | jq '.families[].codes[] | select(.code=="VAV-C")'
-```
-
----
-
-## Pandas YAML → Arrow checklist (commissioning)
-
-- [ ] Replace each executable `type: expression` YAML with a `rules_py` module (keep YAML as reference if useful)
-- [ ] Map `inputs` Brick labels → feather column names in model/poll CSV
-- [ ] Set `fault_code` per rule (letter suffix)
-- [ ] Run Rule Lab kit on 7-day feather window; confirm flag rate sane
-- [ ] Apply sensor_catalog defaults; tune bounds for site climate
-- [ ] Enable building-agent check-in; verify faults in portfolio rollup
-
-**Next:** [Python recipes (full Arrow library)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}) · [Arrow recipes]({{ "/rule-cookbook/arrow-recipes/" | relative_url }}) · [Fault codes]({{ "/fault-codes/" | relative_url }}) · [Rule Lab]({{ "/operator-bridge/rule-lab/" | relative_url }})
+**Next:** [Python recipes (Arrow)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}) · [Rule Lab]({{ "/operator-bridge/rule-lab/" | relative_url }})

@@ -465,10 +465,7 @@ export default function JsonApiPage() {
 
   return (
     <div className="page page-wide json-api-page">
-      <PageHeader
-        title="RESTful sensor (JSON API)"
-        subtitle="Home Assistant sensor.rest style — one HTTP resource, dot-path extractions, test then register. Poll intervals match BACnet and Modbus (1 / 5 / 15 / 30 min or 1 hour)."
-      />
+      <PageHeader title="REST sensors" subtitle="Poll JSON HTTP endpoints into the historian." />
       <TabDebugPanel tab="json-api" />
 
       {pollStatus ? (
@@ -551,11 +548,15 @@ export default function JsonApiPage() {
       </details>
 
       <div className="panel">
-        <h3 className="panel-title">REST resource</h3>
-        <p className="muted">
-          <code>resource</code> is the full URL. Use <code>${"{ENV:VAR}"}</code> in URLs for secrets (see{" "}
-          <code>json_api.env.local</code>). One HTTP request per unique resource; multiple sensors share the poll.
-        </p>
+        <div className="panel-title-row">
+          <h3 className="panel-title">REST resource</h3>
+          <details className="ui-advanced-fold">
+            <summary>Help</summary>
+            <p className="ui-help-text">
+              One URL per resource; multiple JSON paths become historian columns. API keys belong in server env files.
+            </p>
+          </details>
+        </div>
         <div className="form-grid">
           <div className="field" style={{ gridColumn: "1 / -1" }}>
             <label className="field-label" htmlFor="ja-resource">
@@ -676,12 +677,8 @@ export default function JsonApiPage() {
         </div>
 
         <h4 className="panel-subtitle" style={{ marginTop: "1rem" }}>
-          Sensors (value_json_path)
+          Sensor paths
         </h4>
-        <p className="muted">
-          Each row is one historian column — dot notation like <code>main.temp</code> or <code>weather.0.description</code>.
-          Multiple rows = one HTTP GET, many values (like HA <code>json_attributes</code>).
-        </p>
         <table className="data-table" style={{ width: "100%", marginTop: "0.5rem" }}>
           <thead>
             <tr>
@@ -778,8 +775,11 @@ export default function JsonApiPage() {
       </div>
 
       <div className="panel">
-        <h3 className="panel-title">Commissioning tree</h3>
-        <JsonApiTreeLegend />
+        <h3 className="panel-title">Sensors</h3>
+        <details className="ui-advanced-fold">
+          <summary>Legend</summary>
+          <JsonApiTreeLegend />
+        </details>
         {driverDevices.length > 0 ? (
           <div className="bacnet-bulk-toolbar">
             <span className="muted">{selectedPointsList.length} selected</span>

@@ -138,5 +138,8 @@ def generate_smoke_rcx_docx(
         ai_insights=ai_insights,
     )
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    out = reports_dir / f"bench_5007_half_hour_smoke_rcx_{ts}.docx"
+    fname = f"bench_5007_half_hour_smoke_rcx_{ts}.docx"
+    from openfdd_bridge.rcx.report_store import save_report
+
+    out = save_report(fname, blob)
     return blob, out

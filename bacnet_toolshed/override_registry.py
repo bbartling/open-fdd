@@ -345,24 +345,203 @@ def override_alerts(*, operator_only: bool = False) -> list[dict[str, Any]]:
     return alerts
 
 
+def _parse_iso_utc(value: str) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def assess_override_scan_health(status: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Whether the hourly BACnet override rotation is running as expected."""
+    status = status if isinstance(status, dict) else scan_status()
+    interval = float(status.get("scan_interval_s") or scan_interval_s())
+    device_count = int(status.get("device_count") or 0)
+    last_error = str(status.get("last_error") or "").strip()
+    last_scan_at = str(status.get("last_scan_at") or "").strip()
+    stale_threshold_s = max(interval * 2.0, 7200.0)
+
+    age_s: float | None = None
+    parsed = _parse_iso_utc(last_scan_at)
+    if parsed is not None:
+        age_s = max(0.0, (datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)).total_seconds())
+
+    base = {
+        "scan_interval_s": interval,
+        "stale_threshold_s": stale_threshold_s,
+        "last_scan_age_s": round(age_s, 1) if age_s is not None else None,
+        "device_count": device_count,
+        "last_scan_at": last_scan_at,
+        "last_scan_device": status.get("last_scan_device"),
+        "last_error": last_error,
+        "cursor": int(status.get("cursor") or 0),
+        "full_rotation_hours": status.get("full_rotation_hours"),
+    }
+
+    if device_count < 1:
+        return {
+            **base,
+            "ok": False,
+            "status": "no_devices",
+            "detail": "No BACnet devices in override scan rotation (points_discovered.csv).",
+        }
+
+    if last_error and (age_s is None or age_s > interval):
+        return {
+            **base,
+            "ok": False,
+            "status": "error",
+            "detail": f"Last supervisory scan failed: {last_error[:160]}",
+        }
+
+    if age_s is None:
+        return {
+            **base,
+            "ok": False,
+            "status": "stale",
+            "detail": "Override scan has not completed yet — waiting for first hourly cycle.",
+        }
+
+    if age_s > stale_threshold_s:
+        hours = int(age_s // 3600)
+        return {
+            **base,
+            "ok": False,
+            "status": "stale",
+            "detail": f"Last override scan {hours}h ago (expected within {int(stale_threshold_s // 3600)}h).",
+        }
+
+    minutes = max(1, int(age_s // 60))
+    last_dev = status.get("last_scan_device")
+    dev_note = f" · device {last_dev}" if last_dev is not None else ""
+    return {
+        **base,
+        "ok": True,
+        "status": "healthy",
+        "detail": f"Hourly override scan active — last run {minutes}m ago{dev_note}.",
+    }
+
+
+def _iter_override_rows(*, operator_only: bool = False) -> list[dict[str, Any]]:
+    """Flatten registry overrides with device + scan metadata."""
+    data = load_registry()
+    op_pri = operator_override_priority()
+    rows: list[dict[str, Any]] = []
+    for dev in sorted((data.get("devices") or {}).values(), key=lambda d: int(d.get("device_instance") or 0)):
+        if not isinstance(dev, dict) or not dev.get("ok", True):
+            continue
+        inst = int(dev.get("device_instance") or 0)
+        addr = str(dev.get("device_address") or "")
+        scanned_at = str(dev.get("scanned_at") or "")
+        for pt in dev.get("points_with_overrides") or []:
+            if not isinstance(pt, dict):
+                continue
+            oid = str(pt.get("object_identifier") or "")
+            name = str(pt.get("object_name") or oid)
+            for slot in pt.get("overrides") or []:
+                if not isinstance(slot, dict):
+                    continue
+                pl = int(slot.get("priority_level") or 0)
+                if operator_only and pl != op_pri:
+                    continue
+                val = slot.get("value")
+                rows.append(
+                    {
+                        "device_instance": inst,
+                        "device_address": addr,
+                        "device_label": f"Device {inst}",
+                        "object_identifier": oid,
+                        "object_name": name,
+                        "priority_level": pl,
+                        "value": val,
+                        "value_text": str(val) if val is not None else "—",
+                        "operator_override": pl == op_pri,
+                        "scanned_at": scanned_at,
+                    }
+                )
+    return rows
+
+
+def override_dashboard_summary(*, preview_limit: int = 8) -> dict[str, Any]:
+    """Structured BACnet override payload for building summary + RCx."""
+    status = scan_status()
+    health = assess_override_scan_health(status)
+    operator_rows = _iter_override_rows(operator_only=True)
+    all_rows = _iter_override_rows(operator_only=False)
+
+    by_device_map: dict[str, dict[str, Any]] = {}
+    for row in all_rows:
+        key = str(row["device_instance"])
+        bucket = by_device_map.setdefault(
+            key,
+            {
+                "device_instance": row["device_instance"],
+                "device_address": row["device_address"],
+                "device_label": row["device_label"],
+                "operator_override_count": 0,
+                "total_override_count": 0,
+                "last_scanned_at": row.get("scanned_at") or "",
+                "scan_ok": True,
+                "points": [],
+            },
+        )
+        bucket["total_override_count"] += 1
+        if row.get("operator_override"):
+            bucket["operator_override_count"] += 1
+        if row.get("scanned_at"):
+            bucket["last_scanned_at"] = str(row["scanned_at"])
+        bucket["points"].append(row)
+
+    by_device = sorted(by_device_map.values(), key=lambda d: (-int(d["operator_override_count"]), int(d["device_instance"])))
+
+    return {
+        "ok": True,
+        "scan": status,
+        "scan_health": health,
+        "operator_priority": status.get("operator_priority") or operator_override_priority(),
+        "operator_override_points": len(operator_rows),
+        "total_override_points": len(all_rows),
+        "preview_limit": preview_limit,
+        "preview_total": len(operator_rows),
+        "preview": operator_rows[: max(0, preview_limit)],
+        "by_device": by_device,
+        "overrides": operator_rows,
+    }
+
+
 def slim_overrides_for_llm(*, limit: int = 40) -> dict[str, Any]:
     """Compact override dump for Ollama / agent context."""
     op_pri = operator_override_priority()
+    status = scan_status()
+    health = assess_override_scan_health(status)
     lines: list[dict[str, Any]] = []
-    for alert in override_alerts(operator_only=False)[:limit]:
-        meta = alert.get("meta") if isinstance(alert.get("meta"), dict) else {}
+    for row in _iter_override_rows(operator_only=False)[:limit]:
         lines.append(
             {
-                "device": meta.get("device_instance"),
-                "point": meta.get("object_name"),
-                "oid": meta.get("object_identifier"),
-                "priority": meta.get("priority_level"),
-                "value": meta.get("value"),
-                "operator_p8": bool(meta.get("operator_override")),
+                "device": row.get("device_instance"),
+                "device_instance": row.get("device_instance"),
+                "device_address": row.get("device_address"),
+                "point": row.get("object_name"),
+                "object": row.get("object_name"),
+                "oid": row.get("object_identifier"),
+                "object_id": row.get("object_identifier"),
+                "priority": row.get("priority_level"),
+                "value": row.get("value"),
+                "operator_p8": bool(row.get("operator_override")),
+                "scanned_at": row.get("scanned_at"),
             }
         )
+    p8_rows = [r for r in lines if r.get("operator_p8")]
     return {
         "operator_priority": op_pri,
-        "override_count": len(lines),
+        "override_count": len(p8_rows),
+        "operator_override_points": len(p8_rows),
+        "total_override_points": len(lines),
         "overrides": lines,
+        "p8_overrides": p8_rows[:limit],
+        "scan": status,
+        "scan_health": health,
     }

@@ -1,33 +1,28 @@
 ---
 title: Rule Cookbook
 nav_order: 4
+has_children: true
 ---
 
 # Rule Cookbook
 
-Practical patterns for **Arrow-native Rule Lab** on feather historian PyArrow tables — **no pandas on the IoT edge**.
+Arrow-native fault rules for the Operator Bridge historian. Production rules live in `workspace/data/rules_py/` and run via `POST /api/rules/batch`.
 
-**Start here:** [Rule authoring (v1)]({{ "/rule-authoring/" | relative_url }}) — PyArrow vs SQL decision table, Arrow contract, legacy parity, Rust checklist.
+## Start here
 
-| Page | Use when |
-|------|----------|
-| [Rule authoring (v1)]({{ "/rule-authoring/" | relative_url }}) | v1 contract, YAML distinction, migration from pandas gist |
-| [Rule Lab quick start]({{ "/operator-bridge/rule-lab/" | relative_url }}) | Test a rule against live/recent site data in the dashboard |
-| [PyArrow rule recipes]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}) | Full Python + Arrow logic, rolling windows, helpers, ML-ready features |
-| [DataFusion SQL recipes]({{ "/rule-cookbook/datafusion-sql-recipes/" | relative_url }}) | Simple threshold, CASE WHEN, SQL-readable rules (optional `open-fdd[datafusion]`) |
-| [Fault confirmation]({{ "/rule-cookbook/fault-confirmation/" | relative_url }}) | Condition must stay true for N rows or N minutes |
-| [Windowing & debugging]({{ "/rule-cookbook/windowing-debugging/" | relative_url }}) | Lookback windows, chunked runs, batch runtime, Rule Lab console |
-| [Expression cookbook]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}) | Sensor profile reference (Arrow-native) |
-| [GL36 algorithm stubs]({{ "/rule-cookbook/gl36-algorithm-stubs/" | relative_url }}) | Advanced supervisory patterns (doc-only where not executable) |
+| Page | Content |
+|------|---------|
+| [**PyArrow & DataFusion SQL**]({{ "/rule-cookbook/dual-backend-rules/" | relative_url }}) | **Same-rule tutorial**, when to use each backend, parity testing |
+| [Rule authoring]({{ "/rule-authoring/" | relative_url }}) | Contract, types, Rust readiness |
+| [Fault confirmation]({{ "/rule-cookbook/fault-confirmation/" | relative_url }}) | `min_true_rows`, duration, poll interval |
+| [Python recipes (Arrow)]({{ "/rule-cookbook/python-recipes-arrow/" | relative_url }}) | Copy-paste `apply_faults_arrow` modules |
+| [DataFusion SQL recipes]({{ "/rule-cookbook/datafusion-sql-recipes/" | relative_url }}) | SQL threshold & spread patterns |
+| [GL36 & sensor patterns]({{ "/rule-cookbook/expression-cookbook/" | relative_url }}) | AHU/VAV/RTU fault-code mapping |
+| [Windowing & debugging]({{ "/rule-cookbook/windowing-debugging/" | relative_url }}) | Lookback, nulls, test tips |
+| [Central plants]({{ "/rule-cookbook/central-plants/" | relative_url }}) | CHW / CTW / boiler patterns |
 
-**PyArrow** is the primary path for complex HVAC FDD and ML prep. **DataFusion SQL** is optional, Rust-ready, and best for simple expression-style rules.
+## Rule Lab
 
-Programmatic sensor defaults: `open_fdd.arrow_runtime.sensor_catalog.SENSOR_PROFILES`.
+Author and test in the dashboard **Rule Lab** tab (`/rule-lab`): lint, preview on historian window, compare PyArrow vs SQL masks.
 
-```python
-import pyarrow.compute as pc
-from open_fdd.arrow_runtime.cookbook import sensor_bounds_mask
-
-def apply_faults_arrow(table, cfg, context=None):
-    return sensor_bounds_mask(table, "zone_temp", cfg, min_true_rows=5)
-```
+API: [Appendix — REST API]({{ "/appendix/bridge_api/" | relative_url }}) (Rules & FDD, Rule Lab sections).

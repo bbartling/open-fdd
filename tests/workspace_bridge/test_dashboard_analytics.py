@@ -124,6 +124,23 @@ def test_rcx_generate_mime(client):
         == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
     assert resp.content[:2] == b"PK"
+    assert resp.headers.get("X-OpenFDD-Saved-Filename", "").endswith(".docx")
+
+
+def test_rcx_report_list_and_delete(client, tmp_path, monkeypatch):
+    ws = tmp_path / "ws"
+    ws.mkdir(exist_ok=True)
+    monkeypatch.setenv("OPENFDD_WORKSPACE_DIR", str(ws))
+    from openfdd_bridge.rcx.report_store import save_report
+
+    save_report("api-roundtrip.docx", b"PKtest")
+    listed = client.get("/api/reports/rcx/list")
+    assert listed.status_code == 200
+    names = [r["filename"] for r in listed.json().get("reports") or []]
+    assert "api-roundtrip.docx" in names
+    deleted = client.delete("/api/reports/rcx/api-roundtrip.docx")
+    assert deleted.status_code == 200
+    assert client.get("/api/reports/rcx/list").json().get("count") == 0
 
 
 @pytest.fixture

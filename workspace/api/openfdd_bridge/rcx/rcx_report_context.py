@@ -23,11 +23,13 @@ def _point_by_id(model: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 def _override_summary() -> dict[str, Any]:
     try:
-        from bacnet_toolshed.override_registry import slim_overrides_for_llm
+        from bacnet_toolshed.override_registry import override_dashboard_summary, slim_overrides_for_llm
 
-        return slim_overrides_for_llm(limit=64)
+        summary = override_dashboard_summary(preview_limit=8)
+        slim = slim_overrides_for_llm(limit=64)
+        return {**slim, **summary}
     except Exception:
-        return {"override_count": 0, "overrides": []}
+        return {"override_count": 0, "overrides": [], "preview": [], "by_device": []}
 
 
 def assigned_rules_with_sensors(
@@ -104,5 +106,9 @@ def build_rcx_report_context(
         "assigned_rules": rules,
         "motor_runtime": motors,
         "overrides": overrides,
-        "override_count": int(overrides.get("override_count") or 0),
+        "override_count": int(overrides.get("operator_override_points") or overrides.get("override_count") or 0),
+        "override_scan": overrides.get("scan") if isinstance(overrides.get("scan"), dict) else {},
+        "override_scan_health": overrides.get("scan_health") if isinstance(overrides.get("scan_health"), dict) else {},
+        "override_by_device": overrides.get("by_device") if isinstance(overrides.get("by_device"), list) else [],
+        "override_preview": overrides.get("preview") if isinstance(overrides.get("preview"), list) else [],
     }

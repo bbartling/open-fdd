@@ -40,9 +40,9 @@ fi
 
 STATUS="/tmp/paired_fdd_smoke_${MODE}.status.json"
 CYCLES="/tmp/paired_fdd_smoke_${MODE}_cycles.jsonl"
-MD="$ROOT/reports/paired_fdd_smoke_validation.md"
-JSON="$ROOT/reports/paired_fdd_smoke_validation.json"
-PARITY="$ROOT/reports/site_parity_smoke.json"
+MD="$ROOT/workspace/reports/artifacts/paired_fdd_smoke_validation.md"
+JSON="$ROOT/workspace/reports/artifacts/paired_fdd_smoke_validation.json"
+PARITY="$ROOT/workspace/reports/artifacts/site_parity_smoke.json"
 
 missing=0
 for f in "$MD" "$JSON"; do

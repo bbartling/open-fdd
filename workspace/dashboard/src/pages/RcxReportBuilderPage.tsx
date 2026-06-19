@@ -1,5 +1,6 @@
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import PageHeader from "../components/PageHeader";
+import RcxReportsLibrary from "../components/RcxReportsLibrary";
 import {
   downloadRcxReport,
   fetchRcxPreview,
@@ -33,6 +34,7 @@ export default function RcxReportBuilderPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [libraryRefresh, setLibraryRefresh] = useState(0);
 
   const bundles: RcxBundle[] = preview?.report_bundles?.bundles ?? [];
 
@@ -101,7 +103,7 @@ export default function RcxReportBuilderPage() {
     setError("");
     try {
       const charts = [...selectedCharts].filter((c) => c && c.trim());
-      const blob = await downloadRcxReport({
+      const { blob, savedFilename } = await downloadRcxReport({
         ...reportBody,
         scope: "building",
         bundle_ids: selectedBundle ? [selectedBundle] : undefined,
@@ -111,10 +113,15 @@ export default function RcxReportBuilderPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "openfdd-rcx-report.docx";
+      a.download = savedFilename || "openfdd-rcx-report.docx";
       a.click();
       URL.revokeObjectURL(url);
-      setStatus("Report downloaded — paste Plotly screenshots into marked placeholders.");
+      setLibraryRefresh((n) => n + 1);
+      setStatus(
+        savedFilename
+          ? `Report saved as ${savedFilename} — see library below. Paste Plotly screenshots into placeholders after download.`
+          : "Report downloaded — paste Plotly screenshots into marked placeholders.",
+      );
     } catch (e) {
       setError(String(e));
     } finally {
@@ -126,13 +133,11 @@ export default function RcxReportBuilderPage() {
     <div className="analytics-page">
       <PageHeader
         title="RCx Report Builder"
-        subtitle="BRICK-driven equipment reports — zone/box, AHU, VAV, boiler/HWS, chiller, OAT vs weather. Charts from SPARQL model; paste Plotly snips into INSERT HERE placeholders."
+        subtitle="Equipment reports from the BRICK model — charts, DOCX export, saved library."
       />
       <section className="panel rcx-builder-panel">
-        <h2>Equipment report package</h2>
-        <p className="muted rcx-intro">
-          Select a building overview or per-equipment report from the BRICK model. Bench BACnet device 5007 maps to a
-          zone-level template. Use Trend plot to snip charts into DOCX placeholders.
+        <p className="rcx-intro ui-sr-lead">
+          Pick a report package and time range. Use Trend plot to capture charts into DOCX placeholders.
         </p>
 
         <div className="rcx-toolbar-block">
@@ -205,6 +210,9 @@ export default function RcxReportBuilderPage() {
         {status ? <p className="ok-text">{status}</p> : null}
         {error ? <p className="error-text">{error}</p> : null}
       </section>
+
+      <RcxReportsLibrary refreshToken={libraryRefresh} />
+
       {preview ? (
         <>
           <section className="panel">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPlotTraces, faultBoolY } from "./plot-chart";
+import { buildPlotTraces, faultBoolY, parsePlotAxisLimit } from "./plot-chart";
 
 describe("plot-chart", () => {
   it("faultBoolY maps flags to 0/1", () => {
@@ -55,5 +55,32 @@ describe("plot-chart", () => {
     expect(traces).toHaveLength(3);
     expect(traces[2].yaxis).toBe("y3");
     expect(layout.yaxis3).toMatchObject({ range: [-0.08, 1.08], title: "Faults (0/1)", automargin: true });
+  });
+
+  it("applies manual left and right axis ranges", () => {
+    const { layout } = buildPlotTraces(
+      {
+        timestamps: ["t1", "t2"],
+        series: { "oa-t": [70, 71], "oa-h": [40, 41] },
+        series_kinds: { "oa-t": "temperature", "oa-h": "humidity" },
+        fault_plots: {},
+        fault_panels: [],
+      },
+      {
+        enabledFaults: new Set(),
+        showBounds: false,
+        theme: "dark",
+        yLeftLimit: { min: 65, max: 80 },
+        yRightLimit: { min: 30, max: 55 },
+      },
+    );
+    expect(layout.yaxis).toMatchObject({ range: [65, 80], autorange: false });
+    expect(layout.yaxis2).toMatchObject({ range: [30, 55], autorange: false });
+  });
+
+  it("parsePlotAxisLimit rejects invalid ranges", () => {
+    expect(parsePlotAxisLimit("", "")).toBeNull();
+    expect(parsePlotAxisLimit("70", "60")).toBeNull();
+    expect(parsePlotAxisLimit("65", "80")).toEqual({ min: 65, max: 80 });
   });
 });

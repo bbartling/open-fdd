@@ -2,20 +2,23 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from ..deps import require_user
+from ..deps import require_roles, require_user
 from ..rcx.chart_preview import build_rcx_preview, generate_rcx_docx
 from ..rcx.rcx_intent import generate_rcx_report_from_intent, plan_rcx_report_intent
 from ..rcx.rcx_points import list_report_point_tree, list_report_points
-from ..rcx.report_store import list_reports, resolve_report, save_report
+from ..rcx.report_store import delete_report, list_reports, resolve_report, save_report
 from ..rcx.workspace import get_workspace
 
 router = APIRouter(prefix="/api/reports/rcx", tags=["reports"])
+
+_WRITE = Depends(require_roles("integrator", "agent"))
 
 
 class RcxPreviewRequest(BaseModel):
@@ -141,10 +144,14 @@ def rcx_generate(body: RcxGenerateRequest, _user: dict = Depends(require_user)) 
     if body.save_to_volume:
         save_report(fname, docx_bytes)
 
+    headers = {"Content-Disposition": f'attachment; filename="{fname}"'}
+    if body.save_to_volume:
+        headers["X-OpenFDD-Saved-Filename"] = fname
+
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+        headers=headers,
     )
 
 
@@ -206,7 +213,7 @@ def rcx_intent_preview(body: RcxIntentRequest, _user: dict = Depends(require_use
 @router.get("/list")
 def rcx_report_list(limit: int = 100, _user: dict = Depends(require_user)) -> dict[str, Any]:
     reports = list_reports(limit=limit)
-    return {"reports": reports, "count": len(reports)}
+    return {"reports": reports, "count": len(reports), "reports_dir": "workspace/reports/rcx"}
 
 
 @router.get("/download/{filename}")
@@ -220,3 +227,27 @@ def rcx_report_download(filename: str, _user: dict = Depends(require_user)) -> F
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename=path.name,
     )
+
+
+@router.get("/preview/{filename}")
+def rcx_report_preview(filename: str, _user: dict = Depends(require_user)) -> FileResponse:
+    """Inline DOCX for browser preview (docx-preview widget)."""
+    try:
+        path = resolve_report(filename)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(
+        path,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=path.name,
+        headers={"Content-Disposition": f'inline; filename="{path.name}"'},
+    )
+
+
+@router.delete("/{filename}", dependencies=[_WRITE])
+def rcx_report_delete(filename: str) -> dict[str, Any]:
+    try:
+        delete_report(filename)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"ok": True, "deleted": Path(filename).name}
