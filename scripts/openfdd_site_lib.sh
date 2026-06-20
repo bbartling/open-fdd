@@ -69,7 +69,10 @@ openfdd_safe_docker_maintenance() {
   local prune_unused="${PRUNE_UNUSED_IMAGES:-1}"
   local prune_cache="${PRUNE_BUILD_CACHE:-0}"
 
-  echo "==> Safe Docker maintenance (never volume prune)"
+  echo "==> Safe Docker maintenance"
+  echo "    Safe: container prune, network prune, dangling image prune, optional unused image prune"
+  echo "    Never: docker volume prune, docker system prune --volumes, docker compose down -v"
+
   if ! command -v docker >/dev/null 2>&1; then
     echo "WARN: docker not installed — skipping maintenance" >&2
     return 0
@@ -86,7 +89,7 @@ openfdd_safe_docker_maintenance() {
   fi
 
   if [[ "$prune_unused" == "1" ]]; then
-    echo "==> Prune unused images (not referenced by running containers)"
+    echo "==> Prune unused images only, not volumes"
     docker image prune -a -f 2>/dev/null || true
   fi
 
@@ -116,6 +119,156 @@ openfdd_validate_backup_archive() {
   echo "Backup archive OK: $archive ($(du -h "$archive" | awk '{print $1}'))"
 }
 
+openfdd_warn_plaintext_passwords() {
+  local root="$1"
+  local auth_file="$root/workspace/auth.env.local"
+  local found=0
+
+  [[ -f "$auth_file" ]] || return 0
+
+  echo "==> Auth secret check"
+
+  for role in OPERATOR INTEGRATOR AGENT; do
+    local plain_var="OFDD_${role}_PASSWORD"
+    local hash_var="OFDD_${role}_PASSWORD_HASH"
+
+    if grep -Eq "^${plain_var}=" "$auth_file"; then
+      echo "WARN: $plain_var is set in workspace/auth.env.local" >&2
+      echo "      Prefer $hash_var for production/LAN deployments." >&2
+      found=1
+    fi
+  done
+
+  if [[ "$found" == "1" ]]; then
+    echo "      Values were not printed. Do not paste auth.env.local contents into issues/logs." >&2
+    echo "      Hash helper usually looks like:" >&2
+    echo "        python workspace/scripts/hash_password.py '<password>'" >&2
+  else
+    echo "  No plaintext OFDD_*_PASSWORD entries detected"
+  fi
+
+  return 0
+}
+
+openfdd_check_workspace_readable() {
+  local root="$1"
+  local workspace="$root/workspace"
+
+  if [[ ! -d "$workspace" ]]; then
+    echo "ERROR: workspace directory not found: $workspace" >&2
+    return 1
+  fi
+
+  local unreadable
+  unreadable="$(find "$workspace" -xdev ! -readable -print 2>/dev/null | head -50 || true)"
+
+  if [[ -n "$unreadable" ]]; then
+    echo "ERROR: unreadable workspace files found:" >&2
+    echo "$unreadable" >&2
+    echo "" >&2
+    echo "Fix with:" >&2
+    echo '  cd ~/open-fdd' >&2
+    echo '  sudo chown -R "$(id -u):$(id -g)" workspace' >&2
+    echo '  sudo chmod -R u+rwX workspace' >&2
+    echo "" >&2
+    echo "Backup/update stopped before archiving unsafe data." >&2
+    return 1
+  fi
+
+  return 0
+}
+
+openfdd_report_root_owned_workspace_files() {
+  local root="$1"
+  local workspace="$root/workspace"
+
+  [[ -d "$workspace" ]] || return 0
+
+  local root_owned
+  root_owned="$(find "$workspace" -xdev -user root -printf '%M %u:%g %p\n' 2>/dev/null | head -50 || true)"
+
+  if [[ -n "$root_owned" ]]; then
+    echo "WARN: root-owned workspace files detected:" >&2
+    echo "$root_owned" >&2
+    echo "" >&2
+    echo "This can break normal-user backups. Repair with:" >&2
+    echo '  sudo chown -R "$(id -u):$(id -g)" workspace' >&2
+    echo '  sudo chmod -R u+rwX workspace' >&2
+  fi
+}
+
+openfdd_parameterize_compose_images() {
+  local compose_file="$1"
+
+  [[ -f "$compose_file" ]] || return 0
+
+  cp "$compose_file" "$compose_file.bak.$(date +%Y%m%d-%H%M%S)"
+
+  python3 - "$compose_file" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+p = Path(sys.argv[1])
+s = p.read_text()
+
+# Handle hard-pinned tags:
+#   image: ghcr.io/bbartling/openfdd-bridge:3.1.5
+#   image: "ghcr.io/bbartling/openfdd-bridge:3.1.5"
+# Also repair accidentally broken local lines:
+#   image: ghcr.io/bbartling/openfdd-bridge:
+patterns = {
+    r'image:\s*"?ghcr\.io/bbartling/openfdd-bridge:[^"\s]*"?':
+        'image: "ghcr.io/bbartling/openfdd-bridge:${OPENFDD_IMAGE_TAG:-latest}"',
+    r'image:\s*"?ghcr\.io/bbartling/openfdd-commission:[^"\s]*"?':
+        'image: "ghcr.io/bbartling/openfdd-commission:${OPENFDD_IMAGE_TAG:-latest}"',
+    r'image:\s*"?ghcr\.io/bbartling/openfdd-mcp-rag:[^"\s]*"?':
+        'image: "ghcr.io/bbartling/openfdd-mcp-rag:${OPENFDD_IMAGE_TAG:-latest}"',
+}
+
+for pat, repl in patterns.items():
+    s = re.sub(pat, repl, s)
+
+p.write_text(s)
+PY
+
+  echo "Parameterized Open-FDD image tags in: $compose_file"
+}
+
+openfdd_assert_compose_uses_tag() {
+  local compose_file="$1"
+  local tag="$2"
+
+  local resolved
+  if ! resolved="$(OPENFDD_IMAGE_TAG="$tag" docker compose -f "$compose_file" config --images 2>&1)"; then
+    echo "ERROR: docker compose config failed for $compose_file" >&2
+    echo "$resolved" >&2
+    return 1
+  fi
+
+  echo "Resolved compose images:"
+  echo "$resolved"
+
+  echo "$resolved" | grep -q "ghcr.io/bbartling/openfdd-bridge:${tag}" || {
+    echo "ERROR: compose did not resolve bridge image to tag ${tag}" >&2
+    return 1
+  }
+
+  echo "$resolved" | grep -q "ghcr.io/bbartling/openfdd-commission:${tag}" || {
+    echo "ERROR: compose did not resolve commission image to tag ${tag}" >&2
+    return 1
+  }
+
+  if echo "$resolved" | grep -q "ghcr.io/bbartling/openfdd-mcp-rag:"; then
+    echo "$resolved" | grep -q "ghcr.io/bbartling/openfdd-mcp-rag:${tag}" || {
+      echo "ERROR: compose did not resolve mcp-rag image to tag ${tag}" >&2
+      return 1
+    }
+  fi
+
+  return 0
+}
+
 openfdd_apply_feather_restore_cap() {
   local feather_root="$1"
   local max_gib="${2:-0}"
@@ -140,7 +293,6 @@ openfdd_apply_feather_restore_cap() {
 
   echo "Feather store $(numfmt --to=iec-i --suffix=B "$total" 2>/dev/null || echo "$total bytes") exceeds ${max_gib} GiB — dropping oldest shards…"
 
-  # Oldest shards first (by mtime); delete until under cap.
   while IFS= read -r line; do
     path="${line#* }"
     [[ -f "$path" ]] || continue
@@ -226,11 +378,28 @@ openfdd_validate_workspace_layout() {
 
 openfdd_validate_site_health() {
   local health_url="${1:-http://127.0.0.1:8765/health}"
-  if curl -sf --connect-timeout 10 "$health_url" >/dev/null; then
-    echo "Bridge health OK: $health_url"
-    return 0
-  fi
-  echo "WARN: bridge health check failed: $health_url" >&2
+  local timeout="${OPENFDD_HEALTH_TIMEOUT_SECS:-120}"
+  local interval="${OPENFDD_HEALTH_INTERVAL_SECS:-3}"
+  local elapsed=0
+  local health_file="/tmp/openfdd-health-$$.json"
+
+  while [[ "$elapsed" -lt "$timeout" ]]; do
+    if curl -fsS --connect-timeout 5 "$health_url" >"$health_file" 2>/dev/null; then
+      echo "Bridge health OK: $health_url"
+      cat "$health_file"
+      echo
+      rm -f "$health_file"
+      return 0
+    fi
+
+    echo "waiting for bridge health... ${elapsed}/${timeout}s"
+    sleep "$interval"
+    elapsed=$((elapsed + interval))
+  done
+
+  echo "ERROR: bridge health did not become ready within ${timeout}s: $health_url" >&2
+  docker compose logs --since 5m --tail=150 bridge >&2 || true
+  rm -f "$health_file"
   return 1
 }
 
