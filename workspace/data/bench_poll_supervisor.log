@@ -3675,3 +3675,57 @@ synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:27:59+00:00', 'row
 commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
 commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
 synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:30:00+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:32:00+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:34:01+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:36:02+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:38:03+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:40:03+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 300}, 'rows_lon
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:42:04+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:44:05+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:46:06+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:48:06+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:50:07+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:52:08+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'skipped': True, 'reason': 'no new poll rows', 'path': '/home/ben/open-fdd/workspace/bacnet/polls/
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:54:08+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:56:09+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T13:58:10+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T14:00:10+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T14:02:11+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T14:04:12+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+commission_unreachable 200 {'ok': False, 'enabled_points': 4, 'interval_s': 60.0, 'samples': 0, 'error': '', 'at': ''}
+synthetic_tick 0 {'ok': True, 'timestamp_utc': '2026-06-20T14:06:13+00:00', 'rows_appended': 4, 'ingest': {'ok': True, 'path': '/home/ben/open-fdd/workspace/bacnet/polls/samples.csv', 'sites': {'demo': 1}, 'rows_long'

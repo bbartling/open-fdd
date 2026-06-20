@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from bacpypes3.apdu import AbortPDU, ErrorType, PropertyReference
+from bacpypes3.apdu import AbortPDU, ErrorRejectAbortNack, ErrorType, PropertyReference
 from bacpypes3.constructeddata import AnyAtomic
 from bacpypes3.pdu import Address
 from bacpypes3.primitivedata import ObjectIdentifier
@@ -60,10 +60,10 @@ async def read_multiple_chunked(
                 # poll_driver looks up by object id (present-value only)
                 if pid_str in {"present-value", "85"}:
                     merged[oid_str] = val
-        except Exception as err:
+        except (ErrorRejectAbortNack, Exception) as err:
             import sys
 
-            print(f"RPM error @ {device_address}: {err}", file=sys.stderr)
+            print(f"RPM BACnet error @ {device_address}: {err!r}", file=sys.stderr)
             for obj_id_str, props in chunk:
                 for prop_name in props:
                     key = f"{obj_id_str}:{prop_name}"
