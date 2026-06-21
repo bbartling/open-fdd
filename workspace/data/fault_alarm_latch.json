@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-06-18T18:26:07.069400+00:00",
+  "updated_at": "2026-06-21T16:49:54.466096+00:00",
   "alarms": {
     "poll-offline-bacnet-5007": {
       "first_seen": "2026-06-18T18:07:29.355697+00:00",
@@ -14,7 +14,8 @@
         "equipment_family": "POLL",
         "equipment_id": "bacnet-5007",
         "equipment_name": "BACnet MS/TP device 5007"
-      }
+      },
+      "condition_live": false
     },
     "poll-offline-niagara-bench9065": {
       "first_seen": "2026-06-18T18:07:29.355697+00:00",
@@ -28,7 +29,8 @@
         "equipment_family": "POLL",
         "equipment_id": "niagara-bench9065",
         "equipment_name": "Niagara station bench9065"
-      }
+      },
+      "condition_live": false
     },
     "fdd-err-temp-out-of-bounds-demo": {
       "first_seen": "2026-06-18T18:26:07.069165+00:00",
@@ -42,7 +44,8 @@
         "rule_id": "temp-out-of-bounds",
         "rule_name": "Temperature out of bounds",
         "short_description": "Temperature reading is outside the configured range."
-      }
+      },
+      "condition_live": false
     },
     "fdd-err-humidity-out-of-bounds-demo": {
       "first_seen": "2026-06-18T18:26:07.069165+00:00",
@@ -56,7 +59,452 @@
         "rule_id": "humidity-out-of-bounds",
         "rule_name": "Humidity out of bounds",
         "short_description": "Humidity reading is outside the configured range."
-      }
+      },
+      "condition_live": false
+    },
+    "fdd-smoke-paired-zn-t-bacnet-sql-demo": {
+      "first_seen": "2026-06-21T14:02:37.516792+00:00",
+      "last_seen": "2026-06-21T16:49:54.465758+00:00",
+      "alert": {
+        "id": "fdd-smoke-paired-zn-t-bacnet-sql-demo",
+        "severity": "warning",
+        "title": "BACnet MS/TP device 5007 \u2014 Zone temp out of bounds \u2014 BACnet DataFusion SQL (26 samples) at demo",
+        "detail": "26/30 samples flagged (feather).",
+        "source": "fdd",
+        "code": "smoke-paired-zn-t-bacnet-sql",
+        "rule_id": "smoke-paired-zn-t-bacnet-sql",
+        "rule_name": "Smoke paired ZN-T bounds (BACnet SQL)",
+        "short_description": "Zone temp out of bounds \u2014 BACnet DataFusion SQL",
+        "equipment_name": "BACnet MS/TP device 5007",
+        "equipment_names": [
+          "BACnet MS/TP device 5007"
+        ],
+        "equipment_id": "bacnet-5007",
+        "data_source": "BACnet \u00b7 5007",
+        "symptom": "Zone temp out of bounds \u2014 BACnet DataFusion SQL",
+        "model_context": {
+          "severity": "warning",
+          "rule_id": "smoke-paired-zn-t-bacnet-sql",
+          "rule_name": "Smoke paired ZN-T bounds (BACnet SQL)",
+          "short_description": "Zone temp out of bounds \u2014 BACnet DataFusion SQL",
+          "symptom": "Zone temp out of bounds \u2014 BACnet DataFusion SQL",
+          "data_source": "BACnet \u00b7 5007",
+          "site_id": "demo",
+          "equipment": {
+            "id": "bacnet-5007",
+            "name": "BACnet MS/TP device 5007",
+            "type": "BACnet Device"
+          },
+          "point": {
+            "id": "5007-analog-input-10014",
+            "name": "STAT ZN-T zone temp (BACnet direct)",
+            "external_id": "stat_zn-t",
+            "fdd_input": "stat_zn-t",
+            "brick_type": "Zone_Air_Temperature_Sensor",
+            "bacnet_device_id": 5007,
+            "object_identifier": "analog-input,10014"
+          },
+          "bacnet_summary": "device 5007 \u00b7 analog-input,10014",
+          "historian_column": "stat_zn-t",
+          "insight": {
+            "sensor_column": "stat_zn-t",
+            "lookback_hours": 24.0,
+            "sensor_count": 4,
+            "historian_source": "bacnet",
+            "sensors": [
+              {
+                "point_id": "5007-analog-input-10014",
+                "column": "stat_zn-t",
+                "label": "STAT ZN-T zone temp (BACnet direct)",
+                "brick_type": "Zone_Air_Temperature_Sensor",
+                "fdd_input": "stat_zn-t",
+                "equipment_id": "bacnet-5007",
+                "equipment_name": "BACnet MS/TP device 5007",
+                "sample_count": 716,
+                "avg_overall": 72.76,
+                "min_overall": 72.0,
+                "max_overall": 73.5
+              },
+              {
+                "point_id": "5007-analog-input-1173",
+                "column": "oa-t",
+                "label": "OA-T (BACnet direct)",
+                "brick_type": "Outside_Air_Temperature_Sensor",
+                "fdd_input": "oa-t",
+                "equipment_id": "bacnet-5007",
+                "equipment_name": "BACnet MS/TP device 5007",
+                "sample_count": 716,
+                "avg_overall": 71.76,
+                "min_overall": 70.0,
+                "max_overall": 73.5
+              },
+              {
+                "point_id": "5007-analog-input-1168",
+                "column": "oa-h",
+                "label": "OA-H humidity (BACnet direct)",
+                "brick_type": "Outside_Air_Humidity_Sensor",
+                "fdd_input": "oa-h",
+                "equipment_id": "bacnet-5007",
+                "equipment_name": "BACnet MS/TP device 5007",
+                "sample_count": 716,
+                "avg_overall": 45.76,
+                "min_overall": 45.0,
+                "max_overall": 46.5
+              },
+              {
+                "point_id": "5007-analog-input-1192",
+                "column": "duct-t",
+                "label": "DUCT-T discharge air temp (BACnet direct)",
+                "brick_type": "Discharge_Air_Temperature_Sensor",
+                "fdd_input": "duct-t",
+                "equipment_id": "bacnet-5007",
+                "equipment_name": "BACnet MS/TP device 5007",
+                "sample_count": 716,
+                "avg_overall": 53.4,
+                "min_overall": 53.0,
+                "max_overall": 53.8
+              }
+            ],
+            "avg_overall": 72.76,
+            "min_overall": 72.0,
+            "max_overall": 73.5,
+            "sample_count": 716
+          }
+        }
+      },
+      "condition_live": true
+    },
+    "fdd-smoke-paired-zn-t-bacnet-arrow-demo": {
+      "first_seen": "2026-06-21T14:02:37.516792+00:00",
+      "last_seen": "2026-06-21T16:49:54.465758+00:00",
+      "alert": {
+        "id": "fdd-smoke-paired-zn-t-bacnet-arrow-demo",
+        "severity": "warning",
+        "title": "BACnet MS/TP device 5007 \u2014 Zone temp out of bounds \u2014 BACnet PyArrow parity (26 samples) at demo",
+        "detail": "26/30 samples flagged (feather).",
+        "source": "fdd",
+        "code": "smoke-paired-zn-t-bacnet-arrow",
+        "rule_id": "smoke-paired-zn-t-bacnet-arrow",
+        "rule_name": "Smoke paired ZN-T bounds (BACnet PyArrow)",
+        "short_description": "Zone temp out of bounds \u2014 BACnet PyArrow parity",
+        "equipment_name": "BACnet MS/TP device 5007",
+        "equipment_names": [
+          "BACnet MS/TP device 5007"
+        ],
+        "equipment_id": "bacnet-5007",
+        "data_source": "BACnet \u00b7 5007",
+        "symptom": "Zone temp out of bounds \u2014 BACnet PyArrow parity",
+        "model_context": {
+          "severity": "warning",
+          "rule_id": "smoke-paired-zn-t-bacnet-arrow",
+          "rule_name": "Smoke paired ZN-T bounds (BACnet PyArrow)",
+          "short_description": "Zone temp out of bounds \u2014 BACnet PyArrow parity",
+          "symptom": "Zone temp out of bounds \u2014 BACnet PyArrow parity",
+          "data_source": "BACnet \u00b7 5007",
+          "site_id": "demo",
+          "equipment": {
+            "id": "bacnet-5007",
+            "name": "BACnet MS/TP device 5007",
+            "type": "BACnet Device"
+          },
+          "point": {
+            "id": "5007-analog-input-10014",
+            "name": "STAT ZN-T zone temp (BACnet direct)",
+            "external_id": "stat_zn-t",
+            "fdd_input": "stat_zn-t",
+            "brick_type": "Zone_Air_Temperature_Sensor",
+            "bacnet_device_id": 5007,
+            "object_identifier": "analog-input,10014"
+          },
+          "bacnet_summary": "device 5007 \u00b7 analog-input,10014",
+          "historian_column": "stat_zn-t",
+          "insight": {
+            "sensor_column": "stat_zn-t",
+            "lookback_hours": 24.0,
+            "sensor_count": 4,
+            "historian_source": "bacnet",
+            "sensors": [
+              {
+                "point_id": "5007-analog-input-10014",
+                "column": "stat_zn-t",
+                "label": "STAT ZN-T zone temp (BACnet direct)",
+                "brick_type": "Zone_Air_Temperature_Sensor",
+                "fdd_input": "stat_zn-t",
+                "equipment_id": "bacnet-5007",
+                "equipment_name": "BACnet MS/TP device 5007",
+                "sample_count": 716,
+                "avg_overall": 72.76,
+                "min_overall": 72.0,
+                "max_overall": 73.5
+              },
+              {
+                "point_id": "5007-analog-input-1173",
+                "column": "oa-t",
+                "label": "OA-T (BACnet direct)",
+                "brick_type": "Outside_Air_Temperature_Sensor",
+                "fdd_input": "oa-t",
+                "equipment_id": "bacnet-5007",
+                "equipment_name": "BACnet MS/TP device 5007",
+                "sample_count": 716,
+                "avg_overall": 71.76,
+                "min_overall": 70.0,
+                "max_overall": 73.5
+              },
+              {
+                "point_id": "5007-analog-input-1168",
+                "column": "oa-h",
+                "label": "OA-H humidity (BACnet direct)",
+                "brick_type": "Outside_Air_Humidity_Sensor",
+                "fdd_input": "oa-h",
+                "equipment_id": "bacnet-5007",
+                "equipment_name": "BACnet MS/TP device 5007",
+                "sample_count": 716,
+                "avg_overall": 45.76,
+                "min_overall": 45.0,
+                "max_overall": 46.5
+              },
+              {
+                "point_id": "5007-analog-input-1192",
+                "column": "duct-t",
+                "label": "DUCT-T discharge air temp (BACnet direct)",
+                "brick_type": "Discharge_Air_Temperature_Sensor",
+                "fdd_input": "duct-t",
+                "equipment_id": "bacnet-5007",
+                "equipment_name": "BACnet MS/TP device 5007",
+                "sample_count": 716,
+                "avg_overall": 53.4,
+                "min_overall": 53.0,
+                "max_overall": 53.8
+              }
+            ],
+            "avg_overall": 72.76,
+            "min_overall": 72.0,
+            "max_overall": 73.5,
+            "sample_count": 716
+          }
+        }
+      },
+      "condition_live": true
+    },
+    "fdd-smoke-paired-zn-t-niagara-arrow-demo": {
+      "first_seen": "2026-06-21T14:02:37.516792+00:00",
+      "last_seen": "2026-06-21T16:49:54.465758+00:00",
+      "alert": {
+        "id": "fdd-smoke-paired-zn-t-niagara-arrow-demo",
+        "severity": "warning",
+        "title": "Niagara station bench9065 \u2014 Zone temp out of bounds \u2014 Niagara PyArrow (26 samples) at demo",
+        "detail": "26/30 samples flagged (feather).",
+        "source": "fdd",
+        "code": "smoke-paired-zn-t-niagara-arrow",
+        "rule_id": "smoke-paired-zn-t-niagara-arrow",
+        "rule_name": "Smoke paired ZN-T bounds (Niagara PyArrow)",
+        "short_description": "Zone temp out of bounds \u2014 Niagara PyArrow",
+        "equipment_name": "Niagara station bench9065",
+        "equipment_names": [
+          "Niagara station bench9065"
+        ],
+        "equipment_id": "niagara-bench9065",
+        "data_source": "Niagara \u00b7 bench9065",
+        "symptom": "Zone temp out of bounds \u2014 Niagara PyArrow",
+        "model_context": {
+          "severity": "warning",
+          "rule_id": "smoke-paired-zn-t-niagara-arrow",
+          "rule_name": "Smoke paired ZN-T bounds (Niagara PyArrow)",
+          "short_description": "Zone temp out of bounds \u2014 Niagara PyArrow",
+          "symptom": "Zone temp out of bounds \u2014 Niagara PyArrow",
+          "data_source": "Niagara \u00b7 bench9065",
+          "site_id": "demo",
+          "equipment": {
+            "id": "niagara-bench9065",
+            "name": "Niagara station bench9065",
+            "type": "Niagara Station"
+          },
+          "point": {
+            "id": "niagara-bench9065-fa1b48f7f0",
+            "name": "STAT ZN-T zone temp (Niagara baskStream)",
+            "external_id": "niagara-stat-zn-t",
+            "fdd_input": "stat_zn-t",
+            "brick_type": "Zone_Air_Temperature_Sensor",
+            "bacnet_device_id": null,
+            "object_identifier": ""
+          },
+          "bacnet_summary": "not available",
+          "historian_column": "niagara-stat-zn-t",
+          "insight": {
+            "sensor_column": "niagara-stat-zn-t",
+            "lookback_hours": 24.0,
+            "sensor_count": 6,
+            "historian_source": "bacnet",
+            "sensors": [
+              {
+                "point_id": "niagara-bench9065-fa1b48f7f0",
+                "column": "niagara-stat-zn-t",
+                "label": "STAT ZN-T zone temp (Niagara baskStream)",
+                "brick_type": "Zone_Air_Temperature_Sensor",
+                "fdd_input": "stat_zn-t",
+                "equipment_id": "niagara-bench9065",
+                "equipment_name": "Niagara station bench9065"
+              },
+              {
+                "point_id": "niagara-bench9065-f4c0862bb4",
+                "column": "niagara-oa-t",
+                "label": "OA-T (Niagara baskStream)",
+                "brick_type": "Outside_Air_Temperature_Sensor",
+                "fdd_input": "oa-t",
+                "equipment_id": "niagara-bench9065",
+                "equipment_name": "Niagara station bench9065"
+              },
+              {
+                "point_id": "niagara-bench9065-954f1fe9a8",
+                "column": "niagara-oa-h",
+                "label": "OA-H humidity (Niagara baskStream)",
+                "brick_type": "Outside_Air_Humidity_Sensor",
+                "fdd_input": "oa-h",
+                "equipment_id": "niagara-bench9065",
+                "equipment_name": "Niagara station bench9065"
+              },
+              {
+                "point_id": "niagara-bench9065-9fc449ad9c",
+                "column": "niagara-duct-t",
+                "label": "DUCT-T discharge air temp (Niagara baskStream)",
+                "brick_type": "Discharge_Air_Temperature_Sensor",
+                "fdd_input": "duct-t",
+                "equipment_id": "niagara-bench9065",
+                "equipment_name": "Niagara station bench9065"
+              },
+              {
+                "point_id": "niagara-bench9065-c35309e939",
+                "column": "niagara-duct-p",
+                "label": "DUCT-P static pressure (Niagara baskStream)",
+                "brick_type": "Supply_Air_Static_Pressure_Sensor",
+                "fdd_input": "duct-p",
+                "equipment_id": "niagara-bench9065",
+                "equipment_name": "Niagara station bench9065"
+              },
+              {
+                "point_id": "niagara-bench9065-96d2041b61",
+                "column": "niagara-current-s",
+                "label": "CURRENT-S (Niagara baskStream, read-only)",
+                "brick_type": "Sensor",
+                "fdd_input": "current-s",
+                "equipment_id": "niagara-bench9065",
+                "equipment_name": "Niagara station bench9065"
+              }
+            ]
+          }
+        }
+      },
+      "condition_live": true
+    },
+    "fdd-smoke-paired-zn-t-niagara-sql-demo": {
+      "first_seen": "2026-06-21T14:02:37.516792+00:00",
+      "last_seen": "2026-06-21T16:49:54.465758+00:00",
+      "alert": {
+        "id": "fdd-smoke-paired-zn-t-niagara-sql-demo",
+        "severity": "warning",
+        "title": "Niagara station bench9065 \u2014 Zone temp out of bounds \u2014 Niagara DataFusion parity (26 samples) at demo",
+        "detail": "26/30 samples flagged (feather).",
+        "source": "fdd",
+        "code": "smoke-paired-zn-t-niagara-sql",
+        "rule_id": "smoke-paired-zn-t-niagara-sql",
+        "rule_name": "Smoke paired ZN-T bounds (Niagara SQL)",
+        "short_description": "Zone temp out of bounds \u2014 Niagara DataFusion parity",
+        "equipment_name": "Niagara station bench9065",
+        "equipment_names": [
+          "Niagara station bench9065"
+        ],
+        "equipment_id": "niagara-bench9065",
+        "data_source": "Niagara \u00b7 bench9065",
+        "symptom": "Zone temp out of bounds \u2014 Niagara DataFusion parity",
+        "model_context": {
+          "severity": "warning",
+          "rule_id": "smoke-paired-zn-t-niagara-sql",
+          "rule_name": "Smoke paired ZN-T bounds (Niagara SQL)",
+          "short_description": "Zone temp out of bounds \u2014 Niagara DataFusion parity",
+          "symptom": "Zone temp out of bounds \u2014 Niagara DataFusion parity",
+          "data_source": "Niagara \u00b7 bench9065",
+          "site_id": "demo",
+          "equipment": {
+            "id": "niagara-bench9065",
+            "name": "Niagara station bench9065",
+            "type": "Niagara Station"
+          },
+          "point": {
+            "id": "niagara-bench9065-fa1b48f7f0",
+            "name": "STAT ZN-T zone temp (Niagara baskStream)",
+            "external_id": "niagara-stat-zn-t",
+            "fdd_input": "stat_zn-t",
+            "brick_type": "Zone_Air_Temperature_Sensor",
+            "bacnet_device_id": null,
+            "object_identifier": ""
+          },
+          "bacnet_summary": "not available",
+          "historian_column": "niagara-stat-zn-t",
+          "insight": {
+            "sensor_column": "niagara-stat-zn-t",
+            "lookback_hours": 24.0,
+            "sensor_count": 6,
+            "historian_source": "bacnet",
+            "sensors": [
+              {
+                "point_id": "niagara-bench9065-fa1b48f7f0",
+                "column": "niagara-stat-zn-t",
+                "label": "STAT ZN-T zone temp (Niagara baskStream)",
+                "brick_type": "Zone_Air_Temperature_Sensor",
+                "fdd_input": "stat_zn-t",
+                "equipment_id": "niagara-bench9065",
+                "equipment_name": "Niagara station bench9065"
+              },
+              {
+                "point_id": "niagara-bench9065-f4c0862bb4",
+                "column": "niagara-oa-t",
+                "label": "OA-T (Niagara baskStream)",
+                "brick_type": "Outside_Air_Temperature_Sensor",
+                "fdd_input": "oa-t",
+                "equipment_id": "niagara-bench9065",
+                "equipment_name": "Niagara station bench9065"
+              },
+              {
+                "point_id": "niagara-bench9065-954f1fe9a8",
+                "column": "niagara-oa-h",
+                "label": "OA-H humidity (Niagara baskStream)",
+                "brick_type": "Outside_Air_Humidity_Sensor",
+                "fdd_input": "oa-h",
+                "equipment_id": "niagara-bench9065",
+                "equipment_name": "Niagara station bench9065"
+              },
+              {
+                "point_id": "niagara-bench9065-9fc449ad9c",
+                "column": "niagara-duct-t",
+                "label": "DUCT-T discharge air temp (Niagara baskStream)",
+                "brick_type": "Discharge_Air_Temperature_Sensor",
+                "fdd_input": "duct-t",
+                "equipment_id": "niagara-bench9065",
+                "equipment_name": "Niagara station bench9065"
+              },
+              {
+                "point_id": "niagara-bench9065-c35309e939",
+                "column": "niagara-duct-p",
+                "label": "DUCT-P static pressure (Niagara baskStream)",
+                "brick_type": "Supply_Air_Static_Pressure_Sensor",
+                "fdd_input": "duct-p",
+                "equipment_id": "niagara-bench9065",
+                "equipment_name": "Niagara station bench9065"
+              },
+              {
+                "point_id": "niagara-bench9065-96d2041b61",
+                "column": "niagara-current-s",
+                "label": "CURRENT-S (Niagara baskStream, read-only)",
+                "brick_type": "Sensor",
+                "fdd_input": "current-s",
+                "equipment_id": "niagara-bench9065",
+                "equipment_name": "Niagara station bench9065"
+              }
+            ]
+          }
+        }
+      },
+      "condition_live": true
     }
   }
 }
