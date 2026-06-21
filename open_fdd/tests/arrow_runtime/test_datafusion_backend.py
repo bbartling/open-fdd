@@ -13,6 +13,7 @@ from open_fdd.arrow_runtime.datafusion_backend import (
 from open_fdd.arrow_runtime.backend import run_arrow_rule
 from open_fdd.arrow_runtime.rules import detect_rule_backend
 from open_fdd.arrow_runtime.testing import sample_hvac_table
+import open_fdd.arrow_runtime.datafusion_backend as df_backend
 
 THRESHOLD_SQL = """SELECT
   *,
@@ -62,11 +63,20 @@ def test_lint_rejects_dml():
     assert not lint["ok"]
 
 
-def test_missing_datafusion_clean_error():
-    if datafusion_available():
-        pytest.skip("datafusion installed")
+def test_missing_datafusion_clean_error(monkeypatch: pytest.MonkeyPatch):
+    """The missing-DataFusion error path should stay friendly and actionable."""
+
+    def fail_import():
+        raise RuntimeError(
+            "DataFusion SQL backend is not installed.\n"
+            "Install with: pip install 'open-fdd[datafusion]'"
+        )
+
+    monkeypatch.setattr(df_backend, "_import_datafusion", fail_import)
+
     table = sample_hvac_table(5)
     result = run_datafusion_sql_rule(THRESHOLD_SQL, table)
+
     assert result.backend == "datafusion_sql"
     assert result.errors
     assert "open-fdd[datafusion]" in result.errors[0]

@@ -37,28 +37,43 @@ dependencies = [
 open-fdd = "open_fdd.cli:main"
 
 [project.optional-dependencies]
-# Future graph ML (Layer B/C) — not used in Rule Lab sandbox.
 ml = [
     "numpy>=1.26.0",
     "scikit-learn>=1.4.0",
 ]
+
 analytics = [
     "numpy>=1.26.0",
 ]
+
+reports = [
+    "python-docx>=1.1.2",
+]
+
 pandas = [
     "pandas>=2.0.0",
 ]
+
 release = [
     "build>=1.2.0",
     "twine>=6.0.0",
 ]
+
 test = [
     "pytest>=7.0",
     "pytest-timeout>=2.3.0",
+    "pytest-asyncio>=0.23.0",
+    "numpy>=1.26.0",
+    "python-docx>=1.1.2",
 ]
+
 dev = [
     "pytest>=7.0",
     "pytest-timeout>=2.3.0",
+    "pytest-asyncio>=0.23.0",
+    "numpy>=1.26.0",
+    "python-docx>=1.1.2",
+    "datafusion>=40.0.0",
     "pyyaml",
     "pydantic>=2.4,<3",
     "black[jupyter]>=25.11.0",
@@ -66,15 +81,18 @@ dev = [
     "build>=1.2.0",
     "twine>=6.0.0",
 ]
+
 docs = [
     "pyyaml",
     "weasyprint>=62.0",
 ]
+
 portfolio = [
     "dash>=2.17",
     "plotly>=5.22",
     "pandas>=2.2",
 ]
+
 datafusion = [
     "datafusion>=40.0.0",
 ]
@@ -91,6 +109,7 @@ include = [
     "open_fdd.playground*",
     "open_fdd.arrow_runtime*",
     "open_fdd.faults*",
+    "open_fdd.reports*",
 ]
 
 [tool.setuptools.package-data]
@@ -104,3 +123,9 @@ target-version = ["py310", "py311", "py312", "py313", "py314"]
 testpaths = ["open_fdd/tests"]
 timeout = 300
 timeout_method = "thread"
+markers = [
+    "integration: tests requiring live services, Docker, BACnet, or network access",
+    "bacnet: tests requiring BACnet stack or live BACnet fixtures",
+    "datafusion: tests requiring DataFusion optional dependency",
+    "docs: tests requiring docs build tooling",
+]

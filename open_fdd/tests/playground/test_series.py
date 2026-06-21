@@ -19,7 +19,3 @@ def test_build_series_context_cross_sensor():
     ctx = build_series_context(series_map, 1, aliases={"SAT": "sat"})
     assert ctx["SAT"]["current"] == 80.0
 
-
-@pytest.mark.skip(reason="cross-sensor evaluate() rules removed — use Arrow apply_faults_arrow on joined tables")
-def test_evaluate_rules_on_series_cross_sensor():
-    pass
