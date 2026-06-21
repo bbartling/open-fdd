@@ -154,7 +154,11 @@ OPENFDD_IMAGE_TAG="$NEW_TAG" "${COMPOSE[@]}" config --images
 
 echo ""
 echo "==> Final health"
-curl -sS http://127.0.0.1:8765/health || true
+FINAL_HEALTH_STATUS="OK"
+if ! curl -fsS http://127.0.0.1:8765/health; then
+  FINAL_HEALTH_STATUS="UNREACHABLE"
+  echo "WARN: final health probe failed" >&2
+fi
 echo ""
 
 openfdd_warn_plaintext_passwords "$ROOT" || true
@@ -173,7 +177,7 @@ echo "Open-FDD update complete"
 echo "  Tag:        $NEW_TAG"
 echo "  Compose:    $COMPOSE_FILE"
 echo "  Backup:     $BACKUP_ROOT"
-echo "  Health:     OK"
+echo "  Health:     $FINAL_HEALTH_STATUS"
 echo ""
 echo "Done. BACnet poll resumes when commission container is healthy."
 echo "Optional logs: docker compose -f $COMPOSE_FILE logs --since 10m"

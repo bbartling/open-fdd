@@ -249,18 +249,18 @@ openfdd_assert_compose_uses_tag() {
   echo "Resolved compose images:"
   echo "$resolved"
 
-  echo "$resolved" | grep -q "ghcr.io/bbartling/openfdd-bridge:${tag}" || {
+  echo "$resolved" | grep -Fq -- "ghcr.io/bbartling/openfdd-bridge:${tag}" || {
     echo "ERROR: compose did not resolve bridge image to tag ${tag}" >&2
     return 1
   }
 
-  echo "$resolved" | grep -q "ghcr.io/bbartling/openfdd-commission:${tag}" || {
+  echo "$resolved" | grep -Fq -- "ghcr.io/bbartling/openfdd-commission:${tag}" || {
     echo "ERROR: compose did not resolve commission image to tag ${tag}" >&2
     return 1
   }
 
-  if echo "$resolved" | grep -q "ghcr.io/bbartling/openfdd-mcp-rag:"; then
-    echo "$resolved" | grep -q "ghcr.io/bbartling/openfdd-mcp-rag:${tag}" || {
+  if echo "$resolved" | grep -Fq -- "ghcr.io/bbartling/openfdd-mcp-rag:"; then
+    echo "$resolved" | grep -Fq -- "ghcr.io/bbartling/openfdd-mcp-rag:${tag}" || {
       echo "ERROR: compose did not resolve mcp-rag image to tag ${tag}" >&2
       return 1
     }
@@ -382,6 +382,11 @@ openfdd_validate_site_health() {
   local interval="${OPENFDD_HEALTH_INTERVAL_SECS:-3}"
   local elapsed=0
   local health_file="/tmp/openfdd-health-$$.json"
+
+  if ! [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || ! [[ "$interval" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: OPENFDD_HEALTH_TIMEOUT_SECS and OPENFDD_HEALTH_INTERVAL_SECS must be positive integers" >&2
+    return 1
+  fi
 
   while [[ "$elapsed" -lt "$timeout" ]]; do
     if curl -fsS --connect-timeout 5 "$health_url" >"$health_file" 2>/dev/null; then
