@@ -1,0 +1,60 @@
+services:
+  openfdd-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openfdd-bridge
+    environment:
+      SERVICE_MODE: bridge
+      PORT: "8080"
+      FRONTEND_DIR: /app/frontend
+      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-dev-change-me-openfdd-rust-edge}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./workspace:/app/workspace
+    restart: unless-stopped
+
+  openfdd-commission:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openfdd-commission
+    environment:
+      SERVICE_MODE: commission
+      PORT: "9091"
+      FRONTEND_DIR: /app/frontend
+      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-dev-change-me-openfdd-rust-edge}
+    expose:
+      - "9091"
+    volumes:
+      - ./workspace:/app/workspace
+    restart: unless-stopped
+
+  openfdd-haystack-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openfdd-haystack-gateway
+    environment:
+      SERVICE_MODE: haystack-gateway
+      PORT: "9092"
+      FRONTEND_DIR: /app/frontend
+      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-dev-change-me-openfdd-rust-edge}
+    expose:
+      - "9092"
+    volumes:
+      - ./workspace:/app/workspace
+    restart: unless-stopped
+
+  # MCP will be added later. Agent JSON APIs are already exposed by openfdd-bridge.
+
+  open-fdd-rust-backend:
+    profiles: ["rust-prod"]
+    build:
+      context: .
+      dockerfile: Dockerfile.rust
+    network_mode: host
+    volumes:
+      - ./workspace:/app/workspace
+    restart: unless-stopped

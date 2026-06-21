@@ -1,0 +1,43 @@
+openapi: 3.1.0
+info:
+  title: Open-FDD Rust Edge API
+  version: 0.1.0
+security:
+  - bearerAuth: []
+paths:
+  /api/health:
+    get:
+      security: []
+      responses:
+        "200": { description: OK }
+  /api/auth/login:
+    post:
+      security: []
+      responses:
+        "200": { description: JWT token }
+  /api/health/stack:
+    get:
+      responses:
+        "200": { description: Stack health }
+  /api/agent/tools:
+    get:
+      responses:
+        "200": { description: Agent tool list }
+  /api/bacnet/driver/tree:
+    get:
+      responses:
+        "200": { description: BACnet driver tree }
+  /api/rules/save:
+    post:
+      responses:
+        "200": { description: Save rule }
+  /api/rules/batch:
+    post:
+      responses:
+        "200": { description: Run batch FDD rules }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

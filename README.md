@@ -1,536 +1,243 @@
-# Open-FDD
+# Open-FDD Rust Edge
 
-<p align="center">
-  <a href="https://discord.gg/Ta48yQF8fC"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white" alt="Discord"></a>
-  <a href="https://github.com/bbartling/open-fdd/actions/workflows/ci.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
-  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT">
-  <img src="https://img.shields.io/badge/status-Beta-blue" alt="Beta">
-  <img src="https://img.shields.io/badge/Python-%3E%3D3.10-blue?logo=python&logoColor=white" alt="Python 3.10+">
-</p>
+Rust-only Open-FDD edge prototype: API, dashboard, historian, BACnet/Modbus/JSON/Haystack drivers, DataFusion SQL fault detection, JWT agent API, and safe Docker lifecycle scripts.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/bbartling/open-fdd/master/image.png" alt="Open-FDD logo" width="440">
-</p>
+This branch intentionally removes the Python/PyPI project shape. The goal is a small Rust-first base that can later grow into production crates.
 
-<p align="center">
-  Open-source HVAC systems supervisory fault detection for buildings — local-first, on-prem, vendor-neutral, and free to run at the edge.
+## Goals
 
-  Arrow-native rules, optional DataFusion SQL rules for Rust-ready migration, optional PyPI embeddable runtime, and a full Docker/GHCR edge operator stack: BACnet, bridge API, dashboard, and MCP.
+Build a free, open-source, full AFDD platform that is secure, vendor-agnostic, and designed for IoT edge deployments in the smart-building world.
 
-  Includes an open, free knowledge layer for AI-assisted building diagnostics, commissioning support, and HVAC fault investigation.
-</p>
+The platform should include smart-building IoT drivers and full support for algorithms through CDL and a knowledge graph. Everything should be assignable by AI through Haystack, including fault equations, data storage, external references, and algorithm inputs/outputs.
 
-<p align="center">
-  <a href="https://bbartling.github.io/open-fdd/"><img src="https://img.shields.io/badge/Documentation-read_online-2563EB?style=for-the-badge" alt="Documentation"></a>
-  <a href="https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf"><img src="https://img.shields.io/badge/Docs-PDF_download-DC2626?style=for-the-badge" alt="PDF documentation"></a>
-</p>
+Algorithms must be protocol-agnostic across BACnet, Modbus, JSON APIs, and Haystack. A CDL algorithm should be able to use data from any driver as long as the points are mapped through the Haystack assignment layer.
 
----
-
-## Install / run
-
-### Full Open-FDD edge stack (Docker / GitHub Container Registry)
+The project should also include a community-based expression-rule cookbook for DataFusion SQL and use everything the Apache Arrow project has to offer under the hood.
 
 
-| Image | Role |
-|-------|------|
-| [`ghcr.io/bbartling/openfdd-bridge`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge) | API, dashboard, historian |
-| [`ghcr.io/bbartling/openfdd-commission`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-commission) | BACnet discover, read, poll |
-| [`ghcr.io/bbartling/openfdd-mcp-rag`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp-rag) | MCP + doc-search |
-
-GHCR publishes **multi-arch** images (`linux/amd64` + `linux/arm64`) from release **3.1.6** onward. Edge scripts **auto-detect** the host CPU and pull the matching manifest — no manual platform flag on a normal x86 or 64-bit Raspberry Pi install.
-
-| Host CPU (`uname -m`) | Docker platform | Typical hardware |
-|-----------------------|-----------------|------------------|
-| `x86_64`, `amd64` | `linux/amd64` | Intel/AMD servers, VMs |
-| `aarch64`, `arm64` | `linux/arm64` | Raspberry Pi 4/5 (64-bit OS) |
-
-Verify before pull (optional but recommended on Pi):
-
-```bash
-cd ~/open-fdd
-./scripts/openfdd_check_ghcr_platform.sh
-```
-
-Override platform (lab / QEMU emulation only):
-
-```bash
-# Force amd64 images on ARM64 (slow — see docs/quick-start/raspberry-pi-edge.md)
-OPENFDD_DOCKER_PLATFORM=linux/amd64 docker compose pull
-
-# Bootstrap or update with explicit platform
-bash /tmp/openfdd_edge_bootstrap.sh --start --platform linux/arm64
-NEW_TAG=3.1.6 OPENFDD_DOCKER_PLATFORM=linux/amd64 ./scripts/openfdd_site_update.sh
-```
-
-Pi-specific troubleshooting: [Raspberry Pi edge bootstrap](docs/quick-start/raspberry-pi-edge.md).
-
-### Manual Installation
-
-This process does not clone the GitHub repository. It only pulls the `latest` images from GHCR and uses a Bash script to set up the basic file structure on the Linux filesystem.
-
-
-```bash
-curl -fsSL -o /tmp/openfdd_edge_bootstrap.sh \
-  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_edge_bootstrap.sh
-bash /tmp/openfdd_edge_bootstrap.sh --start
-```
-
-### Update an Existing Site
-
-This backs up site data, runs safe Docker maintenance, updates the containers, validates health, and removes the backup archive on success. See [Edge site lifecycle](docs/quick-start/site-lifecycle.md).
-
-
-```bash
-cd ~/open-fdd
-./scripts/openfdd_site_backup.sh
-./scripts/openfdd_site_update.sh
-```
-
-### AI Agent Prompt
-
-
-| Area | Examples |
-|------|----------|
-| **Edge deploy** | `openfdd_edge_bootstrap.sh`, `openfdd_site_backup.sh`, `openfdd_site_update.sh`, `openfdd_check_ghcr_platform.sh`, health checks |
-| **Drivers** | BACnet discover/poll/bind, Niagara station setup, JSON API endpoints |
-| **Model & rules** | BRICK sites/equipment/points, Rule Lab save/bind, batch FDD, tuning brief/apply |
-| **Operations** | Building check-in, zone temps, device poll health, BACnet P8 override scans |
-| **Reports** | `rcx_plan_report`, `rcx_generate_report`, list/download saved DOCX |
-| **Safety** | No BACnet writes without approval; never `docker compose down -v`; never delete `workspace/` |
-
-Deeper route maps: [AI agent context](docs/ai-agent-context.md) · [Edge site lifecycle](docs/quick-start/site-lifecycle.md) · [AGENTS.md](AGENTS.md) · MCP tools in `workspace/mcp_server/server.py`.
-
-<details>
-<summary><strong>Copy-paste: OpenClaw — fresh Raspberry Pi edge bootstrap</strong></summary>
-
-Prompt tuned for **OpenClaw** on a new Pi. Edge deploy uses **GHCR Docker** (not a source clone): `openfdd-bridge`, `openfdd-commission`, `openfdd-mcp-rag`. Bootstrap script: [`scripts/openfdd_edge_bootstrap.sh`](scripts/openfdd_edge_bootstrap.sh).
+## Service shape
 
 ```text
-You are OpenClaw running on a fresh Raspberry Pi intended to become an Open-FDD edge device.
+openfdd-bridge             API + dashboard + historian
+openfdd-commission         BACnet / Modbus / JSON API discover-read-poll
+openfdd-haystack-gateway   Haystack read/nav/ops integration
+MCP                         later
+```
 
-Goal:
-Install and bootstrap Open-FDD from https://github.com/bbartling/open-fdd on this fresh Raspberry Pi, start the Docker edge stack, then validate that:
-1. Docker is installed and working.
-2. Open-FDD edge stack is running.
-3. Bridge health is good.
-4. Auth is configured.
-5. MCP sidecar / mcp-rag is online.
-6. The install is safe for a local OT/LAN edge box and is not exposed publicly.
+## Quick start
 
-Important project facts:
-- Open-FDD edge deploy should use the GHCR Docker stack, not a source-code dev install.
-- The edge stack uses these images:
-  - ghcr.io/bbartling/openfdd-bridge:latest
-  - ghcr.io/bbartling/openfdd-commission:latest
-  - ghcr.io/bbartling/openfdd-mcp-rag:latest
-- The official bootstrap script is:
-  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_edge_bootstrap.sh
-- Raspberry Pi / ARM64: GHCR images must include `linux/arm64`. If pull fails with `no matching manifest for linux/arm64/v8`, see docs/quick-start/raspberry-pi-edge.md — do not treat it as a Docker install failure.
-- Platform check script (after bootstrap downloads scripts): `~/open-fdd/scripts/openfdd_check_ghcr_platform.sh`
-- Default site root should be:
-  ~/open-fdd
-- The persistent workspace must not be deleted after creation:
-  ~/open-fdd/workspace
+```bash
+cp .env.example .env
+./scripts/openfdd_edge_bootstrap.sh
+```
+
+Open:
+
+```text
+http://localhost:8080
+```
+
+Or run directly:
+
+```bash
+docker compose up --build
+```
+
+## Local Rust dev
+
+```bash
+cargo fmt --all
+cargo test --workspace
+cargo run -p open_fdd_edge_prototype
+```
+
+## Auth
+
+Public:
+
+```text
+GET  /api/health
+POST /api/auth/login
+```
+
+Login:
+
+```bash
+TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"sub":"agent","role":"agent"}' | jq -r .access_token)"
+```
+
+Then:
+
+```bash
+curl -s http://127.0.0.1:8080/api/health/stack \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+## Main AI-drivable routes
+
+```text
+GET  /api/agent/manifest
+GET  /api/agent/tools
+GET  /api/building/checkin
+GET  /api/health/stack
+GET  /api/ops/stack
+POST /api/ops/docker/update
+
+POST /api/bacnet/whois
+POST /api/bacnet/point-discovery
+GET  /api/bacnet/driver/tree
+POST /api/bacnet/overrides/scan-once
+
+POST /api/modbus/scan
+GET  /api/modbus/points
+
+GET  /api/json-api/sources
+POST /api/json-api/register
+POST /api/json-api/poll-once
+
+GET  /api/haystack/about
+POST /api/haystack/read
+POST /api/haystack/nav
+POST /api/haystack/ops
+
+GET  /api/arrow/demo
+GET  /api/fdd/datafusion/demo
+POST /api/fdd/run
+GET  /api/rules
+POST /api/rules/save
+POST /api/rules/batch
+
+POST /api/reports/rcx/plan
+POST /api/reports/rcx/generate
+GET  /api/reports/rcx/list
+```
+
+
+## Code layout
+
+```text
+edge/src/
+  main.rs
+  drivers/
+    mod.rs
+    bacnet.rs
+    modbus.rs
+    json_api.rs
+    haystack.rs
+  historian/
+    mod.rs
+    arrow_table.rs
+  fdd/
+    mod.rs
+    datafusion_sql.rs
+  model/
+    mod.rs
+```
+
+Driver code and the FDD/DataFusion SQL facade are now present in the same Rust crate layout. The fast Docker prototype uses deterministic simulator-backed drivers so the API and UI are testable without field hardware. Production wiring can swap those facades to `rusty-bacnet`, `rusty-modbus`, `rusty-haystack`, Apache Arrow, and DataFusion without changing the external API shape.
+
+## Security rules
+
+- JWT Bearer required for operational APIs.
+- Roles: `operator`, `integrator`, `agent`.
+- `OPENFDD_JWT_SECRET` signs tokens.
+- BACnet writes require `integrator` and `approved=true`.
+- Prototype BACnet writes are dry-run only.
+- Keep the edge API on LAN/Tailscale.
 - Never run `docker compose down -v`.
 - Never delete `workspace/`.
-- Do not print secrets into long logs, reports, Git commits, or chat output. You may say where the auth file is located.
+- Never print secrets.
 
-Work plan:
+## Niagara direction
 
-Step 0 — Identify host
-Run:
-set -euo pipefail
-whoami
-hostname
-uname -a
-uname -m
-cat /etc/os-release || true
-ip -4 addr show scope global || true
-
-If `uname -m` is not `aarch64` or `arm64`, warn that the Pi may be 32-bit and GHCR Docker images may not support it. Continue only if Docker image pull succeeds.
-
-Step 1 — Install base packages
-Run:
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl gnupg lsb-release jq git nano
-
-Step 2 — Install Docker if missing
-Check:
-docker --version || true
-docker compose version || true
-
-If Docker or Docker Compose v2 is missing, install Docker using the official Docker apt repo for Debian/Raspberry Pi OS. Use the OS codename from `/etc/os-release`.
-
-Use commands similar to:
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-. /etc/os-release
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian ${VERSION_CODENAME} stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-Then enable Docker:
-sudo systemctl enable --now docker
-sudo usermod -aG docker "$USER" || true
-
-If the current shell cannot access Docker without sudo yet, either use `newgrp docker` or use `sudo docker` only long enough to validate. Prefer to make the final setup work with normal `docker` commands for this user.
-
-Validate:
-docker --version
-docker compose version
-docker run --rm hello-world
-
-Step 2b — GHCR architecture check (ARM64 / Pi only)
-If `uname -m` is `aarch64` or `arm64`, verify GHCR publishes ARM64 before blaming Docker:
-docker buildx imagetools inspect ghcr.io/bbartling/openfdd-bridge:latest | grep -E 'linux/arm64|linux/amd64' || true
-docker buildx imagetools inspect ghcr.io/bbartling/openfdd-mcp-rag:latest | grep -E 'linux/arm64|linux/amd64' || true
-
-If `linux/arm64` is missing and bootstrap fails with `no matching manifest for linux/arm64/v8`:
-- Report clearly: published images are amd64-only for that tag; Pi Docker is fine.
-- Offer: (1) wait for multi-arch GHCR publish, (2) QEMU amd64 emulation (slow, lab only), (3) local `./scripts/docker_build.sh` on the Pi.
-- Full steps: https://bbartling.github.io/open-fdd/quick-start/raspberry-pi-edge/
-
-Step 3 — Bootstrap Open-FDD edge
-Download and run the official bootstrap:
-curl -fsSL -o /tmp/openfdd_edge_bootstrap.sh \
-  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_edge_bootstrap.sh
-
-chmod +x /tmp/openfdd_edge_bootstrap.sh
-bash /tmp/openfdd_edge_bootstrap.sh --start
-
-This should create:
-~/open-fdd/docker-compose.yml
-~/open-fdd/workspace/auth.env.local
-~/open-fdd/workspace/data.env.local
-~/open-fdd/workspace/bacnet/commissioning/commission.env
-~/open-fdd/scripts/openfdd_site_backup.sh
-~/open-fdd/scripts/openfdd_site_update.sh
-
-Step 4 — Validate stack
-Run:
-cd ~/open-fdd
-docker compose ps
-docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
-
-Expected services:
-- bridge
-- commission
-- mcp-rag
-
-All should be `Up` or restarting briefly during first boot.
-
-Step 5 — Validate bridge public health
-Run:
-curl -sf http://127.0.0.1:8765/health | jq .
-
-Expected:
-- HTTP 200
-- JSON has `ok: true`
-- ideally `auth_required: true`
-
-If health fails, inspect:
-cd ~/open-fdd
-docker compose logs --since 10m bridge
-docker compose logs --since 10m commission
-docker compose logs --since 10m mcp-rag
-
-Step 6 — Validate auth file exists without leaking secrets
-Run:
-test -f ~/open-fdd/workspace/auth.env.local
-chmod 600 ~/open-fdd/workspace/auth.env.local || true
-grep -E '^OFDD_(OPERATOR_USER|INTEGRATOR_USER|AGENT_USER)=' ~/open-fdd/workspace/auth.env.local
-
-Do not print passwords in your final report. State that dashboard login uses the `integrator` user and the password from:
-~/open-fdd/workspace/auth.env.local
-
-Step 7 — Login smoke test
-Extract integrator credentials locally and test login:
-cd ~/open-fdd
-set -a
-. ./workspace/auth.env.local
-set +a
-
-TOKEN="$(curl -sf -X POST http://127.0.0.1:8765/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d "{\"username\":\"${OFDD_INTEGRATOR_USER}\",\"password\":\"${OFDD_INTEGRATOR_PASSWORD}\"}" \
-  | jq -r .token)"
-
-test -n "$TOKEN"
-test "$TOKEN" != "null"
-echo "Login token acquired OK"
-
-Then test authenticated stack health:
-curl -sf http://127.0.0.1:8765/health/stack \
-  -H "Authorization: Bearer $TOKEN" | jq .
-
-Expected:
-- API responds successfully.
-- Stack health lists services.
-- BACnet may be yellow if no points are commissioned yet; that is acceptable on a fresh Pi.
-- Bridge should be green/healthy.
-
-Step 8 — Validate MCP sidecar is online
-The Docker edge compose may not publish port 8090 directly to the host. First inspect:
-cd ~/open-fdd
-docker compose ps mcp-rag
-docker compose logs --since 10m mcp-rag
-
-Try health from inside the MCP container:
-docker compose exec -T mcp-rag sh -lc '
-  command -v curl >/dev/null 2>&1 && curl -sf http://127.0.0.1:8090/health ||
-  command -v wget >/dev/null 2>&1 && wget -qO- http://127.0.0.1:8090/health ||
-  python - <<PY
-import urllib.request
-print(urllib.request.urlopen("http://127.0.0.1:8090/health", timeout=5).read().decode())
-PY
-'
-
-Also test from the bridge container to the compose service name:
-docker compose exec -T bridge sh -lc '
-  command -v curl >/dev/null 2>&1 && curl -sf http://mcp-rag:8090/health ||
-  command -v wget >/dev/null 2>&1 && wget -qO- http://mcp-rag:8090/health ||
-  python - <<PY
-import urllib.request
-print(urllib.request.urlopen("http://mcp-rag:8090/health", timeout=5).read().decode())
-PY
-'
-
-If `/health` is not available but the container is running, inspect logs for FastMCP startup and check the MCP endpoint:
-docker compose logs --since 10m mcp-rag | tail -200
-
-If MCP needs host-local access for OpenClaw, do not expose it publicly. Add a localhost-only port mapping to `~/open-fdd/docker-compose.yml` under the `mcp-rag` service:
-
-ports:
-  - "127.0.0.1:8090:8090"
-
-Then recreate only mcp-rag:
-cd ~/open-fdd
-docker compose up -d --force-recreate mcp-rag
-curl -sf http://127.0.0.1:8090/health || true
-
-Do not bind MCP to `0.0.0.0` unless explicitly instructed.
-
-Step 9 — Validate BACnet bind config, but do not start writing to controllers
-Show safe config summary:
-grep '^BACNET_BIND=' ~/open-fdd/workspace/bacnet/commissioning/commission.env || true
-ip -4 addr show scope global || true
-
-If BACNET_BIND looks wrong, report it and suggest the correct LAN IP/prefix. Do not run BACnet writes. On a fresh Pi with no commissioned devices, it is OK if polling has no samples yet.
-
-Step 10 — Optional reboot survival check
-Only do this if allowed by the operator. Otherwise skip.
-sudo reboot
-
-After reconnect:
-cd ~/open-fdd
-docker compose ps
-curl -sf http://127.0.0.1:8765/health | jq .
-
-Final report format:
-Return a concise report with:
-
-1. Host summary:
-   - hostname
-   - architecture
-   - OS
-   - LAN IPs
-
-2. Docker status:
-   - Docker version
-   - Compose version
-   - hello-world pass/fail
-
-3. Open-FDD files created:
-   - ~/open-fdd/docker-compose.yml
-   - ~/open-fdd/workspace/auth.env.local
-   - ~/open-fdd/workspace/bacnet/commissioning/commission.env
-
-4. Container status:
-   - bridge
-   - commission
-   - mcp-rag
-
-5. Health results:
-   - GET /health
-   - authenticated /health/stack
-   - MCP /health or log-based MCP startup proof
-
-6. Login:
-   - say whether integrator login succeeded
-   - do not print passwords or token
-
-7. Next manual steps:
-   - open dashboard locally or through a safe localhost/Caddy/Tailscale route
-   - use integrator credentials from ~/open-fdd/workspace/auth.env.local
-   - commission BACnet / Niagara / JSON API drivers via dashboard or API
-   - validate BACNET_BIND before OT polling
-   - never delete workspace/
-   - update later with:
-     cd ~/open-fdd && ./scripts/openfdd_site_backup.sh && ./scripts/openfdd_site_update.sh
-
-Stop immediately and report clearly if:
-- Docker cannot install.
-- GHCR images do not support this Pi architecture.
-- docker compose pull fails.
-- Bridge /health never becomes healthy.
-- MCP container exits repeatedly.
-```
-
-</details>
-
-<details>
-<summary><strong>Copy-paste: OpenClaw — ongoing edge operator (drivers + FDD)</strong></summary>
-
-Use after bootstrap when the stack is healthy. Agent connects via MCP (`8090`) or bridge JWT (`8765`).
+Custom Niagara WebSockets are replaced by Project Haystack:
 
 ```text
-You are OpenClaw maintaining an Open-FDD edge site at ~/open-fdd.
-
-Goal:
-Help the human operator keep drivers, model, and FDD healthy — without BACnet writes unless explicitly approved.
-
-You can:
-- Check health: GET /health, GET /health/stack (JWT), MCP health_check
-- Commission drivers: BACnet discover/poll config, Niagara stations, JSON API endpoints
-- Maintain BRICK model: sites, equipment, points (preserve point IDs on import)
-- Rule Lab: search cookbook, draft/save/bind PyArrow rules, run POST /api/rules/batch
-- Operations: building.checkin, zone temps, device poll health, override scan status
-- Reports: rcx_plan_report → rcx_generate_report (DOCX saved to workspace/reports/rcx)
-- Updates: ./scripts/openfdd_site_backup.sh then ./scripts/openfdd_site_update.sh
-
-Never:
-- docker compose down -v
-- delete workspace/
-- print passwords, tokens, or auth.env.local contents in chat
-- expose MCP or bridge to 0.0.0.0 on the public internet
-
-Start each session with integrator JWT login, then building_agent_checkin or get_building_status.
-Report faults, stale points, and recommended next steps in plain language.
+Niagara / BAS server
+→ Project Haystack read/nav/ops
+→ Rust Haystack gateway
+→ Open-FDD model + Arrow tables
+→ DataFusion SQL FDD
 ```
 
-</details>
+## What got gutted
 
-<details>
-<summary><strong>Copy-paste: OpenClaw — backup, update & restore</strong></summary>
-
-Use for scheduled upgrades or disaster recovery on an existing `~/open-fdd` site. Full reference: [Edge site lifecycle](docs/quick-start/site-lifecycle.md).
+Removed from this Rust-only baseline:
 
 ```text
-You are OpenClaw upgrading an Open-FDD edge site at ~/open-fdd.
-
-Goal:
-Run a safe image upgrade with backup, Docker maintenance, validation, and backup purge — or restore workspace from backup if requested.
-
-Standard upgrade (workspace bind-mount preserved):
-  cd ~/open-fdd
-  ./scripts/openfdd_site_backup.sh
-  ./scripts/openfdd_site_update.sh
-
-What openfdd_site_update.sh does:
-1. Verify ~/openfdd-backups/latest/workspace-full.tgz integrity
-2. Safe Docker maintenance (container/network/dangling image prune + unused image prune)
-   - NEVER: docker volume prune, docker compose down -v
-3. docker compose pull && up -d --force-recreate
-4. Validate workspace/ layout + GET http://127.0.0.1:8765/health
-5. On success: delete ~/openfdd-backups/latest (PURGE_BACKUP_AFTER_SUCCESS=1 default)
-
-Restore workspace from backup (corruption / rollback):
-  RESTORE_WORKSPACE=1 ./scripts/openfdd_site_update.sh
-
-Historian cap on restore (default keeps newest ~200 GiB of feather shards):
-  RESTORE_WORKSPACE=1 RESTORE_FEATHER_MAX_GIB=200 ./scripts/openfdd_site_update.sh
-
-Restore ALL historian data (no cap):
-  RESTORE_WORKSPACE=1 RESTORE_FEATHER_MAX_GIB=0 ./scripts/openfdd_site_update.sh
-
-Useful env vars:
-  NEW_TAG=latest                    GHCR tag (or OPENFDD_IMAGE_TAG)
-  OPENFDD_DOCKER_PLATFORM=auto      linux/arm64 | linux/amd64 (default: auto-detect host)
-  BACKUP_INCLUDE_POLL_SAMPLES=0     fast backup (skip poll CSV history)
-  SKIP_DOCKER_MAINTENANCE=1         skip prune
-  PURGE_BACKUP_AFTER_SUCCESS=0      keep backup after successful upgrade
-  REQUIRE_BACKUP=0                  upgrade without prior backup (not recommended)
-
-If validation fails:
-- Backup is KEPT at ~/openfdd-backups/latest
-- Inspect: docker compose logs --since 10m bridge
-- Retry restore: RESTORE_WORKSPACE=1 ./scripts/openfdd_site_update.sh
-
-Never:
-- docker compose down -v
-- delete workspace/
-- print auth.env.local passwords in chat
-
-Report: backup size, image tag, health pass/fail, whether backup was purged, feather cap if restore was used.
+pyproject.toml
+Python package/runtime
+PyArrow/Pandas rules
+Dash/Python report code
+Python MCP implementation
+legacy scripts that assume a Python virtualenv
 ```
 
-</details>
+The new base keeps the Open-FDD operating idea: local-first edge stack, agent-drivable API, safe Docker lifecycle, and vendor-neutral HVAC fault detection.
 
+## AI assignment model
 
-### Python package (PyPI)
+Everything is assignable by AI through Haystack IDs:
 
-Use PyPI when you only need the **embeddable Arrow-native FDD runtime** — lint, test, and run rules in your own pipelines (cloud, IoT, notebooks) **without** Docker.
-
-```bash
-pip install open-fdd
+```text
+driver refs
+external refs
+historian storage refs
+fault equation inputs
+DataFusion SQL rules
+CDL algorithm inputs/outputs
 ```
 
-```python
-import pyarrow as pa
-import pyarrow.compute as pc
+API:
 
-from open_fdd.arrow_runtime import run_arrow_rule
-
-
-def high_sat(table, cfg, context=None):
-    return pc.greater(table["SAT"], float(cfg["high"]))
-
-
-table = pa.table({"SAT": [70.0, 90.0]})
-
-result = run_arrow_rule(high_sat, table, {"high": 85})
-
-print(result.true_count)  # 1
+```text
+GET  /api/model/assignments
+POST /api/model/assignments/save
+POST /api/model/assignments/resolve
+GET  /api/model/algorithm-bindings
+GET  /api/control/cdl/bindings
+POST /api/control/cdl/bindings/save
 ```
 
-**DataFusion SQL** (same telemetry table, optional `pip install 'open-fdd[datafusion]'`):
+This keeps algorithms protocol agnostic:
 
-```python
-from open_fdd.arrow_runtime import run_datafusion_sql_rule
-
-SQL = """
-SELECT
-  *,
-  "SAT" > 85.0 AS fault
-FROM telemetry
-"""
-
-result = run_datafusion_sql_rule(SQL, table, {"min_true_rows": 5, "poll_interval_s": 60})
-
-print(result.true_count)  # 1 — same confirmed count as PyArrow when cfg matches
+```text
+BACnet
+Modbus
+JSON API
+Haystack
 ```
 
-Rule `config` fields such as `min_elapsed_minutes` and `min_true_rows` apply to **both** backends (fault confirmation / minimum duration). See [fault confirmation](docs/rule-cookbook/fault-confirmation.md).
+## Tested Powershell on Windows
 
+> Note: DELETE ME this is just to validate application compiles ok. 
 
----
+Syntax/compile only:
+```
+docker run --rm rust:1.85-bookworm bash -c "ls -la /usr/local/cargo/bin && /usr/local/cargo/bin/cargo --version"
 
-## Develop
-
-```bash
-git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[test,dev,analytics]"
-pytest open_fdd/tests -q
 ```
 
-Contributor layout: `AGENTS.md` and [developer docs](https://bbartling.github.io/open-fdd/developer/).
+Compile tests without running:
+```
+docker run --rm `
+  -v "$($PWD.Path):/work" `
+  -w /work `
+  rust:1.85-bookworm `
+  bash -c "export PATH=/usr/local/cargo/bin:`$PATH && cargo --version && cargo check --workspace --all-targets"
+```
+
+Include formatting too
+```
+docker run --rm `
+  -v "$($PWD.Path):/work" `
+  -w /work `
+  rust:1.85-bookworm `
+  bash -c "export PATH=/usr/local/cargo/bin:`$PATH && cargo test --workspace --all-targets --no-run"
+```
+
 
 ---
 

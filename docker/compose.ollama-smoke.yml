@@ -1,8 +1,0 @@
-# Local smoke override: bridge uses in-compose Ollama (avoids host.docker.internal timeouts on Linux).
-services:
-  bridge:
-    environment:
-      OFDD_OLLAMA_BASE_URL: http://ollama:11434
-    depends_on:
-      ollama:
-        condition: service_started

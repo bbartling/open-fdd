@@ -1,7 +1,0 @@
-# Deprecated — use workspace/deploy/caddy/Caddyfile.http or Caddyfile.tls.
-# Ansible installs infra/ansible/templates/Caddyfile.j2 → /etc/caddy/Caddyfile.
-# Local dev: workspace/caddy.env.local + ./scripts/run_local.sh
-
-:80 {
-	reverse_proxy 127.0.0.1:8765
-}

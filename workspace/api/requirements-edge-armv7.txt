@@ -1,7 +1,0 @@
-# Edge hosts without pyarrow wheels (e.g. Pi 3 armv7l + Python 3.13).
-# FeatherStore uses pandas pickle when pyarrow is absent — see feather_store.py.
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
-python-multipart>=0.0.12
-httpx>=0.27.0
-pyModbusTCP>=0.2.1
