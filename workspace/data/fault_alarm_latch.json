@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-06-21T16:53:54.466071+00:00",
+  "updated_at": "2026-06-21T17:14:45.430493+00:00",
   "alarms": {
     "poll-offline-bacnet-5007": {
       "first_seen": "2026-06-18T18:07:29.355697+00:00",
@@ -64,7 +64,7 @@
     },
     "fdd-smoke-paired-zn-t-bacnet-sql-demo": {
       "first_seen": "2026-06-21T14:02:37.516792+00:00",
-      "last_seen": "2026-06-21T16:53:54.465722+00:00",
+      "last_seen": "2026-06-21T17:14:45.430125+00:00",
       "alert": {
         "id": "fdd-smoke-paired-zn-t-bacnet-sql-demo",
         "severity": "warning",
@@ -120,7 +120,7 @@
                 "fdd_input": "stat_zn-t",
                 "equipment_id": "bacnet-5007",
                 "equipment_name": "BACnet MS/TP device 5007",
-                "sample_count": 716,
+                "sample_count": 706,
                 "avg_overall": 72.76,
                 "min_overall": 72.0,
                 "max_overall": 73.5
@@ -133,8 +133,8 @@
                 "fdd_input": "oa-t",
                 "equipment_id": "bacnet-5007",
                 "equipment_name": "BACnet MS/TP device 5007",
-                "sample_count": 716,
-                "avg_overall": 71.76,
+                "sample_count": 706,
+                "avg_overall": 71.75,
                 "min_overall": 70.0,
                 "max_overall": 73.5
               },
@@ -146,8 +146,8 @@
                 "fdd_input": "oa-h",
                 "equipment_id": "bacnet-5007",
                 "equipment_name": "BACnet MS/TP device 5007",
-                "sample_count": 716,
-                "avg_overall": 45.76,
+                "sample_count": 706,
+                "avg_overall": 45.75,
                 "min_overall": 45.0,
                 "max_overall": 46.5
               },
@@ -159,7 +159,7 @@
                 "fdd_input": "duct-t",
                 "equipment_id": "bacnet-5007",
                 "equipment_name": "BACnet MS/TP device 5007",
-                "sample_count": 716,
+                "sample_count": 706,
                 "avg_overall": 53.4,
                 "min_overall": 53.0,
                 "max_overall": 53.8
@@ -168,7 +168,7 @@
             "avg_overall": 72.76,
             "min_overall": 72.0,
             "max_overall": 73.5,
-            "sample_count": 716
+            "sample_count": 706
           }
         }
       },
@@ -176,7 +176,7 @@
     },
     "fdd-smoke-paired-zn-t-bacnet-arrow-demo": {
       "first_seen": "2026-06-21T14:02:37.516792+00:00",
-      "last_seen": "2026-06-21T16:53:54.465722+00:00",
+      "last_seen": "2026-06-21T17:14:45.430125+00:00",
       "alert": {
         "id": "fdd-smoke-paired-zn-t-bacnet-arrow-demo",
         "severity": "warning",
@@ -232,7 +232,7 @@
                 "fdd_input": "stat_zn-t",
                 "equipment_id": "bacnet-5007",
                 "equipment_name": "BACnet MS/TP device 5007",
-                "sample_count": 716,
+                "sample_count": 706,
                 "avg_overall": 72.76,
                 "min_overall": 72.0,
                 "max_overall": 73.5
@@ -245,8 +245,8 @@
                 "fdd_input": "oa-t",
                 "equipment_id": "bacnet-5007",
                 "equipment_name": "BACnet MS/TP device 5007",
-                "sample_count": 716,
-                "avg_overall": 71.76,
+                "sample_count": 706,
+                "avg_overall": 71.75,
                 "min_overall": 70.0,
                 "max_overall": 73.5
               },
@@ -258,8 +258,8 @@
                 "fdd_input": "oa-h",
                 "equipment_id": "bacnet-5007",
                 "equipment_name": "BACnet MS/TP device 5007",
-                "sample_count": 716,
-                "avg_overall": 45.76,
+                "sample_count": 706,
+                "avg_overall": 45.75,
                 "min_overall": 45.0,
                 "max_overall": 46.5
               },
@@ -271,7 +271,7 @@
                 "fdd_input": "duct-t",
                 "equipment_id": "bacnet-5007",
                 "equipment_name": "BACnet MS/TP device 5007",
-                "sample_count": 716,
+                "sample_count": 706,
                 "avg_overall": 53.4,
                 "min_overall": 53.0,
                 "max_overall": 53.8
@@ -280,7 +280,7 @@
             "avg_overall": 72.76,
             "min_overall": 72.0,
             "max_overall": 73.5,
-            "sample_count": 716
+            "sample_count": 706
           }
         }
       },
@@ -288,7 +288,7 @@
     },
     "fdd-smoke-paired-zn-t-niagara-arrow-demo": {
       "first_seen": "2026-06-21T14:02:37.516792+00:00",
-      "last_seen": "2026-06-21T16:53:54.465722+00:00",
+      "last_seen": "2026-06-21T17:14:45.430125+00:00",
       "alert": {
         "id": "fdd-smoke-paired-zn-t-niagara-arrow-demo",
         "severity": "warning",
@@ -398,7 +398,7 @@
     },
     "fdd-smoke-paired-zn-t-niagara-sql-demo": {
       "first_seen": "2026-06-21T14:02:37.516792+00:00",
-      "last_seen": "2026-06-21T16:53:54.465722+00:00",
+      "last_seen": "2026-06-21T17:14:45.430125+00:00",
       "alert": {
         "id": "fdd-smoke-paired-zn-t-niagara-sql-demo",
         "severity": "warning",
