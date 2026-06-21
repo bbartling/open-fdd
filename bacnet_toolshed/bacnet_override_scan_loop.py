@@ -7,6 +7,8 @@ import threading
 import time
 from typing import Any, Callable
 
+from bacpypes3.apdu import ErrorRejectAbortNack
+
 from bacnet_toolshed.bacnet_io_priority import BacnetIoInterrupted
 from bacnet_toolshed.bacnet_ops import supervisory_logic_check
 from bacnet_toolshed.override_registry import (
@@ -54,10 +56,10 @@ def run_override_scan_cycle(run_bacnet_sync: Callable[..., Any]) -> dict[str, An
             "interrupted": True,
             "error": "interrupted for operator request",
         }
-    except Exception as exc:
+    except (ErrorRejectAbortNack, Exception) as exc:
         record_scan_error(device_instance=inst, device_address=addr, error=str(exc))
         advance_cursor(len(devices))
-        print(f"BACnet override scan failed for {inst}: {exc}", file=sys.stderr)
+        print(f"BACnet override scan failed for {inst}: {exc!r}", file=sys.stderr)
         return {
             **scan_status(),
             "ok": False,
@@ -74,8 +76,8 @@ def _override_scan_loop(run_bacnet_sync: Callable[..., Any]) -> None:
         if list_devices_for_scan():
             try:
                 run_override_scan_cycle(run_bacnet_sync)
-            except Exception as exc:
-                print(f"BACnet override scan loop error: {exc}", file=sys.stderr)
+            except (ErrorRejectAbortNack, Exception) as exc:
+                print(f"BACnet override scan loop survived error: {exc!r}", file=sys.stderr)
         time.sleep(interval)
 
 

@@ -299,3 +299,14 @@ apps/desktop-ui/dist/
 apps/desktop-ui/src-tauri/target/
 apps/desktop-ui/src-tauri/gen/
 apps/desktop-ui/tsconfig.app.tsbuildinfo
+
+# Open-FDD runtime workspace state
+workspace/data/bacnet_ingest_state.json
+workspace/data/commission_agent.pid
+workspace/data/*.pid
+workspace/data/*.log
+workspace/data/bench_poll_supervisor.log
+workspace/data/commission_agent.log
+workspace/data/feather_store/
+workspace/bacnet/polls/
+workspace/bacnet/overrides/
