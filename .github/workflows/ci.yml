@@ -38,6 +38,9 @@ jobs:
       - name: Frontend syntax
         run: node --check frontend/app.js
 
+      - name: Login screen present
+        run: grep -q "Sign in" frontend/app.js && ! grep -q 'sub: "ui-agent"' frontend/app.js
+
       - name: New driver-tree UI is default
         run: |
           grep -q "REAL DEAL BACNET CSV BUILD" frontend/app.js
@@ -71,6 +74,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.93.0
+
+      - name: Generate workspace auth.env.local
+        run: |
+          mkdir -p workspace/logs
+          cd edge && cargo run --release --bin openfdd_edge -- auth init --path ../workspace/auth.env.local --force
+
       - name: Compose build
         run: docker compose build --no-cache
 
@@ -97,9 +109,10 @@ jobs:
 
       - name: BACnet override scanner smoke
         run: |
+          INTEGRATOR_PW="$(grep '^OFDD_INTEGRATOR_PASSWORD=' workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
           TOKEN="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
             -H 'Content-Type: application/json' \
-            -d '{"sub":"ci","role":"agent"}' | jq -r .access_token)"
+            -d "$(jq -nc --arg u integrator --arg p "$INTEGRATOR_PW" '{username:$u,password:$p}')" | jq -r '.token // .access_token')"
 
           test -n "$TOKEN"
           test "$TOKEN" != "null"
@@ -129,9 +142,10 @@ jobs:
 
       - name: Modbus simulated driver smoke
         run: |
+          INTEGRATOR_PW="$(grep '^OFDD_INTEGRATOR_PASSWORD=' workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
           TOKEN="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
             -H 'Content-Type: application/json' \
-            -d '{"sub":"ci","role":"agent"}' | jq -r .access_token)"
+            -d "$(jq -nc --arg u integrator --arg p "$INTEGRATOR_PW" '{username:$u,password:$p}')" | jq -r '.token // .access_token')"
 
           curl -fsS http://127.0.0.1:8080/api/modbus/points \
             -H "Authorization: Bearer $TOKEN" | jq -e 'length >= 1'
@@ -148,6 +162,9 @@ jobs:
             -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
             -d '{"register":40001,"function":"holding_register"}' | grep -q simulated
+
+      - name: Auth security smoke
+        run: bash scripts/verify_rust_auth_smoke.sh
 
       - name: CSV files created in workspace
         run: |
