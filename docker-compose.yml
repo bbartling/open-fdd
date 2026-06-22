@@ -8,7 +8,6 @@ services:
       SERVICE_MODE: bridge
       PORT: "8080"
       FRONTEND_DIR: /app/frontend
-      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-dev-change-me-openfdd-rust-edge}
       OPENFDD_WORKSPACE: /app/workspace
       OPENFDD_BACNET_POLL_INTERVAL_SECONDS: ${OPENFDD_BACNET_POLL_INTERVAL_SECONDS:-60}
       OPENFDD_BACNET_SCAN_INTERVAL_SECONDS: ${OPENFDD_BACNET_SCAN_INTERVAL_SECONDS:-3600}
@@ -23,6 +22,8 @@ services:
       OPENFDD_MODBUS_UNIT_ID: ${OPENFDD_MODBUS_UNIT_ID:-1}
     ports:
       - "8080:8080"
+    env_file:
+      - ./workspace/auth.env.local
     volumes:
       - ./workspace:/app/workspace
     restart: unless-stopped
@@ -36,7 +37,6 @@ services:
       SERVICE_MODE: commission
       PORT: "9091"
       FRONTEND_DIR: /app/frontend
-      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-dev-change-me-openfdd-rust-edge}
       OPENFDD_WORKSPACE: /app/workspace
       OPENFDD_BACNET_POLL_INTERVAL_SECONDS: ${OPENFDD_BACNET_POLL_INTERVAL_SECONDS:-60}
       OPENFDD_BACNET_SCAN_INTERVAL_SECONDS: ${OPENFDD_BACNET_SCAN_INTERVAL_SECONDS:-3600}
@@ -51,6 +51,8 @@ services:
       OPENFDD_MODBUS_UNIT_ID: ${OPENFDD_MODBUS_UNIT_ID:-1}
     expose:
       - "9091"
+    env_file:
+      - ./workspace/auth.env.local
     volumes:
       - ./workspace:/app/workspace
     restart: unless-stopped
@@ -64,7 +66,6 @@ services:
       SERVICE_MODE: haystack-gateway
       PORT: "9092"
       FRONTEND_DIR: /app/frontend
-      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-dev-change-me-openfdd-rust-edge}
       OPENFDD_WORKSPACE: /app/workspace
       OPENFDD_BACNET_POLL_INTERVAL_SECONDS: ${OPENFDD_BACNET_POLL_INTERVAL_SECONDS:-60}
       OPENFDD_BACNET_SCAN_INTERVAL_SECONDS: ${OPENFDD_BACNET_SCAN_INTERVAL_SECONDS:-3600}
@@ -79,6 +80,8 @@ services:
       OPENFDD_MODBUS_UNIT_ID: ${OPENFDD_MODBUS_UNIT_ID:-1}
     expose:
       - "9092"
+    env_file:
+      - ./workspace/auth.env.local
     volumes:
       - ./workspace:/app/workspace
     restart: unless-stopped

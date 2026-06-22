@@ -1,4 +1,7 @@
 /target
+/edge/target
+/edge/workspace
 /.env
 /workspace
+workspace/auth.env.local
 .DS_Store
