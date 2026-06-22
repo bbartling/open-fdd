@@ -1,2 +1,0 @@
-bacpypes3>=0.0.102
-pydantic>=2.0

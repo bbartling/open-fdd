@@ -30,4 +30,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Validate supervisor manifest
-        run: bash scripts/validate_supervisor_manifest.sh
+        run: |
+          if [[ -f scripts/validate_supervisor_manifest.sh ]]; then
+            bash scripts/validate_supervisor_manifest.sh
+          else
+            echo "Skip: Rust edge line has no HA supervisor manifest script"
+          fi

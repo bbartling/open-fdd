@@ -1,4 +1,0 @@
-source "https://rubygems.org"
-
-# Match github-pages (used by GitHub's "pages build and deployment" workflow) and our Docs workflow.
-gem "github-pages", group: :jekyll_plugins

@@ -1,0 +1,99 @@
+services:
+  openfdd-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openfdd-bridge
+    environment:
+      SERVICE_MODE: bridge
+      PORT: "8080"
+      FRONTEND_DIR: /app/frontend
+      OPENFDD_WORKSPACE: /app/workspace
+      OPENFDD_BACNET_POLL_INTERVAL_SECONDS: ${OPENFDD_BACNET_POLL_INTERVAL_SECONDS:-60}
+      OPENFDD_BACNET_SCAN_INTERVAL_SECONDS: ${OPENFDD_BACNET_SCAN_INTERVAL_SECONDS:-3600}
+      OPENFDD_BACNET_DEVICE_NAME: ${OPENFDD_BACNET_DEVICE_NAME:-OpenFDD}
+      OPENFDD_BACNET_DEVICE_INSTANCE: ${OPENFDD_BACNET_DEVICE_INSTANCE:-599999}
+      OPENFDD_BACNET_BIND: ${OPENFDD_BACNET_BIND:-192.168.204.55/24:47808}
+      OPENFDD_BACNET_IFACE: ${OPENFDD_BACNET_IFACE:-enp3s0}
+      OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-simulated}
+      OPENFDD_MODBUS_MODE: ${OPENFDD_MODBUS_MODE:-simulated}
+      OPENFDD_MODBUS_HOST: ${OPENFDD_MODBUS_HOST:-192.168.204.14}
+      OPENFDD_MODBUS_PORT: ${OPENFDD_MODBUS_PORT:-1502}
+      OPENFDD_MODBUS_UNIT_ID: ${OPENFDD_MODBUS_UNIT_ID:-1}
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./workspace/auth.env.local
+    volumes:
+      - ./workspace:/app/workspace
+    restart: unless-stopped
+
+  openfdd-commission:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openfdd-commission
+    environment:
+      SERVICE_MODE: commission
+      PORT: "9091"
+      FRONTEND_DIR: /app/frontend
+      OPENFDD_WORKSPACE: /app/workspace
+      OPENFDD_BACNET_POLL_INTERVAL_SECONDS: ${OPENFDD_BACNET_POLL_INTERVAL_SECONDS:-60}
+      OPENFDD_BACNET_SCAN_INTERVAL_SECONDS: ${OPENFDD_BACNET_SCAN_INTERVAL_SECONDS:-3600}
+      OPENFDD_BACNET_DEVICE_NAME: ${OPENFDD_BACNET_DEVICE_NAME:-OpenFDD}
+      OPENFDD_BACNET_DEVICE_INSTANCE: ${OPENFDD_BACNET_DEVICE_INSTANCE:-599999}
+      OPENFDD_BACNET_BIND: ${OPENFDD_BACNET_BIND:-192.168.204.55/24:47808}
+      OPENFDD_BACNET_IFACE: ${OPENFDD_BACNET_IFACE:-enp3s0}
+      OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-simulated}
+      OPENFDD_MODBUS_MODE: ${OPENFDD_MODBUS_MODE:-simulated}
+      OPENFDD_MODBUS_HOST: ${OPENFDD_MODBUS_HOST:-192.168.204.14}
+      OPENFDD_MODBUS_PORT: ${OPENFDD_MODBUS_PORT:-1502}
+      OPENFDD_MODBUS_UNIT_ID: ${OPENFDD_MODBUS_UNIT_ID:-1}
+    expose:
+      - "9091"
+    env_file:
+      - ./workspace/auth.env.local
+    volumes:
+      - ./workspace:/app/workspace
+    restart: unless-stopped
+
+  openfdd-haystack-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openfdd-haystack-gateway
+    environment:
+      SERVICE_MODE: haystack-gateway
+      PORT: "9092"
+      FRONTEND_DIR: /app/frontend
+      OPENFDD_WORKSPACE: /app/workspace
+      OPENFDD_BACNET_POLL_INTERVAL_SECONDS: ${OPENFDD_BACNET_POLL_INTERVAL_SECONDS:-60}
+      OPENFDD_BACNET_SCAN_INTERVAL_SECONDS: ${OPENFDD_BACNET_SCAN_INTERVAL_SECONDS:-3600}
+      OPENFDD_BACNET_DEVICE_NAME: ${OPENFDD_BACNET_DEVICE_NAME:-OpenFDD}
+      OPENFDD_BACNET_DEVICE_INSTANCE: ${OPENFDD_BACNET_DEVICE_INSTANCE:-599999}
+      OPENFDD_BACNET_BIND: ${OPENFDD_BACNET_BIND:-192.168.204.55/24:47808}
+      OPENFDD_BACNET_IFACE: ${OPENFDD_BACNET_IFACE:-enp3s0}
+      OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-simulated}
+      OPENFDD_MODBUS_MODE: ${OPENFDD_MODBUS_MODE:-simulated}
+      OPENFDD_MODBUS_HOST: ${OPENFDD_MODBUS_HOST:-192.168.204.14}
+      OPENFDD_MODBUS_PORT: ${OPENFDD_MODBUS_PORT:-1502}
+      OPENFDD_MODBUS_UNIT_ID: ${OPENFDD_MODBUS_UNIT_ID:-1}
+    expose:
+      - "9092"
+    env_file:
+      - ./workspace/auth.env.local
+    volumes:
+      - ./workspace:/app/workspace
+    restart: unless-stopped
+
+  # MCP will be added later. Agent JSON APIs are already exposed by openfdd-bridge.
+
+  open-fdd-rust-backend:
+    profiles: ["rust-prod"]
+    build:
+      context: .
+      dockerfile: Dockerfile.rust
+    network_mode: host
+    volumes:
+      - ./workspace:/app/workspace
+    restart: unless-stopped

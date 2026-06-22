@@ -1,8 +1,0 @@
-title = "open-fdd"
-
-[allowlist]
-description = "Minified dashboard bundles and generated docs output are not secret sources."
-paths = [
-  '''(?i)(^|/)workspace/api/static/''',
-  '''(?i)(^|/)docs/_site/''',
-]

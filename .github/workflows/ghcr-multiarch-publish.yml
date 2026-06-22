@@ -8,7 +8,7 @@ on:
       image_tag:
         description: "GHCR tag (e.g. 3.1.6)"
         required: true
-        default: "3.1.6"
+        default: "3.2.0"
 
 permissions:
   contents: read

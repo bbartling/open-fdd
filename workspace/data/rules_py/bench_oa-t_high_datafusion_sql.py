@@ -1,1 +1,0 @@
-# datafusion_sql rule — see sql field

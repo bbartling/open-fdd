@@ -1,3 +1,0 @@
-include README.md LICENSE pyproject.toml
-graft examples
-global-exclude __pycache__ *.py[cod] .DS_Store
