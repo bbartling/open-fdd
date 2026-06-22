@@ -44,7 +44,6 @@ fn now_rfc3339() -> String {
     Utc::now().to_rfc3339()
 }
 
-
 fn bacnet_config_value() -> Value {
     json!({
         "mode": env::var("OPENFDD_BACNET_MODE").unwrap_or_else(|_| "simulated".to_string()),
@@ -66,7 +65,7 @@ fn bench5007_points() -> Vec<Value> {
         json!({"id":"bacnet:5007:analog-input:1173","device_instance":5007,"object_id":[0,1173],"name":"Outside Air Temp","polling_enabled":true,"writable":false,"haystack_id":"point:oa-t","fdd_input":"oa-t"}),
         json!({"id":"bacnet:5007:analog-input:1168","device_instance":5007,"object_id":[0,1168],"name":"Outside Air Humidity","polling_enabled":true,"writable":false,"haystack_id":"point:oa-h","fdd_input":"oa-h"}),
         json!({"id":"bacnet:5007:analog-input:1192","device_instance":5007,"object_id":[0,1192],"name":"Discharge Air Temp","polling_enabled":true,"writable":false,"haystack_id":"point:duct-t","fdd_input":"duct-t"}),
-        json!({"id":"bacnet:5007:analog-input:10014","device_instance":5007,"object_id":[0,10014],"name":"Zone Temp","polling_enabled":true,"writable":false,"haystack_id":"point:stat_zn-t","fdd_input":"stat_zn-t"})
+        json!({"id":"bacnet:5007:analog-input:10014","device_instance":5007,"object_id":[0,10014],"name":"Zone Temp","polling_enabled":true,"writable":false,"haystack_id":"point:stat_zn-t","fdd_input":"stat_zn-t"}),
     ]
 }
 
@@ -152,7 +151,11 @@ fn default_registry() -> Value {
 }
 
 fn registry_path() -> PathBuf {
-    workspace_dir().join("data").join("drivers").join("bacnet").join("driver_tree.json")
+    workspace_dir()
+        .join("data")
+        .join("drivers")
+        .join("bacnet")
+        .join("driver_tree.json")
 }
 
 fn read_registry() -> Value {
@@ -168,7 +171,10 @@ fn write_registry(value: &Value) {
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    let _ = fs::write(path, serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string()));
+    let _ = fs::write(
+        path,
+        serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string()),
+    );
 }
 
 fn writable_points(registry: &Value) -> Vec<Value> {
@@ -182,16 +188,23 @@ fn writable_points(registry: &Value) -> Vec<Value> {
                 for device in devices {
                     if let Some(dev_points) = device.get("points").and_then(|v| v.as_array()) {
                         for point in dev_points {
-                            if point.get("writable").and_then(|v| v.as_bool()).unwrap_or(false) {
+                            if point
+                                .get("writable")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false)
+                            {
                                 let mut p = point.clone();
                                 if p.get("device_instance").is_none() {
-                                    p["device_instance"] = device.get("device_instance").cloned().unwrap_or(json!(0));
+                                    p["device_instance"] =
+                                        device.get("device_instance").cloned().unwrap_or(json!(0));
                                 }
                                 if p.get("device_name").is_none() {
-                                    p["device_name"] = device.get("name").cloned().unwrap_or(json!("unknown"));
+                                    p["device_name"] =
+                                        device.get("name").cloned().unwrap_or(json!("unknown"));
                                 }
                                 if p.get("address").is_none() {
-                                    p["address"] = device.get("address").cloned().unwrap_or(json!("unknown"));
+                                    p["address"] =
+                                        device.get("address").cloned().unwrap_or(json!("unknown"));
                                 }
                                 points.push(p);
                             }
@@ -206,7 +219,9 @@ fn writable_points(registry: &Value) -> Vec<Value> {
 
 fn read_priority_array_for_point(point: &Value) -> Vec<(u8, Value)> {
     if bacnet_live::is_live_mode() {
-        if let Some((device_instance, object_type, instance)) = bacnet_live::point_object_from_json(point) {
+        if let Some((device_instance, object_type, instance)) =
+            bacnet_live::point_object_from_json(point)
+        {
             if let Ok(values) = bacnet_live::block_on(bacnet_live::read_priority_array(
                 device_instance,
                 object_type,
@@ -265,11 +280,9 @@ pub fn start_hourly_override_scanner(service_mode: String) {
     if service_mode != "commission" {
         return;
     }
-    thread::spawn(move || {
-        loop {
-            let _ = scan_once_value();
-            thread::sleep(Duration::from_secs(3600));
-        }
+    thread::spawn(move || loop {
+        let _ = scan_once_value();
+        thread::sleep(Duration::from_secs(3600));
     });
 }
 
@@ -290,7 +303,11 @@ pub fn scan_once_value() -> Value {
     for point in writable_points(&registry) {
         let priority_values = read_priority_array_for_point(&point);
         for (priority, value) in priority_values {
-            let kind = if priority == 8 { "operator" } else { "non_priority8" };
+            let kind = if priority == 8 {
+                "operator"
+            } else {
+                "non_priority8"
+            };
             if priority == 8 {
                 p8_count += 1;
             } else {
@@ -318,7 +335,10 @@ pub fn scan_once_value() -> Value {
                 ts.clone(),
                 scan_id.clone(),
                 event["device_instance"].to_string(),
-                event["device_name"].as_str().unwrap_or("unknown").to_string(),
+                event["device_name"]
+                    .as_str()
+                    .unwrap_or("unknown")
+                    .to_string(),
                 event["address"].as_str().unwrap_or("unknown").to_string(),
                 event["point_id"].as_str().unwrap_or("unknown").to_string(),
                 event["object_id"].to_string(),
@@ -358,7 +378,10 @@ pub fn scan_once_value() -> Value {
         "overrides": events
     });
 
-    let _ = fs::write(overrides_dir().join("last_scan.json"), serde_json::to_string_pretty(&status).unwrap_or_default());
+    let _ = fs::write(
+        overrides_dir().join("last_scan.json"),
+        serde_json::to_string_pretty(&status).unwrap_or_default(),
+    );
     status
 }
 
@@ -379,7 +402,8 @@ fn collect_bacnet_points(registry: &Value) -> Vec<Value> {
                                     device.get("device_instance").cloned().unwrap_or(json!(0));
                             }
                             if p.get("address").is_none() {
-                                p["address"] = device.get("address").cloned().unwrap_or(json!("unknown"));
+                                p["address"] =
+                                    device.get("address").cloned().unwrap_or(json!("unknown"));
                             }
                             points.push(p);
                         }

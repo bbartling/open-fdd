@@ -3,9 +3,9 @@
 //! Used when `OPENFDD_BACNET_MODE=live`. Simulated/CI mode never calls into this module.
 
 use bacnet_client::client::BACnetClient;
-use bacnet_transport::bip::BipTransport;
 use bacnet_client::discovery::DiscoveredDevice;
 use bacnet_encoding::primitives::decode_application_value;
+use bacnet_transport::bip::BipTransport;
 use bacnet_types::enums::{ObjectType, PropertyIdentifier};
 use bacnet_types::primitives::{ObjectIdentifier, PropertyValue};
 use serde_json::{json, Value};
@@ -82,8 +82,7 @@ fn router_network() -> Option<(Ipv4Addr, u16)> {
     Some((ip, net))
 }
 
-async fn build_client() -> Result<BACnetClient<BipTransport>, bacnet_types::error::Error>
-{
+async fn build_client() -> Result<BACnetClient<BipTransport>, bacnet_types::error::Error> {
     let (iface, port, bcast) = parse_bind();
     BACnetClient::bip_builder()
         .interface(iface)
@@ -98,7 +97,11 @@ fn mac_to_address(mac: &[u8]) -> String {
     if mac.len() >= 6 {
         format!(
             "{}.{}.{}.{}:{}",
-            mac[0], mac[1], mac[2], mac[3], u16::from_be_bytes([mac[4], mac[5]])
+            mac[0],
+            mac[1],
+            mac[2],
+            mac[3],
+            u16::from_be_bytes([mac[4], mac[5]])
         )
     } else {
         hex::encode(mac)
@@ -170,7 +173,8 @@ fn decode_value_sequence(data: &[u8]) -> Result<Vec<PropertyValue>, String> {
     }
     let mut items = vec![first];
     while offset < data.len() {
-        let (value, new_offset) = decode_application_value(data, offset).map_err(|e| e.to_string())?;
+        let (value, new_offset) =
+            decode_application_value(data, offset).map_err(|e| e.to_string())?;
         if new_offset <= offset {
             break;
         }
@@ -231,15 +235,18 @@ pub async fn read_present_value(
         .await
         .map_err(|e| e.to_string())?;
     if let Some((_, mstp_net)) = router_network() {
-        let _ = client
-            .who_is_network(mstp_net, Some(low), Some(high))
-            .await;
+        let _ = client.who_is_network(mstp_net, Some(low), Some(high)).await;
     }
     sleep(Duration::from_secs(2)).await;
 
     let oid = ObjectIdentifier::new(object_type, instance).map_err(|e| e.to_string())?;
     let ack = client
-        .read_property_from_device(device_instance, oid, PropertyIdentifier::PRESENT_VALUE, None)
+        .read_property_from_device(
+            device_instance,
+            oid,
+            PropertyIdentifier::PRESENT_VALUE,
+            None,
+        )
         .await
         .map_err(|e| e.to_string())?;
     let (value, _) = decode_application_value(&ack.property_value, 0).map_err(|e| e.to_string())?;
@@ -265,15 +272,18 @@ pub async fn read_priority_array(
         .await
         .map_err(|e| e.to_string())?;
     if let Some((_, mstp_net)) = router_network() {
-        let _ = client
-            .who_is_network(mstp_net, Some(low), Some(high))
-            .await;
+        let _ = client.who_is_network(mstp_net, Some(low), Some(high)).await;
     }
     sleep(Duration::from_secs(2)).await;
 
     let oid = ObjectIdentifier::new(object_type, instance).map_err(|e| e.to_string())?;
     let ack = client
-        .read_property_from_device(device_instance, oid, PropertyIdentifier::PRIORITY_ARRAY, None)
+        .read_property_from_device(
+            device_instance,
+            oid,
+            PropertyIdentifier::PRIORITY_ARRAY,
+            None,
+        )
         .await
         .map_err(|e| e.to_string())?;
     let items = decode_value_sequence(&ack.property_value)?;
@@ -312,10 +322,15 @@ pub async fn discover_device_points(device_instance: u32) -> Result<Vec<Value>, 
         .await
         .ok_or_else(|| format!("device {device_instance} not discovered"))?;
 
-    let device_oid = ObjectIdentifier::new(ObjectType::DEVICE, device_instance)
-        .map_err(|e| e.to_string())?;
+    let device_oid =
+        ObjectIdentifier::new(ObjectType::DEVICE, device_instance).map_err(|e| e.to_string())?;
     let list_ack = client
-        .read_property_from_device(device_instance, device_oid, PropertyIdentifier::OBJECT_LIST, None)
+        .read_property_from_device(
+            device_instance,
+            device_oid,
+            PropertyIdentifier::OBJECT_LIST,
+            None,
+        )
         .await
         .map_err(|e| e.to_string())?;
     let list_items = decode_value_sequence(&list_ack.property_value)?;
@@ -331,59 +346,49 @@ pub async fn discover_device_points(device_instance: u32) -> Result<Vec<Value>, 
         }
 
         let name_ack = client
-                .read_property_from_device(
-                    device_instance,
-                    oid,
-                    PropertyIdentifier::OBJECT_NAME,
-                    None,
-                )
-                .await;
-            let pv_ack = client
-                .read_property_from_device(
-                    device_instance,
-                    oid,
-                    PropertyIdentifier::PRESENT_VALUE,
-                    None,
-                )
-                .await;
-            let wp_ack = client
-                .read_property_from_device(
-                    device_instance,
-                    oid,
-                    PropertyIdentifier::OBJECT_TYPE,
-                    None,
-                )
-                .await;
+            .read_property_from_device(device_instance, oid, PropertyIdentifier::OBJECT_NAME, None)
+            .await;
+        let pv_ack = client
+            .read_property_from_device(
+                device_instance,
+                oid,
+                PropertyIdentifier::PRESENT_VALUE,
+                None,
+            )
+            .await;
+        let wp_ack = client
+            .read_property_from_device(device_instance, oid, PropertyIdentifier::OBJECT_TYPE, None)
+            .await;
 
-            let name = name_ack
-                .ok()
-                .and_then(|a| decode_application_value(&a.property_value, 0).ok())
-                .map(|(v, _)| match v {
-                    PropertyValue::CharacterString(s) => s,
-                    other => format!("{other:?}"),
-                })
-                .unwrap_or_else(|| {
-                    format!(
-                        "{}:{}",
-                        object_type_name(oid.object_type()),
-                        oid.instance_number()
-                    )
-                });
+        let name = name_ack
+            .ok()
+            .and_then(|a| decode_application_value(&a.property_value, 0).ok())
+            .map(|(v, _)| match v {
+                PropertyValue::CharacterString(s) => s,
+                other => format!("{other:?}"),
+            })
+            .unwrap_or_else(|| {
+                format!(
+                    "{}:{}",
+                    object_type_name(oid.object_type()),
+                    oid.instance_number()
+                )
+            });
 
-            let value = pv_ack
-                .ok()
-                .and_then(|a| decode_application_value(&a.property_value, 0).ok())
-                .map(|(v, _)| property_value_to_json(&v));
+        let value = pv_ack
+            .ok()
+            .and_then(|a| decode_application_value(&a.property_value, 0).ok())
+            .map(|(v, _)| property_value_to_json(&v));
 
-            let writable = matches!(
-                oid.object_type(),
-                ObjectType::ANALOG_VALUE
-                    | ObjectType::ANALOG_OUTPUT
-                    | ObjectType::BINARY_VALUE
-                    | ObjectType::BINARY_OUTPUT
-                    | ObjectType::MULTI_STATE_VALUE
-                    | ObjectType::MULTI_STATE_OUTPUT
-            ) || wp_ack.is_ok();
+        let writable = matches!(
+            oid.object_type(),
+            ObjectType::ANALOG_VALUE
+                | ObjectType::ANALOG_OUTPUT
+                | ObjectType::BINARY_VALUE
+                | ObjectType::BINARY_OUTPUT
+                | ObjectType::MULTI_STATE_VALUE
+                | ObjectType::MULTI_STATE_OUTPUT
+        ) || wp_ack.is_ok();
 
         points.push(json!({
             "id": format!("bacnet:{}:{}:{}", device_instance, object_type_name(oid.object_type()), oid.instance_number()),

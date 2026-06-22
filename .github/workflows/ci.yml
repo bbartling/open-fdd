@@ -105,7 +105,7 @@ jobs:
           test "$TOKEN" != "null"
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/driver/tree \
-            -H "Authorization: Bearer $TOKEN" | jq -e '.drivers | length >= 1 and .bacnet_config.iface == "enp3s0" and .bacnet_config.bind == "192.168.204.55/24:47808"'
+            -H "Authorization: Bearer $TOKEN" | jq -e '(.drivers | length >= 1) and (.bacnet_config.iface == "enp3s0" and .bacnet_config.bind == "192.168.204.55/24:47808")'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/commission/status \
             -H "Authorization: Bearer $TOKEN" | jq -e '.config.iface == "enp3s0" and .config.bind == "192.168.204.55/24:47808"'

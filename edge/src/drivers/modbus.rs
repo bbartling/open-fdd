@@ -76,10 +76,7 @@ pub fn read_value(body: &Value) -> String {
             .unwrap_or_else(|| "holding_register".to_string());
 
         let scale = body.get("scale").and_then(|v| v.as_f64()).unwrap_or(0.1);
-        let unit = body
-            .get("unit")
-            .and_then(|v| v.as_str())
-            .unwrap_or("raw");
+        let unit = body.get("unit").and_then(|v| v.as_str()).unwrap_or("raw");
 
         if let Some(reg) = register {
             match modbus_live::read_scaled_register(reg, &function, scale, unit) {
@@ -90,11 +87,14 @@ pub fn read_value(body: &Value) -> String {
                 }
             }
         }
-        return serde_json::to_string(&json!({"ok": false, "error": "register or point_id required"}))
-            .unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
+        return serde_json::to_string(
+            &json!({"ok": false, "error": "register or point_id required"}),
+        )
+        .unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
     }
 
-    r#"{"point":"CHW Plant Supply Temp","value":44.8,"unit":"°F","source":"modbus-simulated"}"#.to_string()
+    r#"{"point":"CHW Plant Supply Temp","value":44.8,"unit":"°F","source":"modbus-simulated"}"#
+        .to_string()
 }
 
 pub fn commission_status_json() -> String {

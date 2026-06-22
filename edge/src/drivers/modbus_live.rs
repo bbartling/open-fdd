@@ -108,7 +108,10 @@ fn read_registers(
     }
     let resp_fc = resp[7];
     if resp_fc & 0x80 != 0 {
-        return Err(format!("modbus exception fc=0x{resp_fc:02x} code={}", resp[8]));
+        return Err(format!(
+            "modbus exception fc=0x{resp_fc:02x} code={}",
+            resp[8]
+        ));
     }
     if resp_fc != fc {
         return Err(format!("unexpected function code {resp_fc}"));
@@ -151,7 +154,12 @@ pub fn read_register(register: u16, function: &str) -> Result<Value, String> {
     }))
 }
 
-pub fn read_scaled_register(register: u16, function: &str, scale: f64, unit_label: &str) -> Result<Value, String> {
+pub fn read_scaled_register(
+    register: u16,
+    function: &str,
+    scale: f64,
+    unit_label: &str,
+) -> Result<Value, String> {
     let mut out = read_register(register, function)?;
     if let Some(obj) = out.as_object_mut() {
         let raw = obj.get("raw").and_then(|v| v.as_u64()).unwrap_or(0) as f64;
