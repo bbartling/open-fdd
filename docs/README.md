@@ -15,6 +15,7 @@ Open-FDD is a local-first, on-prem HVAC supervisory fault-detection edge applica
 | Topic | Document |
 | --- | --- |
 | Site update and restore | [operations/rust-update-restore.md](operations/rust-update-restore.md) |
+| Production Caddy TLS | [operations/production-caddy.md](operations/production-caddy.md) |
 | Auth and credentials | [security/rust-edge-auth.md](security/rust-edge-auth.md) |
 | CI and GitHub Actions | [verification/ci-github-actions.md](verification/ci-github-actions.md) |
 
