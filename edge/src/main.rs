@@ -172,6 +172,20 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("POST", "/api/reports/rcx/plan") => json_response(&mut stream, json!({"ok": true, "sections": ["executive_summary", "faults", "overrides", "energy_opportunities", "trend_plots"]})),
         ("GET", "/api/reports/rcx/list") => raw_json(&mut stream, REPORTS),
         ("POST", "/api/reports/rcx/generate") => require_role(&mut stream, &principal, &["integrator", "agent"], json!({"ok": true, "report_id": "rcx-demo-001", "path": "workspace/reports/rcx/rcx-demo-001.md", "sections": ["faults", "overrides", "plotly_trends", "recommendations"]})),
+        ("GET", "/api/bench/5007/smoke/status") => json_response(&mut stream, open_fdd_edge_prototype::bench::status_json()),
+        ("POST", "/api/bench/5007/smoke/run") => {
+            if principal.role != "integrator" {
+                status_json(&mut stream, "403 Forbidden", json!({"ok": false, "error": "integrator role required"}))
+            } else {
+                json_response(&mut stream, json!({
+                    "ok": true,
+                    "started": false,
+                    "message": "Full 1-hour bench smoke must be run via bench_5007_datafusion_smoke CLI; see VERIFY_BENCH_5007_DATAFUSION_SMOKE.md",
+                    "cli": "cargo run --release --bin bench_5007_datafusion_smoke -- --allow-simulated",
+                    "status_path": "/api/bench/5007/smoke/status"
+                }))
+            }
+        },
         _ => status_json(&mut stream, "404 Not Found", json!({"ok": false, "error": "unknown endpoint", "path": clean_path})),
     }
 }
