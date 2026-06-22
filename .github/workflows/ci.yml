@@ -202,7 +202,7 @@ jobs:
             -d '{"sql":"SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t > 110.0 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = '\''AHU-1'\''","confirmation_seconds":300}' \
             | jq -e '.ok == true and (.engine | type == "string") and (.engine | contains("DataFusion"))'
 
-          curl -fsS -X POST http://127.0.0.1:8080/api/fdd-rules/oa_temp_out_of_range/activate \
+          curl -sS -X POST http://127.0.0.1:8080/api/fdd-rules/oa_temp_out_of_range/activate \
             -H "Authorization: Bearer $AGENT" -H 'Content-Type: application/json' -d '{}' \
             | jq -e '.ok == false'
 
