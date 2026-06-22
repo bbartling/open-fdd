@@ -75,6 +75,10 @@ jobs:
         run: |
           mkdir -p workspace/overrides workspace/data/drivers workspace/logs
           sudo chown -R 10001:10001 workspace
+          if [[ ! -f workspace/auth.env.local ]]; then
+            (cd edge && cargo run --release --bin openfdd_edge -- auth init --path ../workspace/auth.env.local --force)
+          fi
+          chmod 600 workspace/auth.env.local
 
       - name: Compose build
         run: docker compose build --no-cache
@@ -102,9 +106,10 @@ jobs:
 
       - name: BACnet override scanner smoke
         run: |
+          AGENT_PW="$(grep '^OFDD_AGENT_PASSWORD=' workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
           TOKEN="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
             -H 'Content-Type: application/json' \
-            -d '{"sub":"ci","role":"agent"}' | jq -r .access_token)"
+            -d "$(jq -nc --arg p "$AGENT_PW" '{username:"agent",password:$p}')" | jq -r '.token // .access_token')"
 
           test -n "$TOKEN"
           test "$TOKEN" != "null"
@@ -134,9 +139,10 @@ jobs:
 
       - name: Modbus simulated driver smoke
         run: |
+          AGENT_PW="$(grep '^OFDD_AGENT_PASSWORD=' workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
           TOKEN="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
             -H 'Content-Type: application/json' \
-            -d '{"sub":"ci","role":"agent"}' | jq -r .access_token)"
+            -d "$(jq -nc --arg p "$AGENT_PW" '{username:"agent",password:$p}')" | jq -r '.token // .access_token')"
 
           curl -fsS http://127.0.0.1:8080/api/modbus/points \
             -H "Authorization: Bearer $TOKEN" | jq -e 'length >= 1'
