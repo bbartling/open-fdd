@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# LEGACY: local source-checkout platform check.
+# For GHCR Rust edge use: scripts/openfdd_rust_check_ghcr_platform.sh
 set -euo pipefail
 ARCH="$(uname -m)"
 case "$ARCH" in

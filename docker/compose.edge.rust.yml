@@ -1,0 +1,82 @@
+# Rust Open-FDD edge stack — pull from GHCR, bind-mount workspace/ for site state.
+#
+# First-time host layout:
+#   bash scripts/openfdd_rust_edge_bootstrap.sh --start
+#
+# Update:
+#   ./scripts/openfdd_rust_site_backup.sh
+#   ./scripts/openfdd_rust_site_update.sh
+#
+# NEVER: docker compose down -v
+# NEVER: delete workspace/
+
+name: openfdd-rust-edge
+
+services:
+  openfdd-bridge:
+    image: ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: openfdd-bridge
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ${OPENFDD_COMPOSE_ROOT:?}/workspace:/var/openfdd/workspace
+    environment:
+      SERVICE_MODE: bridge
+      PORT: "8080"
+      FRONTEND_DIR: /app/frontend
+      OPENFDD_WORKSPACE: /var/openfdd/workspace
+      OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-simulated}
+      OPENFDD_MODBUS_MODE: ${OPENFDD_MODBUS_MODE:-simulated}
+    env_file:
+      - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/auth.env.local
+        required: true
+      - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/data.env.local
+        required: false
+      - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/bacnet/commissioning/commission.env
+        required: false
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  openfdd-commission:
+    image: ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: openfdd-commission
+    network_mode: host
+    volumes:
+      - ${OPENFDD_COMPOSE_ROOT:?}/workspace:/var/openfdd/workspace
+    environment:
+      SERVICE_MODE: commission
+      PORT: "9091"
+      OPENFDD_WORKSPACE: /var/openfdd/workspace
+      OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-simulated}
+    env_file:
+      - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/auth.env.local
+        required: true
+      - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/data.env.local
+        required: false
+      - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/bacnet/commissioning/commission.env
+        required: false
+    restart: unless-stopped
+
+  openfdd-haystack-gateway:
+    image: ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: openfdd-haystack-gateway
+    expose:
+      - "9092"
+    volumes:
+      - ${OPENFDD_COMPOSE_ROOT:?}/workspace:/var/openfdd/workspace
+    environment:
+      SERVICE_MODE: haystack-gateway
+      PORT: "9092"
+      OPENFDD_WORKSPACE: /var/openfdd/workspace
+    env_file:
+      - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/auth.env.local
+        required: true
+    restart: unless-stopped

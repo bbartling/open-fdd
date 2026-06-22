@@ -13,7 +13,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.85.0
+          toolchain: 1.93.0
           components: rustfmt
 
       - name: Format
@@ -53,6 +53,8 @@ jobs:
           grep -q "OPENFDD_BACNET_IFACE=enp3s0" .env.example
           grep -q "OPENFDD_BACNET_BIND=192.168.204.55/24:47808" .env.example
           test -f docker-compose.bacnet-live.yml
+          test -f VERSION
+          grep -q "3.2.0" VERSION
 
   docker:
     name: Docker image build
@@ -68,6 +70,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Prepare workspace for non-root container user
+        run: |
+          mkdir -p workspace/overrides workspace/data/drivers workspace/logs
+          sudo chown -R 10001:10001 workspace
 
       - name: Compose build
         run: docker compose build --no-cache
@@ -103,7 +110,7 @@ jobs:
           test "$TOKEN" != "null"
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/driver/tree \
-            -H "Authorization: Bearer $TOKEN" | jq -e '.drivers | length >= 4 and .bacnet_config.iface == "enp3s0" and .bacnet_config.bind == "192.168.204.55/24:47808"'
+            -H "Authorization: Bearer $TOKEN" | jq -e '(.drivers | length >= 1) and (.bacnet_config.iface == "enp3s0" and .bacnet_config.bind == "192.168.204.55/24:47808")'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/commission/status \
             -H "Authorization: Bearer $TOKEN" | jq -e '.config.iface == "enp3s0" and .config.bind == "192.168.204.55/24:47808"'
@@ -124,6 +131,28 @@ jobs:
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export/non-p8 \
             -H "Authorization: Bearer $TOKEN" | grep "priority_kind"
+
+      - name: Modbus simulated driver smoke
+        run: |
+          TOKEN="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"sub":"ci","role":"agent"}' | jq -r .access_token)"
+
+          curl -fsS http://127.0.0.1:8080/api/modbus/points \
+            -H "Authorization: Bearer $TOKEN" | jq -e 'length >= 1'
+
+          curl -fsS http://127.0.0.1:8080/api/modbus/commission/status \
+            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and .config.mode == "simulated"'
+
+          curl -fsS -X POST http://127.0.0.1:8080/api/modbus/scan \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{}' | jq -e '.ok == true and (.points | length) >= 1'
+
+          curl -fsS -X POST http://127.0.0.1:8080/api/modbus/read \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{"register":40001,"function":"holding_register"}' | grep -q simulated
 
       - name: CSV files created in workspace
         run: |

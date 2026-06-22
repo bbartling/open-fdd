@@ -56,13 +56,16 @@ last_scan.json
 
 Honest status:
 
-The scanner service, API, UI buttons, hourly loop, and CSV logging are now real Rust code.
+The scanner service, API, UI buttons, hourly loop, and CSV logging are real Rust code.
 
-The actual BACnet field-bus read is intentionally isolated in:
+Live BACnet (`OPENFDD_BACNET_MODE=live`) uses [rusty-bacnet](https://github.com/jscott3201/rusty-bacnet) v0.9 for:
 
-```text
-edge/src/drivers/bacnet.rs
-read_priority_array_for_point(...)
-```
+- Who-Is / I-Am discovery (global + routed MS/TP via `OPENFDD_BACNET_ROUTER_IP` + `OPENFDD_BACNET_MSTP_NET`)
+- `POST /api/bacnet/point-discovery` object-list walks
+- `POST /api/bacnet/driver/sync-discovery` → `workspace/data/drivers/bacnet/driver_tree.json`
+- `POST /api/bacnet/read` present-value reads
+- `read_priority_array_for_point` → ReadProperty(priority-array) on writable points
 
-That function currently returns deterministic data so the end-to-end pipeline can be tested without hardware. Replace that adapter with `rusty-bacnet` ReadProperty(priority-array) calls for live BACnet devices.
+Simulated mode (`OPENFDD_BACNET_MODE=simulated`, CI default) keeps deterministic demo data so Docker/GitHub Actions run without an OT BACnet network.
+
+Bench device **5007** (MS/TP net 2000 behind router `192.168.204.200`) is seeded in `driver_tree.json` with oa-t / oa-h / duct-t / stat_zn-t points.

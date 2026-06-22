@@ -1,3 +1,7 @@
 target
+edge/target
 .git
+workspace
 workspace/backups
+edge/workspace
+**/*.db

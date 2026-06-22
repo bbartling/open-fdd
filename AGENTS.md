@@ -1,19 +1,27 @@
-# Agent Guide
+# Agent Guide (Rust edge)
 
-This repository is Rust-only. Use the JSON API first; shell scripts are only for bootstrap/update.
+Use Rust lifecycle scripts and JSON API. No Python runtime required.
 
 ## Start session
 
+After auth merge (`feature/rust-auth-security-parity`):
+
 ```bash
+INTEGRATOR_PW="$(grep '^OFDD_INTEGRATOR_PASSWORD=' ~/open-fdd/workspace/auth.env.local | cut -d= -f2-)"
 TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"sub":"agent","role":"agent"}' | jq -r .access_token)"
+  -d "$(jq -nc --arg u integrator --arg p "$INTEGRATOR_PW" '{username:$u,password:$p}')" \
+  | jq -r '.token // .access_token')"
+```
 
-curl -s http://127.0.0.1:8080/api/building/checkin \
-  -H "Authorization: Bearer $TOKEN" | jq .
+## Safe scripts
 
-curl -s http://127.0.0.1:8080/api/agent/tools \
-  -H "Authorization: Bearer $TOKEN" | jq .
+```bash
+./scripts/openfdd_rust_edge_bootstrap.sh --start
+./scripts/openfdd_rust_site_backup.sh
+./scripts/openfdd_rust_site_update.sh
+./scripts/openfdd_rust_check_ghcr_platform.sh
+./scripts/openfdd_rust_edge_validate.sh
 ```
 
 ## Never
@@ -21,31 +29,12 @@ curl -s http://127.0.0.1:8080/api/agent/tools \
 - delete `workspace/`
 - run `docker compose down -v`
 - run `docker volume prune`
-- print `.env` or token secrets
-- expose the API outside LAN/Tailscale
-- write BACnet points unless the user explicitly approved it
-
-## Safe scripts
-
-```bash
-./scripts/openfdd_edge_bootstrap.sh
-./scripts/openfdd_site_backup.sh
-./scripts/openfdd_site_update.sh
-./scripts/openfdd_check_ghcr_platform.sh
-```
+- print secrets or tokens
+- expose API on public internet
+- write BACnet without explicit human approval
 
 ## Assignment rule
 
-All agent-created point mappings, FDD rule bindings, historian storage refs, external refs, and CDL algorithm bindings must go through Haystack IDs.
+Bind drivers → Haystack IDs → FDD/CDL via `/api/model/assignments`.
 
-Use:
-
-```text
-GET  /api/model/assignments
-POST /api/model/assignments/save
-POST /api/model/assignments/resolve
-GET  /api/control/cdl/bindings
-POST /api/control/cdl/bindings/save
-```
-
-Do not bind FDD or CDL directly to BACnet, Modbus, JSON API, or remote Haystack sources. Bind drivers to Haystack IDs first, then bind rules/algorithms to those IDs.
+See [docs/ai-agent-context.md](docs/ai-agent-context.md).

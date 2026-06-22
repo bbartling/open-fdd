@@ -1,257 +1,150 @@
 # Open-FDD Rust Edge
 
-Rust-only Open-FDD edge prototype: API, dashboard, historian, BACnet/Modbus/JSON/Haystack drivers, DataFusion SQL fault detection, JWT agent API, and safe Docker lifecycle scripts.
+<p align="center">
+  <a href="https://discord.gg/Ta48yQF8fC"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://github.com/bbartling/open-fdd/actions/workflows/rust-ci.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/rust-ci.yml/badge.svg?branch=rust-rewrite-1" alt="Rust CI"></a>
+  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT">
+  <img src="https://img.shields.io/badge/status-Rust%20Edge-blue" alt="Rust Edge">
+  <img src="https://img.shields.io/badge/Rust-1.93-orange?logo=rust" alt="Rust">
+  <img src="https://img.shields.io/badge/Apache%20Arrow-53-blue" alt="Arrow">
+  <img src="https://img.shields.io/badge/DataFusion-SQL-purple" alt="DataFusion">
+  <img src="https://img.shields.io/badge/GHCR-openfdd--edge--rust-blue?logo=docker" alt="GHCR">
+</p>
 
-This branch intentionally removes the Python/PyPI project shape. The goal is a small Rust-first base that can later grow into production crates.
+<p align="center">
+  <img src="https://raw.githubusercontent.com/bbartling/open-fdd/master/image.png" alt="Open-FDD logo" width="440">
+</p>
 
-## Service shape
+<p align="center">
+  Local-first, on-prem, vendor-neutral HVAC supervisory fault detection — <strong>100% Rust edge runtime</strong>:
+  Rust API, React UI, Apache Arrow historian, DataFusion SQL FDD, JWT auth, BACnet/Modbus/Haystack drivers, Docker/GHCR lifecycle.
+</p>
+
+<p align="center">
+  <a href="https://bbartling.github.io/open-fdd/"><img src="https://img.shields.io/badge/Documentation-read_online-2563EB?style=for-the-badge" alt="Documentation"></a>
+  <a href="docs/quick-start/rust-edge-bootstrap.md"><img src="https://img.shields.io/badge/Quick%20Start-Rust%20Edge-059669?style=for-the-badge" alt="Rust quick start"></a>
+</p>
+
+---
+
+## GHCR install (production edge)
+
+Primary Rust image:
 
 ```text
-openfdd-bridge             API + dashboard + historian
-openfdd-commission         BACnet / Modbus / JSON API discover-read-poll
-openfdd-haystack-gateway   Haystack read/nav/ops integration
-MCP                         later
+ghcr.io/bbartling/openfdd-edge-rust:latest
 ```
 
-## Quick start
+Legacy Python stack (compatibility only — not the Rust edge path):
+
+```text
+ghcr.io/bbartling/openfdd-bridge
+ghcr.io/bbartling/openfdd-commission
+ghcr.io/bbartling/openfdd-mcp-rag
+```
+
+### Fresh install
+
+```bash
+curl -fsSL -o /tmp/openfdd_rust_edge_bootstrap.sh \
+  https://github.com/bbartling/open-fdd/raw/refs/heads/rust-rewrite-1/scripts/openfdd_rust_edge_bootstrap.sh
+bash /tmp/openfdd_rust_edge_bootstrap.sh --start
+```
+
+Open `http://127.0.0.1:8080` — sign in with integrator credentials from `~/open-fdd/workspace/auth.env.local` (password never printed by bootstrap).
+
+### Update existing site
+
+```bash
+cd ~/open-fdd
+./scripts/openfdd_rust_site_backup.sh
+./scripts/openfdd_rust_site_update.sh
+./scripts/openfdd_rust_edge_validate.sh
+```
+
+**Never** run `docker compose down -v`. **Never** delete `workspace/`.
+
+---
+
+## Developer / source checkout
 
 ```bash
 cp .env.example .env
-./scripts/openfdd_edge_bootstrap.sh
-```
-
-Open:
-
-```text
-http://localhost:8080
-```
-
-Or run directly:
-
-```bash
 docker compose up --build
-```
-
-## Local Rust dev
-
-```bash
-cargo fmt --all
+# or
 cargo test --workspace
 cargo run -p open_fdd_edge_prototype
 ```
 
-## Auth
+---
 
-Public:
+## Architecture
 
-```text
-GET  /api/health
-POST /api/auth/login
-```
+| Component | Technology |
+| --- | --- |
+| API + auth | Rust (`edge/`) |
+| UI | React static assets |
+| Historian | Apache Arrow RecordBatches |
+| FDD | DataFusion SQL + confirmation duration |
+| BACnet | rusty-bacnet (live) or simulated |
+| Modbus | Native Rust TCP client |
+| Publish | GHCR multi-arch (`rust-ghcr.yml`) |
 
-Login:
+---
 
-```bash
-TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"sub":"agent","role":"agent"}' | jq -r .access_token)"
-```
+## Security
 
-Then:
+- Generated `workspace/auth.env.local` — operator / integrator / agent users
+- `chmod 600` where possible; secrets never printed in bootstrap/update logs
+- Bind API to LAN / Tailscale / reverse proxy — not public internet
+- BACnet writes require integrator + explicit human approval workflow
 
-```bash
-curl -s http://127.0.0.1:8080/api/health/stack \
-  -H "Authorization: Bearer $TOKEN" | jq .
-```
+See [docs/security/rust-edge-auth.md](docs/security/rust-edge-auth.md).
 
-## Main AI-drivable routes
+---
 
-```text
-GET  /api/agent/manifest
-GET  /api/agent/tools
-GET  /api/building/checkin
-GET  /api/health/stack
-GET  /api/ops/stack
-POST /api/ops/docker/update
+## AI agent prompts
 
-POST /api/bacnet/whois
-POST /api/bacnet/point-discovery
-GET  /api/bacnet/driver/tree
-POST /api/bacnet/overrides/scan-once
-
-POST /api/modbus/scan
-GET  /api/modbus/points
-
-GET  /api/json-api/sources
-POST /api/json-api/register
-POST /api/json-api/poll-once
-
-GET  /api/haystack/about
-POST /api/haystack/read
-POST /api/haystack/nav
-POST /api/haystack/ops
-
-GET  /api/arrow/demo
-GET  /api/fdd/datafusion/demo
-POST /api/fdd/run
-GET  /api/rules
-POST /api/rules/save
-POST /api/rules/batch
-
-POST /api/reports/rcx/plan
-POST /api/reports/rcx/generate
-GET  /api/reports/rcx/list
-```
-
-
-## Code layout
+### Fresh Rust edge bootstrap
 
 ```text
-edge/src/
-  main.rs
-  drivers/
-    mod.rs
-    bacnet.rs
-    modbus.rs
-    json_api.rs
-    haystack.rs
-  historian/
-    mod.rs
-    arrow_table.rs
-  fdd/
-    mod.rs
-    datafusion_sql.rs
-  model/
-    mod.rs
+Install Docker if missing. Detect linux/amd64 or linux/arm64. Run openfdd_rust_edge_bootstrap.sh --start from rust-rewrite-1. Validate /api/health and login. Do not print secrets. Do not expose port 8080 to the public internet. Never docker compose down -v. Never delete workspace/.
 ```
 
-Driver code and the FDD/DataFusion SQL facade are now present in the same Rust crate layout. The fast Docker prototype uses deterministic simulator-backed drivers so the API and UI are testable without field hardware. Production wiring can swap those facades to `rusty-bacnet`, `rusty-modbus`, `rusty-haystack`, Apache Arrow, and DataFusion without changing the external API shape.
-
-
-## UI direction
-
-The UI is now focused around a Niagara-style driver tree plus a small number of main work areas.
-
-Driver tree:
-- BACnet
-- Modbus
-- JSON API
-- Haystack
-
-Main tabs:
-- Dashboard
-- SQL FDD
-- Plots
-- Haystack
-- CDL
-- Wire Sheet
-
-The old Rule Lab tab is intentionally removed. Fault rules belong in SQL FDD and are DataFusion SQL only. The data model is Haystack-first. Assignments and CDL algorithm bindings resolve through Haystack IDs so BACnet, Modbus, JSON API, and Haystack can all feed the same protocol-agnostic algorithms.
-
-BACnet override parity:
-- `GET /api/bacnet/overrides/status`
-- `POST /api/bacnet/overrides/scan-once`
-
-The dashboard and driver tree surface priority 8 overrides separately from non-priority-8 overrides.
-
-## Security rules
-
-- JWT Bearer required for operational APIs.
-- Roles: `operator`, `integrator`, `agent`.
-- `OPENFDD_JWT_SECRET` signs tokens.
-- BACnet writes require `integrator` and `approved=true`.
-- Prototype BACnet writes are dry-run only.
-- Keep the edge API on LAN/Tailscale.
-- Never run `docker compose down -v`.
-- Never delete `workspace/`.
-- Never print secrets.
-
-## Niagara direction
-
-Custom Niagara WebSockets are replaced by Project Haystack:
+### Operator session
 
 ```text
-Niagara / BAS server
-→ Project Haystack read/nav/ops
-→ Rust Haystack gateway
-→ Open-FDD model + Arrow tables
-→ DataFusion SQL FDD
+Login as integrator from workspace/auth.env.local. Call GET /api/health/stack, GET /api/bacnet/driver/tree, GET /api/rules. Run safe diagnostics only. No BACnet/Modbus writes without explicit human approval. Do not paste tokens or passwords into chat.
 ```
 
-## What got gutted
-
-Removed from this Rust-only baseline:
+### Backup / update / restore
 
 ```text
-pyproject.toml
-Python package/runtime
-PyArrow/Pandas rules
-Dash/Python report code
-Python MCP implementation
-legacy scripts that assume a Python virtualenv
+Run openfdd_rust_site_backup.sh, then openfdd_rust_site_update.sh with NEW_TAG if needed. Validate with openfdd_rust_edge_validate.sh. Keep backup on failure. Restore workspace only when asked. Never volume prune. Never compose down -v.
 ```
 
-The new base keeps the Open-FDD operating idea: local-first edge stack, agent-drivable API, safe Docker lifecycle, and vendor-neutral HVAC fault detection.
+Full guide: [AGENTS.md](AGENTS.md) and [docs/ai-agent-context.md](docs/ai-agent-context.md).
 
-## AI assignment model
+---
 
-Everything is assignable by AI through Haystack IDs:
+## Legacy scripts (Python-era)
+
+These remain for local dev checkout but are **not** the primary Rust GHCR install path:
 
 ```text
-driver refs
-external refs
-historian storage refs
-fault equation inputs
-DataFusion SQL rules
-CDL algorithm inputs/outputs
+scripts/openfdd_edge_bootstrap.sh   → use openfdd_rust_edge_bootstrap.sh
+scripts/openfdd_site_update.sh      → use openfdd_rust_site_update.sh
+scripts/openfdd_check_ghcr_platform.sh → use openfdd_rust_check_ghcr_platform.sh
 ```
 
-API:
+---
 
-```text
-GET  /api/model/assignments
-POST /api/model/assignments/save
-POST /api/model/assignments/resolve
-GET  /api/model/algorithm-bindings
-GET  /api/control/cdl/bindings
-POST /api/control/cdl/bindings/save
-```
+## Docs
 
-This keeps algorithms protocol agnostic:
+- [Rust edge bootstrap](docs/quick-start/rust-edge-bootstrap.md)
+- [Site lifecycle](docs/quick-start/rust-site-lifecycle.md)
+- [Raspberry Pi / ARM64](docs/quick-start/raspberry-pi-rust-edge.md)
+- [Update & restore](docs/operations/rust-update-restore.md)
+- [Unpushed work log](UNPUSHED_WORK.md)
 
-```text
-BACnet
-Modbus
-JSON API
-Haystack
-```
-
-can all drive the same CDL algorithm or DataFusion SQL fault equation through the Haystack assignment layer.
-
-## Latest fix
-
-- Fixed `/api/model/query` build error by removing the old `HAYSTACK_MODEL` constant reference and routing through `drivers::haystack::model_json()`.
-- Frontend syntax checked with `node --check frontend/app.js`.
-
-## BACnet OT NIC setup
-
-For Ben's Linux test box, the default BACnet OT NIC is currently:
-
-```text
-OPENFDD_BACNET_IFACE=enp3s0
-OPENFDD_BACNET_BIND=192.168.204.55/24:47808
-```
-
-Generate `.env` safely:
-
-```bash
-./scripts/openfdd_bacnet_nic_setup.sh
-```
-
-For live BACnet/IP broadcast testing on Linux, use host networking:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.bacnet-live.yml --env-file .env up --build
-```
-
-The helper script does not change the NIC unless `OPENFDD_BACNET_CONFIGURE_NIC=1` or `--apply` is used.
+Version: **3.2.0** (`VERSION`)

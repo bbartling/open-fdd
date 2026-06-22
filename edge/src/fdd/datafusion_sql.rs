@@ -5,7 +5,6 @@
 //! - save SQL rules under `workspace/data/rules/`.
 //! - run `/api/rules/batch` and persist results under `workspace/data/fdd/`.
 
-
 pub const RULES_JSON: &str = r#"[
   {"id":"sat_deviation","name":"SAT Deviation Detector","engine":"datafusion_sql","enabled":true,"severity":"high"},
   {"id":"duct_static_deviation","name":"Duct Static Deviation","engine":"datafusion_sql","enabled":true,"severity":"medium"},
