@@ -201,19 +201,20 @@ fn build_telemetry_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
     let mut value = Vec::new();
     for row in &rows {
         let t = row.get("ts").and_then(|v| v.as_str()).unwrap_or("");
-        ts.push(parse_ts_ms(t));
-        equipment.push(
-            row.get("equip")
-                .and_then(|v| v.as_str())
-                .unwrap_or("AHU-1")
-                .to_string(),
-        );
+        let ts_ms = parse_ts_ms(t);
+        let equip = row
+            .get("equip")
+            .and_then(|v| v.as_str())
+            .unwrap_or("AHU-1")
+            .to_string();
         for (input, key) in [
             ("sat", "sat"),
             ("sat_sp", "sat_sp"),
             ("fan_cmd", "fan_cmd"),
             ("oat", "oa_t"),
         ] {
+            ts.push(ts_ms);
+            equipment.push(equip.clone());
             fdd_input.push(input.to_string());
             value.push(row.get(key).and_then(|v| v.as_f64()));
         }
