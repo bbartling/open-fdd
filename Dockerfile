@@ -12,5 +12,6 @@ COPY --from=builder /app/edge/target/release/open_fdd_edge_prototype /usr/local/
 COPY frontend ./frontend
 ENV FRONTEND_DIR=/app/frontend
 ENV PORT=8080
+ENV OPENFDD_WORKSPACE=/app/workspace
 EXPOSE 8080
 CMD ["open_fdd_edge_prototype"]

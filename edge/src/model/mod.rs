@@ -4,5 +4,3 @@
 //! BACnet/Modbus/JSON points are referenced from Haystack point rows.
 
 pub mod assignments;
-
-pub use crate::drivers::haystack;

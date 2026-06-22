@@ -9,6 +9,7 @@ services:
       PORT: "8080"
       FRONTEND_DIR: /app/frontend
       OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-dev-change-me-openfdd-rust-edge}
+      OPENFDD_WORKSPACE: /app/workspace
     ports:
       - "8080:8080"
     volumes:
@@ -25,6 +26,7 @@ services:
       PORT: "9091"
       FRONTEND_DIR: /app/frontend
       OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-dev-change-me-openfdd-rust-edge}
+      OPENFDD_WORKSPACE: /app/workspace
     expose:
       - "9091"
     volumes:
@@ -41,6 +43,7 @@ services:
       PORT: "9092"
       FRONTEND_DIR: /app/frontend
       OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-dev-change-me-openfdd-rust-edge}
+      OPENFDD_WORKSPACE: /app/workspace
     expose:
       - "9092"
     volumes:

@@ -4,17 +4,6 @@ Rust-only Open-FDD edge prototype: API, dashboard, historian, BACnet/Modbus/JSON
 
 This branch intentionally removes the Python/PyPI project shape. The goal is a small Rust-first base that can later grow into production crates.
 
-## Goals
-
-Build a free, open-source, full AFDD platform that is secure, vendor-agnostic, and designed for IoT edge deployments in the smart-building world.
-
-The platform should include smart-building IoT drivers and full support for algorithms through CDL and a knowledge graph. Everything should be assignable by AI through Haystack, including fault equations, data storage, external references, and algorithm inputs/outputs.
-
-Algorithms must be protocol-agnostic across BACnet, Modbus, JSON APIs, and Haystack. A CDL algorithm should be able to use data from any driver as long as the points are mapped through the Haystack assignment layer.
-
-The project should also include a community-based expression-rule cookbook for DataFusion SQL and use everything the Apache Arrow project has to offer under the hood.
-
-
 ## Service shape
 
 ```text
@@ -138,6 +127,33 @@ edge/src/
 
 Driver code and the FDD/DataFusion SQL facade are now present in the same Rust crate layout. The fast Docker prototype uses deterministic simulator-backed drivers so the API and UI are testable without field hardware. Production wiring can swap those facades to `rusty-bacnet`, `rusty-modbus`, `rusty-haystack`, Apache Arrow, and DataFusion without changing the external API shape.
 
+
+## UI direction
+
+The UI is now focused around a Niagara-style driver tree plus a small number of main work areas.
+
+Driver tree:
+- BACnet
+- Modbus
+- JSON API
+- Haystack
+
+Main tabs:
+- Dashboard
+- SQL FDD
+- Plots
+- Haystack
+- CDL
+- Wire Sheet
+
+The old Rule Lab tab is intentionally removed. Fault rules belong in SQL FDD and are DataFusion SQL only. The data model is Haystack-first. Assignments and CDL algorithm bindings resolve through Haystack IDs so BACnet, Modbus, JSON API, and Haystack can all feed the same protocol-agnostic algorithms.
+
+BACnet override parity:
+- `GET /api/bacnet/overrides/status`
+- `POST /api/bacnet/overrides/scan-once`
+
+The dashboard and driver tree surface priority 8 overrides separately from non-priority-8 overrides.
+
 ## Security rules
 
 - JWT Bearer required for operational APIs.
@@ -210,37 +226,9 @@ JSON API
 Haystack
 ```
 
-## Tested Powershell on Windows
+can all drive the same CDL algorithm or DataFusion SQL fault equation through the Haystack assignment layer.
 
-> Note: DELETE ME this is just to validate application compiles ok. 
+## Latest fix
 
-Syntax/compile only:
-```
-docker run --rm rust:1.85-bookworm bash -c "ls -la /usr/local/cargo/bin && /usr/local/cargo/bin/cargo --version"
-
-```
-
-Compile tests without running:
-```
-docker run --rm `
-  -v "$($PWD.Path):/work" `
-  -w /work `
-  rust:1.85-bookworm `
-  bash -c "export PATH=/usr/local/cargo/bin:`$PATH && cargo --version && cargo check --workspace --all-targets"
-```
-
-Include formatting too
-```
-docker run --rm `
-  -v "$($PWD.Path):/work" `
-  -w /work `
-  rust:1.85-bookworm `
-  bash -c "export PATH=/usr/local/cargo/bin:`$PATH && cargo test --workspace --all-targets --no-run"
-```
-
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+- Fixed `/api/model/query` build error by removing the old `HAYSTACK_MODEL` constant reference and routing through `drivers::haystack::model_json()`.
+- Frontend syntax checked with `node --check frontend/app.js`.

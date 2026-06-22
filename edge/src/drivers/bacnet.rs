@@ -1,59 +1,324 @@
 //! BACnet driver facade.
 //!
-//! Production direction:
-//! - use `rusty-bacnet` for Who-Is/I-Am, ReadProperty, ReadPropertyMultiple,
-//!   WriteProperty with priority, and priority-array override scan.
-//! - persist device/point registry under `workspace/data/drivers/bacnet/`.
-//! - expose the registry through `/api/bacnet/driver/tree`.
+//! This module is the real Open-FDD Rust BACnet *shape*:
+//! - driver tree registry
+//! - writable-point override scanner
+//! - CSV logging for priority 8 and non-priority-8 overrides
+//! - hourly scanner loop
+//! - explicit scan-once endpoint
 //!
-//! The prototype returns deterministic JSON so API agents and UI workflows are
-//! fully testable without a BACnet network.
+//! The current field-bus read adapter is intentionally isolated in
+//! `read_priority_array_for_point`. Today it returns deterministic values so the
+//! Docker/UI/API/CSV path is testable without a BACnet network. The next step is
+//! to replace only that adapter with rusty-bacnet ReadProperty(priority-array)
+//! calls; the API, tree, CSV format, and dashboard do not need to change.
 
-pub const DEVICES_JSON: &str = r#"[
+use chrono::Utc;
+use serde_json::{json, Value};
+use std::env;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::PathBuf;
+use std::thread;
+use std::time::Duration;
+
+const DEVICES_JSON: &str = r#"[
   {"object_identifier":{"type":"device","instance":1001},"vendor_id":5,"address":"192.168.1.100:47808","label":"AHU-1 Controller","protocol":"BACnet/IP"},
   {"object_identifier":{"type":"device","instance":2002},"vendor_id":359,"address":"192.168.1.101:47808","label":"VAV Floor 2 Router","protocol":"BACnet/IP"}
 ]"#;
 
-pub const POINTS_JSON: &str = r#"[
-  {"mac":"c0a80164bac0","object_id":[0,1],"name":"AHU-1 SAT","kind":"sensor","unit":"°F","writable":false,"value":55.2},
-  {"mac":"c0a80164bac0","object_id":[2,4],"name":"AHU-1 SAT Setpoint","kind":"setpoint","unit":"°F","writable":true,"value":55.0},
-  {"mac":"c0a80164bac0","object_id":[5,8],"name":"AHU-1 Fan Command","kind":"cmd","unit":"bool","writable":true,"value":1}
+const POINTS_JSON: &str = r#"[
+  {"device_instance":1001,"mac":"c0a80164bac0","object_id":[0,1],"name":"AHU-1 SAT","kind":"sensor","unit":"°F","writable":false,"value":55.2,"haystack_id":"point:sat"},
+  {"device_instance":1001,"mac":"c0a80164bac0","object_id":[2,4],"name":"AHU-1 SAT Setpoint","kind":"setpoint","unit":"°F","writable":true,"value":55.0,"haystack_id":"point:sat-sp"},
+  {"device_instance":1001,"mac":"c0a80164bac0","object_id":[5,8],"name":"AHU-1 Fan Command","kind":"cmd","unit":"bool","writable":true,"value":1,"haystack_id":"point:fan-cmd"}
 ]"#;
 
-pub const DRIVER_TREE_JSON: &str = r#"{
-  "site_id":"demo",
-  "building_id":"rust-edge-demo",
-  "drivers":[
-    {
-      "id":"bacnet-ip",
-      "label":"BACnet/IP",
-      "status":"online",
-      "devices":[
+fn workspace_dir() -> PathBuf {
+    env::var("OPENFDD_WORKSPACE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("workspace"))
+}
+
+fn overrides_dir() -> PathBuf {
+    workspace_dir().join("overrides")
+}
+
+fn csv_path(name: &str) -> PathBuf {
+    overrides_dir().join(name)
+}
+
+fn now_rfc3339() -> String {
+    Utc::now().to_rfc3339()
+}
+
+fn default_registry() -> Value {
+    json!({
+      "site_id":"demo",
+      "building_id":"rust-edge-demo",
+      "drivers":[
         {
-          "device_instance":1001,
-          "name":"AHU-1 Controller",
-          "address":"192.168.1.100:47808",
-          "polling_enabled":true,
-          "points":[
-            {"id":"bacnet:1001:analog-input:1","object_id":[0,1],"name":"AHU-1 SAT","polling_enabled":true,"writable":false,"haystack_id":"point:sat"},
-            {"id":"bacnet:1001:analog-value:4","object_id":[2,4],"name":"AHU-1 SAT Setpoint","polling_enabled":true,"writable":true,"haystack_id":"point:sat-sp"},
-            {"id":"bacnet:1001:binary-value:8","object_id":[5,8],"name":"AHU-1 Fan Command","polling_enabled":true,"writable":true,"haystack_id":"point:fan-cmd"}
+          "id":"bacnet-ip",
+          "label":"BACnet/IP",
+          "status":"online",
+          "enabled":true,
+          "override_scan":{"enabled":true,"cadence_seconds":3600,"method":"ReadProperty(priority-array) on writable points"},
+          "devices":[
+            {
+              "device_instance":1001,
+              "name":"AHU-1 Controller",
+              "address":"192.168.1.100:47808",
+              "polling_enabled":true,
+              "points":[
+                {"id":"bacnet:1001:analog-input:1","device_instance":1001,"object_id":[0,1],"name":"AHU-1 SAT","polling_enabled":true,"writable":false,"haystack_id":"point:sat"},
+                {"id":"bacnet:1001:analog-value:4","device_instance":1001,"object_id":[2,4],"name":"AHU-1 SAT Setpoint","polling_enabled":true,"writable":true,"haystack_id":"point:sat-sp"},
+                {"id":"bacnet:1001:binary-value:8","device_instance":1001,"object_id":[5,8],"name":"AHU-1 Fan Command","polling_enabled":true,"writable":true,"haystack_id":"point:fan-cmd"}
+              ]
+            }
           ]
+        },
+        {
+          "id":"modbus-tcp",
+          "label":"Modbus/TCP",
+          "status":"online",
+          "enabled":true,
+          "devices":[
+            {
+              "unit_id":1,
+              "name":"Plant Modbus Gateway",
+              "address":"192.168.1.50:502",
+              "points":[
+                {"id":"modbus:tcp:1:40001","name":"CHW Plant Supply Temp","register":40001,"function":"holding_register","haystack_id":"point:chwst"},
+                {"id":"modbus:tcp:1:40002","name":"Pump Speed Command","register":40002,"function":"holding_register","haystack_id":"point:pump-speed-cmd"}
+              ]
+            }
+          ]
+        },
+        {
+          "id":"json-api",
+          "label":"JSON API",
+          "status":"online",
+          "enabled":true,
+          "sources":[
+            {"id":"openweather-oat","url":"https://api.openweathermap.org/data/2.5/weather","maps_to":"point:oat"},
+            {"id":"plant-json-api","url":"http://edge-controller.local/api/points","maps_to":"plant telemetry"}
+          ]
+        },
+        {
+          "id":"haystack",
+          "label":"Haystack Gateway",
+          "status":"online",
+          "enabled":true,
+          "sites":[
+            {"id":"site:demo","dis":"Demo Site"},
+            {"id":"equip:ahu1","dis":"AHU-1","siteRef":"site:demo"}
+          ],
+          "note":"Niagara-style station integration is represented through Project Haystack read/nav/ops instead of custom Niagara WebSockets."
         }
       ]
-    }
-  ]
-}"#;
+    })
+}
 
-pub const OVERRIDES_JSON: &str = r#"{
-  "last_scan":"2026-06-21T00:20:00Z",
-  "cadence":"hourly",
-  "method":"ReadProperty(priority-array) for writable points",
-  "overrides":[
-    {"point":"AHU-1 SAT Setpoint","priority":8,"level":"operator","value":58.0,"age_minutes":143},
-    {"point":"AHU-1 Fan Command","priority":5,"level":"supervisory","value":1,"age_minutes":58}
-  ]
-}"#;
+fn registry_path() -> PathBuf {
+    workspace_dir().join("data").join("drivers").join("bacnet").join("driver_tree.json")
+}
+
+fn read_registry() -> Value {
+    let path = registry_path();
+    match fs::read_to_string(&path) {
+        Ok(text) => serde_json::from_str::<Value>(&text).unwrap_or_else(|_| default_registry()),
+        Err(_) => default_registry(),
+    }
+}
+
+fn write_registry(value: &Value) {
+    let path = registry_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(path, serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string()));
+}
+
+fn writable_points(registry: &Value) -> Vec<Value> {
+    let mut points = Vec::new();
+    if let Some(drivers) = registry.get("drivers").and_then(|v| v.as_array()) {
+        for driver in drivers {
+            if driver.get("id").and_then(|v| v.as_str()).unwrap_or("") != "bacnet-ip" {
+                continue;
+            }
+            if let Some(devices) = driver.get("devices").and_then(|v| v.as_array()) {
+                for device in devices {
+                    if let Some(dev_points) = device.get("points").and_then(|v| v.as_array()) {
+                        for point in dev_points {
+                            if point.get("writable").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                let mut p = point.clone();
+                                if p.get("device_instance").is_none() {
+                                    p["device_instance"] = device.get("device_instance").cloned().unwrap_or(json!(0));
+                                }
+                                if p.get("device_name").is_none() {
+                                    p["device_name"] = device.get("name").cloned().unwrap_or(json!("unknown"));
+                                }
+                                if p.get("address").is_none() {
+                                    p["address"] = device.get("address").cloned().unwrap_or(json!("unknown"));
+                                }
+                                points.push(p);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    points
+}
+
+/// Adapter seam for real BACnet.
+/// Replace this deterministic return with rusty-bacnet:
+/// ReadProperty(object_id, PropertyIdentifier::PriorityArray)
+fn read_priority_array_for_point(point: &Value) -> Vec<(u8, Value)> {
+    let name = point.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    if name.contains("Setpoint") {
+        vec![(8, json!(58.0))]
+    } else if name.contains("Fan Command") {
+        vec![(5, json!(1))]
+    } else {
+        Vec::new()
+    }
+}
+
+fn ensure_csv_header(path: &PathBuf) {
+    if path.exists() {
+        return;
+    }
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(
+            file,
+            "timestamp,scan_id,device_instance,device_name,address,point_id,object_id,point_name,haystack_id,priority,priority_kind,value,source_method"
+        );
+    }
+}
+
+fn append_csv(path: &PathBuf, row: &[String]) {
+    ensure_csv_header(path);
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let line = row
+            .iter()
+            .map(|v| v.replace('"', "\"\""))
+            .map(|v| format!("\"{}\"", v))
+            .collect::<Vec<_>>()
+            .join(",");
+        let _ = writeln!(file, "{line}");
+    }
+}
+
+fn read_csv(path: &PathBuf) -> String {
+    fs::read_to_string(path).unwrap_or_else(|_| {
+        "timestamp,scan_id,device_instance,device_name,address,point_id,object_id,point_name,haystack_id,priority,priority_kind,value,source_method\n".to_string()
+    })
+}
+
+pub fn start_hourly_override_scanner(service_mode: String) {
+    if service_mode != "commission" {
+        return;
+    }
+    thread::spawn(move || {
+        loop {
+            let _ = scan_once_value();
+            thread::sleep(Duration::from_secs(3600));
+        }
+    });
+}
+
+pub fn scan_once_value() -> Value {
+    let registry = read_registry();
+    write_registry(&registry);
+
+    let scan_id = format!("bacnet-scan-{}", Utc::now().timestamp());
+    let ts = now_rfc3339();
+    let mut events: Vec<Value> = Vec::new();
+    let mut p8_count = 0;
+    let mut non_p8_count = 0;
+
+    let all_path = csv_path("bacnet_overrides.csv");
+    let p8_path = csv_path("bacnet_priority8_overrides.csv");
+    let other_path = csv_path("bacnet_non_priority8_overrides.csv");
+
+    for point in writable_points(&registry) {
+        let priority_values = read_priority_array_for_point(&point);
+        for (priority, value) in priority_values {
+            let kind = if priority == 8 { "operator" } else { "non_priority8" };
+            if priority == 8 {
+                p8_count += 1;
+            } else {
+                non_p8_count += 1;
+            }
+
+            let event = json!({
+                "timestamp": ts,
+                "scan_id": scan_id,
+                "device_instance": point.get("device_instance").cloned().unwrap_or(json!(0)),
+                "device_name": point.get("device_name").cloned().unwrap_or(json!("unknown")),
+                "address": point.get("address").cloned().unwrap_or(json!("unknown")),
+                "point_id": point.get("id").cloned().unwrap_or(json!("unknown")),
+                "object_id": point.get("object_id").cloned().unwrap_or(json!([])),
+                "point": point.get("name").cloned().unwrap_or(json!("unknown")),
+                "haystack_id": point.get("haystack_id").cloned().unwrap_or(json!("")),
+                "priority": priority,
+                "priority_kind": kind,
+                "level": kind,
+                "value": value,
+                "source_method": "ReadProperty(priority-array)"
+            });
+
+            let row = vec![
+                ts.clone(),
+                scan_id.clone(),
+                event["device_instance"].to_string(),
+                event["device_name"].as_str().unwrap_or("unknown").to_string(),
+                event["address"].as_str().unwrap_or("unknown").to_string(),
+                event["point_id"].as_str().unwrap_or("unknown").to_string(),
+                event["object_id"].to_string(),
+                event["point"].as_str().unwrap_or("unknown").to_string(),
+                event["haystack_id"].as_str().unwrap_or("").to_string(),
+                priority.to_string(),
+                kind.to_string(),
+                event["value"].to_string(),
+                "ReadProperty(priority-array)".to_string(),
+            ];
+            append_csv(&all_path, &row);
+            if priority == 8 {
+                append_csv(&p8_path, &row);
+            } else {
+                append_csv(&other_path, &row);
+            }
+            events.push(event);
+        }
+    }
+
+    let status = json!({
+        "ok": true,
+        "last_scan": ts,
+        "scan_id": scan_id,
+        "cadence": "hourly",
+        "method": "ReadProperty(priority-array) for writable BACnet points",
+        "csv": {
+            "all": all_path.display().to_string(),
+            "priority8": p8_path.display().to_string(),
+            "non_priority8": other_path.display().to_string()
+        },
+        "summary": {
+            "priority8": p8_count,
+            "non_priority8": non_p8_count,
+            "total": p8_count + non_p8_count
+        },
+        "overrides": events
+    });
+
+    let _ = fs::write(overrides_dir().join("last_scan.json"), serde_json::to_string_pretty(&status).unwrap_or_default());
+    status
+}
 
 pub fn whois_json() -> &'static str {
     DEVICES_JSON
@@ -63,12 +328,29 @@ pub fn points_json() -> &'static str {
     POINTS_JSON
 }
 
-pub fn driver_tree_json() -> &'static str {
-    DRIVER_TREE_JSON
+pub fn driver_tree_json() -> String {
+    serde_json::to_string_pretty(&read_registry()).unwrap_or_else(|_| "{}".to_string())
 }
 
-pub fn overrides_json() -> &'static str {
-    OVERRIDES_JSON
+pub fn overrides_json() -> String {
+    let last = overrides_dir().join("last_scan.json");
+    if let Ok(text) = fs::read_to_string(last) {
+        text
+    } else {
+        serde_json::to_string_pretty(&scan_once_value()).unwrap_or_else(|_| "{}".to_string())
+    }
+}
+
+pub fn overrides_csv() -> String {
+    read_csv(&csv_path("bacnet_overrides.csv"))
+}
+
+pub fn priority8_csv() -> String {
+    read_csv(&csv_path("bacnet_priority8_overrides.csv"))
+}
+
+pub fn non_priority8_csv() -> String {
+    read_csv(&csv_path("bacnet_non_priority8_overrides.csv"))
 }
 
 pub fn read_present_value_json() -> &'static str {
@@ -76,13 +358,13 @@ pub fn read_present_value_json() -> &'static str {
 }
 
 pub fn write_dry_run_json() -> &'static str {
-    r#"{"ok":true,"dry_run":true,"safety":"BACnet write requires integrator JWT and approved=true; prototype never writes to the field bus"}"#
-}
-
-pub fn poll_status_json() -> &'static str {
-    r#"{"ok":true,"driver":"bacnet","polling_enabled":true,"poll_interval_s":60,"points_polled":3,"last_poll":"2026-06-21T00:20:00Z","errors":0}"#
+    r#"{"ok":true,"dry_run":true,"safety":"BACnet write path requires integrator role and approved=true"}"#
 }
 
 pub fn commission_status_json() -> &'static str {
-    r#"{"ok":true,"driver":"bacnet","commissioning":"ready","whois_available":true,"read_property_available":true,"priority_array_scan_available":true}"#
+    r#"{"ok":true,"service":"bacnet-commission","status":"ready","features":["whois","object-list","read-property","priority-array-scan","csv-override-log"]}"#
+}
+
+pub fn poll_status_json() -> &'static str {
+    r#"{"ok":true,"service":"bacnet-poll","status":"ready","cadence_seconds":300,"writes_scan_cadence_seconds":3600}"#
 }

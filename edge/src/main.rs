@@ -20,137 +20,10 @@ use std::thread;
 
 type HmacSha256 = Hmac<Sha256>;
 
-const DEVICES: &str = r#"[
-  {"object_identifier":{"type":"device","instance":1001},"vendor_id":5,"address":"192.168.1.100:47808","label":"AHU-1 Controller","protocol":"BACnet/IP"},
-  {"object_identifier":{"type":"device","instance":2002},"vendor_id":359,"address":"192.168.1.101:47808","label":"VAV Floor 2 Router","protocol":"BACnet/IP"}
-]"#;
-const POINTS: &str = r#"[
-  {"mac":"c0a80164bac0","object_id":[0,1],"name":"AHU-1 SAT","kind":"sensor","unit":"°F","writable":false,"value":55.2},
-  {"mac":"c0a80164bac0","object_id":[2,4],"name":"AHU-1 SAT Setpoint","kind":"setpoint","unit":"°F","writable":true,"value":55.0},
-  {"mac":"c0a80164bac0","object_id":[5,8],"name":"AHU-1 Fan Command","kind":"cmd","unit":"bool","writable":true,"value":1}
-]"#;
-const MODBUS_POINTS: &str = r#"[
-  {"id":"modbus:tcp:1:40001","name":"CHW Plant Supply Temp","register":40001,"function":"holding_register","value":44.8,"unit":"°F"},
-  {"id":"modbus:tcp:1:40002","name":"Pump Speed Command","register":40002,"function":"holding_register","value":62.0,"unit":"%"}
-]"#;
-const ARROW_ROWS: &str = r#"[
-  {"ts":"2026-06-21T00:00:00Z","equip":"AHU-1","sat":55.0,"sat_sp":55.0,"duct_static":1.20,"duct_static_sp":1.20,"oat":62.0,"fan_cmd":1.0},
-  {"ts":"2026-06-21T00:05:00Z","equip":"AHU-1","sat":66.5,"sat_sp":55.0,"duct_static":1.18,"duct_static_sp":1.20,"oat":63.0,"fan_cmd":1.0},
-  {"ts":"2026-06-21T00:10:00Z","equip":"AHU-1","sat":67.1,"sat_sp":55.0,"duct_static":1.17,"duct_static_sp":1.20,"oat":64.0,"fan_cmd":1.0},
-  {"ts":"2026-06-21T00:15:00Z","equip":"AHU-1","sat":67.3,"sat_sp":55.0,"duct_static":1.15,"duct_static_sp":1.20,"oat":65.0,"fan_cmd":1.0},
-  {"ts":"2026-06-21T00:20:00Z","equip":"AHU-1","sat":56.0,"sat_sp":55.0,"duct_static":1.80,"duct_static_sp":1.20,"oat":66.0,"fan_cmd":1.0}
-]"#;
-const HAYSTACK_MODEL: &str = r#"{
-  "meta":{"ver":"3.0"},
-  "cols":[{"name":"id"},{"name":"dis"},{"name":"site"},{"name":"equip"},{"name":"point"},{"name":"bacnetRef"},{"name":"modbusRef"}],
-  "rows":[
-    {"id":"site:demo","dis":"Demo Site","site":"M"},
-    {"id":"equip:ahu1","dis":"AHU-1","equip":"M","siteRef":"site:demo"},
-    {"id":"point:sat","dis":"AHU-1 SAT","point":"M","sensor":"M","bacnetRef":"analog-input:1"},
-    {"id":"point:chwst","dis":"CHW Plant Supply Temp","point":"M","sensor":"M","modbusRef":"40001"}
-  ]
-}"#;
-const OVERRIDES: &str = r#"{
-  "last_scan":"2026-06-21T00:20:00Z",
-  "cadence":"hourly",
-  "overrides":[
-    {"point":"AHU-1 SAT Setpoint","priority":8,"level":"operator","value":58.0,"age_minutes":143},
-    {"point":"AHU-1 Fan Command","priority":5,"level":"supervisory","value":1,"age_minutes":58}
-  ]
-}"#;
-const CONTROL: &str = r#"{
-  "sequence":"Guideline 36 AHU/VAV Trim & Respond",
-  "inputs":{"zonesCalling":3,"ductStatic":1.2,"sat":55.2},
-  "outputs":{"ductStaticSp":1.35,"satSp":54.0,"trimRespondAction":"respond"},
-  "status":"simulated"
-}"#;
-const JSON_SOURCES: &str = r#"[
-  {"id":"openweather-oat","url":"https://api.openweathermap.org/data/2.5/weather","maps_to":"outside_air_temperature","status":"demo-only"},
-  {"id":"plant-json-api","url":"http://edge-controller.local/api/points","maps_to":"plant telemetry","status":"demo-only"}
-]"#;
-
-const DRIVER_TREE: &str = r#"{
-  "site_id":"demo",
-  "building_id":"rust-edge-demo",
-  "drivers":[
-    {
-      "id":"bacnet-ip",
-      "label":"BACnet/IP",
-      "status":"online",
-      "devices":[
-        {
-          "device_instance":1001,
-          "name":"AHU-1 Controller",
-          "address":"192.168.1.100:47808",
-          "polling_enabled":true,
-          "points":[
-            {"id":"bacnet:1001:analog-input:1","object_id":[0,1],"name":"AHU-1 SAT","polling_enabled":true,"writable":false,"haystack_id":"point:sat"},
-            {"id":"bacnet:1001:analog-value:4","object_id":[2,4],"name":"AHU-1 SAT Setpoint","polling_enabled":true,"writable":true,"haystack_id":"point:sat-sp"},
-            {"id":"bacnet:1001:binary-value:8","object_id":[5,8],"name":"AHU-1 Fan Command","polling_enabled":true,"writable":true,"haystack_id":"point:fan-cmd"}
-          ]
-        }
-      ]
-    },
-    {
-      "id":"modbus-tcp",
-      "label":"Modbus/TCP",
-      "status":"online",
-      "devices":[
-        {
-          "unit_id":1,
-          "name":"Plant Modbus Gateway",
-          "address":"192.168.1.50:502",
-          "points":[
-            {"id":"modbus:tcp:1:40001","name":"CHW Plant Supply Temp","register":40001,"function":"holding_register","haystack_id":"point:chwst"},
-            {"id":"modbus:tcp:1:40002","name":"Pump Speed Command","register":40002,"function":"holding_register","haystack_id":"point:pump-speed-cmd"}
-          ]
-        }
-      ]
-    },
-    {
-      "id":"json-api",
-      "label":"JSON API",
-      "status":"online",
-      "sources":[
-        {"id":"openweather-oat","url":"https://api.openweathermap.org/data/2.5/weather","maps_to":"point:oat"}
-      ]
-    },
-    {
-      "id":"haystack",
-      "label":"Haystack Gateway",
-      "status":"online",
-      "note":"Niagara-style station integration is represented through Project Haystack read/nav/ops instead of custom Niagara WebSockets."
-    }
-  ]
-}"#;
-
-const RULES: &str = r#"[
-  {"id":"sat_deviation","name":"SAT Deviation Detector","engine":"datafusion_sql","enabled":true,"severity":"high"},
-  {"id":"duct_static_deviation","name":"Duct Static Deviation","engine":"datafusion_sql","enabled":true,"severity":"medium"},
-  {"id":"override_watch","name":"Supervisory Override Watch","engine":"bacnet_priority_array","enabled":true,"severity":"advisory"}
-]"#;
-
-const HISTORIAN_QUERY: &str = r#"{
-  "ok":true,
-  "engine":"Apache Arrow RecordBatch / DataFusion query path",
-  "rows":[
-    {"ts":"2026-06-21T00:00:00Z","point_id":"bacnet:1001:analog-input:1","value":55.0},
-    {"ts":"2026-06-21T00:05:00Z","point_id":"bacnet:1001:analog-input:1","value":66.5}
-  ]
-}"#;
-
 const REPORTS: &str = r#"[
   {"report_id":"rcx-demo-001","kind":"rcx","status":"ready","path":"workspace/reports/rcx/rcx-demo-001.md"}
 ]"#;
 
-const FDD: &str = r#"{
-  "engine":"Apache Arrow + DataFusion SQL (Rust production path)",
-  "sql":"SELECT equip, CASE WHEN fan_cmd > 0 AND ABS(sat - sat_sp) > 10 THEN 'SAT_DEVIATION_HIGH' WHEN fan_cmd > 0 AND ABS(duct_static - duct_static_sp) > 0.5 THEN 'DUCT_STATIC_DEVIATION' ELSE 'OK' END AS fault_code, COUNT(*) AS sample_count FROM hvac WHERE fan_cmd > 0 GROUP BY equip, fault_code HAVING fault_code <> 'OK';",
-  "faults":[
-    {"equip":"AHU-1","fault_code":"SAT_DEVIATION_HIGH","severity":"high","sample_count":3,"max_abs_error":12.3},
-    {"equip":"AHU-1","fault_code":"DUCT_STATIC_DEVIATION","severity":"medium","sample_count":1,"max_abs_error":0.60}
-  ]
-}"#;
 
 #[derive(Clone, Debug)]
 struct Principal {
@@ -161,6 +34,8 @@ struct Principal {
 fn main() -> std::io::Result<()> {
     let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
     let root = env::var("FRONTEND_DIR").unwrap_or_else(|_| "/app/frontend".to_string());
+    let service_mode = env::var("SERVICE_MODE").unwrap_or_else(|_| "bridge".to_string());
+    drivers::bacnet::start_hourly_override_scanner(service_mode.clone());
     let listener = TcpListener::bind(format!("0.0.0.0:{port}"))?;
     println!("Open-FDD Rust Edge API listening on http://0.0.0.0:{port}");
     for stream in listener.incoming() {
@@ -240,8 +115,9 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("POST", "/api/haystack/read") => raw_json(&mut stream, drivers::haystack::model_json()),
         ("POST", "/api/haystack/nav") => raw_json(&mut stream, drivers::haystack::model_json()),
         ("POST", "/api/haystack/ops") => raw_json(&mut stream, drivers::haystack::ops_json()),
+        ("POST", "/api/haystack/import") => require_role(&mut stream, &principal, &["integrator", "agent"], serde_json::from_str::<Value>(drivers::haystack::import_json()).unwrap()),
         ("POST", "/api/model/haystack/import") => require_role(&mut stream, &principal, &["integrator", "agent"], json!({"ok": true, "preserve_ids": true, "imported": 4})),
-        ("POST", "/api/model/query") => json_response(&mut stream, json!({"ok": true, "rows": serde_json::from_str::<Value>(HAYSTACK_MODEL).unwrap()["rows"].clone()})),
+        ("POST", "/api/model/query") => json_response(&mut stream, json!({"ok": true, "rows": serde_json::from_str::<Value>(drivers::haystack::model_json()).unwrap()["rows"].clone()})),
         ("GET", "/api/fdd/datafusion/demo") => raw_json(&mut stream, fdd::datafusion_sql::result_json()),
         ("POST", "/api/fdd/run") => require_role(&mut stream, &principal, &["integrator", "agent"], serde_json::from_str::<Value>(fdd::datafusion_sql::result_json()).unwrap()),
         ("GET", "/api/rules") => raw_json(&mut stream, fdd::datafusion_sql::rules_json()),
@@ -252,14 +128,19 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/bacnet/points") => raw_json(&mut stream, drivers::bacnet::points_json()),
         ("GET", "/api/bacnet/commission/status") => raw_json(&mut stream, drivers::bacnet::commission_status_json()),
         ("GET", "/api/bacnet/poll/status") => raw_json(&mut stream, drivers::bacnet::poll_status_json()),
-        ("GET", "/api/bacnet/driver/tree") => raw_json(&mut stream, drivers::bacnet::driver_tree_json()),
+        ("GET", "/api/bacnet/driver/tree") => { let body = drivers::bacnet::driver_tree_json(); raw_json(&mut stream, &body) },
         ("POST", "/api/bacnet/driver/sync-discovery") => require_role(&mut stream, &principal, &["integrator", "agent"], json!({"ok": true, "synced": true, "devices": 1, "points": 3})),
         ("PATCH", "/api/bacnet/driver/point") => require_role(&mut stream, &principal, &["integrator", "agent"], json!({"ok": true, "updated": "point polling settings"})),
         ("POST", "/api/bacnet/point-discovery") => require_role(&mut stream, &principal, &["integrator", "agent"], json!({"ok": true, "status": "demo registry loaded"})),
         ("POST", "/api/bacnet/read") => raw_json(&mut stream, drivers::bacnet::read_present_value_json()),
-        ("GET", "/api/bacnet/overrides/status") => raw_json(&mut stream, drivers::bacnet::overrides_json()),
-        ("POST", "/api/bacnet/overrides/scan-once") => require_role(&mut stream, &principal, &["integrator", "agent"], serde_json::from_str::<Value>(drivers::bacnet::overrides_json()).unwrap()),
-        ("POST", "/api/bacnet/write") => {
+        ("GET", "/api/bacnet/overrides/status") => { let body = drivers::bacnet::overrides_json(); raw_json(&mut stream, &body) },
+        ("POST", "/api/bacnet/overrides/scan-once") => require_role(&mut stream, &principal, &["integrator", "agent"], drivers::bacnet::scan_once_value()),
+        ("GET", "/api/bacnet/overrides/export") => { let body = drivers::bacnet::overrides_csv(); response(&mut stream, "200 OK", "text/csv; charset=utf-8", body.as_bytes()) },
+        ("GET", "/api/bacnet/overrides/export/p8") => { let body = drivers::bacnet::priority8_csv(); response(&mut stream, "200 OK", "text/csv; charset=utf-8", body.as_bytes()) },
+        ("GET", "/api/bacnet/overrides/export/non-p8") => { let body = drivers::bacnet::non_priority8_csv(); response(&mut stream, "200 OK", "text/csv; charset=utf-8", body.as_bytes()) },
+        
+        ("POST", "/api/bacnet/write-dry-run") => require_role(&mut stream, &principal, &["integrator", "agent"], serde_json::from_str::<Value>(drivers::bacnet::write_dry_run_json()).unwrap()),
+("POST", "/api/bacnet/write") => {
             let value: Value = serde_json::from_str(&body).unwrap_or(json!({}));
             let approved = value.get("approved").and_then(|v| v.as_bool()).unwrap_or(false);
             if approved && (principal.role == "integrator") {
@@ -267,13 +148,13 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             } else {
                 status_json(&mut stream, "403 Forbidden", json!({"ok": false, "error": "BACnet writes require integrator role and approved=true"}))
             }
-        }
+        },
         ("GET", "/api/modbus/points") => raw_json(&mut stream, drivers::modbus::points_json()),
         ("POST", "/api/modbus/scan") => require_role(&mut stream, &principal, &["integrator", "agent"], serde_json::from_str::<Value>(&drivers::modbus::scan_json()).unwrap()),
         ("POST", "/api/modbus/read") => raw_json(&mut stream, drivers::modbus::read_json()),
         ("GET", "/api/json-api/sources") => raw_json(&mut stream, drivers::json_api::sources_json()),
-        ("POST", "/api/json-api/poll-once") => require_role(&mut stream, &principal, &["integrator", "agent"], json!({"ok": true, "source_id": "openweather-oat", "points": [{"id": "point:oat", "value": 62.4, "unit": "degF"}]})),
-        ("POST", "/api/json-api/register") => require_role(&mut stream, &principal, &["integrator", "agent"], json!({"ok": true, "status": "registered", "source": "custom-json-api"})),
+        ("POST", "/api/json-api/poll-once") => require_role(&mut stream, &principal, &["integrator", "agent"], serde_json::from_str::<Value>(drivers::json_api::poll_once_json()).unwrap()),
+        ("POST", "/api/json-api/register") => require_role(&mut stream, &principal, &["integrator", "agent"], serde_json::from_str::<Value>(drivers::json_api::register_json()).unwrap()),
         ("GET", "/api/control/status") => raw_json(&mut stream, control::cdl::simulate_json()),
         ("POST", "/api/control/simulate") => require_role(&mut stream, &principal, &["integrator", "agent"], serde_json::from_str::<Value>(control::cdl::simulate_json()).unwrap()),
         ("POST", "/api/reports/rcx/plan") => json_response(&mut stream, json!({"ok": true, "sections": ["executive_summary", "faults", "overrides", "energy_opportunities", "trend_plots"]})),
@@ -398,8 +279,17 @@ fn agent_tools() -> Value {
             {"name":"bacnet.whois","method":"POST","path":"/api/bacnet/whois","requires":"JWT"},
             {"name":"bacnet.point_discovery","method":"POST","path":"/api/bacnet/point-discovery","requires":"integrator|agent"},
             {"name":"bacnet.override_scan","method":"POST","path":"/api/bacnet/overrides/scan-once","requires":"integrator|agent"},
+            {"name":"bacnet.override_export_all","method":"GET","path":"/api/bacnet/overrides/export","requires":"JWT"},
+            {"name":"bacnet.override_export_p8","method":"GET","path":"/api/bacnet/overrides/export/p8","requires":"JWT"},
+            {"name":"bacnet.override_export_non_p8","method":"GET","path":"/api/bacnet/overrides/export/non-p8","requires":"JWT"},
+            {"name":"bacnet.driver_tree","method":"GET","path":"/api/bacnet/driver/tree","requires":"JWT"},
             {"name":"modbus.points","method":"GET","path":"/api/modbus/points","requires":"JWT"},
+            {"name":"modbus.scan","method":"POST","path":"/api/modbus/scan","requires":"integrator|agent"},
+            {"name":"json_api.sources","method":"GET","path":"/api/json-api/sources","requires":"JWT"},
             {"name":"json_api.register","method":"POST","path":"/api/json-api/register","requires":"integrator|agent"},
+            {"name":"json_api.poll_once","method":"POST","path":"/api/json-api/poll-once","requires":"integrator|agent"},
+            {"name":"haystack.status","method":"GET","path":"/api/haystack/status","requires":"JWT"},
+            {"name":"haystack.read","method":"POST","path":"/api/haystack/read","requires":"JWT"},
             {"name":"model.haystack","method":"GET","path":"/api/model/haystack","requires":"JWT"},
             {"name":"model.import","method":"POST","path":"/api/model/haystack/import","requires":"integrator|agent"},
             {"name":"model.assignments","method":"GET","path":"/api/model/assignments","requires":"JWT"},
@@ -410,22 +300,10 @@ fn agent_tools() -> Value {
             {"name":"algorithms.run","method":"POST","path":"/api/algorithms/run","requires":"integrator|agent"},
             {"name":"fdd.run","method":"POST","path":"/api/fdd/run","requires":"integrator|agent"},
             {"name":"rules.batch","method":"POST","path":"/api/rules/batch","requires":"integrator|agent"},
+            {"name":"historian.query","method":"POST","path":"/api/historian/query","requires":"JWT"},
             {"name":"reports.rcx_plan","method":"POST","path":"/api/reports/rcx/plan","requires":"JWT"},
             {"name":"reports.rcx_generate","method":"POST","path":"/api/reports/rcx/generate","requires":"integrator|agent"},
-            {"name":"ops.update","method":"POST","path":"/api/ops/docker/update","requires":"integrator|agent"},
-            {"name":"ui.tabs","method":"GET","path":"/api/ui/tabs","requires":"JWT"},
-            {"name":"bridge.status","method":"GET","path":"/api/bridge/status","requires":"JWT"},
-            {"name":"health.stack","method":"GET","path":"/api/health/stack","requires":"JWT"},
-            {"name":"bacnet.commission_status","method":"GET","path":"/api/bacnet/commission/status","requires":"JWT"},
-            {"name":"bacnet.poll_status","method":"GET","path":"/api/bacnet/poll/status","requires":"JWT"},
-            {"name":"haystack.status","method":"GET","path":"/api/haystack/status","requires":"JWT"},
-            {"name":"control.cdl_status","method":"GET","path":"/api/control/cdl/status","requires":"JWT"},
-            {"name":"bacnet.driver_tree","method":"GET","path":"/api/bacnet/driver/tree","requires":"JWT"},
-            {"name":"rules.save","method":"POST","path":"/api/rules/save","requires":"integrator|agent"},
-            {"name":"haystack.read","method":"POST","path":"/api/haystack/read","requires":"JWT"},
-            {"name":"modbus.scan","method":"POST","path":"/api/modbus/scan","requires":"integrator|agent"},
-            {"name":"json_api.poll_once","method":"POST","path":"/api/json-api/poll-once","requires":"integrator|agent"},
-            {"name":"historian.query","method":"POST","path":"/api/historian/query","requires":"JWT"}
+            {"name":"ops.update","method":"POST","path":"/api/ops/docker/update","requires":"integrator|agent"}
         ]
     })
 }
@@ -543,7 +421,7 @@ fn static_file(stream: &mut TcpStream, frontend: &Path, path: &str) -> std::io::
 
 fn response(stream: &mut TcpStream, status: &str, content_type: &str, body: &[u8]) -> std::io::Result<()> {
     let headers = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nCache-Control: no-store, no-cache, must-revalidate, max-age=0\r\nPragma: no-cache\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         body.len()
     );
     stream.write_all(headers.as_bytes())?;
