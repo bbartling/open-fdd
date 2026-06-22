@@ -107,7 +107,7 @@ Bind to Tailscale or a firewall-restricted interface for remote pen-testing; do 
 | **Reports** | RCX plan/generate (prototype endpoints) |
 | **Safety** | No BACnet writes without approval; never `docker compose down -v`; never delete `workspace/` |
 
-Deeper route maps: [AI agent context](docs/ai-agent-context.md) · [AGENTS.md](AGENTS.md) · verification checklists in [docs/verification/](docs/verification/).
+Deeper route maps: [AI agent guide](docs/ai-agent/README.md) · [SQL FDD cookbook](docs/rule-cookbook/sql-hvac-fdd.md) · [Haystack AI modeling](docs/ai-agent/haystack-and-assignments.md) · [AGENTS.md](AGENTS.md) · [verification checklists](docs/verification/)
 
 <details>
 <summary><strong>Copy-paste: OpenClaw — fresh Raspberry Pi Rust edge bootstrap</strong></summary>

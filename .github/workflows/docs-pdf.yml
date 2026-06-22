@@ -1,75 +1,18 @@
-# Regenerate pdf/open-fdd-docs.pdf (+ .txt) when docs change on master/main.
-# Opens a PR (protected default branch cannot take direct GITHUB_TOKEN pushes).
+# Legacy Python-era PDF bundle — disabled on Rust 3.2 line (no build_docs_pdf.py).
 
 name: Docs PDF
 
 on:
-  push:
-    branches: [master, main]
-    paths:
-      - "docs/**"
-      - "scripts/build_docs_pdf.py"
-      - ".github/workflows/docs-pdf.yml"
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
-concurrency:
-  group: docs-pdf-${{ github.ref }}
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  pdf:
+  skip-rust-docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install pandoc and WeasyPrint system libs
+      - name: PDF bundle not built on Rust line
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq pandoc \
-            libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
-            libffi-dev shared-mime-info
-
-      - name: Install Python deps
-        run: pip install pyyaml weasyprint
-
-      - name: Build PDF and plain-text bundle
-        run: python scripts/build_docs_pdf.py --pdf-engine=weasyprint
-
-      # Fresh bot branch from master — avoids pushing stale commits that touch .github/workflows/*
-      # (GITHUB_TOKEN cannot update workflow files without workflows: write).
-      - name: Reset bot branch on origin
-        run: git push origin --delete chore/docs-pdf-refresh 2>/dev/null || true
-
-      - name: Open PR with updated bundle (if changed)
-        uses: peter-evans/create-pull-request@v7
-        with:
-          branch: chore/docs-pdf-refresh
-          base: ${{ github.event.repository.default_branch }}
-          commit-message: "chore(docs): regenerate PDF and text bundle"
-          title: "chore(docs): regenerate PDF and text bundle"
-          body: |
-            Automated refresh from **Docs PDF** workflow ([`.github/workflows/docs-pdf.yml`](.github/workflows/docs-pdf.yml)).
-
-            Triggered by: ${{ github.event_name }} on `${{ github.ref_name }}`.
-
-            Merge when ready so `pdf/open-fdd-docs.pdf` and `pdf/open-fdd-docs.txt` stay current on `master`.
-          add-paths: |
-            pdf/open-fdd-docs.pdf
-            pdf/open-fdd-docs.txt
-          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
-          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
-          delete-branch: false
+          echo "Rust docs are markdown under docs/ — PDF export is legacy Python-era."
+          echo "Use workflow_dispatch only if build_docs_pdf.py is restored."
