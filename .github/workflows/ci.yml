@@ -75,9 +75,16 @@ jobs:
         run: |
           mkdir -p workspace/overrides workspace/data/drivers workspace/logs
           sudo chown -R 10001:10001 workspace
-          if [[ ! -f workspace/auth.env.local ]]; then
-            (cd edge && cargo run --release --bin openfdd_edge -- auth init --path ../workspace/auth.env.local --force)
-          fi
+          cat > workspace/auth.env.local <<'EOF'
+          OFDD_AUTH_REQUIRED=true
+          OFDD_AUTH_SECRET=ci-test-secret-openfdd-edge-do-not-use-in-production
+          OFDD_OPERATOR_USER=operator
+          OFDD_OPERATOR_PASSWORD=ci-operator-pass
+          OFDD_INTEGRATOR_USER=integrator
+          OFDD_INTEGRATOR_PASSWORD=ci-integrator-pass
+          OFDD_AGENT_USER=agent
+          OFDD_AGENT_PASSWORD=ci-agent-pass
+          EOF
           chmod 600 workspace/auth.env.local
 
       - name: Compose build
