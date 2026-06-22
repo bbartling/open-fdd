@@ -2,7 +2,7 @@
 
 Validates JWT auth, generated credentials, login screen, and RBAC.
 
-> Requires the auth/security feature merged to `rust-rewrite-1` (`openfdd_edge auth init`, login UI).
+> Requires Rust edge auth on `master` (`openfdd_edge auth init`, login UI).
 
 ## Generate credentials
 

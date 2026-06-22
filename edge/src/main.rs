@@ -50,12 +50,7 @@ fn main() -> std::io::Result<()> {
 }
 
 fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
-    let mut buf = [0_u8; 32768];
-    let n = stream.read(&mut buf)?;
-    if n == 0 {
-        return Ok(());
-    }
-    let req = String::from_utf8_lossy(&buf[..n]);
+    let req = read_http_request(&mut stream)?;
     let (method, path, headers, body) = parse_request(&req);
     let clean_path = path.split('?').next().unwrap_or(path.as_str()).to_string();
 
@@ -571,6 +566,60 @@ fn handle_fdd_wires_dynamic(
         }
         _ => None,
     }
+}
+
+fn read_http_request(stream: &mut TcpStream) -> std::io::Result<String> {
+    let mut buf = Vec::with_capacity(4096);
+    let mut chunk = [0_u8; 4096];
+    loop {
+        let n = stream.read(&mut chunk)?;
+        if n == 0 {
+            break;
+        }
+        buf.extend_from_slice(&chunk[..n]);
+        if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+            break;
+        }
+        if buf.len() > 65536 {
+            break;
+        }
+    }
+    if buf.is_empty() {
+        return Ok(String::new());
+    }
+    let header_end = buf
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .map(|i| i + 4)
+        .unwrap_or(buf.len());
+    let headers = &buf[..header_end];
+    let content_length = headers
+        .split(|&b| b == b'\n')
+        .filter_map(|line| {
+            let line = if line.ends_with(b"\r") {
+                &line[..line.len() - 1]
+            } else {
+                line
+            };
+            let line = std::str::from_utf8(line).ok()?;
+            let (name, value) = line.split_once(':')?;
+            if name.trim().eq_ignore_ascii_case("content-length") {
+                value.trim().parse::<usize>().ok()
+            } else {
+                None
+            }
+        })
+        .next()
+        .unwrap_or(0);
+    let body_start = header_end;
+    while buf.len().saturating_sub(body_start) < content_length {
+        let n = stream.read(&mut chunk)?;
+        if n == 0 {
+            break;
+        }
+        buf.extend_from_slice(&chunk[..n]);
+    }
+    Ok(String::from_utf8_lossy(&buf).into_owned())
 }
 
 fn parse_request(req: &str) -> (String, String, Vec<(String, String)>, String) {

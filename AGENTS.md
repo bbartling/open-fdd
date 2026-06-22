@@ -4,7 +4,7 @@ Use Rust lifecycle scripts and JSON API. No Python runtime required.
 
 ## Start session
 
-After auth merge (`feature/rust-auth-security-parity`):
+After auth merge on `master`:
 
 ```bash
 INTEGRATOR_PW="$(grep '^OFDD_INTEGRATOR_PASSWORD=' ~/open-fdd/workspace/auth.env.local | cut -d= -f2-)"

@@ -6,7 +6,7 @@ on:
       - "v*.*.*"
       - "open-fdd-v*"
     branches:
-      - rust-rewrite-1
+      - master
   workflow_dispatch:
     inputs:
       image_tag:

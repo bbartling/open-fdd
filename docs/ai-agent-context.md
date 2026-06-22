@@ -35,4 +35,4 @@ POST /api/rules/batch
 
 ## GHCR publish prompt
 
-Run `cargo fmt`, `cargo test`, `docker build`, push via `.github/workflows/rust-ghcr.yml`, verify multi-arch digest, update README install URL, open PR against `rust-rewrite-1`.
+Run `cargo fmt`, `cargo test`, `docker build`, push via `.github/workflows/rust-ghcr.yml`, verify multi-arch digest, update README install URL, open PR against `master`.

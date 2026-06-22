@@ -7,7 +7,7 @@
 | `.github/workflows/ci.yml` | Rust fmt/check/test, frontend syntax, Docker build, compose API smoke |
 | `.github/workflows/rust-ci.yml` | Extended Rust CI, secret scan, lifecycle script syntax |
 | `.github/workflows/rust-ghcr.yml` | Multi-arch publish to `ghcr.io/bbartling/openfdd-edge-rust` |
-| `.github/workflows/security.yml` | Deny legacy Python project shape on `rust-rewrite-1` |
+| `.github/workflows/security.yml` | Deny legacy Python project shape on `master` |
 
 ## Compose smoke (automated)
 
@@ -32,12 +32,12 @@ Live BACnet compose overlay: `docker-compose.bacnet-live.yml`
 
 ```bash
 git fetch origin
-git checkout rust-rewrite-1
-git pull origin rust-rewrite-1
+git checkout master
+git pull origin master
 git checkout -b feature/your-change
 # … work …
 git push -u origin feature/your-change
-gh pr create --base rust-rewrite-1
+gh pr create --base master
 ```
 
 Legacy Python publish workflows remain for historical tags only. The Rust rewrite line does not ship a PyPI runtime.

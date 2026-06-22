@@ -4,7 +4,7 @@
 
 ```bash
 curl -fsSL -o /tmp/openfdd_rust_edge_bootstrap.sh \
-  https://github.com/bbartling/open-fdd/raw/refs/heads/rust-rewrite-1/scripts/openfdd_rust_edge_bootstrap.sh
+  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_rust_edge_bootstrap.sh
 bash /tmp/openfdd_rust_edge_bootstrap.sh --start
 ```
 

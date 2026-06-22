@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Bootstrap a fresh Rust Open-FDD edge host from GHCR (no source checkout required on device).
 #
-#   curl -fsSL https://github.com/bbartling/open-fdd/raw/refs/heads/rust-rewrite-1/scripts/openfdd_rust_edge_bootstrap.sh -o /tmp/openfdd_rust_edge_bootstrap.sh
+#   curl -fsSL https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_rust_edge_bootstrap.sh -o /tmp/openfdd_rust_edge_bootstrap.sh
 #   bash /tmp/openfdd_rust_edge_bootstrap.sh --start
 set -euo pipefail
 
 OPENFDD_ROOT="${OPENFDD_ROOT:-$HOME/open-fdd}"
-OPENFDD_REPO_REF="${OPENFDD_REPO_REF:-rust-rewrite-1}"
+OPENFDD_REPO_REF="${OPENFDD_REPO_REF:-master}"
 OPENFDD_IMAGE_TAG="${OPENFDD_IMAGE_TAG:-latest}"
 GITHUB_REPO="bbartling/open-fdd"
 DO_START=false

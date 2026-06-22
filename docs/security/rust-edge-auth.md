@@ -1,6 +1,6 @@
 # Rust edge authentication
 
-Open-FDD on the `rust-rewrite-1` branch implements edge authentication entirely in Rust. Python/FastAPI auth is not used at runtime.
+Open-FDD on the `master` branch (3.2 Rust edge) implements edge authentication entirely in Rust.
 
 ## Credential file
 

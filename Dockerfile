@@ -13,6 +13,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=builder /app/target/release/open_fdd_edge_prototype /usr/local/bin/open_fdd_edge_prototype
+COPY --from=builder /app/target/release/openfdd_edge /usr/local/bin/openfdd_edge
 COPY frontend ./frontend
 
 ENV FRONTEND_DIR=/app/frontend \

@@ -1,0 +1,18 @@
+# Open-FDD production reverse proxy (Caddy 2).
+# Self-signed TLS for lab / remote pen-test.
+
+127.0.0.1, localhost {
+	tls internal
+	encode gzip zstd
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+	reverse_proxy openfdd-bridge:8080
+}
+
+:80 {
+	redir https://localhost{uri} permanent
+}
