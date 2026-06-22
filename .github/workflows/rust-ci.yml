@@ -1,0 +1,64 @@
+name: Rust Edge CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  rust:
+    name: Rust format, clippy, and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.93.0
+          components: rustfmt, clippy
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+        continue-on-error: true
+      - name: Test
+        run: cargo test --workspace --all-targets -p open_fdd_edge_prototype
+      - name: Secret scan
+        run: |
+          ! git ls-files | xargs grep -l 'OFDD_AUTH_SECRET=.' 2>/dev/null | grep -v '.example' | grep -v 'site_lib'
+          test -f .gitignore
+          grep -q 'auth.env.local' .gitignore || grep -q '/workspace' .gitignore
+
+  frontend:
+    name: Frontend syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --check frontend/app.js
+
+  docker:
+    name: Docker build and compose config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          mkdir -p workspace/bacnet/commissioning
+          echo 'OFDD_AUTH_REQUIRED=true' > workspace/auth.env.local
+          touch workspace/data.env.local workspace/bacnet/commissioning/commission.env
+          export OPENFDD_COMPOSE_ROOT="$PWD"
+          docker compose -f docker/compose.edge.rust.yml config
+      - run: docker build -t openfdd-edge-rust:ci .
+
+  lifecycle-scripts:
+    name: Bootstrap script syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          bash -n scripts/openfdd_rust_site_lib.sh
+          bash -n scripts/openfdd_rust_edge_bootstrap.sh
+          bash -n scripts/openfdd_rust_site_update.sh
+          bash -n scripts/openfdd_rust_site_backup.sh
+          bash -n scripts/openfdd_rust_check_ghcr_platform.sh
+          bash -n scripts/openfdd_rust_edge_validate.sh
