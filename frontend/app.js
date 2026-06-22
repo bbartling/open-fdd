@@ -1,6 +1,6 @@
 
 // Open-FDD Rust Edge UI - REAL DEAL BACNET CSV BUILD
-// Niagara-style driver tree + focused tabs.
+// Open-FDD driver tree + focused tabs.
 // Legacy tabs are removed. FDD is DataFusion SQL. Data model is Haystack + assignment graph.
 
 const { useEffect, useMemo, useState } = React;
