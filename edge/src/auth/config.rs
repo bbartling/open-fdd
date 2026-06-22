@@ -51,9 +51,24 @@ impl AuthConfig {
             .unwrap_or(false);
 
         let mut users = HashMap::new();
-        add_user(&mut users, "OFDD_OPERATOR_USER", "OFDD_OPERATOR_PASSWORD", "operator");
-        add_user(&mut users, "OFDD_INTEGRATOR_USER", "OFDD_INTEGRATOR_PASSWORD", "integrator");
-        add_user(&mut users, "OFDD_AGENT_USER", "OFDD_AGENT_PASSWORD", "agent");
+        add_user(
+            &mut users,
+            "OFDD_OPERATOR_USER",
+            "OFDD_OPERATOR_PASSWORD",
+            "operator",
+        );
+        add_user(
+            &mut users,
+            "OFDD_INTEGRATOR_USER",
+            "OFDD_INTEGRATOR_PASSWORD",
+            "integrator",
+        );
+        add_user(
+            &mut users,
+            "OFDD_AGENT_USER",
+            "OFDD_AGENT_PASSWORD",
+            "agent",
+        );
 
         Self {
             required,
@@ -72,7 +87,9 @@ impl AuthConfig {
             return Err("OFDD_AUTH_SECRET is missing or too weak".to_string());
         }
         if self.users.len() < 3 {
-            return Err("operator, integrator, and agent credentials must be configured".to_string());
+            return Err(
+                "operator, integrator, and agent credentials must be configured".to_string(),
+            );
         }
         Ok(())
     }

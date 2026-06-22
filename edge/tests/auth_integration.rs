@@ -31,7 +31,8 @@ impl Server {
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
         let port = pick_port();
-        let workspace = std::env::temp_dir().join(format!("openfdd-auth-it-{}", std::process::id()));
+        let workspace =
+            std::env::temp_dir().join(format!("openfdd-auth-it-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&workspace);
         std::fs::create_dir_all(&workspace).unwrap();
         let auth_path = workspace.join("auth.env.local");
@@ -97,7 +98,11 @@ impl Drop for Server {
 fn http_raw(method: &str, url: &str, body: Option<&str>, bearer: Option<&str>) -> (u16, String) {
     let url = url.strip_prefix("http://").unwrap();
     let (host_port, path) = url.split_once('/').unwrap_or((url, ""));
-    let path = if path.is_empty() { "/" } else { &format!("/{path}") };
+    let path = if path.is_empty() {
+        "/"
+    } else {
+        &format!("/{path}")
+    };
     let mut stream = match TcpStream::connect(host_port) {
         Ok(s) => s,
         Err(_) => return (0, String::new()),
@@ -163,13 +168,12 @@ fn login_integrator_and_access_stack() {
     let (status, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
     assert_eq!(status, 200);
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
-    let token = json["token"].as_str().or(json["access_token"].as_str()).unwrap();
-    let (stack_status, stack_body) = http_raw(
-        "GET",
-        &srv.url("/api/health/stack"),
-        None,
-        Some(token),
-    );
+    let token = json["token"]
+        .as_str()
+        .or(json["access_token"].as_str())
+        .unwrap();
+    let (stack_status, stack_body) =
+        http_raw("GET", &srv.url("/api/health/stack"), None, Some(token));
     assert_eq!(stack_status, 200);
     assert!(stack_body.contains("\"ok\":true"));
 }
@@ -206,7 +210,10 @@ fn operator_forbidden_on_modbus_scan() {
     let login_body = login_json("operator", op_pw);
     let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
-    let token = json["token"].as_str().or(json["access_token"].as_str()).unwrap();
+    let token = json["token"]
+        .as_str()
+        .or(json["access_token"].as_str())
+        .unwrap();
     let (status, _) = http_post_json(&srv.url("/api/modbus/scan"), "{}", Some(token));
     assert_eq!(status, 403);
 }

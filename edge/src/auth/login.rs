@@ -52,7 +52,10 @@ fn check_rate_limit(username: &str) -> Result<(), String> {
 
 fn note_failure(username: &str) {
     if let Ok(mut state) = rate_state().lock() {
-        let entry = state.failures.entry(username.to_string()).or_insert((0, Instant::now()));
+        let entry = state
+            .failures
+            .entry(username.to_string())
+            .or_insert((0, Instant::now()));
         entry.0 += 1;
         entry.1 = Instant::now();
     }
@@ -66,11 +69,17 @@ fn clear_failures(username: &str) {
 
 pub fn authenticate(config: &AuthConfig, body: &Value) -> Result<LoginResult, String> {
     if body.get("role").is_some() {
-        audit::log_event("login_rejected_self_mint", json!({"reason": "client supplied role"}));
+        audit::log_event(
+            "login_rejected_self_mint",
+            json!({"reason": "client supplied role"}),
+        );
         return Err("role cannot be supplied by client".into());
     }
     if body.get("sub").is_some() {
-        audit::log_event("login_rejected_self_mint", json!({"reason": "client supplied sub"}));
+        audit::log_event(
+            "login_rejected_self_mint",
+            json!({"reason": "client supplied sub"}),
+        );
         return Err("sub cannot be supplied by client".into());
     }
 
@@ -90,22 +99,25 @@ pub fn authenticate(config: &AuthConfig, body: &Value) -> Result<LoginResult, St
 
     let Some((expected_password, role)) = config.users.get(username) else {
         note_failure(username);
-        audit::log_event("login_failure", json!({"username": username, "reason": "unknown_user"}));
+        audit::log_event(
+            "login_failure",
+            json!({"username": username, "reason": "unknown_user"}),
+        );
         return Err("invalid credentials".into());
     };
 
     if !constant_time_eq(password, expected_password) {
         note_failure(username);
-        audit::log_event("login_failure", json!({"username": username, "reason": "bad_password"}));
+        audit::log_event(
+            "login_failure",
+            json!({"username": username, "reason": "bad_password"}),
+        );
         return Err("invalid credentials".into());
     }
 
     clear_failures(username);
     let (token, expires_at) = super::jwt::create_token(config, username, role);
-    audit::log_event(
-        "login_success",
-        json!({"username": username, "role": role}),
-    );
+    audit::log_event("login_success", json!({"username": username, "role": role}));
 
     Ok(LoginResult {
         token,
@@ -138,7 +150,10 @@ mod tests {
         let mut users = HashMap::new();
         users.insert(
             "integrator".to_string(),
-            ("integrator-test-password-1234567890".to_string(), "integrator"),
+            (
+                "integrator-test-password-1234567890".to_string(),
+                "integrator",
+            ),
         );
         users.insert(
             "operator".to_string(),
@@ -160,7 +175,8 @@ mod tests {
     #[test]
     fn login_success_integrator() {
         let cfg = cfg_with_users();
-        let body = json!({"username":"integrator","password":"integrator-test-password-1234567890"});
+        let body =
+            json!({"username":"integrator","password":"integrator-test-password-1234567890"});
         let result = authenticate(&cfg, &body).unwrap();
         assert_eq!(result.role, "integrator");
     }
