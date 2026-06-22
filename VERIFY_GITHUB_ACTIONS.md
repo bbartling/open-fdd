@@ -1,35 +1,29 @@
-# GitHub Actions added
+# GitHub Actions (Open-FDD 3.2.0 Rust edge)
 
-This branch should now run:
+Primary workflow: `.github/workflows/ci.yml`
 
-- Rust format/check/test
-- Frontend syntax check
-- Legacy UI guard
+Runs on every push/PR:
+
+- Rust 1.93 format / check / test
+- Frontend syntax + legacy UI guard
 - Docker image build
-- Docker Compose smoke test
-- Auth login smoke
-- BACnet driver tree smoke
-- BACnet override scan-once smoke
-- BACnet override CSV export smoke
-- Workspace CSV file existence checks
-- Python project-shape guard
+- Docker Compose smoke:
+  - health + JWT login
+  - BACnet driver tree + override scan + CSV export
+  - Modbus simulated scan/read
+  - workspace CSV files exist
 
-Important PR branch note:
+Live field-bus validation is manual (OT LAN):
 
-If the PR source branch is `rust-rewrite-1`, update the Linux checkout from that branch, not a stale local `pr-354` branch:
+- BACnet: `VERIFY_BACNET_NIC.md`, `VERIFY_BACNET_REALDEAL.md`, `docker-compose.bacnet-live.yml`
+- Modbus: `VERIFY_MODBUS.md` (RPi `192.168.204.14:1502`)
 
-```bash
-git status
-git diff README.md
-git stash push -m "local README before PR354 sync" README.md
-git fetch origin rust-rewrite-1
-git switch -C rust-rewrite-1 origin/rust-rewrite-1
-```
+Legacy Python publish workflows remain for historical tags only; the 3.2.0 line is 100% Rust.
 
-Or refresh a local PR branch directly from the PR ref:
+Branch flow:
 
 ```bash
-git fetch origin pull/354/head
-git switch pr-354
-git reset --hard FETCH_HEAD
+git checkout release/3.2.0   # or master after merge
+git pull
+docker compose up --build
 ```

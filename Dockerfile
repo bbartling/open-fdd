@@ -1,6 +1,6 @@
 # Fast Docker Desktop prototype: 100% Rust server + React/Plotly static UI.
 # The production backend skeleton is in ./backend.
-FROM rust:1.85-bookworm AS builder
+FROM rust:1.93-bookworm AS builder
 WORKDIR /app
 COPY edge ./edge
 WORKDIR /app/edge

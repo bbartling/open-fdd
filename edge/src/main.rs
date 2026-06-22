@@ -124,15 +124,22 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("POST", "/api/rules/save") => require_role(&mut stream, &principal, &["integrator", "agent"], serde_json::from_str::<Value>(fdd::datafusion_sql::save_json()).unwrap()),
         ("POST", "/api/rules/batch") => require_role(&mut stream, &principal, &["integrator", "agent"], serde_json::from_str::<Value>(fdd::datafusion_sql::batch_json()).unwrap()),
         ("GET", "/api/arrow/demo") => raw_json(&mut stream, historian::arrow_table::demo_rows_json()),
-        ("POST", "/api/bacnet/whois") => raw_json(&mut stream, drivers::bacnet::whois_json()),
-        ("GET", "/api/bacnet/points") => raw_json(&mut stream, drivers::bacnet::points_json()),
+        ("POST", "/api/bacnet/whois") => { let body = drivers::bacnet::whois_json(); raw_json(&mut stream, &body) },
+        ("GET", "/api/bacnet/points") => { let body = drivers::bacnet::points_json(); raw_json(&mut stream, &body) },
         ("GET", "/api/bacnet/commission/status") => { let body = drivers::bacnet::commission_status_json(); raw_json(&mut stream, &body) },
         ("GET", "/api/bacnet/poll/status") => { let body = drivers::bacnet::poll_status_json(); raw_json(&mut stream, &body) },
         ("GET", "/api/bacnet/driver/tree") => { let body = drivers::bacnet::driver_tree_json(); raw_json(&mut stream, &body) },
-        ("POST", "/api/bacnet/driver/sync-discovery") => require_role(&mut stream, &principal, &["integrator", "agent"], json!({"ok": true, "synced": true, "devices": 1, "points": 3})),
+        ("POST", "/api/bacnet/driver/sync-discovery") => require_role(&mut stream, &principal, &["integrator", "agent"], drivers::bacnet::sync_discovery_value()),
         ("PATCH", "/api/bacnet/driver/point") => require_role(&mut stream, &principal, &["integrator", "agent"], json!({"ok": true, "updated": "point polling settings"})),
-        ("POST", "/api/bacnet/point-discovery") => require_role(&mut stream, &principal, &["integrator", "agent"], json!({"ok": true, "status": "demo registry loaded"})),
-        ("POST", "/api/bacnet/read") => raw_json(&mut stream, drivers::bacnet::read_present_value_json()),
+        ("POST", "/api/bacnet/point-discovery") => {
+            let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
+            require_role(&mut stream, &principal, &["integrator", "agent"], drivers::bacnet::point_discovery_value(&payload))
+        },
+        ("POST", "/api/bacnet/read") => {
+            let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
+            let response_body = drivers::bacnet::read_present_value_json(&payload);
+            raw_json(&mut stream, &response_body)
+        },
         ("GET", "/api/bacnet/overrides/status") => { let body = drivers::bacnet::overrides_json(); raw_json(&mut stream, &body) },
         ("POST", "/api/bacnet/overrides/scan-once") => require_role(&mut stream, &principal, &["integrator", "agent"], drivers::bacnet::scan_once_value()),
         ("GET", "/api/bacnet/overrides/export") => { let body = drivers::bacnet::overrides_csv(); response(&mut stream, "200 OK", "text/csv; charset=utf-8", body.as_bytes()) },
@@ -149,9 +156,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
                 status_json(&mut stream, "403 Forbidden", json!({"ok": false, "error": "BACnet writes require integrator role and approved=true"}))
             }
         },
-        ("GET", "/api/modbus/points") => raw_json(&mut stream, drivers::modbus::points_json()),
-        ("POST", "/api/modbus/scan") => require_role(&mut stream, &principal, &["integrator", "agent"], serde_json::from_str::<Value>(&drivers::modbus::scan_json()).unwrap()),
-        ("POST", "/api/modbus/read") => raw_json(&mut stream, drivers::modbus::read_json()),
+        ("GET", "/api/modbus/points") => { let body = drivers::modbus::points_json(); raw_json(&mut stream, &body) },
+        ("GET", "/api/modbus/commission/status") => { let body = drivers::modbus::commission_status_json(); raw_json(&mut stream, &body) },
+        ("POST", "/api/modbus/scan") => require_role(&mut stream, &principal, &["integrator", "agent"], drivers::modbus::scan_value()),
+        ("POST", "/api/modbus/read") => {
+            let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
+            let response_body = drivers::modbus::read_value(&payload);
+            raw_json(&mut stream, &response_body)
+        },
         ("GET", "/api/json-api/sources") => raw_json(&mut stream, drivers::json_api::sources_json()),
         ("POST", "/api/json-api/poll-once") => require_role(&mut stream, &principal, &["integrator", "agent"], serde_json::from_str::<Value>(drivers::json_api::poll_once_json()).unwrap()),
         ("POST", "/api/json-api/register") => require_role(&mut stream, &principal, &["integrator", "agent"], serde_json::from_str::<Value>(drivers::json_api::register_json()).unwrap()),

@@ -1,8 +1,12 @@
-# Open-FDD Rust Edge
+# Open-FDD Rust Edge 3.2.0
 
-Rust-only Open-FDD edge prototype: API, dashboard, historian, BACnet/Modbus/JSON/Haystack drivers, DataFusion SQL fault detection, JWT agent API, and safe Docker lifecycle scripts.
+Rust-only Open-FDD edge: API, dashboard, historian, BACnet/Modbus/JSON/Haystack drivers, DataFusion SQL fault detection, JWT agent API, and safe Docker lifecycle scripts.
 
-This branch intentionally removes the Python/PyPI project shape. The goal is a small Rust-first base that can later grow into production crates.
+**3.2.0** wires live field-bus drivers in Rust:
+- BACnet via [`rusty-bacnet`](https://github.com/jscott3201/rusty-bacnet) (device 5007 on MS/TP via router)
+- Modbus/TCP via native Rust client (RPi temp sensor at `192.168.204.14:1502`)
+
+No Python, bacpypes, or PyPI runtime on this line.
 
 ## Service shape
 
@@ -125,7 +129,7 @@ edge/src/
     mod.rs
 ```
 
-Driver code and the FDD/DataFusion SQL facade are now present in the same Rust crate layout. The fast Docker prototype uses deterministic simulator-backed drivers so the API and UI are testable without field hardware. Production wiring can swap those facades to `rusty-bacnet`, `rusty-modbus`, `rusty-haystack`, Apache Arrow, and DataFusion without changing the external API shape.
+Driver code and the FDD/DataFusion SQL facade are in the same Rust crate layout (**v3.2.0**). **Live BACnet** uses [`rusty-bacnet`](https://github.com/jscott3201/rusty-bacnet) v0.9. **Live Modbus** uses native Modbus/TCP reads in `modbus_live.rs` (validated against RPi `192.168.204.14:1502`). Set `OPENFDD_BACNET_MODE=simulated` and `OPENFDD_MODBUS_MODE=simulated` for CI; set `live` for OT LAN hardware.
 
 
 ## UI direction
@@ -248,9 +252,15 @@ Generate `.env` safely:
 ./scripts/openfdd_bacnet_nic_setup.sh
 ```
 
-For live BACnet/IP broadcast testing on Linux, use host networking:
+For live BACnet/IP broadcast testing on Linux, use host networking and set router/MS/TP env vars in `.env`:
 
 ```bash
+OPENFDD_BACNET_MODE=live
+OPENFDD_BACNET_ROUTER_IP=192.168.204.200
+OPENFDD_BACNET_MSTP_NET=2000
+OPENFDD_BACNET_DISCOVER_LOW=5007
+OPENFDD_BACNET_DISCOVER_HIGH=5007
+
 docker compose -f docker-compose.yml -f docker-compose.bacnet-live.yml --env-file .env up --build
 ```
 
