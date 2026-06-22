@@ -7,30 +7,78 @@ const { useEffect, useMemo, useState } = React;
 
 const api = {
   token: localStorage.getItem("openfdd_token") || "",
+  session: (() => {
+    try { return JSON.parse(localStorage.getItem("openfdd_session") || "null"); }
+    catch { return null; }
+  })(),
   headers() {
     const h = { "Content-Type": "application/json" };
     if (this.token) h.Authorization = `Bearer ${this.token}`;
     return h;
   },
-  async login(role = "agent") {
+  decodeJwt(token) {
+    try {
+      const part = token.split(".")[1];
+      const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  },
+  tokenExpired(token = this.token) {
+    const claims = this.decodeJwt(token);
+    if (!claims || !claims.exp) return true;
+    return claims.exp * 1000 <= Date.now();
+  },
+  restoreSession() {
+    if (!this.token || this.tokenExpired()) {
+      this.logout(false);
+      return false;
+    }
+    return true;
+  },
+  async login(username, password) {
     const r = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sub: "ui-agent", role })
+      body: JSON.stringify({ username, password })
     });
-    if (!r.ok) throw new Error(`login ${r.status}`);
-    const j = await r.json();
-    this.token = j.access_token;
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `Login failed (${r.status})`);
+    this.token = j.token || j.access_token || "";
+    this.session = {
+      username: j.subject || username,
+      role: j.role || "operator",
+      expires_at: j.expires_at || null
+    };
     localStorage.setItem("openfdd_token", this.token);
+    localStorage.setItem("openfdd_session", JSON.stringify(this.session));
     return j;
+  },
+  logout(callServer = true) {
+    if (callServer && this.token) {
+      fetch("/api/auth/logout", { method: "POST", headers: this.headers() }).catch(() => {});
+    }
+    this.token = "";
+    this.session = null;
+    localStorage.removeItem("openfdd_token");
+    localStorage.removeItem("openfdd_session");
   },
   async get(path) {
     const r = await fetch(path, { headers: this.headers() });
+    if (r.status === 401) {
+      this.logout(false);
+      throw new Error("Session expired — sign in again");
+    }
     if (!r.ok) throw new Error(`${path} ${r.status}`);
     return r.json();
   },
   async post(path, body = {}) {
     const r = await fetch(path, { method: "POST", headers: this.headers(), body: JSON.stringify(body) });
+    if (r.status === 401) {
+      this.logout(false);
+      throw new Error("Session expired — sign in again");
+    }
     if (!r.ok) throw new Error(`${path} ${r.status}`);
     return r.json();
   }
@@ -292,15 +340,68 @@ function WireSheet({ assignments }) {
   );
 }
 
+function LoginScreen({ onSuccess }) {
+  const [username, setUsername] = useState("integrator");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await api.login(username.trim(), password);
+      onSuccess();
+    } catch (err) {
+      setError(String(err.message || err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return React.createElement("div", { className: "login-shell" },
+    React.createElement("form", { className: "login-card", onSubmit: submit },
+      React.createElement("div", { className: "eyebrow" }, "Open-FDD Edge"),
+      React.createElement("h1", null, "Sign in"),
+      React.createElement("p", { className: "login-copy" }, "Use credentials from workspace/auth.env.local. Secrets are never shown in logs."),
+      React.createElement("label", { className: "login-label" }, "Username"),
+      React.createElement("input", {
+        className: "login-input",
+        autoComplete: "username",
+        value: username,
+        onChange: (e) => setUsername(e.target.value),
+        disabled: busy
+      }),
+      React.createElement("label", { className: "login-label" }, "Password"),
+      React.createElement("input", {
+        className: "login-input",
+        type: "password",
+        autoComplete: "current-password",
+        value: password,
+        onChange: (e) => setPassword(e.target.value),
+        disabled: busy
+      }),
+      error && React.createElement("div", { className: "error login-error" }, error),
+      React.createElement("button", { className: "login-submit", type: "submit", disabled: busy }, busy ? "Signing in…" : "Sign in")
+    )
+  );
+}
+
 function App() {
+  const [authed, setAuthed] = useState(() => api.restoreSession());
   const [tab, setTab] = useState("dashboard");
   const [theme, setTheme] = useState(localStorage.getItem("openfdd_theme") || "dark");
   const [state, setState] = useState({ health: {}, tree: {}, overrides: {}, fdd: {}, rows: [], model: {}, assignments: {}, bindings: {} });
   const [error, setError] = useState("");
+  const [online, setOnline] = useState(false);
 
   async function load() {
+    if (!api.restoreSession()) {
+      setAuthed(false);
+      return;
+    }
     try {
-      if (!api.token) await api.login("agent");
       const [health, tree, overrides, fdd, rows, model, assignments, bindings] = await Promise.all([
         api.get("/api/health"),
         api.get("/api/bacnet/driver/tree"),
@@ -312,14 +413,21 @@ function App() {
         api.get("/api/control/cdl/bindings")
       ]);
       setState({ health, tree, overrides, fdd, rows, model, assignments, bindings });
+      setOnline(true);
       setError("");
     } catch (err) {
+      setOnline(false);
+      if (String(err).includes("Session expired")) setAuthed(false);
       setError(String(err));
     }
   }
 
   useEffect(() => { document.body.dataset.theme = theme; localStorage.setItem("openfdd_theme", theme); }, [theme]);
-  useEffect(() => { load(); }, []);
+  useEffect(() => { if (authed) load(); }, [authed]);
+
+  if (!authed) {
+    return React.createElement(LoginScreen, { onSuccess: () => setAuthed(true) });
+  }
 
   let body = null;
   if (tab === "dashboard") body = React.createElement(Dashboard, { health: state.health, overrides: state.overrides, tree: state.tree });
@@ -336,7 +444,13 @@ function App() {
         React.createElement("h1", null, "Open-FDD")
       ),
       React.createElement("div", { className: "top-actions" },
+        React.createElement("div", { className: "auth-status" },
+          React.createElement("span", { className: cx("status-dot", online && "online") }),
+          React.createElement("span", null, online ? "API online" : "API offline"),
+          React.createElement("span", { className: "auth-meta" }, `user ${api.session?.username || "—"} · role ${api.session?.role || "—"} · auth ${state.health?.auth_required ? "required" : "optional"}`)
+        ),
         React.createElement("button", { onClick: load }, "Refresh"),
+        React.createElement("button", { onClick: () => { api.logout(); setAuthed(false); } }, "Logout"),
         React.createElement("button", { onClick: () => setTheme(theme === "dark" ? "light" : "dark") }, theme === "dark" ? "Light" : "Dark")
       )
     ),
