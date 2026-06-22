@@ -3,15 +3,31 @@ name = "open_fdd_edge_prototype"
 version = "3.2.0"
 edition = "2021"
 
+[[bin]]
+name = "open_fdd_edge_prototype"
+path = "src/main.rs"
+
+[[bin]]
+name = "bench_5007_datafusion_smoke"
+path = "src/bin/bench_5007_datafusion_smoke.rs"
+
 [dependencies]
+arrow = { version = "53", default-features = false, features = ["chrono-tz"] }
 base64 = "0.22"
 bacnet-client = "0.9"
 bacnet-encoding = "0.9"
 bacnet-transport = "0.9"
 bacnet-types = "0.9"
-hex = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+csv = "1"
+datafusion = { version = "42", default-features = false, features = ["nested_expressions"] }
+hex = "0.4"
 hmac = "0.12"
-sha2 = "0.10"
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[dev-dependencies]
+tempfile = "3"

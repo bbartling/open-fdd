@@ -5,4 +5,5 @@
 //! - register queryable tables into DataFusion.
 //! - keep protocol drivers decoupled from FDD rule execution.
 
+pub mod bench_telemetry;
 pub mod arrow_table;
