@@ -1,4 +1,7 @@
 /target
+/edge/target
+/edge/workspace
 /.env
 /workspace
+/workspace/reports/bench_5007_datafusion_smoke
 .DS_Store

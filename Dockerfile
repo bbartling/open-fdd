@@ -4,11 +4,12 @@ FROM rust:1.93-bookworm AS builder
 WORKDIR /app
 COPY edge ./edge
 WORKDIR /app/edge
-RUN cargo build --release
+RUN cargo build --release --bins
 
 FROM debian:bookworm-slim
 WORKDIR /app
 COPY --from=builder /app/edge/target/release/open_fdd_edge_prototype /usr/local/bin/open_fdd_edge_prototype
+COPY --from=builder /app/edge/target/release/bench_5007_datafusion_smoke /usr/local/bin/bench_5007_datafusion_smoke
 COPY frontend ./frontend
 ENV FRONTEND_DIR=/app/frontend
 ENV PORT=8080
