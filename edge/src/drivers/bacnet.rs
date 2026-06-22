@@ -6,6 +6,7 @@
 //! data so Docker/CI runs without an OT BACnet network.
 
 use super::bacnet_live;
+use super::framework::{self, is_bacnet_live};
 use chrono::Utc;
 use serde_json::{json, Value};
 use std::env;
@@ -82,73 +83,143 @@ fn bench5007_device() -> Value {
     })
 }
 
-fn default_registry() -> Value {
+fn simulated_bacnet_driver() -> Value {
     json!({
-      "site_id":"demo",
-      "building_id":"rust-edge-demo",
-      "bacnet_config": bacnet_config_value(),
-      "drivers":[
+      "id":"bacnet-ip",
+      "label":"BACnet/IP",
+      "status":"online",
+      "enabled":true,
+      "mode":"simulated",
+      "source":"simulated",
+      "override_scan":{"enabled":true,"cadence_seconds":3600,"method":"ReadProperty(priority-array) on writable points"},
+      "devices":[
         {
-          "id":"bacnet-ip",
-          "label":"BACnet/IP",
-          "status":"online",
-          "enabled":true,
-          "override_scan":{"enabled":true,"cadence_seconds":3600,"method":"ReadProperty(priority-array) on writable points"},
-          "devices":[
-            bench5007_device(),
-            {
-              "device_instance":1001,
-              "name":"AHU-1 Controller (simulated)",
-              "address":"192.168.1.100:47808",
-              "polling_enabled":true,
-              "points":[
-                {"id":"bacnet:1001:analog-input:1","device_instance":1001,"object_id":[0,1],"name":"AHU-1 SAT","polling_enabled":true,"writable":false,"haystack_id":"point:sat"},
-                {"id":"bacnet:1001:analog-value:4","device_instance":1001,"object_id":[2,4],"name":"AHU-1 SAT Setpoint","polling_enabled":true,"writable":true,"haystack_id":"point:sat-sp"},
-                {"id":"bacnet:1001:binary-value:8","device_instance":1001,"object_id":[5,8],"name":"AHU-1 Fan Command","polling_enabled":true,"writable":true,"haystack_id":"point:fan-cmd"}
-              ]
-            }
+          "device_instance":1001,
+          "name":"AHU-1 Controller (simulated)",
+          "address":"192.168.1.100:47808",
+          "polling_enabled":true,
+          "points":[
+            {"id":"bacnet:1001:analog-input:1","device_instance":1001,"object_id":[0,1],"name":"AHU-1 SAT","polling_enabled":true,"writable":false,"haystack_id":"point:sat","source":"simulated"},
+            {"id":"bacnet:1001:analog-value:4","device_instance":1001,"object_id":[2,4],"name":"AHU-1 SAT Setpoint","polling_enabled":true,"writable":true,"haystack_id":"point:sat-sp","source":"simulated"},
+            {"id":"bacnet:1001:binary-value:8","device_instance":1001,"object_id":[5,8],"name":"AHU-1 Fan Command","polling_enabled":true,"writable":true,"haystack_id":"point:fan-cmd","source":"simulated"}
           ]
-        },
-        {
+        }
+      ]
+    })
+}
+
+fn live_bacnet_driver_empty() -> Value {
+    json!({
+      "id":"bacnet-ip",
+      "label":"BACnet/IP",
+      "status":"degraded",
+      "enabled":true,
+      "mode":"live",
+      "source":"real",
+      "last_error":"No discovered devices in workspace snapshot; run sync-discovery or point-discovery",
+      "override_scan":{"enabled":true,"cadence_seconds":3600,"method":"ReadProperty(priority-array) on writable points"},
+      "devices":[]
+    })
+}
+
+fn shared_non_bacnet_drivers() -> Vec<Value> {
+    vec![
+        json!({
           "id":"modbus-tcp",
           "label":"Modbus/TCP",
           "status":"online",
           "enabled":true,
+          "mode":"simulated",
+          "source":"simulated",
           "devices":[
             {
               "unit_id":1,
               "name":"Plant Modbus Gateway",
               "address":"192.168.1.50:502",
               "points":[
-                {"id":"modbus:tcp:1:40001","name":"CHW Plant Supply Temp","register":40001,"function":"holding_register","haystack_id":"point:chwst"},
-                {"id":"modbus:tcp:1:40002","name":"Pump Speed Command","register":40002,"function":"holding_register","haystack_id":"point:pump-speed-cmd"}
+                {"id":"modbus:tcp:1:40001","name":"CHW Plant Supply Temp","register":40001,"function":"holding_register","haystack_id":"point:chwst","source":"simulated"},
+                {"id":"modbus:tcp:1:40002","name":"Pump Speed Command","register":40002,"function":"holding_register","haystack_id":"point:pump-speed-cmd","source":"simulated"}
               ]
             }
           ]
-        },
-        {
+        }),
+        json!({
           "id":"json-api",
           "label":"JSON API",
           "status":"online",
           "enabled":true,
+          "mode":"simulated",
+          "source":"fixture",
           "sources":[
             {"id":"openweather-oat","url":"https://api.openweathermap.org/data/2.5/weather","maps_to":"point:oat"},
             {"id":"plant-json-api","url":"http://edge-controller.local/api/points","maps_to":"plant telemetry"}
           ]
-        },
-        {
+        }),
+        json!({
           "id":"haystack",
           "label":"Haystack Gateway",
           "status":"online",
           "enabled":true,
+          "mode":"simulated",
+          "source":"fixture",
           "sites":[
             {"id":"site:demo","dis":"Demo Site"},
             {"id":"equip:ahu1","dis":"AHU-1","siteRef":"site:demo"}
           ],
           "note":"Niagara-style station integration is represented through Project Haystack read/nav/ops instead of custom Niagara WebSockets."
-        }
-      ]
+        }),
+    ]
+}
+
+fn simulated_default_registry() -> Value {
+    let mut drivers = vec![simulated_bacnet_driver()];
+    drivers.extend(shared_non_bacnet_drivers());
+    json!({
+      "site_id":"demo",
+      "building_id":"rust-edge-demo",
+      "bacnet_config": bacnet_config_value(),
+      "drivers": drivers
     })
+}
+
+fn live_default_registry() -> Value {
+    let mut drivers = vec![live_bacnet_driver_empty()];
+    drivers.extend(shared_non_bacnet_drivers());
+    json!({
+      "site_id":"demo",
+      "building_id":"rust-edge-demo",
+      "bacnet_config": bacnet_config_value(),
+      "drivers": drivers
+    })
+}
+
+fn default_registry() -> Value {
+    if is_bacnet_live() {
+        live_default_registry()
+    } else {
+        simulated_default_registry()
+    }
+}
+
+pub fn raw_registry_snapshot() -> Value {
+    let path = registry_path();
+    match fs::read_to_string(&path) {
+        Ok(text) => {
+            let parsed = serde_json::from_str::<Value>(&text).unwrap_or_else(|_| default_registry());
+            if is_bacnet_live() {
+                let mut snapshot = parsed;
+                if let Some(drivers) = snapshot.get_mut("drivers").and_then(|v| v.as_array_mut()) {
+                    let mut warnings = Vec::new();
+                    framework::strip_demo_bacnet_devices(drivers, &mut warnings);
+                }
+                snapshot["bacnet_config"] = bacnet_config_value();
+                snapshot
+            } else {
+                parsed
+            }
+        }
+        Err(_) => default_registry(),
+    }
 }
 
 fn registry_path() -> PathBuf {
@@ -156,11 +227,7 @@ fn registry_path() -> PathBuf {
 }
 
 fn read_registry() -> Value {
-    let path = registry_path();
-    match fs::read_to_string(&path) {
-        Ok(text) => serde_json::from_str::<Value>(&text).unwrap_or_else(|_| default_registry()),
-        Err(_) => default_registry(),
-    }
+    raw_registry_snapshot()
 }
 
 fn write_registry(value: &Value) {
@@ -204,26 +271,24 @@ fn writable_points(registry: &Value) -> Vec<Value> {
     points
 }
 
-fn read_priority_array_for_point(point: &Value) -> Vec<(u8, Value)> {
-    if bacnet_live::is_live_mode() {
-        if let Some((device_instance, object_type, instance)) = bacnet_live::point_object_from_json(point) {
-            if let Ok(values) = bacnet_live::block_on(bacnet_live::read_priority_array(
-                device_instance,
-                object_type,
-                instance,
-            )) {
-                return values;
-            }
-        }
-    }
-
-    let name = point.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    if name.contains("Setpoint") {
-        vec![(8, json!(58.0))]
-    } else if name.contains("Fan Command") {
-        vec![(5, json!(1))]
+fn read_priority_array_for_point(point: &Value) -> Result<Vec<(u8, Value)>, String> {
+    if is_bacnet_live() {
+        let (device_instance, object_type, instance) = bacnet_live::point_object_from_json(point)
+            .ok_or_else(|| "invalid BACnet point metadata".to_string())?;
+        bacnet_live::block_on(bacnet_live::read_priority_array(
+            device_instance,
+            object_type,
+            instance,
+        ))
     } else {
-        Vec::new()
+        let name = point.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        Ok(if name.contains("Setpoint") {
+            vec![(8, json!(58.0))]
+        } else if name.contains("Fan Command") {
+            vec![(5, json!(1))]
+        } else {
+            Vec::new()
+        })
     }
 }
 
@@ -287,8 +352,23 @@ pub fn scan_once_value() -> Value {
     let p8_path = csv_path("bacnet_priority8_overrides.csv");
     let other_path = csv_path("bacnet_non_priority8_overrides.csv");
 
+    let mut read_errors: Vec<Value> = Vec::new();
+    let scan_source = if is_bacnet_live() { "real" } else { "simulated" };
+
     for point in writable_points(&registry) {
-        let priority_values = read_priority_array_for_point(&point);
+        let priority_values = match read_priority_array_for_point(&point) {
+            Ok(values) => values,
+            Err(err) => {
+                read_errors.push(json!({
+                    "point_id": point.get("id").cloned().unwrap_or(json!("unknown")),
+                    "error": err
+                }));
+                if is_bacnet_live() {
+                    continue;
+                }
+                Vec::new()
+            }
+        };
         for (priority, value) in priority_values {
             let kind = if priority == 8 { "operator" } else { "non_priority8" };
             if priority == 8 {
@@ -311,7 +391,8 @@ pub fn scan_once_value() -> Value {
                 "priority_kind": kind,
                 "level": kind,
                 "value": value,
-                "source_method": "ReadProperty(priority-array)"
+                "source_method": "ReadProperty(priority-array)",
+                "last_scan_source": scan_source
             });
 
             let row = vec![
@@ -339,12 +420,17 @@ pub fn scan_once_value() -> Value {
         }
     }
 
+    let ok = !is_bacnet_live() || read_errors.is_empty();
     let status = json!({
-        "ok": true,
+        "ok": ok,
+        "degraded": is_bacnet_live() && !read_errors.is_empty(),
         "last_scan": ts,
         "scan_id": scan_id,
         "cadence": "hourly",
         "method": "ReadProperty(priority-array) for writable BACnet points",
+        "last_scan_source": scan_source,
+        "protocol_proof": bacnet_live::protocol_proof(),
+        "read_errors": read_errors,
         "csv": {
             "all": all_path.display().to_string(),
             "priority8": p8_path.display().to_string(),
@@ -444,13 +530,22 @@ pub fn sync_discovery_value() -> Value {
         .and_then(|v| v.parse().ok())
         .unwrap_or(5007u32);
 
-    let discovered_points = if bacnet_live::is_live_mode() {
-        bacnet_live::block_on(bacnet_live::discover_device_points(device_instance)).ok()
+    let discovered_points = if is_bacnet_live() {
+        match bacnet_live::block_on(bacnet_live::discover_device_points(device_instance)) {
+            Ok(points) => points,
+            Err(err) => {
+                return json!({
+                    "ok": false,
+                    "error": err,
+                    "device_instance": device_instance,
+                    "source": "rusty-bacnet",
+                    "degraded": true
+                });
+            }
+        }
     } else {
-        None
+        bench5007_points()
     };
-
-    let points = discovered_points.unwrap_or_else(bench5007_points);
     let mut registry = read_registry();
     registry["bacnet_config"] = bacnet_config_value();
 
@@ -471,7 +566,7 @@ pub fn sync_discovery_value() -> Value {
                     != device_instance
             });
             let mut device = bench5007_device();
-            device["points"] = json!(points);
+            device["points"] = json!(discovered_points);
             devices.push(device);
             driver["devices"] = json!(devices);
             break;
@@ -484,8 +579,8 @@ pub fn sync_discovery_value() -> Value {
         "synced": true,
         "device_instance": device_instance,
         "devices": 1,
-        "points": points.len(),
-        "source": if bacnet_live::is_live_mode() { "rusty-bacnet" } else { "simulated" }
+        "points": discovered_points.len(),
+        "source": if is_bacnet_live() { "rusty-bacnet" } else { "simulated" }
     })
 }
 
@@ -522,8 +617,45 @@ pub fn read_present_value_json(body: &Value) -> String {
     r#"{"point":"AHU-1 SAT","value":55.2,"unit":"°F","source":"bacnet-simulated"}"#.to_string()
 }
 
+pub fn read_priority_array_value(body: &Value) -> Value {
+    let point = body
+        .get("point_id")
+        .and_then(|v| v.as_str())
+        .and_then(bacnet_live::point_json_from_id)
+        .unwrap_or_else(|| body.clone());
+
+    match read_priority_array_for_point(&point) {
+        Ok(values) => json!({
+            "ok": true,
+            "point_id": point.get("id").cloned().unwrap_or(json!(null)),
+            "priority_array": values.iter().map(|(p,v)| json!({"priority": p, "value": v})).collect::<Vec<_>>(),
+            "source": if is_bacnet_live() { "rusty-bacnet" } else { "simulated" },
+            "protocol_proof": bacnet_live::protocol_proof()
+        }),
+        Err(err) => json!({
+            "ok": false,
+            "error": err,
+            "degraded": is_bacnet_live(),
+            "protocol_proof": bacnet_live::protocol_proof()
+        }),
+    }
+}
+
+pub fn driver_health_json() -> String {
+    let config = bacnet_config_value();
+    json!({
+        "ok": true,
+        "driver_id": "bacnet-ip",
+        "status": if is_bacnet_live() { "live" } else { "simulated" },
+        "config": config,
+        "protocol_proof": bacnet_live::protocol_proof(),
+        "validation": super::tree::build_driver_tree_envelope().validation.to_json()
+    })
+    .to_string()
+}
+
 pub fn driver_tree_json() -> String {
-    serde_json::to_string_pretty(&read_registry()).unwrap_or_else(|_| "{}".to_string())
+    super::tree::driver_tree_json()
 }
 
 pub fn overrides_json() -> String {

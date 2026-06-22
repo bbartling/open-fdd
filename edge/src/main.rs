@@ -129,6 +129,9 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/bacnet/commission/status") => { let body = drivers::bacnet::commission_status_json(); raw_json(&mut stream, &body) },
         ("GET", "/api/bacnet/poll/status") => { let body = drivers::bacnet::poll_status_json(); raw_json(&mut stream, &body) },
         ("GET", "/api/bacnet/driver/tree") => { let body = drivers::bacnet::driver_tree_json(); raw_json(&mut stream, &body) },
+        ("GET", "/api/drivers/tree") => { let body = drivers::tree::driver_tree_json(); raw_json(&mut stream, &body) },
+        ("GET", "/api/health/workspace") => json_response(&mut stream, drivers::framework::workspace_health()),
+        ("GET", "/api/bacnet/driver/health") => { let body = drivers::bacnet::driver_health_json(); raw_json(&mut stream, &body) },
         ("POST", "/api/bacnet/driver/sync-discovery") => require_role(&mut stream, &principal, &["integrator", "agent"], drivers::bacnet::sync_discovery_value()),
         ("PATCH", "/api/bacnet/driver/point") => require_role(&mut stream, &principal, &["integrator", "agent"], json!({"ok": true, "updated": "point polling settings"})),
         ("POST", "/api/bacnet/point-discovery") => {
@@ -139,6 +142,10 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
             let response_body = drivers::bacnet::read_present_value_json(&payload);
             raw_json(&mut stream, &response_body)
+        },
+        ("POST", "/api/bacnet/read-priority-array") => {
+            let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
+            require_role(&mut stream, &principal, &["integrator", "agent"], drivers::bacnet::read_priority_array_value(&payload))
         },
         ("GET", "/api/bacnet/overrides/status") => { let body = drivers::bacnet::overrides_json(); raw_json(&mut stream, &body) },
         ("POST", "/api/bacnet/overrides/scan-once") => require_role(&mut stream, &principal, &["integrator", "agent"], drivers::bacnet::scan_once_value()),
