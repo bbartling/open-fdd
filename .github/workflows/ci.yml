@@ -71,6 +71,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Prepare workspace for non-root container user
+        run: |
+          mkdir -p workspace/overrides workspace/data/drivers workspace/logs
+          sudo chown -R 10001:10001 workspace
+
       - name: Compose build
         run: docker compose build --no-cache
 
