@@ -74,7 +74,6 @@ jobs:
       - name: Prepare workspace for non-root container user
         run: |
           mkdir -p workspace/overrides workspace/data/drivers workspace/logs
-          sudo chown -R 10001:10001 workspace
           cat > workspace/auth.env.local <<'EOF'
           OFDD_AUTH_REQUIRED=true
           OFDD_AUTH_SECRET=ci-test-secret-openfdd-edge-do-not-use-in-production
@@ -86,6 +85,7 @@ jobs:
           OFDD_AGENT_PASSWORD=ci-agent-pass
           EOF
           chmod 600 workspace/auth.env.local
+          sudo chown -R 10001:10001 workspace
 
       - name: Compose build
         run: docker compose build --no-cache
