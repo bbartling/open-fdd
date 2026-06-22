@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# LEGACY: local source-checkout bootstrap (build from Dockerfile).
+# For GHCR production install use: scripts/openfdd_rust_edge_bootstrap.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
