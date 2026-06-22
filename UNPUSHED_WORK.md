@@ -10,10 +10,10 @@ GitHub push works after installing `gh` 2.67.0 at `/home/ben/bin/gh` (credential
 | --- | --- | --- |
 | `rust-rewrite-1` | yes | Base for Rust rewrite |
 | `master` | yes | Legacy Python line |
-| `feature/rust-auth-security-parity` | yes | Auth/security PR branch |
-| `feature/rust-edge-bootstrap-update-docs-ghcr` | yes | **PR #356** — bootstrap/GHCR/docs/CI |
-| `feature/rust-bench-5007-datafusion-smoke` | yes | Pushed; open PR vs `rust-rewrite-1` |
-| `feature/rust-driver-framework-react-ui-parity` | yes | Pushed; open PR vs `rust-rewrite-1` |
+| `feature/rust-auth-security-parity` | yes | **PR #355** — auth/security |
+| `feature/rust-edge-bootstrap-update-docs-ghcr` | yes | **PR #356** — bootstrap/GHCR/docs/CI (**CI green**) |
+| `feature/rust-bench-5007-datafusion-smoke` | yes | **PR #358** |
+| `feature/rust-driver-framework-react-ui-parity` | yes | **PR #357** |
 | `fix/ghcr-multiarch-arm64` | yes | Pushed; review/merge or delete if superseded |
 | `origin/chore/docs-pdf-refresh` | stale | Open PR #350 on master — review/close |
 | `origin/feat/ui-agent-readme-polish` | stale | Open PR #352 — review/close |
