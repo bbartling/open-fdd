@@ -1,6 +1,8 @@
-//! Fault detection layer.
-//!
-//! FDD in this Rust-only baseline is DataFusion SQL oriented. Driver data lands
-//! in Arrow-shaped historian tables, then rules are SQL over those tables.
+//! Fault detection layer — DataFusion SQL over Apache Arrow telemetry.
 
+pub mod confirmation;
 pub mod datafusion_sql;
+pub mod execution;
+pub mod rules;
+pub mod sql_safety;
+pub mod wires;

@@ -212,6 +212,45 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent"],
             serde_json::from_str::<Value>(fdd::datafusion_sql::batch_json()).unwrap(),
         ),
+
+        ("GET", "/api/fdd-schema/tables") => {
+            raw_json(&mut stream, &fdd::wires::api::schema_tables_json())
+        }
+        ("GET", "/api/fdd-schema/fdd-inputs") => {
+            raw_json(&mut stream, &fdd::wires::api::schema_fdd_inputs_json())
+        }
+        ("GET", "/api/fdd-schema/equipment-types") => {
+            raw_json(&mut stream, &fdd::wires::api::schema_equipment_types_json())
+        }
+        ("GET", "/api/fdd-rules") => raw_json(&mut stream, &fdd::wires::api::list_rules_json()),
+        ("POST", "/api/fdd-rules") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator"],
+            fdd::wires::api::save_rule(&parse_json_body(&body), &principal.sub),
+        ),
+        ("POST", "/api/fdd-rules/builder-sql") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            fdd::wires::api::builder_sql(&parse_json_body(&body)),
+        ),
+        ("GET", "/api/fdd-wires/graphs") => raw_json(
+            &mut stream,
+            &fdd::wires::api::list_graphs(query_param(&path, "site_id").as_deref()),
+        ),
+        ("POST", "/api/fdd-wires/graphs") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator"],
+            fdd::wires::api::create_graph(&parse_json_body(&body), &principal.sub),
+        ),
+        ("POST", "/api/fdd-wires/propose-assignments") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            fdd::wires::api::propose_assignments(&parse_json_body(&body), &principal.role),
+        ),
         ("GET", "/api/arrow/demo") => {
             raw_json(&mut stream, historian::arrow_table::demo_rows_json())
         }
@@ -380,11 +419,157 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent"],
             json!({"ok": true, "report_id": "rcx-demo-001", "path": "workspace/reports/rcx/rcx-demo-001.md", "sections": ["faults", "overrides", "plotly_trends", "recommendations"]}),
         ),
-        _ => status_json(
-            &mut stream,
-            "404 Not Found",
-            json!({"ok": false, "error": "unknown endpoint", "path": clean_path}),
-        ),
+        _ => {
+            if let Some(resp) = handle_fdd_wires_dynamic(
+                &mut stream,
+                &principal,
+                method.as_str(),
+                &clean_path,
+                &body,
+            ) {
+                resp
+            } else {
+                status_json(
+                    &mut stream,
+                    "404 Not Found",
+                    json!({"ok": false, "error": "unknown endpoint", "path": clean_path}),
+                )
+            }
+        }
+    }
+}
+
+fn parse_json_body(body: &str) -> Value {
+    serde_json::from_str(body).unwrap_or(json!({}))
+}
+
+fn query_param(path: &str, key: &str) -> Option<String> {
+    path.split('?').nth(1).and_then(|qs| {
+        qs.split('&').find_map(|pair| {
+            let mut parts = pair.splitn(2, '=');
+            if parts.next()? == key {
+                Some(parts.next()?.to_string())
+            } else {
+                None
+            }
+        })
+    })
+}
+
+fn path_parts(path: &str) -> Vec<&str> {
+    path.trim_matches('/').split('/').collect()
+}
+
+fn handle_fdd_wires_dynamic(
+    stream: &mut TcpStream,
+    principal: &Principal,
+    method: &str,
+    path: &str,
+    body: &str,
+) -> Option<std::io::Result<()>> {
+    let parts = path_parts(path);
+    if parts.len() < 3 || parts[0] != "api" {
+        return None;
+    }
+
+    match (method, parts.as_slice()) {
+        ("GET", ["api", "fdd-rules", rule_id]) => {
+            Some(raw_json(stream, &fdd::wires::api::get_rule_json(rule_id)))
+        }
+        ("PUT", ["api", "fdd-rules", rule_id]) => {
+            let mut payload = parse_json_body(body);
+            payload["rule_id"] = json!(rule_id);
+            Some(require_role(
+                stream,
+                principal,
+                &["integrator"],
+                fdd::wires::api::save_rule(&payload, &principal.sub),
+            ))
+        }
+        ("POST", ["api", "fdd-rules", rule_id, "validate-sql"]) => {
+            let mut payload = parse_json_body(body);
+            payload["rule_id"] = json!(rule_id);
+            Some(require_role(
+                stream,
+                principal,
+                &["integrator", "agent"],
+                fdd::wires::api::validate_rule_sql(&payload),
+            ))
+        }
+        ("POST", ["api", "fdd-rules", rule_id, "test-sql"]) => {
+            let mut payload = parse_json_body(body);
+            payload["rule_id"] = json!(rule_id);
+            Some(require_role(
+                stream,
+                principal,
+                &["integrator", "agent"],
+                fdd::wires::api::test_rule_sql(&payload),
+            ))
+        }
+        ("POST", ["api", "fdd-rules", rule_id, "activate"]) => Some(require_role(
+            stream,
+            principal,
+            &["integrator"],
+            fdd::wires::api::activate_rule(rule_id, &principal.sub, &principal.role),
+        )),
+        ("GET", ["api", "fdd-wires", "graphs", graph_id]) => {
+            let site = query_param(path, "site_id").unwrap_or_else(|| "site:demo".to_string());
+            Some(raw_json(
+                stream,
+                &fdd::wires::api::get_graph(&site, graph_id),
+            ))
+        }
+        ("PUT", ["api", "fdd-wires", "graphs", graph_id]) => {
+            let site = query_param(path, "site_id").unwrap_or_else(|| "site:demo".to_string());
+            Some(require_role(
+                stream,
+                principal,
+                &["integrator"],
+                fdd::wires::api::update_graph(
+                    &site,
+                    graph_id,
+                    &parse_json_body(body),
+                    &principal.sub,
+                ),
+            ))
+        }
+        ("POST", ["api", "fdd-wires", "graphs", graph_id, "validate"]) => {
+            let site = query_param(path, "site_id").unwrap_or_else(|| "site:demo".to_string());
+            Some(require_role(
+                stream,
+                principal,
+                &["integrator", "agent"],
+                fdd::wires::api::validate_graph(&site, graph_id),
+            ))
+        }
+        ("POST", ["api", "fdd-wires", "graphs", graph_id, "test"]) => {
+            let site = query_param(path, "site_id").unwrap_or_else(|| "site:demo".to_string());
+            Some(require_role(
+                stream,
+                principal,
+                &["integrator", "agent"],
+                fdd::wires::api::test_graph(&site, graph_id),
+            ))
+        }
+        ("POST", ["api", "fdd-wires", "graphs", graph_id, "approve"]) => {
+            let site = query_param(path, "site_id").unwrap_or_else(|| "site:demo".to_string());
+            Some(require_role(
+                stream,
+                principal,
+                &["integrator"],
+                fdd::wires::api::approve_graph(&site, graph_id, &principal.sub, &principal.role),
+            ))
+        }
+        ("POST", ["api", "fdd-wires", "graphs", graph_id, "activate"]) => {
+            let site = query_param(path, "site_id").unwrap_or_else(|| "site:demo".to_string());
+            Some(require_role(
+                stream,
+                principal,
+                &["integrator"],
+                fdd::wires::api::activate_graph(&site, graph_id, &principal.sub, &principal.role),
+            ))
+        }
+        _ => None,
     }
 }
 
@@ -520,6 +705,10 @@ fn agent_tools() -> Value {
             {"name":"control.cdl_bindings_save","method":"POST","path":"/api/control/cdl/bindings/save","requires":"integrator|agent"},
             {"name":"algorithms.run","method":"POST","path":"/api/algorithms/run","requires":"integrator|agent"},
             {"name":"fdd.run","method":"POST","path":"/api/fdd/run","requires":"integrator|agent"},
+            {"name":"fdd.wires.graphs","method":"GET","path":"/api/fdd-wires/graphs","requires":"JWT"},
+            {"name":"fdd.wires.propose","method":"POST","path":"/api/fdd-wires/propose-assignments","requires":"integrator|agent"},
+            {"name":"fdd.rules.list","method":"GET","path":"/api/fdd-rules","requires":"JWT"},
+            {"name":"fdd.rules.activate","method":"POST","path":"/api/fdd-rules/{id}/activate","requires":"integrator"},
             {"name":"rules.batch","method":"POST","path":"/api/rules/batch","requires":"integrator|agent"},
             {"name":"historian.query","method":"POST","path":"/api/historian/query","requires":"JWT"},
             {"name":"reports.rcx_plan","method":"POST","path":"/api/reports/rcx/plan","requires":"JWT"},
@@ -624,7 +813,7 @@ fn status_json(stream: &mut TcpStream, status: &str, value: Value) -> std::io::R
 fn options(stream: &mut TcpStream) -> std::io::Result<()> {
     let origin = cors_origin();
     let headers = format!(
-        "HTTP/1.1 204 No Content\r\n{origin}Access-Control-Allow-Methods: GET,POST,OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nContent-Length: 0\r\n\r\n"
+        "HTTP/1.1 204 No Content\r\n{origin}Access-Control-Allow-Methods: GET,POST,PUT,OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nContent-Length: 0\r\n\r\n"
     );
     stream.write_all(headers.as_bytes())
 }

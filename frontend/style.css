@@ -344,6 +344,103 @@ h3 { margin: 0 0 10px; color: var(--muted); font-size: 14px; text-transform: upp
 }
 .wire-node.rule { border-color: rgba(245,158,11,.45); }
 .wire-node.alg { border-color: rgba(34,197,94,.45); }
+
+/* FDD Wires — Rule Assignment Workspace */
+.fdd-wires-shell {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 300px;
+  grid-template-rows: minmax(320px, 1fr) auto;
+  gap: 12px;
+  min-height: 620px;
+}
+.fdd-left, .fdd-right, .fdd-bottom { overflow: auto; }
+.fdd-center { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wire-canvas {
+  position: relative;
+  min-height: 420px;
+  border: 1px dashed var(--line);
+  border-radius: 16px;
+  background:
+    linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0 / 24px 24px,
+    var(--panel2);
+}
+.wire-node-card {
+  position: absolute;
+  width: 150px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px var(--shadow);
+  cursor: pointer;
+}
+.wire-node-card.selected { border-color: var(--blue); }
+.wire-node-card.sql_rule { border-color: rgba(245,158,11,.55); }
+.wire-node-card.fault_output { border-color: rgba(239,68,68,.55); }
+.wire-node-title { font-weight: 700; font-size: 13px; }
+.wire-node-meta { color: var(--muted); font-size: 11px; margin: 4px 0; }
+.wire-edge-label { font-size: 11px; color: var(--muted); padding: 4px 8px; }
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  margin: 2px 2px 0 0;
+  border: 1px solid var(--line);
+}
+.badge-sim { background: rgba(245,158,11,.15); color: var(--amber); }
+.badge-fix { background: rgba(148,163,184,.15); }
+.badge-real { background: rgba(34,197,94,.15); color: var(--green); }
+.badge-ai { background: rgba(56,189,248,.15); color: var(--blue); }
+.badge-ok { background: rgba(34,197,94,.15); color: var(--green); }
+.badge-bad { background: rgba(239,68,68,.15); color: var(--red); }
+.palette-group { margin: 10px 0; }
+.palette-group .chip { margin: 4px 4px 0 0; font-size: 11px; }
+.ctx-menu {
+  position: fixed;
+  z-index: 1000;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 12px 40px var(--shadow);
+}
+.ctx-item { display: block; width: 100%; text-align: left; margin: 2px 0; }
+.sql-editor {
+  width: 100%;
+  min-height: 140px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+.builder-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.builder-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+.validation-box, .results-box, .proposal-box {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  font-size: 12px;
+  overflow: auto;
+  max-height: 220px;
+}
+.warn-banner, .info-banner {
+  padding: 10px 12px;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+}
+.warn-banner { background: rgba(245,158,11,.12); }
+.info-banner { background: rgba(56,189,248,.12); }
+.file-btn { display: inline-block; }
+.muted { color: var(--muted); }
+.fdd-bottom { grid-column: 1 / -1; padding: 10px 14px; }
+
 .error {
   border: 1px solid rgba(239,68,68,.45);
   background: rgba(239,68,68,.12);

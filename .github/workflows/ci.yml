@@ -36,7 +36,16 @@ jobs:
           node-version: "22"
 
       - name: Frontend syntax
-        run: node --check frontend/app.js
+        run: |
+          node --check frontend/app.js
+          node --check frontend/fdd-wires.js
+
+      - name: FDD Wires UI guards
+        run: |
+          grep -q "FDD Wires" frontend/app.js
+          grep -q "Rule Assignment Workspace" frontend/fdd-wires.js
+          grep -q "Raw DataFusion SQL" frontend/fdd-wires.js
+          ! grep -Ri "grafana\|rubix\|nubeio\|nubedev\|niagara" frontend/app.js frontend/fdd-wires.js frontend/index.html
 
       - name: New driver-tree UI is default
         run: |
@@ -166,6 +175,38 @@ jobs:
             -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
             -d '{"register":40001,"function":"holding_register"}' | grep -q simulated
+
+      - name: FDD Wires and DataFusion SQL smoke
+        run: |
+          INTEGRATOR_PW="$(grep '^OFDD_INTEGRATOR_PASSWORD=' workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
+          AGENT_PW="$(grep '^OFDD_AGENT_PASSWORD=' workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
+          INT="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -nc --arg p "$INTEGRATOR_PW" '{username:"integrator",password:$p}')" | jq -r '.token // .access_token')"
+          AGENT="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -nc --arg p "$AGENT_PW" '{username:"agent",password:$p}')" | jq -r '.token // .access_token')"
+
+          curl -fsS http://127.0.0.1:8080/api/fdd-wires/graphs?site_id=site:demo \
+            -H "Authorization: Bearer $INT" | jq -e '.ok == true'
+
+          curl -fsS http://127.0.0.1:8080/api/fdd-wires/graphs/graph:bench-5007-fdd?site_id=site:demo \
+            -H "Authorization: Bearer $INT" | jq -e '.graph.nodes | length >= 4'
+
+          curl -fsS -X POST http://127.0.0.1:8080/api/fdd-wires/propose-assignments \
+            -H "Authorization: Bearer $AGENT" -H 'Content-Type: application/json' \
+            -d '{"site_id":"site:demo","equipment_type":"ahu"}' | jq -e '.review_status == "needs_review"'
+
+          curl -fsS -X POST http://127.0.0.1:8080/api/fdd-rules/oa_temp_out_of_range/test-sql \
+            -H "Authorization: Bearer $INT" -H 'Content-Type: application/json' \
+            -d '{"sql":"SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t > 110.0 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = '\''AHU-1'\''","confirmation_seconds":300}' \
+            | jq -e '.ok == true and (.engine | type == "string") and (.engine | contains("DataFusion"))'
+
+          curl -sS -X POST http://127.0.0.1:8080/api/fdd-rules/oa_temp_out_of_range/activate \
+            -H "Authorization: Bearer $AGENT" -H 'Content-Type: application/json' -d '{}' \
+            | jq -e '.ok == false'
+
+          curl -fsS http://127.0.0.1:8080/fdd-wires.js | grep -q "FDD Wires"
 
       - name: CSV files created in workspace
         run: |
