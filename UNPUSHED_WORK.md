@@ -8,43 +8,48 @@ Last updated: 2026-06-22
 | --- | --- | --- |
 | #356 | `feature/rust-edge-bootstrap-update-docs-ghcr` | **MERGED** |
 | #360 | `feature/docs-verification-consolidation` | **MERGED** |
+| #361 | `feature/rust-auth-port-rewrite` | **MERGED** (auth on correct base) |
+| #359 | `feature/rust-fdd-wires-sql-rule-assignments` | **MERGED** |
 
-## Merged to `master` (wrong base — re-ported)
+## Docs cleanup (done)
 
-| PR | Branch | Notes |
-| --- | --- | --- |
-| #355 | `feature/rust-auth-security-parity` | Merged to `master` by mistake → **#361** ports to `rust-rewrite-1` |
+Root `VERIFY_*.md` files removed. Checklists live under `docs/verification/` including [fdd-wires.md](docs/verification/fdd-wires.md).
 
 ## Open PRs
 
 | PR | Branch | Notes |
 | --- | --- | --- |
-| #361 | `feature/rust-auth-port-rewrite` | Auth on correct base — merge next |
-| #357 | `feature/rust-driver-framework-react-ui-parity` | needs merge conflict resolution |
-| #358 | `feature/rust-bench-5007-datafusion-smoke` | needs rebase; generalize bench docs |
-| #359 | `feature/rust-fdd-wires-sql-rule-assignments` | rebase onto #361 after merge |
+| #357 | `feature/rust-driver-framework-react-ui-parity` | Rebase onto `rust-rewrite-1` has conflicts in `main.rs`, `bacnet.rs`, `Cargo.lock` — needs manual merge |
+| #358 | `feature/rust-bench-5007-datafusion-smoke` | Largely superseded by #359; close or rebase if bench-specific smoke still needed |
 
-## Stale / review
+## Stale / review (base `master`)
 
 | Branch | Action |
 | --- | --- |
-| `chore/docs-pdf-refresh` | Open PR #350 on master — close or merge separately |
-| `feat/ui-agent-readme-polish` | Open PR #352 on master |
+| `chore/docs-pdf-refresh` | PR #350 — separate from rust line |
+| `feat/ui-agent-readme-polish` | PR #352 — separate from rust line |
 | `fix/ghcr-multiarch-arm64` | Review vs `rust-ghcr.yml`; delete if superseded |
-| `pr-354` | **deleted** from origin |
+| `feature/rust-auth-security-parity` | Merged to `master` (#355) by mistake; correct auth is on `rust-rewrite-1` via #361 |
 
-## Push command (all feature branches)
+## Remote branches safe to delete (merged)
+
+```bash
+git push origin --delete feature/rust-auth-port-rewrite
+git push origin --delete feature/rust-fdd-wires-sql-rule-assignments
+git push origin --delete feature/docs-verification-consolidation
+git push origin --delete feature/rust-edge-bootstrap-update-docs-ghcr
+```
+
+## Push command
 
 ```bash
 git push -u origin <branch>   # first push
 git push --force-with-lease   # after rebase
 ```
 
-GitHub auth: `/home/ben/bin/gh` (credential helper restored).
+GitHub auth: `/home/ben/bin/gh`
 
-## Recommended merge order
+## CI fixes applied this session
 
-1. #361 auth port (rust-rewrite-1)
-2. #359 FDD Wires (rebase)
-3. #357 driver framework (resolve conflicts)
-4. #358 bench smoke (optional; keep docs generalized)
+- Compose smoke: create `auth.env.local` before `chown`; chown only writable workspace subdirs
+- FDD smoke: login via `username`/`password` from `auth.env.local` fixture
