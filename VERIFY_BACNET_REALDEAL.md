@@ -69,3 +69,11 @@ Live BACnet (`OPENFDD_BACNET_MODE=live`) uses [rusty-bacnet](https://github.com/
 Simulated mode (`OPENFDD_BACNET_MODE=simulated`, CI default) keeps deterministic demo data so Docker/GitHub Actions run without an OT BACnet network.
 
 Bench device **5007** (MS/TP net 2000 behind router `192.168.204.200`) is seeded in `driver_tree.json` with oa-t / oa-h / duct-t / stat_zn-t points.
+
+Packet capture on the OT NIC:
+
+```bash
+sudo tcpdump -ni enp3s0 'udp port 47808' -vv
+```
+
+See also `VERIFY_BACNET_REAL_VS_SIMULATED.md` for live/simulated guard tests.
