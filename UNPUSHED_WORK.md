@@ -7,16 +7,22 @@ Last updated: 2026-06-22
 | PR | Branch | Status |
 | --- | --- | --- |
 | #356 | `feature/rust-edge-bootstrap-update-docs-ghcr` | **MERGED** |
+| #360 | `feature/docs-verification-consolidation` | **MERGED** |
 
-## Open PRs (rebase onto latest `rust-rewrite-1` after doc/CI fixes)
+## Merged to `master` (wrong base — re-ported)
 
-| PR | Branch | CI notes |
+| PR | Branch | Notes |
 | --- | --- | --- |
-| #355 | `feature/rust-auth-security-parity` | manifest job failed (missing supervisor script) — fix in #360 |
-| #357 | `feature/rust-driver-framework-react-ui-parity` | needs rebase + fmt/compose fixes |
-| #358 | `feature/rust-bench-5007-datafusion-smoke` | needs rebase + fmt/compose fixes |
-| #359 | `feature/rust-fdd-wires-sql-rule-assignments` | rebase after #360; CI fixes landed on branch |
-| #360 | `feature/docs-verification-consolidation` | pending (this branch) |
+| #355 | `feature/rust-auth-security-parity` | Merged to `master` by mistake → **#361** ports to `rust-rewrite-1` |
+
+## Open PRs
+
+| PR | Branch | Notes |
+| --- | --- | --- |
+| #361 | `feature/rust-auth-port-rewrite` | Auth on correct base — merge next |
+| #357 | `feature/rust-driver-framework-react-ui-parity` | needs merge conflict resolution |
+| #358 | `feature/rust-bench-5007-datafusion-smoke` | needs rebase; generalize bench docs |
+| #359 | `feature/rust-fdd-wires-sql-rule-assignments` | rebase onto #361 after merge |
 
 ## Stale / review
 
@@ -38,8 +44,7 @@ GitHub auth: `/home/ben/bin/gh` (credential helper restored).
 
 ## Recommended merge order
 
-1. #360 docs consolidation
-2. #355 auth security (rebased)
-3. #357 driver framework
-4. #358 bench smoke (optional / can generalize docs further)
-5. #359 FDD Wires
+1. #361 auth port (rust-rewrite-1)
+2. #359 FDD Wires (rebase)
+3. #357 driver framework (resolve conflicts)
+4. #358 bench smoke (optional; keep docs generalized)
