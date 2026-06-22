@@ -1,0 +1,35 @@
+# Linux live BACnet override.
+#
+# BACnet/IP discovery uses UDP broadcast and often needs host networking.
+# Use this on the Linux OT LAN test box, not for GitHub Actions/CI.
+#
+# Usage:
+#   ./scripts/openfdd_bacnet_nic_setup.sh
+#   docker compose -f docker-compose.yml -f docker-compose.bacnet-live.yml --env-file .env up --build
+
+services:
+  openfdd-bridge:
+    network_mode: host
+    ports: []
+    environment:
+      OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-live}
+      OPENFDD_BACNET_IFACE: ${OPENFDD_BACNET_IFACE:-enp3s0}
+      OPENFDD_BACNET_BIND: ${OPENFDD_BACNET_BIND:-192.168.204.55/24:47808}
+      OPENFDD_BACNET_DEVICE_INSTANCE: ${OPENFDD_BACNET_DEVICE_INSTANCE:-599999}
+      OPENFDD_BACNET_DEVICE_NAME: ${OPENFDD_BACNET_DEVICE_NAME:-OpenFDD}
+
+  openfdd-commission:
+    network_mode: host
+    ports: []
+    expose: []
+    environment:
+      OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-live}
+      OPENFDD_BACNET_IFACE: ${OPENFDD_BACNET_IFACE:-enp3s0}
+      OPENFDD_BACNET_BIND: ${OPENFDD_BACNET_BIND:-192.168.204.55/24:47808}
+      OPENFDD_BACNET_DEVICE_INSTANCE: ${OPENFDD_BACNET_DEVICE_INSTANCE:-599999}
+      OPENFDD_BACNET_DEVICE_NAME: ${OPENFDD_BACNET_DEVICE_NAME:-OpenFDD}
+
+  openfdd-haystack-gateway:
+    network_mode: host
+    ports: []
+    expose: []

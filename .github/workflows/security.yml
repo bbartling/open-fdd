@@ -27,6 +27,8 @@ jobs:
         run: |
           test -f Cargo.toml
           test -f docker-compose.yml
+          test -f docker-compose.bacnet-live.yml
+          test -f .env.example
           test -f Dockerfile
           test -d edge
           test -d frontend

@@ -51,10 +51,24 @@ fn now_rfc3339() -> String {
     Utc::now().to_rfc3339()
 }
 
+
+fn bacnet_config_value() -> Value {
+    json!({
+        "mode": env::var("OPENFDD_BACNET_MODE").unwrap_or_else(|_| "simulated".to_string()),
+        "iface": env::var("OPENFDD_BACNET_IFACE").unwrap_or_else(|_| "enp3s0".to_string()),
+        "bind": env::var("OPENFDD_BACNET_BIND").unwrap_or_else(|_| "192.168.204.55/24:47808".to_string()),
+        "device_instance": env::var("OPENFDD_BACNET_DEVICE_INSTANCE").unwrap_or_else(|_| "599999".to_string()),
+        "device_name": env::var("OPENFDD_BACNET_DEVICE_NAME").unwrap_or_else(|_| "OpenFDD".to_string()),
+        "scan_interval_seconds": env::var("OPENFDD_BACNET_SCAN_INTERVAL_SECONDS").unwrap_or_else(|_| "3600".to_string()),
+        "poll_interval_seconds": env::var("OPENFDD_BACNET_POLL_INTERVAL_SECONDS").unwrap_or_else(|_| "60".to_string())
+    })
+}
+
 fn default_registry() -> Value {
     json!({
       "site_id":"demo",
       "building_id":"rust-edge-demo",
+      "bacnet_config": bacnet_config_value(),
       "drivers":[
         {
           "id":"bacnet-ip",
@@ -361,10 +375,23 @@ pub fn write_dry_run_json() -> &'static str {
     r#"{"ok":true,"dry_run":true,"safety":"BACnet write path requires integrator role and approved=true"}"#
 }
 
-pub fn commission_status_json() -> &'static str {
-    r#"{"ok":true,"service":"bacnet-commission","status":"ready","features":["whois","object-list","read-property","priority-array-scan","csv-override-log"]}"#
+pub fn commission_status_json() -> String {
+    json!({
+        "ok": true,
+        "service": "bacnet-commission",
+        "status": "ready",
+        "config": bacnet_config_value(),
+        "features": ["whois","object-list","read-property","priority-array-scan","csv-override-log"]
+    }).to_string()
 }
 
-pub fn poll_status_json() -> &'static str {
-    r#"{"ok":true,"service":"bacnet-poll","status":"ready","cadence_seconds":300,"writes_scan_cadence_seconds":3600}"#
+pub fn poll_status_json() -> String {
+    json!({
+        "ok": true,
+        "service": "bacnet-poll",
+        "status": "ready",
+        "config": bacnet_config_value(),
+        "cadence_seconds": env::var("OPENFDD_BACNET_POLL_INTERVAL_SECONDS").unwrap_or_else(|_| "60".to_string()),
+        "writes_scan_cadence_seconds": env::var("OPENFDD_BACNET_SCAN_INTERVAL_SECONDS").unwrap_or_else(|_| "3600".to_string())
+    }).to_string()
 }

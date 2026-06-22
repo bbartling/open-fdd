@@ -232,3 +232,26 @@ can all drive the same CDL algorithm or DataFusion SQL fault equation through th
 
 - Fixed `/api/model/query` build error by removing the old `HAYSTACK_MODEL` constant reference and routing through `drivers::haystack::model_json()`.
 - Frontend syntax checked with `node --check frontend/app.js`.
+
+## BACnet OT NIC setup
+
+For Ben's Linux test box, the default BACnet OT NIC is currently:
+
+```text
+OPENFDD_BACNET_IFACE=enp3s0
+OPENFDD_BACNET_BIND=192.168.204.55/24:47808
+```
+
+Generate `.env` safely:
+
+```bash
+./scripts/openfdd_bacnet_nic_setup.sh
+```
+
+For live BACnet/IP broadcast testing on Linux, use host networking:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.bacnet-live.yml --env-file .env up --build
+```
+
+The helper script does not change the NIC unless `OPENFDD_BACNET_CONFIGURE_NIC=1` or `--apply` is used.
