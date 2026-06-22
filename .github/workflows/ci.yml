@@ -85,7 +85,7 @@ jobs:
           OFDD_AGENT_PASSWORD=ci-agent-pass
           EOF
           chmod 600 workspace/auth.env.local
-          sudo chown -R 10001:10001 workspace
+          sudo chown -R 10001:10001 workspace/overrides workspace/data workspace/logs
 
       - name: Compose build
         run: docker compose build --no-cache
