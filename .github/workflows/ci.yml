@@ -1,210 +1,129 @@
-# open-fdd: Arrow runtime + playground tests. PyPI release is the open_fdd package only.
-
-name: CI
+name: Rust Edge CI
 
 on:
-  pull_request:
-    branches: [main, master, develop, dev, dev/**]
   push:
-    branches: [main, master, develop, dev, dev/**]
-
-permissions:
-  contents: read
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  pull_request:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: "pip"
-
-      - name: Install package (dev deps for tests)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev,analytics]"
-
-      - name: Build combined docs text bundle
-        run: python scripts/build_docs_pdf.py --no-pdf
-
-      - name: Check package version consistency
-        run: python scripts/release/check_version.py
-
-      - name: Run package tests (pytest)
-        run: |
-          python -m pytest open_fdd/tests/arrow_runtime -q
-          python -m pytest open_fdd/tests/playground -q
-          # Separate invocations — both dirs have test_cookbook.py
-          python -m pytest open_fdd/tests/faults -q
-          python -m pytest open_fdd/tests/test_version_consistency.py open_fdd/tests/test_package_import.py open_fdd/tests/test_cli_smoke.py -q
-          python -m pytest tests/test_no_pandas_edge_fdd.py -q
-
-      - name: Arrow benchmark smoke
-        run: |
-          mkdir -p .bench
-          python benchmarks/bench_arrow_native.py --rows 10000 --repeats 1 --output .bench/arrow_native.json
-          python benchmarks/bench_arrow_end_to_end.py --sites 1 --rows-per-site 10000 --repeats 1 --output .bench/arrow_end_to_end.json
-
-      - name: Build open-fdd sdist/wheel (dry run)
-        run: |
-          python -m pip install build==1.2.2 twine==6.1.0
-          python -m build
-          twine check dist/*
-
-      - name: Verify wheel imports Arrow runtime
-        run: |
-          python -m venv /tmp/ofdd-wheel-smoke
-          wheel="$(ls -1t dist/*.whl | head -n 1)"
-          test -n "$wheel"
-          /tmp/ofdd-wheel-smoke/bin/pip install "$wheel"
-          /tmp/ofdd-wheel-smoke/bin/python -c "from open_fdd.arrow_runtime import run_arrow_rule; from open_fdd.arrow_runtime.column_map_from_model import build_column_map_from_model_points; import open_fdd; assert open_fdd.__version__"
-
-  test-datafusion:
+  rust:
+    name: Rust format and tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: "pip"
-      - name: Install with DataFusion extra
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev,datafusion]"
-      - name: DataFusion SQL backend tests
-        run: python -m pytest open_fdd/tests/arrow_runtime/test_datafusion_backend.py -q
+      - uses: actions/checkout@v4
 
-  agent-shell:
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.85.0
+          components: rustfmt
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Check
+        run: cargo check --workspace --all-targets
+
+      - name: Test
+        run: cargo test --workspace --all-targets
+
+  frontend:
+    name: Frontend syntax and legacy UI guard
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: "pip"
-      - name: Install engine and agent shell
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev,analytics]"
-          pip install -e "packages/openfdd-agent-shell[dev]"
-      - name: Test agent shell
-        working-directory: packages/openfdd-agent-shell
-        run: python -m pytest -q
+      - uses: actions/checkout@v4
 
-  operator-bridge-security:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: "pip"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
-          cache-dependency-path: workspace/dashboard/package-lock.json
-      - name: Install security audit tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install pip-audit bandit
-      - name: pip-audit bridge and bacnet requirements (with security constraints)
-        run: |
-          pip install -r docker/python-security-constraints.txt
-          pip install -r workspace/api/requirements.txt -r bacnet_toolshed/requirements.txt
-          pip-audit
-      - name: bandit bridge (high severity)
-        run: bandit -r workspace/api/openfdd_bridge -lll -q
-      - name: gitleaks secret scan
-        run: |
-          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar xz gitleaks
-          ./gitleaks detect --source . --no-git --redact --exit-code 1
-      - name: semgrep security scan
-        run: |
-          python -m pip install semgrep
-          semgrep scan --config p/default --sarif --output semgrep.sarif workspace/api/openfdd_bridge workspace/dashboard/src
-          semgrep scan --config p/default --severity ERROR workspace/api/openfdd_bridge workspace/dashboard/src
-      - name: npm audit dashboard (high+)
-        working-directory: workspace/dashboard
-        run: |
-          npm ci
-          npm audit --audit-level=high
-      - name: Build production dashboard
-        working-directory: workspace/dashboard
-        run: npm run build
-      - name: Scan production assets for private LAN / bench literals
-        run: python scripts/check_production_assets.py
 
-  operator-bridge:
+      - name: Frontend syntax
+        run: node --check frontend/app.js
+
+      - name: New driver-tree UI is default
+        run: |
+          grep -q "REAL DEAL BACNET CSV BUILD" frontend/app.js
+          ! grep -R "Rule Lab" frontend/app.js frontend/index.html
+          ! grep -R "/api/haystack/model" frontend/app.js frontend/index.html
+          ! grep -R "Open-FDD-style tabs" frontend/app.js frontend/index.html
+
+  docker:
+    name: Docker image build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: "pip"
-      - name: Install bridge dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev,analytics]"
-          pip install -r workspace/api/requirements.txt
-          pip install -r portfolio/requirements.txt
-          pip install -r bacnet_toolshed/requirements.txt
-          pip install -r workspace/mcp_server/requirements.txt
-          pip install httpx
-      - name: Test operator bridge
-        env:
-          OPENFDD_REPO_ROOT: ${{ github.workspace }}
-          OFDD_DESKTOP_DATA_DIR: ${{ github.workspace }}/workspace/data
-          PYTHONPATH: ${{ github.workspace }}/workspace:${{ github.workspace }}/workspace/api:${{ github.workspace }}
-        run: |
-          python -m pytest open_fdd/tests/validation -q
-          python -m pytest tests/workspace_bridge -q
-          python -m pytest tests/workspace_mcp -q
-          python -m pytest tests/portfolio -q
+      - uses: actions/checkout@v4
 
-  docs:
+      - name: Docker build
+        run: docker build -t open-fdd-rust-edge:ci .
+
+  compose-smoke:
+    name: Docker Compose API smoke
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
+      - uses: actions/checkout@v4
 
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.3"
-          bundler-cache: true
-          working-directory: docs
+      - name: Compose build
+        run: docker compose build --no-cache
 
-      - name: Build Jekyll site (Just the Docs)
-        working-directory: docs
-        run: bundle install && bundle exec jekyll build -d "${{ github.workspace }}/_site"
-        env:
-          JEKYLL_ENV: production
-          JEKYLL_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compose up
+        run: docker compose up -d
 
-      - name: Check internal docs links (built HTML)
-        run: python3 scripts/check_docs_internal_links.py --site _site
+      - name: Wait for bridge
+        run: |
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8080/api/health >/tmp/health.json; then
+              cat /tmp/health.json
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+
+      - name: UI served is new driver-tree build
+        run: |
+          curl -fsS http://127.0.0.1:8080/app.js | grep "REAL DEAL BACNET CSV BUILD"
+          ! curl -fsS http://127.0.0.1:8080/app.js | grep "Rule Lab"
+          ! curl -fsS http://127.0.0.1:8080/app.js | grep "/api/haystack/model"
+
+      - name: BACnet override scanner smoke
+        run: |
+          TOKEN="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"sub":"ci","role":"agent"}' | jq -r .access_token)"
+
+          test -n "$TOKEN"
+          test "$TOKEN" != "null"
+
+          curl -fsS http://127.0.0.1:8080/api/bacnet/driver/tree \
+            -H "Authorization: Bearer $TOKEN" | jq -e '.drivers | length >= 4'
+
+          curl -fsS -X POST http://127.0.0.1:8080/api/bacnet/overrides/scan-once \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{}' | jq -e '.ok == true and .summary.total >= 1'
+
+          curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/status \
+            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and .summary.priority8 >= 1'
+
+          curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export \
+            -H "Authorization: Bearer $TOKEN" | grep "timestamp,scan_id"
+
+          curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export/p8 \
+            -H "Authorization: Bearer $TOKEN" | grep "priority_kind"
+
+          curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export/non-p8 \
+            -H "Authorization: Bearer $TOKEN" | grep "priority_kind"
+
+      - name: CSV files created in workspace
+        run: |
+          test -f workspace/overrides/bacnet_overrides.csv
+          test -f workspace/overrides/bacnet_priority8_overrides.csv
+          test -f workspace/overrides/bacnet_non_priority8_overrides.csv
+          test -f workspace/overrides/last_scan.json
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Compose down
+        if: always()
+        run: docker compose down

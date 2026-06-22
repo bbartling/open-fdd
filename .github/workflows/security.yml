@@ -1,0 +1,38 @@
+name: Rust Edge Security Guards
+
+on:
+  pull_request:
+  push:
+    branches: [ master, main, rust-rewrite-1 ]
+
+jobs:
+  deny-old-python-shape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure old Python project shape is gone
+        run: |
+          test ! -f pyproject.toml
+          test ! -f requirements.txt
+          test ! -d open_fdd
+          test ! -d bacnet_toolshed
+
+      - name: Ensure safety docs exist
+        run: |
+          test -f AGENTS.md
+          grep -q "Never" AGENTS.md
+
+      - name: Keep Rust rewrite focused
+        run: |
+          test -f Cargo.toml
+          test -f docker-compose.yml
+          test -f Dockerfile
+          test -d edge
+          test -d frontend
+
+      - name: No legacy UI route regressions
+        run: |
+          ! grep -R "/api/haystack/model" frontend edge
+          ! grep -R "Rule Lab" frontend
+          ! grep -R "Open-FDD-style tabs" frontend
