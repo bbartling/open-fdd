@@ -81,11 +81,18 @@ const api = {
     }
     if (!r.ok) throw new Error(`${path} ${r.status}`);
     return r.json();
+  },
+  async put(path, body = {}) {
+    const r = await fetch(path, { method: "PUT", headers: this.headers(), body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(`${path} ${r.status}`);
+    return r.json();
   }
 };
 
 const TABS = [
   ["dashboard", "Dashboard"],
+  ["fdd-wires", "FDD Wires"],
+  ["rules", "SQL Rules"],
   ["fdd", "SQL FDD"],
   ["plots", "Plots"],
   ["haystack", "Haystack"],
@@ -431,6 +438,8 @@ function App() {
 
   let body = null;
   if (tab === "dashboard") body = React.createElement(Dashboard, { health: state.health, overrides: state.overrides, tree: state.tree });
+  if (tab === "fdd-wires" && window.OpenFddFddWires) body = React.createElement(window.OpenFddFddWires.FddWiresWorkspace, { apiClient: api, driverTree: state.tree, onRefresh: load });
+  if (tab === "rules" && window.OpenFddFddWires) body = React.createElement(window.OpenFddFddWires.SqlRuleBuilder, { apiClient: api });
   if (tab === "fdd") body = React.createElement(SqlFdd, { fdd: state.fdd });
   if (tab === "plots") body = React.createElement(Plots, { rows: state.rows, fdd: state.fdd });
   if (tab === "haystack") body = React.createElement(Haystack, { model: state.model });
