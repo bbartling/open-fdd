@@ -17,7 +17,7 @@ fi
 HOURS="${BENCH_SMOKE_HOURS:-6}"
 INTERVAL="${BENCH_SMOKE_INTERVAL_SEC:-300}"
 SAMPLES="${BENCH_SMOKE_SAMPLES:-}"
-LOG_DIR="$ROOT/workspace/logs/bench_5007_long_smoke"
+LOG_DIR="${BENCH_SMOKE_LOG_DIR:-$ROOT/workspace/logs/bench_5007_long_smoke}"
 AUTH="$ROOT/workspace/auth.env.local"
 if [[ -n "$SAMPLES" ]]; then
   END=0
