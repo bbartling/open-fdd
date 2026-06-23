@@ -2,6 +2,14 @@
 
 Open-FDD is a local-first, on-prem HVAC supervisory fault-detection edge application built around **Rust**, **Apache Arrow**, **DataFusion SQL**, **React**, and **Docker/GHCR**.
 
+## Architecture
+
+Open-FDD uses **Apache Arrow** and **Feather** as the native historian and data storage layer, while **DataFusion SQL** serves as the fault detection and analytics engine that operates directly on those Arrow datasets. Telemetry from BACnet, Haystack, Modbus, and JSON APIs is normalized into Arrow-native structures (persisted as Feather files at the edge) instead of a traditional relational database. DataFusion executes SQL-based fault detection rules, reporting logic, and data quality checks directly against that historian.
+
+The stack is migrating to an all-Rust edge runtime: BACnet and Modbus drivers, Haystack gateway, Arrow historian, DataFusion FDD, JWT auth, and the React dashboard. Docker containers (`openfdd-bridge`, `openfdd-commission`, `openfdd-haystack-gateway`) share one workspace volume and form a self-hosted platform without cloud dependency.
+
+Full detail: [architecture/overview.md](architecture/overview.md).
+
 ## Quick start
 
 | Topic | Document |
@@ -23,6 +31,8 @@ Open-FDD is a local-first, on-prem HVAC supervisory fault-detection edge applica
 
 | Topic | Document |
 | --- | --- |
+| Platform overview | [architecture/overview.md](architecture/overview.md) |
+| Local BACnet server (diagnostics) | [architecture/bacnet-local-server.md](architecture/bacnet-local-server.md) |
 | Drivers, historian, and FDD | [architecture/drivers-and-fdd.md](architecture/drivers-and-fdd.md) |
 | Haystack assignment model | [ASSIGNMENT_MODEL.md](ASSIGNMENT_MODEL.md) |
 | Agent API surface | [AI_AGENT_API.md](AI_AGENT_API.md) |

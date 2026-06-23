@@ -16,7 +16,7 @@ pub const RPI_POINTS_JSON: &str = r#"[
   {"id":"modbus:tcp:1:30003","name":"RPi Humidity","register":30003,"function":"input_register","scale":0.1,"unit":"%RH","address":"192.168.204.14:1502","unit_id":1,"haystack_id":"point:rpi-rh"}
 ]"#;
 
-fn modbus_config_value() -> Value {
+pub fn modbus_config_value() -> Value {
     let (host, port) = modbus_live::host_port();
     json!({
         "mode": env::var("OPENFDD_MODBUS_MODE").unwrap_or_else(|_| "simulated".to_string()),
@@ -95,6 +95,14 @@ pub fn read_value(body: &Value) -> String {
 
     r#"{"point":"CHW Plant Supply Temp","value":44.8,"unit":"°F","source":"modbus-simulated"}"#
         .to_string()
+}
+
+pub fn commission_status_mode() -> &'static str {
+    if modbus_live::is_live_mode() {
+        "online"
+    } else {
+        "simulated"
+    }
 }
 
 pub fn commission_status_json() -> String {

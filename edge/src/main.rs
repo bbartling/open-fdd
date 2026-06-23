@@ -265,6 +265,16 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let body = drivers::bacnet::poll_status_json();
             raw_json(&mut stream, &body)
         }
+        ("GET", "/api/drivers/tree") => {
+            raw_json(&mut stream, &drivers::tree::unified_tree_json())
+        }
+        ("GET", "/api/bacnet/server/points") => {
+            raw_json(&mut stream, &drivers::bacnet_server::server_points_json())
+        }
+        ("POST", "/api/bacnet/priority-array") => {
+            let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
+            raw_json(&mut stream, &drivers::bacnet::priority_array_json(&payload))
+        }
         ("GET", "/api/bacnet/driver/tree") => {
             let body = drivers::bacnet::driver_tree_json();
             raw_json(&mut stream, &body)
@@ -296,8 +306,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             raw_json(&mut stream, &response_body)
         }
         ("GET", "/api/bacnet/overrides/status") => {
-            let body = drivers::bacnet::overrides_json();
-            raw_json(&mut stream, &body)
+            json_response(&mut stream, drivers::tree::overrides_status_ui())
         }
         ("POST", "/api/bacnet/overrides/scan-once") => require_role(
             &mut stream,
@@ -415,6 +424,13 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             json!({"ok": true, "report_id": "rcx-demo-001", "path": "workspace/reports/rcx/rcx-demo-001.md", "sections": ["faults", "overrides", "plotly_trends", "recommendations"]}),
         ),
         _ => {
+            if method == "GET" && clean_path.starts_with("/api/bacnet/jobs/") {
+                let job_id = clean_path.trim_start_matches("/api/bacnet/jobs/");
+                return json_response(
+                    &mut stream,
+                    json!({"ok": true, "job_id": job_id, "status": "complete", "result": {}}),
+                );
+            }
             if let Some(resp) = handle_fdd_wires_dynamic(
                 &mut stream,
                 &principal,

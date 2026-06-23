@@ -22,6 +22,26 @@
   Includes an open knowledge layer for AI-assisted building diagnostics, commissioning support, and HVAC fault investigation.
 </p>
 
+## Architecture
+
+Open-FDD uses **Apache Arrow** and **Feather** as the native historian and data storage layer, while **DataFusion SQL** serves as the fault detection and analytics engine that operates directly on those Arrow datasets. Rather than storing building telemetry in a traditional relational database, data collected from BACnet, Haystack, Modbus, and JSON APIs is normalized into Arrow-native structures and persisted as Feather files, allowing high-performance columnar analytics at the edge. DataFusion then executes SQL-based fault detection rules, reporting logic, and data quality checks directly against the Arrow historian — a clear path toward a fully Rust-based analytics stack without Pandas or other row-oriented processing frameworks.
+
+The platform is migrating to an **all-Rust architecture**: protocol drivers, historian services, APIs, and the analytics engine. BACnet communication uses Rust-native BACnet libraries; Haystack support is implemented through Rust Haystack integrations; Modbus connectivity uses Rust Modbus libraries; and the FDD engine executes DataFusion SQL against Arrow datasets. The entire telemetry pipeline stays memory-safe, performant, and suitable for resource-constrained edge devices as well as larger on-premises building servers.
+
+Open-FDD deploys as a collection of **Docker containers** that work together as a complete edge operations platform:
+
+| Container | Role |
+| --- | --- |
+| **openfdd-bridge** | REST API, JWT auth, Arrow historian, React dashboard, Modbus driver, JSON API sources, agent APIs |
+| **openfdd-commission** | BACnet discovery, point browsing, polling, supervisory override scans |
+| **openfdd-haystack-gateway** | Project Haystack read/nav/ops against BAS stations (Niagara-style integration path) |
+
+The left **Driver Tree** in the dashboard lists BACnet, Modbus/TCP, JSON API, and Haystack gateway entries from `workspace/data/drivers/bacnet/driver_tree.json`. Modbus, JSON API, and Haystack also expose dedicated REST routes on the bridge (`/api/modbus/*`, `/api/json-api/*`, `/api/haystack/*`, `/api/model/haystack`). MCP and knowledge services are planned; agent JSON APIs are already on the bridge.
+
+Together these services create a self-hosted, on-premises platform for building telemetry collection, data modeling, fault detection and diagnostics, retro-commissioning, and AI-assisted building operations — without a cloud dependency.
+
+See [architecture overview](docs/architecture/overview.md) and [drivers + FDD](docs/architecture/drivers-and-fdd.md).
+
 <p align="center">
   <a href="docs/README.md"><img src="https://img.shields.io/badge/Documentation-read_online-2563EB?style=for-the-badge" alt="Documentation"></a>
   <a href="docs/quick-start/rust-edge-bootstrap.md"><img src="https://img.shields.io/badge/Quick%20Start-Rust%20Edge-059669?style=for-the-badge" alt="Rust quick start"></a>

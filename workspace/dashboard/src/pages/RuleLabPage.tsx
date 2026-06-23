@@ -1,0 +1,603 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import PageHeader from "../components/PageHeader";
+import PythonCodeEditor from "../components/PythonCodeEditor";
+import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
+import { apiDownloadBlob, apiFetch, fetchAuthMe, getBridgeBase } from "../lib/api";
+import { formatApiError } from "../lib/formatApiError";
+import { openTextPopup } from "../lib/ttlPopup";
+import { displayRuleName, formatRuleLabel } from "../lib/ruleDisplay";
+import { useActiveSiteId } from "../lib/useActiveSiteId";
+import {
+  formatBatchSummary,
+  formatLintIssues,
+  formatRuleTestEvents,
+  type LintIssue,
+} from "../lib/rule-lab-console";
+
+const NEW_RULE_VALUE = "__new__";
+
+type SavedRule = {
+  id: string;
+  name: string;
+  mode: "rule" | "script";
+  severity: string;
+  enabled: boolean;
+  source_path?: string;
+  fault_code?: string;
+  fault_codes?: string[];
+  code?: string;
+  config?: Record<string, unknown>;
+  bindings?: {
+    point_ids?: string[];
+    equipment_ids?: string[];
+    brick_types?: string[];
+  };
+};
+
+function syntaxPillClass(ok: boolean | null, busy: boolean): string {
+  if (busy) return "syntax-pill pending";
+  if (ok === true) return "syntax-pill ok";
+  if (ok === false) return "syntax-pill err";
+  return "syntax-pill";
+}
+
+export default function RuleLabPage() {
+  const activeSiteId = useActiveSiteId();
+  const [code, setCode] = useState("");
+  const [sourcePath, setSourcePath] = useState("");
+  const [consoleText, setConsoleText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [lintBusy, setLintBusy] = useState(false);
+  const [syntaxOk, setSyntaxOk] = useState<boolean | null>(null);
+  const [lintIssues, setLintIssues] = useState<LintIssue[]>([]);
+  const [ruleName, setRuleName] = useState("New rule");
+  const [saved, setSaved] = useState<SavedRule[]>([]);
+  const [activeRuleId, setActiveRuleId] = useState<string>("");
+  const [creatingNew, setCreatingNew] = useState(true);
+  const [authRole, setAuthRole] = useState<string | null>(null);
+  const [metaDirty, setMetaDirty] = useState(false);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const uploadRef = useRef<HTMLInputElement>(null);
+  const lintTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    fetchAuthMe()
+      .then((me) => setAuthRole(me.role))
+      .catch(() => setAuthRole(null));
+  }, []);
+
+  const refreshSaved = useCallback(async () => {
+    const res = await apiFetch<{ rules: SavedRule[] }>("/api/rules/saved");
+    const rules = (res.rules || []).filter((r) => r.mode !== "script");
+    setSaved(rules);
+    return rules;
+  }, []);
+
+  const loadRuleView = useCallback(async (rule: SavedRule) => {
+    setCreatingNew(false);
+    setActiveRuleId(rule.id);
+    setRuleName(displayRuleName(rule.name));
+    setMetaDirty(false);
+    try {
+      const res = await apiFetch<{ code: string; path: string }>(`/api/rules/saved/${rule.id}/source`);
+      setCode(res.code?.trim() || rule.code?.trim() || "");
+      setSourcePath(res.path || rule.source_path || "");
+    } catch (e) {
+      if (rule.code?.trim()) {
+        setCode(rule.code);
+        setSourcePath(rule.source_path || "");
+      } else {
+        setConsoleText(formatApiError(e));
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const rules = await refreshSaved();
+        if (rules.length > 0) {
+          await loadRuleView(rules[0]);
+        } else {
+          setCreatingNew(true);
+          setActiveRuleId("");
+          setCode("");
+          setSourcePath("");
+        }
+      } catch (e) {
+        setConsoleText(formatApiError(e));
+      } finally {
+        setInitialLoadDone(true);
+      }
+    })();
+  }, [refreshSaved, loadRuleView]);
+
+  const runDebouncedLint = useCallback((source: string) => {
+    if (!source.trim()) {
+      setSyntaxOk(null);
+      setLintIssues([]);
+      return;
+    }
+    if (lintTimer.current) window.clearTimeout(lintTimer.current);
+    lintTimer.current = window.setTimeout(() => {
+      setLintBusy(true);
+      apiFetch<{ ok: boolean; issues: LintIssue[] }>("/api/playground/lint", {
+        method: "POST",
+        body: JSON.stringify({ code: source, mode: "rule" }),
+      })
+        .then((res) => {
+          setSyntaxOk(res.ok);
+          setLintIssues(res.issues || []);
+        })
+        .catch(() => {
+          setSyntaxOk(null);
+          setLintIssues([]);
+        })
+        .finally(() => setLintBusy(false));
+    }, 400);
+  }, []);
+
+  useEffect(() => {
+    runDebouncedLint(code);
+    return () => {
+      if (lintTimer.current) window.clearTimeout(lintTimer.current);
+    };
+  }, [code, runDebouncedLint]);
+
+  function appendConsole(text: string) {
+    setConsoleText((prev) => (prev ? `${prev}\n${text}` : text));
+  }
+
+  function preservedBindings(existing?: SavedRule["bindings"]): SavedRule["bindings"] {
+    return {
+      point_ids: [...(existing?.point_ids ?? [])],
+      equipment_ids: [...(existing?.equipment_ids ?? [])],
+      brick_types: [...(existing?.brick_types ?? [])],
+    };
+  }
+
+  async function lintNow() {
+    if (!code.trim()) {
+      appendConsole("No rule loaded — upload rule.py or select a saved rule.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await apiFetch<{ ok: boolean; issues: LintIssue[] }>("/api/playground/lint", {
+        method: "POST",
+        body: JSON.stringify({ code, mode: "rule" }),
+      });
+      setSyntaxOk(res.ok);
+      setLintIssues(res.issues || []);
+      appendConsole(formatLintIssues(res.issues || []));
+    } catch (e) {
+      appendConsole(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testRun() {
+    if (!code.trim()) {
+      appendConsole("Upload rule.py before testing.");
+      return;
+    }
+    if (syntaxOk === false) {
+      appendConsole("Fix lint errors before test.");
+      return;
+    }
+    const rule = saved.find((r) => r.id === activeRuleId);
+    const pointId = rule?.bindings?.point_ids?.[0];
+    if (!pointId) {
+      appendConsole(
+        "Quick test needs one bound point — add this rule id to points[].fdd_rule_ids in Model & assignments JSON, then import.",
+      );
+      return;
+    }
+    setBusy(true);
+    setConsoleText("");
+    try {
+      const res = await apiFetch<{
+        rows: number;
+        flagged: number;
+        data_source?: string;
+        value_column?: string;
+        backend?: string;
+        events: { type: string; text?: string }[];
+        trace?: string;
+        error?: string;
+        ms?: number;
+      }>("/api/playground/test-rule", {
+        method: "POST",
+        body: JSON.stringify({
+          code,
+          config: {},
+          site_id: activeSiteId || undefined,
+          point_keys: [pointId],
+          lookback_hours: 3,
+          limit: 120,
+          chunk_hours: 0,
+        }),
+      });
+      setConsoleText(
+        [
+          `>>> Quick test (first bound point) rows=${res.rows} flagged=${res.flagged} · ${res.data_source}`,
+          res.backend ? `backend: ${res.backend}${res.ms != null ? ` · ${res.ms} ms` : ""}` : "",
+          res.value_column ? `column: ${res.value_column}` : "",
+          formatRuleTestEvents(res.events || [], { maxLines: 28 }),
+          res.trace || res.error || "",
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      );
+    } catch (e) {
+      setConsoleText(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveMetadata(opts?: { manageBusy?: boolean }) {
+    if (!activeRuleId || creatingNew) {
+      appendConsole("Upload rule.py first to create a rule.");
+      return;
+    }
+    if (!code.trim()) return;
+    const manageBusy = opts?.manageBusy !== false;
+    if (manageBusy) setBusy(true);
+    try {
+      const fresh = await apiFetch<{ rules: SavedRule[] }>("/api/rules/saved");
+      const bindingsSource = fresh.rules?.find((r) => r.id === activeRuleId)?.bindings;
+      const res = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
+        method: "POST",
+        body: JSON.stringify({
+          id: activeRuleId,
+          name: ruleName,
+          mode: "rule",
+          code,
+          config: {},
+          severity: "warning",
+          bindings: preservedBindings(bindingsSource),
+        }),
+      });
+      setMetaDirty(false);
+      appendConsole(`>>> Saved name for ${res.rule.id}`);
+      await refreshSaved();
+    } catch (e) {
+      appendConsole(formatApiError(e));
+    } finally {
+      if (manageBusy) setBusy(false);
+    }
+  }
+
+  async function downloadKit() {
+    setBusy(true);
+    try {
+      const params = new URLSearchParams();
+      if (activeSiteId) params.set("site_id", activeSiteId);
+      if (activeRuleId && !creatingNew) params.set("rule_id", activeRuleId);
+      params.set("lookback_hours", "3");
+      const rule = saved.find((r) => r.id === activeRuleId);
+      const pointId = rule?.bindings?.point_ids?.[0];
+      if (pointId) params.set("point_id", pointId);
+      const { blob, filename } = await apiDownloadBlob(`/api/rules/export-kit?${params.toString()}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      appendConsole(`>>> Downloaded ${filename} (rule.py + data.py + sample.feather)`);
+    } catch (e) {
+      appendConsole(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onUploadFile(file: File | null) {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      if (activeRuleId && !creatingNew) form.append("rule_id", activeRuleId);
+      const base = getBridgeBase();
+      const token = sessionStorage.getItem("ofdd_token");
+      const res = await fetch(`${base}/api/rules/upload`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        let msg = text;
+        try {
+          const body = JSON.parse(text) as { detail?: string };
+          if (body.detail) msg = body.detail;
+        } catch {
+          /* plain text */
+        }
+        throw new Error(msg);
+      }
+      const body = JSON.parse(text) as { rule: SavedRule; filename?: string };
+      const newId = body.rule.id;
+      setActiveRuleId(newId);
+      setCreatingNew(false);
+      await loadRuleView(body.rule);
+      appendConsole(
+        `>>> Uploaded ${body.filename || file.name} → ${formatRuleLabel(body.rule.name)} (${newId})`,
+      );
+      await refreshSaved();
+    } catch (e) {
+      appendConsole(formatApiError(e));
+    } finally {
+      setBusy(false);
+      if (uploadRef.current) uploadRef.current.value = "";
+    }
+  }
+
+  async function updateAllRecords() {
+    setBusy(true);
+    try {
+      if (metaDirty && activeRuleId) await saveMetadata({ manageBusy: false });
+      const res = await apiFetch<{
+        rules_run?: number;
+        flagged_runs?: number;
+        runs?: { rule_name?: string; site_id?: string; flagged?: number; status?: string }[];
+      }>("/api/rules/batch", {
+        method: "POST",
+        body: JSON.stringify({ limit: 50000, chunk_hours: 6, lookback_hours: 24, use_chunks: true }),
+      });
+      setConsoleText(formatBatchSummary(res));
+    } catch (e) {
+      appendConsole(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function beginNewRule() {
+    setCreatingNew(true);
+    setActiveRuleId("");
+    setRuleName("New rule");
+    setCode("");
+    setSourcePath("");
+    setMetaDirty(false);
+    appendConsole("Download a blank kit or upload rule.py to create a new Arrow rule.");
+  }
+
+  async function removeRule() {
+    if (!activeRuleId) return;
+    if (!window.confirm(`Delete rule "${ruleName}"?`)) return;
+    setBusy(true);
+    try {
+      await apiFetch(`/api/rules/saved/${activeRuleId}`, { method: "DELETE" });
+      const list = await refreshSaved();
+      if (list[0]) await loadRuleView(list[0]);
+      else beginNewRule();
+      appendConsole(`>>> Deleted rule ${activeRuleId}`);
+    } catch (e) {
+      appendConsole(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onRuleSelectChange(id: string) {
+    if (id === NEW_RULE_VALUE) {
+      beginNewRule();
+      return;
+    }
+    const rule = saved.find((r) => r.id === id);
+    if (rule) await loadRuleView(rule);
+  }
+
+  function openRuleInTab() {
+    if (!code.trim()) return;
+    const title = sourcePath ? sourcePath.split("/").pop() || "rule.py" : "rule.py";
+    openTextPopup(title, code);
+  }
+
+  const selectValue = creatingNew ? NEW_RULE_VALUE : activeRuleId || saved[0]?.id || "";
+
+  const syntaxTitle = useMemo(() => {
+    if (lintBusy) return "Checking syntax…";
+    if (syntaxOk === true) return "Arrow lint OK";
+    if (syntaxOk === false) return lintIssues.find((i) => i.severity === "error")?.message || "Lint error";
+    return code.trim() ? "Lint pending" : "No rule loaded";
+  }, [lintBusy, syntaxOk, lintIssues, code]);
+
+  const consoleLines = useMemo(() => consoleTextToLines(consoleText), [consoleText]);
+
+  return (
+    <div className="page page-wide rule-lab-page">
+      <PageHeader
+        title="Rule Lab"
+        subtitle={
+          <>
+            Arrow-only rules: <strong>download kit</strong> → edit locally → <strong>upload rule.py</strong>.
+            Pin rules via <a href="/model">Model & assignments</a> commissioning JSON.
+          </>
+        }
+      />
+
+      {authRole === "operator" ? (
+        <p className="error panel">
+          Signed in as <strong>operator</strong>. Upload and batch require <strong>integrator</strong> or{" "}
+          <strong>agent</strong> (download kit and read-only view are OK).
+        </p>
+      ) : null}
+
+      <div className="panel rule-lab-toolbar">
+        <div className="rule-lab-rule-row">
+          <label className="field-label" htmlFor="rule-select">
+            Rule
+          </label>
+          <div className="rule-switcher-group">
+            <button
+              type="button"
+              className="rule-step-btn rule-step-remove"
+              disabled={!activeRuleId || busy || creatingNew}
+              onClick={() => void removeRule()}
+              title="Delete selected rule"
+              aria-label="Delete rule"
+            >
+              −
+            </button>
+            <select
+              id="rule-select"
+              className="rule-switcher-select"
+              value={selectValue}
+              disabled={!initialLoadDone || (saved.length === 0 && creatingNew)}
+              onChange={(e) => void onRuleSelectChange(e.target.value)}
+            >
+              {creatingNew ? <option value={NEW_RULE_VALUE}>New rule (upload .py)</option> : null}
+              {saved.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {formatRuleLabel(r.name)}
+                  {metaDirty && r.id === activeRuleId ? " *" : ""}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="rule-step-btn rule-step-add"
+              disabled={busy}
+              onClick={beginNewRule}
+              title="New rule"
+              aria-label="Add rule"
+            >
+              +
+            </button>
+          </div>
+          <span className={syntaxPillClass(syntaxOk, lintBusy)} title={syntaxTitle}>
+            {lintBusy ? "…" : syntaxOk === true ? "arrow ok" : syntaxOk === false ? "lint err" : "arrow —"}
+          </span>
+        </div>
+
+        <div className="form-grid">
+          <div className="field">
+            <label className="field-label" htmlFor="rule-name">
+              Name
+            </label>
+            <input
+              id="rule-name"
+              value={ruleName}
+              disabled={creatingNew}
+              onChange={(e) => {
+                setRuleName(e.target.value);
+                setMetaDirty(true);
+              }}
+            />
+          </div>
+        </div>
+
+        <p className="muted rule-lab-hint">
+          Tune thresholds in <code>rule.py</code> constants (<code>VALUE_COLUMN</code>, limits) — download kit, edit locally,
+          upload.
+        </p>
+
+        <div className="toolbar rule-lab-actions">
+          <button type="button" className="secondary" disabled={busy} onClick={() => void downloadKit()}>
+            Download kit (.zip)
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy || authRole === "operator"}
+            onClick={() => uploadRef.current?.click()}
+          >
+            Upload rule.py
+          </button>
+          <input
+            ref={uploadRef}
+            type="file"
+            accept=".py,text/x-python,application/x-python-code"
+            hidden
+            onChange={(e) => void onUploadFile(e.target.files?.[0] ?? null)}
+          />
+          <button type="button" className="secondary" disabled={busy || !code.trim()} onClick={() => void lintNow()}>
+            Lint
+          </button>
+          <button type="button" disabled={busy || syntaxOk === false || !code.trim()} onClick={() => void testRun()}>
+            Quick test
+          </button>
+          <button
+            type="button"
+            disabled={busy || authRole === "operator" || creatingNew || !metaDirty}
+            onClick={() => void saveMetadata()}
+          >
+            Save name
+          </button>
+          <button
+            type="button"
+            className="primary"
+            disabled={busy || authRole === "operator" || !code.trim()}
+            onClick={() => void updateAllRecords()}
+          >
+            Update all records
+          </button>
+          {metaDirty ? <span className="muted dirty-hint">Unsaved name</span> : null}
+        </div>
+      </div>
+
+      {sourcePath ? (
+        <p className="muted code-path">
+          File: <code>{sourcePath}</code>
+          {code.trim() ? (
+            <>
+              {" "}
+              ·{" "}
+              <button type="button" className="linkish" onClick={openRuleInTab}>
+                Open in new tab
+              </button>
+            </>
+          ) : null}
+        </p>
+      ) : null}
+
+      <div className="panel rule-lab-readonly-panel">
+        <h3 className="panel-title">rule.py (read-only)</h3>
+        {code.trim() ? (
+          <div className="rule-readonly-editor">
+            <PythonCodeEditor
+              value={code}
+              onChange={() => undefined}
+              readOnly
+              height="320px"
+              lintIssues={lintIssues}
+            />
+          </div>
+        ) : (
+          <p className="muted">
+            No rule loaded. Download a dev kit with real feather sample data, edit <code>rule.py</code> locally with{" "}
+            <code>pip install open-fdd pyarrow</code>, then upload when lint passes.
+          </p>
+        )}
+        {lintIssues.length > 0 && syntaxOk === false ? (
+          <ul className="rule-lint-list">
+            {lintIssues
+              .filter((i) => i.severity === "error")
+              .slice(0, 6)
+              .map((i, idx) => (
+                <li key={`${i.line}-${idx}`}>
+                  line {i.line}: {i.message}
+                </li>
+              ))}
+          </ul>
+        ) : null}
+      </div>
+
+      <RuleLabConsole
+        lines={consoleLines}
+        placeholder="Download, upload, lint, quick test, or batch output."
+        footer={
+          <button type="button" className="secondary small-btn" onClick={() => setConsoleText("")}>
+            Clear
+          </button>
+        }
+      />
+    </div>
+  );
+}

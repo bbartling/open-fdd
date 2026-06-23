@@ -1,10 +1,16 @@
 /target
 /edge/target
 /.env
-/workspace
 edge/workspace/
 workspace/auth.env.local
 workspace/data.env.local
 workspace/data/fdd_wires/
+workspace/backups/
+workspace/data/
+workspace/logs/
+workspace/overrides/
+workspace/bacnet/
+workspace/dashboard/node_modules/
+frontend/assets/
 **/*.db
 .DS_Store

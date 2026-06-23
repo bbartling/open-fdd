@@ -2,6 +2,21 @@
 
 Rust-only layout: driver code in `edge/src/drivers/`, fault detection in `edge/src/fdd/`.
 
+See [architecture overview](overview.md) for the full platform picture (Arrow/Feather historian, DataFusion FDD, Docker services).
+
+## Driver tree vs REST APIs
+
+The React **Driver Tree** sidebar reads `workspace/data/drivers/bacnet/driver_tree.json`. It is meant to list all four protocol families:
+
+| Driver ID | Label | Tree content | Primary API |
+| --- | --- | --- | --- |
+| `bacnet-ip` | BACnet/IP | Devices, points, override scan | `/api/bacnet/*` |
+| `modbus-tcp` | Modbus/TCP | Units, registers | `/api/modbus/*` |
+| `json-api` | JSON API | HTTP sources | `/api/json-api/*` |
+| `haystack` | Haystack Gateway | Sites + integration note | `/api/haystack/*`, `/api/model/haystack` |
+
+If the on-disk driver tree was narrowed to BACnet-only (common after bench commissioning), Modbus, JSON API, and Haystack disappear from the sidebar even though their APIs remain live on the bridge. Merge the other driver blocks back into the JSON file, or remove the file to fall back to the built-in default tree in `edge/src/drivers/bacnet.rs`.
+
 ## Driver modules
 
 ```text

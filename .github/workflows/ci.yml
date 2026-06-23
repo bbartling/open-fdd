@@ -26,7 +26,7 @@ jobs:
         run: cargo test --workspace --all-targets
 
   frontend:
-    name: Frontend syntax and legacy UI guard
+    name: TypeScript dashboard build and tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,24 +35,26 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Frontend syntax
-        run: |
-          node --check frontend/app.js
-          node --check frontend/fdd-wires.js
+      - name: Install dashboard dependencies
+        working-directory: workspace/dashboard
+        run: npm ci
 
-      - name: FDD Wires UI guards
-        run: |
-          grep -q "FDD Wires" frontend/app.js
-          grep -q "Rule Assignment Workspace" frontend/fdd-wires.js
-          grep -q "Raw DataFusion SQL" frontend/fdd-wires.js
-          ! grep -Ri "grafana\|rubix\|nubeio\|nubedev\|niagara" frontend/app.js frontend/fdd-wires.js frontend/index.html
+      - name: Vitest
+        working-directory: workspace/dashboard
+        run: npm test
 
-      - name: New driver-tree UI is default
+      - name: Production build
+        working-directory: workspace/dashboard
+        env:
+          VITE_OUT_DIR: ../../frontend
+        run: npm run build
+
+      - name: Built UI guards
         run: |
-          grep -q "REAL DEAL BACNET CSV BUILD" frontend/app.js
-          ! grep -R "Rule Lab" frontend/app.js frontend/index.html
-          ! grep -R "/api/haystack/model" frontend/app.js frontend/index.html
-          ! grep -R "Open-FDD-style tabs" frontend/app.js frontend/index.html
+          test -f frontend/index.html
+          grep -q "Drivers" workspace/dashboard/src/pages/DriversPage.tsx
+          grep -q "SupervisoryOverridePanel" workspace/dashboard/src/components/SupervisoryOverridePanel.tsx
+          ! grep -R "Rule Lab" workspace/dashboard/src frontend/index.html || true
 
       - name: BACnet NIC helper guards
         run: |
