@@ -21,6 +21,7 @@ pub fn apply_confirmation(raw_rows: &[Value], confirmation_seconds: i64) -> Valu
     for row in raw_rows {
         let fault = row
             .get("fault_raw")
+            .or_else(|| row.get("raw_fault"))
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
         if fault {
@@ -82,9 +83,9 @@ mod tests {
     #[test]
     fn confirms_after_duration() {
         let rows = vec![
-            json!({"timestamp":"2026-06-21T00:00:00Z","fault_raw":true,"equipment_id":"AHU-1"}),
-            json!({"timestamp":"2026-06-21T00:06:00Z","fault_raw":true,"equipment_id":"AHU-1"}),
-            json!({"timestamp":"2026-06-21T00:11:00Z","fault_raw":false,"equipment_id":"AHU-1"}),
+            json!({"timestamp":"2026-06-21T00:00:00Z","fault_raw":true,"equipment_id":"5007"}),
+            json!({"timestamp":"2026-06-21T00:06:00Z","fault_raw":true,"equipment_id":"5007"}),
+            json!({"timestamp":"2026-06-21T00:11:00Z","fault_raw":false,"equipment_id":"5007"}),
         ];
         let out = apply_confirmation(&rows, 300);
         assert_eq!(out["confirmed_fault_count"].as_u64(), Some(1));

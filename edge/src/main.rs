@@ -1,4 +1,5 @@
 mod auth;
+mod bench;
 mod control;
 mod drivers;
 mod fdd;
@@ -265,6 +266,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let body = drivers::bacnet::poll_status_json();
             raw_json(&mut stream, &body)
         }
+        ("GET", "/api/drivers/tree") => raw_json(&mut stream, &drivers::tree::unified_tree_json()),
+        ("GET", "/api/bacnet/server/points") => {
+            raw_json(&mut stream, &drivers::bacnet_server::server_points_json())
+        }
+        ("POST", "/api/bacnet/priority-array") => {
+            let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
+            raw_json(&mut stream, &drivers::bacnet::priority_array_json(&payload))
+        }
         ("GET", "/api/bacnet/driver/tree") => {
             let body = drivers::bacnet::driver_tree_json();
             raw_json(&mut stream, &body)
@@ -296,8 +305,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             raw_json(&mut stream, &response_body)
         }
         ("GET", "/api/bacnet/overrides/status") => {
-            let body = drivers::bacnet::overrides_json();
-            raw_json(&mut stream, &body)
+            json_response(&mut stream, drivers::tree::overrides_status_ui())
         }
         ("POST", "/api/bacnet/overrides/scan-once") => require_role(
             &mut stream,
@@ -388,13 +396,43 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            serde_json::from_str::<Value>(drivers::json_api::poll_once_json()).unwrap(),
+            drivers::json_api::poll_test_source(),
         ),
         ("POST", "/api/json-api/register") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
             serde_json::from_str::<Value>(drivers::json_api::register_json()).unwrap(),
+        ),
+        ("GET", "/api/historian/bench/5007/status") => {
+            json_response(&mut stream, historian::store::status_json())
+        }
+        ("GET", "/api/bench/5007/smoke/status") => {
+            json_response(&mut stream, bench::smoke::status_json())
+        }
+        ("POST", "/api/bench/5007/smoke/sample") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            bench::smoke::capture_sample(&serde_json::from_str(&body).unwrap_or(json!({}))),
+        ),
+        ("POST", "/api/bench/5007/smoke/eval") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            bench::smoke::evaluate_historian_fdd(),
+        ),
+        ("POST", "/api/bench/5007/smoke/cycle") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            bench::smoke::evaluate_sample(&serde_json::from_str(&body).unwrap_or(json!({}))),
+        ),
+        ("POST", "/api/bench/5007/smoke/inject-scenario") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            bench::smoke::inject_scenario(&serde_json::from_str(&body).unwrap_or(json!({}))),
         ),
         ("GET", "/api/control/status") => raw_json(&mut stream, control::cdl::simulate_json()),
         ("POST", "/api/control/simulate") => require_role(
@@ -415,6 +453,13 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             json!({"ok": true, "report_id": "rcx-demo-001", "path": "workspace/reports/rcx/rcx-demo-001.md", "sections": ["faults", "overrides", "plotly_trends", "recommendations"]}),
         ),
         _ => {
+            if method == "GET" && clean_path.starts_with("/api/bacnet/jobs/") {
+                let job_id = clean_path.trim_start_matches("/api/bacnet/jobs/");
+                return json_response(
+                    &mut stream,
+                    json!({"ok": true, "job_id": job_id, "status": "complete", "result": {}}),
+                );
+            }
             if let Some(resp) = handle_fdd_wires_dynamic(
                 &mut stream,
                 &principal,

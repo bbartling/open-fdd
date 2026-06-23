@@ -45,7 +45,7 @@
 
   function SqlRuleBuilder({ apiClient }) {
     const [mode, setMode] = useState("builder");
-    const [builder, setBuilder] = useState({ name: "OA Temperature Out Of Range", input: "oa_t", operator: ">", value: 110, equipment_id: "AHU-1", confirmation_seconds: 300, severity: "medium", fault_code: "OA_TEMP_OUT_OF_RANGE" });
+    const [builder, setBuilder] = useState({ name: "OA Temperature Out Of Range", input: "oa_t", operator: ">", value: 110, equipment_id: "5007", confirmation_seconds: 300, severity: "medium", fault_code: "OA_TEMP_OUT_OF_RANGE" });
     const [sql, setSql] = useState("");
     const [rawCustom, setRawCustom] = useState(false);
     const [result, setResult] = useState(null);

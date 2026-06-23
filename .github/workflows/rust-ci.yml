@@ -28,14 +28,23 @@ jobs:
           grep -q 'auth.env.local' .gitignore || grep -q '/workspace' .gitignore
 
   frontend:
-    name: Frontend syntax
+    name: TypeScript dashboard build and tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: node --check frontend/app.js
+      - name: Install dashboard dependencies
+        working-directory: workspace/dashboard
+        run: npm ci
+      - name: Vitest
+        working-directory: workspace/dashboard
+        run: npm test
 
   docker:
     name: Docker build and compose config

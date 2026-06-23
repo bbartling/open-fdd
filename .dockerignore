@@ -1,7 +1,11 @@
 target
 edge/target
 .git
-workspace
 workspace/backups
+workspace/data
+workspace/logs
+workspace/overrides
+workspace/bacnet
+workspace/auth.env.local
 edge/workspace
 **/*.db

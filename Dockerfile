@@ -1,4 +1,13 @@
 # Multi-stage Rust Open-FDD edge image (linux/amd64 + linux/arm64 via buildx).
+FROM node:22-bookworm AS dashboard
+WORKDIR /app/dashboard
+COPY workspace/dashboard/package.json workspace/dashboard/package-lock.json ./
+RUN npm ci
+COPY workspace/dashboard ./
+ENV VITE_OUT_DIR=../frontend
+RUN npm run build
+COPY frontend/style.css /app/frontend/
+
 FROM rust:1.93-bookworm AS builder
 WORKDIR /app
 COPY Cargo.toml ./
@@ -14,7 +23,7 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=builder /app/target/release/open_fdd_edge_prototype /usr/local/bin/open_fdd_edge_prototype
 COPY --from=builder /app/target/release/openfdd_edge /usr/local/bin/openfdd_edge
-COPY frontend ./frontend
+COPY --from=dashboard /app/frontend ./frontend
 
 ENV FRONTEND_DIR=/app/frontend \
     PORT=8080 \

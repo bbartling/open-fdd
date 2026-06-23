@@ -290,8 +290,9 @@ pub async fn read_priority_array(
 
     let mut out = Vec::new();
     for (idx, item) in items.iter().enumerate() {
-        let priority = idx as u8;
-        if priority == 0 {
+        // BACnet priority array: priority levels 1–16 map to sequence indices 0–15.
+        let priority = (idx + 1) as u8;
+        if priority > 16 {
             continue;
         }
         if !matches!(item, PropertyValue::Null) {

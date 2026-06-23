@@ -86,7 +86,7 @@ mod tests {
 
     #[test]
     fn allows_select_from_telemetry_pivot() {
-        let sql = "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t > 100 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = 'AHU-1'";
+        let sql = "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t > 100 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = '5007'";
         assert!(is_sql_safe(sql));
     }
 }

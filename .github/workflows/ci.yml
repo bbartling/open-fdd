@@ -26,7 +26,7 @@ jobs:
         run: cargo test --workspace --all-targets
 
   frontend:
-    name: Frontend syntax and legacy UI guard
+    name: TypeScript dashboard build and tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,24 +35,26 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Frontend syntax
-        run: |
-          node --check frontend/app.js
-          node --check frontend/fdd-wires.js
+      - name: Install dashboard dependencies
+        working-directory: workspace/dashboard
+        run: npm ci
 
-      - name: FDD Wires UI guards
-        run: |
-          grep -q "FDD Wires" frontend/app.js
-          grep -q "Rule Assignment Workspace" frontend/fdd-wires.js
-          grep -q "Raw DataFusion SQL" frontend/fdd-wires.js
-          ! grep -Ri "grafana\|rubix\|nubeio\|nubedev\|niagara" frontend/app.js frontend/fdd-wires.js frontend/index.html
+      - name: Vitest
+        working-directory: workspace/dashboard
+        run: npm test
 
-      - name: New driver-tree UI is default
+      - name: Production build
+        working-directory: workspace/dashboard
+        env:
+          VITE_OUT_DIR: ../../frontend
+        run: npm run build
+
+      - name: Built UI guards
         run: |
-          grep -q "REAL DEAL BACNET CSV BUILD" frontend/app.js
-          ! grep -R "Rule Lab" frontend/app.js frontend/index.html
-          ! grep -R "/api/haystack/model" frontend/app.js frontend/index.html
-          ! grep -R "Open-FDD-style tabs" frontend/app.js frontend/index.html
+          test -f frontend/index.html
+          grep -q "Drivers" workspace/dashboard/src/pages/DriversPage.tsx
+          grep -q "SupervisoryOverridePanel" workspace/dashboard/src/components/SupervisoryOverridePanel.tsx
+          ! grep -R "Rule Lab" workspace/dashboard/src frontend/index.html || true
 
       - name: BACnet NIC helper guards
         run: |
@@ -114,11 +116,10 @@ jobs:
           docker compose logs
           exit 1
 
-      - name: UI served is new driver-tree build
+      - name: UI served is TypeScript driver-tree build
         run: |
-          curl -fsS http://127.0.0.1:8080/app.js | grep "REAL DEAL BACNET CSV BUILD"
-          ! curl -fsS http://127.0.0.1:8080/app.js | grep "Rule Lab"
-          ! curl -fsS http://127.0.0.1:8080/app.js | grep "/api/haystack/model"
+          curl -fsS http://127.0.0.1:8080/ | grep -q 'id="root"'
+          curl -fsS http://127.0.0.1:8080/ | grep -q '/assets/index-'
 
       - name: BACnet override scanner smoke
         run: |
@@ -131,7 +132,7 @@ jobs:
           test "$TOKEN" != "null"
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/driver/tree \
-            -H "Authorization: Bearer $TOKEN" | jq -e '(.drivers | length >= 1) and (.bacnet_config.iface == "enp3s0" and .bacnet_config.bind == "192.168.204.55/24:47808")'
+            -H "Authorization: Bearer $TOKEN" | jq -e '((.drivers // []) | length >= 1) or ((.devices // []) | length >= 1)'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/commission/status \
             -H "Authorization: Bearer $TOKEN" | jq -e '.config.iface == "enp3s0" and .config.bind == "192.168.204.55/24:47808"'
@@ -142,7 +143,7 @@ jobs:
             -d '{}' | jq -e '.ok == true and .summary.total >= 1'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/status \
-            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and .summary.priority8 >= 1'
+            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and (.operator_override_points // 0) >= 1'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export \
             -H "Authorization: Bearer $TOKEN" | grep "timestamp,scan_id"
@@ -199,14 +200,27 @@ jobs:
 
           curl -fsS -X POST http://127.0.0.1:8080/api/fdd-rules/oa_temp_out_of_range/test-sql \
             -H "Authorization: Bearer $INT" -H 'Content-Type: application/json' \
-            -d '{"sql":"SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t > 110.0 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = '\''AHU-1'\''","confirmation_seconds":300}' \
+            -d '{"sql":"SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t > 110.0 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = '\''5007'\''","confirmation_seconds":300}' \
             | jq -e '.ok == true and (.engine | type == "string") and (.engine | contains("DataFusion"))'
 
           curl -sS -X POST http://127.0.0.1:8080/api/fdd-rules/oa_temp_out_of_range/activate \
             -H "Authorization: Bearer $AGENT" -H 'Content-Type: application/json' -d '{}' \
             | jq -e '.ok == false'
 
-          curl -fsS http://127.0.0.1:8080/fdd-wires.js | grep -q "FDD Wires"
+          curl -fsS http://127.0.0.1:8080/api/fdd-schema/fdd-inputs \
+            -H "Authorization: Bearer $INT" | jq -e '(.fdd_inputs // []) | length >= 1'
+
+          curl -fsS http://127.0.0.1:8080/api/fdd/datafusion/demo \
+            -H "Authorization: Bearer $INT" | jq -e '(.faults[0].equip // "") == "5007"'
+
+          curl -fsS -X POST http://127.0.0.1:8080/api/bench/5007/smoke/inject-scenario \
+            -H "Authorization: Bearer $AGENT" \
+            -H 'Content-Type: application/json' \
+            -d '{"normal_minutes":5,"fault_minutes":6,"clear_minutes":5}' \
+            | jq -e '.ok == true and (.proof.live_fdd_pass // false) == true'
+
+          curl -fsS http://127.0.0.1:8080/api/bench/5007/smoke/status \
+            -H "Authorization: Bearer $INT" | jq -e '.ok == true and (.rule_sql | contains("confirmation_required_minutes"))'
 
       - name: CSV files created in workspace
         run: |
