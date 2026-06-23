@@ -213,6 +213,15 @@ jobs:
           curl -fsS http://127.0.0.1:8080/api/fdd/datafusion/demo \
             -H "Authorization: Bearer $INT" | jq -e '(.faults[0].equip // "") == "5007"'
 
+          curl -fsS -X POST http://127.0.0.1:8080/api/bench/5007/smoke/inject-scenario \
+            -H "Authorization: Bearer $AGENT" \
+            -H 'Content-Type: application/json' \
+            -d '{"normal_minutes":5,"fault_minutes":6,"clear_minutes":5}' \
+            | jq -e '.ok == true and (.proof.live_fdd_pass // false) == true'
+
+          curl -fsS http://127.0.0.1:8080/api/bench/5007/smoke/status \
+            -H "Authorization: Bearer $INT" | jq -e '.ok == true and (.rule_sql | contains("confirmation_required_minutes"))'
+
       - name: CSV files created in workspace
         run: |
           test -f workspace/overrides/bacnet_overrides.csv

@@ -1,4 +1,5 @@
 mod auth;
+mod bench;
 mod control;
 mod drivers;
 mod fdd;
@@ -395,13 +396,43 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            serde_json::from_str::<Value>(drivers::json_api::poll_once_json()).unwrap(),
+            drivers::json_api::poll_test_source(),
         ),
         ("POST", "/api/json-api/register") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
             serde_json::from_str::<Value>(drivers::json_api::register_json()).unwrap(),
+        ),
+        ("GET", "/api/historian/bench/5007/status") => {
+            json_response(&mut stream, historian::store::status_json())
+        }
+        ("GET", "/api/bench/5007/smoke/status") => {
+            json_response(&mut stream, bench::smoke::status_json())
+        }
+        ("POST", "/api/bench/5007/smoke/sample") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            bench::smoke::capture_sample(&serde_json::from_str(&body).unwrap_or(json!({}))),
+        ),
+        ("POST", "/api/bench/5007/smoke/eval") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            bench::smoke::evaluate_historian_fdd(),
+        ),
+        ("POST", "/api/bench/5007/smoke/cycle") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            bench::smoke::evaluate_sample(&serde_json::from_str(&body).unwrap_or(json!({}))),
+        ),
+        ("POST", "/api/bench/5007/smoke/inject-scenario") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            bench::smoke::inject_scenario(&serde_json::from_str(&body).unwrap_or(json!({}))),
         ),
         ("GET", "/api/control/status") => raw_json(&mut stream, control::cdl::simulate_json()),
         ("POST", "/api/control/simulate") => require_role(
