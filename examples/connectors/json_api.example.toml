@@ -1,0 +1,29 @@
+source_id = "demo_building_json_feed"
+display_name = "Demo building JSON feed"
+site_id = "site:demo"
+building_id = "building:main"
+base_url = "https://demo.local"
+polling_interval_s = 300
+timeout_s = 20
+
+[auth]
+auth_type = "bearer"
+secret_ref = "DEMO_JSON_BEARER_TOKEN"
+
+[[endpoints]]
+endpoint_id = "points"
+path = "/points"
+method = "GET"
+shape = "array"
+
+[[endpoints.points]]
+point_id = "point:supply_air_temp"
+point_name = "Supply Air Temp"
+value_path = "value"
+units_path = "unit"
+
+[[endpoints.points]]
+point_id = "point:return_air_temp"
+point_name = "Return Air Temp"
+value_path = "value"
+units_path = "unit"

@@ -1,0 +1,10 @@
+source_id = "demo_portfolio_postgres"
+display_name = "Demo portfolio Postgres read-only lake"
+site_id = "site:demo"
+building_id = "building:main"
+connection_secret_ref = "DEMO_POSTGRES_READONLY_DSN"
+query_timeout_s = 30
+row_limit = 5000
+catalog_sql_path = "examples/connectors/sql/point_catalog.example.sql"
+current_values_sql_path = "examples/connectors/sql/current_values.example.sql"
+history_sql_path = "examples/connectors/sql/history_backfill.example.sql"

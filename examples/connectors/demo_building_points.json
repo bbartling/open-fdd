@@ -1,0 +1,18 @@
+{
+  "points": [
+    {
+      "id": "supply_air_temp",
+      "name": "Supply Air Temp",
+      "value": 55.5,
+      "unit": "degF",
+      "quality": "good"
+    },
+    {
+      "id": "return_air_temp",
+      "name": "Return Air Temp",
+      "value": 72.0,
+      "unit": "degF",
+      "quality": "good"
+    }
+  ]
+}

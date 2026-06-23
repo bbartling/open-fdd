@@ -1,0 +1,6 @@
+source_id = "simulation_bench"
+display_name = "Simulation data lake (demo)"
+site_id = "site:demo"
+building_id = "building:main"
+mode = "deterministic"
+interval_s = 60

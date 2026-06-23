@@ -1,5 +1,6 @@
 mod auth;
 mod bench;
+mod connectors;
 mod control;
 mod drivers;
 mod fdd;
@@ -404,6 +405,35 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent"],
             serde_json::from_str::<Value>(drivers::json_api::register_json()).unwrap(),
         ),
+        ("GET", "/api/sources") => require_role(
+            &mut stream,
+            &principal,
+            connectors::api::read_roles(),
+            connectors::api::list_sources_api(),
+        ),
+        ("POST", "/api/sources") => require_role(
+            &mut stream,
+            &principal,
+            connectors::api::mutate_roles(),
+            connectors::api::create_source(&parse_json_body(&body)),
+        ),
+        ("GET", "/api/connectors/historian/status") => require_role(
+            &mut stream,
+            &principal,
+            connectors::api::read_roles(),
+            connectors::api::historian_status(),
+        ),
+        ("GET", "/api/export/historian.csv") => {
+            let body = connectors::api::export_historian_csv();
+            let name = connectors::api::export_filename("historian");
+            require_role_csv(
+                &mut stream,
+                &principal,
+                connectors::api::read_roles(),
+                body,
+                &name,
+            )
+        }
         ("GET", "/api/historian/bench/5007/status") => {
             json_response(&mut stream, historian::store::status_json())
         }
@@ -460,7 +490,16 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
                     json!({"ok": true, "job_id": job_id, "status": "complete", "result": {}}),
                 );
             }
-            if let Some(resp) = handle_fdd_wires_dynamic(
+            if let Some(resp) = handle_sources_dynamic(
+                &mut stream,
+                &principal,
+                method.as_str(),
+                &path,
+                &clean_path,
+                &body,
+            ) {
+                resp
+            } else if let Some(resp) = handle_fdd_wires_dynamic(
                 &mut stream,
                 &principal,
                 method.as_str(),
@@ -498,6 +537,105 @@ fn query_param(path: &str, key: &str) -> Option<String> {
 
 fn path_parts(path: &str) -> Vec<&str> {
     path.trim_matches('/').split('/').collect()
+}
+
+fn handle_sources_dynamic(
+    stream: &mut TcpStream,
+    principal: &Principal,
+    method: &str,
+    _path: &str,
+    clean_path: &str,
+    body: &str,
+) -> Option<std::io::Result<()>> {
+    let parts = path_parts(clean_path);
+    if parts.len() < 3 || parts[0] != "api" || parts[1] != "sources" {
+        return None;
+    }
+    let source_id = parts[2];
+    match (method, parts.as_slice()) {
+        ("GET", ["api", "sources", sid]) if *sid == source_id && parts.len() == 3 => {
+            Some(require_role(
+                stream,
+                principal,
+                connectors::api::read_roles(),
+                connectors::api::get_source_api(source_id),
+            ))
+        }
+        ("POST", ["api", "sources", sid, "test"]) if *sid == source_id => Some(require_role(
+            stream,
+            principal,
+            connectors::api::read_roles(),
+            connectors::api::test_source(source_id),
+        )),
+        ("POST", ["api", "sources", sid, "discover"]) if *sid == source_id => Some(require_role(
+            stream,
+            principal,
+            connectors::api::read_roles(),
+            connectors::api::discover_source(source_id),
+        )),
+        ("GET", ["api", "sources", sid, "catalog"]) if *sid == source_id => Some(require_role(
+            stream,
+            principal,
+            connectors::api::read_roles(),
+            connectors::api::catalog(source_id),
+        )),
+        ("POST", ["api", "sources", sid, "poll-once"]) if *sid == source_id => Some(require_role(
+            stream,
+            principal,
+            connectors::api::mutate_roles(),
+            connectors::api::poll_once(source_id),
+        )),
+        ("POST", ["api", "sources", sid, "backfill"]) if *sid == source_id => Some(require_role(
+            stream,
+            principal,
+            connectors::api::mutate_roles(),
+            connectors::api::start_backfill(source_id, &parse_json_body(body), &principal.sub),
+        )),
+        ("GET", ["api", "sources", sid, "health"]) if *sid == source_id => Some(require_role(
+            stream,
+            principal,
+            connectors::api::read_roles(),
+            connectors::api::source_health(source_id),
+        )),
+        ("GET", ["api", "sources", sid, "sample"]) if *sid == source_id => Some(require_role(
+            stream,
+            principal,
+            connectors::api::read_roles(),
+            connectors::api::sample(source_id),
+        )),
+        ("GET", ["api", "sources", sid, "backfill", job_id]) if *sid == source_id => {
+            Some(require_role(
+                stream,
+                principal,
+                connectors::api::read_roles(),
+                connectors::api::get_backfill_job(source_id, job_id),
+            ))
+        }
+        ("GET", ["api", "sources", sid, "mappings"]) if *sid == source_id => Some(require_role(
+            stream,
+            principal,
+            connectors::api::read_roles(),
+            connectors::mapping::list_mappings(Some(source_id)),
+        )),
+        ("POST", ["api", "sources", sid, "mappings"]) if *sid == source_id => Some(require_role(
+            stream,
+            principal,
+            connectors::api::mutate_roles(),
+            connectors::mapping::upsert_mapping(&parse_json_body(body)),
+        )),
+        ("GET", ["api", "sources", sid, "mappings.csv"]) if *sid == source_id => {
+            let csv_body = connectors::mapping::export_mappings_csv(source_id);
+            let name = connectors::api::export_filename("source_mappings");
+            Some(require_role_csv(
+                stream,
+                principal,
+                connectors::api::read_roles(),
+                csv_body,
+                &name,
+            ))
+        }
+        _ => None,
+    }
 }
 
 fn handle_fdd_wires_dynamic(
@@ -746,6 +884,45 @@ fn require_role(
         audit::log_event(
             "forbidden",
             json!({"role": principal.role.clone(), "required": roles}),
+        );
+        status_json(
+            stream,
+            "403 Forbidden",
+            json!({"ok": false, "error": "insufficient role", "role": principal.role}),
+        )
+    }
+}
+
+fn csv_attachment_response(
+    stream: &mut TcpStream,
+    body: &str,
+    filename: &str,
+) -> std::io::Result<()> {
+    let content_type = "text/csv; charset=utf-8";
+    let headers = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Disposition: attachment; filename=\"{filename}\"\r\n{sec}{cors}Content-Length: {len}\r\nConnection: close\r\n\r\n",
+        sec = security_headers(content_type, false),
+        cors = cors_origin(),
+        len = body.len(),
+        filename = filename
+    );
+    stream.write_all(headers.as_bytes())?;
+    stream.write_all(body.as_bytes())
+}
+
+fn require_role_csv(
+    stream: &mut TcpStream,
+    principal: &Principal,
+    roles: &[&str],
+    body: String,
+    filename: &str,
+) -> std::io::Result<()> {
+    if role_allowed(principal, roles) {
+        csv_attachment_response(stream, &body, filename)
+    } else {
+        audit::log_event(
+            "forbidden",
+            json!({"role": principal.role.clone(), "required": roles, "export": filename}),
         );
         status_json(
             stream,

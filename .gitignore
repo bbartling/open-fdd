@@ -10,6 +10,8 @@ workspace/data/
 workspace/logs/
 workspace/overrides/
 workspace/bacnet/
+workspace/connectors/local/
+workspace/secrets/
 workspace/dashboard/node_modules/
 frontend/assets/
 frontend/index.html

@@ -1,0 +1,9 @@
+{
+  "dt": 1710000000,
+  "main": {
+    "temp": 55.4,
+    "humidity": 42
+  },
+  "units": "imperial",
+  "name": "Demo City"
+}

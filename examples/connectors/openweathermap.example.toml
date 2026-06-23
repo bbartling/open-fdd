@@ -1,0 +1,30 @@
+source_id = "openweathermap_oat"
+display_name = "OpenWeatherMap outside air temperature (example)"
+site_id = "site:demo"
+building_id = "building:main"
+base_url = "https://api.openweathermap.org/data/2.5"
+polling_interval_s = 900
+timeout_s = 30
+rate_limit_per_min = 60
+
+[auth]
+auth_type = "bearer"
+secret_ref = "OPENWEATHERMAP_API_KEY"
+
+[retry]
+max_retries = 2
+backoff_ms = 500
+
+[[endpoints]]
+endpoint_id = "weather"
+path = "/weather?q=DemoCity&units=imperial"
+method = "GET"
+shape = "flat"
+timestamp_path = "dt"
+
+[[endpoints.points]]
+point_id = "point:outside_air_temp"
+point_name = "Outside Air Temp"
+value_path = "main.temp"
+units = "degF"
+equipment_id = "equip:weather"

@@ -159,15 +159,26 @@ async fn execute_query(sql: &str) -> Result<Vec<Value>, String> {
 }
 
 async fn register_historian_tables(ctx: &SessionContext) -> Result<(), String> {
-    let pivot_rows = store::load_pivot_rows()?;
-    if pivot_rows.is_empty() {
-        return Err("historian has no rows — capture bench samples first".into());
+    let pivot_rows = store::load_pivot_rows().unwrap_or_default();
+    let normalized_rows = crate::connectors::historian::load_rows().unwrap_or_default();
+    if pivot_rows.is_empty() && normalized_rows.is_empty() {
+        return Err("historian has no rows — poll a source or capture bench samples first".into());
     }
-    let pivot = store::pivot_rows_to_batch(&pivot_rows).map_err(|e| e.to_string())?;
-    let telemetry = historian_pivot_to_telemetry_batch(&pivot_rows).map_err(|e| e.to_string())?;
+    if !pivot_rows.is_empty() {
+        let pivot = store::pivot_rows_to_batch(&pivot_rows).map_err(|e| e.to_string())?;
+        ctx.register_batch("telemetry_pivot", pivot)
+            .map_err(|e| e.to_string())?;
+    } else {
+        let empty = store::pivot_rows_to_batch(&[]).map_err(|e| e.to_string())?;
+        ctx.register_batch("telemetry_pivot", empty)
+            .map_err(|e| e.to_string())?;
+    }
+    let telemetry = if !normalized_rows.is_empty() {
+        crate::connectors::historian::rows_to_batch(&normalized_rows).map_err(|e| e.to_string())?
+    } else {
+        historian_pivot_to_telemetry_batch(&pivot_rows).map_err(|e| e.to_string())?
+    };
     let hvac = build_hvac_batch().map_err(|e| e.to_string())?;
-    ctx.register_batch("telemetry_pivot", pivot)
-        .map_err(|e| e.to_string())?;
     ctx.register_batch("telemetry", telemetry)
         .map_err(|e| e.to_string())?;
     ctx.register_batch("hvac", hvac)

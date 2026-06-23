@@ -14,6 +14,8 @@ const NAV = [
   { to: "/algorithms", icon: "⚙️", label: "Algorithms", protected: true },
   { to: "/faults", icon: "🚦", label: "Fault catalog" },
   { to: "/plot", icon: "📈", label: "Trend plot", protected: true },
+  { to: "/sources", icon: "🔌", label: "Data Connectors", protected: true },
+  { to: "/json-api", icon: "🌐", label: "JSON API (legacy)", protected: true },
   { to: "/agent", icon: "🤖", label: "AI Agent", protected: true },
   { to: "/host", icon: "📊", label: "Host stats", protected: true },
 ];

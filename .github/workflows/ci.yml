@@ -222,6 +222,28 @@ jobs:
           curl -fsS http://127.0.0.1:8080/api/bench/5007/smoke/status \
             -H "Authorization: Bearer $INT" | jq -e '.ok == true and (.rule_sql | contains("confirmation_required_minutes"))'
 
+      - name: Generic connector source smoke
+        run: |
+          AGENT_PW="$(grep '^OFDD_AGENT_PASSWORD=' workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
+          TOKEN="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -nc --arg p "$AGENT_PW" '{username:"agent",password:$p}')" | jq -r '.token // .access_token')"
+
+          curl -fsS http://127.0.0.1:8080/api/sources \
+            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and (.sources | length >= 3)'
+
+          curl -fsS -X POST http://127.0.0.1:8080/api/sources/demo_building_json_feed/poll-once \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{}' | jq -e '.ok == true and (.rows_written // 0) >= 0'
+
+          curl -D /tmp/historian-export.hdr -fsS http://127.0.0.1:8080/api/export/historian.csv \
+            -H "Authorization: Bearer $TOKEN" -o /tmp/historian-export.csv
+          grep -qi 'text/csv' /tmp/historian-export.hdr
+          head -n 1 /tmp/historian-export.csv | grep -q 'timestamp_utc'
+
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/sources)" = "401"
+
       - name: CSV files created in workspace
         run: |
           test -f workspace/overrides/bacnet_overrides.csv

@@ -15,6 +15,7 @@ import PlotPage from "./pages/PlotPage";
 import RuleLabPage from "./pages/RuleLabPage";
 import SqlFddRulesPage from "./pages/SqlFddRulesPage";
 import Bench5007SmokePage from "./pages/Bench5007SmokePage";
+import SourcesPage from "./pages/SourcesPage";
 import AlgorithmsPage from "./pages/AlgorithmsPage";
 import { TabErrorBoundary } from "./components/TabDebugPanel";
 
@@ -40,6 +41,9 @@ export default function App() {
             <Route path="bacnet" element={<TabErrorBoundary tab="drivers"><DriversPage /></TabErrorBoundary>} />
             <Route path="modbus" element={<TabErrorBoundary tab="modbus"><ModbusPage /></TabErrorBoundary>} />
             <Route path="json-api" element={<TabErrorBoundary tab="json-api"><JsonApiPage /></TabErrorBoundary>} />
+            <Route path="sources" element={<TabErrorBoundary tab="sources"><SourcesPage /></TabErrorBoundary>} />
+            <Route path="sources/:sourceId" element={<TabErrorBoundary tab="sources"><SourcesPage /></TabErrorBoundary>} />
+            <Route path="connectors" element={<Navigate to="/sources" replace />} />
             <Route path="agent" element={<TabErrorBoundary tab="agent"><AgentPage /></TabErrorBoundary>} />
             <Route path="host" element={<TabErrorBoundary tab="host"><HostStatsPage /></TabErrorBoundary>} />
             <Route path="fdd" element={<Navigate to="/sql-fdd" replace />} />

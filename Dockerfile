@@ -24,10 +24,13 @@ WORKDIR /app
 COPY --from=builder /app/target/release/open_fdd_edge_prototype /usr/local/bin/open_fdd_edge_prototype
 COPY --from=builder /app/target/release/openfdd_edge /usr/local/bin/openfdd_edge
 COPY --from=dashboard /app/frontend ./frontend
+COPY examples ./examples
 
 ENV FRONTEND_DIR=/app/frontend \
     PORT=8080 \
     OPENFDD_WORKSPACE=/var/openfdd/workspace \
+    OPENFDD_REPO_ROOT=/app \
+    OPENFDD_CONNECTOR_DEMO_MODE=1 \
     SERVICE_MODE=bridge
 
 RUN mkdir -p /var/openfdd/workspace && chown -R openfdd:openfdd /var/openfdd/workspace /app
