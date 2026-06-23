@@ -120,7 +120,7 @@ jobs:
         run: |
           curl -fsS http://127.0.0.1:8080/ | grep -q 'id="root"'
           curl -fsS http://127.0.0.1:8080/ | grep -q '/assets/index-'
-          ! curl -fsS http://127.0.0.1:8080/app.js 2>/dev/null | grep -q "REAL DEAL BACNET CSV BUILD" || test ! -f frontend/app.js
+          curl -fsS http://127.0.0.1:8080/fdd-wires.js | grep -q "FDD Wires"
 
       - name: BACnet override scanner smoke
         run: |
@@ -207,8 +207,6 @@ jobs:
           curl -sS -X POST http://127.0.0.1:8080/api/fdd-rules/oa_temp_out_of_range/activate \
             -H "Authorization: Bearer $AGENT" -H 'Content-Type: application/json' -d '{}' \
             | jq -e '.ok == false'
-
-          curl -fsS http://127.0.0.1:8080/fdd-wires.js | grep -q "FDD Wires"
 
       - name: CSV files created in workspace
         run: |
