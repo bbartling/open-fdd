@@ -4,6 +4,7 @@ WORKDIR /app/dashboard
 COPY workspace/dashboard/package.json workspace/dashboard/package-lock.json ./
 RUN npm ci
 COPY workspace/dashboard ./
+COPY frontend/fdd-wires.js frontend/app.js frontend/style.css /app/frontend/
 ENV VITE_OUT_DIR=../frontend
 RUN npm run build
 
