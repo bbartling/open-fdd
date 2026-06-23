@@ -410,42 +410,45 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let response_body = drivers::bacnet::read_present_value_json(&payload);
             raw_json(&mut stream, &response_body)
         }
-        ("GET", "/api/bacnet/overrides/status") => {
-            json_response(&mut stream, drivers::tree::overrides_status_ui())
-        }
+        ("GET", "/api/bacnet/overrides/status") => require_role(
+            &mut stream,
+            &principal,
+            &["operator", "integrator", "agent"],
+            drivers::tree::overrides_status_ui(),
+        ),
+        ("GET", "/api/bacnet/overrides/summary") => require_role(
+            &mut stream,
+            &principal,
+            &["operator", "integrator", "agent"],
+            drivers::bacnet::overrides_summary_json(),
+        ),
         ("POST", "/api/bacnet/overrides/scan-once") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
             drivers::bacnet::scan_once_value(),
         ),
-        ("GET", "/api/bacnet/overrides/export") => {
-            let body = drivers::bacnet::overrides_csv();
-            response(
-                &mut stream,
-                "200 OK",
-                "text/csv; charset=utf-8",
-                body.as_bytes(),
-            )
-        }
-        ("GET", "/api/bacnet/overrides/export/p8") => {
-            let body = drivers::bacnet::priority8_csv();
-            response(
-                &mut stream,
-                "200 OK",
-                "text/csv; charset=utf-8",
-                body.as_bytes(),
-            )
-        }
-        ("GET", "/api/bacnet/overrides/export/non-p8") => {
-            let body = drivers::bacnet::non_priority8_csv();
-            response(
-                &mut stream,
-                "200 OK",
-                "text/csv; charset=utf-8",
-                body.as_bytes(),
-            )
-        }
+        ("GET", "/api/bacnet/overrides/export") => require_role_csv(
+            &mut stream,
+            &principal,
+            &["operator", "integrator", "agent"],
+            "bacnet_overrides_export.csv",
+            drivers::bacnet::overrides_csv(),
+        ),
+        ("GET", "/api/bacnet/overrides/export/p8") => require_role_csv(
+            &mut stream,
+            &principal,
+            &["operator", "integrator", "agent"],
+            "bacnet_priority8_overrides.csv",
+            drivers::bacnet::priority8_csv(),
+        ),
+        ("GET", "/api/bacnet/overrides/export/non-p8") => require_role_csv(
+            &mut stream,
+            &principal,
+            &["operator", "integrator", "agent"],
+            "bacnet_non_priority8_overrides.csv",
+            drivers::bacnet::non_priority8_csv(),
+        ),
 
         ("POST", "/api/bacnet/write-dry-run") => require_role(
             &mut stream,
@@ -1017,6 +1020,44 @@ fn authorize(headers: &[(String, String)]) -> Result<Principal, String> {
         .strip_prefix("Bearer ")
         .ok_or("expected Bearer token")?;
     auth::jwt::verify_token(cfg, token)
+}
+
+fn require_role_csv(
+    stream: &mut TcpStream,
+    principal: &Principal,
+    roles: &[&str],
+    filename: &str,
+    body: String,
+) -> std::io::Result<()> {
+    if role_allowed(principal, roles) {
+        csv_attachment_response(stream, filename, &body)
+    } else {
+        audit::log_event(
+            "forbidden",
+            json!({"role": principal.role.clone(), "required": roles, "export": filename}),
+        );
+        status_json(
+            stream,
+            "403 Forbidden",
+            json!({"ok": false, "error": "insufficient role", "role": principal.role}),
+        )
+    }
+}
+
+fn csv_attachment_response(
+    stream: &mut TcpStream,
+    filename: &str,
+    body: &str,
+) -> std::io::Result<()> {
+    let headers = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/csv; charset=utf-8\r\nContent-Disposition: attachment; filename=\"{}\"\r\n{sec}{cors}Content-Length: {len}\r\nConnection: close\r\n\r\n",
+        filename.replace('"', ""),
+        sec = security_headers("text/csv; charset=utf-8", true),
+        cors = cors_origin(),
+        len = body.len()
+    );
+    stream.write_all(headers.as_bytes())?;
+    stream.write_all(body.as_bytes())
 }
 
 fn require_role(

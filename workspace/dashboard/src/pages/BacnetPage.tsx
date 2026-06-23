@@ -906,7 +906,7 @@ export default function BacnetPage() {
             disabled={anyPending}
             onClick={() => void downloadOverrideExport().catch((e) => setActionError(formatApiError(e)))}
           >
-            Export override CSV ({overrideStatus?.export_row_count ?? 0} rows)
+            Export override report CSV ({overrideStatus?.export_row_count ?? 0} rows)
           </button>
         </div>
       </div>

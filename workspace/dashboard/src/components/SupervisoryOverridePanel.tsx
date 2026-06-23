@@ -1,4 +1,5 @@
 import ActionButton from "./ActionButton";
+import { EXPORT_OVERRIDE_REPORT_CSV_LABEL } from "../lib/supervisoryOverrideUi";
 
 export type OverrideStatus = {
   device_count?: number;
@@ -63,7 +64,7 @@ export default function SupervisoryOverridePanel({ status, pending, disabled, on
           onClick={onScanOnce}
         />
         <ActionButton
-          label={`Export override report CSV (${status?.export_row_count ?? 0} rows)`}
+          label={`${EXPORT_OVERRIDE_REPORT_CSV_LABEL} (${status?.export_row_count ?? 0} rows)`}
           title="Download supervisory override report from the priority-array scan (CSV)."
           disabled={disabled}
           onClick={onExportCsv}

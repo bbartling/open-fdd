@@ -84,7 +84,7 @@ jobs:
 
       - name: Prepare workspace for non-root container user
         run: |
-          mkdir -p workspace/overrides workspace/data/drivers workspace/logs
+          mkdir -p workspace/overrides workspace/bacnet/overrides workspace/data/drivers workspace/logs
           cat > workspace/auth.env.local <<'EOF'
           OFDD_AUTH_REQUIRED=true
           OFDD_AUTH_SECRET=ci-test-secret-openfdd-edge-do-not-use-in-production
@@ -96,7 +96,7 @@ jobs:
           OFDD_AGENT_PASSWORD=ci-agent-pass
           EOF
           chmod 600 workspace/auth.env.local
-          sudo chown -R 10001:10001 workspace/overrides workspace/data workspace/logs
+          sudo chown -R 10001:10001 workspace/overrides workspace/bacnet workspace/data workspace/logs
 
       - name: Compose build
         run: docker compose build --no-cache
@@ -146,7 +146,13 @@ jobs:
             -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and (.operator_override_points // 0) >= 1'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export \
-            -H "Authorization: Bearer $TOKEN" | grep "timestamp,scan_id"
+            -H "Authorization: Bearer $TOKEN" | grep "scanned_at"
+
+          curl -fsSI http://127.0.0.1:8080/api/bacnet/overrides/export \
+            -H "Authorization: Bearer $TOKEN" | grep -i 'Content-Disposition: attachment; filename="bacnet_overrides_export.csv"'
+
+          curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/summary \
+            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and (.operator_priority // 0) >= 1'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export/p8 \
             -H "Authorization: Bearer $TOKEN" | grep "priority_kind"
@@ -227,6 +233,8 @@ jobs:
 
       - name: CSV files created in workspace
         run: |
+          test -f workspace/bacnet/overrides/registry.json
+          test -f workspace/bacnet/overrides/overrides_export.csv
           test -f workspace/overrides/bacnet_overrides.csv
           test -f workspace/overrides/bacnet_priority8_overrides.csv
           test -f workspace/overrides/bacnet_non_priority8_overrides.csv
