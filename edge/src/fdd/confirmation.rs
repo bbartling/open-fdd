@@ -21,6 +21,7 @@ pub fn apply_confirmation(raw_rows: &[Value], confirmation_seconds: i64) -> Valu
     for row in raw_rows {
         let fault = row
             .get("fault_raw")
+            .or_else(|| row.get("raw_fault"))
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
         if fault {

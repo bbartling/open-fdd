@@ -171,7 +171,9 @@ pub fn pivot_rows_to_batch(rows: &[Value]) -> Result<RecordBatch, String> {
             Arc::new(Float64Array::from(vec![None; rows.len()])),
             Arc::new(Float64Array::from(duct)),
             Arc::new(Float64Array::from(zn)),
+            Arc::new(Float64Array::from(vec![None; rows.len()])),
             Arc::new(Float64Array::from(vec![Some(1.0); rows.len()])),
+            Arc::new(Float64Array::from(vec![None; rows.len()])),
         ],
     )
     .map_err(|e| e.to_string())

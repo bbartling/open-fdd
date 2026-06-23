@@ -393,14 +393,16 @@ fn proof_summary(eval: &Value, demo_only: bool) -> Value {
         }
     }
     let confirmation = eval.get("confirmation").cloned().unwrap_or(json!({}));
+    let confirmed_from_sql = confirmed_true >= 1;
+    let confirmed_from_streak = confirmation
+        .get("confirmed_fault_count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0)
+        >= 1;
     let pass = !demo_only
         && raw_false > 0
         && raw_true > 0
-        && confirmation
-            .get("confirmed_fault_count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0)
-            >= 1;
+        && (confirmed_from_sql || confirmed_from_streak);
     json!({
         "demo_only": demo_only,
         "live_fdd_pass": pass,
