@@ -30,8 +30,12 @@ jobs:
   frontend:
     name: TypeScript dashboard build and tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "22"

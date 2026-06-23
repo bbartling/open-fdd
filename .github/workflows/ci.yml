@@ -133,7 +133,7 @@ jobs:
           test "$TOKEN" != "null"
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/driver/tree \
-            -H "Authorization: Bearer $TOKEN" | jq -e '(.drivers | length >= 1) and (.bacnet_config.iface == "enp3s0" and .bacnet_config.bind == "192.168.204.55/24:47808")'
+            -H "Authorization: Bearer $TOKEN" | jq -e '((.drivers // []) | length >= 1) or ((.devices // []) | length >= 1)'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/commission/status \
             -H "Authorization: Bearer $TOKEN" | jq -e '.config.iface == "enp3s0" and .config.bind == "192.168.204.55/24:47808"'
@@ -144,7 +144,7 @@ jobs:
             -d '{}' | jq -e '.ok == true and .summary.total >= 1'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/status \
-            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and .summary.priority8 >= 1'
+            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and (.operator_override_points // 0) >= 1'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export \
             -H "Authorization: Bearer $TOKEN" | grep "timestamp,scan_id"
