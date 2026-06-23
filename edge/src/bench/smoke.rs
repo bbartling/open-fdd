@@ -176,17 +176,21 @@ fn detect_data_source(rows: &[Value]) -> String {
 }
 
 fn bacnet_points_meta() -> Value {
-    json!(BENCH_BACNET_POINTS.iter().map(|(name, inst, input)| json!({
-        "name": name,
-        "object_instance": inst,
-        "fdd_input": input,
-        "bacnet_id": format!("bacnet:{BENCH_DEVICE}:analog-input:{inst}")
-    })).collect::<Vec<_>>())
+    json!(BENCH_BACNET_POINTS
+        .iter()
+        .map(|(name, inst, input)| json!({
+            "name": name,
+            "object_instance": inst,
+            "fdd_input": input,
+            "bacnet_id": format!("bacnet:{BENCH_DEVICE}:analog-input:{inst}")
+        }))
+        .collect::<Vec<_>>())
 }
 
 fn modbus_probe() -> Value {
     let cfg = modbus::modbus_config_value();
-    let body = json!({"register": 30001, "function": "input_register", "scale": 0.1, "unit": "degF"});
+    let body =
+        json!({"register": 30001, "function": "input_register", "scale": 0.1, "unit": "degF"});
     let read = modbus::read_value(&body);
     let parsed: Value = serde_json::from_str(&read).unwrap_or(json!({"ok": false}));
     json!({
@@ -227,12 +231,7 @@ pub fn capture_sample(body: &Value) -> Value {
         simulated_values(&phase)
     } else if bacnet_live::is_live_mode() {
         match poll_live_bacnet() {
-            Ok(v) => (
-                v,
-                "bacnet:live".to_string(),
-                "bacnet".to_string(),
-                false,
-            ),
+            Ok(v) => (v, "bacnet:live".to_string(), "bacnet".to_string(), false),
             Err(err) => {
                 return json!({"ok": false, "error": err, "demo_only": true});
             }
@@ -372,7 +371,11 @@ pub fn evaluate_sample(body: &Value) -> Value {
 }
 
 fn proof_summary(eval: &Value, demo_only: bool) -> Value {
-    let rows = eval.get("rows").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let rows = eval
+        .get("rows")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
     let mut raw_true = 0;
     let mut raw_false = 0;
     let mut confirmed_true = 0;
@@ -418,9 +421,18 @@ fn proof_summary(eval: &Value, demo_only: bool) -> Value {
 }
 
 pub fn inject_scenario(body: &Value) -> Value {
-    let normal_min = body.get("normal_minutes").and_then(|v| v.as_u64()).unwrap_or(5);
-    let fault_min = body.get("fault_minutes").and_then(|v| v.as_u64()).unwrap_or(6);
-    let clear_min = body.get("clear_minutes").and_then(|v| v.as_u64()).unwrap_or(5);
+    let normal_min = body
+        .get("normal_minutes")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(5);
+    let fault_min = body
+        .get("fault_minutes")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(6);
+    let clear_min = body
+        .get("clear_minutes")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(5);
     let _ = store::clear_rows_with_source_prefix("simulation:bench_5007");
     let start = Utc::now();
     let mut rows = Vec::new();

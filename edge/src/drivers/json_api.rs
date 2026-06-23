@@ -28,18 +28,12 @@ pub fn poll_once_json() -> String {
 }
 
 pub fn poll_test_source() -> Value {
-    let source_id = env::var("OPENFDD_JSON_API_TEST_SOURCE").unwrap_or_else(|_| "httpbin-health".to_string());
+    let source_id =
+        env::var("OPENFDD_JSON_API_TEST_SOURCE").unwrap_or_else(|_| "httpbin-health".to_string());
     let url = env::var("OPENFDD_JSON_API_TEST_URL")
         .unwrap_or_else(|_| "https://httpbin.org/get".to_string());
     let output = Command::new("curl")
-        .args([
-            "-fsS",
-            "-o",
-            "/dev/null",
-            "-w",
-            "%{http_code}",
-            &url,
-        ])
+        .args(["-fsS", "-o", "/dev/null", "-w", "%{http_code}", &url])
         .output();
     match output {
         Ok(out) if out.status.success() => {
@@ -60,7 +54,9 @@ pub fn poll_test_source() -> Value {
             "url": url,
             "error": String::from_utf8_lossy(&out.stderr).to_string()
         }),
-        Err(err) => json!({"ok": false, "source_id": source_id, "url": url, "error": err.to_string()}),
+        Err(err) => {
+            json!({"ok": false, "source_id": source_id, "url": url, "error": err.to_string()})
+        }
     }
 }
 

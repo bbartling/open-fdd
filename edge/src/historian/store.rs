@@ -148,9 +148,7 @@ pub fn pivot_rows_to_batch(rows: &[Value]) -> Result<RecordBatch, String> {
     let mut zn = Vec::new();
     for row in rows {
         ts.push(parse_ts_ms(
-            row.get("timestamp")
-                .and_then(|v| v.as_str())
-                .unwrap_or(""),
+            row.get("timestamp").and_then(|v| v.as_str()).unwrap_or(""),
         ));
         equip.push(
             row.get("equipment_id")

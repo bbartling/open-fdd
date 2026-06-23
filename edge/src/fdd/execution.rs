@@ -188,7 +188,9 @@ async fn register_demo_tables(ctx: &SessionContext) -> Result<(), String> {
     Ok(())
 }
 
-fn historian_pivot_to_telemetry_batch(rows: &[Value]) -> Result<RecordBatch, arrow::error::ArrowError> {
+fn historian_pivot_to_telemetry_batch(
+    rows: &[Value],
+) -> Result<RecordBatch, arrow::error::ArrowError> {
     let schema = Schema::new(vec![
         Field::new(
             "timestamp",
@@ -217,11 +219,7 @@ fn historian_pivot_to_telemetry_batch(rows: &[Value]) -> Result<RecordBatch, arr
     let mut driver = Vec::new();
     let mut simulated = Vec::new();
     for row in rows {
-        let ts_ms = store::parse_ts_ms(
-            row.get("timestamp")
-                .and_then(|v| v.as_str())
-                .unwrap_or(""),
-        );
+        let ts_ms = store::parse_ts_ms(row.get("timestamp").and_then(|v| v.as_str()).unwrap_or(""));
         let equip = row
             .get("equipment_id")
             .and_then(|v| v.as_str())
