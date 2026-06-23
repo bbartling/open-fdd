@@ -12,5 +12,6 @@ workspace/overrides/
 workspace/bacnet/
 workspace/dashboard/node_modules/
 frontend/assets/
+frontend/index.html
 **/*.db
 .DS_Store
