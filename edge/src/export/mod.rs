@@ -156,7 +156,7 @@ pub fn meta_json() -> Value {
             "equipment": list_equipment(&historian_rows)
         },
         "xlsx_supported": false,
-        "xlsx_note": "CSV exports are available now; track XLSX in GitHub issue."
+        "xlsx_note": "CSV exports are available now; XLSX tracked in GitHub issue #367."
     })
 }
 
