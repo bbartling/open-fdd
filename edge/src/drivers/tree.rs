@@ -115,12 +115,18 @@ fn override_map() -> HashMap<String, Value> {
                 })
             });
             let priority = ev.get("priority").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
-            if let Some(arr) = entry.get_mut("override_priorities").and_then(|v| v.as_array_mut()) {
+            if let Some(arr) = entry
+                .get_mut("override_priorities")
+                .and_then(|v| v.as_array_mut())
+            {
                 if !arr.iter().any(|p| p.as_u64() == Some(priority as u64)) {
                     arr.push(json!(priority));
                 }
             }
-            if let Some(arr) = entry.get_mut("override_slots").and_then(|v| v.as_array_mut()) {
+            if let Some(arr) = entry
+                .get_mut("override_slots")
+                .and_then(|v| v.as_array_mut())
+            {
                 arr.push(json!({
                     "priority_level": priority,
                     "type": ev.get("priority_kind").cloned().unwrap_or(json!("override")),
@@ -150,12 +156,17 @@ fn bacnet_point_ui(point: &Value, device: &Value, overrides: &HashMap<String, Va
         .get("poll_interval_s")
         .or_else(|| point.get("poll_interval_seconds"))
         .and_then(|v| v.as_u64())
-        .unwrap_or(if point.get("polling_enabled").and_then(|v| v.as_bool()) == Some(true) {
-            60
-        } else {
-            0
-        });
-    let enabled = point.get("enabled").and_then(|v| v.as_bool()).unwrap_or(poll_s > 0);
+        .unwrap_or(
+            if point.get("polling_enabled").and_then(|v| v.as_bool()) == Some(true) {
+                60
+            } else {
+                0
+            },
+        );
+    let enabled = point
+        .get("enabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(poll_s > 0);
     let mut out = json!({
         "point_id": point_id,
         "object_identifier": oid,
@@ -220,7 +231,9 @@ pub fn bacnet_devices_ui() -> Vec<Value> {
                         .count();
                     let operator_override_count = points
                         .iter()
-                        .filter(|p| p.get("operator_override").and_then(|v| v.as_bool()) == Some(true))
+                        .filter(|p| {
+                            p.get("operator_override").and_then(|v| v.as_bool()) == Some(true)
+                        })
                         .count();
                     let override_point_count = points
                         .iter()
@@ -296,7 +309,10 @@ pub fn modbus_devices_ui() -> Vec<Value> {
                                 .collect()
                         })
                         .unwrap_or_default();
-                    let poll_count = points.iter().filter(|p| p.get("enabled").and_then(|v| v.as_bool()) == Some(true)).count();
+                    let poll_count = points
+                        .iter()
+                        .filter(|p| p.get("enabled").and_then(|v| v.as_bool()) == Some(true))
+                        .count();
                     devices.push(json!({
                         "device_key": device_key,
                         "host": host,
@@ -325,7 +341,10 @@ pub fn json_api_devices_ui() -> Vec<Value> {
             }
             if let Some(sources) = driver.get("sources").and_then(|v| v.as_array()) {
                 for src in sources {
-                    let url = src.get("url").and_then(|v| v.as_str()).unwrap_or("http://localhost/");
+                    let url = src
+                        .get("url")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("http://localhost/");
                     let host = url.split('/').nth(2).unwrap_or("localhost").to_string();
                     let point_id = src
                         .get("id")
@@ -365,7 +384,11 @@ pub fn json_api_devices_ui() -> Vec<Value> {
 
 pub fn haystack_devices_ui() -> Vec<Value> {
     let model: Value = serde_json::from_str(haystack::model_json()).unwrap_or(json!({}));
-    let rows = model.get("rows").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let rows = model
+        .get("rows")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
     let mut sites: BTreeMap<String, Vec<Value>> = BTreeMap::new();
     for row in rows {
         let id = row.get("id").and_then(|v| v.as_str()).unwrap_or("");
@@ -405,7 +428,14 @@ pub fn haystack_devices_ui() -> Vec<Value> {
         .collect()
 }
 
-fn driver_root(id: &str, protocol: &str, label: &str, status: &str, child_count: usize, summary: Value) -> Value {
+fn driver_root(
+    id: &str,
+    protocol: &str,
+    label: &str,
+    status: &str,
+    child_count: usize,
+    summary: Value,
+) -> Value {
     json!({
         "id": id,
         "protocol": protocol,
@@ -493,7 +523,9 @@ mod tests {
     #[test]
     fn bacnet_devices_include_local_server() {
         let devices = bacnet_devices_ui();
-        assert!(devices.iter().any(|d| d.get("local_server").and_then(|v| v.as_bool()) == Some(true)));
+        assert!(devices
+            .iter()
+            .any(|d| d.get("local_server").and_then(|v| v.as_bool()) == Some(true)));
     }
 
     #[test]

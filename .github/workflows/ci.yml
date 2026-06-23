@@ -116,11 +116,11 @@ jobs:
           docker compose logs
           exit 1
 
-      - name: UI served is new driver-tree build
+      - name: UI served is TypeScript driver-tree build
         run: |
-          curl -fsS http://127.0.0.1:8080/app.js | grep "REAL DEAL BACNET CSV BUILD"
-          ! curl -fsS http://127.0.0.1:8080/app.js | grep "Rule Lab"
-          ! curl -fsS http://127.0.0.1:8080/app.js | grep "/api/haystack/model"
+          curl -fsS http://127.0.0.1:8080/ | grep -q 'id="root"'
+          curl -fsS http://127.0.0.1:8080/ | grep -q '/assets/index-'
+          ! curl -fsS http://127.0.0.1:8080/app.js 2>/dev/null | grep -q "REAL DEAL BACNET CSV BUILD" || test ! -f frontend/app.js
 
       - name: BACnet override scanner smoke
         run: |

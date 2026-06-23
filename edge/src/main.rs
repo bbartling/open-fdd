@@ -265,9 +265,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let body = drivers::bacnet::poll_status_json();
             raw_json(&mut stream, &body)
         }
-        ("GET", "/api/drivers/tree") => {
-            raw_json(&mut stream, &drivers::tree::unified_tree_json())
-        }
+        ("GET", "/api/drivers/tree") => raw_json(&mut stream, &drivers::tree::unified_tree_json()),
         ("GET", "/api/bacnet/server/points") => {
             raw_json(&mut stream, &drivers::bacnet_server::server_points_json())
         }

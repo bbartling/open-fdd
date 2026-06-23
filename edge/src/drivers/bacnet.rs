@@ -165,14 +165,12 @@ fn merge_missing_drivers(mut registry: Value) -> Value {
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
-    let drivers = registry
-        .as_object_mut()
-        .and_then(|obj| {
-            if !obj.contains_key("drivers") {
-                obj.insert("drivers".to_string(), json!([]));
-            }
-            obj.get_mut("drivers").and_then(|v| v.as_array_mut())
-        });
+    let drivers = registry.as_object_mut().and_then(|obj| {
+        if !obj.contains_key("drivers") {
+            obj.insert("drivers".to_string(), json!([]));
+        }
+        obj.get_mut("drivers").and_then(|v| v.as_array_mut())
+    });
     let Some(drivers) = drivers else {
         return default;
     };
@@ -195,7 +193,8 @@ fn read_registry() -> Value {
     let path = registry_path();
     match fs::read_to_string(&path) {
         Ok(text) => {
-            let parsed = serde_json::from_str::<Value>(&text).unwrap_or_else(|_| default_registry());
+            let parsed =
+                serde_json::from_str::<Value>(&text).unwrap_or_else(|_| default_registry());
             merge_missing_drivers(parsed)
         }
         Err(_) => default_registry(),
@@ -313,10 +312,11 @@ pub fn merge_live_discovery_into_registry(device_instance: u32) -> Value {
     if !bacnet_live::is_live_mode() {
         return json!({"ok": true, "skipped": true, "reason": "not live mode"});
     }
-    let discovered = match bacnet_live::block_on(bacnet_live::discover_device_points(device_instance)) {
-        Ok(points) => points,
-        Err(err) => return json!({"ok": false, "error": err}),
-    };
+    let discovered =
+        match bacnet_live::block_on(bacnet_live::discover_device_points(device_instance)) {
+            Ok(points) => points,
+            Err(err) => return json!({"ok": false, "error": err}),
+        };
 
     let mut registry = read_registry();
     registry["bacnet_config"] = bacnet_config_value();
@@ -865,8 +865,10 @@ pub fn priority_array_json(body: &Value) -> String {
                 })
             })
             .collect();
-        return serde_json::to_string(&json!({"ok": true, "point_id": point_id, "priority_array": slots}))
-            .unwrap_or_else(|_| "{}".to_string());
+        return serde_json::to_string(
+            &json!({"ok": true, "point_id": point_id, "priority_array": slots}),
+        )
+        .unwrap_or_else(|_| "{}".to_string());
     }
     serde_json::to_string(&json!({"ok": false, "error": "point not found"})).unwrap_or_default()
 }
