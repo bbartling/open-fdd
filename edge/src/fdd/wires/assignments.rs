@@ -129,10 +129,10 @@ fn point_matches(point: &Value, label: &str, fdd_input: &str) -> bool {
 
 fn demo_driver_points() -> Vec<Value> {
     vec![
-        json!({"id":"bacnet:5007:analog-input:1173","name":"Outside Air Temp","haystack_id":"point:oa-t","fdd_input":"oa_t","source_label":"simulated"}),
-        json!({"id":"bacnet:5007:analog-input:1174","name":"Supply Air Temp","haystack_id":"point:sat","fdd_input":"sat","source_label":"simulated"}),
-        json!({"id":"bacnet:5007:analog-value:1175","name":"SAT Setpoint","haystack_id":"point:sat-sp","fdd_input":"sat_sp","source_label":"simulated"}),
-        json!({"id":"bacnet:5007:binary-output:1176","name":"Fan Command","haystack_id":"point:fan-cmd","fdd_input":"fan_cmd","source_label":"simulated"}),
+        json!({"id":"bacnet:validation:analog-input:1173","name":"Outside Air Temp","haystack_id":"point:oa-t","fdd_input":"oa_t","source_label":"simulated"}),
+        json!({"id":"bacnet:validation:analog-input:1174","name":"Supply Air Temp","haystack_id":"point:sat","fdd_input":"sat","source_label":"simulated"}),
+        json!({"id":"bacnet:validation:analog-value:1175","name":"SAT Setpoint","haystack_id":"point:sat-sp","fdd_input":"sat_sp","source_label":"simulated"}),
+        json!({"id":"bacnet:validation:binary-output:1176","name":"Fan Command","haystack_id":"point:fan-cmd","fdd_input":"fan_cmd","source_label":"simulated"}),
     ]
 }
 

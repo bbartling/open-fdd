@@ -56,7 +56,7 @@ pub fn equipment_types_json() -> Value {
         "equipment_types": [
             {"id":"ahu","label":"Air Handling Unit"},
             {"id":"vav","label":"VAV Box"},
-            {"id":"bench","label":"Bench Controller"},
+            {"id":"bench","label":"Validation Controller"},
             {"id":"plant","label":"Central Plant"}
         ]
     })
@@ -83,7 +83,7 @@ pub fn run_rule_sql_from_historian(sql: &str, confirmation_seconds: i64, params:
                 "rows": rows,
                 "confirmation": confirmation,
                 "engine": "Apache Arrow + DataFusion SQL (Rust)",
-                "historian": "workspace/data/historian/bench_5007"
+                "historian": store::bench_dir().display().to_string()
             })
         }
         Err(err) => json!({"ok": false, "error": err}),
@@ -223,7 +223,7 @@ fn historian_pivot_to_telemetry_batch(
         let equip = row
             .get("equipment_id")
             .and_then(|v| v.as_str())
-            .unwrap_or("5007")
+            .unwrap_or("equip:validation")
             .to_string();
         let src = row
             .get("source")
@@ -271,7 +271,7 @@ fn historian_pivot_to_telemetry_batch(
         .into();
     let unit: StringArray = std::iter::repeat("degF").take(n).collect::<Vec<_>>().into();
     let quality: StringArray = std::iter::repeat("good").take(n).collect::<Vec<_>>().into();
-    let device: StringArray = std::iter::repeat("5007").take(n).collect::<Vec<_>>().into();
+    let device: StringArray = std::iter::repeat("equip:validation").take(n).collect::<Vec<_>>().into();
     let object: StringArray = std::iter::repeat("ai:bench")
         .take(n)
         .collect::<Vec<_>>()
@@ -371,7 +371,7 @@ fn build_telemetry_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
         let equip = row
             .get("equip")
             .and_then(|v| v.as_str())
-            .unwrap_or("5007")
+            .unwrap_or("equip:validation")
             .to_string();
         for (input, key) in [
             ("sat", "sat"),
@@ -411,7 +411,7 @@ fn build_telemetry_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
         .take(n)
         .collect::<Vec<_>>()
         .into();
-    let device: StringArray = std::iter::repeat("5007").take(n).collect::<Vec<_>>().into();
+    let device: StringArray = std::iter::repeat("equip:validation").take(n).collect::<Vec<_>>().into();
     let object: StringArray = std::iter::repeat("ai:1173")
         .take(n)
         .collect::<Vec<_>>()
@@ -470,7 +470,7 @@ fn build_pivot_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
         equip.push(
             row.get("equip")
                 .and_then(|v| v.as_str())
-                .unwrap_or("5007")
+                .unwrap_or("equip:validation")
                 .to_string(),
         );
         sat.push(row.get("sat").and_then(|v| v.as_f64()));
@@ -561,7 +561,7 @@ pub fn builder_to_sql(builder: &Value) -> String {
     let equipment = builder
         .get("equipment_id")
         .and_then(|v| v.as_str())
-        .unwrap_or("5007");
+        .unwrap_or("equip:validation");
     format!(
         "SELECT timestamp, equipment_id, {input}, CASE WHEN {input} IS NULL THEN false WHEN {input} {op} {value} THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = '{equipment}'"
     )

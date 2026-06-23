@@ -50,7 +50,8 @@ Manual QA procedures live under [verification/](verification/). Use these after 
 | Default React UI | [verification/ui-smoke.md](verification/ui-smoke.md) |
 | Auth, login, and RBAC | [verification/auth-and-login.md](verification/auth-and-login.md) |
 | FDD Wires and SQL rules | [verification/fdd-wires.md](verification/fdd-wires.md) |
-| Bench 5007 long smoke | [verification/bench-5007-long-smoke.md](verification/bench-5007-long-smoke.md) |
+| Live FDD validation (development) | [testing/live-fdd-validation.md](testing/live-fdd-validation.md) |
+| Legacy bench 5007 runbook | [verification/bench-5007-long-smoke.md](verification/bench-5007-long-smoke.md) |
 
 ## AI agent and FDD cookbooks
 

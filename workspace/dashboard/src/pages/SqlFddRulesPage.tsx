@@ -29,19 +29,19 @@ type DemoResult = {
   faults?: FddFault[];
 };
 
+const GRAPH_ID = "graph:live-fdd-validation";
+const SITE_ID = "site:demo";
+
 const DEFAULT_BUILDER: BuilderState = {
   name: "OA Temperature Out Of Range",
   input: "oa_t",
   operator: ">",
   value: 110,
-  equipment_id: "5007",
+  equipment_id: "equip:validation",
   confirmation_seconds: 300,
   severity: "medium",
   fault_code: "OA_TEMP_OUT_OF_RANGE",
 };
-
-const GRAPH_ID = "graph:bench-5007-fdd";
-const SITE_ID = "site:demo";
 
 export default function SqlFddRulesPage() {
   const [mode, setMode] = useState<"builder" | "raw">("builder");
@@ -159,7 +159,7 @@ export default function SqlFddRulesPage() {
         `/api/fdd-wires/graphs/${encodeURIComponent(GRAPH_ID)}/validate?site_id=${encodeURIComponent(SITE_ID)}`,
         { method: "POST", body: JSON.stringify({}) },
       );
-      setGraphStatus(out.ok ? "Bench 5007 graph validates" : `Graph issues: ${(out.issues ?? []).length}`);
+      setGraphStatus(out.ok ? "Validation graph checks passed" : `Graph issues: ${(out.issues ?? []).length}`);
     } catch (e) {
       setError(formatApiError(e));
     } finally {

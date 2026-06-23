@@ -8,6 +8,7 @@ workspace/data/fdd_wires/
 workspace/backups/
 workspace/data/
 workspace/logs/
+workspace/smoke-profiles/local/*.local.toml
 workspace/overrides/
 workspace/bacnet/
 workspace/dashboard/node_modules/
