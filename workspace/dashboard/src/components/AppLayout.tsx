@@ -13,6 +13,7 @@ const NAV = [
   { to: "/model", icon: "🧱", label: "Model & assignments", protected: true },
   { to: "/algorithms", icon: "⚙️", label: "Algorithms", protected: true },
   { to: "/faults", icon: "🚦", label: "Fault catalog" },
+  { to: "/exports", icon: "⬇️", label: "Data Export", protected: true },
   { to: "/plot", icon: "📈", label: "Trend plot", protected: true },
   { to: "/agent", icon: "🤖", label: "AI Agent", protected: true },
   { to: "/host", icon: "📊", label: "Host stats", protected: true },

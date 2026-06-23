@@ -15,6 +15,7 @@ import PlotPage from "./pages/PlotPage";
 import RuleLabPage from "./pages/RuleLabPage";
 import SqlFddRulesPage from "./pages/SqlFddRulesPage";
 import Bench5007SmokePage from "./pages/Bench5007SmokePage";
+import DataExportPage from "./pages/DataExportPage";
 import AlgorithmsPage from "./pages/AlgorithmsPage";
 import { TabErrorBoundary } from "./components/TabDebugPanel";
 
@@ -36,6 +37,8 @@ export default function App() {
             <Route path="data-model" element={<Navigate to="/model" replace />} />
             <Route path="fdd-assignments" element={<Navigate to="/model" replace />} />
             <Route path="plot" element={<TabErrorBoundary tab="plot"><PlotPage /></TabErrorBoundary>} />
+            <Route path="exports" element={<TabErrorBoundary tab="exports"><DataExportPage /></TabErrorBoundary>} />
+            <Route path="downloads" element={<Navigate to="/exports" replace />} />
             <Route path="drivers" element={<TabErrorBoundary tab="drivers"><DriversPage /></TabErrorBoundary>} />
             <Route path="bacnet" element={<TabErrorBoundary tab="drivers"><DriversPage /></TabErrorBoundary>} />
             <Route path="modbus" element={<TabErrorBoundary tab="modbus"><ModbusPage /></TabErrorBoundary>} />

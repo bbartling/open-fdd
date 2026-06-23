@@ -2,6 +2,7 @@ mod auth;
 mod bench;
 mod control;
 mod drivers;
+mod export;
 mod fdd;
 mod historian;
 mod model;
@@ -124,6 +125,49 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         }
         ("POST", "/api/historian/query") => {
             raw_json(&mut stream, historian::arrow_table::query_json())
+        }
+        ("GET", "/api/export/meta") => json_response(&mut stream, export::meta_json()),
+        ("GET", "/api/export/historian.csv") => {
+            let q = export::parse_query(query_string(&path));
+            let body = export::historian_csv(&q);
+            let name = export::export_filename("historian");
+            require_role_csv(&mut stream, &principal, READ_EXPORT_ROLES, body, &name)
+        }
+        ("GET", "/api/export/faults.csv") => {
+            let qs = query_string(&path);
+            let q = export::parse_query(qs);
+            let summary = qs
+                .split('&')
+                .any(|p| p == "summary=1" || p.starts_with("summary=1&"));
+            let body = export::faults_csv(&q, summary);
+            let name = export::export_filename(if summary {
+                "fault_summary"
+            } else {
+                "fault_results"
+            });
+            require_role_csv(&mut stream, &principal, READ_EXPORT_ROLES, body, &name)
+        }
+        ("GET", "/api/export/model-points.csv") => {
+            let body = export::model_points_csv();
+            let name = export::export_filename("model_points");
+            require_role_csv(&mut stream, &principal, READ_EXPORT_ROLES, body, &name)
+        }
+        ("GET", "/api/export/rules.csv") => {
+            let body = export::rules_csv();
+            let name = export::export_filename("rules");
+            require_role_csv(
+                &mut stream,
+                &principal,
+                &["integrator", "agent"],
+                body,
+                &name,
+            )
+        }
+        ("GET", "/api/export/bench-5007.csv") => {
+            let q = export::parse_query(query_string(&path));
+            let body = export::bench_5007_csv(&q);
+            let name = export::export_filename("5007_smoke");
+            require_role_csv(&mut stream, &principal, READ_EXPORT_ROLES, body, &name)
         }
         ("POST", "/api/ops/docker/update") => require_role(
             &mut stream,
@@ -315,30 +359,18 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ),
         ("GET", "/api/bacnet/overrides/export") => {
             let body = drivers::bacnet::overrides_csv();
-            response(
-                &mut stream,
-                "200 OK",
-                "text/csv; charset=utf-8",
-                body.as_bytes(),
-            )
+            let name = export::export_filename("bacnet_overrides");
+            require_role_csv(&mut stream, &principal, READ_EXPORT_ROLES, body, &name)
         }
         ("GET", "/api/bacnet/overrides/export/p8") => {
             let body = drivers::bacnet::priority8_csv();
-            response(
-                &mut stream,
-                "200 OK",
-                "text/csv; charset=utf-8",
-                body.as_bytes(),
-            )
+            let name = export::export_filename("bacnet_overrides_p8");
+            require_role_csv(&mut stream, &principal, READ_EXPORT_ROLES, body, &name)
         }
         ("GET", "/api/bacnet/overrides/export/non-p8") => {
             let body = drivers::bacnet::non_priority8_csv();
-            response(
-                &mut stream,
-                "200 OK",
-                "text/csv; charset=utf-8",
-                body.as_bytes(),
-            )
+            let name = export::export_filename("bacnet_overrides_non_p8");
+            require_role_csv(&mut stream, &principal, READ_EXPORT_ROLES, body, &name)
         }
 
         ("POST", "/api/bacnet/write-dry-run") => require_role(
@@ -755,6 +787,51 @@ fn require_role(
     }
 }
 
+const READ_EXPORT_ROLES: &[&str] = &["operator", "integrator", "agent"];
+
+fn query_string(path: &str) -> &str {
+    path.split('?').nth(1).unwrap_or("")
+}
+
+fn csv_attachment_response(
+    stream: &mut TcpStream,
+    body: &str,
+    filename: &str,
+) -> std::io::Result<()> {
+    let content_type = "text/csv; charset=utf-8";
+    let headers = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Disposition: attachment; filename=\"{filename}\"\r\n{sec}{cors}Content-Length: {len}\r\nConnection: close\r\n\r\n",
+        sec = security_headers(content_type, false),
+        cors = cors_origin(),
+        len = body.len(),
+        filename = filename
+    );
+    stream.write_all(headers.as_bytes())?;
+    stream.write_all(body.as_bytes())
+}
+
+fn require_role_csv(
+    stream: &mut TcpStream,
+    principal: &Principal,
+    roles: &[&str],
+    body: String,
+    filename: &str,
+) -> std::io::Result<()> {
+    if role_allowed(principal, roles) {
+        csv_attachment_response(stream, &body, filename)
+    } else {
+        audit::log_event(
+            "forbidden",
+            json!({"role": principal.role.clone(), "required": roles, "export": filename}),
+        );
+        status_json(
+            stream,
+            "403 Forbidden",
+            json!({"ok": false, "error": "insufficient role", "role": principal.role}),
+        )
+    }
+}
+
 fn agent_manifest() -> Value {
     json!({
         "name": "open-fdd-rust-edge",
@@ -805,6 +882,12 @@ fn agent_tools() -> Value {
             {"name":"fdd.rules.activate","method":"POST","path":"/api/fdd-rules/{id}/activate","requires":"integrator"},
             {"name":"rules.batch","method":"POST","path":"/api/rules/batch","requires":"integrator|agent"},
             {"name":"historian.query","method":"POST","path":"/api/historian/query","requires":"JWT"},
+            {"name":"export.meta","method":"GET","path":"/api/export/meta","requires":"JWT"},
+            {"name":"export.historian_csv","method":"GET","path":"/api/export/historian.csv","requires":"operator|integrator|agent"},
+            {"name":"export.faults_csv","method":"GET","path":"/api/export/faults.csv","requires":"operator|integrator|agent"},
+            {"name":"export.model_points_csv","method":"GET","path":"/api/export/model-points.csv","requires":"operator|integrator|agent"},
+            {"name":"export.rules_csv","method":"GET","path":"/api/export/rules.csv","requires":"integrator|agent"},
+            {"name":"export.bench_5007_csv","method":"GET","path":"/api/export/bench-5007.csv","requires":"operator|integrator|agent"},
             {"name":"reports.rcx_plan","method":"POST","path":"/api/reports/rcx/plan","requires":"JWT"},
             {"name":"reports.rcx_generate","method":"POST","path":"/api/reports/rcx/generate","requires":"integrator|agent"},
             {"name":"ops.update","method":"POST","path":"/api/ops/docker/update","requires":"integrator|agent"}

@@ -217,3 +217,94 @@ fn operator_forbidden_on_modbus_scan() {
     let (status, _) = http_post_json(&srv.url("/api/modbus/scan"), "{}", Some(token));
     assert_eq!(status, 403);
 }
+
+fn http_get_with_headers(url: &str, bearer: Option<&str>) -> (u16, String, String) {
+    let url = url.strip_prefix("http://").unwrap();
+    let (host_port, path) = url.split_once('/').unwrap_or((url, ""));
+    let path = if path.is_empty() {
+        "/"
+    } else {
+        &format!("/{path}")
+    };
+    let mut stream = TcpStream::connect(host_port).expect("connect");
+    stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
+    let mut req = format!("GET {path} HTTP/1.1\r\nHost: {host_port}\r\nConnection: close\r\n");
+    if let Some(token) = bearer {
+        req.push_str(&format!("Authorization: Bearer {token}\r\n"));
+    }
+    req.push_str("\r\n");
+    stream.write_all(req.as_bytes()).unwrap();
+    let mut buf = Vec::new();
+    stream.read_to_end(&mut buf).unwrap();
+    let resp = String::from_utf8_lossy(&buf);
+    let status = resp
+        .lines()
+        .next()
+        .and_then(|l| l.split_whitespace().nth(1))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let header_end = resp.find("\r\n\r\n").map(|i| i + 4).unwrap_or(0);
+    let headers = resp
+        .lines()
+        .take_while(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+    (status, headers, resp[header_end..].to_string())
+}
+
+fn login_token(srv: &Server, username: &str, password: &str) -> String {
+    let login_body = login_json(username, password);
+    let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    json["token"]
+        .as_str()
+        .or(json["access_token"].as_str())
+        .unwrap()
+        .to_string()
+}
+
+#[test]
+fn export_requires_authentication() {
+    let srv = Server::start();
+    let (status, _, _) = http_get_with_headers(&srv.url("/api/export/historian.csv"), None);
+    assert_eq!(status, 401);
+}
+
+#[test]
+fn historian_export_returns_csv_attachment() {
+    let srv = Server::start();
+    let pw = srv.integrator_password();
+    let token = login_token(&srv, "integrator", &pw);
+    let (status, headers, body) =
+        http_get_with_headers(&srv.url("/api/export/historian.csv"), Some(&token));
+    assert_eq!(status, 200);
+    assert!(headers.to_ascii_lowercase().contains("text/csv"));
+    assert!(headers.contains("Content-Disposition"));
+    assert!(headers.contains("openfdd_historian_"));
+    assert!(body.starts_with("timestamp_utc,timestamp_local,timezone"));
+}
+
+#[test]
+fn model_points_export_has_expected_columns() {
+    let srv = Server::start();
+    let pw = srv.integrator_password();
+    let token = login_token(&srv, "integrator", &pw);
+    let (status, _, body) =
+        http_get_with_headers(&srv.url("/api/export/model-points.csv"), Some(&token));
+    assert_eq!(status, 200);
+    let header = body.lines().next().unwrap_or("");
+    assert!(header.contains("point_id"));
+    assert!(header.contains("haystack_tags"));
+    assert!(header.contains("rule_inputs"));
+}
+
+#[test]
+fn operator_cannot_export_rules() {
+    let srv = Server::start();
+    let text = std::fs::read_to_string(&srv.auth_path).unwrap();
+    let map = parse_env_file(&text);
+    let op_pw = map.get("OFDD_OPERATOR_PASSWORD").unwrap();
+    let token = login_token(&srv, "operator", op_pw);
+    let (status, _, _) = http_get_with_headers(&srv.url("/api/export/rules.csv"), Some(&token));
+    assert_eq!(status, 403);
+}

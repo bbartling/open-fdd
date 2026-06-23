@@ -222,6 +222,31 @@ jobs:
           curl -fsS http://127.0.0.1:8080/api/bench/5007/smoke/status \
             -H "Authorization: Bearer $INT" | jq -e '.ok == true and (.rule_sql | contains("confirmation_required_minutes"))'
 
+      - name: Data export CSV smoke
+        run: |
+          AGENT_PW="$(grep '^OFDD_AGENT_PASSWORD=' workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
+          TOKEN="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -nc --arg p "$AGENT_PW" '{username:"agent",password:$p}')" | jq -r '.token // .access_token')"
+
+          curl -fsS http://127.0.0.1:8080/api/export/meta \
+            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and (.exports | length >= 5)'
+
+          curl -D /tmp/export-headers.txt -fsS http://127.0.0.1:8080/api/export/historian.csv \
+            -H "Authorization: Bearer $TOKEN" -o /tmp/historian.csv
+          grep -qi 'text/csv' /tmp/export-headers.txt
+          grep -q 'Content-Disposition' /tmp/export-headers.txt
+          grep -q 'openfdd_historian_' /tmp/export-headers.txt
+          head -n 1 /tmp/historian.csv | grep -q 'timestamp_utc,timestamp_local,timezone'
+
+          curl -fsS http://127.0.0.1:8080/api/export/model-points.csv \
+            -H "Authorization: Bearer $TOKEN" | head -n 1 | grep -q 'point_id,point_name'
+
+          curl -fsS http://127.0.0.1:8080/api/export/bench-5007.csv \
+            -H "Authorization: Bearer $TOKEN" | head -n 1 | grep -q 'smoke_run_id'
+
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/export/historian.csv)" = "401"
+
       - name: CSV files created in workspace
         run: |
           test -f workspace/overrides/bacnet_overrides.csv
