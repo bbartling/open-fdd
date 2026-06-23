@@ -148,17 +148,17 @@ jobs:
           curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export \
             -H "Authorization: Bearer $TOKEN" | grep "scanned_at"
 
-          curl -fsSI http://127.0.0.1:8080/api/bacnet/overrides/export \
+          curl -fsS -D - -o /dev/null http://127.0.0.1:8080/api/bacnet/overrides/export \
             -H "Authorization: Bearer $TOKEN" | grep -i 'Content-Disposition: attachment; filename="bacnet_overrides_export.csv"'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/summary \
             -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and (.operator_priority // 0) >= 1'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export/p8 \
-            -H "Authorization: Bearer $TOKEN" | grep "priority_kind"
+            -H "Authorization: Bearer $TOKEN" | grep "override_kind"
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export/non-p8 \
-            -H "Authorization: Bearer $TOKEN" | grep "priority_kind"
+            -H "Authorization: Bearer $TOKEN" | grep "override_kind"
 
       - name: Modbus simulated driver smoke
         run: |
