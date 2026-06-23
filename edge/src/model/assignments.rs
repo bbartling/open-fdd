@@ -16,30 +16,41 @@ pub const ASSIGNMENTS_JSON: &str = r#"{
   "points":[
     {
       "haystack_id":"point:sat",
-      "dis":"AHU-1 Supply Air Temp",
+      "dis":"Device 5007 Discharge Air Temp",
       "kind":"sensor",
-      "equip_ref":"equip:ahu1",
+      "equip_ref":"equip:5007",
       "unit":"degF",
       "driver_bindings":[
-        {"driver":"bacnet","ref":"bacnet:1001:analog-input:1","object_id":[0,1],"priority":1}
+        {"driver":"bacnet","ref":"bacnet:5007:analog-input:1192","object_id":[0,1192],"priority":1}
       ],
-      "storage_ref":"arrow://hvac/sat",
+      "storage_ref":"arrow://hvac/duct_t",
       "external_refs":[
-        {"system":"niagara-haystack","ref":"@ahu1-sat"},
-        {"system":"site-docs","ref":"AHU-1/SAT"}
+        {"system":"site-docs","ref":"5007/DischargeAirTemp"}
       ]
     },
     {
+      "haystack_id":"point:actuator-0",
+      "dis":"Device 5007 ACTUATOR-0",
+      "kind":"cmd",
+      "equip_ref":"equip:5007",
+      "unit":"%",
+      "driver_bindings":[
+        {"driver":"bacnet","ref":"bacnet:5007:analog-output:2466","object_id":[1,2466],"priority":1}
+      ],
+      "storage_ref":"arrow://hvac/actuator_0",
+      "external_refs":[{"system":"site-docs","ref":"5007/ACTUATOR-0"}]
+    },
+    {
       "haystack_id":"point:sat-sp",
-      "dis":"AHU-1 Supply Air Temp Setpoint",
+      "dis":"Device 5007 SAT Setpoint (bench fixture)",
       "kind":"setpoint",
-      "equip_ref":"equip:ahu1",
+      "equip_ref":"equip:5007",
       "unit":"degF",
       "driver_bindings":[
-        {"driver":"bacnet","ref":"bacnet:1001:analog-value:4","object_id":[2,4],"priority":1}
+        {"driver":"bacnet","ref":"bacnet:5007:analog-value:1175","object_id":[2,1175],"priority":1}
       ],
       "storage_ref":"arrow://hvac/sat_sp",
-      "external_refs":[{"system":"niagara-haystack","ref":"@ahu1-sat-sp"}]
+      "external_refs":[{"system":"site-docs","ref":"5007/SAT-SP"}]
     },
     {
       "haystack_id":"point:chwst",
@@ -89,7 +100,7 @@ pub const ASSIGNMENTS_JSON: &str = r#"{
       "engine":"cdl",
       "protocol_agnostic":true,
       "inputs":{
-        "zone_requests":"haystack://equip:ahu1/zone_requests",
+        "zone_requests":"haystack://equip:5007/zone_requests",
         "duct_static":"point:duct-static",
         "sat":"point:sat"
       },
@@ -112,9 +123,9 @@ pub fn save_assignment_json() -> &'static str {
 }
 
 pub fn resolve_json() -> &'static str {
-    r#"{"ok":true,"haystack_id":"point:sat","selected_binding":{"driver":"bacnet","ref":"bacnet:1001:analog-input:1"},"storage_ref":"arrow://hvac/sat"}"#
+    r#"{"ok":true,"haystack_id":"point:sat","selected_binding":{"driver":"bacnet","ref":"bacnet:5007:analog-input:1192"},"storage_ref":"arrow://hvac/sat"}"#
 }
 
 pub fn algorithm_bindings_json() -> &'static str {
-    r#"{"ok":true,"algorithm_id":"g36_ahu_vav_trim_respond","protocol_agnostic":true,"bindings":{"inputs":{"zone_requests":"haystack://equip:ahu1/zone_requests","duct_static":"point:duct-static","sat":"point:sat"},"outputs":{"duct_static_sp":"point:duct-static-sp","sat_sp":"point:sat-sp"}}}"#
+    r#"{"ok":true,"algorithm_id":"g36_ahu_vav_trim_respond","protocol_agnostic":true,"bindings":{"inputs":{"zone_requests":"haystack://equip:5007/zone_requests","duct_static":"point:duct-static","sat":"point:sat"},"outputs":{"duct_static_sp":"point:duct-static-sp","sat_sp":"point:sat-sp"}}}"#
 }

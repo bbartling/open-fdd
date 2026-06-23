@@ -13,6 +13,7 @@ import HostStatsPage from "./pages/HostStatsPage";
 import LoginPage from "./pages/LoginPage";
 import PlotPage from "./pages/PlotPage";
 import RuleLabPage from "./pages/RuleLabPage";
+import SqlFddRulesPage from "./pages/SqlFddRulesPage";
 import AlgorithmsPage from "./pages/AlgorithmsPage";
 import { TabErrorBoundary } from "./components/TabDebugPanel";
 
@@ -26,6 +27,7 @@ export default function App() {
           <Route index element={<HomePage />} />
           <Route path="faults" element={<FaultsPage />} />
           <Route element={<RequireAuth />}>
+            <Route path="sql-fdd" element={<TabErrorBoundary tab="sql-fdd"><SqlFddRulesPage /></TabErrorBoundary>} />
             <Route path="rule-lab" element={<TabErrorBoundary tab="rule-lab"><RuleLabPage /></TabErrorBoundary>} />
             <Route path="model" element={<TabErrorBoundary tab="model"><DataModelPage /></TabErrorBoundary>} />
             <Route path="algorithms" element={<TabErrorBoundary tab="algorithms"><AlgorithmsPage /></TabErrorBoundary>} />
@@ -38,7 +40,9 @@ export default function App() {
             <Route path="json-api" element={<TabErrorBoundary tab="json-api"><JsonApiPage /></TabErrorBoundary>} />
             <Route path="agent" element={<TabErrorBoundary tab="agent"><AgentPage /></TabErrorBoundary>} />
             <Route path="host" element={<TabErrorBoundary tab="host"><HostStatsPage /></TabErrorBoundary>} />
-            <Route path="fdd" element={<Navigate to="/model" replace />} />
+            <Route path="fdd" element={<Navigate to="/sql-fdd" replace />} />
+            <Route path="fdd-wires" element={<Navigate to="/sql-fdd" replace />} />
+            <Route path="rules" element={<Navigate to="/sql-fdd" replace />} />
           </Route>
         </Route>
       </Routes>

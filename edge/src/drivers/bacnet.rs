@@ -16,14 +16,13 @@ use std::thread;
 use std::time::Duration;
 
 const DEVICES_JSON: &str = r#"[
-  {"object_identifier":{"type":"device","instance":1001},"vendor_id":5,"address":"192.168.1.100:47808","label":"AHU-1 Controller","protocol":"BACnet/IP"},
-  {"object_identifier":{"type":"device","instance":2002},"vendor_id":359,"address":"192.168.1.101:47808","label":"VAV Floor 2 Router","protocol":"BACnet/IP"}
+  {"object_identifier":{"type":"device","instance":5007},"vendor_id":5,"address":"192.168.204.200:47808","label":"BENS Bench Controller","protocol":"BACnet/IP"}
 ]"#;
 
 const POINTS_JSON: &str = r#"[
-  {"device_instance":1001,"mac":"c0a80164bac0","object_id":[0,1],"name":"AHU-1 SAT","kind":"sensor","unit":"°F","writable":false,"value":55.2,"haystack_id":"point:sat"},
-  {"device_instance":1001,"mac":"c0a80164bac0","object_id":[2,4],"name":"AHU-1 SAT Setpoint","kind":"setpoint","unit":"°F","writable":true,"value":55.0,"haystack_id":"point:sat-sp"},
-  {"device_instance":1001,"mac":"c0a80164bac0","object_id":[5,8],"name":"AHU-1 Fan Command","kind":"cmd","unit":"bool","writable":true,"value":1,"haystack_id":"point:fan-cmd"}
+  {"device_instance":5007,"mac":"c0a801c8bac0","object_id":[0,1173],"name":"Outside Air Temp","kind":"sensor","unit":"°F","writable":false,"value":62.0,"haystack_id":"point:oa-t"},
+  {"device_instance":5007,"mac":"c0a801c8bac0","object_id":[1,2466],"name":"ACTUATOR-0","kind":"cmd","unit":"%","writable":true,"value":55.0,"haystack_id":"point:actuator-0"},
+  {"device_instance":5007,"mac":"c0a801c8bac0","object_id":[1,10032],"name":"C06-0-10VDC-O","kind":"cmd","unit":"V","writable":true,"value":11.0,"haystack_id":"point:c06-ao"}
 ]"#;
 
 fn workspace_dir() -> PathBuf {
@@ -62,10 +61,12 @@ pub fn bacnet_config_value() -> Value {
 
 fn bench5007_points() -> Vec<Value> {
     vec![
-        json!({"id":"bacnet:5007:analog-input:1173","device_instance":5007,"object_id":[0,1173],"name":"Outside Air Temp","polling_enabled":true,"writable":false,"haystack_id":"point:oa-t","fdd_input":"oa-t"}),
-        json!({"id":"bacnet:5007:analog-input:1168","device_instance":5007,"object_id":[0,1168],"name":"Outside Air Humidity","polling_enabled":true,"writable":false,"haystack_id":"point:oa-h","fdd_input":"oa-h"}),
-        json!({"id":"bacnet:5007:analog-input:1192","device_instance":5007,"object_id":[0,1192],"name":"Discharge Air Temp","polling_enabled":true,"writable":false,"haystack_id":"point:duct-t","fdd_input":"duct-t"}),
-        json!({"id":"bacnet:5007:analog-input:10014","device_instance":5007,"object_id":[0,10014],"name":"Zone Temp","polling_enabled":true,"writable":false,"haystack_id":"point:stat_zn-t","fdd_input":"stat_zn-t"}),
+        json!({"id":"bacnet:5007:analog-input:1173","device_instance":5007,"object_id":[0,1173],"name":"Outside Air Temp","polling_enabled":true,"writable":false,"haystack_id":"point:oa-t","fdd_input":"oa_t"}),
+        json!({"id":"bacnet:5007:analog-input:1168","device_instance":5007,"object_id":[0,1168],"name":"Outside Air Humidity","polling_enabled":true,"writable":false,"haystack_id":"point:oa-h","fdd_input":"oa_h"}),
+        json!({"id":"bacnet:5007:analog-input:1192","device_instance":5007,"object_id":[0,1192],"name":"Discharge Air Temp","polling_enabled":true,"writable":false,"haystack_id":"point:duct-t","fdd_input":"duct_t"}),
+        json!({"id":"bacnet:5007:analog-input:10014","device_instance":5007,"object_id":[0,10014],"name":"Zone Temp","polling_enabled":true,"writable":false,"haystack_id":"point:stat_zn-t","fdd_input":"stat_zn_t"}),
+        json!({"id":"bacnet:5007:analog-output:10032","device_instance":5007,"object_id":[1,10032],"name":"C06-0-10VDC-O","polling_enabled":true,"writable":true,"commandable":true,"haystack_id":"point:c06-ao","fdd_input":"c06_ao"}),
+        json!({"id":"bacnet:5007:analog-output:2466","device_instance":5007,"object_id":[1,2466],"name":"ACTUATOR-0","polling_enabled":true,"writable":true,"commandable":true,"haystack_id":"point:actuator-0","fdd_input":"actuator_0"}),
     ]
 }
 
@@ -94,18 +95,7 @@ fn default_registry() -> Value {
           "enabled":true,
           "override_scan":{"enabled":true,"cadence_seconds":3600,"method":"ReadProperty(priority-array) on writable points"},
           "devices":[
-            bench5007_device(),
-            {
-              "device_instance":1001,
-              "name":"AHU-1 Controller (simulated)",
-              "address":"192.168.1.100:47808",
-              "polling_enabled":true,
-              "points":[
-                {"id":"bacnet:1001:analog-input:1","device_instance":1001,"object_id":[0,1],"name":"AHU-1 SAT","polling_enabled":true,"writable":false,"haystack_id":"point:sat"},
-                {"id":"bacnet:1001:analog-value:4","device_instance":1001,"object_id":[2,4],"name":"AHU-1 SAT Setpoint","polling_enabled":true,"writable":true,"haystack_id":"point:sat-sp"},
-                {"id":"bacnet:1001:binary-value:8","device_instance":1001,"object_id":[5,8],"name":"AHU-1 Fan Command","polling_enabled":true,"writable":true,"haystack_id":"point:fan-cmd"}
-              ]
-            }
+            bench5007_device()
           ]
         },
         {
@@ -142,7 +132,7 @@ fn default_registry() -> Value {
           "enabled":true,
           "sites":[
             {"id":"site:demo","dis":"Demo Site"},
-            {"id":"equip:ahu1","dis":"AHU-1","siteRef":"site:demo"}
+            {"id":"equip:5007","dis":"Device 5007 Bench","siteRef":"site:demo"}
           ],
           "note":"Niagara-style station integration is represented through Project Haystack read/nav/ops instead of custom Niagara WebSockets."
         }
@@ -428,10 +418,10 @@ fn read_priority_array_for_point(point: &Value) -> Vec<(u8, Value)> {
     }
 
     let name = point.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    if name.contains("Setpoint") {
-        vec![(8, json!(58.0))]
-    } else if name.contains("Fan Command") {
-        vec![(5, json!(1))]
+    if name == "ACTUATOR-0" {
+        vec![(8, json!(55.0))]
+    } else if name == "C06-0-10VDC-O" {
+        vec![(1, json!(11.0))]
     } else {
         Vec::new()
     }
@@ -756,7 +746,7 @@ pub fn read_present_value_json(body: &Value) -> String {
         .unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
     }
 
-    r#"{"point":"AHU-1 SAT","value":55.2,"unit":"°F","source":"bacnet-simulated"}"#.to_string()
+    r#"{"point":"Outside Air Temp","device_instance":5007,"value":62.0,"unit":"°F","source":"bacnet-simulated"}"#.to_string()
 }
 
 pub fn driver_tree_json() -> String {

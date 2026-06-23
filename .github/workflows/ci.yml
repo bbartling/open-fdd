@@ -120,7 +120,6 @@ jobs:
         run: |
           curl -fsS http://127.0.0.1:8080/ | grep -q 'id="root"'
           curl -fsS http://127.0.0.1:8080/ | grep -q '/assets/index-'
-          curl -fsS http://127.0.0.1:8080/fdd-wires.js | grep -q "FDD Wires"
 
       - name: BACnet override scanner smoke
         run: |
@@ -201,12 +200,18 @@ jobs:
 
           curl -fsS -X POST http://127.0.0.1:8080/api/fdd-rules/oa_temp_out_of_range/test-sql \
             -H "Authorization: Bearer $INT" -H 'Content-Type: application/json' \
-            -d '{"sql":"SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t > 110.0 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = '\''AHU-1'\''","confirmation_seconds":300}' \
+            -d '{"sql":"SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t > 110.0 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = '\''5007'\''","confirmation_seconds":300}' \
             | jq -e '.ok == true and (.engine | type == "string") and (.engine | contains("DataFusion"))'
 
           curl -sS -X POST http://127.0.0.1:8080/api/fdd-rules/oa_temp_out_of_range/activate \
             -H "Authorization: Bearer $AGENT" -H 'Content-Type: application/json' -d '{}' \
             | jq -e '.ok == false'
+
+          curl -fsS http://127.0.0.1:8080/api/fdd-schema/fdd-inputs \
+            -H "Authorization: Bearer $INT" | jq -e '(.fdd_inputs // []) | length >= 1'
+
+          curl -fsS http://127.0.0.1:8080/api/fdd/datafusion/demo \
+            -H "Authorization: Bearer $INT" | jq -e '(.faults[0].equip // "") == "5007"'
 
       - name: CSV files created in workspace
         run: |

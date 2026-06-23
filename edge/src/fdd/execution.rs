@@ -205,7 +205,7 @@ fn build_telemetry_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
         let equip = row
             .get("equip")
             .and_then(|v| v.as_str())
-            .unwrap_or("AHU-1")
+            .unwrap_or("5007")
             .to_string();
         for (input, key) in [
             ("sat", "sat"),
@@ -304,7 +304,7 @@ fn build_pivot_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
         equip.push(
             row.get("equip")
                 .and_then(|v| v.as_str())
-                .unwrap_or("AHU-1")
+                .unwrap_or("5007")
                 .to_string(),
         );
         sat.push(row.get("sat").and_then(|v| v.as_f64()));
@@ -395,7 +395,7 @@ pub fn builder_to_sql(builder: &Value) -> String {
     let equipment = builder
         .get("equipment_id")
         .and_then(|v| v.as_str())
-        .unwrap_or("AHU-1");
+        .unwrap_or("5007");
     format!(
         "SELECT timestamp, equipment_id, {input}, CASE WHEN {input} IS NULL THEN false WHEN {input} {op} {value} THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = '{equipment}'"
     )

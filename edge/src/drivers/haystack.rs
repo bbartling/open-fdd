@@ -15,8 +15,8 @@ pub const MODEL_JSON: &str = r#"{
   "cols":[{"name":"id"},{"name":"dis"},{"name":"site"},{"name":"equip"},{"name":"point"},{"name":"bacnetRef"},{"name":"modbusRef"}],
   "rows":[
     {"id":"site:demo","dis":"Demo Site","site":"M"},
-    {"id":"equip:ahu1","dis":"AHU-1","equip":"M","siteRef":"site:demo"},
-    {"id":"point:sat","dis":"AHU-1 SAT","point":"M","sensor":"M","bacnetRef":"analog-input:1"},
+    {"id":"equip:5007","dis":"Device 5007 Bench","equip":"M","siteRef":"site:demo"},
+    {"id":"point:oa-t","dis":"Outside Air Temp","point":"M","sensor":"M","bacnetRef":"bacnet:5007:analog-input:1173"},
     {"id":"point:chwst","dis":"CHW Plant Supply Temp","point":"M","sensor":"M","modbusRef":"40001"}
   ]
 }"#;
