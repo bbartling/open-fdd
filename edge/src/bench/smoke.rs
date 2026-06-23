@@ -283,7 +283,8 @@ pub fn evaluate_historian_fdd() -> Value {
     }
     let data_source = detect_data_source(&rows);
     let sql = default_rule_sql();
-    let mut result = execution::run_rule_sql_from_historian(&sql, confirmation_seconds(), &json!({}));
+    let mut result =
+        execution::run_rule_sql_from_historian(&sql, confirmation_seconds(), &json!({}));
     if let Some(obj) = result.as_object_mut() {
         obj.insert("data_source".into(), json!(data_source));
         obj.insert(
@@ -362,9 +363,18 @@ fn proof_summary(eval: &Value, demo_only: bool) -> Value {
 
 pub fn inject_scenario(body: &Value) -> Value {
     let p = profile::active_profile();
-    let normal_min = body.get("normal_minutes").and_then(|v| v.as_u64()).unwrap_or(5);
-    let fault_min = body.get("fault_minutes").and_then(|v| v.as_u64()).unwrap_or(6);
-    let clear_min = body.get("clear_minutes").and_then(|v| v.as_u64()).unwrap_or(5);
+    let normal_min = body
+        .get("normal_minutes")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(5);
+    let fault_min = body
+        .get("fault_minutes")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(6);
+    let clear_min = body
+        .get("clear_minutes")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(5);
     let _ = store::clear_rows_with_source_prefix("simulation:live_fdd_validation");
     let start = Utc::now();
     let mut rows = Vec::new();
@@ -395,7 +405,12 @@ pub fn inject_scenario(body: &Value) -> Value {
     })
 }
 
-fn make_sim_row(p: &SmokeProfile, start: &chrono::DateTime<Utc>, minute_offset: u64, phase: &str) -> Value {
+fn make_sim_row(
+    p: &SmokeProfile,
+    start: &chrono::DateTime<Utc>,
+    minute_offset: u64,
+    phase: &str,
+) -> Value {
     let ts = (*start + chrono::Duration::minutes(minute_offset as i64)).to_rfc3339();
     let (oa_t, _, _, _) = simulated_values(phase).0;
     store::make_pivot_row(

@@ -43,7 +43,8 @@ pub fn profile_path() -> PathBuf {
     if let Ok(p) = env::var("OPENFDD_SMOKE_PROFILE_PATH") {
         return PathBuf::from(p);
     }
-    let id = env::var("OPENFDD_SMOKE_PROFILE").unwrap_or_else(|_| "local_bacnet_fdd_validation".into());
+    let id =
+        env::var("OPENFDD_SMOKE_PROFILE").unwrap_or_else(|_| "local_bacnet_fdd_validation".into());
     workspace_dir()
         .join("smoke-profiles/local")
         .join(format!("{id}.local.toml"))
@@ -308,12 +309,15 @@ mod tests {
         std::env::set_var("OPENFDD_SMOKE_DEVICE_INSTANCE", "42");
         let p = active_profile();
         assert_eq!(p.device_instance, 42);
+        std::env::remove_var("OPENFDD_WORKSPACE");
+        std::env::remove_var("OPENFDD_SMOKE_DEVICE_INSTANCE");
         let _ = fs::remove_dir_all(ws);
     }
 
     #[test]
     fn parses_local_toml_points() {
         let _lock = test_lock();
+        std::env::remove_var("OPENFDD_SMOKE_DEVICE_INSTANCE");
         let ws = std::env::temp_dir().join(format!("ofdd-toml-{}", std::process::id()));
         let dir = ws.join("smoke-profiles/local");
         fs::create_dir_all(&dir).unwrap();
@@ -347,5 +351,7 @@ point.oa_t = "OA Temp|1173|oa_t"
         assert!(validate_modbus());
         std::env::remove_var("OPENFDD_SMOKE_REQUIRE_CONFIRMED_FAULT");
         std::env::remove_var("OPENFDD_SMOKE_VALIDATE_MODBUS");
+        std::env::remove_var("OPENFDD_WORKSPACE");
+        std::env::remove_var("OPENFDD_SMOKE_PROFILE");
     }
 }

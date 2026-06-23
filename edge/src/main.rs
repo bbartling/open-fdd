@@ -393,19 +393,16 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/json-api/sources") => {
             raw_json(&mut stream, drivers::json_api::sources_json())
         }
-        ("POST", "/api/json-api/poll-once") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            {
+        ("POST", "/api/json-api/poll-once") => {
+            require_role(&mut stream, &principal, &["integrator", "agent"], {
                 let payload = serde_json::from_str::<Value>(&body).unwrap_or(json!({}));
                 if let Some(url) = payload.get("url").and_then(|v| v.as_str()) {
                     drivers::json_api::poll_url(url)
                 } else {
                     drivers::json_api::poll_test_source()
                 }
-            },
-        ),
+            })
+        }
         ("POST", "/api/json-api/register") => require_role(
             &mut stream,
             &principal,

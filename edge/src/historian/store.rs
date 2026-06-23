@@ -15,9 +15,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 pub fn historian_subdir() -> String {
-    std::env::var("OPENFDD_HISTORIAN_SUBDIR").unwrap_or_else(|_| {
-        crate::validation::profile::active_profile().historian_subdir
-    })
+    std::env::var("OPENFDD_HISTORIAN_SUBDIR")
+        .unwrap_or_else(|_| crate::validation::profile::active_profile().historian_subdir)
 }
 
 pub fn bench_dir() -> PathBuf {

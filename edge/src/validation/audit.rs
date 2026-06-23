@@ -72,7 +72,9 @@ pub fn scan_line_for_violations(rel: &str, line_no: usize, line: &str) -> Vec<Au
     if line.contains("5007") && !rel.contains("docker-compose.bacnet-live.yml") {
         let lower = line.to_ascii_lowercase();
         if lower.contains("5007")
-            && (lower.contains("bench") || lower.contains("/api/bench") || lower.contains("device 5007"))
+            && (lower.contains("bench")
+                || lower.contains("/api/bench")
+                || lower.contains("device 5007"))
         {
             out.push(AuditViolation {
                 path: PathBuf::from(rel),

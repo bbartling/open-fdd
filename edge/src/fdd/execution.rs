@@ -271,7 +271,10 @@ fn historian_pivot_to_telemetry_batch(
         .into();
     let unit: StringArray = std::iter::repeat("degF").take(n).collect::<Vec<_>>().into();
     let quality: StringArray = std::iter::repeat("good").take(n).collect::<Vec<_>>().into();
-    let device: StringArray = std::iter::repeat("equip:validation").take(n).collect::<Vec<_>>().into();
+    let device: StringArray = std::iter::repeat("equip:validation")
+        .take(n)
+        .collect::<Vec<_>>()
+        .into();
     let object: StringArray = std::iter::repeat("ai:bench")
         .take(n)
         .collect::<Vec<_>>()
@@ -411,7 +414,10 @@ fn build_telemetry_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
         .take(n)
         .collect::<Vec<_>>()
         .into();
-    let device: StringArray = std::iter::repeat("equip:validation").take(n).collect::<Vec<_>>().into();
+    let device: StringArray = std::iter::repeat("equip:validation")
+        .take(n)
+        .collect::<Vec<_>>()
+        .into();
     let object: StringArray = std::iter::repeat("ai:1173")
         .take(n)
         .collect::<Vec<_>>()
