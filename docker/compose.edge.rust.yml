@@ -3,6 +3,8 @@
 # Profiles:
 #   desktop-json-csv — bridge only (set OPENFDD_*_ENABLED=0 in .env for JSON/CSV mode)
 #   full-edge        — bridge + BACnet/Modbus commission + Haystack gateway
+#   caddy-http       — Caddy LAN ingress on port 80 (use with desktop-json-csv or full-edge)
+#   caddy-tls        — Caddy TLS on 443 with self-signed certs (run openfdd-edge tls generate first)
 #
 # Desktop (Windows Docker Desktop friendly):
 #   OPENFDD_COMPOSE_ROOT=$PWD docker compose -f docker/compose.edge.rust.yml --profile desktop-json-csv up -d
@@ -76,6 +78,42 @@ services:
         required: false
       - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/bacnet/commissioning/commission.env
         required: false
+    restart: unless-stopped
+
+  openfdd-caddy-http:
+    profiles: ["caddy-http"]
+    image: caddy:2-alpine
+    container_name: openfdd-caddy
+    ports:
+      - "${OPENFDD_CADDY_HTTP_PORT:-80}:80"
+    volumes:
+      - ${OPENFDD_COMPOSE_ROOT:?}/docker/caddy/Caddyfile.http:/etc/caddy/Caddyfile:ro
+    environment:
+      OPENFDD_CADDY_ENABLED: "1"
+      OPENFDD_CADDY_MODE: http
+    depends_on:
+      openfdd-bridge:
+        condition: service_healthy
+    restart: unless-stopped
+
+  openfdd-caddy-tls:
+    profiles: ["caddy-tls"]
+    image: caddy:2-alpine
+    container_name: openfdd-caddy
+    ports:
+      - "${OPENFDD_CADDY_HTTP_PORT:-80}:80"
+      - "${OPENFDD_CADDY_HTTPS_PORT:-443}:443"
+    volumes:
+      - ${OPENFDD_COMPOSE_ROOT:?}/docker/caddy/Caddyfile.tls:/etc/caddy/Caddyfile:ro
+      - ${OPENFDD_COMPOSE_ROOT:?}/${OPENFDD_CADDY_CERT_DIR:-workspace/deploy/caddy/certs}:/certs:ro
+    environment:
+      OPENFDD_CADDY_ENABLED: "1"
+      OPENFDD_CADDY_MODE: tls
+      OPENFDD_CADDY_HOSTNAME: ${OPENFDD_CADDY_HOSTNAME:-openfdd.local}
+      OPENFDD_CADDY_TLS_CN: ${OPENFDD_CADDY_TLS_CN:-openfdd.local}
+    depends_on:
+      openfdd-bridge:
+        condition: service_healthy
     restart: unless-stopped
 
   openfdd-haystack-gateway:

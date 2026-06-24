@@ -7,7 +7,6 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
-use subtle::ConstantTimeEq;
 
 #[derive(Clone, Debug)]
 pub struct LoginResult {
@@ -30,10 +29,6 @@ fn rate_state() -> &'static Mutex<RateState> {
             failures: HashMap::new(),
         })
     })
-}
-
-fn constant_time_eq(a: &str, b: &str) -> bool {
-    a.as_bytes().ct_eq(b.as_bytes()).into()
 }
 
 fn check_rate_limit(username: &str) -> Result<(), String> {
@@ -97,7 +92,7 @@ pub fn authenticate(config: &AuthConfig, body: &Value) -> Result<LoginResult, St
 
     check_rate_limit(username)?;
 
-    let Some((expected_password, role)) = config.users.get(username) else {
+    let Some((expected, role)) = config.users.get(username) else {
         note_failure(username);
         audit::log_event(
             "login_failure",
@@ -106,7 +101,7 @@ pub fn authenticate(config: &AuthConfig, body: &Value) -> Result<LoginResult, St
         return Err("invalid credentials".into());
     };
 
-    if !constant_time_eq(password, expected_password) {
+    if !expected.verify(password).unwrap_or(false) {
         note_failure(username);
         audit::log_event(
             "login_failure",
@@ -144,6 +139,7 @@ pub fn login_response(result: LoginResult) -> Value {
 mod tests {
     use super::*;
     use crate::auth::config::AuthConfig;
+    use crate::auth::password::PasswordCredential;
     use std::collections::HashMap;
 
     fn cfg_with_users() -> AuthConfig {
@@ -151,17 +147,23 @@ mod tests {
         users.insert(
             "integrator".to_string(),
             (
-                "integrator-test-password-1234567890".to_string(),
+                PasswordCredential::Plain("integrator-test-password-1234567890".to_string()),
                 "integrator",
             ),
         );
         users.insert(
             "operator".to_string(),
-            ("operator-test-password-1234567890".to_string(), "operator"),
+            (
+                PasswordCredential::Plain("operator-test-password-1234567890".to_string()),
+                "operator",
+            ),
         );
         users.insert(
             "agent".to_string(),
-            ("agent-test-password-123456789012345".to_string(), "agent"),
+            (
+                PasswordCredential::Plain("agent-test-password-123456789012345".to_string()),
+                "agent",
+            ),
         );
         AuthConfig {
             required: true,

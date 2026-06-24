@@ -1,6 +1,9 @@
 //! Auth configuration loaded from env + workspace/auth.env.local.
 
-use super::env_file::{apply_env_file, default_auth_env_path};
+use super::env_file::{
+    apply_env_file, default_auth_env_path, load_password_credential, RoleSpec, ALL_ROLES,
+};
+use super::password::PasswordCredential;
 use std::collections::HashMap;
 use std::env;
 
@@ -16,14 +19,13 @@ pub struct AuthConfig {
     pub secret: String,
     pub ttl_seconds: i64,
     pub cookie_secure: bool,
-    pub users: HashMap<String, (String, &'static str)>,
+    pub users: HashMap<String, (PasswordCredential, &'static str)>,
 }
 
 impl AuthConfig {
     pub fn load() -> Self {
         apply_env_file(&default_auth_env_path());
 
-        // Legacy alias
         if env::var("OFDD_AUTH_SECRET").is_err() {
             if let Ok(v) = env::var("OPENFDD_JWT_SECRET") {
                 env::set_var("OFDD_AUTH_SECRET", v);
@@ -41,8 +43,9 @@ impl AuthConfig {
             "dev-change-me-openfdd-rust-edge".to_string()
         });
 
-        let ttl_seconds = env::var("OFDD_JWT_TTL_SECONDS")
+        let ttl_seconds = env::var("OPENFDD_AUTH_TTL_SEC")
             .ok()
+            .or_else(|| env::var("OFDD_JWT_TTL_SECONDS").ok())
             .and_then(|v| v.parse().ok())
             .unwrap_or(28_800);
 
@@ -50,25 +53,11 @@ impl AuthConfig {
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
 
+        let map = super::env_file::load_env_file(&default_auth_env_path()).unwrap_or_default();
         let mut users = HashMap::new();
-        add_user(
-            &mut users,
-            "OFDD_OPERATOR_USER",
-            "OFDD_OPERATOR_PASSWORD",
-            "operator",
-        );
-        add_user(
-            &mut users,
-            "OFDD_INTEGRATOR_USER",
-            "OFDD_INTEGRATOR_PASSWORD",
-            "integrator",
-        );
-        add_user(
-            &mut users,
-            "OFDD_AGENT_USER",
-            "OFDD_AGENT_PASSWORD",
-            "agent",
-        );
+        for spec in ALL_ROLES {
+            add_user_from_spec(&mut users, &map, spec);
+        }
 
         Self {
             required,
@@ -95,15 +84,22 @@ impl AuthConfig {
     }
 }
 
-fn add_user(
-    users: &mut HashMap<String, (String, &'static str)>,
-    user_key: &str,
-    pass_key: &str,
-    role: &'static str,
+fn add_user_from_spec(
+    users: &mut HashMap<String, (PasswordCredential, &'static str)>,
+    map: &HashMap<String, String>,
+    spec: RoleSpec,
 ) {
-    let username = env::var(user_key).unwrap_or_else(|_| role.to_string());
-    if let Ok(password) = env::var(pass_key) {
-        users.insert(username, (password, role));
+    let username = map
+        .get(spec.user_key)
+        .cloned()
+        .unwrap_or_else(|| spec.default_user.to_string());
+    if let Some(cred) = load_password_credential(map, spec.hash_key, spec.pass_key) {
+        users.insert(username, (cred, spec.role));
+    } else if let Ok(password) = env::var(spec.pass_key) {
+        users.insert(
+            username,
+            (PasswordCredential::from_env_plain(password), spec.role),
+        );
     }
 }
 
@@ -115,29 +111,27 @@ mod tests {
 
     #[test]
     fn loads_users_from_generated_env_file() {
-        let path = std::env::temp_dir().join(format!(
+        let dir = std::env::temp_dir().join(format!(
             "openfdd-auth-load-{}",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
         ));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("auth.env.local");
         generate_auth_env(&GenerateOptions {
             path: path.clone(),
             force: true,
             show_secrets: false,
         })
         .unwrap();
-        std::env::set_var("OPENFDD_WORKSPACE", path.parent().unwrap());
-        // Re-apply by reading file directly
-        let map = crate::auth::env_file::load_env_file(&path).unwrap();
-        for (k, v) in map {
-            std::env::set_var(k, v);
-        }
+        std::env::set_var("OPENFDD_WORKSPACE", &dir);
         let cfg = AuthConfig::load();
         assert!(cfg.users.contains_key("operator"));
         assert!(cfg.users.contains_key("integrator"));
         assert!(cfg.users.contains_key("agent"));
-        let _ = std::fs::remove_file(path);
+        assert!(cfg.users.contains_key("admin"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

@@ -1,0 +1,22 @@
+# TLS mode — self-signed certs from openfdd-edge tls generate
+
+{
+	admin off
+}
+
+:80 {
+	redir https://{host}{uri} permanent
+}
+
+{$OPENFDD_CADDY_HOSTNAME:openfdd.local}, localhost, 127.0.0.1 {
+	tls /certs/cert.pem /certs/key.pem
+	encode gzip zstd
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options SAMEORIGIN
+	}
+	reverse_proxy openfdd-bridge:8080
+}

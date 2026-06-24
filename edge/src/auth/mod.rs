@@ -5,6 +5,7 @@ pub mod config;
 pub mod env_file;
 pub mod jwt;
 pub mod login;
+pub mod password;
 pub mod rbac;
 
 pub use config::{AuthConfig, Principal};

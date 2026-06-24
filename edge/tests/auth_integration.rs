@@ -21,7 +21,8 @@ fn pick_port() -> u16 {
 struct Server {
     child: Child,
     port: u16,
-    auth_path: std::path::PathBuf,
+    integrator_password: String,
+    operator_password: String,
 }
 
 impl Server {
@@ -36,12 +37,22 @@ impl Server {
         let _ = std::fs::remove_dir_all(&workspace);
         std::fs::create_dir_all(&workspace).unwrap();
         let auth_path = workspace.join("auth.env.local");
-        generate_auth_env(&GenerateOptions {
+        let generated = generate_auth_env(&GenerateOptions {
             path: auth_path.clone(),
             force: true,
             show_secrets: false,
         })
         .unwrap();
+        let integrator_password = generated
+            .plaintext_passwords
+            .get("integrator")
+            .cloned()
+            .expect("integrator password from generate");
+        let operator_password = generated
+            .plaintext_passwords
+            .get("operator")
+            .cloned()
+            .expect("operator password from generate");
         let auth_map = parse_env_file(&std::fs::read_to_string(&auth_path).unwrap());
 
         let bin = env!("CARGO_BIN_EXE_open_fdd_edge_prototype");
@@ -66,7 +77,8 @@ impl Server {
                 return Self {
                     child,
                     port,
-                    auth_path,
+                    integrator_password,
+                    operator_password,
                 };
             }
             thread::sleep(Duration::from_millis(250));
@@ -79,12 +91,12 @@ impl Server {
         format!("http://127.0.0.1:{}{}", self.port, path)
     }
 
-    fn integrator_password(&self) -> String {
-        let text = std::fs::read_to_string(&self.auth_path).unwrap();
-        parse_env_file(&text)
-            .get("OFDD_INTEGRATOR_PASSWORD")
-            .cloned()
-            .unwrap()
+    fn integrator_password(&self) -> &str {
+        &self.integrator_password
+    }
+
+    fn operator_password(&self) -> &str {
+        &self.operator_password
     }
 
     fn operator_password(&self) -> String {
@@ -227,10 +239,7 @@ fn wrong_password_fails() {
 #[test]
 fn operator_forbidden_on_modbus_scan() {
     let srv = Server::start();
-    let text = std::fs::read_to_string(&srv.auth_path).unwrap();
-    let map = parse_env_file(&text);
-    let op_pw = map.get("OFDD_OPERATOR_PASSWORD").unwrap();
-    let login_body = login_json("operator", op_pw);
+    let login_body = login_json("operator", srv.operator_password());
     let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     let token = json["token"]

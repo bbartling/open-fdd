@@ -1,9 +1,11 @@
 mod auth;
 mod bench;
 mod control;
+mod dashboard;
 mod data_management;
 mod drivers;
 mod export;
+mod faults;
 mod fdd;
 mod historian;
 mod import;
@@ -83,6 +85,16 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         );
         return json_response(&mut stream, json!({"ok": true}));
     }
+    if method == "GET" && clean_path == "/api/auth/status" {
+        let cfg = auth_config();
+        return json_response(
+            &mut stream,
+            json!({"ok": true, "auth_required": cfg.required}),
+        );
+    }
+    if method == "GET" && clean_path == "/api/building/snapshot" {
+        return json_response(&mut stream, dashboard::building_snapshot());
+    }
     if method == "GET" && !clean_path.starts_with("/api/") {
         return static_file(&mut stream, frontend, &clean_path);
     }
@@ -104,6 +116,82 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             json!({"ok": true, "principal": {"sub": principal.sub, "role": principal.role}}),
         ),
+        ("GET", "/api/auth/me") => json_response(
+            &mut stream,
+            json!({
+                "ok": true,
+                "username": principal.sub,
+                "role": principal.role,
+                "auth_required": auth_config().required
+            }),
+        ),
+        ("POST", "/api/auth/ws-ticket") => {
+            let (ticket, _exp) =
+                auth::jwt::create_ws_ticket(auth_config(), &principal.sub, &principal.role);
+            json_response(
+                &mut stream,
+                json!({"ok": true, "ticket": ticket, "username": principal.sub, "role": principal.role}),
+            )
+        }
+        ("GET", "/api/ops/stack") => json_response(&mut stream, dashboard::stack_health()),
+
+        ("GET", "/api/health/stack") => json_response(&mut stream, dashboard::stack_health()),
+        ("GET", "/api/building/status") => json_response(&mut stream, dashboard::building_status()),
+        ("GET", "/api/dashboard/summary") => json_response(&mut stream, dashboard::summary()),
+        ("GET", "/api/dashboard/sites") => json_response(&mut stream, dashboard::sites()),
+        ("GET", "/api/dashboard/faults") => json_response(&mut stream, dashboard::faults_panel()),
+        ("GET", "/api/dashboard/faults/active") => {
+            json_response(&mut stream, dashboard::faults_active())
+        }
+        ("GET", "/api/dashboard/faults/history") => {
+            json_response(&mut stream, dashboard::faults_history())
+        }
+        ("GET", "/api/dashboard/model-coverage") => {
+            json_response(&mut stream, dashboard::model_coverage_route())
+        }
+        ("GET", "/api/dashboard/source-health") => {
+            json_response(&mut stream, dashboard::source_health())
+        }
+        ("GET", "/api/dashboard/historian-health") => {
+            json_response(&mut stream, dashboard::historian_health())
+        }
+        ("GET", "/api/dashboard/security") => {
+            json_response(&mut stream, dashboard::security_status())
+        }
+        ("GET", "/api/dashboard/analytics") => json_response(&mut stream, dashboard::analytics()),
+        ("GET", "/api/faults") => json_response(&mut stream, faults::list_json(None)),
+        ("GET", "/api/faults/status") => json_response(&mut stream, faults::status_json()),
+        ("GET", "/api/faults/summary") => json_response(&mut stream, faults::summary_json()),
+        ("GET", "/api/faults/export.csv") => {
+            let body = faults::export_csv();
+            require_role_csv(
+                &mut stream,
+                &principal,
+                READ_EXPORT_ROLES,
+                body,
+                "openfdd_faults.csv",
+            )
+        }
+        ("GET", "/api/faults/catalog") => json_response(&mut stream, faults::catalog_json()),
+        ("GET", "/api/faults/tree") => json_response(&mut stream, faults::tree_json()),
+        ("GET", "/api/faults/applicable") => {
+            let site = query_param(&clean_path, "site_id");
+            json_response(&mut stream, faults::applicable_json(site.as_deref()))
+        }
+        ("POST", "/api/faults/validate-scope") => json_response(
+            &mut stream,
+            faults::validate_scope_json(
+                serde_json::from_str::<Value>(&body)
+                    .ok()
+                    .and_then(|v| {
+                        v.get("site_id")
+                            .and_then(|s| s.as_str())
+                            .map(str::to_string)
+                    })
+                    .as_deref(),
+            ),
+        ),
+        ("GET", "/api/model/sites") => json_response(&mut stream, dashboard::sites()),
         ("GET", "/api/ui/tabs") => raw_json(&mut stream, ops::bridge::ui_tabs_json()),
         ("GET", "/api/bridge/status") => raw_json(&mut stream, ops::bridge::status_json()),
         ("GET", "/api/agent/manifest") => json_response(&mut stream, agent_manifest()),
@@ -120,9 +208,6 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent"],
             agent_update(),
         ),
-        ("GET", "/api/ops/stack") => json_response(&mut stream, stack_status()),
-
-        ("GET", "/api/health/stack") => json_response(&mut stream, stack_status()),
         ("GET", "/api/historian/query") => {
             raw_json(&mut stream, historian::arrow_table::query_json())
         }
@@ -597,6 +682,11 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             json!({"ok": true, "report_id": "rcx-demo-001", "path": "workspace/reports/rcx/rcx-demo-001.md", "sections": ["faults", "overrides", "plotly_trends", "recommendations"]}),
         ),
         _ => {
+            if let Some(resp) =
+                handle_faults_dynamic(&mut stream, &principal, method.as_str(), &clean_path)
+            {
+                return resp;
+            }
             if let Some(resp) = handle_data_management_dynamic(
                 &mut stream,
                 &principal,
@@ -772,6 +862,32 @@ fn handle_fdd_wires_dynamic(
         }
         _ => None,
     }
+}
+
+fn handle_faults_dynamic(
+    stream: &mut TcpStream,
+    _principal: &Principal,
+    method: &str,
+    path: &str,
+) -> Option<std::io::Result<()>> {
+    if method != "GET" {
+        return None;
+    }
+    let prefix = "/api/faults/";
+    if !path.starts_with(prefix) {
+        return None;
+    }
+    let tail = path.trim_start_matches(prefix);
+    if tail.is_empty()
+        || tail.contains('/')
+        || matches!(
+            tail,
+            "status" | "summary" | "export.csv" | "catalog" | "tree" | "applicable"
+        )
+    {
+        return None;
+    }
+    Some(json_response(stream, faults::get_fault(tail)))
 }
 
 fn handle_data_management_dynamic(
@@ -1131,59 +1247,6 @@ fn agent_update() -> Value {
     })
 }
 
-fn protocol_enabled(env_key: &str) -> bool {
-    env::var(env_key)
-        .map(|v| v != "0" && v.to_lowercase() != "false")
-        .unwrap_or(true)
-}
-
-fn stack_status() -> Value {
-    let bacnet = if protocol_enabled("OPENFDD_BACNET_ENABLED") {
-        json!({"id":"bacnet","status":"ready","write_guard":"human approval required"})
-    } else {
-        json!({"id":"bacnet","status":"disabled","note":"OPENFDD_BACNET_ENABLED=0"})
-    };
-    let modbus = if protocol_enabled("OPENFDD_MODBUS_ENABLED") {
-        json!({"id":"modbus","status":"ready"})
-    } else {
-        json!({"id":"modbus","status":"disabled","note":"OPENFDD_MODBUS_ENABLED=0"})
-    };
-    let haystack = if protocol_enabled("OPENFDD_HAYSTACK_ENABLED") {
-        json!({"id":"haystack","status":"ready"})
-    } else {
-        json!({"id":"haystack","status":"disabled","note":"OPENFDD_HAYSTACK_ENABLED=0"})
-    };
-    let commission = if protocol_enabled("OPENFDD_BACNET_ENABLED")
-        || protocol_enabled("OPENFDD_MODBUS_ENABLED")
-    {
-        json!({"id":"openfdd-commission","label":"BACnet + Modbus + JSON polling","status":"online","auth_required":true})
-    } else {
-        json!({"id":"openfdd-commission","label":"Field-bus polling","status":"disabled","auth_required":false,"note":"Not started in desktop JSON/CSV mode"})
-    };
-    let haystack_svc = if protocol_enabled("OPENFDD_HAYSTACK_ENABLED") {
-        json!({"id":"openfdd-haystack-gateway","label":"Haystack read/nav/ops integration","status":"online","auth_required":true})
-    } else {
-        json!({"id":"openfdd-haystack-gateway","label":"Haystack gateway","status":"disabled","auth_required":false})
-    };
-    json!({
-        "ok": true,
-        "auth_required": auth_config().required,
-        "services": [
-            {"id":"openfdd-bridge","label":"API + dashboard + historian","status":"online","auth_required":true},
-            commission,
-            haystack_svc,
-            bacnet,
-            modbus,
-            haystack,
-            {"id":"json-api","status": if protocol_enabled("OPENFDD_JSON_API_ENABLED") { "ready" } else { "disabled" }},
-            {"id":"csv-import","status": if protocol_enabled("OPENFDD_IMPORT_ENABLED") { "ready" } else { "disabled" }},
-            {"id":"csv-export","status": if protocol_enabled("OPENFDD_EXPORT_ENABLED") { "ready" } else { "disabled" }},
-            {"id":"arrow-datafusion","status":"ready"},
-            {"id":"control-engine","status":"ready"}
-        ]
-    })
-}
-
 fn building_checkin() -> Value {
     json!({
         "ok": true,
@@ -1246,10 +1309,13 @@ fn cors_origin() -> String {
 fn security_headers(content_type: &str, is_auth: bool) -> String {
     let mut h = String::new();
     h.push_str("X-Content-Type-Options: nosniff\r\n");
-    h.push_str("Referrer-Policy: no-referrer\r\n");
+    h.push_str("Referrer-Policy: strict-origin-when-cross-origin\r\n");
     h.push_str("X-Frame-Options: SAMEORIGIN\r\n");
+    h.push_str("Cross-Origin-Opener-Policy: same-origin\r\n");
+    h.push_str("Cross-Origin-Resource-Policy: same-origin\r\n");
+    h.push_str("Permissions-Policy: geolocation=(), microphone=(), camera=()\r\n");
     h.push_str(&format!(
-        "Content-Security-Policy: default-src 'self'; script-src 'self' https://unpkg.com https://cdn.plot.ly; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'\r\n"
+        "Content-Security-Policy: default-src 'self'; script-src 'self' https://unpkg.com https://cdn.plot.ly; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; frame-ancestors 'self'\r\n"
     ));
     if is_auth || content_type.contains("json") {
         h.push_str(

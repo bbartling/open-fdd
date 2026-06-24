@@ -1,6 +1,6 @@
 //! Production hardcoding audit — forbidden bench-specific terms outside dev paths.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuditViolation {
