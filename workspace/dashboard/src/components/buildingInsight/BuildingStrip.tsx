@@ -39,7 +39,7 @@ export default function BuildingStrip({
       <div className="bis-b-stat">
         <div className="label">Equipment</div>
         <div className="value">{equipmentCount != null ? equipmentCount : "—"}</div>
-        <div className="sub">BRICK model</div>
+        <div className="sub">Haystack model</div>
       </div>
       <div className="bis-b-stat">
         <div className="label">Points</div>
@@ -57,7 +57,7 @@ export default function BuildingStrip({
             "Polling"
           )}
         </div>
-        <div className="sub">{lastSyncLabel || "BACnet poll cycle"}</div>
+        <div className="sub">{lastSyncLabel || "Historian ingest"}</div>
       </div>
       <div className="bis-b-stat">
         <div className="label">Active issues</div>

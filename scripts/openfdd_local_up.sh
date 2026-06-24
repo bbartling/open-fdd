@@ -50,7 +50,19 @@ if [[ ! -f "$ROOT/workspace/auth.env.local" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$ROOT/frontend/index.html ]] || [[ ! -d "$ROOT/frontend/assets" ]] || [[ -z "$(ls -A "$ROOT/frontend/assets" 2>/dev/null || true)" ]]; then
+need_frontend_build=0
+if [[ ! -f "$ROOT/frontend/index.html" ]]; then
+  need_frontend_build=1
+elif [[ ! -d "$ROOT/frontend/assets" ]]; then
+  need_frontend_build=1
+else
+  asset_count="$(find "$ROOT/frontend/assets" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')"
+  if [[ "${asset_count:-0}" -eq 0 ]]; then
+    need_frontend_build=1
+  fi
+fi
+
+if [[ "$need_frontend_build" -eq 1 ]]; then
   echo "WARN: frontend build missing — running npm run build in workspace/dashboard"
   if command -v npm >/dev/null 2>&1; then
     (cd "$ROOT/workspace/dashboard" && npm ci && npm run build)
@@ -71,6 +83,8 @@ if [[ "$BUILD" -eq 1 && "$AVAIL_MB" -lt 2048 ]]; then
 fi
 
 export OPENFDD_CARGO_BUILD_JOBS="${OPENFDD_CARGO_BUILD_JOBS:-1}"
+export OPENFDD_RUN_UID="${OPENFDD_RUN_UID:-$(id -u)}"
+export OPENFDD_RUN_GID="${OPENFDD_RUN_GID:-$(id -g)}"
 export COMPOSE_FILE="$ROOT/docker-compose.local.yml"
 
 build_local_image() {
@@ -105,7 +119,7 @@ elif ! docker image inspect open-fdd-openfdd-bridge:local >/dev/null 2>&1; then
   exit 1
 fi
 
-if curl -fsS http://127.0.0.1:8080/api/health >/dev/null 2>&1; then
+if [[ "$BUILD" -eq 0 ]] && curl -fsS http://127.0.0.1:8080/api/health >/dev/null 2>&1; then
   echo "==> Bridge already healthy on :8080 — open http://127.0.0.1:8080"
   curl -fsS http://127.0.0.1:8080/api/health
   echo

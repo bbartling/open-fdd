@@ -121,7 +121,7 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
         <p className="muted">
           Includes <code>sites</code>, <code>equipment</code>, <code>points</code> (with optional{" "}
           <code>fdd_rule_ids</code> per point), and <code>fdd_rules[]</code> binding summary. Paste into your AI
-          session or edit by hand — then import the same file to apply BRICK + assignments together.
+          session or edit by hand — then import the same file to apply Haystack + assignments together.
         </p>
         {exportSummary ? (
           <p className="muted">
@@ -134,7 +134,7 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
           readOnly
           className="dm-json-editor"
           value={exportText}
-          placeholder="Click Refresh to load BRICK model + FDD assignments…"
+          placeholder="Click Refresh to load Haystack model + FDD assignments…"
         />
       </section>
 
@@ -155,7 +155,7 @@ export default function CommissioningImportExportPanel({ onStatus, onImported }:
           </label>
         </header>
         <p className="muted">
-          Edit assignments by setting <code>points[].fdd_rule_ids</code> (rule ids from Rule Lab) and/or updating{" "}
+          Edit assignments by setting <code>points[].fdd_rule_ids</code> (rule ids from SQL FDD Rules) and/or updating{" "}
           <code>fdd_rules[].bindings.point_ids</code>. Supports <code>import_ready_json</code> wrappers and fenced{" "}
           <code>```json</code> blocks.
         </p>

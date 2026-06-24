@@ -4,6 +4,16 @@ Open-FDD stores edge credentials in `workspace/auth.env.local` (gitignored). Gen
 
 ## Generate credentials
 
+**Recommended (no Rust on host):**
+
+```bash
+./scripts/openfdd_auth_init.sh
+```
+
+Uses `openfdd-edge` from your local bridge image or GHCR to write bcrypt hashes to `workspace/auth.env.local`. For first-time lab bootstrap only, add `--show-secrets` and save the printed passwords in your password manager (avoid CI logs and shared terminals).
+
+**GHCR-only host (Docker, no source checkout for Rust):**
+
 ```bash
 openfdd-edge auth generate --out workspace/auth.env.local --show-secrets
 ```
@@ -12,6 +22,12 @@ Or one-shot security bootstrap (auth + TLS certs):
 
 ```bash
 openfdd-edge bootstrap security --show-secrets
+```
+
+**GHCR-only host (Docker, no Rust on host):**
+
+```bash
+./scripts/openfdd_auth_init.sh --ghcr --force
 ```
 
 Generated file includes bcrypt hashes only:
@@ -23,9 +39,16 @@ Generated file includes bcrypt hashes only:
 - `OFDD_ADMIN_USER` / `OFDD_ADMIN_PASSWORD_HASH`
 - `OPENFDD_AUTH_TTL_SEC=28800`
 
-Plaintext passwords are printed once with `--show-secrets` and are never written to disk or logs.
+Plaintext passwords are printed once with `--show-secrets` (stdout only); only bcrypt hashes are written to `auth.env.local`.
 
 ## Rotate credentials
+
+```bash
+./scripts/openfdd_auth_init.sh --rotate --all --show-secrets
+docker compose -f docker-compose.local.yml up -d --force-recreate openfdd-bridge
+```
+
+Or with `openfdd-edge` on PATH:
 
 ```bash
 openfdd-edge auth rotate --role agent --show-secrets

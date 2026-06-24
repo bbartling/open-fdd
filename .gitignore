@@ -2,7 +2,10 @@
 /edge/target
 /.env
 edge/workspace/
+auth.env.local
+auth.env.local.*
 workspace/auth.env.local
+workspace/auth.env.local.bak.*
 workspace/data.env.local
 workspace/data/fdd_wires/
 workspace/backups/
@@ -14,6 +17,7 @@ workspace/export-profiles/local/*.local.toml
 workspace/imports/
 workspace/exports/
 workspace/data-management/
+workspace/deploy/
 workspace/overrides/
 workspace/bacnet/
 workspace/dashboard/node_modules/

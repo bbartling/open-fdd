@@ -48,7 +48,7 @@ export async function openTtlPopup(
   popup.document.write(
     `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Data model TTL</title></head>` +
       `<body style="font-family:system-ui,sans-serif;padding:1rem;background:#fff;color:#333;">` +
-      `<p>Loading BRICK TTL graph…</p>` +
+      `<p>Loading Haystack TTL graph…</p>` +
       `<p style="color:#666;font-size:14px;">If this hangs, ` +
       `<a href="${href}">open raw TTL</a>.</p></body></html>`,
   );

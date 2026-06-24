@@ -95,7 +95,10 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
     if method == "GET" && clean_path == "/api/building/snapshot" {
         return json_response(&mut stream, dashboard::building_snapshot());
     }
-    if method == "GET" && !clean_path.starts_with("/api/") {
+    if method == "GET"
+        && !clean_path.starts_with("/api/")
+        && !clean_path.starts_with("/openfdd-agent/")
+    {
         return static_file(&mut stream, frontend, &clean_path);
     }
 
@@ -137,6 +140,9 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
 
         ("GET", "/api/health/stack") => json_response(&mut stream, dashboard::stack_health()),
         ("GET", "/api/building/status") => json_response(&mut stream, dashboard::building_status()),
+        ("GET", "/openfdd-agent/building-insight") => {
+            json_response(&mut stream, dashboard::building_insight_stub())
+        }
         ("GET", "/api/dashboard/summary") => json_response(&mut stream, dashboard::summary()),
         ("GET", "/api/dashboard/sites") => json_response(&mut stream, dashboard::sites()),
         ("GET", "/api/dashboard/faults") => json_response(&mut stream, dashboard::faults_panel()),

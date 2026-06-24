@@ -18,7 +18,7 @@ export type FaultInference = {
 
 export function formatFaultInferenceBlock(inf: FaultInference | null | undefined): string {
   if (!inf) return "";
-  const lines: string[] = [">>> Fault catalog mapping (local Ollama + BRICK scope)"];
+  const lines: string[] = [">>> Fault catalog mapping (local Ollama + Haystack scope)"];
   if (inf.narrative) lines.push(inf.narrative);
   const codes = inf.fault_codes ?? (inf.fault_code ? [inf.fault_code] : []);
   if (codes.length) {

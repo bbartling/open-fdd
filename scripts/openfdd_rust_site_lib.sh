@@ -195,7 +195,27 @@ openfdd_rust_generate_auth_env_local() {
     chmod 600 "$path" 2>/dev/null || true
     return 0
   fi
-  # Bash fallback until Rust CLI is in container PATH on host
+  # Docker openfdd-edge (bcrypt) when host has no Rust toolchain
+  local ws_root auth_basename img
+  ws_root="$(cd "$(dirname "$path")" && pwd)"
+  auth_basename="$(basename "$path")"
+  img="${OPENFDD_AUTH_IMAGE:-open-fdd-openfdd-bridge:local}"
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    if ! docker image inspect "$img" >/dev/null 2>&1; then
+      img="${OPENFDD_RUST_GHCR_IMAGE:-ghcr.io/bbartling/openfdd-edge-rust:latest}"
+      docker pull "$img" || return 1
+    fi
+    if docker image inspect "$img" >/dev/null 2>&1; then
+      local dargs=(auth init --path "/app/workspace/$auth_basename")
+      [[ "$force" == "true" ]] && dargs+=(--force)
+      [[ "$show_secrets" == "true" ]] && dargs+=(--show-secrets)
+      docker run --rm --user "$(id -u):$(id -g)" -v "$ws_root:/app/workspace" "$img" openfdd-edge "${dargs[@]}" \
+        || return 1
+      chmod 600 "$path" 2>/dev/null || true
+      return 0
+    fi
+  fi
+  # Last-resort bash fallback (plaintext passwords — lab only)
   local secret op_pw int_pw ag_pw
   secret="$(openssl rand -hex 32 2>/dev/null || date +%s%N | sha256sum | cut -c1-64)"
   op_pw="$(openssl rand -base64 24 2>/dev/null | tr -d '/+=$' | head -c 28)"

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import { apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
+import { useActiveSiteId } from "../lib/useActiveSiteId";
 
 type BuilderState = {
   name: string;
@@ -30,20 +31,20 @@ type DemoResult = {
 };
 
 const GRAPH_ID = "graph:live-fdd-validation";
-const SITE_ID = "site:demo";
 
 const DEFAULT_BUILDER: BuilderState = {
   name: "OA Temperature Out Of Range",
   input: "oa_t",
   operator: ">",
   value: 110,
-  equipment_id: "equip:validation",
+  equipment_id: "",
   confirmation_seconds: 300,
   severity: "medium",
   fault_code: "OA_TEMP_OUT_OF_RANGE",
 };
 
 export default function SqlFddRulesPage() {
+  const siteId = useActiveSiteId();
   const [mode, setMode] = useState<"builder" | "raw">("builder");
   const [builder, setBuilder] = useState<BuilderState>(DEFAULT_BUILDER);
   const [sql, setSql] = useState("");
@@ -107,6 +108,18 @@ export default function SqlFddRulesPage() {
   }
 
   useEffect(() => {
+    if (!siteId) return;
+    apiFetch<{ equipment?: { id?: string }[] }>(`/api/model/sites/${encodeURIComponent(siteId)}/equipment`)
+      .then((res) => {
+        const first = res.equipment?.[0]?.id;
+        if (first) {
+          setBuilder((b) => (b.equipment_id ? b : { ...b, equipment_id: first }));
+        }
+      })
+      .catch(() => undefined);
+  }, [siteId]);
+
+  useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") void runSql();
     }
@@ -139,7 +152,7 @@ export default function SqlFddRulesPage() {
         "/api/fdd-wires/propose-assignments",
         {
           method: "POST",
-          body: JSON.stringify({ site_id: SITE_ID, equipment_type: "ahu", device_instance: 5007 }),
+          body: JSON.stringify({ site_id: siteId || undefined, equipment_type: "ahu" }),
         },
       );
       setGraphStatus(`Proposed ${out.proposed?.length ?? 0} draft bindings — ${out.review_status ?? "needs_review"}`);
@@ -156,7 +169,7 @@ export default function SqlFddRulesPage() {
     setError("");
     try {
       const out = await apiFetch<{ ok?: boolean; issues?: unknown[] }>(
-        `/api/fdd-wires/graphs/${encodeURIComponent(GRAPH_ID)}/validate?site_id=${encodeURIComponent(SITE_ID)}`,
+        `/api/fdd-wires/graphs/${encodeURIComponent(GRAPH_ID)}/validate${siteId ? `?site_id=${encodeURIComponent(siteId)}` : ""}`,
         { method: "POST", body: JSON.stringify({}) },
       );
       setGraphStatus(out.ok ? "Validation graph checks passed" : `Graph issues: ${(out.issues ?? []).length}`);
@@ -171,7 +184,7 @@ export default function SqlFddRulesPage() {
     <div className="sql-fdd-page">
       <PageHeader
         title="SQL FDD Rules"
-        subtitle="One workspace for DataFusion SQL rules, the rule builder, and the device 5007 bench graph. Python scripts live under Rule Lab."
+        subtitle="DataFusion SQL rules, the rule builder, and Haystack-to-rule wiring for the active site model."
       />
 
       {error ? <div className="error-banner">{error}</div> : null}
@@ -228,7 +241,7 @@ export default function SqlFddRulesPage() {
               />
             </label>
             <label>
-              Equipment (device 5007 bench)
+              Equipment (Haystack equip id)
               <input
                 value={builder.equipment_id}
                 onChange={(e) => setBuilder({ ...builder, equipment_id: e.target.value })}
@@ -274,7 +287,7 @@ export default function SqlFddRulesPage() {
 
       <section className="panel">
         <div className="toolbar">
-          <h2 className="panel-title">FDD Wires — device 5007 bench graph</h2>
+          <h2 className="panel-title">FDD Wires — rule mapping graph</h2>
           <button type="button" className="secondary-btn" onClick={() => void proposeAssignments()} disabled={busy}>
             Propose assignments
           </button>
@@ -283,13 +296,20 @@ export default function SqlFddRulesPage() {
           </button>
         </div>
         <p className="muted-copy">
-          Graph <code>{GRAPH_ID}</code> binds BACnet device <strong>5007</strong> points to FDD inputs. Use Drivers for live overrides; use this panel for rule wiring.
+          Graph <code>{GRAPH_ID}</code> maps BACnet/Haystack points to FDD inputs for the active site
+          {siteId ? (
+            <>
+              {" "}
+              (<code>{siteId}</code>)
+            </>
+          ) : null}
+          . Configure drivers and the Haystack model per building — nothing is hard-coded to a test bench.
         </p>
         {graphStatus ? <div className="status-banner">{graphStatus}</div> : null}
       </section>
 
       <section className="panel">
-        <h2 className="panel-title">DataFusion batch demo (device 5007)</h2>
+        <h2 className="panel-title">DataFusion batch demo</h2>
         {demo?.sql ? <pre className="sql-block">{demo.sql}</pre> : null}
         <div className="table-like">
           {(demo?.faults ?? []).map((f) => (

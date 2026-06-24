@@ -101,7 +101,7 @@ export default function BuildingCheckEngine() {
             <h3>Building check-engine</h3>
             <p className="muted">No building model configured yet.</p>
             <p className="muted">
-              Import a BRICK model under <Link to="/model">Model & assignments</Link> to enable fault detection.
+              Import a Haystack model under <Link to="/model">Model & assignments</Link> to enable fault detection.
             </p>
           </div>
         </div>

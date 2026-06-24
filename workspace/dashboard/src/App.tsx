@@ -5,14 +5,13 @@ import { DashboardStreamProvider } from "./lib/dashboardStream";
 import AgentPage from "./pages/AgentPage";
 import DriversPage from "./pages/DriversPage";
 import JsonApiPage from "./pages/JsonApiPage";
+import BacnetPage from "./pages/BacnetPage";
 import ModbusPage from "./pages/ModbusPage";
 import DataModelPage from "./pages/DataModelPage";
-import FaultsPage from "./pages/FaultsPage";
 import HomePage from "./pages/HomePage";
 import HostStatsPage from "./pages/HostStatsPage";
 import LoginPage from "./pages/LoginPage";
 import PlotPage from "./pages/PlotPage";
-import RuleLabPage from "./pages/RuleLabPage";
 import SqlFddRulesPage from "./pages/SqlFddRulesPage";
 import LiveFddValidationPage from "./pages/LiveFddValidationPage";
 import DataManagementPage from "./pages/DataManagementPage";
@@ -27,19 +26,19 @@ export default function App() {
         {/* Public check-engine views — no sign-in required */}
         <Route element={<AppLayout />}>
           <Route index element={<HomePage />} />
-          <Route path="faults" element={<FaultsPage />} />
+          <Route path="faults" element={<Navigate to="/" replace />} />
           <Route element={<RequireAuth />}>
             <Route path="live-fdd-validation" element={<TabErrorBoundary tab="live-fdd-validation"><LiveFddValidationPage /></TabErrorBoundary>} />
             <Route path="bench-5007" element={<Navigate to="/live-fdd-validation" replace />} />
             <Route path="sql-fdd" element={<TabErrorBoundary tab="sql-fdd"><SqlFddRulesPage /></TabErrorBoundary>} />
-            <Route path="rule-lab" element={<TabErrorBoundary tab="rule-lab"><RuleLabPage /></TabErrorBoundary>} />
+            <Route path="rule-lab" element={<Navigate to="/sql-fdd" replace />} />
             <Route path="model" element={<TabErrorBoundary tab="model"><DataModelPage /></TabErrorBoundary>} />
             <Route path="algorithms" element={<TabErrorBoundary tab="algorithms"><AlgorithmsPage /></TabErrorBoundary>} />
             <Route path="data-model" element={<Navigate to="/model" replace />} />
             <Route path="fdd-assignments" element={<Navigate to="/model" replace />} />
             <Route path="plot" element={<TabErrorBoundary tab="plot"><PlotPage /></TabErrorBoundary>} />
             <Route path="drivers" element={<TabErrorBoundary tab="drivers"><DriversPage /></TabErrorBoundary>} />
-            <Route path="bacnet" element={<TabErrorBoundary tab="drivers"><DriversPage /></TabErrorBoundary>} />
+            <Route path="bacnet" element={<TabErrorBoundary tab="bacnet"><BacnetPage /></TabErrorBoundary>} />
             <Route path="modbus" element={<TabErrorBoundary tab="modbus"><ModbusPage /></TabErrorBoundary>} />
             <Route path="json-api" element={<TabErrorBoundary tab="json-api"><JsonApiPage /></TabErrorBoundary>} />
             <Route path="data-management" element={<TabErrorBoundary tab="data-management"><DataManagementPage /></TabErrorBoundary>} />

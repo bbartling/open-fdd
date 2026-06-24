@@ -161,7 +161,7 @@ export default function HomeBuildingInsight() {
       ) : null}
       {insight?.brick_model?.feeds_chains?.length ? (
         <p className="muted home-insight-meta">
-          BRICK feeds: {insight.brick_model.feeds_chains.slice(0, 4).join("; ")}
+          Haystack feeds: {insight.brick_model.feeds_chains.slice(0, 4).join("; ")}
           {(insight.brick_model.feeds_chains.length ?? 0) > 4 ? " …" : ""}
         </p>
       ) : null}

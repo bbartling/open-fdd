@@ -83,14 +83,15 @@ a {
 }
 
 .sidebar {
-  width: 264px;
+  width: 280px;
   flex-shrink: 0;
   border-right: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
   background: var(--sidebar-bg);
-  padding: 16px 12px;
+  padding: 16px 12px 20px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  overflow-y: auto;
 }
 
 .brand-row {
@@ -118,11 +119,33 @@ a {
 .sidebar-hint {
   margin: 0;
   padding: 0 8px;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.nav-section-title {
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 8px 8px 4px;
 }
 
 .sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -144,6 +167,23 @@ a {
   color: var(--text);
 }
 
+.nav-item-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.nav-soon {
+  margin-left: auto;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.1rem 0.4rem;
+}
+
 .nav-item.active {
   background: var(--nav-active-bg);
   color: var(--nav-active-text);
@@ -163,15 +203,17 @@ a {
 }
 
 .content {
-  padding: 18px 20px;
+  padding: 20px 28px 32px;
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  max-width: 1440px;
 }
 
 .page {
-  max-width: 980px;
+  max-width: 1200px;
+  width: 100%;
 }
 
 .page.page-agent {
@@ -481,11 +523,31 @@ textarea {
   margin-top: auto;
 }
 
+.stack-strip-label {
+  font-size: 0.65rem;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.15rem;
+}
+
 .stack-strip {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 0.75rem 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0.75rem;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+}
+
+.status-pill.status-disabled {
+  opacity: 0.85;
+  border-style: dashed;
+  font-size: 0.72rem;
 }
 
 .status-pill {
@@ -3005,5 +3067,67 @@ button.linkish {
   }
   .driver-details-panel {
     position: static;
+  }
+}
+
+/* Live FDD validation wiresheet */
+.bench-smoke-page .wiresheet-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.bench-smoke-page .wire-col {
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  padding: 0.85rem;
+  min-height: 280px;
+  background: var(--panel-soft);
+}
+
+.bench-smoke-page .wire-col h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+}
+
+.bench-smoke-page .wire-node {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  margin-bottom: 0.5rem;
+  background: var(--panel);
+}
+
+.bench-smoke-page .wire-node small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin-top: 0.2rem;
+}
+
+.bench-smoke-page .fault-pill {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  margin-right: 0.35rem;
+  border: 1px solid var(--border);
+}
+
+.bench-smoke-page .fault-pill-ok.active {
+  background: color-mix(in srgb, var(--ok) 20%, transparent);
+  color: var(--ok);
+}
+
+.bench-smoke-page .fault-pill-warn.active,
+.bench-smoke-page .fault-pill-bad.active {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+
+@media (max-width: 900px) {
+  .bench-smoke-page .wiresheet-grid {
+    grid-template-columns: 1fr;
   }
 }

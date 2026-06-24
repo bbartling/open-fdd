@@ -154,7 +154,7 @@ function layerEquipment(
   });
   const layerTitles = ranks.map((r) => layerLabelForRank(r));
 
-  // Nudge feed children one column right of their parent when BRICK feeds exist.
+  // Nudge feed children one column right of their parent when Haystack feeds exist.
   if (feeds.length) {
     const byId = new Map(equipment.map((e) => [e.equipment_id, e]));
     const layerIndex = new Map<string, number>();
