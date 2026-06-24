@@ -1,0 +1,19 @@
+profile_id = "default_bulk_export"
+timezone = "UTC"
+retention_days = 30
+lookback_hours = 24
+
+[[exports]]
+type = "historian"
+enabled = true
+filename = "openfdd_historian_{date}.csv"
+
+[[exports]]
+type = "faults"
+enabled = true
+filename = "openfdd_faults_{date}.csv"
+
+[[exports]]
+type = "bacnet_overrides"
+enabled = true
+filename = "openfdd_bacnet_overrides_{date}.csv"

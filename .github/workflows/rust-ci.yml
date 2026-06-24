@@ -71,3 +71,5 @@ jobs:
           bash -n scripts/openfdd_rust_site_backup.sh
           bash -n scripts/openfdd_rust_check_ghcr_platform.sh
           bash -n scripts/openfdd_rust_edge_validate.sh
+          bash -n scripts/openfdd_csv_import_sidecar.sh
+          bash -n scripts/openfdd_csv_export_sidecar.sh
