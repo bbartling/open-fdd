@@ -9,10 +9,13 @@ RUN npm run build
 COPY frontend/style.css /app/frontend/
 
 FROM rust:1.93-bookworm AS builder
+ARG CARGO_BUILD_JOBS=2
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 WORKDIR /app
-COPY Cargo.toml ./
+COPY Cargo.toml Cargo.lock ./
 COPY edge ./edge
-RUN cargo build --release --bins -p open_fdd_edge_prototype
+RUN echo "==> release build jobs=${CARGO_BUILD_JOBS}" \
+    && cargo build --release --bins -p open_fdd_edge_prototype -j "${CARGO_BUILD_JOBS}"
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \

@@ -45,6 +45,17 @@ cd ~/open-fdd
 
 Login at `http://127.0.0.1:8080` with integrator user from `workspace/auth.env.local`.
 
+## Local dev (8 GB RAM / no GHCR)
+
+Avoid `docker compose up --build` on memory-constrained hosts — it can OOM the machine. Use:
+
+```bash
+./scripts/openfdd_local_up.sh          # start (reuse image)
+./scripts/openfdd_local_up.sh --build  # first time / after Rust changes
+```
+
+See [deployment/local-dev.md](../deployment/local-dev.md).
+
 ## Network
 
 Default compose binds `127.0.0.1:8080`. Expose via Tailscale, VPN, or reverse proxy — not direct public internet.

@@ -1,5 +1,7 @@
 services:
   openfdd-bridge:
+    # WARNING: `docker compose up --build` runs npm + release Rust in Docker and can OOM
+    # small hosts (SSH drop). For local dev use: ./scripts/openfdd_local_up.sh
     build:
       context: .
       dockerfile: Dockerfile
@@ -29,6 +31,7 @@ services:
     restart: unless-stopped
 
   openfdd-commission:
+    profiles: ["full-edge"]
     build:
       context: .
       dockerfile: Dockerfile
@@ -58,6 +61,7 @@ services:
     restart: unless-stopped
 
   openfdd-haystack-gateway:
+    profiles: ["full-edge"]
     build:
       context: .
       dockerfile: Dockerfile
