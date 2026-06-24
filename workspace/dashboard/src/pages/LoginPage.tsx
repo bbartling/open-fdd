@@ -70,6 +70,11 @@ export default function LoginPage() {
           />
         </div>
         {error ? <p className="error">{error}</p> : null}
+        <p className="muted login-hint">
+          Passwords live in <code>workspace/auth.env.local</code> (bcrypt only). If sign-in fails after a rotate,
+          restart the bridge and use the password printed by{" "}
+          <code>./scripts/openfdd_auth_init.sh --rotate --all --show-secrets</code>.
+        </p>
         <button type="submit">Sign in</button>
       </form>
     </div>

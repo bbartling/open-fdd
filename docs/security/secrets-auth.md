@@ -57,7 +57,18 @@ openfdd-edge auth rotate --all --show-secrets
 
 Rotation backs up the previous file to `auth.env.local.bak.<timestamp>`, preserves usernames unless you edit them manually, and rotates `OFDD_AUTH_SECRET` when using `--all` (invalidates existing JWTs).
 
-## IT-managed passwords
+**Always restart the bridge** after changing `auth.env.local` — the edge loads credentials once at startup.
+
+## Roles
+
+| Role | Access |
+|------|--------|
+| **operator** | Read-only: browse all tabs, exports, trends, faults |
+| **integrator** | Full commissioning mutations (BACnet/Modbus/JSON API, model, FDD) |
+| **agent** | Same mutation tier as integrator (automation / Codex hooks) |
+| **admin** | Same mutation tier as integrator |
+
+The home **Building status** dashboard is public without sign-in.
 
 Set hashes manually in `workspace/auth.env.local`:
 

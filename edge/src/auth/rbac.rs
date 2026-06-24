@@ -10,12 +10,17 @@ pub fn is_read_only_role(role: &str) -> bool {
     role == "operator"
 }
 
+/// Integrator-tier roles may run commissioning mutations; operator is read-only browse/export.
+pub fn is_integrator_tier(role: &str) -> bool {
+    matches!(role, "integrator" | "agent" | "admin")
+}
+
 pub fn is_mutation_role(role: &str) -> bool {
-    matches!(role, "integrator" | "agent")
+    is_integrator_tier(role)
 }
 
 pub fn can_write_field_bus(role: &str, approved: bool) -> bool {
-    role == "integrator" && approved
+    is_integrator_tier(role) && approved
 }
 
 #[cfg(test)]
@@ -25,7 +30,7 @@ mod tests {
     #[test]
     fn operator_cannot_write_field_bus() {
         assert!(!can_write_field_bus("operator", true));
-        assert!(!can_write_field_bus("agent", true));
+        assert!(can_write_field_bus("agent", true));
         assert!(can_write_field_bus("integrator", true));
         assert!(!can_write_field_bus("integrator", false));
     }

@@ -113,7 +113,7 @@ export default function AppLayout() {
             </span>
           ) : null}
         </div>
-        <p className="sidebar-hint">Haystack-first operator console</p>
+        <p className="sidebar-hint">Building summary is public; sign in to browse all tabs (operator read-only).</p>
         <StackStatusStrip />
         <nav className="sidebar-nav">
           {NAV_SECTIONS.map((section) => (
@@ -140,11 +140,6 @@ export default function AppLayout() {
                   >
                     <span className="nav-icon">{item.icon}</span>
                     {item.label}
-                    {item.protected && authRequired && !signedIn ? (
-                      <span className="nav-lock" title="Sign in required">
-                        🔒
-                      </span>
-                    ) : null}
                   </NavLink>
                 ),
               )}
