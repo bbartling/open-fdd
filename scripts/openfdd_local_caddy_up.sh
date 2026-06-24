@@ -68,14 +68,16 @@ mkdir -p "$CERT_DIR"
 if [[ "$MODE" == "tls" ]]; then
   if [[ "$FORCE_CERTS" -eq 1 || ! -f "$CERT_DIR/cert.pem" || ! -f "$CERT_DIR/key.pem" ]]; then
     echo "==> Generating self-signed TLS certs (CN=openfdd.local SAN: localhost + ${LAN_IP:-none})"
-    cert_args=(openfdd-edge tls generate --cn openfdd.local --out /var/openfdd/workspace/deploy/caddy/certs)
+    cert_extra=()
     if [[ -n "$LAN_IP" ]]; then
-      cert_args+=(--lan-ip "$LAN_IP")
+      cert_extra=(--lan-ip "$LAN_IP")
     fi
     docker run --rm \
-      -v "$ROOT/workspace:/var/openfdd/workspace" \
+      --user "$(id -u):$(id -g)" \
+      -v "$ROOT/workspace:/app/workspace" \
       open-fdd-openfdd-bridge:local \
-      "${cert_args[@]}"
+      openfdd-edge tls generate --cn openfdd.local --out /app/workspace/deploy/caddy/certs \
+      "${cert_extra[@]}"
   fi
   export OPENFDD_CADDY_FILE="$ROOT/docker/caddy/Caddyfile.local.tls"
 else
