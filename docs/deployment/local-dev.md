@@ -58,7 +58,11 @@ docker compose -f docker-compose.local.yml logs -f openfdd-bridge
 docker compose -f docker-compose.local.yml down   # never use down -v
 ```
 
-If build still OOMs: add swap, set `OPENFDD_CARGO_BUILD_JOBS=1`, close browsers/IDE, or build on a larger machine and `docker save/load` the image.
+If build still OOMs: add swap, set `OPENFDD_CARGO_BUILD_JOBS=1`, close browsers/IDE, or install buildx for memory-capped builds:
+
+```bash
+sudo apt install docker-buildx-plugin   # Debian/Ubuntu
+```
 
 ## GHCR / Caddy
 

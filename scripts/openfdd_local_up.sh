@@ -71,19 +71,31 @@ if [[ "$BUILD" -eq 1 && "$AVAIL_MB" -lt 2048 ]]; then
 fi
 
 export OPENFDD_CARGO_BUILD_JOBS="${OPENFDD_CARGO_BUILD_JOBS:-1}"
-export DOCKER_BUILDKIT=1
 export COMPOSE_FILE="$ROOT/docker-compose.local.yml"
+
+build_local_image() {
+  local build_args=(
+    --build-arg "CARGO_BUILD_JOBS=${OPENFDD_CARGO_BUILD_JOBS}"
+    -f "$ROOT/Dockerfile.local"
+    -t open-fdd-openfdd-bridge:local
+    "$ROOT"
+  )
+
+  if docker buildx version >/dev/null 2>&1; then
+    echo "==> Using BuildKit (buildx) with 3g build memory cap"
+    export DOCKER_BUILDKIT=1
+    docker build --progress=plain --memory=3g --memory-swap=5g "${build_args[@]}"
+  else
+    echo "==> buildx not installed — using legacy docker build (DOCKER_BUILDKIT=0)"
+    echo "    Install docker-buildx for build memory limits: sudo apt install docker-buildx-plugin"
+    export DOCKER_BUILDKIT=0
+    docker build "${build_args[@]}"
+  fi
+}
 
 if [[ "$BUILD" -eq 1 ]]; then
   echo "==> Building open-fdd-openfdd-bridge:local (jobs=${OPENFDD_CARGO_BUILD_JOBS}, log appended here)"
-  docker build \
-    --progress=plain \
-    --memory=3g \
-    --memory-swap=5g \
-    --build-arg "CARGO_BUILD_JOBS=${OPENFDD_CARGO_BUILD_JOBS}" \
-    -f "$ROOT/Dockerfile.local" \
-    -t open-fdd-openfdd-bridge:local \
-    "$ROOT"
+  build_local_image
   echo "==> Docker build finished"
 elif docker image inspect open-fdd-openfdd-bridge:latest >/dev/null 2>&1; then
   echo "==> Tagging existing open-fdd-openfdd-bridge:latest as :local (no rebuild)"
