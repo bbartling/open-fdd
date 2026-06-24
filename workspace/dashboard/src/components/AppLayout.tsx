@@ -28,6 +28,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: "/drivers", icon: "🌳", label: "Drivers", protected: true },
       { to: "/sql-fdd", icon: "⚡", label: "SQL FDD Rules", protected: true },
       { to: "/plot", icon: "📈", label: "Trend plot", protected: true },
+      { to: "/reports", icon: "📄", label: "Report builder", protected: true },
     ],
   },
   {

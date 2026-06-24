@@ -11,6 +11,7 @@ mod historian;
 mod import;
 mod model;
 mod ops;
+mod reports;
 mod validation;
 
 use auth::audit;
@@ -692,6 +693,18 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             json!({"ok": true, "sections": ["executive_summary", "faults", "overrides", "energy_opportunities", "trend_plots"]}),
         ),
+        ("GET", "/api/reports/templates") => require_role(
+            &mut stream,
+            &principal,
+            READ_EXPORT_ROLES,
+            reports::templates(),
+        ),
+        ("POST", "/api/reports/draft") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            reports::create_draft(&parse_json_body(&body)),
+        ),
         ("GET", "/api/reports/rcx/list") => raw_json(&mut stream, REPORTS),
         ("POST", "/api/reports/rcx/generate") => require_role(
             &mut stream,
@@ -700,6 +713,11 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             json!({"ok": true, "report_id": "rcx-demo-001", "path": "workspace/reports/rcx/rcx-demo-001.md", "sections": ["faults", "overrides", "plotly_trends", "recommendations"]}),
         ),
         _ => {
+            if let Some(resp) =
+                handle_reports_dynamic(&mut stream, &principal, method.as_str(), &clean_path, &body)
+            {
+                return resp;
+            }
             if let Some(resp) =
                 handle_faults_dynamic(&mut stream, &principal, method.as_str(), &clean_path)
             {
@@ -908,6 +926,72 @@ fn handle_faults_dynamic(
     Some(json_response(stream, faults::get_fault(tail)))
 }
 
+fn handle_reports_dynamic(
+    stream: &mut TcpStream,
+    principal: &Principal,
+    method: &str,
+    path: &str,
+    body: &str,
+) -> Option<std::io::Result<()>> {
+    let parts = path_parts(path);
+    if parts.len() < 3 || parts[0] != "api" || parts[1] != "reports" {
+        return None;
+    }
+    if parts[2] == "templates" || parts[2] == "draft" || parts[2] == "rcx" {
+        return None;
+    }
+    let report_id = reports::safe_report_id(parts[2])?;
+    if parts.len() == 3 {
+        return match method {
+            "GET" => Some(require_role(
+                stream,
+                principal,
+                READ_EXPORT_ROLES,
+                reports::get_report(&report_id),
+            )),
+            "PATCH" => Some(require_role(
+                stream,
+                principal,
+                &["integrator", "agent"],
+                reports::patch_report(&report_id, &parse_json_body(body)),
+            )),
+            _ => None,
+        };
+    }
+    match (method, parts.get(3).copied(), parts.get(4).copied()) {
+        ("GET", Some("data"), None) => Some(require_role(
+            stream,
+            principal,
+            READ_EXPORT_ROLES,
+            reports::report_data(&report_id),
+        )),
+        ("GET", Some("download.pdf"), None) => {
+            let path = reports::download_path(&report_id, "pdf")?;
+            Some(require_role_file(
+                stream,
+                principal,
+                READ_EXPORT_ROLES,
+                &path,
+                "application/pdf",
+                &format!("{report_id}.pdf"),
+            ))
+        }
+        ("POST", Some("sections"), Some("reorder")) => Some(require_role(
+            stream,
+            principal,
+            &["integrator", "agent"],
+            reports::reorder_sections(&report_id, &parse_json_body(body)),
+        )),
+        ("POST", Some("render"), Some("pdf")) => Some(require_role(
+            stream,
+            principal,
+            &["integrator", "agent"],
+            reports::render_pdf_bundle(&report_id),
+        )),
+        _ => None,
+    }
+}
+
 fn handle_data_management_dynamic(
     stream: &mut TcpStream,
     principal: &Principal,
@@ -1011,6 +1095,55 @@ fn csv_attachment_response(
     );
     stream.write_all(headers.as_bytes())?;
     stream.write_all(body.as_bytes())
+}
+
+fn require_role_file(
+    stream: &mut TcpStream,
+    principal: &Principal,
+    roles: &[&str],
+    path: &Path,
+    content_type: &str,
+    filename: &str,
+) -> std::io::Result<()> {
+    if !role_allowed(principal, roles) {
+        audit::log_event(
+            "forbidden",
+            json!({"role": principal.role.clone(), "required": roles, "file": filename}),
+        );
+        return status_json(
+            stream,
+            "403 Forbidden",
+            json!({"ok": false, "error": "insufficient role", "role": principal.role}),
+        );
+    }
+    let bytes = match fs::read(path) {
+        Ok(b) => b,
+        Err(_) => {
+            return status_json(
+                stream,
+                "404 Not Found",
+                json!({"ok": false, "error": "file not found"}),
+            );
+        }
+    };
+    file_attachment_response(stream, &bytes, content_type, filename)
+}
+
+fn file_attachment_response(
+    stream: &mut TcpStream,
+    body: &[u8],
+    content_type: &str,
+    filename: &str,
+) -> std::io::Result<()> {
+    let headers = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Disposition: attachment; filename=\"{filename}\"\r\n{sec}{cors}Content-Length: {len}\r\nConnection: close\r\n\r\n",
+        sec = security_headers(content_type, false),
+        cors = cors_origin(),
+        len = body.len(),
+        filename = filename
+    );
+    stream.write_all(headers.as_bytes())?;
+    stream.write_all(body)
 }
 
 fn require_role_csv(
@@ -1227,6 +1360,10 @@ fn agent_tools() -> Value {
             {"name":"fdd.rules.activate","method":"POST","path":"/api/fdd-rules/{id}/activate","requires":"integrator"},
             {"name":"rules.batch","method":"POST","path":"/api/rules/batch","requires":"integrator|agent"},
             {"name":"historian.query","method":"POST","path":"/api/historian/query","requires":"JWT"},
+            {"name":"reports.templates","method":"GET","path":"/api/reports/templates","requires":"JWT"},
+            {"name":"reports.draft","method":"POST","path":"/api/reports/draft","requires":"integrator|agent"},
+            {"name":"reports.render_pdf","method":"POST","path":"/api/reports/{id}/render/pdf","requires":"integrator|agent"},
+            {"name":"reports.download_pdf","method":"GET","path":"/api/reports/{id}/download.pdf","requires":"JWT"},
             {"name":"reports.rcx_plan","method":"POST","path":"/api/reports/rcx/plan","requires":"JWT"},
             {"name":"reports.rcx_generate","method":"POST","path":"/api/reports/rcx/generate","requires":"integrator|agent"},
             {"name":"ops.update","method":"POST","path":"/api/ops/docker/update","requires":"integrator|agent"}
