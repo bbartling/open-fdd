@@ -1,0 +1,14 @@
+# Desktop JSON/CSV-only overrides — use with compose.edge.rust.yml --profile desktop-json-csv
+# Example: docker compose -f docker/compose.edge.rust.yml -f docker/compose.desktop.json-csv.yml --profile desktop-json-csv up -d
+
+services:
+  openfdd-bridge:
+    environment:
+      OPENFDD_BACNET_ENABLED: "0"
+      OPENFDD_MODBUS_ENABLED: "0"
+      OPENFDD_HAYSTACK_ENABLED: "0"
+      OPENFDD_JSON_API_ENABLED: "1"
+      OPENFDD_IMPORT_ENABLED: "1"
+      OPENFDD_EXPORT_ENABLED: "1"
+      OPENFDD_BACNET_MODE: simulated
+      OPENFDD_MODBUS_MODE: simulated

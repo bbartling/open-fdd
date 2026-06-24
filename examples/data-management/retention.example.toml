@@ -1,0 +1,18 @@
+# Example retention policy (copy to workspace/data-management/retention.local.toml)
+# No automatic purge runs unless OPENFDD_RETENTION_SIDECAR_ENABLED=1 and cron invokes
+# scripts/openfdd_data_retention_sidecar.sh
+
+# validation_days = 90
+
+[bacnet_live]
+keep_days = 365
+
+[json_api]
+keep_days = 180
+
+[import_projects]
+keep_all = true
+
+[storage_cap]
+enabled = false
+max_gb = 0

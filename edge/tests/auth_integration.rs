@@ -263,3 +263,64 @@ fn import_job_lifecycle() {
     assert_eq!(commit_status, 200);
     assert!(commit_body.contains("\"status\":\"completed\""));
 }
+
+#[test]
+fn data_management_preview_requires_integrator() {
+    let srv = Server::start();
+    let pw = srv.integrator_password();
+    let login_body = login_json("integrator", &pw);
+    let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let token = json["token"]
+        .as_str()
+        .or(json["access_token"].as_str())
+        .unwrap();
+    let (status, preview_body) = http_post_json(
+        &srv.url("/api/data-management/purge/preview"),
+        r#"{"historian_subdir":"validation","dry_run":true}"#,
+        Some(token),
+    );
+    assert_eq!(status, 200);
+    assert!(preview_body.contains("\"matched_row_count\""));
+}
+
+#[test]
+fn data_management_execute_requires_confirmation() {
+    let srv = Server::start();
+    let pw = srv.integrator_password();
+    let login_body = login_json("integrator", &pw);
+    let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let token = json["token"]
+        .as_str()
+        .or(json["access_token"].as_str())
+        .unwrap();
+    let (status, exec_body) = http_post_json(
+        &srv.url("/api/data-management/purge/execute"),
+        r#"{"all":true,"dry_run":true}"#,
+        Some(token),
+    );
+    assert_eq!(status, 200);
+    assert!(exec_body.contains("confirmation phrase"));
+}
+
+#[test]
+fn data_management_summary_authenticated() {
+    let srv = Server::start();
+    let pw = srv.integrator_password();
+    let login_body = login_json("integrator", &pw);
+    let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let token = json["token"]
+        .as_str()
+        .or(json["access_token"].as_str())
+        .unwrap();
+    let (status, summary) = http_raw(
+        "GET",
+        &srv.url("/api/data-management/summary"),
+        None,
+        Some(token),
+    );
+    assert_eq!(status, 200);
+    assert!(summary.contains("\"total_row_count\""));
+}

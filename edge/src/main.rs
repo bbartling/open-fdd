@@ -1,6 +1,7 @@
 mod auth;
 mod bench;
 mod control;
+mod data_management;
 mod drivers;
 mod export;
 mod fdd;
@@ -182,6 +183,48 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let name = export::export_filename("import_jobs");
             require_role_csv(&mut stream, &principal, READ_EXPORT_ROLES, body, &name)
         }
+        ("GET", "/api/data-management/summary") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            data_management::storage_summary(),
+        ),
+        ("GET", "/api/data-management/storage") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            data_management::storage_summary(),
+        ),
+        ("POST", "/api/data-management/purge/preview") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            data_management::preview_purge(&parse_json_body(&body)),
+        ),
+        ("POST", "/api/data-management/purge/execute") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator"],
+            data_management::execute_purge(&parse_json_body(&body), &principal.role),
+        ),
+        ("GET", "/api/data-management/policies") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            data_management::get_policies(),
+        ),
+        ("PUT", "/api/data-management/policies") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator"],
+            data_management::put_policies(&parse_json_body(&body), &principal.role),
+        ),
+        ("GET", "/api/data-management/agent-tools") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            data_management::agent_tools(),
+        ),
         ("POST", "/api/import/jobs") => require_role(
             &mut stream,
             &principal,
@@ -551,6 +594,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             json!({"ok": true, "report_id": "rcx-demo-001", "path": "workspace/reports/rcx/rcx-demo-001.md", "sections": ["faults", "overrides", "plotly_trends", "recommendations"]}),
         ),
         _ => {
+            if let Some(resp) = handle_data_management_dynamic(
+                &mut stream,
+                &principal,
+                method.as_str(),
+                &clean_path,
+            ) {
+                return resp;
+            }
             if let Some(resp) = handle_import_job_dynamic(
                 &mut stream,
                 &principal,
@@ -718,6 +769,38 @@ fn handle_fdd_wires_dynamic(
         }
         _ => None,
     }
+}
+
+fn handle_data_management_dynamic(
+    stream: &mut TcpStream,
+    principal: &Principal,
+    method: &str,
+    path: &str,
+) -> Option<std::io::Result<()>> {
+    let parts = path_parts(path);
+    if parts.len() != 5
+        || parts[0] != "api"
+        || parts[1] != "data-management"
+        || parts[2] != "purge"
+    {
+        return None;
+    }
+    if method != "GET" {
+        return None;
+    }
+    let job_id = parts[4];
+    if job_id.contains("..") || job_id.contains('/') {
+        return Some(json_response(
+            stream,
+            json!({"ok": false, "error": "invalid job id"}),
+        ));
+    }
+    Some(require_role(
+        stream,
+        principal,
+        &["integrator", "agent", "operator"],
+        data_management::purge_job_status(job_id),
+    ))
 }
 
 fn handle_import_job_dynamic(
@@ -1048,17 +1131,53 @@ fn agent_update() -> Value {
     })
 }
 
+fn protocol_enabled(env_key: &str) -> bool {
+    env::var(env_key)
+        .map(|v| v != "0" && v.to_lowercase() != "false")
+        .unwrap_or(true)
+}
+
 fn stack_status() -> Value {
+    let bacnet = if protocol_enabled("OPENFDD_BACNET_ENABLED") {
+        json!({"id":"bacnet","status":"ready","write_guard":"human approval required"})
+    } else {
+        json!({"id":"bacnet","status":"disabled","note":"OPENFDD_BACNET_ENABLED=0"})
+    };
+    let modbus = if protocol_enabled("OPENFDD_MODBUS_ENABLED") {
+        json!({"id":"modbus","status":"ready"})
+    } else {
+        json!({"id":"modbus","status":"disabled","note":"OPENFDD_MODBUS_ENABLED=0"})
+    };
+    let haystack = if protocol_enabled("OPENFDD_HAYSTACK_ENABLED") {
+        json!({"id":"haystack","status":"ready"})
+    } else {
+        json!({"id":"haystack","status":"disabled","note":"OPENFDD_HAYSTACK_ENABLED=0"})
+    };
+    let commission = if protocol_enabled("OPENFDD_BACNET_ENABLED")
+        || protocol_enabled("OPENFDD_MODBUS_ENABLED")
+    {
+        json!({"id":"openfdd-commission","label":"BACnet + Modbus + JSON polling","status":"online","auth_required":true})
+    } else {
+        json!({"id":"openfdd-commission","label":"Field-bus polling","status":"disabled","auth_required":false,"note":"Not started in desktop JSON/CSV mode"})
+    };
+    let haystack_svc = if protocol_enabled("OPENFDD_HAYSTACK_ENABLED") {
+        json!({"id":"openfdd-haystack-gateway","label":"Haystack read/nav/ops integration","status":"online","auth_required":true})
+    } else {
+        json!({"id":"openfdd-haystack-gateway","label":"Haystack gateway","status":"disabled","auth_required":false})
+    };
     json!({
         "ok": true,
         "auth_required": auth_config().required,
         "services": [
             {"id":"openfdd-bridge","label":"API + dashboard + historian","status":"online","auth_required":true},
-            {"id":"openfdd-commission","label":"BACnet + Modbus + JSON polling","status":"online","auth_required":true},
-            {"id":"openfdd-haystack-gateway","label":"Haystack read/nav/ops integration","status":"online","auth_required":true},
-            {"id":"bacnet","status":"ready","write_guard":"human approval required"},
-            {"id":"modbus","status":"ready"},
-            {"id":"haystack","status":"ready"},
+            commission,
+            haystack_svc,
+            bacnet,
+            modbus,
+            haystack,
+            {"id":"json-api","status": if protocol_enabled("OPENFDD_JSON_API_ENABLED") { "ready" } else { "disabled" }},
+            {"id":"csv-import","status": if protocol_enabled("OPENFDD_IMPORT_ENABLED") { "ready" } else { "disabled" }},
+            {"id":"csv-export","status": if protocol_enabled("OPENFDD_EXPORT_ENABLED") { "ready" } else { "disabled" }},
             {"id":"arrow-datafusion","status":"ready"},
             {"id":"control-engine","status":"ready"}
         ]

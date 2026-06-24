@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod control;
+pub mod data_management;
 pub mod drivers;
 pub mod export;
 pub mod fdd;

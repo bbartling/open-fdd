@@ -13,6 +13,10 @@ on:
         description: "Image tag (default VERSION file)"
         required: false
         default: ""
+      tag_latest:
+        description: "Also tag :latest (default false except on master push)"
+        required: false
+        default: "false"
 
 permissions:
   contents: read
@@ -68,16 +72,22 @@ jobs:
           tag="$(resolve_ghcr_publish_tag "${GITHUB_REF_NAME}" "${{ inputs.image_tag }}")"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
+      - id: tags
+        run: |
+          tags="${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}"
+          tags="${tags},${{ env.IMAGE }}:${{ github.sha }}"
+          if [[ "${{ github.ref }}" == "refs/heads/master" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.tag_latest }}" == "true" ]]; then
+            tags="${tags},${{ env.IMAGE }}:latest"
+          fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}
-            ${{ env.IMAGE }}:${{ github.sha }}
-            ${{ env.IMAGE }}:latest
+          tags: ${{ steps.tags.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
