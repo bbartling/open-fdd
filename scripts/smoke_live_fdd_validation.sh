@@ -268,7 +268,7 @@ while true; do
     fdd_sql_ok=true
     jq -e '.ok == true' "${prefix}_fdd_cycle.json" >/dev/null 2>&1 || fdd_sql_ok=false
     data_source="$(jq -r '.fdd_eval.data_source // .capture.data_source // "unknown"' "${prefix}_fdd_cycle.json")"
-    demo_only="$(jq -r '.proof.demo_only // true' "${prefix}_fdd_cycle.json")"
+    demo_only="$(jq -r 'if .proof.demo_only == null then true else .proof.demo_only end' "${prefix}_fdd_cycle.json")"
     raw_fault_count="$(jq -r '.proof.raw_fault_samples // 0' "${prefix}_fdd_cycle.json")"
     confirmed_fault_count="$(jq -r '.proof.confirmed_fault_samples // (.proof.confirmed_fault_count // 0)' "${prefix}_fdd_cycle.json")"
     confirmation_required_minutes="$(jq -r '.proof.confirmation_required_minutes // 5' "${prefix}_fdd_cycle.json")"
