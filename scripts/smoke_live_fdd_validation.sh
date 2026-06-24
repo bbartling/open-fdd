@@ -20,6 +20,12 @@
 #   OPENFDD_SMOKE_SIMULATE=1 OPENFDD_SMOKE_SAMPLES=3 \
 #   ./scripts/smoke_live_fdd_validation.sh
 #
+# Finalize a crashed run from existing summary.jsonl:
+#   OPENFDD_SMOKE_FINALIZE_ONLY=1 \
+#   OPENFDD_SMOKE_ARTIFACT_DIR=workspace/logs/live_fdd_validation_6h_... \
+#   OPENFDD_SMOKE_SIMULATE=1 OPENFDD_SMOKE_REQUIRE_CONFIRMED_FAULT=1 \
+#   ./scripts/smoke_live_fdd_validation.sh
+#
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/openfdd_rust_site_lib.sh
@@ -62,6 +68,152 @@ export OPENFDD_SMOKE_LIVE_FDD="$LIVE_FDD"
 export OPENFDD_SMOKE_JSON_API_URL="$JSON_API_URL"
 
 mkdir -p "$LOG_DIR"
+
+capture_docker_state() {
+  local tag="$1"
+  if [[ "$VALIDATE_DOCKER" != "1" ]]; then return 0; fi
+  docker compose ps >"$LOG_DIR/docker_compose_ps_${tag}.txt" 2>&1 || true
+  docker ps >"$LOG_DIR/docker_ps_${tag}.txt" 2>&1 || true
+}
+
+classify_docker_logs() {
+  local since="$1" out="$2"
+  docker compose logs --since "$since" 2>&1 | tee "$out" | grep -Ei 'panic|fatal|stack trace|corruption|Arrow.*fail|DataFusion.*fail' || true
+}
+
+infer_proof_flags_from_artifacts() {
+  local latest_cycle
+  latest_cycle="$(ls -1 "$LOG_DIR"/capture_*_fdd_cycle.json 2>/dev/null | sort | tail -1 || true)"
+  if [[ -n "$latest_cycle" && -f "$latest_cycle" ]]; then
+    LIVE_FDD_PASS="$(jq -r '.proof.live_fdd_pass // false' "$latest_cycle")"
+    DEMO_ONLY="$(jq -r 'if .proof.demo_only == null then true else .proof.demo_only end' "$latest_cycle")"
+    [[ "$LIVE_FDD_PASS" == "true" ]] && LIVE_FDD_PASS=true || LIVE_FDD_PASS=false
+    [[ "$DEMO_ONLY" == "false" ]] && DEMO_ONLY=false || DEMO_ONLY=true
+  fi
+  if [[ -f "$LOG_DIR/summary.jsonl" ]]; then
+    SEEN_RAW_FAULT="$(jq -s 'any(.[]; (.raw_fault_count // 0) > 0)' "$LOG_DIR/summary.jsonl")"
+    SEEN_CONFIRMED="$(jq -s 'any(.[]; (.confirmed_fault_count // 0) > 0)' "$LOG_DIR/summary.jsonl")"
+    SEEN_CLEAR="$(jq -s 'any(.[]; (.expected_phase // "") == "clear" or (.expected_phase // "") == "normal")' "$LOG_DIR/summary.jsonl")"
+  fi
+}
+
+write_final_report() {
+  infer_proof_flags_from_artifacts
+
+  fail_count="$(jq -s '[.[] | select(.api_health_ok==false or .fdd_sql_ok==false)] | length' "$LOG_DIR/summary.jsonl" 2>/dev/null || echo 0)"
+  total="$(wc -l <"$LOG_DIR/summary.jsonl" | tr -d ' ')"
+
+  jq -nc \
+    --arg finished "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --argjson samples "$total" \
+    --argjson failures "$fail_count" \
+    --argjson live_pass "$LIVE_FDD_PASS" \
+    --argjson demo_only "$DEMO_ONLY" \
+    --argjson seen_raw "$SEEN_RAW_FAULT" \
+    --argjson seen_confirmed "$SEEN_CONFIRMED" \
+    --argjson seen_clear "$SEEN_CLEAR" \
+    --arg artifact "$LOG_DIR" \
+    '{finished_at:$finished,samples:$samples,interval_failures:$failures,live_fdd_pass:$live_pass,demo_only:$demo_only,seen_raw_fault:$seen_raw,seen_confirmed_fault:$seen_confirmed,seen_clear:$seen_clear,artifact_dir:$artifact}' \
+    >"$LOG_DIR/final_report.json"
+
+  {
+    echo "# Live FDD Validation Report"
+    echo ""
+    echo "- Artifact directory: \`$LOG_DIR\`"
+    echo "- Samples: $total"
+    echo "- Interval failures: $fail_count"
+    echo "- Live FDD pass: $LIVE_FDD_PASS"
+    echo "- Demo only: $DEMO_ONLY"
+    echo "- Raw fault seen: $SEEN_RAW_FAULT"
+    echo "- Confirmed fault seen: $SEEN_CONFIRMED"
+    echo "- Clear seen: $SEEN_CLEAR"
+  } >"$LOG_DIR/final_report.md"
+}
+
+evaluate_pass_fail() {
+  local fail_count="$1"
+  if [[ "$NO_DEMO_PASS" == "1" && "$DEMO_ONLY" == "true" && "$SIMULATE" != "1" ]]; then
+    echo "FAIL: ended DEMO ONLY while OPENFDD_SMOKE_NO_DEMO_PASS=1" | tee -a "$LOG_DIR/run.log" >&2
+    return 1
+  fi
+
+  if [[ "$REQUIRE_CONFIRMED" == "1" ]]; then
+    if [[ "$SIMULATE" == "1" && "$LIVE_FDD_PASS" != "true" ]]; then
+      echo "FAIL: simulation did not prove confirmed fault transitions" | tee -a "$LOG_DIR/run.log" >&2
+      return 1
+    fi
+    if [[ "$SIMULATE" != "1" && ( "$SEEN_RAW_FAULT" != "true" || "$SEEN_CONFIRMED" != "true" || "$SEEN_CLEAR" != "true" ) ]]; then
+      echo "FAIL: live run missing raw/confirmed/clear transitions — inspect summary.jsonl" | tee -a "$LOG_DIR/run.log" >&2
+      return 1
+    fi
+  fi
+
+  if [[ "$REQUIRE_MODBUS" == "1" ]]; then
+    local modbus_fails
+    modbus_fails="$(jq -s '[.[] | select(.modbus_ok==false)] | length' "$LOG_DIR/summary.jsonl")"
+    if [[ "$modbus_fails" -gt 0 ]]; then
+      echo "FAIL: Modbus required but offline/degraded" | tee -a "$LOG_DIR/run.log" >&2
+      return 1
+    fi
+  fi
+
+  if [[ "$fail_count" -gt 0 ]]; then
+    echo "FAIL: some intervals failed — inspect $LOG_DIR/summary.jsonl" >&2
+    return 1
+  fi
+
+  echo "PASS: live FDD validation smoke complete." | tee -a "$LOG_DIR/run.log"
+  return 0
+}
+
+should_stop_sampling() {
+  local sample_n="$1"
+  local remaining="$2"
+  if [[ -n "$SAMPLES" && "$sample_n" -ge "$SAMPLES" ]]; then
+    return 0
+  fi
+  if [[ "$SHORT_FDD" == "1" && "$remaining" -le 0 ]]; then
+    return 0
+  fi
+  if [[ "$SHORT_FDD" != "1" && -z "$SAMPLES" && "$remaining" -le 0 ]]; then
+    return 0
+  fi
+  return 1
+}
+
+sleep_until_next_sample() {
+  local remaining="$1"
+  if should_stop_sampling "$sample_n" "$remaining"; then
+    return 0
+  fi
+  local sleep_for="$INTERVAL"
+  if [[ "$SHORT_FDD" != "1" && -z "$SAMPLES" && "$remaining" -lt "$sleep_for" ]]; then
+    sleep_for="$remaining"
+  fi
+  if (( sleep_for > 0 )); then
+    sleep "$sleep_for"
+  fi
+}
+
+if [[ "${OPENFDD_SMOKE_FINALIZE_ONLY:-0}" == "1" ]]; then
+  LOG_DIR="${OPENFDD_SMOKE_ARTIFACT_DIR:-$ARTIFACT_ROOT}"
+  if [[ ! -f "$LOG_DIR/summary.jsonl" ]]; then
+    echo "ERROR: missing $LOG_DIR/summary.jsonl" >&2
+    exit 1
+  fi
+  LIVE_FDD_PASS=false
+  DEMO_ONLY=true
+  SEEN_RAW_FAULT=false
+  SEEN_CONFIRMED=false
+  SEEN_CLEAR=false
+  capture_docker_state end
+  write_final_report
+  fail_count="$(jq -s '[.[] | select(.api_health_ok==false or .fdd_sql_ok==false)] | length' "$LOG_DIR/summary.jsonl" 2>/dev/null || echo 0)"
+  echo "Finalized: $(date -Iseconds)" | tee -a "$LOG_DIR/run.log"
+  evaluate_pass_fail "$fail_count"
+  exit $?
+fi
+
 if [[ "$VALIDATE_DOCKER" == "1" ]]; then
   openfdd_rust_check_docker
 fi
@@ -116,18 +268,6 @@ jq -nc \
 
 echo "Live FDD validation mode=$MODE_LABEL interval=${INTERVAL}s artifact=$LOG_DIR device=$DEVICE_INSTANCE simulate=$SIMULATE" | tee "$LOG_DIR/run.log"
 echo "Started: $(date -Iseconds)" | tee -a "$LOG_DIR/run.log"
-
-capture_docker_state() {
-  local tag="$1"
-  if [[ "$VALIDATE_DOCKER" != "1" ]]; then return 0; fi
-  docker compose ps >"$LOG_DIR/docker_compose_ps_${tag}.txt" 2>&1 || true
-  docker ps >"$LOG_DIR/docker_ps_${tag}.txt" 2>&1 || true
-}
-
-classify_docker_logs() {
-  local since="$1" out="$2"
-  docker compose logs --since "$since" 2>&1 | tee "$out" | grep -Ei 'panic|fatal|stack trace|corruption|Arrow.*fail|DataFusion.*fail' || true
-}
 
 capture_docker_state start
 LAST_DOCKER_SINCE="1m"
@@ -341,14 +481,10 @@ while true; do
   echo "[$ts] sample=$sample_n phase=$phase api=$api_health_ok stack=$stack_health_ok docker=$docker_ok bacnet=$bacnet_device_seen fdd=$fdd_sql_ok modbus=$modbus_ok json=$json_api_ok source=$data_source demo=$demo_only raw=$raw_fault_count confirmed=$confirmed_fault_count"
 
   remaining=$(( END - $(date +%s) ))
-  if [[ -n "$SAMPLES" && $sample_n -ge $SAMPLES ]]; then break; fi
-  if [[ "$SHORT_FDD" == "1" && $remaining -le 0 ]]; then break; fi
-  if [[ "$SHORT_FDD" != "1" && -z "$SAMPLES" && $remaining -le 0 ]]; then break; fi
-  sleep_for=$INTERVAL
-  if [[ "$SHORT_FDD" != "1" && -z "$SAMPLES" && $remaining -lt $sleep_for ]]; then
-    sleep_for=$remaining
+  if should_stop_sampling "$sample_n" "$remaining"; then
+    break
   fi
-  sleep "$sleep_for"
+  sleep_until_next_sample "$remaining"
 done
 
 capture_docker_state end
@@ -357,65 +493,12 @@ curl "${CURL_TLS[@]}" -fsS "${BASE}/api/validation-runs/current/status" \
   -H "Authorization: Bearer $INT_TOKEN" \
   -o "$LOG_DIR/final_status.json" 2>/dev/null || true
 
+write_final_report
 fail_count="$(jq -s '[.[] | select(.api_health_ok==false or .fdd_sql_ok==false)] | length' "$LOG_DIR/summary.jsonl" 2>/dev/null || echo 0)"
 total="$(wc -l <"$LOG_DIR/summary.jsonl" | tr -d ' ')"
-
-jq -nc \
-  --arg finished "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  --argjson samples "$total" \
-  --argjson failures "$fail_count" \
-  --argjson live_pass "$LIVE_FDD_PASS" \
-  --argjson demo_only "$DEMO_ONLY" \
-  --argjson seen_raw "$SEEN_RAW_FAULT" \
-  --argjson seen_confirmed "$SEEN_CONFIRMED" \
-  --argjson seen_clear "$SEEN_CLEAR" \
-  --arg artifact "$LOG_DIR" \
-  '{finished_at:$finished,samples:$samples,interval_failures:$failures,live_fdd_pass:$live_pass,demo_only:$demo_only,seen_raw_fault:$seen_raw,seen_confirmed_fault:$seen_confirmed,seen_clear:$seen_clear,artifact_dir:$artifact}' \
-  >"$LOG_DIR/final_report.json"
-
-{
-  echo "# Live FDD Validation Report"
-  echo ""
-  echo "- Artifact directory: \`$LOG_DIR\`"
-  echo "- Samples: $total"
-  echo "- Interval failures: $fail_count"
-  echo "- Live FDD pass: $LIVE_FDD_PASS"
-  echo "- Demo only: $DEMO_ONLY"
-  echo "- Raw fault seen: $SEEN_RAW_FAULT"
-  echo "- Confirmed fault seen: $SEEN_CONFIRMED"
-  echo "- Clear seen: $SEEN_CLEAR"
-} >"$LOG_DIR/final_report.md"
 
 echo "Finished: $(date -Iseconds)" | tee -a "$LOG_DIR/run.log"
 echo "Samples: $total interval_failures: $fail_count artifact=$LOG_DIR" | tee -a "$LOG_DIR/run.log"
 
-if [[ "$NO_DEMO_PASS" == "1" && "$DEMO_ONLY" == "true" && "$SIMULATE" != "1" ]]; then
-  echo "FAIL: ended DEMO ONLY while OPENFDD_SMOKE_NO_DEMO_PASS=1" | tee -a "$LOG_DIR/run.log" >&2
-  exit 1
-fi
-
-if [[ "$REQUIRE_CONFIRMED" == "1" ]]; then
-  if [[ "$SIMULATE" == "1" && "$LIVE_FDD_PASS" != "true" ]]; then
-    echo "FAIL: simulation did not prove confirmed fault transitions" | tee -a "$LOG_DIR/run.log" >&2
-    exit 1
-  fi
-  if [[ "$SIMULATE" != "1" && ( "$SEEN_RAW_FAULT" != "true" || "$SEEN_CONFIRMED" != "true" || "$SEEN_CLEAR" != "true" ) ]]; then
-    echo "FAIL: live run missing raw/confirmed/clear transitions — inspect summary.jsonl" | tee -a "$LOG_DIR/run.log" >&2
-    exit 1
-  fi
-fi
-
-if [[ "$REQUIRE_MODBUS" == "1" ]]; then
-  modbus_fails="$(jq -s '[.[] | select(.modbus_ok==false)] | length' "$LOG_DIR/summary.jsonl")"
-  if [[ "$modbus_fails" -gt 0 ]]; then
-    echo "FAIL: Modbus required but offline/degraded" | tee -a "$LOG_DIR/run.log" >&2
-    exit 1
-  fi
-fi
-
-if [[ "$fail_count" -gt 0 ]]; then
-  echo "FAIL: some intervals failed — inspect $LOG_DIR/summary.jsonl" >&2
-  exit 1
-fi
-
-echo "PASS: live FDD validation smoke complete." | tee -a "$LOG_DIR/run.log"
+evaluate_pass_fail "$fail_count"
+exit $?
