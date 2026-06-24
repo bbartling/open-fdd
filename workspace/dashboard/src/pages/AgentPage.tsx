@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 
 export default function AgentPage() {
@@ -22,8 +23,8 @@ export default function AgentPage() {
           <li>Fault narrative and operator Q&amp;A</li>
         </ul>
         <p className="muted">
-          Use <a href="/sql-fdd">SQL FDD Rules</a> and{" "}
-          <a href="/live-fdd-validation">Live FDD Validation</a> for bench proof today.
+          Use <Link to="/sql-fdd">SQL FDD Rules</Link> and{" "}
+          <Link to="/live-fdd-validation">Live FDD Validation</Link> for bench proof today.
         </p>
       </div>
     </div>

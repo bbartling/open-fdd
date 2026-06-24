@@ -51,5 +51,5 @@ Fault detection:
 OUTPUT — return ONLY one JSON object with keys:
 - validation_notes (string)
 - relationship_summary (string)
-- rule_compatibility_notes (string) — note which Python rule inputs are covered
+- rule_compatibility_notes (string) — note which SQL FDD rule inputs are covered
 - import_ready_json (object with ONLY sites, equipment, points)`;

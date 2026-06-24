@@ -39,7 +39,7 @@ Generated file includes bcrypt hashes only:
 - `OFDD_ADMIN_USER` / `OFDD_ADMIN_PASSWORD_HASH`
 - `OPENFDD_AUTH_TTL_SEC=28800`
 
-Plaintext passwords are printed once with `--show-secrets` and are never written to disk or logs.
+Plaintext passwords are printed once with `--show-secrets` (stdout only); only bcrypt hashes are written to `auth.env.local`.
 
 ## Rotate credentials
 

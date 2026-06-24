@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 
 export default function AlgorithmsPage() {
@@ -23,8 +24,8 @@ export default function AlgorithmsPage() {
           <li>Chilled / hot water plant trim & respond</li>
         </ul>
         <p className="muted">
-          Until this tab ships, use <a href="/sql-fdd">SQL FDD Rules</a> for fault detection and{" "}
-          <a href="/model">Model &amp; assignments</a> for point bindings.
+          Until this tab ships, use <Link to="/sql-fdd">SQL FDD Rules</Link> for fault detection and{" "}
+          <Link to="/model">Model &amp; assignments</Link> for point bindings.
         </p>
       </div>
     </div>
