@@ -6,6 +6,7 @@ import AgentPage from "./pages/AgentPage";
 import DriversPage from "./pages/DriversPage";
 import JsonApiPage from "./pages/JsonApiPage";
 import BacnetPage from "./pages/BacnetPage";
+import HaystackPage from "./pages/HaystackPage";
 import ModbusPage from "./pages/ModbusPage";
 import DataModelPage from "./pages/DataModelPage";
 import HomePage from "./pages/HomePage";
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="fdd-assignments" element={<Navigate to="/model" replace />} />
             <Route path="plot" element={<TabErrorBoundary tab="plot"><PlotPage /></TabErrorBoundary>} />
             <Route path="drivers" element={<TabErrorBoundary tab="drivers"><DriversPage /></TabErrorBoundary>} />
+            <Route path="haystack" element={<TabErrorBoundary tab="haystack"><HaystackPage /></TabErrorBoundary>} />
             <Route path="bacnet" element={<TabErrorBoundary tab="bacnet"><BacnetPage /></TabErrorBoundary>} />
             <Route path="modbus" element={<TabErrorBoundary tab="modbus"><ModbusPage /></TabErrorBoundary>} />
             <Route path="json-api" element={<TabErrorBoundary tab="json-api"><JsonApiPage /></TabErrorBoundary>} />

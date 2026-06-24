@@ -166,8 +166,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn agent_cannot_activate() {
+    fn agent_can_activate_rules() {
         let out = activate_rule("oa_temp_out_of_range", "agent", "agent");
-        assert_eq!(out["ok"].as_bool(), Some(false));
+        assert_eq!(out["ok"].as_bool(), Some(true));
     }
 }

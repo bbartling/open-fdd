@@ -346,7 +346,9 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent"],
             json!({"ok": true, "run_id": "alg-demo-001", "result": serde_json::from_str::<Value>(control::cdl::simulate_json()).unwrap()}),
         ),
-        ("GET", "/api/model/haystack") => raw_json(&mut stream, drivers::haystack::model_json()),
+        ("GET", "/api/model/haystack") => {
+            raw_json(&mut stream, &model::persist::haystack_model_json_string())
+        }
         ("GET", "/api/model/assignments") => {
             raw_json(&mut stream, model::assignments::assignments_json())
         }
@@ -364,8 +366,12 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         }
         ("GET", "/api/haystack/about") => raw_json(&mut stream, drivers::haystack::about_json()),
         ("GET", "/api/haystack/status") => raw_json(&mut stream, drivers::haystack::status_json()),
-        ("POST", "/api/haystack/read") => raw_json(&mut stream, drivers::haystack::model_json()),
-        ("POST", "/api/haystack/nav") => raw_json(&mut stream, drivers::haystack::model_json()),
+        ("POST", "/api/haystack/read") => {
+            raw_json(&mut stream, &model::persist::haystack_model_json_string())
+        }
+        ("POST", "/api/haystack/nav") => {
+            raw_json(&mut stream, &model::persist::haystack_model_json_string())
+        }
         ("POST", "/api/haystack/ops") => raw_json(&mut stream, drivers::haystack::ops_json()),
         ("POST", "/api/haystack/import") => require_role(
             &mut stream,
@@ -379,9 +385,15 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent"],
             json!({"ok": true, "preserve_ids": true, "imported": 4}),
         ),
+        ("POST", "/api/model/haystack/from-smoke-profile") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            model::smoke_profile::import_from_active_profile(),
+        ),
         ("POST", "/api/model/query") => json_response(
             &mut stream,
-            json!({"ok": true, "rows": serde_json::from_str::<Value>(drivers::haystack::model_json()).unwrap()["rows"].clone()}),
+            json!({"ok": true, "rows": model::query::haystack_rows()}),
         ),
         ("GET", "/api/fdd/datafusion/demo") => {
             raw_json(&mut stream, fdd::datafusion_sql::result_json())

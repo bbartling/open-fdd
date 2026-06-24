@@ -22,6 +22,7 @@ ROTATE=false
 ROTATE_ALL=false
 ROTATE_ROLE=""
 HASH_PASSWORD=""
+RESTART=false
 SUBCMD=(auth init --path "$AUTH_PATH")
 
 usage() {
@@ -41,6 +42,7 @@ Options:
   --all                 Rotate all roles + OFDD_AUTH_SECRET (invalidates JWTs)
   --role NAME           Rotate one role: operator|integrator|agent|admin
   --hash-password PASS  Print bcrypt hash for manual auth.env.local editing
+  --restart             After init/rotate, recreate local openfdd-bridge container
   -h, --help            Show this help
 
 After rotate or force init, recreate bridge containers to pick up new env.
@@ -62,6 +64,7 @@ while [[ $# -gt 0 ]]; do
     --all) ROTATE_ALL=true; shift ;;
     --role) ROTATE_ROLE="$2"; shift 2 ;;
     --hash-password) HASH_PASSWORD="$2"; SUBCMD=(auth hash-password "$2"); shift 2 ;;
+    --restart) RESTART=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -139,4 +142,12 @@ fi
 
 chmod 600 "$AUTH_PATH" 2>/dev/null || true
 echo "==> Auth env: $AUTH_PATH"
-echo "==> Recreate bridge after rotate/force: docker compose -f docker-compose.local.yml up -d --force-recreate openfdd-bridge"
+if [[ "$RESTART" == "true" ]]; then
+  export OPENFDD_RUN_UID="${OPENFDD_RUN_UID:-$(id -u)}"
+  export OPENFDD_RUN_GID="${OPENFDD_RUN_GID:-$(id -g)}"
+  echo "==> Recreating openfdd-bridge to reload auth env"
+  docker compose -f "$ROOT/docker-compose.local.yml" up -d --force-recreate openfdd-bridge
+else
+  echo "==> Recreate bridge after rotate/force: docker compose -f docker-compose.local.yml up -d --force-recreate openfdd-bridge"
+  echo "==> Or re-run with --restart"
+fi

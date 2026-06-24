@@ -302,6 +302,35 @@ pub fn print_generated_credentials(passwords: &HashMap<String, String>, show_sec
     }
 }
 
+/// Write one-time credential handoff file next to auth.env.local (lab bootstrap only).
+pub fn write_bootstrap_credentials_once(
+    auth_path: &Path,
+    passwords: &HashMap<String, String>,
+) -> std::io::Result<Option<PathBuf>> {
+    if passwords.is_empty() {
+        return Ok(None);
+    }
+    let workspace = auth_path
+        .parent()
+        .unwrap_or_else(|| Path::new("workspace"));
+    let handoff = workspace.join("bootstrap_credentials.once.txt");
+    let mut lines = vec![
+        "# Open-FDD one-time bootstrap credentials — DELETE after saving to your password manager.".to_string(),
+        "# Do NOT commit this file. Do NOT paste bcrypt hashes from auth.env.local as passwords.".to_string(),
+        format!("# Generated: {}", chrono::Utc::now().to_rfc3339()),
+        String::new(),
+    ];
+    for (user, pw) in passwords {
+        lines.push(format!("{user}: {pw}"));
+    }
+    lines.push(String::new());
+    lines.push("# After saving passwords, delete this file:".to_string());
+    lines.push("#   rm workspace/bootstrap_credentials.once.txt".to_string());
+    fs::write(&handoff, lines.join("\n"))?;
+    chmod_600_unix(&handoff);
+    Ok(Some(handoff))
+}
+
 pub fn chmod_600_unix(path: &Path) {
     #[cfg(unix)]
     {

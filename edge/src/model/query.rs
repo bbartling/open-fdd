@@ -4,9 +4,7 @@ use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
 pub fn haystack_rows() -> Vec<Value> {
-    let model: Value =
-        serde_json::from_str(crate::drivers::haystack::MODEL_JSON).unwrap_or(json!({"rows": []}));
-    model
+    crate::model::persist::haystack_model_value()
         .get("rows")
         .and_then(|v| v.as_array())
         .cloned()

@@ -20,7 +20,7 @@ pub fn is_mutation_role(role: &str) -> bool {
 }
 
 pub fn can_write_field_bus(role: &str, approved: bool) -> bool {
-    is_integrator_tier(role) && approved
+    role == "integrator" && approved
 }
 
 #[cfg(test)]
@@ -30,8 +30,15 @@ mod tests {
     #[test]
     fn operator_cannot_write_field_bus() {
         assert!(!can_write_field_bus("operator", true));
-        assert!(can_write_field_bus("agent", true));
+        assert!(!can_write_field_bus("agent", true));
         assert!(can_write_field_bus("integrator", true));
         assert!(!can_write_field_bus("integrator", false));
+    }
+
+    #[test]
+    fn agent_is_integrator_tier_for_mutations() {
+        assert!(is_integrator_tier("agent"));
+        assert!(is_integrator_tier("integrator"));
+        assert!(!is_integrator_tier("operator"));
     }
 }
