@@ -1,3 +1,5 @@
+# LEGACY Python stack only — publishes openfdd-bridge, openfdd-commission, openfdd-mcp-rag.
+# Current Rust deployments use .github/workflows/rust-ghcr.yml → ghcr.io/bbartling/openfdd-edge-rust
 # Copy to .github/workflows/ghcr-multiarch-publish.yml (requires workflow OAuth scope to push).
 # Then: gh workflow run "Publish multi-arch GHCR images" -f image_tag=3.1.6
 name: Publish multi-arch GHCR images

@@ -1,0 +1,10 @@
+profile_id = "default_csv_import"
+source_id = "source:csv-import"
+site_id = "site:demo"
+building_id = "building:main"
+equipment_id = "equip:validation"
+timestamp_column = "timestamp"
+timezone = "UTC"
+delimiter = ","
+header_row = 1
+data_shape = "wide"

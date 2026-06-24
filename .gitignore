@@ -9,6 +9,11 @@ workspace/backups/
 workspace/data/
 workspace/logs/
 workspace/smoke-profiles/local/*.local.toml
+workspace/import-profiles/local/*.local.toml
+workspace/export-profiles/local/*.local.toml
+workspace/imports/
+workspace/exports/
+workspace/data-management/
 workspace/overrides/
 workspace/bacnet/
 workspace/dashboard/node_modules/

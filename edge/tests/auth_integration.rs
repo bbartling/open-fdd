@@ -217,3 +217,110 @@ fn operator_forbidden_on_modbus_scan() {
     let (status, _) = http_post_json(&srv.url("/api/modbus/scan"), "{}", Some(token));
     assert_eq!(status, 403);
 }
+
+#[test]
+fn export_requires_authentication() {
+    let srv = Server::start();
+    let (status, _) = http_raw("GET", &srv.url("/api/export/historian.csv"), None, None);
+    assert_eq!(status, 401);
+}
+
+#[test]
+fn import_job_lifecycle() {
+    let srv = Server::start();
+    let pw = srv.integrator_password();
+    let login_body = login_json("integrator", &pw);
+    let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let token = json["token"]
+        .as_str()
+        .or(json["access_token"].as_str())
+        .unwrap();
+    let (create_status, create_body) = http_post_json(
+        &srv.url("/api/import/jobs"),
+        r#"{"profile_id":"default_csv_import"}"#,
+        Some(token),
+    );
+    assert_eq!(create_status, 200);
+    let job_id = serde_json::from_str::<serde_json::Value>(&create_body).unwrap()["job_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let csv = "timestamp,equipment_id,oa_t,oa_h,duct_t,zn_t\n2026-06-24T00:00:00Z,equip:validation,62,45,55,72\n";
+    let (upload_status, _) = http_raw(
+        "POST",
+        &srv.url(&format!("/api/import/jobs/{job_id}/upload")),
+        Some(csv),
+        Some(token),
+    );
+    assert_eq!(upload_status, 200);
+    let (commit_status, commit_body) = http_raw(
+        "POST",
+        &srv.url(&format!("/api/import/jobs/{job_id}/commit")),
+        None,
+        Some(token),
+    );
+    assert_eq!(commit_status, 200);
+    assert!(commit_body.contains("\"status\":\"completed\""));
+}
+
+#[test]
+fn data_management_preview_requires_integrator() {
+    let srv = Server::start();
+    let pw = srv.integrator_password();
+    let login_body = login_json("integrator", &pw);
+    let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let token = json["token"]
+        .as_str()
+        .or(json["access_token"].as_str())
+        .unwrap();
+    let (status, preview_body) = http_post_json(
+        &srv.url("/api/data-management/purge/preview"),
+        r#"{"historian_subdir":"validation","dry_run":true}"#,
+        Some(token),
+    );
+    assert_eq!(status, 200);
+    assert!(preview_body.contains("\"matched_row_count\""));
+}
+
+#[test]
+fn data_management_execute_requires_confirmation() {
+    let srv = Server::start();
+    let pw = srv.integrator_password();
+    let login_body = login_json("integrator", &pw);
+    let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let token = json["token"]
+        .as_str()
+        .or(json["access_token"].as_str())
+        .unwrap();
+    let (status, exec_body) = http_post_json(
+        &srv.url("/api/data-management/purge/execute"),
+        r#"{"all":true,"dry_run":true}"#,
+        Some(token),
+    );
+    assert_eq!(status, 200);
+    assert!(exec_body.contains("confirmation phrase"));
+}
+
+#[test]
+fn data_management_summary_authenticated() {
+    let srv = Server::start();
+    let pw = srv.integrator_password();
+    let login_body = login_json("integrator", &pw);
+    let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let token = json["token"]
+        .as_str()
+        .or(json["access_token"].as_str())
+        .unwrap();
+    let (status, summary) = http_raw(
+        "GET",
+        &srv.url("/api/data-management/summary"),
+        None,
+        Some(token),
+    );
+    assert_eq!(status, 200);
+    assert!(summary.contains("\"total_row_count\""));
+}

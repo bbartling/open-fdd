@@ -20,9 +20,110 @@ pub fn historian_subdir() -> String {
 }
 
 pub fn bench_dir() -> PathBuf {
-    workspace_dir()
-        .join("data/historian")
-        .join(historian_subdir())
+    historian_dir_for_subdir(&historian_subdir())
+}
+
+pub fn historian_root() -> PathBuf {
+    workspace_dir().join("data/historian")
+}
+
+pub fn historian_dir_for_subdir(subdir: &str) -> PathBuf {
+    historian_root().join(subdir)
+}
+
+pub fn valid_subdir(subdir: &str) -> bool {
+    !subdir.is_empty() && !subdir.contains("..") && !subdir.contains('/') && !subdir.contains('\\')
+}
+
+pub fn list_historian_subdirs() -> Vec<String> {
+    let root = historian_root();
+    let mut out = Vec::new();
+    if !root.exists() {
+        return out;
+    }
+    if pivot_jsonl_path().exists() {
+        out.push(historian_subdir());
+    }
+    if let Ok(entries) = fs::read_dir(&root) {
+        for entry in entries.flatten() {
+            if !entry.path().is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') {
+                continue;
+            }
+            if entry.path().join("telemetry_pivot.jsonl").exists() && !out.contains(&name) {
+                out.push(name);
+            }
+        }
+    }
+    if out.is_empty() {
+        out.push(historian_subdir());
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+pub fn pivot_jsonl_path_for(subdir: &str) -> PathBuf {
+    historian_dir_for_subdir(subdir).join("telemetry_pivot.jsonl")
+}
+
+pub fn load_rows_in(subdir: &str) -> Result<Vec<Value>, String> {
+    if !valid_subdir(subdir) {
+        return Err("invalid historian subdir".into());
+    }
+    let path = pivot_jsonl_path_for(subdir);
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let mut rows = Vec::new();
+    for line in text.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if let Ok(v) = serde_json::from_str::<Value>(line) {
+            rows.push(v);
+        }
+    }
+    Ok(rows)
+}
+
+pub fn row_count_in(subdir: &str) -> usize {
+    load_rows_in(subdir).map(|r| r.len()).unwrap_or(0)
+}
+
+pub fn rewrite_subdir(subdir: &str, rows: &[Value]) -> Result<(), String> {
+    if !valid_subdir(subdir) {
+        return Err("invalid historian subdir".into());
+    }
+    let dir = historian_dir_for_subdir(subdir);
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("telemetry_pivot.jsonl");
+    if rows.is_empty() {
+        if path.exists() {
+            fs::remove_file(&path).map_err(|e| e.to_string())?;
+        }
+        let arrow = dir.join("telemetry_pivot.arrow");
+        if arrow.exists() {
+            let _ = fs::remove_file(&arrow);
+        }
+        return Ok(());
+    }
+    let mut file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&path)
+        .map_err(|e| e.to_string())?;
+    for row in rows {
+        let line = serde_json::to_string(row).map_err(|e| e.to_string())?;
+        writeln!(file, "{line}").map_err(|e| e.to_string())?;
+    }
+    write_arrow_ipc(rows)?;
+    Ok(())
 }
 
 pub fn pivot_jsonl_path() -> PathBuf {
