@@ -67,3 +67,30 @@ sudo apt install docker-buildx-plugin   # Debian/Ubuntu
 ## GHCR / Caddy
 
 Production edge compose pulls `ghcr.io/bbartling/openfdd-edge-rust` — use `./scripts/openfdd_local_up.sh` until a GHCR tag is published or you build and tag locally.
+
+## Remote dial-in (production-like Caddy + TLS)
+
+After the local image is built:
+
+```bash
+# Wait for ./scripts/openfdd_local_up.sh --build to finish, then:
+./scripts/openfdd_local_caddy_up.sh --mode tls
+```
+
+- Caddy listens on **0.0.0.0:443** (and redirects :80 → HTTPS)
+- Bridge stays internal; **same `workspace/auth.env.local`** JWT users
+- Open from another machine: `https://<your-LAN-IP>/` (accept self-signed cert warning)
+- Optional hosts entry on client: `<LAN-IP> openfdd.local`
+
+HTTP-only lab mode:
+
+```bash
+./scripts/openfdd_local_caddy_up.sh --mode http
+```
+
+Firewall on the server if needed:
+
+```bash
+sudo ufw allow 443/tcp
+sudo ufw allow 80/tcp
+```
