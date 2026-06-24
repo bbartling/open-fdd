@@ -86,6 +86,14 @@ impl Server {
             .cloned()
             .unwrap()
     }
+
+    fn operator_password(&self) -> String {
+        let text = std::fs::read_to_string(&self.auth_path).unwrap();
+        parse_env_file(&text)
+            .get("OFDD_OPERATOR_PASSWORD")
+            .cloned()
+            .unwrap()
+    }
 }
 
 impl Drop for Server {
@@ -96,6 +104,17 @@ impl Drop for Server {
 }
 
 fn http_raw(method: &str, url: &str, body: Option<&str>, bearer: Option<&str>) -> (u16, String) {
+    let (status, headers, body) = http_raw_response(method, url, body, bearer);
+    let _ = headers;
+    (status, body)
+}
+
+fn http_raw_response(
+    method: &str,
+    url: &str,
+    body: Option<&str>,
+    bearer: Option<&str>,
+) -> (u16, String, String) {
     let url = url.strip_prefix("http://").unwrap();
     let (host_port, path) = url.split_once('/').unwrap_or((url, ""));
     let path = if path.is_empty() {
@@ -105,7 +124,7 @@ fn http_raw(method: &str, url: &str, body: Option<&str>, bearer: Option<&str>) -
     };
     let mut stream = match TcpStream::connect(host_port) {
         Ok(s) => s,
-        Err(_) => return (0, String::new()),
+        Err(_) => return (0, String::new(), String::new()),
     };
     stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
     let mut req = format!("{method} {path} HTTP/1.1\r\nHost: {host_port}\r\nConnection: close\r\n");
@@ -131,7 +150,11 @@ fn http_raw(method: &str, url: &str, body: Option<&str>, bearer: Option<&str>) -
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
     let body_start = resp.find("\r\n\r\n").map(|i| i + 4).unwrap_or(0);
-    (status, resp[body_start..].to_string())
+    (
+        status,
+        resp[..body_start.saturating_sub(4)].to_string(),
+        resp[body_start..].to_string(),
+    )
 }
 
 fn http_get(url: &str) -> String {
@@ -226,6 +249,13 @@ fn export_requires_authentication() {
 }
 
 #[test]
+fn override_export_requires_auth() {
+    let srv = Server::start();
+    let (status, _) = http_raw("GET", &srv.url("/api/bacnet/overrides/export"), None, None);
+    assert_eq!(status, 401);
+}
+
+#[test]
 fn import_job_lifecycle() {
     let srv = Server::start();
     let pw = srv.integrator_password();
@@ -262,6 +292,29 @@ fn import_job_lifecycle() {
     );
     assert_eq!(commit_status, 200);
     assert!(commit_body.contains("\"status\":\"completed\""));
+}
+
+#[test]
+fn override_export_returns_attachment_filename() {
+    let srv = Server::start();
+    let pw = srv.integrator_password();
+    let login_body = login_json("integrator", &pw);
+    let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let token = json["token"]
+        .as_str()
+        .or(json["access_token"].as_str())
+        .unwrap();
+    let (status, headers, csv_body) = http_raw_response(
+        "GET",
+        &srv.url("/api/bacnet/overrides/export"),
+        None,
+        Some(token),
+    );
+    assert_eq!(status, 200);
+    assert!(headers.contains("Content-Type: text/csv"));
+    assert!(headers.contains("filename=\"bacnet_overrides_export.csv\""));
+    assert!(csv_body.starts_with("scanned_at,"));
 }
 
 #[test]
@@ -323,4 +376,31 @@ fn data_management_summary_authenticated() {
     );
     assert_eq!(status, 200);
     assert!(summary.contains("\"total_row_count\""));
+}
+
+#[test]
+fn operator_can_export_but_not_scan_once() {
+    let srv = Server::start();
+    let op_pw = srv.operator_password();
+    let login_body = login_json("operator", &op_pw);
+    let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let token = json["token"]
+        .as_str()
+        .or(json["access_token"].as_str())
+        .unwrap();
+    let (export_status, _, csv_body) = http_raw_response(
+        "GET",
+        &srv.url("/api/bacnet/overrides/export"),
+        None,
+        Some(token),
+    );
+    assert_eq!(export_status, 200);
+    assert!(csv_body.contains("scanned_at"));
+    let (scan_status, _) = http_post_json(
+        &srv.url("/api/bacnet/overrides/scan-once"),
+        "{}",
+        Some(token),
+    );
+    assert_eq!(scan_status, 403);
 }

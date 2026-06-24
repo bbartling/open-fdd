@@ -31,12 +31,56 @@ fn workspace_dir() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("workspace"))
 }
 
-fn overrides_dir() -> PathBuf {
+fn bacnet_overrides_dir() -> PathBuf {
+    workspace_dir().join("bacnet/overrides")
+}
+
+fn legacy_overrides_dir() -> PathBuf {
     workspace_dir().join("overrides")
 }
 
+fn overrides_dir() -> PathBuf {
+    bacnet_overrides_dir()
+}
+
+fn override_registry_path() -> PathBuf {
+    bacnet_overrides_dir().join("registry.json")
+}
+
+fn export_csv_path() -> PathBuf {
+    bacnet_overrides_dir().join("overrides_export.csv")
+}
+
 fn csv_path(name: &str) -> PathBuf {
-    overrides_dir().join(name)
+    bacnet_overrides_dir().join(name)
+}
+
+pub fn override_scan_interval_s() -> u64 {
+    env::var("OFDD_OVERRIDE_SCAN_INTERVAL_S")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3600)
+}
+
+pub fn operator_override_priority() -> u8 {
+    env::var("OFDD_OPERATOR_OVERRIDE_PRIORITY")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8)
+}
+
+pub const OVERRIDE_EXPORT_CSV_HEADER: &str = "scanned_at,device_instance,device_address,device_label,object_identifier,object_name,object_type,present_value,priority_level,priority_value,operator_override,override_kind,units,source";
+
+pub fn override_kind(priority: u8, operator_priority: u8) -> &'static str {
+    if priority == operator_priority {
+        "operator"
+    } else {
+        "supervisory"
+    }
+}
+
+pub fn is_operator_override(priority: u8, operator_priority: u8) -> bool {
+    priority == operator_priority
 }
 
 fn now_rfc3339() -> String {
@@ -435,6 +479,18 @@ fn ensure_csv_header(path: &PathBuf) {
         let _ = fs::create_dir_all(parent);
     }
     if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{}", OVERRIDE_EXPORT_CSV_HEADER);
+    }
+}
+
+fn ensure_legacy_csv_header(path: &PathBuf) {
+    if path.exists() {
+        return;
+    }
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
         let _ = writeln!(
             file,
             "timestamp,scan_id,device_instance,device_name,address,point_id,object_id,point_name,haystack_id,priority,priority_kind,value,source_method"
@@ -456,8 +512,208 @@ fn append_csv(path: &PathBuf, row: &[String]) {
 }
 
 fn read_csv(path: &PathBuf) -> String {
-    fs::read_to_string(path).unwrap_or_else(|_| {
-        "timestamp,scan_id,device_instance,device_name,address,point_id,object_id,point_name,haystack_id,priority,priority_kind,value,source_method\n".to_string()
+    fs::read_to_string(path).unwrap_or_else(|_| format!("{}\n", OVERRIDE_EXPORT_CSV_HEADER))
+}
+
+fn read_override_registry() -> Value {
+    let path = override_registry_path();
+    if let Ok(text) = fs::read_to_string(&path) {
+        serde_json::from_str(&text).unwrap_or_else(|_| json!({}))
+    } else if let Ok(text) = fs::read_to_string(legacy_overrides_dir().join("last_scan.json")) {
+        serde_json::from_str(&text).unwrap_or_else(|_| json!({}))
+    } else {
+        json!({})
+    }
+}
+
+fn write_override_registry(value: &Value) {
+    let path = override_registry_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(
+        path,
+        serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string()),
+    );
+    let _ = fs::write(
+        legacy_overrides_dir().join("last_scan.json"),
+        serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string()),
+    );
+}
+
+fn field_device_instances(registry: &Value) -> Vec<u32> {
+    let mut devices = Vec::new();
+    if let Some(drivers) = registry.get("drivers").and_then(|v| v.as_array()) {
+        for driver in drivers {
+            if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
+                continue;
+            }
+            if let Some(devs) = driver.get("devices").and_then(|v| v.as_array()) {
+                for device in devs {
+                    if device.get("local_server").and_then(|v| v.as_bool()) == Some(true) {
+                        continue;
+                    }
+                    if let Some(inst) = device.get("device_instance").and_then(|v| v.as_u64()) {
+                        devices.push(inst as u32);
+                    }
+                }
+            }
+        }
+    }
+    devices.sort_unstable();
+    devices.dedup();
+    devices
+}
+
+fn pick_scan_device(registry: &Value, override_reg: &Value) -> (u32, usize, u32) {
+    let devices = field_device_instances(registry);
+    if devices.is_empty() {
+        let fallback = bench_device_instance();
+        return (fallback, 0, fallback);
+    }
+    let rotation = override_reg
+        .get("rotation_index")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as usize;
+    let idx = rotation % devices.len();
+    let device = devices[idx];
+    let next_idx = (idx + 1) % devices.len();
+    let next_device = devices[next_idx];
+    (device, next_idx, next_device)
+}
+
+fn object_identifier_for_point(point: &Value) -> String {
+    if let Some(id) = point.get("id").and_then(|v| v.as_str()) {
+        return id.to_string();
+    }
+    let object_type = point_object_type(point);
+    let instance = point
+        .get("object_id")
+        .and_then(|v| v.as_array())
+        .and_then(|a| a.get(1))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    format!("{object_type}:{instance}")
+}
+
+fn export_csv_row(
+    scanned_at: &str,
+    point: &Value,
+    priority: u8,
+    priority_value: &Value,
+    operator_priority: u8,
+) -> Vec<String> {
+    let kind = override_kind(priority, operator_priority);
+    let operator = is_operator_override(priority, operator_priority);
+    vec![
+        scanned_at.to_string(),
+        point
+            .get("device_instance")
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "0".to_string()),
+        point
+            .get("address")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string(),
+        point
+            .get("device_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string(),
+        object_identifier_for_point(point),
+        point
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string(),
+        point_object_type(point),
+        point
+            .get("value")
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| priority_value.to_string()),
+        priority.to_string(),
+        priority_value.to_string(),
+        operator.to_string(),
+        kind.to_string(),
+        point
+            .get("unit")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        "ReadProperty(priority-array)".to_string(),
+    ]
+}
+
+fn legacy_csv_row(
+    scanned_at: &str,
+    scan_id: &str,
+    point: &Value,
+    priority: u8,
+    priority_value: &Value,
+    operator_priority: u8,
+) -> Vec<String> {
+    let kind = override_kind(priority, operator_priority);
+    vec![
+        scanned_at.to_string(),
+        scan_id.to_string(),
+        point
+            .get("device_instance")
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "0".to_string()),
+        point
+            .get("device_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string(),
+        point
+            .get("address")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string(),
+        point
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string(),
+        point
+            .get("object_id")
+            .map(|v| v.to_string())
+            .unwrap_or_default(),
+        point
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string(),
+        point
+            .get("haystack_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        priority.to_string(),
+        kind.to_string(),
+        priority_value.to_string(),
+        "ReadProperty(priority-array)".to_string(),
+    ]
+}
+
+pub fn overrides_summary_json() -> Value {
+    let reg = read_override_registry();
+    let summary = reg.get("summary").cloned().unwrap_or(json!({}));
+    json!({
+        "ok": true,
+        "last_scan_at": reg.get("last_scan_at").cloned().unwrap_or(json!(null)),
+        "last_scanned_device": reg.get("last_scanned_device").cloned().unwrap_or(json!(null)),
+        "next_device": reg.get("next_device_instance").cloned().unwrap_or(json!(null)),
+        "device_count": reg.get("device_count").cloned().unwrap_or(json!(0)),
+        "operator_priority": reg.get("operator_priority").cloned().unwrap_or(json!(operator_override_priority())),
+        "operator_override_count": summary.get("priority8").cloned().unwrap_or(json!(0)),
+        "other_override_count": summary.get("non_priority8").cloned().unwrap_or(json!(0)),
+        "total_override_count": summary.get("total").cloned().unwrap_or(json!(0)),
+        "export_row_count": reg.get("export_row_count").cloned().unwrap_or(json!(0)),
+        "scan_interval_s": reg.get("scan_interval_s").cloned().unwrap_or(json!(override_scan_interval_s())),
+        "scan_health": reg.get("scan_health").cloned().unwrap_or(json!("unknown")),
+        "scan_error": reg.get("scan_error").cloned().unwrap_or(json!(null))
     })
 }
 
@@ -467,16 +723,22 @@ pub fn start_hourly_override_scanner(service_mode: String) {
     }
     thread::spawn(move || loop {
         let _ = scan_once_value();
-        thread::sleep(Duration::from_secs(3600));
+        thread::sleep(Duration::from_secs(override_scan_interval_s()));
     });
 }
 
 pub fn scan_once_value() -> Value {
-    let device_instance = bench_device_instance();
-    let merge = merge_live_discovery_into_registry(device_instance);
+    let operator_priority = operator_override_priority();
     let registry = read_registry();
+    let override_reg = read_override_registry();
+    let (device_instance, next_rotation, next_device) = pick_scan_device(&registry, &override_reg);
+    let merge = merge_live_discovery_into_registry(device_instance);
+    let device_count = field_device_instances(&registry).len().max(1) as u64;
 
-    let scan_points = if bacnet_live::is_live_mode() {
+    let mut scan_health = "ok".to_string();
+    let mut scan_error: Option<String> = None;
+
+    let scan_points: Vec<Value> = if bacnet_live::is_live_mode() {
         match bacnet_live::block_on(bacnet_live::discover_device_points(device_instance)) {
             Ok(discovered) => discovered
                 .into_iter()
@@ -491,10 +753,30 @@ pub fn scan_once_value() -> Value {
                     p
                 })
                 .collect(),
-            Err(_) => commandable_points(&registry),
+            Err(err) => {
+                scan_health = "degraded".to_string();
+                scan_error = Some(err.clone());
+                commandable_points(&registry)
+                    .into_iter()
+                    .filter(|p| {
+                        p.get("device_instance")
+                            .and_then(|v| v.as_u64())
+                            .map(|d| d as u32 == device_instance)
+                            .unwrap_or(true)
+                    })
+                    .collect()
+            }
         }
     } else {
         commandable_points(&registry)
+            .into_iter()
+            .filter(|p| {
+                p.get("device_instance")
+                    .and_then(|v| v.as_u64())
+                    .map(|d| d as u32 == device_instance)
+                    .unwrap_or(true)
+            })
+            .collect()
     };
 
     let scan_id = format!("bacnet-scan-{}", Utc::now().timestamp());
@@ -503,19 +785,18 @@ pub fn scan_once_value() -> Value {
     let mut p8_count = 0;
     let mut non_p8_count = 0;
 
-    let all_path = csv_path("bacnet_overrides.csv");
-    let p8_path = csv_path("bacnet_priority8_overrides.csv");
-    let other_path = csv_path("bacnet_non_priority8_overrides.csv");
+    let export_path = export_csv_path();
+    let legacy_all = legacy_overrides_dir().join("bacnet_overrides.csv");
+    let legacy_p8 = legacy_overrides_dir().join("bacnet_priority8_overrides.csv");
+    let legacy_other = legacy_overrides_dir().join("bacnet_non_priority8_overrides.csv");
+    let split_p8 = csv_path("bacnet_priority8_overrides.csv");
+    let split_other = csv_path("bacnet_non_priority8_overrides.csv");
 
     for point in &scan_points {
-        let priority_values = read_priority_array_for_point(&point);
+        let priority_values = read_priority_array_for_point(point);
         for (priority, value) in priority_values {
-            let kind = if priority == 8 {
-                "operator"
-            } else {
-                "non_priority8"
-            };
-            if priority == 8 {
+            let kind = override_kind(priority, operator_priority);
+            if is_operator_override(priority, operator_priority) {
                 p8_count += 1;
             } else {
                 non_p8_count += 1;
@@ -538,49 +819,54 @@ pub fn scan_once_value() -> Value {
                 "source_method": "ReadProperty(priority-array)"
             });
 
-            let row = vec![
-                ts.clone(),
-                scan_id.clone(),
-                event["device_instance"].to_string(),
-                event["device_name"]
-                    .as_str()
-                    .unwrap_or("unknown")
-                    .to_string(),
-                event["address"].as_str().unwrap_or("unknown").to_string(),
-                event["point_id"].as_str().unwrap_or("unknown").to_string(),
-                event["object_id"].to_string(),
-                event["point"].as_str().unwrap_or("unknown").to_string(),
-                event["haystack_id"].as_str().unwrap_or("").to_string(),
-                priority.to_string(),
-                kind.to_string(),
-                event["value"].to_string(),
-                "ReadProperty(priority-array)".to_string(),
-            ];
-            append_csv(&all_path, &row);
-            if priority == 8 {
-                append_csv(&p8_path, &row);
+            let export_row = export_csv_row(&ts, point, priority, &value, operator_priority);
+            append_csv(&export_path, &export_row);
+            if is_operator_override(priority, operator_priority) {
+                append_csv(&split_p8, &export_row);
             } else {
-                append_csv(&other_path, &row);
+                append_csv(&split_other, &export_row);
+            }
+            let legacy_row =
+                legacy_csv_row(&ts, &scan_id, point, priority, &value, operator_priority);
+            ensure_legacy_csv_header(&legacy_all);
+            append_csv(&legacy_all, &legacy_row);
+            if is_operator_override(priority, operator_priority) {
+                ensure_legacy_csv_header(&legacy_p8);
+                append_csv(&legacy_p8, &legacy_row);
+            } else {
+                ensure_legacy_csv_header(&legacy_other);
+                append_csv(&legacy_other, &legacy_row);
             }
             events.push(event);
         }
     }
 
-    let scanned_device = json!(device_instance);
-
+    let export_row_count = count_csv_rows(&export_path);
     let status = json!({
         "ok": true,
         "last_scan": ts,
+        "last_scan_at": ts,
         "scan_id": scan_id,
-        "scanned_device": scanned_device,
+        "scanned_device": device_instance,
+        "last_scanned_device": device_instance,
+        "next_device_instance": next_device,
+        "rotation_index": next_rotation,
+        "device_count": device_count,
+        "operator_priority": operator_priority,
+        "scan_interval_s": override_scan_interval_s(),
+        "scan_health": scan_health,
+        "scan_error": scan_error,
+        "export_row_count": export_row_count,
         "merge": merge,
         "commandable_point_count": scan_points.len(),
-        "cadence": "hourly",
-        "method": "ReadProperty(priority-array) for writable BACnet points",
+        "cadence": format!("{}s", override_scan_interval_s()),
+        "method": "ReadProperty(priority-array) for commandable BACnet points",
         "csv": {
-            "all": all_path.display().to_string(),
-            "priority8": p8_path.display().to_string(),
-            "non_priority8": other_path.display().to_string()
+            "export": export_path.display().to_string(),
+            "all": export_path.display().to_string(),
+            "priority8": split_p8.display().to_string(),
+            "non_priority8": split_other.display().to_string(),
+            "legacy_all": legacy_all.display().to_string()
         },
         "summary": {
             "priority8": p8_count,
@@ -590,11 +876,19 @@ pub fn scan_once_value() -> Value {
         "overrides": events
     });
 
-    let _ = fs::write(
-        overrides_dir().join("last_scan.json"),
-        serde_json::to_string_pretty(&status).unwrap_or_default(),
-    );
+    write_override_registry(&status);
     status
+}
+
+fn count_csv_rows(path: &PathBuf) -> u64 {
+    fs::read_to_string(path)
+        .map(|text| {
+            text.lines()
+                .skip(1)
+                .filter(|line| !line.trim().is_empty())
+                .count() as u64
+        })
+        .unwrap_or(0)
 }
 
 fn collect_bacnet_points(registry: &Value) -> Vec<Value> {
@@ -758,12 +1052,7 @@ pub fn read_registry_value() -> Value {
 }
 
 pub fn overrides_last_scan() -> Value {
-    let last = overrides_dir().join("last_scan.json");
-    if let Ok(text) = fs::read_to_string(last) {
-        serde_json::from_str(&text).unwrap_or_else(|_| json!({}))
-    } else {
-        json!({})
-    }
+    read_override_registry()
 }
 
 pub fn poll_metrics() -> Value {
@@ -864,16 +1153,16 @@ pub fn priority_array_json(body: &Value) -> String {
 }
 
 pub fn overrides_json() -> String {
-    let last = overrides_dir().join("last_scan.json");
-    if let Ok(text) = fs::read_to_string(last) {
-        text
+    let reg = read_override_registry();
+    if reg.as_object().map(|o| !o.is_empty()).unwrap_or(false) {
+        serde_json::to_string_pretty(&reg).unwrap_or_else(|_| "{}".to_string())
     } else {
         serde_json::to_string_pretty(&scan_once_value()).unwrap_or_else(|_| "{}".to_string())
     }
 }
 
 pub fn overrides_csv() -> String {
-    read_csv(&csv_path("bacnet_overrides.csv"))
+    read_csv(&export_csv_path())
 }
 
 pub fn priority8_csv() -> String {
@@ -907,4 +1196,68 @@ pub fn poll_status_json() -> String {
         "cadence_seconds": env::var("OPENFDD_BACNET_POLL_INTERVAL_SECONDS").unwrap_or_else(|_| "60".to_string()),
         "writes_scan_cadence_seconds": env::var("OPENFDD_BACNET_SCAN_INTERVAL_SECONDS").unwrap_or_else(|_| "3600".to_string())
     }).to_string()
+}
+
+#[cfg(test)]
+mod override_export_tests {
+    use super::*;
+    use std::env;
+
+    #[test]
+    fn csv_header_has_stable_columns() {
+        let cols: Vec<&str> = OVERRIDE_EXPORT_CSV_HEADER.split(',').collect();
+        assert_eq!(cols.len(), 14);
+        assert_eq!(cols[0], "scanned_at");
+        assert_eq!(cols[10], "operator_override");
+        assert_eq!(cols[11], "override_kind");
+    }
+
+    #[test]
+    fn classifies_p8_vs_other_priority() {
+        let op = operator_override_priority();
+        assert!(is_operator_override(op, op));
+        assert!(!is_operator_override(1, op));
+        assert_eq!(override_kind(op, op), "operator");
+        assert_eq!(override_kind(1, op), "supervisory");
+    }
+
+    #[test]
+    fn registry_roundtrip_persists_scan_state() {
+        let tmp = env::temp_dir().join(format!("openfdd-bacnet-override-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        env::set_var("OPENFDD_WORKSPACE", &tmp);
+        let sample = json!({
+            "last_scan_at": "2026-06-23T00:00:00Z",
+            "last_scanned_device": 5007,
+            "next_device_instance": 5007,
+            "device_count": 1,
+            "operator_priority": 8,
+            "export_row_count": 2,
+            "scan_health": "ok",
+            "summary": {"priority8": 1, "non_priority8": 1, "total": 2}
+        });
+        write_override_registry(&sample);
+        let loaded = read_override_registry();
+        assert_eq!(loaded["last_scanned_device"], 5007);
+        assert_eq!(loaded["export_row_count"], 2);
+        assert!(override_registry_path().exists());
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn export_csv_row_marks_operator_override() {
+        let point = json!({
+            "device_instance": 5007,
+            "address": "192.168.204.200:47808",
+            "device_name": "Bench",
+            "id": "bacnet:5007:analog-output:2466",
+            "name": "ACTUATOR-0",
+            "object_id": [1, 2466],
+            "unit": "%",
+            "value": 55.0
+        });
+        let row = export_csv_row("2026-06-23T00:00:00Z", &point, 8, &json!(55.0), 8);
+        assert_eq!(row[10], "true");
+        assert_eq!(row[11], "operator");
+    }
 }

@@ -37,10 +37,19 @@ curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export/p8 \
 ## Expected workspace files
 
 ```text
+workspace/bacnet/overrides/registry.json
+workspace/bacnet/overrides/overrides_export.csv
 workspace/overrides/bacnet_overrides.csv
 workspace/overrides/bacnet_priority8_overrides.csv
 workspace/overrides/bacnet_non_priority8_overrides.csv
 workspace/overrides/last_scan.json
+```
+
+Environment:
+
+```bash
+OFDD_OVERRIDE_SCAN_INTERVAL_S=3600
+OFDD_OPERATOR_OVERRIDE_PRIORITY=8
 ```
 
 ## Mode honesty

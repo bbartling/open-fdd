@@ -497,15 +497,18 @@ pub fn overrides_status_ui() -> Value {
     json!({
         "ok": true,
         "device_count": device_count,
-        "scan_interval_s": 3600,
-        "full_rotation_hours": device_count.max(1),
-        "operator_priority": 8,
+        "scan_interval_s": bacnet::override_scan_interval_s(),
+        "full_rotation_hours": (device_count.max(1) as f64 * bacnet::override_scan_interval_s() as f64 / 3600.0).ceil() as u64,
+        "operator_priority": scan.get("operator_priority").cloned().unwrap_or(json!(bacnet::operator_override_priority())),
         "operator_override_points": summary.get("priority8").cloned().unwrap_or(json!(0)),
+        "other_override_points": summary.get("non_priority8").cloned().unwrap_or(json!(0)),
         "total_override_points": summary.get("total").cloned().unwrap_or(json!(0)),
-        "last_scan_at": scan.get("last_scan").cloned().unwrap_or(json!(null)),
-        "last_scan_device": scan.get("scanned_device").cloned().unwrap_or(json!(null)),
+        "last_scan_at": scan.get("last_scan_at").cloned().or_else(|| scan.get("last_scan").cloned()).unwrap_or(json!(null)),
+        "last_scan_device": scan.get("last_scanned_device").cloned().or_else(|| scan.get("scanned_device").cloned()).unwrap_or(json!(null)),
         "next_device_instance": scan.get("next_device_instance").cloned().unwrap_or(json!(null)),
-        "export_row_count": summary.get("total").cloned().unwrap_or(json!(0))
+        "export_row_count": scan.get("export_row_count").cloned().unwrap_or(summary.get("total").cloned().unwrap_or(json!(0))),
+        "scan_health": scan.get("scan_health").cloned().unwrap_or(json!("unknown")),
+        "scan_error": scan.get("scan_error").cloned().unwrap_or(json!(null))
     })
 }
 

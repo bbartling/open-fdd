@@ -410,42 +410,45 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let response_body = drivers::bacnet::read_present_value_json(&payload);
             raw_json(&mut stream, &response_body)
         }
-        ("GET", "/api/bacnet/overrides/status") => {
-            json_response(&mut stream, drivers::tree::overrides_status_ui())
-        }
+        ("GET", "/api/bacnet/overrides/status") => require_role(
+            &mut stream,
+            &principal,
+            &["operator", "integrator", "agent"],
+            drivers::tree::overrides_status_ui(),
+        ),
+        ("GET", "/api/bacnet/overrides/summary") => require_role(
+            &mut stream,
+            &principal,
+            &["operator", "integrator", "agent"],
+            drivers::bacnet::overrides_summary_json(),
+        ),
         ("POST", "/api/bacnet/overrides/scan-once") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
             drivers::bacnet::scan_once_value(),
         ),
-        ("GET", "/api/bacnet/overrides/export") => {
-            let body = drivers::bacnet::overrides_csv();
-            response(
-                &mut stream,
-                "200 OK",
-                "text/csv; charset=utf-8",
-                body.as_bytes(),
-            )
-        }
-        ("GET", "/api/bacnet/overrides/export/p8") => {
-            let body = drivers::bacnet::priority8_csv();
-            response(
-                &mut stream,
-                "200 OK",
-                "text/csv; charset=utf-8",
-                body.as_bytes(),
-            )
-        }
-        ("GET", "/api/bacnet/overrides/export/non-p8") => {
-            let body = drivers::bacnet::non_priority8_csv();
-            response(
-                &mut stream,
-                "200 OK",
-                "text/csv; charset=utf-8",
-                body.as_bytes(),
-            )
-        }
+        ("GET", "/api/bacnet/overrides/export") => require_role_csv(
+            &mut stream,
+            &principal,
+            &["operator", "integrator", "agent"],
+            drivers::bacnet::overrides_csv(),
+            "bacnet_overrides_export.csv",
+        ),
+        ("GET", "/api/bacnet/overrides/export/p8") => require_role_csv(
+            &mut stream,
+            &principal,
+            &["operator", "integrator", "agent"],
+            drivers::bacnet::priority8_csv(),
+            "bacnet_priority8_overrides.csv",
+        ),
+        ("GET", "/api/bacnet/overrides/export/non-p8") => require_role_csv(
+            &mut stream,
+            &principal,
+            &["operator", "integrator", "agent"],
+            drivers::bacnet::non_priority8_csv(),
+            "bacnet_non_priority8_overrides.csv",
+        ),
 
         ("POST", "/api/bacnet/write-dry-run") => require_role(
             &mut stream,
