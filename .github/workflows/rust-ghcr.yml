@@ -42,7 +42,11 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
         continue-on-error: true
       - run: cargo test --workspace --all-targets -p open_fdd_edge_prototype
-      - run: node --check frontend/app.js
+      - run: |
+          cd workspace/dashboard
+          npm ci
+          npm run build
+          test -f ../../frontend/index.html
       - run: |
           mkdir -p workspace/bacnet/commissioning
           echo 'OFDD_AUTH_REQUIRED=true' > workspace/auth.env.local
