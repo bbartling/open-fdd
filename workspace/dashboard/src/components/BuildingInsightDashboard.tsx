@@ -40,9 +40,9 @@ export default function BuildingInsightDashboard() {
       const res = await apiFetch<InsightResponse>(`/openfdd-agent/building-insight${qs}`);
       setInsight(res);
       setInsightError("");
-    } catch {
+    } catch (e) {
       setInsight(null);
-      setInsightError("");
+      setInsightError(force ? formatApiError(e) : "");
     } finally {
       setInsightLoading(false);
     }

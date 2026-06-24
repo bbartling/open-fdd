@@ -7,12 +7,12 @@ Open-FDD stores edge credentials in `workspace/auth.env.local` (gitignored). Gen
 **Recommended (no Rust on host):**
 
 ```bash
-./scripts/openfdd_auth_init.sh --show-secrets
+./scripts/openfdd_auth_init.sh
 ```
 
-Uses `openfdd-edge` from your local bridge image or GHCR to write bcrypt hashes to `workspace/auth.env.local`.
+Uses `openfdd-edge` from your local bridge image or GHCR to write bcrypt hashes to `workspace/auth.env.local`. For first-time lab bootstrap only, add `--show-secrets` and save the printed passwords in your password manager (avoid CI logs and shared terminals).
 
-**With Rust toolchain installed:**
+**GHCR-only host (Docker, no source checkout for Rust):**
 
 ```bash
 openfdd-edge auth generate --out workspace/auth.env.local --show-secrets
@@ -24,10 +24,10 @@ Or one-shot security bootstrap (auth + TLS certs):
 openfdd-edge bootstrap security --show-secrets
 ```
 
-**GHCR-only host (no source checkout):**
+**GHCR-only host (Docker, no Rust on host):**
 
 ```bash
-./scripts/openfdd_auth_init.sh --ghcr --force --show-secrets
+./scripts/openfdd_auth_init.sh --ghcr --force
 ```
 
 Generated file includes bcrypt hashes only:

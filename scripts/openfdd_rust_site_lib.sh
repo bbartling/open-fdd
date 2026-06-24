@@ -203,13 +203,14 @@ openfdd_rust_generate_auth_env_local() {
   if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     if ! docker image inspect "$img" >/dev/null 2>&1; then
       img="${OPENFDD_RUST_GHCR_IMAGE:-ghcr.io/bbartling/openfdd-edge-rust:latest}"
-      docker pull "$img" >/dev/null 2>&1 || true
+      docker pull "$img" || return 1
     fi
     if docker image inspect "$img" >/dev/null 2>&1; then
       local dargs=(auth init --path "/app/workspace/$auth_basename")
       [[ "$force" == "true" ]] && dargs+=(--force)
       [[ "$show_secrets" == "true" ]] && dargs+=(--show-secrets)
-      docker run --rm --user "$(id -u):$(id -g)" -v "$ws_root:/app/workspace" "$img" openfdd-edge "${dargs[@]}"
+      docker run --rm --user "$(id -u):$(id -g)" -v "$ws_root:/app/workspace" "$img" openfdd-edge "${dargs[@]}" \
+        || return 1
       chmod 600 "$path" 2>/dev/null || true
       return 0
     fi

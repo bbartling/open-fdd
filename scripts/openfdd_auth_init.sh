@@ -56,7 +56,7 @@ while [[ $# -gt 0 ]]; do
     --show-secrets) SHOW_SECRETS=true; shift ;;
     --rotate)
       ROTATE=true
-      SUBCMD=(auth rotate --path "$AUTH_PATH")
+      SUBCMD=(auth rotate --out "$AUTH_PATH")
       shift
       ;;
     --all) ROTATE_ALL=true; shift ;;
@@ -75,7 +75,7 @@ run_host() {
   if [[ -n "$HASH_PASSWORD" ]]; then
     openfdd-edge "${SUBCMD[@]}"
   elif [[ "$ROTATE" == "true" ]]; then
-    local args=(auth rotate --path "$AUTH_PATH")
+    local args=(auth rotate --out "$AUTH_PATH")
     [[ "$ROTATE_ALL" == "true" ]] && args+=(--all)
     [[ -n "$ROTATE_ROLE" ]] && args+=(--role "$ROTATE_ROLE")
     [[ "$SHOW_SECRETS" == "true" ]] && args+=(--show-secrets)
@@ -97,18 +97,28 @@ run_docker() {
     openfdd-edge "${DOCKER_ARGS[@]}"
 }
 
+resolve_docker_image() {
+  if docker image inspect "$IMAGE" >/dev/null 2>&1; then
+    printf '%s' "$IMAGE"
+    return 0
+  fi
+  echo "==> Local image missing — pulling $GHCR_IMAGE" >&2
+  docker pull "$GHCR_IMAGE"
+  printf '%s' "$GHCR_IMAGE"
+}
+
 if [[ -n "$HASH_PASSWORD" ]]; then
   if command -v openfdd-edge >/dev/null 2>&1; then
     run_host
   else
-    docker pull "$IMAGE" >/dev/null 2>&1 || true
-    docker run --rm "$IMAGE" openfdd-edge auth hash-password "$HASH_PASSWORD"
+    img="$(resolve_docker_image)"
+    docker run --rm "$img" openfdd-edge auth hash-password "$HASH_PASSWORD"
   fi
   exit 0
 fi
 
 if [[ "$ROTATE" == "true" ]]; then
-  DOCKER_ARGS=(auth rotate --path "$CONTAINER_AUTH_PATH")
+  DOCKER_ARGS=(auth rotate --out "$CONTAINER_AUTH_PATH")
   [[ "$ROTATE_ALL" == "true" ]] && DOCKER_ARGS+=(--all)
   [[ -n "$ROTATE_ROLE" ]] && DOCKER_ARGS+=(--role "$ROTATE_ROLE")
   [[ "$SHOW_SECRETS" == "true" ]] && DOCKER_ARGS+=(--show-secrets)
@@ -122,12 +132,9 @@ fi
 
 if command -v openfdd-edge >/dev/null 2>&1; then
   run_host
-elif docker image inspect "$IMAGE" >/dev/null 2>&1; then
-  run_docker "$IMAGE"
 else
-  echo "==> Local image missing — pulling $GHCR_IMAGE"
-  docker pull "$GHCR_IMAGE"
-  run_docker "$GHCR_IMAGE"
+  img="$(resolve_docker_image)"
+  run_docker "$img"
 fi
 
 chmod 600 "$AUTH_PATH" 2>/dev/null || true
