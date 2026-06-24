@@ -43,6 +43,14 @@ pub fn stack_health() -> Value {
     let import_on = protocol_enabled("OPENFDD_IMPORT_ENABLED");
     let export_on = protocol_enabled("OPENFDD_EXPORT_ENABLED");
 
+    let csv_on = import_on || export_on;
+    let csv_detail = match (import_on, export_on) {
+        (true, true) => "Import + export sidecars ready",
+        (true, false) => "Import sidecar ready · export disabled",
+        (false, true) => "Export sidecar ready · import disabled",
+        (false, false) => "Disabled — OPENFDD_IMPORT_ENABLED=0 and OPENFDD_EXPORT_ENABLED=0",
+    };
+
     let services = vec![
         service_status(
             "openfdd-bridge",
@@ -86,26 +94,7 @@ pub fn stack_health() -> Value {
             "JSON API ingest",
             if json_api_on { "Enabled" } else { "Disabled" },
         ),
-        service_status(
-            "csv-import",
-            import_on,
-            "CSV import",
-            if import_on {
-                "Sidecar ready"
-            } else {
-                "Disabled"
-            },
-        ),
-        service_status(
-            "csv-export",
-            export_on,
-            "CSV export",
-            if export_on {
-                "Sidecar ready"
-            } else {
-                "Disabled"
-            },
-        ),
+        service_status("csv-sidecars", csv_on, "CSV sidecars", csv_detail),
         service_status(
             "arrow-datafusion",
             true,

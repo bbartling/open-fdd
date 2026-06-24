@@ -5,6 +5,7 @@ import { DashboardStreamProvider } from "./lib/dashboardStream";
 import AgentPage from "./pages/AgentPage";
 import DriversPage from "./pages/DriversPage";
 import JsonApiPage from "./pages/JsonApiPage";
+import BacnetPage from "./pages/BacnetPage";
 import ModbusPage from "./pages/ModbusPage";
 import DataModelPage from "./pages/DataModelPage";
 import HomePage from "./pages/HomePage";
@@ -37,7 +38,7 @@ export default function App() {
             <Route path="fdd-assignments" element={<Navigate to="/model" replace />} />
             <Route path="plot" element={<TabErrorBoundary tab="plot"><PlotPage /></TabErrorBoundary>} />
             <Route path="drivers" element={<TabErrorBoundary tab="drivers"><DriversPage /></TabErrorBoundary>} />
-            <Route path="bacnet" element={<TabErrorBoundary tab="drivers"><DriversPage /></TabErrorBoundary>} />
+            <Route path="bacnet" element={<TabErrorBoundary tab="bacnet"><BacnetPage /></TabErrorBoundary>} />
             <Route path="modbus" element={<TabErrorBoundary tab="modbus"><ModbusPage /></TabErrorBoundary>} />
             <Route path="json-api" element={<TabErrorBoundary tab="json-api"><JsonApiPage /></TabErrorBoundary>} />
             <Route path="data-management" element={<TabErrorBoundary tab="data-management"><DataManagementPage /></TabErrorBoundary>} />

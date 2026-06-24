@@ -33,6 +33,8 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Integrations",
     items: [
+      { to: "/bacnet", icon: "📡", label: "BACnet", protected: true },
+      { to: "/modbus", icon: "🔌", label: "Modbus", protected: true },
       { to: "/json-api", icon: "🌐", label: "JSON API", protected: true },
       { to: "/data-management", icon: "🗄️", label: "Data management", protected: true },
     ],
