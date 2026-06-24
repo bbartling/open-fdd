@@ -14,7 +14,7 @@ export function buildLlmModelBundle(prompt: string, model: ModelPayload): string
   );
 }
 
-/** Prompt + commissioning export (BRICK + FDD rule bindings). */
+/** Prompt + commissioning export (Haystack + FDD rule bindings). */
 export function buildLlmCommissioningBundle(prompt: string, bundle: Record<string, unknown>): string {
   const json = JSON.stringify(bundle, null, 2);
   return (

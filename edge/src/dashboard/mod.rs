@@ -137,6 +137,24 @@ pub fn building_snapshot() -> Value {
     })
 }
 
+/// Minimal stub until the Python-era building-insight agent is ported.
+pub fn building_insight_stub() -> Value {
+    json!({
+        "ok": true,
+        "generated_at": null,
+        "lookback_days": 14,
+        "device_sentence": null,
+        "device_poll_health": {
+            "healthy_count": 0,
+            "offline_equipment": [],
+            "flaky_equipment": []
+        },
+        "zone_temps": null,
+        "worst_zones": [],
+        "brick_model": { "feeds_chains": [], "equipment_count": 0 }
+    })
+}
+
 pub fn building_status() -> Value {
     let coverage = query::model_coverage();
     let fault_summary = faults::summary_json();

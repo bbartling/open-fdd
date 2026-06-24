@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "./api";
 
-/** Active BRICK site from bridge (`/api/model/sites`), not hard-coded demo. */
+/** Active Haystack site from bridge (`/api/model/sites`), not hard-coded demo. */
 export function useActiveSiteId(fallback = ""): string {
   const [siteId, setSiteId] = useState(fallback);
 

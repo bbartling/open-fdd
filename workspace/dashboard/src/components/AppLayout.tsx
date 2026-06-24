@@ -4,20 +4,53 @@ import { clearToken, fetchAuthMe, fetchAuthStatus, hasToken } from "../lib/api";
 import { useTheme } from "../contexts/theme-context";
 import StackStatusStrip from "./StackStatusStrip";
 
-const NAV = [
-  { to: "/", end: true, icon: "🏠", label: "Building status" },
-  { to: "/drivers", icon: "🌳", label: "Drivers", protected: true },
-  { to: "/live-fdd-validation", icon: "🧪", label: "Live FDD Validation", protected: true },
-  { to: "/sql-fdd", icon: "⚡", label: "SQL FDD Rules", protected: true },
-  { to: "/rule-lab", icon: "🐍", label: "Python Rule Lab", protected: true },
-  { to: "/model", icon: "🧱", label: "Model & assignments", protected: true },
-  { to: "/algorithms", icon: "⚙️", label: "Algorithms", protected: true },
-  { to: "/faults", icon: "🚦", label: "Fault catalog" },
-  { to: "/plot", icon: "📈", label: "Trend plot", protected: true },
-  { to: "/json-api", icon: "🌐", label: "JSON API", protected: true },
-  { to: "/data-management", icon: "🗄️", label: "Data management", protected: true },
-  { to: "/agent", icon: "🤖", label: "AI Agent", protected: true },
-  { to: "/host", icon: "📊", label: "Host stats", protected: true },
+type NavItem = {
+  to: string;
+  end?: boolean;
+  icon: string;
+  label: string;
+  protected?: boolean;
+  disabled?: boolean;
+  disabledHint?: string;
+};
+
+const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
+  {
+    title: "Overview",
+    items: [
+      { to: "/", end: true, icon: "🏠", label: "Building status" },
+      { to: "/live-fdd-validation", icon: "🧪", label: "Live FDD Validation", protected: true },
+    ],
+  },
+  {
+    title: "Data & rules",
+    items: [
+      { to: "/drivers", icon: "🌳", label: "Drivers", protected: true },
+      { to: "/sql-fdd", icon: "⚡", label: "SQL FDD Rules", protected: true },
+      { to: "/plot", icon: "📈", label: "Trend plot", protected: true },
+    ],
+  },
+  {
+    title: "Integrations",
+    items: [
+      { to: "/json-api", icon: "🌐", label: "JSON API", protected: true },
+      { to: "/data-management", icon: "🗄️", label: "Data management", protected: true },
+    ],
+  },
+  {
+    title: "Haystack model",
+    items: [
+      { to: "/model", icon: "📐", label: "Model & assignments", protected: true },
+      { to: "/algorithms", icon: "⚙️", label: "Algorithms", protected: true },
+    ],
+  },
+  {
+    title: "Ops",
+    items: [
+      { to: "/agent", icon: "🤖", label: "AI Agent", protected: true, disabled: true, disabledHint: "Coming soon — Ollama & Codex" },
+      { to: "/host", icon: "📊", label: "Host stats", protected: true },
+    ],
+  },
 ];
 
 export default function AppLayout() {
@@ -78,23 +111,42 @@ export default function AppLayout() {
             </span>
           ) : null}
         </div>
+        <p className="sidebar-hint">Haystack-first operator console</p>
         <StackStatusStrip />
         <nav className="sidebar-nav">
-          {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
-            >
-              <span className="nav-icon">{item.icon}</span>
-              {item.label}
-              {item.protected && authRequired && !signedIn ? (
-                <span className="nav-lock" title="Sign in required">
-                  🔒
-                </span>
-              ) : null}
-            </NavLink>
+          {NAV_SECTIONS.map((section) => (
+            <div key={section.title} className="nav-section">
+              <div className="nav-section-title">{section.title}</div>
+              {section.items.map((item) =>
+                item.disabled ? (
+                  <span
+                    key={item.to}
+                    className="nav-item nav-item-disabled"
+                    title={item.disabledHint ?? "Coming soon"}
+                    aria-disabled="true"
+                  >
+                    <span className="nav-icon">{item.icon}</span>
+                    {item.label}
+                    <span className="nav-soon">Soon</span>
+                  </span>
+                ) : (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
+                  >
+                    <span className="nav-icon">{item.icon}</span>
+                    {item.label}
+                    {item.protected && authRequired && !signedIn ? (
+                      <span className="nav-lock" title="Sign in required">
+                        🔒
+                      </span>
+                    ) : null}
+                  </NavLink>
+                ),
+              )}
+            </div>
           ))}
         </nav>
         {authRequired === null ? null : authRequired && !signedIn ? (

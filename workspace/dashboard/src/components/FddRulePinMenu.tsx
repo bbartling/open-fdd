@@ -116,7 +116,7 @@ export default function FddRulePinMenu({ menu, onClose, onStatus, onChanged, rul
         {busy ? <p className="muted">Updating…</p> : null}
         {error ? <p className="error">{error}</p> : null}
         {!enabledRules.length ? (
-          <p className="dm-context-muted">No enabled rules. Create one in Rule Lab.</p>
+          <p className="dm-context-muted">No enabled rules. Create one in SQL FDD Rules.</p>
         ) : (
           enabledRules.map((r) => (
             <button key={r.id} type="button" role="menuitem" className="context-menu-item" onClick={() => void applyRule(r)}>

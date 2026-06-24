@@ -8,7 +8,7 @@ The generic model query layer (`edge/src/model/query.rs`) powers dashboard analy
 - Group points by equip; group equips by type
 - Count mapped vs unmapped points
 - Source coverage by protocol (BACnet, Modbus, JSON API tags)
-- Future BRICK/RDF adapter hook (optional)
+- Future RDF/SPARQL adapter hook (optional)
 
 ## Data sources
 

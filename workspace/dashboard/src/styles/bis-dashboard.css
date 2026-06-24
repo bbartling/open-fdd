@@ -1,1 +1,653 @@
-/* Building insight dashboard extensions (optional). */
+/* Building insight dashboard — operator home layout */
+
+.content:has(.home-bis) {
+  max-width: none;
+  width: 100%;
+  padding: 24px 32px 40px;
+}
+
+.home-bis {
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+}
+
+.bis-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+}
+
+/* Top summary strip */
+.bis-building-strip {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(4, minmax(120px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.bis-b-name,
+.bis-b-stat {
+  background: var(--panel);
+  padding: 1rem 1.15rem;
+  min-width: 0;
+}
+
+.bis-b-name {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.bis-b-icon {
+  color: var(--primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.bis-b-name h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.bis-b-name p {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.bis-b-stat .label {
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.bis-b-stat .value {
+  margin-top: 0.35rem;
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.bis-b-stat .sub {
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.bis-warn-value {
+  color: var(--warning);
+}
+
+.bis-live-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 1.1rem;
+}
+
+.bis-live-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent);
+}
+
+/* Grid rows */
+.bis-row {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.bis-row-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.bis-row-mt {
+  margin-top: 0;
+}
+
+/* Cards */
+.bis-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.25rem 1.35rem;
+  min-width: 0;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.bis-card h3 {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.bis-card h2 {
+  margin: 0.35rem 0 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.bis-card-sub {
+  margin: 0.5rem 0 0.85rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+  max-width: 58ch;
+  line-height: 1.45;
+}
+
+.bis-card-head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.bis-hint {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* Health index */
+.bis-health-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.bis-overall-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-soft);
+}
+
+.bis-pill-dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.bis-pill-ok .bis-pill-dot {
+  background: var(--ok);
+}
+
+.bis-pill-warning .bis-pill-dot {
+  background: var(--warning);
+}
+
+.bis-pill-critical .bis-pill-dot {
+  background: var(--danger);
+}
+
+.bis-pill-txt {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.bis-pill-grade {
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.bis-pill-ok .bis-pill-grade {
+  color: var(--ok);
+}
+
+.bis-pill-warning .bis-pill-grade {
+  color: var(--warning);
+}
+
+.bis-pill-critical .bis-pill-grade {
+  color: var(--danger);
+}
+
+.bis-gauge-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.bis-gauge {
+  text-align: center;
+  padding: 0.5rem 0.25rem;
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+
+.bis-gauge-ring {
+  position: relative;
+  width: 90px;
+  height: 90px;
+  margin: 0 auto;
+}
+
+.bis-ring-bg {
+  stroke: var(--border);
+}
+
+.bis-gauge-score {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.bis-gauge-label {
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.bis-gauge-delta {
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.bis-insight-one-liner {
+  margin: 1rem 0 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary) 8%, var(--panel-soft));
+  border-left: 3px solid var(--primary);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+/* Comfort panel */
+.bis-comfort-card .bis-lead {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.bis-lead {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.bis-muted-line {
+  margin: 0.35rem 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.bis-ok-text {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.bis-zone-table-wrap {
+  margin-top: 0.75rem;
+  overflow-x: auto;
+}
+
+.bis-zone-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.bis-zone-table th,
+.bis-zone-table td {
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.bis-zone-table th {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.bis-opp-list {
+  margin: 0.85rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.86rem;
+}
+
+.bis-opp-list li {
+  margin-bottom: 0.45rem;
+}
+
+.bis-opp-list strong {
+  display: block;
+  text-transform: capitalize;
+}
+
+.bis-opp-list span {
+  color: var(--muted);
+}
+
+/* Fault cards */
+.bis-fault-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.bis-fault {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-soft);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  font: inherit;
+  color: inherit;
+}
+
+.bis-fault:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.bis-fault-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.bis-severity-pill {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+}
+
+.bis-sev-critical {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+
+.bis-sev-high {
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
+  color: var(--warning);
+}
+
+.bis-sev-medium {
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+  color: var(--primary);
+}
+
+.bis-sev-low {
+  background: var(--panel);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.bis-fault-eq {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.bis-fault-title {
+  font-weight: 650;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.bis-fault-desc {
+  margin-top: 0.3rem;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+.bis-fault-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+}
+
+.bis-fault-meta-label {
+  color: var(--muted);
+}
+
+.bis-linked-faults {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.86rem;
+}
+
+.bis-code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--primary);
+}
+
+.bis-foot-meta {
+  margin: 1rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* Buttons */
+.bis-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.bis-btn-secondary {
+  background: var(--panel-soft);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.bis-btn-secondary:hover {
+  background: var(--nav-hover-bg);
+}
+
+.bis-btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.bis-btn-primary:hover {
+  background: var(--primary-strong);
+}
+
+.bis-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Modal */
+.bis-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: color-mix(in srgb, var(--text) 35%, transparent);
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+.bis-modal {
+  width: min(560px, 96vw);
+  max-height: min(85vh, 720px);
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px color-mix(in srgb, var(--text) 25%, transparent);
+}
+
+.bis-modal-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.bis-modal-head-text h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.bis-modal-eq {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
+
+.bis-modal-close {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 0 0.25rem;
+}
+
+.bis-modal-body {
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.bis-modal-section {
+  margin-bottom: 1rem;
+}
+
+.bis-modal-section h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.bis-modal-section p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.bis-modal-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.88rem;
+}
+
+.bis-technical {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  background: var(--panel-soft);
+  font-size: 0.78rem;
+  overflow-x: auto;
+}
+
+.bis-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0;
+}
+
+.bis-meta-grid dt {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bis-meta-grid dd {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+}
+
+.bis-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 1100px) {
+  .bis-building-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bis-b-name {
+    grid-column: 1 / -1;
+  }
+
+  .bis-row-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .bis-gauge-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .content:has(.home-bis) {
+    padding: 16px;
+  }
+
+  .bis-building-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .bis-gauge-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bis-card-head-row {
+    flex-direction: column;
+  }
+}

@@ -15,7 +15,7 @@ type Props = {
   queryEngine?: string;
 };
 
-/** Site / equipment / sensor from BRICK model SPARQL scope API. */
+/** Site / equipment / sensor from Haystack model scope API. */
 export default function ModelScopePicker({
   sites,
   siteId,

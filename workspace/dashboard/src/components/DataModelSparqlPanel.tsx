@@ -94,7 +94,7 @@ export default function DataModelSparqlPanel({ onStatus }: Props) {
   return (
     <div className="dm-sparql panel">
       <p className="muted">
-        Run predefined summary queries or paste your own SPARQL against the synced BRICK + BACnet graph (
+        Run predefined summary queries or paste your own SPARQL against the synced Haystack + BACnet graph (
         <code>data_model.ttl</code>). Read-only SELECT queries only.
       </p>
 

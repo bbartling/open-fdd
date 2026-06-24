@@ -375,7 +375,7 @@ pub fn validate_scope_json(site_id: Option<&str>) -> Value {
     json!({
         "ok": true,
         "site_id": site_id.unwrap_or("site:demo"),
-        "validation": "Haystack model scope validated locally (Ollama optional). BRICK/SPARQL not required.",
+        "validation": "Haystack model scope validated locally (Ollama optional). SPARQL optional.",
         "ollama_error": Value::Null
     })
 }

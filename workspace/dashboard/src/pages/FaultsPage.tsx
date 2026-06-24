@@ -167,7 +167,7 @@ export default function FaultsPage() {
         title="Fault catalog"
         subtitle={
           <>
-            Scoped to your BRICK data model via SPARQL — only families that match modeled equipment (AHU, VAV/FCU,
+            Scoped to your Haystack model — only families that match modeled equipment (AHU, VAV/FCU,
             heat pump, chiller, …) are shown. Assigned Rule Lab rules with catalog codes appear below. Ollama validates
             scope against the live model.
           </>
@@ -238,7 +238,7 @@ export default function FaultsPage() {
       {!loading && tree && !tree.model_configured ? (
         <div className="panel">
           <p className="muted">
-            No BRICK equipment found for this site. Import or model equipment on{" "}
+            No Haystack equipment found for this site. Import or model equipment on{" "}
             <Link to="/model">Model & assignments</Link> commissioning JSON to pin rules to points.
           </p>
         </div>
@@ -288,7 +288,7 @@ export default function FaultsPage() {
             <strong>Unmatched equipment</strong>
             <span className="badge">{tree.unmatched_equipment.length}</span>
             <span className="muted" style={{ marginLeft: 8 }}>
-              — no catalog family (set BRICK equipment_type on Data Model)
+              — no catalog family (set Haystack equipment_type on Data Model)
             </span>
           </summary>
           <ul>

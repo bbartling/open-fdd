@@ -136,7 +136,7 @@ function groupFddInput(alerts: FaultAlert[]): DisplayFault | null {
     ],
     underlying: [hit],
     plainEnglish:
-      "Many BRICK points do not have an fdd_input alias. Python rules that reference a different column name than brick_type will not evaluate until those aliases are set on the Data Model tab.",
+      "Many Haystack points do not have an fdd_input alias. Python rules that reference a different column name than brick_type will not evaluate until those aliases are set on the Data Model tab.",
     technical: hit.detail || hit.title,
   };
 }

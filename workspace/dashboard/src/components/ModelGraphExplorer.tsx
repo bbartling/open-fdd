@@ -43,7 +43,7 @@ export default function ModelGraphExplorer({ siteId, onStatus, refreshKey = 0 }:
     const el = networkChartRef.current?.querySelector(".dm-network-chart") as HTMLDivElement | null;
     try {
       await downloadBrickNetworkPng(el);
-      onStatus?.("Downloaded BRICK network graph PNG");
+      onStatus?.("Downloaded Haystack network graph PNG");
     } catch (e) {
       setError(formatApiError(e));
     }
@@ -54,7 +54,7 @@ export default function ModelGraphExplorer({ siteId, onStatus, refreshKey = 0 }:
       <section className="dm-network-section panel">
         <div className="dm-network-head">
           <div>
-            <h3 className="panel-title">BRICK network</h3>
+            <h3 className="panel-title">Haystack network</h3>
             <p className="muted dm-network-sub">
               Equipment <strong>feeds</strong> relationships and BACnet points on the model. Pin FDD rules per device on{" "}
               <a href="/model">Model & assignments</a> commissioning JSON.
@@ -86,7 +86,7 @@ export default function ModelGraphExplorer({ siteId, onStatus, refreshKey = 0 }:
 
         <div ref={networkChartRef} className="dm-network-wrap">
           {loading && !graph?.equipment?.length ? (
-            <Spinner label="Building BRICK network graph…" />
+            <Spinner label="Building Haystack network graph…" />
           ) : (
             <BrickNetworkGraph graph={graph} height={640} layoutMode="spring" />
           )}

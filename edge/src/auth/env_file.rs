@@ -38,8 +38,11 @@ pub fn load_env_file(path: &Path) -> std::io::Result<HashMap<String, String>> {
 pub fn apply_env_file(path: &Path) {
     if let Ok(map) = load_env_file(path) {
         for (k, v) in map {
-            if std::env::var(&k).is_err() {
-                std::env::set_var(k, v);
+            // Workspace auth file wins — docker env_file may mangle bcrypt `$` sequences.
+            if k.starts_with("OFDD_") || k.starts_with("OPENFDD_") {
+                std::env::set_var(&k, v);
+            } else if std::env::var(&k).is_err() {
+                std::env::set_var(&k, v);
             }
         }
     }

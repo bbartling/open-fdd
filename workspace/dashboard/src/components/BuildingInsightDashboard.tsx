@@ -24,6 +24,7 @@ type BuildingStatusResponse = {
 
 const INSIGHT_POLL_MS = 15 * 60 * 1000;
 
+/** Insight agent is optional; only fetch on operator request to avoid 404 noise on older bridges. */
 export default function BuildingInsightDashboard() {
   const { snapshot, error: streamError, live } = useDashboardStream();
   const [insight, setInsight] = useState<InsightResponse | null>(null);
@@ -39,18 +40,19 @@ export default function BuildingInsightDashboard() {
       const res = await apiFetch<InsightResponse>(`/openfdd-agent/building-insight${qs}`);
       setInsight(res);
       setInsightError("");
-    } catch (e) {
-      setInsightError(formatApiError(e));
+    } catch {
+      setInsight(null);
+      setInsightError("");
     } finally {
       setInsightLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadInsight(false);
+    if (!insight) return;
     const t = window.setInterval(() => void loadInsight(false), INSIGHT_POLL_MS);
     return () => window.clearInterval(t);
-  }, [loadInsight]);
+  }, [loadInsight, insight]);
 
   useEffect(() => {
     apiFetch<BuildingStatusResponse>("/api/building/status")
@@ -143,7 +145,7 @@ export default function BuildingInsightDashboard() {
           <h2>Building insight</h2>
           <p className="muted">No building model configured yet.</p>
           <p className="muted">
-            Import a BRICK model under <Link to="/model">Model & assignments</Link> to enable fault
+            Import a Haystack model under <Link to="/model">Model & assignments</Link> to enable fault
             detection and comfort analytics.
           </p>
         </div>
@@ -168,7 +170,7 @@ export default function BuildingInsightDashboard() {
         activeFaults={sevCounts.total}
         faultBreakdown={faultBreakdown}
         live={live}
-        lastSyncLabel={live ? "WebSocket" : "HTTP poll"}
+        lastSyncLabel="HTTP poll · 15s"
       />
 
       <div className="bis-row bis-row-2">
@@ -225,7 +227,7 @@ export default function BuildingInsightDashboard() {
               disabled={insightLoading}
               onClick={() => void loadInsight(true)}
             >
-              {insightLoading ? "Refreshing…" : "Refresh insight"}
+              {insightLoading ? "Loading…" : insight ? "Refresh insight" : "Load insight"}
             </button>
           </div>
           {displayFaults.length ? (
@@ -235,7 +237,12 @@ export default function BuildingInsightDashboard() {
               ))}
             </div>
           ) : (
-            <p className="bis-lead bis-ok-text">All clear — no open faults or model warnings.</p>
+            <p className="bis-lead bis-ok-text">
+              All clear — no open faults or model warnings.
+              {!insight ? (
+                <span className="muted"> Use Load insight for comfort analytics when the agent is enabled.</span>
+              ) : null}
+            </p>
           )}
         </div>
 
@@ -244,7 +251,7 @@ export default function BuildingInsightDashboard() {
           <h2>Feeds &amp; research</h2>
           {insight?.brick_model?.feeds_chains?.length ? (
             <p className="bis-muted-line">
-              <strong>BRICK feeds:</strong> {insight.brick_model.feeds_chains.slice(0, 5).join("; ")}
+              <strong>Haystack feeds:</strong> {insight.brick_model.feeds_chains.slice(0, 5).join("; ")}
               {(insight.brick_model.feeds_chains.length ?? 0) > 5 ? " …" : ""}
             </p>
           ) : (
@@ -277,7 +284,7 @@ export default function BuildingInsightDashboard() {
               : ""}
           </p>
           {insight?.error && !insight.ollama_ok ? (
-            <p className="muted">Ollama offline — deterministic summary. Chat on Agent tab.</p>
+            <p className="muted">Ollama offline — deterministic summary only.</p>
           ) : null}
           {insightError ? <p className="error">{insightError}</p> : null}
         </div>

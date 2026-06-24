@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { apiFetch, fetchWsTicket, getBridgeBase, hasToken } from "./api";
+import { apiFetch, hasToken } from "./api";
 import type { Traffic } from "../components/TrafficLight";
 
 export type ServiceStatus = "green" | "yellow" | "red" | "gray";
@@ -87,20 +87,6 @@ const DashboardStreamContext = createContext<DashboardStreamValue>({
   live: false,
 });
 
-function wsBaseUrl(): string {
-  const base = getBridgeBase();
-  if (base) {
-    const parsed = new URL(base);
-    parsed.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
-    parsed.pathname = "/ws/dashboard";
-    parsed.search = "";
-    parsed.hash = "";
-    return parsed.toString();
-  }
-  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${window.location.host}/ws/dashboard`;
-}
-
 async function fetchSnapshot(authenticated: boolean): Promise<DashboardSnapshot> {
   if (!authenticated) {
     const snap = await apiFetch<DashboardSnapshot & { ok?: boolean }>("/api/building/snapshot");
@@ -130,13 +116,10 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
 
   useEffect(() => {
     let cancelled = false;
-    let ws: WebSocket | null = null;
     let pollId = 0;
-    let gotData = false;
 
     const apply = (data: DashboardSnapshot) => {
       if (!cancelled) {
-        gotData = true;
         setSnapshot(data);
         setError("");
       }
@@ -150,59 +133,13 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
         });
     };
 
-    const startPolling = () => {
-      setLive(false);
-      if (!pollId) {
-        poll();
-        pollId = window.setInterval(poll, pollMs);
-      }
-    };
-
-    const connectWs = async () => {
-      if (cancelled) return;
-      const ticket = await fetchWsTicket();
-      if (cancelled) return;
-      try {
-        const url = new URL(wsBaseUrl());
-        ws = ticket
-          ? new WebSocket(url.toString(), ["ofdd.ws", ticket])
-          : new WebSocket(url.toString());
-        ws.onopen = () => {
-          if (!cancelled) setLive(true);
-        };
-        ws.onmessage = (ev) => {
-          try {
-            apply(JSON.parse(ev.data) as DashboardSnapshot);
-          } catch {
-            /* ignore malformed frame */
-          }
-        };
-        ws.onerror = () => ws?.close();
-        ws.onclose = () => {
-          if (!cancelled) startPolling();
-        };
-      } catch {
-        if (!cancelled) startPolling();
-      }
-    };
-
-    if (authenticated) {
-      void connectWs();
-    } else {
-      startPolling();
-    }
-
-    const fallbackTimer = authenticated
-      ? window.setTimeout(() => {
-          if (!cancelled && !gotData) startPolling();
-        }, 2500)
-      : 0;
+    poll();
+    pollId = window.setInterval(poll, pollMs);
+    setLive(false);
 
     return () => {
       cancelled = true;
-      ws?.close();
       window.clearInterval(pollId);
-      if (fallbackTimer) window.clearTimeout(fallbackTimer);
     };
   }, [pollMs, authenticated]);
 

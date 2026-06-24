@@ -25,6 +25,6 @@ Public: `GET /api/building/snapshot` (unauthenticated snapshot for login page).
 - **Fault coverage** — active/confirmed/raw faults from DataFusion rules
 - **BACnet overrides** — priority 8 and other counts when BACnet enabled
 
-BRICK/SPARQL import remains optional legacy; it is not required for dashboard analytics.
+Legacy RDF import remains optional; Haystack JSON is the primary model path for dashboard analytics.
 
 See [modeling/haystack_dashboard_model.md](../modeling/haystack_dashboard_model.md).

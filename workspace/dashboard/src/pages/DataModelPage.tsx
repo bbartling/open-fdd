@@ -59,7 +59,7 @@ export default function DataModelPage() {
       await copyToClipboard(buildLlmCommissioningBundle(MODEL_COMMISSIONING_PROMPT, bundle));
       setCopiedKey("llm");
       window.setTimeout(() => setCopiedKey(""), 2000);
-      setOut("Copied LLM prompt + commissioning JSON (BRICK + FDD assignments) — paste into your chat session.");
+      setOut("Copied LLM prompt + commissioning JSON (Haystack + FDD assignments) — paste into your chat session.");
     } catch (error) {
       setOut(`Copy failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
@@ -74,7 +74,7 @@ export default function DataModelPage() {
         apiFetchText("/api/model/ttl?save=false", { headers: { Accept: "text/turtle" } }),
       );
       if (err) setOut(`TTL: ${err}`);
-      else setOut("Opened BRICK TTL in a new browser tab.");
+      else setOut("Opened Haystack TTL in a new browser tab.");
     } finally {
       setTtlLoading(false);
     }
@@ -100,7 +100,7 @@ export default function DataModelPage() {
         subtitle={
           <>
             Site <code>{activeSiteId || "…"}</code> · {eqCount} equipment · {pointCount} points · {ruleCount} rules ·{" "}
-            {boundPoints} bound points · edit BRICK + rule pins via commissioning JSON (Import / export tab)
+            {boundPoints} bound points · edit Haystack + rule pins via commissioning JSON (Import / export tab)
           </>
         }
       />
@@ -149,7 +149,7 @@ export default function DataModelPage() {
           <p className="muted panel">
             BACnet poll → model sync keeps <code>model.json</code> aligned with live polling. Pin FDD rules by editing{" "}
             <code>points[].fdd_rule_ids</code> in the <strong>Import / export</strong> tab (or ask your AI agent to
-            return commissioning JSON). Rule Lab edits Python only — assignments live in this JSON workflow. Trend
+            return commissioning JSON). SQL FDD rules and assignments live in this JSON workflow. Trend
             context: <a href="/plot">Trend plot</a>.
           </p>
         </>
@@ -160,7 +160,7 @@ export default function DataModelPage() {
       {activeTab === "advanced" ? (
         <div className="dm-advanced panel">
           <p className="muted">
-            <strong>Copy prompt + commissioning JSON for LLM</strong> bundles BRICK redesign instructions with live
+            <strong>Copy prompt + commissioning JSON for LLM</strong> bundles Haystack redesign instructions with live
             export including <code>fdd_rules</code> and per-point <code>fdd_rule_ids</code>.
           </p>
           <div className="row">

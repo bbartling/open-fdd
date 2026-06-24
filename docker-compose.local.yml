@@ -20,19 +20,21 @@ services:
     container_name: openfdd-bridge
     ports:
       - "127.0.0.1:8080:8080"
-    env_file:
-      - ./workspace/auth.env.local
+    # Auth is read at runtime from OPENFDD_WORKSPACE/auth.env.local (do not use env_file —
+    # Docker Compose mangles bcrypt `$` in hash values).
     volumes:
       - ./workspace:/app/workspace
       - ./frontend:/app/frontend:ro
     environment:
+      OPENFDD_RUN_UID: ${OPENFDD_RUN_UID:-1000}
+      OPENFDD_RUN_GID: ${OPENFDD_RUN_GID:-1000}
       SERVICE_MODE: bridge
       PORT: "8080"
       FRONTEND_DIR: /app/frontend
       OPENFDD_WORKSPACE: /app/workspace
-      OPENFDD_BACNET_ENABLED: ${OPENFDD_BACNET_ENABLED:-0}
+      OPENFDD_BACNET_ENABLED: ${OPENFDD_BACNET_ENABLED:-1}
       OPENFDD_MODBUS_ENABLED: ${OPENFDD_MODBUS_ENABLED:-0}
-      OPENFDD_HAYSTACK_ENABLED: ${OPENFDD_HAYSTACK_ENABLED:-0}
+      OPENFDD_HAYSTACK_ENABLED: ${OPENFDD_HAYSTACK_ENABLED:-1}
       OPENFDD_JSON_API_ENABLED: ${OPENFDD_JSON_API_ENABLED:-1}
       OPENFDD_IMPORT_ENABLED: ${OPENFDD_IMPORT_ENABLED:-1}
       OPENFDD_EXPORT_ENABLED: ${OPENFDD_EXPORT_ENABLED:-1}
@@ -41,3 +43,4 @@ services:
         limits:
           memory: 512M
     restart: unless-stopped
+    user: "${OPENFDD_RUN_UID:-1000}:${OPENFDD_RUN_GID:-1000}"
