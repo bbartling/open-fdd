@@ -122,8 +122,7 @@ fn run_generate(path: PathBuf, force: bool, show_secrets: bool) -> std::io::Resu
     print_env_summary(&result.contents, show_secrets);
     print_generated_credentials(&result.plaintext_passwords, show_secrets);
     if show_secrets {
-        if let Some(handoff) =
-            write_bootstrap_credentials_once(&path, &result.plaintext_passwords)?
+        if let Some(handoff) = write_bootstrap_credentials_once(&path, &result.plaintext_passwords)?
         {
             eprintln!(
                 "wrote one-time credential handoff {} (delete after saving passwords)",
@@ -165,10 +164,9 @@ fn main() -> std::io::Result<()> {
                 print_env_summary(&result.contents, show_secrets);
                 print_generated_credentials(&result.plaintext_passwords, show_secrets);
                 if show_secrets {
-                    if let Some(handoff) = write_bootstrap_credentials_once(
-                        &path,
-                        &result.plaintext_passwords,
-                    )? {
+                    if let Some(handoff) =
+                        write_bootstrap_credentials_once(&path, &result.plaintext_passwords)?
+                    {
                         eprintln!(
                             "wrote one-time credential handoff {} (delete after saving passwords)",
                             handoff.display()

@@ -20,7 +20,10 @@ pub fn save_haystack_grid(grid: &Value) -> std::io::Result<PathBuf> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::write(&path, serde_json::to_string_pretty(grid).unwrap_or_else(|_| "{}".into()))?;
+    fs::write(
+        &path,
+        serde_json::to_string_pretty(grid).unwrap_or_else(|_| "{}".into()),
+    )?;
     Ok(path)
 }
 

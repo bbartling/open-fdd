@@ -310,13 +310,13 @@ pub fn write_bootstrap_credentials_once(
     if passwords.is_empty() {
         return Ok(None);
     }
-    let workspace = auth_path
-        .parent()
-        .unwrap_or_else(|| Path::new("workspace"));
+    let workspace = auth_path.parent().unwrap_or_else(|| Path::new("workspace"));
     let handoff = workspace.join("bootstrap_credentials.once.txt");
     let mut lines = vec![
-        "# Open-FDD one-time bootstrap credentials — DELETE after saving to your password manager.".to_string(),
-        "# Do NOT commit this file. Do NOT paste bcrypt hashes from auth.env.local as passwords.".to_string(),
+        "# Open-FDD one-time bootstrap credentials — DELETE after saving to your password manager."
+            .to_string(),
+        "# Do NOT commit this file. Do NOT paste bcrypt hashes from auth.env.local as passwords."
+            .to_string(),
         format!("# Generated: {}", chrono::Utc::now().to_rfc3339()),
         String::new(),
     ];
