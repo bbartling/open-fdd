@@ -39,7 +39,10 @@ pub fn purge_jobs_dir() -> PathBuf {
 
 fn parse_filter(body: &Value) -> PurgeFilter {
     PurgeFilter {
-        site_id: body.get("site_id").and_then(|v| v.as_str()).map(str::to_string),
+        site_id: body
+            .get("site_id")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
         building_id: body
             .get("building_id")
             .and_then(|v| v.as_str())
@@ -72,13 +75,10 @@ fn parse_filter(body: &Value) -> PurgeFilter {
             .get("import_job_id")
             .and_then(|v| v.as_str())
             .map(str::to_string),
-        validation_run: body
-            .get("validation_run_id")
-            .is_some()
+        validation_run: body.get("validation_run_id").is_some()
             || body.get("validation_run").and_then(|v| v.as_bool()) == Some(true),
         historian_subdir: body
             .get("historian_subdir")
-            .or_else(|| body.get("validation_run_id").map(|_| &json!("validation")))
             .and_then(|v| v.as_str())
             .map(str::to_string)
             .or_else(|| {
@@ -218,7 +218,10 @@ pub fn storage_summary() -> Value {
 
 pub fn preview_purge(body: &Value) -> Value {
     let filter = parse_filter(body);
-    let dry_run = body.get("dry_run").and_then(|v| v.as_bool()).unwrap_or(true);
+    let dry_run = body
+        .get("dry_run")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
     let mut matched_rows = 0usize;
     let mut matched_files = 0usize;
     let mut matched_bytes = 0u64;
@@ -229,10 +232,7 @@ pub fn preview_purge(body: &Value) -> Value {
 
     for sub in &subdirs {
         let rows = store::load_rows_in(sub).unwrap_or_default();
-        let matched: Vec<_> = rows
-            .iter()
-            .filter(|r| row_matches(r, &filter))
-            .collect();
+        let matched: Vec<_> = rows.iter().filter(|r| row_matches(r, &filter)).collect();
         if matched.is_empty() {
             continue;
         }
@@ -311,7 +311,10 @@ pub fn execute_purge(body: &Value, role: &str) -> Value {
             "error": format!("confirmation phrase required: {CONFIRM_PHRASE}")
         });
     }
-    let dry_run = body.get("dry_run").and_then(|v| v.as_bool()).unwrap_or(false);
+    let dry_run = body
+        .get("dry_run")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let preview = preview_purge(body);
     if preview.get("matched_row_count").and_then(|v| v.as_u64()) == Some(0) {
         return json!({"ok": false, "error": "no rows matched", "preview": preview});

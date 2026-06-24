@@ -778,10 +778,7 @@ fn handle_data_management_dynamic(
     path: &str,
 ) -> Option<std::io::Result<()>> {
     let parts = path_parts(path);
-    if parts.len() != 5
-        || parts[0] != "api"
-        || parts[1] != "data-management"
-        || parts[2] != "purge"
+    if parts.len() != 5 || parts[0] != "api" || parts[1] != "data-management" || parts[2] != "purge"
     {
         return None;
     }

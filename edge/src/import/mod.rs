@@ -145,9 +145,7 @@ pub fn preview_job(job_id: &str) -> Value {
         Ok(f) => f,
         Err(err) => return json!({"ok": false, "error": err.to_string()}),
     };
-    let mut rdr = csv::ReaderBuilder::new()
-        .flexible(true)
-        .from_reader(file);
+    let mut rdr = csv::ReaderBuilder::new().flexible(true).from_reader(file);
     let headers = rdr.headers().ok().cloned().unwrap_or_default();
     let columns: Vec<String> = headers.iter().map(str::to_string).collect();
     let mut sample_rows = Vec::new();
@@ -212,9 +210,7 @@ pub fn commit_job(job_id: &str) -> Value {
         Ok(f) => f,
         Err(err) => return json!({"ok": false, "error": err.to_string()}),
     };
-    let mut rdr = csv::ReaderBuilder::new()
-        .flexible(true)
-        .from_reader(file);
+    let mut rdr = csv::ReaderBuilder::new().flexible(true).from_reader(file);
     let mut line = 1u64;
     for result in rdr.records() {
         line += 1;
@@ -233,9 +229,8 @@ pub fn commit_job(job_id: &str) -> Value {
             continue;
         }
         if record.len() < 3 {
-            let msg = format!(
-                "line {line}: expected timestamp,equipment_id,oa_t[,oa_h,duct_t,zn_t]"
-            );
+            let msg =
+                format!("line {line}: expected timestamp,equipment_id,oa_t[,oa_h,duct_t,zn_t]");
             let mut updated = job.clone();
             updated["status"] = json!("failed");
             updated["error"] = json!(msg);

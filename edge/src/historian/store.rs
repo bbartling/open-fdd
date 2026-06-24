@@ -32,10 +32,7 @@ pub fn historian_dir_for_subdir(subdir: &str) -> PathBuf {
 }
 
 pub fn valid_subdir(subdir: &str) -> bool {
-    !subdir.is_empty()
-        && !subdir.contains("..")
-        && !subdir.contains('/')
-        && !subdir.contains('\\')
+    !subdir.is_empty() && !subdir.contains("..") && !subdir.contains('/') && !subdir.contains('\\')
 }
 
 pub fn list_historian_subdirs() -> Vec<String> {
