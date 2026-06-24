@@ -95,7 +95,10 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
     if method == "GET" && clean_path == "/api/building/snapshot" {
         return json_response(&mut stream, dashboard::building_snapshot());
     }
-    if method == "GET" && !clean_path.starts_with("/api/") && !clean_path.starts_with("/openfdd-agent/") {
+    if method == "GET"
+        && !clean_path.starts_with("/api/")
+        && !clean_path.starts_with("/openfdd-agent/")
+    {
         return static_file(&mut stream, frontend, &clean_path);
     }
 
