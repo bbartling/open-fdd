@@ -6,6 +6,7 @@ mod fdd;
 mod historian;
 mod model;
 mod ops;
+mod validation;
 
 use auth::audit;
 use auth::auth_config;
@@ -392,18 +393,53 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/json-api/sources") => {
             raw_json(&mut stream, drivers::json_api::sources_json())
         }
-        ("POST", "/api/json-api/poll-once") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            drivers::json_api::poll_test_source(),
-        ),
+        ("POST", "/api/json-api/poll-once") => {
+            require_role(&mut stream, &principal, &["integrator", "agent"], {
+                let payload = serde_json::from_str::<Value>(&body).unwrap_or(json!({}));
+                if let Some(url) = payload.get("url").and_then(|v| v.as_str()) {
+                    drivers::json_api::poll_url(url)
+                } else {
+                    drivers::json_api::poll_test_source()
+                }
+            })
+        }
         ("POST", "/api/json-api/register") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
             serde_json::from_str::<Value>(drivers::json_api::register_json()).unwrap(),
         ),
+        ("GET", "/api/historian/validation/status") => {
+            json_response(&mut stream, historian::store::status_json())
+        }
+        ("GET", "/api/validation-runs/current/status") => {
+            json_response(&mut stream, bench::smoke::status_json())
+        }
+        ("POST", "/api/validation-runs/current/sample") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            bench::smoke::capture_sample(&serde_json::from_str(&body).unwrap_or(json!({}))),
+        ),
+        ("POST", "/api/validation-runs/current/eval") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            bench::smoke::evaluate_historian_fdd(),
+        ),
+        ("POST", "/api/validation-runs/current/cycle") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            bench::smoke::evaluate_sample(&serde_json::from_str(&body).unwrap_or(json!({}))),
+        ),
+        ("POST", "/api/validation-runs/current/inject-scenario") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            bench::smoke::inject_scenario(&serde_json::from_str(&body).unwrap_or(json!({}))),
+        ),
+        // Deprecated aliases — remove after downstream scripts migrate.
         ("GET", "/api/historian/bench/5007/status") => {
             json_response(&mut stream, historian::store::status_json())
         }

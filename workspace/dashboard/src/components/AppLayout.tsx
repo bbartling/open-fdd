@@ -7,7 +7,7 @@ import StackStatusStrip from "./StackStatusStrip";
 const NAV = [
   { to: "/", end: true, icon: "🏠", label: "Building status" },
   { to: "/drivers", icon: "🌳", label: "Drivers", protected: true },
-  { to: "/bench-5007", icon: "🧪", label: "Bench 5007 FDD", protected: true },
+  { to: "/live-fdd-validation", icon: "🧪", label: "Live FDD Validation", protected: true },
   { to: "/sql-fdd", icon: "⚡", label: "SQL FDD Rules", protected: true },
   { to: "/rule-lab", icon: "🐍", label: "Python Rule Lab", protected: true },
   { to: "/model", icon: "🧱", label: "Model & assignments", protected: true },

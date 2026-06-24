@@ -139,7 +139,7 @@ fn default_oa_rule() -> Value {
         "equipment_types": ["ahu", "bench"],
         "required_inputs": ["oa_t"],
         "optional_inputs": [],
-        "sql": "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t IS NULL THEN false WHEN oa_t < 40.0 THEN true WHEN oa_t > 110.0 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = '5007'",
+        "sql": "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t IS NULL THEN false WHEN oa_t < 40.0 THEN true WHEN oa_t > 110.0 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = 'equip:validation'",
         "builder_config": {"input":"oa_t","operator":"range","low":40,"high":110},
         "confirmation_seconds": 300,
         "clear_behavior": "immediate",

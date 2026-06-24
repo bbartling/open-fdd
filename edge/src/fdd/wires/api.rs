@@ -118,7 +118,7 @@ pub fn test_graph(site_id: &str, graph_id: &str) -> Value {
         .and_then(|c| c.get("sql"))
         .and_then(|v| v.as_str())
         .unwrap_or(
-            "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t IS NULL THEN false WHEN oa_t < 40.0 OR oa_t > 110.0 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = '5007'",
+            "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t IS NULL THEN false WHEN oa_t < 40.0 OR oa_t > 110.0 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = 'equip:validation'",
         );
     let exec = execution::run_rule_sql(sql, confirm_secs, &json!({}));
     json!({

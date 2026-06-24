@@ -191,7 +191,7 @@ jobs:
           curl -fsS http://127.0.0.1:8080/api/fdd-wires/graphs?site_id=site:demo \
             -H "Authorization: Bearer $INT" | jq -e '.ok == true'
 
-          curl -fsS http://127.0.0.1:8080/api/fdd-wires/graphs/graph:bench-5007-fdd?site_id=site:demo \
+          curl -fsS http://127.0.0.1:8080/api/fdd-wires/graphs/graph:live-fdd-validation?site_id=site:demo \
             -H "Authorization: Bearer $INT" | jq -e '.graph.nodes | length >= 4'
 
           curl -fsS -X POST http://127.0.0.1:8080/api/fdd-wires/propose-assignments \
@@ -200,7 +200,7 @@ jobs:
 
           curl -fsS -X POST http://127.0.0.1:8080/api/fdd-rules/oa_temp_out_of_range/test-sql \
             -H "Authorization: Bearer $INT" -H 'Content-Type: application/json' \
-            -d '{"sql":"SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t > 110.0 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = '\''5007'\''","confirmation_seconds":300}' \
+            -d '{"sql":"SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t > 110.0 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = '\''equip:validation'\''","confirmation_seconds":300}' \
             | jq -e '.ok == true and (.engine | type == "string") and (.engine | contains("DataFusion"))'
 
           curl -sS -X POST http://127.0.0.1:8080/api/fdd-rules/oa_temp_out_of_range/activate \
@@ -211,16 +211,19 @@ jobs:
             -H "Authorization: Bearer $INT" | jq -e '(.fdd_inputs // []) | length >= 1'
 
           curl -fsS http://127.0.0.1:8080/api/fdd/datafusion/demo \
-            -H "Authorization: Bearer $INT" | jq -e '(.faults[0].equip // "") == "5007"'
+            -H "Authorization: Bearer $INT" | jq -e '(.faults[0].equip // "") == "equip:validation"'
 
-          curl -fsS -X POST http://127.0.0.1:8080/api/bench/5007/smoke/inject-scenario \
+          curl -fsS -X POST http://127.0.0.1:8080/api/validation-runs/current/inject-scenario \
             -H "Authorization: Bearer $AGENT" \
             -H 'Content-Type: application/json' \
             -d '{"normal_minutes":5,"fault_minutes":6,"clear_minutes":5}' \
             | jq -e '.ok == true and (.proof.live_fdd_pass // false) == true'
 
-          curl -fsS http://127.0.0.1:8080/api/bench/5007/smoke/status \
+          curl -fsS http://127.0.0.1:8080/api/validation-runs/current/status \
             -H "Authorization: Bearer $INT" | jq -e '.ok == true and (.rule_sql | contains("confirmation_required_minutes"))'
+
+      - name: No-hardcoding audit
+        run: ./scripts/audit_no_hardcoding.sh
 
       - name: CSV files created in workspace
         run: |

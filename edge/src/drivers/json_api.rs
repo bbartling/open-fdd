@@ -28,35 +28,52 @@ pub fn poll_once_json() -> String {
 }
 
 pub fn poll_test_source() -> Value {
-    let source_id =
-        env::var("OPENFDD_JSON_API_TEST_SOURCE").unwrap_or_else(|_| "httpbin-health".to_string());
     let url = env::var("OPENFDD_JSON_API_TEST_URL")
         .unwrap_or_else(|_| "https://httpbin.org/get".to_string());
+    poll_url(&url)
+}
+
+pub fn poll_url(url: &str) -> Value {
+    let source_id =
+        env::var("OPENFDD_JSON_API_TEST_SOURCE").unwrap_or_else(|_| "json-api-smoke".to_string());
+    let started = std::time::Instant::now();
     let output = Command::new("curl")
-        .args(["-fsS", "-o", "/dev/null", "-w", "%{http_code}", &url])
+        .args(["-fsS", "-o", "/dev/null", "-w", "%{http_code}", url])
         .output();
+    let response_time_ms = started.elapsed().as_millis() as u64;
     match output {
         Ok(out) if out.status.success() => {
             let code = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let http_status = code.parse::<u64>().unwrap_or(0);
+            let ok = http_status == 200;
             json!({
-                "ok": code == "200",
+                "ok": ok,
                 "source_id": source_id,
                 "url": url,
-                "http_status": code.parse::<u64>().unwrap_or(0),
+                "http_status": http_status,
+                "response_time_ms": response_time_ms,
+                "parsed_points_count": if ok { 1 } else { 0 },
                 "points": [{"id":"point:json-api-health","value":1,"unit":"bool","quality":"good"}],
                 "source_driver": "json-api",
-                "message": if code == "200" { "HTTP 200 OK" } else { "unexpected status" }
+                "message": if ok { "HTTP 200 OK" } else { "unexpected status" }
             })
         }
         Ok(out) => json!({
             "ok": false,
             "source_id": source_id,
             "url": url,
+            "response_time_ms": response_time_ms,
+            "parsed_points_count": 0,
             "error": String::from_utf8_lossy(&out.stderr).to_string()
         }),
-        Err(err) => {
-            json!({"ok": false, "source_id": source_id, "url": url, "error": err.to_string()})
-        }
+        Err(err) => json!({
+            "ok": false,
+            "source_id": source_id,
+            "url": url,
+            "response_time_ms": response_time_ms,
+            "parsed_points_count": 0,
+            "error": err.to_string()
+        }),
     }
 }
 

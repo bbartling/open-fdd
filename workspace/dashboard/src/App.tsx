@@ -14,7 +14,7 @@ import LoginPage from "./pages/LoginPage";
 import PlotPage from "./pages/PlotPage";
 import RuleLabPage from "./pages/RuleLabPage";
 import SqlFddRulesPage from "./pages/SqlFddRulesPage";
-import Bench5007SmokePage from "./pages/Bench5007SmokePage";
+import LiveFddValidationPage from "./pages/LiveFddValidationPage";
 import AlgorithmsPage from "./pages/AlgorithmsPage";
 import { TabErrorBoundary } from "./components/TabDebugPanel";
 
@@ -28,7 +28,8 @@ export default function App() {
           <Route index element={<HomePage />} />
           <Route path="faults" element={<FaultsPage />} />
           <Route element={<RequireAuth />}>
-            <Route path="bench-5007" element={<TabErrorBoundary tab="bench-5007"><Bench5007SmokePage /></TabErrorBoundary>} />
+            <Route path="live-fdd-validation" element={<TabErrorBoundary tab="live-fdd-validation"><LiveFddValidationPage /></TabErrorBoundary>} />
+            <Route path="bench-5007" element={<Navigate to="/live-fdd-validation" replace />} />
             <Route path="sql-fdd" element={<TabErrorBoundary tab="sql-fdd"><SqlFddRulesPage /></TabErrorBoundary>} />
             <Route path="rule-lab" element={<TabErrorBoundary tab="rule-lab"><RuleLabPage /></TabErrorBoundary>} />
             <Route path="model" element={<TabErrorBoundary tab="model"><DataModelPage /></TabErrorBoundary>} />
