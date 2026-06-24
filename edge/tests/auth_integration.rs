@@ -98,14 +98,6 @@ impl Server {
     fn operator_password(&self) -> &str {
         &self.operator_password
     }
-
-    fn operator_password(&self) -> String {
-        let text = std::fs::read_to_string(&self.auth_path).unwrap();
-        parse_env_file(&text)
-            .get("OFDD_OPERATOR_PASSWORD")
-            .cloned()
-            .unwrap()
-    }
 }
 
 impl Drop for Server {
@@ -390,8 +382,7 @@ fn data_management_summary_authenticated() {
 #[test]
 fn operator_can_export_but_not_scan_once() {
     let srv = Server::start();
-    let op_pw = srv.operator_password();
-    let login_body = login_json("operator", &op_pw);
+    let login_body = login_json("operator", srv.operator_password());
     let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     let token = json["token"]
