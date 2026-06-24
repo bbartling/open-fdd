@@ -1,0 +1,43 @@
+# Local dev overlay — bridge only, memory-safe Dockerfile.local, no GHCR.
+#
+#   ./scripts/openfdd_local_up.sh
+#   ./scripts/openfdd_local_up.sh --build
+#
+# Do NOT use the root docker-compose.yml --build on small hosts; it runs npm + release
+# rustc in one image and can OOM the machine (SSH drop, hard reboot).
+
+name: open-fdd-local
+
+services:
+  openfdd-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+      args:
+        CARGO_BUILD_JOBS: ${OPENFDD_CARGO_BUILD_JOBS:-1}
+    image: open-fdd-openfdd-bridge:local
+    pull_policy: never
+    container_name: openfdd-bridge
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file:
+      - ./workspace/auth.env.local
+    volumes:
+      - ./workspace:/app/workspace
+      - ./frontend:/app/frontend:ro
+    environment:
+      SERVICE_MODE: bridge
+      PORT: "8080"
+      FRONTEND_DIR: /app/frontend
+      OPENFDD_WORKSPACE: /app/workspace
+      OPENFDD_BACNET_ENABLED: ${OPENFDD_BACNET_ENABLED:-0}
+      OPENFDD_MODBUS_ENABLED: ${OPENFDD_MODBUS_ENABLED:-0}
+      OPENFDD_HAYSTACK_ENABLED: ${OPENFDD_HAYSTACK_ENABLED:-0}
+      OPENFDD_JSON_API_ENABLED: ${OPENFDD_JSON_API_ENABLED:-1}
+      OPENFDD_IMPORT_ENABLED: ${OPENFDD_IMPORT_ENABLED:-1}
+      OPENFDD_EXPORT_ENABLED: ${OPENFDD_EXPORT_ENABLED:-1}
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: unless-stopped

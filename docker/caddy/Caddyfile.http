@@ -1,0 +1,16 @@
+# HTTP mode — Caddy on port 80, proxy to Rust bridge (lab / non-TLS LAN)
+
+{
+	admin off
+}
+
+:80 {
+	encode gzip zstd
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options SAMEORIGIN
+	}
+	reverse_proxy openfdd-bridge:8080
+}

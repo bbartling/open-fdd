@@ -8,12 +8,13 @@ name = "open_fdd_edge_prototype"
 path = "src/main.rs"
 
 [[bin]]
-name = "openfdd_edge"
+name = "openfdd-edge"
 path = "src/bin/openfdd_edge.rs"
 
 [dependencies]
 arrow = "53"
 base64 = "0.22"
+bcrypt = "0.16"
 bacnet-client = "0.9"
 bacnet-encoding = "0.9"
 bacnet-transport = "0.9"
@@ -25,6 +26,7 @@ datafusion = "43"
 hex = "0.4"
 hmac = "0.12"
 rand = "0.8"
+rcgen = "0.13"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"

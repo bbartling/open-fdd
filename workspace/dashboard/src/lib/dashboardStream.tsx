@@ -108,7 +108,7 @@ async function fetchSnapshot(authenticated: boolean): Promise<DashboardSnapshot>
     return body as DashboardSnapshot;
   }
   const [stack, faults] = await Promise.all([
-    apiFetch<StackHealth>("/health/stack"),
+    apiFetch<StackHealth>("/api/health/stack"),
     apiFetch<FaultsStatus & { ok?: boolean }>("/api/faults/status"),
   ]);
   const { ok: _ok, ...faultBody } = faults;

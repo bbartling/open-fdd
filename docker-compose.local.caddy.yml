@@ -1,0 +1,30 @@
+# Local Caddy ingress — remote dial-in (HTTP or TLS) with same JWT auth.
+# Use with docker-compose.local.yml (local image, no GHCR).
+#
+#   ./scripts/openfdd_local_caddy_up.sh --mode tls
+#   ./scripts/openfdd_local_caddy_up.sh --mode http
+
+services:
+  openfdd-bridge:
+    environment:
+      OPENFDD_CADDY_ENABLED: "1"
+      OPENFDD_CADDY_MODE: ${OPENFDD_CADDY_MODE:-tls}
+      OPENFDD_CADDY_HOSTNAME: ${OPENFDD_CADDY_HOSTNAME:-openfdd.local}
+      OPENFDD_CADDY_CERT_DIR: /var/openfdd/workspace/deploy/caddy/certs
+
+  openfdd-caddy:
+    profiles: ["caddy", "caddy-http", "caddy-tls"]
+    image: caddy:2-alpine
+    container_name: openfdd-caddy
+    ports:
+      - "0.0.0.0:${OPENFDD_CADDY_HTTP_PORT:-80}:80"
+      - "0.0.0.0:${OPENFDD_CADDY_HTTPS_PORT:-443}:443"
+    volumes:
+      - ${OPENFDD_CADDY_FILE:-./docker/caddy/Caddyfile.local.tls}:/etc/caddy/Caddyfile:ro
+      - ./workspace/deploy/caddy/certs:/certs:ro
+    environment:
+      OPENFDD_CADDY_HOSTNAME: ${OPENFDD_CADDY_HOSTNAME:-openfdd.local}
+    depends_on:
+      openfdd-bridge:
+        condition: service_started
+    restart: unless-stopped

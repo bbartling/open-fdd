@@ -87,6 +87,12 @@ pub fn verify_token(config: &AuthConfig, token: &str) -> Result<Principal, Strin
     })
 }
 
+pub fn create_ws_ticket(config: &AuthConfig, sub: &str, role: &str) -> (String, DateTime<Utc>) {
+    let mut short = config.clone();
+    short.ttl_seconds = 120;
+    create_token(&short, sub, role)
+}
+
 pub fn claims_from_token_unverified(token: &str) -> Option<Claims> {
     let parts: Vec<&str> = token.split('.').collect();
     if parts.len() != 3 {
@@ -105,9 +111,7 @@ pub fn claims_from_token_unverified(token: &str) -> Option<Claims> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::env_file::{generate_auth_env, GenerateOptions};
     use std::collections::HashMap;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn test_config() -> AuthConfig {
         AuthConfig {

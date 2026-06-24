@@ -1,11 +1,14 @@
 pub mod auth;
 pub mod control;
+pub mod dashboard;
 pub mod data_management;
 pub mod drivers;
 pub mod export;
+pub mod faults;
 pub mod fdd;
 pub mod historian;
 pub mod import;
 pub mod model;
 pub mod ops;
+pub mod tls;
 pub mod validation;

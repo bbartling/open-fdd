@@ -1,21 +1,20 @@
-# Multi-stage Rust Open-FDD edge image (linux/amd64 + linux/arm64 via buildx).
-FROM node:22-bookworm AS dashboard
-WORKDIR /app/dashboard
-COPY workspace/dashboard/package.json workspace/dashboard/package-lock.json ./
-RUN npm ci
-COPY workspace/dashboard ./
-ENV VITE_OUT_DIR=../frontend
-RUN npm run build
-COPY frontend/style.css /app/frontend/
+# Local / lab build — low memory, no in-Docker npm.
+#
+# Uses pre-built frontend/ from the repo (run `npm run build` in workspace/dashboard first
+# if you changed UI). Limits parallel rustc jobs to avoid OOM on 8 GB hosts.
+#
+#   docker build -f Dockerfile.local -t open-fdd-openfdd-bridge:local .
+#   ./scripts/openfdd_local_up.sh
 
 FROM rust:1.93-bookworm AS builder
-ARG CARGO_BUILD_JOBS=2
+ARG CARGO_BUILD_JOBS=1
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY edge ./edge
-RUN echo "==> release build jobs=${CARGO_BUILD_JOBS}" \
-    && cargo build --release --bins -p open_fdd_edge_prototype -j "${CARGO_BUILD_JOBS}"
+RUN echo "==> openfdd local rust build (jobs=${CARGO_BUILD_JOBS})" \
+    && cargo build --release --bins -p open_fdd_edge_prototype -j "${CARGO_BUILD_JOBS}" \
+    && echo "==> openfdd local rust build complete"
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
@@ -26,18 +25,18 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=builder /app/target/release/open_fdd_edge_prototype /usr/local/bin/open_fdd_edge_prototype
 COPY --from=builder /app/target/release/openfdd-edge /usr/local/bin/openfdd-edge
-COPY --from=dashboard /app/frontend ./frontend
+COPY frontend ./frontend
 
 ENV FRONTEND_DIR=/app/frontend \
     PORT=8080 \
-    OPENFDD_WORKSPACE=/var/openfdd/workspace \
+    OPENFDD_WORKSPACE=/app/workspace \
     SERVICE_MODE=bridge
 
 RUN mkdir -p /var/openfdd/workspace && chown -R openfdd:openfdd /var/openfdd/workspace /app
 
 USER openfdd
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS http://127.0.0.1:8080/api/health || exit 1
 
 CMD ["open_fdd_edge_prototype"]

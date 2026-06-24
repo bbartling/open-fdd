@@ -101,7 +101,7 @@ pub fn activate_rule(rule_id: &str, actor: &str, role: &str) -> Value {
     if role != "integrator" {
         return json!({"ok": false, "error": "integrator role required to activate rules", "role": role});
     }
-    let mut rule = get_rule(rule_id);
+    let rule = get_rule(rule_id);
     if rule.get("ok").and_then(|v| v.as_bool()) != Some(true) {
         return rule;
     }
