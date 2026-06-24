@@ -50,8 +50,8 @@ if [[ ! -f "$ROOT/workspace/auth.env.local" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$ROOT/frontend/index.html" ]]; then
-  echo "WARN: frontend/index.html missing — building dashboard once on host"
+if [[ ! -f "$ROOT/frontend/index.html ]] || [[ ! -d "$ROOT/frontend/assets" ]] || [[ -z "$(ls -A "$ROOT/frontend/assets" 2>/dev/null || true)" ]]; then
+  echo "WARN: frontend build missing — running npm run build in workspace/dashboard"
   if command -v npm >/dev/null 2>&1; then
     (cd "$ROOT/workspace/dashboard" && npm ci && npm run build)
   else

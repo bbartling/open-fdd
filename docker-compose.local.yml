@@ -24,6 +24,7 @@ services:
       - ./workspace/auth.env.local
     volumes:
       - ./workspace:/app/workspace
+      - ./frontend:/app/frontend:ro
     environment:
       SERVICE_MODE: bridge
       PORT: "8080"
