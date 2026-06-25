@@ -502,7 +502,7 @@ pub fn json_api_driver_tree_json() -> String {
 }
 
 pub fn haystack_devices_ui() -> Vec<Value> {
-    let model: Value = serde_json::from_str(haystack::model_json()).unwrap_or(json!({}));
+    let model: Value = serde_json::from_str(&haystack::model_json()).unwrap_or(json!({}));
     let rows = model
         .get("rows")
         .and_then(|v| v.as_array())

@@ -29,8 +29,11 @@ pub fn save_haystack_grid(grid: &Value) -> std::io::Result<PathBuf> {
 
 pub fn haystack_model_value() -> Value {
     load_haystack_grid().unwrap_or_else(|| {
-        serde_json::from_str(crate::drivers::haystack::MODEL_JSON)
-            .unwrap_or(json!({"meta":{"ver":"3.0","mode":"fixture"},"cols":[],"rows":[]}))
+        serde_json::from_str(&crate::drivers::haystack::model_json()).unwrap_or(json!({
+            "meta": {"ver": "3.0", "mode": "fixture"},
+            "cols": [],
+            "rows": []
+        }))
     })
 }
 

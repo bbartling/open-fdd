@@ -26,6 +26,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: "/haystack", icon: "🌿", label: "Haystack", protected: true },
       { to: "/modbus", icon: "🔌", label: "Modbus", protected: true },
       { to: "/json-api", icon: "🌐", label: "JSON API", protected: true },
+      { to: "/data-management", icon: "🗄️", label: "Data management", protected: true },
     ],
   },
   {

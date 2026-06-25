@@ -45,6 +45,14 @@ PROFILE="${OPENFDD_SMOKE_PROFILE:-local_bacnet_fdd_validation}"
 DEVICE_INSTANCE="${OPENFDD_SMOKE_DEVICE_INSTANCE:-0}"
 HOURS="${OPENFDD_SMOKE_DURATION_HOURS:-${BENCH_SMOKE_HOURS:-6}}"
 INTERVAL="${OPENFDD_SMOKE_INTERVAL_SECONDS:-${BENCH_SMOKE_INTERVAL_SEC:-300}}"
+
+if [[ "${OPENFDD_VALIDATION_ONE_HOUR:-0}" == "1" ]]; then
+  HOURS="${OPENFDD_SMOKE_DURATION_HOURS:-1}"
+  INTERVAL="${OPENFDD_SMOKE_INTERVAL_SECONDS:-60}"
+  OPENFDD_SMOKE_CSV_INTERVAL_SECONDS="${OPENFDD_SMOKE_CSV_INTERVAL_SECONDS:-300}"
+  OPENFDD_SMOKE_MODBUS_INTERVAL_SECONDS="${OPENFDD_SMOKE_MODBUS_INTERVAL_SECONDS:-300}"
+  OPENFDD_SMOKE_HAYSTACK_INTERVAL_SECONDS="${OPENFDD_SMOKE_HAYSTACK_INTERVAL_SECONDS:-300}"
+fi
 SAMPLES="${OPENFDD_SMOKE_SAMPLES:-${BENCH_SMOKE_SAMPLES:-}}"
 LIVE_FDD="${OPENFDD_SMOKE_LIVE_FDD:-${BENCH_SMOKE_LIVE_FDD:-0}}"
 SIMULATE="${OPENFDD_SMOKE_SIMULATE:-${BENCH_SMOKE_SIMULATE:-0}}"
@@ -337,6 +345,9 @@ while true; do
   confirmation_required_minutes=5
   modbus_ok=false
   modbus_registers_read=0
+  haystack_ok=true
+  haystack_configured=false
+  haystack_readings=0
   json_api_ok=false
   json_api_points_read=0
   csv_import_ok=true
@@ -383,19 +394,41 @@ while true; do
   fi
 
   if [[ "$VALIDATE_MODBUS" == "1" ]]; then
-    modbus_body='{"register":30001,"function":"input_register","scale":0.1,"unit":"degF"}'
-    if curl "${CURL_TLS[@]}" -fsS -X POST "${BASE}/api/modbus/read" \
-      -H "Authorization: Bearer $INT_TOKEN" \
-      -H 'Content-Type: application/json' \
-      -d "$modbus_body" \
-      -o "${prefix}_modbus.json" 2>/dev/null; then
-      if jq -e '.value != null or .ok == true' "${prefix}_modbus.json" >/dev/null 2>&1; then
-        modbus_ok=true
-        modbus_registers_read=1
+    modbus_interval="${OPENFDD_SMOKE_MODBUS_INTERVAL_SECONDS:-300}"
+    if (( sample_n == 1 || (INTERVAL > 0 && (sample_n * INTERVAL) % modbus_interval == 0) )); then
+      modbus_body='{"register":30001,"function":"input_register","scale":0.1,"unit":"degF"}'
+      if curl "${CURL_TLS[@]}" -fsS -X POST "${BASE}/api/modbus/read" \
+        -H "Authorization: Bearer $INT_TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d "$modbus_body" \
+        -o "${prefix}_modbus.json" 2>/dev/null; then
+        if jq -e '.value != null or .ok == true' "${prefix}_modbus.json" >/dev/null 2>&1; then
+          modbus_ok=true
+          modbus_registers_read=1
+        fi
       fi
+    else
+      modbus_ok=true
     fi
   else
     modbus_ok=true
+  fi
+
+  if [[ -n "${OPENFDD_HAYSTACK_BASE:-}" ]]; then
+    haystack_configured=true
+    haystack_interval="${OPENFDD_SMOKE_HAYSTACK_INTERVAL_SECONDS:-300}"
+    if (( sample_n == 1 || (INTERVAL > 0 && (sample_n * INTERVAL) % haystack_interval == 0) )); then
+      haystack_ok=false
+      if curl "${CURL_TLS[@]}" -fsS -X POST "${BASE}/api/haystack/test" \
+        -H "Authorization: Bearer $INT_TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d '{}' \
+        -o "${prefix}_haystack_test.json" 2>/dev/null \
+        && jq -e '.ok == true' "${prefix}_haystack_test.json" >/dev/null 2>&1; then
+        haystack_ok=true
+        haystack_readings=1
+      fi
+    fi
   fi
 
   if [[ "$VALIDATE_JSON" == "1" ]]; then
@@ -501,13 +534,16 @@ while true; do
     --argjson confirm_min "$confirmation_required_minutes" \
     --argjson modbus "$modbus_ok" \
     --argjson modbus_regs "$modbus_registers_read" \
+    --argjson haystack_ok "$haystack_ok" \
+    --argjson haystack_configured "$haystack_configured" \
+    --argjson haystack_readings "$haystack_readings" \
     --argjson json_ok "$json_api_ok" \
     --argjson json_pts "$json_api_points_read" \
     --argjson csv_ok "$csv_import_ok" \
     --argjson csv_hist_delta "$csv_hist_delta" \
     --argjson override_ok "$override_scan_ok" \
     --argjson demo_only "$demo_only" \
-    '{timestamp_utc:$ts,sample_index:$n,mode:$mode,api_health_ok:$api_health,stack_health_ok:$stack_health,docker_ok:$docker_ok,docker_error_count:$docker_errors,source_id:$source_id,smoke_device_instance:$device,bacnet_device_seen:$bacnet_seen,bacnet_poll_ok:$bacnet_poll,historian_rows_written:$hist_rows,fdd_sql_ok:$fdd_ok,raw_fault_count:$raw_fault,confirmed_fault_count:$confirmed_fault,minutes_in_fault:$minutes_fault,confirmation_required_minutes:$confirm_min,expected_phase:$phase,expected_fault_state:$expected_fault,actual_fault_state:$actual_fault,demo_only:$demo_only,modbus_ok:$modbus,modbus_registers_read:$modbus_regs,json_api_ok:$json_ok,json_api_points_read:$json_pts,csv_import_ok:$csv_ok,csv_hist_row_delta:$csv_hist_delta,override_scan_ok:$override_ok,data_source:$data_source,error:$err}' \
+    '{timestamp_utc:$ts,sample_index:$n,mode:$mode,api_health_ok:$api_health,stack_health_ok:$stack_health,docker_ok:$docker_ok,docker_error_count:$docker_errors,source_id:$source_id,smoke_device_instance:$device,bacnet_device_seen:$bacnet_seen,bacnet_poll_ok:$bacnet_poll,historian_rows_written:$hist_rows,fdd_sql_ok:$fdd_ok,raw_fault_count:$raw_fault,confirmed_fault_count:$confirmed_fault,minutes_in_fault:$minutes_fault,confirmation_required_minutes:$confirm_min,expected_phase:$phase,expected_fault_state:$expected_fault,actual_fault_state:$actual_fault,demo_only:$demo_only,modbus_ok:$modbus,modbus_registers_read:$modbus_regs,haystack_ok:$haystack_ok,haystack_configured:$haystack_configured,haystack_readings:$haystack_readings,json_api_ok:$json_ok,json_api_points_read:$json_pts,csv_import_ok:$csv_ok,csv_hist_row_delta:$csv_hist_delta,override_scan_ok:$override_ok,data_source:$data_source,error:$err}' \
     >>"$LOG_DIR/summary.jsonl"
 
   echo "[$ts] sample=$sample_n phase=$phase api=$api_health_ok stack=$stack_health_ok docker=$docker_ok bacnet=$bacnet_device_seen fdd=$fdd_sql_ok modbus=$modbus_ok json=$json_api_ok source=$data_source demo=$demo_only raw=$raw_fault_count confirmed=$confirmed_fault_count"

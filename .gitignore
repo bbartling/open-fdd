@@ -14,10 +14,12 @@ workspace/logs/
 workspace/smoke-profiles/local/*.local.toml
 workspace/bootstrap_credentials.once.txt
 workspace/bench.env.local
+workspace/haystack/local.nhaystack.toml
 workspace/import-profiles/local/*.local.toml
 workspace/export-profiles/local/*.local.toml
 workspace/imports/
 workspace/exports/
+workspace/reports/generated/
 workspace/data-management/
 workspace/deploy/
 workspace/overrides/

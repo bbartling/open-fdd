@@ -66,9 +66,19 @@ function ReportSectionCard({
 
 export default function ReportBuilderPage() {
   const [report, setReport] = useState<ReportDoc | null>(null);
+  const [reports, setReports] = useState<Array<Record<string, unknown>>>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const loadReports = useCallback(async () => {
+    try {
+      const res = await apiFetch<{ records?: Array<Record<string, unknown>> }>("/api/reports");
+      setReports(res.records ?? []);
+    } catch (e) {
+      setError(formatApiError(e));
+    }
+  }, []);
 
   const sections = useMemo(
     () => [...(report?.sections ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
@@ -96,7 +106,39 @@ export default function ReportBuilderPage() {
 
   useEffect(() => {
     void createDraft();
-  }, [createDraft]);
+    void loadReports();
+  }, [createDraft, loadReports]);
+
+  async function deleteReport(reportId: string) {
+    setBusy(true);
+    setError("");
+    try {
+      await apiFetch(`/api/reports/${reportId}`, { method: "DELETE" });
+      await loadReports();
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function downloadListedReport(reportId: string) {
+    setBusy(true);
+    setError("");
+    try {
+      const { blob, filename } = await apiDownloadBlob(`/api/reports/${reportId}/download.pdf`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || `${reportId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function persistSections(next: ReportSection[]) {
     if (!report?.report_id) return;
@@ -178,6 +220,35 @@ export default function ReportBuilderPage() {
       />
 
       {error ? <div className="error-banner">{error}</div> : null}
+
+      <section className="panel">
+        <h2>Validation reports</h2>
+        {reports.length === 0 ? (
+          <p className="hint">No reports yet. Run the 1-hour validation workflow to generate a PDF.</p>
+        ) : (
+          <ul className="report-list">
+            {reports.map((r) => {
+              const id = String(r.report_id ?? "");
+              return (
+                <li key={id} className="report-list-row">
+                  <span className={`badge ${r.status === "pass" ? "ok" : r.status === "fail" ? "bad" : ""}`}>
+                    {String(r.status ?? "draft")}
+                  </span>
+                  <strong>{String(r.title ?? id)}</strong>
+                  <span className="muted">{String(r.created_at ?? "—")}</span>
+                  <span className="muted">{Number(r.size_bytes ?? 0) > 0 ? `${r.size_bytes} B` : "no PDF"}</span>
+                  <button type="button" className="secondary-btn" disabled={busy} onClick={() => void downloadListedReport(id)}>
+                    Download PDF
+                  </button>
+                  <button type="button" className="secondary-btn" disabled={busy} onClick={() => void deleteReport(id)}>
+                    Delete
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       <div className="toolbar">
         <button type="button" className="secondary-btn" onClick={() => void createDraft()} disabled={busy}>

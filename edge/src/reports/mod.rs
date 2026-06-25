@@ -500,6 +500,180 @@ pub fn safe_report_id(raw: &str) -> Option<String> {
     Some(sanitized)
 }
 
+pub fn list_reports() -> Value {
+    let dir = reports_dir();
+    let _ = fs::create_dir_all(&dir);
+    let mut records: Vec<Value> = Vec::new();
+    if let Ok(entries) = fs::read_dir(&dir) {
+        for ent in entries.flatten() {
+            if !ent.path().is_dir() {
+                continue;
+            }
+            let id = ent.file_name().to_string_lossy().to_string();
+            let Some(doc) = load_report(&id) else {
+                continue;
+            };
+            let meta = doc.get("metadata").cloned().unwrap_or(json!({}));
+            let pdf_path = ent.path().join("report.pdf");
+            records.push(json!({
+                "report_id": id,
+                "title": doc.get("title").cloned().unwrap_or(json!(null)),
+                "report_type": meta.get("template_id").or(doc.get("template_id")).cloned().unwrap_or(json!("validation-summary")),
+                "validation_run_id": meta.get("validation_run_id").cloned().unwrap_or(json!(null)),
+                "status": meta.get("validation_status").cloned().unwrap_or(json!("draft")),
+                "created_at": meta.get("created_at").cloned().or_else(|| doc.get("created_at").cloned()).unwrap_or(json!(null)),
+                "pdf_ready": pdf_path.exists(),
+                "size_bytes": fs::metadata(&pdf_path).map(|m| m.len()).unwrap_or(0),
+            }));
+        }
+    }
+    records.sort_by(|a, b| {
+        let ta = a.get("created_at").and_then(|v| v.as_str()).unwrap_or("");
+        let tb = b.get("created_at").and_then(|v| v.as_str()).unwrap_or("");
+        tb.cmp(ta)
+    });
+    json!({"ok": true, "records": records})
+}
+
+pub fn delete_report(report_id: &str) -> Value {
+    let id = match safe_report_id(report_id) {
+        Some(v) => v,
+        None => return json!({"ok": false, "error": "invalid report id"}),
+    };
+    let dir = report_dir(&id);
+    if !dir.exists() {
+        return json!({"ok": false, "error": "report not found", "report_id": id});
+    }
+    match fs::remove_dir_all(&dir) {
+        Ok(()) => json!({"ok": true, "deleted": true, "report_id": id}),
+        Err(e) => json!({"ok": false, "error": e.to_string(), "report_id": id}),
+    }
+}
+
+fn validation_summary_from_artifact(artifact_dir: &str) -> Value {
+    let path = Path::new(artifact_dir).join("summary.jsonl");
+    let text = match fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(_) => return json!({"ok": false, "error": "summary.jsonl not found"}),
+    };
+    let mut samples = 0_u64;
+    let mut bacnet_poll_ok = 0_u64;
+    let mut modbus_ok = 0_u64;
+    let mut haystack_ok = 0_u64;
+    let mut csv_ok = 0_u64;
+    let mut raw_fault_samples = 0_u64;
+    let mut confirmed_fault_samples = 0_u64;
+    for line in text.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let Ok(row) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        samples += 1;
+        if row.get("bacnet_poll_ok").and_then(|v| v.as_bool()) == Some(true) {
+            bacnet_poll_ok += 1;
+        }
+        if row.get("modbus_ok").and_then(|v| v.as_bool()) == Some(true) {
+            modbus_ok += 1;
+        }
+        if row.get("haystack_ok").and_then(|v| v.as_bool()) == Some(true) {
+            haystack_ok += 1;
+        }
+        if row.get("csv_import_ok").and_then(|v| v.as_bool()) == Some(true) {
+            csv_ok += 1;
+        }
+        if row
+            .get("raw_fault_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            > 0
+        {
+            raw_fault_samples += 1;
+        }
+        if row
+            .get("confirmed_fault_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            > 0
+        {
+            confirmed_fault_samples += 1;
+        }
+    }
+    json!({
+        "samples": samples,
+        "bacnet_poll_ok": bacnet_poll_ok,
+        "modbus_ok": modbus_ok,
+        "haystack_ok": haystack_ok,
+        "csv_import_ok": csv_ok,
+        "raw_fault_samples": raw_fault_samples,
+        "confirmed_fault_samples": confirmed_fault_samples,
+        "artifact_dir": artifact_dir,
+    })
+}
+
+pub fn from_validation_run(body: &Value) -> Value {
+    let artifact_dir = body
+        .get("artifact_dir")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let run_id = body
+        .get("validation_run_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let passed = body.get("pass").and_then(|v| v.as_bool()).unwrap_or(false);
+    let title = if passed {
+        "Open-FDD 1-Hour Validation Report — PASS"
+    } else {
+        "Open-FDD 1-Hour Validation Report — FAILED"
+    };
+    let summary = validation_summary_from_artifact(artifact_dir);
+    let mut doc = create_draft(&json!({
+        "template_id": "validation-summary",
+        "title": title,
+    }));
+    if doc.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return doc;
+    }
+    let report_id = doc
+        .get("report_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if let Some(mut saved) = load_report(&report_id) {
+        saved["metadata"] = json!({
+            "validation_run_id": run_id,
+            "validation_status": if passed { "pass" } else { "fail" },
+            "artifact_dir": artifact_dir,
+            "created_at": Utc::now().to_rfc3339(),
+            "template_id": "validation-summary",
+            "pdf_ready": false,
+        });
+        if let Some(sections) = saved.get_mut("sections").and_then(|v| v.as_array_mut()) {
+            sections.push(json!({
+                "id": "validation-run-summary",
+                "type": "validation_summary",
+                "title": "Validation run summary",
+                "visible": true,
+                "order": 99,
+                "content": summary
+            }));
+        }
+        let _ = save_report(&report_id, &saved);
+        doc = saved;
+    }
+    let pdf = render_pdf_bundle(&report_id);
+    json!({
+        "ok": true,
+        "report_id": report_id,
+        "pass": passed,
+        "validation_run_id": run_id,
+        "artifact_dir": artifact_dir,
+        "summary": summary,
+        "pdf": pdf,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -529,5 +703,44 @@ mod tests {
         let doc = create_draft(&json!({"title": "Test Report"}));
         assert_eq!(doc["ok"], true, "draft error: {:?}", doc.get("error"));
         assert!(doc["sections"].as_array().unwrap().len() >= 5);
+    }
+
+    #[test]
+    fn list_delete_and_from_validation_run() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let tmp = std::env::temp_dir().join(format!("ofdd-report-list-{}-{n}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", tmp.to_string_lossy().as_ref());
+
+        let listed = list_reports();
+        assert_eq!(listed["ok"], true);
+
+        let artifact = tmp.join("val");
+        std::fs::create_dir_all(&artifact).unwrap();
+        std::fs::write(
+            artifact.join("summary.jsonl"),
+            r#"{"bacnet_poll_ok":true,"modbus_ok":true,"haystack_ok":true,"csv_import_ok":true,"raw_fault_count":0,"confirmed_fault_count":0}"#,
+        )
+        .unwrap();
+
+        let created = from_validation_run(&json!({
+            "artifact_dir": artifact.to_string_lossy(),
+            "validation_run_id": "run-test-1",
+            "pass": true
+        }));
+        assert_eq!(created["ok"], true, "{created:?}");
+        let rid = created["report_id"].as_str().unwrap();
+        let again = list_reports();
+        assert!(again["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r.get("report_id").and_then(|v| v.as_str()) == Some(rid)));
+
+        let del = delete_report(rid);
+        assert_eq!(del["ok"], true);
     }
 }

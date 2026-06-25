@@ -4,8 +4,8 @@ import RequireAuth from "./components/RequireAuth";
 import { DashboardStreamProvider } from "./lib/dashboardStream";
 import AgentPage from "./pages/AgentPage";
 import JsonApiPage from "./pages/JsonApiPage";
-import BacnetPage from "./pages/BacnetPage";
 import HaystackPage from "./pages/HaystackPage";
+import BacnetPage from "./pages/BacnetPage";
 import ModbusPage from "./pages/ModbusPage";
 import DataModelPage from "./pages/DataModelPage";
 import HomePage from "./pages/HomePage";
@@ -45,6 +45,7 @@ export default function App() {
             <Route path="bacnet" element={<TabErrorBoundary tab="bacnet"><BacnetPage /></TabErrorBoundary>} />
             <Route path="modbus" element={<TabErrorBoundary tab="modbus"><ModbusPage /></TabErrorBoundary>} />
             <Route path="json-api" element={<TabErrorBoundary tab="json-api"><JsonApiPage /></TabErrorBoundary>} />
+            <Route path="haystack" element={<TabErrorBoundary tab="haystack"><HaystackPage /></TabErrorBoundary>} />
             <Route path="data-management" element={<TabErrorBoundary tab="data-management"><DataManagementPage /></TabErrorBoundary>} />
             <Route path="reports" element={<TabErrorBoundary tab="reports"><ReportBuilderPage /></TabErrorBoundary>} />
             <Route path="agent" element={<TabErrorBoundary tab="agent"><AgentPage /></TabErrorBoundary>} />

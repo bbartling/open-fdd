@@ -16,7 +16,7 @@ pub fn is_live_mode() -> bool {
 }
 
 pub fn host_port() -> (String, u16) {
-    let host = env::var("OPENFDD_MODBUS_HOST").unwrap_or_else(|_| "192.168.204.14".to_string());
+    let host = env::var("OPENFDD_MODBUS_HOST").unwrap_or_default();
     let port = env::var("OPENFDD_MODBUS_PORT")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -132,6 +132,9 @@ fn read_registers(
 
 pub fn read_register(register: u16, function: &str) -> Result<Value, String> {
     let (host, port) = host_port();
+    if host.trim().is_empty() {
+        return Err("OPENFDD_MODBUS_HOST not configured".to_string());
+    }
     let unit = unit_id();
     let address = modbus_address(register, function)?;
     let fc = match function {
