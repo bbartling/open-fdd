@@ -513,8 +513,7 @@ point.oa_t = "OA Temp|1001|oa_t"
     }
 
     fn test_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        LOCK.lock().unwrap_or_else(|e| e.into_inner())
+        crate::test_support::workspace_env_lock()
     }
 
     #[test]

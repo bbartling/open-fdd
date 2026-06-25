@@ -506,10 +506,15 @@ fn read_priority_array_for_point(point: &Value) -> Vec<(u8, Value)> {
     }
 
     let name = point.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    if name == "ACTUATOR-0" {
-        vec![(8, json!(55.0))]
-    } else if name == "C06-0-10VDC-O" {
-        vec![(1, json!(11.0))]
+    if point.get("commandable").and_then(|v| v.as_bool()) == Some(true)
+        || point.get("writable").and_then(|v| v.as_bool()) == Some(true)
+    {
+        let value = point.get("value").cloned().unwrap_or(json!(55.0));
+        if name.contains("ACTUATOR") || name.contains("Actuator") {
+            vec![(8, value)]
+        } else {
+            vec![(1, value)]
+        }
     } else {
         Vec::new()
     }

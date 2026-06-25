@@ -132,6 +132,7 @@ mod tests {
 
     #[test]
     fn builds_rows_from_profile_points() {
+        let _lock = crate::test_support::workspace_env_lock();
         let dir = std::env::temp_dir().join(format!("openfdd-smoke-import-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         std::env::set_var("OPENFDD_WORKSPACE", &dir);

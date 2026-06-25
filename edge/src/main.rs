@@ -12,6 +12,7 @@ mod import;
 mod model;
 mod ops;
 mod reports;
+mod test_support;
 mod validation;
 
 use auth::audit;
