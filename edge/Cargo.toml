@@ -11,6 +11,14 @@ path = "src/main.rs"
 name = "openfdd-edge"
 path = "src/bin/openfdd_edge.rs"
 
+[[bin]]
+name = "openfdd_dev_validation"
+path = "src/bin/openfdd_dev_validation.rs"
+
+[lib]
+name = "open_fdd_edge_prototype"
+path = "src/lib.rs"
+
 [dependencies]
 arrow = "53"
 base64 = "0.22"
