@@ -8,7 +8,7 @@ ENV VITE_OUT_DIR=../frontend
 RUN npm run build
 COPY frontend/style.css /app/frontend/
 
-FROM rust:1.93-bookworm AS builder
+FROM rust:1.94-bookworm AS builder
 ARG CARGO_BUILD_JOBS=2
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 WORKDIR /app
