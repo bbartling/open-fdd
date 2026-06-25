@@ -1,6 +1,18 @@
 # Local UI build and inspection
 
-Run the Rust edge locally, open the dashboard in a browser, and verify auth, Live FDD Validation, exports, and JSON/CSV-only mode.
+Run the Rust edge locally, open the dashboard in a browser, and verify auth and main tabs.
+
+**Canonical build recipes:** [local-dev.md](./local-dev.md) (localhost, Caddy remote TLS, auth, troubleshooting).
+
+## Build recipes (quick reference)
+
+| Goal | Command |
+|------|---------|
+| Local image (8 GB safe) | `./scripts/openfdd_local_up.sh --build` |
+| Restart bridge | `./scripts/openfdd_local_up.sh` |
+| UI inspection + smoke | `./scripts/openfdd_inspection_build.sh --build --smoke` |
+| Remote HTTPS (Caddy) | `./scripts/openfdd_local_caddy_up.sh --mode tls --lan-ip <IP>` |
+| GHCR desktop profile | see below |
 
 ## Prerequisites
 
@@ -8,7 +20,7 @@ Run the Rust edge locally, open the dashboard in a browser, and verify auth, Liv
 - Git
 - Optional: Node 20+ if you change the React dashboard (`workspace/dashboard`)
 
-Auth credentials live in `workspace/auth.env.local` (never commit). Copy from `.env.example` patterns or generate with bootstrap scripts.
+Auth: `workspace/auth.env.local` holds **bcrypt hashes** (never commit). Login passwords are in **`workspace/bootstrap_credentials.once.txt`** after `./scripts/openfdd_auth_init.sh --show-secrets`.
 
 ## Linux — GHCR image (recommended when publish is green)
 
@@ -49,7 +61,7 @@ curl -fsS http://127.0.0.1:8080/api/health
 
 ## Windows Docker Desktop
 
-See [windows_docker_desktop.md](../desktop/windows_docker_desktop.md). Quick path:
+See [windows_docker_desktop.md](./windows_docker_desktop.md). Quick path:
 
 ```powershell
 git clone https://github.com/bbartling/open-fdd.git
@@ -63,21 +75,17 @@ curl.exe -fsS http://localhost:8080/api/health
 Start-Process http://localhost:8080
 ```
 
-With local Caddy/TLS overlay (feature branch or production-like lab):
-
-```powershell
-curl.exe -k -fsS https://localhost/api/health
-Start-Process https://localhost
-```
+Remote Caddy TLS on Linux bench: use `./scripts/openfdd_local_caddy_up.sh` — see [local-dev.md](./local-dev.md).
 
 ## Login
 
-Default users: `integrator`, `operator`, `agent`. Passwords are in `workspace/auth.env.local` (plaintext CI-style values work; bcrypt hashes preferred).
+Default users: `integrator`, `operator`, `agent`.
+
+**Password:** plaintext from `workspace/bootstrap_credentials.once.txt` — **not** the `OFDD_*_PASSWORD_HASH=` lines in `auth.env.local`.
 
 ```bash
-curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"integrator","password":"<from auth.env.local>"}'
+./scripts/openfdd_auth_init.sh --rotate --all --show-secrets --restart
+OPENFDD_BRIDGE_BASE=http://127.0.0.1:8080 ./scripts/openfdd_auth_smoke.sh
 ```
 
 ## Pages to inspect

@@ -88,5 +88,17 @@ Those are a **follow-up pass** after UI inspection is satisfactory.
 
 ## See also
 
+- [local-dev.md](./local-dev.md) — all build recipes (localhost, Caddy TLS, auth)
 - [local_ui_build.md](./local_ui_build.md) — GHCR vs local Dockerfile paths
 - [windows_docker_desktop.md](./windows_docker_desktop.md) — Docker Desktop on Windows
+- [caddy.md](./caddy.md) — Caddy ingress details
+
+## Remote HTTPS (production-like bench access)
+
+After local image build:
+
+```bash
+./scripts/openfdd_local_caddy_up.sh --mode tls --lan-ip 192.168.204.55
+```
+
+Open **https://192.168.204.55/** from another machine (accept self-signed cert). Full recipe: [local-dev.md](./local-dev.md).

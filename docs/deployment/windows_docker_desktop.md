@@ -67,6 +67,12 @@ Start-Process https://localhost
 | Login invalid | Rotate auth; use plaintext bootstrap file, not bcrypt hash |
 | Port 8080 in use | Change compose port mapping or stop conflicting service |
 | BACnet/Modbus red | Expected off in `desktop-json-csv` profile — use JSON API tab instead |
+| Remote HTTPS from LAN | Linux bench: `./scripts/openfdd_local_caddy_up.sh --mode tls --lan-ip <IP>` — [local-dev.md](./local-dev.md) |
+
+## See also
+
+- [local-dev.md](./local-dev.md) — build recipes including Caddy remote TLS
+- [local_ui_inspection.md](./local_ui_inspection.md)
 
 ## Intentionally not required
 
