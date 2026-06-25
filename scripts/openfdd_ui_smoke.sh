@@ -1,11 +1,31 @@
 #!/usr/bin/env bash
 # Lightweight UI inspection smoke — API + SPA routes, no long validation or field hardware.
+#
+#   ./scripts/openfdd_ui_smoke.sh
+#   ./scripts/openfdd_ui_smoke.sh --base-url "http://192.168.1.50:8080"
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/openfdd_auth_lib.sh
 source "$ROOT/scripts/openfdd_auth_lib.sh"
 
 BASE="${OPENFDD_API_BASE:-http://127.0.0.1:8080}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --base-url)
+      BASE="${2:?--base-url requires value}"
+      shift 2
+      ;;
+    -h|--help)
+      echo "Usage: $0 [--base-url URL]"
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+export OPENFDD_API_BASE="$BASE"
 AUTH="${OPENFDD_AUTH_ENV:-$ROOT/workspace/auth.env.local}"
 ARTIFACT="${OPENFDD_UI_SMOKE_ARTIFACT:-$ROOT/workspace/logs/ui_smoke_$(date -u +%Y%m%dT%H%M%SZ)}"
 CHECK_REPORTS="${OPENFDD_UI_SMOKE_REPORTS:-1}"

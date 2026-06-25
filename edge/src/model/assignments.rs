@@ -29,16 +29,16 @@ pub const ASSIGNMENTS_JSON: &str = r#"{
       ]
     },
     {
-      "haystack_id":"point:actuator-0",
-      "dis":"Device Demo AHU ACTUATOR-0",
+      "haystack_id":"point:demo-actuator",
+      "dis":"Device Demo AHU Actuator Output",
       "kind":"cmd",
       "equip_ref":"equip:demo-ahu",
       "unit":"%",
       "driver_bindings":[
         {"driver":"bacnet","ref":"bacnet:demo-ahu:analog-output:2001","object_id":[1,2001],"priority":1}
       ],
-      "storage_ref":"arrow://hvac/actuator_0",
-      "external_refs":[{"system":"site-docs","ref":"demo-ahu/ACTUATOR-0"}]
+      "storage_ref":"arrow://hvac/actuator_cmd",
+      "external_refs":[{"system":"site-docs","ref":"demo-ahu/actuator-output"}]
     },
     {
       "haystack_id":"point:sat-sp",

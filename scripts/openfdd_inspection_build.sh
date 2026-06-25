@@ -20,12 +20,14 @@ BUILD=0
 SMOKE=0
 DESKTOP=0
 SKIP_RUST=0
+PUBLIC_URL="${OPENFDD_PUBLIC_BASE_URL:-}"
+BIND_HOST="${OPENFDD_BIND_HOST:-}"
 COMPOSE_FILE="${COMPOSE_FILE:-$ROOT/docker-compose.local.yml}"
 BASE="${OPENFDD_BRIDGE_BASE:-http://127.0.0.1:8080}"
 
 usage() {
   cat <<'EOF'
-Usage: scripts/openfdd_inspection_build.sh [--build] [--smoke] [--desktop] [--skip-rust]
+Usage: scripts/openfdd_inspection_build.sh [--build] [--smoke] [--desktop] [--skip-rust] [--public-url URL]
 
 Prepares auth, builds the React dashboard, starts Docker, waits for health, prints UI URL.
 Does NOT run 1-hour or 6-hour validation.
@@ -34,6 +36,11 @@ Does NOT run 1-hour or 6-hour validation.
   --smoke       Run scripts/openfdd_auth_smoke.sh and scripts/openfdd_ui_smoke.sh
   --desktop     Use GHCR compose with JSON/CSV-only profile (BACnet/Modbus disabled)
   --skip-rust   Skip optional host cargo build (Docker image still includes Rust edge)
+  --public-url  Remote inspection URL (also OPENFDD_PUBLIC_BASE_URL)
+
+Env:
+  OPENFDD_BIND_HOST=0.0.0.0   bind edge to all interfaces for LAN inspection
+  OPENFDD_PUBLIC_BASE_URL     printed remote UI URL for another computer
 EOF
 }
 
@@ -43,11 +50,24 @@ while [[ $# -gt 0 ]]; do
     --smoke) SMOKE=1 ;;
     --desktop) DESKTOP=1 ;;
     --skip-rust) SKIP_RUST=1 ;;
+    --public-url)
+      PUBLIC_URL="${2:?--public-url requires value}"
+      shift
+      ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
   shift
 done
+
+if [[ -n "$PUBLIC_URL" ]]; then
+  BASE="$PUBLIC_URL"
+  export OPENFDD_BRIDGE_BASE="$BASE"
+fi
+if [[ -n "$BIND_HOST" ]]; then
+  export OPENFDD_BIND_HOST="$BIND_HOST"
+  export PORT="${OPENFDD_PORT:-8080}"
+fi
 
 # Explicit --build overrides bench.env.local (inspection/dev intent).
 if [[ "$BUILD" == "1" ]]; then
@@ -129,12 +149,17 @@ if [[ "$SMOKE" == "1" ]]; then
   echo "==> Login smoke (all roles)"
   OPENFDD_BRIDGE_BASE="$BASE" "$ROOT/scripts/openfdd_login_ui_smoke.sh"
   echo "==> UI smoke"
-  OPENFDD_API_BASE="$BASE" "$ROOT/scripts/openfdd_ui_smoke.sh"
+  OPENFDD_API_BASE="$BASE" "$ROOT/scripts/openfdd_ui_smoke.sh" --base-url "$BASE"
 fi
 
 echo ""
-echo "Open-FDD UI:"
-echo "  $BASE"
+echo "Open-FDD local UI:"
+echo "  http://127.0.0.1:${OPENFDD_PORT:-8080}"
+if [[ -n "$PUBLIC_URL" ]]; then
+  echo ""
+  echo "Open-FDD remote UI:"
+  echo "  $PUBLIC_URL"
+fi
 echo ""
 echo "Credentials (plaintext — NOT the bcrypt hash in auth.env.local):"
 if [[ -f "$BOOTSTRAP" ]]; then

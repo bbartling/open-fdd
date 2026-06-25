@@ -713,6 +713,34 @@ mod tests {
     }
 
     #[test]
+    fn report_title_uses_request_not_hardcoded_bench() {
+        let _guard = workspace_test_lock();
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let tmp =
+            std::env::temp_dir().join(format!("ofdd-report-title-{}-{n}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", tmp.to_string_lossy().as_ref());
+
+        let custom_title = "RCx Report — equip:custom-lab-99";
+        let doc = create_draft(&json!({"title": custom_title}));
+        assert_eq!(doc["ok"], true);
+        assert_eq!(doc["title"].as_str(), Some(custom_title));
+        let body = doc.to_string();
+        let forbidden_bench = format!("{}-bench", 5007);
+        let forbidden_equip = format!("equip:{}", 5007);
+        let forbidden_actuator = format!("ACTUATOR-{}", 0);
+        assert!(!body.contains(&forbidden_bench));
+        assert!(!body.contains(&forbidden_equip));
+        assert!(!body.contains(&forbidden_actuator));
+
+        std::env::remove_var("OPENFDD_WORKSPACE");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
     fn list_delete_and_from_validation_run() {
         let _guard = workspace_test_lock();
         use std::sync::atomic::{AtomicU64, Ordering};

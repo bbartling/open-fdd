@@ -79,15 +79,17 @@ You are modeling a site on Open-FDD Rust edge.
 7. Use /api/fdd-rules/builder-sql to preview SQL from FDD inputs.
 ```
 
-## Bench device 5007 example
+## Local test bench example (profile-driven)
 
-Seeded points on the demo bench controller (device instance **5007**):
+Do **not** hardcode device instances or BACnet object IDs in production code. Map your lab bench in a gitignored local profile, for example:
 
-| BACnet ref | Haystack ID | FDD input |
+`workspace/smoke-profiles/local/local_validation_profile.local.toml`
+
+| BACnet ref (example) | Haystack ID | FDD input |
 | --- | --- | --- |
-| `bacnet:5007:analog-input:1173` | `point:oa-t` | `oa_t` |
-| `bacnet:5007:analog-input:1168` | `point:oa-h` | `oa_h` |
-| `bacnet:5007:analog-input:1192` | `point:duct-t` | `duct_t` |
-| `bacnet:5007:analog-input:10014` | `point:stat_zn-t` | `zone_t` |
+| `bacnet:<device>:analog-input:<instance>` | `point:oa-t` | `oa_t` |
+| `bacnet:<device>:analog-input:<instance>` | `point:oa-h` | `oa_h` |
+| `bacnet:<device>:analog-input:<instance>` | `point:duct-t` | `duct_t` |
+| `bacnet:<device>:analog-input:<instance>` | `point:zone-t` | `zone_t` |
 
-Use these when drafting SQL rules for the bench AHU — see [SQL HVAC FDD cookbook](../rule-cookbook/sql-hvac-fdd.md).
+See `workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml.example` for a copy-paste template (placeholders only).
