@@ -11,6 +11,7 @@ pub mod import;
 pub mod model;
 pub mod ops;
 pub mod reports;
+#[cfg(test)]
 pub mod test_support;
 pub mod tls;
 pub mod validation;

@@ -19,7 +19,7 @@ services:
     pull_policy: never
     container_name: openfdd-bridge
     ports:
-      - "127.0.0.1:8080:8080"
+      - "${OPENFDD_PUBLISH_HOST:-127.0.0.1}:8080:8080"
     # Auth is read at runtime from OPENFDD_WORKSPACE/auth.env.local (do not use env_file —
     # Docker Compose mangles bcrypt `$` in hash values).
     volumes:

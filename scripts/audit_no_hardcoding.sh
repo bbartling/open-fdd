@@ -13,6 +13,8 @@ PATTERNS=(
   '/bench-5007'
 )
 
+SCAN_DIRS=(edge workspace/dashboard/src scripts docs docker-compose.yml .env.example .github)
+
 ALLOWED=(
   'scripts/'
   'docs/testing/'

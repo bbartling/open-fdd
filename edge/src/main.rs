@@ -682,6 +682,9 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/historian/validation/status") => {
             json_response(&mut stream, historian::store::status_json())
         }
+        ("GET", "/api/validation/audit") => {
+            json_response(&mut stream, validation::audit_status_json())
+        }
         ("GET", "/api/validation-runs/current/status") => {
             json_response(&mut stream, bench::smoke::status_json())
         }

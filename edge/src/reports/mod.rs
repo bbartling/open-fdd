@@ -628,7 +628,7 @@ pub fn from_validation_run(body: &Value) -> Value {
         "Open-FDD 1-Hour Validation Report — FAILED"
     };
     let summary = validation_summary_from_artifact(artifact_dir);
-    let mut doc = create_draft(&json!({
+    let doc = create_draft(&json!({
         "template_id": "validation-summary",
         "title": title,
     }));
@@ -660,7 +660,6 @@ pub fn from_validation_run(body: &Value) -> Value {
             }));
         }
         let _ = save_report(&report_id, &saved);
-        doc = saved;
     }
     let pdf = render_pdf_bundle(&report_id);
     json!({

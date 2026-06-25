@@ -23,10 +23,6 @@ pub fn register_json() -> &'static str {
     r#"{"ok":true,"status":"registered","source":"custom-json-api","runtime":"rust"}"#
 }
 
-pub fn poll_once_json() -> String {
-    serde_json::to_string(&poll_test_source()).unwrap_or_else(|_| r#"{"ok":false}"#.to_string())
-}
-
 pub fn poll_test_source() -> Value {
     let url = env::var("OPENFDD_JSON_API_TEST_URL")
         .unwrap_or_else(|_| "https://httpbin.org/get".to_string());
@@ -99,13 +95,15 @@ pub fn poll_status_json() -> String {
         .to_string();
     }
     let sources: Vec<Value> = serde_json::from_str(SOURCES_JSON).unwrap_or_default();
+    let sample = poll_once_value(&json!({}));
     json!({
         "ok": true,
         "enabled": true,
         "service": "json-api-poll",
         "status": "ready",
         "enabled_points": sources.len(),
-        "samples": 0
+        "samples": sample.get("parsed_points_count").cloned().unwrap_or(json!(0)),
+        "last_poll": sample
     })
     .to_string()
 }

@@ -447,6 +447,20 @@ pub fn bacnet_point_to_simulated_json(profile: &SmokeProfile, pt: &BacnetPointRo
 pub fn profile_summary_json() -> Value {
     let p = active_profile();
     let path = profile_path();
+    let validation_path = validation_profile_path();
+    let dev_meta = super::dev_profile::DevValidationProfile::load(&validation_path)
+        .map(|d| {
+            json!({
+                "configured": true,
+                "report_title": d.report_title,
+                "site_id": d.site_id,
+                "modbus_register_count": d.modbus_registers.len(),
+                "haystack_point_count": d.haystack_points.len(),
+                "modbus_decode_example": super::dev_profile::decode_modbus_scaled(725, 0.1),
+                "parity_tolerance_f": d.temp_tolerance_f,
+            })
+        })
+        .unwrap_or(json!({"configured": false}));
     json!({
         "profile_id": p.profile_id,
         "source_id": p.source_id,
@@ -463,7 +477,18 @@ pub fn profile_summary_json() -> Value {
         "haystack_configured": is_haystack_configured(&p),
         "csv_enabled": p.csv_enabled,
         "profile_path": path.display().to_string(),
-        "profile_file_present": path.exists()
+        "validation_profile_path": validation_path.display().to_string(),
+        "profile_file_present": path.exists(),
+        "dev_profile": dev_meta,
+        "smoke_flags": json!({
+            "require_modbus": require_modbus(),
+            "no_demo_pass": no_demo_pass(),
+            "require_confirmed_fault": require_confirmed_fault(),
+            "validate_docker": validate_docker(),
+            "validate_modbus": validate_modbus(),
+            "validate_json_api": validate_json_api(),
+            "simulate_phases": simulate_phases(),
+        }),
     })
 }
 

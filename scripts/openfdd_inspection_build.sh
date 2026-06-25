@@ -66,6 +66,7 @@ if [[ -n "$PUBLIC_URL" ]]; then
 fi
 if [[ -n "$BIND_HOST" ]]; then
   export OPENFDD_BIND_HOST="$BIND_HOST"
+  export OPENFDD_PUBLISH_HOST="$BIND_HOST"
   export PORT="${OPENFDD_PORT:-8080}"
 fi
 

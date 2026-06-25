@@ -103,10 +103,6 @@ fn legacy_overrides_dir() -> PathBuf {
     workspace_dir().join("overrides")
 }
 
-fn overrides_dir() -> PathBuf {
-    bacnet_overrides_dir()
-}
-
 fn override_registry_path() -> PathBuf {
     bacnet_overrides_dir().join("registry.json")
 }
@@ -371,10 +367,6 @@ fn commandable_points(registry: &Value) -> Vec<Value> {
         }
     }
     points
-}
-
-fn writable_points(registry: &Value) -> Vec<Value> {
-    commandable_points(registry)
 }
 
 fn bench_device_instance() -> u32 {
@@ -848,6 +840,15 @@ pub fn scan_once_value() -> Value {
     let split_p8 = csv_path("bacnet_priority8_overrides.csv");
     let split_other = csv_path("bacnet_non_priority8_overrides.csv");
 
+    // Python-era parity: CI and legacy tooling expect these paths even when a scan
+    // produces only operator (p8) or only supervisory overrides.
+    ensure_csv_header(&export_path);
+    ensure_legacy_csv_header(&legacy_all);
+    ensure_legacy_csv_header(&legacy_p8);
+    ensure_legacy_csv_header(&legacy_other);
+    ensure_csv_header(&split_p8);
+    ensure_csv_header(&split_other);
+
     for point in &scan_points {
         let priority_values = read_priority_array_for_point(point);
         for (priority, value) in priority_values {
@@ -1223,15 +1224,6 @@ pub fn priority_array_json(body: &Value) -> String {
         .unwrap_or_else(|_| "{}".to_string());
     }
     serde_json::to_string(&json!({"ok": false, "error": "point not found"})).unwrap_or_default()
-}
-
-pub fn overrides_json() -> String {
-    let reg = read_override_registry();
-    if reg.as_object().map(|o| !o.is_empty()).unwrap_or(false) {
-        serde_json::to_string_pretty(&reg).unwrap_or_else(|_| "{}".to_string())
-    } else {
-        serde_json::to_string_pretty(&scan_once_value()).unwrap_or_else(|_| "{}".to_string())
-    }
 }
 
 pub fn overrides_csv() -> String {
