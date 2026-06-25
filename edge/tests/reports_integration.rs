@@ -95,12 +95,7 @@ impl Server {
     }
 }
 
-fn http_raw(
-    method: &str,
-    url: &str,
-    token: Option<&str>,
-    body: Option<&str>,
-) -> (u16, String) {
+fn http_raw(method: &str, url: &str, token: Option<&str>, body: Option<&str>) -> (u16, String) {
     let parsed = url.strip_prefix("http://").unwrap_or(url);
     let (host_port, path) = parsed.split_once('/').unwrap_or((parsed, ""));
     let path = format!("/{path}");
@@ -148,7 +143,7 @@ fn report_templates_requires_auth_or_returns_templates() {
     assert_eq!(status, 200);
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(json["ok"], true);
-    assert!(json["templates"].as_array().unwrap().len() >= 1);
+    assert!(!json["templates"].as_array().unwrap().is_empty());
 }
 
 #[test]

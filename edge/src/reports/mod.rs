@@ -1,7 +1,7 @@
 //! Model-driven report drafts and HTML/PDF export bundles (Rust-era, no Python).
 
-use crate::fdd::rules;
 use crate::faults;
+use crate::fdd::rules;
 use crate::historian::store;
 use crate::model::query;
 use chrono::Utc;
@@ -344,7 +344,10 @@ h1{{margin-bottom:0.2rem}}h2{{color:#333;margin-top:0}}\
             if sec.get("visible").and_then(|v| v.as_bool()) == Some(false) {
                 continue;
             }
-            let stitle = sec.get("title").and_then(|v| v.as_str()).unwrap_or("Section");
+            let stitle = sec
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Section");
             html.push_str(&format!("<section><h2>{stitle}</h2><pre>"));
             html.push_str(
                 &serde_json::to_string_pretty(sec.get("content").unwrap_or(&json!({})))
@@ -425,8 +428,8 @@ pub fn render_pdf(report_id: &str) -> Result<PathBuf, String> {
                 .unwrap_or("Section");
             lines.push(String::new());
             lines.push(format!("## {stitle}"));
-            let body = serde_json::to_string(sec.get("content").unwrap_or(&json!({})))
-                .unwrap_or_default();
+            let body =
+                serde_json::to_string(sec.get("content").unwrap_or(&json!({}))).unwrap_or_default();
             for chunk in body.as_bytes().chunks(90) {
                 lines.push(String::from_utf8_lossy(chunk).into_owned());
             }
@@ -504,20 +507,24 @@ mod tests {
     #[test]
     fn sanitize_report_id() {
         assert_eq!(sanitize_id("rpt-123"), "rpt-123");
-        assert_eq!(sanitize_id("../evil"), "____evil");
+        assert_eq!(sanitize_id("../evil"), "___evil");
     }
 
     #[test]
     fn templates_include_validation_summary() {
         let t = templates();
         assert_eq!(t["ok"], true);
-        assert!(t["templates"].as_array().unwrap().len() >= 1);
+        assert!(!t["templates"].as_array().unwrap().is_empty());
     }
 
     #[test]
     fn create_draft_has_sections() {
+        let tmp = std::env::temp_dir().join(format!("ofdd-report-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", tmp.to_string_lossy().as_ref());
         let doc = create_draft(&json!({"title": "Test Report"}));
-        assert_eq!(doc["ok"], true);
+        assert_eq!(doc["ok"], true, "draft error: {:?}", doc.get("error"));
         assert!(doc["sections"].as_array().unwrap().len() >= 5);
     }
 }
