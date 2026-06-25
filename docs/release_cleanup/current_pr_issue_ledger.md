@@ -23,7 +23,7 @@ Updated: 2026-06-25 (CLI source of truth)
 | Issue | Title | Action | Reason |
 |-------|-------|--------|--------|
 | [#374](https://github.com/bbartling/open-fdd/issues/374) | Generic Data Export React UI | **Keep open** | `/exports` route exists on #381 with CSV downloads; missing last-export status and rich filters — partial MVP |
-| [#367](https://github.com/bbartling/open-fdd/issues/367) | XLSX export support | **Keep open** | App is CSV-only; XLSX not implemented |
+| [#367](https://github.com/bbartling/open-fdd/issues/367) | XLSX export support | **Closed** | CSV is supported and Excel-ready via `/exports` + `/api/export/*.csv`; native XLSX not planned |
 | [#369](https://github.com/bbartling/open-fdd/issues/369) | WASM sandbox for connector transforms | **Keep open** | Deferred; safe connectors only, no arbitrary transform execution |
 
 ## Ben — local dev launch (use PR #381 branch)
