@@ -98,7 +98,7 @@ Those are a **follow-up pass** after UI inspection is satisfactory.
 After local image build:
 
 ```bash
-./scripts/openfdd_local_caddy_up.sh --mode tls --lan-ip 192.168.204.55
+./scripts/openfdd_local_caddy_up.sh --mode tls --lan-ip <your-lan-ip>
 ```
 
-Open **https://192.168.204.55/** from another machine (accept self-signed cert). Full recipe: [local-dev.md](./local-dev.md).
+Open **https://<your-lan-ip>/** from another machine (accept self-signed cert). Full recipe: [local-dev.md](./local-dev.md).

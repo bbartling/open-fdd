@@ -377,6 +377,18 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             raw_json(&mut stream, model::assignments::algorithm_bindings_json())
         }
         ("GET", "/api/haystack/about") => raw_json(&mut stream, &drivers::haystack::about_json()),
+        ("GET", "/api/haystack/config") => {
+            raw_json(&mut stream, &drivers::haystack::config_get_json())
+        }
+        ("POST", "/api/haystack/config") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            serde_json::from_str::<Value>(&drivers::haystack::config_save_json(&parse_json_body(
+                &body,
+            )))
+            .unwrap_or(json!({"ok": false})),
+        ),
         ("GET", "/api/haystack/status") => raw_json(&mut stream, &drivers::haystack::status_json()),
         ("GET", "/api/haystack/ops") => raw_json(&mut stream, &drivers::haystack::ops_json()),
         ("POST", "/api/haystack/test") => raw_json(&mut stream, &drivers::haystack::test_json()),
@@ -1436,6 +1448,8 @@ fn agent_tools() -> Value {
             {"name":"json_api.sources","method":"GET","path":"/api/json-api/sources","requires":"JWT"},
             {"name":"json_api.register","method":"POST","path":"/api/json-api/register","requires":"integrator|agent"},
             {"name":"json_api.poll_once","method":"POST","path":"/api/json-api/poll-once","requires":"integrator|agent"},
+            {"name":"haystack.config","method":"GET","path":"/api/haystack/config","requires":"JWT"},
+            {"name":"haystack.config_save","method":"POST","path":"/api/haystack/config","requires":"integrator|agent"},
             {"name":"haystack.status","method":"GET","path":"/api/haystack/status","requires":"JWT"},
             {"name":"haystack.test","method":"POST","path":"/api/haystack/test","requires":"JWT"},
             {"name":"haystack.about","method":"GET","path":"/api/haystack/about","requires":"JWT"},

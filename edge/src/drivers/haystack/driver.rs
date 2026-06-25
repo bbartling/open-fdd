@@ -4,7 +4,7 @@ use super::client::{
     about as client_about, nav as client_nav, ops as client_ops, read as client_read,
     test_connection,
 };
-use super::config::{load_config, HaystackConfig};
+use super::config::{apply_save_payload, config_path, load_config, save_config, HaystackConfig};
 use super::fixture;
 use super::normalize::{
     build_driver_tree, grid_rows, normalize_equipment, normalize_points, normalize_sources,
@@ -230,6 +230,37 @@ pub fn points_json() -> String {
         })
     })
     .pipe_to_string()
+}
+
+pub fn config_get_json() -> String {
+    let cfg = load_config();
+    json!({
+        "ok": true,
+        "config": cfg.redacted_summary(),
+        "config_path": config_path().display().to_string(),
+        "config_file_present": config_path().exists()
+    })
+    .pipe_to_string()
+}
+
+pub fn config_save_json(payload: &Value) -> String {
+    let current = load_config();
+    let updated = apply_save_payload(&current, payload);
+    if updated.base_url.trim().is_empty() {
+        return json!({"ok": false, "error": "base_url is required"}).pipe_to_string();
+    }
+    let mut to_save = updated.clone();
+    to_save.enabled = true;
+    match save_config(&to_save) {
+        Ok(()) => json!({
+            "ok": true,
+            "message": "Haystack configuration saved to local profile",
+            "config": to_save.redacted_summary(),
+            "config_path": config_path().display().to_string()
+        })
+        .pipe_to_string(),
+        Err(e) => json!({"ok": false, "error": e}).pipe_to_string(),
+    }
 }
 
 trait PipeToString {

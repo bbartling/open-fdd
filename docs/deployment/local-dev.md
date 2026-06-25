@@ -109,11 +109,11 @@ Open **http://127.0.0.1:8080** and sign in with plaintext from bootstrap (see ab
 After the local image exists (`openfdd_local_up.sh --build`):
 
 ```bash
-# Example: bench at 192.168.204.55
-./scripts/openfdd_local_caddy_up.sh --mode tls --lan-ip 192.168.204.55
+# Example: bench at <your-lan-ip>
+./scripts/openfdd_local_caddy_up.sh --mode tls --lan-ip <your-lan-ip>
 
 # If cert was generated without this IP before:
-./scripts/openfdd_local_caddy_up.sh --mode tls --lan-ip 192.168.204.55 --regen-certs
+./scripts/openfdd_local_caddy_up.sh --mode tls --lan-ip <your-lan-ip> --regen-certs
 ```
 
 What you get:
@@ -123,14 +123,14 @@ What you get:
 - Self-signed TLS with LAN IP in cert SANs
 - Same JWT users as local/prod
 
-From another machine: **https://192.168.204.55/** (accept browser cert warning).
+From another machine: **https://<your-lan-ip>/** (accept browser cert warning).
 
-Optional client hosts entry: `192.168.204.55 openfdd.local` → **https://openfdd.local/**
+Optional client hosts entry: `<your-lan-ip> openfdd.local` → **https://openfdd.local/**
 
 HTTP-only lab mode:
 
 ```bash
-./scripts/openfdd_local_caddy_up.sh --mode http --lan-ip 192.168.204.55
+./scripts/openfdd_local_caddy_up.sh --mode http --lan-ip <your-lan-ip>
 ```
 
 Firewall on the server:
@@ -144,7 +144,7 @@ Health check:
 
 ```bash
 curl -kfsS https://127.0.0.1/api/health
-curl -kfsS https://192.168.204.55/api/health
+curl -kfsS https://<your-lan-ip>/api/health
 ```
 
 More detail: [caddy.md](./caddy.md), [operations/production-caddy.md](../operations/production-caddy.md).

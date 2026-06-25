@@ -66,7 +66,7 @@ mod tests {
         let input = ParityInput {
             equipment_id: "equip:demo".into(),
             role: "oa_t".into(),
-            bacnet_object: "analog-input,1173".into(),
+            bacnet_object: "analog-input,1001".into(),
             haystack_id: "point:oa-t".into(),
             bacnet_value: 62.0,
             haystack_value: 62.5,
@@ -83,7 +83,7 @@ mod tests {
         let input = ParityInput {
             equipment_id: "equip:demo".into(),
             role: "oa_h".into(),
-            bacnet_object: "analog-input,1168".into(),
+            bacnet_object: "analog-input,1002".into(),
             haystack_id: "point:oa-h".into(),
             bacnet_value: 45.0,
             haystack_value: 55.0,

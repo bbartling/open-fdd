@@ -418,7 +418,7 @@ fn build_telemetry_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
         .take(n)
         .collect::<Vec<_>>()
         .into();
-    let object: StringArray = std::iter::repeat("ai:1173")
+    let object: StringArray = std::iter::repeat("ai:1001")
         .take(n)
         .collect::<Vec<_>>()
         .into();

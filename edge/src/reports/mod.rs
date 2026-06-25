@@ -709,6 +709,8 @@ mod tests {
     fn list_delete_and_from_validation_run() {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT: AtomicU64 = AtomicU64::new(0);
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let n = NEXT.fetch_add(1, Ordering::Relaxed);
         let tmp = std::env::temp_dir().join(format!("ofdd-report-list-{}-{n}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
@@ -742,5 +744,7 @@ mod tests {
 
         let del = delete_report(rid);
         assert_eq!(del["ok"], true);
+        std::env::remove_var("OPENFDD_WORKSPACE");
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

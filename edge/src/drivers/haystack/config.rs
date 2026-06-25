@@ -1,18 +1,18 @@
 //! Haystack driver configuration (TOML + environment overrides).
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 const DEFAULT_CONFIG_PATH: &str = "workspace/haystack/local.nhaystack.toml";
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HaystackConfigFile {
     pub haystack: HaystackConfig,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HaystackConfig {
     #[serde(default = "default_id")]
     pub id: String,
@@ -183,6 +183,26 @@ pub fn config_path() -> PathBuf {
 
 pub fn load_config() -> HaystackConfig {
     let mut cfg = load_config_from_path(&config_path()).unwrap_or_default();
+    let profile = crate::validation::profile::active_profile();
+    if crate::validation::profile::is_haystack_configured(&profile) {
+        if cfg.base_url.trim().is_empty() {
+            cfg.base_url = profile.haystack_base_url.clone();
+        }
+        if !profile.haystack_username.is_empty()
+            && cfg.username.as_ref().is_none_or(String::is_empty)
+        {
+            cfg.username = Some(profile.haystack_username.clone());
+        }
+        if !profile.haystack_password.is_empty()
+            && cfg.password.as_ref().is_none_or(String::is_empty)
+        {
+            cfg.password = Some(profile.haystack_password.clone());
+        }
+        if !profile.haystack_source_id.is_empty() {
+            cfg.source_id = profile.haystack_source_id.clone();
+        }
+        cfg.enabled = true;
+    }
     if let Ok(base) = env::var("OPENFDD_HAYSTACK_BASE") {
         if !base.trim().is_empty() {
             cfg.base_url = base;
@@ -208,6 +228,48 @@ pub fn load_config_from_path(path: &Path) -> Option<HaystackConfig> {
     let raw = fs::read_to_string(path).ok()?;
     let parsed: HaystackConfigFile = toml::from_str(&raw).ok()?;
     Some(parsed.haystack)
+}
+
+pub fn save_config(cfg: &HaystackConfig) -> Result<(), String> {
+    let path = config_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let file = HaystackConfigFile {
+        haystack: cfg.clone(),
+    };
+    let text = toml::to_string_pretty(&file).map_err(|e| e.to_string())?;
+    fs::write(&path, text).map_err(|e| e.to_string())
+}
+
+pub fn apply_save_payload(base: &HaystackConfig, payload: &serde_json::Value) -> HaystackConfig {
+    let mut cfg = base.clone();
+    if let Some(v) = payload.get("base_url").and_then(|v| v.as_str()) {
+        cfg.base_url = v.trim().to_string();
+        cfg.enabled = !cfg.base_url.is_empty();
+    }
+    if let Some(v) = payload.get("username").and_then(|v| v.as_str()) {
+        if !v.is_empty() {
+            cfg.username = Some(v.to_string());
+        }
+    }
+    if let Some(v) = payload.get("password").and_then(|v| v.as_str()) {
+        if !v.is_empty() {
+            cfg.password = Some(v.to_string());
+        }
+    }
+    if let Some(v) = payload.get("enabled").and_then(|v| v.as_bool()) {
+        cfg.enabled = v;
+    }
+    if let Some(v) = payload.get("tls_verify").and_then(|v| v.as_bool()) {
+        cfg.tls_verify = v;
+    }
+    if let Some(v) = payload.get("source_id").and_then(|v| v.as_str()) {
+        if !v.is_empty() {
+            cfg.source_id = v.to_string();
+        }
+    }
+    cfg
 }
 
 #[cfg(test)]

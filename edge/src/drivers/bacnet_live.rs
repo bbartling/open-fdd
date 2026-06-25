@@ -54,10 +54,16 @@ fn parse_bind() -> (Ipv4Addr, u16, Ipv4Addr) {
 }
 
 fn discover_low_high() -> (u32, u32) {
+    let profile = crate::validation::profile::active_profile();
+    let default_inst = if profile.device_instance > 0 {
+        profile.device_instance
+    } else {
+        0
+    };
     let low = env::var("OPENFDD_BACNET_DISCOVER_LOW")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(5007);
+        .unwrap_or(default_inst);
     let high = env::var("OPENFDD_BACNET_DISCOVER_HIGH")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -421,7 +427,7 @@ pub fn point_object_from_json(point: &Value) -> Option<(u32, ObjectType, u32)> {
 }
 
 pub fn point_object_from_id(point_id: &str) -> Option<(u32, ObjectType, u32)> {
-    // bacnet:5007:analog-input:1173
+    // bacnet:<device>:analog-input:<instance>
     let parts: Vec<&str> = point_id.split(':').collect();
     if parts.len() != 4 || parts[0] != "bacnet" {
         return None;

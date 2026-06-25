@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Generic live FDD validation smoke — BACnet, Modbus, JSON API, historian, Docker.
 #
-# Example (6-hour live validation against a configured BACnet device):
-#   OPENFDD_SMOKE_PROFILE=local_bacnet_fdd_validation \
-#   OPENFDD_SMOKE_DEVICE_INSTANCE=5007 \
+# Example (live validation against a configured BACnet device):
+#   OPENFDD_VALIDATION_PROFILE=workspace/smoke-profiles/local/local_validation_profile.local.toml \
+#   OPENFDD_SMOKE_DEVICE_INSTANCE=<your-device> \
 #   OPENFDD_SMOKE_DURATION_HOURS=6 \
 #   OPENFDD_SMOKE_INTERVAL_SECONDS=300 \
 #   OPENFDD_SMOKE_LIVE_FDD=1 \
@@ -41,7 +41,8 @@ if [[ "$BASE" == https://* ]]; then
   CURL_TLS=(-k)
 fi
 
-PROFILE="${OPENFDD_SMOKE_PROFILE:-local_bacnet_fdd_validation}"
+PROFILE="${OPENFDD_SMOKE_PROFILE:-local_validation_profile}"
+VALIDATION_PROFILE="${OPENFDD_VALIDATION_PROFILE:-$ROOT/workspace/smoke-profiles/local/${PROFILE}.local.toml}"
 DEVICE_INSTANCE="${OPENFDD_SMOKE_DEVICE_INSTANCE:-0}"
 HOURS="${OPENFDD_SMOKE_DURATION_HOURS:-${BENCH_SMOKE_HOURS:-6}}"
 INTERVAL="${OPENFDD_SMOKE_INTERVAL_SECONDS:-${BENCH_SMOKE_INTERVAL_SEC:-300}}"
@@ -73,6 +74,14 @@ LOG_DIR="$ARTIFACT_ROOT"
 AUTH="$ROOT/workspace/auth.env.local"
 
 export OPENFDD_SMOKE_PROFILE="$PROFILE"
+export OPENFDD_VALIDATION_PROFILE="$VALIDATION_PROFILE"
+export OPENFDD_SMOKE_PROFILE_PATH="$VALIDATION_PROFILE"
+echo "Using validation profile: $VALIDATION_PROFILE"
+if [[ ! -f "$VALIDATION_PROFILE" ]]; then
+  echo "ERROR: validation profile not found: $VALIDATION_PROFILE" >&2
+  echo "Copy workspace/smoke-profiles/local/local_validation_profile.local.toml.example to ${PROFILE}.local.toml" >&2
+  exit 1
+fi
 export OPENFDD_HISTORIAN_SUBDIR="${OPENFDD_HISTORIAN_SUBDIR:-validation}"
 if [[ "$DEVICE_INSTANCE" != "0" ]]; then
   export OPENFDD_SMOKE_DEVICE_INSTANCE="$DEVICE_INSTANCE"

@@ -23,6 +23,16 @@ exec > >(tee -a "$ORCH_DIR/orchestrator.log") 2>&1
 echo "==> Open-FDD one-hour validation orchestration"
 echo "    artifact=$ORCH_DIR"
 
+VALIDATION_PROFILE="${OPENFDD_VALIDATION_PROFILE:-$ROOT/workspace/smoke-profiles/local/local_validation_profile.local.toml}"
+export OPENFDD_VALIDATION_PROFILE="$VALIDATION_PROFILE"
+export OPENFDD_SMOKE_PROFILE_PATH="$VALIDATION_PROFILE"
+echo "    profile=$VALIDATION_PROFILE"
+if [[ ! -f "$VALIDATION_PROFILE" ]]; then
+  echo "ERROR: validation profile not found: $VALIDATION_PROFILE" >&2
+  echo "Copy workspace/smoke-profiles/local/local_validation_profile.local.toml.example and configure." >&2
+  exit 1
+fi
+
 if [[ "$QUICK_MIN" -gt 0 ]]; then
   echo "WARN: OPENFDD_VALIDATION_QUICK_MINUTES=$QUICK_MIN — not a full 1-hour acceptance run"
 fi

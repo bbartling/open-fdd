@@ -261,8 +261,12 @@ pub fn pivot_rows_to_batch(rows: &[Value]) -> Result<RecordBatch, String> {
         equip.push(
             row.get("equipment_id")
                 .and_then(|v| v.as_str())
-                .unwrap_or("5007")
-                .to_string(),
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| {
+                    crate::validation::profile::active_profile()
+                        .equipment_id
+                        .clone()
+                }),
         );
         oat.push(row.get("oa_t").and_then(|v| v.as_f64()));
         oah.push(row.get("oa_h").and_then(|v| v.as_f64()));

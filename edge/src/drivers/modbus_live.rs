@@ -15,13 +15,21 @@ pub fn is_live_mode() -> bool {
         .unwrap_or(false)
 }
 
-pub fn host_port() -> (String, u16) {
-    let host = env::var("OPENFDD_MODBUS_HOST").unwrap_or_default();
+pub fn host_port() -> Result<(String, u16), String> {
+    let profile = crate::validation::profile::active_profile();
+    if crate::validation::profile::is_modbus_configured(&profile) {
+        return Ok((profile.modbus_host.clone(), profile.modbus_port));
+    }
+    let host = env::var("OPENFDD_MODBUS_HOST")
+        .map_err(|_| "OPENFDD_MODBUS_HOST not configured".to_string())?;
+    if host.trim().is_empty() {
+        return Err("OPENFDD_MODBUS_HOST not configured".to_string());
+    }
     let port = env::var("OPENFDD_MODBUS_PORT")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(1502);
-    (host, port)
+    Ok((host, port))
 }
 
 pub fn unit_id() -> u8 {
@@ -131,10 +139,7 @@ fn read_registers(
 }
 
 pub fn read_register(register: u16, function: &str) -> Result<Value, String> {
-    let (host, port) = host_port();
-    if host.trim().is_empty() {
-        return Err("OPENFDD_MODBUS_HOST not configured".to_string());
-    }
+    let (host, port) = host_port()?;
     let unit = unit_id();
     let address = modbus_address(register, function)?;
     let fc = match function {
@@ -174,7 +179,7 @@ pub fn read_scaled_register(
 }
 
 pub fn scan_device() -> Result<Value, String> {
-    let (host, port) = host_port();
+    let (host, port) = host_port()?;
     let unit = unit_id();
     let holding = read_registers(&host, port, unit, FC_READ_HOLDING, 0, 6)?;
     let input = read_registers(&host, port, unit, FC_READ_INPUT, 0, 4)?;

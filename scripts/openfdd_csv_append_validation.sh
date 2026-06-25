@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CSV append/import/export/purge helpers for live FDD validation (device 5007).
+# CSV append/import/export/purge helpers for live FDD validation.
 # Sourced from smoke_live_fdd_validation.sh — not executed directly.
 set -euo pipefail
 
@@ -7,8 +7,8 @@ openfdd_csv_append_init() {
   local log_dir="$1"
   CSV_APPEND_LOG_DIR="$log_dir"
   CSV_APPEND_SOURCE_ID="${OPENFDD_CSV_SOURCE_ID:-source:validation-csv}"
-  CSV_APPEND_EQUIPMENT_ID="${OPENFDD_CSV_EQUIPMENT_ID:-5007}"
-  CSV_APPEND_PROFILE="${OPENFDD_CSV_IMPORT_PROFILE:-validation_csv_5007}"
+  CSV_APPEND_EQUIPMENT_ID="${OPENFDD_CSV_EQUIPMENT_ID:-${OPENFDD_SMOKE_EQUIPMENT_ID:-equip:local-test-equipment}}"
+  CSV_APPEND_PROFILE="${OPENFDD_CSV_IMPORT_PROFILE:-validation_csv_local}"
   CSV_APPEND_BATCH="${CSV_APPEND_BATCH:-0}"
   CSV_APPEND_HIST_ROWS_BEFORE=0
   CSV_APPEND_HIST_ROWS_AFTER=0

@@ -15,13 +15,13 @@ Uses `docker-compose.local.yml` + `docker-compose.local.caddy.yml` and the **loc
 **Remote TLS dial-in** (production-like; self-signed cert):
 
 ```bash
-./scripts/openfdd_local_caddy_up.sh --mode tls --lan-ip 192.168.204.55
+./scripts/openfdd_local_caddy_up.sh --mode tls --lan-ip <your-lan-ip>
 ```
 
 Regenerate cert if the LAN IP changed:
 
 ```bash
-./scripts/openfdd_local_caddy_up.sh --mode tls --lan-ip 192.168.204.55 --regen-certs
+./scripts/openfdd_local_caddy_up.sh --mode tls --lan-ip <your-lan-ip> --regen-certs
 ```
 
 | Flag | Purpose |

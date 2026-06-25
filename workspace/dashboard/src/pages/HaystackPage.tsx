@@ -95,8 +95,20 @@ export default function HaystackPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [advancedJson, setAdvancedJson] = useState("");
 
-  const baseUrl = status?.config?.base_url ?? "—";
-  const enabled = status?.enabled ?? false;
+  const [formBaseUrl, setFormBaseUrl] = useState("");
+  const [formUsername, setFormUsername] = useState("");
+  const [formPassword, setFormPassword] = useState("");
+  const [configPath, setConfigPath] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+
+  const loadConfig = useCallback(async () => {
+    const cfg = await apiFetch<{ config?: HaystackStatus["config"]; config_path?: string }>(
+      "/api/haystack/config",
+    );
+    setFormBaseUrl(String(cfg.config?.base_url ?? ""));
+    setFormUsername(String(cfg.config?.username ?? "").replace(/\*+$/, ""));
+    setConfigPath(String(cfg.config_path ?? ""));
+  }, []);
 
   const appendLog = (line: string) =>
     setLog((prev) => `${new Date().toISOString()} ${line}\n${prev}`.slice(0, 12000));
@@ -118,10 +130,44 @@ export default function HaystackPage() {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([loadStatus(), loadTree()])
+    Promise.all([loadStatus(), loadTree(), loadConfig()])
       .catch((e) => setError(formatApiError(e)))
       .finally(() => setLoading(false));
-  }, [loadStatus, loadTree]);
+  }, [loadStatus, loadTree, loadConfig]);
+
+  const baseUrl = status?.config?.base_url ?? "—";
+  const enabled = status?.enabled ?? false;
+
+  async function saveConfig() {
+    setPending(true);
+    setError("");
+    setSaveMessage("");
+    try {
+      const body: Record<string, unknown> = {
+        base_url: formBaseUrl.trim(),
+        username: formUsername.trim(),
+        enabled: true,
+        tls_verify: status?.config?.tls_verify ?? false,
+      };
+      if (formPassword.trim()) {
+        body.password = formPassword;
+      }
+      const res = await apiFetch<{ message?: string; config_path?: string }>("/api/haystack/config", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      setSaveMessage(res.message ?? "Configuration saved");
+      setFormPassword("");
+      if (res.config_path) setConfigPath(res.config_path);
+      await loadStatus();
+      await loadConfig();
+      appendLog("Saved Haystack configuration");
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setPending(false);
+    }
+  }
 
   async function testConnection() {
     setPending(true);
@@ -240,12 +286,58 @@ export default function HaystackPage() {
       {!enabled && !loading ? (
         <div className="panel callout-panel">
           <p>
-            Haystack is disabled or not configured. Set{" "}
-            <code>OPENFDD_HAYSTACK_BASE</code> / credentials locally or copy{" "}
-            <code>workspace/haystack/local.nhaystack.example.toml</code> to a gitignored file.
+            Configure Haystack below (saved to gitignored{" "}
+            <code>workspace/haystack/local.nhaystack.toml</code>) or set{" "}
+            <code>[haystack]</code> in your local validation profile. Use{" "}
+            <code>OPENFDD_HAYSTACK_FIXTURE=1</code> for UI/API without live Niagara.
           </p>
         </div>
       ) : null}
+
+      <div className="panel driver-connection-panel">
+        <h3>Connection settings</h3>
+        <div className="form-grid">
+          <label>
+            Base URL
+            <input
+              type="url"
+              value={formBaseUrl}
+              onChange={(e) => setFormBaseUrl(e.target.value)}
+              placeholder="https://&lt;host&gt;/haystack"
+            />
+          </label>
+          <label>
+            Username
+            <input
+              type="text"
+              value={formUsername}
+              onChange={(e) => setFormUsername(e.target.value)}
+              autoComplete="username"
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={formPassword}
+              onChange={(e) => setFormPassword(e.target.value)}
+              placeholder="Leave blank to keep existing"
+              autoComplete="current-password"
+            />
+          </label>
+        </div>
+        {configPath ? (
+          <p className="muted">
+            Profile: <code>{configPath}</code>
+          </p>
+        ) : null}
+        {saveMessage ? <p className="success">{saveMessage}</p> : null}
+        <div className="btn-row">
+          <ActionButton pending={pending} onClick={() => void saveConfig()}>
+            Save configuration
+          </ActionButton>
+        </div>
+      </div>
 
       <div className="panel driver-connection-panel">
         <h3>Haystack server</h3>

@@ -95,6 +95,15 @@ fn effective_points(p: &SmokeProfile) -> Vec<profile::BacnetPointRole> {
 }
 
 fn modbus_probe(p: &SmokeProfile) -> Value {
+    if !profile::is_modbus_configured(p) {
+        return json!({
+            "configured": false,
+            "status": "skipped",
+            "message": "Modbus not configured",
+            "available": false,
+            "degraded": false
+        });
+    }
     let body = json!({
         "register": p.modbus_register,
         "function": "input_register",

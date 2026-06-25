@@ -1,35 +1,63 @@
 # Open-FDD release cleanup ledger
 
-Updated: 2026-06-26 (validation reporting workflow PR)
+Updated: 2026-06-26 (anti-hardcoding / model-driven validation cleanup)
 
 ## Current PRs
 
-| PR | Title | Branch | CI | Blocks validation PR? | Decision |
-|----|-------|--------|-----|----------------------|----------|
-| **NEW** | Add local validation reporting workflow | `feature/local-validation-reporting-workflow` | pending | — | **Active — this PR** |
-| [#383](https://github.com/bbartling/open-fdd/pull/383) | Rust Haystack driver for Niagara nHaystack | `feature/haystack-niagara-driver` | Rust CI failing (Docker) | No — merged into validation branch | **Leave open** until CI fixed; superseded by merge into #384 |
-| [#381](https://github.com/bbartling/open-fdd/pull/381) | UI inspection build | `integration/ui-inspection-build` | Green | No — fast-forward merged into validation branch | **Leave open** until #384 merges; then close as superseded |
-| [#382](https://github.com/bbartling/open-fdd/pull/382) | Docs cleanup Rust-only | `docs/rust-readme-docs-ci-cleanup` | Mostly green | No | **Leave open** — docs-only |
+| PR | Title | Branch | CI | Decision |
+|----|-------|--------|-----|----------|
+| [#385](https://github.com/bbartling/open-fdd/pull/385) | Local validation reporting workflow | `feature/local-validation-reporting-workflow` | pending | **Active — anti-hardcoding cleanup** |
+| [#383](https://github.com/bbartling/open-fdd/pull/383) | Rust Haystack driver | `feature/haystack-niagara-driver` | merged into #385 | Leave open until CI green |
+| [#381](https://github.com/bbartling/open-fdd/pull/381) | UI inspection build | `integration/ui-inspection-build` | Green | Superseded by merge into #385 |
 
-## Current issues
+## Anti-hardcoding audit
 
-| Issue | Title | This PR | Decision |
-|-------|-------|---------|----------|
-| [#374](https://github.com/bbartling/open-fdd/issues/374) | Generic Data Export UI | Partial `/exports` on integration branch | **Keep open** — not in scope |
-| [#369](https://github.com/bbartling/open-fdd/issues/369) | WASM sandbox | Not addressed | **Keep open** — deferred |
-| **NEW** | Run 6-hour validation after 1-hour report workflow is stable | Future | **Create** if not run in this PR |
+| File | Value | Allowed? | Fix |
+|------|-------|----------|-----|
+| `edge/src/validation/profile.rs` | `192.168.204.14` modbus default | **Not allowed** | Removed; empty host, `modbus_enabled=false`; typed section loader |
+| `edge/src/drivers/modbus_live.rs` | env fallback to private IP | **Not allowed** | `host_port()` returns `Result`; reads profile first |
+| `edge/src/drivers/modbus.rs` | `RPI_POINTS_JSON` @ 192.168.204.14 | **Not allowed** | Profile-driven live points; `not_configured` status |
+| `edge/src/drivers/bacnet.rs` | bench5007, 1173/1168/1192, 192.168.204.* | **Not allowed** | Profile-driven simulated device/points; generic demo IDs |
+| `edge/src/drivers/bacnet_live.rs` | discover default 5007 | **Not allowed** | Uses validation profile `device_instance` |
+| `edge/src/model/smoke_profile.rs` test | 5007, 1173, 192.168.204.14 | **Not allowed** | Generic equip/instance 42 / 1001 |
+| `edge/src/historian/store.rs` | equipment default `5007` | **Not allowed** | Uses `active_profile().equipment_id` |
+| `edge/src/model/assignments.rs` | equip:5007, analog-input,1192 | **Not allowed** | Generic `equip:demo-ahu` / 100x IDs |
+| `docker-compose.yml` | MODBUS/BACnet private defaults | **Not allowed** | Empty env defaults (must configure) |
+| `.env.example` | 192.168.204.*, 5007 | **Not allowed** | Placeholders + `OPENFDD_VALIDATION_PROFILE` |
+| `scripts/openfdd_csv_append_validation.sh` | CSV equipment 5007 | **Not allowed** | Requires profile/env equipment id |
+| `scripts/smoke_live_fdd_validation.sh` | implicit 5007 profile | **Not allowed** | Requires `local_validation_profile.local.toml` |
+| `scripts/openfdd_rust_edge_bootstrap.sh` | 192.168.204.* commission env | **Not allowed** | Placeholder commission template |
+| `docs/deployment/*.md` | 192.168.204.55 examples | **Not allowed** | Replaced with `<your-lan-ip>` |
+| `workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml.example` | 5007, 1173… | **Allowed** | Example only; copy to gitignored `.local.toml` |
+| `edge/src/main.rs` | `/api/bench/5007/*` legacy routes | **Allowed (deferred)** | Legacy bench API surface; tracked for removal |
+| `scripts/audit_no_private_bench_hardcoding.sh` | CI guard | **Added** | Wired into `.github/workflows/ci.yml` |
 
-## Issue comments (if still open after merge)
+## Config / profile behavior
 
-- **#374:** Partial MVP exists on integration branch (`/exports` CSV downloads). Rich filters and last-export status remain future work.
-- **#369:** WASM sandbox for custom connector transforms remains deferred; validation PR uses safe read-only drivers only.
+- **Source of truth:** `OPENFDD_VALIDATION_PROFILE` → `workspace/smoke-profiles/local/local_validation_profile.local.toml` (gitignored)
+- **Example:** `workspace/smoke-profiles/local/local_validation_profile.local.toml.example`
+- **Haystack UI:** Integrations → Haystack → Save configuration → `workspace/haystack/local.nhaystack.toml` (gitignored)
+- **Modbus/Haystack missing:** API/UI returns `not_configured` / skipped — not failed
+- **Reports:** equipment id, points, SQL from active profile + historian — no bench constants
 
-## Local 1-hour validation
+## Example command
 
 ```bash
-git checkout feature/local-validation-reporting-workflow
-OPENFDD_ALLOW_LOCAL_BUILD=1 ./scripts/openfdd_inspection_build.sh --build
-./scripts/openfdd_one_hour_validation_report.sh
+OPENFDD_VALIDATION_PROFILE=workspace/smoke-profiles/local/local_validation_profile.local.toml \
+  ./scripts/openfdd_one_hour_validation_report.sh
 ```
 
-Quick wiring (not acceptance): `OPENFDD_VALIDATION_QUICK_MINUTES=3 ./scripts/openfdd_one_hour_validation_report.sh`
+## Tests run (cleanup step — no full 1-hour validation)
+
+- `cargo test --workspace` — pass
+- `cargo fmt --all` — applied
+- `npm ci && npm run build` — pass
+- `docker compose config` — pass
+- `bash -n` on validation/smoke scripts — pass
+- `./scripts/audit_no_private_bench_hardcoding.sh` — pass
+
+## Deferred
+
+- **Legacy `/api/bench/5007/*` routes** in `edge/src/main.rs` — remain for backward compat; remove in follow-up issue
+- **Full 1-hour validation** — blocked until profile configured locally and user runs orchestrator
+- **Issue #384** — 6-hour validation after 1-hour workflow stable
