@@ -678,6 +678,11 @@ pub fn from_validation_run(body: &Value) -> Value {
 mod tests {
     use super::*;
 
+    fn workspace_test_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     #[test]
     fn sanitize_report_id() {
         assert_eq!(sanitize_id("rpt-123"), "rpt-123");
@@ -693,6 +698,7 @@ mod tests {
 
     #[test]
     fn create_draft_has_sections() {
+        let _guard = workspace_test_lock();
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let n = NEXT.fetch_add(1, Ordering::Relaxed);
@@ -703,14 +709,15 @@ mod tests {
         let doc = create_draft(&json!({"title": "Test Report"}));
         assert_eq!(doc["ok"], true, "draft error: {:?}", doc.get("error"));
         assert!(doc["sections"].as_array().unwrap().len() >= 5);
+        std::env::remove_var("OPENFDD_WORKSPACE");
+        let _ = std::fs::remove_dir_all(tmp);
     }
 
     #[test]
     fn list_delete_and_from_validation_run() {
+        let _guard = workspace_test_lock();
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT: AtomicU64 = AtomicU64::new(0);
-        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let n = NEXT.fetch_add(1, Ordering::Relaxed);
         let tmp = std::env::temp_dir().join(format!("ofdd-report-list-{}-{n}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);

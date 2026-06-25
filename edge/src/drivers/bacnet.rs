@@ -33,6 +33,7 @@ fn default_simulated_points() -> Vec<Value> {
         json!({"device_instance":inst,"object_id":[0,1001],"name":"Outside Air Temp","kind":"sensor","unit":"°F","writable":false,"value":62.0,"haystack_id":"point:oa-t","fdd_input":"oa_t"}),
         json!({"device_instance":inst,"object_id":[0,1002],"name":"Outside Air Humidity","kind":"sensor","unit":"%RH","writable":false,"value":45.0,"haystack_id":"point:oa-h","fdd_input":"oa_h"}),
         json!({"device_instance":inst,"object_id":[0,1003],"name":"Discharge Air Temp","kind":"sensor","unit":"°F","writable":false,"value":55.0,"haystack_id":"point:duct-t","fdd_input":"duct_t"}),
+        json!({"device_instance":inst,"object_id":[1,2001],"name":"Demo Actuator","kind":"cmd","unit":"%","writable":true,"commandable":true,"value":55.0,"haystack_id":"point:actuator-demo","fdd_input":"actuator_demo"}),
     ]
 }
 
