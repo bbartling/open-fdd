@@ -12,6 +12,7 @@ workspace/backups/
 workspace/data/
 workspace/logs/
 workspace/smoke-profiles/local/*.local.toml
+workspace/haystack/local.nhaystack.toml
 workspace/import-profiles/local/*.local.toml
 workspace/export-profiles/local/*.local.toml
 workspace/imports/

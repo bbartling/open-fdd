@@ -1,0 +1,18 @@
+[haystack]
+id = "local-niagara-nhaystack"
+name = "Local Niagara nHaystack"
+enabled = true
+base_url = "http://<niagara-host>:<port>/haystack"
+auth_mode = "basic"
+username_env = "OPENFDD_HAYSTACK_USER"
+password_env = "OPENFDD_HAYSTACK_PASS"
+tls_verify = false
+timeout_seconds = 15
+poll_interval_seconds = 60
+source_id = "source:local-niagara-haystack"
+site_id = "site:local"
+source_type = "haystack"
+model_import_enabled = true
+polling_enabled = true
+# nav_root = "site:"
+# filter = "point"

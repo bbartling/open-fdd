@@ -346,7 +346,15 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent"],
             json!({"ok": true, "run_id": "alg-demo-001", "result": serde_json::from_str::<Value>(control::cdl::simulate_json()).unwrap()}),
         ),
-        ("GET", "/api/model/haystack") => raw_json(&mut stream, drivers::haystack::model_json()),
+        ("GET", "/api/model/haystack") => {
+            let body = drivers::haystack::model_json();
+            raw_json(&mut stream, &body)
+        }
+        ("GET", "/api/model/sources") => raw_json(&mut stream, &drivers::haystack::sources_json()),
+        ("GET", "/api/model/equipment") => {
+            raw_json(&mut stream, &drivers::haystack::equipment_json())
+        }
+        ("GET", "/api/model/points") => raw_json(&mut stream, &drivers::haystack::points_json()),
         ("GET", "/api/model/assignments") => {
             raw_json(&mut stream, model::assignments::assignments_json())
         }
@@ -362,27 +370,52 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/model/algorithm-bindings") => {
             raw_json(&mut stream, model::assignments::algorithm_bindings_json())
         }
-        ("GET", "/api/haystack/about") => raw_json(&mut stream, drivers::haystack::about_json()),
-        ("GET", "/api/haystack/status") => raw_json(&mut stream, drivers::haystack::status_json()),
-        ("POST", "/api/haystack/read") => raw_json(&mut stream, drivers::haystack::model_json()),
-        ("POST", "/api/haystack/nav") => raw_json(&mut stream, drivers::haystack::model_json()),
-        ("POST", "/api/haystack/ops") => raw_json(&mut stream, drivers::haystack::ops_json()),
+        ("GET", "/api/haystack/about") => raw_json(&mut stream, &drivers::haystack::about_json()),
+        ("GET", "/api/haystack/status") => raw_json(&mut stream, &drivers::haystack::status_json()),
+        ("GET", "/api/haystack/ops") => raw_json(&mut stream, &drivers::haystack::ops_json()),
+        ("POST", "/api/haystack/test") => raw_json(&mut stream, &drivers::haystack::test_json()),
+        ("POST", "/api/haystack/read") => {
+            let payload = parse_json_body(&body);
+            raw_json(&mut stream, &drivers::haystack::read_json(&payload))
+        }
+        ("POST", "/api/haystack/nav") => {
+            let payload = parse_json_body(&body);
+            raw_json(&mut stream, &drivers::haystack::nav_json(&payload))
+        }
+        ("POST", "/api/haystack/ops") => raw_json(&mut stream, &drivers::haystack::ops_json()),
+        ("POST", "/api/haystack/poll-once") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            serde_json::from_str::<Value>(&drivers::haystack::poll_once_json(&parse_json_body(
+                &body,
+            )))
+            .unwrap_or(json!({"ok": false})),
+        ),
+        ("GET", "/api/haystack/driver/tree") => {
+            raw_json(&mut stream, &drivers::haystack::driver_tree_json())
+        }
         ("POST", "/api/haystack/import") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            serde_json::from_str::<Value>(drivers::haystack::import_json()).unwrap(),
+            serde_json::from_str::<Value>(&drivers::haystack::import_json(&parse_json_body(&body)))
+                .unwrap_or(json!({"ok": false})),
         ),
         ("POST", "/api/model/haystack/import") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            json!({"ok": true, "preserve_ids": true, "imported": 4}),
+            serde_json::from_str::<Value>(&drivers::haystack::import_json(&parse_json_body(&body)))
+                .unwrap_or(json!({"ok": false})),
         ),
-        ("POST", "/api/model/query") => json_response(
-            &mut stream,
-            json!({"ok": true, "rows": serde_json::from_str::<Value>(drivers::haystack::model_json()).unwrap()["rows"].clone()}),
-        ),
+        ("POST", "/api/model/query") => {
+            let model_body = drivers::haystack::model_json();
+            json_response(
+                &mut stream,
+                json!({"ok": true, "rows": serde_json::from_str::<Value>(&model_body).unwrap_or(json!({}))["rows"].clone()}),
+            )
+        }
         ("GET", "/api/fdd/datafusion/demo") => {
             raw_json(&mut stream, fdd::datafusion_sql::result_json())
         }
@@ -1199,8 +1232,18 @@ fn agent_tools() -> Value {
             {"name":"json_api.register","method":"POST","path":"/api/json-api/register","requires":"integrator|agent"},
             {"name":"json_api.poll_once","method":"POST","path":"/api/json-api/poll-once","requires":"integrator|agent"},
             {"name":"haystack.status","method":"GET","path":"/api/haystack/status","requires":"JWT"},
+            {"name":"haystack.test","method":"POST","path":"/api/haystack/test","requires":"JWT"},
+            {"name":"haystack.about","method":"GET","path":"/api/haystack/about","requires":"JWT"},
+            {"name":"haystack.ops","method":"GET","path":"/api/haystack/ops","requires":"JWT"},
+            {"name":"haystack.nav","method":"POST","path":"/api/haystack/nav","requires":"JWT"},
             {"name":"haystack.read","method":"POST","path":"/api/haystack/read","requires":"JWT"},
+            {"name":"haystack.poll_once","method":"POST","path":"/api/haystack/poll-once","requires":"integrator|agent"},
+            {"name":"haystack.import","method":"POST","path":"/api/haystack/import","requires":"integrator|agent"},
+            {"name":"haystack.driver_tree","method":"GET","path":"/api/haystack/driver/tree","requires":"JWT"},
             {"name":"model.haystack","method":"GET","path":"/api/model/haystack","requires":"JWT"},
+            {"name":"model.sources","method":"GET","path":"/api/model/sources","requires":"JWT"},
+            {"name":"model.equipment","method":"GET","path":"/api/model/equipment","requires":"JWT"},
+            {"name":"model.points","method":"GET","path":"/api/model/points","requires":"JWT"},
             {"name":"model.import","method":"POST","path":"/api/model/haystack/import","requires":"integrator|agent"},
             {"name":"model.assignments","method":"GET","path":"/api/model/assignments","requires":"JWT"},
             {"name":"model.assignments_save","method":"POST","path":"/api/model/assignments/save","requires":"integrator|agent"},
