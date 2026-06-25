@@ -148,11 +148,11 @@ mod tests {
             historian_subdir: "validation".into(),
             artifact_subdir: "live_fdd_validation".into(),
             fdd_rule_id: "oa_temp_out_of_range".into(),
-            bacnet_points: vec![crate::validation::profile::BacnetPointRole {
-                name: "Outside Air Temp".into(),
-                object_instance: 1001,
-                fdd_input: "oa_t".into(),
-            }],
+            bacnet_points: vec![crate::validation::profile::BacnetPointRole::sensor(
+                "Outside Air Temp",
+                1001,
+                "oa_t",
+            )],
             modbus_host: String::new(),
             modbus_port: 1502,
             modbus_unit_id: 1,
