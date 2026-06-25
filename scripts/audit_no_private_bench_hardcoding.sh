@@ -22,6 +22,7 @@ is_allowed() {
   local file="$1"
   case "$file" in
     workspace/smoke-profiles/local/*.local.toml.example) return 0 ;;
+    workspace/smoke-profiles/local/local_5007_validation.local.toml.example) return 0 ;;
     workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml.example) return 0 ;;
     docs/validation/*|docs/verification/*|docs/testing/*|docs/release_cleanup/*) return 0 ;;
     edge/src/validation/audit.rs) return 0 ;;

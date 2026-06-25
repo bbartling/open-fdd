@@ -6,7 +6,7 @@
 //! data so Docker/CI runs without an OT BACnet network.
 
 use super::bacnet_live;
-use crate::validation::profile::{active_profile, BacnetPointRole};
+use crate::validation::profile::{active_profile, bacnet_point_to_simulated_json, BacnetPointRole};
 use chrono::Utc;
 use serde_json::{json, Value};
 use std::env;
@@ -33,7 +33,19 @@ fn default_simulated_points() -> Vec<Value> {
         json!({"device_instance":inst,"object_id":[0,1001],"name":"Outside Air Temp","kind":"sensor","unit":"°F","writable":false,"value":62.0,"haystack_id":"point:oa-t","fdd_input":"oa_t"}),
         json!({"device_instance":inst,"object_id":[0,1002],"name":"Outside Air Humidity","kind":"sensor","unit":"%RH","writable":false,"value":45.0,"haystack_id":"point:oa-h","fdd_input":"oa_h"}),
         json!({"device_instance":inst,"object_id":[0,1003],"name":"Discharge Air Temp","kind":"sensor","unit":"°F","writable":false,"value":55.0,"haystack_id":"point:duct-t","fdd_input":"duct_t"}),
-        json!({"device_instance":inst,"object_id":[1,2001],"name":"Demo Actuator","kind":"cmd","unit":"%","writable":true,"commandable":true,"value":55.0,"haystack_id":"point:actuator-demo","fdd_input":"actuator_demo"}),
+        json!({
+            "device_instance": inst,
+            "object_id": [1, 2001],
+            "name": "Demo Actuator",
+            "kind": "cmd",
+            "unit": "%",
+            "writable": true,
+            "commandable": true,
+            "value": 55.0,
+            "haystack_id": "point:actuator-demo",
+            "fdd_input": "actuator_demo",
+            "simulated_priorities": [{"priority": 8, "value": 55.0}]
+        }),
     ]
 }
 
@@ -44,21 +56,7 @@ fn profile_simulated_points() -> Vec<Value> {
     }
     p.bacnet_points
         .iter()
-        .map(|pt: &BacnetPointRole| {
-            json!({
-                "id": format!("bacnet:{}:analog-input:{}", p.device_instance, pt.object_instance),
-                "device_instance": p.device_instance,
-                "object_id": [0, pt.object_instance],
-                "name": pt.name,
-                "kind": "sensor",
-                "unit": if pt.fdd_input.contains("_h") { "%RH" } else { "°F" },
-                "writable": false,
-                "value": 62.0,
-                "polling_enabled": true,
-                "haystack_id": format!("point:{}", pt.fdd_input),
-                "fdd_input": pt.fdd_input
-            })
-        })
+        .map(|pt: &BacnetPointRole| bacnet_point_to_simulated_json(&p, pt))
         .collect()
 }
 
@@ -505,16 +503,25 @@ fn read_priority_array_for_point(point: &Value) -> Vec<(u8, Value)> {
         }
     }
 
-    let name = point.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    if let Some(arr) = point.get("simulated_priorities").and_then(|v| v.as_array()) {
+        let mut out = Vec::new();
+        for entry in arr {
+            let prio = entry.get("priority").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            let val = entry.get("value").cloned().unwrap_or_else(|| json!(null));
+            if prio > 0 {
+                out.push((prio, val));
+            }
+        }
+        if !out.is_empty() {
+            return out;
+        }
+    }
+
     if point.get("commandable").and_then(|v| v.as_bool()) == Some(true)
         || point.get("writable").and_then(|v| v.as_bool()) == Some(true)
     {
         let value = point.get("value").cloned().unwrap_or(json!(55.0));
-        if name.contains("ACTUATOR") || name.contains("Actuator") {
-            vec![(8, value)]
-        } else {
-            vec![(1, value)]
-        }
+        vec![(1, value)]
     } else {
         Vec::new()
     }
@@ -1317,13 +1324,28 @@ mod override_export_tests {
             "address": "simulated:local",
             "device_name": "Validation Device",
             "id": "bacnet:42:analog-output:2001",
-            "name": "ACTUATOR-0",
-            "object_id": [1, 2466],
+            "name": "Demo Actuator",
+            "object_id": [1, 2001],
             "unit": "%",
-            "value": 55.0
+            "value": 55.0,
+            "commandable": true,
+            "simulated_priorities": [{"priority": 8, "value": 55.0}]
         });
         let row = export_csv_row("2026-06-23T00:00:00Z", &point, 8, &json!(55.0), 8);
         assert_eq!(row[10], "true");
         assert_eq!(row[11], "operator");
+    }
+
+    #[test]
+    fn simulated_priorities_from_point_metadata_not_name() {
+        let point = json!({
+            "name": "Generic AO",
+            "commandable": true,
+            "simulated_priorities": [{"priority": 8, "value": 42.0}]
+        });
+        let slots = read_priority_array_for_point(&point);
+        assert_eq!(slots.len(), 1);
+        assert_eq!(slots[0].0, 8);
+        assert_eq!(slots[0].1, json!(42.0));
     }
 }
