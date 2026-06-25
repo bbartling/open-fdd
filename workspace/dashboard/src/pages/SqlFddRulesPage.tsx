@@ -32,6 +32,33 @@ type DemoResult = {
 
 const GRAPH_ID = "graph:live-fdd-validation";
 
+function validationSummary(payload: Record<string, unknown> | null): string {
+  if (!payload) return "";
+  if (typeof payload.error === "string") return payload.error;
+  if (typeof payload.message === "string") return payload.message;
+  if (payload.ok === true) return "SQL validation passed.";
+  const issues = payload.issues;
+  if (Array.isArray(issues) && issues.length > 0) {
+    return issues.map((item) => String(item)).join("; ");
+  }
+  if (payload.valid === true) return "SQL validation passed.";
+  if (payload.valid === false) return "SQL validation failed — check table/column names.";
+  return "Validation finished.";
+}
+
+function runResultSummary(payload: Record<string, unknown> | null): string {
+  if (!payload) return "";
+  if (typeof payload.error === "string") return payload.error;
+  const rows = payload.rows;
+  if (Array.isArray(rows)) {
+    return `Preview returned ${rows.length} row(s).`;
+  }
+  const count = payload.row_count ?? payload.count;
+  if (typeof count === "number") return `Preview returned ${count} row(s).`;
+  if (payload.ok === true) return "SQL preview completed.";
+  return "Preview finished.";
+}
+
 const DEFAULT_BUILDER: BuilderState = {
   name: "OA Temperature Out Of Range",
   input: "oa_t",
@@ -55,7 +82,9 @@ export default function SqlFddRulesPage() {
   const [demo, setDemo] = useState<DemoResult | null>(null);
   const [graphStatus, setGraphStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState("");
+  const equipmentMissing = mode === "builder" && !builder.equipment_id.trim();
 
   useEffect(() => {
     Promise.all([
@@ -88,6 +117,10 @@ export default function SqlFddRulesPage() {
   }, [mode, builder.input, builder.operator, builder.value, builder.equipment_id, previewBuilder]);
 
   async function runSql() {
+    if (equipmentMissing) {
+      setError("Select equipment first.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -109,14 +142,16 @@ export default function SqlFddRulesPage() {
 
   useEffect(() => {
     if (!siteId) return;
-    apiFetch<{ equipment?: { id?: string }[] }>(`/api/model/sites/${encodeURIComponent(siteId)}/equipment`)
+    apiFetch<{ equipment?: { id?: string; equipment_id?: string }[] }>(
+      `/api/model/sites/${encodeURIComponent(siteId)}/equipment`,
+    )
       .then((res) => {
-        const first = res.equipment?.[0]?.id;
+        const first = res.equipment?.[0]?.id ?? res.equipment?.[0]?.equipment_id;
         if (first) {
           setBuilder((b) => (b.equipment_id ? b : { ...b, equipment_id: first }));
         }
       })
-      .catch(() => undefined);
+      .catch(() => setError("Could not load equipment for this site — enter an equip id manually."));
   }, [siteId]);
 
   useEffect(() => {
@@ -201,10 +236,12 @@ export default function SqlFddRulesPage() {
           <button type="button" className="secondary-btn" onClick={() => void validateSql()} disabled={busy}>
             Validate SQL
           </button>
-          <button type="button" className="primary-btn" onClick={() => void runSql()} disabled={busy || !sql.trim()}>
+          <button type="button" className="primary-btn" onClick={() => void runSql()} disabled={busy || !sql.trim() || equipmentMissing}>
             Run (Ctrl/Cmd+Enter)
           </button>
         </div>
+
+        {equipmentMissing ? <div className="warn-banner">Select equipment first.</div> : null}
 
         {mode === "builder" ? (
           <div className="builder-grid">
@@ -277,11 +314,19 @@ export default function SqlFddRulesPage() {
           />
         </label>
 
-        {validation ? (
-          <pre className="code-block">{JSON.stringify(validation, null, 2)}</pre>
+        {validation ? <div className="status-banner">{validationSummary(validation)}</div> : null}
+        {runResult ? <div className="status-banner">{runResultSummary(runResult)}</div> : null}
+        {(validation || runResult) && showAdvanced ? (
+          <details className="advanced-json">
+            <summary>Advanced / raw JSON</summary>
+            {validation ? <pre className="code-block">{JSON.stringify(validation, null, 2)}</pre> : null}
+            {runResult ? <pre className="code-block">{JSON.stringify(runResult, null, 2)}</pre> : null}
+          </details>
         ) : null}
-        {runResult ? (
-          <pre className="code-block">{JSON.stringify(runResult, null, 2)}</pre>
+        {(validation || runResult) && !showAdvanced ? (
+          <button type="button" className="secondary-btn" onClick={() => setShowAdvanced(true)}>
+            Show advanced JSON
+          </button>
         ) : null}
       </section>
 
@@ -308,8 +353,9 @@ export default function SqlFddRulesPage() {
         {graphStatus ? <div className="status-banner">{graphStatus}</div> : null}
       </section>
 
-      <section className="panel">
-        <h2 className="panel-title">DataFusion batch demo</h2>
+      <section className="panel demo-panel">
+        <h2 className="panel-title">DataFusion batch demo (sample data)</h2>
+        <p className="muted-copy">Demonstration only — not live historian results.</p>
         {demo?.sql ? <pre className="sql-block">{demo.sql}</pre> : null}
         <div className="table-like">
           {(demo?.faults ?? []).map((f) => (

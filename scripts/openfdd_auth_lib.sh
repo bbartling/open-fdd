@@ -46,10 +46,12 @@ openfdd_auth_login_token() {
   local auth_file="${2:?auth file}"
   local role="${3:-integrator}"
   local user pw
+  local CURL_TLS=()
+  if [[ "$base" == https://* ]]; then CURL_TLS=(-k); fi
   user="$(grep "^OFDD_${role^^}_USER=" "$auth_file" | cut -d= -f2- | tr -d '\r' || true)"
   user="${user:-$role}"
   pw="$(openfdd_auth_plaintext_password "$auth_file" "$role")" || return 1
-  curl -fsS -X POST "${base}/api/auth/login" \
+  curl "${CURL_TLS[@]}" -fsS -X POST "${base}/api/auth/login" \
     -H 'Content-Type: application/json' \
     -d "$(jq -nc --arg u "$user" --arg p "$pw" '{username:$u,password:$p}')" \
     | jq -r '.token // .access_token // empty'

@@ -7,6 +7,7 @@ use super::json_api;
 use super::modbus;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
+use std::env;
 
 const COMMANDABLE: &[&str] = &[
     "analog-output",
@@ -380,6 +381,124 @@ pub fn json_api_devices_ui() -> Vec<Value> {
             })
         })
         .collect()
+}
+
+pub fn modbus_driver_tree_value() -> Value {
+    if env::var("OPENFDD_MODBUS_ENABLED")
+        .map(|v| v == "0" || v.eq_ignore_ascii_case("false"))
+        .unwrap_or(false)
+    {
+        return json!({
+            "ok": true,
+            "enabled": false,
+            "status": "disabled",
+            "message": "Modbus is disabled or not configured",
+            "devices": []
+        });
+    }
+    let mut devices = modbus_devices_ui();
+    if devices.is_empty() {
+        let points: Vec<Value> = serde_json::from_str(&modbus::points_json()).unwrap_or_default();
+        if !points.is_empty() {
+            let cfg = modbus::modbus_config_value();
+            let host = cfg
+                .get("host")
+                .and_then(|v| v.as_str())
+                .unwrap_or("127.0.0.1");
+            let port = cfg.get("port").and_then(|v| v.as_str()).unwrap_or("502");
+            let unit_id = cfg.get("unit_id").and_then(|v| v.as_str()).unwrap_or("1");
+            let mapped: Vec<Value> = points
+                .iter()
+                .map(|p| {
+                    json!({
+                        "point_id": p.get("id").cloned().unwrap_or(json!(null)),
+                        "label": p.get("name").cloned().unwrap_or(json!("point")),
+                        "register_address": p.get("register").cloned().unwrap_or(json!(null)),
+                        "function": p.get("function").cloned().unwrap_or(json!("holding_register")),
+                        "present_value": p.get("value").cloned().unwrap_or(json!(null)),
+                        "units": p.get("unit").cloned().unwrap_or(json!(null)),
+                        "poll_label": "simulated",
+                        "enabled": false
+                    })
+                })
+                .collect();
+            devices.push(json!({
+                "device_key": format!("{host}:{port}:{unit_id}"),
+                "host": host,
+                "port": port,
+                "unit_id": unit_id,
+                "device_address": format!("{host}:{port}"),
+                "point_count": mapped.len(),
+                "poll_count": 0,
+                "points": mapped
+            }));
+        }
+    }
+    json!({"ok": true, "enabled": true, "devices": devices})
+}
+
+pub fn modbus_driver_tree_json() -> String {
+    serde_json::to_string_pretty(&modbus_driver_tree_value()).unwrap_or_else(|_| "{}".to_string())
+}
+
+pub fn json_api_driver_tree_value() -> Value {
+    if env::var("OPENFDD_JSON_API_ENABLED")
+        .map(|v| v == "0" || v.eq_ignore_ascii_case("false"))
+        .unwrap_or(false)
+    {
+        return json!({
+            "ok": true,
+            "enabled": false,
+            "status": "disabled",
+            "message": "JSON API driver is disabled or not configured",
+            "devices": []
+        });
+    }
+    let mut devices = json_api_devices_ui();
+    if devices.is_empty() {
+        let sources: Vec<Value> =
+            serde_json::from_str(json_api::sources_json()).unwrap_or_default();
+        let mut by_host: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+        for src in sources {
+            let url = src
+                .get("url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("http://localhost/");
+            let host = url.split('/').nth(2).unwrap_or("localhost").to_string();
+            let point_id = src
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("json-api:point")
+                .to_string();
+            by_host.entry(host.clone()).or_default().push(json!({
+                "point_id": point_id,
+                "label": point_id,
+                "url": url,
+                "method": "GET",
+                "json_path": src.get("maps_to").cloned().unwrap_or(json!("$")),
+                "present_value": json!(null),
+                "poll_label": "off",
+                "enabled": false
+            }));
+        }
+        devices = by_host
+            .into_iter()
+            .map(|(host, points)| {
+                json!({
+                    "device_key": host.clone(),
+                    "host": host,
+                    "point_count": points.len(),
+                    "poll_count": 0,
+                    "points": points
+                })
+            })
+            .collect();
+    }
+    json!({"ok": true, "enabled": true, "devices": devices})
+}
+
+pub fn json_api_driver_tree_json() -> String {
+    serde_json::to_string_pretty(&json_api_driver_tree_value()).unwrap_or_else(|_| "{}".to_string())
 }
 
 pub fn haystack_devices_ui() -> Vec<Value> {

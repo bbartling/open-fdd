@@ -160,6 +160,23 @@ fn dashboard_summary_requires_auth() {
 }
 
 #[test]
+fn building_status_and_analytics_shape() {
+    let srv = Server::start();
+    let (status, body) = srv.get("/api/building/status");
+    assert_eq!(status, 200);
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v.get("ok").and_then(|x| x.as_bool()), Some(true));
+    assert!(v.get("model_counts").is_some());
+    assert!(v.get("rule_count").is_some());
+
+    let (a_status, a_body) = srv.get("/api/dashboard/analytics");
+    assert_eq!(a_status, 200);
+    let a: serde_json::Value = serde_json::from_str(&a_body).unwrap();
+    assert!(a.get("rule_health").is_some());
+    assert!(a.get("model").is_some());
+}
+
+#[test]
 fn faults_list_and_csv_export() {
     let srv = Server::start();
     let (status, body) = srv.get("/api/faults");

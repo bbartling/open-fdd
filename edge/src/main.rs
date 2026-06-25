@@ -287,6 +287,12 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent", "operator"],
             data_management::storage_summary(),
         ),
+        ("GET", "/api/host/stats") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            ops::host_stats::stats_json(),
+        ),
         ("POST", "/api/data-management/purge/preview") => require_role(
             &mut stream,
             &principal,
@@ -591,6 +597,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let body = drivers::modbus::commission_status_json();
             raw_json(&mut stream, &body)
         }
+        ("GET", "/api/modbus/poll/status") => {
+            let body = drivers::modbus::poll_status_json();
+            raw_json(&mut stream, &body)
+        }
+        ("GET", "/api/modbus/driver/tree") => {
+            let body = drivers::modbus::driver_tree_json();
+            raw_json(&mut stream, &body)
+        }
         ("POST", "/api/modbus/scan") => require_role(
             &mut stream,
             &principal,
@@ -604,6 +618,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         }
         ("GET", "/api/json-api/sources") => {
             raw_json(&mut stream, drivers::json_api::sources_json())
+        }
+        ("GET", "/api/json-api/poll/status") => {
+            let body = drivers::json_api::poll_status_json();
+            raw_json(&mut stream, &body)
+        }
+        ("GET", "/api/json-api/driver/tree") => {
+            let body = drivers::json_api::driver_tree_json();
+            raw_json(&mut stream, &body)
         }
         ("POST", "/api/json-api/poll-once") => {
             require_role(&mut stream, &principal, &["integrator", "agent"], {
@@ -740,6 +762,9 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             ) {
                 return resp;
             }
+            if let Some(resp) = handle_model_dynamic(&mut stream, method.as_str(), &clean_path) {
+                return resp;
+            }
             if method == "GET" && clean_path.starts_with("/api/bacnet/jobs/") {
                 let job_id = clean_path.trim_start_matches("/api/bacnet/jobs/");
                 return json_response(
@@ -785,6 +810,33 @@ fn query_param(path: &str, key: &str) -> Option<String> {
 
 fn path_parts(path: &str) -> Vec<&str> {
     path.trim_matches('/').split('/').collect()
+}
+
+fn handle_model_dynamic(
+    stream: &mut TcpStream,
+    method: &str,
+    path: &str,
+) -> Option<std::io::Result<()>> {
+    if method != "GET" {
+        return None;
+    }
+    let prefix = "/api/model/sites/";
+    let suffix = "/equipment";
+    if !path.starts_with(prefix) || !path.ends_with(suffix) {
+        return None;
+    }
+    let site_id = path
+        .trim_start_matches(prefix)
+        .trim_end_matches(suffix)
+        .trim();
+    if site_id.is_empty() {
+        return Some(status_json(
+            stream,
+            "400 Bad Request",
+            json!({"ok": false, "error": "site_id required"}),
+        ));
+    }
+    Some(json_response(stream, model::query::list_equipment(site_id)))
 }
 
 fn handle_fdd_wires_dynamic(
@@ -1496,6 +1548,9 @@ fn static_file(stream: &mut TcpStream, frontend: &Path, path: &str) -> std::io::
                 "html" => "text/html; charset=utf-8",
                 "css" => "text/css; charset=utf-8",
                 "js" => "application/javascript; charset=utf-8",
+                "svg" => "image/svg+xml",
+                "ico" => "image/x-icon",
+                "png" => "image/png",
                 _ => "application/octet-stream",
             };
             response(stream, "200 OK", ctype, &bytes)

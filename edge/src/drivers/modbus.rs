@@ -115,3 +115,36 @@ pub fn commission_status_json() -> String {
     })
     .to_string()
 }
+
+fn protocol_enabled(env_key: &str) -> bool {
+    env::var(env_key)
+        .map(|v| v != "0" && v.to_lowercase() != "false")
+        .unwrap_or(true)
+}
+
+pub fn poll_status_json() -> String {
+    if !protocol_enabled("OPENFDD_MODBUS_ENABLED") {
+        return json!({
+            "ok": true,
+            "enabled": false,
+            "status": "disabled",
+            "message": "Modbus is disabled or not configured"
+        })
+        .to_string();
+    }
+    let points: Vec<Value> = serde_json::from_str(&points_json()).unwrap_or_default();
+    json!({
+        "ok": true,
+        "enabled": true,
+        "service": "modbus-poll",
+        "status": commission_status_mode(),
+        "enabled_points": points.len(),
+        "samples": 0,
+        "config": modbus_config_value()
+    })
+    .to_string()
+}
+
+pub fn driver_tree_json() -> String {
+    super::tree::modbus_driver_tree_json()
+}

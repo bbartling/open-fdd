@@ -5,6 +5,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+# shellcheck source=scripts/openfdd_bench_lib.sh
+source "$ROOT/scripts/openfdd_bench_lib.sh"
+openfdd_bench_load_env "$ROOT"
 
 LOG_DIR="$ROOT/workspace/logs"
 LOG_FILE="$LOG_DIR/local-up.log"
@@ -24,9 +27,9 @@ Usage: scripts/openfdd_local_up.sh [--build]
 
 Starts openfdd-bridge only using docker-compose.local.yml (no GHCR, no npm-in-docker).
 
-  --build   Rebuild image with Dockerfile.local (memory-limited; can take 15–40 min on 8 GB)
+  --build   Rebuild image with Dockerfile.local (requires OPENFDD_ALLOW_LOCAL_BUILD=1 and 12GB+ free disk)
 
-Without --build, reuses image open-fdd-openfdd-bridge:local if present.
+Without --build, reuses open-fdd-openfdd-bridge:local or pulls ghcr.io/bbartling/openfdd-edge-rust:latest.
 
 UI: http://127.0.0.1:8080
 Log: workspace/logs/local-up.log
@@ -108,6 +111,7 @@ build_local_image() {
 }
 
 if [[ "$BUILD" -eq 1 ]]; then
+  openfdd_bench_require_local_build_allowed 12
   echo "==> Building open-fdd-openfdd-bridge:local (jobs=${OPENFDD_CARGO_BUILD_JOBS}, log appended here)"
   build_local_image
   echo "==> Docker build finished"
@@ -115,8 +119,12 @@ elif docker image inspect open-fdd-openfdd-bridge:latest >/dev/null 2>&1; then
   echo "==> Tagging existing open-fdd-openfdd-bridge:latest as :local (no rebuild)"
   docker tag open-fdd-openfdd-bridge:latest open-fdd-openfdd-bridge:local
 elif ! docker image inspect open-fdd-openfdd-bridge:local >/dev/null 2>&1; then
-  echo "==> No local image — run with --build once: ./scripts/openfdd_local_up.sh --build"
-  exit 1
+  echo "==> No local image — pulling from GHCR (no bench compile)"
+  "$ROOT/scripts/openfdd_bench_pull_ghcr.sh" || {
+    echo "ERROR: GHCR pull failed. If offline, run once with:"
+    echo "  OPENFDD_ALLOW_LOCAL_BUILD=1 ./scripts/openfdd_local_up.sh --build"
+    exit 1
+  }
 fi
 
 if [[ "$BUILD" -eq 0 ]] && curl -fsS http://127.0.0.1:8080/api/health >/dev/null 2>&1; then

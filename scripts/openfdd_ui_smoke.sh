@@ -62,6 +62,41 @@ check_api() {
   echo "OK: $name ($code)"
 }
 
+assert_dashboard_summary() {
+  local out="$ARTIFACT/_api_dashboard_summary.json"
+  if [[ ! -f "$out" ]]; then
+    echo "FAIL: dashboard summary artifact missing" >&2
+    fail=1
+    return
+  fi
+  if ! jq -e '.model_coverage.equipment_count != null and .model_coverage.point_count != null' "$out" >/dev/null; then
+    echo "FAIL: dashboard summary missing model_coverage counts" >&2
+    fail=1
+    return
+  fi
+  if ! jq -e '.faults != null and .historian_health != null' "$out" >/dev/null; then
+    echo "FAIL: dashboard summary missing faults or historian sections" >&2
+    fail=1
+    return
+  fi
+  echo "OK: dashboard summary shape"
+}
+
+assert_dashboard_analytics() {
+  local out="$ARTIFACT/_api_dashboard_analytics.json"
+  if [[ ! -f "$out" ]]; then
+    echo "FAIL: dashboard analytics artifact missing" >&2
+    fail=1
+    return
+  fi
+  if ! jq -e '.rule_health.rule_count != null' "$out" >/dev/null; then
+    echo "FAIL: dashboard analytics missing rule_health.rule_count" >&2
+    fail=1
+    return
+  fi
+  echo "OK: dashboard analytics shape"
+}
+
 check_route() {
   local route="$1"
   local out="$ARTIFACT/route$(echo "$route" | tr '/' '_').html"
@@ -81,6 +116,9 @@ echo "UI inspection smoke → $ARTIFACT"
 check_api public-health /api/health
 check_api auth-me /api/auth/me
 check_api building-snapshot /api/building/snapshot
+check_api building-status /api/building/status
+check_api dashboard-summary /api/dashboard/summary
+check_api dashboard-analytics /api/dashboard/analytics
 check_api stack-health /api/health/stack
 check_api json-api-sources /api/json-api/sources
 check_api model-haystack /api/model/haystack
@@ -88,6 +126,12 @@ check_api fdd-rules /api/fdd-rules
 check_api historian-status /api/historian/validation/status
 check_api data-management /api/data-management/summary
 check_api export-meta /api/export/meta
+check_api host-stats /api/host/stats
+check_api modbus-poll /api/modbus/poll/status
+check_api modbus-tree /api/modbus/driver/tree
+check_api json-api-poll /api/json-api/poll/status
+check_api json-api-tree /api/json-api/driver/tree
+check_api model-equipment "/api/model/sites/site%3Ademo/equipment"
 
 if [[ "$CHECK_REPORTS" == "1" ]]; then
   check_api reports-templates /api/reports/templates
@@ -104,10 +148,15 @@ for route in \
   /sql-fdd \
   /plot \
   /reports \
+  /exports \
+  /host \
   /data-management \
   /live-fdd-validation; do
   check_route "$route"
 done
+
+assert_dashboard_summary
+assert_dashboard_analytics
 
 jq -nc \
   --arg finished "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \

@@ -55,10 +55,12 @@ fn random_secret_hex(bytes: usize) -> String {
     hex::encode(buf)
 }
 
+const PASSWORD_LENGTH: usize = 14;
+
 fn random_password() -> String {
     const CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#%^*_-";
     let mut rng = rand::thread_rng();
-    (0..28)
+    (0..PASSWORD_LENGTH)
         .map(|_| {
             let idx = (rng.next_u32() as usize) % CHARSET.len();
             CHARSET[idx] as char
@@ -399,6 +401,22 @@ mod tests {
         ));
         let _ = fs::create_dir_all(&dir);
         dir.join("auth.env.local")
+    }
+
+    #[test]
+    fn generated_passwords_are_fourteen_chars() {
+        let path = temp_auth_path();
+        let _ = fs::remove_file(&path);
+        let result = generate_auth_env(&GenerateOptions {
+            path: path.clone(),
+            force: true,
+            show_secrets: false,
+        })
+        .unwrap();
+        for pw in result.plaintext_passwords.values() {
+            assert_eq!(pw.len(), PASSWORD_LENGTH);
+        }
+        let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
     #[test]

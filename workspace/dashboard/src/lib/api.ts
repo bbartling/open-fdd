@@ -211,7 +211,13 @@ export async function fetchAuthMe(): Promise<AuthMe> {
 }
 
 export async function login(username: string, password: string) {
-  return apiFetch<{ token: string; username: string; role: string }>("/api/auth/login", {
+  return apiFetch<{
+    token?: string;
+    access_token?: string;
+    username?: string;
+    subject?: string;
+    role: string;
+  }>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username, password }),
   });

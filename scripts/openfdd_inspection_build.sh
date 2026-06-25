@@ -6,10 +6,15 @@
 #   ./scripts/openfdd_inspection_build.sh --smoke      # also run auth + UI API smoke
 #   ./scripts/openfdd_inspection_build.sh --desktop    # JSON/CSV-only (BACnet/Modbus off)
 #
+# Prefer one command: ./scripts/openfdd_start.sh
+#
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/openfdd_rust_site_lib.sh
 source "$ROOT/scripts/openfdd_rust_site_lib.sh"
+# shellcheck source=scripts/openfdd_bench_lib.sh
+source "$ROOT/scripts/openfdd_bench_lib.sh"
+openfdd_bench_load_env "$ROOT"
 
 BUILD=0
 SMOKE=0
@@ -55,15 +60,20 @@ if [[ ! -f "$AUTH" ]]; then
     "$ROOT/scripts/openfdd_auth_init.sh" --show-secrets
   echo "==> Save passwords from above or from $BOOTSTRAP (gitignored), then delete the handoff file when done."
 elif [[ ! -f "$BOOTSTRAP" ]]; then
-  echo "==> Auth file exists. Login password is NOT the bcrypt hash in auth.env.local."
-  echo "    If you forgot it: ./scripts/openfdd_auth_init.sh --rotate --all --show-secrets --restart"
+  echo "==> No bootstrap handoff — rotating credentials (plaintext shown once)"
+  "$ROOT/scripts/openfdd_auth_init.sh" --rotate --all --show-secrets --restart
 fi
 
 echo "==> Building React dashboard"
-(cd "$ROOT/workspace/dashboard" && npm ci && npm run build)
+if [[ -d "$ROOT/workspace/dashboard/node_modules" ]]; then
+  (cd "$ROOT/workspace/dashboard" && npm run build)
+else
+  (cd "$ROOT/workspace/dashboard" && npm ci && npm run build)
+fi
 
 if [[ "$SKIP_RUST" != "1" ]] && command -v cargo >/dev/null 2>&1; then
   echo "==> Host cargo build (optional sanity check)"
+  openfdd_bench_require_free_disk_gb 6
   (cd "$ROOT/edge" && cargo build --workspace)
 fi
 
@@ -91,6 +101,7 @@ if [[ "$DESKTOP" == "1" ]]; then
 else
   echo "==> Starting local bridge (docker-compose.local.yml)"
   if [[ "$BUILD" == "1" ]]; then
+    openfdd_bench_require_local_build_allowed 12
     "$ROOT/scripts/openfdd_local_up.sh" --build
   else
     "$ROOT/scripts/openfdd_local_up.sh"
@@ -109,9 +120,11 @@ echo
 
 if [[ "$SMOKE" == "1" ]]; then
   echo "==> Auth smoke"
-  OPENFDD_BRIDGE_BASE="$BASE" "$ROOT/scripts/openfdd_auth_smoke.sh" || true
+  OPENFDD_BRIDGE_BASE="$BASE" "$ROOT/scripts/openfdd_auth_smoke.sh"
+  echo "==> Login smoke (all roles)"
+  OPENFDD_BRIDGE_BASE="$BASE" "$ROOT/scripts/openfdd_login_ui_smoke.sh"
   echo "==> UI smoke"
-  OPENFDD_API_BASE="$BASE" "$ROOT/scripts/openfdd_ui_smoke.sh" || true
+  OPENFDD_API_BASE="$BASE" "$ROOT/scripts/openfdd_ui_smoke.sh"
 fi
 
 echo ""

@@ -11,6 +11,7 @@ import FaultCard from "./buildingInsight/FaultCard";
 import FaultDetailModal from "./buildingInsight/FaultDetailModal";
 import HealthGauge from "./buildingInsight/HealthGauge";
 import type { InsightResponse } from "../lib/insightTypes";
+import OperationalContextPanel from "./buildingInsight/OperationalContextPanel";
 
 type BuildingStatusResponse = {
   ok?: boolean;
@@ -113,10 +114,6 @@ export default function BuildingInsightDashboard() {
           .join(" · ");
 
   const days = insight?.lookback_days ?? 14;
-  const updatedLabel =
-    insight?.generated_at != null
-      ? new Date(insight.generated_at * 1000).toLocaleString()
-      : null;
 
   if (streamError && !snapshot) {
     return (
@@ -246,48 +243,11 @@ export default function BuildingInsightDashboard() {
           )}
         </div>
 
-        <div className="bis-card">
-          <h3>Context</h3>
-          <h2>Feeds &amp; research</h2>
-          {insight?.brick_model?.feeds_chains?.length ? (
-            <p className="bis-muted-line">
-              <strong>Haystack feeds:</strong> {insight.brick_model.feeds_chains.slice(0, 5).join("; ")}
-              {(insight.brick_model.feeds_chains.length ?? 0) > 5 ? " …" : ""}
-            </p>
-          ) : (
-            <p className="muted">No feed relationships in model summary.</p>
-          )}
-          {insight?.zone_temps?.struggling_zones?.length ? (
-            <p className="bis-muted-line">
-              <strong>Slow recovery:</strong>{" "}
-              {insight.zone_temps.struggling_zones
-                .slice(0, 4)
-                .map((z) => `${z.label || "?"} (${z.ahu_name || "AHU"})`)
-                .join(", ")}
-            </p>
-          ) : null}
-          {insight?.faults_linked?.length ? (
-            <ul className="bis-linked-faults">
-              {insight.faults_linked.slice(0, 6).map((f) => (
-                <li key={`${f.code}-${f.equipment_name}`}>
-                  <span className="bis-code">{f.code}</span> {f.title}
-                  {f.equipment_name ? ` · ${f.equipment_name}` : ""}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <p className="bis-foot-meta">
-            {insight?.source === "ollama" ? "AI summary" : "Rule-based summary"}
-            {updatedLabel ? ` · updated ${updatedLabel}` : ""}
-            {insight?.refresh_interval_s
-              ? ` · every ${Math.round(insight.refresh_interval_s / 60)} min`
-              : ""}
-          </p>
-          {insight?.error && !insight.ollama_ok ? (
-            <p className="muted">Ollama offline — deterministic summary only.</p>
-          ) : null}
-          {insightError ? <p className="error">{insightError}</p> : null}
-        </div>
+        <OperationalContextPanel
+          refreshKey={snapshot?.faults.alert_count}
+          insight={insight}
+          insightError={insightError}
+        />
       </div>
 
       <FaultDetailModal fault={selectedFault} onClose={() => setSelectedFault(null)} />

@@ -462,6 +462,19 @@
   color: var(--muted);
 }
 
+.bis-inline-link {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.bis-subhead {
+  margin: 1.1rem 0 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 /* Buttons */
 .bis-btn {
   display: inline-flex;

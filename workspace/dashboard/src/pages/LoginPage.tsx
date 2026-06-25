@@ -31,9 +31,21 @@ export default function LoginPage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    const user = username.trim();
+    const pass = password.trimEnd();
+    if (pass.startsWith("$2b$") || (pass.includes("OFDD_") && pass.includes("PASSWORD_HASH"))) {
+      setError(
+        "That value is a bcrypt hash, not a login password. Use workspace/bootstrap_credentials.once.txt.",
+      );
+      return;
+    }
     try {
-      const res = await login(username, password);
-      setToken(res.token);
+      const res = await login(user, pass);
+      const token = res.token ?? res.access_token;
+      if (!token) {
+        throw new Error("Login succeeded but no session token was returned.");
+      }
+      setToken(token);
       navigate("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "login failed");
@@ -70,12 +82,6 @@ export default function LoginPage() {
           />
         </div>
         {error ? <p className="error">{error}</p> : null}
-        <p className="muted login-hint">
-          Use the <strong>plaintext password</strong> from bootstrap output — not the bcrypt hash lines in{" "}
-          <code>auth.env.local</code>. After rotate, run{" "}
-          <code>./scripts/openfdd_auth_init.sh --rotate --all --show-secrets --restart</code> or check{" "}
-          <code>workspace/bootstrap_credentials.once.txt</code> (delete after saving).
-        </p>
         <button type="submit">Sign in</button>
       </form>
     </div>

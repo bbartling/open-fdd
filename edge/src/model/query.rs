@@ -43,6 +43,33 @@ pub fn list_buildings(site_id: Option<&str>) -> Value {
     })
 }
 
+pub fn list_equipment(site_id: &str) -> Value {
+    let equips = list_equips(Some(site_id));
+    let equipment: Vec<Value> = equips
+        .get("equips")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|row| {
+            let equipment_id = row.get("equipment_id").cloned().unwrap_or(json!(null));
+            json!({
+                "id": equipment_id.clone(),
+                "equipment_id": equipment_id,
+                "name": row.get("name").cloned().unwrap_or(json!(null)),
+                "site_id": row.get("site_id").cloned().unwrap_or(json!(site_id)),
+                "equipment_type": row.get("equipment_type").cloned().unwrap_or(json!(null))
+            })
+        })
+        .collect();
+    json!({
+        "ok": true,
+        "site_id": site_id,
+        "equipment": equipment,
+        "count": equipment.len()
+    })
+}
+
 pub fn list_equips(site_id: Option<&str>) -> Value {
     let sid = site_id.unwrap_or("site:demo");
     let mut equips = Vec::new();

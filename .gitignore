@@ -13,6 +13,7 @@ workspace/data/
 workspace/logs/
 workspace/smoke-profiles/local/*.local.toml
 workspace/bootstrap_credentials.once.txt
+workspace/bench.env.local
 workspace/import-profiles/local/*.local.toml
 workspace/export-profiles/local/*.local.toml
 workspace/imports/

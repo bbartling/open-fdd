@@ -14,11 +14,54 @@ Use the **local overlay** instead (`Dockerfile.local` + `docker-compose.local.ym
 | **Restart after code/UI change** | `cd workspace/dashboard && npm run build` then `./scripts/openfdd_local_up.sh` | http://127.0.0.1:8080 |
 | **UI inspection (auth + tab smoke)** | `./scripts/openfdd_inspection_build.sh --build --smoke` | http://127.0.0.1:8080 |
 | **JSON/CSV-only (no BACnet/Modbus)** | `./scripts/openfdd_inspection_build.sh --desktop --smoke` | http://127.0.0.1:8080 |
-| **Remote LAN dial-in (Caddy TLS)** | `./scripts/openfdd_local_caddy_up.sh --mode tls --lan-ip <YOUR_IP>` | https://\<LAN-IP\>/ |
-| **Regenerate TLS cert for new IP** | add `--regen-certs` to the Caddy command above | https://\<LAN-IP\>/ |
+| **Remote LAN dial-in (Caddy TLS)** | `./scripts/openfdd_remote_up.sh` | https://\<LAN-IP\>/ |
+| **Health check (API + auth)** | `./scripts/openfdd_health_check.sh --remote --auth` | — |
+| **Pull GHCR image (no bench compile)** | `./scripts/openfdd_bench_pull_ghcr.sh` | — |
+| **One-time bench hardening** | `./scripts/openfdd_bench_setup.sh` | cron + buildx + bench.env |
+| **Extend root disk (once, sudo)** | `sudo ./scripts/openfdd_bench_extend_disk.sh` | ~233G total |
+| **Regenerate TLS cert for new IP** | add `--regen-certs` to Caddy command | https://\<LAN-IP\>/ |
 | **GHCR compose (when publish is green)** | see [local_ui_build.md](./local_ui_build.md) | http://127.0.0.1:8080 |
 
 Logs for local bridge starts: `workspace/logs/local-up.log`
+
+## Bench long-term (bensbench / 8 GB / small root)
+
+Rust edge **images are built in GitHub Actions** (`.github/workflows/rust-ghcr.yml` → `ghcr.io/bbartling/openfdd-edge-rust`). The bench should **pull**, not compile, unless you explicitly opt in.
+
+One-time setup:
+
+```bash
+./scripts/openfdd_bench_setup.sh              # buildx hint, weekly cron, workspace/bench.env.local
+sudo ./scripts/openfdd_bench_extend_disk.sh   # grow / from ~100G to full ~233G disk (once)
+```
+
+Daily / remote:
+
+```bash
+./scripts/openfdd_remote_up.sh                # cleanup + GHCR pull + Caddy + health (no --build)
+./scripts/openfdd_health_check.sh --remote --auth
+```
+
+**React UI local dev** (hot reload — no Docker Rust compile):
+
+```bash
+./scripts/openfdd_ui_dev.sh                   # Vite http://127.0.0.1:5173 → API on :8080
+./scripts/openfdd_ui_dev.sh --lan             # Vite on all interfaces for remote browser
+./scripts/openfdd_ui_dev.sh --build-only      # sync frontend/ only (Caddy :443 path)
+```
+
+| Policy | Default |
+|--------|---------|
+| Local Docker `--build` | **Off** (`OPENFDD_ALLOW_LOCAL_BUILD=0` in `workspace/bench.env.local`) |
+| `CARGO_BUILD_JOBS` | `1` |
+| Weekly Docker cleanup | Cron Sun 03:00 → `openfdd_docker_maintenance.sh --aggressive` |
+| GHCR publish | GitHub Actions on `master` / tags — **not on the bench** |
+
+Rare local rebuild (12GB+ free disk required):
+
+```bash
+OPENFDD_ALLOW_LOCAL_BUILD=1 ./scripts/openfdd_local_up.sh --build
+```
 
 ## Auth and login
 
@@ -158,8 +201,9 @@ docker compose -f docker-compose.local.yml down   # never use down -v
 
 | Symptom | Fix |
 |---------|-----|
+| Caddy script: missing image | `./scripts/openfdd_bench_pull_ghcr.sh` or `./scripts/openfdd_remote_up.sh` |
+| Disk full / crash during build | `./scripts/openfdd_docker_maintenance.sh --aggressive`; extend disk with `sudo ./scripts/openfdd_bench_extend_disk.sh` |
 | Login “invalid credentials” | Use bootstrap plaintext, not bcrypt hash |
-| Caddy script: missing image | Run `./scripts/openfdd_local_up.sh --build` first |
 | Remote TLS cert warning | Expected (self-signed); use `--regen-certs` if wrong IP |
 | Remote timeout | `sudo ufw allow 443/tcp`; check routing to LAN IP |
 | Build OOM | `OPENFDD_CARGO_BUILD_JOBS=1`, add swap, use buildx memory cap |
@@ -172,7 +216,7 @@ sudo apt install docker-buildx-plugin   # Debian/Ubuntu
 
 ## GHCR compose
 
-Production edge compose pulls `ghcr.io/bbartling/openfdd-edge-rust` — use `./scripts/openfdd_local_up.sh` until a GHCR tag is published, or build and tag locally. See [local_ui_build.md](./local_ui_build.md).
+Production edge compose pulls `ghcr.io/bbartling/openfdd-edge-rust`. **GitHub Actions** builds and pushes multi-arch images (`rust-ghcr.yml`); the bench pulls `:latest` via `./scripts/openfdd_bench_pull_ghcr.sh`. See [local_ui_build.md](./local_ui_build.md).
 
 ## See also
 

@@ -12,11 +12,12 @@ export default defineConfig({
     emptyOutDir: false,
   },
   server: {
-    port: 5173,
-    host: "127.0.0.1",
+    port: Number(process.env.VITE_DEV_PORT || 5173),
+    host: process.env.VITE_DEV_HOST || "127.0.0.1",
     proxy: {
       "/api": { target: "http://127.0.0.1:8080", changeOrigin: true },
       "/health": { target: "http://127.0.0.1:8080", changeOrigin: true },
+      "/openfdd-agent": { target: "http://127.0.0.1:8080", changeOrigin: true },
     },
   },
 });

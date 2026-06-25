@@ -81,3 +81,35 @@ pub fn poll_once_value(body: &Value) -> Value {
     let _ = body;
     poll_test_source()
 }
+
+fn protocol_enabled(env_key: &str) -> bool {
+    env::var(env_key)
+        .map(|v| v != "0" && v.to_lowercase() != "false")
+        .unwrap_or(true)
+}
+
+pub fn poll_status_json() -> String {
+    if !protocol_enabled("OPENFDD_JSON_API_ENABLED") {
+        return json!({
+            "ok": true,
+            "enabled": false,
+            "status": "disabled",
+            "message": "JSON API driver is disabled or not configured"
+        })
+        .to_string();
+    }
+    let sources: Vec<Value> = serde_json::from_str(SOURCES_JSON).unwrap_or_default();
+    json!({
+        "ok": true,
+        "enabled": true,
+        "service": "json-api-poll",
+        "status": "ready",
+        "enabled_points": sources.len(),
+        "samples": 0
+    })
+    .to_string()
+}
+
+pub fn driver_tree_json() -> String {
+    super::tree::json_api_driver_tree_json()
+}
