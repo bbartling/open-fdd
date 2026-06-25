@@ -1555,7 +1555,16 @@ fn static_file(stream: &mut TcpStream, frontend: &Path, path: &str) -> std::io::
             };
             response(stream, "200 OK", ctype, &bytes)
         }
-        Err(_) => response(stream, "404 Not Found", "text/plain", b"not found"),
+        Err(_) => {
+            // React SPA: unknown paths without a file extension serve index.html.
+            if !rel.contains('.') {
+                let index = PathBuf::from(frontend).join("index.html");
+                if let Ok(bytes) = fs::read(&index) {
+                    return response(stream, "200 OK", "text/html; charset=utf-8", &bytes);
+                }
+            }
+            response(stream, "404 Not Found", "text/plain", b"not found")
+        }
     }
 }
 

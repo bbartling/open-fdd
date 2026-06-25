@@ -49,6 +49,11 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+# Explicit --build overrides bench.env.local (inspection/dev intent).
+if [[ "$BUILD" == "1" ]]; then
+  export OPENFDD_ALLOW_LOCAL_BUILD=1
+fi
+
 AUTH="$ROOT/workspace/auth.env.local"
 BOOTSTRAP="$ROOT/workspace/bootstrap_credentials.once.txt"
 
@@ -139,7 +144,15 @@ else
 fi
 echo ""
 echo "Login users: operator, integrator, agent"
-echo "Tabs to click: / /login /bacnet /modbus /haystack /json-api /model /sql-fdd /plot /reports /data-management"
+echo "Tabs to click: / /login /bacnet /modbus /haystack /json-api /model /sql-fdd /plot /reports /exports /host /data-management"
+echo ""
+if [[ "$DESKTOP" == "1" ]]; then
+  echo "Stop stack:"
+  echo "  docker compose -f docker/compose.edge.rust.yml -f docker/compose.desktop.json-csv.yml --profile desktop-json-csv down"
+else
+  echo "Stop stack:"
+  echo "  docker compose -f docker-compose.local.yml down"
+fi
 echo ""
 if [[ -f "$ROOT/docker/caddy/Caddyfile" ]] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q openfdd-caddy; then
   echo "Caddy:"

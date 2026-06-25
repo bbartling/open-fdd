@@ -63,7 +63,7 @@ check_api() {
 }
 
 assert_dashboard_summary() {
-  local out="$ARTIFACT/_api_dashboard_summary.json"
+  local out="$ARTIFACT/dashboard-summary.json"
   if [[ ! -f "$out" ]]; then
     echo "FAIL: dashboard summary artifact missing" >&2
     fail=1
@@ -83,7 +83,7 @@ assert_dashboard_summary() {
 }
 
 assert_dashboard_analytics() {
-  local out="$ARTIFACT/_api_dashboard_analytics.json"
+  local out="$ARTIFACT/dashboard-analytics.json"
   if [[ ! -f "$out" ]]; then
     echo "FAIL: dashboard analytics artifact missing" >&2
     fail=1

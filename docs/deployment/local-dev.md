@@ -12,7 +12,7 @@ Use the **local overlay** instead (`Dockerfile.local` + `docker-compose.local.ym
 |------|---------|-----|
 | **First local image + dashboard** | `./scripts/openfdd_local_up.sh --build` | http://127.0.0.1:8080 |
 | **Restart after code/UI change** | `cd workspace/dashboard && npm run build` then `./scripts/openfdd_local_up.sh` | http://127.0.0.1:8080 |
-| **UI inspection (auth + tab smoke)** | `./scripts/openfdd_inspection_build.sh --build --smoke` | http://127.0.0.1:8080 |
+| **UI inspection (auth + tab smoke)** | `OPENFDD_ALLOW_LOCAL_BUILD=1 ./scripts/openfdd_inspection_build.sh --build --smoke` | http://127.0.0.1:8080 |
 | **JSON/CSV-only (no BACnet/Modbus)** | `./scripts/openfdd_inspection_build.sh --desktop --smoke` | http://127.0.0.1:8080 |
 | **Remote LAN dial-in (Caddy TLS)** | `./scripts/openfdd_remote_up.sh` | https://\<LAN-IP\>/ |
 | **Health check (API + auth)** | `./scripts/openfdd_health_check.sh --remote --auth` | — |

@@ -47,6 +47,11 @@ EOF
   shift
 done
 
+# --build explicitly opts into local Docker compile (overrides workspace/bench.env.local).
+if [[ "$BUILD" -eq 1 ]]; then
+  export OPENFDD_ALLOW_LOCAL_BUILD=1
+fi
+
 if [[ ! -f "$ROOT/workspace/auth.env.local" ]]; then
   echo "ERROR: missing workspace/auth.env.local"
   echo "Create one or copy from workspace/auth.env.example"
