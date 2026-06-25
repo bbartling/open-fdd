@@ -12,14 +12,15 @@ use open_fdd_edge_prototype::auth::env_file::{generate_auth_env, parse_env_file,
 static SERVER_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 struct Server {
-    _child: Child,
+    _lock: std::sync::MutexGuard<'static, ()>,
+    child: Child,
     port: u16,
     token: String,
 }
 
 impl Server {
     fn start() -> Self {
-        let _lock = SERVER_LOCK
+        let lock = SERVER_LOCK
             .get_or_init(|| Mutex::new(()))
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
@@ -28,11 +29,8 @@ impl Server {
             .local_addr()
             .unwrap()
             .port();
-        let workspace = std::env::temp_dir().join(format!(
-            "openfdd-report-it-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let workspace =
+            std::env::temp_dir().join(format!("openfdd-report-it-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&workspace);
         std::fs::create_dir_all(&workspace).unwrap();
         let auth_path = workspace.join("auth.env.local");
@@ -59,8 +57,9 @@ impl Server {
         for (k, v) in &auth_map {
             cmd.env(k, v);
         }
-        let child = cmd.spawn().expect("start edge");
-        for _ in 0..60 {
+        let mut child = cmd.spawn().expect("start edge");
+        let mut ready = false;
+        for _ in 0..120 {
             let (status, _) = http_raw(
                 "GET",
                 &format!("http://127.0.0.1:{port}/api/health"),
@@ -68,10 +67,12 @@ impl Server {
                 None,
             );
             if status == 200 {
+                ready = true;
                 break;
             }
-            thread::sleep(Duration::from_millis(200));
+            thread::sleep(Duration::from_millis(250));
         }
+        assert!(ready, "edge server did not become ready on port {port}");
         let login = serde_json::json!({"username":"integrator","password":pw}).to_string();
         let (_, body) = http_post_json(
             &format!("http://127.0.0.1:{port}/api/auth/login"),
@@ -86,12 +87,20 @@ impl Server {
                     .and_then(|t| t.as_str())
                     .map(str::to_string)
             })
-            .unwrap();
+            .expect("login token missing");
         Server {
-            _child: child,
+            _lock: lock,
+            child,
             port,
             token,
         }
+    }
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 
@@ -99,7 +108,7 @@ fn http_raw(method: &str, url: &str, token: Option<&str>, body: Option<&str>) ->
     let parsed = url.strip_prefix("http://").unwrap_or(url);
     let (host_port, path) = parsed.split_once('/').unwrap_or((parsed, ""));
     let path = format!("/{path}");
-    let mut stream = TcpStream::connect(host_port).unwrap();
+    let mut stream = TcpStream::connect(host_port).expect("connect to edge server");
     let mut req = format!("{method} {path} HTTP/1.1\r\nHost: {host_port}\r\n");
     if let Some(t) = token {
         req.push_str(&format!("Authorization: Bearer {t}\r\n"));
