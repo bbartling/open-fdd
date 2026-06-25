@@ -628,7 +628,7 @@ pub fn from_validation_run(body: &Value) -> Value {
         "Open-FDD 1-Hour Validation Report — FAILED"
     };
     let summary = validation_summary_from_artifact(artifact_dir);
-    let mut doc = create_draft(&json!({
+    let doc = create_draft(&json!({
         "template_id": "validation-summary",
         "title": title,
     }));
@@ -658,11 +658,56 @@ pub fn from_validation_run(body: &Value) -> Value {
                 "order": 99,
                 "content": summary
             }));
+            if let Some(harness) = body.get("harness") {
+                if let Some(api) = harness.get("api_health") {
+                    sections.push(json!({
+                        "id": "api-health",
+                        "type": "api_health_table",
+                        "title": "API health",
+                        "visible": true,
+                        "order": 100,
+                        "content": {"endpoints": api}
+                    }));
+                }
+                if let Some(browser) = harness.get("browser_smoke") {
+                    sections.push(json!({
+                        "id": "ui-smoke",
+                        "type": "ui_smoke_summary",
+                        "title": "UI smoke",
+                        "visible": true,
+                        "order": 101,
+                        "content": browser
+                    }));
+                }
+                if let Some(sources) = harness.get("source_validation") {
+                    sections.push(json!({
+                        "id": "source-validation",
+                        "type": "source_validation",
+                        "title": "Data source validation",
+                        "visible": true,
+                        "order": 102,
+                        "content": sources
+                    }));
+                }
+                if let Some(fdd) = harness.get("fdd_analytics") {
+                    sections.push(json!({
+                        "id": "fdd-analytics",
+                        "type": "fdd_analytics",
+                        "title": "FDD analytics",
+                        "visible": true,
+                        "order": 103,
+                        "content": fdd
+                    }));
+                }
+            }
         }
         let _ = save_report(&report_id, &saved);
-        doc = saved;
     }
     let pdf = render_pdf_bundle(&report_id);
+    let pdf_path = pdf
+        .get("pdf_path")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
     json!({
         "ok": true,
         "report_id": report_id,
@@ -671,6 +716,7 @@ pub fn from_validation_run(body: &Value) -> Value {
         "artifact_dir": artifact_dir,
         "summary": summary,
         "pdf": pdf,
+        "pdf_path": pdf_path,
     })
 }
 
