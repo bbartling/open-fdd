@@ -51,7 +51,8 @@ Manual QA procedures live under [verification/](verification/). Use these after 
 | Auth, login, and RBAC | [verification/auth-and-login.md](verification/auth-and-login.md) |
 | FDD Wires and SQL rules | [verification/fdd-wires.md](verification/fdd-wires.md) |
 | Live FDD validation (development) | [testing/live-fdd-validation.md](testing/live-fdd-validation.md) |
-| Legacy bench 5007 runbook | [verification/bench-5007-long-smoke.md](verification/bench-5007-long-smoke.md) |
+
+Historical Python-era notes: [archive/python-era.md](archive/python-era.md)
 
 ## AI agent and FDD cookbooks
 

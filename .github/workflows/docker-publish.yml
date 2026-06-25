@@ -1,158 +1,17 @@
-# Publish Open-FDD edge images to GHCR.
-# Tags: vX.Y.Z / open-fdd-vX.Y.Z → versioned + minor + latest
-# workflow_dispatch → pyproject.toml version + minor + latest (optional image_tag override)
-# Ordinary branch pushes do NOT publish.
+# DISABLED — legacy Python stack GHCR images (openfdd-bridge, openfdd-commission, …).
+# Current deployments use .github/workflows/rust-ghcr.yml → ghcr.io/bbartling/openfdd-edge-rust
 
-name: Publish Docker images to GHCR
+name: Publish Docker images to GHCR (legacy Python — disabled)
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
-      - "open-fdd-v*"
   workflow_dispatch:
-    inputs:
-      image_tag:
-        description: "Optional SemVer override (default reads VERSION file)"
-        required: false
-        default: ""
-      keep_versions:
-        description: "GHCR versions to retain per image"
-        required: false
-        default: "3"
-
-permissions:
-  contents: read
-  packages: write
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  REGISTRY: ghcr.io
-  OWNER: bbartling
 
 jobs:
-  resolve-tag:
-    runs-on: ubuntu-latest
-    outputs:
-      build_tag: ${{ steps.meta.outputs.build_tag }}
-      publish_release_tags: ${{ steps.meta.outputs.publish_release_tags }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-
-      - id: meta
-        run: |
-          chmod +x scripts/resolve_ghcr_publish_tag.sh
-          # shellcheck source=/dev/null
-          source scripts/resolve_ghcr_publish_tag.sh
-          ref="${GITHUB_REF_NAME}"
-          ver="$(resolve_ghcr_publish_tag "${ref}" "${{ inputs.image_tag || '' }}")"
-          if [[ -z "$ver" ]]; then
-            echo "Could not resolve GHCR publish version (pyproject.toml or image_tag)" >&2
-            exit 1
-          fi
-          echo "build_tag=${ver}" >> "$GITHUB_OUTPUT"
-          if ghcr_publish_release_tags_enabled "${ref}" "${{ github.event_name }}"; then
-            echo "publish_release_tags=1" >> "$GITHUB_OUTPUT"
-          else
-            echo "publish_release_tags=0" >> "$GITHUB_OUTPUT"
-          fi
-          echo "Publishing ghcr tags: ${ver}, latest (minor alias when release tags enabled)"
-
-  docker:
-    needs: resolve-tag
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - image: openfdd-bridge
-            target: bridge
-            description: Open-FDD Operator Bridge API, dashboard, historian
-          - image: openfdd-commission
-            target: commission
-            description: Open-FDD BACnet commissioning and poll worker
-          - image: openfdd-mcp-rag
-            target: mcp-rag
-            description: Open-FDD MCP and doc-search sidecar
-          - image: openfdd-cloud-exporter
-            target: cloud-exporter
-            description: Open-FDD generic cloud POST exporter sidecar
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}
-          tags: |
-            type=raw,value=${{ needs.resolve-tag.outputs.build_tag }}
-            type=raw,value=latest,enable=${{ needs.resolve-tag.outputs.publish_release_tags == '1' }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: docker/Dockerfile
-          target: ${{ matrix.target }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            OPENFDD_IMAGE_TAG=${{ needs.resolve-tag.outputs.build_tag }}
-            OPENFDD_BUILD_GIT_SHA=${{ github.sha }}
-            OPENFDD_BUILD_TIME=${{ github.event.head_commit.timestamp }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Tag minor release alias
-        if: needs.resolve-tag.outputs.publish_release_tags == '1'
-        run: |
-          ver="${{ needs.resolve-tag.outputs.build_tag }}"
-          minor="${ver%.*}"
-          src="${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:${ver}"
-          dst="${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:${minor}"
-          docker buildx imagetools create -t "$dst" "$src"
-
-      - name: Verify version and latest tags
-        if: needs.resolve-tag.outputs.publish_release_tags == '1'
-        run: |
-          ver="${{ needs.resolve-tag.outputs.build_tag }}"
-          img="${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}"
-          docker manifest inspect "${img}:${ver}"
-          docker manifest inspect "${img}:latest"
-
-  prune:
-    needs: docker
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+  disabled:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Prune old GHCR versions
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GHCR_KEEP_VERSIONS: ${{ inputs.keep_versions || '3' }}
+      - name: Legacy Python GHCR publish removed
         run: |
-          chmod +x scripts/ghcr_prune_packages.sh
-          ./scripts/ghcr_prune_packages.sh --delete-retired --all-images \
-            --keep-releases "${GHCR_KEEP_VERSIONS}" --confirm-delete
+          echo "This workflow published retired Python stack images."
+          echo "Use .github/workflows/rust-ghcr.yml for ghcr.io/bbartling/openfdd-edge-rust"
+          exit 1

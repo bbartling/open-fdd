@@ -274,6 +274,6 @@ Link rules in the visual graph: `driver_point → model_point → fdd_input → 
 
 See [fdd-wires.md](../verification/fdd-wires.md) and [AI Haystack guide](../ai-agent/haystack-and-assignments.md).
 
-## Legacy Python cookbook
+## Historical note
 
-The Python-era PyArrow rule functions and ZIP cookbook remain in git history for **off-edge** `pip install open-fdd` use. The Rust edge path is **SQL-only** for runtime FDD.
+Pre-Rust PyArrow rule functions and ZIP cookbooks live in git history only. The Rust edge runs **DataFusion SQL** on the Arrow historian. See [archive/python-era.md](../archive/python-era.md).

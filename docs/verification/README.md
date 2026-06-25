@@ -24,4 +24,3 @@ These documents describe **how to confirm** Open-FDD Rust edge behavior on a rea
 - [UI smoke](ui-smoke.md)
 - [Auth and login](auth-and-login.md)
 - [FDD Wires and SQL rules](fdd-wires.md)
-- [Bench 5007 long smoke](bench-5007-long-smoke.md)

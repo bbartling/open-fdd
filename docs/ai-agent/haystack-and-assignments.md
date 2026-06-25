@@ -48,7 +48,7 @@ curl -s -X POST http://127.0.0.1:8080/api/model/assignments/save \
   -d '{
     "points": [{
       "haystack_id": "point:oa-t",
-      "driver_bindings": [{"driver":"bacnet","ref":"bacnet:5007:analog-input:1173"}],
+      "driver_bindings": [{"driver":"bacnet","ref":"bacnet:<device>:analog-input:<instance>"}],
       "fdd_input": "oa_t"
     }]
   }' | jq .
@@ -79,15 +79,15 @@ You are modeling a site on Open-FDD Rust edge.
 7. Use /api/fdd-rules/builder-sql to preview SQL from FDD inputs.
 ```
 
-## Bench device 5007 example
+## Example BACnet → Haystack mapping
 
-Seeded points on the demo bench controller (device instance **5007**):
+Generic illustration for a local AHU (replace device instance and object IDs with your commissioned points):
 
 | BACnet ref | Haystack ID | FDD input |
 | --- | --- | --- |
-| `bacnet:5007:analog-input:1173` | `point:oa-t` | `oa_t` |
-| `bacnet:5007:analog-input:1168` | `point:oa-h` | `oa_h` |
-| `bacnet:5007:analog-input:1192` | `point:duct-t` | `duct_t` |
-| `bacnet:5007:analog-input:10014` | `point:stat_zn-t` | `zone_t` |
+| `bacnet:<device>:analog-input:<instance>` | `point:oa-t` | `oa_t` |
+| `bacnet:<device>:analog-input:<instance>` | `point:oa-h` | `oa_h` |
+| `bacnet:<device>:analog-input:<instance>` | `point:duct-t` | `duct_t` |
+| `bacnet:<device>:analog-input:<instance>` | `point:stat_zn-t` | `zone_t` |
 
-Use these when drafting SQL rules for the bench AHU — see [SQL HVAC FDD cookbook](../rule-cookbook/sql-hvac-fdd.md).
+Use your driver tree refs when drafting SQL rules — see [SQL HVAC FDD cookbook](../rule-cookbook/sql-hvac-fdd.md).

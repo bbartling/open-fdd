@@ -40,4 +40,4 @@ git push -u origin feature/your-change
 gh pr create --base master
 ```
 
-Legacy Python publish workflows remain for historical tags only. The Rust rewrite line does not ship a PyPI runtime.
+Legacy Python PyPI/GHCR publish workflows are disabled on `master`. The Rust edge ships only via `ghcr.io/bbartling/openfdd-edge-rust` (see `rust-ghcr.yml`). Historical Python packaging notes: [archive/python-era.md](../archive/python-era.md).

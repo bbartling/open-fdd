@@ -8,7 +8,7 @@ Use the generic Rust validation harness:
 
 ```bash
 OPENFDD_SMOKE_PROFILE=local_bacnet_fdd_validation \
-OPENFDD_SMOKE_DEVICE_INSTANCE=5007 \
+OPENFDD_SMOKE_DEVICE_INSTANCE=<your-bacnet-device-instance> \
 OPENFDD_SMOKE_DURATION_HOURS=6 \
 OPENFDD_SMOKE_INTERVAL_SECONDS=300 \
 OPENFDD_SMOKE_LIVE_FDD=1 \
@@ -21,7 +21,7 @@ OPENFDD_SMOKE_NO_DEMO_PASS=1 \
 ./scripts/smoke_live_fdd_validation.sh
 ```
 
-`scripts/bench_5007_long_smoke.sh` remains as a **deprecated wrapper** only.
+`scripts/bench_5007_long_smoke.sh` is a **deprecated wrapper** — use `smoke_live_fdd_validation.sh` with a local profile instead.
 
 ### Short dry-run (simulation, no OT writes)
 
@@ -43,7 +43,7 @@ cp workspace/smoke-profiles/local/local_bacnet_fdd_validation.local.toml.example
    workspace/smoke-profiles/local/local_bacnet_fdd_validation.local.toml
 ```
 
-Local `*.local.toml` files are gitignored. BACnet device **5007** appears only as an **example** local development value — not a product assumption.
+Local `*.local.toml` files are gitignored. Set `device_instance`, IPs, and point lists for **your** BACnet/Modbus/JSON sources — not committed defaults.
 
 ## API routes
 
@@ -54,27 +54,11 @@ Local `*.local.toml` files are gitignored. BACnet device **5007** appears only a
 | `POST /api/validation-runs/current/inject-scenario` | Safe simulation inject |
 | `GET /api/historian/validation/status` | Historian row counts |
 
-Legacy `/api/bench/5007/*` aliases remain temporarily for backward compatibility.
+Legacy `/api/bench/*` aliases may remain temporarily for backward compatibility.
 
-## Python oracle policy
+## Runtime note
 
-**Decision (2026-06):** The Python runtime is **formally superseded** on `master` by the Rust edge production line (PRs #362/#363). Regression coverage uses:
-
-- Rust unit/integration tests
-- DataFusion SQL + historian golden paths via `inject-scenario`
-- CI FDD wires smoke
-- Live validation harness (`smoke_live_fdd_validation.sh`)
-
-Historical Python references live in git history and archived PRs; restoring `open_fdd/` is optional on a legacy branch, not required for production.
-
-## Port compatibility
-
-| Stack | Health URL |
-|-------|------------|
-| Legacy Python edge | `http://127.0.0.1:8765/health` (historical) |
-| Rust production edge | `http://127.0.0.1:8080/health` internal, `https://localhost/api/health` via Caddy |
-
-8765 is not reintroduced unless explicitly configured as a dev-only alias.
+Production validation uses the Rust edge only. Historical Python stack notes: [archive/python-era.md](../archive/python-era.md).
 
 ## No-hardcoding audit
 
@@ -84,4 +68,5 @@ Historical Python references live in git history and archived PRs; restoring `op
 
 ## Related docs
 
-- [Bench 5007 long smoke (legacy name)](../verification/bench-5007-long-smoke.md) — historical runbook; prefer this page for new work.
+- [Smoke profiles](../../workspace/smoke-profiles/README.md) (if present) and gitignored `workspace/smoke-profiles/local/*.local.toml`
+- [FDD Wires verification](../verification/fdd-wires.md)

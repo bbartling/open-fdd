@@ -17,7 +17,8 @@ How AI agents (OpenClaw, Cursor, MCP clients) assist with Open-FDD on the **3.2 
 ## Session start (copy-paste)
 
 ```bash
-INTEGRATOR_PW="$(grep '^OFDD_INTEGRATOR_PASSWORD=' ~/open-fdd/workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
+# Plaintext password is in workspace/bootstrap_credentials.once.txt (not auth.env.local hashes)
+INTEGRATOR_PW="$(grep '^integrator:' ~/open-fdd/workspace/bootstrap_credentials.once.txt | awk '{print $2}')"
 TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
   -H 'Content-Type: application/json' \
   -d "$(jq -nc --arg p "$INTEGRATOR_PW" '{username:"integrator",password:$p}')" \
@@ -45,6 +46,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/agent/tools 
 
 ```bash
 cargo fmt --all --check && cargo test --workspace
-docker build -t openfdd-edge-rust:local .
-# Push via .github/workflows/rust-ghcr.yml on master or tag v3.2.0
+cd workspace/dashboard && npm ci && npm run build
+# Merge to master or tag v3.2.x — rust-ghcr.yml publishes the image.
+# Wait for GitHub Actions green before merge. Docs-only PRs do not need a manual docker push.
 ```

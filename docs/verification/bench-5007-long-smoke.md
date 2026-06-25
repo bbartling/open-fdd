@@ -1,6 +1,8 @@
-# Bench device 5007 — long smoke test
+# Long smoke test (legacy runbook name)
 
-Validates BACnet device **5007** (bench controller) and FDD state transitions over an extended run. Use on a live OT LAN with `OPENFDD_BACNET_MODE=live`.
+> **Note:** Prefer [live FDD validation (development)](../testing/live-fdd-validation.md) with a gitignored local smoke profile. This page retains a historical filename for script compatibility only.
+
+Validates a configured BACnet device and FDD state transitions over an extended run. Use on a live OT LAN with `OPENFDD_BACNET_MODE=live`. Device instance and point list come from your local `*.local.toml` profile — not from product defaults.
 
 ## Prerequisites
 
