@@ -1,68 +1,120 @@
-# WSL → Linux runtime validation handoff (PR #385)
+# WSL source ↔ Linux field-install validation handoff
 
-Updated: 2026-06-26
+Updated: 2026-06-26 (post #385 merge)
 
-## WSL audit summary
+## Roles
 
-WSL is the **build and static-check** machine. Live BACnet/Modbus/Haystack validation runs on the **Linux runtime tester** with OT-LAN access.
+| Machine | Purpose | Do **not** |
+|---------|---------|------------|
+| **WSL** (`~/src/open-fdd`) | Source edits, `cargo test`, PRs, patches | Live BACnet, Docker stack, GHCR publish from laptop |
+| **Linux field box** (wiped install) | Pull **GHCR** image, bootstrap, OT-LAN validation | `git clone`, `gh pr checkout`, local `docker build`, `npm run build` |
 
-| Check | WSL result |
-|-------|------------|
-| `git status` | Clean on `feature/local-validation-reporting-workflow` |
-| `gh pr checks 385` | Green (16/16) before handoff commit |
-| `./scripts/audit_no_private_bench_hardcoding.sh` | Pass — no production bench strings |
-| `cargo fmt --all --check` | Pass |
-| `cargo clippy --workspace --all-targets -- -D warnings` | Pass after clippy + protocol cleanup |
-| `cargo test --workspace` | Pass (110 integration + unit tests) |
-| `npm ci && npm run build` | Pass from `workspace/dashboard/` |
-| `docker compose config` | **Skipped** — Docker not installed in this WSL distro; CI covers compose |
+PR **#385** merged to `master` at `e3341919`. GHCR publishes on every master push to:
 
-## Protocol stack honesty (no smoking mirrors on live paths)
+`ghcr.io/bbartling/openfdd-edge-rust:latest` and `:3.2.0` (from `VERSION`).
 
-| Driver | Live stack | Simulated / CI path |
-|--------|------------|---------------------|
-| BACnet | `bacnet-client` / [rusty-bacnet](https://github.com/jscott3201/rusty-bacnet) via `bacnet_live.rs` | `OPENFDD_BACNET_MODE=simulated` — labeled `bacnet-simulated` |
-| Modbus | [rusty-modbus-client](https://github.com/jscott3201/rusty-modbus) via `modbus_live.rs` | `OPENFDD_MODBUS_MODE=simulated` — labeled `modbus-simulated` |
-| Haystack | `rusty-haystack-client` SCRAM/Basic HTTP | `OPENFDD_HAYSTACK_FIXTURE=1` only — labeled `fixture`; unconfigured returns `not_configured` |
-| JSON API | `reqwest` fetch + JSON body point extraction | No synthetic points on HTTP 200 |
-
-Live BACnet override scan **does not** fall back to registry simulated priority data on discovery failure.
-
-## Allowed hardcoding locations (audit allowlist)
-
-Private bench strings appear only in:
-
-- `edge/src/validation/audit.rs` — forbidden-pattern unit tests
-- `workspace/smoke-profiles/local/*.local.toml.example` — operator copies to gitignored `*.local.toml`
-- `docs/verification/*`, `docs/release_cleanup/*` — documentation
-- Comment-only examples in `scripts/openfdd_*_smoke.sh` (comment lines skipped by audit)
-
-## Linux runtime tester — exact next commands
+## WSL (after merge) — source-only loop
 
 ```bash
-cd ~/open-fdd
-git fetch origin
-gh pr checkout 385
+cd ~/src/open-fdd
+git checkout master
 git pull --ff-only
 
-OPENFDD_PUBLISH_HOST=0.0.0.0 ./scripts/openfdd_inspection_build.sh --build --smoke --public-url "http://<linux-tester-ip>:8080"
-
-OPENFDD_VALIDATION_PROFILE=workspace/smoke-profiles/local/local_5007_validation.local.toml ./scripts/openfdd_dev_5007_report_validation.sh
+# static checks (no Docker required)
+cargo fmt --all --check
+cargo clippy --lib -p open_fdd_edge_prototype -- -D warnings
+cargo test --workspace
+cd workspace/dashboard && npm ci && npm run build
+./scripts/audit_no_private_bench_hardcoding.sh
 ```
 
-Replace `<linux-tester-ip>` with the tester’s LAN address (not WSL).
+Patch failures reported from the Linux box → branch → PR → merge → GHCR republish → Linux `openfdd_rust_site_update.sh`.
 
-### Prerequisites on Linux tester
+## Linux field box — fresh GHCR install (no git checkout)
 
-1. Copy `workspace/smoke-profiles/local/local_5007_validation.local.toml.example` → `local_5007_validation.local.toml` and fill device IPs/objects.
-2. Set live modes in env or compose overlay:
-   - `OPENFDD_BACNET_MODE=live`
-   - `OPENFDD_MODBUS_MODE=live` (if Modbus bench present)
-   - Haystack: configure `OPENFDD_HAYSTACK_BASE` + credentials (do **not** set `OPENFDD_HAYSTACK_FIXTURE=1` on bench)
-3. OT-LAN NIC bound per [docs/verification/bacnet-nic-setup.md](../verification/bacnet-nic-setup.md).
+**Prerequisites:** Docker, curl, jq; OT-LAN NIC for BACnet live mode.
 
-## Do not run on WSL
+### 1. Bootstrap from master (pulls GHCR image)
 
-- 1-hour `openfdd_dev_5007_report_validation.sh` against real device 5007
-- Live BACnet writes
-- GHCR publish / merge (human gate)
+```bash
+curl -fsSL https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_rust_edge_bootstrap.sh \
+  -o /tmp/openfdd_rust_edge_bootstrap.sh
+bash /tmp/openfdd_rust_edge_bootstrap.sh --start --image-tag 3.2.0
+```
+
+Save integrator/operator passwords from the one-time handoff file, then delete `~/open-fdd/workspace/bootstrap_credentials.once.txt`.
+
+Default site root: `~/open-fdd` (override with `OPENFDD_ROOT`).
+
+### 2. Platform check (Pi / amd64)
+
+```bash
+~/open-fdd/scripts/openfdd_rust_check_ghcr_platform.sh
+```
+
+### 3. Smoke validate pulled image
+
+```bash
+~/open-fdd/scripts/openfdd_rust_edge_validate.sh
+```
+
+### 4. BACnet / Modbus / Haystack live validation
+
+Copy profile example on the **field box** (not in git):
+
+```bash
+cp ~/open-fdd/workspace/smoke-profiles/local/local_5007_validation.local.toml.example \
+   ~/open-fdd/workspace/smoke-profiles/local/local_5007_validation.local.toml
+# edit: device IP, BACnet objects, Modbus host, Haystack base URL
+```
+
+Set live modes in `~/open-fdd/workspace/data.env.local` or compose env:
+
+```bash
+OPENFDD_BACNET_MODE=live
+OPENFDD_MODBUS_MODE=live
+# Haystack: OPENFDD_HAYSTACK_BASE + credentials — do NOT set OPENFDD_HAYSTACK_FIXTURE=1
+```
+
+Run validation orchestrator (on #385 master):
+
+```bash
+OPENFDD_VALIDATION_PROFILE=workspace/smoke-profiles/local/local_5007_validation.local.toml \
+  ~/open-fdd/scripts/openfdd_one_hour_validation_report.sh
+```
+
+(`openfdd_dev_5007_report_validation.sh` lands with PR #386 — use one-hour script until then.)
+
+NIC setup: [docs/verification/bacnet-nic-setup.md](../verification/bacnet-nic-setup.md).
+
+### 5. After a WSL fix is merged — update site only
+
+```bash
+~/open-fdd/scripts/openfdd_rust_site_update.sh --image-tag 3.2.0
+# or --image-tag latest after confirming GHCR publish
+```
+
+Backup first: `~/open-fdd/scripts/openfdd_rust_site_backup.sh`
+
+## Protocol stacks (live paths)
+
+| Driver | Stack |
+|--------|--------|
+| BACnet | [rusty-bacnet](https://github.com/jscott3201/rusty-bacnet) via `bacnet_live.rs` |
+| Modbus | [rusty-modbus](https://github.com/jscott3201/rusty-modbus) via `modbus_live.rs` |
+| Haystack | [rusty-haystack-client](https://github.com/jscott3201/rusty-haystack) |
+| JSON API | reqwest + JSON body parse |
+
+Simulated CI paths remain labeled `*-simulated` / `fixture` only when explicitly configured.
+
+## GHCR publish (GitHub Actions)
+
+Auto on master push. Manual if needed:
+
+```bash
+gh workflow run "Publish Rust edge to GHCR" --ref master -f image_tag=3.2.0 -f tag_latest=true
+gh run list --workflow="Publish Rust edge to GHCR" --limit 3
+gh run watch <run-id>
+```
+
+Publish takes ~2–3 hours (multi-arch build + test gate).
