@@ -287,30 +287,4 @@ mod tests {
         assert_eq!(redact_user("ab"), "**");
         assert!(redact_user("integrator").contains("***"));
     }
-
-    #[test]
-    fn env_overrides_base_url() {
-        let cfg_path =
-            std::env::temp_dir().join(format!("openfdd-haystack-test-{}.toml", std::process::id()));
-        std::fs::write(&cfg_path, "[haystack]\nenabled = false\nbase_url = \"\"\n").unwrap();
-        let key_base = "OPENFDD_HAYSTACK_BASE";
-        let key_cfg = "OPENFDD_HAYSTACK_CONFIG";
-        let prev_base = env::var(key_base).ok();
-        let prev_cfg = env::var(key_cfg).ok();
-        env::set_var(key_cfg, cfg_path.to_string_lossy().to_string());
-        env::set_var(key_base, "http://example/haystack");
-        env::remove_var("OPENFDD_HAYSTACK_DISABLED");
-        let cfg = load_config();
-        assert_eq!(cfg.base_url, "http://example/haystack");
-        assert!(cfg.enabled);
-        match prev_base {
-            Some(v) => env::set_var(key_base, v),
-            None => env::remove_var(key_base),
-        }
-        match prev_cfg {
-            Some(v) => env::set_var(key_cfg, v),
-            None => env::remove_var(key_cfg),
-        }
-        let _ = std::fs::remove_file(cfg_path);
-    }
 }

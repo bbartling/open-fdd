@@ -170,6 +170,6 @@ mod tests {
     fn build_tree_groups_by_equip_ref() {
         let rows = grid_rows(&fixture::fixture_grid());
         let tree = build_driver_tree(&rows, "source:test", "http://example/haystack");
-        assert!(tree["devices"].as_array().unwrap().len() >= 1);
+        assert!(!tree["devices"].as_array().unwrap().is_empty());
     }
 }

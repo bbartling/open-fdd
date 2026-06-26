@@ -59,7 +59,7 @@ impl Server {
         for (k, v) in &auth_map {
             cmd.env(k, v);
         }
-        let mut child = cmd.spawn().expect("start edge");
+        let child = cmd.spawn().expect("start edge");
         for _ in 0..60 {
             let (status, _) = http_raw(
                 "GET",

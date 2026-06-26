@@ -499,7 +499,7 @@ fn read_priority_array_for_point(point: &Value) -> Vec<(u8, Value)> {
         let mut out = Vec::new();
         for entry in arr {
             let prio = entry.get("priority").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
-            let val = entry.get("value").cloned().unwrap_or_else(|| json!(null));
+            let val = entry.get("value").cloned().unwrap_or(json!(null));
             if prio > 0 {
                 out.push((prio, val));
             }
@@ -790,7 +790,7 @@ pub fn scan_once_value() -> Value {
         match bacnet_live::block_on(bacnet_live::discover_device_points(device_instance)) {
             Ok(discovered) => discovered
                 .into_iter()
-                .filter(|p| is_commandable_point(p))
+                .filter(is_commandable_point)
                 .map(|mut p| {
                     if p.get("device_instance").is_none() {
                         p["device_instance"] = json!(device_instance);
@@ -802,17 +802,9 @@ pub fn scan_once_value() -> Value {
                 })
                 .collect(),
             Err(err) => {
-                scan_health = "degraded".to_string();
-                scan_error = Some(err.clone());
-                commandable_points(&registry)
-                    .into_iter()
-                    .filter(|p| {
-                        p.get("device_instance")
-                            .and_then(|v| v.as_u64())
-                            .map(|d| d as u32 == device_instance)
-                            .unwrap_or(true)
-                    })
-                    .collect()
+                scan_health = "error".to_string();
+                scan_error = Some(err);
+                Vec::new()
             }
         }
     } else {

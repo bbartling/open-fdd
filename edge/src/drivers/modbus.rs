@@ -141,7 +141,7 @@ pub fn commission_status_json() -> String {
         "service": "modbus-commission",
         "status": "ready",
         "config": modbus_config_value(),
-        "features": ["scan", "read-holding", "read-input", "modbus-tcp-live"]
+        "features": ["scan", "read-holding", "read-input", "rusty-modbus-live"]
     })
     .to_string()
 }

@@ -279,7 +279,7 @@ pub fn top_faulted_equipment() -> Value {
         *counts.entry(equip).or_insert(0) += 1;
     }
     let mut ranked: Vec<(String, usize)> = counts.into_iter().collect();
-    ranked.sort_by(|a, b| b.1.cmp(&a.1));
+    ranked.sort_by_key(|b| std::cmp::Reverse(b.1));
     let items: Vec<Value> = ranked
         .into_iter()
         .take(10)

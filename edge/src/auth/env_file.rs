@@ -40,9 +40,9 @@ pub fn apply_env_file(path: &Path) {
         for (k, v) in map {
             // Workspace auth file wins — docker env_file may mangle bcrypt `$` sequences.
             // Never override OPENFDD_WORKSPACE from auth.env.local (path resolution depends on it).
-            if (k.starts_with("OFDD_") || k.starts_with("OPENFDD_")) && k != "OPENFDD_WORKSPACE" {
-                std::env::set_var(&k, v);
-            } else if std::env::var(&k).is_err() {
+            if ((k.starts_with("OFDD_") || k.starts_with("OPENFDD_")) && k != "OPENFDD_WORKSPACE")
+                || std::env::var(&k).is_err()
+            {
                 std::env::set_var(&k, v);
             }
         }
@@ -391,7 +391,6 @@ pub fn load_password_credential(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_auth_path() -> PathBuf {
         let dir = std::env::temp_dir().join(format!(

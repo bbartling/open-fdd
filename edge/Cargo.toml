@@ -38,3 +38,5 @@ rusty-haystack-core = { git = "https://github.com/jscott3201/rusty-haystack", re
 toml = "1.1.2"
 once_cell = "1.21.4"
 reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "json", "rustls"] }
+rusty-modbus-client = { git = "https://github.com/jscott3201/rusty-modbus", version = "0.1.0" }
+rusty-modbus-types = { git = "https://github.com/jscott3201/rusty-modbus", version = "0.1.0" }

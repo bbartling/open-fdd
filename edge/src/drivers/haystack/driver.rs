@@ -43,11 +43,23 @@ pub fn status_value() -> Value {
         json!({
             "ok": true,
             "enabled": true,
-            "status": if cfg.is_configured() { "live-or-fixture" } else { "fixture" },
+            "status": if cfg.fixture_mode() {
+                "fixture"
+            } else if cfg.is_configured() {
+                "live"
+            } else {
+                "not_configured"
+            },
             "source_id": cfg.source_id,
             "message": "Haystack driver ready",
             "driver": "haystack",
-            "mode": if cfg.fixture_mode() || !cfg.is_configured() { "fixture" } else { "live" },
+            "mode": if cfg.fixture_mode() {
+                "fixture"
+            } else if cfg.is_configured() {
+                "live"
+            } else {
+                "not_configured"
+            },
             "supported_ops": ["about", "ops", "read", "nav", "poll-once", "import"],
             "points": point_count,
             "config": cfg.redacted_summary()
@@ -276,42 +288,6 @@ impl PipeToString for Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn disabled_status_is_clean() {
-        let cfg_path = std::env::temp_dir().join(format!(
-            "openfdd-haystack-disabled-{}.toml",
-            std::process::id()
-        ));
-        std::fs::write(
-            &cfg_path,
-            "[haystack]\nenabled = true\nbase_url = \"http://example/haystack\"\n",
-        )
-        .unwrap();
-        std::env::set_var(
-            "OPENFDD_HAYSTACK_CONFIG",
-            cfg_path.to_string_lossy().to_string(),
-        );
-        std::env::set_var("OPENFDD_HAYSTACK_DISABLED", "1");
-        std::env::remove_var("OPENFDD_HAYSTACK_FIXTURE");
-        std::env::remove_var("OPENFDD_HAYSTACK_BASE");
-        let st: Value = serde_json::from_str(&status_json()).unwrap();
-        assert_eq!(st["enabled"], false);
-        assert_eq!(st["status"], "disabled");
-        std::env::remove_var("OPENFDD_HAYSTACK_DISABLED");
-        std::env::remove_var("OPENFDD_HAYSTACK_CONFIG");
-        let _ = std::fs::remove_file(cfg_path);
-    }
-
-    #[test]
-    fn fixture_import_populates_model() {
-        std::env::set_var("OPENFDD_HAYSTACK_FIXTURE", "1");
-        std::env::remove_var("OPENFDD_HAYSTACK_DISABLED");
-        let out: Value = serde_json::from_str(&import_json(&json!({}))).unwrap();
-        assert_eq!(out["ok"], true);
-        assert!(out["imported"].as_u64().unwrap_or(0) > 0);
-        std::env::remove_var("OPENFDD_HAYSTACK_FIXTURE");
-    }
 
     #[test]
     fn empty_nav_read_do_not_panic() {

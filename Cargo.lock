@@ -2321,6 +2321,8 @@ dependencies = [
  "reqwest",
  "rusty-haystack-client",
  "rusty-haystack-core",
+ "rusty-modbus-client",
+ "rusty-modbus-types",
  "serde",
  "serde_json",
  "sha2",
@@ -2946,6 +2948,68 @@ dependencies = [
  "thiserror",
  "tokio",
  "zeroize",
+]
+
+[[package]]
+name = "rusty-modbus-client"
+version = "0.1.0"
+source = "git+https://github.com/jscott3201/rusty-modbus#b2703b1cbef8d3c4a86caa56f987a17d39d85c27"
+dependencies = [
+ "bytes",
+ "parking_lot",
+ "rusty-modbus-codec",
+ "rusty-modbus-frame",
+ "rusty-modbus-tcp",
+ "rusty-modbus-types",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "rusty-modbus-codec"
+version = "0.1.0"
+source = "git+https://github.com/jscott3201/rusty-modbus#b2703b1cbef8d3c4a86caa56f987a17d39d85c27"
+dependencies = [
+ "rusty-modbus-types",
+]
+
+[[package]]
+name = "rusty-modbus-frame"
+version = "0.1.0"
+source = "git+https://github.com/jscott3201/rusty-modbus#b2703b1cbef8d3c4a86caa56f987a17d39d85c27"
+dependencies = [
+ "bytes",
+ "rusty-modbus-codec",
+ "rusty-modbus-types",
+ "thiserror",
+ "tokio-util",
+ "zerocopy",
+]
+
+[[package]]
+name = "rusty-modbus-tcp"
+version = "0.1.0"
+source = "git+https://github.com/jscott3201/rusty-modbus#b2703b1cbef8d3c4a86caa56f987a17d39d85c27"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "rusty-modbus-codec",
+ "rusty-modbus-frame",
+ "rusty-modbus-types",
+ "socket2",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "rusty-modbus-types"
+version = "0.1.0"
+source = "git+https://github.com/jscott3201/rusty-modbus#b2703b1cbef8d3c4a86caa56f987a17d39d85c27"
+dependencies = [
+ "zerocopy",
 ]
 
 [[package]]

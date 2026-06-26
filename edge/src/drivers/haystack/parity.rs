@@ -40,7 +40,7 @@ pub fn compare_reading(input: &ParityInput, tol: &ParityTolerance) -> Value {
     } else {
         tol.temperature_f
     };
-    let pass = abs_delta <= tolerance && ts_delta <= tol.timestamp_skew_seconds as i64;
+    let pass = abs_delta <= tolerance && ts_delta <= tol.timestamp_skew_seconds;
     json!({
         "equipment_id": input.equipment_id,
         "role": input.role,

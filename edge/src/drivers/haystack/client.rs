@@ -264,11 +264,24 @@ pub fn test_connection(cfg: &HaystackConfig) -> Value {
     }
 }
 
+fn not_configured_response(cfg: &HaystackConfig, op: &str) -> Value {
+    json!({
+        "ok": false,
+        "enabled": false,
+        "status": "not_configured",
+        "source_id": cfg.source_id,
+        "message": format!(
+            "Haystack {op} requires base_url configuration or OPENFDD_HAYSTACK_FIXTURE=1 for labeled CI fixture data"
+        ),
+        "config": cfg.redacted_summary()
+    })
+}
+
 pub fn about(cfg: &HaystackConfig) -> Value {
     if !cfg.effective_enabled() {
         return disabled_response(cfg);
     }
-    if cfg.fixture_mode() || !cfg.is_configured() {
+    if cfg.fixture_mode() {
         return json!({
             "ok": true,
             "enabled": true,
@@ -276,6 +289,9 @@ pub fn about(cfg: &HaystackConfig) -> Value {
             "source_id": cfg.source_id,
             "records": fixture::fixture_about()
         });
+    }
+    if !cfg.is_configured() {
+        return not_configured_response(cfg, "about");
     }
     match LiveClient::connect(cfg) {
         Ok(client) => match client.about() {
@@ -296,7 +312,7 @@ pub fn ops(cfg: &HaystackConfig) -> Value {
     if !cfg.effective_enabled() {
         return disabled_response(cfg);
     }
-    if cfg.fixture_mode() || !cfg.is_configured() {
+    if cfg.fixture_mode() {
         return json!({
             "ok": true,
             "enabled": true,
@@ -304,6 +320,9 @@ pub fn ops(cfg: &HaystackConfig) -> Value {
             "source_id": cfg.source_id,
             "records": fixture::fixture_ops()
         });
+    }
+    if !cfg.is_configured() {
+        return not_configured_response(cfg, "ops");
     }
     match LiveClient::connect(cfg) {
         Ok(client) => match client.ops() {
@@ -328,7 +347,7 @@ pub fn nav(cfg: &HaystackConfig, payload: &Value) -> Value {
         .get("navId")
         .or_else(|| payload.get("nav_id"))
         .and_then(|v| v.as_str());
-    if cfg.fixture_mode() || !cfg.is_configured() {
+    if cfg.fixture_mode() {
         let grid = fixture::fixture_grid();
         return json!({
             "ok": true,
@@ -337,6 +356,9 @@ pub fn nav(cfg: &HaystackConfig, payload: &Value) -> Value {
             "source_id": cfg.source_id,
             "records": grid
         });
+    }
+    if !cfg.is_configured() {
+        return not_configured_response(cfg, "nav");
     }
     match LiveClient::connect(cfg) {
         Ok(client) => match client.nav(nav_id) {
@@ -357,7 +379,7 @@ pub fn read(cfg: &HaystackConfig, payload: &Value) -> Value {
     if !cfg.effective_enabled() {
         return disabled_response(cfg);
     }
-    if cfg.fixture_mode() || !cfg.is_configured() {
+    if cfg.fixture_mode() {
         let grid = fixture::fixture_grid();
         return json!({
             "ok": true,
@@ -366,6 +388,9 @@ pub fn read(cfg: &HaystackConfig, payload: &Value) -> Value {
             "source_id": cfg.source_id,
             "records": grid
         });
+    }
+    if !cfg.is_configured() {
+        return not_configured_response(cfg, "read");
     }
     let ids: Vec<String> = payload
         .get("ids")

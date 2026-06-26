@@ -24,9 +24,7 @@ pub mod tests {
                 ("200 OK", ABOUT_JSON)
             } else if req.contains("/haystack/ops") {
                 ("200 OK", OPS_JSON)
-            } else if req.contains("/haystack/read") {
-                ("200 OK", READ_JSON)
-            } else if req.contains("/haystack/nav") {
+            } else if req.contains("/haystack/read") || req.contains("/haystack/nav") {
                 ("200 OK", READ_JSON)
             } else {
                 ("404 Not Found", r#"{"error":"not found"}"#)

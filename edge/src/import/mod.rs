@@ -250,17 +250,17 @@ pub fn commit_job(job_id: &str) -> Value {
         let oa_h = parse_f64_field(&record, 3, "oa_h", line, Some(45.0), &mut warnings);
         let duct_t = parse_f64_field(&record, 4, "duct_t", line, Some(55.0), &mut warnings);
         let zn_t = parse_f64_field(&record, 5, "zn_t", line, Some(72.0), &mut warnings);
-        let row = store::make_pivot_row(
-            &ts,
-            equip,
+        let row = store::make_pivot_row(store::PivotSample {
+            timestamp: &ts,
+            equipment_id: equip,
             oa_t,
             oa_h,
             duct_t,
             zn_t,
-            &format!("{source}:{job_id}"),
-            "csv-import",
-            false,
-        );
+            source: &format!("{source}:{job_id}"),
+            source_driver: "csv-import",
+            is_simulated: false,
+        });
         if let Err(err) = store::append_pivot_row(&row) {
             let mut updated = job.clone();
             updated["status"] = json!("failed");

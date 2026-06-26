@@ -1,13 +1,29 @@
-//! Live Modbus/TCP adapter for bench devices (e.g. RPi temp sensor on :1502).
+//! Live Modbus/TCP adapter via [rusty-modbus](https://github.com/jscott3201/rusty-modbus).
 
+use rusty_modbus_client::client::ModbusClient;
+use rusty_modbus_client::config::ClientConfig;
+use rusty_modbus_types::UnitId;
 use serde_json::{json, Value};
 use std::env;
-use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::net::ToSocketAddrs;
+use std::sync::OnceLock;
 use std::time::Duration;
+use tokio::runtime::Runtime;
 
-const FC_READ_HOLDING: u8 = 3;
-const FC_READ_INPUT: u8 = 4;
+static RUNTIME: OnceLock<Runtime> = OnceLock::new();
+
+fn runtime() -> &'static Runtime {
+    RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime for Modbus")
+    })
+}
+
+fn block_on<F: std::future::Future>(future: F) -> F::Output {
+    runtime().block_on(future)
+}
 
 pub fn is_live_mode() -> bool {
     env::var("OPENFDD_MODBUS_MODE")
@@ -66,99 +82,69 @@ fn modbus_address(register: u16, function: &str) -> Result<u16, String> {
     }
 }
 
-fn read_registers(
+async fn connect_client(host: &str, port: u16) -> Result<ModbusClient, String> {
+    let addr = format!("{host}:{port}")
+        .to_socket_addrs()
+        .map_err(|e| format!("resolve {host}:{port}: {e}"))?
+        .next()
+        .ok_or_else(|| format!("no address for {host}:{port}"))?;
+    let config = ClientConfig {
+        unit_id: UnitId(unit_id()),
+        timeout: Duration::from_millis(timeout_ms()),
+        ..Default::default()
+    };
+    ModbusClient::connect(addr, config)
+        .await
+        .map_err(|e| format!("connect {host}:{port}: {e}"))
+}
+
+async fn read_registers_async(
     host: &str,
     port: u16,
-    unit: u8,
-    fc: u8,
+    function: &str,
     address: u16,
     count: u16,
 ) -> Result<Vec<u16>, String> {
-    let mut stream = TcpStream::connect(format!("{host}:{port}"))
-        .map_err(|e| format!("connect {host}:{port}: {e}"))?;
-    stream
-        .set_read_timeout(Some(Duration::from_millis(timeout_ms())))
-        .map_err(|e| e.to_string())?;
-    stream
-        .set_write_timeout(Some(Duration::from_millis(timeout_ms())))
-        .map_err(|e| e.to_string())?;
+    let client = connect_client(host, port).await?;
+    let uid = UnitId(unit_id());
+    match function {
+        "holding_register" => client
+            .read_holding_registers(uid, address, count)
+            .await
+            .map_err(|e| format!("read holding {address}: {e}")),
+        "input_register" => client
+            .read_input_registers(uid, address, count)
+            .await
+            .map_err(|e| format!("read input {address}: {e}")),
+        other => Err(format!("unsupported modbus function: {other}")),
+    }
+}
 
-    let pdu = [
-        fc,
-        (address >> 8) as u8,
-        (address & 0xFF) as u8,
-        (count >> 8) as u8,
-        (count & 0xFF) as u8,
-    ];
-    let header = [
-        0x00,
-        0x01, // transaction id
-        0x00,
-        0x00, // protocol id
-        0x00,
-        (pdu.len() as u8 + 1), // length
-        unit,
-    ];
-    stream
-        .write_all(&header)
-        .and_then(|_| stream.write_all(&pdu))
-        .map_err(|e| format!("write: {e}"))?;
-
-    let mut resp = [0_u8; 256];
-    let n = stream.read(&mut resp).map_err(|e| format!("read: {e}"))?;
-    if n < 9 {
-        return Err(format!("short modbus response ({n} bytes)"));
-    }
-
-    let resp_unit = resp[6];
-    if resp_unit != unit {
-        return Err(format!("unexpected unit id {resp_unit}"));
-    }
-    let resp_fc = resp[7];
-    if resp_fc & 0x80 != 0 {
-        return Err(format!(
-            "modbus exception fc=0x{resp_fc:02x} code={}",
-            resp[8]
-        ));
-    }
-    if resp_fc != fc {
-        return Err(format!("unexpected function code {resp_fc}"));
-    }
-
-    let byte_count = resp[8] as usize;
-    if 9 + byte_count > n {
-        return Err("truncated modbus payload".to_string());
-    }
-
-    let mut values = Vec::with_capacity(count as usize);
-    for i in 0..count as usize {
-        let off = 9 + i * 2;
-        values.push(u16::from_be_bytes([resp[off], resp[off + 1]]));
-    }
-    Ok(values)
+fn read_registers(
+    host: &str,
+    port: u16,
+    function: &str,
+    address: u16,
+    count: u16,
+) -> Result<Vec<u16>, String> {
+    block_on(read_registers_async(host, port, function, address, count))
 }
 
 pub fn read_register(register: u16, function: &str) -> Result<Value, String> {
     let (host, port) = host_port()?;
-    let unit = unit_id();
     let address = modbus_address(register, function)?;
-    let fc = match function {
-        "holding_register" => FC_READ_HOLDING,
-        "input_register" => FC_READ_INPUT,
-        _ => return Err(format!("unsupported function: {function}")),
-    };
-    let values = read_registers(&host, port, unit, fc, address, 1)?;
+    let values = read_registers(&host, port, function, address, 1)?;
     let raw = values.first().copied().unwrap_or(0);
     Ok(json!({
         "ok": true,
         "host": host,
         "port": port,
-        "unit_id": unit,
+        "unit_id": unit_id(),
         "register": register,
         "function": function,
         "raw": raw,
         "value": raw,
-        "source": "modbus-tcp-live"
+        "source": "rusty-modbus"
     }))
 }
 
@@ -181,8 +167,8 @@ pub fn read_scaled_register(
 pub fn scan_device() -> Result<Value, String> {
     let (host, port) = host_port()?;
     let unit = unit_id();
-    let holding = read_registers(&host, port, unit, FC_READ_HOLDING, 0, 6)?;
-    let input = read_registers(&host, port, unit, FC_READ_INPUT, 0, 4)?;
+    let holding = read_registers(&host, port, "holding_register", 0, 6)?;
+    let input = read_registers(&host, port, "input_register", 0, 4)?;
 
     let points = vec![
         json!({
@@ -241,19 +227,18 @@ pub fn scan_device() -> Result<Value, String> {
             "protocol": "modbus/tcp"
         }],
         "points": points,
-        "source": "modbus-tcp-live"
+        "source": "rusty-modbus"
     }))
 }
 
 pub fn parse_point_id(point_id: &str) -> Option<(u8, u16, String)> {
-    // modbus:tcp:1:40001
     let parts: Vec<&str> = point_id.split(':').collect();
     if parts.len() != 4 || parts[0] != "modbus" || parts[1] != "tcp" {
         return None;
     }
     let unit = parts[2].parse().ok()?;
     let register = parts[3].parse().ok()?;
-    let function = if register >= 30001 && register < 40001 {
+    let function = if (30001..40001).contains(&register) {
         "input_register".to_string()
     } else {
         "holding_register".to_string()
