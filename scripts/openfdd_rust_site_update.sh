@@ -27,6 +27,9 @@ openfdd_rust_check_docker
   exit 1
 }
 
+openfdd_rust_write_site_env "$ROOT" "$OPENFDD_IMAGE_TAG"
+openfdd_rust_install_edge_compose "$ROOT" "${OPENFDD_REPO_REF:-master}"
+
 if [[ "$REQUIRE_BACKUP" == "1" ]]; then
   echo "==> Backup (required)"
   if [[ "$DRY_RUN" == "1" ]]; then
