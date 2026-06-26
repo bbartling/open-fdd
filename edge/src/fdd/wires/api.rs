@@ -131,8 +131,8 @@ pub fn test_graph(site_id: &str, graph_id: &str) -> Value {
 }
 
 pub fn approve_graph(site_id: &str, graph_id: &str, actor: &str, role: &str) -> Value {
-    if role != "integrator" {
-        return json!({"ok": false, "error": "integrator role required to approve graphs", "role": role});
+    if !crate::auth::rbac::is_integrator_tier(role) {
+        return json!({"ok": false, "error": "integrator or agent role required to approve graphs", "role": role});
     }
     let mut graph = match persistence::read_graph(site_id, graph_id) {
         Some(g) => g,
@@ -150,8 +150,8 @@ pub fn approve_graph(site_id: &str, graph_id: &str, actor: &str, role: &str) -> 
 }
 
 pub fn activate_graph(site_id: &str, graph_id: &str, actor: &str, role: &str) -> Value {
-    if role != "integrator" {
-        return json!({"ok": false, "error": "integrator role required to activate graphs", "role": role});
+    if !crate::auth::rbac::is_integrator_tier(role) {
+        return json!({"ok": false, "error": "integrator or agent role required to activate graphs", "role": role});
     }
     let mut graph = match persistence::read_graph(site_id, graph_id) {
         Some(g) => g,

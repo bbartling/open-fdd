@@ -1,23 +1,32 @@
 # Example local smoke profile — copy to local_bacnet_fdd_validation.local.toml (gitignored).
-# BACnet device_instance is lab-specific; production code reads this only via OPENFDD_SMOKE_* env.
+# Replace placeholders with your local BACnet test bench mapping.
 
 profile_id = "local_bacnet_fdd_validation"
 source_id = "source:validation-bacnet"
 source_type = "bacnet"
-device_instance = 5007
-equipment_id = "5007"
+device_instance = 0 # replace with your BACnet device instance
+equipment_id = "equip:local-test-equipment"
 poll_interval_seconds = 300
 duration_hours = 6
 confirmation_minutes = 5
 historian_subdir = "validation"
 artifact_dir = "live_fdd_validation"
 fdd_rule_id = "oa_temp_out_of_range"
-modbus_host = "192.168.204.14"
-modbus_port = 1502
-modbus_unit_id = 1
-json_api_url = "https://httpbin.org/get"
 
-point.oa_t = "Outside Air Temp|1173|oa_t"
-point.oa_h = "Outside Air Humidity|1168|oa_h"
-point.duct_t = "Discharge Air Temp|1192|duct_t"
-point.zn_t = "Zone Temp|10014|zn_t"
+[modbus]
+enabled = false
+host = "<replace-with-modbus-host>"
+port = 1502
+unit_id = 1
+
+[json_api]
+enabled = false
+url = "https://httpbin.org/get"
+
+# point.oa_t = "Outside Air Temp|<object-instance>|oa_t"
+# point.oa_h = "Outside Air Humidity|<object-instance>|oa_h"
+# point.duct_t = "Discharge Air Temp|<object-instance>|duct_t"
+# point.zn_t = "Zone Temp|<object-instance>|zn_t"
+
+# Optional dev-only simulated priority-array fixture for commandable points (simulated mode only):
+# point.actuator = "Demo AO|<instance>|actuator_cmd|analog-output|true|8:55.0"

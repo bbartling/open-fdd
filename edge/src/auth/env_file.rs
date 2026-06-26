@@ -40,9 +40,9 @@ pub fn apply_env_file(path: &Path) {
         for (k, v) in map {
             // Workspace auth file wins — docker env_file may mangle bcrypt `$` sequences.
             // Never override OPENFDD_WORKSPACE from auth.env.local (path resolution depends on it).
-            if (k.starts_with("OFDD_") || k.starts_with("OPENFDD_")) && k != "OPENFDD_WORKSPACE" {
-                std::env::set_var(&k, v);
-            } else if std::env::var(&k).is_err() {
+            if ((k.starts_with("OFDD_") || k.starts_with("OPENFDD_")) && k != "OPENFDD_WORKSPACE")
+                || std::env::var(&k).is_err()
+            {
                 std::env::set_var(&k, v);
             }
         }
@@ -55,10 +55,12 @@ fn random_secret_hex(bytes: usize) -> String {
     hex::encode(buf)
 }
 
+const PASSWORD_LENGTH: usize = 14;
+
 fn random_password() -> String {
     const CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#%^*_-";
     let mut rng = rand::thread_rng();
-    (0..28)
+    (0..PASSWORD_LENGTH)
         .map(|_| {
             let idx = (rng.next_u32() as usize) % CHARSET.len();
             CHARSET[idx] as char
@@ -302,6 +304,35 @@ pub fn print_generated_credentials(passwords: &HashMap<String, String>, show_sec
     }
 }
 
+/// Write one-time credential handoff file next to auth.env.local (lab bootstrap only).
+pub fn write_bootstrap_credentials_once(
+    auth_path: &Path,
+    passwords: &HashMap<String, String>,
+) -> std::io::Result<Option<PathBuf>> {
+    if passwords.is_empty() {
+        return Ok(None);
+    }
+    let workspace = auth_path.parent().unwrap_or_else(|| Path::new("workspace"));
+    let handoff = workspace.join("bootstrap_credentials.once.txt");
+    let mut lines = vec![
+        "# Open-FDD one-time bootstrap credentials — DELETE after saving to your password manager."
+            .to_string(),
+        "# Do NOT commit this file. Do NOT paste bcrypt hashes from auth.env.local as passwords."
+            .to_string(),
+        format!("# Generated: {}", chrono::Utc::now().to_rfc3339()),
+        String::new(),
+    ];
+    for (user, pw) in passwords {
+        lines.push(format!("{user}: {pw}"));
+    }
+    lines.push(String::new());
+    lines.push("# After saving passwords, delete this file:".to_string());
+    lines.push("#   rm workspace/bootstrap_credentials.once.txt".to_string());
+    fs::write(&handoff, lines.join("\n"))?;
+    chmod_600_unix(&handoff);
+    Ok(Some(handoff))
+}
+
 pub fn chmod_600_unix(path: &Path) {
     #[cfg(unix)]
     {
@@ -360,7 +391,6 @@ pub fn load_password_credential(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_auth_path() -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
@@ -370,6 +400,22 @@ mod tests {
         ));
         let _ = fs::create_dir_all(&dir);
         dir.join("auth.env.local")
+    }
+
+    #[test]
+    fn generated_passwords_are_fourteen_chars() {
+        let path = temp_auth_path();
+        let _ = fs::remove_file(&path);
+        let result = generate_auth_env(&GenerateOptions {
+            path: path.clone(),
+            force: true,
+            show_secrets: false,
+        })
+        .unwrap();
+        for pw in result.plaintext_passwords.values() {
+            assert_eq!(pw.len(), PASSWORD_LENGTH);
+        }
+        let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
     #[test]

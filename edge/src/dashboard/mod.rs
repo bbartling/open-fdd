@@ -147,13 +147,18 @@ pub fn building_insight_stub() -> Value {
 pub fn building_status() -> Value {
     let coverage = query::model_coverage();
     let fault_summary = faults::summary_json();
+    let rule_health = faults::rule_health();
     json!({
         "ok": true,
         "model_score": coverage.get("model_score").cloned().unwrap_or(json!(null)),
         "model_counts": {
             "equipment": coverage.get("equipment_count").cloned().unwrap_or(json!(0)),
-            "points": coverage.get("point_count").cloned().unwrap_or(json!(0))
+            "points": coverage.get("point_count").cloned().unwrap_or(json!(0)),
+            "mapped_points": coverage.get("mapped_points").cloned().unwrap_or(json!(0)),
+            "unmapped_points": coverage.get("unmapped_points").cloned().unwrap_or(json!(0))
         },
+        "rule_count": rule_health.get("rule_count").cloned().unwrap_or(json!(0)),
+        "datafusion_ok": rule_health.get("datafusion_ok").cloned().unwrap_or(json!(false)),
         "alert_count": fault_summary.get("active_count").cloned().unwrap_or(json!(0))
     })
 }
@@ -366,5 +371,14 @@ mod tests {
         assert_eq!(body.get("ok").and_then(|v| v.as_bool()), Some(true));
         assert!(body.get("overall").is_some());
         assert!(body.get("services").and_then(|v| v.as_array()).is_some());
+    }
+
+    #[test]
+    fn building_status_includes_model_and_rules() {
+        let body = building_status();
+        assert_eq!(body.get("ok").and_then(|v| v.as_bool()), Some(true));
+        assert!(body.get("model_counts").is_some());
+        assert!(body.get("rule_count").is_some());
+        assert!(body.get("alert_count").is_some());
     }
 }

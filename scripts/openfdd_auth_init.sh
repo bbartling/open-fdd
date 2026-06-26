@@ -22,6 +22,7 @@ ROTATE=false
 ROTATE_ALL=false
 ROTATE_ROLE=""
 HASH_PASSWORD=""
+RESTART=false
 SUBCMD=(auth init --path "$AUTH_PATH")
 
 usage() {
@@ -41,6 +42,7 @@ Options:
   --all                 Rotate all roles + OFDD_AUTH_SECRET (invalidates JWTs)
   --role NAME           Rotate one role: operator|integrator|agent|admin
   --hash-password PASS  Print bcrypt hash for manual auth.env.local editing
+  --restart             After init/rotate, recreate local openfdd-bridge container
   -h, --help            Show this help
 
 After rotate or force init, recreate bridge containers to pick up new env.
@@ -62,6 +64,7 @@ while [[ $# -gt 0 ]]; do
     --all) ROTATE_ALL=true; shift ;;
     --role) ROTATE_ROLE="$2"; shift 2 ;;
     --hash-password) HASH_PASSWORD="$2"; SUBCMD=(auth hash-password "$2"); shift 2 ;;
+    --restart) RESTART=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -70,6 +73,35 @@ done
 mkdir -p "$(dirname "$AUTH_PATH")"
 CONTAINER_AUTH_PATH="/app/workspace/$(basename "$AUTH_PATH")"
 WORKSPACE_MOUNT="$(cd "$(dirname "$AUTH_PATH")" && pwd)"
+HANDOFF="$WORKSPACE_MOUNT/bootstrap_credentials.once.txt"
+AUTH_LOG="$(mktemp "${TMPDIR:-/tmp}/openfdd-auth-init.XXXXXX")"
+trap 'rm -f "$AUTH_LOG"' EXIT
+
+write_bootstrap_handoff_from_log() {
+  [[ "$SHOW_SECRETS" == "true" ]] || return 0
+  local role line
+  local -a creds=()
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^[[:space:]]*(operator|integrator|agent|admin):[[:space:]]+(.+)$ ]]; then
+      role="${BASH_REMATCH[1]}"
+      creds+=("${role}: ${BASH_REMATCH[2]}")
+    fi
+  done < <(grep -E '^[[:space:]]*(operator|integrator|agent|admin):' "$AUTH_LOG" 2>/dev/null || true)
+  [[ ${#creds[@]} -eq 0 ]] && return 0
+  {
+    echo "# Open-FDD one-time bootstrap credentials — DELETE after saving to your password manager."
+    echo "# Do NOT paste bcrypt hashes from auth.env.local as login passwords."
+    echo "# Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "# Rotate again: ./scripts/openfdd_auth_init.sh --rotate --all --show-secrets --restart"
+    echo
+    printf '%s\n' "${creds[@]}"
+    echo
+    echo "# After saving passwords, delete this file:"
+    echo "#   rm workspace/bootstrap_credentials.once.txt"
+  } >"$HANDOFF"
+  chmod 600 "$HANDOFF" 2>/dev/null || true
+  echo "==> Wrote one-time handoff: $HANDOFF"
+}
 
 run_host() {
   if [[ -n "$HASH_PASSWORD" ]]; then
@@ -85,6 +117,25 @@ run_host() {
     [[ "$FORCE" == "true" ]] && args+=(--force)
     [[ "$SHOW_SECRETS" == "true" ]] && args+=(--show-secrets)
     openfdd-edge "${args[@]}"
+  fi
+}
+
+run_local_binary() {
+  local bin="$1"
+  shift
+  if [[ -n "$HASH_PASSWORD" ]]; then
+    "$bin" auth hash-password "$HASH_PASSWORD"
+  elif [[ "$ROTATE" == "true" ]]; then
+    local args=(auth rotate --out "$AUTH_PATH")
+    [[ "$ROTATE_ALL" == "true" ]] && args+=(--all)
+    [[ -n "$ROTATE_ROLE" ]] && args+=(--role "$ROTATE_ROLE")
+    [[ "$SHOW_SECRETS" == "true" ]] && args+=(--show-secrets)
+    "$bin" "${args[@]}"
+  else
+    local args=(auth init --path "$AUTH_PATH")
+    [[ "$FORCE" == "true" ]] && args+=(--force)
+    [[ "$SHOW_SECRETS" == "true" ]] && args+=(--show-secrets)
+    "$bin" "${args[@]}"
   fi
 }
 
@@ -130,13 +181,24 @@ else
   [[ "$SHOW_SECRETS" == "true" ]] && DOCKER_ARGS+=(--show-secrets)
 fi
 
-if command -v openfdd-edge >/dev/null 2>&1; then
-  run_host
+if [[ -x "$ROOT/target/debug/openfdd-edge" ]]; then
+  run_local_binary "$ROOT/target/debug/openfdd-edge" 2>&1 | tee "$AUTH_LOG"
+elif command -v openfdd-edge >/dev/null 2>&1; then
+  run_host 2>&1 | tee "$AUTH_LOG"
 else
   img="$(resolve_docker_image)"
-  run_docker "$img"
+  run_docker "$img" 2>&1 | tee "$AUTH_LOG"
 fi
+write_bootstrap_handoff_from_log
 
 chmod 600 "$AUTH_PATH" 2>/dev/null || true
 echo "==> Auth env: $AUTH_PATH"
-echo "==> Recreate bridge after rotate/force: docker compose -f docker-compose.local.yml up -d --force-recreate openfdd-bridge"
+if [[ "$RESTART" == "true" ]]; then
+  export OPENFDD_RUN_UID="${OPENFDD_RUN_UID:-$(id -u)}"
+  export OPENFDD_RUN_GID="${OPENFDD_RUN_GID:-$(id -g)}"
+  echo "==> Recreating openfdd-bridge to reload auth env"
+  docker compose -f "$ROOT/docker-compose.local.yml" up -d --force-recreate openfdd-bridge
+else
+  echo "==> Recreate bridge after rotate/force: docker compose -f docker-compose.local.yml up -d --force-recreate openfdd-bridge"
+  echo "==> Or re-run with --restart"
+fi

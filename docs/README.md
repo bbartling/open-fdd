@@ -18,6 +18,16 @@ Full detail: [architecture/overview.md](architecture/overview.md).
 | Backup, update, restore | [quick-start/rust-site-lifecycle.md](quick-start/rust-site-lifecycle.md) |
 | Raspberry Pi / ARM64 | [quick-start/raspberry-pi-rust-edge.md](quick-start/raspberry-pi-rust-edge.md) |
 
+## Local development
+
+| Topic | Document |
+| --- | --- |
+| **Build recipes** (local up, Caddy TLS, auth) | [deployment/local-dev.md](deployment/local-dev.md) |
+| UI inspection (no long validation) | [deployment/local_ui_inspection.md](deployment/local_ui_inspection.md) |
+| GHCR vs local Dockerfile | [deployment/local_ui_build.md](deployment/local_ui_build.md) |
+| Caddy LAN ingress | [deployment/caddy.md](deployment/caddy.md) |
+| Windows Docker Desktop | [deployment/windows_docker_desktop.md](deployment/windows_docker_desktop.md) |
+
 ## Operations
 
 | Topic | Document |

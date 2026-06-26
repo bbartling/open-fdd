@@ -10,5 +10,7 @@ pub mod historian;
 pub mod import;
 pub mod model;
 pub mod ops;
+pub mod reports;
+pub mod test_support;
 pub mod tls;
 pub mod validation;

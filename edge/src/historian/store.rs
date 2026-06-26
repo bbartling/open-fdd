@@ -261,8 +261,12 @@ pub fn pivot_rows_to_batch(rows: &[Value]) -> Result<RecordBatch, String> {
         equip.push(
             row.get("equipment_id")
                 .and_then(|v| v.as_str())
-                .unwrap_or("5007")
-                .to_string(),
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| {
+                    crate::validation::profile::active_profile()
+                        .equipment_id
+                        .clone()
+                }),
         );
         oat.push(row.get("oa_t").and_then(|v| v.as_f64()));
         oah.push(row.get("oa_h").and_then(|v| v.as_f64()));
@@ -312,27 +316,29 @@ pub fn parse_ts_ms(s: &str) -> i64 {
         .unwrap_or_else(|_| Utc::now().timestamp_millis())
 }
 
-pub fn make_pivot_row(
-    timestamp: &str,
-    equipment_id: &str,
-    oa_t: f64,
-    oa_h: f64,
-    duct_t: f64,
-    zn_t: f64,
-    source: &str,
-    source_driver: &str,
-    is_simulated: bool,
-) -> Value {
+pub struct PivotSample<'a> {
+    pub timestamp: &'a str,
+    pub equipment_id: &'a str,
+    pub oa_t: f64,
+    pub oa_h: f64,
+    pub duct_t: f64,
+    pub zn_t: f64,
+    pub source: &'a str,
+    pub source_driver: &'a str,
+    pub is_simulated: bool,
+}
+
+pub fn make_pivot_row(sample: PivotSample<'_>) -> Value {
     json!({
-        "timestamp": timestamp,
-        "equipment_id": equipment_id,
-        "oa_t": oa_t,
-        "oa_h": oa_h,
-        "duct_t": duct_t,
-        "zn_t": zn_t,
-        "source": source,
-        "source_driver": source_driver,
-        "is_simulated": is_simulated
+        "timestamp": sample.timestamp,
+        "equipment_id": sample.equipment_id,
+        "oa_t": sample.oa_t,
+        "oa_h": sample.oa_h,
+        "duct_t": sample.duct_t,
+        "zn_t": sample.zn_t,
+        "source": sample.source,
+        "source_driver": sample.source_driver,
+        "is_simulated": sample.is_simulated
     })
 }
 

@@ -3,7 +3,7 @@
 use clap::{Parser, Subcommand};
 use open_fdd_edge_prototype::auth::env_file::{
     default_auth_env_path, generate_auth_env, print_env_summary, print_generated_credentials,
-    rotate_auth_env, GenerateOptions, RotateOptions,
+    rotate_auth_env, write_bootstrap_credentials_once, GenerateOptions, RotateOptions,
 };
 use open_fdd_edge_prototype::auth::password::hash_password;
 use open_fdd_edge_prototype::tls::{default_cert_dir, generate_self_signed, TlsGenerateOptions};
@@ -121,6 +121,15 @@ fn run_generate(path: PathBuf, force: bool, show_secrets: bool) -> std::io::Resu
     }
     print_env_summary(&result.contents, show_secrets);
     print_generated_credentials(&result.plaintext_passwords, show_secrets);
+    if show_secrets {
+        if let Some(handoff) = write_bootstrap_credentials_once(&path, &result.plaintext_passwords)?
+        {
+            eprintln!(
+                "wrote one-time credential handoff {} (delete after saving passwords)",
+                handoff.display()
+            );
+        }
+    }
     Ok(())
 }
 
@@ -154,6 +163,16 @@ fn main() -> std::io::Result<()> {
                 eprintln!("rotated {}", path.display());
                 print_env_summary(&result.contents, show_secrets);
                 print_generated_credentials(&result.plaintext_passwords, show_secrets);
+                if show_secrets {
+                    if let Some(handoff) =
+                        write_bootstrap_credentials_once(&path, &result.plaintext_passwords)?
+                    {
+                        eprintln!(
+                            "wrote one-time credential handoff {} (delete after saving passwords)",
+                            handoff.display()
+                        );
+                    }
+                }
                 Ok(())
             }
             AuthCommands::HashPassword { password } => {

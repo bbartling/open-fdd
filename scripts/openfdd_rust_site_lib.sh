@@ -116,25 +116,10 @@ openfdd_rust_login_smoke() {
     echo "ERROR: missing $auth_file" >&2
     return 1
   }
-  local user pass
-  user="$(grep '^OFDD_INTEGRATOR_USER=' "$auth_file" | cut -d= -f2- | tr -d '\r' || true)"
-  pass="$(grep '^OFDD_INTEGRATOR_PASSWORD=' "$auth_file" | cut -d= -f2- | tr -d '\r' || true)"
-  [[ -n "$user" && -n "$pass" ]] || {
-    echo "ERROR: integrator credentials missing in auth.env.local" >&2
-    return 1
-  }
+  # shellcheck source=scripts/openfdd_auth_lib.sh
+  source "$(dirname "${BASH_SOURCE[0]}")/openfdd_auth_lib.sh"
   local token
-  token="$(curl -fsS -X POST "${base}/api/auth/login" \
-    -H 'Content-Type: application/json' \
-    -d "$(jq -nc --arg u "$user" --arg p "$pass" '{username:$u,password:$p}')" \
-    2>/dev/null | jq -r '.token // .access_token // empty' || true)"
-  if [[ -z "$token" || "$token" == "null" ]]; then
-    echo "WARN: username/password login failed — trying legacy demo JWT (merge feature/rust-auth-security-parity for production auth)" >&2
-    token="$(curl -fsS -X POST "${base}/api/auth/login" \
-      -H 'Content-Type: application/json' \
-      -d '{"sub":"validate","role":"integrator"}' \
-      | jq -r '.access_token // empty')"
-  fi
+  token="$(openfdd_auth_login_token "$base" "$auth_file" integrator)" || return 1
   [[ -n "$token" && "$token" != "null" ]] || {
     echo "ERROR: login failed (no token returned)" >&2
     return 1

@@ -59,7 +59,7 @@ impl Server {
         for (k, v) in &auth_map {
             cmd.env(k, v);
         }
-        let mut child = cmd.spawn().expect("start edge");
+        let child = cmd.spawn().expect("start edge");
         for _ in 0..60 {
             let (status, _) = http_raw(
                 "GET",
@@ -157,6 +157,23 @@ fn dashboard_summary_requires_auth() {
     assert_eq!(status, 200);
     assert!(body.contains("\"model_coverage\""));
     assert!(body.contains("\"historian_health\""));
+}
+
+#[test]
+fn building_status_and_analytics_shape() {
+    let srv = Server::start();
+    let (status, body) = srv.get("/api/building/status");
+    assert_eq!(status, 200);
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v.get("ok").and_then(|x| x.as_bool()), Some(true));
+    assert!(v.get("model_counts").is_some());
+    assert!(v.get("rule_count").is_some());
+
+    let (a_status, a_body) = srv.get("/api/dashboard/analytics");
+    assert_eq!(a_status, 200);
+    let a: serde_json::Value = serde_json::from_str(&a_body).unwrap();
+    assert!(a.get("rule_health").is_some());
+    assert!(a.get("model").is_some());
 }
 
 #[test]

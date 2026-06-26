@@ -98,8 +98,8 @@ pub fn test_rule_sql(payload: &Value) -> Value {
 }
 
 pub fn activate_rule(rule_id: &str, actor: &str, role: &str) -> Value {
-    if role != "integrator" {
-        return json!({"ok": false, "error": "integrator role required to activate rules", "role": role});
+    if !crate::auth::rbac::is_integrator_tier(role) {
+        return json!({"ok": false, "error": "integrator or agent role required to activate rules", "role": role});
     }
     let rule = get_rule(rule_id);
     if rule.get("ok").and_then(|v| v.as_bool()) != Some(true) {
@@ -166,8 +166,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn agent_cannot_activate() {
+    fn agent_can_activate_rules() {
         let out = activate_rule("oa_temp_out_of_range", "agent", "agent");
-        assert_eq!(out["ok"].as_bool(), Some(false));
+        assert_eq!(out["ok"].as_bool(), Some(true));
     }
 }

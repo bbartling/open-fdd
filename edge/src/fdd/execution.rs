@@ -257,26 +257,21 @@ fn historian_pivot_to_telemetry_batch(
         }
     }
     let n = ts.len();
-    let site: StringArray = std::iter::repeat("site:demo")
-        .take(n)
+    let site: StringArray = std::iter::repeat_n("site:demo", n)
         .collect::<Vec<_>>()
         .into();
-    let building: StringArray = std::iter::repeat("building:main")
-        .take(n)
+    let building: StringArray = std::iter::repeat_n("building:main", n)
         .collect::<Vec<_>>()
         .into();
-    let point: StringArray = std::iter::repeat("point:bench")
-        .take(n)
+    let point: StringArray = std::iter::repeat_n("point:bench", n)
         .collect::<Vec<_>>()
         .into();
-    let unit: StringArray = std::iter::repeat("degF").take(n).collect::<Vec<_>>().into();
-    let quality: StringArray = std::iter::repeat("good").take(n).collect::<Vec<_>>().into();
-    let device: StringArray = std::iter::repeat("equip:validation")
-        .take(n)
+    let unit: StringArray = std::iter::repeat_n("degF", n).collect::<Vec<_>>().into();
+    let quality: StringArray = std::iter::repeat_n("good", n).collect::<Vec<_>>().into();
+    let device: StringArray = std::iter::repeat_n("equip:validation", n)
         .collect::<Vec<_>>()
         .into();
-    let object: StringArray = std::iter::repeat("ai:bench")
-        .take(n)
+    let object: StringArray = std::iter::repeat_n("ai:bench", n)
         .collect::<Vec<_>>()
         .into();
     RecordBatch::try_new(
@@ -389,39 +384,28 @@ fn build_telemetry_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
         }
     }
     let n = ts.len();
-    let site: StringArray = std::iter::repeat("site:demo")
-        .take(n)
+    let site: StringArray = std::iter::repeat_n("site:demo", n)
         .collect::<Vec<_>>()
         .into();
-    let building: StringArray = std::iter::repeat("building:main")
-        .take(n)
+    let building: StringArray = std::iter::repeat_n("building:main", n)
         .collect::<Vec<_>>()
         .into();
     let equip_arr: StringArray = equipment.into();
-    let point: StringArray = std::iter::repeat("point:demo")
-        .take(n)
+    let point: StringArray = std::iter::repeat_n("point:demo", n)
         .collect::<Vec<_>>()
         .into();
     let fdd_arr: StringArray = fdd_input.into();
     let val_arr: Float64Array = value.into();
-    let unit: StringArray = std::iter::repeat("degF").take(n).collect::<Vec<_>>().into();
-    let quality: StringArray = std::iter::repeat("good").take(n).collect::<Vec<_>>().into();
-    let source: StringArray = std::iter::repeat("simulated")
-        .take(n)
+    let unit: StringArray = std::iter::repeat_n("degF", n).collect::<Vec<_>>().into();
+    let quality: StringArray = std::iter::repeat_n("good", n).collect::<Vec<_>>().into();
+    let source: StringArray = std::iter::repeat_n("simulated", n)
         .collect::<Vec<_>>()
         .into();
-    let driver: StringArray = std::iter::repeat("bacnet")
-        .take(n)
+    let driver: StringArray = std::iter::repeat_n("bacnet", n).collect::<Vec<_>>().into();
+    let device: StringArray = std::iter::repeat_n("equip:validation", n)
         .collect::<Vec<_>>()
         .into();
-    let device: StringArray = std::iter::repeat("equip:validation")
-        .take(n)
-        .collect::<Vec<_>>()
-        .into();
-    let object: StringArray = std::iter::repeat("ai:1173")
-        .take(n)
-        .collect::<Vec<_>>()
-        .into();
+    let object: StringArray = std::iter::repeat_n("ai:1001", n).collect::<Vec<_>>().into();
     let simulated = BooleanArray::from(vec![true; n]);
     let ts_arr = TimestampMillisecondArray::from(ts);
     RecordBatch::try_new(

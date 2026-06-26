@@ -1,0 +1,37 @@
+# Local BACnet vs Haystack parity profile (example only — not used in production).
+# Copy to local_haystack_5007_parity.local.toml and replace haystack_id placeholders
+# after browsing your Niagara nHaystack station.
+
+profile_id = "local_haystack_bacnet_parity"
+site_id = "site:local"
+equipment_id = "equip:local-air-handler"
+bacnet_source_id = "source:local-bacnet"
+haystack_source_id = "source:local-niagara-haystack"
+poll_interval_seconds = 60
+
+[bacnet]
+device_instance = 5007
+
+[points.oa_t]
+role = "oa_t"
+label = "Outside Air Temp"
+bacnet_object = "analog-input,1173"
+haystack_id = "<replace-with-nhaystack-point-id>"
+
+[points.oa_h]
+role = "oa_h"
+label = "Outside Air Humidity"
+bacnet_object = "analog-input,1168"
+haystack_id = "<replace-with-nhaystack-point-id>"
+
+[points.duct_t]
+role = "duct_t"
+label = "Discharge Air Temp"
+bacnet_object = "analog-input,1192"
+haystack_id = "<replace-with-nhaystack-point-id>"
+
+[points.zn_t]
+role = "zn_t"
+label = "Zone Temp"
+bacnet_object = "analog-input,10014"
+haystack_id = "<replace-with-nhaystack-point-id>"

@@ -14,38 +14,176 @@
   <img src="https://raw.githubusercontent.com/bbartling/open-fdd/master/image.png" alt="Open-FDD logo" width="440">
 </p>
 
+
 <p align="center">
   Open-source HVAC supervisory fault detection for buildings — local-first, on-prem, vendor-neutral, and free to run at the edge.
+</p>
 
-  The **3.2 Rust edge** is a single, memory-safe runtime: JWT auth, React dashboard, Apache Arrow historian, DataFusion SQL FDD, BACnet/Modbus/Haystack drivers, and Docker/GHCR lifecycle scripts. Rust gives predictable latency, strong typing at the OT boundary, and one binary per service — no Python interpreter on the edge path.
+<p align="center">
+  The <strong>Open-FDD Rust edge</strong> includes JWT auth, a React dashboard, Apache Arrow/Feather historian, DataFusion SQL fault rules, BACnet/Modbus/Haystack drivers, reports, and Docker/GHCR lifecycle scripts.
+</p>
 
-  Includes an open knowledge layer for AI-assisted building diagnostics, commissioning support, and HVAC fault investigation.
+<p align="center">
+  Built for local building networks, Raspberry Pi / edge servers, and on-prem BAS integration without requiring a cloud service.
 </p>
 
 ## Architecture
 
-Open-FDD uses **Apache Arrow** and **Feather** as the native historian and data storage layer, while **DataFusion SQL** serves as the fault detection and analytics engine that operates directly on those Arrow datasets. Rather than storing building telemetry in a traditional relational database, data collected from BACnet, Haystack, Modbus, and JSON APIs is normalized into Arrow-native structures and persisted as Feather files, allowing high-performance columnar analytics at the edge. DataFusion then executes SQL-based fault detection rules, reporting logic, and data quality checks directly against the Arrow historian — a clear path toward a fully Rust-based analytics stack without Pandas or other row-oriented processing frameworks.
+Open-FDD is a Rust-based edge application for building telemetry, supervisory fault detection, reporting, and HVAC diagnostics.
 
-The platform is migrating to an **all-Rust architecture**: protocol drivers, historian services, APIs, and the analytics engine. BACnet communication uses Rust-native BACnet libraries; Haystack support is implemented through Rust Haystack integrations; Modbus connectivity uses Rust Modbus libraries; and the FDD engine executes DataFusion SQL against Arrow datasets. The entire telemetry pipeline stays memory-safe, performant, and suitable for resource-constrained edge devices as well as larger on-premises building servers.
+Telemetry from BACnet, Haystack, Modbus, JSON APIs, and CSV imports is normalized into an Arrow-native historian and persisted as Feather files. DataFusion SQL runs fault rules, validation checks, analytics, and report queries directly against that local historian.
 
-Open-FDD deploys as a collection of **Docker containers** that work together as a complete edge operations platform:
+<details>
+<summary><strong>Service modes and driver locations</strong></summary>
 
-| Container | Role |
-| --- | --- |
-| **openfdd-bridge** | REST API, JWT auth, Arrow historian, React dashboard, Modbus driver, JSON API sources, agent APIs |
-| **openfdd-commission** | BACnet discovery, point browsing, polling, supervisory override scans |
-| **openfdd-haystack-gateway** | Project Haystack read/nav/ops against BAS stations (Niagara-style integration path) |
+Open-FDD currently publishes one Rust GHCR image:
 
-The left **Driver Tree** in the dashboard lists BACnet, Modbus/TCP, JSON API, and Haystack gateway entries from `workspace/data/drivers/bacnet/driver_tree.json`. Modbus, JSON API, and Haystack also expose dedicated REST routes on the bridge (`/api/modbus/*`, `/api/json-api/*`, `/api/haystack/*`, `/api/model/haystack`). MCP and knowledge services are planned; agent JSON APIs are already on the bridge.
+```text
+ghcr.io/bbartling/openfdd-edge-rust
+```
 
-Together these services create a self-hosted, on-premises platform for building telemetry collection, data modeling, fault detection and diagnostics, retro-commissioning, and AI-assisted building operations — without a cloud dependency.
+Docker Compose can run that same image as multiple service containers by changing the service mode.
 
-See [architecture overview](docs/architecture/overview.md) and [drivers + FDD](docs/architecture/drivers-and-fdd.md).
+### `openfdd-bridge`
+
+Main application service.
+
+Responsibilities:
+
+* Main REST API service
+* React dashboard static serving
+* JWT auth / RBAC
+* Arrow / Feather historian
+* DataFusion SQL FDD
+* Reports / PDF generation
+* Building dashboard summary APIs
+* Fault analytics APIs
+* Trend / timeseries APIs
+* Data export / purge APIs
+* Model and assignment APIs
+
+Bridge-owned drivers:
+
+#### Modbus driver
+
+The Modbus driver currently lives in `openfdd-bridge` unless it is split into its own service later.
+
+Responsibilities:
+
+* Modbus/TCP connection config
+* Modbus register reads
+* Modbus poll status
+* Modbus driver tree API
+
+Example routes:
+
+```text
+/api/modbus/driver/tree
+/api/modbus/poll/status
+/api/modbus/read
+/api/modbus/poll-once
+```
+
+#### JSON API driver
+
+The JSON API driver currently lives in `openfdd-bridge` unless it is split into its own service later.
+
+Responsibilities:
+
+* REST/JSON source config
+* HTTP polling
+* JSON path/value mapping
+* JSON API poll status
+* JSON API driver tree API
+
+Example routes:
+
+```text
+/api/json-api/driver/tree
+/api/json-api/poll/status
+/api/json-api/poll-once
+```
+
+### `openfdd-commission`
+
+BACnet-specific service mode.
+
+Responsibilities:
+
+* BACnet discovery / Who-Is
+* BACnet point browsing
+* BACnet polling
+* BACnet driver tree generation
+* BACnet override scans
+* BACnet priority-array checks
+* BACnet CSV artifacts for override summaries
+
+Example routes or APIs exposed through bridge/service wiring:
+
+```text
+/api/bacnet/driver/tree
+/api/bacnet/overrides/scan-once
+/api/bacnet/poll/status
+```
+
+### `openfdd-haystack-gateway`
+
+Haystack-specific service mode.
+
+Responsibilities:
+
+* Project Haystack read/nav/ops
+* Niagara nHaystack integration path
+* Haystack source browsing
+* Haystack point reads
+* Haystack model/source import
+* Haystack-to-Open-FDD model mapping
+
+Example routes:
+
+```text
+/api/haystack/status
+/api/haystack/about
+/api/haystack/ops
+/api/haystack/nav
+/api/haystack/read
+/api/haystack/import
+/api/haystack/driver/tree
+/api/model/haystack
+```
+
+### Future service mode
+
+MCP / agent tooling is expected to become a later service mode after the core Rust edge, drivers, historian, FDD, and reports are stable.
+
+Possible future shape:
+
+```text
+openfdd-mcp
+```
+
+or:
+
+```text
+SERVICE_MODE=mcp
+```
+
+</details>
+
 
 <p align="center">
-  <a href="docs/README.md"><img src="https://img.shields.io/badge/Documentation-read_online-2563EB?style=for-the-badge" alt="Documentation"></a>
-  <a href="docs/quick-start/rust-edge-bootstrap.md"><img src="https://img.shields.io/badge/Quick%20Start-Rust%20Edge-059669?style=for-the-badge" alt="Rust quick start"></a>
-  <a href="https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf"><img src="https://img.shields.io/badge/Legacy%20PDF-Python%20era-DC2626?style=for-the-badge" alt="Legacy PDF"></a>
+  <a href="docs/README.md">
+    <img src="https://img.shields.io/badge/Docs-online-2563EB?style=for-the-badge" alt="Online docs">
+  </a>
+  <a href="docs/quick-start/rust-edge-bootstrap.md">
+    <img src="https://img.shields.io/badge/Quick%20Start-Rust%20Edge-059669?style=for-the-badge" alt="Rust edge quick start">
+  </a>
+  <a href="https://arrow.apache.org/">
+    <img src="https://img.shields.io/badge/Apache%20Arrow-columnar%20data-0B7285?style=for-the-badge" alt="Apache Arrow">
+  </a>
+  <a href="https://datafusion.apache.org/">
+    <img src="https://img.shields.io/badge/DataFusion-SQL%20engine-6D28D9?style=for-the-badge" alt="Apache DataFusion">
+  </a>
 </p>
 
 ---
@@ -80,7 +218,7 @@ curl -fsSL -o /tmp/openfdd_rust_edge_bootstrap.sh \
 bash /tmp/openfdd_rust_edge_bootstrap.sh --start
 ```
 
-Open `http://127.0.0.1:8080` — sign in with **integrator** credentials from `~/open-fdd/workspace/auth.env.local` (password never printed by bootstrap).
+Open `http://127.0.0.1:8080` — sign in with **integrator** credentials from `workspace/bootstrap_credentials.once.txt` (password never printed by bootstrap).
 
 ### Update an existing site
 
@@ -91,43 +229,10 @@ cd ~/open-fdd
 ./scripts/openfdd_rust_edge_validate.sh
 ```
 
-**Never** run `docker compose down -v`. **Never** delete `workspace/`.
-
-See [Rust site lifecycle](docs/quick-start/rust-site-lifecycle.md).
-
-### Production TLS (Caddy + auth)
-
-For lab pen-tests or LAN deployment behind TLS, build from source with Caddy:
-
-```bash
-# Generate auth if missing (once)
-cd edge && cargo run --release --bin openfdd_edge -- auth init --path ../workspace/auth.env.local
-chmod 600 ../workspace/auth.env.local
-
-docker compose -f docker-compose.prod.yml up -d --build
-./scripts/openfdd_prod_validate.sh
-```
-
-- HTTPS: `https://127.0.0.1/` (self-signed via Caddy `tls internal`)
-- API health: `curl -kfsS https://127.0.0.1/api/health`
-- Bridge is **not** exposed on `:8080` to the host — only via Caddy `:443`
-
-Bind to Tailscale or a firewall-restricted interface for remote pen-testing; do not expose MCP or the dashboard to the public internet.
-
 ---
 
-## AI Agent Prompt
+## Agent prompts
 
-| Area | Examples |
-|------|----------|
-| **Edge deploy** | `openfdd_rust_edge_bootstrap.sh`, `openfdd_rust_site_backup.sh`, `openfdd_rust_site_update.sh`, `openfdd_rust_check_ghcr_platform.sh`, health checks |
-| **Drivers** | BACnet discover/poll/bind, Modbus scan/read, JSON API endpoints, driver tree |
-| **Model & rules** | Haystack model, FDD Wires graph, DataFusion SQL rules, batch FDD, assignment proposals |
-| **Operations** | Building check-in, override scans, stack health, Arrow/DataFusion demos |
-| **Reports** | RCX plan/generate (prototype endpoints) |
-| **Safety** | No BACnet writes without approval; never `docker compose down -v`; never delete `workspace/` |
-
-Deeper route maps: [AI agent guide](docs/ai-agent/README.md) · [SQL FDD cookbook](docs/rule-cookbook/sql-hvac-fdd.md) · [Haystack AI modeling](docs/ai-agent/haystack-and-assignments.md) · [AGENTS.md](AGENTS.md) · [verification checklists](docs/verification/)
 
 <details>
 <summary><strong>Copy-paste: OpenClaw — fresh Raspberry Pi Rust edge bootstrap</strong></summary>
@@ -142,12 +247,12 @@ Install and bootstrap Open-FDD Rust edge from https://github.com/bbartling/open-
 1. Docker is installed and working.
 2. Open-FDD edge stack is running (bridge, commission, haystack-gateway).
 3. Bridge health is good (GET /api/health).
-4. Auth is configured (workspace/auth.env.local).
-5. Integrator login succeeds.
-6. The install is safe for a local OT/LAN edge box and is not exposed publicly.
+4. Auth is configured.
+5. Plaintext bootstrap credentials are available in workspace/bootstrap_credentials.once.txt if generated.
+6. Integrator login succeeds using the plaintext bootstrap credentials.
 
 Important project facts:
-- Open-FDD 3.2 edge is 100% Rust — use openfdd_rust_edge_bootstrap.sh, not the legacy Python bootstrap.
+- Open-FDD 3.2 edge is a Rust edge runtime — use openfdd_rust_edge_bootstrap.sh, not the legacy Python bootstrap.
 - Primary GHCR image: ghcr.io/bbartling/openfdd-edge-rust:latest
 - Bootstrap script:
   https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_rust_edge_bootstrap.sh
@@ -176,8 +281,12 @@ cd ~/open-fdd && docker compose ps
 curl -sf http://127.0.0.1:8080/api/health | jq .
 ./scripts/openfdd_rust_edge_validate.sh
 
-Step 5 — Login smoke (do not print password or token)
-Use integrator user from workspace/auth.env.local
+Step 5 — Login smoke
+
+Use integrator credentials from workspace/bootstrap_credentials.once.txt if present.
+
+Do not print passwords or tokens.
+Do not use bcrypt hashes from auth.env.local as login passwords.
 
 Final report: host summary, Docker status, container status, health, login pass/fail, next manual steps.
 Stop if GHCR pull fails, bridge health never recovers, or auth file missing.
@@ -208,7 +317,7 @@ Never:
 - docker compose down -v
 - delete workspace/
 - print passwords, tokens, or auth.env.local contents in chat
-- expose bridge to 0.0.0.0 on the public internet
+- expose the dashboard/API to the public internet
 
 Start each session with integrator JWT login from workspace/auth.env.local.
 Report faults, stale points, and recommended next steps in plain language.
@@ -267,33 +376,6 @@ docker compose -f docker-compose.prod.yml up -d --build
 ./scripts/openfdd_prod_validate.sh
 ```
 
-Contributor layout: [AGENTS.md](AGENTS.md) · [docs/README.md](docs/README.md)
-
-| Component | Technology |
-| --- | --- |
-| API + auth | Rust (`edge/`) — JWT, RBAC, audit |
-| UI | React static assets |
-| Historian | Apache Arrow RecordBatches |
-| FDD | DataFusion SQL + confirmation duration |
-| BACnet | rusty-bacnet (live) or simulated |
-| Modbus | Native Rust TCP client |
-| Publish | GHCR multi-arch (`rust-ghcr.yml`) |
-
----
-
-## Legacy Python stack (3.1.x — compatibility only)
-
-The pre-Rust edge used separate Python images (`openfdd-bridge`, `openfdd-commission`, `openfdd-mcp-rag`) on port **8765** and a PyPI `open-fdd` package. That line remains in git history for reference; **new deployments should use the Rust GHCR image above**.
-
-PyPI embeddable runtime (optional, off-edge):
-
-```bash
-pip install open-fdd
-```
-
-See legacy docs PDF and [bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/) for Python-era cookbooks.
-
----
 
 ## License
 

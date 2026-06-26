@@ -23,7 +23,8 @@ Uses workspace/auth.env.local (same JWT users as production).
 
 After start:
   https://<LAN-IP>/     (accept browser cert warning)
-  Login: integrator + password from workspace/auth.env.local
+  Login: integrator + password from workspace/bootstrap_credentials.once.txt
+         (auth.env.local stores bcrypt hashes only — not login passwords)
 
 Requires: open-fdd-openfdd-bridge:local image (run ./scripts/openfdd_local_up.sh --build first)
 EOF
@@ -123,7 +124,9 @@ if [[ -n "$LAN_IP" ]]; then
 else
   echo "    Could not detect LAN IP — use: ip -4 addr show"
 fi
-echo "    Login users: operator, integrator, agent (see workspace/auth.env.local)"
+echo "    Login users: operator, integrator, agent"
+echo "    Passwords: workspace/bootstrap_credentials.once.txt (plaintext)"
+echo "               auth.env.local stores bcrypt hashes only — do not use as login password"
 if [[ "$MODE" == "tls" ]]; then
   echo "    Browser: accept self-signed certificate warning (expected for lab TLS)"
 fi

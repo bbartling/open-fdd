@@ -6,7 +6,7 @@
 #   docker build -f Dockerfile.local -t open-fdd-openfdd-bridge:local .
 #   ./scripts/openfdd_local_up.sh
 
-FROM rust:1.93-bookworm AS builder
+FROM rust:1.95-bookworm AS builder
 ARG CARGO_BUILD_JOBS=1
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 WORKDIR /app

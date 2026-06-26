@@ -32,3 +32,11 @@ serde_json = "1"
 sha2 = "0.10"
 subtle = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+# rusty-haystack v0.8.1 — git pin (not on crates.io); SCRAM client + Haystack REST codecs.
+rusty-haystack-client = { git = "https://github.com/jscott3201/rusty-haystack", rev = "d85e72271e789d3dcf4a90f79adb7d1556faae80", version = "0.8.1" }
+rusty-haystack-core = { git = "https://github.com/jscott3201/rusty-haystack", rev = "d85e72271e789d3dcf4a90f79adb7d1556faae80", version = "0.8.1" }
+toml = "1.1.2"
+once_cell = "1.21.4"
+reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "json", "rustls"] }
+rusty-modbus-client = { git = "https://github.com/jscott3201/rusty-modbus", version = "0.1.0" }
+rusty-modbus-types = { git = "https://github.com/jscott3201/rusty-modbus", version = "0.1.0" }

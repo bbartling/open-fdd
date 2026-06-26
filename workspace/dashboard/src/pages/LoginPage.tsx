@@ -31,9 +31,21 @@ export default function LoginPage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    const user = username.trim();
+    const pass = password.trimEnd();
+    if (pass.startsWith("$2b$") || (pass.includes("OFDD_") && pass.includes("PASSWORD_HASH"))) {
+      setError(
+        "That value is a bcrypt hash, not a login password. Use workspace/bootstrap_credentials.once.txt.",
+      );
+      return;
+    }
     try {
-      const res = await login(username, password);
-      setToken(res.token);
+      const res = await login(user, pass);
+      const token = res.token ?? res.access_token;
+      if (!token) {
+        throw new Error("Login succeeded but no session token was returned.");
+      }
+      setToken(token);
       navigate("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "login failed");

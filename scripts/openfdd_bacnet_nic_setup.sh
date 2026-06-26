@@ -11,13 +11,13 @@ set -euo pipefail
 # Safe defaults:
 # - Does NOT change the NIC unless OPENFDD_BACNET_CONFIGURE_NIC=1 or --apply is used.
 # - Defaults to Ben's current OT LAN observation when present:
-#   enp3s0 / 192.168.204.55/24 / UDP 47808.
+#   <iface> / <your-ip>/24 / UDP 47808.
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${OPENFDD_ENV_FILE:-$ROOT/.env}"
 
 DEFAULT_IFACE="${OPENFDD_BACNET_IFACE:-enp3s0}"
-DEFAULT_CIDR="${OPENFDD_BACNET_STATIC_CIDR:-192.168.204.55/24}"
+DEFAULT_CIDR="${OPENFDD_BACNET_STATIC_CIDR:-}"
 DEFAULT_PORT="${OPENFDD_BACNET_PORT:-47808}"
 DEFAULT_DEVICE_INSTANCE="${OPENFDD_BACNET_DEVICE_INSTANCE:-599999}"
 DEFAULT_DEVICE_NAME="${OPENFDD_BACNET_DEVICE_NAME:-OpenFDD}"

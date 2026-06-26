@@ -18,6 +18,11 @@ const FORBIDDEN: &[&str] = &[
     "bench 5007",
     "/bench-5007",
     "/api/bench/5007",
+    "ACTUATOR-0",
+    "C06-0-10VDC-O",
+    "BENS BENCHTEST BOX",
+    "192.168.204.14",
+    "equip:5007-bench",
 ];
 
 const ALLOWED_PREFIXES: &[&str] = &[
@@ -124,6 +129,33 @@ mod tests {
             r#"<PageHeader title="Bench 5007 — FDD wiresheet" />"#,
         );
         assert!(!hits.is_empty());
+    }
+
+    #[test]
+    fn flags_actuator_zero_in_production_rust() {
+        let hits = scan_line_for_violations(
+            "edge/src/drivers/bacnet.rs",
+            1,
+            r#"if name == "ACTUATOR-0" { vec![(8, json!(55.0))] }"#,
+        );
+        assert!(!hits.is_empty());
+    }
+
+    #[test]
+    fn flags_c06_point_name_branch() {
+        let hits = scan_line_for_violations(
+            "edge/src/drivers/bacnet.rs",
+            1,
+            r#"else if name == "C06-0-10VDC-O" {"#,
+        );
+        assert!(!hits.is_empty());
+    }
+
+    #[test]
+    fn allows_example_profile_path() {
+        assert!(path_allowed(
+            "workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml.example"
+        ));
     }
 
     #[test]

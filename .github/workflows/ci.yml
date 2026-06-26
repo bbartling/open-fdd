@@ -13,7 +13,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.93.0
+          toolchain: 1.95.0
           components: rustfmt
 
       - name: Format
@@ -24,6 +24,9 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --all-targets
+
+      - name: Anti-hardcoding audit
+        run: bash -n scripts/audit_no_private_bench_hardcoding.sh && ./scripts/audit_no_private_bench_hardcoding.sh
 
   frontend:
     name: TypeScript dashboard build and tests
@@ -61,8 +64,10 @@ jobs:
           test -x scripts/openfdd_bacnet_nic_setup.sh
           bash -n scripts/openfdd_bacnet_nic_setup.sh
           test -f .env.example
-          grep -q "OPENFDD_BACNET_IFACE=enp3s0" .env.example
-          grep -q "OPENFDD_BACNET_BIND=192.168.204.55/24:47808" .env.example
+          grep -q "OPENFDD_BACNET_MODE=simulated" .env.example
+          grep -q "OPENFDD_VALIDATION_PROFILE" .env.example
+          test -x scripts/audit_no_private_bench_hardcoding.sh
+          ./scripts/audit_no_private_bench_hardcoding.sh
           test -f docker-compose.bacnet-live.yml
           test -f VERSION
           grep -q "3.2.0" VERSION
@@ -135,7 +140,7 @@ jobs:
             -H "Authorization: Bearer $TOKEN" | jq -e '((.drivers // []) | length >= 1) or ((.devices // []) | length >= 1)'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/commission/status \
-            -H "Authorization: Bearer $TOKEN" | jq -e '.config.iface == "enp3s0" and .config.bind == "192.168.204.55/24:47808"'
+            -H "Authorization: Bearer $TOKEN" | jq -e '.config.mode == "simulated"'
 
           curl -fsS -X POST http://127.0.0.1:8080/api/bacnet/overrides/scan-once \
             -H "Authorization: Bearer $TOKEN" \
@@ -229,7 +234,7 @@ jobs:
             -H "Authorization: Bearer $INT" | jq -e '.ok == true and (.rule_sql | contains("confirmation_required_minutes"))'
 
       - name: No-hardcoding audit
-        run: ./scripts/audit_no_hardcoding.sh
+        run: ./scripts/audit_no_private_bench_hardcoding.sh
 
       - name: CSV files created in workspace
         run: |

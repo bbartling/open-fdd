@@ -1,0 +1,53 @@
+# Copy to local_validation_profile.local.toml (gitignored) and replace placeholders.
+#   cp workspace/smoke-profiles/local/local_validation_profile.local.toml.example \
+#      workspace/smoke-profiles/local/local_validation_profile.local.toml
+#
+# Run validation:
+#   OPENFDD_VALIDATION_PROFILE=workspace/smoke-profiles/local/local_validation_profile.local.toml \
+#     ./scripts/openfdd_one_hour_validation_report.sh
+
+profile_id = "local_validation"
+site_id = "site:local"
+equipment_id = "equip:local-test-equipment"
+duration_minutes = 60
+duration_hours = 1
+confirmation_minutes = 5
+source_id = "source:validation-bacnet"
+source_type = "bacnet"
+fdd_rule_id = "oa_temp_out_of_range"
+historian_subdir = "validation"
+artifact_dir = "live_fdd_validation"
+
+[bacnet]
+enabled = true
+device_instance = 0 # replace with your local BACnet test device
+poll_interval_seconds = 60
+# point.oa_t = "Outside Air Temp|<object-instance>|oa_t"
+# point.oa_h = "Outside Air Humidity|<object-instance>|oa_h"
+# point.duct_t = "Discharge Air Temp|<object-instance>|duct_t"
+# point.zn_t = "Zone Temp|<object-instance>|zn_t"
+
+[modbus]
+enabled = false
+host = "<replace-with-modbus-host>"
+port = 1502
+unit_id = 1
+poll_interval_seconds = 300
+
+[haystack]
+enabled = false
+base_url = "http://<replace-with-niagara-host>/haystack"
+username = "<replace-with-username>"
+password = "<replace-with-password>"
+source_id = "source:local-haystack"
+poll_interval_seconds = 300
+
+[json_api]
+enabled = false
+url = "https://httpbin.org/get"
+poll_interval_seconds = 300
+
+[csv_append]
+enabled = true
+source_id = "source:validation-csv"
+interval_seconds = 300

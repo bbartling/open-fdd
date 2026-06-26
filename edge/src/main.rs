@@ -11,6 +11,8 @@ mod historian;
 mod import;
 mod model;
 mod ops;
+mod reports;
+mod test_support;
 mod validation;
 
 use auth::audit;
@@ -286,6 +288,12 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent", "operator"],
             data_management::storage_summary(),
         ),
+        ("GET", "/api/host/stats") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            ops::host_stats::stats_json(),
+        ),
         ("POST", "/api/data-management/purge/preview") => require_role(
             &mut stream,
             &principal,
@@ -346,7 +354,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent"],
             json!({"ok": true, "run_id": "alg-demo-001", "result": serde_json::from_str::<Value>(control::cdl::simulate_json()).unwrap()}),
         ),
-        ("GET", "/api/model/haystack") => raw_json(&mut stream, drivers::haystack::model_json()),
+        ("GET", "/api/model/haystack") => {
+            raw_json(&mut stream, &model::persist::haystack_model_json_string())
+        }
+        ("GET", "/api/model/sources") => raw_json(&mut stream, &drivers::haystack::sources_json()),
+        ("GET", "/api/model/equipment") => {
+            raw_json(&mut stream, &drivers::haystack::equipment_json())
+        }
+        ("GET", "/api/model/points") => raw_json(&mut stream, &drivers::haystack::points_json()),
         ("GET", "/api/model/assignments") => {
             raw_json(&mut stream, model::assignments::assignments_json())
         }
@@ -362,26 +377,66 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/model/algorithm-bindings") => {
             raw_json(&mut stream, model::assignments::algorithm_bindings_json())
         }
-        ("GET", "/api/haystack/about") => raw_json(&mut stream, drivers::haystack::about_json()),
-        ("GET", "/api/haystack/status") => raw_json(&mut stream, drivers::haystack::status_json()),
-        ("POST", "/api/haystack/read") => raw_json(&mut stream, drivers::haystack::model_json()),
-        ("POST", "/api/haystack/nav") => raw_json(&mut stream, drivers::haystack::model_json()),
-        ("POST", "/api/haystack/ops") => raw_json(&mut stream, drivers::haystack::ops_json()),
+        ("GET", "/api/haystack/about") => raw_json(&mut stream, &drivers::haystack::about_json()),
+        ("GET", "/api/haystack/config") => {
+            raw_json(&mut stream, &drivers::haystack::config_get_json())
+        }
+        ("POST", "/api/haystack/config") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            serde_json::from_str::<Value>(&drivers::haystack::config_save_json(&parse_json_body(
+                &body,
+            )))
+            .unwrap_or(json!({"ok": false})),
+        ),
+        ("GET", "/api/haystack/status") => raw_json(&mut stream, &drivers::haystack::status_json()),
+        ("GET", "/api/haystack/ops") => raw_json(&mut stream, &drivers::haystack::ops_json()),
+        ("POST", "/api/haystack/test") => raw_json(&mut stream, &drivers::haystack::test_json()),
+        ("POST", "/api/haystack/read") => {
+            let payload = parse_json_body(&body);
+            raw_json(&mut stream, &drivers::haystack::read_json(&payload))
+        }
+        ("POST", "/api/haystack/nav") => {
+            let payload = parse_json_body(&body);
+            raw_json(&mut stream, &drivers::haystack::nav_json(&payload))
+        }
+        ("POST", "/api/haystack/ops") => raw_json(&mut stream, &drivers::haystack::ops_json()),
+        ("POST", "/api/haystack/poll-once") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            serde_json::from_str::<Value>(&drivers::haystack::poll_once_json(&parse_json_body(
+                &body,
+            )))
+            .unwrap_or(json!({"ok": false})),
+        ),
+        ("GET", "/api/haystack/driver/tree") => {
+            raw_json(&mut stream, &drivers::haystack::driver_tree_json())
+        }
         ("POST", "/api/haystack/import") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            serde_json::from_str::<Value>(drivers::haystack::import_json()).unwrap(),
+            serde_json::from_str::<Value>(&drivers::haystack::import_json(&parse_json_body(&body)))
+                .unwrap_or(json!({"ok": false})),
         ),
         ("POST", "/api/model/haystack/import") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            json!({"ok": true, "preserve_ids": true, "imported": 4}),
+            serde_json::from_str::<Value>(&drivers::haystack::import_json(&parse_json_body(&body)))
+                .unwrap_or(json!({"ok": false})),
+        ),
+        ("POST", "/api/model/haystack/from-smoke-profile") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            model::smoke_profile::import_from_active_profile(),
         ),
         ("POST", "/api/model/query") => json_response(
             &mut stream,
-            json!({"ok": true, "rows": serde_json::from_str::<Value>(drivers::haystack::model_json()).unwrap()["rows"].clone()}),
+            json!({"ok": true, "rows": model::query::haystack_rows()}),
         ),
         ("GET", "/api/fdd/datafusion/demo") => {
             raw_json(&mut stream, fdd::datafusion_sql::result_json())
@@ -578,6 +633,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let body = drivers::modbus::commission_status_json();
             raw_json(&mut stream, &body)
         }
+        ("GET", "/api/modbus/poll/status") => {
+            let body = drivers::modbus::poll_status_json();
+            raw_json(&mut stream, &body)
+        }
+        ("GET", "/api/modbus/driver/tree") => {
+            let body = drivers::modbus::driver_tree_json();
+            raw_json(&mut stream, &body)
+        }
         ("POST", "/api/modbus/scan") => require_role(
             &mut stream,
             &principal,
@@ -591,6 +654,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         }
         ("GET", "/api/json-api/sources") => {
             raw_json(&mut stream, drivers::json_api::sources_json())
+        }
+        ("GET", "/api/json-api/poll/status") => {
+            let body = drivers::json_api::poll_status_json();
+            raw_json(&mut stream, &body)
+        }
+        ("GET", "/api/json-api/driver/tree") => {
+            let body = drivers::json_api::driver_tree_json();
+            raw_json(&mut stream, &body)
         }
         ("POST", "/api/json-api/poll-once") => {
             require_role(&mut stream, &principal, &["integrator", "agent"], {
@@ -610,6 +681,9 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ),
         ("GET", "/api/historian/validation/status") => {
             json_response(&mut stream, historian::store::status_json())
+        }
+        ("GET", "/api/validation/audit") => {
+            json_response(&mut stream, validation::audit_status_json())
         }
         ("GET", "/api/validation-runs/current/status") => {
             json_response(&mut stream, bench::smoke::status_json())
@@ -680,6 +754,30 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             json!({"ok": true, "sections": ["executive_summary", "faults", "overrides", "energy_opportunities", "trend_plots"]}),
         ),
+        ("GET", "/api/reports/templates") => require_role(
+            &mut stream,
+            &principal,
+            READ_EXPORT_ROLES,
+            reports::templates(),
+        ),
+        ("POST", "/api/reports/draft") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            reports::create_draft(&parse_json_body(&body)),
+        ),
+        ("GET", "/api/reports") => require_role(
+            &mut stream,
+            &principal,
+            READ_EXPORT_ROLES,
+            reports::list_reports(),
+        ),
+        ("POST", "/api/reports/from-validation-run") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            reports::from_validation_run(&parse_json_body(&body)),
+        ),
         ("GET", "/api/reports/rcx/list") => raw_json(&mut stream, REPORTS),
         ("POST", "/api/reports/rcx/generate") => require_role(
             &mut stream,
@@ -688,6 +786,11 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             json!({"ok": true, "report_id": "rcx-demo-001", "path": "workspace/reports/rcx/rcx-demo-001.md", "sections": ["faults", "overrides", "plotly_trends", "recommendations"]}),
         ),
         _ => {
+            if let Some(resp) =
+                handle_reports_dynamic(&mut stream, &principal, method.as_str(), &clean_path, &body)
+            {
+                return resp;
+            }
             if let Some(resp) =
                 handle_faults_dynamic(&mut stream, &principal, method.as_str(), &clean_path)
             {
@@ -708,6 +811,9 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
                 &clean_path,
                 &body,
             ) {
+                return resp;
+            }
+            if let Some(resp) = handle_model_dynamic(&mut stream, method.as_str(), &clean_path) {
                 return resp;
             }
             if method == "GET" && clean_path.starts_with("/api/bacnet/jobs/") {
@@ -755,6 +861,33 @@ fn query_param(path: &str, key: &str) -> Option<String> {
 
 fn path_parts(path: &str) -> Vec<&str> {
     path.trim_matches('/').split('/').collect()
+}
+
+fn handle_model_dynamic(
+    stream: &mut TcpStream,
+    method: &str,
+    path: &str,
+) -> Option<std::io::Result<()>> {
+    if method != "GET" {
+        return None;
+    }
+    let prefix = "/api/model/sites/";
+    let suffix = "/equipment";
+    if !path.starts_with(prefix) || !path.ends_with(suffix) {
+        return None;
+    }
+    let site_id = path
+        .trim_start_matches(prefix)
+        .trim_end_matches(suffix)
+        .trim();
+    if site_id.is_empty() {
+        return Some(status_json(
+            stream,
+            "400 Bad Request",
+            json!({"ok": false, "error": "site_id required"}),
+        ));
+    }
+    Some(json_response(stream, model::query::list_equipment(site_id)))
 }
 
 fn handle_fdd_wires_dynamic(
@@ -896,6 +1029,78 @@ fn handle_faults_dynamic(
     Some(json_response(stream, faults::get_fault(tail)))
 }
 
+fn handle_reports_dynamic(
+    stream: &mut TcpStream,
+    principal: &Principal,
+    method: &str,
+    path: &str,
+    body: &str,
+) -> Option<std::io::Result<()>> {
+    let parts = path_parts(path);
+    if parts.len() < 3 || parts[0] != "api" || parts[1] != "reports" {
+        return None;
+    }
+    if parts[2] == "templates" || parts[2] == "draft" || parts[2] == "rcx" {
+        return None;
+    }
+    let report_id = reports::safe_report_id(parts[2])?;
+    if parts.len() == 3 {
+        return match method {
+            "GET" => Some(require_role(
+                stream,
+                principal,
+                READ_EXPORT_ROLES,
+                reports::get_report(&report_id),
+            )),
+            "PATCH" => Some(require_role(
+                stream,
+                principal,
+                &["integrator", "agent"],
+                reports::patch_report(&report_id, &parse_json_body(body)),
+            )),
+            "DELETE" => Some(require_role(
+                stream,
+                principal,
+                &["integrator", "agent"],
+                reports::delete_report(&report_id),
+            )),
+            _ => None,
+        };
+    }
+    match (method, parts.get(3).copied(), parts.get(4).copied()) {
+        ("GET", Some("data"), None) => Some(require_role(
+            stream,
+            principal,
+            READ_EXPORT_ROLES,
+            reports::report_data(&report_id),
+        )),
+        ("GET", Some("download.pdf"), None) => {
+            let path = reports::download_path(&report_id, "pdf")?;
+            Some(require_role_file(
+                stream,
+                principal,
+                READ_EXPORT_ROLES,
+                &path,
+                "application/pdf",
+                &format!("{report_id}.pdf"),
+            ))
+        }
+        ("POST", Some("sections"), Some("reorder")) => Some(require_role(
+            stream,
+            principal,
+            &["integrator", "agent"],
+            reports::reorder_sections(&report_id, &parse_json_body(body)),
+        )),
+        ("POST", Some("render"), Some("pdf")) => Some(require_role(
+            stream,
+            principal,
+            &["integrator", "agent"],
+            reports::render_pdf_bundle(&report_id),
+        )),
+        _ => None,
+    }
+}
+
 fn handle_data_management_dynamic(
     stream: &mut TcpStream,
     principal: &Principal,
@@ -999,6 +1204,55 @@ fn csv_attachment_response(
     );
     stream.write_all(headers.as_bytes())?;
     stream.write_all(body.as_bytes())
+}
+
+fn require_role_file(
+    stream: &mut TcpStream,
+    principal: &Principal,
+    roles: &[&str],
+    path: &Path,
+    content_type: &str,
+    filename: &str,
+) -> std::io::Result<()> {
+    if !role_allowed(principal, roles) {
+        audit::log_event(
+            "forbidden",
+            json!({"role": principal.role.clone(), "required": roles, "file": filename}),
+        );
+        return status_json(
+            stream,
+            "403 Forbidden",
+            json!({"ok": false, "error": "insufficient role", "role": principal.role}),
+        );
+    }
+    let bytes = match fs::read(path) {
+        Ok(b) => b,
+        Err(_) => {
+            return status_json(
+                stream,
+                "404 Not Found",
+                json!({"ok": false, "error": "file not found"}),
+            );
+        }
+    };
+    file_attachment_response(stream, &bytes, content_type, filename)
+}
+
+fn file_attachment_response(
+    stream: &mut TcpStream,
+    body: &[u8],
+    content_type: &str,
+    filename: &str,
+) -> std::io::Result<()> {
+    let headers = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Disposition: attachment; filename=\"{filename}\"\r\n{sec}{cors}Content-Length: {len}\r\nConnection: close\r\n\r\n",
+        sec = security_headers(content_type, false),
+        cors = cors_origin(),
+        len = body.len(),
+        filename = filename
+    );
+    stream.write_all(headers.as_bytes())?;
+    stream.write_all(body)
 }
 
 fn require_role_csv(
@@ -1198,9 +1452,21 @@ fn agent_tools() -> Value {
             {"name":"json_api.sources","method":"GET","path":"/api/json-api/sources","requires":"JWT"},
             {"name":"json_api.register","method":"POST","path":"/api/json-api/register","requires":"integrator|agent"},
             {"name":"json_api.poll_once","method":"POST","path":"/api/json-api/poll-once","requires":"integrator|agent"},
+            {"name":"haystack.config","method":"GET","path":"/api/haystack/config","requires":"JWT"},
+            {"name":"haystack.config_save","method":"POST","path":"/api/haystack/config","requires":"integrator|agent"},
             {"name":"haystack.status","method":"GET","path":"/api/haystack/status","requires":"JWT"},
+            {"name":"haystack.test","method":"POST","path":"/api/haystack/test","requires":"JWT"},
+            {"name":"haystack.about","method":"GET","path":"/api/haystack/about","requires":"JWT"},
+            {"name":"haystack.ops","method":"GET","path":"/api/haystack/ops","requires":"JWT"},
+            {"name":"haystack.nav","method":"POST","path":"/api/haystack/nav","requires":"JWT"},
             {"name":"haystack.read","method":"POST","path":"/api/haystack/read","requires":"JWT"},
+            {"name":"haystack.poll_once","method":"POST","path":"/api/haystack/poll-once","requires":"integrator|agent"},
+            {"name":"haystack.import","method":"POST","path":"/api/haystack/import","requires":"integrator|agent"},
+            {"name":"haystack.driver_tree","method":"GET","path":"/api/haystack/driver/tree","requires":"JWT"},
             {"name":"model.haystack","method":"GET","path":"/api/model/haystack","requires":"JWT"},
+            {"name":"model.sources","method":"GET","path":"/api/model/sources","requires":"JWT"},
+            {"name":"model.equipment","method":"GET","path":"/api/model/equipment","requires":"JWT"},
+            {"name":"model.points","method":"GET","path":"/api/model/points","requires":"JWT"},
             {"name":"model.import","method":"POST","path":"/api/model/haystack/import","requires":"integrator|agent"},
             {"name":"model.assignments","method":"GET","path":"/api/model/assignments","requires":"JWT"},
             {"name":"model.assignments_save","method":"POST","path":"/api/model/assignments/save","requires":"integrator|agent"},
@@ -1215,6 +1481,10 @@ fn agent_tools() -> Value {
             {"name":"fdd.rules.activate","method":"POST","path":"/api/fdd-rules/{id}/activate","requires":"integrator"},
             {"name":"rules.batch","method":"POST","path":"/api/rules/batch","requires":"integrator|agent"},
             {"name":"historian.query","method":"POST","path":"/api/historian/query","requires":"JWT"},
+            {"name":"reports.templates","method":"GET","path":"/api/reports/templates","requires":"JWT"},
+            {"name":"reports.draft","method":"POST","path":"/api/reports/draft","requires":"integrator|agent"},
+            {"name":"reports.render_pdf","method":"POST","path":"/api/reports/{id}/render/pdf","requires":"integrator|agent"},
+            {"name":"reports.download_pdf","method":"GET","path":"/api/reports/{id}/download.pdf","requires":"JWT"},
             {"name":"reports.rcx_plan","method":"POST","path":"/api/reports/rcx/plan","requires":"JWT"},
             {"name":"reports.rcx_generate","method":"POST","path":"/api/reports/rcx/generate","requires":"integrator|agent"},
             {"name":"ops.update","method":"POST","path":"/api/ops/docker/update","requires":"integrator|agent"}
@@ -1347,11 +1617,23 @@ fn static_file(stream: &mut TcpStream, frontend: &Path, path: &str) -> std::io::
                 "html" => "text/html; charset=utf-8",
                 "css" => "text/css; charset=utf-8",
                 "js" => "application/javascript; charset=utf-8",
+                "svg" => "image/svg+xml",
+                "ico" => "image/x-icon",
+                "png" => "image/png",
                 _ => "application/octet-stream",
             };
             response(stream, "200 OK", ctype, &bytes)
         }
-        Err(_) => response(stream, "404 Not Found", "text/plain", b"not found"),
+        Err(_) => {
+            // React SPA: unknown paths without a file extension serve index.html.
+            if !rel.contains('.') {
+                let index = PathBuf::from(frontend).join("index.html");
+                if let Ok(bytes) = fs::read(&index) {
+                    return response(stream, "200 OK", "text/html; charset=utf-8", &bytes);
+                }
+            }
+            response(stream, "404 Not Found", "text/plain", b"not found")
+        }
     }
 }
 

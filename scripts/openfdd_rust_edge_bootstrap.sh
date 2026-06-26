@@ -83,11 +83,11 @@ fi
 if [[ ! -f "$OPENFDD_ROOT/workspace/bacnet/commissioning/commission.env" ]]; then
   cat >"$OPENFDD_ROOT/workspace/bacnet/commissioning/commission.env" <<'EOF'
 # BACnet commissioning defaults — edit for live OT LAN
-OPENFDD_BACNET_IFACE=enp3s0
-OPENFDD_BACNET_BIND=192.168.204.55/24:47808
-OPENFDD_BACNET_ROUTER_IP=192.168.204.200
+OPENFDD_BACNET_IFACE=<replace-with-iface>
+OPENFDD_BACNET_BIND=<replace-with-ip>/24:47808
+OPENFDD_BACNET_ROUTER_IP=<replace-with-router-ip>
 OPENFDD_BACNET_MSTP_NET=2000
-OPENFDD_BENCH_DEVICE_INSTANCE=5007
+OPENFDD_BENCH_DEVICE_INSTANCE=<replace-with-device-instance>
 EOF
 fi
 

@@ -1,6 +1,7 @@
 //! Modbus driver facade (live TCP + simulated CI path).
 
 use super::modbus_live;
+use crate::validation::profile::{active_profile, is_modbus_configured};
 use serde_json::{json, Value};
 use std::env;
 
@@ -9,27 +10,56 @@ pub const POINTS_JSON: &str = r#"[
   {"id":"modbus:tcp:1:40002","name":"Pump Speed Command","register":40002,"function":"holding_register","value":62.0,"unit":"%","address":"192.168.1.50:502","unit_id":1}
 ]"#;
 
-pub const RPI_POINTS_JSON: &str = r#"[
-  {"id":"modbus:tcp:1:40001","name":"RPi Temp °F","register":40001,"function":"holding_register","scale":0.1,"unit":"°F","address":"192.168.204.14:1502","unit_id":1,"haystack_id":"point:rpi-temp-f"},
-  {"id":"modbus:tcp:1:40002","name":"RPi Temp °C","register":40002,"function":"holding_register","scale":0.1,"unit":"°C","address":"192.168.204.14:1502","unit_id":1,"haystack_id":"point:rpi-temp-c"},
-  {"id":"modbus:tcp:1:40003","name":"RPi Setpoint °F","register":40003,"function":"holding_register","scale":0.1,"unit":"°F","writable":true,"address":"192.168.204.14:1502","unit_id":1,"haystack_id":"point:rpi-sp-f"},
-  {"id":"modbus:tcp:1:30003","name":"RPi Humidity","register":30003,"function":"input_register","scale":0.1,"unit":"%RH","address":"192.168.204.14:1502","unit_id":1,"haystack_id":"point:rpi-rh"}
-]"#;
+fn live_points_from_profile() -> String {
+    let p = active_profile();
+    if !is_modbus_configured(&p) {
+        return "[]".to_string();
+    }
+    let addr = format!("{}:{}", p.modbus_host, p.modbus_port);
+    let unit = p.modbus_unit_id;
+    let points = vec![
+        json!({"id":format!("modbus:tcp:{unit}:40001"),"name":"Temp °F","register":40001,"function":"holding_register","scale":0.1,"unit":"°F","address":addr,"unit_id":unit,"haystack_id":"point:modbus-temp-f"}),
+        json!({"id":format!("modbus:tcp:{unit}:40002"),"name":"Temp °C","register":40002,"function":"holding_register","scale":0.1,"unit":"°C","address":addr,"unit_id":unit,"haystack_id":"point:modbus-temp-c"}),
+        json!({"id":format!("modbus:tcp:{unit}:40003"),"name":"Setpoint °F","register":40003,"function":"holding_register","scale":0.1,"unit":"°F","writable":true,"address":addr,"unit_id":unit,"haystack_id":"point:modbus-sp-f"}),
+        json!({"id":format!("modbus:tcp:{unit}:30003"),"name":"Humidity","register":30003,"function":"input_register","scale":0.1,"unit":"%RH","address":addr,"unit_id":unit,"haystack_id":"point:modbus-rh"}),
+    ];
+    serde_json::to_string(&points).unwrap_or_else(|_| "[]".to_string())
+}
 
 pub fn modbus_config_value() -> Value {
-    let (host, port) = modbus_live::host_port();
+    let profile = active_profile();
+    let configured = is_modbus_configured(&profile);
+    let mode = env::var("OPENFDD_MODBUS_MODE").unwrap_or_else(|_| "simulated".to_string());
+    let (host, port, status, message): (String, u16, &str, String) = if configured {
+        (
+            profile.modbus_host.clone(),
+            profile.modbus_port,
+            "configured",
+            String::new(),
+        )
+    } else if modbus_live::is_live_mode() {
+        match modbus_live::host_port() {
+            Ok((h, p)) => (h, p, "env", String::new()),
+            Err(msg) => (String::new(), 1502, "not_configured", msg),
+        }
+    } else {
+        (String::new(), 1502, "simulated", String::new())
+    };
     json!({
-        "mode": env::var("OPENFDD_MODBUS_MODE").unwrap_or_else(|_| "simulated".to_string()),
+        "mode": mode,
         "host": host,
         "port": port.to_string(),
         "unit_id": modbus_live::unit_id().to_string(),
-        "timeout_ms": modbus_live::timeout_ms().to_string()
+        "timeout_ms": modbus_live::timeout_ms().to_string(),
+        "configured": configured || status == "env",
+        "status": status,
+        "message": message
     })
 }
 
 pub fn points_json() -> String {
     if modbus_live::is_live_mode() {
-        RPI_POINTS_JSON.to_string()
+        live_points_from_profile()
     } else {
         POINTS_JSON.to_string()
     }
@@ -111,7 +141,53 @@ pub fn commission_status_json() -> String {
         "service": "modbus-commission",
         "status": "ready",
         "config": modbus_config_value(),
-        "features": ["scan", "read-holding", "read-input", "modbus-tcp-live"]
+        "features": ["scan", "read-holding", "read-input", "rusty-modbus-live"]
     })
     .to_string()
+}
+
+fn protocol_enabled(env_key: &str) -> bool {
+    env::var(env_key)
+        .map(|v| v != "0" && v.to_lowercase() != "false")
+        .unwrap_or(true)
+}
+
+pub fn poll_status_json() -> String {
+    if !protocol_enabled("OPENFDD_MODBUS_ENABLED") {
+        return json!({
+            "ok": true,
+            "enabled": false,
+            "status": "disabled",
+            "message": "Modbus is disabled or not configured"
+        })
+        .to_string();
+    }
+    if modbus_live::is_live_mode() {
+        let cfg = modbus_config_value();
+        if cfg.get("status").and_then(|v| v.as_str()) == Some("not_configured") {
+            return json!({
+                "ok": true,
+                "enabled": false,
+                "status": "not_configured",
+                "message": "Modbus not configured — set profile [modbus] or OPENFDD_MODBUS_HOST",
+                "config": cfg
+            })
+            .to_string();
+        }
+    }
+    let points: Vec<Value> = serde_json::from_str(&points_json()).unwrap_or_default();
+    json!({
+        "ok": true,
+        "enabled": true,
+        "service": "modbus-poll",
+        "status": commission_status_mode(),
+        "enabled_points": points.len(),
+        "samples": 0,
+        "config": modbus_config_value()
+    })
+    .to_string()
+}
+
+pub fn driver_tree_json() -> String {
+    super::tree::modbus_driver_tree_json()
 }

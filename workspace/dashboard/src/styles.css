@@ -3131,3 +3131,60 @@ button.linkish {
     grid-template-columns: 1fr;
   }
 }
+
+.report-builder-page .report-builder-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.report-builder-page .report-section-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  background: var(--panel);
+}
+
+.report-builder-page .report-section-card.muted {
+  opacity: 0.55;
+}
+
+.report-builder-page .report-section-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.report-builder-page .report-section-type {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  flex: 1;
+}
+
+.report-builder-page .report-section-title {
+  width: 100%;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: inherit;
+  margin-bottom: 0.5rem;
+}
+
+.report-builder-page .report-preview-iframe {
+  width: 100%;
+  min-height: 480px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+@media (max-width: 900px) {
+  .report-builder-page .report-builder-grid {
+    grid-template-columns: 1fr;
+  }
+}

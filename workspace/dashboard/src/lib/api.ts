@@ -56,6 +56,42 @@ function authHeaders(): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+function parseErrorBody(text: string, status: number): Error {
+  try {
+    const body = JSON.parse(text) as {
+      error?: string;
+      message?: string;
+      detail?: string | { error?: string; detail?: string; message?: string };
+    };
+    if (typeof body.error === "string") {
+      if (body.error === "invalid credentials") {
+        return new Error("Invalid username or password.");
+      }
+      return new Error(body.error);
+    }
+    if (typeof body.message === "string") {
+      return new Error(body.message);
+    }
+    if (typeof body.detail === "string") {
+      return new Error(body.detail);
+    }
+    if (body.detail && typeof body.detail === "object") {
+      const nested = body.detail;
+      if (typeof nested.error === "string") return new Error(nested.error);
+      if (typeof nested.detail === "string") return new Error(nested.detail);
+      if (typeof nested.message === "string") return new Error(nested.message);
+      return new Error(JSON.stringify(nested));
+    }
+  } catch (e) {
+    if (e instanceof SyntaxError) {
+      // not JSON — fall through
+    } else if (e instanceof Error) {
+      return e;
+    }
+  }
+  return new Error(text || `HTTP ${status}`);
+}
+
 export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
@@ -80,26 +116,7 @@ export async function apiFetch<T>(
   }
   if (!res.ok) {
     const text = await res.text();
-    try {
-      const body = JSON.parse(text) as { detail?: string | { error?: string; detail?: string; message?: string } };
-      if (typeof body.detail === "string") {
-        throw new Error(body.detail);
-      }
-      if (body.detail && typeof body.detail === "object") {
-        const nested = body.detail;
-        if (typeof nested.error === "string") throw new Error(nested.error);
-        if (typeof nested.detail === "string") throw new Error(nested.detail);
-        if (typeof nested.message === "string") throw new Error(nested.message);
-        throw new Error(JSON.stringify(nested));
-      }
-    } catch (e) {
-      if (e instanceof SyntaxError) {
-        // not JSON — fall through to plain-text error
-      } else if (e instanceof Error) {
-        throw e;
-      }
-    }
-    throw new Error(text || `HTTP ${res.status}`);
+    throw parseErrorBody(text, res.status);
   }
   return res.json() as Promise<T>;
 }
@@ -194,7 +211,13 @@ export async function fetchAuthMe(): Promise<AuthMe> {
 }
 
 export async function login(username: string, password: string) {
-  return apiFetch<{ token: string; username: string; role: string }>("/api/auth/login", {
+  return apiFetch<{
+    token?: string;
+    access_token?: string;
+    username?: string;
+    subject?: string;
+    role: string;
+  }>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username, password }),
   });

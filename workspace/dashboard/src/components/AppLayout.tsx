@@ -17,40 +17,41 @@ type NavItem = {
 const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Overview",
-    items: [
-      { to: "/", end: true, icon: "🏠", label: "Building status" },
-      { to: "/live-fdd-validation", icon: "🧪", label: "Live FDD Validation", protected: true },
-    ],
-  },
-  {
-    title: "Data & rules",
-    items: [
-      { to: "/drivers", icon: "🌳", label: "Drivers", protected: true },
-      { to: "/sql-fdd", icon: "⚡", label: "SQL FDD Rules", protected: true },
-      { to: "/plot", icon: "📈", label: "Trend plot", protected: true },
-    ],
+    items: [{ to: "/", end: true, icon: "🏠", label: "Dashboard" }],
   },
   {
     title: "Integrations",
     items: [
       { to: "/bacnet", icon: "📡", label: "BACnet", protected: true },
+      { to: "/haystack", icon: "🌿", label: "Haystack", protected: true },
       { to: "/modbus", icon: "🔌", label: "Modbus", protected: true },
       { to: "/json-api", icon: "🌐", label: "JSON API", protected: true },
       { to: "/data-management", icon: "🗄️", label: "Data management", protected: true },
     ],
   },
   {
-    title: "Haystack model",
+    title: "Model & rules",
     items: [
       { to: "/model", icon: "📐", label: "Model & assignments", protected: true },
+      { to: "/sql-fdd", icon: "⚡", label: "SQL FDD Rules", protected: true },
+      { to: "/plot", icon: "📈", label: "Plots", protected: true },
+      { to: "/reports", icon: "📄", label: "Reports", protected: true },
+    ],
+  },
+  {
+    title: "Data & ops",
+    items: [
+      { to: "/exports", icon: "⬇️", label: "Data export", protected: true },
+      { to: "/data-management", icon: "🗄️", label: "Host / data management", protected: true },
+      { to: "/host", icon: "📊", label: "Host stats", protected: true },
+      { to: "/live-fdd-validation", icon: "🧪", label: "Validation runs", protected: true },
       { to: "/algorithms", icon: "⚙️", label: "Algorithms", protected: true },
     ],
   },
   {
-    title: "Ops",
+    title: "Settings",
     items: [
       { to: "/agent", icon: "🤖", label: "AI Agent", protected: true, disabled: true, disabledHint: "Coming soon — Ollama & Codex" },
-      { to: "/host", icon: "📊", label: "Host stats", protected: true },
     ],
   },
 ];
@@ -113,7 +114,7 @@ export default function AppLayout() {
             </span>
           ) : null}
         </div>
-        <p className="sidebar-hint">Haystack-first operator console</p>
+        <p className="sidebar-hint">Building summary is public; sign in to browse all tabs (operator read-only).</p>
         <StackStatusStrip />
         <nav className="sidebar-nav">
           {NAV_SECTIONS.map((section) => (
@@ -140,11 +141,6 @@ export default function AppLayout() {
                   >
                     <span className="nav-icon">{item.icon}</span>
                     {item.label}
-                    {item.protected && authRequired && !signedIn ? (
-                      <span className="nav-lock" title="Sign in required">
-                        🔒
-                      </span>
-                    ) : null}
                   </NavLink>
                 ),
               )}

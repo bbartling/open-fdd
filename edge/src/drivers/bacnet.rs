@@ -6,6 +6,7 @@
 //! data so Docker/CI runs without an OT BACnet network.
 
 use super::bacnet_live;
+use crate::validation::profile::{active_profile, bacnet_point_to_simulated_json, BacnetPointRole};
 use chrono::Utc;
 use serde_json::{json, Value};
 use std::env;
@@ -15,15 +16,78 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 
-const DEVICES_JSON: &str = r#"[
-  {"object_identifier":{"type":"device","instance":5007},"vendor_id":5,"address":"192.168.204.200:47808","label":"BENS Bench Controller","protocol":"BACnet/IP"}
-]"#;
+const GENERIC_SIM_DEVICE: u32 = 42;
 
-const POINTS_JSON: &str = r#"[
-  {"device_instance":5007,"mac":"c0a801c8bac0","object_id":[0,1173],"name":"Outside Air Temp","kind":"sensor","unit":"°F","writable":false,"value":62.0,"haystack_id":"point:oa-t"},
-  {"device_instance":5007,"mac":"c0a801c8bac0","object_id":[1,2466],"name":"ACTUATOR-0","kind":"cmd","unit":"%","writable":true,"value":55.0,"haystack_id":"point:actuator-0"},
-  {"device_instance":5007,"mac":"c0a801c8bac0","object_id":[1,10032],"name":"C06-0-10VDC-O","kind":"cmd","unit":"V","writable":true,"value":11.0,"haystack_id":"point:c06-ao"}
-]"#;
+fn simulated_device_instance() -> u32 {
+    let p = active_profile();
+    if p.device_instance > 0 {
+        p.device_instance
+    } else {
+        GENERIC_SIM_DEVICE
+    }
+}
+
+fn default_simulated_points() -> Vec<Value> {
+    let inst = simulated_device_instance();
+    vec![
+        json!({"device_instance":inst,"object_id":[0,1001],"name":"Outside Air Temp","kind":"sensor","unit":"°F","writable":false,"value":62.0,"haystack_id":"point:oa-t","fdd_input":"oa_t"}),
+        json!({"device_instance":inst,"object_id":[0,1002],"name":"Outside Air Humidity","kind":"sensor","unit":"%RH","writable":false,"value":45.0,"haystack_id":"point:oa-h","fdd_input":"oa_h"}),
+        json!({"device_instance":inst,"object_id":[0,1003],"name":"Discharge Air Temp","kind":"sensor","unit":"°F","writable":false,"value":55.0,"haystack_id":"point:duct-t","fdd_input":"duct_t"}),
+        json!({
+            "device_instance": inst,
+            "object_id": [1, 2001],
+            "name": "Demo Actuator",
+            "kind": "cmd",
+            "unit": "%",
+            "writable": true,
+            "commandable": true,
+            "value": 55.0,
+            "haystack_id": "point:actuator-demo",
+            "fdd_input": "actuator_demo",
+            "simulated_priorities": [{"priority": 8, "value": 55.0}]
+        }),
+    ]
+}
+
+fn profile_simulated_points() -> Vec<Value> {
+    let p = active_profile();
+    if p.bacnet_points.is_empty() {
+        return default_simulated_points();
+    }
+    p.bacnet_points
+        .iter()
+        .map(|pt: &BacnetPointRole| bacnet_point_to_simulated_json(&p, pt))
+        .collect()
+}
+
+fn profile_simulated_device() -> Value {
+    let inst = simulated_device_instance();
+    json!({
+      "device_instance": inst,
+      "name": format!("Validation Device {inst}"),
+      "address": "simulated:local",
+      "router_ip": "",
+      "mstp_network": 0,
+      "polling_enabled": true,
+      "points": profile_simulated_points()
+    })
+}
+
+fn simulated_devices_json() -> String {
+    let inst = simulated_device_instance();
+    serde_json::to_string(&vec![json!({
+        "object_identifier": {"type": "device", "instance": inst},
+        "vendor_id": 5,
+        "address": "simulated:local",
+        "label": format!("Validation Device {inst}"),
+        "protocol": "BACnet/IP"
+    })])
+    .unwrap_or_else(|_| "[]".to_string())
+}
+
+fn simulated_points_json() -> String {
+    serde_json::to_string(&profile_simulated_points()).unwrap_or_else(|_| "[]".to_string())
+}
 
 fn workspace_dir() -> PathBuf {
     env::var("OPENFDD_WORKSPACE")
@@ -37,10 +101,6 @@ fn bacnet_overrides_dir() -> PathBuf {
 
 fn legacy_overrides_dir() -> PathBuf {
     workspace_dir().join("overrides")
-}
-
-fn overrides_dir() -> PathBuf {
-    bacnet_overrides_dir()
 }
 
 fn override_registry_path() -> PathBuf {
@@ -88,41 +148,19 @@ fn now_rfc3339() -> String {
 }
 
 pub fn bacnet_config_value() -> Value {
+    let inst = simulated_device_instance();
     json!({
         "mode": env::var("OPENFDD_BACNET_MODE").unwrap_or_else(|_| "simulated".to_string()),
-        "iface": env::var("OPENFDD_BACNET_IFACE").unwrap_or_else(|_| "enp3s0".to_string()),
-        "bind": env::var("OPENFDD_BACNET_BIND").unwrap_or_else(|_| "192.168.204.55/24:47808".to_string()),
+        "iface": env::var("OPENFDD_BACNET_IFACE").unwrap_or_default(),
+        "bind": env::var("OPENFDD_BACNET_BIND").unwrap_or_default(),
         "device_instance": env::var("OPENFDD_BACNET_DEVICE_INSTANCE").unwrap_or_else(|_| "599999".to_string()),
         "device_name": env::var("OPENFDD_BACNET_DEVICE_NAME").unwrap_or_else(|_| "OpenFDD".to_string()),
         "scan_interval_seconds": env::var("OPENFDD_BACNET_SCAN_INTERVAL_SECONDS").unwrap_or_else(|_| "3600".to_string()),
         "poll_interval_seconds": env::var("OPENFDD_BACNET_POLL_INTERVAL_SECONDS").unwrap_or_else(|_| "60".to_string()),
-        "router_ip": env::var("OPENFDD_BACNET_ROUTER_IP").unwrap_or_else(|_| "192.168.204.200".to_string()),
-        "mstp_network": env::var("OPENFDD_BACNET_MSTP_NET").unwrap_or_else(|_| "2000".to_string()),
-        "discover_low": env::var("OPENFDD_BACNET_DISCOVER_LOW").unwrap_or_else(|_| "5007".to_string()),
-        "discover_high": env::var("OPENFDD_BACNET_DISCOVER_HIGH").unwrap_or_else(|_| "5007".to_string())
-    })
-}
-
-fn bench5007_points() -> Vec<Value> {
-    vec![
-        json!({"id":"bacnet:5007:analog-input:1173","device_instance":5007,"object_id":[0,1173],"name":"Outside Air Temp","polling_enabled":true,"writable":false,"haystack_id":"point:oa-t","fdd_input":"oa_t"}),
-        json!({"id":"bacnet:5007:analog-input:1168","device_instance":5007,"object_id":[0,1168],"name":"Outside Air Humidity","polling_enabled":true,"writable":false,"haystack_id":"point:oa-h","fdd_input":"oa_h"}),
-        json!({"id":"bacnet:5007:analog-input:1192","device_instance":5007,"object_id":[0,1192],"name":"Discharge Air Temp","polling_enabled":true,"writable":false,"haystack_id":"point:duct-t","fdd_input":"duct_t"}),
-        json!({"id":"bacnet:5007:analog-input:10014","device_instance":5007,"object_id":[0,10014],"name":"Zone Temp","polling_enabled":true,"writable":false,"haystack_id":"point:stat_zn-t","fdd_input":"stat_zn_t"}),
-        json!({"id":"bacnet:5007:analog-output:10032","device_instance":5007,"object_id":[1,10032],"name":"C06-0-10VDC-O","polling_enabled":true,"writable":true,"commandable":true,"haystack_id":"point:c06-ao","fdd_input":"c06_ao"}),
-        json!({"id":"bacnet:5007:analog-output:2466","device_instance":5007,"object_id":[1,2466],"name":"ACTUATOR-0","polling_enabled":true,"writable":true,"commandable":true,"haystack_id":"point:actuator-0","fdd_input":"actuator_0"}),
-    ]
-}
-
-fn bench5007_device() -> Value {
-    json!({
-      "device_instance":5007,
-      "name":"BENS Bench Controller",
-      "address":"192.168.204.200:47808",
-      "router_ip":"192.168.204.200",
-      "mstp_network":2000,
-      "polling_enabled":true,
-      "points": bench5007_points()
+        "router_ip": env::var("OPENFDD_BACNET_ROUTER_IP").unwrap_or_default(),
+        "mstp_network": env::var("OPENFDD_BACNET_MSTP_NET").unwrap_or_default(),
+        "discover_low": env::var("OPENFDD_BACNET_DISCOVER_LOW").unwrap_or_else(|_| inst.to_string()),
+        "discover_high": env::var("OPENFDD_BACNET_DISCOVER_HIGH").unwrap_or_else(|_| inst.to_string())
     })
 }
 
@@ -139,7 +177,7 @@ fn default_registry() -> Value {
           "enabled":true,
           "override_scan":{"enabled":true,"cadence_seconds":3600,"method":"ReadProperty(priority-array) on writable points"},
           "devices":[
-            bench5007_device()
+            profile_simulated_device()
           ]
         },
         {
@@ -176,7 +214,7 @@ fn default_registry() -> Value {
           "enabled":true,
           "sites":[
             {"id":"site:demo","dis":"Demo Site"},
-            {"id":"equip:5007","dis":"Device 5007 Bench","siteRef":"site:demo"}
+            {"id": format!("equip:{}", active_profile().equipment_id.trim_start_matches("equip:")), "dis": format!("Equipment {}", active_profile().equipment_id), "siteRef":"site:demo"}
           ],
           "note":"Niagara-style station integration is represented through Project Haystack read/nav/ops instead of custom Niagara WebSockets."
         }
@@ -331,15 +369,11 @@ fn commandable_points(registry: &Value) -> Vec<Value> {
     points
 }
 
-fn writable_points(registry: &Value) -> Vec<Value> {
-    commandable_points(registry)
-}
-
 fn bench_device_instance() -> u32 {
     env::var("OPENFDD_BACNET_DISCOVER_LOW")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(5007)
+        .unwrap_or_else(simulated_device_instance)
 }
 
 pub fn merge_live_discovery_into_registry(device_instance: u32) -> Value {
@@ -461,11 +495,25 @@ fn read_priority_array_for_point(point: &Value) -> Vec<(u8, Value)> {
         }
     }
 
-    let name = point.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    if name == "ACTUATOR-0" {
-        vec![(8, json!(55.0))]
-    } else if name == "C06-0-10VDC-O" {
-        vec![(1, json!(11.0))]
+    if let Some(arr) = point.get("simulated_priorities").and_then(|v| v.as_array()) {
+        let mut out = Vec::new();
+        for entry in arr {
+            let prio = entry.get("priority").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            let val = entry.get("value").cloned().unwrap_or(json!(null));
+            if prio > 0 {
+                out.push((prio, val));
+            }
+        }
+        if !out.is_empty() {
+            return out;
+        }
+    }
+
+    if point.get("commandable").and_then(|v| v.as_bool()) == Some(true)
+        || point.get("writable").and_then(|v| v.as_bool()) == Some(true)
+    {
+        let value = point.get("value").cloned().unwrap_or(json!(55.0));
+        vec![(1, value)]
     } else {
         Vec::new()
     }
@@ -742,7 +790,7 @@ pub fn scan_once_value() -> Value {
         match bacnet_live::block_on(bacnet_live::discover_device_points(device_instance)) {
             Ok(discovered) => discovered
                 .into_iter()
-                .filter(|p| is_commandable_point(p))
+                .filter(is_commandable_point)
                 .map(|mut p| {
                     if p.get("device_instance").is_none() {
                         p["device_instance"] = json!(device_instance);
@@ -754,17 +802,9 @@ pub fn scan_once_value() -> Value {
                 })
                 .collect(),
             Err(err) => {
-                scan_health = "degraded".to_string();
-                scan_error = Some(err.clone());
-                commandable_points(&registry)
-                    .into_iter()
-                    .filter(|p| {
-                        p.get("device_instance")
-                            .and_then(|v| v.as_u64())
-                            .map(|d| d as u32 == device_instance)
-                            .unwrap_or(true)
-                    })
-                    .collect()
+                scan_health = "error".to_string();
+                scan_error = Some(err);
+                Vec::new()
             }
         }
     } else {
@@ -791,6 +831,15 @@ pub fn scan_once_value() -> Value {
     let legacy_other = legacy_overrides_dir().join("bacnet_non_priority8_overrides.csv");
     let split_p8 = csv_path("bacnet_priority8_overrides.csv");
     let split_other = csv_path("bacnet_non_priority8_overrides.csv");
+
+    // Python-era parity: CI and legacy tooling expect these paths even when a scan
+    // produces only operator (p8) or only supervisory overrides.
+    ensure_csv_header(&export_path);
+    ensure_legacy_csv_header(&legacy_all);
+    ensure_legacy_csv_header(&legacy_p8);
+    ensure_legacy_csv_header(&legacy_other);
+    ensure_csv_header(&split_p8);
+    ensure_csv_header(&split_other);
 
     for point in &scan_points {
         let priority_values = read_priority_array_for_point(point);
@@ -929,7 +978,7 @@ pub fn whois_json() -> String {
                 .unwrap_or_else(|_| r#"{"ok":false}"#.to_string()),
         }
     } else {
-        DEVICES_JSON.to_string()
+        simulated_devices_json()
     }
 }
 
@@ -938,7 +987,7 @@ pub fn points_json() -> String {
         serde_json::to_string(&collect_bacnet_points(&read_registry()))
             .unwrap_or_else(|_| "[]".to_string())
     } else {
-        POINTS_JSON.to_string()
+        simulated_points_json()
     }
 }
 
@@ -946,7 +995,7 @@ pub fn point_discovery_value(body: &Value) -> Value {
     let device_instance = body
         .get("device_instance")
         .and_then(|v| v.as_u64())
-        .unwrap_or(5007) as u32;
+        .unwrap_or_else(|| simulated_device_instance() as u64) as u32;
 
     if bacnet_live::is_live_mode() {
         match bacnet_live::block_on(bacnet_live::discover_device_points(device_instance)) {
@@ -963,7 +1012,7 @@ pub fn point_discovery_value(body: &Value) -> Value {
             "ok": true,
             "status": "simulated registry loaded",
             "device_instance": device_instance,
-            "points": bench5007_points()
+            "points": profile_simulated_points()
         })
     }
 }
@@ -974,7 +1023,7 @@ pub fn sync_discovery_value() -> Value {
         return merge_live_discovery_into_registry(device_instance);
     }
 
-    let points = bench5007_points();
+    let points = profile_simulated_points();
     let mut registry = read_registry();
     registry["bacnet_config"] = bacnet_config_value();
     if let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) {
@@ -993,7 +1042,7 @@ pub fn sync_discovery_value() -> Value {
                     .unwrap_or(0) as u32
                     != device_instance
             });
-            let mut device = bench5007_device();
+            let mut device = profile_simulated_device();
             device["points"] = json!(points);
             devices.push(device);
             driver["devices"] = json!(devices);
@@ -1040,7 +1089,24 @@ pub fn read_present_value_json(body: &Value) -> String {
         .unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
     }
 
-    r#"{"point":"Outside Air Temp","device_instance":5007,"value":62.0,"unit":"°F","source":"bacnet-simulated"}"#.to_string()
+    let inst = simulated_device_instance();
+    let first = profile_simulated_points()
+        .first()
+        .cloned()
+        .unwrap_or(json!({"name":"Outside Air Temp","value":62.0}));
+    let name = first
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Outside Air Temp");
+    let value = first.get("value").and_then(|v| v.as_f64()).unwrap_or(62.0);
+    serde_json::to_string(&json!({
+        "point": name,
+        "device_instance": inst,
+        "value": value,
+        "unit": "°F",
+        "source": "bacnet-simulated"
+    }))
+    .unwrap_or_else(|_| r#"{"ok":false}"#.to_string())
 }
 
 pub fn driver_tree_json() -> String {
@@ -1152,15 +1218,6 @@ pub fn priority_array_json(body: &Value) -> String {
     serde_json::to_string(&json!({"ok": false, "error": "point not found"})).unwrap_or_default()
 }
 
-pub fn overrides_json() -> String {
-    let reg = read_override_registry();
-    if reg.as_object().map(|o| !o.is_empty()).unwrap_or(false) {
-        serde_json::to_string_pretty(&reg).unwrap_or_else(|_| "{}".to_string())
-    } else {
-        serde_json::to_string_pretty(&scan_once_value()).unwrap_or_else(|_| "{}".to_string())
-    }
-}
-
 pub fn overrides_csv() -> String {
     read_csv(&export_csv_path())
 }
@@ -1228,8 +1285,8 @@ mod override_export_tests {
         env::set_var("OPENFDD_WORKSPACE", &tmp);
         let sample = json!({
             "last_scan_at": "2026-06-23T00:00:00Z",
-            "last_scanned_device": 5007,
-            "next_device_instance": 5007,
+            "last_scanned_device": 42,
+            "next_device_instance": 42,
             "device_count": 1,
             "operator_priority": 8,
             "export_row_count": 2,
@@ -1238,7 +1295,7 @@ mod override_export_tests {
         });
         write_override_registry(&sample);
         let loaded = read_override_registry();
-        assert_eq!(loaded["last_scanned_device"], 5007);
+        assert_eq!(loaded["last_scanned_device"], 42);
         assert_eq!(loaded["export_row_count"], 2);
         assert!(override_registry_path().exists());
         let _ = fs::remove_dir_all(&tmp);
@@ -1247,17 +1304,32 @@ mod override_export_tests {
     #[test]
     fn export_csv_row_marks_operator_override() {
         let point = json!({
-            "device_instance": 5007,
-            "address": "192.168.204.200:47808",
-            "device_name": "Bench",
-            "id": "bacnet:5007:analog-output:2466",
-            "name": "ACTUATOR-0",
-            "object_id": [1, 2466],
+            "device_instance": 42,
+            "address": "simulated:local",
+            "device_name": "Validation Device",
+            "id": "bacnet:42:analog-output:2001",
+            "name": "Demo Actuator",
+            "object_id": [1, 2001],
             "unit": "%",
-            "value": 55.0
+            "value": 55.0,
+            "commandable": true,
+            "simulated_priorities": [{"priority": 8, "value": 55.0}]
         });
         let row = export_csv_row("2026-06-23T00:00:00Z", &point, 8, &json!(55.0), 8);
         assert_eq!(row[10], "true");
         assert_eq!(row[11], "operator");
+    }
+
+    #[test]
+    fn simulated_priorities_from_point_metadata_not_name() {
+        let point = json!({
+            "name": "Generic AO",
+            "commandable": true,
+            "simulated_priorities": [{"priority": 8, "value": 42.0}]
+        });
+        let slots = read_priority_array_for_point(&point);
+        assert_eq!(slots.len(), 1);
+        assert_eq!(slots[0].0, 8);
+        assert_eq!(slots[0].1, json!(42.0));
     }
 }

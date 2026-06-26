@@ -95,6 +95,15 @@ fn effective_points(p: &SmokeProfile) -> Vec<profile::BacnetPointRole> {
 }
 
 fn modbus_probe(p: &SmokeProfile) -> Value {
+    if !profile::is_modbus_configured(p) {
+        return json!({
+            "configured": false,
+            "status": "skipped",
+            "message": "Modbus not configured",
+            "available": false,
+            "degraded": false
+        });
+    }
     let body = json!({
         "register": p.modbus_register,
         "function": "input_register",
@@ -179,17 +188,17 @@ pub fn capture_sample(body: &Value) -> Value {
         simulated_values("normal")
     };
 
-    let row = store::make_pivot_row(
-        &ts,
-        &p.equipment_id,
-        values.0,
-        values.1,
-        values.2,
-        values.3,
-        &source,
-        &source_driver,
+    let row = store::make_pivot_row(store::PivotSample {
+        timestamp: &ts,
+        equipment_id: &p.equipment_id,
+        oa_t: values.0,
+        oa_h: values.1,
+        duct_t: values.2,
+        zn_t: values.3,
+        source: &source,
+        source_driver: &source_driver,
         is_simulated,
-    );
+    });
 
     if let Err(err) = store::append_pivot_row(&row) {
         return json!({"ok": false, "error": err});
@@ -413,15 +422,15 @@ fn make_sim_row(
 ) -> Value {
     let ts = (*start + chrono::Duration::minutes(minute_offset as i64)).to_rfc3339();
     let (oa_t, _, _, _) = simulated_values(phase).0;
-    store::make_pivot_row(
-        &ts,
-        &p.equipment_id,
+    store::make_pivot_row(store::PivotSample {
+        timestamp: &ts,
+        equipment_id: &p.equipment_id,
         oa_t,
-        45.0,
-        55.0,
-        72.0,
-        &format!("simulation:live_fdd_validation:{phase}"),
-        "simulation",
-        true,
-    )
+        oa_h: 45.0,
+        duct_t: 55.0,
+        zn_t: 72.0,
+        source: &format!("simulation:live_fdd_validation:{phase}"),
+        source_driver: "simulation",
+        is_simulated: true,
+    })
 }

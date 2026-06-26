@@ -1,13 +1,10 @@
-//! JSON API driver facade.
-//!
-//! Production direction:
-//! - register HTTP JSON sources with URL, headers, polling cadence, timestamp
-//!   mapping, point mapping, and units.
-//! - poll them into normalized point samples for Arrow/DataFusion.
+//! JSON API driver — real HTTP fetch via reqwest; no synthetic point fabrication.
 
+use reqwest::blocking::Client;
+use reqwest::StatusCode;
 use serde_json::{json, Value};
 use std::env;
-use std::process::Command;
+use std::time::Duration;
 
 pub const SOURCES_JSON: &str = r#"[
   {"id":"httpbin-health","url":"https://httpbin.org/get","maps_to":"json_api_health","status":"test-bench","kind":"http-get"},
@@ -23,8 +20,48 @@ pub fn register_json() -> &'static str {
     r#"{"ok":true,"status":"registered","source":"custom-json-api","runtime":"rust"}"#
 }
 
-pub fn poll_once_json() -> String {
-    serde_json::to_string(&poll_test_source()).unwrap_or_else(|_| r#"{"ok":false}"#.to_string())
+fn http_client() -> Result<Client, String> {
+    Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("HTTP client build failed: {e}"))
+}
+
+fn extract_points(body: &Value) -> Vec<Value> {
+    if let Some(arr) = body.as_array() {
+        return arr.iter().filter_map(normalize_point).collect();
+    }
+    if let Some(points) = body.get("points").and_then(|v| v.as_array()) {
+        return points.iter().filter_map(normalize_point).collect();
+    }
+    if let Some(data) = body.get("data").and_then(|v| v.as_array()) {
+        return data.iter().filter_map(normalize_point).collect();
+    }
+    if body.is_object() {
+        if let Some(p) = normalize_point(body) {
+            return vec![p];
+        }
+    }
+    Vec::new()
+}
+
+fn normalize_point(item: &Value) -> Option<Value> {
+    let id = item
+        .get("id")
+        .or_else(|| item.get("point_id"))
+        .and_then(|v| v.as_str())?;
+    let value = item
+        .get("value")
+        .or_else(|| item.get("curVal"))
+        .or_else(|| item.get("val"))
+        .cloned()
+        .unwrap_or(json!(null));
+    Some(json!({
+        "id": id,
+        "value": value,
+        "unit": item.get("unit").cloned().unwrap_or(json!(null)),
+        "quality": item.get("quality").cloned().unwrap_or(json!("good"))
+    }))
 }
 
 pub fn poll_test_source() -> Value {
@@ -37,47 +74,103 @@ pub fn poll_url(url: &str) -> Value {
     let source_id =
         env::var("OPENFDD_JSON_API_TEST_SOURCE").unwrap_or_else(|_| "json-api-smoke".to_string());
     let started = std::time::Instant::now();
-    let output = Command::new("curl")
-        .args(["-fsS", "-o", "/dev/null", "-w", "%{http_code}", url])
-        .output();
-    let response_time_ms = started.elapsed().as_millis() as u64;
-    match output {
-        Ok(out) if out.status.success() => {
-            let code = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            let http_status = code.parse::<u64>().unwrap_or(0);
-            let ok = http_status == 200;
+    let client = match http_client() {
+        Ok(c) => c,
+        Err(err) => {
+            return json!({
+                "ok": false,
+                "source_id": source_id,
+                "url": url,
+                "response_time_ms": started.elapsed().as_millis() as u64,
+                "parsed_points_count": 0,
+                "error": err,
+                "source_driver": "json-api"
+            });
+        }
+    };
+
+    match client.get(url).send() {
+        Ok(resp) => {
+            let response_time_ms = started.elapsed().as_millis() as u64;
+            let http_status = resp.status().as_u16();
+            let ok = resp.status() == StatusCode::OK;
+            let body_text = resp.text().unwrap_or_default();
+            let points = if ok {
+                serde_json::from_str::<Value>(&body_text)
+                    .map(|body| extract_points(&body))
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
             json!({
                 "ok": ok,
                 "source_id": source_id,
                 "url": url,
                 "http_status": http_status,
                 "response_time_ms": response_time_ms,
-                "parsed_points_count": if ok { 1 } else { 0 },
-                "points": [{"id":"point:json-api-health","value":1,"unit":"bool","quality":"good"}],
+                "parsed_points_count": points.len(),
+                "points": points,
                 "source_driver": "json-api",
-                "message": if ok { "HTTP 200 OK" } else { "unexpected status" }
+                "message": if ok {
+                    if points.is_empty() {
+                        "HTTP 200 OK — no mappable points in JSON body"
+                    } else {
+                        "HTTP 200 OK"
+                    }
+                } else {
+                    "unexpected status"
+                }
             })
         }
-        Ok(out) => json!({
-            "ok": false,
-            "source_id": source_id,
-            "url": url,
-            "response_time_ms": response_time_ms,
-            "parsed_points_count": 0,
-            "error": String::from_utf8_lossy(&out.stderr).to_string()
-        }),
         Err(err) => json!({
             "ok": false,
             "source_id": source_id,
             "url": url,
-            "response_time_ms": response_time_ms,
+            "response_time_ms": started.elapsed().as_millis() as u64,
             "parsed_points_count": 0,
-            "error": err.to_string()
+            "error": err.to_string(),
+            "source_driver": "json-api"
         }),
     }
 }
 
 pub fn poll_once_value(body: &Value) -> Value {
-    let _ = body;
+    if let Some(url) = body.get("url").and_then(|v| v.as_str()) {
+        return poll_url(url);
+    }
     poll_test_source()
+}
+
+fn protocol_enabled(env_key: &str) -> bool {
+    env::var(env_key)
+        .map(|v| v != "0" && v.to_lowercase() != "false")
+        .unwrap_or(true)
+}
+
+pub fn poll_status_json() -> String {
+    if !protocol_enabled("OPENFDD_JSON_API_ENABLED") {
+        return json!({
+            "ok": true,
+            "enabled": false,
+            "status": "disabled",
+            "message": "JSON API driver is disabled or not configured"
+        })
+        .to_string();
+    }
+    let sources: Vec<Value> = serde_json::from_str(SOURCES_JSON).unwrap_or_default();
+    let sample = poll_once_value(&json!({}));
+    json!({
+        "ok": true,
+        "enabled": true,
+        "service": "json-api-poll",
+        "status": "ready",
+        "enabled_points": sources.len(),
+        "samples": sample.get("parsed_points_count").cloned().unwrap_or(json!(0)),
+        "last_poll": sample
+    })
+    .to_string()
+}
+
+pub fn driver_tree_json() -> String {
+    super::tree::json_api_driver_tree_json()
 }
