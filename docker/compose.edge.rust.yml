@@ -41,9 +41,9 @@ services:
       OPENFDD_JSON_API_ENABLED: ${OPENFDD_JSON_API_ENABLED:-1}
       OPENFDD_IMPORT_ENABLED: ${OPENFDD_IMPORT_ENABLED:-1}
       OPENFDD_EXPORT_ENABLED: ${OPENFDD_EXPORT_ENABLED:-1}
+    # Auth is read at runtime from OPENFDD_WORKSPACE/auth.env.local (do not use env_file —
+    # Docker Compose mangles bcrypt `$` in hash values).
     env_file:
-      - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/auth.env.local
-        required: true
       - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/data.env.local
         required: false
       - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/bacnet/commissioning/commission.env
@@ -72,8 +72,6 @@ services:
       OPENFDD_BACNET_ENABLED: ${OPENFDD_BACNET_ENABLED:-1}
       OPENFDD_MODBUS_ENABLED: ${OPENFDD_MODBUS_ENABLED:-1}
     env_file:
-      - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/auth.env.local
-        required: true
       - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/data.env.local
         required: false
       - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/bacnet/commissioning/commission.env
@@ -130,7 +128,4 @@ services:
       PORT: "9092"
       OPENFDD_WORKSPACE: /var/openfdd/workspace
       OPENFDD_HAYSTACK_ENABLED: ${OPENFDD_HAYSTACK_ENABLED:-1}
-    env_file:
-      - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/auth.env.local
-        required: true
     restart: unless-stopped
