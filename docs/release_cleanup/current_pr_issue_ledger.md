@@ -1,12 +1,12 @@
 # Open-FDD release cleanup ledger
 
-Updated: 2026-06-25 (anti-hardcoding audit — #385 blocked until clean)
+Updated: 2026-06-25 (post cold-boot recovery — CI CSV parity fix pushed)
 
 ## Current open PRs
 
 | PR | Title | Branch | CI (latest) | Status |
 |----|-------|--------|-------------|--------|
-| [#385](https://github.com/bbartling/open-fdd/pull/385) | Local validation reporting workflow | `feature/local-validation-reporting-workflow` | Rust tests failing on prior push; re-run after audit fix | **Active — anti-hardcoding cleanup in progress** |
+| [#385](https://github.com/bbartling/open-fdd/pull/385) | Local validation reporting workflow | `feature/local-validation-reporting-workflow` | Re-running after `234c47b5` CSV parity fix | **Active — anti-hardcoding audit passes locally; awaiting green compose smoke** |
 | [#386](https://github.com/bbartling/open-fdd/pull/386) | Dev 5007 RCx validation harness | `feature/dev-5007-rcx-validation-report` | CI in progress | **Blocked until #385 audit passes** — do not merge harness before model-driven cleanup |
 | [#382](https://github.com/bbartling/open-fdd/pull/382) | Docs cleanup for Rust-only Open-FDD | `docs/rust-readme-docs-ci-cleanup` | — | Docs-only; independent |
 
@@ -30,7 +30,7 @@ Updated: 2026-06-25 (anti-hardcoding audit — #385 blocked until clean)
 
 ## Hardcoding audit status
 
-**#385 is blocked** until `./scripts/audit_no_private_bench_hardcoding.sh` passes and production code no longer branches on bench point names.
+**#385 audit passes locally** (`./scripts/audit_no_private_bench_hardcoding.sh`). CI compose smoke was failing on missing legacy split CSV paths when default simulated registry yields p8-only overrides — fixed in `234c47b5`.
 
 | Area | Status | Fix |
 |------|--------|-----|

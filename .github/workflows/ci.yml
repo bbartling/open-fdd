@@ -234,7 +234,7 @@ jobs:
             -H "Authorization: Bearer $INT" | jq -e '.ok == true and (.rule_sql | contains("confirmation_required_minutes"))'
 
       - name: No-hardcoding audit
-        run: ./scripts/audit_no_hardcoding.sh
+        run: ./scripts/audit_no_private_bench_hardcoding.sh
 
       - name: CSV files created in workspace
         run: |
