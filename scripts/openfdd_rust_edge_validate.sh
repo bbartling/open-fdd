@@ -56,8 +56,8 @@ if [[ -f "$AUTH" ]]; then
   fi
 fi
 
-if [[ -n "$TOKEN" ]] && curl -fsS "${BASE}/api/bench/5007/smoke/status" -H "Authorization: Bearer $TOKEN" >/dev/null 2>&1; then
-  echo "OK: bench smoke status endpoint present"
+if [[ -n "$TOKEN" ]] && curl -fsS "${BASE}/api/validation-runs/current/status" -H "Authorization: Bearer $TOKEN" >/dev/null 2>&1; then
+  echo "OK: validation-runs status endpoint present"
 fi
 
 if [[ "$LIVE_BACNET" == "1" ]]; then

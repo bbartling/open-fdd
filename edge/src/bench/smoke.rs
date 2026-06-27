@@ -54,20 +54,24 @@ fn detect_data_source(rows: &[Value]) -> String {
         return "empty".to_string();
     }
     let mut live = 0;
-    let mut sim = 0;
     let mut demo = 0;
     for row in rows {
         match row.get("source").and_then(|v| v.as_str()).unwrap_or("") {
-            s if s.starts_with("simulation:") => sim += 1,
-            s if s.contains("demo") => demo += 1,
+            s if s.starts_with("validation:fixture") => live += 1,
             s if s.starts_with("bacnet:live") => live += 1,
-            _ => live += 1,
+            s if s.contains("demo") => demo += 1,
+            _ if !row
+                .get("is_simulated")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false) =>
+            {
+                live += 1
+            }
+            _ => demo += 1,
         }
     }
-    if live > 0 && sim == 0 && demo == 0 {
+    if live > 0 && demo == 0 {
         "bacnet:live".to_string()
-    } else if sim > 0 && live == 0 {
-        "simulation:live_fdd_validation".to_string()
     } else if demo > 0 {
         "demo:static".to_string()
     } else {
@@ -145,47 +149,30 @@ fn json_api_probe(p: &SmokeProfile) -> Value {
 }
 
 fn haystack_fixture_status(p: &SmokeProfile) -> Value {
+    let site = crate::model::scope::active_site_id().unwrap_or_else(|| "site:unknown".to_string());
     json!({
         "mode": "fixture",
-        "site": "site:demo",
+        "site": site,
         "equip": format!("equip:{}", p.equipment_id),
         "driver_tree": true
     })
 }
 
-fn simulation_mode(body: &Value) -> Option<String> {
-    body.get("simulation_phase")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .or_else(|| {
-            std::env::var("BENCH_SMOKE_SIM_PHASE")
-                .ok()
-                .filter(|s| !s.is_empty())
-        })
-}
-
-pub fn capture_sample(body: &Value) -> Value {
+pub fn capture_sample(_body: &Value) -> Value {
     let p = profile::active_profile();
     let ts = Utc::now().to_rfc3339();
-    let sim = simulation_mode(body);
-    let (values, source, source_driver, is_simulated) = if let Some(phase) = sim {
-        simulated_values(&phase)
-    } else if bacnet_live::is_live_mode() {
-        match poll_live_bacnet(&p) {
-            Ok(v) => (v, "bacnet:live".to_string(), "bacnet".to_string(), false),
-            Err(err) => {
-                return json!({"ok": false, "error": err, "demo_only": true});
-            }
-        }
-    } else if profile::short_mode() || profile::live_fdd_enabled() {
+    if !bacnet_live::is_live_mode() {
         return json!({
             "ok": false,
-            "error": "BACnet live mode required for live FDD capture (set OPENFDD_BACNET_MODE=live) or pass simulation_phase",
-            "demo_only": true,
-            "hint": "Use simulation_phase=normal|fault|clear for safe proof without OT writes"
+            "error": "BACnet live mode required for validation capture (set OPENFDD_BACNET_MODE=live and configure bind/network)",
+            "demo_only": true
         });
-    } else {
-        simulated_values("normal")
+    }
+    let (values, source, source_driver) = match poll_live_bacnet(&p) {
+        Ok(v) => (v, "bacnet:live".to_string(), "bacnet".to_string()),
+        Err(err) => {
+            return json!({"ok": false, "error": err, "demo_only": true});
+        }
     };
 
     let row = store::make_pivot_row(store::PivotSample {
@@ -197,7 +184,7 @@ pub fn capture_sample(body: &Value) -> Value {
         zn_t: values.3,
         source: &source,
         source_driver: &source_driver,
-        is_simulated,
+        is_simulated: false,
     });
 
     if let Err(err) = store::append_pivot_row(&row) {
@@ -214,7 +201,7 @@ pub fn capture_sample(body: &Value) -> Value {
         "bacnet_points": values,
         "source": source,
         "source_driver": source_driver,
-        "is_simulated": is_simulated
+        "is_simulated": false
     });
     let _ = std::fs::write(
         &capture_path,
@@ -230,21 +217,6 @@ pub fn capture_sample(body: &Value) -> Value {
         "data_source": source,
         "demo_only": source.starts_with("demo")
     })
-}
-
-fn simulated_values(phase: &str) -> ((f64, f64, f64, f64), String, String, bool) {
-    let (oa_t, label) = match phase {
-        "fault" | "fault_high" => (120.0, "fault"),
-        "fault_low" => (30.0, "fault"),
-        "clear" | "normal" => (62.0, "normal"),
-        _ => (62.0, "normal"),
-    };
-    (
-        (oa_t, 45.0, 55.0, 72.0),
-        format!("simulation:live_fdd_validation:{label}"),
-        "simulation".to_string(),
-        true,
-    )
 }
 
 fn poll_live_bacnet(p: &SmokeProfile) -> Result<(f64, f64, f64, f64), String> {
@@ -384,22 +356,11 @@ pub fn inject_scenario(body: &Value) -> Value {
         .get("clear_minutes")
         .and_then(|v| v.as_u64())
         .unwrap_or(5);
-    let _ = store::clear_rows_with_source_prefix("simulation:live_fdd_validation");
+    let _ = store::clear_rows_with_source_prefix("validation:fixture");
     let start = Utc::now();
-    let mut rows = Vec::new();
-    let mut minute = 0;
-    for _ in 0..normal_min {
-        rows.push(make_sim_row(&p, &start, minute, "normal"));
-        minute += 1;
-    }
-    for _ in 0..fault_min {
-        rows.push(make_sim_row(&p, &start, minute, "fault"));
-        minute += 1;
-    }
-    for _ in 0..clear_min {
-        rows.push(make_sim_row(&p, &start, minute, "clear"));
-        minute += 1;
-    }
+    let rows = super::validation_fixture::inject_scenario_rows(
+        &p, start, normal_min, fault_min, clear_min,
+    );
     if let Err(err) = store::rewrite_all(&rows) {
         return json!({"ok": false, "error": err});
     }
@@ -407,30 +368,9 @@ pub fn inject_scenario(body: &Value) -> Value {
     json!({
         "ok": true,
         "injected_rows": rows.len(),
-        "data_source": "simulation:live_fdd_validation",
+        "data_source": "validation:fixture",
         "demo_only": false,
         "fdd_eval": eval,
         "proof": proof_summary(&eval, false)
-    })
-}
-
-fn make_sim_row(
-    p: &SmokeProfile,
-    start: &chrono::DateTime<Utc>,
-    minute_offset: u64,
-    phase: &str,
-) -> Value {
-    let ts = (*start + chrono::Duration::minutes(minute_offset as i64)).to_rfc3339();
-    let (oa_t, _, _, _) = simulated_values(phase).0;
-    store::make_pivot_row(store::PivotSample {
-        timestamp: &ts,
-        equipment_id: &p.equipment_id,
-        oa_t,
-        oa_h: 45.0,
-        duct_t: 55.0,
-        zn_t: 72.0,
-        source: &format!("simulation:live_fdd_validation:{phase}"),
-        source_driver: "simulation",
-        is_simulated: true,
     })
 }

@@ -30,15 +30,25 @@ const FORBIDDEN: &[&str] = &[
     "bacnet:demo-ahu",
 ];
 
+const FORBIDDEN_OT_SIM: &[&str] = &[
+    "simulated_values",
+    "simulated_priorities",
+    "bacnet_point_to_simulated",
+    "simulation_phase",
+    "simulated:local",
+    "OPENFDD_BACNET_MODE=simulated",
+    "OPENFDD_MODBUS_MODE=simulated",
+    "/api/bench/5007",
+];
+
 const ALLOWED_FILES: &[&str] = &[
     "scripts/bench_5007_long_smoke.sh",
     "docs/verification/bench-5007-long-smoke.md",
     "edge/src/validation/audit.rs",
-    "edge/src/main.rs",
     "edge/src/drivers/haystack/fixture.rs",
     "edge/src/historian/arrow_table.rs",
     "edge/src/fdd/datafusion_sql.rs",
-    "edge/src/bench/smoke.rs",
+    "edge/src/bench/validation_fixture.rs",
 ];
 
 const ALLOWED_PREFIXES: &[&str] = &[
@@ -84,6 +94,18 @@ pub fn scan_line_for_violations(rel: &str, line_no: usize, line: &str) -> Vec<Au
                 pattern: (*pat).to_string(),
                 snippet: line.trim().chars().take(120).collect(),
             });
+        }
+    }
+    if rel.starts_with("edge/src/") {
+        for pat in FORBIDDEN_OT_SIM {
+            if line.contains(pat) {
+                out.push(AuditViolation {
+                    path: PathBuf::from(rel),
+                    line: line_no,
+                    pattern: format!("ot_sim:{pat}"),
+                    snippet: line.trim().chars().take(120).collect(),
+                });
+            }
         }
     }
     if line.contains("5007") && !rel.contains("docker-compose.bacnet-live.yml") {
@@ -181,8 +203,47 @@ mod tests {
     }
 
     #[test]
+    fn flags_ot_simulated_helpers_in_production_rust() {
+        let hits = scan_line_for_violations(
+            "edge/src/drivers/bacnet.rs",
+            1,
+            "fn simulated_values(phase: &str)",
+        );
+        assert!(!hits.is_empty());
+        assert!(hits.iter().any(|h| h.pattern.starts_with("ot_sim:")));
+    }
+
+    #[test]
+    fn flags_bench_5007_api_route_in_production_rust() {
+        let hits =
+            scan_line_for_violations("edge/src/main.rs", 1, r#"("/api/bench/5007/smoke/status")"#);
+        assert!(!hits.is_empty());
+    }
+
+    #[test]
     fn allows_fixture_haystack_grid() {
         assert!(path_allowed("edge/src/drivers/haystack/fixture.rs"));
+    }
+
+    #[test]
+    fn production_ot_driver_sources_exclude_simulated_helpers() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        for rel in [
+            "src/bench/smoke.rs",
+            "src/drivers/bacnet.rs",
+            "src/drivers/modbus.rs",
+        ] {
+            let text = std::fs::read_to_string(root.join(rel)).expect("read driver source");
+            for token in FORBIDDEN_OT_SIM {
+                if token.starts_with("/api/") {
+                    continue;
+                }
+                assert!(
+                    !text.contains(token),
+                    "{rel} must not reintroduce legacy OT sim token: {token}"
+                );
+            }
+        }
     }
 
     #[test]

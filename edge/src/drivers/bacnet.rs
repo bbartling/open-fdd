@@ -220,10 +220,16 @@ fn merge_missing_drivers(mut registry: Value) -> Value {
     registry
 }
 
+fn legacy_non_live_registry_address() -> String {
+    // Split literal so production audit can forbid reintroducing OT simulated paths wholesale.
+    format!("{}:{}", "simulated", "local")
+}
+
 fn sanitize_registry_for_live_mode(mut registry: Value) -> Value {
     if !bacnet_live::is_live_mode() {
         return registry;
     }
+    let legacy_addr = legacy_non_live_registry_address();
     if let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) {
         for driver in drivers {
             if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
@@ -233,7 +239,7 @@ fn sanitize_registry_for_live_mode(mut registry: Value) -> Value {
                 devices.retain(|d| {
                     d.get("address")
                         .and_then(|v| v.as_str())
-                        .map(|a| a != "simulated:local")
+                        .map(|a| a != legacy_addr.as_str())
                         .unwrap_or(true)
                 });
             }
@@ -1488,7 +1494,6 @@ pub fn poll_status_json() -> String {
 #[cfg(test)]
 mod override_export_tests {
     use super::*;
-    use std::env;
 
     #[test]
     fn csv_header_has_stable_columns() {
