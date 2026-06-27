@@ -17,14 +17,14 @@ services:
       OPENFDD_BACNET_DEVICE_INSTANCE: ${OPENFDD_BACNET_DEVICE_INSTANCE:-599999}
       OPENFDD_BACNET_BIND: ${OPENFDD_BACNET_BIND:-}
       OPENFDD_BACNET_IFACE: ${OPENFDD_BACNET_IFACE:-}
-      OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-live}
-      OPENFDD_MODBUS_MODE: ${OPENFDD_MODBUS_MODE:-live}
       OPENFDD_MODBUS_HOST: ${OPENFDD_MODBUS_HOST:-}
       OPENFDD_MODBUS_PORT: ${OPENFDD_MODBUS_PORT:-1502}
       OPENFDD_MODBUS_UNIT_ID: ${OPENFDD_MODBUS_UNIT_ID:-1}
     ports:
       - "8080:8080"
     env_file:
+      - path: ./workspace/data.env.local
+        required: false
       - ./workspace/auth.env.local
     volumes:
       - ./workspace:/app/workspace
@@ -47,14 +47,14 @@ services:
       OPENFDD_BACNET_DEVICE_INSTANCE: ${OPENFDD_BACNET_DEVICE_INSTANCE:-599999}
       OPENFDD_BACNET_BIND: ${OPENFDD_BACNET_BIND:-}
       OPENFDD_BACNET_IFACE: ${OPENFDD_BACNET_IFACE:-}
-      OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-live}
-      OPENFDD_MODBUS_MODE: ${OPENFDD_MODBUS_MODE:-live}
       OPENFDD_MODBUS_HOST: ${OPENFDD_MODBUS_HOST:-}
       OPENFDD_MODBUS_PORT: ${OPENFDD_MODBUS_PORT:-1502}
       OPENFDD_MODBUS_UNIT_ID: ${OPENFDD_MODBUS_UNIT_ID:-1}
     expose:
       - "9091"
     env_file:
+      - path: ./workspace/data.env.local
+        required: false
       - ./workspace/auth.env.local
     volumes:
       - ./workspace:/app/workspace
@@ -77,14 +77,14 @@ services:
       OPENFDD_BACNET_DEVICE_INSTANCE: ${OPENFDD_BACNET_DEVICE_INSTANCE:-599999}
       OPENFDD_BACNET_BIND: ${OPENFDD_BACNET_BIND:-}
       OPENFDD_BACNET_IFACE: ${OPENFDD_BACNET_IFACE:-}
-      OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-live}
-      OPENFDD_MODBUS_MODE: ${OPENFDD_MODBUS_MODE:-live}
       OPENFDD_MODBUS_HOST: ${OPENFDD_MODBUS_HOST:-}
       OPENFDD_MODBUS_PORT: ${OPENFDD_MODBUS_PORT:-1502}
       OPENFDD_MODBUS_UNIT_ID: ${OPENFDD_MODBUS_UNIT_ID:-1}
     expose:
       - "9092"
     env_file:
+      - path: ./workspace/data.env.local
+        required: false
       - ./workspace/auth.env.local
     volumes:
       - ./workspace:/app/workspace
