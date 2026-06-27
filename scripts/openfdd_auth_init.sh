@@ -200,14 +200,18 @@ if [[ "$RESTART" == "true" ]]; then
   export OPENFDD_RUN_UID="${OPENFDD_RUN_UID:-$(id -u)}"
   export OPENFDD_RUN_GID="${OPENFDD_RUN_GID:-$(id -g)}"
   COMPOSE="$(openfdd_rust_resolve_compose_file "$ROOT")"
-  echo "==> Recreating openfdd-bridge to reload auth env"
+  echo "==> Recreating openfdd-bridge to reload auth env (compose: $COMPOSE)"
   if [[ -f "$COMPOSE" ]]; then
-    docker compose -f "$COMPOSE" up -d --force-recreate openfdd-bridge
+    compose_args=(-f "$COMPOSE")
+    if [[ -n "${COMPOSE_PROFILE:-}" ]]; then
+      compose_args+=(--profile "$COMPOSE_PROFILE")
+    fi
+    docker compose "${compose_args[@]}" up -d --force-recreate openfdd-bridge
   else
-    echo "WARN: no compose file found under $ROOT — recreate bridge manually" >&2
+    echo "WARN: no compose file found under $ROOT — set COMPOSE_FILE or run from ~/open-fdd" >&2
   fi
 else
-  echo "==> Recreate bridge after rotate/force:"
-  echo "    docker compose -f docker-compose.yml up -d --force-recreate openfdd-bridge"
+  echo "==> Recreate bridge after rotate/force (use the same compose file that started the stack):"
+  echo "    COMPOSE_FILE=docker-compose.yml COMPOSE_PROFILE=full-edge docker compose -f docker-compose.yml --profile full-edge up -d --force-recreate openfdd-bridge"
   echo "==> Or re-run with --restart"
 fi

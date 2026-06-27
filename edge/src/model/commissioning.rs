@@ -274,9 +274,17 @@ pub fn remove_bacnet_bindings_from_model() -> Value {
     if points_removed > 0 {
         let mut new_grid = grid;
         new_grid["rows"] = json!(kept);
-        let _ = crate::model::persist::save_haystack_grid(&new_grid);
+        if let Err(e) = crate::model::persist::save_haystack_grid(&new_grid) {
+            return json!({
+                "ok": false,
+                "error": format!("failed to persist Haystack model after BACnet clear: {e}"),
+                "points_removed": 0,
+                "equipment_removed": 0
+            });
+        }
     }
     json!({
+        "ok": true,
         "points_removed": points_removed,
         "equipment_removed": 0
     })

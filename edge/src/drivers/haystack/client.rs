@@ -155,6 +155,8 @@ impl BasicHaystackClient {
         row.set("id", Kind::Ref(HRef::from_val(point_id)));
         let mut cols = vec![HCol::new("id")];
         if release {
+            row.set("val", Kind::NA);
+            cols.push(HCol::new("val"));
             if let Some(l) = level {
                 row.set("level", Kind::Number(Number::unitless(l as f64)));
                 cols.push(HCol::new("level"));
@@ -521,8 +523,7 @@ pub fn write(cfg: &HaystackConfig, payload: &Value) -> Value {
         });
     let level = payload
         .get("level")
-        .and_then(|v| v.as_u64())
-        .map(|n| n as u8);
+        .and_then(|v| v.as_u64().filter(|n| *n <= u8::MAX as u64).map(|n| n as u8));
     let who = payload
         .get("who")
         .and_then(|v| v.as_str())

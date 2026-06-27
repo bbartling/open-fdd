@@ -19,13 +19,11 @@ Prove that readings for the same logical sensor points match when obtained via:
 ## Procedure
 
 ```bash
-# Copy and edit haystack_id placeholders first:
-cp workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml.example \
-   workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml
-
 OPENFDD_HAYSTACK_PARITY_PROFILE=workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml \
   ./scripts/openfdd_haystack_bacnet_parity.sh
 ```
+
+(`OPENFDD_HAYSTACK_PARITY_PROFILE` is **required** — copy from `.local.toml.example` and set `haystack_id` values.)
 
 1. Connect to BACnet direct using `bacnet_source_id`.
 2. Connect to Niagara nHaystack using `haystack_source_id`.

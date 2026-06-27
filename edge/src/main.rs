@@ -500,13 +500,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let payload = parse_json_body(&body);
             raw_json(&mut stream, &drivers::haystack::read_json(&payload))
         }
-        ("POST", "/api/haystack/write") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            serde_json::from_str::<Value>(&drivers::haystack::write_json(&parse_json_body(&body)))
-                .unwrap_or(json!({"ok": false})),
-        ),
+        ("POST", "/api/haystack/write") => {
+            require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {
+                serde_json::from_str::<Value>(&drivers::haystack::write_json(&parse_json_body(
+                    &body,
+                )))
+                .unwrap_or(json!({"ok": false}))
+            })
+        }
         ("POST", "/api/haystack/nav") => {
             let payload = parse_json_body(&body);
             raw_json(&mut stream, &drivers::haystack::nav_json(&payload))
@@ -686,18 +687,16 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent"],
             json!({"ok": true, "updated": "point polling settings"}),
         ),
-        ("PATCH", "/api/bacnet/driver/device/remap") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            drivers::bacnet::remap_bacnet_device_value(&parse_json_body(&body)),
-        ),
-        ("DELETE", "/api/bacnet/driver/registry") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            drivers::bacnet::clear_bacnet_registry_value(),
-        ),
+        ("PATCH", "/api/bacnet/driver/device/remap") => {
+            require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {
+                drivers::bacnet::remap_bacnet_device_value(&parse_json_body(&body))
+            })
+        }
+        ("DELETE", "/api/bacnet/driver/registry") => {
+            require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {
+                drivers::bacnet::clear_bacnet_registry_value()
+            })
+        }
         ("POST", "/api/bacnet/point-discovery") => {
             let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
             require_role(
@@ -1548,6 +1547,27 @@ fn authorize(headers: &[(String, String)]) -> Result<Principal, String> {
         .strip_prefix("Bearer ")
         .ok_or("expected Bearer token")?;
     auth::jwt::verify_token(cfg, token)
+}
+
+fn require_role_lazy<F: FnOnce() -> Value>(
+    stream: &mut TcpStream,
+    principal: &Principal,
+    roles: &[&str],
+    body_fn: F,
+) -> std::io::Result<()> {
+    if role_allowed(principal, roles) {
+        json_response(stream, body_fn())
+    } else {
+        audit::log_event(
+            "forbidden",
+            json!({"role": principal.role.clone(), "required": roles}),
+        );
+        status_json(
+            stream,
+            "403 Forbidden",
+            json!({"ok": false, "error": "insufficient role", "role": principal.role}),
+        )
+    }
 }
 
 fn require_role(

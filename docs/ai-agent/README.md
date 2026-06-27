@@ -1,6 +1,10 @@
-# AI agent guide (Rust edge)
+# AI agent guide (Rust edge + external orchestrators)
 
-How AI agents (OpenClaw, Cursor, MCP clients) assist with Open-FDD on the **3.2 Rust edge**.
+How **external** AI agents (Cursor, Codex, OpenClaw, future MCP clients) assist with Open-FDD on the **3.2 Rust edge** — without requiring built-in Ollama or MCP-RAG in the bridge container.
+
+**Architecture:** [agent/openfdd-agent-current-standing.md](../agent/openfdd-agent-current-standing.md) · [agent/openfdd-agent-architecture.md](../agent/openfdd-agent-architecture.md) · [security/agent-safety-boundaries.md](../security/agent-safety-boundaries.md)
+
+**Legacy Python/Ollama docs:** [legacy/README.md](../legacy/README.md)
 
 ## What AI can do on this stack
 

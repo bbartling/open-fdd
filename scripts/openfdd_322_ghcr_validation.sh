@@ -13,9 +13,20 @@ echo "==> GHCR manifest inspect: $IMAGE"
 docker manifest inspect "$IMAGE" >/dev/null
 echo "OK: GHCR tag $TAG published"
 
-echo "==> Edge health + version"
-curl -fsS "${BASE}/api/health" | jq -e '.ok == true'
-curl -fsS "${BASE}/api/health" | jq -r '.version // .release // "unknown"'
+echo "==> Edge health + version (expect tag prefix $TAG)"
+health="$(curl -fsS "${BASE}/api/health")"
+echo "$health" | jq -e '.ok == true' >/dev/null
+reported_version="$(echo "$health" | jq -r '.version // .release // empty')"
+reported_tag="$(echo "$health" | jq -r '.image_tag // empty')"
+if [[ -n "$reported_version" && "$reported_version" != "$TAG" && "$reported_version" != *"$TAG"* ]]; then
+  echo "ERROR: /api/health version=$reported_version expected $TAG" >&2
+  exit 1
+fi
+if [[ -n "$reported_tag" && "$reported_tag" != "$TAG" && "$reported_tag" != "latest" ]]; then
+  echo "ERROR: /api/health image_tag=$reported_tag expected $TAG" >&2
+  exit 1
+fi
+echo "OK: health version=${reported_version:-unknown} image_tag=${reported_tag:-unknown}"
 
 "$ROOT/scripts/openfdd_rust_edge_validate.sh"
 echo "GHCR validation complete for tag $TAG"

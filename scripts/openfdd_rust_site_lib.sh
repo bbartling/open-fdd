@@ -114,10 +114,8 @@ openfdd_rust_ensure_container_workspace() {
   if command -v chown >/dev/null 2>&1; then
     if [[ "$(id -u)" -eq 0 ]]; then
       chown -R "${uid}:${gid}" "$ws/reports" "$ws/logs" "$ws/data" 2>/dev/null || true
-      [[ -f "$auth" ]] && chown "${uid}:${gid}" "$auth" 2>/dev/null || true
     elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
       sudo chown -R "${uid}:${gid}" "$ws/reports" "$ws/logs" "$ws/data" 2>/dev/null || true
-      [[ -f "$auth" ]] && sudo chown "${uid}:${gid}" "$auth" 2>/dev/null || true
     else
       echo "Hint: ensure $ws/reports is writable by container uid ${uid} (sudo chown -R ${uid}:${gid} $ws/reports)" >&2
     fi

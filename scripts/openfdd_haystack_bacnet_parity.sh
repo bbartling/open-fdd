@@ -7,7 +7,11 @@ source "$ROOT/scripts/openfdd_auth_lib.sh"
 
 BASE="${OPENFDD_API_BASE:-http://127.0.0.1:8080}"
 AUTH="$ROOT/workspace/auth.env.local"
-PROFILE="${OPENFDD_HAYSTACK_PARITY_PROFILE:-$ROOT/workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml}"
+PROFILE="${OPENFDD_HAYSTACK_PARITY_PROFILE:-}"
+if [[ -z "$PROFILE" ]]; then
+  echo "ERROR: set OPENFDD_HAYSTACK_PARITY_PROFILE to your configured parity TOML (copy from local_haystack_5007_parity.local.toml.example)." >&2
+  exit 2
+fi
 RUN_TS="$(date -u +%Y%m%dT%H%M%SZ)"
 LOG_DIR="${OPENFDD_PARITY_ARTIFACT_DIR:-$ROOT/workspace/logs/haystack_bacnet_parity_${RUN_TS}}"
 mkdir -p "$LOG_DIR"
@@ -20,6 +24,10 @@ fi
 
 TOKEN="$(openfdd_auth_login_token "$BASE" "$AUTH" integrator)"
 DEVICE="$(grep -E '^device_instance' "$PROFILE" | head -1 | awk -F= '{gsub(/ /,"",$2); print $2}')"
+if [[ -z "$DEVICE" ]] || ! [[ "$DEVICE" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: profile must define numeric [bacnet] device_instance (found: '${DEVICE:-<empty>}')" >&2
+  exit 2
+fi
 TEMP_TOL="${OPENFDD_PARITY_TEMP_TOL:-1.0}"
 HUM_TOL="${OPENFDD_PARITY_HUM_TOL:-5.0}"
 

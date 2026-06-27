@@ -168,7 +168,9 @@ Example routes:
 
 ### Future service mode
 
-MCP / agent tooling is expected to become a later service mode after the core Rust edge, drivers, historian, FDD, and reports are stable.
+MCP / agent tooling is expected to become a **separate read-first sidecar** after the core Rust edge, drivers, historian, FDD, and reports are stable. **Built-in Ollama is not required** — dashboard Agent/Ollama panels are placeholders for optional local-only helpers.
+
+See [docs/agent/openfdd-agent-architecture.md](docs/agent/openfdd-agent-architecture.md) and [docs/agent/openfdd-mcp-tool-contract.md](docs/agent/openfdd-mcp-tool-contract.md).
 
 Possible future shape:
 

@@ -40,6 +40,13 @@ pub fn status_value() -> Value {
             .iter()
             .filter(|r| r.get("point").and_then(|v| v.as_str()) == Some("M"))
             .count();
+        let mut supported_ops = vec!["about", "ops", "read", "nav", "poll-once", "import"];
+        if !cfg.fixture_mode() && cfg.is_configured() {
+            let mode = cfg.auth_mode.to_ascii_lowercase();
+            if mode != "scram" && mode != "bearer" {
+                supported_ops.push("pointWrite");
+            }
+        }
         json!({
             "ok": true,
             "enabled": true,
@@ -60,7 +67,7 @@ pub fn status_value() -> Value {
             } else {
                 "not_configured"
             },
-            "supported_ops": ["about", "ops", "read", "nav", "poll-once", "import", "pointWrite"],
+            "supported_ops": supported_ops,
             "points": point_count,
             "config": cfg.redacted_summary()
         })
