@@ -10,7 +10,6 @@ import {
   idsFromFilename,
   mergeDatasets,
   numericColumns,
-  numericSeries,
   splitCsvHorizontal,
   splitCsvVertical,
   type CsvDataset,
@@ -45,8 +44,6 @@ export default function CsvWorkbenchPage() {
   const [status, setStatus] = useState("");
   const [mergeKey, setMergeKey] = useState("Date");
   const [mergeMode, setMergeMode] = useState<MergeMode>("inner");
-  const [chartX, setChartX] = useState("");
-  const [chartY, setChartY] = useState("");
   const [modelPreview, setModelPreview] = useState<ModelPreview | null>(null);
   const [columnMappings, setColumnMappings] = useState<Record<string, string>>({});
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -91,11 +88,6 @@ export default function CsvWorkbenchPage() {
     () => (merged ? numericColumns(merged.columns, merged.rows) : []),
     [merged],
   );
-
-  const chartSeries = useMemo(() => {
-    if (!merged || !chartX || !chartY) return null;
-    return numericSeries(merged.columns, merged.rows, chartX, chartY);
-  }, [merged, chartX, chartY]);
 
   const loadRecipes = useCallback(async () => {
     if (!hasToken()) return;
@@ -163,11 +155,6 @@ export default function CsvWorkbenchPage() {
       }
       setDatasets((prev) => [...prev, ...added]);
       if (added[0]?.timestampColumn) setMergeKey(added[0].timestampColumn);
-      if (added[0]?.columns.length) {
-        const nums = numericColumns(added[0].columns, added[0].rows);
-        setChartX(added[0].timestampColumn || added[0].columns[0] || "");
-        setChartY(nums[0] || added[0].columns[1] || "");
-      }
       setStatus(`Loaded ${added.length} file(s).`);
     } catch (e) {
       setError(formatApiError(e));
@@ -366,7 +353,7 @@ export default function CsvWorkbenchPage() {
     <div className="page page-wide csv-workbench-page">
       <PageHeader
         title="CSV workbench"
-        subtitle="UT3-style ingest: split, combine, preview Haystack model from filename + headers, map columns, commit, draft rules, and purge by source."
+        subtitle="Upload → preview → map columns → join/merge → commit to historian. Use Plots tab for trend charts."
       />
 
       {error ? <p className="error">{error}</p> : null}
@@ -457,6 +444,11 @@ export default function CsvWorkbenchPage() {
             <button type="button" className="secondary-btn" disabled={!!busy} onClick={() => void createRcxReport()}>
               Draft RCx PDF
             </button>
+            {numericCols.length ? (
+              <a className="secondary-btn" href="/plot">
+                Open in Plots
+              </a>
+            ) : null}
             <button type="button" className="linkish-btn" onClick={() => setDatasets([])}>
               Clear all
             </button>
@@ -652,53 +644,6 @@ export default function CsvWorkbenchPage() {
                 </tbody>
               </table>
             </div>
-          </section>
-
-          <section className="panel">
-            <h3 className="panel-title">Quick trend chart</h3>
-            <div className="form-grid">
-              <label className="field">
-                <span className="field-label">X axis</span>
-                <select value={chartX} onChange={(e) => setChartX(e.target.value)}>
-                  {merged.columns.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span className="field-label">Y axis</span>
-                <select value={chartY} onChange={(e) => setChartY(e.target.value)}>
-                  {numericCols.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            {chartSeries && chartSeries.y.length ? (
-              <div className="csv-spark-chart">
-                <svg viewBox="0 0 400 120" preserveAspectRatio="none">
-                  <polyline
-                    fill="none"
-                    stroke="var(--accent)"
-                    strokeWidth="1.5"
-                    points={chartSeries.y
-                      .map((v, i) => {
-                        const min = Math.min(...chartSeries.y);
-                        const max = Math.max(...chartSeries.y);
-                        const span = max - min || 1;
-                        const x = (i / Math.max(chartSeries.y.length - 1, 1)) * 400;
-                        const y = 110 - ((v - min) / span) * 100;
-                        return `${x},${y}`;
-                      })
-                      .join(" ")}
-                  />
-                </svg>
-              </div>
-            ) : null}
           </section>
         </>
       ) : null}

@@ -22,12 +22,20 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [{ to: "/", end: true, icon: "🏠", label: "Dashboard" }],
   },
   {
+    title: "Wiresheet",
+    items: [
+      { to: "/wiresheet", icon: "🔗", label: "Studio", protected: true },
+      { to: "/csv", icon: "📂", label: "CSV Fusion", protected: true },
+      { to: "/wiresheet/haystack", icon: "🌿", label: "Haystack model", protected: true },
+      { to: "/wiresheet/rules", icon: "⚡", label: "Rule mapping", protected: true },
+    ],
+  },
+  {
     title: "Integrations",
     items: [
       { to: "/bacnet", icon: "📡", label: "BACnet", protected: true },
       { to: "/haystack", icon: "🌿", label: "Haystack", protected: true },
       { to: "/modbus", icon: "🔌", label: "Modbus", protected: true },
-      { to: "/csv", icon: "📂", label: "CSV workbench", protected: true },
       { to: "/json-api", icon: "🌐", label: "JSON API", protected: true },
       { to: "/data-management", icon: "🗄️", label: "Data management", protected: true },
     ],
