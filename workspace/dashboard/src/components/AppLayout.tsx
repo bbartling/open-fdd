@@ -27,6 +27,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: "/bacnet", icon: "📡", label: "BACnet", protected: true },
       { to: "/haystack", icon: "🌿", label: "Haystack", protected: true },
       { to: "/modbus", icon: "🔌", label: "Modbus", protected: true },
+      { to: "/csv", icon: "📂", label: "CSV workbench", protected: true },
       { to: "/json-api", icon: "🌐", label: "JSON API", protected: true },
       { to: "/data-management", icon: "🗄️", label: "Data management", protected: true },
     ],

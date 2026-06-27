@@ -3204,3 +3204,69 @@ button.linkish {
     grid-template-columns: 1fr;
   }
 }
+
+.csv-drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  background: color-mix(in srgb, var(--panel) 92%, var(--accent) 8%);
+  margin-bottom: 1.25rem;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.csv-drop-zone-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--panel) 85%, var(--accent) 15%);
+}
+
+.csv-drop-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0 0 0.35rem;
+}
+
+.csv-drop-btn {
+  margin-top: 1rem;
+  cursor: pointer;
+}
+
+.csv-dataset-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.csv-dataset-list li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.csv-preview-table {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.csv-preview-table th,
+.csv-preview-table td {
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.csv-spark-chart svg {
+  width: 100%;
+  height: 120px;
+  background: color-mix(in srgb, var(--panel) 95%, transparent);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.linkish-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  margin-left: 0.5rem;
+  font-size: inherit;
+}

@@ -15,6 +15,7 @@ import PlotPage from "./pages/PlotPage";
 import SqlFddRulesPage from "./pages/SqlFddRulesPage";
 import LiveFddValidationPage from "./pages/LiveFddValidationPage";
 import DataManagementPage from "./pages/DataManagementPage";
+import CsvWorkbenchPage from "./pages/CsvWorkbenchPage";
 import ReportBuilderPage from "./pages/ReportBuilderPage";
 import AlgorithmsPage from "./pages/AlgorithmsPage";
 import DataExportPage from "./pages/DataExportPage";
@@ -46,6 +47,7 @@ export default function App() {
             <Route path="modbus" element={<TabErrorBoundary tab="modbus"><ModbusPage /></TabErrorBoundary>} />
             <Route path="json-api" element={<TabErrorBoundary tab="json-api"><JsonApiPage /></TabErrorBoundary>} />
             <Route path="haystack" element={<TabErrorBoundary tab="haystack"><HaystackPage /></TabErrorBoundary>} />
+            <Route path="csv" element={<TabErrorBoundary tab="csv"><CsvWorkbenchPage /></TabErrorBoundary>} />
             <Route path="data-management" element={<TabErrorBoundary tab="data-management"><DataManagementPage /></TabErrorBoundary>} />
             <Route path="reports" element={<TabErrorBoundary tab="reports"><ReportBuilderPage /></TabErrorBoundary>} />
             <Route path="agent" element={<TabErrorBoundary tab="agent"><AgentPage /></TabErrorBoundary>} />
