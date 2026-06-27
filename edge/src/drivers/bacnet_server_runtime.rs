@@ -212,7 +212,7 @@ async fn run_server() -> Result<(), String> {
     let opt_flag = Arc::new(AtomicBool::new(false));
     let _ = OPTIMIZATION_ENABLED.set(opt_flag);
 
-    let mut server = BACnetServer::bip_builder()
+    let server = BACnetServer::bip_builder()
         .interface(Ipv4Addr::UNSPECIFIED)
         .port(port)
         .broadcast_address(bcast)

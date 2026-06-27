@@ -1,16 +1,13 @@
-//! BACnet driver facade (rusty-bacnet live path + simulated CI path).
-//!
-//! Live mode (`OPENFDD_BACNET_MODE=live`) uses [rusty-bacnet](https://github.com/jscott3201/rusty-bacnet)
-//! for Who-Is/I-Am discovery, object-list walks, ReadProperty(present-value), and
-//! ReadProperty(priority-array) override scans. Simulated mode keeps deterministic
-//! data so Docker/CI runs without an OT BACnet network.
+//! BACnet driver facade — live rusty-bacnet only (no simulated OT data).
 
 use super::bacnet_live;
-use crate::validation::profile::{active_profile, bacnet_point_to_simulated_json, BacnetPointRole};
+use super::live_gate;
+use crate::validation::profile::active_profile;
 use bacnet_types::enums::ObjectType;
 use bacnet_types::primitives::PropertyValue;
-use chrono::Utc;
+use chrono::{Duration as ChronoDuration, Utc};
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -18,77 +15,16 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 
-const GENERIC_SIM_DEVICE: u32 = 42;
-
-fn simulated_device_instance() -> u32 {
+fn profile_device_instance() -> u32 {
     let p = active_profile();
     if p.device_instance > 0 {
         p.device_instance
     } else {
-        GENERIC_SIM_DEVICE
+        env::var("OPENFDD_BACNET_DISCOVER_LOW")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0)
     }
-}
-
-fn default_simulated_points() -> Vec<Value> {
-    let inst = simulated_device_instance();
-    vec![
-        json!({"device_instance":inst,"object_id":[0,1001],"name":"Outside Air Temp","kind":"sensor","unit":"°F","writable":false,"value":62.0,"haystack_id":"point:oa-t","fdd_input":"oa_t"}),
-        json!({"device_instance":inst,"object_id":[0,1002],"name":"Outside Air Humidity","kind":"sensor","unit":"%RH","writable":false,"value":45.0,"haystack_id":"point:oa-h","fdd_input":"oa_h"}),
-        json!({"device_instance":inst,"object_id":[0,1003],"name":"Discharge Air Temp","kind":"sensor","unit":"°F","writable":false,"value":55.0,"haystack_id":"point:duct-t","fdd_input":"duct_t"}),
-        json!({
-            "device_instance": inst,
-            "object_id": [1, 2001],
-            "name": "Demo Actuator",
-            "kind": "cmd",
-            "unit": "%",
-            "writable": true,
-            "commandable": true,
-            "value": 55.0,
-            "haystack_id": "point:actuator-demo",
-            "fdd_input": "actuator_demo",
-            "simulated_priorities": [{"priority": 8, "value": 55.0}]
-        }),
-    ]
-}
-
-fn profile_simulated_points() -> Vec<Value> {
-    let p = active_profile();
-    if p.bacnet_points.is_empty() {
-        return default_simulated_points();
-    }
-    p.bacnet_points
-        .iter()
-        .map(|pt: &BacnetPointRole| bacnet_point_to_simulated_json(&p, pt))
-        .collect()
-}
-
-fn profile_simulated_device() -> Value {
-    let inst = simulated_device_instance();
-    json!({
-      "device_instance": inst,
-      "name": format!("Validation Device {inst}"),
-      "address": "simulated:local",
-      "router_ip": "",
-      "mstp_network": 0,
-      "polling_enabled": true,
-      "points": profile_simulated_points()
-    })
-}
-
-fn simulated_devices_json() -> String {
-    let inst = simulated_device_instance();
-    serde_json::to_string(&vec![json!({
-        "object_identifier": {"type": "device", "instance": inst},
-        "vendor_id": 5,
-        "address": "simulated:local",
-        "label": format!("Validation Device {inst}"),
-        "protocol": "BACnet/IP"
-    })])
-    .unwrap_or_else(|_| "[]".to_string())
-}
-
-fn simulated_points_json() -> String {
-    serde_json::to_string(&profile_simulated_points()).unwrap_or_else(|_| "[]".to_string())
 }
 
 fn workspace_dir() -> PathBuf {
@@ -124,6 +60,13 @@ pub fn override_scan_interval_s() -> u64 {
         .unwrap_or(3600)
 }
 
+pub fn override_retention_years() -> u32 {
+    env::var("OFDD_OVERRIDE_CSV_RETENTION_YEARS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1)
+}
+
 pub fn operator_override_priority() -> u8 {
     env::var("OFDD_OPERATOR_OVERRIDE_PRIORITY")
         .ok()
@@ -150,9 +93,14 @@ fn now_rfc3339() -> String {
 }
 
 pub fn bacnet_config_value() -> Value {
-    let inst = simulated_device_instance();
+    let inst = profile_device_instance();
+    let mode = if bacnet_live::is_live_mode() {
+        "live"
+    } else {
+        "disabled"
+    };
     json!({
-        "mode": env::var("OPENFDD_BACNET_MODE").unwrap_or_else(|_| "live".to_string()),
+        "mode": mode,
         "iface": env::var("OPENFDD_BACNET_IFACE").unwrap_or_default(),
         "bind": env::var("OPENFDD_BACNET_BIND").unwrap_or_default(),
         "device_instance": env::var("OPENFDD_BACNET_DEVICE_INSTANCE").unwrap_or_else(|_| "599999".to_string()),
@@ -186,24 +134,8 @@ fn haystack_registry_sites() -> Value {
 }
 
 fn default_registry() -> Value {
-    let bacnet_devices = if bacnet_live::is_live_mode() {
-        json!([])
-    } else {
-        json!([profile_simulated_device()])
-    };
-    let modbus_devices = if super::modbus_live::is_live_mode() {
-        json!([])
-    } else {
-        json!([{
-          "unit_id":1,
-          "name":"Plant Modbus Gateway",
-          "address":"192.168.1.50:502",
-          "points":[
-            {"id":"modbus:tcp:1:40001","name":"CHW Plant Supply Temp","register":40001,"function":"holding_register","haystack_id":"point:chwst"},
-            {"id":"modbus:tcp:1:40002","name":"Pump Speed Command","register":40002,"function":"holding_register","haystack_id":"point:pump-speed-cmd"}
-          ]
-        }])
-    };
+    let bacnet_devices = json!([]);
+    let modbus_devices = json!([]);
     let site_id =
         crate::model::scope::active_site_id().unwrap_or_else(|| "site:unknown".to_string());
     let site_slug = site_id.trim_start_matches("site:");
@@ -423,7 +355,7 @@ fn bench_device_instance() -> u32 {
     env::var("OPENFDD_BACNET_DISCOVER_LOW")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or_else(simulated_device_instance)
+        .unwrap_or_else(profile_device_instance)
 }
 
 pub fn merge_live_discovery_into_registry(device_instance: u32) -> Value {
@@ -532,42 +464,55 @@ pub fn merge_live_discovery_into_registry(device_instance: u32) -> Value {
 }
 
 fn read_priority_array_for_point(point: &Value) -> Vec<(u8, Value)> {
-    if bacnet_live::is_live_mode() {
-        if let Some((device_instance, object_type, instance)) =
-            bacnet_live::point_object_from_json(point)
-        {
-            if let Ok(values) = bacnet_live::block_on(bacnet_live::read_priority_array(
-                device_instance,
-                object_type,
-                instance,
-            )) {
-                return values;
-            }
-        }
-    }
-
-    if let Some(arr) = point.get("simulated_priorities").and_then(|v| v.as_array()) {
-        let mut out = Vec::new();
-        for entry in arr {
-            let prio = entry.get("priority").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
-            let val = entry.get("value").cloned().unwrap_or(json!(null));
-            if prio > 0 {
-                out.push((prio, val));
-            }
-        }
-        if !out.is_empty() {
-            return out;
-        }
-    }
-
-    if point.get("commandable").and_then(|v| v.as_bool()) == Some(true)
-        || point.get("writable").and_then(|v| v.as_bool()) == Some(true)
+    if let Some((device_instance, object_type, instance)) =
+        bacnet_live::point_object_from_json(point)
     {
-        let value = point.get("value").cloned().unwrap_or(json!(55.0));
-        vec![(1, value)]
-    } else {
-        Vec::new()
+        if let Ok(values) = bacnet_live::block_on(bacnet_live::read_priority_array(
+            device_instance,
+            object_type,
+            instance,
+        )) {
+            return values;
+        }
     }
+    Vec::new()
+}
+
+fn read_priority_arrays_rpm_for_points(
+    device_instance: u32,
+    points: &[Value],
+) -> BTreeMap<String, Vec<(u8, Value)>> {
+    let mut objects = Vec::new();
+    let mut id_by_key: BTreeMap<String, String> = BTreeMap::new();
+    for point in points {
+        let Some((dev, object_type, instance)) = bacnet_live::point_object_from_json(point) else {
+            continue;
+        };
+        if dev != device_instance {
+            continue;
+        }
+        let pid = point
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        id_by_key.insert(format!("{}:{}", object_type.to_raw(), instance), pid);
+        objects.push((object_type, instance));
+    }
+    let Ok(map) = bacnet_live::block_on(bacnet_live::read_priority_arrays_rpm(
+        device_instance,
+        &objects,
+    )) else {
+        return BTreeMap::new();
+    };
+    let mut out = BTreeMap::new();
+    for ((object_type, instance), slots) in map {
+        let key = format!("{}:{}", object_type.to_raw(), instance);
+        if let Some(pid) = id_by_key.get(&key) {
+            out.insert(pid.clone(), slots);
+        }
+    }
+    out
 }
 
 fn ensure_csv_header(path: &PathBuf) {
@@ -608,6 +553,44 @@ fn append_csv(path: &PathBuf, row: &[String]) {
             .join(",");
         let _ = writeln!(file, "{line}");
     }
+    prune_csv_older_than_years(path, override_retention_years());
+}
+
+fn parse_csv_timestamp(line: &str) -> Option<chrono::DateTime<Utc>> {
+    let first = line.split(',').next()?.trim_matches('"');
+    chrono::DateTime::parse_from_rfc3339(first)
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
+}
+
+fn prune_csv_older_than_years(path: &PathBuf, years: u32) {
+    if years == 0 {
+        return;
+    }
+    let Ok(text) = fs::read_to_string(path) else {
+        return;
+    };
+    let mut lines: Vec<&str> = text.lines().collect();
+    if lines.len() <= 1 {
+        return;
+    }
+    let header = lines.remove(0);
+    let cutoff = Utc::now() - ChronoDuration::days(i64::from(years) * 365);
+    lines.retain(|line| {
+        if line.trim().is_empty() {
+            return false;
+        }
+        parse_csv_timestamp(line)
+            .map(|ts| ts >= cutoff)
+            .unwrap_or(true)
+    });
+    let mut out = String::from(header);
+    out.push('\n');
+    for line in lines {
+        out.push_str(line);
+        out.push('\n');
+    }
+    let _ = fs::write(path, out);
 }
 
 fn read_csv(path: &PathBuf) -> String {
@@ -821,12 +804,151 @@ pub fn start_hourly_override_scanner(service_mode: String) {
         return;
     }
     thread::spawn(move || loop {
-        let _ = scan_once_value();
+        if bacnet_live::is_live_mode() {
+            let _ = scan_once_value();
+        }
         thread::sleep(Duration::from_secs(override_scan_interval_s()));
     });
 }
 
+pub fn poll_interval_s() -> u64 {
+    env::var("OPENFDD_BACNET_POLL_INTERVAL_SECONDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(60)
+}
+
+pub fn start_bacnet_poll_loop(service_mode: String) {
+    if service_mode != "commission" {
+        return;
+    }
+    thread::spawn(move || loop {
+        if bacnet_live::is_live_mode() {
+            let _ = poll_cycle_value();
+        }
+        thread::sleep(Duration::from_secs(poll_interval_s()));
+    });
+}
+
+pub fn poll_cycle_value() -> Value {
+    if let Some(err) = live_gate::bacnet_live_required("poll") {
+        return err;
+    }
+    let registry = read_registry();
+    let mut updated = 0_u64;
+    let mut samples = 0_u64;
+    let mut working = registry.clone();
+    if let Some(drivers) = registry.get("drivers").and_then(|v| v.as_array()) {
+        for driver in drivers {
+            if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
+                continue;
+            }
+            if let Some(devs) = driver.get("devices").and_then(|v| v.as_array()) {
+                for device in devs {
+                    let device_instance = device
+                        .get("device_instance")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as u32;
+                    if device_instance == 0 {
+                        continue;
+                    }
+                    let points: Vec<Value> = device
+                        .get("points")
+                        .and_then(|v| v.as_array())
+                        .map(|pts| {
+                            pts.iter()
+                                .filter(|p| {
+                                    p.get("polling_enabled").and_then(|v| v.as_bool())
+                                        == Some(true)
+                                })
+                                .cloned()
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if points.is_empty() {
+                        continue;
+                    }
+                    let objects: Vec<(ObjectType, u32)> = points
+                        .iter()
+                        .filter_map(bacnet_live::point_object_from_json)
+                        .map(|(_, ot, inst)| (ot, inst))
+                        .collect();
+                    if let Ok(reads) = bacnet_live::block_on(bacnet_live::poll_present_values_rpm(
+                        device_instance,
+                        &objects,
+                    )) {
+                        samples += reads.len() as u64;
+                        updated +=
+                            apply_poll_reads(&mut working, device_instance, &reads);
+                    }
+                }
+            }
+        }
+    }
+    json!({
+        "ok": true,
+        "samples": samples,
+        "points_updated": updated,
+        "at": now_rfc3339(),
+        "method": "ReadPropertyMultiple"
+    })
+}
+
+fn apply_poll_reads(registry: &mut Value, device_instance: u32, reads: &[Value]) -> u64 {
+    let mut count = 0_u64;
+    let by_id: BTreeMap<String, Value> = reads
+        .iter()
+        .filter_map(|r| {
+            r.get("id")
+                .and_then(|v| v.as_str())
+                .map(|id| (id.to_string(), r.clone()))
+        })
+        .collect();
+    if let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) {
+        for driver in drivers {
+            if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
+                continue;
+            }
+            if let Some(devs) = driver.get_mut("devices").and_then(|v| v.as_array_mut()) {
+                for device in devs {
+                    if device.get("device_instance").and_then(|v| v.as_u64()).unwrap_or(0)
+                        as u32
+                        != device_instance
+                    {
+                        continue;
+                    }
+                    if let Some(points) = device.get_mut("points").and_then(|v| v.as_array_mut()) {
+                        for point in points {
+                            let pid = point
+                                .get("id")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            if let Some(read) = by_id.get(pid) {
+                                if let Some(pv) = read.get("present_value") {
+                                    point["present_value"] = pv.clone();
+                                    point["value"] = pv.clone();
+                                }
+                                if let Some(at) = read.get("last_read_at") {
+                                    point["last_read_at"] = at.clone();
+                                }
+                                count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if count > 0 {
+        write_registry(registry);
+    }
+    count
+}
+
 pub fn scan_once_value() -> Value {
+    if let Some(err) = live_gate::bacnet_live_required("override_scan") {
+        return err;
+    }
     let operator_priority = operator_override_priority();
     let registry = read_registry();
     let override_reg = read_override_registry();
@@ -837,7 +959,7 @@ pub fn scan_once_value() -> Value {
     let mut scan_health = "ok".to_string();
     let mut scan_error: Option<String> = None;
 
-    let scan_points: Vec<Value> = if bacnet_live::is_live_mode() {
+    let scan_points: Vec<Value> =
         match bacnet_live::block_on(bacnet_live::discover_device_points_with_fallback(
             device_instance,
         )) {
@@ -859,18 +981,9 @@ pub fn scan_once_value() -> Value {
                 scan_error = Some(err);
                 Vec::new()
             }
-        }
-    } else {
-        commandable_points(&registry)
-            .into_iter()
-            .filter(|p| {
-                p.get("device_instance")
-                    .and_then(|v| v.as_u64())
-                    .map(|d| d as u32 == device_instance)
-                    .unwrap_or(true)
-            })
-            .collect()
-    };
+        };
+
+    let pa_by_point = read_priority_arrays_rpm_for_points(device_instance, &scan_points);
 
     let scan_id = format!("bacnet-scan-{}", Utc::now().timestamp());
     let ts = now_rfc3339();
@@ -895,7 +1008,15 @@ pub fn scan_once_value() -> Value {
     ensure_csv_header(&split_other);
 
     for point in &scan_points {
-        let priority_values = read_priority_array_for_point(point);
+        let point_id = point
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let priority_values = pa_by_point
+            .get(&point_id)
+            .cloned()
+            .unwrap_or_else(|| read_priority_array_for_point(point));
         for (priority, value) in priority_values {
             let kind = override_kind(priority, operator_priority);
             if is_operator_override(priority, operator_priority) {
@@ -962,7 +1083,7 @@ pub fn scan_once_value() -> Value {
         "merge": merge,
         "commandable_point_count": scan_points.len(),
         "cadence": format!("{}s", override_scan_interval_s()),
-        "method": "ReadProperty(priority-array) for commandable BACnet points",
+        "method": "ReadPropertyMultiple(priority-array) for commandable BACnet points",
         "csv": {
             "export": export_path.display().to_string(),
             "all": export_path.display().to_string(),
@@ -1024,142 +1145,80 @@ fn collect_bacnet_points(registry: &Value) -> Vec<Value> {
 }
 
 pub fn whois_json() -> String {
-    if bacnet_live::is_live_mode() {
-        match bacnet_live::block_on(bacnet_live::whois_devices()) {
-            Ok(devices) => serde_json::to_string(&devices).unwrap_or_else(|_| "[]".to_string()),
-            Err(err) => serde_json::to_string(&json!({"ok": false, "error": err}))
-                .unwrap_or_else(|_| r#"{"ok":false}"#.to_string()),
-        }
-    } else {
-        simulated_devices_json()
+    if let Some(err) = live_gate::bacnet_live_required("whois") {
+        return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
+    }
+    match bacnet_live::block_on(bacnet_live::whois_devices()) {
+        Ok(devices) => serde_json::to_string(&devices).unwrap_or_else(|_| "[]".to_string()),
+        Err(err) => serde_json::to_string(&json!({"ok": false, "error": err}))
+            .unwrap_or_else(|_| r#"{"ok":false}"#.to_string()),
     }
 }
 
 pub fn points_json() -> String {
-    if bacnet_live::is_live_mode() {
-        serde_json::to_string(&collect_bacnet_points(&read_registry()))
-            .unwrap_or_else(|_| "[]".to_string())
-    } else {
-        simulated_points_json()
+    if let Some(err) = live_gate::bacnet_live_required("points") {
+        return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
     }
+    serde_json::to_string(&collect_bacnet_points(&read_registry()))
+        .unwrap_or_else(|_| "[]".to_string())
 }
 
 pub fn point_discovery_value(body: &Value) -> Value {
+    if let Some(err) = live_gate::bacnet_live_required("discovery") {
+        return err;
+    }
     let device_instance = body
         .get("device_instance")
         .and_then(|v| v.as_u64())
-        .unwrap_or_else(|| simulated_device_instance() as u64) as u32;
+        .unwrap_or_else(|| profile_device_instance() as u64) as u32;
 
-    if bacnet_live::is_live_mode() {
-        match bacnet_live::block_on(bacnet_live::discover_device_points_with_fallback(
-            device_instance,
-        )) {
-            Ok(points) => json!({
-                "ok": true,
-                "device_instance": device_instance,
-                "points": points,
-                "source": "rusty-bacnet"
-            }),
-            Err(err) => json!({"ok": false, "error": err}),
-        }
-    } else {
-        json!({
+    match bacnet_live::block_on(bacnet_live::discover_device_points_with_fallback(
+        device_instance,
+    )) {
+        Ok(points) => json!({
             "ok": true,
-            "status": "simulated registry loaded",
             "device_instance": device_instance,
-            "points": profile_simulated_points()
-        })
+            "points": points,
+            "source": "rusty-bacnet"
+        }),
+        Err(err) => json!({"ok": false, "error": err}),
     }
 }
 
 pub fn sync_discovery_value() -> Value {
+    if let Some(err) = live_gate::bacnet_live_required("sync_discovery") {
+        return err;
+    }
     let device_instance = bench_device_instance();
-    if bacnet_live::is_live_mode() {
-        return merge_live_discovery_into_registry(device_instance);
-    }
-
-    let points = profile_simulated_points();
-    let mut registry = read_registry();
-    registry["bacnet_config"] = bacnet_config_value();
-    if let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) {
-        for driver in drivers {
-            if driver.get("id").and_then(|v| v.as_str()).unwrap_or("") != "bacnet-ip" {
-                continue;
-            }
-            let mut devices = driver
-                .get("devices")
-                .and_then(|v| v.as_array())
-                .cloned()
-                .unwrap_or_default();
-            devices.retain(|d| {
-                d.get("device_instance")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u32
-                    != device_instance
-            });
-            let mut device = profile_simulated_device();
-            device["points"] = json!(points);
-            devices.push(device);
-            driver["devices"] = json!(devices);
-            break;
-        }
-    }
-    write_registry(&registry);
-    json!({
-        "ok": true,
-        "synced": true,
-        "device_instance": device_instance,
-        "points": points.len(),
-        "source": "simulated"
-    })
+    merge_live_discovery_into_registry(device_instance)
 }
 
 pub fn read_present_value_json(body: &Value) -> String {
-    if bacnet_live::is_live_mode() {
-        let resolved = body
-            .get("point_id")
-            .and_then(|v| v.as_str())
-            .and_then(bacnet_live::point_object_from_id)
-            .or_else(|| bacnet_live::point_object_from_json(body));
+    if let Some(err) = live_gate::bacnet_live_required("read") {
+        return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
+    }
+    let resolved = body
+        .get("point_id")
+        .and_then(|v| v.as_str())
+        .and_then(bacnet_live::point_object_from_id)
+        .or_else(|| bacnet_live::point_object_from_json(body));
 
-        if let Some((device_instance, object_type, instance)) = resolved {
-            match bacnet_live::block_on(bacnet_live::read_present_value(
-                device_instance,
-                object_type,
-                instance,
-            )) {
-                Ok(value) => {
-                    return serde_json::to_string(&value).unwrap_or_else(|_| "{}".to_string())
-                }
-                Err(err) => {
-                    return serde_json::to_string(&json!({"ok": false, "error": err}))
-                        .unwrap_or_else(|_| r#"{"ok":false}"#.to_string())
-                }
+    if let Some((device_instance, object_type, instance)) = resolved {
+        match bacnet_live::block_on(bacnet_live::read_present_value(
+            device_instance,
+            object_type,
+            instance,
+        )) {
+            Ok(value) => return serde_json::to_string(&value).unwrap_or_else(|_| "{}".to_string()),
+            Err(err) => {
+                return serde_json::to_string(&json!({"ok": false, "error": err}))
+                    .unwrap_or_else(|_| r#"{"ok":false}"#.to_string())
             }
         }
-        return serde_json::to_string(&json!({
-            "ok": false,
-            "error": "point_id or device_instance/object_id required"
-        }))
-        .unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
     }
-
-    let inst = simulated_device_instance();
-    let first = profile_simulated_points()
-        .first()
-        .cloned()
-        .unwrap_or(json!({"name":"Outside Air Temp","value":62.0}));
-    let name = first
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("Outside Air Temp");
-    let value = first.get("value").and_then(|v| v.as_f64()).unwrap_or(62.0);
     serde_json::to_string(&json!({
-        "point": name,
-        "device_instance": inst,
-        "value": value,
-        "unit": "°F",
-        "source": "bacnet-simulated"
+        "ok": false,
+        "error": "point_id or device_instance/object_id required"
     }))
     .unwrap_or_else(|_| r#"{"ok":false}"#.to_string())
 }
@@ -1217,59 +1276,106 @@ pub fn active_fault_count() -> u64 {
 }
 
 pub fn priority_array_json(body: &Value) -> String {
+    if let Some(err) = live_gate::bacnet_live_required("priority_array") {
+        return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
+    }
     if let Some(point_id) = body.get("point_id").and_then(|v| v.as_str()) {
-        if bacnet_live::is_live_mode() {
-            if let Some((device_instance, object_type, instance)) =
-                bacnet_live::point_object_from_id(point_id)
-            {
-                let point = json!({
-                    "id": point_id,
-                    "device_instance": device_instance,
-                    "object_id": [object_type.to_raw(), instance],
-                });
-                let slots: Vec<Value> = read_priority_array_for_point(&point)
-                    .into_iter()
-                    .map(|(priority, value)| {
-                        json!({
-                            "priority_level": priority,
-                            "type": if value.is_null() { "null" } else { "value" },
-                            "value": value
-                        })
+        if let Some((device_instance, object_type, instance)) =
+            bacnet_live::point_object_from_id(point_id)
+        {
+            let point = json!({
+                "id": point_id,
+                "device_instance": device_instance,
+                "object_id": [object_type.to_raw(), instance],
+            });
+            let slots: Vec<Value> = read_priority_array_for_point(&point)
+                .into_iter()
+                .map(|(priority, value)| {
+                    json!({
+                        "priority_level": priority,
+                        "type": if value.is_null() { "null" } else { "value" },
+                        "value": value
                     })
-                    .collect();
-                return serde_json::to_string(&json!({
-                    "ok": true,
-                    "point_id": point_id,
-                    "priority_array": slots
-                }))
-                .unwrap_or_else(|_| "{}".to_string());
-            }
+                })
+                .collect();
+            return serde_json::to_string(&json!({
+                "ok": true,
+                "point_id": point_id,
+                "priority_array": slots
+            }))
+            .unwrap_or_else(|_| "{}".to_string());
         }
     }
+    serde_json::to_string(&json!({"ok": false, "error": "point not found or invalid point_id"}))
+        .unwrap_or_default()
+}
 
-    let registry = read_registry();
-    let point_id = body.get("point_id").and_then(|v| v.as_str()).unwrap_or("");
-    for point in collect_bacnet_points(&registry) {
-        let id = point.get("id").and_then(|v| v.as_str()).unwrap_or("");
-        if id != point_id && point.get("point_id").and_then(|v| v.as_str()) != Some(point_id) {
+pub fn override_storage_meta() -> Value {
+    let export_path = export_csv_path();
+    json!({
+        "ok": true,
+        "retention_years": override_retention_years(),
+        "scan_interval_s": override_scan_interval_s(),
+        "export_path": export_path.display().to_string(),
+        "export_row_count": count_csv_rows(&export_path),
+        "priority8_path": csv_path("bacnet_priority8_overrides.csv").display().to_string(),
+        "non_priority8_path": csv_path("bacnet_non_priority8_overrides.csv").display().to_string(),
+        "last_scan": overrides_last_scan().get("last_scan_at").cloned().unwrap_or(json!(null))
+    })
+}
+
+pub fn override_fault_alerts() -> Vec<Value> {
+    let op_pri = operator_override_priority();
+    let scan = read_override_registry();
+    let ts = scan
+        .get("last_scan_at")
+        .or_else(|| scan.get("last_scan"))
+        .cloned()
+        .unwrap_or(json!(null));
+    let mut out = Vec::new();
+    let Some(events) = scan.get("overrides").and_then(|v| v.as_array()) else {
+        return out;
+    };
+    for ev in events {
+        let priority = ev.get("priority").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+        if priority != op_pri {
             continue;
         }
-        let slots: Vec<Value> = read_priority_array_for_point(&point)
-            .into_iter()
-            .map(|(priority, value)| {
-                json!({
-                    "priority_level": priority,
-                    "type": if value.is_null() { "null" } else { "value" },
-                    "value": value
-                })
-            })
-            .collect();
-        return serde_json::to_string(
-            &json!({"ok": true, "point_id": point_id, "priority_array": slots}),
-        )
-        .unwrap_or_else(|_| "{}".to_string());
+        let point_name = ev
+            .get("point")
+            .or_else(|| ev.get("point_name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let device_name = ev
+            .get("device_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let pid = ev
+            .get("point_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let value = ev.get("value").cloned().unwrap_or(json!(null));
+        out.push(json!({
+            "id": format!("bacnet-override-{pid}-p{priority}"),
+            "severity": "warning",
+            "title": format!("OVERRIDE {device_name} — {point_name}"),
+            "detail": format!("Operator priority {priority} write active (value {value})"),
+            "equipment_id": device_name,
+            "equipment_name": device_name,
+            "source": "bacnet_override",
+            "code": "BACNET_P8_OVERRIDE",
+            "rule_id": "bacnet_operator_override",
+            "rule_name": format!("BACnet operator override (P{priority})"),
+            "first_seen_at": ts.clone(),
+            "last_seen_at": ts.clone(),
+            "analytics": {
+                "priority": priority,
+                "point_id": pid,
+                "value": value
+            }
+        }));
     }
-    serde_json::to_string(&json!({"ok": false, "error": "point not found"})).unwrap_or_default()
+    out
 }
 
 pub fn overrides_csv() -> String {
@@ -1431,16 +1537,15 @@ mod override_export_tests {
     #[test]
     fn export_csv_row_marks_operator_override() {
         let point = json!({
-            "device_instance": 42,
-            "address": "simulated:local",
-            "device_name": "Validation Device",
-            "id": "bacnet:42:analog-output:2001",
+            "device_instance": 1001,
+            "address": "192.168.1.10:47808",
+            "device_name": "Field Device",
+            "id": "bacnet:1001:analog-output:2001",
             "name": "Demo Actuator",
             "object_id": [1, 2001],
             "unit": "%",
             "value": 55.0,
-            "commandable": true,
-            "simulated_priorities": [{"priority": 8, "value": 55.0}]
+            "commandable": true
         });
         let row = export_csv_row("2026-06-23T00:00:00Z", &point, 8, &json!(55.0), 8);
         assert_eq!(row[10], "true");
@@ -1448,15 +1553,22 @@ mod override_export_tests {
     }
 
     #[test]
-    fn simulated_priorities_from_point_metadata_not_name() {
-        let point = json!({
-            "name": "Generic AO",
-            "commandable": true,
-            "simulated_priorities": [{"priority": 8, "value": 42.0}]
+    fn prune_csv_drops_rows_older_than_retention() {
+        crate::test_support::with_temp_workspace(|_| {
+            let path = export_csv_path();
+            if let Some(parent) = path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let old = (Utc::now() - ChronoDuration::days(400)).to_rfc3339();
+            let recent = Utc::now().to_rfc3339();
+            let body = format!(
+                "{OVERRIDE_EXPORT_CSV_HEADER}\n\"{old}\",\"1\",\"a\",\"d\",\"oid\",\"n\",\"ao\",\"1\",\"8\",\"55\",\"true\",\"operator\",\"%\",\"test\"\n\"{recent}\",\"1\",\"a\",\"d\",\"oid\",\"n\",\"ao\",\"1\",\"8\",\"55\",\"true\",\"operator\",\"%\",\"test\"\n"
+            );
+            let _ = fs::write(&path, body);
+            prune_csv_older_than_years(&path, 1);
+            let kept = fs::read_to_string(&path).unwrap_or_default();
+            assert!(kept.contains(&recent));
+            assert!(!kept.contains(&old));
         });
-        let slots = read_priority_array_for_point(&point);
-        assert_eq!(slots.len(), 1);
-        assert_eq!(slots[0].0, 8);
-        assert_eq!(slots[0].1, json!(42.0));
     }
 }

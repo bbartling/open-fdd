@@ -593,6 +593,150 @@ pub async fn discover_device_points_rpm(device_instance: u32) -> Result<Vec<Valu
     Ok(points)
 }
 
+fn priority_slots_from_bytes(data: &[u8]) -> Result<Vec<(u8, Value)>, String> {
+    let items = decode_value_sequence(data)?;
+    let mut out = Vec::new();
+    for (idx, item) in items.iter().enumerate() {
+        let priority = (idx + 1) as u8;
+        if priority > 16 {
+            continue;
+        }
+        if !matches!(item, PropertyValue::Null) {
+            out.push((priority, property_value_to_json(item)));
+        }
+    }
+    Ok(out)
+}
+
+pub async fn read_priority_arrays_rpm(
+    device_instance: u32,
+    objects: &[(ObjectType, u32)],
+) -> Result<std::collections::HashMap<(ObjectType, u32), Vec<(u8, Value)>>, String> {
+    if objects.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let mut client = build_client().await.map_err(|e| e.to_string())?;
+    let (low, high) = discover_low_high();
+    client
+        .who_is(Some(low), Some(high))
+        .await
+        .map_err(|e| e.to_string())?;
+    if let Some((_, mstp_net)) = router_network() {
+        let _ = client.who_is_network(mstp_net, Some(low), Some(high)).await;
+    }
+    sleep(Duration::from_secs(2)).await;
+
+    let specs: Vec<ReadAccessSpecification> = objects
+        .iter()
+        .filter_map(|(object_type, instance)| {
+            ObjectIdentifier::new(*object_type, *instance)
+                .ok()
+                .map(|oid| ReadAccessSpecification {
+                    object_identifier: oid,
+                    list_of_property_references: vec![PropertyReference {
+                        property_identifier: PropertyIdentifier::PRIORITY_ARRAY,
+                        property_array_index: None,
+                    }],
+                })
+        })
+        .collect();
+
+    let rpm = client
+        .read_property_multiple_from_device(device_instance, specs)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut out = std::collections::HashMap::new();
+    for result in rpm.list_of_read_access_results {
+        let ot = result.object_identifier.object_type();
+        let inst = result.object_identifier.instance_number();
+        for prop in result.list_of_results {
+            if prop.error.is_some() {
+                continue;
+            }
+            let Some(bytes) = prop.property_value.as_ref() else {
+                continue;
+            };
+            if prop.property_identifier != PropertyIdentifier::PRIORITY_ARRAY {
+                continue;
+            }
+            if let Ok(slots) = priority_slots_from_bytes(bytes) {
+                out.insert((ot, inst), slots);
+            }
+        }
+    }
+    let _ = client.stop().await;
+    Ok(out)
+}
+
+pub async fn poll_present_values_rpm(
+    device_instance: u32,
+    objects: &[(ObjectType, u32)],
+) -> Result<Vec<Value>, String> {
+    if objects.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut client = build_client().await.map_err(|e| e.to_string())?;
+    let (low, high) = discover_low_high();
+    client
+        .who_is(Some(low), Some(high))
+        .await
+        .map_err(|e| e.to_string())?;
+    if let Some((_, mstp_net)) = router_network() {
+        let _ = client.who_is_network(mstp_net, Some(low), Some(high)).await;
+    }
+    sleep(Duration::from_secs(2)).await;
+
+    let specs: Vec<ReadAccessSpecification> = objects
+        .iter()
+        .filter_map(|(object_type, instance)| {
+            ObjectIdentifier::new(*object_type, *instance)
+                .ok()
+                .map(|oid| ReadAccessSpecification {
+                    object_identifier: oid,
+                    list_of_property_references: vec![PropertyReference {
+                        property_identifier: PropertyIdentifier::PRESENT_VALUE,
+                        property_array_index: None,
+                    }],
+                })
+        })
+        .collect();
+
+    let rpm = client
+        .read_property_multiple_from_device(device_instance, specs)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut samples = Vec::new();
+    let at = chrono::Utc::now().to_rfc3339();
+    for result in rpm.list_of_read_access_results {
+        let ot = result.object_identifier.object_type();
+        let inst = result.object_identifier.instance_number();
+        let mut value = Value::Null;
+        for prop in result.list_of_results {
+            if prop.error.is_some() {
+                continue;
+            }
+            let Some(bytes) = prop.property_value.as_ref() else {
+                continue;
+            };
+            if let Some(val) = decode_prop(bytes) {
+                value = property_value_to_json(&val);
+            }
+        }
+        samples.push(json!({
+            "device_instance": device_instance,
+            "object_id": [ot.to_raw(), inst],
+            "id": format!("bacnet:{}:{}:{}", device_instance, object_type_name(ot), inst),
+            "present_value": value,
+            "last_read_at": at,
+            "read_method": "ReadPropertyMultiple"
+        }));
+    }
+    let _ = client.stop().await;
+    Ok(samples)
+}
+
 pub async fn write_present_value(
     device_instance: u32,
     object_type: ObjectType,

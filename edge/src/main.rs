@@ -43,6 +43,7 @@ fn main() -> std::io::Result<()> {
     let root = env::var("FRONTEND_DIR").unwrap_or_else(|_| "/app/frontend".to_string());
     let service_mode = env::var("SERVICE_MODE").unwrap_or_else(|_| "bridge".to_string());
     drivers::bacnet::start_hourly_override_scanner(service_mode.clone());
+    drivers::bacnet::start_bacnet_poll_loop(service_mode.clone());
     drivers::bacnet_server_runtime::start_background();
     let listener = TcpListener::bind(format!("0.0.0.0:{port}"))?;
     println!("Open-FDD Rust Edge API listening on http://0.0.0.0:{port}");

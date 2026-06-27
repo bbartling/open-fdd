@@ -135,7 +135,8 @@ fn override_map() -> HashMap<String, Value> {
                 }));
             }
             entry["has_override"] = json!(true);
-            if priority == 8 {
+            let op_pri = bacnet::operator_override_priority();
+            if priority == op_pri {
                 entry["operator_override"] = json!(true);
                 entry["operator_override_value"] = ev.get("value").cloned().unwrap_or(json!(null));
             }
@@ -417,7 +418,7 @@ pub fn modbus_driver_tree_value() -> Value {
                         "function": p.get("function").cloned().unwrap_or(json!("holding_register")),
                         "present_value": p.get("value").cloned().unwrap_or(json!(null)),
                         "units": p.get("unit").cloned().unwrap_or(json!(null)),
-                        "poll_label": "simulated",
+                        "poll_label": "live",
                         "enabled": false
                     })
                 })

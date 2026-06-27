@@ -1,14 +1,10 @@
-//! Modbus driver facade (live TCP + simulated CI path).
+//! Modbus driver facade — live TCP only (rusty-modbus).
 
+use super::live_gate;
 use super::modbus_live;
 use crate::validation::profile::{active_profile, is_modbus_configured};
 use serde_json::{json, Value};
 use std::env;
-
-pub const POINTS_JSON: &str = r#"[
-  {"id":"modbus:tcp:1:40001","name":"CHW Plant Supply Temp","register":40001,"function":"holding_register","value":44.8,"unit":"°F","address":"192.168.1.50:502","unit_id":1},
-  {"id":"modbus:tcp:1:40002","name":"Pump Speed Command","register":40002,"function":"holding_register","value":62.0,"unit":"%","address":"192.168.1.50:502","unit_id":1}
-]"#;
 
 fn live_points_from_profile() -> String {
     let p = active_profile();
@@ -32,7 +28,7 @@ pub fn modbus_config_value() -> Value {
     let mode = if modbus_live::is_live_mode() {
         "live"
     } else {
-        "simulated"
+        "disabled"
     };
     let (host, port, status, message): (String, u16, &str, String) = if configured {
         (
@@ -47,7 +43,7 @@ pub fn modbus_config_value() -> Value {
             Err(msg) => (String::new(), 1502, "not_configured", msg),
         }
     } else {
-        (String::new(), 1502, "simulated", String::new())
+        (String::new(), 1502, "not_configured", "Modbus live mode required".into())
     };
     json!({
         "mode": mode,
@@ -62,80 +58,70 @@ pub fn modbus_config_value() -> Value {
 }
 
 pub fn points_json() -> String {
-    if modbus_live::is_live_mode() {
-        live_points_from_profile()
-    } else {
-        POINTS_JSON.to_string()
+    if let Some(err) = live_gate::modbus_live_required("points") {
+        return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
     }
+    live_points_from_profile()
 }
 
 pub fn scan_value() -> Value {
-    if modbus_live::is_live_mode() {
-        match modbus_live::scan_device() {
-            Ok(v) => v,
-            Err(err) => json!({"ok": false, "error": err, "config": modbus_config_value()}),
-        }
-    } else {
-        serde_json::from_str(&format!(
-            r#"{{"ok":true,"devices":[{{"unit_id":1,"address":"192.168.1.50:502","name":"Plant Modbus Gateway"}}],"points":{},"source":"simulated"}}"#,
-            POINTS_JSON
-        ))
-        .unwrap_or(json!({"ok": true, "source": "simulated"}))
+    if let Some(err) = live_gate::modbus_live_required("scan") {
+        return err;
+    }
+    match modbus_live::scan_device() {
+        Ok(v) => v,
+        Err(err) => json!({"ok": false, "error": err, "config": modbus_config_value()}),
     }
 }
 
 pub fn read_value(body: &Value) -> String {
-    if modbus_live::is_live_mode() {
-        let register = body
-            .get("register")
-            .and_then(|v| v.as_u64())
-            .map(|v| v as u16)
-            .or_else(|| {
-                body.get("point_id")
-                    .and_then(|v| v.as_str())
-                    .and_then(modbus_live::parse_point_id)
-                    .map(|(_, reg, _)| reg)
-            });
+    if let Some(err) = live_gate::modbus_live_required("read") {
+        return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
+    }
+    let register = body
+        .get("register")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u16)
+        .or_else(|| {
+            body.get("point_id")
+                .and_then(|v| v.as_str())
+                .and_then(modbus_live::parse_point_id)
+                .map(|(_, reg, _)| reg)
+        });
 
-        let function = body
-            .get("function")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .or_else(|| {
-                body.get("point_id")
-                    .and_then(|v| v.as_str())
-                    .and_then(modbus_live::parse_point_id)
-                    .map(|(_, _, func)| func)
-            })
-            .unwrap_or_else(|| "holding_register".to_string());
+    let function = body
+        .get("function")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .or_else(|| {
+            body.get("point_id")
+                .and_then(|v| v.as_str())
+                .and_then(modbus_live::parse_point_id)
+                .map(|(_, _, func)| func)
+        })
+        .unwrap_or_else(|| "holding_register".to_string());
 
-        let scale = body.get("scale").and_then(|v| v.as_f64()).unwrap_or(0.1);
-        let unit = body.get("unit").and_then(|v| v.as_str()).unwrap_or("raw");
+    let scale = body.get("scale").and_then(|v| v.as_f64()).unwrap_or(0.1);
+    let unit = body.get("unit").and_then(|v| v.as_str()).unwrap_or("raw");
 
-        if let Some(reg) = register {
-            match modbus_live::read_scaled_register(reg, &function, scale, unit) {
-                Ok(v) => return serde_json::to_string(&v).unwrap_or_else(|_| "{}".to_string()),
-                Err(err) => {
-                    return serde_json::to_string(&json!({"ok": false, "error": err}))
-                        .unwrap_or_else(|_| r#"{"ok":false}"#.to_string())
-                }
+    if let Some(reg) = register {
+        match modbus_live::read_scaled_register(reg, &function, scale, unit) {
+            Ok(v) => return serde_json::to_string(&v).unwrap_or_else(|_| "{}".to_string()),
+            Err(err) => {
+                return serde_json::to_string(&json!({"ok": false, "error": err}))
+                    .unwrap_or_else(|_| r#"{"ok":false}"#.to_string())
             }
         }
-        return serde_json::to_string(
-            &json!({"ok": false, "error": "register or point_id required"}),
-        )
-        .unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
     }
-
-    r#"{"point":"CHW Plant Supply Temp","value":44.8,"unit":"°F","source":"modbus-simulated"}"#
-        .to_string()
+    serde_json::to_string(&json!({"ok": false, "error": "register or point_id required"}))
+        .unwrap_or_else(|_| r#"{"ok":false}"#.to_string())
 }
 
 pub fn commission_status_mode() -> &'static str {
     if modbus_live::is_live_mode() {
         "online"
     } else {
-        "simulated"
+        "not_configured"
     }
 }
 
@@ -166,18 +152,19 @@ pub fn poll_status_json() -> String {
         })
         .to_string();
     }
-    if modbus_live::is_live_mode() {
-        let cfg = modbus_config_value();
-        if cfg.get("status").and_then(|v| v.as_str()) == Some("not_configured") {
-            return json!({
-                "ok": true,
-                "enabled": false,
-                "status": "not_configured",
-                "message": "Modbus not configured — set profile [modbus] or OPENFDD_MODBUS_HOST",
-                "config": cfg
-            })
-            .to_string();
-        }
+    if let Some(err) = live_gate::modbus_live_required("poll") {
+        return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
+    }
+    let cfg = modbus_config_value();
+    if cfg.get("status").and_then(|v| v.as_str()) == Some("not_configured") {
+        return json!({
+            "ok": true,
+            "enabled": false,
+            "status": "not_configured",
+            "message": "Modbus not configured — set profile [modbus] or OPENFDD_MODBUS_HOST",
+            "config": cfg
+        })
+        .to_string();
     }
     let points: Vec<Value> = serde_json::from_str(&points_json()).unwrap_or_default();
     json!({
@@ -187,7 +174,7 @@ pub fn poll_status_json() -> String {
         "status": commission_status_mode(),
         "enabled_points": points.len(),
         "samples": 0,
-        "config": modbus_config_value()
+        "config": cfg
     })
     .to_string()
 }

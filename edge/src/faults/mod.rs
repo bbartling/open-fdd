@@ -3,38 +3,94 @@
 use crate::fdd::{execution, rules};
 use crate::historian::store;
 use crate::model::scope;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 
 const CONFIRMATION_SECONDS: i64 = 300;
+const CLEAR_SNOOZE_MINUTES: i64 = 15;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ClearedEntry {
+    cleared_at: String,
+    snooze_until: String,
+}
 
 fn cleared_path() -> PathBuf {
     crate::validation::profile::workspace_dir().join("data/faults_cleared.json")
 }
 
-fn load_cleared_ids() -> HashSet<String> {
+fn load_cleared_map() -> HashMap<String, ClearedEntry> {
     let path = cleared_path();
-    let text = fs::read_to_string(path).unwrap_or_else(|_| "[]".into());
-    serde_json::from_str::<Vec<String>>(&text)
-        .unwrap_or_default()
-        .into_iter()
-        .collect()
+    let text = fs::read_to_string(&path).unwrap_or_else(|_| "{}".into());
+    if let Ok(map) = serde_json::from_str::<HashMap<String, ClearedEntry>>(&text) {
+        return map;
+    }
+    // Migrate legacy string list format.
+    if let Ok(ids) = serde_json::from_str::<Vec<String>>(&text) {
+        let now = Utc::now();
+        return ids
+            .into_iter()
+            .map(|id| {
+                let snooze = now + Duration::minutes(CLEAR_SNOOZE_MINUTES);
+                (
+                    id,
+                    ClearedEntry {
+                        cleared_at: now.to_rfc3339(),
+                        snooze_until: snooze.to_rfc3339(),
+                    },
+                )
+            })
+            .collect();
+    }
+    HashMap::new()
 }
 
-fn save_cleared_ids(ids: &HashSet<String>) -> std::io::Result<()> {
+fn save_cleared_map(map: &HashMap<String, ClearedEntry>) -> std::io::Result<()> {
     let path = cleared_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let mut list: Vec<String> = ids.iter().cloned().collect();
-    list.sort();
     fs::write(
         path,
-        serde_json::to_string_pretty(&list).unwrap_or_else(|_| "[]".into()),
+        serde_json::to_string_pretty(map).unwrap_or_else(|_| "{}".into()),
     )
+}
+
+fn prune_expired_snoozes(map: &mut HashMap<String, ClearedEntry>) {
+    let now = Utc::now();
+    map.retain(|_, entry| {
+        DateTime::parse_from_rfc3339(&entry.snooze_until)
+            .map(|t| t.with_timezone(&Utc) > now)
+            .unwrap_or(false)
+    });
+}
+
+fn load_cleared_ids() -> HashSet<String> {
+    let mut map = load_cleared_map();
+    prune_expired_snoozes(&mut map);
+    let _ = save_cleared_map(&map);
+    map.keys().cloned().collect()
+}
+
+fn save_cleared_ids(ids: &HashSet<String>) -> std::io::Result<()> {
+    let mut map = load_cleared_map();
+    prune_expired_snoozes(&mut map);
+    let now = Utc::now();
+    let snooze = now + Duration::minutes(CLEAR_SNOOZE_MINUTES);
+    for id in ids {
+        map.insert(
+            id.clone(),
+            ClearedEntry {
+                cleared_at: now.to_rfc3339(),
+                snooze_until: snooze.to_rfc3339(),
+            },
+        );
+    }
+    save_cleared_map(&map)
 }
 
 pub fn clear_fault(fault_id: &str, cleared_by: &str) -> Value {
@@ -48,7 +104,9 @@ pub fn clear_fault(fault_id: &str, cleared_by: &str) -> Value {
             "ok": true,
             "fault_id": fault_id,
             "cleared_by": cleared_by,
-            "cleared_at": Utc::now().to_rfc3339()
+            "cleared_at": Utc::now().to_rfc3339(),
+            "snooze_minutes": CLEAR_SNOOZE_MINUTES,
+            "note": "Fault hidden until snooze expires; reappears if condition persists"
         }),
         Err(e) => json!({"ok": false, "error": e.to_string()}),
     }
@@ -163,7 +221,7 @@ fn rule_for_row(row: &Value) -> Value {
 
 pub fn list_records() -> Vec<Value> {
     let cleared_ids = load_cleared_ids();
-    eval_rows()
+    let mut records: Vec<Value> = eval_rows()
         .iter()
         .enumerate()
         .filter(|(_, r)| {
@@ -178,7 +236,42 @@ pub fn list_records() -> Vec<Value> {
                 .map(|id| !is_manually_cleared(id, &cleared_ids))
                 .unwrap_or(true)
         })
-        .collect()
+        .collect();
+    for alert in crate::drivers::bacnet::override_fault_alerts() {
+        let fault_id = alert
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if fault_id.is_empty() || is_manually_cleared(&fault_id, &cleared_ids) {
+            continue;
+        }
+        records.push(json!({
+            "fault_id": fault_id,
+            "rule_id": alert.get("rule_id").cloned().unwrap_or(json!("bacnet_operator_override")),
+            "rule_name": alert.get("rule_name").cloned().unwrap_or(json!("BACnet operator override")),
+            "site_id": scope::active_site_id().unwrap_or_else(|| "site:unknown".to_string()),
+            "building_id": Value::Null,
+            "equipment_id": alert.get("equipment_id").cloned().unwrap_or(json!("unknown")),
+            "source_ids": json!(["bacnet"]),
+            "status": "confirmed",
+            "severity": alert.get("severity").cloned().unwrap_or(json!("warning")),
+            "first_seen_at": alert.get("first_seen_at").cloned().unwrap_or(json!(null)),
+            "confirmed_at": alert.get("last_seen_at").cloned().unwrap_or(json!(null)),
+            "last_seen_at": alert.get("last_seen_at").cloned().unwrap_or(json!(null)),
+            "cleared_at": Value::Null,
+            "minutes_in_fault": 0,
+            "confirmation_required_minutes": 0,
+            "input_points": json!([]),
+            "latest_values": json!({}),
+            "sql_result_ref": "bacnet_override_scan",
+            "notes": alert.get("detail").cloned().unwrap_or(json!(null)),
+            "source": "bacnet_override",
+            "title": alert.get("title").cloned().unwrap_or(json!(null)),
+            "code": alert.get("code").cloned().unwrap_or(json!(null))
+        }));
+    }
+    records
 }
 
 pub fn list_json(filter: Option<&str>) -> Value {
@@ -376,23 +469,31 @@ fn build_fault_families(records: &[Value]) -> Vec<Value> {
         if rec.get("status").and_then(|v| v.as_str()) == Some("cleared") {
             continue;
         }
-        let family = rec
-            .get("rule_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("general")
-            .to_string();
-        let analytics = fault_analytics_for_record(rec, &all_rows);
+        let source = rec.get("source").and_then(|v| v.as_str()).unwrap_or("fdd_rule");
+        let family = if source == "bacnet_override" {
+            "bacnet_overrides".to_string()
+        } else {
+            rec.get("rule_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("general")
+                .to_string()
+        };
+        let analytics = if source == "bacnet_override" {
+            rec.get("analytics").cloned().unwrap_or(json!({}))
+        } else {
+            fault_analytics_for_record(rec, &all_rows)
+        };
         by_family.entry(family).or_default().push(json!({
             "id": rec.get("fault_id").cloned().unwrap_or(Value::Null),
             "severity": rec.get("severity").cloned().unwrap_or(json!("warning")),
-            "title": rec.get("rule_name").cloned().unwrap_or(json!("Fault")),
-            "detail": rec.get("equipment_id").cloned().unwrap_or(Value::Null),
+            "title": rec.get("title").or_else(|| rec.get("rule_name")).cloned().unwrap_or(json!("Fault")),
+            "detail": rec.get("notes").or_else(|| rec.get("equipment_id")).cloned().unwrap_or(Value::Null),
             "rule_id": rec.get("rule_id").cloned().unwrap_or(Value::Null),
             "rule_name": rec.get("rule_name").cloned().unwrap_or(Value::Null),
             "equipment_id": rec.get("equipment_id").cloned().unwrap_or(Value::Null),
             "equipment_name": rec.get("equipment_id").cloned().unwrap_or(Value::Null),
-            "source": "fdd_rule",
-            "code": rec.get("rule_id").cloned().unwrap_or(Value::Null),
+            "source": source,
+            "code": rec.get("code").or_else(|| rec.get("rule_id")).cloned().unwrap_or(Value::Null),
             "first_seen_at": rec.get("first_seen_at").cloned().unwrap_or(Value::Null),
             "last_seen_at": rec.get("last_seen_at").cloned().unwrap_or(Value::Null),
             "analytics": analytics
