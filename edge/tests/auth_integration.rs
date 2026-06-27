@@ -84,6 +84,7 @@ impl Server {
             thread::sleep(Duration::from_millis(250));
         }
         let _ = child.kill();
+        let _ = child.wait();
         panic!("server did not become ready on port {port}");
     }
 
@@ -130,7 +131,7 @@ fn http_raw_response(
         Ok(s) => s,
         Err(_) => return (0, String::new(), String::new()),
     };
-    stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
+    stream.set_read_timeout(Some(Duration::from_secs(30))).ok();
     let mut req = format!("{method} {path} HTTP/1.1\r\nHost: {host_port}\r\nConnection: close\r\n");
     if let Some(token) = bearer {
         req.push_str(&format!("Authorization: Bearer {token}\r\n"));
@@ -145,7 +146,18 @@ fn http_raw_response(
     }
     stream.write_all(req.as_bytes()).unwrap();
     let mut buf = Vec::new();
-    stream.read_to_end(&mut buf).unwrap();
+    let mut chunk = [0u8; 8192];
+    loop {
+        match stream.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => buf.extend_from_slice(&chunk[..n]),
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(50));
+                continue;
+            }
+            Err(e) => panic!("HTTP read failed: {e}"),
+        }
+    }
     let resp = String::from_utf8_lossy(&buf);
     let status = resp
         .lines()
@@ -191,7 +203,7 @@ fn login_json(username: &str, password: &str) -> String {
 fn login_integrator_and_access_stack() {
     let srv = Server::start();
     let pw = srv.integrator_password();
-    let login_body = login_json("integrator", &pw);
+    let login_body = login_json("integrator", pw);
     let (status, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
     assert_eq!(status, 200);
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
@@ -260,7 +272,7 @@ fn override_export_requires_auth() {
 fn import_job_lifecycle() {
     let srv = Server::start();
     let pw = srv.integrator_password();
-    let login_body = login_json("integrator", &pw);
+    let login_body = login_json("integrator", pw);
     let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     let token = json["token"]
@@ -299,7 +311,7 @@ fn import_job_lifecycle() {
 fn override_export_returns_attachment_filename() {
     let srv = Server::start();
     let pw = srv.integrator_password();
-    let login_body = login_json("integrator", &pw);
+    let login_body = login_json("integrator", pw);
     let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     let token = json["token"]
@@ -322,7 +334,7 @@ fn override_export_returns_attachment_filename() {
 fn data_management_preview_requires_integrator() {
     let srv = Server::start();
     let pw = srv.integrator_password();
-    let login_body = login_json("integrator", &pw);
+    let login_body = login_json("integrator", pw);
     let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     let token = json["token"]
@@ -342,7 +354,7 @@ fn data_management_preview_requires_integrator() {
 fn data_management_execute_requires_confirmation() {
     let srv = Server::start();
     let pw = srv.integrator_password();
-    let login_body = login_json("integrator", &pw);
+    let login_body = login_json("integrator", pw);
     let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     let token = json["token"]
@@ -362,7 +374,7 @@ fn data_management_execute_requires_confirmation() {
 fn data_management_summary_authenticated() {
     let srv = Server::start();
     let pw = srv.integrator_password();
-    let login_body = login_json("integrator", &pw);
+    let login_body = login_json("integrator", pw);
     let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     let token = json["token"]

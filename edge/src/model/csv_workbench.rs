@@ -318,7 +318,7 @@ pub fn draft_rule(body: &Value, actor: &str) -> Value {
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
         .map(str::to_string)
-        .or_else(|| super::scope::first_equipment_id())
+        .or_else(super::scope::first_equipment_id)
         .unwrap_or_else(|| "equip:unknown".to_string());
     let fdd_input = body
         .get("fdd_input")
@@ -351,6 +351,9 @@ pub fn draft_rule(body: &Value, actor: &str) -> Value {
 }
 
 pub fn purge_source_preview(source_id: &str) -> Value {
+    if source_id.trim().is_empty() {
+        return json!({"ok": false, "error": "source_id required"});
+    }
     let historian_rows = store::load_pivot_rows().unwrap_or_default();
     let hist_matched = historian_rows
         .iter()
@@ -378,6 +381,9 @@ pub fn purge_source_preview(source_id: &str) -> Value {
 }
 
 pub fn purge_source_execute(source_id: &str, confirm: &str) -> Value {
+    if source_id.trim().is_empty() {
+        return json!({"ok": false, "error": "source_id required"});
+    }
     if confirm != "PURGE HISTORIAN DATA" {
         return json!({"ok": false, "error": "confirmation phrase required"});
     }

@@ -175,8 +175,6 @@ pub fn source_coverage() -> Value {
         } else if row.get("bacnetRef").is_some() {
             "bacnet"
         } else if row.get("modbusRef").is_some() {
-            "bacnet"
-        } else if row.get("modbusRef").is_some() {
             "modbus"
         } else if row.get("fddInput").is_some() {
             "json_api"

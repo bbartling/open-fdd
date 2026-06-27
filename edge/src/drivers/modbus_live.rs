@@ -26,9 +26,12 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
 }
 
 pub fn is_live_mode() -> bool {
-    env::var("OPENFDD_MODBUS_MODE")
-        .map(|v| !v.eq_ignore_ascii_case("simulated"))
-        .unwrap_or(true)
+    match env::var("OPENFDD_MODBUS_MODE") {
+        Ok(v) if v.eq_ignore_ascii_case("live") => true,
+        Ok(v) if v.eq_ignore_ascii_case("simulated") => false,
+        Ok(_) => false,
+        Err(_) => true,
+    }
 }
 
 pub fn host_port() -> Result<(String, u16), String> {

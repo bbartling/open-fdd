@@ -87,23 +87,6 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             json!({"ok": true, "auth_required": cfg.required}),
         );
     }
-    if method == "GET" && clean_path == "/api/building/snapshot" {
-        return json_response(&mut stream, dashboard::building_snapshot());
-    }
-    if method == "GET" {
-        match clean_path.as_str() {
-            "/api/building/status" => {
-                return json_response(&mut stream, dashboard::building_status());
-            }
-            "/api/dashboard/summary" => {
-                return json_response(&mut stream, dashboard::summary());
-            }
-            "/api/dashboard/analytics" => {
-                return json_response(&mut stream, dashboard::analytics());
-            }
-            _ => {}
-        }
-    }
     if method == "GET"
         && !clean_path.starts_with("/api/")
         && !clean_path.starts_with("/openfdd-agent/")
@@ -148,6 +131,9 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/ops/stack") => json_response(&mut stream, dashboard::stack_health()),
 
         ("GET", "/api/health/stack") => json_response(&mut stream, dashboard::stack_health()),
+        ("GET", "/api/building/snapshot") => {
+            json_response(&mut stream, dashboard::building_snapshot())
+        }
         ("GET", "/api/building/status") => json_response(&mut stream, dashboard::building_status()),
         ("GET", "/openfdd-agent/building-insight") => {
             json_response(&mut stream, dashboard::building_insight_stub())

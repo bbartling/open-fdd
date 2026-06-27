@@ -93,7 +93,7 @@ pub fn default_site_id() -> String {
     env::var("OPENFDD_SITE_ID")
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .or_else(|| crate::model::scope::active_site_id())
+        .or_else(crate::model::scope::active_site_id)
         .unwrap_or_else(|| "site:unknown".to_string())
 }
 

@@ -29,7 +29,11 @@ fn live_points_from_profile() -> String {
 pub fn modbus_config_value() -> Value {
     let profile = active_profile();
     let configured = is_modbus_configured(&profile);
-    let mode = env::var("OPENFDD_MODBUS_MODE").unwrap_or_else(|_| "live".to_string());
+    let mode = if modbus_live::is_live_mode() {
+        "live"
+    } else {
+        "simulated"
+    };
     let (host, port, status, message): (String, u16, &str, String) = if configured {
         (
             profile.modbus_host.clone(),

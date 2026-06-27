@@ -54,8 +54,8 @@ pub fn clear_fault(fault_id: &str, cleared_by: &str) -> Value {
     }
 }
 
-fn is_manually_cleared(fault_id: &str) -> bool {
-    load_cleared_ids().contains(fault_id)
+fn is_manually_cleared(fault_id: &str, cleared_ids: &HashSet<String>) -> bool {
+    cleared_ids.contains(fault_id)
 }
 
 pub fn eval_rows() -> Vec<Value> {
@@ -109,7 +109,7 @@ fn build_fault_record(row: &Value, rule: &Value, idx: usize) -> Value {
         .get("equipment_id")
         .and_then(|v| v.as_str())
         .map(str::to_string)
-        .or_else(|| scope::first_equipment_id())
+        .or_else(scope::first_equipment_id)
         .unwrap_or_else(|| "unknown".to_string());
     let site_id = scope::site_for_equipment(&equipment);
     let rule_id = rule
@@ -162,6 +162,7 @@ fn rule_for_row(row: &Value) -> Value {
 }
 
 pub fn list_records() -> Vec<Value> {
+    let cleared_ids = load_cleared_ids();
     eval_rows()
         .iter()
         .enumerate()
@@ -174,7 +175,7 @@ pub fn list_records() -> Vec<Value> {
         .filter(|rec| {
             rec.get("fault_id")
                 .and_then(|v| v.as_str())
-                .map(|id| !is_manually_cleared(id))
+                .map(|id| !is_manually_cleared(id, &cleared_ids))
                 .unwrap_or(true)
         })
         .collect()
