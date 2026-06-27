@@ -177,7 +177,11 @@ fn building_status_public_without_token() {
 #[test]
 fn model_tree_and_commissioning_export_available() {
     let srv = Server::start();
-    for path in ["/api/model/tree", "/api/model/commissioning-export", "/api/model/health"] {
+    for path in [
+        "/api/model/tree",
+        "/api/model/commissioning-export",
+        "/api/model/health",
+    ] {
         let (status, body) = srv.get(path);
         assert_eq!(status, 200, "GET {path}");
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();

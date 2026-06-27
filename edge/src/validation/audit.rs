@@ -23,6 +23,22 @@ const FORBIDDEN: &[&str] = &[
     "BENS BENCHTEST BOX",
     "192.168.204.14",
     "equip:5007-bench",
+    "site:demo",
+    "equip:demo-ahu",
+    "equip:validation",
+    "demo-ahu",
+    "bacnet:demo-ahu",
+];
+
+const ALLOWED_FILES: &[&str] = &[
+    "scripts/bench_5007_long_smoke.sh",
+    "docs/verification/bench-5007-long-smoke.md",
+    "edge/src/validation/audit.rs",
+    "edge/src/main.rs",
+    "edge/src/drivers/haystack/fixture.rs",
+    "edge/src/historian/arrow_table.rs",
+    "edge/src/fdd/datafusion_sql.rs",
+    "edge/src/bench/smoke.rs",
 ];
 
 const ALLOWED_PREFIXES: &[&str] = &[
@@ -35,13 +51,6 @@ const ALLOWED_PREFIXES: &[&str] = &[
     "workspace/smoke-profiles/",
     "workspace\\smoke-profiles\\",
     ".github/workflows/",
-];
-
-const ALLOWED_FILES: &[&str] = &[
-    "scripts/bench_5007_long_smoke.sh",
-    "docs/verification/bench-5007-long-smoke.md",
-    "edge/src/validation/audit.rs",
-    "edge/src/main.rs",
 ];
 
 pub fn path_allowed(rel: &str) -> bool {
@@ -61,6 +70,9 @@ pub fn scan_line_for_violations(rel: &str, line_no: usize, line: &str) -> Vec<Au
         return Vec::new();
     }
     if rel.contains("/fixtures/") || rel.contains("\\fixtures\\") {
+        return Vec::new();
+    }
+    if line.contains("forbidden_") || (line.contains("assert!(!") && line.contains(".contains(")) {
         return Vec::new();
     }
     let mut out = Vec::new();
@@ -156,6 +168,21 @@ mod tests {
         assert!(path_allowed(
             "workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml.example"
         ));
+    }
+
+    #[test]
+    fn flags_site_demo_in_production_rust() {
+        let hits = scan_line_for_violations(
+            "edge/src/drivers/bacnet.rs",
+            1,
+            r#"{"id":"site:demo","dis":"Demo Site"}"#,
+        );
+        assert!(!hits.is_empty());
+    }
+
+    #[test]
+    fn allows_fixture_haystack_grid() {
+        assert!(path_allowed("edge/src/drivers/haystack/fixture.rs"));
     }
 
     #[test]

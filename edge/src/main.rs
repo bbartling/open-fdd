@@ -337,6 +337,74 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent"],
             import::create_job(&parse_json_body(&body)),
         ),
+        ("POST", "/api/csv-workbench/preview") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            model::csv_workbench::preview_model(&parse_json_body(&body)),
+        ),
+        ("POST", "/api/csv-workbench/quality") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            model::csv_workbench::analyze_quality(&parse_json_body(&body)),
+        ),
+        ("GET", "/api/csv-workbench/recipes") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            model::csv_workbench::list_recipes(),
+        ),
+        ("POST", "/api/csv-workbench/recipes") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            model::csv_workbench::save_recipe(&parse_json_body(&body)),
+        ),
+        ("GET", "/api/csv-workbench/column-mappings") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            model::csv_workbench::get_column_mappings(query_param(&path, "source_id").as_deref()),
+        ),
+        ("PUT", "/api/csv-workbench/column-mappings") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            model::csv_workbench::save_column_mappings(&parse_json_body(&body)),
+        ),
+        ("POST", "/api/csv-workbench/draft-rule") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            model::csv_workbench::draft_rule(&parse_json_body(&body), principal.sub.as_str()),
+        ),
+        ("POST", "/api/csv-workbench/purge-source/preview") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            model::csv_workbench::purge_source_preview(
+                parse_json_body(&body)
+                    .get("source_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(""),
+            ),
+        ),
+        ("POST", "/api/csv-workbench/purge-source/execute") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            model::csv_workbench::purge_source_execute(
+                parse_json_body(&body)
+                    .get("source_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(""),
+                parse_json_body(&body)
+                    .get("confirm")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(""),
+            ),
+        ),
         ("POST", "/api/ops/docker/update") => require_role(
             &mut stream,
             &principal,
@@ -888,6 +956,10 @@ fn parse_json_body(body: &str) -> Value {
     serde_json::from_str(body).unwrap_or(json!({}))
 }
 
+fn site_scope_param(path: &str) -> String {
+    model::scope::resolve_site_id(query_param(path, "site_id").as_deref()).unwrap_or_default()
+}
+
 fn query_param(path: &str, key: &str) -> Option<String> {
     path.split('?').nth(1).and_then(|qs| {
         qs.split('&').find_map(|pair| {
@@ -985,14 +1057,14 @@ fn handle_fdd_wires_dynamic(
             fdd::wires::api::activate_rule(rule_id, &principal.sub, &principal.role),
         )),
         ("GET", ["api", "fdd-wires", "graphs", graph_id]) => {
-            let site = query_param(path, "site_id").unwrap_or_else(|| "site:demo".to_string());
+            let site = site_scope_param(path);
             Some(raw_json(
                 stream,
                 &fdd::wires::api::get_graph(&site, graph_id),
             ))
         }
         ("PUT", ["api", "fdd-wires", "graphs", graph_id]) => {
-            let site = query_param(path, "site_id").unwrap_or_else(|| "site:demo".to_string());
+            let site = site_scope_param(path);
             Some(require_role(
                 stream,
                 principal,
@@ -1006,7 +1078,7 @@ fn handle_fdd_wires_dynamic(
             ))
         }
         ("POST", ["api", "fdd-wires", "graphs", graph_id, "validate"]) => {
-            let site = query_param(path, "site_id").unwrap_or_else(|| "site:demo".to_string());
+            let site = site_scope_param(path);
             Some(require_role(
                 stream,
                 principal,
@@ -1015,7 +1087,7 @@ fn handle_fdd_wires_dynamic(
             ))
         }
         ("POST", ["api", "fdd-wires", "graphs", graph_id, "test"]) => {
-            let site = query_param(path, "site_id").unwrap_or_else(|| "site:demo".to_string());
+            let site = site_scope_param(path);
             Some(require_role(
                 stream,
                 principal,
@@ -1024,7 +1096,7 @@ fn handle_fdd_wires_dynamic(
             ))
         }
         ("POST", ["api", "fdd-wires", "graphs", graph_id, "approve"]) => {
-            let site = query_param(path, "site_id").unwrap_or_else(|| "site:demo".to_string());
+            let site = site_scope_param(path);
             Some(require_role(
                 stream,
                 principal,
@@ -1033,7 +1105,7 @@ fn handle_fdd_wires_dynamic(
             ))
         }
         ("POST", ["api", "fdd-wires", "graphs", graph_id, "activate"]) => {
-            let site = query_param(path, "site_id").unwrap_or_else(|| "site:demo".to_string());
+            let site = site_scope_param(path);
             Some(require_role(
                 stream,
                 principal,

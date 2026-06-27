@@ -5,39 +5,10 @@ use open_fdd_edge_prototype::fdd::execution;
 use open_fdd_edge_prototype::historian::store;
 use open_fdd_edge_prototype::import;
 use open_fdd_edge_prototype::model::{assignments, csv_import, query};
+use open_fdd_edge_prototype::test_support::with_temp_workspace;
 use serde_json::json;
 use std::fs;
-use std::path::{Path, PathBuf};
-
-fn workspace_lock() -> std::sync::MutexGuard<'static, ()> {
-    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
-    LOCK.get_or_init(|| std::sync::Mutex::new(()))
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-}
-
-fn with_workspace<F: FnOnce(&Path)>(f: F) {
-    let _guard = workspace_lock();
-    let prev = std::env::var("OPENFDD_WORKSPACE").ok();
-    let dir = std::env::temp_dir().join(format!(
-        "openfdd-mzvav-it-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos()
-    ));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
-    std::env::set_var("OPENFDD_WORKSPACE", &dir);
-    f(&dir);
-    if let Some(p) = prev {
-        std::env::set_var("OPENFDD_WORKSPACE", p);
-    } else {
-        std::env::remove_var("OPENFDD_WORKSPACE");
-    }
-    let _ = fs::remove_dir_all(&dir);
-}
+use std::path::PathBuf;
 
 fn fixture_csv() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mzvav-2-1-head.csv")
@@ -124,7 +95,7 @@ fn mzvav_csv_import_builds_model_and_historian() {
         return;
     }
     let content = fs::read_to_string(&path).expect("read csv");
-    with_workspace(|_| {
+    with_temp_workspace(|_| {
         let out = commit_csv("MZVAV-2-1.csv", &content);
         assert_eq!(out.get("ok").and_then(|v| v.as_bool()), Some(true));
         let rows = out
@@ -133,7 +104,8 @@ fn mzvav_csv_import_builds_model_and_historian() {
             .unwrap_or(0);
         assert!(rows > 100, "expected substantial row count, got {rows}");
 
-        let export = query::list_points(Some("site:mzvav-2-1"));
+        let (site_id, _, _, _) = csv_import::ids_from_filename("MZVAV-2-1.csv");
+        let export = query::list_points(Some(&site_id));
         let points = export
             .get("points")
             .and_then(|v| v.as_array())
@@ -166,7 +138,7 @@ fn mzvav_vertical_split_inner_join_commit() {
     let path = fixture_csv();
     let content = fs::read_to_string(&path).expect("read fixture");
     let (left, _right) = split_csv_vertical(&content, 9);
-    with_workspace(|_| {
+    with_temp_workspace(|_| {
         let left_out = commit_csv("mzvav-left.csv", &left);
         assert_eq!(left_out.get("ok").and_then(|v| v.as_bool()), Some(true));
         let before = store::row_count();
@@ -185,7 +157,7 @@ fn mzvav_horizontal_append_commits() {
     let path = fixture_csv();
     let content = fs::read_to_string(&path).expect("read fixture");
     let (first, second) = split_csv_horizontal(&content, 200);
-    with_workspace(|_| {
+    with_temp_workspace(|_| {
         let a = commit_csv("mzvav-part-a.csv", &first);
         let b = commit_csv("mzvav-part-b.csv", &second);
         assert_eq!(a.get("ok").and_then(|v| v.as_bool()), Some(true));
@@ -205,7 +177,7 @@ fn mzvav_fdd_eval_and_purge() {
         return;
     }
     let content = fs::read_to_string(&path).expect("read csv");
-    with_workspace(|_| {
+    with_temp_workspace(|_| {
         let out = commit_csv("MZVAV-2-1.csv", &content);
         assert_eq!(out.get("ok").and_then(|v| v.as_bool()), Some(true));
 

@@ -28,9 +28,31 @@ pub fn list_rules() -> Value {
         }
     }
     if rules.is_empty() {
-        rules.push(default_oa_rule());
+        return json!({"ok": true, "rules": [], "count": 0});
     }
-    json!({"ok": true, "rules": rules})
+    json!({"ok": true, "rules": rules, "count": rules.len()})
+}
+
+pub fn evaluable_rules() -> Vec<Value> {
+    let body = list_rules();
+    body.get("rules")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|rule| {
+            let status = rule
+                .get("review_status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            matches!(status, "active" | "approved")
+        })
+        .filter(|rule| {
+            rule.get("sql")
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| !s.trim().is_empty())
+        })
+        .collect()
 }
 
 pub fn get_rule(rule_id: &str) -> Value {
@@ -39,9 +61,6 @@ pub fn get_rule(rule_id: &str) -> Value {
         if let Ok(rule) = serde_json::from_str::<Value>(&text) {
             return json!({"ok": true, "rule": rule});
         }
-    }
-    if rule_id == "oa_temp_out_of_range" {
-        return json!({"ok": true, "rule": default_oa_rule()});
     }
     json!({"ok": false, "error": "rule not found", "rule_id": rule_id})
 }
@@ -131,24 +150,31 @@ pub fn activate_rule(rule_id: &str, actor: &str, role: &str) -> Value {
     })
 }
 
-fn default_oa_rule() -> Value {
+fn template_oa_rule() -> Value {
     json!({
         "rule_id": "oa_temp_out_of_range",
         "name": "OA Temperature Out Of Range",
         "description": "Outside air temperature below low limit or above high limit",
-        "equipment_types": ["ahu", "bench"],
+        "equipment_types": ["ahu"],
         "required_inputs": ["oa_t"],
         "optional_inputs": [],
-        "sql": "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t IS NULL THEN false WHEN oa_t < 40.0 THEN true WHEN oa_t > 110.0 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = 'equip:validation'",
+        "sql": "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t IS NULL THEN false WHEN oa_t < 40.0 THEN true WHEN oa_t > 110.0 THEN true ELSE false END AS fault_raw FROM telemetry_pivot",
         "builder_config": {"input":"oa_t","operator":"range","low":40,"high":110},
         "confirmation_seconds": 300,
         "clear_behavior": "immediate",
         "severity": "medium",
         "output_fault_code": "OA_TEMP_OUT_OF_RANGE",
         "source": "human_created",
-        "review_status": "approved",
+        "review_status": "draft",
         "sql_mode": "builder"
     })
+}
+
+pub fn rule_template(rule_id: &str) -> Value {
+    if rule_id == "oa_temp_out_of_range" {
+        return json!({"ok": true, "rule": template_oa_rule(), "template": true});
+    }
+    json!({"ok": false, "error": "template not found", "rule_id": rule_id})
 }
 
 fn workspace_dir() -> PathBuf {
@@ -164,10 +190,25 @@ fn ensure_dirs() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::with_temp_workspace;
 
     #[test]
     fn agent_can_activate_rules() {
-        let out = activate_rule("oa_temp_out_of_range", "agent", "agent");
-        assert_eq!(out["ok"].as_bool(), Some(true));
+        with_temp_workspace(|_| {
+            let rule = template_oa_rule();
+            let mut approved = rule.clone();
+            approved["review_status"] = json!("approved");
+            let _ = save_rule(&approved, "integrator");
+            let out = activate_rule("oa_temp_out_of_range", "agent", "agent");
+            assert_eq!(out["ok"].as_bool(), Some(true));
+        });
+    }
+
+    #[test]
+    fn empty_rules_when_none_persisted() {
+        with_temp_workspace(|_| {
+            let body = list_rules();
+            assert_eq!(body["count"].as_u64(), Some(0));
+        });
     }
 }

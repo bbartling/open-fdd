@@ -94,7 +94,7 @@ fn infer_unit(slug: &str) -> &'static str {
     }
 }
 
-fn pivot_alias(slug: &str) -> Option<&'static str> {
+pub fn pivot_alias(slug: &str) -> Option<&'static str> {
     match slug {
         "oa_t" | "oat" | "outside_air_temp" | "outside_air_temperature" | "outdoor_air_temp" => {
             Some("oa_t")
@@ -177,7 +177,12 @@ fn merge_assignment_points(existing: &[Value], incoming: &[Value]) -> Vec<Value>
     by_id.into_values().collect()
 }
 
-pub fn import_from_csv_commit(headers: &[String], filename: &str, job_id: &str) -> Value {
+pub fn import_from_csv_commit(
+    headers: &[String],
+    filename: &str,
+    job_id: &str,
+    column_mappings: Option<&HashMap<String, String>>,
+) -> Value {
     let (site_id, equip_id, source_id, display_name) = ids_from_filename(filename);
     let ts_idx = find_timestamp_column(headers);
     let mut value_headers: Vec<(String, String)> = Vec::new();
@@ -221,6 +226,11 @@ pub fn import_from_csv_commit(headers: &[String], filename: &str, job_id: &str) 
     let base = slug_from_filename(filename);
     let mut assignment_points: Vec<Value> = Vec::new();
     for (header, slug) in &value_headers {
+        let fdd_input = column_mappings
+            .and_then(|m| m.get(header.as_str()))
+            .cloned()
+            .or_else(|| pivot_alias(slug).map(str::to_string))
+            .unwrap_or_else(|| slug.clone());
         let point_id = format!("point:{base}-{slug}");
         rows.push(json!({
             "id": point_id,
@@ -231,7 +241,7 @@ pub fn import_from_csv_commit(headers: &[String], filename: &str, job_id: &str) 
             "unit": infer_unit(slug),
             "equipRef": equip_id,
             "sourceRef": source_id,
-            "fddInput": slug,
+            "fddInput": fdd_input,
             "csvRef": format!("csv:{source_id}:{slug}")
         }));
         assignment_points.push(json!({
@@ -249,7 +259,8 @@ pub fn import_from_csv_commit(headers: &[String], filename: &str, job_id: &str) 
             "external_refs": [{
                 "system": "csv",
                 "ref": format!("{}/{header}", filename.rsplit(['/', '\\']).next().unwrap_or(filename))
-            }]
+            }],
+            "fdd_input": fdd_input
         }));
     }
 

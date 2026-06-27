@@ -164,6 +164,25 @@ pub fn bacnet_config_value() -> Value {
     })
 }
 
+fn haystack_registry_sites() -> Value {
+    let mut sites = Vec::new();
+    for row in crate::model::query::haystack_rows() {
+        if row.get("site").and_then(|v| v.as_str()) == Some("M") {
+            sites.push(json!({
+                "id": row.get("id").cloned().unwrap_or(Value::Null),
+                "dis": row.get("dis").cloned().unwrap_or(Value::Null)
+            }));
+        } else if row.get("equip").and_then(|v| v.as_str()) == Some("M") {
+            sites.push(json!({
+                "id": row.get("id").cloned().unwrap_or(Value::Null),
+                "dis": row.get("dis").cloned().unwrap_or(Value::Null),
+                "siteRef": row.get("siteRef").cloned().unwrap_or(Value::Null)
+            }));
+        }
+    }
+    json!(sites)
+}
+
 fn default_registry() -> Value {
     let bacnet_devices = if bacnet_live::is_live_mode() {
         json!([])
@@ -183,9 +202,12 @@ fn default_registry() -> Value {
           ]
         }])
     };
+    let site_id =
+        crate::model::scope::active_site_id().unwrap_or_else(|| "site:unknown".to_string());
+    let site_slug = site_id.trim_start_matches("site:");
     json!({
-      "site_id":"demo",
-      "building_id":"rust-edge-demo",
+      "site_id": site_slug,
+      "building_id": format!("{site_slug}-main"),
       "bacnet_config": bacnet_config_value(),
       "drivers":[
         {
@@ -218,10 +240,7 @@ fn default_registry() -> Value {
           "label":"Haystack Gateway",
           "status":"online",
           "enabled":true,
-          "sites":[
-            {"id":"site:demo","dis":"Demo Site"},
-            {"id": format!("equip:{}", active_profile().equipment_id.trim_start_matches("equip:")), "dis": format!("Equipment {}", active_profile().equipment_id), "siteRef":"site:demo"}
-          ],
+          "sites": haystack_registry_sites(),
           "note":"Niagara-style station integration is represented through Project Haystack read/nav/ops instead of custom Niagara WebSockets."
         }
       ]
@@ -1327,25 +1346,24 @@ mod override_export_tests {
 
     #[test]
     fn registry_roundtrip_persists_scan_state() {
-        let tmp = env::temp_dir().join(format!("openfdd-bacnet-override-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&tmp);
-        env::set_var("OPENFDD_WORKSPACE", &tmp);
-        let sample = json!({
-            "last_scan_at": "2026-06-23T00:00:00Z",
-            "last_scanned_device": 42,
-            "next_device_instance": 42,
-            "device_count": 1,
-            "operator_priority": 8,
-            "export_row_count": 2,
-            "scan_health": "ok",
-            "summary": {"priority8": 1, "non_priority8": 1, "total": 2}
+        crate::test_support::with_temp_workspace(|tmp| {
+            let sample = json!({
+                "last_scan_at": "2026-06-23T00:00:00Z",
+                "last_scanned_device": 42,
+                "next_device_instance": 42,
+                "device_count": 1,
+                "operator_priority": 8,
+                "export_row_count": 2,
+                "scan_health": "ok",
+                "summary": {"priority8": 1, "non_priority8": 1, "total": 2}
+            });
+            write_override_registry(&sample);
+            let loaded = read_override_registry();
+            assert_eq!(loaded["last_scanned_device"], 42);
+            assert_eq!(loaded["export_row_count"], 2);
+            assert!(override_registry_path().starts_with(tmp));
+            assert!(override_registry_path().exists());
         });
-        write_override_registry(&sample);
-        let loaded = read_override_registry();
-        assert_eq!(loaded["last_scanned_device"], 42);
-        assert_eq!(loaded["export_row_count"], 2);
-        assert!(override_registry_path().exists());
-        let _ = fs::remove_dir_all(&tmp);
     }
 
     #[test]

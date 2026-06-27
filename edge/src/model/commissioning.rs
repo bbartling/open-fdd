@@ -34,12 +34,26 @@ pub fn commissioning_export_json() -> Value {
     let site_id = sites_body
         .get("active_site_id")
         .and_then(|v| v.as_str())
-        .unwrap_or("site:demo");
-    let equipment = query::list_equipment(site_id);
-    let points = query::list_points(Some(site_id));
+        .map(str::to_string)
+        .or_else(|| {
+            sites_body
+                .get("sites")
+                .and_then(|v| v.as_array())
+                .and_then(|a| a.first())
+                .and_then(|s| s.get("site_id").and_then(|v| v.as_str()))
+                .map(str::to_string)
+        });
+    let equipment = site_id
+        .as_deref()
+        .map(query::list_equipment)
+        .unwrap_or_else(|| json!({"ok": true, "equipment": [], "count": 0}));
+    let points = site_id
+        .as_deref()
+        .map(|s| query::list_points(Some(s)))
+        .unwrap_or_else(|| json!({"ok": true, "points": [], "count": 0}));
     let assignments = super::assignments::load_assignments_value();
-    let fdd_rules = assignments
-        .get("fault_equation_bindings")
+    let fdd_rules = crate::fdd::rules::list_rules()
+        .get("rules")
         .cloned()
         .unwrap_or(json!([]));
     json!({
@@ -50,7 +64,8 @@ pub fn commissioning_export_json() -> Value {
         "equipment": equipment.get("equipment").cloned().unwrap_or(json!([])),
         "points": points.get("points").cloned().unwrap_or(json!([])),
         "fdd_rules": fdd_rules,
-        "assignments": assignments.get("points").cloned().unwrap_or(json!([]))
+        "assignments": assignments.get("points").cloned().unwrap_or(json!([])),
+        "fault_equation_bindings": assignments.get("fault_equation_bindings").cloned().unwrap_or(json!([]))
     })
 }
 
@@ -70,7 +85,7 @@ pub fn import_commissioning(body: &Value) -> Value {
                 .get("site_id")
                 .or_else(|| site.get("id"))
                 .and_then(|v| v.as_str())
-                .unwrap_or("site:demo");
+                .unwrap_or("site:unknown");
             let name = site
                 .get("name")
                 .or_else(|| site.get("dis"))
@@ -89,7 +104,7 @@ pub fn import_commissioning(body: &Value) -> Value {
                 "id": id,
                 "dis": eq.get("name").or_else(|| eq.get("dis")).cloned().unwrap_or(json!(id)),
                 "equip": "M",
-                "siteRef": eq.get("site_id").cloned().unwrap_or(json!("site:demo"))
+                "siteRef": eq.get("site_id").cloned().unwrap_or(Value::Null)
             }));
         }
     }
@@ -117,14 +132,37 @@ pub fn import_commissioning(body: &Value) -> Value {
         "rows": rows
     });
     match persist::save_haystack_grid(&grid) {
-        Ok(path) => json!({
-            "ok": true,
-            "sites": payload.get("sites").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
-            "equipment": payload.get("equipment").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
-            "points": payload.get("points").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
-            "fdd_rules_updated": payload.get("fdd_rules").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
-            "path": path.display().to_string()
-        }),
+        Ok(path) => {
+            let mut assignments_updated = 0usize;
+            if let Some(pts) = payload.get("assignments").and_then(|v| v.as_array()) {
+                let mut current = super::assignments::load_assignments_value();
+                current["points"] = json!(pts);
+                if let Some(fdd) = payload.get("fdd_rules") {
+                    current["fault_equation_bindings"] = fdd.clone();
+                }
+                let _ = super::assignments::save_assignments_value(&current);
+                assignments_updated = pts.len();
+            } else if payload.get("fdd_rules").is_some() {
+                let mut current = super::assignments::load_assignments_value();
+                current["fault_equation_bindings"] =
+                    payload.get("fdd_rules").cloned().unwrap_or(json!([]));
+                let _ = super::assignments::save_assignments_value(&current);
+            }
+            if let Some(rules_arr) = payload.get("fdd_rules").and_then(|v| v.as_array()) {
+                for rule in rules_arr {
+                    let _ = crate::fdd::rules::save_rule(rule, "commissioning-import");
+                }
+            }
+            json!({
+                "ok": true,
+                "sites": payload.get("sites").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
+                "equipment": payload.get("equipment").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
+                "points": payload.get("points").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
+                "fdd_rules_updated": payload.get("fdd_rules").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
+                "assignments_updated": assignments_updated,
+                "path": path.display().to_string()
+            })
+        }
         Err(e) => json!({"ok": false, "error": e.to_string()}),
     }
 }
@@ -183,7 +221,7 @@ pub fn bacnet_sync_status_json() -> Value {
         .count();
     let extra = model_refs
         .iter()
-        .filter(|r| !driver_ids.iter().any(|d| r.contains(d.as_str())))
+        .filter(|r| !driver_ids.contains(r.as_str()))
         .count();
     let ttl = ttl_path();
     json!({
@@ -279,6 +317,36 @@ pub fn sync_ttl_json() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fdd::rules;
+    use crate::test_support::with_temp_workspace;
+
+    #[test]
+    fn commissioning_export_import_roundtrip_rules() {
+        with_temp_workspace(|_| {
+            let export = super::commissioning_export_json();
+            assert_eq!(export.get("ok").and_then(|v| v.as_bool()), Some(true));
+            let mut payload = export.clone();
+            payload["points"] = json!([{
+                "point_id": "point:test-oa",
+                "name": "OAT",
+                "equip_ref": "equip:test-1",
+                "fdd_input": "oa_t"
+            }]);
+            payload["fdd_rules"] = json!([{
+                "rule_id": "test_rule_roundtrip",
+                "name": "Test",
+                "sql": "SELECT timestamp, equipment_id, oa_t, false AS fault_raw FROM telemetry_pivot",
+                "review_status": "draft"
+            }]);
+            let imported = super::import_commissioning(&json!({"payload": payload}));
+            assert_eq!(imported.get("ok").and_then(|v| v.as_bool()), Some(true));
+            let listed = rules::list_rules();
+            assert!(listed
+                .get("rules")
+                .and_then(|v| v.as_array())
+                .is_some_and(|a| !a.is_empty()));
+        });
+    }
 
     #[test]
     fn tree_and_export_shapes() {

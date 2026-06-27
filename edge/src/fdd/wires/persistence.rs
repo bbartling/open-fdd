@@ -90,7 +90,11 @@ pub fn write_assignments(site_id: &str, doc: &Value) -> Result<PathBuf, String> 
 }
 
 pub fn default_site_id() -> String {
-    env::var("OPENFDD_SITE_ID").unwrap_or_else(|_| "site:demo".to_string())
+    env::var("OPENFDD_SITE_ID")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| crate::model::scope::active_site_id())
+        .unwrap_or_else(|| "site:unknown".to_string())
 }
 
 fn read_json_file(path: &Path) -> Option<Value> {

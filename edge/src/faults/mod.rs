@@ -2,13 +2,13 @@
 
 use crate::fdd::{execution, rules};
 use crate::historian::store;
+use crate::model::scope;
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 
-const DEFAULT_SQL: &str = "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t IS NULL THEN false WHEN oa_t < 40.0 OR oa_t > 110.0 THEN true ELSE false END AS raw_fault FROM telemetry_pivot";
 const CONFIRMATION_SECONDS: i64 = 300;
 
 fn cleared_path() -> PathBuf {
@@ -59,17 +59,35 @@ fn is_manually_cleared(fault_id: &str) -> bool {
 }
 
 pub fn eval_rows() -> Vec<Value> {
-    let eval =
-        execution::run_rule_sql_from_historian(DEFAULT_SQL, CONFIRMATION_SECONDS, &json!({}));
-    eval.get("rows")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default()
+    let mut out = Vec::new();
+    for rule in rules::evaluable_rules() {
+        let sql = rule.get("sql").and_then(|v| v.as_str()).unwrap_or("");
+        let confirmation = rule
+            .get("confirmation_seconds")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(CONFIRMATION_SECONDS);
+        let eval = execution::run_rule_sql_from_historian(sql, confirmation, &json!({}));
+        if eval.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+            continue;
+        }
+        let Some(rows) = eval.get("rows").and_then(|v| v.as_array()) else {
+            continue;
+        };
+        for row in rows {
+            let mut tagged = row.clone();
+            if let Some(obj) = tagged.as_object_mut() {
+                obj.entry("_rule".to_string()).or_insert(rule.clone());
+            }
+            out.push(tagged);
+        }
+    }
+    out
 }
 
 fn build_fault_record(row: &Value, rule: &Value, idx: usize) -> Value {
     let raw = row
         .get("raw_fault")
+        .or_else(|| row.get("fault_raw"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
     let confirmed = row
@@ -90,23 +108,38 @@ fn build_fault_record(row: &Value, rule: &Value, idx: usize) -> Value {
     let equipment = row
         .get("equipment_id")
         .and_then(|v| v.as_str())
-        .unwrap_or("equip:validation");
+        .map(str::to_string)
+        .or_else(|| scope::first_equipment_id())
+        .unwrap_or_else(|| "unknown".to_string());
+    let site_id = scope::site_for_equipment(&equipment);
     let rule_id = rule
         .get("rule_id")
         .and_then(|v| v.as_str())
-        .unwrap_or("oa_temp_out_of_range");
+        .unwrap_or("unknown_rule");
     let rule_name = rule
-        .get("rule_name")
+        .get("name")
+        .or_else(|| rule.get("rule_name"))
         .and_then(|v| v.as_str())
-        .unwrap_or("OA Temperature Out Of Range");
+        .unwrap_or(rule_id);
+    let inputs = scope::required_inputs_for_rule(rule);
+    let source_ids = scope::source_protocols_for_equipment(&equipment);
+    let mut latest_values = json!({});
+    if let Some(obj) = latest_values.as_object_mut() {
+        for input in &inputs {
+            obj.insert(
+                input.clone(),
+                row.get(input).cloned().unwrap_or(Value::Null),
+            );
+        }
+    }
     json!({
         "fault_id": format!("fault-{rule_id}-{equipment}-{idx}"),
         "rule_id": rule_id,
         "rule_name": rule_name,
-        "site_id": "site:demo",
-        "building_id": "building:main",
+        "site_id": site_id,
+        "building_id": Value::Null,
         "equipment_id": equipment,
-        "source_ids": ["bacnet"],
+        "source_ids": source_ids,
         "status": status,
         "severity": rule.get("severity").cloned().unwrap_or(json!("warning")),
         "first_seen_at": ts,
@@ -115,27 +148,29 @@ fn build_fault_record(row: &Value, rule: &Value, idx: usize) -> Value {
         "cleared_at": if cleared { json!(ts) } else { Value::Null },
         "minutes_in_fault": row.get("minutes_in_fault").cloned().unwrap_or(json!(0)),
         "confirmation_required_minutes": row.get("confirmation_required_minutes").cloned().unwrap_or(json!(5)),
-        "input_points": ["oa_t"],
-        "latest_values": {"oa_t": row.get("oa_t").cloned().unwrap_or(Value::Null)},
+        "input_points": inputs,
+        "latest_values": latest_values,
         "sql_result_ref": "telemetry_pivot",
         "notes": Value::Null
     })
 }
 
-fn default_rule() -> Value {
-    rules::get_rule("oa_temp_out_of_range")["rule"].clone()
+fn rule_for_row(row: &Value) -> Value {
+    row.get("_rule").cloned().unwrap_or_else(
+        || json!({"rule_id": "unknown", "name": "Unknown rule", "required_inputs": []}),
+    )
 }
 
 pub fn list_records() -> Vec<Value> {
-    let rule = default_rule();
     eval_rows()
         .iter()
         .enumerate()
         .filter(|(_, r)| {
             r.get("raw_fault").and_then(|v| v.as_bool()) == Some(true)
                 || r.get("confirmed_fault").and_then(|v| v.as_bool()) == Some(true)
+                || r.get("fault_raw").and_then(|v| v.as_bool()) == Some(true)
         })
-        .map(|(i, r)| build_fault_record(r, &rule, i))
+        .map(|(i, r)| build_fault_record(r, &rule_for_row(r), i))
         .filter(|rec| {
             rec.get("fault_id")
                 .and_then(|v| v.as_str())
@@ -432,19 +467,20 @@ pub fn top_faulted_equipment() -> Value {
 }
 
 pub fn rule_health() -> Value {
-    let rules_body = rules::list_rules();
-    let rules_arr = rules_body
-        .get("rules")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
-    let eval =
-        execution::run_rule_sql_from_historian(DEFAULT_SQL, CONFIRMATION_SECONDS, &json!({}));
+    let rules_arr = rules::evaluable_rules();
+    let eval = rules_arr.first().map(|rule| {
+        let sql = rule.get("sql").and_then(|v| v.as_str()).unwrap_or("");
+        let confirmation = rule
+            .get("confirmation_seconds")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(CONFIRMATION_SECONDS);
+        execution::run_rule_sql_from_historian(sql, confirmation, &json!({}))
+    });
     json!({
         "ok": true,
         "rule_count": rules_arr.len(),
-        "datafusion_ok": eval.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
-        "last_error": eval.get("error").cloned().unwrap_or(Value::Null)
+        "datafusion_ok": eval.as_ref().and_then(|e| e.get("ok").and_then(|v| v.as_bool())).unwrap_or(false),
+        "last_error": eval.and_then(|e| e.get("error").cloned()).unwrap_or(Value::Null)
     })
 }
 
@@ -480,8 +516,8 @@ pub fn tree_json() -> Value {
 }
 
 pub fn applicable_json(site_id: Option<&str>) -> Value {
-    let sid = site_id.unwrap_or("site:demo");
-    let equips = crate::model::query::list_equips(Some(sid));
+    let sid = scope::resolve_site_id(site_id);
+    let equips = crate::model::query::list_equips(sid.as_deref());
     let equipment: Vec<Value> = equips
         .get("equips")
         .and_then(|v| v.as_array())
@@ -503,13 +539,7 @@ pub fn applicable_json(site_id: Option<&str>) -> Value {
         "hidden_families": [],
         "family_equipment": {"ahu": equipment},
         "unmatched_equipment": [],
-        "assigned_rules": [{
-            "rule_id": "oa_temp_out_of_range",
-            "rule_name": "OA Temperature Out Of Range",
-            "fault_code": "OAT_OUT_OF_RANGE",
-            "family": "ahu",
-            "severity": "warning"
-        }],
+        "assigned_rules": rules::evaluable_rules(),
         "families": catalog_json()["families"].clone()
     })
 }
@@ -517,7 +547,7 @@ pub fn applicable_json(site_id: Option<&str>) -> Value {
 pub fn validate_scope_json(site_id: Option<&str>) -> Value {
     json!({
         "ok": true,
-        "site_id": site_id.unwrap_or("site:demo"),
+        "site_id": scope::resolve_site_id(site_id),
         "validation": "Haystack model scope validated locally (Ollama optional). SPARQL optional.",
         "ollama_error": Value::Null
     })

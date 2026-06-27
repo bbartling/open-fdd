@@ -3,13 +3,13 @@
 use crate::fdd::execution;
 use crate::fdd::rules;
 use crate::historian::store;
+use crate::model::scope;
 use chrono::{DateTime, Local, Utc};
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::env;
 use std::fs;
 
-const DEFAULT_EQUIPMENT: &str = "equip:validation";
 const CONFIRMATION_SECONDS: i64 = 300;
 
 pub const VALIDATION_RUNS_CSV_HEADER: &str = "timestamp_utc,sample_index,api_health_ok,fdd_sql_ok,smoke_device_instance,expected_phase,raw_fault_count,confirmed_fault_count,data_source,demo_only,artifact_dir";
@@ -23,15 +23,27 @@ pub const MODEL_POINTS_CSV_HEADER: &str = "site_id,building_id,equipment_id,equi
 pub const RULES_CSV_HEADER: &str = "rule_id,rule_name,severity,review_status,confirmation_seconds,clear_behavior,required_inputs,optional_inputs,sql,data_source_label";
 
 fn fdd_eval_from_historian() -> Value {
-    let sql = "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t IS NULL THEN false WHEN oa_t < 40.0 OR oa_t > 110.0 THEN true ELSE false END AS raw_fault FROM telemetry_pivot";
-    execution::run_rule_sql_from_historian(sql, CONFIRMATION_SECONDS, &json!({}))
+    let Some(rule) = rules::evaluable_rules().into_iter().next() else {
+        return json!({"ok": true, "rows": [], "row_count": 0});
+    };
+    let sql = rule.get("sql").and_then(|v| v.as_str()).unwrap_or("");
+    let confirmation = rule
+        .get("confirmation_seconds")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(CONFIRMATION_SECONDS);
+    execution::run_rule_sql_from_historian(sql, confirmation, &json!({}))
 }
 
 fn default_equipment(rows: &[Value]) -> String {
     rows.first()
         .and_then(|r| r.get("equipment_id").and_then(|v| v.as_str()))
-        .unwrap_or(DEFAULT_EQUIPMENT)
-        .to_string()
+        .map(str::to_string)
+        .or_else(scope::first_equipment_id)
+        .unwrap_or_default()
+}
+
+fn default_site() -> String {
+    scope::active_site_id().unwrap_or_default()
 }
 
 #[derive(Default, Clone)]
@@ -180,7 +192,7 @@ pub fn meta_json() -> Value {
             }
         ],
         "filters": {
-            "sites": ["site:demo"],
+            "sites": scope::active_site_id().into_iter().collect::<Vec<_>>(),
             "buildings": ["building:main"],
             "protocols": list_protocols(&historian_rows),
             "equipment": list_equipment(&historian_rows)
@@ -235,7 +247,9 @@ fn list_equipment(rows: &[Value]) -> Vec<String> {
             set.insert(e.to_string());
         }
     }
-    set.insert(DEFAULT_EQUIPMENT.into());
+    if let Some(e) = scope::first_equipment_id() {
+        set.insert(e);
+    }
     set.into_iter().collect()
 }
 
@@ -253,7 +267,12 @@ pub fn historian_csv(query: &ExportQuery) -> String {
     let path = store::pivot_jsonl_path().display().to_string();
     let mut out = String::from(HISTORIAN_CSV_HEADER);
     out.push('\n');
-    let site = query.site_id.as_deref().unwrap_or("site:demo");
+    let site = query
+        .site_id
+        .as_deref()
+        .map(str::to_string)
+        .or_else(scope::active_site_id)
+        .unwrap_or_default();
     let building = query.building_id.as_deref().unwrap_or("building:main");
     for row in rows {
         let ts = row.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
@@ -261,7 +280,9 @@ pub fn historian_csv(query: &ExportQuery) -> String {
         let equip = row
             .get("equipment_id")
             .and_then(|v| v.as_str())
-            .unwrap_or(DEFAULT_EQUIPMENT);
+            .map(str::to_string)
+            .or_else(scope::first_equipment_id)
+            .unwrap_or_default();
         let protocol = row
             .get("source_driver")
             .and_then(|v| v.as_str())
@@ -359,7 +380,7 @@ pub fn faults_csv(query: &ExportQuery, summary: bool) -> String {
             csv_row(&[
                 Utc::now().to_rfc3339(),
                 Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
-                "site:demo".into(),
+                default_site(),
                 "building:main".into(),
                 default_equipment(&rows),
                 "oa_temp_out_of_range".into(),
@@ -399,14 +420,26 @@ pub fn faults_csv(query: &ExportQuery, summary: bool) -> String {
         out.push_str(&csv_row(&[
             utc,
             local,
-            "site:demo".into(),
+            scope::site_for_equipment(
+                row.get("equipment_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(""),
+            )
+            .unwrap_or_else(default_site),
             "building:main".into(),
             row.get("equipment_id")
                 .and_then(|v| v.as_str())
-                .unwrap_or(DEFAULT_EQUIPMENT)
+                .map(str::to_string)
+                .or_else(scope::first_equipment_id)
+                .unwrap_or_default(),
+            row.get("_rule_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("rule")
                 .into(),
-            "oa_temp_out_of_range".into(),
-            "OA Temperature Out Of Range".into(),
+            row.get("_rule_name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Rule")
+                .into(),
             raw.to_string(),
             confirmed.to_string(),
             minutes,
@@ -445,7 +478,7 @@ pub fn model_points_csv() -> String {
             let (protocol, device, object) = first_driver_binding(point);
             let rule_inputs = rule_inputs_for_point(haystack_id, &assignments);
             out.push_str(&csv_row(&[
-                "site:demo".into(),
+                default_site(),
                 "building:main".into(),
                 equip.replace("equip:", ""),
                 point

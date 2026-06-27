@@ -1,24 +1,41 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import { apiFetch, apiUploadRaw, hasToken } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import {
+  analyzeQualityLocal,
+  datasetsToCsv,
   downloadCsv,
   fileToDataset,
+  idsFromFilename,
   mergeDatasets,
   numericColumns,
   numericSeries,
+  splitCsvHorizontal,
+  splitCsvVertical,
   type CsvDataset,
   type MergeMode,
 } from "../lib/csvWorkbench";
 
-type JobStatus = {
+type JobStatus = { ok?: boolean; job_id?: string; rows_committed?: number };
+type ModelPreview = {
   ok?: boolean;
-  job_id?: string;
-  status?: string;
-  rows_committed?: number;
-  bytes?: number;
+  site_id?: string;
+  equipment_id?: string;
+  source_id?: string;
+  display_name?: string;
+  point_count?: number;
+  points?: { header: string; fdd_input: string; auto_fdd_input?: string; mapped_override?: boolean }[];
 };
+type Recipe = {
+  id: string;
+  name: string;
+  merge_key: string;
+  merge_mode: MergeMode;
+  filenames: string[];
+};
+
+const FDD_INPUTS = ["oa_t", "oa_h", "sat", "sat_sp", "duct_t", "zn_t", "fan_cmd", "occ", "duct_static", ""];
 
 export default function CsvWorkbenchPage() {
   const [datasets, setDatasets] = useState<CsvDataset[]>([]);
@@ -30,12 +47,27 @@ export default function CsvWorkbenchPage() {
   const [mergeMode, setMergeMode] = useState<MergeMode>("inner");
   const [chartX, setChartX] = useState("");
   const [chartY, setChartY] = useState("");
+  const [modelPreview, setModelPreview] = useState<ModelPreview | null>(null);
+  const [columnMappings, setColumnMappings] = useState<Record<string, string>>({});
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [recipeName, setRecipeName] = useState("");
+  const [splitCol, setSplitCol] = useState(5);
+  const [splitRows, setSplitRows] = useState(500);
+  const [ruleInput, setRuleInput] = useState("oa_t");
+  const [ruleOp, setRuleOp] = useState(">");
+  const [ruleThreshold, setRuleThreshold] = useState("75");
+  const [purgeConfirm, setPurgeConfirm] = useState("");
+
+  const commitFilename = useMemo(() => {
+    if (datasets.length === 1) return datasets[0].name;
+    return "openfdd-merged.csv";
+  }, [datasets]);
 
   const merged = useMemo(() => {
     if (!datasets.length) return null;
     try {
       return mergeDatasets(datasets, mergeKey, mergeMode);
-    } catch (e) {
+    } catch {
       return null;
     }
   }, [datasets, mergeKey, mergeMode]);
@@ -50,6 +82,11 @@ export default function CsvWorkbenchPage() {
     }
   }, [datasets, mergeKey, mergeMode]);
 
+  const quality = useMemo(() => {
+    if (!merged?.columns.length) return null;
+    return analyzeQualityLocal(merged.columns, merged.rows);
+  }, [merged]);
+
   const numericCols = useMemo(
     () => (merged ? numericColumns(merged.columns, merged.rows) : []),
     [merged],
@@ -59,6 +96,57 @@ export default function CsvWorkbenchPage() {
     if (!merged || !chartX || !chartY) return null;
     return numericSeries(merged.columns, merged.rows, chartX, chartY);
   }, [merged, chartX, chartY]);
+
+  const loadRecipes = useCallback(async () => {
+    if (!hasToken()) return;
+    try {
+      const out = await apiFetch<{ recipes?: Recipe[] }>("/api/csv-workbench/recipes");
+      setRecipes(out.recipes ?? []);
+    } catch {
+      /* optional */
+    }
+  }, []);
+
+  const refreshModelPreview = useCallback(async () => {
+    if (!merged?.columns.length) {
+      setModelPreview(null);
+      return;
+    }
+    const ids = idsFromFilename(commitFilename);
+    try {
+      const out = await apiFetch<ModelPreview>("/api/csv-workbench/preview", {
+        method: "POST",
+        body: JSON.stringify({
+          source_filename: commitFilename,
+          headers: merged.columns,
+        }),
+      });
+      setModelPreview(out);
+      if (hasToken()) {
+        const maps = await apiFetch<{ mappings?: Record<string, string> }>(
+          `/api/csv-workbench/column-mappings?source_id=${encodeURIComponent(ids.sourceId)}`,
+        );
+        setColumnMappings(maps.mappings ?? {});
+      }
+    } catch (e) {
+      setModelPreview({
+        ok: true,
+        ...ids,
+        display_name: commitFilename,
+        point_count: merged.columns.length - 1,
+        points: merged.columns.slice(1).map((h) => ({ header: h, fdd_input: h })),
+      });
+      void e;
+    }
+  }, [merged, commitFilename]);
+
+  useEffect(() => {
+    void loadRecipes();
+  }, [loadRecipes]);
+
+  useEffect(() => {
+    void refreshModelPreview();
+  }, [refreshModelPreview]);
 
   const ingestFiles = useCallback(async (files: FileList | File[]) => {
     setError("");
@@ -71,9 +159,7 @@ export default function CsvWorkbenchPage() {
     try {
       const added: CsvDataset[] = [];
       for (const file of list) {
-        const text = await file.text();
-        const ds = fileToDataset(file, text);
-        added.push(ds);
+        added.push(fileToDataset(file, await file.text()));
       }
       setDatasets((prev) => [...prev, ...added]);
       if (added[0]?.timestampColumn) setMergeKey(added[0].timestampColumn);
@@ -82,7 +168,7 @@ export default function CsvWorkbenchPage() {
         setChartX(added[0].timestampColumn || added[0].columns[0] || "");
         setChartY(nums[0] || added[0].columns[1] || "");
       }
-      setStatus(`Loaded ${added.length} file(s) — preview shows first ~500 rows per file.`);
+      setStatus(`Loaded ${added.length} file(s).`);
     } catch (e) {
       setError(formatApiError(e));
     } finally {
@@ -90,8 +176,75 @@ export default function CsvWorkbenchPage() {
     }
   }, []);
 
+  async function saveColumnMappings() {
+    if (!modelPreview?.source_id) return;
+    setBusy("map");
+    try {
+      await apiFetch("/api/csv-workbench/column-mappings", {
+        method: "PUT",
+        body: JSON.stringify({ source_id: modelPreview.source_id, mappings: columnMappings }),
+      });
+      setStatus("Column → FDD input mappings saved for this source.");
+      await refreshModelPreview();
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function saveRecipe() {
+    if (!recipeName.trim()) {
+      setError("Recipe name required.");
+      return;
+    }
+    const id = recipeName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    setBusy("recipe");
+    try {
+      await apiFetch("/api/csv-workbench/recipes", {
+        method: "POST",
+        body: JSON.stringify({
+          id,
+          name: recipeName,
+          merge_key: mergeKey,
+          merge_mode: mergeMode,
+          filenames: datasets.map((d) => d.name),
+        }),
+      });
+      setStatus(`Recipe "${recipeName}" saved.`);
+      setRecipeName("");
+      await loadRecipes();
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  function applyRecipe(recipe: Recipe) {
+    setMergeKey(recipe.merge_key);
+    setMergeMode(recipe.merge_mode);
+    setStatus(`Applied recipe "${recipe.name}" — load files: ${recipe.filenames.join(", ")}`);
+  }
+
+  function splitSelectedVertical(ds: CsvDataset) {
+    const { left, right } = splitCsvVertical(ds.fullText, splitCol);
+    const leftDs = fileToDataset(new File([left], `${ds.name.replace(/\.csv$/i, "")}-left.csv`, { type: "text/csv" }), left);
+    const rightDs = fileToDataset(new File([right], `${ds.name.replace(/\.csv$/i, "")}-right.csv`, { type: "text/csv" }), right);
+    setDatasets((prev) => [...prev.filter((d) => d.id !== ds.id), leftDs, rightDs]);
+    setStatus(`Split ${ds.name} vertically after column ${splitCol}.`);
+  }
+
+  function splitSelectedHorizontal(ds: CsvDataset) {
+    const { first, second } = splitCsvHorizontal(ds.fullText, splitRows);
+    const a = fileToDataset(new File([first], `${ds.name.replace(/\.csv$/i, "")}-part-a.csv`, { type: "text/csv" }), first);
+    const b = fileToDataset(new File([second], `${ds.name.replace(/\.csv$/i, "")}-part-b.csv`, { type: "text/csv" }), second);
+    setDatasets((prev) => [...prev.filter((d) => d.id !== ds.id), a, b]);
+    setStatus(`Split ${ds.name} horizontally after ${splitRows} data rows.`);
+  }
+
   async function commitToHistorian() {
-    if (!datasets.length) {
+    if (!datasets.length || !merged) {
       setError("Load a CSV file first.");
       return;
     }
@@ -99,27 +252,20 @@ export default function CsvWorkbenchPage() {
       setError("Sign in as integrator to commit CSV to the historian.");
       return;
     }
+    if (quality && !quality.readyToCommit) {
+      setError("Resolve duplicate timestamps before commit (or review data quality panel).");
+      return;
+    }
     setBusy("commit");
     setError("");
     try {
-      let csvBody: string;
-      if (datasets.length === 1) {
-        csvBody = datasets[0].fullText;
-      } else if (merged) {
-        csvBody = [
-          merged.columns.join(","),
-          ...merged.rows.map((r) =>
-            r.map((c) => (c.includes(",") || c.includes('"') ? `"${c.replace(/"/g, '""')}"` : c)).join(","),
-          ),
-        ].join("\n");
-        setStatus("Note: merged commit uses all merged rows from loaded files.");
-      } else {
-        throw new Error("Nothing to commit");
+      if (Object.keys(columnMappings).length) {
+        await saveColumnMappings();
       }
-      const sourceFilename = datasets.length === 1 ? datasets[0].name : "openfdd-merged.csv";
+      const csvBody = datasetsToCsv(merged.columns, merged.rows);
       const created = await apiFetch<JobStatus>("/api/import/jobs", {
         method: "POST",
-        body: JSON.stringify({ source_filename: sourceFilename }),
+        body: JSON.stringify({ source_filename: commitFilename }),
       });
       if (!created.job_id) throw new Error("Could not create import job");
       await apiUploadRaw(`/api/import/jobs/${encodeURIComponent(created.job_id)}/upload`, csvBody, "text/csv");
@@ -129,8 +275,61 @@ export default function CsvWorkbenchPage() {
         { method: "POST", body: "{}" },
       );
       setStatus(
-        `Historian commit OK — ${committed.rows_committed ?? 0} rows from ${sourceFilename} (Haystack model updated automatically).`,
+        `Historian commit OK — ${committed.rows_committed ?? 0} rows · model ${modelPreview?.site_id ?? "auto"}.`,
       );
+      window.dispatchEvent(new CustomEvent("ofdd-dashboard-refresh"));
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function draftRule() {
+    if (!hasToken() || !modelPreview?.equipment_id) {
+      setError("Sign in and load CSV to draft a rule.");
+      return;
+    }
+    setBusy("rule");
+    try {
+      const out = await apiFetch<{ ok?: boolean; rule_id?: string }>("/api/csv-workbench/draft-rule", {
+        method: "POST",
+        body: JSON.stringify({
+          equipment_id: modelPreview.equipment_id,
+          fdd_input: ruleInput,
+          operator: ruleOp,
+          threshold: Number.parseFloat(ruleThreshold),
+          name: `CSV rule — ${ruleInput} ${ruleOp} ${ruleThreshold}`,
+        }),
+      });
+      setStatus(`Draft FDD rule saved (${out.rule_id ?? "csv_workbench_rule"}) — approve in FDD wires.`);
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function purgeSource() {
+    if (!modelPreview?.source_id || purgeConfirm !== "PURGE HISTORIAN DATA") {
+      setError('Type PURGE HISTORIAN DATA to confirm source-scoped purge.');
+      return;
+    }
+    setBusy("purge");
+    try {
+      const preview = await apiFetch<{ historian_rows_matched?: number; model_entities_matched?: number }>(
+        "/api/csv-workbench/purge-source/preview",
+        { method: "POST", body: JSON.stringify({ source_id: modelPreview.source_id }) },
+      );
+      const out = await apiFetch<{ ok?: boolean }>("/api/csv-workbench/purge-source/execute", {
+        method: "POST",
+        body: JSON.stringify({ source_id: modelPreview.source_id, confirm: purgeConfirm }),
+      });
+      if (!out.ok) throw new Error("Purge failed");
+      setStatus(
+        `Purged source ${modelPreview.source_id} — ${preview.historian_rows_matched ?? 0} historian rows, ${preview.model_entities_matched ?? 0} model entities.`,
+      );
+      setPurgeConfirm("");
       window.dispatchEvent(new CustomEvent("ofdd-dashboard-refresh"));
     } catch (e) {
       setError(formatApiError(e));
@@ -145,7 +344,6 @@ export default function CsvWorkbenchPage() {
       return;
     }
     setBusy("report");
-    setError("");
     try {
       const draft = await apiFetch<{ report_id?: string }>("/api/reports/draft", {
         method: "POST",
@@ -156,7 +354,7 @@ export default function CsvWorkbenchPage() {
       });
       if (!draft.report_id) throw new Error("Report draft failed");
       await apiFetch(`/api/reports/${draft.report_id}/render/pdf`, { method: "POST" });
-      setStatus(`Report ${draft.report_id} — open Reports tab to preview/download PDF.`);
+      setStatus(`Report ${draft.report_id} — open Reports tab to download PDF.`);
     } catch (e) {
       setError(formatApiError(e));
     } finally {
@@ -164,15 +362,11 @@ export default function CsvWorkbenchPage() {
     }
   }
 
-  function removeDataset(id: string) {
-    setDatasets((prev) => prev.filter((d) => d.id !== id));
-  }
-
   return (
     <div className="page page-wide csv-workbench-page">
       <PageHeader
         title="CSV workbench"
-        subtitle="Drag CSV files, preview and merge on time, chart trends, export merged CSV, or commit to the historian — Haystack sites, equipment, and points are created automatically from the file name and columns."
+        subtitle="UT3-style ingest: split, combine, preview Haystack model from filename + headers, map columns, commit, draft rules, and purge by source."
       />
 
       {error ? <p className="error">{error}</p> : null}
@@ -193,7 +387,7 @@ export default function CsvWorkbenchPage() {
         }}
       >
         <p className="csv-drop-title">Drop CSV files here</p>
-        <p className="muted">LBNL MZVAV, trend exports, or any wide-format building CSV</p>
+        <p className="muted">Any wide-format building CSV — site/equip/source derived from filename</p>
         <label className="primary-btn csv-drop-btn">
           {busy === "parse" ? "Parsing…" : "Choose files"}
           <input
@@ -218,10 +412,15 @@ export default function CsvWorkbenchPage() {
                 <strong>{ds.name}</strong>
                 <span className="muted">
                   {" "}
-                  — {ds.rowCount.toLocaleString()} rows · {ds.columns.length} cols ·{" "}
-                  {(ds.bytes / 1024).toFixed(0)} KB
+                  — {ds.rowCount.toLocaleString()} rows · {ds.columns.length} cols
                 </span>
-                <button type="button" className="linkish-btn" onClick={() => removeDataset(ds.id)}>
+                <button type="button" className="linkish-btn" onClick={() => splitSelectedVertical(ds)}>
+                  Split vertical
+                </button>
+                <button type="button" className="linkish-btn" onClick={() => splitSelectedHorizontal(ds)}>
+                  Split horizontal
+                </button>
+                <button type="button" className="linkish-btn" onClick={() => setDatasets((p) => p.filter((d) => d.id !== ds.id))}>
                   Remove
                 </button>
               </li>
@@ -229,33 +428,34 @@ export default function CsvWorkbenchPage() {
           </ul>
           <div className="form-grid">
             <label className="field">
+              <span className="field-label">Vertical split after col #</span>
+              <input type="number" min={1} value={splitCol} onChange={(e) => setSplitCol(Number(e.target.value))} />
+            </label>
+            <label className="field">
+              <span className="field-label">Horizontal split after rows</span>
+              <input type="number" min={1} value={splitRows} onChange={(e) => setSplitRows(Number(e.target.value))} />
+            </label>
+            <label className="field">
               <span className="field-label">Merge key</span>
               <input value={mergeKey} onChange={(e) => setMergeKey(e.target.value)} />
             </label>
             <label className="field">
               <span className="field-label">Merge mode</span>
               <select value={mergeMode} onChange={(e) => setMergeMode(e.target.value as MergeMode)}>
-                <option value="inner">Inner join on key (UT3 combine)</option>
-                <option value="append">Append rows (stack datasets)</option>
+                <option value="inner">Inner join on key</option>
+                <option value="append">Append rows</option>
               </select>
             </label>
           </div>
           <div className="toolbar">
-            <button
-              type="button"
-              className="secondary-btn"
-              disabled={!merged}
-              onClick={() =>
-                merged && downloadCsv("openfdd-merged.csv", merged.columns, merged.rows)
-              }
-            >
+            <button type="button" className="secondary-btn" disabled={!merged} onClick={() => merged && downloadCsv("openfdd-merged.csv", merged.columns, merged.rows)}>
               Export merged CSV
             </button>
-            <button type="button" className="secondary-btn" disabled={!!busy || !datasets.length} onClick={() => void commitToHistorian()}>
-              {busy === "commit" ? "Committing…" : "Commit merged → historian"}
+            <button type="button" className="secondary-btn" disabled={!!busy || !merged} onClick={() => void commitToHistorian()}>
+              {busy === "commit" ? "Committing…" : "Commit → historian + model"}
             </button>
             <button type="button" className="secondary-btn" disabled={!!busy} onClick={() => void createRcxReport()}>
-              {busy === "report" ? "Creating…" : "Draft RCx PDF report"}
+              Draft RCx PDF
             </button>
             <button type="button" className="linkish-btn" onClick={() => setDatasets([])}>
               Clear all
@@ -264,12 +464,174 @@ export default function CsvWorkbenchPage() {
         </section>
       ) : null}
 
+      {modelPreview?.ok ? (
+        <section className="panel">
+          <h3 className="panel-title">Pre-commit model preview</h3>
+          <p className="muted">
+            From <strong>{commitFilename}</strong> — no manual site/equip fields.
+          </p>
+          <ul className="csv-meta-list">
+            <li>
+              <strong>Site:</strong> {modelPreview.site_id}
+            </li>
+            <li>
+              <strong>Equipment:</strong> {modelPreview.equipment_id}
+            </li>
+            <li>
+              <strong>Source:</strong> {modelPreview.source_id}
+            </li>
+            <li>
+              <strong>Points:</strong> {modelPreview.point_count}
+            </li>
+          </ul>
+        </section>
+      ) : null}
+
+      {modelPreview?.points?.length ? (
+        <section className="panel">
+          <h3 className="panel-title">Column → FDD input mapper</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>CSV column</th>
+                  <th>Auto</th>
+                  <th>FDD input</th>
+                </tr>
+              </thead>
+              <tbody>
+                {modelPreview.points.map((pt) => (
+                  <tr key={pt.header}>
+                    <td>{pt.header}</td>
+                    <td className="muted">{pt.auto_fdd_input ?? "—"}</td>
+                    <td>
+                      <select
+                        value={columnMappings[pt.header] ?? pt.fdd_input}
+                        onChange={(e) =>
+                          setColumnMappings((m) => ({
+                            ...m,
+                            [pt.header]: e.target.value,
+                          }))
+                        }
+                      >
+                        {FDD_INPUTS.filter(Boolean).map((id) => (
+                          <option key={id} value={id}>
+                            {id}
+                          </option>
+                        ))}
+                        <option value={pt.fdd_input}>{pt.fdd_input} (column slug)</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button type="button" className="secondary-btn" disabled={!!busy} onClick={() => void saveColumnMappings()}>
+            Save mappings for source
+          </button>
+        </section>
+      ) : null}
+
+      {quality ? (
+        <section className="panel">
+          <h3 className="panel-title">Data quality</h3>
+          <p className={quality.readyToCommit ? "ok" : "error"}>
+            {quality.readyToCommit ? "Ready to commit" : "Review warnings before commit"}
+          </p>
+          <ul>
+            {quality.warnings.map((w) => (
+              <li key={w.code + w.message}>
+                [{w.severity}] {w.message}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <section className="panel">
+        <h3 className="panel-title">Merge recipes</h3>
+        <div className="form-grid">
+          <label className="field">
+            <span className="field-label">Recipe name</span>
+            <input value={recipeName} onChange={(e) => setRecipeName(e.target.value)} placeholder="e.g. weekly-trend-merge" />
+          </label>
+        </div>
+        <button type="button" className="secondary-btn" disabled={!datasets.length || !!busy} onClick={() => void saveRecipe()}>
+          Save current merge as recipe
+        </button>
+        {recipes.length ? (
+          <ul className="csv-dataset-list">
+            {recipes.map((r) => (
+              <li key={r.id}>
+                <strong>{r.name}</strong>
+                <span className="muted">
+                  {" "}
+                  — {r.merge_mode} on {r.merge_key} · {r.filenames.join(", ")}
+                </span>
+                <button type="button" className="linkish-btn" onClick={() => applyRecipe(r)}>
+                  Apply settings
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">No saved recipes yet.</p>
+        )}
+      </section>
+
+      {modelPreview?.equipment_id ? (
+        <section className="panel">
+          <h3 className="panel-title">Post-import rule wizard (draft)</h3>
+          <div className="form-grid">
+            <label className="field">
+              <span className="field-label">FDD input</span>
+              <select value={ruleInput} onChange={(e) => setRuleInput(e.target.value)}>
+                {FDD_INPUTS.filter(Boolean).map((id) => (
+                  <option key={id} value={id}>
+                    {id}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-label">Operator</span>
+              <select value={ruleOp} onChange={(e) => setRuleOp(e.target.value)}>
+                <option value=">">&gt;</option>
+                <option value="<">&lt;</option>
+                <option value=">=">&gt;=</option>
+                <option value="<=">&lt;=</option>
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-label">Threshold</span>
+              <input value={ruleThreshold} onChange={(e) => setRuleThreshold(e.target.value)} />
+            </label>
+          </div>
+          <button type="button" className="secondary-btn" disabled={!!busy} onClick={() => void draftRule()}>
+            Save draft SQL rule
+          </button>
+        </section>
+      ) : null}
+
+      {modelPreview?.source_id ? (
+        <section className="panel">
+          <h3 className="panel-title">Purge by CSV source</h3>
+          <p className="muted">Removes historian rows and model entities for {modelPreview.source_id} only.</p>
+          <label className="field">
+            <span className="field-label">Type PURGE HISTORIAN DATA to confirm</span>
+            <input value={purgeConfirm} onChange={(e) => setPurgeConfirm(e.target.value)} />
+          </label>
+          <button type="button" className="secondary-btn" disabled={!!busy} onClick={() => void purgeSource()}>
+            Purge this source
+          </button>
+        </section>
+      ) : null}
+
       {merged && merged.columns.length ? (
         <>
           <section className="panel">
-            <h3 className="panel-title">
-              Merged preview ({merged.rowCount.toLocaleString()} rows in sample)
-            </h3>
+            <h3 className="panel-title">Merged preview ({merged.rowCount.toLocaleString()} rows)</h3>
             <div className="table-wrap csv-preview-table">
               <table>
                 <thead>
@@ -280,7 +642,7 @@ export default function CsvWorkbenchPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {merged.rows.slice(0, 12).map((row, i) => (
+                  {merged.rows.slice(0, 8).map((row, i) => (
                     <tr key={i}>
                       {row.map((cell, j) => (
                         <td key={j}>{cell}</td>
@@ -306,7 +668,7 @@ export default function CsvWorkbenchPage() {
                 </select>
               </label>
               <label className="field">
-                <span className="field-label">Y axis (numeric)</span>
+                <span className="field-label">Y axis</span>
                 <select value={chartY} onChange={(e) => setChartY(e.target.value)}>
                   {numericCols.map((c) => (
                     <option key={c} value={c}>
@@ -317,7 +679,7 @@ export default function CsvWorkbenchPage() {
               </label>
             </div>
             {chartSeries && chartSeries.y.length ? (
-              <div className="csv-spark-chart" aria-label="Trend preview">
+              <div className="csv-spark-chart">
                 <svg viewBox="0 0 400 120" preserveAspectRatio="none">
                   <polyline
                     fill="none"
@@ -335,13 +697,8 @@ export default function CsvWorkbenchPage() {
                       .join(" ")}
                   />
                 </svg>
-                <p className="muted">
-                  {chartY} vs {chartX} ({chartSeries.y.length} points sampled)
-                </p>
               </div>
-            ) : (
-              <p className="muted">Select numeric columns to preview a trend.</p>
-            )}
+            ) : null}
           </section>
         </>
       ) : null}

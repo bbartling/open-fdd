@@ -3242,6 +3242,19 @@ button.linkish {
   border-bottom: 1px solid var(--border);
 }
 
+.csv-meta-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+}
+
+.csv-meta-list li {
+  font-size: 0.92rem;
+}
+
 .csv-preview-table {
   max-height: 320px;
   overflow: auto;

@@ -267,3 +267,97 @@ export function numericColumns(columns: string[], rows: string[][]): string[] {
     return hits >= 3;
   });
 }
+
+/** Split CSV vertically after column index (UT3-style). */
+export function splitCsvVertical(text: string, splitAfterCol: number): { left: string; right: string } {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) return { left: "", right: "" };
+  const header = splitCsvLine(lines[0]);
+  const leftIndices = [0, ...header.map((_, i) => i).filter((i) => i > 0 && i <= splitAfterCol)];
+  const rightIndices = [0, ...header.map((_, i) => i).filter((i) => i > splitAfterCol)];
+
+  const project = (line: string, cols: number[]) => {
+    const cells = splitCsvLine(line);
+    return cols.map((i) => cells[i] ?? "").join(",");
+  };
+
+  const left = [project(lines[0], leftIndices), ...lines.slice(1).map((l) => project(l, leftIndices))].join("\n");
+  const right = [project(lines[0], rightIndices), ...lines.slice(1).map((l) => project(l, rightIndices))].join("\n");
+  return { left, right };
+}
+
+/** Split CSV horizontally after N data rows (keeps header in both). */
+export function splitCsvHorizontal(text: string, dataRowsInFirst: number): { first: string; second: string } {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) return { first: "", second: "" };
+  const header = lines[0];
+  const first = [header, ...lines.slice(1, 1 + dataRowsInFirst)].join("\n");
+  const second = [header, ...lines.slice(1 + dataRowsInFirst)].join("\n");
+  return { first, second };
+}
+
+export type QualityReport = {
+  duplicateTimestamps: number;
+  warnings: { severity: string; code: string; message: string }[];
+  readyToCommit: boolean;
+};
+
+/** Client-side data quality scan (mirrors server analyze_quality). */
+export function analyzeQualityLocal(columns: string[], rows: string[][]): QualityReport {
+  const tsCol = detectTimestampColumn(columns);
+  const tsIdx = columns.indexOf(tsCol ?? "");
+  const seen = new Set<string>();
+  let duplicateTimestamps = 0;
+  const warnings: QualityReport["warnings"] = [];
+  if (tsIdx >= 0) {
+    for (const row of rows) {
+      const ts = row[tsIdx] ?? "";
+      if (seen.has(ts)) duplicateTimestamps += 1;
+      else seen.add(ts);
+    }
+  }
+  for (const [i, col] of columns.entries()) {
+    if (i === tsIdx) continue;
+    let empty = 0;
+    for (const row of rows) {
+      if (!(row[i] ?? "").trim()) empty += 1;
+    }
+    if (rows.length > 0 && empty * 2 > rows.length) {
+      warnings.push({
+        severity: "info",
+        code: "sparse_column",
+        message: `${col}: ${Math.round((empty / rows.length) * 100)}% empty`,
+      });
+    }
+  }
+  if (duplicateTimestamps > 0) {
+    warnings.push({
+      severity: "warning",
+      code: "duplicate_timestamps",
+      message: `${duplicateTimestamps} duplicate timestamp(s) in loaded data`,
+    });
+  }
+  const sampleTs = rows[0]?.[tsIdx] ?? "";
+  if (sampleTs.includes("/") && !sampleTs.includes("T") && !sampleTs.includes("+")) {
+    warnings.push({
+      severity: "info",
+      code: "timezone_ambiguous",
+      message: "Timestamps appear to be local US-style without explicit timezone",
+    });
+  }
+  return {
+    duplicateTimestamps,
+    warnings,
+    readyToCommit: duplicateTimestamps === 0,
+  };
+}
+
+export function idsFromFilename(filename: string): { siteId: string; equipId: string; sourceId: string } {
+  const base = filename.replace(/^.*[/\\]/, "").replace(/\.csv$/i, "");
+  const slug = base
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const s = slug || "csv-import";
+  return { siteId: `site:${s}`, equipId: `equip:${s}`, sourceId: `source:csv:${s}` };
+}

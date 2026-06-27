@@ -260,7 +260,17 @@ pub fn commit_job(job_id: &str) -> Value {
             return json!({"ok": false, "job_id": job_id, "error": err, "rows_committed": rows_committed});
         }
     }
-    let model = crate::model::csv_import::import_from_csv_commit(&headers, source_filename, job_id);
+    let model = {
+        let maps = crate::model::csv_workbench::load_column_mappings();
+        let (_, _, source_id, _) = crate::model::csv_import::ids_from_filename(source_filename);
+        let header_map = maps.get(&source_id).cloned();
+        crate::model::csv_import::import_from_csv_commit(
+            &headers,
+            source_filename,
+            job_id,
+            header_map.as_ref(),
+        )
+    };
     let mut updated = job.clone();
     updated["status"] = json!("completed");
     updated["rows_committed"] = json!(rows_committed);

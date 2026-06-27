@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { fileToDataset, mergeDatasets, parseCsvText, type CsvDataset } from "./csvWorkbench";
+import {
+  analyzeQualityLocal,
+  fileToDataset,
+  mergeDatasets,
+  parseCsvText,
+  splitCsvHorizontal,
+  splitCsvVertical,
+  type CsvDataset,
+} from "./csvWorkbench";
 
 describe("csvWorkbench", () => {
   it("parses header and counts rows", () => {
@@ -89,5 +97,15 @@ describe("csvWorkbench", () => {
     const merged = mergeDatasets([a, b], "Date", "inner");
     expect(merged.rowCount).toBe(1);
     expect(merged.rows[0][0]).toBe("2024-01-01");
+  });
+
+  it("splits vertically and horizontally", () => {
+    const text = "Date,A,B,C\n1,a,b,c\n2,d,e,f\n";
+    const { left, right } = splitCsvVertical(text, 1);
+    expect(left).toContain("Date,A");
+    expect(right).toContain("Date,B,C");
+    const { first, second } = splitCsvHorizontal(text, 1);
+    expect(first.split("\n").length).toBe(2);
+    expect(second.split("\n").length).toBe(2);
   });
 });

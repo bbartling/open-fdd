@@ -48,28 +48,6 @@ pub fn assignments_json_string() -> String {
     load_assignments_value().to_string()
 }
 
-/// Demo fixture for bench/CI only — not used for live commissioning export.
-pub const DEMO_ASSIGNMENTS_JSON: &str = r#"{
-  "ok":true,
-  "model":"haystack-only",
-  "points":[
-    {
-      "haystack_id":"point:sat",
-      "dis":"Device Demo AHU Discharge Air Temp",
-      "kind":"sensor",
-      "equip_ref":"equip:demo-ahu",
-      "unit":"degF",
-      "driver_bindings":[
-        {"driver":"bacnet","ref":"bacnet:demo-ahu:analog-input:1003","object_id":[0,1003],"priority":1}
-      ],
-      "storage_ref":"arrow://hvac/duct_t",
-      "external_refs":[{"system":"site-docs","ref":"demo-ahu/DischargeAirTemp"}]
-    }
-  ],
-  "fault_equation_bindings":[],
-  "algorithm_bindings":[]
-}"#;
-
 pub fn save_assignment_json() -> &'static str {
     r#"{"ok":true,"saved":true,"scope":"haystack-assignment","path":"workspace/data/model/assignments.json"}"#
 }

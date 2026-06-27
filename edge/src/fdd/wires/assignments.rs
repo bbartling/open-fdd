@@ -2,21 +2,24 @@
 
 use serde_json::{json, Value};
 
-const AHU_MAPPINGS: &[(&str, &str, &str, f64)] = &[
-    ("Outside Air Temp", "oa_t", "point:oa-t", 0.95),
-    ("Supply Air Temp", "sat", "point:sat", 0.93),
-    ("Discharge Air Temp", "duct_t", "point:duct-t", 0.90),
-    ("Zone Temp", "zn_t", "point:zn-t", 0.88),
-    ("Outside Air Humidity", "oa_h", "point:oa-h", 0.86),
-    ("SAT Setpoint", "sat_sp", "point:sat-sp", 0.92),
-    ("Fan Command", "fan_cmd", "point:fan-cmd", 0.94),
+use crate::model::scope;
+
+const AHU_MAPPINGS: &[(&str, &str, f64)] = &[
+    ("Outside Air Temp", "oa_t", 0.95),
+    ("Supply Air Temp", "sat", 0.93),
+    ("Discharge Air Temp", "duct_t", 0.90),
+    ("Zone Temp", "zn_t", 0.88),
+    ("Outside Air Humidity", "oa_h", 0.86),
+    ("SAT Setpoint", "sat_sp", 0.92),
+    ("Fan Command", "fan_cmd", 0.94),
 ];
 
 pub fn propose_assignments(payload: &Value) -> Value {
     let site_id = payload
         .get("site_id")
         .and_then(|v| v.as_str())
-        .unwrap_or("site:demo");
+        .map(str::to_string)
+        .or_else(scope::active_site_id);
     let equipment_type = payload
         .get("equipment_type")
         .and_then(|v| v.as_str())
@@ -27,15 +30,13 @@ pub fn propose_assignments(payload: &Value) -> Value {
     let mut missing = Vec::new();
     let mut ambiguous = Vec::new();
 
-    for (label, fdd_input, haystack_id, confidence) in AHU_MAPPINGS {
+    for (label, fdd_input, confidence) in AHU_MAPPINGS {
         let matches: Vec<&Value> = driver_points
             .iter()
             .filter(|p| point_matches(p, label, fdd_input))
             .collect();
         if matches.is_empty() {
-            missing.push(
-                json!({"fdd_input": fdd_input, "label": label, "expected_haystack": haystack_id}),
-            );
+            missing.push(json!({"fdd_input": fdd_input, "label": label}));
             continue;
         }
         if matches.len() > 1 {
@@ -46,6 +47,11 @@ pub fn propose_assignments(payload: &Value) -> Value {
             }));
         }
         let chosen = matches[0];
+        let haystack_id = chosen
+            .get("haystack_id")
+            .or_else(|| chosen.get("id"))
+            .cloned()
+            .unwrap_or(json!(null));
         proposals.push(json!({
             "fdd_input": fdd_input,
             "label": label,
@@ -105,7 +111,7 @@ fn collect_driver_points(payload: &Value) -> Vec<Value> {
         }
         return out;
     }
-    demo_driver_points()
+    scope::driver_points_from_model()
 }
 
 fn point_matches(point: &Value, label: &str, fdd_input: &str) -> bool {
@@ -127,22 +133,18 @@ fn point_matches(point: &Value, label: &str, fdd_input: &str) -> bool {
         || (fdd_input == "fan_cmd" && name.to_ascii_lowercase().contains("fan"))
 }
 
-fn demo_driver_points() -> Vec<Value> {
-    vec![
-        json!({"id":"bacnet:validation:analog-input:1001","name":"Outside Air Temp","haystack_id":"point:oa-t","fdd_input":"oa_t","source_label":"simulated"}),
-        json!({"id":"bacnet:validation:analog-input:1174","name":"Supply Air Temp","haystack_id":"point:sat","fdd_input":"sat","source_label":"simulated"}),
-        json!({"id":"bacnet:validation:analog-value:1175","name":"SAT Setpoint","haystack_id":"point:sat-sp","fdd_input":"sat_sp","source_label":"simulated"}),
-        json!({"id":"bacnet:validation:binary-output:1176","name":"Fan Command","haystack_id":"point:fan-cmd","fdd_input":"fan_cmd","source_label":"simulated"}),
-    ]
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn proposes_oa_t_assignment() {
-        let out = propose_assignments(&json!({"equipment_type":"ahu"}));
+    fn proposes_oa_t_assignment_from_payload_points() {
+        let out = propose_assignments(&json!({
+            "equipment_type":"ahu",
+            "driver_points": [
+                {"id":"point:1","name":"Outside Air Temp","haystack_id":"point:1","fdd_input":"oa_t","ref":"csv:src:oa_t"}
+            ]
+        }));
         let proposals = out["proposals"].as_array().unwrap();
         assert!(proposals.iter().any(|p| p["fdd_input"] == "oa_t"));
         assert_eq!(out["review_status"], "needs_review");

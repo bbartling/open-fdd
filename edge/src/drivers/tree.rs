@@ -512,11 +512,13 @@ pub fn haystack_devices_ui() -> Vec<Value> {
     for row in rows {
         let id = row.get("id").and_then(|v| v.as_str()).unwrap_or("");
         if row.get("point").and_then(|v| v.as_str()) == Some("M") {
+            let active = crate::model::scope::active_site_id();
             let site = row
                 .get("siteRef")
                 .and_then(|v| v.as_str())
-                .unwrap_or("site:demo")
-                .to_string();
+                .map(str::to_string)
+                .or(active)
+                .unwrap_or_else(|| "site:unknown".to_string());
             sites.entry(site).or_default().push(json!({
                 "point_id": id,
                 "label": row.get("dis").cloned().unwrap_or(json!(id)),
