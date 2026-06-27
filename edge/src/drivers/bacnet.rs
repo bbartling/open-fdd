@@ -1715,7 +1715,7 @@ mod override_export_tests {
             let out = remap_bacnet_device_value(&json!({
                 "device_instance": 100,
                 "new_device_instance": 5007,
-                "new_device_address": "192.168.204.200"
+                "new_device_address": "198.51.100.50"
             }));
             assert_eq!(out["ok"], true);
             let updated = read_registry();

@@ -272,10 +272,8 @@ fn apply_root_key(p: &mut SmokeProfile, key: &str, val: &str) {
 
 fn apply_bacnet_key(p: &mut SmokeProfile, key: &str, val: &str) {
     match key {
-        "enabled" => {
-            if val == "true" || val == "1" {
-                p.source_type = "bacnet".into();
-            }
+        "enabled" if val == "true" || val == "1" => {
+            p.source_type = "bacnet".into();
         }
         "device_instance" => {
             if let Ok(n) = val.parse() {
