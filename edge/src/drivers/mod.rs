@@ -13,6 +13,7 @@
 pub mod bacnet;
 pub mod bacnet_live;
 pub mod bacnet_server;
+pub mod bacnet_server_runtime;
 pub mod haystack;
 pub mod json_api;
 pub mod modbus;

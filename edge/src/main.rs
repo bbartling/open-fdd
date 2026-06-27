@@ -43,6 +43,7 @@ fn main() -> std::io::Result<()> {
     let root = env::var("FRONTEND_DIR").unwrap_or_else(|_| "/app/frontend".to_string());
     let service_mode = env::var("SERVICE_MODE").unwrap_or_else(|_| "bridge".to_string());
     drivers::bacnet::start_hourly_override_scanner(service_mode.clone());
+    drivers::bacnet_server_runtime::start_background();
     let listener = TcpListener::bind(format!("0.0.0.0:{port}"))?;
     println!("Open-FDD Rust Edge API listening on http://0.0.0.0:{port}");
     for stream in listener.incoming() {
@@ -614,6 +615,26 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/bacnet/server/points") => {
             raw_json(&mut stream, &drivers::bacnet_server::server_points_json())
         }
+        ("GET", "/api/openfdd/optimization-enabled") => json_response(
+            &mut stream,
+            json!({
+                "ok": true,
+                "enabled": drivers::bacnet_server_runtime::optimization_enabled()
+            }),
+        ),
+        ("POST", "/api/openfdd/optimization-enabled") => {
+            require_role(&mut stream, &principal, &["integrator", "agent"], {
+                let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
+                let enabled = payload
+                    .get("enabled")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                json!({
+                    "ok": true,
+                    "enabled": drivers::bacnet_server_runtime::set_optimization_enabled(enabled)
+                })
+            })
+        }
         ("POST", "/api/bacnet/priority-array") => {
             let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
             raw_json(&mut stream, &drivers::bacnet::priority_array_json(&payload))
@@ -701,10 +722,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
             if can_write_field_bus(&principal.role, approved) {
-                json_response(
-                    &mut stream,
-                    json!({"ok": true, "dry_run": true, "safety": "BACnet write requires explicit human approval; prototype never writes to field bus"}),
-                )
+                json_response(&mut stream, drivers::bacnet::write_property_value(&value))
             } else {
                 audit::log_event(
                     "forbidden",

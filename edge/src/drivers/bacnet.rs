@@ -7,6 +7,8 @@
 
 use super::bacnet_live;
 use crate::validation::profile::{active_profile, bacnet_point_to_simulated_json, BacnetPointRole};
+use bacnet_types::enums::ObjectType;
+use bacnet_types::primitives::PropertyValue;
 use chrono::Utc;
 use serde_json::{json, Value};
 use std::env;
@@ -428,11 +430,12 @@ pub fn merge_live_discovery_into_registry(device_instance: u32) -> Value {
     if !bacnet_live::is_live_mode() {
         return json!({"ok": true, "skipped": true, "reason": "not live mode"});
     }
-    let discovered =
-        match bacnet_live::block_on(bacnet_live::discover_device_points(device_instance)) {
-            Ok(points) => points,
-            Err(err) => return json!({"ok": false, "error": err}),
-        };
+    let discovered = match bacnet_live::block_on(bacnet_live::discover_device_points_with_fallback(
+        device_instance,
+    )) {
+        Ok(points) => points,
+        Err(err) => return json!({"ok": false, "error": err}),
+    };
 
     let mut registry = read_registry();
     registry["bacnet_config"] = bacnet_config_value();
@@ -835,7 +838,9 @@ pub fn scan_once_value() -> Value {
     let mut scan_error: Option<String> = None;
 
     let scan_points: Vec<Value> = if bacnet_live::is_live_mode() {
-        match bacnet_live::block_on(bacnet_live::discover_device_points(device_instance)) {
+        match bacnet_live::block_on(bacnet_live::discover_device_points_with_fallback(
+            device_instance,
+        )) {
             Ok(discovered) => discovered
                 .into_iter()
                 .filter(is_commandable_point)
@@ -1046,7 +1051,9 @@ pub fn point_discovery_value(body: &Value) -> Value {
         .unwrap_or_else(|| simulated_device_instance() as u64) as u32;
 
     if bacnet_live::is_live_mode() {
-        match bacnet_live::block_on(bacnet_live::discover_device_points(device_instance)) {
+        match bacnet_live::block_on(bacnet_live::discover_device_points_with_fallback(
+            device_instance,
+        )) {
             Ok(points) => json!({
                 "ok": true,
                 "device_instance": device_instance,
@@ -1203,9 +1210,8 @@ pub fn count_field_devices(registry: &Value) -> u64 {
 }
 
 pub fn active_fault_count() -> u64 {
-    overrides_last_scan()
-        .get("summary")
-        .and_then(|s| s.get("total"))
+    crate::faults::summary_json()
+        .get("active_count")
         .and_then(|v| v.as_u64())
         .unwrap_or(0)
 }
@@ -1279,7 +1285,63 @@ pub fn non_priority8_csv() -> String {
 }
 
 pub fn write_dry_run_json() -> &'static str {
-    r#"{"ok":true,"dry_run":true,"safety":"BACnet write path requires integrator role and approved=true"}"#
+    r#"{"ok":true,"dry_run":true,"note":"Set approved=true on /api/bacnet/write to execute WriteProperty on field devices"}"#
+}
+
+pub fn write_property_value(body: &Value) -> Value {
+    let point_id = body.get("point_id").and_then(|v| v.as_str()).unwrap_or("");
+    let priority = body
+        .get("priority")
+        .and_then(|v| v.as_u64())
+        .map(|p| p as u8);
+    let value = body
+        .get("value")
+        .cloned()
+        .unwrap_or(serde_json::json!(null));
+
+    let Some((device_instance, object_type, instance)) =
+        bacnet_live::point_object_from_id(point_id)
+    else {
+        return json!({"ok": false, "error": "point_id required (bacnet:device:type:instance)"});
+    };
+
+    if !bacnet_live::is_live_mode() {
+        return json!({"ok": false, "error": "BACnet live mode required for field writes"});
+    }
+
+    let pv = json_value_to_property(&value, object_type);
+    match bacnet_live::block_on(bacnet_live::write_present_value(
+        device_instance,
+        object_type,
+        instance,
+        &pv,
+        priority,
+    )) {
+        Ok(v) => v,
+        Err(e) => json!({"ok": false, "error": e}),
+    }
+}
+
+fn json_value_to_property(value: &Value, object_type: ObjectType) -> PropertyValue {
+    if value.is_null() {
+        return PropertyValue::Null;
+    }
+    if let Some(n) = value.as_f64() {
+        return PropertyValue::Real(n as f32);
+    }
+    if let Some(b) = value.as_bool() {
+        return PropertyValue::Boolean(b);
+    }
+    if let Some(n) = value.as_u64() {
+        if matches!(
+            object_type,
+            ObjectType::BINARY_VALUE | ObjectType::BINARY_OUTPUT
+        ) {
+            return PropertyValue::Enumerated(n as u32);
+        }
+        return PropertyValue::Unsigned(n);
+    }
+    PropertyValue::Real(0.0)
 }
 
 pub fn commission_status_json() -> String {

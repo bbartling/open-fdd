@@ -4,7 +4,9 @@
 
 use bacnet_client::client::BACnetClient;
 use bacnet_client::discovery::DiscoveredDevice;
-use bacnet_encoding::primitives::decode_application_value;
+use bacnet_encoding::primitives::{decode_application_value, encode_property_value};
+use bacnet_services::common::PropertyReference;
+use bacnet_services::rpm::ReadAccessSpecification;
 use bacnet_transport::bip::BipTransport;
 use bacnet_types::enums::{ObjectType, PropertyIdentifier};
 use bacnet_types::primitives::{ObjectIdentifier, PropertyValue};
@@ -32,15 +34,37 @@ pub fn block_on<F: std::future::Future>(future: F) -> F::Output {
 
 pub fn is_live_mode() -> bool {
     env::var("OPENFDD_BACNET_MODE")
-        .map(|v| !v.eq_ignore_ascii_case("simulated"))
+        .map(|v| v.eq_ignore_ascii_case("live"))
         .unwrap_or(true)
+}
+
+fn client_bind_port() -> u16 {
+    if let Ok(v) = env::var("OPENFDD_BACNET_CLIENT_PORT") {
+        if let Ok(p) = v.parse::<u16>() {
+            return p;
+        }
+    }
+    let server_on = env::var("OPENFDD_BACNET_SERVER_ENABLED")
+        .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+        .unwrap_or_else(|_| {
+            env::var("OPENFDD_BACNET_ENABLED")
+                .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+                .unwrap_or(true)
+        });
+    if server_on {
+        0
+    } else {
+        0xBAC0
+    }
 }
 
 fn parse_bind() -> (Ipv4Addr, u16, Ipv4Addr) {
     let bind = env::var("OPENFDD_BACNET_BIND").unwrap_or_else(|_| "0.0.0.0/24:47808".to_string());
     let mut ip_part = bind.as_str();
-    let mut port: u16 = 0xBAC0;
-    if let Some((left, right)) = bind.rsplit_once(':') {
+    let mut port: u16 = client_bind_port();
+    if port == 0 {
+        // Ephemeral client port when local BACnet server owns :47808.
+    } else if let Some((left, right)) = bind.rsplit_once(':') {
         if let Ok(p) = right.parse::<u16>() {
             port = p;
             ip_part = left;
@@ -436,4 +460,186 @@ pub fn point_object_from_id(point_id: &str) -> Option<(u32, ObjectType, u32)> {
     let object_type = object_type_code(parts[2])?;
     let instance = parts[3].parse().ok()?;
     Some((device_instance, object_type, instance))
+}
+
+fn decode_prop(bytes: &[u8]) -> Option<PropertyValue> {
+    decode_application_value(bytes, 0).ok().map(|(v, _)| v)
+}
+
+pub async fn discover_device_points_rpm(device_instance: u32) -> Result<Vec<Value>, String> {
+    let mut client = build_client().await.map_err(|e| e.to_string())?;
+    let (low, high) = discover_low_high();
+    client
+        .who_is(Some(low), Some(high))
+        .await
+        .map_err(|e| e.to_string())?;
+    if let Some((_, mstp_net)) = router_network() {
+        let _ = client.who_is_network(mstp_net, Some(low), Some(high)).await;
+    }
+    sleep(Duration::from_secs(discover_timeout_secs())).await;
+
+    let dev = client
+        .get_device(device_instance)
+        .await
+        .ok_or_else(|| format!("device {device_instance} not discovered"))?;
+
+    let device_oid =
+        ObjectIdentifier::new(ObjectType::DEVICE, device_instance).map_err(|e| e.to_string())?;
+    let list_ack = client
+        .read_property_from_device(
+            device_instance,
+            device_oid,
+            PropertyIdentifier::OBJECT_LIST,
+            None,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    let list_items = decode_value_sequence(&list_ack.property_value)?;
+
+    let object_ids: Vec<ObjectIdentifier> = list_items
+        .into_iter()
+        .filter_map(|item| match item {
+            PropertyValue::ObjectIdentifier(o) if o.object_type() != ObjectType::DEVICE => Some(o),
+            _ => None,
+        })
+        .collect();
+
+    if object_ids.is_empty() {
+        let _ = client.stop().await;
+        return Ok(Vec::new());
+    }
+
+    let specs: Vec<ReadAccessSpecification> = object_ids
+        .iter()
+        .map(|oid| ReadAccessSpecification {
+            object_identifier: *oid,
+            list_of_property_references: vec![
+                PropertyReference {
+                    property_identifier: PropertyIdentifier::OBJECT_NAME,
+                    property_array_index: None,
+                },
+                PropertyReference {
+                    property_identifier: PropertyIdentifier::PRESENT_VALUE,
+                    property_array_index: None,
+                },
+                PropertyReference {
+                    property_identifier: PropertyIdentifier::OBJECT_TYPE,
+                    property_array_index: None,
+                },
+            ],
+        })
+        .collect();
+
+    let rpm = client
+        .read_property_multiple_from_device(device_instance, specs)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut points = Vec::new();
+    for result in rpm.list_of_read_access_results {
+        let oid = result.object_identifier;
+        let mut name = format!(
+            "{}:{}",
+            object_type_name(oid.object_type()),
+            oid.instance_number()
+        );
+        let mut value: Option<Value> = None;
+        for prop in result.list_of_results {
+            if prop.error.is_some() {
+                continue;
+            }
+            let Some(bytes) = prop.property_value.as_ref() else {
+                continue;
+            };
+            let Some(val) = decode_prop(bytes) else {
+                continue;
+            };
+            match prop.property_identifier {
+                PropertyIdentifier::OBJECT_NAME => {
+                    if let PropertyValue::CharacterString(s) = val {
+                        name = s;
+                    }
+                }
+                PropertyIdentifier::PRESENT_VALUE => {
+                    value = Some(property_value_to_json(&val));
+                }
+                _ => {}
+            }
+        }
+        let writable = matches!(
+            oid.object_type(),
+            ObjectType::ANALOG_VALUE
+                | ObjectType::ANALOG_OUTPUT
+                | ObjectType::BINARY_VALUE
+                | ObjectType::BINARY_OUTPUT
+                | ObjectType::MULTI_STATE_VALUE
+                | ObjectType::MULTI_STATE_OUTPUT
+        );
+        points.push(json!({
+            "id": format!("bacnet:{}:{}:{}", device_instance, object_type_name(oid.object_type()), oid.instance_number()),
+            "device_instance": device_instance,
+            "object_id": [oid.object_type().to_raw(), oid.instance_number()],
+            "name": name,
+            "polling_enabled": true,
+            "writable": writable,
+            "present_value": value,
+            "address": mac_to_address(dev.mac_address.as_slice()),
+            "source_network": dev.source_network,
+            "read_method": "ReadPropertyMultiple"
+        }));
+    }
+
+    let _ = client.stop().await;
+    Ok(points)
+}
+
+pub async fn write_present_value(
+    device_instance: u32,
+    object_type: ObjectType,
+    instance: u32,
+    value: &PropertyValue,
+    priority: Option<u8>,
+) -> Result<Value, String> {
+    let mut client = build_client().await.map_err(|e| e.to_string())?;
+    let (low, high) = discover_low_high();
+    client
+        .who_is(Some(low), Some(high))
+        .await
+        .map_err(|e| e.to_string())?;
+    sleep(Duration::from_secs(2)).await;
+
+    let oid = ObjectIdentifier::new(object_type, instance).map_err(|e| e.to_string())?;
+    let mut buf = bytes::BytesMut::new();
+    encode_property_value(&mut buf, value).map_err(|e| e.to_string())?;
+    client
+        .write_property_to_device(
+            device_instance,
+            oid,
+            PropertyIdentifier::PRESENT_VALUE,
+            None,
+            buf.to_vec(),
+            priority,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let out = json!({
+        "ok": true,
+        "device_instance": device_instance,
+        "object_id": [object_type.to_raw(), instance],
+        "priority": priority,
+        "source": "rusty-bacnet-write"
+    });
+    let _ = client.stop().await;
+    Ok(out)
+}
+
+/// RPM-first discovery; falls back to sequential ReadProperty when RPM fails.
+pub async fn discover_device_points_with_fallback(
+    device_instance: u32,
+) -> Result<Vec<Value>, String> {
+    match discover_device_points_rpm(device_instance).await {
+        Ok(points) if !points.is_empty() => Ok(points),
+        Ok(_) | Err(_) => discover_device_points(device_instance).await,
+    }
 }
