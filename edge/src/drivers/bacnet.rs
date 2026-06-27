@@ -1575,7 +1575,8 @@ pub fn remap_bacnet_device_value(body: &Value) -> Value {
             }
             if let Some(devices) = driver.get_mut("devices").and_then(|v| v.as_array_mut()) {
                 for device in devices.iter_mut() {
-                    if device.get("device_instance").and_then(|v| v.as_u64()) != Some(old_inst as u64)
+                    if device.get("device_instance").and_then(|v| v.as_u64())
+                        != Some(old_inst as u64)
                     {
                         continue;
                     }

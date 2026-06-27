@@ -512,10 +512,13 @@ pub fn write(cfg: &HaystackConfig, payload: &Value) -> Value {
         .get("release")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    let value = payload.get("value").or_else(|| payload.get("val")).and_then(|v| {
-        v.as_f64()
-            .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
-    });
+    let value = payload
+        .get("value")
+        .or_else(|| payload.get("val"))
+        .and_then(|v| {
+            v.as_f64()
+                .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+        });
     let level = payload
         .get("level")
         .and_then(|v| v.as_u64())
