@@ -17,8 +17,6 @@ import LiveFddValidationPage from "./pages/LiveFddValidationPage";
 import DataManagementPage from "./pages/DataManagementPage";
 import CsvWorkbenchPage from "./pages/CsvWorkbenchPage";
 import WiresheetStudioPage from "./pages/WiresheetStudioPage";
-import WiresheetHaystackPage from "./pages/WiresheetHaystackPage";
-import WiresheetRulesPage from "./pages/WiresheetRulesPage";
 import ReportBuilderPage from "./pages/ReportBuilderPage";
 import AlgorithmsPage from "./pages/AlgorithmsPage";
 import DataExportPage from "./pages/DataExportPage";
@@ -52,15 +50,15 @@ export default function App() {
             <Route path="haystack" element={<TabErrorBoundary tab="haystack"><HaystackPage /></TabErrorBoundary>} />
             <Route path="csv" element={<TabErrorBoundary tab="csv"><CsvWorkbenchPage /></TabErrorBoundary>} />
             <Route path="wiresheet" element={<TabErrorBoundary tab="wiresheet"><WiresheetStudioPage /></TabErrorBoundary>} />
-            <Route path="wiresheet/haystack" element={<TabErrorBoundary tab="wiresheet-haystack"><WiresheetHaystackPage /></TabErrorBoundary>} />
-            <Route path="wiresheet/rules" element={<TabErrorBoundary tab="wiresheet-rules"><WiresheetRulesPage /></TabErrorBoundary>} />
+            <Route path="wiresheet/haystack" element={<Navigate to="/model" replace />} />
+            <Route path="wiresheet/rules" element={<Navigate to="/model" replace />} />
             <Route path="data-management" element={<TabErrorBoundary tab="data-management"><DataManagementPage /></TabErrorBoundary>} />
             <Route path="reports" element={<TabErrorBoundary tab="reports"><ReportBuilderPage /></TabErrorBoundary>} />
             <Route path="agent" element={<TabErrorBoundary tab="agent"><AgentPage /></TabErrorBoundary>} />
             <Route path="host" element={<TabErrorBoundary tab="host"><HostStatsPage /></TabErrorBoundary>} />
             <Route path="fdd" element={<Navigate to="/sql-fdd" replace />} />
             <Route path="fdd-wires" element={<Navigate to="/wiresheet" replace />} />
-            <Route path="rules" element={<Navigate to="/wiresheet/rules" replace />} />
+            <Route path="rules" element={<Navigate to="/model" replace />} />
           </Route>
         </Route>
       </Routes>

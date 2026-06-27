@@ -3536,3 +3536,206 @@ button.linkish {
     max-height: 280px;
   }
 }
+
+/* ── Action bars (Haystack, SQL FDD, etc.) ── */
+.action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.action-bar--wrap {
+  margin-top: 0.75rem;
+}
+
+/* ── CSV Fusion wiresheet ── */
+.csv-fusion-wiresheet {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.csv-fusion-wiresheet--empty {
+  padding: 1.5rem;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.csv-fusion-wiresheet__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.csv-fusion-wiresheet__canvas {
+  height: 280px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel-soft);
+}
+
+.csv-fusion-wiresheet__canvas .react-flow {
+  width: 100%;
+  height: 100%;
+}
+
+.csv-recipes-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.csv-recipes-save {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  min-width: 280px;
+}
+
+.csv-recipes-save input {
+  flex: 1;
+  min-width: 200px;
+}
+
+.csv-recipe-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.csv-recipe-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.85rem;
+  background: var(--panel-soft);
+}
+
+.csv-recipe-card h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+.csv-recipe-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.35rem;
+}
+
+.csv-recipe-card__files {
+  font-size: 0.82rem;
+  margin: 0 0 0.65rem;
+  word-break: break-all;
+}
+
+.chip {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background: var(--nav-active-bg);
+  color: var(--nav-active-text);
+}
+
+.csv-recipes-empty {
+  padding: 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+/* ── SQL FDD page ── */
+.sql-fdd-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sql-fdd-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sql-fdd-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.sql-fdd-builder-grid {
+  margin-bottom: 1rem;
+}
+
+.sql-editor-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.sql-editor {
+  width: 100%;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--input-text);
+  resize: vertical;
+}
+
+.sql-editor--large {
+  min-height: 280px;
+}
+
+.sql-fdd-results {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.demo-panel-collapsible {
+  padding: 0.75rem 1rem;
+}
+
+.demo-panel-collapsible summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.fdd-wiresheet-summary__header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.detail-grid.compact {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.fdd-rule-wiresheet__canvas {
+  min-height: 400px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.fdd-rule-wiresheet--compact .fdd-rule-wiresheet__canvas {
+  min-height: 280px;
+}

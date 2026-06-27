@@ -94,14 +94,15 @@ export default function DataModelSparqlPanel({ onStatus }: Props) {
   return (
     <div className="dm-sparql panel">
       <p className="muted">
-        Run predefined summary queries or paste your own SPARQL against the synced Haystack + BACnet graph (
-        <code>data_model.ttl</code>). Read-only SELECT queries only.
+        Query the Haystack model as RDF (Turtle export). Haystack tags map to RDF resources — SPARQL is the standard
+        way to explore sites, equipment, points, and BACnet refs. Brick-compatible queries can be added later; this
+        panel uses the synced Open-FDD graph (<code>data_model.ttl</code>). Read-only SELECT only.
       </p>
 
       {catalogError ? <p className="dm-sparql-error">{catalogError}</p> : null}
 
       <section className="dm-sparql-presets">
-        <h3>Summarize your HVAC</h3>
+        <h3>Summarize your Haystack model</h3>
         <p className="muted">
           Click a button to run a predefined SPARQL query. Results appear in the custom section below.
         </p>

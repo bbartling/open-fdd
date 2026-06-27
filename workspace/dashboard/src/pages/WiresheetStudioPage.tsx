@@ -155,8 +155,8 @@ export default function WiresheetStudioPage() {
   return (
     <div className="page wiresheet-page">
       <PageHeader
-        title="Wiresheet Studio"
-        subtitle="Visual FDD workflow editor — data sources → transforms → SQL rules → faults → outputs."
+        title="FDD Wiresheet Studio"
+        subtitle="Rule mapping graph — Haystack points → FDD inputs → SQL rules → faults. AI proposes bindings; you review and save."
         meta={
           <div className="wiresheet-toolbar">
             <button type="button" className="primary-btn" disabled={busy} onClick={() => void saveGraph()}>
@@ -168,14 +168,11 @@ export default function WiresheetStudioPage() {
             <button type="button" className="secondary-btn" disabled={busy} onClick={() => void loadGraph()}>
               Reload
             </button>
-            <a className="secondary-btn" href="/csv">
-              CSV Fusion
+            <a className="secondary-btn" href="/model">
+              Model & FDD assignments
             </a>
-            <a className="secondary-btn" href="/wiresheet/haystack">
-              Haystack model
-            </a>
-            <a className="secondary-btn" href="/wiresheet/rules">
-              Rule mapping
+            <a className="secondary-btn" href="/sql-fdd">
+              SQL FDD editor
             </a>
           </div>
         }
@@ -187,7 +184,11 @@ export default function WiresheetStudioPage() {
       <GlobalSearchBar nodes={nodes} onFocusNode={setFocusNodeId} />
 
       <div className="wiresheet-layout">
-        <WiresheetPalette onAdd={onAddPalette} />
+        <WiresheetPalette
+          onAdd={onAddPalette}
+          fddMode
+          categories={["Data Sources", "Haystack", "Fault Detection", "Outputs"]}
+        />
         <WiresheetCanvas
           nodes={nodes}
           edges={edges}

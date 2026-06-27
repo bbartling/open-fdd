@@ -15,6 +15,7 @@ import {
   type CsvDataset,
   type MergeMode,
 } from "../lib/csvWorkbench";
+import CsvFusionWiresheet from "../wiresheet/CsvFusionWiresheet";
 
 type JobStatus = { ok?: boolean; job_id?: string; rows_committed?: number };
 type ModelPreview = {
@@ -352,8 +353,8 @@ export default function CsvWorkbenchPage() {
   return (
     <div className="page page-wide csv-workbench-page">
       <PageHeader
-        title="CSV workbench"
-        subtitle="Upload → preview → map columns → join/merge → commit to historian. Use Plots tab for trend charts."
+        title="CSV Fusion"
+        subtitle="Upload files → join or append on the fusion wiresheet → map columns → commit. AI can propose merges from filenames and headers."
       />
 
       {error ? <p className="error">{error}</p> : null}
@@ -391,8 +392,62 @@ export default function CsvWorkbenchPage() {
       </div>
 
       {datasets.length ? (
-        <section className="panel">
-          <h3 className="panel-title">Loaded datasets ({datasets.length})</h3>
+        <>
+          <section className="panel csv-fusion-panel">
+            <h3 className="panel-title">Fusion wiresheet</h3>
+            <p className="muted">
+              Each uploaded file is a source node. Choose join or append, then commit the merged output to the historian.
+            </p>
+            <CsvFusionWiresheet
+              datasets={datasets}
+              mergeKey={mergeKey}
+              mergeMode={mergeMode}
+              onMergeKeyChange={setMergeKey}
+              onMergeModeChange={setMergeMode}
+            />
+          </section>
+
+          <section className="panel">
+            <div className="csv-recipes-header">
+              <div>
+                <h3 className="panel-title">Saved merge recipes</h3>
+                <p className="muted">Store join/append settings for repeat uploads — AI can also generate these from your file set.</p>
+              </div>
+              <div className="csv-recipes-save">
+                <input
+                  value={recipeName}
+                  onChange={(e) => setRecipeName(e.target.value)}
+                  placeholder="Recipe name (e.g. weekly-trend-merge)"
+                  aria-label="Recipe name"
+                />
+                <button type="button" className="primary-btn" disabled={!datasets.length || !!busy} onClick={() => void saveRecipe()}>
+                  Save recipe
+                </button>
+              </div>
+            </div>
+            {recipes.length ? (
+              <div className="csv-recipe-cards">
+                {recipes.map((r) => (
+                  <article key={r.id} className="csv-recipe-card">
+                    <h4>{r.name}</h4>
+                    <p className="csv-recipe-card__meta">
+                      <span className="chip">{r.merge_mode === "append" ? "Append" : "Join"}</span>
+                      <span className="muted">on {r.merge_key}</span>
+                    </p>
+                    <p className="muted csv-recipe-card__files">{r.filenames.join(" · ")}</p>
+                    <button type="button" className="secondary-btn" onClick={() => applyRecipe(r)}>
+                      Apply settings
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="muted csv-recipes-empty">No saved recipes — configure merge above and save, or import via AI commissioning JSON on Model tab.</p>
+            )}
+          </section>
+
+          <section className="panel">
+            <h3 className="panel-title">Loaded datasets ({datasets.length})</h3>
           <ul className="csv-dataset-list">
             {datasets.map((ds) => (
               <li key={ds.id}>
@@ -422,17 +477,6 @@ export default function CsvWorkbenchPage() {
               <span className="field-label">Horizontal split after rows</span>
               <input type="number" min={1} value={splitRows} onChange={(e) => setSplitRows(Number(e.target.value))} />
             </label>
-            <label className="field">
-              <span className="field-label">Merge key</span>
-              <input value={mergeKey} onChange={(e) => setMergeKey(e.target.value)} />
-            </label>
-            <label className="field">
-              <span className="field-label">Merge mode</span>
-              <select value={mergeMode} onChange={(e) => setMergeMode(e.target.value as MergeMode)}>
-                <option value="inner">Inner join on key</option>
-                <option value="append">Append rows</option>
-              </select>
-            </label>
           </div>
           <div className="toolbar">
             <button type="button" className="secondary-btn" disabled={!merged} onClick={() => merged && downloadCsv("openfdd-merged.csv", merged.columns, merged.rows)}>
@@ -454,6 +498,7 @@ export default function CsvWorkbenchPage() {
             </button>
           </div>
         </section>
+        </>
       ) : null}
 
       {modelPreview?.ok ? (
@@ -540,37 +585,6 @@ export default function CsvWorkbenchPage() {
           </ul>
         </section>
       ) : null}
-
-      <section className="panel">
-        <h3 className="panel-title">Merge recipes</h3>
-        <div className="form-grid">
-          <label className="field">
-            <span className="field-label">Recipe name</span>
-            <input value={recipeName} onChange={(e) => setRecipeName(e.target.value)} placeholder="e.g. weekly-trend-merge" />
-          </label>
-        </div>
-        <button type="button" className="secondary-btn" disabled={!datasets.length || !!busy} onClick={() => void saveRecipe()}>
-          Save current merge as recipe
-        </button>
-        {recipes.length ? (
-          <ul className="csv-dataset-list">
-            {recipes.map((r) => (
-              <li key={r.id}>
-                <strong>{r.name}</strong>
-                <span className="muted">
-                  {" "}
-                  — {r.merge_mode} on {r.merge_key} · {r.filenames.join(", ")}
-                </span>
-                <button type="button" className="linkish-btn" onClick={() => applyRecipe(r)}>
-                  Apply settings
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="muted">No saved recipes yet.</p>
-        )}
-      </section>
 
       {modelPreview?.equipment_id ? (
         <section className="panel">

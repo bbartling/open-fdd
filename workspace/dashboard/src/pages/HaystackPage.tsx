@@ -278,19 +278,14 @@ export default function HaystackPage() {
     <div className="page page-wide driver-page">
       <PageHeader
         title="Haystack"
-        subtitle="Haystack server workflow for Niagara nHaystack — browse nav, read points, import model entities."
+        subtitle="Connect to a Haystack server, browse sites and points, and import into the Open-FDD model."
       />
 
       {error ? <p className="error">{error}</p> : null}
 
       {!enabled && !loading ? (
         <div className="panel callout-panel">
-          <p>
-            Configure Haystack below (saved to gitignored{" "}
-            <code>workspace/haystack/local.nhaystack.toml</code>) or set{" "}
-            <code>[haystack]</code> in your local validation profile. Use{" "}
-            <code>OPENFDD_HAYSTACK_FIXTURE=1</code> for UI/API without live Niagara.
-          </p>
+          <p>Enter connection settings below, then save and test. Use <strong>Import model</strong> to pull sites, equipment, and points into Model & FDD assignments.</p>
         </div>
       ) : null}
 
@@ -326,13 +321,8 @@ export default function HaystackPage() {
             />
           </label>
         </div>
-        {configPath ? (
-          <p className="muted">
-            Profile: <code>{configPath}</code>
-          </p>
-        ) : null}
         {saveMessage ? <p className="success">{saveMessage}</p> : null}
-        <div className="btn-row">
+        <div className="action-bar">
           <ActionButton pending={pending} onClick={() => void saveConfig()}>
             Save configuration
           </ActionButton>
@@ -362,7 +352,7 @@ export default function HaystackPage() {
             <dd>{status?.source_id ?? "—"}</dd>
           </div>
         </dl>
-        <div className="btn-row">
+        <div className="action-bar action-bar--wrap">
           <ActionButton pending={pending} onClick={() => void testConnection()}>
             Test connection
           </ActionButton>

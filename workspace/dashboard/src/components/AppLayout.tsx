@@ -24,10 +24,8 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Wiresheet",
     items: [
-      { to: "/wiresheet", icon: "🔗", label: "Studio", protected: true },
+      { to: "/wiresheet", icon: "🔗", label: "FDD Studio", protected: true },
       { to: "/csv", icon: "📂", label: "CSV Fusion", protected: true },
-      { to: "/wiresheet/haystack", icon: "🌿", label: "Haystack model", protected: true },
-      { to: "/wiresheet/rules", icon: "⚡", label: "Rule mapping", protected: true },
     ],
   },
   {
@@ -43,7 +41,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Model & rules",
     items: [
-      { to: "/model", icon: "📐", label: "Model & assignments", protected: true },
+      { to: "/model", icon: "📐", label: "Model & FDD assignments", protected: true },
       { to: "/sql-fdd", icon: "⚡", label: "SQL FDD Rules", protected: true },
       { to: "/plot", icon: "📈", label: "Plots", protected: true },
       { to: "/reports", icon: "📄", label: "Reports", protected: true },
