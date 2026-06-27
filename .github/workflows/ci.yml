@@ -93,6 +93,7 @@ jobs:
           cat > workspace/data.env.local <<'EOF'
           OPENFDD_BACNET_MODE=live
           OPENFDD_MODBUS_MODE=live
+          OPENFDD_DEV=1
           EOF
           cat > workspace/auth.env.local <<'EOF'
           OFDD_AUTH_REQUIRED=true
