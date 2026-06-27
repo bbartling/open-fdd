@@ -469,7 +469,10 @@ fn build_fault_families(records: &[Value]) -> Vec<Value> {
         if rec.get("status").and_then(|v| v.as_str()) == Some("cleared") {
             continue;
         }
-        let source = rec.get("source").and_then(|v| v.as_str()).unwrap_or("fdd_rule");
+        let source = rec
+            .get("source")
+            .and_then(|v| v.as_str())
+            .unwrap_or("fdd_rule");
         let family = if source == "bacnet_override" {
             "bacnet_overrides".to_string()
         } else {

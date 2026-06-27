@@ -858,8 +858,7 @@ pub fn poll_cycle_value() -> Value {
                         .map(|pts| {
                             pts.iter()
                                 .filter(|p| {
-                                    p.get("polling_enabled").and_then(|v| v.as_bool())
-                                        == Some(true)
+                                    p.get("polling_enabled").and_then(|v| v.as_bool()) == Some(true)
                                 })
                                 .cloned()
                                 .collect()
@@ -878,8 +877,7 @@ pub fn poll_cycle_value() -> Value {
                         &objects,
                     )) {
                         samples += reads.len() as u64;
-                        updated +=
-                            apply_poll_reads(&mut working, device_instance, &reads);
+                        updated += apply_poll_reads(&mut working, device_instance, &reads);
                     }
                 }
             }
@@ -911,18 +909,17 @@ fn apply_poll_reads(registry: &mut Value, device_instance: u32, reads: &[Value])
             }
             if let Some(devs) = driver.get_mut("devices").and_then(|v| v.as_array_mut()) {
                 for device in devs {
-                    if device.get("device_instance").and_then(|v| v.as_u64()).unwrap_or(0)
-                        as u32
+                    if device
+                        .get("device_instance")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as u32
                         != device_instance
                     {
                         continue;
                     }
                     if let Some(points) = device.get_mut("points").and_then(|v| v.as_array_mut()) {
                         for point in points {
-                            let pid = point
-                                .get("id")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
+                            let pid = point.get("id").and_then(|v| v.as_str()).unwrap_or("");
                             if let Some(read) = by_id.get(pid) {
                                 if let Some(pv) = read.get("present_value") {
                                     point["present_value"] = pv.clone();
@@ -959,29 +956,28 @@ pub fn scan_once_value() -> Value {
     let mut scan_health = "ok".to_string();
     let mut scan_error: Option<String> = None;
 
-    let scan_points: Vec<Value> =
-        match bacnet_live::block_on(bacnet_live::discover_device_points_with_fallback(
-            device_instance,
-        )) {
-            Ok(discovered) => discovered
-                .into_iter()
-                .filter(is_commandable_point)
-                .map(|mut p| {
-                    if p.get("device_instance").is_none() {
-                        p["device_instance"] = json!(device_instance);
-                    }
-                    if p.get("device_name").is_none() {
-                        p["device_name"] = json!(format!("Device {device_instance}"));
-                    }
-                    p
-                })
-                .collect(),
-            Err(err) => {
-                scan_health = "error".to_string();
-                scan_error = Some(err);
-                Vec::new()
-            }
-        };
+    let scan_points: Vec<Value> = match bacnet_live::block_on(
+        bacnet_live::discover_device_points_with_fallback(device_instance),
+    ) {
+        Ok(discovered) => discovered
+            .into_iter()
+            .filter(is_commandable_point)
+            .map(|mut p| {
+                if p.get("device_instance").is_none() {
+                    p["device_instance"] = json!(device_instance);
+                }
+                if p.get("device_name").is_none() {
+                    p["device_name"] = json!(format!("Device {device_instance}"));
+                }
+                p
+            })
+            .collect(),
+        Err(err) => {
+            scan_health = "error".to_string();
+            scan_error = Some(err);
+            Vec::new()
+        }
+    };
 
     let pa_by_point = read_priority_arrays_rpm_for_points(device_instance, &scan_points);
 

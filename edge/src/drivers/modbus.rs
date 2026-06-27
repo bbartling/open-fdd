@@ -43,7 +43,12 @@ pub fn modbus_config_value() -> Value {
             Err(msg) => (String::new(), 1502, "not_configured", msg),
         }
     } else {
-        (String::new(), 1502, "not_configured", "Modbus live mode required".into())
+        (
+            String::new(),
+            1502,
+            "not_configured",
+            "Modbus live mode required".into(),
+        )
     };
     json!({
         "mode": mode,

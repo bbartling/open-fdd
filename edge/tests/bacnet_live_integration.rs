@@ -74,5 +74,9 @@ fn rpm_poll_present_values_on_configured_device() {
     );
 
     let poll = bacnet::poll_cycle_value();
-    assert_eq!(poll.get("ok").and_then(|v| v.as_bool()), Some(true), "{poll}");
+    assert_eq!(
+        poll.get("ok").and_then(|v| v.as_bool()),
+        Some(true),
+        "{poll}"
+    );
 }
