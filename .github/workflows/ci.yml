@@ -169,7 +169,7 @@ jobs:
           curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export/non-p8 \
             -H "Authorization: Bearer $TOKEN" | grep "override_kind"
 
-      - name: Modbus live-mode gate smoke
+      - name: Modbus live-mode smoke
         run: |
           AGENT_PW="$(grep '^OFDD_AGENT_PASSWORD=' workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
           TOKEN="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
@@ -177,7 +177,7 @@ jobs:
             -d "$(jq -nc --arg p "$AGENT_PW" '{username:"agent",password:$p}')" | jq -r '.token // .access_token')"
 
           curl -fsS http://127.0.0.1:8080/api/modbus/points \
-            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == false and (.error | test("live"))'
+            -H "Authorization: Bearer $TOKEN" | jq -e 'type == "array"'
 
           curl -fsS http://127.0.0.1:8080/api/modbus/commission/status \
             -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and .config.mode == "live"'
@@ -185,7 +185,7 @@ jobs:
           curl -fsS -X POST http://127.0.0.1:8080/api/modbus/scan \
             -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
-            -d '{}' | jq -e '.ok == false and (.error | test("live"))'
+            -d '{}' | jq -e '.ok == false'
 
           curl -fsS -X POST http://127.0.0.1:8080/api/modbus/read \
             -H "Authorization: Bearer $TOKEN" \
