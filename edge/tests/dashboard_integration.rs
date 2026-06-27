@@ -144,32 +144,33 @@ fn http_post_json(url: &str, body: &str, bearer: Option<&str>) -> (u16, String) 
 }
 
 #[test]
-fn dashboard_summary_public_read() {
+fn dashboard_summary_requires_auth() {
     let srv = Server::start();
-    let (anon, body) = http_raw(
+    let (anon, _) = http_raw(
         "GET",
         &format!("http://127.0.0.1:{}/api/dashboard/summary", srv.port),
         None,
         None,
     );
-    assert_eq!(anon, 200);
-    assert!(body.contains("\"model_coverage\""));
-    assert!(body.contains("\"historian_health\""));
+    assert_eq!(anon, 401);
     let (status, authed) = srv.get("/api/dashboard/summary");
     assert_eq!(status, 200);
     assert!(authed.contains("\"model_coverage\""));
+    assert!(authed.contains("\"historian_health\""));
 }
 
 #[test]
-fn building_status_public_without_token() {
+fn building_status_requires_auth() {
     let srv = Server::start();
-    let (status, body) = http_raw(
+    let (status, _) = http_raw(
         "GET",
         &format!("http://127.0.0.1:{}/api/building/status", srv.port),
         None,
         None,
     );
-    assert_eq!(status, 200);
+    assert_eq!(status, 401);
+    let (authed_status, body) = srv.get("/api/building/status");
+    assert_eq!(authed_status, 200);
     let v: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(v.get("ok").and_then(|x| x.as_bool()), Some(true));
 }
