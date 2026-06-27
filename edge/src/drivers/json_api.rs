@@ -141,6 +141,46 @@ pub fn poll_once_value(body: &Value) -> Value {
     poll_test_source()
 }
 
+pub fn refresh_point(body: &Value) -> Value {
+    let point_id = body
+        .get("point_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let sources: Vec<Value> = serde_json::from_str(SOURCES_JSON).unwrap_or_default();
+    for src in sources {
+        if src.get("id").and_then(|v| v.as_str()) != Some(point_id) && !point_id.is_empty() {
+            continue;
+        }
+        let url = src.get("url").and_then(|v| v.as_str()).unwrap_or("");
+        if url.is_empty() {
+            continue;
+        }
+        let poll = poll_url(url);
+        let present = poll
+            .get("points")
+            .and_then(|v| v.as_array())
+            .and_then(|a| a.first())
+            .and_then(|p| p.get("value"))
+            .cloned()
+            .unwrap_or(Value::Null);
+        return json!({
+            "ok": poll.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+            "point_id": if point_id.is_empty() { src.get("id").cloned().unwrap_or(Value::Null) } else { json!(point_id) },
+            "present_value": present,
+            "url": url,
+            "source_driver": "json-api"
+        });
+    }
+    if point_id.is_empty() {
+        let poll = poll_test_source();
+        return json!({
+            "ok": poll.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+            "present_value": poll.get("points").and_then(|v| v.as_array()).and_then(|a| a.first()).and_then(|p| p.get("value")).cloned().unwrap_or(Value::Null)
+        });
+    }
+    json!({"ok": false, "error": "point not found", "point_id": point_id})
+}
+
 fn protocol_enabled(env_key: &str) -> bool {
     env::var(env_key)
         .map(|v| v != "0" && v.to_lowercase() != "false")

@@ -144,19 +144,63 @@ fn http_post_json(url: &str, body: &str, bearer: Option<&str>) -> (u16, String) 
 }
 
 #[test]
-fn dashboard_summary_requires_auth() {
+fn dashboard_summary_public_read() {
     let srv = Server::start();
-    let (anon, _) = http_raw(
+    let (anon, body) = http_raw(
         "GET",
         &format!("http://127.0.0.1:{}/api/dashboard/summary", srv.port),
         None,
         None,
     );
-    assert_eq!(anon, 401);
-    let (status, body) = srv.get("/api/dashboard/summary");
-    assert_eq!(status, 200);
+    assert_eq!(anon, 200);
     assert!(body.contains("\"model_coverage\""));
     assert!(body.contains("\"historian_health\""));
+    let (status, authed) = srv.get("/api/dashboard/summary");
+    assert_eq!(status, 200);
+    assert!(authed.contains("\"model_coverage\""));
+}
+
+#[test]
+fn building_status_public_without_token() {
+    let srv = Server::start();
+    let (status, body) = http_raw(
+        "GET",
+        &format!("http://127.0.0.1:{}/api/building/status", srv.port),
+        None,
+        None,
+    );
+    assert_eq!(status, 200);
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v.get("ok").and_then(|x| x.as_bool()), Some(true));
+}
+
+#[test]
+fn model_tree_and_commissioning_export_available() {
+    let srv = Server::start();
+    for path in ["/api/model/tree", "/api/model/commissioning-export", "/api/model/health"] {
+        let (status, body) = srv.get(path);
+        assert_eq!(status, 200, "GET {path}");
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(v.get("ok").and_then(|x| x.as_bool()), Some(true));
+    }
+}
+
+#[test]
+fn fault_clear_requires_operator_role() {
+    let srv = Server::start();
+    let (anon, _) = http_post_json(
+        &format!("http://127.0.0.1:{}/api/faults/fault-test/clear", srv.port),
+        "{}",
+        None,
+    );
+    assert_eq!(anon, 401);
+    let (status, body) = http_post_json(
+        &format!("http://127.0.0.1:{}/api/faults/fault-test/clear", srv.port),
+        "{}",
+        Some(&srv.token),
+    );
+    assert_eq!(status, 200);
+    assert!(body.contains("\"ok\":true"));
 }
 
 #[test]

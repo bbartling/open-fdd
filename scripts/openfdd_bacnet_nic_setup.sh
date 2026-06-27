@@ -101,7 +101,7 @@ BIND="${FINAL_CIDR}:${DEFAULT_PORT}"
 
 upsert_env "OPENFDD_JWT_SECRET" "${OPENFDD_JWT_SECRET:-dev-change-me-openfdd-rust-edge}"
 upsert_env "OPENFDD_WORKSPACE" "/app/workspace"
-upsert_env "OPENFDD_BACNET_MODE" "${OPENFDD_BACNET_MODE:-simulated}"
+upsert_env "OPENFDD_BACNET_MODE" "${OPENFDD_BACNET_MODE:-live}"
 upsert_env "OPENFDD_BACNET_IFACE" "$IFACE"
 upsert_env "OPENFDD_BACNET_BIND" "$BIND"
 upsert_env "OPENFDD_BACNET_DEVICE_INSTANCE" "$DEFAULT_DEVICE_INSTANCE"

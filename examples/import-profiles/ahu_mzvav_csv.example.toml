@@ -1,0 +1,12 @@
+profile_id = "ahu_mzvav_csv"
+source_id = "source:ahu-mzvav"
+site_id = "site:demo"
+building_id = "building:main"
+equipment_id = "equip:mzvav-1"
+timestamp_column = "Datetime"
+timezone = "UTC"
+delimiter = ","
+header_row = 1
+data_shape = "wide"
+# Practice fixture from LBNL MZVAV synthesis (open-fdd/air_handling_unit/ahu_data)
+# Local path: workspace/fixtures/ahu_data/MZVAV-1.csv

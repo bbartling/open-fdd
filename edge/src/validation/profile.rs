@@ -557,7 +557,12 @@ pub fn validate_json_api() -> bool {
 }
 
 pub fn simulate_phases() -> bool {
-    env_flag("OPENFDD_SMOKE_SIMULATE") || env_flag("BENCH_SMOKE_SIMULATE")
+    if env_flag("OPENFDD_SMOKE_SIMULATE") || env_flag("BENCH_SMOKE_SIMULATE") {
+        eprintln!(
+            "WARN: OPENFDD_SMOKE_SIMULATE is removed — use live OT drivers or CSV import for validation"
+        );
+    }
+    false
 }
 
 fn env_flag(key: &str) -> bool {

@@ -121,6 +121,36 @@ export async function apiFetch<T>(
   return res.json() as Promise<T>;
 }
 
+/** Upload raw CSV/text bodies (import job upload endpoint). */
+export async function apiUploadRaw<T>(
+  path: string,
+  body: string | Blob,
+  contentType = "text/csv",
+): Promise<T> {
+  const base = getBridgeBase();
+  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...authHeaders(),
+      "Content-Type": contentType,
+    },
+    body,
+  });
+  if (res.status === 401) {
+    sessionStorage.removeItem(TOKEN_KEY);
+    if (shouldRedirectLogin()) {
+      window.location.assign("/login");
+    }
+    throw new Error("unauthorized");
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    throw parseErrorBody(text, res.status);
+  }
+  return res.json() as Promise<T>;
+}
+
 /** Download binary payloads (zip exports) with shared auth/base-url behavior. */
 export async function apiDownloadBlob(
   path: string,

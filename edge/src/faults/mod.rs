@@ -4,10 +4,57 @@ use crate::fdd::{execution, rules};
 use crate::historian::store;
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::PathBuf;
 
 const DEFAULT_SQL: &str = "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t IS NULL THEN false WHEN oa_t < 40.0 OR oa_t > 110.0 THEN true ELSE false END AS raw_fault FROM telemetry_pivot";
 const CONFIRMATION_SECONDS: i64 = 300;
+
+fn cleared_path() -> PathBuf {
+    crate::validation::profile::workspace_dir()
+        .join("data/faults_cleared.json")
+}
+
+fn load_cleared_ids() -> HashSet<String> {
+    let path = cleared_path();
+    let text = fs::read_to_string(path).unwrap_or_else(|_| "[]".into());
+    serde_json::from_str::<Vec<String>>(&text)
+        .unwrap_or_default()
+        .into_iter()
+        .collect()
+}
+
+fn save_cleared_ids(ids: &HashSet<String>) -> std::io::Result<()> {
+    let path = cleared_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut list: Vec<String> = ids.iter().cloned().collect();
+    list.sort();
+    fs::write(path, serde_json::to_string_pretty(&list).unwrap_or_else(|_| "[]".into()))
+}
+
+pub fn clear_fault(fault_id: &str, cleared_by: &str) -> Value {
+    if fault_id.trim().is_empty() {
+        return json!({"ok": false, "error": "fault_id required"});
+    }
+    let mut ids = load_cleared_ids();
+    ids.insert(fault_id.to_string());
+    match save_cleared_ids(&ids) {
+        Ok(()) => json!({
+            "ok": true,
+            "fault_id": fault_id,
+            "cleared_by": cleared_by,
+            "cleared_at": Utc::now().to_rfc3339()
+        }),
+        Err(e) => json!({"ok": false, "error": e.to_string()}),
+    }
+}
+
+fn is_manually_cleared(fault_id: &str) -> bool {
+    load_cleared_ids().contains(fault_id)
+}
 
 pub fn eval_rows() -> Vec<Value> {
     let eval =
@@ -87,6 +134,12 @@ pub fn list_records() -> Vec<Value> {
                 || r.get("confirmed_fault").and_then(|v| v.as_bool()) == Some(true)
         })
         .map(|(i, r)| build_fault_record(r, &rule, i))
+        .filter(|rec| {
+            rec.get("fault_id")
+                .and_then(|v| v.as_str())
+                .map(|id| !is_manually_cleared(id))
+                .unwrap_or(true)
+        })
         .collect()
 }
 
@@ -197,7 +250,86 @@ pub fn status_json() -> Value {
     })
 }
 
+fn fault_analytics_for_record(rec: &Value, all_rows: &[Value]) -> Value {
+    let equipment = rec
+        .get("equipment_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let input_col = rec
+        .get("input_points")
+        .and_then(|v| v.as_array())
+        .and_then(|a| a.first())
+        .and_then(|v| v.as_str())
+        .unwrap_or("oa_t");
+    let mut fault_vals = Vec::new();
+    let mut normal_vals = Vec::new();
+    let mut fault_samples = 0_usize;
+    let mut total_samples = 0_usize;
+    let mut first_fault: Option<String> = None;
+    let mut last_fault: Option<String> = None;
+
+    for row in all_rows {
+        if row.get("equipment_id").and_then(|v| v.as_str()) != Some(equipment) {
+            continue;
+        }
+        total_samples += 1;
+        let is_fault = row.get("raw_fault").and_then(|v| v.as_bool()) == Some(true)
+            || row.get("confirmed_fault").and_then(|v| v.as_bool()) == Some(true);
+        if let Some(v) = row.get(input_col).and_then(|v| v.as_f64()) {
+            if is_fault {
+                fault_vals.push(v);
+            } else {
+                normal_vals.push(v);
+            }
+        }
+        if is_fault {
+            fault_samples += 1;
+            let ts = row.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
+            if first_fault.is_none() {
+                first_fault = Some(ts.to_string());
+            }
+            last_fault = Some(ts.to_string());
+        }
+    }
+
+    let minutes = rec.get("minutes_in_fault").and_then(|v| v.as_i64()).unwrap_or(0);
+    let hours = minutes as f64 / 60.0;
+    let avg = |vals: &[f64]| {
+        if vals.is_empty() {
+            Value::Null
+        } else {
+            json!(vals.iter().sum::<f64>() / vals.len() as f64)
+        }
+    };
+    let min = |vals: &[f64]| vals.iter().copied().fold(f64::INFINITY, f64::min);
+    let max = |vals: &[f64]| vals.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+
+    json!({
+        "fault_samples": fault_samples,
+        "total_samples": total_samples,
+        "avg_value_fault": avg(&fault_vals),
+        "avg_value_normal": avg(&normal_vals),
+        "min_value_fault": if fault_vals.is_empty() { Value::Null } else { json!(min(&fault_vals)) },
+        "max_value_fault": if fault_vals.is_empty() { Value::Null } else { json!(max(&fault_vals)) },
+        "value_unit": if input_col.contains("_h") { "%RH" } else { "°F" },
+        "bounds_low": 40.0,
+        "bounds_high": 110.0,
+        "fault_span_label": match (&first_fault, &last_fault) {
+            (Some(a), Some(b)) if a == b => json!(a),
+            (Some(a), Some(b)) => json!(format!("{a} → {b}")),
+            _ => Value::Null
+        },
+        "estimated_fault_duration_label": format!("{hours:.1} h"),
+        "estimated_fault_duration_hours": hours,
+        "hours_in_fault": hours,
+        "first_seen_at": first_fault,
+        "last_seen_at": last_fault,
+        "value_columns": [input_col]
+    })
+}
+
 fn build_fault_families(records: &[Value]) -> Vec<Value> {
+    let all_rows = eval_rows();
     let mut by_family: HashMap<String, Vec<Value>> = HashMap::new();
     for rec in records {
         if rec.get("status").and_then(|v| v.as_str()) == Some("cleared") {
@@ -208,6 +340,7 @@ fn build_fault_families(records: &[Value]) -> Vec<Value> {
             .and_then(|v| v.as_str())
             .unwrap_or("general")
             .to_string();
+        let analytics = fault_analytics_for_record(rec, &all_rows);
         by_family.entry(family).or_default().push(json!({
             "id": rec.get("fault_id").cloned().unwrap_or(Value::Null),
             "severity": rec.get("severity").cloned().unwrap_or(json!("warning")),
@@ -216,7 +349,12 @@ fn build_fault_families(records: &[Value]) -> Vec<Value> {
             "rule_id": rec.get("rule_id").cloned().unwrap_or(Value::Null),
             "rule_name": rec.get("rule_name").cloned().unwrap_or(Value::Null),
             "equipment_id": rec.get("equipment_id").cloned().unwrap_or(Value::Null),
-            "equipment_name": rec.get("equipment_id").cloned().unwrap_or(Value::Null)
+            "equipment_name": rec.get("equipment_id").cloned().unwrap_or(Value::Null),
+            "source": "fdd_rule",
+            "code": rec.get("rule_id").cloned().unwrap_or(Value::Null),
+            "first_seen_at": rec.get("first_seen_at").cloned().unwrap_or(Value::Null),
+            "last_seen_at": rec.get("last_seen_at").cloned().unwrap_or(Value::Null),
+            "analytics": analytics
         }));
     }
     by_family
@@ -407,5 +545,34 @@ mod tests {
         let body = status_json();
         assert!(body.get("traffic").is_some());
         assert!(body.get("families").is_some());
+    }
+
+    #[test]
+    fn clear_fault_hides_from_list() {
+        let _lock = crate::test_support::workspace_env_lock();
+        let dir = std::env::temp_dir().join(format!("openfdd-fault-clear-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        std::env::set_var("OPENFDD_WORKSPACE", &dir);
+        let fault_id = "fault-test-clear";
+        let out = clear_fault(fault_id, "operator");
+        assert_eq!(out.get("ok").and_then(|v| v.as_bool()), Some(true));
+        assert!(load_cleared_ids().contains(fault_id));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn fault_analytics_includes_hours() {
+        let rec = json!({
+            "equipment_id": "equip:local-test",
+            "minutes_in_fault": 90,
+            "input_points": ["oa_t"]
+        });
+        let rows = vec![
+            json!({"equipment_id":"equip:local-test","timestamp":"2026-06-21T10:00:00Z","raw_fault":true,"oa_t":120.0}),
+            json!({"equipment_id":"equip:local-test","timestamp":"2026-06-21T11:00:00Z","raw_fault":false,"oa_t":70.0}),
+        ];
+        let analytics = fault_analytics_for_record(&rec, &rows);
+        assert_eq!(analytics.get("hours_in_fault").and_then(|v| v.as_f64()), Some(1.5));
+        assert!(analytics.get("fault_span_label").is_some());
     }
 }

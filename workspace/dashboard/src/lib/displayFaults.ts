@@ -144,13 +144,43 @@ function groupFddInput(alerts: FaultAlert[]): DisplayFault | null {
 function alertToDisplay(a: FaultAlert, equipmentLabel: string): DisplayFault {
   const sev = mapSeverity(String(a.severity || "warning"));
   const meta: { label: string; value: string }[] = [];
-  if (a.analytics?.estimated_fault_duration_label) {
-    meta.push({ label: "Duration", value: a.analytics.estimated_fault_duration_label });
+  const analytics = a.analytics;
+  if (analytics?.first_seen_at) {
+    meta.push({ label: "First seen", value: String(analytics.first_seen_at) });
   }
-  if (a.analytics?.fault_samples != null && a.analytics?.total_samples != null) {
+  if (analytics?.last_seen_at) {
+    meta.push({ label: "Last seen", value: String(analytics.last_seen_at) });
+  }
+  if (analytics?.fault_span_label) {
+    meta.push({ label: "Fault window", value: String(analytics.fault_span_label) });
+  }
+  if (analytics?.estimated_fault_duration_label) {
+    meta.push({ label: "Time in fault", value: analytics.estimated_fault_duration_label });
+  } else if (analytics?.hours_in_fault != null) {
+    meta.push({ label: "Time in fault", value: `${Number(analytics.hours_in_fault).toFixed(1)} h` });
+  }
+  if (analytics?.avg_value_fault != null) {
+    meta.push({
+      label: "Avg in fault",
+      value: `${analytics.avg_value_fault}${analytics.value_unit ? ` ${analytics.value_unit}` : ""}`,
+    });
+  }
+  if (analytics?.avg_value_normal != null) {
+    meta.push({
+      label: "Avg normal",
+      value: `${analytics.avg_value_normal}${analytics.value_unit ? ` ${analytics.value_unit}` : ""}`,
+    });
+  }
+  if (analytics?.min_value_fault != null && analytics?.max_value_fault != null) {
+    meta.push({
+      label: "In-fault range",
+      value: `${analytics.min_value_fault} – ${analytics.max_value_fault}${analytics.value_unit ? ` ${analytics.value_unit}` : ""}`,
+    });
+  }
+  if (analytics?.fault_samples != null && analytics?.total_samples != null) {
     meta.push({
       label: "Samples",
-      value: `${a.analytics.fault_samples} / ${a.analytics.total_samples}`,
+      value: `${analytics.fault_samples} / ${analytics.total_samples} in fault`,
     });
   }
   if (a.code && a.source !== "poll_health" && a.source !== "model_health") {

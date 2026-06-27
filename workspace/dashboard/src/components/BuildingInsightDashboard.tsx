@@ -250,7 +250,11 @@ export default function BuildingInsightDashboard() {
         />
       </div>
 
-      <FaultDetailModal fault={selectedFault} onClose={() => setSelectedFault(null)} />
+      <FaultDetailModal
+        fault={selectedFault}
+        onClose={() => setSelectedFault(null)}
+        onCleared={() => window.dispatchEvent(new CustomEvent("ofdd-dashboard-refresh"))}
+      />
     </div>
   );
 }

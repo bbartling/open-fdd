@@ -15,17 +15,12 @@
 #   OPENFDD_SMOKE_NO_DEMO_PASS=1 \
 #   ./scripts/smoke_live_fdd_validation.sh
 #
-# Short dry-run with safe simulation (no OT writes):
+# Short dry-run without OT (CSV-only validation):
 #   OPENFDD_SMOKE_DURATION_HOURS=0.05 OPENFDD_SMOKE_INTERVAL_SECONDS=30 \
-#   OPENFDD_SMOKE_SIMULATE=1 OPENFDD_SMOKE_SAMPLES=3 \
+#   OPENFDD_SMOKE_SAMPLES=3 OPENFDD_SMOKE_CSV_APPEND=1 \
 #   ./scripts/smoke_live_fdd_validation.sh
 #
-# Finalize a crashed run from existing summary.jsonl:
-#   OPENFDD_SMOKE_FINALIZE_ONLY=1 \
-#   OPENFDD_SMOKE_ARTIFACT_DIR=workspace/logs/live_fdd_validation_6h_... \
-#   OPENFDD_SMOKE_SIMULATE=1 OPENFDD_SMOKE_REQUIRE_CONFIRMED_FAULT=1 \
-#   ./scripts/smoke_live_fdd_validation.sh
-#
+# OPENFDD_SMOKE_SIMULATE is removed — live OT or CSV import only.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/openfdd_rust_site_lib.sh
@@ -57,6 +52,10 @@ fi
 SAMPLES="${OPENFDD_SMOKE_SAMPLES:-${BENCH_SMOKE_SAMPLES:-}}"
 LIVE_FDD="${OPENFDD_SMOKE_LIVE_FDD:-${BENCH_SMOKE_LIVE_FDD:-0}}"
 SIMULATE="${OPENFDD_SMOKE_SIMULATE:-${BENCH_SMOKE_SIMULATE:-0}}"
+if [[ "$SIMULATE" == "1" ]]; then
+  echo "ERROR: OPENFDD_SMOKE_SIMULATE is removed. Use live BACnet/Modbus or CSV import." >&2
+  exit 2
+fi
 REQUIRE_CONFIRMED="${OPENFDD_SMOKE_REQUIRE_CONFIRMED_FAULT:-0}"
 REQUIRE_MODBUS="${OPENFDD_SMOKE_REQUIRE_MODBUS:-0}"
 VALIDATE_DOCKER="${OPENFDD_SMOKE_VALIDATE_DOCKER:-1}"
@@ -578,25 +577,30 @@ if [[ "$CSV_APPEND" == "1" ]]; then
   openfdd_csv_append_export_checks "$BASE" "$INT_TOKEN" after_purge || true
 fi
 
-report_draft="$(curl "${CURL_TLS[@]}" -fsS -X POST "${BASE}/api/reports/draft" \
+fail_count="$(jq -s '[.[] | select(.api_health_ok==false or .fdd_sql_ok==false)] | length' "$LOG_DIR/summary.jsonl" 2>/dev/null || echo 0)"
+total="$(wc -l <"$LOG_DIR/summary.jsonl" | tr -d ' ')"
+
+report_draft="$(curl "${CURL_TLS[@]}" -fsS -X POST "${BASE}/api/reports/from-validation-run" \
   -H "Authorization: Bearer $INT_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"template_id":"validation-summary","title":"Live FDD Validation Report"}' 2>/dev/null || echo '{}')"
+  -d "$(jq -nc --arg dir "$LOG_DIR" --arg run "$RUN_TS" --argjson pass "$([[ "$fail_count" -eq 0 ]] && echo true || echo false)" \
+    '{artifact_dir:$dir,validation_run_id:$run,pass:$pass}')" 2>/dev/null || echo '{}')"
 echo "$report_draft" >"$LOG_DIR/validation_report_draft.json"
 report_id="$(jq -r '.report_id // empty' <<<"$report_draft")"
 if [[ -n "$report_id" ]]; then
-  curl "${CURL_TLS[@]}" -fsS -X POST "${BASE}/api/reports/${report_id}/render/pdf" \
-    -H "Authorization: Bearer $INT_TOKEN" \
-    -H 'Content-Type: application/json' \
-    -d '{}' -o "$LOG_DIR/validation_report_render.json" 2>/dev/null || true
   curl "${CURL_TLS[@]}" -fsS "${BASE}/api/reports/${report_id}/download.pdf" \
     -H "Authorization: Bearer $INT_TOKEN" \
-    -o "$LOG_DIR/validation_report.pdf" 2>/dev/null || true
+    -o "$LOG_DIR/validation_report.pdf" 2>/dev/null || {
+      echo "WARN: PDF download failed for report $report_id — see validation_report_draft.json" | tee -a "$LOG_DIR/run.log"
+    }
+  if [[ -f "$LOG_DIR/validation_report.pdf" ]] && [[ -s "$LOG_DIR/validation_report.pdf" ]]; then
+    echo "Report PDF: $LOG_DIR/validation_report.pdf" | tee -a "$LOG_DIR/run.log"
+  fi
+else
+  echo "WARN: validation report not created — $(jq -r '.error // "unknown"' <<<"$report_draft")" | tee -a "$LOG_DIR/run.log"
 fi
 
 write_final_report
-fail_count="$(jq -s '[.[] | select(.api_health_ok==false or .fdd_sql_ok==false)] | length' "$LOG_DIR/summary.jsonl" 2>/dev/null || echo 0)"
-total="$(wc -l <"$LOG_DIR/summary.jsonl" | tr -d ' ')"
 
 echo "Finished: $(date -Iseconds)" | tee -a "$LOG_DIR/run.log"
 echo "Samples: $total interval_failures: $fail_count artifact=$LOG_DIR" | tee -a "$LOG_DIR/run.log"

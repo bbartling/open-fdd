@@ -24,6 +24,7 @@ export type FaultAnalytics = {
   fault_samples?: number;
   total_samples?: number;
   avg_value_fault?: number;
+  avg_value_normal?: number;
   min_value_fault?: number;
   max_value_fault?: number;
   value_unit?: string;
@@ -32,6 +33,10 @@ export type FaultAnalytics = {
   fault_span_label?: string;
   estimated_fault_duration_label?: string;
   estimated_fault_duration_sec?: number;
+  estimated_fault_duration_hours?: number;
+  hours_in_fault?: number;
+  first_seen_at?: string;
+  last_seen_at?: string;
   fault_span_sec?: number;
   sample_period_sec?: number;
   value_columns?: string[];
@@ -136,9 +141,12 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
     poll();
     pollId = window.setInterval(poll, pollMs);
     setLive(false);
+    const onRefresh = () => poll();
+    window.addEventListener("ofdd-dashboard-refresh", onRefresh);
 
     return () => {
       cancelled = true;
+      window.clearEventListener("ofdd-dashboard-refresh", onRefresh);
       window.clearInterval(pollId);
     };
   }, [pollMs, authenticated]);

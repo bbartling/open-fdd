@@ -224,7 +224,7 @@ export default function ReportBuilderPage() {
       <section className="panel">
         <h2>Validation reports</h2>
         {reports.length === 0 ? (
-          <p className="hint">No reports yet. Run the 1-hour validation workflow to generate a PDF.</p>
+          <p className="hint">No reports yet. Run a validation workflow from Reports or complete a site validation harness to generate a PDF.</p>
         ) : (
           <ul className="report-list">
             {reports.map((r) => {

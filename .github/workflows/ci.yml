@@ -64,13 +64,13 @@ jobs:
           test -x scripts/openfdd_bacnet_nic_setup.sh
           bash -n scripts/openfdd_bacnet_nic_setup.sh
           test -f .env.example
-          grep -q "OPENFDD_BACNET_MODE=simulated" .env.example
+          grep -q "OPENFDD_BACNET_MODE=live" .env.example
           grep -q "OPENFDD_VALIDATION_PROFILE" .env.example
           test -x scripts/audit_no_private_bench_hardcoding.sh
           ./scripts/audit_no_private_bench_hardcoding.sh
           test -f docker-compose.bacnet-live.yml
           test -f VERSION
-          grep -q "3.2.1" VERSION
+          grep -q "3.2.2" VERSION
 
   docker:
     name: Docker image build
@@ -90,6 +90,10 @@ jobs:
       - name: Prepare workspace for non-root container user
         run: |
           mkdir -p workspace/overrides workspace/bacnet/overrides workspace/data/drivers workspace/logs
+          cat > workspace/data.env.local <<'EOF'
+          OPENFDD_BACNET_MODE=simulated
+          OPENFDD_MODBUS_MODE=simulated
+          EOF
           cat > workspace/auth.env.local <<'EOF'
           OFDD_AUTH_REQUIRED=true
           OFDD_AUTH_SECRET=ci-test-secret-openfdd-edge-do-not-use-in-production

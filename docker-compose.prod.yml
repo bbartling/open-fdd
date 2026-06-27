@@ -24,8 +24,8 @@ services:
       FRONTEND_DIR: /app/frontend
       OPENFDD_WORKSPACE: /app/workspace
       OFDD_AUTH_REQUIRED: "true"
-      OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-simulated}
-      OPENFDD_MODBUS_MODE: ${OPENFDD_MODBUS_MODE:-simulated}
+      OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-live}
+      OPENFDD_MODBUS_MODE: ${OPENFDD_MODBUS_MODE:-live}
     env_file:
       - ./workspace/auth.env.local
     volumes:
@@ -49,8 +49,8 @@ services:
       SERVICE_MODE: commission
       PORT: "9091"
       OPENFDD_WORKSPACE: /app/workspace
-      OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-simulated}
-      OPENFDD_MODBUS_MODE: ${OPENFDD_MODBUS_MODE:-simulated}
+      OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-live}
+      OPENFDD_MODBUS_MODE: ${OPENFDD_MODBUS_MODE:-live}
     env_file:
       - ./workspace/auth.env.local
     volumes:

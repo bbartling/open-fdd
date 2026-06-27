@@ -14,6 +14,7 @@ mod ops;
 mod reports;
 mod test_support;
 mod validation;
+mod version;
 
 use auth::audit;
 use auth::auth_config;
@@ -67,15 +68,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         return options(&mut stream);
     }
     if method == "GET" && (clean_path == "/api/health" || clean_path == "/health") {
-        return json_response(
-            &mut stream,
-            json!({
-                "ok": true,
-                "auth_required": auth_config().required,
-                "mode": "rust-jwt-edge-auth",
-                "services": ["bridge-api", "dashboard", "historian", "commission", "bacnet", "modbus", "haystack-gateway", "arrow", "datafusion", "control", "json-api", "agent-api"]
-            }),
-        );
+        return json_response(&mut stream, version::health_json(auth_config().required));
     }
     if method == "POST" && clean_path == "/api/auth/login" {
         return login_handler(&mut stream, &body);
@@ -96,6 +89,23 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
     }
     if method == "GET" && clean_path == "/api/building/snapshot" {
         return json_response(&mut stream, dashboard::building_snapshot());
+    }
+    if method == "GET" {
+        match clean_path.as_str() {
+            "/api/building/status" => {
+                return json_response(&mut stream, dashboard::building_status());
+            }
+            "/api/dashboard/summary" => {
+                return json_response(&mut stream, dashboard::summary());
+            }
+            "/api/dashboard/analytics" => {
+                return json_response(&mut stream, dashboard::analytics());
+            }
+            "/api/fdd-rules" => {
+                return raw_json(&mut stream, &fdd::wires::api::list_rules_json());
+            }
+            _ => {}
+        }
     }
     if method == "GET"
         && !clean_path.starts_with("/api/")
@@ -377,6 +387,34 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/model/algorithm-bindings") => {
             raw_json(&mut stream, model::assignments::algorithm_bindings_json())
         }
+        ("GET", "/api/model/tree") => json_response(&mut stream, model::commissioning::tree_json()),
+        ("GET", "/api/model/commissioning-export") => {
+            json_response(&mut stream, model::commissioning::commissioning_export_json())
+        }
+        ("POST", "/api/model/commissioning-import") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            model::commissioning::import_commissioning(&parse_json_body(&body)),
+        ),
+        ("GET", "/api/model/health") => {
+            json_response(&mut stream, model::commissioning::health_json())
+        }
+        ("GET", "/api/model/bacnet-sync") => {
+            json_response(&mut stream, model::commissioning::bacnet_sync_status_json())
+        }
+        ("POST", "/api/model/bacnet-sync") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            model::commissioning::bacnet_sync_apply_json(),
+        ),
+        ("POST", "/api/model/sync-ttl") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            model::commissioning::sync_ttl_json(),
+        ),
         ("GET", "/api/haystack/about") => raw_json(&mut stream, &drivers::haystack::about_json()),
         ("GET", "/api/haystack/config") => {
             raw_json(&mut stream, &drivers::haystack::config_get_json())
@@ -672,6 +710,10 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
                     drivers::json_api::poll_test_source()
                 }
             })
+        }
+        ("POST", "/api/json-api/refresh") => {
+            let payload = serde_json::from_str::<Value>(&body).unwrap_or(json!({}));
+            json_response(&mut stream, drivers::json_api::refresh_point(&payload))
         }
         ("POST", "/api/json-api/register") => require_role(
             &mut stream,
@@ -1005,18 +1047,34 @@ fn handle_fdd_wires_dynamic(
 
 fn handle_faults_dynamic(
     stream: &mut TcpStream,
-    _principal: &Principal,
+    principal: &Principal,
     method: &str,
     path: &str,
 ) -> Option<std::io::Result<()>> {
-    if method != "GET" {
-        return None;
-    }
     let prefix = "/api/faults/";
     if !path.starts_with(prefix) {
         return None;
     }
     let tail = path.trim_start_matches(prefix);
+    if tail.ends_with("/clear") && method == "POST" {
+        let fault_id = tail.trim_end_matches("/clear").trim_end_matches('/');
+        if fault_id.is_empty() {
+            return Some(status_json(
+                stream,
+                "400 Bad Request",
+                json!({"ok": false, "error": "fault_id required"}),
+            ));
+        }
+        return Some(require_role(
+            stream,
+            principal,
+            &["operator", "integrator", "agent"],
+            faults::clear_fault(fault_id, &principal.sub),
+        ));
+    }
+    if method != "GET" {
+        return None;
+    }
     if tail.is_empty()
         || tail.contains('/')
         || matches!(

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
+import CsvImportPanel from "../components/CsvImportPanel";
 
 type StorageSummary = {
   ok?: boolean;
@@ -28,6 +29,7 @@ export default function DataManagementPage() {
   const [subdir, setSubdir] = useState("validation");
   const [confirm, setConfirm] = useState("");
   const [jobResult, setJobResult] = useState<string>("");
+  const [importStatus, setImportStatus] = useState("");
 
   const loadSummary = useCallback(async () => {
     setError(null);
@@ -102,6 +104,9 @@ export default function DataManagementPage() {
 
       {error ? <div className="alert alert-error">{error}</div> : null}
       {jobResult ? <div className="alert alert-ok">{jobResult}</div> : null}
+      {importStatus ? <div className="alert alert-ok">{importStatus}</div> : null}
+
+      <CsvImportPanel onStatus={setImportStatus} />
 
       <section className="card">
         <h2>Storage summary</h2>

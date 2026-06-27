@@ -150,7 +150,7 @@ fn now_rfc3339() -> String {
 pub fn bacnet_config_value() -> Value {
     let inst = simulated_device_instance();
     json!({
-        "mode": env::var("OPENFDD_BACNET_MODE").unwrap_or_else(|_| "simulated".to_string()),
+        "mode": env::var("OPENFDD_BACNET_MODE").unwrap_or_else(|_| "live".to_string()),
         "iface": env::var("OPENFDD_BACNET_IFACE").unwrap_or_default(),
         "bind": env::var("OPENFDD_BACNET_BIND").unwrap_or_default(),
         "device_instance": env::var("OPENFDD_BACNET_DEVICE_INSTANCE").unwrap_or_else(|_| "599999".to_string()),
@@ -165,6 +165,24 @@ pub fn bacnet_config_value() -> Value {
 }
 
 fn default_registry() -> Value {
+    let bacnet_devices = if bacnet_live::is_live_mode() {
+        json!([])
+    } else {
+        json!([profile_simulated_device()])
+    };
+    let modbus_devices = if super::modbus_live::is_live_mode() {
+        json!([])
+    } else {
+        json!([{
+          "unit_id":1,
+          "name":"Plant Modbus Gateway",
+          "address":"192.168.1.50:502",
+          "points":[
+            {"id":"modbus:tcp:1:40001","name":"CHW Plant Supply Temp","register":40001,"function":"holding_register","haystack_id":"point:chwst"},
+            {"id":"modbus:tcp:1:40002","name":"Pump Speed Command","register":40002,"function":"holding_register","haystack_id":"point:pump-speed-cmd"}
+          ]
+        }])
+    };
     json!({
       "site_id":"demo",
       "building_id":"rust-edge-demo",
@@ -176,26 +194,14 @@ fn default_registry() -> Value {
           "status":"online",
           "enabled":true,
           "override_scan":{"enabled":true,"cadence_seconds":3600,"method":"ReadProperty(priority-array) on writable points"},
-          "devices":[
-            profile_simulated_device()
-          ]
+          "devices": bacnet_devices
         },
         {
           "id":"modbus-tcp",
           "label":"Modbus/TCP",
           "status":"online",
           "enabled":true,
-          "devices":[
-            {
-              "unit_id":1,
-              "name":"Plant Modbus Gateway",
-              "address":"192.168.1.50:502",
-              "points":[
-                {"id":"modbus:tcp:1:40001","name":"CHW Plant Supply Temp","register":40001,"function":"holding_register","haystack_id":"point:chwst"},
-                {"id":"modbus:tcp:1:40002","name":"Pump Speed Command","register":40002,"function":"holding_register","haystack_id":"point:pump-speed-cmd"}
-              ]
-            }
-          ]
+          "devices": modbus_devices
         },
         {
           "id":"json-api",
@@ -203,8 +209,8 @@ fn default_registry() -> Value {
           "status":"online",
           "enabled":true,
           "sources":[
-            {"id":"openweather-oat","url":"https://api.openweathermap.org/data/2.5/weather","maps_to":"point:oat"},
-            {"id":"plant-json-api","url":"http://edge-controller.local/api/points","maps_to":"plant telemetry"}
+            {"id":"postbin-echo","url":"https://postman-echo.com/get","maps_to":"json_api_echo"},
+            {"id":"httpbin-health","url":"https://httpbin.org/get","maps_to":"json_api_health"}
           ]
         },
         {
@@ -261,16 +267,39 @@ fn merge_missing_drivers(mut registry: Value) -> Value {
     registry
 }
 
+fn sanitize_registry_for_live_mode(mut registry: Value) -> Value {
+    if !bacnet_live::is_live_mode() {
+        return registry;
+    }
+    if let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) {
+        for driver in drivers {
+            if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
+                continue;
+            }
+            if let Some(devices) = driver.get_mut("devices").and_then(|v| v.as_array_mut()) {
+                devices.retain(|d| {
+                    d.get("address")
+                        .and_then(|v| v.as_str())
+                        .map(|a| a != "simulated:local")
+                        .unwrap_or(true)
+                });
+            }
+        }
+    }
+    registry
+}
+
 fn read_registry() -> Value {
     let path = registry_path();
-    match fs::read_to_string(&path) {
+    let registry = match fs::read_to_string(&path) {
         Ok(text) => {
             let parsed =
                 serde_json::from_str::<Value>(&text).unwrap_or_else(|_| default_registry());
             merge_missing_drivers(parsed)
         }
         Err(_) => default_registry(),
-    }
+    };
+    sanitize_registry_for_live_mode(registry)
 }
 
 fn write_registry(value: &Value) {
@@ -1235,11 +1264,29 @@ pub fn write_dry_run_json() -> &'static str {
 }
 
 pub fn commission_status_json() -> String {
+    let cfg = bacnet_config_value();
+    let low = env::var("OPENFDD_BACNET_DISCOVER_LOW").unwrap_or_else(|_| "1".into());
+    let high = env::var("OPENFDD_BACNET_DISCOVER_HIGH").unwrap_or_else(|_| "4194303".into());
+    let bind = env::var("OPENFDD_BACNET_BIND").unwrap_or_default();
+    let mode = env::var("OPENFDD_BACNET_MODE").unwrap_or_else(|_| "live".to_string());
+    let service_mode = env::var("SERVICE_MODE").unwrap_or_else(|_| "bridge".into());
+    let commission_agent_ok = service_mode == "commission"
+        || env::var("OPENFDD_BACNET_ENABLED")
+            .map(|v| v != "0" && v.to_lowercase() != "false")
+            .unwrap_or(true);
+    let discovery_mutations_enabled = env::var("OFDD_DISABLE_BACNET_DISCOVERY_MUTATIONS")
+        .map(|v| v != "1" && v.to_lowercase() != "true")
+        .unwrap_or(true);
     json!({
         "ok": true,
         "service": "bacnet-commission",
         "status": "ready",
-        "config": bacnet_config_value(),
+        "config": cfg,
+        "bacnet_bind": bind,
+        "bacnet_mode": mode,
+        "discover_range": [low, high],
+        "commission_agent_ok": commission_agent_ok,
+        "discovery_mutations_enabled": discovery_mutations_enabled,
         "features": ["whois","object-list","read-property","priority-array-scan","csv-override-log","rusty-bacnet-live"]
     }).to_string()
 }

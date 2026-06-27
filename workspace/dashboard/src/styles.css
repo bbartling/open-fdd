@@ -3046,7 +3046,23 @@ button.linkish {
   text-align: left;
   border: none;
   background: transparent;
+  color: var(--text);
   cursor: pointer;
+}
+
+.bacnet-tree-point-row code,
+.bacnet-tree-point-row .bacnet-tree-point-name {
+  color: var(--text);
+}
+
+.bacnet-tree-point-name {
+  font-weight: 500;
+}
+
+.bacnet-tree-point-address {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-family: var(--mono, ui-monospace, monospace);
 }
 
 .point-select-btn:hover {

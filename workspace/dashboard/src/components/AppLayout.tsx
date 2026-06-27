@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { clearToken, fetchAuthMe, fetchAuthStatus, hasToken } from "../lib/api";
+import { clearToken, fetchAuthMe, fetchAuthStatus, getBridgeBase, hasToken } from "../lib/api";
 import { useTheme } from "../contexts/theme-context";
 import StackStatusStrip from "./StackStatusStrip";
+
+type HealthInfo = { version?: string; image_tag?: string };
 
 type NavItem = {
   to: string;
@@ -63,6 +65,15 @@ export default function AppLayout() {
   const [tokenPresent, setTokenPresent] = useState(hasToken());
   const [sessionRole, setSessionRole] = useState<string | null>(null);
   const [sessionUser, setSessionUser] = useState<string | null>(null);
+  const [edgeVersion, setEdgeVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    const base = getBridgeBase();
+    fetch(`${base}/api/health`)
+      .then((r) => r.json())
+      .then((h: HealthInfo) => setEdgeVersion(h.version || h.image_tag || null))
+      .catch(() => setEdgeVersion(null));
+  }, []);
 
   useEffect(() => {
     fetchAuthStatus()
@@ -108,6 +119,11 @@ export default function AppLayout() {
       <aside className="sidebar">
         <div className="brand-row">
           <span className="brand">Open-FDD</span>
+          {edgeVersion ? (
+            <span className="brand-chip muted" title="Edge release">
+              v{edgeVersion}
+            </span>
+          ) : null}
           {roleChip ? (
             <span className="brand-chip" title={sessionUser ? `${sessionUser}` : undefined}>
               {roleChip}

@@ -112,18 +112,22 @@ export default function BacnetPage() {
   }, []);
 
   const refresh = useCallback(async () => {
-    const [c, s] = await Promise.all([
-      apiFetch<BacnetConfig>("/config/bacnet"),
-      apiFetch<CommissionStatus>("/api/bacnet/commission/status").catch(() => null),
-    ]);
-    setCfg(c);
+    const s = await apiFetch<
+      BacnetConfig &
+        CommissionStatus & {
+          ok?: boolean;
+          bacnet_mode?: string;
+        }
+    >("/api/bacnet/commission/status");
+    setCfg({
+      commission_agent_ok: s.commission_agent_ok === true || s.ok === true,
+      discovery_mutations_enabled: s.discovery_mutations_enabled !== false,
+    });
+    setStatus(s);
     await loadDriverTree();
-    if (s) {
-      setStatus(s);
-      if (s.discover_range?.length === 2) {
-        setWhoisLow(Number(s.discover_range[0]) || 1);
-        setWhoisHigh(Number(s.discover_range[1]) || 4194303);
-      }
+    if (s.discover_range?.length === 2) {
+      setWhoisLow(Number(s.discover_range[0]) || 1);
+      setWhoisHigh(Number(s.discover_range[1]) || 4194303);
     }
   }, [loadDriverTree]);
 

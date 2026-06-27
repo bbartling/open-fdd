@@ -14,3 +14,4 @@ pub mod reports;
 pub mod test_support;
 pub mod tls;
 pub mod validation;
+pub mod version;

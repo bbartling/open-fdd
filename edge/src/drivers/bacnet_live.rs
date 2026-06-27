@@ -32,8 +32,8 @@ pub fn block_on<F: std::future::Future>(future: F) -> F::Output {
 
 pub fn is_live_mode() -> bool {
     env::var("OPENFDD_BACNET_MODE")
-        .map(|v| v.eq_ignore_ascii_case("live"))
-        .unwrap_or(false)
+        .map(|v| !v.eq_ignore_ascii_case("simulated"))
+        .unwrap_or(true)
 }
 
 fn parse_bind() -> (Ipv4Addr, u16, Ipv4Addr) {

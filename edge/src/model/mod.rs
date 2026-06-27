@@ -4,6 +4,7 @@
 //! BACnet/Modbus/JSON points are referenced from Haystack point rows.
 
 pub mod assignments;
+pub mod commissioning;
 pub mod persist;
 pub mod query;
 pub mod smoke_profile;
