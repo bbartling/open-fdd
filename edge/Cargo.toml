@@ -1,6 +1,6 @@
 [package]
 name = "open_fdd_edge_prototype"
-version = "3.2.2"
+version = "3.2.3"
 edition = "2021"
 
 [[bin]]

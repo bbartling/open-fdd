@@ -19,10 +19,12 @@ TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
 ```bash
 ./scripts/openfdd_rust_edge_bootstrap.sh --start
 ./scripts/openfdd_rust_site_backup.sh
-./scripts/openfdd_rust_site_update.sh
+./scripts/openfdd_rust_site_update.sh   # pull GHCR :latest after master merge
 ./scripts/openfdd_rust_check_ghcr_platform.sh
 ./scripts/openfdd_rust_edge_validate.sh
 ```
+
+After a release merge to `master`, run `openfdd_rust_site_update.sh` to pull the new `ghcr.io/bbartling/openfdd-edge-rust` image. Verify with `/api/health` (`version` + `image_tag`).
 
 ## Never
 
