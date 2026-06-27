@@ -54,14 +54,20 @@ fn save_job(job: &Value) -> Result<(), String> {
 
 pub fn create_job(body: &Value) -> Value {
     let job_id = format!("import-{}", Utc::now().timestamp_millis());
+    let source_filename = body
+        .get("source_filename")
+        .and_then(|v| v.as_str())
+        .unwrap_or("import.csv");
+    let (site_id, equip_id, source_id, _) =
+        crate::model::csv_import::ids_from_filename(source_filename);
     let job = json!({
         "ok": true,
         "job_id": job_id,
         "status": "created",
-        "profile_id": body.get("profile_id").and_then(|v| v.as_str()).unwrap_or("default_csv_import"),
-        "site_id": body.get("site_id").and_then(|v| v.as_str()).unwrap_or("site:demo"),
-        "building_id": body.get("building_id").and_then(|v| v.as_str()).unwrap_or("building:main"),
-        "source_id": body.get("source_id").and_then(|v| v.as_str()).unwrap_or("source:csv-import"),
+        "source_filename": source_filename,
+        "site_id": site_id,
+        "equipment_id": equip_id,
+        "source_id": source_id,
         "rows_committed": 0,
         "created_at": Utc::now().to_rfc3339(),
         "preview": Value::Null,
@@ -95,42 +101,6 @@ pub fn upload_csv(job_id: &str, body: &str) -> Value {
         .unwrap_or("upload.csv"));
     let _ = save_job(&job);
     json!({"ok": true, "job_id": job_id, "status": "uploaded", "bytes": body.len()})
-}
-
-fn parse_f64_field(
-    record: &csv::StringRecord,
-    idx: usize,
-    field: &str,
-    line: u64,
-    default: Option<f64>,
-    warnings: &mut Vec<String>,
-) -> f64 {
-    match record.get(idx) {
-        Some(s) if s.trim().is_empty() => {
-            if let Some(d) = default {
-                warnings.push(format!("line {line}: {field} empty, using default {d}"));
-                d
-            } else {
-                warnings.push(format!("line {line}: {field} empty"));
-                0.0
-            }
-        }
-        Some(s) => match s.trim().parse::<f64>() {
-            Ok(v) => v,
-            Err(_) => {
-                warnings.push(format!("line {line}: invalid {field} value '{s}'"));
-                default.unwrap_or(0.0)
-            }
-        },
-        None => {
-            if let Some(d) = default {
-                warnings.push(format!("line {line}: missing {field}, using default {d}"));
-                d
-            } else {
-                0.0
-            }
-        }
-    }
 }
 
 pub fn preview_job(job_id: &str) -> Value {
@@ -174,7 +144,7 @@ pub fn patch_options(job_id: &str, body: &Value) -> Value {
         return json!({"ok": false, "error": "job not found"});
     };
     for key in [
-        "profile_id",
+        "source_filename",
         "site_id",
         "building_id",
         "source_id",
@@ -196,14 +166,13 @@ pub fn commit_job(job_id: &str) -> Value {
     if !path.exists() {
         return json!({"ok": false, "error": "upload missing"});
     };
-    let equipment = job
-        .get("equipment_id")
+    let source_filename = job
+        .get("source_filename")
         .and_then(|v| v.as_str())
-        .unwrap_or("equip:validation");
-    let source = job
-        .get("source_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("source:csv-import");
+        .or_else(|| job.get("source_file").and_then(|v| v.as_str()))
+        .unwrap_or("import.csv");
+    let (site_id, equipment, source, _) =
+        crate::model::csv_import::ids_from_filename(source_filename);
     let mut rows_committed = 0u64;
     let mut warnings: Vec<String> = Vec::new();
     let file = match fs::File::open(&path) {
@@ -211,7 +180,22 @@ pub fn commit_job(job_id: &str) -> Value {
         Err(err) => return json!({"ok": false, "error": err.to_string()}),
     };
     let mut rdr = csv::ReaderBuilder::new().flexible(true).from_reader(file);
+    let headers = match rdr.headers() {
+        Ok(h) => h.iter().map(str::to_string).collect::<Vec<_>>(),
+        Err(err) => return json!({"ok": false, "error": err.to_string()}),
+    };
+    if headers.is_empty() {
+        return json!({"ok": false, "error": "csv header row missing"});
+    }
+    let ts_idx = crate::model::csv_import::find_timestamp_column(&headers);
+    let value_cols: Vec<(usize, String)> = headers
+        .iter()
+        .enumerate()
+        .filter(|(i, h)| *i != ts_idx && !h.trim().is_empty())
+        .map(|(i, h)| (i, crate::model::csv_import::column_slug(h)))
+        .collect();
     let mut line = 1u64;
+    let mut new_rows: Vec<Value> = Vec::new();
     for result in rdr.records() {
         line += 1;
         let record = match result {
@@ -228,48 +212,55 @@ pub fn commit_job(job_id: &str) -> Value {
         if record.iter().all(|s| s.trim().is_empty()) {
             continue;
         }
-        if record.len() < 3 {
-            let msg =
-                format!("line {line}: expected timestamp,equipment_id,oa_t[,oa_h,duct_t,zn_t]");
-            let mut updated = job.clone();
-            updated["status"] = json!("failed");
-            updated["error"] = json!(msg);
-            let _ = save_job(&updated);
-            return json!({"ok": false, "job_id": job_id, "error": msg, "rows_committed": rows_committed});
+        if record.len() < headers.len() && record.len() <= ts_idx {
+            warnings.push(format!("line {line}: short row, skipped"));
+            continue;
         }
-        let ts = record.get(0).unwrap_or("").trim().to_string();
+        let ts = record.get(ts_idx).unwrap_or("").trim().to_string();
         if ts.is_empty() {
             warnings.push(format!("line {line}: timestamp empty, skipped"));
             continue;
         }
-        let equip = record
-            .get(1)
-            .filter(|s| !s.trim().is_empty())
-            .unwrap_or(equipment);
-        let oa_t = parse_f64_field(&record, 2, "oa_t", line, None, &mut warnings);
-        let oa_h = parse_f64_field(&record, 3, "oa_h", line, Some(45.0), &mut warnings);
-        let duct_t = parse_f64_field(&record, 4, "duct_t", line, Some(55.0), &mut warnings);
-        let zn_t = parse_f64_field(&record, 5, "zn_t", line, Some(72.0), &mut warnings);
-        let row = store::make_pivot_row(store::PivotSample {
-            timestamp: &ts,
-            equipment_id: equip,
-            oa_t,
-            oa_h,
-            duct_t,
-            zn_t,
-            source: &format!("{source}:{job_id}"),
-            source_driver: "csv-import",
-            is_simulated: false,
+        let mut row = json!({
+            "timestamp": ts,
+            "equipment_id": equipment,
+            "source": format!("{source}:{job_id}"),
+            "source_driver": "csv",
+            "is_simulated": false
         });
-        if let Err(err) = store::append_pivot_row(&row) {
+        for (idx, slug) in &value_cols {
+            if let Some(raw) = record.get(*idx) {
+                if raw.trim().is_empty() {
+                    continue;
+                }
+                match raw.trim().parse::<f64>() {
+                    Ok(v) => {
+                        row[slug] = json!(v);
+                        crate::model::csv_import::apply_pivot_aliases(&mut row, slug, v);
+                    }
+                    Err(_) => warnings.push(format!("line {line}: {slug} not numeric")),
+                }
+            }
+        }
+        if row.as_object().map(|o| o.len()).unwrap_or(0) <= 5 {
+            warnings.push(format!("line {line}: no numeric values, skipped"));
+            continue;
+        }
+        new_rows.push(row);
+        rows_committed += 1;
+    }
+    if !new_rows.is_empty() {
+        let mut all = store::load_pivot_rows().unwrap_or_default();
+        all.extend(new_rows);
+        if let Err(err) = store::rewrite_all(&all) {
             let mut updated = job.clone();
             updated["status"] = json!("failed");
             updated["error"] = json!(err);
             let _ = save_job(&updated);
             return json!({"ok": false, "job_id": job_id, "error": err, "rows_committed": rows_committed});
         }
-        rows_committed += 1;
     }
+    let model = crate::model::csv_import::import_from_csv_commit(&headers, source_filename, job_id);
     let mut updated = job.clone();
     updated["status"] = json!("completed");
     updated["rows_committed"] = json!(rows_committed);
@@ -277,6 +268,10 @@ pub fn commit_job(job_id: &str) -> Value {
     updated["warning_count"] = json!(warnings.len());
     updated["completed_at"] = json!(Utc::now().to_rfc3339());
     updated["historian_row_count"] = json!(store::row_count());
+    updated["site_id"] = json!(site_id);
+    updated["equipment_id"] = json!(equipment);
+    updated["source_id"] = json!(source);
+    updated["model_import"] = model.clone();
     let _ = save_job(&updated);
     json!({
         "ok": true,
@@ -285,7 +280,11 @@ pub fn commit_job(job_id: &str) -> Value {
         "rows_committed": rows_committed,
         "warning_count": warnings.len(),
         "warnings": warnings,
-        "historian_row_count": store::row_count()
+        "historian_row_count": store::row_count(),
+        "site_id": site_id,
+        "equipment_id": equipment,
+        "source_id": source,
+        "model_import": model
     })
 }
 

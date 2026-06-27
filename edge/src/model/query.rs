@@ -25,7 +25,11 @@ pub fn list_sites() -> Value {
         }
     }
     if sites.is_empty() {
-        sites.push(json!({"site_id": "site:demo", "name": "Demo Site"}));
+        return json!({
+            "ok": true,
+            "sites": sites,
+            "active_site_id": Value::Null
+        });
     }
     json!({
         "ok": true,
@@ -229,13 +233,14 @@ mod tests {
     #[test]
     fn groups_equips_and_counts_unmapped() {
         let coverage = model_coverage();
-        assert!(
-            coverage
-                .get("equipment_count")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0)
-                >= 1
-        );
+        assert!(coverage
+            .get("equipment_count")
+            .and_then(|v| v.as_u64())
+            .is_some());
+        assert!(coverage
+            .get("point_count")
+            .and_then(|v| v.as_u64())
+            .is_some());
         let unmapped = unmapped_points();
         assert!(unmapped.get("count").is_some());
         let grouped = group_points_by_equip();

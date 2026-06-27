@@ -5,7 +5,8 @@ pub fn edge_version() -> &'static str {
 }
 
 pub fn health_json(auth_required: bool) -> serde_json::Value {
-    let image_tag = std::env::var("OPENFDD_IMAGE_TAG").unwrap_or_else(|_| edge_version().to_string());
+    let image_tag =
+        std::env::var("OPENFDD_IMAGE_TAG").unwrap_or_else(|_| edge_version().to_string());
     serde_json::json!({
         "ok": true,
         "version": edge_version(),

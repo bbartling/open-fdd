@@ -5,6 +5,7 @@
 
 pub mod assignments;
 pub mod commissioning;
+pub mod csv_import;
 pub mod persist;
 pub mod query;
 pub mod smoke_profile;

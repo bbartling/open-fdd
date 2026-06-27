@@ -428,8 +428,7 @@ pub fn faults_csv(query: &ExportQuery, summary: bool) -> String {
 }
 
 pub fn model_points_csv() -> String {
-    let assignments: Value =
-        serde_json::from_str(crate::model::assignments::assignments_json()).unwrap_or(json!({}));
+    let assignments = crate::model::assignments::load_assignments_value();
     let label = "model/assignments".to_string();
     let mut out = String::from(MODEL_POINTS_CSV_HEADER);
     out.push('\n');

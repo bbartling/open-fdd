@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getBridgeBase } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import { useDashboardStream } from "../lib/dashboardStream";
 import { buildDisplayFaults, countBySeverity, type DisplayFault } from "../lib/displayFaults";
@@ -33,6 +33,16 @@ export default function BuildingInsightDashboard() {
   const [insightError, setInsightError] = useState("");
   const [insightLoading, setInsightLoading] = useState(false);
   const [selectedFault, setSelectedFault] = useState<DisplayFault | null>(null);
+  const [edgeVersion, setEdgeVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`${getBridgeBase()}/api/health`)
+      .then((r) => r.json())
+      .then((h: { version?: string; image_tag?: string }) =>
+        setEdgeVersion(h.version || h.image_tag || null),
+      )
+      .catch(() => setEdgeVersion(null));
+  }, []);
 
   const loadInsight = useCallback(async (force = false) => {
     setInsightLoading(true);
@@ -162,6 +172,7 @@ export default function BuildingInsightDashboard() {
       <BuildingStrip
         siteName="Active site"
         siteDetail={`${days}-day analytics · Open FDD`}
+        edgeVersion={edgeVersion}
         equipmentCount={equipmentCount}
         pointCount={pointCount}
         activeFaults={sevCounts.total}

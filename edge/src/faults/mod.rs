@@ -12,8 +12,7 @@ const DEFAULT_SQL: &str = "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t 
 const CONFIRMATION_SECONDS: i64 = 300;
 
 fn cleared_path() -> PathBuf {
-    crate::validation::profile::workspace_dir()
-        .join("data/faults_cleared.json")
+    crate::validation::profile::workspace_dir().join("data/faults_cleared.json")
 }
 
 fn load_cleared_ids() -> HashSet<String> {
@@ -32,7 +31,10 @@ fn save_cleared_ids(ids: &HashSet<String>) -> std::io::Result<()> {
     }
     let mut list: Vec<String> = ids.iter().cloned().collect();
     list.sort();
-    fs::write(path, serde_json::to_string_pretty(&list).unwrap_or_else(|_| "[]".into()))
+    fs::write(
+        path,
+        serde_json::to_string_pretty(&list).unwrap_or_else(|_| "[]".into()),
+    )
 }
 
 pub fn clear_fault(fault_id: &str, cleared_by: &str) -> Value {
@@ -292,7 +294,10 @@ fn fault_analytics_for_record(rec: &Value, all_rows: &[Value]) -> Value {
         }
     }
 
-    let minutes = rec.get("minutes_in_fault").and_then(|v| v.as_i64()).unwrap_or(0);
+    let minutes = rec
+        .get("minutes_in_fault")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
     let hours = minutes as f64 / 60.0;
     let avg = |vals: &[f64]| {
         if vals.is_empty() {
@@ -550,6 +555,7 @@ mod tests {
     #[test]
     fn clear_fault_hides_from_list() {
         let _lock = crate::test_support::workspace_env_lock();
+        let prev = std::env::var("OPENFDD_WORKSPACE").ok();
         let dir = std::env::temp_dir().join(format!("openfdd-fault-clear-{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
         std::env::set_var("OPENFDD_WORKSPACE", &dir);
@@ -557,6 +563,18 @@ mod tests {
         let out = clear_fault(fault_id, "operator");
         assert_eq!(out.get("ok").and_then(|v| v.as_bool()), Some(true));
         assert!(load_cleared_ids().contains(fault_id));
+        let listed = list_records();
+        assert!(!listed.iter().any(|r| {
+            r.get("fault_id")
+                .and_then(|v| v.as_str())
+                .map(|id| id == fault_id)
+                .unwrap_or(false)
+        }));
+        if let Some(p) = prev {
+            std::env::set_var("OPENFDD_WORKSPACE", p);
+        } else {
+            std::env::remove_var("OPENFDD_WORKSPACE");
+        }
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -572,7 +590,10 @@ mod tests {
             json!({"equipment_id":"equip:local-test","timestamp":"2026-06-21T11:00:00Z","raw_fault":false,"oa_t":70.0}),
         ];
         let analytics = fault_analytics_for_record(&rec, &rows);
-        assert_eq!(analytics.get("hours_in_fault").and_then(|v| v.as_f64()), Some(1.5));
+        assert_eq!(
+            analytics.get("hours_in_fault").and_then(|v| v.as_f64()),
+            Some(1.5)
+        );
         assert!(analytics.get("fault_span_label").is_some());
     }
 }

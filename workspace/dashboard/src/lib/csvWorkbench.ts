@@ -4,7 +4,10 @@ export type CsvDataset = {
   id: string;
   name: string;
   columns: string[];
+  /** Sample rows for UI preview (capped). */
   rows: string[][];
+  /** All parsed data rows for merge/export/commit. */
+  allRows: string[][];
   rowCount: number;
   bytes: number;
   timestampColumn: string | null;
@@ -17,6 +20,7 @@ export type MergeMode = "inner" | "append";
 export type ParsedCsvPreview = {
   columns: string[];
   sampleRows: string[][];
+  allRows: string[][];
   rowCount: number;
   timestampColumn: string | null;
 };
@@ -68,27 +72,29 @@ function detectTimestampColumn(columns: string[]): string | null {
   return columns[0] ?? null;
 }
 
-/** Parse CSV text — samples up to maxSampleRows for UI; counts all data rows. */
-export function parseCsvText(text: string, maxSampleRows = 200): ParsedCsvPreview {
+function dataRowsFromText(text: string): { columns: string[]; allRows: string[][] } {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (!lines.length) {
-    return { columns: [], sampleRows: [], rowCount: 0, timestampColumn: null };
+    return { columns: [], allRows: [] };
   }
   const columns = splitCsvLine(lines[0]);
-  const sampleRows: string[][] = [];
-  let rowCount = 0;
+  const allRows: string[][] = [];
   for (let i = 1; i < lines.length; i++) {
     const row = splitCsvLine(lines[i]);
     if (row.every((c) => c === "")) continue;
-    rowCount += 1;
-    if (sampleRows.length < maxSampleRows) {
-      sampleRows.push(row);
-    }
+    allRows.push(row);
   }
+  return { columns, allRows };
+}
+
+/** Parse CSV text — keeps all rows; sample capped for UI. */
+export function parseCsvText(text: string, maxSampleRows = 200): ParsedCsvPreview {
+  const { columns, allRows } = dataRowsFromText(text);
   return {
     columns,
-    sampleRows,
-    rowCount,
+    sampleRows: allRows.slice(0, maxSampleRows),
+    allRows,
+    rowCount: allRows.length,
     timestampColumn: detectTimestampColumn(columns),
   };
 }
@@ -100,11 +106,16 @@ export function fileToDataset(file: File, text: string, maxSampleRows = 500): Cs
     name: file.name,
     columns: parsed.columns,
     rows: parsed.sampleRows,
+    allRows: parsed.allRows,
     rowCount: parsed.rowCount,
     bytes: file.size,
     timestampColumn: parsed.timestampColumn,
     fullText: text,
   };
+}
+
+function datasetRows(ds: CsvDataset): string[][] {
+  return ds.allRows.length ? ds.allRows : ds.rows;
 }
 
 function rowToCsv(cells: string[]): string {
@@ -141,7 +152,7 @@ export function mergeDatasets(
     const columns = [...colSet];
     const rows: string[][] = [];
     for (const ds of datasets) {
-      for (const row of ds.rows) {
+      for (const row of datasetRows(ds)) {
         const mapped = columns.map((col) => {
           const idx = ds.columns.indexOf(col);
           return idx >= 0 ? row[idx] ?? "" : "";
@@ -153,6 +164,7 @@ export function mergeDatasets(
   }
 
   const [first, ...rest] = datasets;
+  const firstRows = datasetRows(first);
   const keyIdx0 = first.columns.indexOf(keyColumn);
   if (keyIdx0 < 0) {
     throw new Error(`Key column "${keyColumn}" not found in ${first.name}`);
@@ -171,15 +183,24 @@ export function mergeDatasets(
     const keyIdx = ds.columns.indexOf(keyColumn);
     if (keyIdx < 0) throw new Error(`Key column "${keyColumn}" not found in ${ds.name}`);
     const byKey = new Map<string, string[]>();
-    for (const row of ds.rows) {
+    for (const row of datasetRows(ds)) {
       byKey.set(row[keyIdx] ?? "", row);
     }
     return { ds, keyIdx, byKey };
   });
 
   const rows: string[][] = [];
-  for (const row of first.rows) {
+  for (const row of firstRows) {
     const key = row[keyIdx0] ?? "";
+    let matchedAll = true;
+    for (const { byKey } of indexMaps) {
+      if (!byKey.has(key)) {
+        matchedAll = false;
+        break;
+      }
+    }
+    if (!matchedAll) continue;
+
     const out = mergedColumns.map((col) => {
       if (first.columns.includes(col)) {
         const i = first.columns.indexOf(col);
@@ -194,7 +215,7 @@ export function mergeDatasets(
       }
       return "";
     });
-    if (out.some((c) => c !== "")) rows.push(out);
+    rows.push(out);
   }
 
   return { columns: mergedColumns, rows, rowCount: rows.length };

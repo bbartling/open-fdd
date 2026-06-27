@@ -237,8 +237,12 @@ fn historian_pivot_to_telemetry_batch(
         for (input, key) in [
             ("oa_t", "oa_t"),
             ("oa_h", "oa_h"),
+            ("sat", "sat"),
             ("duct_t", "duct_t"),
             ("zn_t", "zn_t"),
+            ("sat_sp", "sat_sp"),
+            ("fan_cmd", "fan_cmd"),
+            ("occ", "occ"),
         ] {
             if row.get(key).and_then(|v| v.as_f64()).is_some() {
                 ts.push(ts_ms);

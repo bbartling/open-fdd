@@ -25,6 +25,7 @@ workspace/deploy/
 workspace/overrides/
 workspace/bacnet/
 workspace/fixtures/ahu_data/*.csv
+workspace/dashboard/node_modules/
 frontend/assets/
 frontend/index.html
 **/*.db

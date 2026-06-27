@@ -101,9 +101,6 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             "/api/dashboard/analytics" => {
                 return json_response(&mut stream, dashboard::analytics());
             }
-            "/api/fdd-rules" => {
-                return raw_json(&mut stream, &fdd::wires::api::list_rules_json());
-            }
             _ => {}
         }
     }
@@ -349,9 +346,10 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/building/checkin") => json_response(&mut stream, building_checkin()),
         ("GET", "/api/algorithms") => json_response(&mut stream, algorithms()),
         ("GET", "/api/control/cdl/status") => raw_json(&mut stream, control::cdl::status_json()),
-        ("GET", "/api/control/cdl/bindings") => {
-            raw_json(&mut stream, model::assignments::algorithm_bindings_json())
-        }
+        ("GET", "/api/control/cdl/bindings") => raw_json(
+            &mut stream,
+            &model::assignments::algorithm_bindings_json_string(),
+        ),
         ("POST", "/api/control/cdl/bindings/save") => require_role(
             &mut stream,
             &principal,
@@ -373,7 +371,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         }
         ("GET", "/api/model/points") => raw_json(&mut stream, &drivers::haystack::points_json()),
         ("GET", "/api/model/assignments") => {
-            raw_json(&mut stream, model::assignments::assignments_json())
+            raw_json(&mut stream, &model::assignments::assignments_json_string())
         }
         ("POST", "/api/model/assignments/save") => require_role(
             &mut stream,
@@ -384,13 +382,15 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("POST", "/api/model/assignments/resolve") => {
             raw_json(&mut stream, model::assignments::resolve_json())
         }
-        ("GET", "/api/model/algorithm-bindings") => {
-            raw_json(&mut stream, model::assignments::algorithm_bindings_json())
-        }
+        ("GET", "/api/model/algorithm-bindings") => raw_json(
+            &mut stream,
+            &model::assignments::algorithm_bindings_json_string(),
+        ),
         ("GET", "/api/model/tree") => json_response(&mut stream, model::commissioning::tree_json()),
-        ("GET", "/api/model/commissioning-export") => {
-            json_response(&mut stream, model::commissioning::commissioning_export_json())
-        }
+        ("GET", "/api/model/commissioning-export") => json_response(
+            &mut stream,
+            model::commissioning::commissioning_export_json(),
+        ),
         ("POST", "/api/model/commissioning-import") => require_role(
             &mut stream,
             &principal,

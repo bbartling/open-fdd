@@ -1,6 +1,7 @@
 type Props = {
   siteName: string;
   siteDetail?: string;
+  edgeVersion?: string | null;
   equipmentCount?: number;
   pointCount?: number;
   activeFaults: number;
@@ -12,6 +13,7 @@ type Props = {
 export default function BuildingStrip({
   siteName,
   siteDetail,
+  edgeVersion,
   equipmentCount,
   pointCount,
   activeFaults,
@@ -34,6 +36,7 @@ export default function BuildingStrip({
         <div>
           <h2>{siteName}</h2>
           {siteDetail ? <p>{siteDetail}</p> : null}
+          {edgeVersion ? <p className="bis-edge-version muted">Open-FDD edge v{edgeVersion}</p> : null}
         </div>
       </div>
       <div className="bis-b-stat">

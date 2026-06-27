@@ -9,18 +9,18 @@ use std::fs;
 use std::path::PathBuf;
 
 fn ttl_path() -> PathBuf {
-    crate::validation::profile::workspace_dir()
-        .join("data/model/data_model.ttl")
+    crate::validation::profile::workspace_dir().join("data/model/data_model.ttl")
 }
 
 pub fn tree_json() -> Value {
     let sites = query::list_sites();
-    let site_id = sites
-        .get("active_site_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("site:demo");
-    let equipment = query::list_equipment(site_id);
-    let points = query::list_points(Some(site_id));
+    let site_id = sites.get("active_site_id").and_then(|v| v.as_str());
+    let equipment = site_id
+        .map(query::list_equipment)
+        .unwrap_or_else(|| json!({"ok": true, "equipment": [], "count": 0}));
+    let points = site_id
+        .map(|s| query::list_points(Some(s)))
+        .unwrap_or_else(|| json!({"ok": true, "points": [], "count": 0}));
     json!({
         "ok": true,
         "site_id": site_id,
@@ -37,8 +37,7 @@ pub fn commissioning_export_json() -> Value {
         .unwrap_or("site:demo");
     let equipment = query::list_equipment(site_id);
     let points = query::list_points(Some(site_id));
-    let assignments: Value =
-        serde_json::from_str(super::assignments::assignments_json()).unwrap_or(json!({}));
+    let assignments = super::assignments::load_assignments_value();
     let fdd_rules = assignments
         .get("fault_equation_bindings")
         .cloned()
@@ -56,10 +55,7 @@ pub fn commissioning_export_json() -> Value {
 }
 
 pub fn import_commissioning(body: &Value) -> Value {
-    let payload = body
-        .get("payload")
-        .cloned()
-        .unwrap_or_else(|| body.clone());
+    let payload = body.get("payload").cloned().unwrap_or_else(|| body.clone());
     let sites = payload.get("sites").and_then(|v| v.as_array()).cloned();
     let equipment = payload.get("equipment").and_then(|v| v.as_array()).cloned();
     let points = payload.get("points").and_then(|v| v.as_array()).cloned();
@@ -75,7 +71,10 @@ pub fn import_commissioning(body: &Value) -> Value {
                 .or_else(|| site.get("id"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("site:demo");
-            let name = site.get("name").or_else(|| site.get("dis")).and_then(|v| v.as_str());
+            let name = site
+                .get("name")
+                .or_else(|| site.get("dis"))
+                .and_then(|v| v.as_str());
             rows.push(json!({"id": id, "dis": name.unwrap_or(id), "site": "M"}));
         }
     }

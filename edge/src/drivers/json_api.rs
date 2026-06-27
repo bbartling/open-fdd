@@ -142,10 +142,7 @@ pub fn poll_once_value(body: &Value) -> Value {
 }
 
 pub fn refresh_point(body: &Value) -> Value {
-    let point_id = body
-        .get("point_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let point_id = body.get("point_id").and_then(|v| v.as_str()).unwrap_or("");
     let sources: Vec<Value> = serde_json::from_str(SOURCES_JSON).unwrap_or_default();
     for src in sources {
         if src.get("id").and_then(|v| v.as_str()) != Some(point_id) && !point_id.is_empty() {

@@ -146,7 +146,7 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
 
     return () => {
       cancelled = true;
-      window.clearEventListener("ofdd-dashboard-refresh", onRefresh);
+      window.removeEventListener("ofdd-dashboard-refresh", onRefresh);
       window.clearInterval(pollId);
     };
   }, [pollMs, authenticated]);

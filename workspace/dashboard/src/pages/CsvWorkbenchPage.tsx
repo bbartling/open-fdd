@@ -30,9 +30,6 @@ export default function CsvWorkbenchPage() {
   const [mergeMode, setMergeMode] = useState<MergeMode>("inner");
   const [chartX, setChartX] = useState("");
   const [chartY, setChartY] = useState("");
-  const [profileId, setProfileId] = useState("ahu_mzvav_csv");
-  const [sourceId, setSourceId] = useState("source:csv-workbench");
-  const [equipmentId, setEquipmentId] = useState("equip:mzvav-1");
 
   const merged = useMemo(() => {
     if (!datasets.length) return null;
@@ -40,6 +37,16 @@ export default function CsvWorkbenchPage() {
       return mergeDatasets(datasets, mergeKey, mergeMode);
     } catch (e) {
       return null;
+    }
+  }, [datasets, mergeKey, mergeMode]);
+
+  const mergeError = useMemo(() => {
+    if (!datasets.length || datasets.length === 1) return "";
+    try {
+      mergeDatasets(datasets, mergeKey, mergeMode);
+      return "";
+    } catch (e) {
+      return formatApiError(e);
     }
   }, [datasets, mergeKey, mergeMode]);
 
@@ -105,13 +112,14 @@ export default function CsvWorkbenchPage() {
             r.map((c) => (c.includes(",") || c.includes('"') ? `"${c.replace(/"/g, '""')}"` : c)).join(","),
           ),
         ].join("\n");
-        setStatus("Note: merged commit uses preview sample rows — for full files commit one dataset at a time.");
+        setStatus("Note: merged commit uses all merged rows from loaded files.");
       } else {
         throw new Error("Nothing to commit");
       }
+      const sourceFilename = datasets.length === 1 ? datasets[0].name : "openfdd-merged.csv";
       const created = await apiFetch<JobStatus>("/api/import/jobs", {
         method: "POST",
-        body: JSON.stringify({ profile_id: profileId, source_id: sourceId, equipment_id: equipmentId }),
+        body: JSON.stringify({ source_filename: sourceFilename }),
       });
       if (!created.job_id) throw new Error("Could not create import job");
       await apiUploadRaw(`/api/import/jobs/${encodeURIComponent(created.job_id)}/upload`, csvBody, "text/csv");
@@ -120,7 +128,9 @@ export default function CsvWorkbenchPage() {
         `/api/import/jobs/${encodeURIComponent(created.job_id)}/commit`,
         { method: "POST", body: "{}" },
       );
-      setStatus(`Historian commit OK — ${committed.rows_committed ?? 0} rows (job ${created.job_id})`);
+      setStatus(
+        `Historian commit OK — ${committed.rows_committed ?? 0} rows from ${sourceFilename} (Haystack model updated automatically).`,
+      );
       window.dispatchEvent(new CustomEvent("ofdd-dashboard-refresh"));
     } catch (e) {
       setError(formatApiError(e));
@@ -162,10 +172,11 @@ export default function CsvWorkbenchPage() {
     <div className="page page-wide csv-workbench-page">
       <PageHeader
         title="CSV workbench"
-        subtitle="UT3-style ingest: drag CSV files, preview columns, merge datasets on time, chart trends, export merged CSV for RCx, or commit to the Haystack historian for FDD rules and PDF reports."
+        subtitle="Drag CSV files, preview and merge on time, chart trends, export merged CSV, or commit to the historian — Haystack sites, equipment, and points are created automatically from the file name and columns."
       />
 
       {error ? <p className="error">{error}</p> : null}
+      {mergeError ? <p className="error">{mergeError}</p> : null}
       {status ? <p className="ok">{status}</p> : null}
 
       <div
@@ -334,28 +345,6 @@ export default function CsvWorkbenchPage() {
           </section>
         </>
       ) : null}
-
-      <section className="panel">
-        <h3 className="panel-title">Historian / Haystack ingest</h3>
-        <p className="muted">
-          Same data modeling path as BACnet/Modbus: commit CSV → historian → assign Haystack points → SQL FDD
-          rules → PDF reports. Interval sidecar: <code>scripts/openfdd_csv_import_sidecar.sh</code>
-        </p>
-        <div className="form-grid">
-          <label className="field">
-            <span className="field-label">Import profile</span>
-            <input value={profileId} onChange={(e) => setProfileId(e.target.value)} />
-          </label>
-          <label className="field">
-            <span className="field-label">Source ID</span>
-            <input value={sourceId} onChange={(e) => setSourceId(e.target.value)} />
-          </label>
-          <label className="field">
-            <span className="field-label">Equipment ID</span>
-            <input value={equipmentId} onChange={(e) => setEquipmentId(e.target.value)} />
-          </label>
-        </div>
-      </section>
     </div>
   );
 }

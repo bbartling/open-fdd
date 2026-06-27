@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiFetch, hasToken } from "../lib/api";
-import { formatApiError } from "../lib/formatApiError";
+import { apiFetch, hasToken } from "../../lib/api";
+import { formatApiError } from "../../lib/formatApiError";
 import type { DisplayFault } from "../../lib/displayFaults";
 
 type Props = {
