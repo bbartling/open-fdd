@@ -1,6 +1,6 @@
-# BACnet vs Haystack parity validation (design)
+# BACnet vs Haystack parity validation
 
-This document describes a **future** smoke test — it is **not run in CI** and **not required to merge** the initial Haystack driver PR.
+Compare BACnet direct readings with Niagara nHaystack for the same logical points on a **field bench** (not CI).
 
 ## Goal
 
@@ -16,7 +16,16 @@ Prove that readings for the same logical sensor points match when obtained via:
 - Local parity profile mapping roles → BACnet objects + Haystack ids  
   Example: `workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml.example`
 
-## Procedure (future)
+## Procedure
+
+```bash
+# Copy and edit haystack_id placeholders first:
+cp workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml.example \
+   workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml
+
+OPENFDD_HAYSTACK_PARITY_PROFILE=workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml \
+  ./scripts/openfdd_haystack_bacnet_parity.sh
+```
 
 1. Connect to BACnet direct using `bacnet_source_id`.
 2. Connect to Niagara nHaystack using `haystack_source_id`.

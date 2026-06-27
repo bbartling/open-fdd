@@ -95,6 +95,35 @@ openfdd_rust_warn_root_owned_workspace() {
   fi
 }
 
+# GHCR edge images run as uid 10001 (openfdd). Ensure reports and auth are writable.
+openfdd_rust_container_uid() {
+  printf '%s' "${OPENFDD_CONTAINER_UID:-10001}"
+}
+
+openfdd_rust_ensure_container_workspace() {
+  local root="$1"
+  local ws="$root/workspace"
+  local uid gid
+  uid="$(openfdd_rust_container_uid)"
+  gid="${OPENFDD_CONTAINER_GID:-$uid}"
+  mkdir -p "$ws/reports/generated" "$ws/logs" "$ws/data/drivers" "$ws/data/model"
+  local auth="$ws/auth.env.local"
+  if [[ -f "$auth" ]]; then
+    chmod 600 "$auth" 2>/dev/null || true
+  fi
+  if command -v chown >/dev/null 2>&1; then
+    if [[ "$(id -u)" -eq 0 ]]; then
+      chown -R "${uid}:${gid}" "$ws/reports" "$ws/logs" "$ws/data" 2>/dev/null || true
+      [[ -f "$auth" ]] && chown "${uid}:${gid}" "$auth" 2>/dev/null || true
+    elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+      sudo chown -R "${uid}:${gid}" "$ws/reports" "$ws/logs" "$ws/data" 2>/dev/null || true
+      [[ -f "$auth" ]] && sudo chown "${uid}:${gid}" "$auth" 2>/dev/null || true
+    else
+      echo "Hint: ensure $ws/reports is writable by container uid ${uid} (sudo chown -R ${uid}:${gid} $ws/reports)" >&2
+    fi
+  fi
+}
+
 openfdd_rust_wait_for_health() {
   local url="${1:-http://127.0.0.1:8080/api/health}"
   local timeout="${2:-120}"

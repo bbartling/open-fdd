@@ -51,11 +51,6 @@ if [[ "${OPENFDD_VALIDATION_ONE_HOUR:-0}" == "1" ]]; then
 fi
 SAMPLES="${OPENFDD_SMOKE_SAMPLES:-${BENCH_SMOKE_SAMPLES:-}}"
 LIVE_FDD="${OPENFDD_SMOKE_LIVE_FDD:-${BENCH_SMOKE_LIVE_FDD:-0}}"
-SIMULATE="${OPENFDD_SMOKE_SIMULATE:-${BENCH_SMOKE_SIMULATE:-0}}"
-if [[ "$SIMULATE" == "1" ]]; then
-  echo "ERROR: OPENFDD_SMOKE_SIMULATE is removed. Use live BACnet/Modbus or CSV import." >&2
-  exit 2
-fi
 REQUIRE_CONFIRMED="${OPENFDD_SMOKE_REQUIRE_CONFIRMED_FAULT:-0}"
 REQUIRE_MODBUS="${OPENFDD_SMOKE_REQUIRE_MODBUS:-0}"
 VALIDATE_DOCKER="${OPENFDD_SMOKE_VALIDATE_DOCKER:-1}"
@@ -155,17 +150,13 @@ write_final_report() {
 
 evaluate_pass_fail() {
   local fail_count="$1"
-  if [[ "$NO_DEMO_PASS" == "1" && "$DEMO_ONLY" == "true" && "$SIMULATE" != "1" ]]; then
+  if [[ "$NO_DEMO_PASS" == "1" && "$DEMO_ONLY" == "true" ]]; then
     echo "FAIL: ended DEMO ONLY while OPENFDD_SMOKE_NO_DEMO_PASS=1" | tee -a "$LOG_DIR/run.log" >&2
     return 1
   fi
 
   if [[ "$REQUIRE_CONFIRMED" == "1" ]]; then
-    if [[ "$SIMULATE" == "1" && "$LIVE_FDD_PASS" != "true" ]]; then
-      echo "FAIL: simulation did not prove confirmed fault transitions" | tee -a "$LOG_DIR/run.log" >&2
-      return 1
-    fi
-    if [[ "$SIMULATE" != "1" && ( "$SEEN_RAW_FAULT" != "true" || "$SEEN_CONFIRMED" != "true" || "$SEEN_CLEAR" != "true" ) ]]; then
+    if [[ "$SEEN_RAW_FAULT" != "true" || "$SEEN_CONFIRMED" != "true" || "$SEEN_CLEAR" != "true" ]]; then
       echo "FAIL: live run missing raw/confirmed/clear transitions — inspect summary.jsonl" | tee -a "$LOG_DIR/run.log" >&2
       return 1
     fi
@@ -294,7 +285,7 @@ jq -nc \
   '{profile_id:$profile,device_instance:($device|tonumber?),interval_seconds:$interval,duration_hours:($hours|tonumber?),json_api_url:$json_url,mode:$mode,artifact_dir:$artifact,started_at:(now|todate)}' \
   >"$LOG_DIR/run_config.json"
 
-echo "Live FDD validation mode=$MODE_LABEL interval=${INTERVAL}s artifact=$LOG_DIR device=$DEVICE_INSTANCE simulate=$SIMULATE csv_append=$CSV_APPEND" | tee "$LOG_DIR/run.log"
+echo "Live FDD validation mode=$MODE_LABEL interval=${INTERVAL}s artifact=$LOG_DIR device=$DEVICE_INSTANCE csv_append=$CSV_APPEND" | tee "$LOG_DIR/run.log"
 echo "Started: $(date -Iseconds)" | tee -a "$LOG_DIR/run.log"
 
 VALIDATION_STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -302,28 +293,8 @@ VALIDATION_STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 capture_docker_state start
 LAST_DOCKER_SINCE="1m"
 
-if [[ "$SIMULATE" == "1" ]]; then
-  echo "Injecting simulation scenario (5m normal / 6m fault / 5m clear)..." | tee -a "$LOG_DIR/run.log"
-  curl "${CURL_TLS[@]}" -fsS -X POST "${BASE}/api/validation-runs/current/inject-scenario" \
-    -H "Authorization: Bearer $AGENT_TOKEN" \
-    -H 'Content-Type: application/json' \
-    -d '{"normal_minutes":5,"fault_minutes":6,"clear_minutes":5}' \
-    | tee "$LOG_DIR/inject_scenario.json" >/dev/null
-fi
-
 expected_phase_for_sample() {
-  local n="$1"
-  if [[ "$SIMULATE" != "1" ]]; then
-    echo "live"
-    return
-  fi
-  # 72 samples @ 5min ≈ 6h: baseline, fault+sustain, clear, optional 2nd fault cycle
-  if [[ "$n" -le 12 ]]; then echo "normal"
-  elif [[ "$n" -le 36 ]]; then echo "fault"
-  elif [[ "$n" -le 48 ]]; then echo "clear"
-  elif [[ "$n" -le 60 ]]; then echo "fault"
-  else echo "clear"
-  fi
+  echo "live"
 }
 
 sample_n=0

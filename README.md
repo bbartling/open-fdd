@@ -395,4 +395,4 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 MIT — see [LICENSE](LICENSE).
 
-Version: **3.2.0**
+Version: **3.2.3**

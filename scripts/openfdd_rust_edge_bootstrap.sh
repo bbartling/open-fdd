@@ -57,7 +57,8 @@ fi
 
 openfdd_rust_check_docker
 
-mkdir -p "$OPENFDD_ROOT/workspace"/{auth,logs,reports,data/drivers,data/historian,data/rules,backups,bacnet/commissioning}
+mkdir -p "$OPENFDD_ROOT/workspace"/{auth,logs,reports/generated,data/drivers,data/historian,data/rules,data/model,backups,bacnet/commissioning}
+openfdd_rust_ensure_container_workspace "$OPENFDD_ROOT"
 
 for script in openfdd_auth_lib.sh openfdd_rust_site_backup.sh openfdd_rust_site_update.sh openfdd_rust_check_ghcr_platform.sh openfdd_rust_edge_validate.sh; do
   dest="$OPENFDD_ROOT/scripts/$script"

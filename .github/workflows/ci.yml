@@ -89,7 +89,7 @@ jobs:
 
       - name: Prepare workspace for non-root container user
         run: |
-          mkdir -p workspace/overrides workspace/bacnet/overrides workspace/data/drivers workspace/logs
+          mkdir -p workspace/overrides workspace/bacnet/overrides workspace/data/drivers workspace/logs workspace/reports/generated
           cat > workspace/data.env.local <<'EOF'
           OPENFDD_BACNET_MODE=live
           OPENFDD_MODBUS_MODE=live
@@ -105,7 +105,7 @@ jobs:
           OFDD_AGENT_PASSWORD=ci-agent-pass
           EOF
           chmod 600 workspace/auth.env.local
-          sudo chown -R 10001:10001 workspace/overrides workspace/bacnet workspace/data workspace/logs
+          sudo chown -R 10001:10001 workspace/overrides workspace/bacnet workspace/data workspace/logs workspace/reports
 
       - name: Compose build
         run: docker compose build --no-cache

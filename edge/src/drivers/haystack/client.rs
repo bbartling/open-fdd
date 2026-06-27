@@ -142,6 +142,40 @@ impl BasicHaystackClient {
         let grid = HGrid::from_parts(HDict::new(), vec![HCol::new("id")], rows);
         self.call("read", &grid)
     }
+
+    fn point_write(
+        &self,
+        point_id: &str,
+        value: Option<f64>,
+        level: Option<u8>,
+        release: bool,
+        who: Option<&str>,
+    ) -> Result<HGrid, String> {
+        let mut row = HDict::new();
+        row.set("id", Kind::Ref(HRef::from_val(point_id)));
+        let mut cols = vec![HCol::new("id")];
+        if release {
+            if let Some(l) = level {
+                row.set("level", Kind::Number(Number::unitless(l as f64)));
+                cols.push(HCol::new("level"));
+            }
+        } else if let Some(v) = value {
+            row.set("val", Kind::Number(Number::unitless(v)));
+            cols.push(HCol::new("val"));
+            if let Some(l) = level {
+                row.set("level", Kind::Number(Number::unitless(l as f64)));
+                cols.push(HCol::new("level"));
+            }
+        } else {
+            return Err("value required unless release=true".to_string());
+        }
+        if let Some(w) = who {
+            row.set("who", Kind::Str(w.to_string()));
+            cols.push(HCol::new("who"));
+        }
+        let grid = HGrid::from_parts(HDict::new(), cols, vec![row]);
+        self.call("pointWrite", &grid)
+    }
 }
 
 enum LiveClient {
@@ -217,6 +251,25 @@ impl LiveClient {
                 let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
                 block_on(c.read_by_ids(&refs)).map_err(|e| client_error_json(&e))
             }
+        }
+    }
+
+    fn point_write(
+        &self,
+        point_id: &str,
+        value: Option<f64>,
+        level: Option<u8>,
+        release: bool,
+        who: Option<&str>,
+    ) -> Result<HGrid, Value> {
+        match self {
+            LiveClient::Basic(c) => c
+                .point_write(point_id, value, level, release, who)
+                .map_err(|e| json!({"ok": false, "error": e})),
+            LiveClient::Scram(_) => Err(json!({
+                "ok": false,
+                "error": "pointWrite requires basic auth (nHaystack/Niagara); SCRAM stations are read-only in this release"
+            })),
         }
     }
 }
@@ -428,6 +481,61 @@ pub fn read(cfg: &HaystackConfig, payload: &Value) -> Value {
                 Err(err) => error_response(cfg, "read failed", err),
             }
         }
+        Err(err) => error_response(cfg, "connect failed", err),
+    }
+}
+
+pub fn write(cfg: &HaystackConfig, payload: &Value) -> Value {
+    if !cfg.effective_enabled() {
+        return disabled_response(cfg);
+    }
+    if cfg.fixture_mode() {
+        return json!({
+            "ok": false,
+            "enabled": true,
+            "status": "fixture",
+            "source_id": cfg.source_id,
+            "message": "Haystack pointWrite is not supported in fixture mode"
+        });
+    }
+    if !cfg.is_configured() {
+        return not_configured_response(cfg, "pointWrite");
+    }
+    let point_id = payload
+        .get("id")
+        .or_else(|| payload.get("point_id"))
+        .and_then(|v| v.as_str());
+    let Some(point_id) = point_id else {
+        return json!({"ok": false, "error": "id (Haystack ref) required"});
+    };
+    let release = payload
+        .get("release")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let value = payload.get("value").or_else(|| payload.get("val")).and_then(|v| {
+        v.as_f64()
+            .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+    });
+    let level = payload
+        .get("level")
+        .and_then(|v| v.as_u64())
+        .map(|n| n as u8);
+    let who = payload
+        .get("who")
+        .and_then(|v| v.as_str())
+        .or(Some("openfdd"));
+    match LiveClient::connect(cfg) {
+        Ok(client) => match client.point_write(point_id, value, level, release, who) {
+            Ok(grid) => json!({
+                "ok": true,
+                "enabled": true,
+                "status": "live",
+                "source_id": cfg.source_id,
+                "message": if release { "pointWrite release OK" } else { "pointWrite OK" },
+                "records": grid_to_json(&grid)
+            }),
+            Err(err) => error_response(cfg, "pointWrite failed", err),
+        },
         Err(err) => error_response(cfg, "connect failed", err),
     }
 }

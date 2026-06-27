@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 mod auth;
 mod bench;
 mod control;
@@ -33,6 +35,13 @@ use std::thread;
 const REPORTS: &str = r#"[
   {"report_id":"rcx-demo-001","kind":"rcx","status":"ready","path":"workspace/reports/rcx/rcx-demo-001.md"}
 ]"#;
+
+fn dev_endpoints_enabled() -> bool {
+    matches!(
+        env::var("OPENFDD_DEV").as_deref(),
+        Ok("1") | Ok("true") | Ok("TRUE") | Ok("yes") | Ok("YES")
+    )
+}
 
 fn main() -> std::io::Result<()> {
     let cfg = auth_config();
@@ -491,6 +500,13 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let payload = parse_json_body(&body);
             raw_json(&mut stream, &drivers::haystack::read_json(&payload))
         }
+        ("POST", "/api/haystack/write") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            serde_json::from_str::<Value>(&drivers::haystack::write_json(&parse_json_body(&body)))
+                .unwrap_or(json!({"ok": false})),
+        ),
         ("POST", "/api/haystack/nav") => {
             let payload = parse_json_body(&body);
             raw_json(&mut stream, &drivers::haystack::nav_json(&payload))
@@ -533,7 +549,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             json!({"ok": true, "rows": model::query::haystack_rows()}),
         ),
         ("GET", "/api/fdd/datafusion/demo") => {
-            raw_json(&mut stream, fdd::datafusion_sql::result_json())
+            if dev_endpoints_enabled() {
+                raw_json(&mut stream, fdd::datafusion_sql::result_json())
+            } else {
+                json_response(
+                    &mut stream,
+                    json!({"ok": false, "error": "demo endpoints disabled; set OPENFDD_DEV=1 for lab use"}),
+                )
+            }
         }
         ("POST", "/api/fdd/run") => require_role(
             &mut stream,
@@ -594,7 +617,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             fdd::wires::api::propose_assignments(&parse_json_body(&body), &principal.role),
         ),
         ("GET", "/api/arrow/demo") => {
-            raw_json(&mut stream, historian::arrow_table::demo_rows_json())
+            if dev_endpoints_enabled() {
+                raw_json(&mut stream, historian::arrow_table::demo_rows_json())
+            } else {
+                json_response(
+                    &mut stream,
+                    json!({"ok": false, "error": "demo endpoints disabled; set OPENFDD_DEV=1 for lab use"}),
+                )
+            }
         }
         ("POST", "/api/bacnet/whois") => {
             let body = drivers::bacnet::whois_json();
@@ -655,6 +685,18 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &principal,
             &["integrator", "agent"],
             json!({"ok": true, "updated": "point polling settings"}),
+        ),
+        ("PATCH", "/api/bacnet/driver/device/remap") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            drivers::bacnet::remap_bacnet_device_value(&parse_json_body(&body)),
+        ),
+        ("DELETE", "/api/bacnet/driver/registry") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            drivers::bacnet::clear_bacnet_registry_value(),
         ),
         ("POST", "/api/bacnet/point-discovery") => {
             let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
@@ -829,6 +871,12 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ),
         ("GET", "/api/control/status") => raw_json(&mut stream, control::cdl::status_json()),
         ("POST", "/api/control/simulate") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            serde_json::from_str::<Value>(control::cdl::dry_run_json()).unwrap(),
+        ),
+        ("POST", "/api/control/dry-run") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
@@ -1551,6 +1599,8 @@ fn agent_tools() -> Value {
             {"name":"bacnet.override_export_p8","method":"GET","path":"/api/bacnet/overrides/export/p8","requires":"JWT"},
             {"name":"bacnet.override_export_non_p8","method":"GET","path":"/api/bacnet/overrides/export/non-p8","requires":"JWT"},
             {"name":"bacnet.driver_tree","method":"GET","path":"/api/bacnet/driver/tree","requires":"JWT"},
+            {"name":"bacnet.driver_remap","method":"PATCH","path":"/api/bacnet/driver/device/remap","requires":"integrator|agent"},
+            {"name":"bacnet.driver_registry_clear","method":"DELETE","path":"/api/bacnet/driver/registry","requires":"integrator|agent"},
             {"name":"modbus.points","method":"GET","path":"/api/modbus/points","requires":"JWT"},
             {"name":"modbus.scan","method":"POST","path":"/api/modbus/scan","requires":"integrator|agent"},
             {"name":"json_api.sources","method":"GET","path":"/api/json-api/sources","requires":"JWT"},
@@ -1564,6 +1614,7 @@ fn agent_tools() -> Value {
             {"name":"haystack.ops","method":"GET","path":"/api/haystack/ops","requires":"JWT"},
             {"name":"haystack.nav","method":"POST","path":"/api/haystack/nav","requires":"JWT"},
             {"name":"haystack.read","method":"POST","path":"/api/haystack/read","requires":"JWT"},
+            {"name":"haystack.write","method":"POST","path":"/api/haystack/write","requires":"integrator|agent"},
             {"name":"haystack.poll_once","method":"POST","path":"/api/haystack/poll-once","requires":"integrator|agent"},
             {"name":"haystack.import","method":"POST","path":"/api/haystack/import","requires":"integrator|agent"},
             {"name":"haystack.driver_tree","method":"GET","path":"/api/haystack/driver/tree","requires":"JWT"},

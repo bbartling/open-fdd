@@ -126,10 +126,12 @@ pub fn building_snapshot() -> Value {
     })
 }
 
-/// Minimal stub until the Python-era building-insight agent is ported.
+/// Intentional stub until building-insight agent is ported (issue #402 L-03).
 pub fn building_insight_stub() -> Value {
     json!({
         "ok": true,
+        "stub": true,
+        "message": "Building insight agent not yet ported to Rust edge",
         "generated_at": null,
         "lookback_days": 14,
         "device_sentence": null,

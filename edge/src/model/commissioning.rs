@@ -249,6 +249,39 @@ pub fn bacnet_sync_apply_json() -> Value {
     })
 }
 
+/// Remove Haystack model rows bound to BACnet refs (used when clearing BACnet registry).
+pub fn remove_bacnet_bindings_from_model() -> Value {
+    let grid = crate::model::persist::haystack_model_value();
+    let rows = grid
+        .get("rows")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut points_removed = 0_u64;
+    let kept: Vec<Value> = rows
+        .into_iter()
+        .filter(|row| {
+            let is_bacnet_point = row.get("point").and_then(|v| v.as_str()) == Some("M")
+                && row.get("bacnetRef").is_some();
+            if is_bacnet_point {
+                points_removed += 1;
+                false
+            } else {
+                true
+            }
+        })
+        .collect();
+    if points_removed > 0 {
+        let mut new_grid = grid;
+        new_grid["rows"] = json!(kept);
+        let _ = crate::model::persist::save_haystack_grid(&new_grid);
+    }
+    json!({
+        "points_removed": points_removed,
+        "equipment_removed": 0
+    })
+}
+
 pub fn health_json() -> Value {
     let coverage = query::model_coverage();
     let score = coverage.get("model_score").and_then(|v| v.as_f64());
