@@ -10,5 +10,5 @@ services:
       OPENFDD_JSON_API_ENABLED: "1"
       OPENFDD_IMPORT_ENABLED: "1"
       OPENFDD_EXPORT_ENABLED: "1"
-      OPENFDD_BACNET_MODE: simulated
-      OPENFDD_MODBUS_MODE: simulated
+      OPENFDD_BACNET_MODE: live
+      OPENFDD_MODBUS_MODE: live

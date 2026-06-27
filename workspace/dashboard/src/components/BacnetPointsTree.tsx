@@ -315,8 +315,8 @@ export default function BacnetPointsTree({
                                       onChange={(e) => onTogglePointSelection?.(p.point_id, e.target.checked)}
                                     />
                                   ) : null}
-                                  <code>{p.object_identifier}</code>
-                                  <span className="bacnet-tree-point-name">{p.object_name}</span>
+                                  <span className="bacnet-tree-point-name">{p.object_name || p.object_identifier}</span>
+                                  <span className="bacnet-tree-point-address">{p.object_identifier}</span>
                                   {p.commandable ? (
                                     <span className="badge commandable-badge" title="Commandable (priority-array)">
                                       cmd

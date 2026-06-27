@@ -13,8 +13,6 @@ pub struct BacnetPointRole {
     /// BACnet object type slug, e.g. analog-input, analog-output, analog-value.
     pub object_type: String,
     pub writable: bool,
-    /// Simulated priority-array entries for override scan in simulated mode (priority, value).
-    pub simulated_priorities: Vec<(u8, f64)>,
 }
 
 impl BacnetPointRole {
@@ -25,7 +23,6 @@ impl BacnetPointRole {
             fdd_input: fdd_input.to_string(),
             object_type: "analog-input".into(),
             writable: false,
-            simulated_priorities: Vec::new(),
         }
     }
 }
@@ -381,17 +378,12 @@ fn parse_point_line(p: &mut SmokeProfile, key: &str, val: &str) {
                 .get(4)
                 .map(|s| *s == "true" || *s == "1")
                 .unwrap_or(false);
-            let simulated_priorities = parts
-                .get(5)
-                .map(|s| parse_simulated_priority_spec(s))
-                .unwrap_or_default();
             p.bacnet_points.push(BacnetPointRole {
                 name: parts[0].to_string(),
                 object_instance: inst,
                 fdd_input: parts[2].to_string(),
                 object_type,
                 writable,
-                simulated_priorities,
             });
         }
     } else if !input.is_empty() {
@@ -401,47 +393,8 @@ fn parse_point_line(p: &mut SmokeProfile, key: &str, val: &str) {
             fdd_input: input.to_string(),
             object_type: "analog-input".into(),
             writable: false,
-            simulated_priorities: Vec::new(),
         });
     }
-}
-
-fn parse_simulated_priority_spec(spec: &str) -> Vec<(u8, f64)> {
-    spec.split(',')
-        .filter_map(|pair| {
-            let (prio, val) = pair.split_once(':')?;
-            Some((prio.trim().parse().ok()?, val.trim().parse().ok()?))
-        })
-        .collect()
-}
-
-pub fn bacnet_point_to_simulated_json(profile: &SmokeProfile, pt: &BacnetPointRole) -> Value {
-    let type_code = match pt.object_type.as_str() {
-        "analog-output" => 1,
-        "analog-value" => 2,
-        _ => 0,
-    };
-    let mut obj = json!({
-        "id": format!("bacnet:{}:{}:{}", profile.device_instance, pt.object_type, pt.object_instance),
-        "device_instance": profile.device_instance,
-        "object_id": [type_code, pt.object_instance],
-        "name": pt.name,
-        "kind": if pt.writable { "cmd" } else { "sensor" },
-        "writable": pt.writable,
-        "commandable": pt.writable || pt.object_type == "analog-output",
-        "polling_enabled": true,
-        "haystack_id": format!("point:{}", pt.fdd_input),
-        "fdd_input": pt.fdd_input,
-        "value": pt.simulated_priorities.first().map(|(_, v)| *v).unwrap_or(62.0)
-    });
-    if !pt.simulated_priorities.is_empty() {
-        obj["simulated_priorities"] = json!(pt
-            .simulated_priorities
-            .iter()
-            .map(|(p, v)| json!({"priority": p, "value": v}))
-            .collect::<Vec<_>>());
-    }
-    obj
 }
 
 pub fn profile_summary_json() -> Value {
@@ -487,7 +440,6 @@ pub fn profile_summary_json() -> Value {
             "validate_docker": validate_docker(),
             "validate_modbus": validate_modbus(),
             "validate_json_api": validate_json_api(),
-            "simulate_phases": simulate_phases(),
         }),
     })
 }
@@ -556,10 +508,6 @@ pub fn validate_json_api() -> bool {
     env_flag("OPENFDD_SMOKE_VALIDATE_JSON_API")
 }
 
-pub fn simulate_phases() -> bool {
-    env_flag("OPENFDD_SMOKE_SIMULATE") || env_flag("BENCH_SMOKE_SIMULATE")
-}
-
 fn env_flag(key: &str) -> bool {
     env::var(key)
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -571,20 +519,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_simulated_priority_point_line() {
+    fn parses_writable_bacnet_point_line() {
         let mut p = from_env_defaults();
         parse_point_line(
             &mut p,
             "point.actuator",
-            "Demo AO|2001|actuator_demo|analog-output|true|8:55.0,1:11.0",
+            "Demo AO|2001|actuator_demo|analog-output|true",
         );
         assert_eq!(p.bacnet_points.len(), 1);
         let pt = &p.bacnet_points[0];
         assert_eq!(pt.object_type, "analog-output");
         assert!(pt.writable);
-        assert_eq!(pt.simulated_priorities, vec![(8, 55.0), (1, 11.0)]);
-        let json = bacnet_point_to_simulated_json(&p, pt);
-        assert_eq!(json["simulated_priorities"][0]["priority"], 8);
     }
 
     #[test]

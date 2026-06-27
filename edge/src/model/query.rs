@@ -25,7 +25,11 @@ pub fn list_sites() -> Value {
         }
     }
     if sites.is_empty() {
-        sites.push(json!({"site_id": "site:demo", "name": "Demo Site"}));
+        return json!({
+            "ok": true,
+            "sites": sites,
+            "active_site_id": Value::Null
+        });
     }
     json!({
         "ok": true,
@@ -35,11 +39,15 @@ pub fn list_sites() -> Value {
 }
 
 pub fn list_buildings(site_id: Option<&str>) -> Value {
-    let sid = site_id.unwrap_or("site:demo");
+    let sid = super::scope::resolve_site_id(site_id);
     json!({
         "ok": true,
         "site_id": sid,
-        "buildings": [{"building_id": "building:main", "name": "Main building", "site_id": sid}]
+        "buildings": if sid.is_some() {
+            json!([{"building_id": "building:main", "name": "Main building", "site_id": sid}])
+        } else {
+            json!([])
+        }
     })
 }
 
@@ -71,14 +79,20 @@ pub fn list_equipment(site_id: &str) -> Value {
 }
 
 pub fn list_equips(site_id: Option<&str>) -> Value {
-    let sid = site_id.unwrap_or("site:demo");
+    let sid = super::scope::resolve_site_id(site_id);
     let mut equips = Vec::new();
     for row in haystack_rows() {
         if row.get("equip").and_then(|v| v.as_str()) == Some("M") {
+            let row_site = row.get("siteRef").and_then(|v| v.as_str());
+            if let Some(filter) = sid.as_deref() {
+                if row_site != Some(filter) {
+                    continue;
+                }
+            }
             equips.push(json!({
                 "equipment_id": row.get("id").cloned().unwrap_or(json!(null)),
                 "name": row.get("dis").cloned().unwrap_or(json!(null)),
-                "site_id": row.get("siteRef").cloned().unwrap_or(json!(sid)),
+                "site_id": row.get("siteRef").cloned().unwrap_or(json!(null)),
                 "equipment_type": infer_equip_type(&row)
             }));
         }
@@ -87,15 +101,23 @@ pub fn list_equips(site_id: Option<&str>) -> Value {
 }
 
 pub fn list_points(site_id: Option<&str>) -> Value {
-    let sid = site_id.unwrap_or("site:demo");
+    let sid = super::scope::resolve_site_id(site_id);
+    let equip_site = super::scope::equip_site_map();
     let mut points = Vec::new();
     for row in haystack_rows() {
         if row.get("point").and_then(|v| v.as_str()) == Some("M") {
+            let equip_ref = row.get("equipRef").and_then(|v| v.as_str());
+            let point_site = equip_ref.and_then(|e| equip_site.get(e).cloned());
+            if let Some(filter) = sid.as_deref() {
+                if point_site.as_deref() != Some(filter) {
+                    continue;
+                }
+            }
             points.push(json!({
                 "point_id": row.get("id").cloned().unwrap_or(json!(null)),
                 "name": row.get("dis").cloned().unwrap_or(json!(null)),
                 "equip_ref": row.get("equipRef").cloned().unwrap_or(json!(null)),
-                "site_id": sid,
+                "site_id": point_site,
                 "mapped": is_point_mapped(&row),
                 "fdd_input": row.get("fddInput").cloned().unwrap_or(json!(null))
             }));
@@ -148,7 +170,9 @@ pub fn source_coverage() -> Value {
         if row.get("point").and_then(|v| v.as_str()) != Some("M") {
             continue;
         }
-        let protocol = if row.get("bacnetRef").is_some() {
+        let protocol = if row.get("csvRef").is_some() {
+            "csv"
+        } else if row.get("bacnetRef").is_some() {
             "bacnet"
         } else if row.get("modbusRef").is_some() {
             "modbus"
@@ -225,17 +249,43 @@ fn infer_equip_type(row: &Value) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::csv_import;
+    use crate::test_support::with_temp_workspace;
+
+    #[test]
+    fn list_points_filters_by_csv_import_site() {
+        with_temp_workspace(|_| {
+            let model = csv_import::import_from_csv_commit(
+                &["Date".to_string(), "Outdoor Air Temp".to_string()],
+                "Plant-A.csv",
+                "job-1",
+                None,
+            );
+            assert_eq!(model.get("ok").and_then(|v| v.as_bool()), Some(true));
+            let (site, equip, _, _) = csv_import::ids_from_filename("Plant-A.csv");
+            assert_eq!(
+                crate::model::scope::site_for_equipment(&equip).as_deref(),
+                Some(site.as_str())
+            );
+            let pts = list_points(Some(&site));
+            assert!(
+                pts.get("count").and_then(|v| v.as_u64()).unwrap_or(0) >= 1,
+                "expected points for {site}: {pts}"
+            );
+        });
+    }
 
     #[test]
     fn groups_equips_and_counts_unmapped() {
         let coverage = model_coverage();
-        assert!(
-            coverage
-                .get("equipment_count")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0)
-                >= 1
-        );
+        assert!(coverage
+            .get("equipment_count")
+            .and_then(|v| v.as_u64())
+            .is_some());
+        assert!(coverage
+            .get("point_count")
+            .and_then(|v| v.as_u64())
+            .is_some());
         let unmapped = unmapped_points();
         assert!(unmapped.get("count").is_some());
         let grouped = group_points_by_equip();

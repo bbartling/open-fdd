@@ -90,7 +90,11 @@ pub fn write_assignments(site_id: &str, doc: &Value) -> Result<PathBuf, String> 
 }
 
 pub fn default_site_id() -> String {
-    env::var("OPENFDD_SITE_ID").unwrap_or_else(|_| "site:demo".to_string())
+    env::var("OPENFDD_SITE_ID")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(crate::model::scope::active_site_id)
+        .unwrap_or_else(|| "site:unknown".to_string())
 }
 
 fn read_json_file(path: &Path) -> Option<Value> {
@@ -120,7 +124,7 @@ pub fn seed_demo_graph(site_id: &str, actor: &str) -> Value {
     graph["review_status"] = json!("needs_review");
     graph["source"] = json!("ai_generated");
     graph["nodes"] = json!([
-        {"id":"n-driver-oa","type":"driver_point","label":"BACnet Outside Air Temp","position":{"x":40,"y":80},"config":{"ref":"bacnet:validation:analog-input:1001","source_label":"simulated"},"source":"ai_generated","provenance":{"confidence":0.92},"validation":{"status":"ok"}},
+        {"id":"n-driver-oa","type":"driver_point","label":"BACnet Outside Air Temp","position":{"x":40,"y":80},"config":{"ref":"bacnet:validation:analog-input:1001","source_label":"live"},"source":"ai_generated","provenance":{"confidence":0.92},"validation":{"status":"ok"}},
         {"id":"n-model-oa","type":"model_point","label":"point:oa-t","position":{"x":220,"y":80},"config":{"haystack_id":"point:oa-t"},"source":"ai_generated","validation":{"status":"ok"}},
         {"id":"n-fdd-input","type":"fdd_input","label":"oa_t","position":{"x":400,"y":80},"config":{"fdd_input":"oa_t","unit":"degF"},"source":"ai_generated","validation":{"status":"ok"}},
         {"id":"n-sql-rule","type":"sql_rule","label":"OA Temperature Out Of Range","position":{"x":580,"y":80},"config":{"rule_id":"oa_temp_out_of_range","sql_mode":"builder"},"source":"ai_generated","validation":{"status":"ok"}},

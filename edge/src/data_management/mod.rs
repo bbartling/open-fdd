@@ -212,6 +212,7 @@ pub fn storage_summary() -> Value {
         "historian_root": store::historian_root().display().to_string(),
         "by_subdir": by_subdir,
         "by_source": by_source,
+        "bacnet_override_log": crate::drivers::bacnet::override_storage_meta(),
         "warnings": ["Purge operations are irreversible. Export before purge when in doubt."]
     })
 }

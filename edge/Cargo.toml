@@ -1,6 +1,6 @@
 [package]
 name = "open_fdd_edge_prototype"
-version = "3.2.1"
+version = "3.2.2"
 edition = "2021"
 
 [[bin]]
@@ -15,8 +15,12 @@ path = "src/bin/openfdd_edge.rs"
 arrow = "53"
 base64 = "0.22"
 bcrypt = "0.16"
+bytes = "1"
 bacnet-client = "0.9"
 bacnet-encoding = "0.9"
+bacnet-objects = "0.9"
+bacnet-services = "0.9"
+rusty-bacnet-server = { package = "bacnet-server", version = "0.9" }
 bacnet-transport = "0.9"
 bacnet-types = "0.9"
 chrono = { version = "0.4", features = ["serde"] }

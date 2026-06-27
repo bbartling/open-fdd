@@ -145,6 +145,13 @@ fn ensure_dir() {
 }
 
 pub fn append_pivot_row(row: &Value) -> Result<(), String> {
+    append_pivot_rows(std::slice::from_ref(row))
+}
+
+pub fn append_pivot_rows(rows: &[Value]) -> Result<(), String> {
+    if rows.is_empty() {
+        return Ok(());
+    }
     ensure_dir();
     let path = pivot_jsonl_path();
     let mut file = OpenOptions::new()
@@ -152,10 +159,12 @@ pub fn append_pivot_row(row: &Value) -> Result<(), String> {
         .append(true)
         .open(&path)
         .map_err(|e| e.to_string())?;
-    let line = serde_json::to_string(row).map_err(|e| e.to_string())?;
-    writeln!(file, "{line}").map_err(|e| e.to_string())?;
-    if let Ok(rows) = load_pivot_rows() {
-        let _ = write_arrow_ipc(&rows);
+    for row in rows {
+        let line = serde_json::to_string(row).map_err(|e| e.to_string())?;
+        writeln!(file, "{line}").map_err(|e| e.to_string())?;
+    }
+    if let Ok(all) = load_pivot_rows() {
+        let _ = write_arrow_ipc(&all);
     }
     Ok(())
 }
@@ -252,8 +261,12 @@ pub fn pivot_rows_to_batch(rows: &[Value]) -> Result<RecordBatch, String> {
     let mut equip = Vec::new();
     let mut oat = Vec::new();
     let mut oah = Vec::new();
+    let mut sat = Vec::new();
     let mut duct = Vec::new();
     let mut zn = Vec::new();
+    let mut sat_sp = Vec::new();
+    let mut fan_cmd = Vec::new();
+    let mut occ = Vec::new();
     for row in rows {
         ts.push(parse_ts_ms(
             row.get("timestamp").and_then(|v| v.as_str()).unwrap_or(""),
@@ -270,8 +283,16 @@ pub fn pivot_rows_to_batch(rows: &[Value]) -> Result<RecordBatch, String> {
         );
         oat.push(row.get("oa_t").and_then(|v| v.as_f64()));
         oah.push(row.get("oa_h").and_then(|v| v.as_f64()));
+        sat.push(
+            row.get("sat")
+                .and_then(|v| v.as_f64())
+                .or_else(|| row.get("duct_t").and_then(|v| v.as_f64())),
+        );
         duct.push(row.get("duct_t").and_then(|v| v.as_f64()));
         zn.push(row.get("zn_t").and_then(|v| v.as_f64()));
+        sat_sp.push(row.get("sat_sp").and_then(|v| v.as_f64()));
+        fan_cmd.push(row.get("fan_cmd").and_then(|v| v.as_f64()));
+        occ.push(row.get("occ").and_then(|v| v.as_f64()));
     }
     RecordBatch::try_new(
         Arc::new(schema),
@@ -280,12 +301,12 @@ pub fn pivot_rows_to_batch(rows: &[Value]) -> Result<RecordBatch, String> {
             Arc::new(StringArray::from(equip)),
             Arc::new(Float64Array::from(oat)),
             Arc::new(Float64Array::from(oah)),
-            Arc::new(Float64Array::from(vec![None; rows.len()])),
+            Arc::new(Float64Array::from(sat)),
             Arc::new(Float64Array::from(duct)),
             Arc::new(Float64Array::from(zn)),
-            Arc::new(Float64Array::from(vec![None; rows.len()])),
-            Arc::new(Float64Array::from(vec![Some(1.0); rows.len()])),
-            Arc::new(Float64Array::from(vec![None; rows.len()])),
+            Arc::new(Float64Array::from(sat_sp)),
+            Arc::new(Float64Array::from(fan_cmd)),
+            Arc::new(Float64Array::from(occ)),
         ],
     )
     .map_err(|e| e.to_string())
@@ -311,9 +332,21 @@ fn pivot_schema() -> Schema {
 }
 
 pub fn parse_ts_ms(s: &str) -> i64 {
-    DateTime::parse_from_rfc3339(s)
-        .map(|dt| dt.with_timezone(&Utc).timestamp_millis())
-        .unwrap_or_else(|_| Utc::now().timestamp_millis())
+    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+        return dt.with_timezone(&Utc).timestamp_millis();
+    }
+    for fmt in [
+        "%m/%d/%Y %H:%M",
+        "%m/%d/%Y %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%dT%H:%M:%S",
+    ] {
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s.trim(), fmt) {
+            return DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc).timestamp_millis();
+        }
+    }
+    Utc::now().timestamp_millis()
 }
 
 pub struct PivotSample<'a> {

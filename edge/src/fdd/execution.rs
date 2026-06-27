@@ -3,6 +3,7 @@
 use crate::fdd::confirmation;
 use crate::fdd::sql_safety;
 use crate::historian::{arrow_table, store};
+use crate::model::scope;
 use arrow::array::{BooleanArray, Float64Array, StringArray, TimestampMillisecondArray};
 use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use arrow::record_batch::RecordBatch;
@@ -161,7 +162,7 @@ async fn execute_query(sql: &str) -> Result<Vec<Value>, String> {
 async fn register_historian_tables(ctx: &SessionContext) -> Result<(), String> {
     let pivot_rows = store::load_pivot_rows()?;
     if pivot_rows.is_empty() {
-        return Err("historian has no rows — capture bench samples first".into());
+        return Err("historian has no rows — import CSV or capture telemetry first".into());
     }
     let pivot = store::pivot_rows_to_batch(&pivot_rows).map_err(|e| e.to_string())?;
     let telemetry = historian_pivot_to_telemetry_batch(&pivot_rows).map_err(|e| e.to_string())?;
@@ -188,6 +189,16 @@ async fn register_demo_tables(ctx: &SessionContext) -> Result<(), String> {
     Ok(())
 }
 
+fn default_equipment_id() -> String {
+    scope::first_equipment_id().unwrap_or_else(|| "equip:unknown".to_string())
+}
+
+fn site_id_for_equipment(equip: &str) -> String {
+    scope::site_for_equipment(equip)
+        .or_else(scope::active_site_id)
+        .unwrap_or_else(|| "site:unknown".to_string())
+}
+
 fn historian_pivot_to_telemetry_batch(
     rows: &[Value],
 ) -> Result<RecordBatch, arrow::error::ArrowError> {
@@ -212,19 +223,23 @@ fn historian_pivot_to_telemetry_batch(
         Field::new("is_simulated", DataType::Boolean, false),
     ]);
     let mut ts = Vec::new();
+    let mut sites = Vec::new();
     let mut equipment = Vec::new();
+    let mut points = Vec::new();
     let mut fdd_input = Vec::new();
     let mut value = Vec::new();
     let mut source = Vec::new();
     let mut driver = Vec::new();
+    let mut devices = Vec::new();
     let mut simulated = Vec::new();
     for row in rows {
         let ts_ms = store::parse_ts_ms(row.get("timestamp").and_then(|v| v.as_str()).unwrap_or(""));
         let equip = row
             .get("equipment_id")
             .and_then(|v| v.as_str())
-            .unwrap_or("equip:validation")
-            .to_string();
+            .map(str::to_string)
+            .unwrap_or_else(default_equipment_id);
+        let site = site_id_for_equipment(&equip);
         let src = row
             .get("source")
             .and_then(|v| v.as_str())
@@ -237,58 +252,56 @@ fn historian_pivot_to_telemetry_batch(
         for (input, key) in [
             ("oa_t", "oa_t"),
             ("oa_h", "oa_h"),
+            ("sat", "sat"),
             ("duct_t", "duct_t"),
             ("zn_t", "zn_t"),
+            ("sat_sp", "sat_sp"),
+            ("fan_cmd", "fan_cmd"),
+            ("occ", "occ"),
         ] {
             if row.get(key).and_then(|v| v.as_f64()).is_some() {
                 ts.push(ts_ms);
+                sites.push(site.clone());
                 equipment.push(equip.clone());
+                points.push(format!("point:{input}"));
                 fdd_input.push(input.to_string());
                 value.push(row.get(key).and_then(|v| v.as_f64()));
                 source.push(src.clone());
                 driver.push(
                     row.get("source_driver")
                         .and_then(|v| v.as_str())
-                        .unwrap_or("bacnet")
+                        .unwrap_or("csv")
                         .to_string(),
                 );
+                devices.push(equip.clone());
                 simulated.push(sim);
             }
         }
     }
     let n = ts.len();
-    let site: StringArray = std::iter::repeat_n("site:demo", n)
-        .collect::<Vec<_>>()
-        .into();
     let building: StringArray = std::iter::repeat_n("building:main", n)
-        .collect::<Vec<_>>()
-        .into();
-    let point: StringArray = std::iter::repeat_n("point:bench", n)
         .collect::<Vec<_>>()
         .into();
     let unit: StringArray = std::iter::repeat_n("degF", n).collect::<Vec<_>>().into();
     let quality: StringArray = std::iter::repeat_n("good", n).collect::<Vec<_>>().into();
-    let device: StringArray = std::iter::repeat_n("equip:validation", n)
-        .collect::<Vec<_>>()
-        .into();
-    let object: StringArray = std::iter::repeat_n("ai:bench", n)
+    let object: StringArray = std::iter::repeat_n("historian", n)
         .collect::<Vec<_>>()
         .into();
     RecordBatch::try_new(
         Arc::new(schema),
         vec![
             Arc::new(TimestampMillisecondArray::from(ts)),
-            Arc::new(site),
+            Arc::new(StringArray::from(sites)),
             Arc::new(building),
             Arc::new(StringArray::from(equipment)),
-            Arc::new(point),
+            Arc::new(StringArray::from(points)),
             Arc::new(StringArray::from(fdd_input)),
             Arc::new(Float64Array::from(value)),
             Arc::new(unit),
             Arc::new(quality),
             Arc::new(StringArray::from(source)),
             Arc::new(StringArray::from(driver)),
-            Arc::new(device),
+            Arc::new(StringArray::from(devices)),
             Arc::new(object),
             Arc::new(BooleanArray::from(simulated)),
         ],
@@ -360,7 +373,9 @@ fn build_telemetry_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
         Field::new("is_simulated", DataType::Boolean, false),
     ]);
     let mut ts = Vec::new();
+    let mut sites = Vec::new();
     let mut equipment = Vec::new();
+    let mut points = Vec::new();
     let mut fdd_input = Vec::new();
     let mut value = Vec::new();
     for row in &rows {
@@ -369,8 +384,9 @@ fn build_telemetry_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
         let equip = row
             .get("equip")
             .and_then(|v| v.as_str())
-            .unwrap_or("equip:validation")
-            .to_string();
+            .map(str::to_string)
+            .unwrap_or_else(default_equipment_id);
+        let site = site_id_for_equipment(&equip);
         for (input, key) in [
             ("sat", "sat"),
             ("sat_sp", "sat_sp"),
@@ -378,22 +394,19 @@ fn build_telemetry_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
             ("oat", "oa_t"),
         ] {
             ts.push(ts_ms);
+            sites.push(site.clone());
             equipment.push(equip.clone());
+            points.push(format!("point:{input}"));
             fdd_input.push(input.to_string());
             value.push(row.get(key).and_then(|v| v.as_f64()));
         }
     }
     let n = ts.len();
-    let site: StringArray = std::iter::repeat_n("site:demo", n)
-        .collect::<Vec<_>>()
-        .into();
     let building: StringArray = std::iter::repeat_n("building:main", n)
         .collect::<Vec<_>>()
         .into();
     let equip_arr: StringArray = equipment.into();
-    let point: StringArray = std::iter::repeat_n("point:demo", n)
-        .collect::<Vec<_>>()
-        .into();
+    let point: StringArray = points.into();
     let fdd_arr: StringArray = fdd_input.into();
     let val_arr: Float64Array = value.into();
     let unit: StringArray = std::iter::repeat_n("degF", n).collect::<Vec<_>>().into();
@@ -401,18 +414,19 @@ fn build_telemetry_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
     let source: StringArray = std::iter::repeat_n("simulated", n)
         .collect::<Vec<_>>()
         .into();
-    let driver: StringArray = std::iter::repeat_n("bacnet", n).collect::<Vec<_>>().into();
-    let device: StringArray = std::iter::repeat_n("equip:validation", n)
+    let driver: StringArray = std::iter::repeat_n("csv", n).collect::<Vec<_>>().into();
+    let device: StringArray = equip_arr.clone();
+    let object: StringArray = std::iter::repeat_n("historian", n)
         .collect::<Vec<_>>()
         .into();
-    let object: StringArray = std::iter::repeat_n("ai:1001", n).collect::<Vec<_>>().into();
-    let simulated = BooleanArray::from(vec![true; n]);
+    let simulated = BooleanArray::from(vec![false; n]);
     let ts_arr = TimestampMillisecondArray::from(ts);
+    let site_arr: StringArray = sites.into();
     RecordBatch::try_new(
         Arc::new(schema),
         vec![
             Arc::new(ts_arr),
-            Arc::new(site),
+            Arc::new(site_arr),
             Arc::new(building),
             Arc::new(equip_arr),
             Arc::new(point),
@@ -460,8 +474,8 @@ fn build_pivot_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
         equip.push(
             row.get("equip")
                 .and_then(|v| v.as_str())
-                .unwrap_or("equip:validation")
-                .to_string(),
+                .map(str::to_string)
+                .unwrap_or_else(default_equipment_id),
         );
         sat.push(row.get("sat").and_then(|v| v.as_f64()));
         sat_sp.push(row.get("sat_sp").and_then(|v| v.as_f64()));
@@ -551,7 +565,8 @@ pub fn builder_to_sql(builder: &Value) -> String {
     let equipment = builder
         .get("equipment_id")
         .and_then(|v| v.as_str())
-        .unwrap_or("equip:validation");
+        .map(str::to_string)
+        .unwrap_or_else(default_equipment_id);
     format!(
         "SELECT timestamp, equipment_id, {input}, CASE WHEN {input} IS NULL THEN false WHEN {input} {op} {value} THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = '{equipment}'"
     )

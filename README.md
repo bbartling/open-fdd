@@ -20,12 +20,26 @@
 </p>
 
 <p align="center">
-  The <strong>Open-FDD Rust edge</strong> includes JWT auth, a React dashboard, Apache Arrow/Feather historian, DataFusion SQL fault rules, BACnet/Modbus/Haystack drivers, reports, and Docker/GHCR lifecycle scripts.
+  The <strong>Open-FDD Rust edge</strong> ships JWT auth, a React dashboard, an Apache Arrow/Feather historian, DataFusion SQL fault rules, BACnet/Modbus/Haystack/JSON drivers, PDF reports, and Docker/GHCR lifecycle scripts. Telemetry and assignments flow through a <strong>Project Haystack knowledge graph</strong> (sites, equipment, points, and driver bindings) so FDD rules and reports stay protocol-agnostic.
 </p>
 
 <p align="center">
-  Built for local building networks, Raspberry Pi / edge servers, and on-prem BAS integration without requiring a cloud service.
+  Built for local building networks, Raspberry Pi / edge servers, and on-prem BAS integration — no cloud service required. Field benches use <strong>live OT drivers</strong> (for example BACnet MSTP device discovery); simulated devices are CI-only, not production defaults.
 </p>
+
+## Docker at a glance
+
+One GHCR image (`ghcr.io/bbartling/openfdd-edge-rust`) runs as different containers via Compose profiles:
+
+| Profile | Containers | What runs inside |
+| --- | ---: | --- |
+| **`desktop-json-csv`** | 1 | **`openfdd-bridge`** — REST API, React UI, JWT auth, historian, DataFusion FDD, Modbus/JSON/CSV drivers, reports |
+| **`full-edge`** | 3 | **`openfdd-bridge`** (above) + **`openfdd-commission`** (BACnet Who-Is, point browse, poll, override scan; host network) + **`openfdd-haystack-gateway`** (Haystack read/nav on port 9092) |
+| **`caddy-http`** or **`caddy-tls`** | +1 | **`openfdd-caddy`** — LAN reverse proxy in front of bridge (HTTP :80 or TLS :443) |
+
+Bridge-owned sidecars (same container as bridge): Modbus/TCP, JSON API ingest, CSV import/export, fault analytics, Haystack model APIs.
+
+Never run `docker compose down -v` or delete `workspace/` — site state lives in the bind mount.
 
 ## Architecture
 

@@ -7,6 +7,16 @@ type StorageSummary = {
   estimated_bytes?: number;
   by_subdir?: Record<string, { row_count?: number; jsonl_bytes?: number }>;
   by_source?: Record<string, { source_id?: string; row_count?: number }>;
+  bacnet_override_log?: {
+    ok?: boolean;
+    retention_years?: number;
+    scan_interval_s?: number;
+    export_path?: string;
+    export_row_count?: number;
+    priority8_path?: string;
+    non_priority8_path?: string;
+    last_scan?: string | null;
+  };
   warnings?: string[];
 };
 
@@ -138,6 +148,39 @@ export default function DataManagementPage() {
         <button type="button" className="btn" onClick={() => void loadSummary()}>
           Refresh
         </button>
+      </section>
+
+      <section className="card">
+        <h2>BACnet override log (CSV)</h2>
+        <p>
+          Hourly priority-array scans append to CSV exports. Rows older than{" "}
+          <strong>{summary?.bacnet_override_log?.retention_years ?? 1} year</strong> are pruned
+          automatically on each append.
+        </p>
+        {summary?.bacnet_override_log ? (
+          <>
+            <p>
+              Export rows: <strong>{summary.bacnet_override_log.export_row_count ?? 0}</strong> ·
+              Scan cadence:{" "}
+              <strong>{summary.bacnet_override_log.scan_interval_s ?? 3600}s</strong> · Last scan:{" "}
+              <strong>{String(summary.bacnet_override_log.last_scan ?? "—")}</strong>
+            </p>
+            <div className="btn-row">
+              <a className="btn btn-secondary" href="/api/bacnet/overrides/export">
+                Download all overrides CSV
+              </a>
+              <a className="btn btn-secondary" href="/api/bacnet/overrides/export/p8">
+                Download P8 overrides CSV
+              </a>
+              <a className="btn btn-secondary" href="/api/bacnet/overrides/export/non-p8">
+                Download non-P8 CSV
+              </a>
+            </div>
+            <pre className="code-block">{JSON.stringify(summary.bacnet_override_log, null, 2)}</pre>
+          </>
+        ) : (
+          <p>Loading override log metadata…</p>
+        )}
       </section>
 
       <section className="card">

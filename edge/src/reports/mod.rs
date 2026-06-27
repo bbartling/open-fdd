@@ -131,6 +131,11 @@ pub fn templates() -> Value {
                 "id": "equipment-fdd",
                 "title": "Equipment FDD report",
                 "description": "Per-equipment plots, SQL rules, and fault timelines"
+            },
+            {
+                "id": "rcx-universal-3",
+                "title": "RCx Universal 3 (ASHRAE)",
+                "description": "Retro-commissioning style report: faults, trends, recommendations, and CSV-backed evidence"
             }
         ]
     })

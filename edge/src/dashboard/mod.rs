@@ -323,9 +323,10 @@ fn bacnet_override_counts() -> Value {
         .unwrap_or_default();
     let mut p8 = 0_usize;
     let mut other = 0_usize;
+    let op_pri = crate::drivers::bacnet::operator_override_priority();
     for ev in events {
-        let priority = ev.get("priority").and_then(|v| v.as_u64()).unwrap_or(0);
-        if priority == 8 {
+        let priority = ev.get("priority").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+        if priority == op_pri {
             p8 += 1;
         } else if priority > 0 {
             other += 1;

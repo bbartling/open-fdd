@@ -64,13 +64,13 @@ jobs:
           test -x scripts/openfdd_bacnet_nic_setup.sh
           bash -n scripts/openfdd_bacnet_nic_setup.sh
           test -f .env.example
-          grep -q "OPENFDD_BACNET_MODE=simulated" .env.example
+          grep -q "OPENFDD_BACNET_MODE=live" .env.example
           grep -q "OPENFDD_VALIDATION_PROFILE" .env.example
           test -x scripts/audit_no_private_bench_hardcoding.sh
           ./scripts/audit_no_private_bench_hardcoding.sh
           test -f docker-compose.bacnet-live.yml
           test -f VERSION
-          grep -q "3.2.1" VERSION
+          grep -q "3.2.2" VERSION
 
   docker:
     name: Docker image build
@@ -90,6 +90,10 @@ jobs:
       - name: Prepare workspace for non-root container user
         run: |
           mkdir -p workspace/overrides workspace/bacnet/overrides workspace/data/drivers workspace/logs
+          cat > workspace/data.env.local <<'EOF'
+          OPENFDD_BACNET_MODE=live
+          OPENFDD_MODBUS_MODE=live
+          EOF
           cat > workspace/auth.env.local <<'EOF'
           OFDD_AUTH_REQUIRED=true
           OFDD_AUTH_SECRET=ci-test-secret-openfdd-edge-do-not-use-in-production
@@ -140,15 +144,15 @@ jobs:
             -H "Authorization: Bearer $TOKEN" | jq -e '((.drivers // []) | length >= 1) or ((.devices // []) | length >= 1)'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/commission/status \
-            -H "Authorization: Bearer $TOKEN" | jq -e '.config.mode == "simulated"'
+            -H "Authorization: Bearer $TOKEN" | jq -e '.config.mode == "live"'
 
           curl -fsS -X POST http://127.0.0.1:8080/api/bacnet/overrides/scan-once \
             -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
-            -d '{}' | jq -e '.ok == true and .summary.total >= 1'
+            -d '{}' | jq -e '.ok == true and (.summary.total // 0) >= 0'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/status \
-            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and (.operator_override_points // 0) >= 1'
+            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true'
 
           curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export \
             -H "Authorization: Bearer $TOKEN" | grep "scanned_at"
@@ -165,7 +169,7 @@ jobs:
           curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export/non-p8 \
             -H "Authorization: Bearer $TOKEN" | grep "override_kind"
 
-      - name: Modbus simulated driver smoke
+      - name: Modbus live-mode smoke
         run: |
           AGENT_PW="$(grep '^OFDD_AGENT_PASSWORD=' workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
           TOKEN="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
@@ -173,20 +177,20 @@ jobs:
             -d "$(jq -nc --arg p "$AGENT_PW" '{username:"agent",password:$p}')" | jq -r '.token // .access_token')"
 
           curl -fsS http://127.0.0.1:8080/api/modbus/points \
-            -H "Authorization: Bearer $TOKEN" | jq -e 'length >= 1'
+            -H "Authorization: Bearer $TOKEN" | jq -e 'type == "array"'
 
           curl -fsS http://127.0.0.1:8080/api/modbus/commission/status \
-            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and .config.mode == "simulated"'
+            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and .config.mode == "live"'
 
           curl -fsS -X POST http://127.0.0.1:8080/api/modbus/scan \
             -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
-            -d '{}' | jq -e '.ok == true and (.points | length) >= 1'
+            -d '{}' | jq -e '.ok == false'
 
           curl -fsS -X POST http://127.0.0.1:8080/api/modbus/read \
             -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
-            -d '{"register":40001,"function":"holding_register"}' | grep -q simulated
+            -d '{"register":40001,"function":"holding_register"}' | jq -e '.ok == false'
 
       - name: FDD Wires and DataFusion SQL smoke
         run: |

@@ -40,6 +40,7 @@ fn status_point(
     name: &str,
     present_value: Value,
     units: &str,
+    writable: bool,
 ) -> Value {
     let inst = device_instance();
     json!({
@@ -54,9 +55,9 @@ fn status_point(
         "present_value": present_value,
         "units": units,
         "polling_enabled": false,
-        "writable": false,
+        "writable": writable,
         "local_server": true,
-        "commandable": is_commandable_object_type(object_type),
+        "commandable": writable || is_commandable_object_type(object_type),
         "haystack_id": format!("point:openfdd-{instance}")
     })
 }
@@ -90,41 +91,55 @@ pub fn runtime_metrics() -> Value {
 
 pub fn status_points() -> Vec<Value> {
     let m = runtime_metrics();
+    let active = m["active_fault_count"].as_f64().unwrap_or(0.0);
     vec![
-        status_point(
-            "binary-value",
-            9001,
-            "openfdd-edge-online",
-            m["edge_online"].clone(),
-            "bool",
-        ),
-        status_point(
-            "binary-value",
-            9002,
-            "openfdd-commission-agent",
-            m["commission_agent_online"].clone(),
-            "bool",
-        ),
-        status_point(
-            "analog-value",
-            9001,
-            "openfdd-poll-sample-count",
-            m["poll_sample_count"].clone(),
-            "count",
-        ),
-        status_point(
-            "analog-value",
-            9002,
-            "openfdd-devices-discovered",
-            m["devices_discovered"].clone(),
-            "count",
-        ),
         status_point(
             "analog-value",
             9003,
             "openfdd-active-fault-count",
-            m["active_fault_count"].clone(),
+            json!(active),
             "count",
+            false,
+        ),
+        status_point(
+            "binary-value",
+            9004,
+            "openfdd-faults-present",
+            json!(active > 0.0),
+            "bool",
+            false,
+        ),
+        status_point(
+            "binary-value",
+            9010,
+            "openfdd-optimization-enabled",
+            json!(super::bacnet_server_runtime::optimization_enabled()),
+            "bool",
+            true,
+        ),
+        status_point(
+            "analog-value",
+            9101,
+            "outside-air-temperature",
+            json!(0.0),
+            "degF",
+            false,
+        ),
+        status_point(
+            "analog-value",
+            9102,
+            "outside-air-humidity",
+            json!(0.0),
+            "pct",
+            false,
+        ),
+        status_point(
+            "analog-value",
+            9103,
+            "outside-air-dewpoint",
+            json!(0.0),
+            "degF",
+            false,
         ),
     ]
 }
@@ -159,19 +174,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn local_server_has_five_status_points() {
+    fn local_server_has_openfdd_points() {
         let points = status_points();
-        assert_eq!(points.len(), 5);
+        assert_eq!(points.len(), 6);
         let ids: Vec<String> = points
             .iter()
             .filter_map(|p| p.get("object_identifier").and_then(|v| v.as_str()))
             .map(str::to_string)
             .collect();
-        assert!(ids.contains(&"binary-value,9001".to_string()));
-        assert!(ids.contains(&"binary-value,9002".to_string()));
-        assert!(ids.contains(&"analog-value,9001".to_string()));
-        assert!(ids.contains(&"analog-value,9002".to_string()));
         assert!(ids.contains(&"analog-value,9003".to_string()));
+        assert!(ids.contains(&"binary-value,9010".to_string()));
+        assert!(ids.contains(&"analog-value,9101".to_string()));
     }
 
     #[test]

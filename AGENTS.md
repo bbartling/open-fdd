@@ -32,6 +32,11 @@ TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
 - print secrets or tokens
 - expose API on public internet
 - write BACnet without explicit human approval
+- hardcode BACnet device instances (e.g. 5007), building names, or bench-specific routes in production Rust/TS
+- add simulated/smoke-mirror OT data paths (`OPENFDD_*_MODE=simulated`, `simulated_values`, `simulation_phase`, fake driver points)
+- use `#[allow(dead_code)]` to silence unused code — delete or wire it up instead
+
+Live OT I/O uses `OPENFDD_BACNET_MODE=live` and `OPENFDD_MODBUS_MODE=live` only. CI SQL proof uses `validation:fixture` historian rows (not OT simulation). Opt-in field tests require env-configured device instances — never a default bench ID in repo code.
 
 ## Assignment rule
 

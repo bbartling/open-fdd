@@ -113,14 +113,31 @@ pub fn test_graph(site_id: &str, graph_id: &str) -> Value {
         .and_then(|c| c.get("confirmation_seconds"))
         .and_then(|v| v.as_i64())
         .unwrap_or(300);
-    let sql = sql_node
+    let sql = match sql_node
         .and_then(|n| n.get("config"))
         .and_then(|c| c.get("sql"))
         .and_then(|v| v.as_str())
-        .unwrap_or(
-            "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t IS NULL THEN false WHEN oa_t < 40.0 OR oa_t > 110.0 THEN true ELSE false END AS fault_raw FROM telemetry_pivot WHERE equipment_id = 'equip:validation'",
-        );
-    let exec = execution::run_rule_sql(sql, confirm_secs, &json!({}));
+        .filter(|s| !s.trim().is_empty())
+    {
+        Some(s) => s.to_string(),
+        None => {
+            if let Some(builder) = sql_node
+                .and_then(|n| n.get("config"))
+                .and_then(|c| c.get("builder"))
+            {
+                execution::builder_to_sql(builder)
+            } else {
+                return json!({
+                    "ok": false,
+                    "error": "graph has no SQL rule configured",
+                    "validation": validation,
+                    "graph_id": graph_id,
+                    "site_id": site_id
+                });
+            }
+        }
+    };
+    let exec = execution::run_rule_sql(&sql, confirm_secs, &json!({}));
     json!({
         "ok": validation["ok"].as_bool().unwrap_or(false) && exec.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
         "validation": validation,

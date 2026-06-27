@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { clearToken, fetchAuthMe, fetchAuthStatus, hasToken } from "../lib/api";
+import { clearToken, fetchAuthMe, fetchAuthStatus, getBridgeBase, hasToken } from "../lib/api";
 import { useTheme } from "../contexts/theme-context";
 import StackStatusStrip from "./StackStatusStrip";
+
+type HealthInfo = { version?: string; image_tag?: string };
 
 type NavItem = {
   to: string;
@@ -20,6 +22,13 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [{ to: "/", end: true, icon: "🏠", label: "Dashboard" }],
   },
   {
+    title: "Wiresheet",
+    items: [
+      { to: "/wiresheet", icon: "🔗", label: "FDD Studio", protected: true },
+      { to: "/csv", icon: "📂", label: "CSV Fusion", protected: true },
+    ],
+  },
+  {
     title: "Integrations",
     items: [
       { to: "/bacnet", icon: "📡", label: "BACnet", protected: true },
@@ -32,7 +41,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Model & rules",
     items: [
-      { to: "/model", icon: "📐", label: "Model & assignments", protected: true },
+      { to: "/model", icon: "📐", label: "Model & FDD assignments", protected: true },
       { to: "/sql-fdd", icon: "⚡", label: "SQL FDD Rules", protected: true },
       { to: "/plot", icon: "📈", label: "Plots", protected: true },
       { to: "/reports", icon: "📄", label: "Reports", protected: true },
@@ -63,6 +72,15 @@ export default function AppLayout() {
   const [tokenPresent, setTokenPresent] = useState(hasToken());
   const [sessionRole, setSessionRole] = useState<string | null>(null);
   const [sessionUser, setSessionUser] = useState<string | null>(null);
+  const [edgeVersion, setEdgeVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    const base = getBridgeBase();
+    fetch(`${base}/api/health`)
+      .then((r) => r.json())
+      .then((h: HealthInfo) => setEdgeVersion(h.version || h.image_tag || null))
+      .catch(() => setEdgeVersion(null));
+  }, []);
 
   useEffect(() => {
     fetchAuthStatus()
@@ -108,6 +126,11 @@ export default function AppLayout() {
       <aside className="sidebar">
         <div className="brand-row">
           <span className="brand">Open-FDD</span>
+          {edgeVersion ? (
+            <span className="brand-chip muted" title="Edge release">
+              v{edgeVersion}
+            </span>
+          ) : null}
           {roleChip ? (
             <span className="brand-chip" title={sessionUser ? `${sessionUser}` : undefined}>
               {roleChip}

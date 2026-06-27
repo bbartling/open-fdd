@@ -1,13 +1,19 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { apiFetch, hasToken } from "../../lib/api";
+import { formatApiError } from "../../lib/formatApiError";
 import type { DisplayFault } from "../../lib/displayFaults";
 
 type Props = {
   fault: DisplayFault | null;
   onClose: () => void;
+  onCleared?: () => void;
 };
 
-export default function FaultDetailModal({ fault, onClose }: Props) {
+export default function FaultDetailModal({ fault, onClose, onCleared }: Props) {
+  const [clearBusy, setClearBusy] = useState(false);
+  const [clearError, setClearError] = useState("");
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -17,6 +23,30 @@ export default function FaultDetailModal({ fault, onClose }: Props) {
   }, [onClose]);
 
   if (!fault) return null;
+
+  async function clearFault() {
+    if (!hasToken()) {
+      setClearError("Operator login required to clear faults.");
+      return;
+    }
+    setClearBusy(true);
+    setClearError("");
+    try {
+      await apiFetch(`/api/faults/${encodeURIComponent(fault!.id)}/clear`, { method: "POST" });
+      onCleared?.();
+      onClose();
+    } catch (e) {
+      setClearError(formatApiError(e));
+    } finally {
+      setClearBusy(false);
+    }
+  }
+
+  const canClear =
+    fault.source !== "poll_health" &&
+    fault.source !== "model_health" &&
+    fault.source !== "bacnet_override" &&
+    !fault.id.startsWith("group-");
 
   return (
     <div
@@ -80,7 +110,18 @@ export default function FaultDetailModal({ fault, onClose }: Props) {
               </dl>
             </section>
           ) : null}
+          {clearError ? <p className="error">{clearError}</p> : null}
           <div className="bis-modal-actions">
+            {canClear ? (
+              <button
+                type="button"
+                className="bis-btn bis-btn-secondary"
+                disabled={clearBusy}
+                onClick={() => void clearFault()}
+              >
+                {clearBusy ? "Clearing…" : hasToken() ? "Clear fault" : "Clear (login required)"}
+              </button>
+            ) : null}
             {fault.source === "model_health" ? (
               <Link to="/model" className="bis-btn bis-btn-primary" onClick={onClose}>
                 Open data model

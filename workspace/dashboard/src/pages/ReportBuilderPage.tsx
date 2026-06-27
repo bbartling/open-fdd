@@ -70,6 +70,7 @@ export default function ReportBuilderPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [templateId, setTemplateId] = useState("validation-summary");
 
   const loadReports = useCallback(async () => {
     try {
@@ -78,7 +79,7 @@ export default function ReportBuilderPage() {
     } catch (e) {
       setError(formatApiError(e));
     }
-  }, []);
+  }, [templateId]);
 
   const sections = useMemo(
     () => [...(report?.sections ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
@@ -92,8 +93,11 @@ export default function ReportBuilderPage() {
       const draft = await apiFetch<ReportDoc>("/api/reports/draft", {
         method: "POST",
         body: JSON.stringify({
-          template_id: "validation-summary",
-          title: "Open-FDD Validation Report",
+          template_id: templateId,
+          title:
+            templateId === "rcx-universal-3"
+              ? "RCx Universal 3 Report"
+              : "Open-FDD Validation Report",
         }),
       });
       setReport(draft);
@@ -102,7 +106,7 @@ export default function ReportBuilderPage() {
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [templateId]);
 
   useEffect(() => {
     void createDraft();
@@ -224,7 +228,7 @@ export default function ReportBuilderPage() {
       <section className="panel">
         <h2>Validation reports</h2>
         {reports.length === 0 ? (
-          <p className="hint">No reports yet. Run the 1-hour validation workflow to generate a PDF.</p>
+          <p className="hint">No reports yet. Run a validation workflow from Reports or complete a site validation harness to generate a PDF.</p>
         ) : (
           <ul className="report-list">
             {reports.map((r) => {
@@ -251,6 +255,14 @@ export default function ReportBuilderPage() {
       </section>
 
       <div className="toolbar">
+        <label className="field">
+          <span className="field-label">Template</span>
+          <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+            <option value="validation-summary">Validation summary</option>
+            <option value="equipment-fdd">Equipment FDD</option>
+            <option value="rcx-universal-3">RCx Universal 3 (ASHRAE)</option>
+          </select>
+        </label>
         <button type="button" className="secondary-btn" onClick={() => void createDraft()} disabled={busy}>
           Regenerate draft
         </button>

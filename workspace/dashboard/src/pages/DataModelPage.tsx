@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { apiFetchText } from "../lib/api";
+import { apiFetch, apiFetchText } from "../lib/api";
 import { openTtlPopup, openTextPopup } from "../lib/ttlPopup";
 import { copyToClipboard } from "../lib/clipboard";
 import { buildLlmCommissioningBundle } from "../lib/llmModelBundle";
@@ -9,12 +9,12 @@ import DataModelSparqlPanel from "../components/DataModelSparqlPanel";
 import CommissioningImportExportPanel from "../components/CommissioningImportExportPanel";
 import ModelSyncBar from "../components/ModelSyncBar";
 import PageHeader from "../components/PageHeader";
-import { apiFetch } from "../lib/api";
+import FddWiresheetSummary from "../components/FddWiresheetSummary";
 
 type SiteRow = { id: string; name: string };
 
 export default function DataModelPage() {
-  const [activeTab, setActiveTab] = useState<"explorer" | "import" | "sparql" | "advanced">("import");
+  const [activeTab, setActiveTab] = useState<"import" | "explorer" | "wiresheet" | "sparql" | "advanced">("import");
   const [out, setOut] = useState("");
   const [ttlLoading, setTtlLoading] = useState(false);
   const [copiedKey, setCopiedKey] = useState("");
@@ -99,8 +99,9 @@ export default function DataModelPage() {
         title="Model & FDD assignments"
         subtitle={
           <>
-            Site <code>{activeSiteId || "…"}</code> · {eqCount} equipment · {pointCount} points · {ruleCount} rules ·{" "}
-            {boundPoints} bound points · edit Haystack + rule pins via commissioning JSON (Import / export tab)
+            Haystack site <code>{activeSiteId || "…"}</code> · {eqCount} equipment · {pointCount} points · {ruleCount}{" "}
+            rules · {boundPoints} bound points · import/export commissioning JSON or use AI to populate model + FDD
+            wiresheet
           </>
         }
       />
@@ -122,10 +123,17 @@ export default function DataModelPage() {
         </button>
         <button
           type="button"
+          className={activeTab === "wiresheet" ? "" : "secondary-btn"}
+          onClick={() => setActiveTab("wiresheet")}
+        >
+          FDD wiresheet
+        </button>
+        <button
+          type="button"
           className={activeTab === "sparql" ? "" : "secondary-btn"}
           onClick={() => setActiveTab("sparql")}
         >
-          SPARQL
+          Haystack RDF
         </button>
         <button
           type="button"
@@ -154,6 +162,8 @@ export default function DataModelPage() {
           </p>
         </>
       ) : null}
+
+      {activeTab === "wiresheet" ? <FddWiresheetSummary onStatus={setOut} /> : null}
 
       {activeTab === "sparql" ? <DataModelSparqlPanel onStatus={setOut} /> : null}
 

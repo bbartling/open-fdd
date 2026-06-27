@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import { apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
@@ -29,8 +30,6 @@ type DemoResult = {
   sql?: string;
   faults?: FddFault[];
 };
-
-const GRAPH_ID = "graph:live-fdd-validation";
 
 function validationSummary(payload: Record<string, unknown> | null): string {
   if (!payload) return "";
@@ -80,7 +79,6 @@ export default function SqlFddRulesPage() {
   const [validation, setValidation] = useState<Record<string, unknown> | null>(null);
   const [runResult, setRunResult] = useState<Record<string, unknown> | null>(null);
   const [demo, setDemo] = useState<DemoResult | null>(null);
-  const [graphStatus, setGraphStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState("");
@@ -178,184 +176,138 @@ export default function SqlFddRulesPage() {
     }
   }
 
-  async function proposeAssignments() {
-    setBusy(true);
-    setGraphStatus("");
-    setError("");
-    try {
-      const out = await apiFetch<{ review_status?: string; proposed?: unknown[] }>(
-        "/api/fdd-wires/propose-assignments",
-        {
-          method: "POST",
-          body: JSON.stringify({ site_id: siteId || undefined, equipment_type: "ahu" }),
-        },
-      );
-      setGraphStatus(`Proposed ${out.proposed?.length ?? 0} draft bindings — ${out.review_status ?? "needs_review"}`);
-    } catch (e) {
-      setError(formatApiError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function validateGraph() {
-    setBusy(true);
-    setGraphStatus("");
-    setError("");
-    try {
-      const out = await apiFetch<{ ok?: boolean; issues?: unknown[] }>(
-        `/api/fdd-wires/graphs/${encodeURIComponent(GRAPH_ID)}/validate${siteId ? `?site_id=${encodeURIComponent(siteId)}` : ""}`,
-        { method: "POST", body: JSON.stringify({}) },
-      );
-      setGraphStatus(out.ok ? "Validation graph checks passed" : `Graph issues: ${(out.issues ?? []).length}`);
-    } catch (e) {
-      setError(formatApiError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
-    <div className="sql-fdd-page">
+    <div className="page page-wide sql-fdd-page">
       <PageHeader
         title="SQL FDD Rules"
-        subtitle="DataFusion SQL rules, the rule builder, and Haystack-to-rule wiring for the active site model."
+        subtitle={
+          <>
+            DataFusion SQL rules for site <code>{siteId || "…"}</code>. Map points on{" "}
+            <Link to="/model">Model & FDD assignments</Link> or the{" "}
+            <Link to="/wiresheet">FDD Wiresheet</Link>.
+          </>
+        }
       />
 
       {error ? <div className="error-banner">{error}</div> : null}
 
-      <section className="panel">
-        <div className="toolbar">
-          <h2 className="panel-title">SQL Rule Builder</h2>
-          <button type="button" className={mode === "builder" ? "primary-btn" : "secondary-btn"} onClick={() => setMode("builder")}>
-            Builder
-          </button>
-          <button type="button" className={mode === "raw" ? "primary-btn" : "secondary-btn"} onClick={() => setMode("raw")}>
-            Raw SQL
-          </button>
-          <button type="button" className="secondary-btn" onClick={() => void validateSql()} disabled={busy}>
-            Validate SQL
-          </button>
-          <button type="button" className="primary-btn" onClick={() => void runSql()} disabled={busy || !sql.trim() || equipmentMissing}>
-            Run (Ctrl/Cmd+Enter)
-          </button>
-        </div>
-
-        {equipmentMissing ? <div className="warn-banner">Select equipment first.</div> : null}
-
-        {mode === "builder" ? (
-          <div className="builder-grid">
-            <label>
-              Rule name
-              <input value={builder.name} onChange={(e) => setBuilder({ ...builder, name: e.target.value })} />
-            </label>
-            <label>
-              FDD input
-              <select value={builder.input} onChange={(e) => setBuilder({ ...builder, input: e.target.value })}>
-                {fddInputs.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Operator
-              <select value={builder.operator} onChange={(e) => setBuilder({ ...builder, operator: e.target.value })}>
-                {[">", "<", ">=", "<="].map((op) => (
-                  <option key={op} value={op}>
-                    {op}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Threshold
-              <input
-                type="number"
-                value={builder.value}
-                onChange={(e) => setBuilder({ ...builder, value: Number(e.target.value) })}
-              />
-            </label>
-            <label>
-              Equipment (Haystack equip id)
-              <input
-                value={builder.equipment_id}
-                onChange={(e) => setBuilder({ ...builder, equipment_id: e.target.value })}
-              />
-            </label>
-            <label>
-              Confirmation (sec)
-              <input
-                type="number"
-                value={builder.confirmation_seconds}
-                onChange={(e) => setBuilder({ ...builder, confirmation_seconds: Number(e.target.value) })}
-              />
-            </label>
-            <label>
-              Fault code
-              <input value={builder.fault_code} onChange={(e) => setBuilder({ ...builder, fault_code: e.target.value })} />
-            </label>
+      <div className="sql-fdd-layout">
+        <section className="panel sql-fdd-builder-panel">
+          <div className="sql-fdd-toolbar">
+            <h2 className="panel-title">Rule builder</h2>
+            <div className="action-bar">
+              <button type="button" className={mode === "builder" ? "primary-btn" : "secondary-btn"} onClick={() => setMode("builder")}>
+                Builder
+              </button>
+              <button type="button" className={mode === "raw" ? "primary-btn" : "secondary-btn"} onClick={() => setMode("raw")}>
+                Raw SQL
+              </button>
+              <button type="button" className="secondary-btn" onClick={() => void validateSql()} disabled={busy}>
+                Validate
+              </button>
+              <button type="button" className="primary-btn" onClick={() => void runSql()} disabled={busy || !sql.trim() || equipmentMissing}>
+                Run preview
+              </button>
+              <Link className="secondary-btn" to="/wiresheet">
+                Open FDD Wiresheet
+              </Link>
+            </div>
           </div>
-        ) : null}
 
-        {rawCustom ? <div className="warn-banner">Raw SQL is custom — builder mode may not round-trip these edits.</div> : null}
+          {equipmentMissing ? <div className="warn-banner">Select Haystack equipment id before running preview.</div> : null}
 
-        <label className="sql-editor-label">
-          Generated / raw DataFusion SQL
-          <textarea
-            className="sql-editor"
-            value={sql}
-            onChange={(e) => {
-              setSql(e.target.value);
-              setRawCustom(true);
-            }}
-            rows={8}
-          />
-        </label>
-
-        {validation ? <div className="status-banner">{validationSummary(validation)}</div> : null}
-        {runResult ? <div className="status-banner">{runResultSummary(runResult)}</div> : null}
-        {(validation || runResult) && showAdvanced ? (
-          <details className="advanced-json">
-            <summary>Advanced / raw JSON</summary>
-            {validation ? <pre className="code-block">{JSON.stringify(validation, null, 2)}</pre> : null}
-            {runResult ? <pre className="code-block">{JSON.stringify(runResult, null, 2)}</pre> : null}
-          </details>
-        ) : null}
-        {(validation || runResult) && !showAdvanced ? (
-          <button type="button" className="secondary-btn" onClick={() => setShowAdvanced(true)}>
-            Show advanced JSON
-          </button>
-        ) : null}
-      </section>
-
-      <section className="panel">
-        <div className="toolbar">
-          <h2 className="panel-title">FDD Wires — rule mapping graph</h2>
-          <button type="button" className="secondary-btn" onClick={() => void proposeAssignments()} disabled={busy}>
-            Propose assignments
-          </button>
-          <button type="button" className="secondary-btn" onClick={() => void validateGraph()} disabled={busy}>
-            Validate graph
-          </button>
-        </div>
-        <p className="muted-copy">
-          Graph <code>{GRAPH_ID}</code> maps BACnet/Haystack points to FDD inputs for the active site
-          {siteId ? (
-            <>
-              {" "}
-              (<code>{siteId}</code>)
-            </>
+          {mode === "builder" ? (
+            <div className="builder-grid sql-fdd-builder-grid">
+              <label>
+                Rule name
+                <input value={builder.name} onChange={(e) => setBuilder({ ...builder, name: e.target.value })} />
+              </label>
+              <label>
+                FDD input
+                <select value={builder.input} onChange={(e) => setBuilder({ ...builder, input: e.target.value })}>
+                  {fddInputs.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Operator
+                <select value={builder.operator} onChange={(e) => setBuilder({ ...builder, operator: e.target.value })}>
+                  {[">", "<", ">=", "<="].map((op) => (
+                    <option key={op} value={op}>
+                      {op}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Threshold
+                <input
+                  type="number"
+                  value={builder.value}
+                  onChange={(e) => setBuilder({ ...builder, value: Number(e.target.value) })}
+                />
+              </label>
+              <label>
+                Equipment (Haystack equip id)
+                <input
+                  value={builder.equipment_id}
+                  onChange={(e) => setBuilder({ ...builder, equipment_id: e.target.value })}
+                />
+              </label>
+              <label>
+                Confirmation (sec)
+                <input
+                  type="number"
+                  value={builder.confirmation_seconds}
+                  onChange={(e) => setBuilder({ ...builder, confirmation_seconds: Number(e.target.value) })}
+                />
+              </label>
+              <label>
+                Fault code
+                <input value={builder.fault_code} onChange={(e) => setBuilder({ ...builder, fault_code: e.target.value })} />
+              </label>
+            </div>
           ) : null}
-          . Configure drivers and the Haystack model per building — nothing is hard-coded to a test bench.
-        </p>
-        {graphStatus ? <div className="status-banner">{graphStatus}</div> : null}
-      </section>
 
-      <section className="panel demo-panel">
-        <h2 className="panel-title">DataFusion batch demo (sample data)</h2>
-        <p className="muted-copy">Demonstration only — not live historian results.</p>
+          {rawCustom ? <div className="warn-banner">Raw SQL edited manually — builder may not round-trip.</div> : null}
+
+          <label className="sql-editor-label">
+            DataFusion SQL
+            <textarea
+              className="sql-editor sql-editor--large"
+              value={sql}
+              onChange={(e) => {
+                setSql(e.target.value);
+                setRawCustom(true);
+              }}
+              spellCheck={false}
+            />
+          </label>
+
+          <div className="sql-fdd-results">
+            {validation ? <div className="status-banner">{validationSummary(validation)}</div> : null}
+            {runResult ? <div className="status-banner">{runResultSummary(runResult)}</div> : null}
+          </div>
+          {(validation || runResult) && showAdvanced ? (
+            <details className="advanced-json" open>
+              <summary>Raw JSON</summary>
+              {validation ? <pre className="code-block">{JSON.stringify(validation, null, 2)}</pre> : null}
+              {runResult ? <pre className="code-block">{JSON.stringify(runResult, null, 2)}</pre> : null}
+            </details>
+          ) : null}
+          {(validation || runResult) && !showAdvanced ? (
+            <button type="button" className="secondary-btn" onClick={() => setShowAdvanced(true)}>
+              Show raw JSON
+            </button>
+          ) : null}
+        </section>
+      </div>
+
+      <details className="panel demo-panel-collapsible">
+        <summary>DataFusion batch demo (sample data only)</summary>
         {demo?.sql ? <pre className="sql-block">{demo.sql}</pre> : null}
         <div className="table-like">
           {(demo?.faults ?? []).map((f) => (
@@ -367,8 +319,8 @@ export default function SqlFddRulesPage() {
             </div>
           ))}
         </div>
-        {demo?.engine ? <p className="muted-copy">{demo.engine}</p> : null}
-      </section>
+        {demo?.engine ? <p className="muted">{demo.engine}</p> : null}
+      </details>
     </div>
   );
 }
