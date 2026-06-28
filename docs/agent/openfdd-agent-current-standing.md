@@ -14,7 +14,7 @@ This document summarizes **what is true in the repo today** versus **legacy Pyth
 | **Auth** | JWT + RBAC from `workspace/auth.env.local` (bcrypt; not in compose `env_file`) |
 | **Historian / FDD** | Apache Arrow/Feather + DataFusion SQL in bridge |
 | **Agent HTTP surface** | JSON REST + JWT (`GET /api/agent/tools`, `/openfdd-agent/building-insight` stub) |
-| **MCP service mode** | **Not shipped** — future read-first sidecar |
+| **MCP service mode** | **Phase 1 scaffold** — `openfdd-mcp` crate + `ghcr.io/bbartling/openfdd-mcp` (stdio sidecar); not in edge binary |
 | **Built-in Ollama** | **Not required** — UI panels and host-stats placeholders only |
 
 ## External orchestration (target policy)
@@ -26,7 +26,7 @@ This document summarizes **what is true in the repo today** versus **legacy Pyth
 | **Simple triage** | Worker / mini model | Pass/fail tests, HTTP status, missing selectors, syntax |
 | **Complex evaluation** | Thinking model | Auth, multi-service failures, deploy scripts, field-bus writes |
 | **Optional local LLM** | Ollama (operator LAN only) | Doc Q&A / RAG helper — **not** a runtime dependency |
-| **Future MCP** | `openfdd-mcp` (planned) | Read-first tools; writes gated by human approval |
+| **Future MCP** | `openfdd-mcp` (scaffold) | Read-first tools; writes gated by human approval |
 
 ## Legacy artifacts (do not treat as current without verification)
 
@@ -51,7 +51,8 @@ This document summarizes **what is true in the repo today** versus **legacy Pyth
 ## Related docs
 
 - [openfdd-agent-architecture.md](openfdd-agent-architecture.md) — target multi-agent design
-- [openfdd-mcp-tool-contract.md](openfdd-mcp-tool-contract.md) — future MCP tools
+- [bench-driver-setup-wsl-agent.md](bench-driver-setup-wsl-agent.md) — on-bench WSL Cursor agent prompt (Haystack + drivers)
+- [openfdd-mcp-tool-contract.md](openfdd-mcp-tool-contract.md) — MCP tools + bench extensions
 - [../security/agent-safety-boundaries.md](../security/agent-safety-boundaries.md) — hard limits
 - [../ai-agent/README.md](../ai-agent/README.md) — session start + API index (updated to link here)
 
