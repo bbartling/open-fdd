@@ -16,7 +16,17 @@ fn protocol_enabled(env_key: &str) -> bool {
 }
 
 fn service_status(id: &str, enabled: bool, label: &str, detail: &str) -> Value {
-    if enabled {
+    service_status_link(id, enabled, label, detail, None)
+}
+
+fn service_status_link(
+    id: &str,
+    enabled: bool,
+    label: &str,
+    detail: &str,
+    href: Option<&str>,
+) -> Value {
+    let mut obj = if enabled {
         json!({
             "id": id,
             "label": label,
@@ -32,7 +42,13 @@ fn service_status(id: &str, enabled: bool, label: &str, detail: &str) -> Value {
             "configured": false,
             "detail": detail
         })
+    };
+    if let Some(h) = href {
+        if let Some(map) = obj.as_object_mut() {
+            map.insert("href".into(), json!(h));
+        }
     }
+    obj
 }
 
 pub fn stack_health() -> Value {
@@ -100,6 +116,20 @@ pub fn stack_health() -> Value {
             true,
             "Arrow + DataFusion",
             "Rule SQL engine ready",
+        ),
+        service_status_link(
+            "oxigraph-sparql",
+            true,
+            "Oxigraph SPARQL",
+            "Haystack RDF model queries",
+            Some("/model"),
+        ),
+        service_status_link(
+            "mcp",
+            true,
+            "MCP agent",
+            "Cursor/Codex tools via openfdd-mcp sidecar",
+            Some("/agent"),
         ),
     ];
 

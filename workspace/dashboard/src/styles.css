@@ -94,17 +94,29 @@ a {
   overflow-y: auto;
 }
 
+.brand-block {
+  padding: 2px 8px 4px;
+}
+
 .brand-row {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.brand-meta {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 2px 8px 6px;
+  gap: 6px;
 }
 
 .brand {
   font-size: 21px;
   font-weight: 700;
   letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
 .brand-chip {
@@ -114,31 +126,7 @@ a {
   border-radius: 999px;
   font-size: 11px;
   padding: 3px 8px;
-}
-
-.brand-mcp-link {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--muted);
-  text-decoration: none;
-}
-
-.brand-mcp-link:hover {
-  color: var(--text);
-  border-color: var(--primary);
-  background: var(--panel-soft);
-}
-
-.brand-mcp-icon {
-  font-size: 13px;
-  line-height: 1;
+  white-space: nowrap;
 }
 
 .csv-workflow-guide {
@@ -657,6 +645,23 @@ textarea {
   border-radius: 10px;
   background: var(--panel-soft);
   border: 1px solid var(--border);
+}
+
+.stack-strip-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.stack-strip-link {
+  text-decoration: none;
+  color: inherit;
+  border-radius: 999px;
+}
+
+.stack-strip-link:hover .status-pill {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--panel-soft));
 }
 
 .status-pill.status-disabled {

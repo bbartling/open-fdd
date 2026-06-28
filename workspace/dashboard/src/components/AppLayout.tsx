@@ -123,24 +123,22 @@ export default function AppLayout() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand-row">
-          <span className="brand">Open-FDD</span>
-          {edgeVersion ? (
-            <span className="brand-chip muted" title="Edge release">
-              v{edgeVersion}
-            </span>
-          ) : null}
-          {roleChip ? (
-            <span className="brand-chip" title={sessionUser ? `${sessionUser}` : undefined}>
-              {roleChip}
-            </span>
-          ) : null}
-          <Link to="/agent" className="brand-mcp-link" title="MCP tools for Cursor / Codex">
-            <span className="brand-mcp-icon" aria-hidden="true">
-              ⎇
-            </span>
-            MCP
-          </Link>
+        <div className="brand-block">
+          <div className="brand-row">
+            <span className="brand">Open-FDD</span>
+            <div className="brand-meta">
+              {edgeVersion ? (
+                <span className="brand-chip muted" title="Edge release">
+                  v{edgeVersion}
+                </span>
+              ) : null}
+              {roleChip ? (
+                <span className="brand-chip" title={sessionUser ? `${sessionUser}` : undefined}>
+                  {roleChip}
+                </span>
+              ) : null}
+            </div>
+          </div>
         </div>
         <p className="sidebar-hint">Building summary is public; sign in to browse all tabs (operator read-only).</p>
         <StackStatusStrip />
