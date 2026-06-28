@@ -1,4 +1,5 @@
-//! Smoke / validation profile loaded from env and optional local TOML (gitignored).
+//! Site configuration loaded from env and optional local TOML (gitignored).
+//! When no profile file exists, drivers report `configured: false` and empty sources.
 
 use serde_json::{json, Value};
 use std::env;
@@ -28,7 +29,7 @@ impl BacnetPointRole {
 }
 
 #[derive(Clone, Debug)]
-pub struct SmokeProfile {
+pub struct SiteConfig {
     pub profile_id: String,
     pub source_id: String,
     pub source_type: String,
@@ -76,90 +77,98 @@ pub fn validation_profile_path() -> PathBuf {
 }
 
 pub fn profile_path() -> PathBuf {
-    if let Ok(p) = env::var("OPENFDD_SMOKE_PROFILE_PATH") {
+    if let Ok(p) = env::var("OPENFDD_SITE_CONFIG_PATH") {
         return PathBuf::from(p);
     }
-    let id =
-        env::var("OPENFDD_SMOKE_PROFILE").unwrap_or_else(|_| "local_validation_profile".into());
-    workspace_dir()
-        .join("smoke-profiles/local")
-        .join(format!("{id}.local.toml"))
+    workspace_dir().join("config/site.local.toml")
 }
 
-pub fn is_modbus_configured(p: &SmokeProfile) -> bool {
+pub fn is_modbus_configured(p: &SiteConfig) -> bool {
     p.modbus_enabled && !p.modbus_host.trim().is_empty()
 }
 
-pub fn is_haystack_configured(p: &SmokeProfile) -> bool {
+pub fn is_haystack_configured(p: &SiteConfig) -> bool {
     p.haystack_enabled && !p.haystack_base_url.trim().is_empty()
 }
 
-pub fn active_profile() -> SmokeProfile {
+pub fn is_profile_configured(p: &SiteConfig) -> bool {
+    p.device_instance > 0
+        || !p.equipment_id.trim().is_empty()
+        || !p.bacnet_points.is_empty()
+        || is_modbus_configured(p)
+        || is_haystack_configured(p)
+        || p.csv_enabled
+        || p.json_api_enabled
+}
+
+pub fn active_profile() -> SiteConfig {
     load_profile_from_path(&profile_path())
 }
 
-pub fn load_profile_from_path(path: &Path) -> SmokeProfile {
+pub fn load_profile_from_path(path: &Path) -> SiteConfig {
     let mut profile = from_env_defaults();
-    if let Ok(text) = fs::read_to_string(path) {
-        apply_toml(&mut profile, &text);
+    if path.exists() {
+        if let Ok(text) = fs::read_to_string(path) {
+            apply_toml(&mut profile, &text);
+        }
     }
     apply_env_overrides(&mut profile);
     profile
 }
 
-fn from_env_defaults() -> SmokeProfile {
-    SmokeProfile {
-        profile_id: "local_validation".into(),
-        source_id: "source:validation".into(),
-        source_type: "bacnet".into(),
+fn from_env_defaults() -> SiteConfig {
+    SiteConfig {
+        profile_id: String::new(),
+        source_id: String::new(),
+        source_type: String::new(),
         device_instance: 0,
-        equipment_id: "equip:local-test-equipment".into(),
+        equipment_id: String::new(),
         poll_interval_seconds: 300,
-        duration_hours: 6.0,
+        duration_hours: 0.0,
         confirmation_minutes: 5,
-        historian_subdir: "validation".into(),
-        artifact_subdir: "live_fdd_validation".into(),
-        fdd_rule_id: "oa_temp_out_of_range".into(),
+        historian_subdir: "historian".into(),
+        artifact_subdir: "validation_runs".into(),
+        fdd_rule_id: String::new(),
         bacnet_points: Vec::new(),
         modbus_host: String::new(),
-        modbus_port: 1502,
-        modbus_unit_id: 1,
-        modbus_register: 30001,
+        modbus_port: 502,
+        modbus_unit_id: 0,
+        modbus_register: 0,
         modbus_enabled: false,
         modbus_poll_interval_seconds: 300,
         haystack_enabled: false,
         haystack_base_url: String::new(),
         haystack_username: String::new(),
         haystack_password: String::new(),
-        haystack_source_id: "source:local-haystack".into(),
+        haystack_source_id: String::new(),
         haystack_poll_interval_seconds: 300,
-        csv_enabled: true,
-        csv_source_id: "source:validation-csv".into(),
+        csv_enabled: false,
+        csv_source_id: String::new(),
         csv_interval_seconds: 300,
         json_api_enabled: false,
         json_api_url: None,
         json_api_poll_interval_seconds: 300,
-        duration_minutes: 60,
+        duration_minutes: 0,
     }
 }
 
-fn apply_env_overrides(p: &mut SmokeProfile) {
-    if let Ok(v) = env::var("OPENFDD_SMOKE_PROFILE") {
+fn apply_env_overrides(p: &mut SiteConfig) {
+    if let Ok(v) = env::var("OPENFDD_SITE_CONFIG_ID") {
         if !v.is_empty() {
             p.profile_id = v;
         }
     }
-    if let Ok(v) = env::var("OPENFDD_SMOKE_DEVICE_INSTANCE") {
+    if let Ok(v) = env::var("OPENFDD_BACNET_DEVICE_INSTANCE") {
         if let Ok(inst) = v.parse::<u32>() {
             p.device_instance = inst;
         }
     }
-    if let Ok(v) = env::var("OPENFDD_SMOKE_DURATION_HOURS") {
+    if let Ok(v) = env::var("OPENFDD_VALIDATION_DURATION_HOURS") {
         if let Ok(h) = v.parse::<f64>() {
             p.duration_hours = h;
         }
     }
-    if let Ok(v) = env::var("OPENFDD_SMOKE_INTERVAL_SECONDS") {
+    if let Ok(v) = env::var("OPENFDD_BACNET_POLL_INTERVAL_SECONDS") {
         if let Ok(s) = v.parse::<u64>() {
             p.poll_interval_seconds = s;
         }
@@ -169,7 +178,7 @@ fn apply_env_overrides(p: &mut SmokeProfile) {
             p.historian_subdir = v;
         }
     }
-    if let Ok(v) = env::var("OPENFDD_SMOKE_JSON_API_URL") {
+    if let Ok(v) = env::var("OPENFDD_JSON_API_URL") {
         if !v.is_empty() {
             p.json_api_url = Some(v);
             p.json_api_enabled = true;
@@ -204,7 +213,7 @@ fn apply_env_overrides(p: &mut SmokeProfile) {
     }
 }
 
-fn apply_toml(p: &mut SmokeProfile, text: &str) {
+fn apply_toml(p: &mut SiteConfig, text: &str) {
     let mut section = String::new();
     for line in text.lines() {
         let line = line.trim();
@@ -231,7 +240,7 @@ fn apply_toml(p: &mut SmokeProfile, text: &str) {
     }
 }
 
-fn apply_root_key(p: &mut SmokeProfile, key: &str, val: &str) {
+fn apply_root_key(p: &mut SiteConfig, key: &str, val: &str) {
     match key {
         "profile_id" => p.profile_id = val.to_string(),
         "source_id" => p.source_id = val.to_string(),
@@ -270,7 +279,7 @@ fn apply_root_key(p: &mut SmokeProfile, key: &str, val: &str) {
     }
 }
 
-fn apply_bacnet_key(p: &mut SmokeProfile, key: &str, val: &str) {
+fn apply_bacnet_key(p: &mut SiteConfig, key: &str, val: &str) {
     match key {
         "enabled" if val == "true" || val == "1" => {
             p.source_type = "bacnet".into();
@@ -290,7 +299,7 @@ fn apply_bacnet_key(p: &mut SmokeProfile, key: &str, val: &str) {
     }
 }
 
-fn apply_modbus_key(p: &mut SmokeProfile, key: &str, val: &str) {
+fn apply_modbus_key(p: &mut SiteConfig, key: &str, val: &str) {
     match key {
         "enabled" => p.modbus_enabled = val == "true" || val == "1",
         "host" => p.modbus_host = val.to_string(),
@@ -318,7 +327,7 @@ fn apply_modbus_key(p: &mut SmokeProfile, key: &str, val: &str) {
     }
 }
 
-fn apply_haystack_key(p: &mut SmokeProfile, key: &str, val: &str) {
+fn apply_haystack_key(p: &mut SiteConfig, key: &str, val: &str) {
     match key {
         "enabled" => p.haystack_enabled = val == "true" || val == "1",
         "base_url" => p.haystack_base_url = val.to_string(),
@@ -334,7 +343,7 @@ fn apply_haystack_key(p: &mut SmokeProfile, key: &str, val: &str) {
     }
 }
 
-fn apply_csv_key(p: &mut SmokeProfile, key: &str, val: &str) {
+fn apply_csv_key(p: &mut SiteConfig, key: &str, val: &str) {
     match key {
         "enabled" => p.csv_enabled = val == "true" || val == "1",
         "source_id" => p.csv_source_id = val.to_string(),
@@ -347,7 +356,7 @@ fn apply_csv_key(p: &mut SmokeProfile, key: &str, val: &str) {
     }
 }
 
-fn apply_json_api_key(p: &mut SmokeProfile, key: &str, val: &str) {
+fn apply_json_api_key(p: &mut SiteConfig, key: &str, val: &str) {
     match key {
         "enabled" => p.json_api_enabled = val == "true" || val == "1",
         "url" => p.json_api_url = Some(val.to_string()),
@@ -360,9 +369,9 @@ fn apply_json_api_key(p: &mut SmokeProfile, key: &str, val: &str) {
     }
 }
 
-fn parse_point_line(p: &mut SmokeProfile, key: &str, val: &str) {
-    // point.oa_t = "Outside Air Temp|1001|oa_t"
-    // point.actuator = "Demo AO|2001|actuator_demo|analog-output|true|8:55.0"
+fn parse_point_line(p: &mut SiteConfig, key: &str, val: &str) {
+    // point.oa_t = "OA Temp|1001|oa_t"
+    // point.actuator = "Actuator AO|2001|actuator_ao|analog-output|true|8:55.0"
     let input = key.trim_start_matches("point.");
     let parts: Vec<&str> = val.split('|').collect();
     if parts.len() >= 3 {
@@ -399,6 +408,7 @@ pub fn profile_summary_json() -> Value {
     let p = active_profile();
     let path = profile_path();
     let validation_path = validation_profile_path();
+    let configured = path.exists() && is_profile_configured(&p);
     let dev_meta = super::dev_profile::DevValidationProfile::load(&validation_path)
         .map(|d| {
             json!({
@@ -413,6 +423,7 @@ pub fn profile_summary_json() -> Value {
         })
         .unwrap_or(json!({"configured": false}));
     json!({
+        "configured": configured,
         "profile_id": p.profile_id,
         "source_id": p.source_id,
         "device_instance": p.device_instance,
@@ -431,19 +442,15 @@ pub fn profile_summary_json() -> Value {
         "validation_profile_path": validation_path.display().to_string(),
         "profile_file_present": path.exists(),
         "dev_profile": dev_meta,
-        "smoke_flags": json!({
-            "require_modbus": require_modbus(),
-            "no_demo_pass": no_demo_pass(),
-            "require_confirmed_fault": require_confirmed_fault(),
-            "validate_docker": validate_docker(),
-            "validate_modbus": validate_modbus(),
-            "validate_json_api": validate_json_api(),
-        }),
     })
 }
 
-pub fn fdd_sql(profile: &SmokeProfile) -> String {
-    let equip = &profile.equipment_id;
+pub fn fdd_sql(profile: &SiteConfig) -> String {
+    let equip = if profile.equipment_id.trim().is_empty() {
+        "equip:unknown".to_string()
+    } else {
+        profile.equipment_id.clone()
+    };
     let confirmation_minutes = profile.confirmation_minutes;
     format!(
         r#"WITH samples AS (
@@ -474,42 +481,14 @@ ORDER BY timestamp"#
     )
 }
 
-pub fn live_fdd_enabled() -> bool {
-    env_flag("OPENFDD_SMOKE_LIVE_FDD") || env_flag("BENCH_SMOKE_LIVE_FDD")
-}
-
-pub fn short_mode() -> bool {
-    env_flag("BENCH_SMOKE_SHORT_FDD")
-}
-
-pub fn require_modbus() -> bool {
-    env_flag("OPENFDD_SMOKE_REQUIRE_MODBUS")
-}
-
-pub fn no_demo_pass() -> bool {
-    env_flag("OPENFDD_SMOKE_NO_DEMO_PASS")
-}
-
-pub fn require_confirmed_fault() -> bool {
-    env_flag("OPENFDD_SMOKE_REQUIRE_CONFIRMED_FAULT")
-}
-
-pub fn validate_docker() -> bool {
-    env_flag("OPENFDD_SMOKE_VALIDATE_DOCKER")
-}
-
-pub fn validate_modbus() -> bool {
-    env_flag("OPENFDD_SMOKE_VALIDATE_MODBUS")
-}
-
-pub fn validate_json_api() -> bool {
-    env_flag("OPENFDD_SMOKE_VALIDATE_JSON_API")
-}
-
 fn env_flag(key: &str) -> bool {
     env::var(key)
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
+}
+
+pub fn require_modbus() -> bool {
+    env_flag("OPENFDD_VALIDATION_REQUIRE_MODBUS")
 }
 
 #[cfg(test)]
@@ -522,7 +501,7 @@ mod tests {
         parse_point_line(
             &mut p,
             "point.actuator",
-            "Demo AO|2001|actuator_demo|analog-output|true",
+            "Actuator AO|2001|actuator_ao|analog-output|true",
         );
         assert_eq!(p.bacnet_points.len(), 1);
         let pt = &p.bacnet_points[0];
@@ -535,23 +514,23 @@ mod tests {
         let _lock = test_lock();
         let ws = std::env::temp_dir().join(format!("ofdd-prof-{}", std::process::id()));
         std::env::set_var("OPENFDD_WORKSPACE", &ws);
-        std::env::set_var("OPENFDD_SMOKE_DEVICE_INSTANCE", "42");
+        std::env::set_var("OPENFDD_BACNET_DEVICE_INSTANCE", "42");
         let p = active_profile();
         assert_eq!(p.device_instance, 42);
         std::env::remove_var("OPENFDD_WORKSPACE");
-        std::env::remove_var("OPENFDD_SMOKE_DEVICE_INSTANCE");
+        std::env::remove_var("OPENFDD_BACNET_DEVICE_INSTANCE");
         let _ = fs::remove_dir_all(ws);
     }
 
     #[test]
     fn parses_local_toml_points() {
         let _lock = test_lock();
-        std::env::remove_var("OPENFDD_SMOKE_DEVICE_INSTANCE");
+        std::env::remove_var("OPENFDD_BACNET_DEVICE_INSTANCE");
         let ws = std::env::temp_dir().join(format!("ofdd-toml-{}", std::process::id()));
-        let dir = ws.join("smoke-profiles/local");
+        let dir = ws.join("config");
         fs::create_dir_all(&dir).unwrap();
         fs::write(
-            dir.join("test.local.toml"),
+            dir.join("site.local.toml"),
             r#"profile_id = "test"
 device_instance = 99
 point.oa_t = "OA Temp|1001|oa_t"
@@ -559,7 +538,6 @@ point.oa_t = "OA Temp|1001|oa_t"
         )
         .unwrap();
         std::env::set_var("OPENFDD_WORKSPACE", &ws);
-        std::env::set_var("OPENFDD_SMOKE_PROFILE", "test");
         let p = active_profile();
         assert_eq!(p.device_instance, 99);
         assert_eq!(p.bacnet_points.len(), 1);
@@ -579,18 +557,5 @@ point.oa_t = "OA Temp|1001|oa_t"
 
     fn test_lock() -> std::sync::MutexGuard<'static, ()> {
         crate::test_support::workspace_env_lock()
-    }
-
-    #[test]
-    fn smoke_env_flags() {
-        let _lock = test_lock();
-        std::env::set_var("OPENFDD_SMOKE_REQUIRE_CONFIRMED_FAULT", "1");
-        std::env::set_var("OPENFDD_SMOKE_VALIDATE_MODBUS", "1");
-        assert!(require_confirmed_fault());
-        assert!(validate_modbus());
-        std::env::remove_var("OPENFDD_SMOKE_REQUIRE_CONFIRMED_FAULT");
-        std::env::remove_var("OPENFDD_SMOKE_VALIDATE_MODBUS");
-        std::env::remove_var("OPENFDD_WORKSPACE");
-        std::env::remove_var("OPENFDD_SMOKE_PROFILE");
     }
 }

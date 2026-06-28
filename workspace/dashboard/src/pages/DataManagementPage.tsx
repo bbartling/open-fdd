@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import PageHeader from "../components/PageHeader";
 import { apiFetch } from "../lib/api";
 
 type StorageSummary = {
@@ -7,16 +8,6 @@ type StorageSummary = {
   estimated_bytes?: number;
   by_subdir?: Record<string, { row_count?: number; jsonl_bytes?: number }>;
   by_source?: Record<string, { source_id?: string; row_count?: number }>;
-  bacnet_override_log?: {
-    ok?: boolean;
-    retention_years?: number;
-    scan_interval_s?: number;
-    export_path?: string;
-    export_row_count?: number;
-    priority8_path?: string;
-    non_priority8_path?: string;
-    last_scan?: string | null;
-  };
   warnings?: string[];
 };
 
@@ -29,6 +20,12 @@ type PurgePreview = {
   irreversible?: boolean;
 };
 
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
+
 export default function DataManagementPage() {
   const [summary, setSummary] = useState<StorageSummary | null>(null);
   const [preview, setPreview] = useState<PurgePreview | null>(null);
@@ -37,7 +34,7 @@ export default function DataManagementPage() {
   const [beforeUtc, setBeforeUtc] = useState("");
   const [subdir, setSubdir] = useState("validation");
   const [confirm, setConfirm] = useState("");
-  const [jobResult, setJobResult] = useState<string>("");
+  const [jobResult, setJobResult] = useState("");
 
   const loadSummary = useCallback(async () => {
     setError(null);
@@ -92,7 +89,7 @@ export default function DataManagementPage() {
         setError(data.error || "Purge failed");
         return;
       }
-      setJobResult(`Purge job ${data.job_id}: removed ${data.rows_removed ?? 0} rows`);
+      setJobResult(`Removed ${data.rows_removed ?? 0} rows (job ${data.job_id ?? "—"})`);
       setConfirm("");
       await loadSummary();
     } catch (e) {
@@ -100,130 +97,127 @@ export default function DataManagementPage() {
     }
   }
 
+  const sources = Object.entries(summary?.by_source ?? {});
+
   return (
-    <div className="page-stack">
-      <header className="page-header">
-        <h1>Data management</h1>
-        <p>
-          Inspect Arrow/Feather historian storage and purge by source, subdir, or date. Purges are
-          irreversible — export CSV first via the export APIs or sidecar.
-        </p>
-      </header>
+    <div className="page-stack data-mgmt-page">
+      <PageHeader
+        title="Historian storage"
+        subtitle="Inspect Arrow/Feather partitions and purge by source or date. Export CSV before destructive purges."
+      />
 
       {error ? <div className="alert alert-error">{error}</div> : null}
       {jobResult ? <div className="alert alert-ok">{jobResult}</div> : null}
 
-      <section className="card">
-        <h2>Storage summary</h2>
+      <section className="panel">
+        <div className="panel-head-row">
+          <h2 className="panel-title">Storage summary</h2>
+          <button type="button" className="secondary-btn" onClick={() => void loadSummary()}>
+            Refresh
+          </button>
+        </div>
         {summary ? (
           <>
-            <p>
-              Total rows: <strong>{summary.total_row_count ?? 0}</strong> · Estimated bytes:{" "}
-              <strong>{summary.estimated_bytes ?? 0}</strong>
+            <p className="storage-summary-line">
+              <strong>{summary.total_row_count?.toLocaleString() ?? 0}</strong> historian rows ·{" "}
+              <strong>{formatBytes(summary.estimated_bytes ?? 0)}</strong> estimated
             </p>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Historian subdir</th>
+                    <th>Partition</th>
                     <th>Rows</th>
-                    <th>JSONL bytes</th>
+                    <th>Size</th>
                   </tr>
                 </thead>
                 <tbody>
                   {Object.entries(summary.by_subdir ?? {}).map(([key, row]) => (
                     <tr key={key}>
-                      <td>{key}</td>
-                      <td>{row.row_count ?? 0}</td>
-                      <td>{row.jsonl_bytes ?? 0}</td>
+                      <td><code>{key}</code></td>
+                      <td>{row.row_count?.toLocaleString() ?? 0}</td>
+                      <td>{formatBytes(row.jsonl_bytes ?? 0)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            {sources.length ? (
+              <>
+                <h3 className="panel-subtitle">By source</h3>
+                <ul className="source-chip-list">
+                  {sources.map(([key, row]) => (
+                    <li key={key}>
+                      <code>{row.source_id ?? key}</code>
+                      <span className="muted">{row.row_count?.toLocaleString() ?? 0} rows</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
           </>
         ) : (
-          <p>Loading…</p>
-        )}
-        <button type="button" className="btn" onClick={() => void loadSummary()}>
-          Refresh
-        </button>
-      </section>
-
-      <section className="card">
-        <h2>BACnet override log (CSV)</h2>
-        <p>
-          Hourly priority-array scans append to CSV exports. Rows older than{" "}
-          <strong>{summary?.bacnet_override_log?.retention_years ?? 1} year</strong> are pruned
-          automatically on each append.
-        </p>
-        {summary?.bacnet_override_log ? (
-          <>
-            <p>
-              Export rows: <strong>{summary.bacnet_override_log.export_row_count ?? 0}</strong> ·
-              Scan cadence:{" "}
-              <strong>{summary.bacnet_override_log.scan_interval_s ?? 3600}s</strong> · Last scan:{" "}
-              <strong>{String(summary.bacnet_override_log.last_scan ?? "—")}</strong>
-            </p>
-            <div className="btn-row">
-              <a className="btn btn-secondary" href="/api/bacnet/overrides/export">
-                Download all overrides CSV
-              </a>
-              <a className="btn btn-secondary" href="/api/bacnet/overrides/export/p8">
-                Download P8 overrides CSV
-              </a>
-              <a className="btn btn-secondary" href="/api/bacnet/overrides/export/non-p8">
-                Download non-P8 CSV
-              </a>
-            </div>
-            <pre className="code-block">{JSON.stringify(summary.bacnet_override_log, null, 2)}</pre>
-          </>
-        ) : (
-          <p>Loading override log metadata…</p>
+          <p className="muted">Loading…</p>
         )}
       </section>
 
-      <section className="card">
-        <h2>Purge preview</h2>
-        <div className="form-grid">
-          <label>
-            Source ID contains
+      <section className="panel">
+        <h2 className="panel-title">Purge preview</h2>
+        <p className="muted">Dry-run first — previews matched row counts without deleting data.</p>
+        <div className="form-grid form-grid-3">
+          <label className="field">
+            <span className="field-label">Source ID contains</span>
             <input value={sourceId} onChange={(e) => setSourceId(e.target.value)} placeholder="source:csv-import" />
           </label>
-          <label>
-            Before UTC (RFC3339)
+          <label className="field">
+            <span className="field-label">Before UTC</span>
             <input value={beforeUtc} onChange={(e) => setBeforeUtc(e.target.value)} placeholder="2026-01-01T00:00:00Z" />
           </label>
-          <label>
-            Historian subdir
+          <label className="field">
+            <span className="field-label">Historian partition</span>
             <input value={subdir} onChange={(e) => setSubdir(e.target.value)} placeholder="validation" />
           </label>
         </div>
-        <div className="btn-row">
-          <button type="button" className="btn" onClick={() => void runPreview(false)}>
-            Preview purge
+        <div className="action-bar action-bar-spaced">
+          <button type="button" className="primary-btn" onClick={() => void runPreview(false)}>
+            Preview matched rows
           </button>
-          <button type="button" className="btn btn-secondary" onClick={() => void runPreview(true)}>
+          <button type="button" className="secondary-btn" onClick={() => void runPreview(true)}>
             Preview purge all
           </button>
         </div>
         {preview ? (
-          <pre className="code-block">{JSON.stringify(preview, null, 2)}</pre>
+          <div className="purge-preview-card">
+            <p>
+              <strong>{preview.matched_row_count?.toLocaleString() ?? 0}</strong> rows matched · ~
+              {formatBytes(preview.matched_byte_estimate ?? 0)}
+            </p>
+            {preview.matched_sources?.length ? (
+              <p className="muted">Sources: {preview.matched_sources.slice(0, 8).join(", ")}</p>
+            ) : null}
+            {preview.warnings?.length ? (
+              <ul className="warn-list">
+                {preview.warnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         ) : null}
       </section>
 
-      <section className="card danger-zone">
-        <h2>Execute purge (integrator)</h2>
-        <p>Type <code>PURGE HISTORIAN DATA</code> to confirm.</p>
-        <label>
-          Confirmation phrase
-          <input value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+      <section className="panel danger-zone">
+        <h2 className="panel-title">Execute purge</h2>
+        <p className="muted">Integrator role required. Type the confirmation phrase exactly.</p>
+        <label className="field">
+          <span className="field-label">Confirmation phrase</span>
+          <input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="PURGE HISTORIAN DATA" />
         </label>
-        <div className="btn-row">
-          <button type="button" className="btn btn-danger" onClick={() => void executePurge(false)}>
+        <div className="action-bar action-bar-spaced">
+          <button type="button" className="btn-danger" onClick={() => void executePurge(false)}>
             Execute filtered purge
           </button>
-          <button type="button" className="btn btn-danger" onClick={() => void executePurge(true)}>
+          <button type="button" className="btn-danger" onClick={() => void executePurge(true)}>
             Purge all historian data
           </button>
         </div>

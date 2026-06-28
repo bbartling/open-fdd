@@ -12,12 +12,10 @@ pub fn list_graphs(site_id: Option<&str>) -> String {
     let site = site_id
         .map(String::from)
         .unwrap_or_else(persistence::default_site_id);
-    persistence::seed_demo_graph(&site, "system");
     serde_json::to_string(&persistence::list_graphs(&site)).unwrap_or_else(|_| "{}".to_string())
 }
 
 pub fn get_graph(site_id: &str, graph_id: &str) -> String {
-    persistence::seed_demo_graph(site_id, "system");
     match persistence::read_graph(site_id, graph_id) {
         Some(graph) => serde_json::to_string(&json!({"ok": true, "graph": graph})).unwrap(),
         None => serde_json::to_string(&json!({"ok": false, "error": "graph not found"})).unwrap(),

@@ -1,6 +1,6 @@
 # Open-FDD MCP tool contract (draft)
 
-**Status:** Design for a future `openfdd-mcp` service (`SERVICE_MODE=mcp`). Not required for Open-FDD 3.2.x core runtime.
+**Status:** Phase 1 scaffold ships as **`openfdd-mcp`** crate + `ghcr.io/bbartling/openfdd-mcp` (stdio sidecar). Not required for core edge runtime.
 
 **Principles:**
 
@@ -71,7 +71,20 @@ Tools return JSON aligned with bridge responses:
 - Reuse `GET /api/agent/tools` manifest until MCP server ships.
 - Issue #402 proposed `open-fdd-mcp` as a **separate future task** — do not block edge releases on MCP.
 
+## Bench tools (WSL agent)
+
+Additional tools implemented in `mcp/` for live bench work — see [bench-driver-setup-wsl-agent.md](bench-driver-setup-wsl-agent.md):
+
+| Tool ID | Purpose |
+| --- | --- |
+| `openfdd_bench_topology` | NIC, bridge/commission bases, optional topology JSON file |
+| `openfdd_driver_status` | Bundle of poll/status endpoints |
+| `openfdd_bacnet_read` | Commission BACnet read by `point_id` |
+| `openfdd_haystack_read` | Filter/ids read via bridge |
+
 ## Related
 
 - [openfdd-agent-architecture.md](openfdd-agent-architecture.md)
+- [bench-driver-setup-wsl-agent.md](bench-driver-setup-wsl-agent.md)
+- [../../mcp/README.md](../../mcp/README.md)
 - [../security/agent-safety-boundaries.md](../security/agent-safety-boundaries.md)

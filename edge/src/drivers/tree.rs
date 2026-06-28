@@ -455,10 +455,12 @@ pub fn json_api_driver_tree_value() -> Value {
             "devices": []
         });
     }
-    let mut devices = json_api_devices_ui();
+    let mut devices = json_api::saved_devices_for_tree();
     if devices.is_empty() {
-        let sources: Vec<Value> =
-            serde_json::from_str(json_api::sources_json()).unwrap_or_default();
+        let sources: Vec<Value> = serde_json::from_str::<Value>(&json_api::sources_json())
+            .ok()
+            .and_then(|v| v.get("sources").and_then(|s| s.as_array()).cloned())
+            .unwrap_or_default();
         let mut by_host: BTreeMap<String, Vec<Value>> = BTreeMap::new();
         for src in sources {
             let url = src

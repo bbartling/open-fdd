@@ -160,19 +160,32 @@ fn dashboard_summary_requires_auth() {
 }
 
 #[test]
-fn building_status_requires_auth() {
+fn building_status_public_read_only_without_auth() {
     let srv = Server::start();
-    let (status, _) = http_raw(
+    let (status, body) = http_raw(
         "GET",
         &format!("http://127.0.0.1:{}/api/building/status", srv.port),
         None,
         None,
     );
-    assert_eq!(status, 401);
-    let (authed_status, body) = srv.get("/api/building/status");
-    assert_eq!(authed_status, 200);
+    assert_eq!(status, 200);
     let v: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(v.get("ok").and_then(|x| x.as_bool()), Some(true));
+}
+
+#[test]
+fn building_snapshot_public_without_auth() {
+    let srv = Server::start();
+    let (status, body) = http_raw(
+        "GET",
+        &format!("http://127.0.0.1:{}/api/building/snapshot", srv.port),
+        None,
+        None,
+    );
+    assert_eq!(status, 200);
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert!(v.get("stack").is_some());
+    assert!(v.get("faults").is_some());
 }
 
 #[test]
@@ -243,4 +256,41 @@ fn desktop_mode_stack_shows_disabled_protocols() {
     assert_eq!(status, 200);
     assert!(body.contains("\"status\":\"gray\""));
     assert!(body.contains("BACnet"));
+}
+
+#[test]
+fn json_api_request_endpoint_exists() {
+    let srv = Server::start();
+    let payload = r#"{"url":"https://jsonplaceholder.typicode.com/todos/1","method":"GET","json_path":"title"}"#;
+    let (status, body) = http_raw(
+        "POST",
+        &format!("http://127.0.0.1:{}/api/json-api/request", srv.port),
+        Some(payload),
+        Some(&srv.token),
+    );
+    assert_eq!(status, 200);
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v.get("success").and_then(|x| x.as_bool()), Some(true));
+}
+
+#[test]
+fn timeseries_sites_and_rules_saved_routes() {
+    let srv = Server::start();
+    let (s_status, s_body) = http_raw(
+        "GET",
+        &format!("http://127.0.0.1:{}/api/timeseries/sites", srv.port),
+        None,
+        Some(&srv.token),
+    );
+    assert_eq!(s_status, 200);
+    assert!(s_body.contains("\"sites\""));
+
+    let (r_status, r_body) = http_raw(
+        "GET",
+        &format!("http://127.0.0.1:{}/api/rules/saved", srv.port),
+        None,
+        Some(&srv.token),
+    );
+    assert_eq!(r_status, 200);
+    assert!(r_body.contains("\"rules\""));
 }

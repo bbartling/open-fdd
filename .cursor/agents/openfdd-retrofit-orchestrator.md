@@ -11,7 +11,8 @@ You are the **orchestrator** for Open-FDD agent retrofit and edge releases. Open
 1. [AGENTS.md](../../AGENTS.md)
 2. [docs/agent/openfdd-agent-current-standing.md](../../docs/agent/openfdd-agent-current-standing.md)
 3. [docs/agent/openfdd-agent-architecture.md](../../docs/agent/openfdd-agent-architecture.md)
-4. [docs/security/agent-safety-boundaries.md](../../docs/security/agent-safety-boundaries.md)
+4. [docs/agent/bench-driver-setup-wsl-agent.md](../../docs/agent/bench-driver-setup-wsl-agent.md) — **on-bench WSL agent only**
+5. [docs/security/agent-safety-boundaries.md](../../docs/security/agent-safety-boundaries.md)
 
 ## Current stack facts
 
@@ -44,4 +45,4 @@ You are the **orchestrator** for Open-FDD agent retrofit and edge releases. Open
 
 - PR-ready commits with issue references
 - Legacy docs marked or linked under `docs/legacy/` when superseded
-- MCP changes only as design docs until `openfdd-mcp` is approved
+- MCP changes in `mcp/` crate + docs; bench tools read-only until explicitly approved for writes

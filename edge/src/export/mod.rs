@@ -327,7 +327,7 @@ fn pivot_point_values(row: &Value) -> Vec<(String, String, String, String)> {
     vec![
         (
             "oa_t".into(),
-            "Outside Air Temp".into(),
+            "OA temperature".into(),
             fmt_f64(row.get("oa_t")),
             "degF".into(),
         ),

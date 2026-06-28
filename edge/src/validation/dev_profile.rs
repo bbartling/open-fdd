@@ -1,6 +1,6 @@
 //! Extended dev-only validation profile (local TOML, never hardcoded bench values).
 
-use super::profile::{load_profile_from_path, SmokeProfile};
+use super::profile::{load_profile_from_path, SiteConfig};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -23,7 +23,7 @@ pub struct HaystackPointSpec {
 #[derive(Clone, Debug)]
 pub struct DevValidationProfile {
     pub profile_path: PathBuf,
-    pub smoke: SmokeProfile,
+    pub site_config: SiteConfig,
     pub report_title: String,
     pub site_id: String,
     pub modbus_registers: Vec<ModbusRegisterSpec>,
@@ -36,10 +36,10 @@ pub struct DevValidationProfile {
 impl DevValidationProfile {
     pub fn load(path: &Path) -> Result<Self, String> {
         let text = fs::read_to_string(path).map_err(|e| format!("read profile: {e}"))?;
-        let smoke = load_profile_from_path(path);
+        let site_config = load_profile_from_path(path);
         let mut profile = Self {
             profile_path: path.to_path_buf(),
-            smoke,
+            site_config,
             report_title: "Local RCx Validation Report".into(),
             site_id: String::new(),
             modbus_registers: Vec::new(),
@@ -50,7 +50,7 @@ impl DevValidationProfile {
         };
         profile.apply_toml(&text);
         if profile.site_id.is_empty() {
-            profile.site_id = profile.smoke.equipment_id.clone();
+            profile.site_id = profile.site_config.equipment_id.clone();
         }
         Ok(profile)
     }
@@ -137,11 +137,11 @@ impl DevValidationProfile {
     }
 
     pub fn modbus_configured(&self) -> bool {
-        super::profile::is_modbus_configured(&self.smoke)
+        super::profile::is_modbus_configured(&self.site_config)
     }
 
     pub fn haystack_configured(&self) -> bool {
-        super::profile::is_haystack_configured(&self.smoke)
+        super::profile::is_haystack_configured(&self.site_config)
     }
 }
 
@@ -245,8 +245,8 @@ point.oa_t = "point:oa-t|oa_t"
         let path = dir.join("empty.local.toml");
         fs::write(&path, "profile_id = \"empty\"\n").unwrap();
         let p = DevValidationProfile::load(&path).unwrap();
-        assert!(p.smoke.modbus_host.is_empty());
-        assert_eq!(p.smoke.device_instance, 0);
+        assert!(p.site_config.modbus_host.is_empty());
+        assert_eq!(p.site_config.device_instance, 0);
         let _ = fs::remove_dir_all(&dir);
     }
 }

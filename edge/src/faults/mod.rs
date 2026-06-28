@@ -716,13 +716,13 @@ mod tests {
     #[test]
     fn fault_analytics_includes_hours() {
         let rec = json!({
-            "equipment_id": "equip:local-test",
+            "equipment_id": "equip:unit-a",
             "minutes_in_fault": 90,
             "input_points": ["oa_t"]
         });
         let rows = vec![
-            json!({"equipment_id":"equip:local-test","timestamp":"2026-06-21T10:00:00Z","raw_fault":true,"oa_t":120.0}),
-            json!({"equipment_id":"equip:local-test","timestamp":"2026-06-21T11:00:00Z","raw_fault":false,"oa_t":70.0}),
+            json!({"equipment_id":"equip:unit-a","timestamp":"2026-06-21T10:00:00Z","raw_fault":true,"oa_t":120.0}),
+            json!({"equipment_id":"equip:unit-a","timestamp":"2026-06-21T11:00:00Z","raw_fault":false,"oa_t":70.0}),
         ];
         let analytics = fault_analytics_for_record(&rec, &rows);
         assert_eq!(

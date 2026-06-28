@@ -348,7 +348,7 @@ export default function ModbusPage() {
     <div className="page page-wide modbus-page">
       <PageHeader
         title="Modbus commissioning"
-        subtitle="TCP register reads with BACnet-style tree, polling, and refresh. Try the local fake sensor on port 5502."
+        subtitle="TCP register reads with BACnet-style tree, polling, and historian storage."
       />
       <TabDebugPanel tab="modbus" />
 
@@ -383,13 +383,9 @@ export default function ModbusPage() {
 
       <div className="panel">
         <h3 className="panel-title">Add register</h3>
-        {benchHintAvailable ? (
-          <p className="muted modbus-bench-hint">
-            Local dev: start{" "}
-            <code>./scripts/fake_modbus_temp_server.py --port 5502 --flatline 72.5</code> then use defaults below
-            (addr 100, scale 0.1).
-          </p>
-        ) : null}
+        <p className="muted">
+          Connect to a Modbus TCP device, read once to verify, then store samples to the historian for FDD and plots.
+        </p>
         <div className="form-grid">
           <div className="field">
             <label className="field-label" htmlFor="mb-host">

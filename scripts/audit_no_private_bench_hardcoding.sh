@@ -39,6 +39,7 @@ is_allowed() {
     workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml.example) return 0 ;;
     tests/fixtures/*) return 0 ;;
     docs/validation/*|docs/verification/*|docs/testing/*|docs/release_cleanup/*) return 0 ;;
+    docs/agent/bench-driver-setup-wsl-agent.md) return 0 ;;
     edge/src/validation/audit.rs) return 0 ;;
     edge/src/main.rs) return 0 ;;
     scripts/bench_5007_long_smoke.sh) return 0 ;;

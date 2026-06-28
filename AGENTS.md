@@ -9,7 +9,7 @@ Open-FDD **3.2.x** is a **deterministic Rust edge runtime** (`ghcr.io/bbartling/
 | **Optional Ollama** | Local-only doc helper for operators — not a bridge dependency |
 | **Future MCP** | Read-first `openfdd-mcp` sidecar — see [docs/agent/openfdd-mcp-tool-contract.md](docs/agent/openfdd-mcp-tool-contract.md) |
 
-**Agent docs:** [docs/agent/openfdd-agent-current-standing.md](docs/agent/openfdd-agent-current-standing.md) · [architecture](docs/agent/openfdd-agent-architecture.md) · [safety boundaries](docs/security/agent-safety-boundaries.md)
+**Agent docs:** [docs/agent/openfdd-agent-current-standing.md](docs/agent/openfdd-agent-current-standing.md) · [architecture](docs/agent/openfdd-agent-architecture.md) · [bench WSL agent prompt](docs/agent/bench-driver-setup-wsl-agent.md) · [safety boundaries](docs/security/agent-safety-boundaries.md)
 
 **Cursor agents:** `.cursor/agents/openfdd-retrofit-orchestrator.md` · `.cursor/agents/simple-test-triage.md`
 
@@ -37,6 +37,7 @@ Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:808
 ./scripts/openfdd_rust_site_update.sh   # pull GHCR :latest after master merge
 ./scripts/openfdd_rust_check_ghcr_platform.sh
 ./scripts/openfdd_rust_edge_validate.sh
+./scripts/openfdd_drivers_validate.sh   # field bench: BACnet/Modbus/Haystack/JSON API
 ```
 
 After a release merge to `master`, run `openfdd_rust_site_update.sh` to pull the new `ghcr.io/bbartling/openfdd-edge-rust` image. Verify with `/api/health` (`version` + `image_tag`).

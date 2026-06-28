@@ -35,7 +35,6 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: "/haystack", icon: "🌿", label: "Haystack", protected: true },
       { to: "/modbus", icon: "🔌", label: "Modbus", protected: true },
       { to: "/json-api", icon: "🌐", label: "JSON API", protected: true },
-      { to: "/data-management", icon: "🗄️", label: "Data management", protected: true },
     ],
   },
   {
@@ -51,7 +50,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: "Data & ops",
     items: [
       { to: "/exports", icon: "⬇️", label: "Data export", protected: true },
-      { to: "/data-management", icon: "🗄️", label: "Host / data management", protected: true },
+      { to: "/data-management", icon: "🗄️", label: "Historian storage", protected: true },
       { to: "/host", icon: "📊", label: "Host stats", protected: true },
       { to: "/live-fdd-validation", icon: "🧪", label: "Validation runs", protected: true },
       { to: "/algorithms", icon: "⚙️", label: "Algorithms", protected: true },
