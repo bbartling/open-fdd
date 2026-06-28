@@ -269,7 +269,10 @@ fn arrow_cell_json(col: &Arc<dyn arrow::array::Array>, row: usize) -> Value {
             json!(a.value(row))
         }
         DataType::Float64 => {
-            let a = col.as_any().downcast_ref::<arrow::array::Float64Array>().unwrap();
+            let a = col
+                .as_any()
+                .downcast_ref::<arrow::array::Float64Array>()
+                .unwrap();
             json!(a.value(row))
         }
         DataType::Boolean => {
