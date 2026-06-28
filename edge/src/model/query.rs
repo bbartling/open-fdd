@@ -263,7 +263,10 @@ pub fn equipment_model_summary() -> Value {
     let feeds_chains: Vec<String> = feed_edges
         .iter()
         .map(|(from, to)| {
-            let from_label = labels.get(from).map(String::as_str).unwrap_or(from.as_str());
+            let from_label = labels
+                .get(from)
+                .map(String::as_str)
+                .unwrap_or(from.as_str());
             let to_label = labels.get(to).map(String::as_str).unwrap_or(to.as_str());
             format!("{from_label} feeds {to_label}")
         })
@@ -356,18 +359,24 @@ pub fn network_graph(site_id: Option<&str>) -> Value {
             .and_then(|v| v.as_str())
             .unwrap_or(&point_id)
             .to_string();
-        points_by_equipment.entry(equip_ref).or_default().push(json!({
-            "point_id": point_id,
-            "name": name,
-            "label": name,
-            "equipment_id": row.get("equipRef").cloned().unwrap_or(json!(null)),
-            "unit": row.get("unit").cloned().unwrap_or(json!(null))
-        }));
+        points_by_equipment
+            .entry(equip_ref)
+            .or_default()
+            .push(json!({
+                "point_id": point_id,
+                "name": name,
+                "label": name,
+                "equipment_id": row.get("equipRef").cloned().unwrap_or(json!(null)),
+                "unit": row.get("unit").cloned().unwrap_or(json!(null))
+            }));
     }
 
     for feed in &mut feeds {
         if let Some(from) = feed.get("from_equipment_id").and_then(|v| v.as_str()) {
-            feed["from_label"] = json!(labels.get(from).cloned().unwrap_or_else(|| from.to_string()));
+            feed["from_label"] = json!(labels
+                .get(from)
+                .cloned()
+                .unwrap_or_else(|| from.to_string()));
         }
         if let Some(to) = feed.get("to_equipment_id").and_then(|v| v.as_str()) {
             feed["to_label"] = json!(labels.get(to).cloned().unwrap_or_else(|| to.to_string()));

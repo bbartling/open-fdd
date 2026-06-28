@@ -100,7 +100,9 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         return json_response(&mut stream, body);
     }
     if method == "GET" && clean_path.starts_with("/api/faults/") {
-        let tail = clean_path.trim_start_matches("/api/faults/").trim_matches('/');
+        let tail = clean_path
+            .trim_start_matches("/api/faults/")
+            .trim_matches('/');
         if !tail.is_empty()
             && !tail.contains('/')
             && !matches!(

@@ -16,9 +16,8 @@ pub fn list_graphs(site_id: Option<&str>) -> String {
 }
 
 pub fn get_graph(site_id: &str, graph_id: &str) -> String {
-    let graph = persistence::read_graph(site_id, graph_id).unwrap_or_else(|| {
-        super::schema::empty_graph(site_id, graph_id, "system")
-    });
+    let graph = persistence::read_graph(site_id, graph_id)
+        .unwrap_or_else(|| super::schema::empty_graph(site_id, graph_id, "system"));
     serde_json::to_string(&json!({"ok": true, "graph": graph})).unwrap()
 }
 
