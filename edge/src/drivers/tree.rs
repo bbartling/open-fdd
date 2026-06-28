@@ -455,7 +455,10 @@ pub fn json_api_driver_tree_value() -> Value {
             "devices": []
         });
     }
-    let mut devices = json_api_devices_ui();
+    let mut devices = json_api::saved_devices_for_tree();
+    if devices.is_empty() {
+        devices = json_api_devices_ui();
+    }
     if devices.is_empty() {
         let sources: Vec<Value> =
             serde_json::from_str(json_api::sources_json()).unwrap_or_default();

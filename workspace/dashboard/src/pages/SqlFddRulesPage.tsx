@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import { apiFetch } from "../lib/api";
+import { copyToClipboard } from "../lib/clipboard";
 import { formatApiError } from "../lib/formatApiError";
 import { useActiveSiteId } from "../lib/useActiveSiteId";
 
@@ -81,6 +82,7 @@ export default function SqlFddRulesPage() {
   const [demo, setDemo] = useState<DemoResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [copyStatus, setCopyStatus] = useState("");
   const [error, setError] = useState("");
   const equipmentMissing = mode === "builder" && !builder.equipment_id.trim();
 
@@ -195,29 +197,66 @@ export default function SqlFddRulesPage() {
         <section className="panel sql-fdd-builder-panel">
           <div className="sql-fdd-toolbar">
             <h2 className="panel-title">Rule builder</h2>
-            <div className="action-bar">
-              <button type="button" className={mode === "builder" ? "primary-btn" : "secondary-btn"} onClick={() => setMode("builder")}>
-                Builder
+            <div className="action-bar sql-fdd-mode-bar">
+              <button
+                type="button"
+                className={mode === "builder" ? "primary-btn" : "secondary-btn"}
+                onClick={() => {
+                  setMode("builder");
+                  setRawCustom(false);
+                }}
+              >
+                Visual builder
               </button>
-              <button type="button" className={mode === "raw" ? "primary-btn" : "secondary-btn"} onClick={() => setMode("raw")}>
+              <button
+                type="button"
+                className={mode === "raw" ? "primary-btn" : "secondary-btn"}
+                onClick={() => setMode("raw")}
+              >
                 Raw SQL
               </button>
-              <button type="button" className="secondary-btn" onClick={() => void validateSql()} disabled={busy}>
-                Validate
-              </button>
-              <button type="button" className="primary-btn" onClick={() => void runSql()} disabled={busy || !sql.trim() || equipmentMissing}>
-                Run preview
+              {mode === "raw" ? (
+                <button type="button" className="secondary-btn" onClick={() => void validateSql()} disabled={busy}>
+                  Validate SQL
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => void runSql()}
+                disabled={busy || (mode === "raw" ? !sql.trim() : equipmentMissing)}
+              >
+                Test query
               </button>
               <Link className="secondary-btn" to="/wiresheet">
-                Open FDD Wiresheet
+                FDD Wiresheet
               </Link>
             </div>
           </div>
 
-          {equipmentMissing ? <div className="warn-banner">Select Haystack equipment id before running preview.</div> : null}
+          <p className="muted sql-fdd-mode-hint">
+            {mode === "builder"
+              ? "Visual builder generates DataFusion SQL from FDD inputs — no manual SQL editing in this mode (Grafana-style)."
+              : "Raw SQL mode: write full SELECT against telemetry_pivot. Builder fields are hidden."}
+          </p>
 
           {mode === "builder" ? (
-            <div className="builder-grid sql-fdd-builder-grid">
+            <>
+              <div className="sql-vars-panel">
+                <h3 className="panel-subtitle">Available variables</h3>
+                <p className="muted">
+                  Table <code>telemetry_pivot</code> columns from mapped FDD inputs. Filter with{" "}
+                  <code>equipment_id = &apos;…&apos;</code>.
+                </p>
+                <div className="sql-var-chips">
+                  {fddInputs.map((i) => (
+                    <span key={i.id} className="chip" title={i.label}>
+                      {i.id}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="builder-grid sql-fdd-builder-grid">
               <label>
                 Rule name
                 <input value={builder.name} onChange={(e) => setBuilder({ ...builder, name: e.target.value })} />
@@ -270,37 +309,70 @@ export default function SqlFddRulesPage() {
                 <input value={builder.fault_code} onChange={(e) => setBuilder({ ...builder, fault_code: e.target.value })} />
               </label>
             </div>
+              <details className="generated-sql-details">
+                <summary>Generated SQL (read-only)</summary>
+                <pre className="sql-block">{sql || "—"}</pre>
+              </details>
+            </>
+          ) : (
+            <label className="sql-editor-label">
+              DataFusion SQL
+              <textarea
+                className="sql-editor sql-editor--large"
+                value={sql}
+                onChange={(e) => {
+                  setSql(e.target.value);
+                  setRawCustom(true);
+                }}
+                spellCheck={false}
+                placeholder="SELECT timestamp, equipment_id, oa_t, … FROM telemetry_pivot WHERE …"
+              />
+            </label>
+          )}
+
+          {equipmentMissing && mode === "builder" ? (
+            <div className="warn-banner">Select Haystack equipment id before testing the query.</div>
           ) : null}
 
-          {rawCustom ? <div className="warn-banner">Raw SQL edited manually — builder may not round-trip.</div> : null}
-
-          <label className="sql-editor-label">
-            DataFusion SQL
-            <textarea
-              className="sql-editor sql-editor--large"
-              value={sql}
-              onChange={(e) => {
-                setSql(e.target.value);
-                setRawCustom(true);
-              }}
-              spellCheck={false}
-            />
-          </label>
+          {rawCustom && mode === "raw" ? (
+            <div className="warn-banner">Editing raw SQL — switch to Visual builder to use the form again.</div>
+          ) : null}
 
           <div className="sql-fdd-results">
             {validation ? <div className="status-banner">{validationSummary(validation)}</div> : null}
             {runResult ? <div className="status-banner">{runResultSummary(runResult)}</div> : null}
           </div>
+
+          {runResult ? (
+            <section className="panel sql-test-query-panel">
+              <div className="panel-head-row">
+                <h3 className="panel-title">Query results</h3>
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => {
+                    void copyToClipboard(JSON.stringify(runResult, null, 2)).then((ok) =>
+                      setCopyStatus(ok ? "Copied JSON" : "Copy failed"),
+                    );
+                  }}
+                >
+                  Copy JSON
+                </button>
+              </div>
+              {copyStatus ? <p className="muted">{copyStatus}</p> : null}
+              <pre className="code-block sql-query-json">{JSON.stringify(runResult, null, 2)}</pre>
+            </section>
+          ) : null}
+
           {(validation || runResult) && showAdvanced ? (
             <details className="advanced-json" open>
-              <summary>Raw JSON</summary>
+              <summary>Validation JSON</summary>
               {validation ? <pre className="code-block">{JSON.stringify(validation, null, 2)}</pre> : null}
-              {runResult ? <pre className="code-block">{JSON.stringify(runResult, null, 2)}</pre> : null}
             </details>
           ) : null}
           {(validation || runResult) && !showAdvanced ? (
             <button type="button" className="secondary-btn" onClick={() => setShowAdvanced(true)}>
-              Show raw JSON
+              Show validation JSON
             </button>
           ) : null}
         </section>

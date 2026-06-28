@@ -5,6 +5,7 @@ import ActionButton from "../components/ActionButton";
 import BacnetPointsTree, { type DriverDevice, type DriverPoint } from "../components/BacnetPointsTree";
 import BacnetTreeLegend from "../components/BacnetTreeLegend";
 import { formatBacnetValue, pointIsCommandable, type PrioritySlot } from "../lib/bacnetTreeMenu";
+import BacnetOverridePanel from "../components/BacnetOverridePanel";
 import PageHeader from "../components/PageHeader";
 import Spinner from "../components/Spinner";
 import { TabDebugPanel } from "../components/TabDebugPanel";
@@ -1016,6 +1017,8 @@ export default function BacnetPage() {
           </p>
         ) : null}
       </div>
+
+      <BacnetOverridePanel />
 
       <div className="panel">
         <h3>Activity</h3>

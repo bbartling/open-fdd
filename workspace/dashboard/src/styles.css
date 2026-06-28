@@ -3739,3 +3739,181 @@ button.linkish {
 .fdd-rule-wiresheet--compact .fdd-rule-wiresheet__canvas {
   min-height: 280px;
 }
+
+.action-bar-spaced {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.panel-head-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.meta-dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem 1.25rem;
+  margin: 0.75rem 0;
+}
+
+.meta-dl dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.meta-dl dd {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+}
+
+.data-mgmt-page .purge-preview-card {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+}
+
+.source-chip-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.source-chip-list li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+.json-api-presets {
+  margin: 1rem 0;
+}
+
+.preset-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.preset-card {
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.preset-card strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.preset-card .chip {
+  margin-top: 0.5rem;
+}
+
+.owm-preset-block {
+  padding: 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+.sql-fdd-mode-bar {
+  flex-wrap: wrap;
+}
+
+.sql-fdd-mode-hint {
+  margin: 0.5rem 0 1rem;
+}
+
+.sql-vars-panel {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--panel));
+}
+
+.sql-var-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.generated-sql-details {
+  margin-top: 1rem;
+}
+
+.sql-test-query-panel .sql-query-json {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.report-builder-toolbar {
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.report-brand-toggle {
+  align-self: end;
+  margin-bottom: 0.35rem;
+}
+
+.report-list-pro .report-list-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto auto;
+  gap: 0.75rem 1rem;
+  align-items: center;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.report-list-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.report-preview-full {
+  margin-top: 1.25rem;
+}
+
+.report-preview-full .report-preview-iframe {
+  width: 100%;
+  min-height: 720px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.csv-preview-panel {
+  margin-top: 0.5rem;
+}
+
+.csv-merge-controls {
+  margin-top: 1rem;
+}
+
+@media (max-width: 900px) {
+  .report-list-pro .report-list-row {
+    grid-template-columns: 1fr;
+  }
+}

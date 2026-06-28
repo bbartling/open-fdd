@@ -15,6 +15,7 @@ mod model;
 mod ops;
 mod reports;
 mod test_support;
+mod timeseries;
 mod validation;
 mod version;
 
@@ -97,6 +98,17 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             json!({"ok": true, "auth_required": cfg.required}),
         );
+    }
+    // Public read-only dashboard endpoints (home/login view without JWT).
+    if method == "GET"
+        && (clean_path == "/api/building/snapshot" || clean_path == "/api/building/status")
+    {
+        let body = if clean_path == "/api/building/snapshot" {
+            dashboard::building_snapshot()
+        } else {
+            dashboard::building_status()
+        };
+        return json_response(&mut stream, body);
     }
     if method == "GET"
         && !clean_path.starts_with("/api/")
@@ -836,6 +848,54 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent"],
             serde_json::from_str::<Value>(drivers::json_api::register_json()).unwrap(),
         ),
+        ("POST", "/api/json-api/request") => {
+            let payload = serde_json::from_str::<Value>(&body).unwrap_or(json!({}));
+            json_response(&mut stream, drivers::json_api::http_request(&payload))
+        }
+        ("POST", "/api/json-api/read_and_store") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            drivers::json_api::read_and_store(&serde_json::from_str::<Value>(&body).unwrap_or(json!({}))),
+        ),
+        ("PATCH", "/api/json-api/endpoint/poll") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            drivers::json_api::patch_endpoint_poll(&serde_json::from_str::<Value>(&body).unwrap_or(json!({}))),
+        ),
+        ("POST", "/api/json-api/poll/once") | ("POST", "/api/json-api/poll-once") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            drivers::json_api::poll_all_saved(),
+        ),
+        ("GET", "/api/timeseries/sites") => {
+            json_response(&mut stream, timeseries::sites_json())
+        }
+        ("GET", "/api/timeseries/series") => {
+            let site = query_param(&path, "site_id").unwrap_or_default();
+            json_response(&mut stream, timeseries::series_json(&site))
+        }
+        ("GET", "/api/timeseries/readings") => {
+            let params = query_params_map(&path);
+            json_response(&mut stream, timeseries::readings_json(&params))
+        }
+        ("GET", p) if p.starts_with("/api/timeseries/export.csv") => {
+            let params = query_params_map(&path);
+            match timeseries::export_csv(&params) {
+                Ok(csv) => csv_attachment_response(&mut stream, &csv, "openfdd_timeseries.csv"),
+                Err(err) => json_response(&mut stream, json!({"ok": false, "error": err})),
+            }
+        }
+        ("GET", "/api/rules/saved") => {
+            let rules_body: Value = serde_json::from_str(&fdd::wires::api::list_rules_json())
+                .unwrap_or(json!({"rules": []}));
+            json_response(
+                &mut stream,
+                json!({"ok": true, "rules": rules_body.get("rules").cloned().unwrap_or(json!([]))}),
+            )
+        }
         ("GET", "/api/historian/validation/status") => {
             json_response(&mut stream, historian::store::status_json())
         }
@@ -948,6 +1008,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             if let Some(resp) = handle_model_dynamic(&mut stream, method.as_str(), &clean_path) {
                 return resp;
             }
+            if let Some(resp) = handle_json_api_dynamic(
+                &mut stream,
+                &principal,
+                method.as_str(),
+                &clean_path,
+            ) {
+                return resp;
+            }
             if method == "GET" && clean_path.starts_with("/api/bacnet/jobs/") {
                 let job_id = clean_path.trim_start_matches("/api/bacnet/jobs/");
                 return json_response(
@@ -995,6 +1063,19 @@ fn query_param(path: &str, key: &str) -> Option<String> {
     })
 }
 
+fn query_params_map(path: &str) -> std::collections::HashMap<String, String> {
+    let mut out = std::collections::HashMap::new();
+    if let Some(qs) = path.split('?').nth(1) {
+        for pair in qs.split('&') {
+            let mut parts = pair.splitn(2, '=');
+            if let (Some(k), Some(v)) = (parts.next(), parts.next()) {
+                out.insert(k.to_string(), v.to_string());
+            }
+        }
+    }
+    out
+}
+
 fn path_parts(path: &str) -> Vec<&str> {
     path.trim_matches('/').split('/').collect()
 }
@@ -1024,6 +1105,31 @@ fn handle_model_dynamic(
         ));
     }
     Some(json_response(stream, model::query::list_equipment(site_id)))
+}
+
+fn handle_json_api_dynamic(
+    stream: &mut TcpStream,
+    principal: &Principal,
+    method: &str,
+    path: &str,
+) -> Option<std::io::Result<()>> {
+    let prefix = "/api/json-api/endpoint/";
+    if !path.starts_with(prefix) {
+        return None;
+    }
+    let point_id = path.trim_start_matches(prefix).trim();
+    if point_id.is_empty() || point_id.contains('/') {
+        return None;
+    }
+    match method {
+        "DELETE" => Some(require_role(
+            stream,
+            principal,
+            &["integrator", "agent"],
+            drivers::json_api::delete_endpoint(point_id),
+        )),
+        _ => None,
+    }
 }
 
 fn handle_fdd_wires_dynamic(

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiFetch } from "../../lib/api";
+import { apiFetch, hasToken } from "../../lib/api";
 import type {
   DashboardAnalytics,
   DashboardSummary,
@@ -8,10 +8,25 @@ import type {
 } from "../../lib/dashboardSummaryTypes";
 import type { InsightResponse } from "../../lib/insightTypes";
 
+type BuildingMeta = {
+  ok?: boolean;
+  model_score?: number | null;
+  model_counts?: {
+    equipment?: number;
+    points?: number;
+    mapped_points?: number;
+    unmapped_points?: number;
+  };
+  alert_count?: number;
+  rule_count?: number;
+  datafusion_ok?: boolean;
+};
+
 type Props = {
   refreshKey?: number;
   insight?: InsightResponse | null;
   insightError?: string;
+  buildingMeta?: BuildingMeta | null;
 };
 
 function formatProtocolLabel(protocol: string): string {
@@ -25,13 +40,26 @@ function formatProtocolLabel(protocol: string): string {
   }
 }
 
-export default function OperationalContextPanel({ refreshKey, insight, insightError }: Props) {
+export default function OperationalContextPanel({
+  refreshKey,
+  insight,
+  insightError,
+  buildingMeta,
+}: Props) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [rules, setRules] = useState<FddRulesResponse | null>(null);
   const [loadError, setLoadError] = useState("");
+  const signedIn = hasToken();
 
   useEffect(() => {
+    if (!signedIn) {
+      setSummary(null);
+      setAnalytics(null);
+      setRules(null);
+      setLoadError("");
+      return;
+    }
     let cancelled = false;
     setLoadError("");
     Promise.all([
@@ -55,14 +83,15 @@ export default function OperationalContextPanel({ refreshKey, insight, insightEr
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [refreshKey, signedIn]);
 
   const model = summary?.model_coverage;
   const ruleHealth = analytics?.rule_health;
   const ruleList = rules?.rules ?? [];
   const enabledRules = ruleList.filter((r) => r.enabled !== false);
-  const ruleCount = ruleHealth?.rule_count ?? ruleList.length;
-  const activeFaults = summary?.faults?.active_count ?? 0;
+  const ruleCount =
+    ruleHealth?.rule_count ?? ruleList.length ?? buildingMeta?.rule_count ?? 0;
+  const activeFaults = summary?.faults?.active_count ?? buildingMeta?.alert_count ?? 0;
   const historian = summary?.historian_health;
 
   const mappedSources = useMemo(() => {
@@ -89,14 +118,26 @@ export default function OperationalContextPanel({ refreshKey, insight, insightEr
       ? `${model.equipment_count ?? 0} equipment · ${model.point_count ?? 0} points · ${model.mapped_points ?? 0} mapped${
           (model.unmapped_points ?? 0) > 0 ? ` · ${model.unmapped_points} unmapped` : ""
         }${model.model_score != null ? ` · ${model.model_score}% coverage` : ""}`
-      : "No Haystack model loaded — import under Model & assignments.";
+      : buildingMeta?.model_counts &&
+          ((buildingMeta.model_counts.equipment ?? 0) > 0 ||
+            (buildingMeta.model_counts.points ?? 0) > 0)
+        ? `${buildingMeta.model_counts.equipment ?? 0} equipment · ${buildingMeta.model_counts.points ?? 0} points · ${buildingMeta.model_counts.mapped_points ?? 0} mapped${
+            (buildingMeta.model_counts.unmapped_points ?? 0) > 0
+              ? ` · ${buildingMeta.model_counts.unmapped_points} unmapped`
+              : ""
+          }${buildingMeta.model_score != null ? ` · ${buildingMeta.model_score}% coverage` : ""}`
+        : "No Haystack model loaded — sign in and import under Model & assignments.";
 
   const rulesLine =
     ruleCount > 0
       ? `${enabledRules.length || ruleCount} FDD rule${ruleCount === 1 ? "" : "s"} configured${
-          ruleHealth?.datafusion_ok === false ? " · DataFusion check failed" : ""
+          (ruleHealth?.datafusion_ok ?? buildingMeta?.datafusion_ok) === false
+            ? " · DataFusion check failed"
+            : ""
         }`
-      : "No FDD rules configured — add rules under SQL FDD.";
+      : signedIn
+        ? "No FDD rules configured — add rules under SQL FDD."
+        : "Sign in to view FDD rule configuration.";
 
   const faultLine =
     activeFaults === 0
@@ -107,7 +148,9 @@ export default function OperationalContextPanel({ refreshKey, insight, insightEr
     ? `${historian.row_count ?? 0} historian rows${
         historian.latest_sample_at ? ` · latest ${historian.latest_sample_at}` : ""
       }${historian.subdir_count ? ` · ${historian.subdir_count} partition(s)` : ""}`
-    : "Historian status unavailable.";
+    : signedIn
+      ? "Historian status unavailable."
+      : "Sign in for historian row counts and validation profile details.";
 
   const validationProfile = summary?.validation?.profile_id;
   const feeds = insight?.brick_model?.feeds_chains ?? [];
