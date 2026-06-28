@@ -7,7 +7,7 @@ Open-FDD **3.2.x** is a **deterministic Rust edge runtime** (`ghcr.io/bbartling/
 | **Rust edge** | `openfdd-bridge`, `openfdd-commission`, `openfdd-haystack-gateway` — poll, historian, FDD, reports |
 | **External agent** | Docs/code PRs, validation scripts, read-only API inspection |
 | **Optional Ollama** | Local-only doc helper for operators — not a bridge dependency |
-| **Future MCP** | Read-first `openfdd-mcp` sidecar — see [docs/agent/openfdd-mcp-tool-contract.md](docs/agent/openfdd-mcp-tool-contract.md) |
+| **Optional MCP** | Read-first `openfdd-mcp` GHCR sidecar (3.2.3+) — [mcp/README.md](mcp/README.md); not started by site update |
 
 **Agent docs:** [docs/agent/openfdd-agent-current-standing.md](docs/agent/openfdd-agent-current-standing.md) · [architecture](docs/agent/openfdd-agent-architecture.md) · [bench WSL agent prompt](docs/agent/bench-driver-setup-wsl-agent.md) · [safety boundaries](docs/security/agent-safety-boundaries.md)
 
@@ -41,6 +41,16 @@ Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:808
 ```
 
 After a release merge to `master`, run `openfdd_rust_site_update.sh` to pull the new `ghcr.io/bbartling/openfdd-edge-rust` image. Verify with `/api/health` (`version` + `image_tag`).
+
+**Optional MCP (3.2.3+):** site update does not pull/start MCP. After validate:
+
+```bash
+export OPENFDD_COMPOSE_ROOT=~/open-fdd OPENFDD_IMAGE_TAG=3.2.3
+docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar pull openfdd-mcp
+export OPENFDD_MCP_TOKEN="$TOKEN"
+```
+
+Cursor stdio config: [mcp/README.md](mcp/README.md).
 
 ## Model routing (external agents)
 

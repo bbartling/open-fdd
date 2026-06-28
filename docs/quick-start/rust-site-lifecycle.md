@@ -33,6 +33,18 @@ Environment:
 ./scripts/openfdd_rust_edge_validate.sh
 ```
 
+## Optional MCP sidecar (3.2.3+)
+
+Not started by `openfdd_rust_site_update.sh`. After edge validate passes:
+
+```bash
+export OPENFDD_COMPOSE_ROOT=~/open-fdd
+export OPENFDD_IMAGE_TAG=3.2.3   # same as NEW_TAG above
+docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar pull openfdd-mcp
+```
+
+Wire Cursor with `ghcr.io/bbartling/openfdd-mcp:$OPENFDD_IMAGE_TAG` and an integrator JWT — [mcp/README.md](../../mcp/README.md).
+
 ## Restore workspace
 
 ```bash

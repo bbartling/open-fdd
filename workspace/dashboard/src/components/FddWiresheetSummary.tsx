@@ -4,7 +4,7 @@ import { apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import { useActiveSiteId } from "../lib/useActiveSiteId";
 import { graphToFlow } from "../wiresheet/graphAdapter";
-import type { WiresheetGraph } from "../wiresheet/types";
+import { fetchWiresheetGraph } from "../wiresheet/wiresheetApi";
 
 const GRAPH_ID = "graph:live-fdd-validation";
 
@@ -23,10 +23,7 @@ export default function FddWiresheetSummary({ onStatus }: Props) {
   const loadGraph = useCallback(async () => {
     if (!siteId) return;
     try {
-      const qs = `?site_id=${encodeURIComponent(siteId)}`;
-      const graph = await apiFetch<WiresheetGraph>(
-        `/api/fdd-wires/graphs/${encodeURIComponent(GRAPH_ID)}${qs}`,
-      );
+      const graph = await fetchWiresheetGraph(GRAPH_ID, siteId);
       const flow = graphToFlow(graph);
       setNodeCount(flow.nodes.length);
       setReviewStatus(graph.review_status ?? "draft");

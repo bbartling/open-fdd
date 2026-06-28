@@ -16,6 +16,7 @@ import WiresheetPalette from "../wiresheet/WiresheetPalette";
 import WiresheetPropertyPanel from "../wiresheet/WiresheetPropertyPanel";
 import { flowToGraph, graphToFlow, newNodeId } from "../wiresheet/graphAdapter";
 import type { NodeCatalogEntry, WiresheetGraph } from "../wiresheet/types";
+import { fetchWiresheetGraph } from "../wiresheet/wiresheetApi";
 
 const DEFAULT_GRAPH_ID = "graph:live-fdd-validation";
 
@@ -37,10 +38,7 @@ export default function WiresheetStudioPage() {
     setBusy(true);
     setError("");
     try {
-      const qs = siteId ? `?site_id=${encodeURIComponent(siteId)}` : "";
-      const graph = await apiFetch<WiresheetGraph>(
-        `/api/fdd-wires/graphs/${encodeURIComponent(DEFAULT_GRAPH_ID)}${qs}`,
-      );
+      const graph = await fetchWiresheetGraph(DEFAULT_GRAPH_ID, siteId);
       const flow = graphToFlow(graph);
       setNodes(flow.nodes);
       setEdges(flow.edges);

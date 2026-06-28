@@ -4,6 +4,62 @@ Read-first [Model Context Protocol](https://modelcontextprotocol.io/) server for
 
 **Image:** `ghcr.io/bbartling/openfdd-mcp`
 
+## After a Docker / GHCR site update
+
+`openfdd_rust_site_update.sh` updates the **edge stack only**. MCP is opt-in — pull and wire it **after** the edge is healthy, using the **same tag** as the edge (`OPENFDD_IMAGE_TAG`, e.g. `3.2.3`).
+
+```bash
+cd ~/open-fdd
+export OPENFDD_COMPOSE_ROOT="$PWD"
+export OPENFDD_IMAGE_TAG=3.2.3
+
+# Pull MCP image (optional — docker run will pull if missing)
+docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar pull openfdd-mcp
+
+# JWT for bridge REST (integrator or agent role)
+source scripts/openfdd_auth_lib.sh
+INTEGRATOR_PW="$(openfdd_auth_plaintext_password workspace/auth.env.local integrator)"
+export OPENFDD_MCP_TOKEN="$(
+  curl -s -X POST http://127.0.0.1:8080/api/auth/login \
+    -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg u integrator --arg p "$INTEGRATOR_PW" '{username:$u,password:$p}')" \
+  | jq -r '.token // .access_token'
+)"
+```
+
+**Cursor (stdio via Docker)** — MCP speaks JSON-RPC on stdin/stdout, not HTTP:
+
+```json
+{
+  "mcpServers": {
+    "openfdd": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm", "--network", "host",
+        "-e", "OPENFDD_API_BASE=http://127.0.0.1:8080",
+        "-e", "OPENFDD_COMMISSION_BASE=http://127.0.0.1:9091",
+        "-e", "OPENFDD_MCP_TOKEN",
+        "ghcr.io/bbartling/openfdd-mcp:3.2.3"
+      ],
+      "env": {
+        "OPENFDD_MCP_TOKEN": "<JWT from login above>"
+      }
+    }
+  }
+}
+```
+
+**Manual smoke test:**
+
+```bash
+docker run -i --rm --network host \
+  -e OPENFDD_API_BASE=http://127.0.0.1:8080 \
+  -e OPENFDD_MCP_TOKEN="$OPENFDD_MCP_TOKEN" \
+  ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG}
+```
+
+The compose service `openfdd-mcp` (`profiles: ["mcp-sidecar"]`) exists to **pull** the image with the same env/volume wiring as production; interactive MCP clients should use `docker run -i` (or the release binary below), not a detached `up -d`.
+
 ## Transport
 
 Stdio JSON-RPC (MCP 2024-11-05). Suitable for Cursor **WSL agent** local config:

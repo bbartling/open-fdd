@@ -97,7 +97,8 @@ services:
       - ./workspace:/app/workspace
     restart: unless-stopped
 
-  # MCP will be added later. Agent JSON APIs are already exposed by openfdd-bridge.
+  # Optional MCP sidecar: see mcp/README.md and README "Optional MCP sidecar".
+  # docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar pull openfdd-mcp
 
   open-fdd-rust-backend:
     profiles: ["rust-prod"]
