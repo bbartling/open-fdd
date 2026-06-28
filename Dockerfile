@@ -14,6 +14,7 @@ ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY edge ./edge
+COPY mcp ./mcp
 RUN echo "==> release build jobs=${CARGO_BUILD_JOBS}" \
     && cargo build --release --bins -p open_fdd_edge_prototype -j "${CARGO_BUILD_JOBS}"
 

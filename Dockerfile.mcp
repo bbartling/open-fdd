@@ -1,0 +1,15 @@
+# Open-FDD MCP server image (stdio transport for Cursor / agents).
+FROM rust:1.95-bookworm AS builder
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+COPY mcp ./mcp
+RUN cargo build --release -p openfdd-mcp
+
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && useradd --create-home --uid 10002 --shell /usr/sbin/nologin openfdd-mcp
+COPY --from=builder /app/target/release/openfdd-mcp /usr/local/bin/openfdd-mcp
+USER openfdd-mcp
+ENTRYPOINT ["openfdd-mcp"]

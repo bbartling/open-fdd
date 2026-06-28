@@ -1,5 +1,7 @@
 # Open-FDD Rust Edge
 
+> **Note:** Prefer `openfdd_rust_edge_bootstrap.sh` and [AGENTS.md](../AGENTS.md) for current install. This file lists REST routes; external agents use Cursor/Codex — built-in Ollama/MCP are optional/future ([agent architecture](../agent/openfdd-agent-architecture.md)).
+
 Turn-key Rust + React prototype that mirrors the Open-FDD edge split:
 
 ```text

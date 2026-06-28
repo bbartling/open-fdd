@@ -168,7 +168,9 @@ Example routes:
 
 ### Future service mode
 
-MCP / agent tooling is expected to become a later service mode after the core Rust edge, drivers, historian, FDD, and reports are stable.
+MCP / agent tooling is expected to become a **separate read-first sidecar** after the core Rust edge, drivers, historian, FDD, and reports are stable. **Built-in Ollama is not required** — dashboard Agent/Ollama panels are placeholders for optional local-only helpers.
+
+See [docs/agent/openfdd-agent-architecture.md](docs/agent/openfdd-agent-architecture.md) and [docs/agent/openfdd-mcp-tool-contract.md](docs/agent/openfdd-mcp-tool-contract.md).
 
 Possible future shape:
 
@@ -209,6 +211,7 @@ SERVICE_MODE=mcp
 | Image | Role |
 |-------|------|
 | [`ghcr.io/bbartling/openfdd-edge-rust`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-edge-rust) | API, dashboard, historian, commission, Haystack (same image, `SERVICE_MODE`) |
+| [`ghcr.io/bbartling/openfdd-mcp`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp) | Read-first MCP stdio sidecar for Cursor/agents ([mcp/README.md](mcp/README.md)) |
 
 GHCR publishes **multi-arch** images (`linux/amd64` + `linux/arm64`). Edge scripts **auto-detect** the host CPU.
 

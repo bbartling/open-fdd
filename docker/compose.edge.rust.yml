@@ -127,3 +127,20 @@ services:
       OPENFDD_WORKSPACE: /var/openfdd/workspace
       OPENFDD_HAYSTACK_ENABLED: ${OPENFDD_HAYSTACK_ENABLED:-1}
     restart: unless-stopped
+
+  openfdd-mcp:
+    profiles: ["mcp-sidecar"]
+    image: ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: openfdd-mcp
+    network_mode: host
+    stdin_open: true
+    tty: false
+    environment:
+      OPENFDD_API_BASE: ${OPENFDD_API_BASE:-http://127.0.0.1:8080}
+      OPENFDD_COMMISSION_BASE: ${OPENFDD_COMMISSION_BASE:-http://127.0.0.1:9091}
+      OPENFDD_MCP_TOKEN: ${OPENFDD_MCP_TOKEN:-}
+      OPENFDD_BENCH_TOPOLOGY_FILE: ${OPENFDD_BENCH_TOPOLOGY_FILE:-}
+    volumes:
+      - ${OPENFDD_COMPOSE_ROOT:?}/workspace:/var/openfdd/workspace:ro
+    restart: "no"

@@ -1520,6 +1520,16 @@ pub fn clear_bacnet_registry_value() -> Value {
     }
     write_registry(&registry);
     let model_sync = crate::model::commissioning::remove_bacnet_bindings_from_model();
+    if model_sync.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+        return json!({
+            "ok": false,
+            "error": model_sync
+                .get("error")
+                .and_then(|v| v.as_str())
+                .unwrap_or("model sync failed after registry clear"),
+            "driver_points_removed": driver_points
+        });
+    }
     json!({
         "ok": true,
         "message": "BACnet driver registry cleared",
@@ -1705,10 +1715,13 @@ mod override_export_tests {
             }));
             assert_eq!(out["ok"], true);
             let updated = read_registry();
-            let inst = updated["drivers"][0]["devices"][0]["device_instance"]
-                .as_u64()
-                .unwrap();
+            let device = &updated["drivers"][0]["devices"][0];
+            let inst = device["device_instance"].as_u64().unwrap();
             assert_eq!(inst, 5007);
+            assert_eq!(device["address"].as_str(), Some("198.51.100.50"));
+            let pt = &device["points"][0];
+            assert_eq!(pt["device_instance"].as_u64(), Some(5007));
+            assert_eq!(pt["address"].as_str(), Some("198.51.100.50"));
         });
     }
 }

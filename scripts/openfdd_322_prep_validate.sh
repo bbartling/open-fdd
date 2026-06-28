@@ -19,11 +19,11 @@ else
   echo "WARN: workspace/data.env.local missing — bootstrap first"
 fi
 
-HAYSTACK_CFG="$ROOT/workspace/data/drivers/local.nhaystack.toml"
+HAYSTACK_CFG="$ROOT/workspace/haystack/local.nhaystack.toml"
 if [[ -f "$HAYSTACK_CFG" ]]; then
   echo "OK: Haystack profile present: $HAYSTACK_CFG"
 else
-  echo "WARN: Haystack gateway needs workspace/data/drivers/local.nhaystack.toml (see docs/development/local_haystack_niagara.md)"
+  echo "WARN: Haystack gateway needs workspace/haystack/local.nhaystack.toml (see docs/development/local_haystack_niagara.md)"
 fi
 
 "$ROOT/scripts/openfdd_rust_edge_validate.sh"

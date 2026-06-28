@@ -15,7 +15,7 @@ while (( attempt < MAX_ATTEMPTS )); do
   if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
     echo "GHCR tag $TAG available — running site update"
     NEW_TAG="$TAG" "$ROOT/scripts/openfdd_rust_site_update.sh"
-    "$ROOT/scripts/openfdd_322_ghcr_validation.sh"
+    OPENFDD_IMAGE_TAG="$TAG" "$ROOT/scripts/openfdd_322_ghcr_validation.sh"
     exit 0
   fi
   echo "Attempt $attempt/$MAX_ATTEMPTS: not published yet"
