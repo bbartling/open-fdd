@@ -312,23 +312,23 @@ pub fn fusion_preview_handler(session_id: &str, limit: usize) -> Value {
         });
     }
     let mut plan_val = session.get("plan").cloned().unwrap_or(json!({}));
-    let mut plan: plan::ImportPlan =
-        match serde_json::from_value::<plan::ImportPlan>(plan_val.clone()) {
-            Ok(p) if !p.files.is_empty() => p,
-            _ => {
-                let inferred = infer_ut3_plan_from_session(&session);
-                if inferred.files.is_empty() {
-                    return json!({"ok": false, "error": "session has no staged files"});
-                }
-                plan_val = serde_json::to_value(&inferred).unwrap_or(json!({}));
-                session["plan"] = plan_val.clone();
-                if status == "previewed" {
-                    session["status"] = json!("planned");
-                }
-                let _ = save_session(session_id, &session);
-                inferred
+    let plan: plan::ImportPlan = match serde_json::from_value::<plan::ImportPlan>(plan_val.clone())
+    {
+        Ok(p) if !p.files.is_empty() => p,
+        _ => {
+            let inferred = infer_ut3_plan_from_session(&session);
+            if inferred.files.is_empty() {
+                return json!({"ok": false, "error": "session has no staged files"});
             }
-        };
+            plan_val = serde_json::to_value(&inferred).unwrap_or(json!({}));
+            session["plan"] = plan_val.clone();
+            if status == "previewed" {
+                session["status"] = json!("planned");
+            }
+            let _ = save_session(session_id, &session);
+            inferred
+        }
+    };
     if plan.files.is_empty() {
         return json!({"ok": false, "error": "session plan has no file mappings — run Preview plan"});
     }

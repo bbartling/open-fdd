@@ -267,9 +267,10 @@ fn join_asof(
     Ok(out)
 }
 
+type HourlyResampleBucket = (OutputRow, Vec<BTreeMap<String, f64>>);
+
 fn resample_kw_hourly(rows: Vec<OutputRow>) -> Vec<OutputRow> {
-    let mut buckets: BTreeMap<DateTime<Utc>, (OutputRow, Vec<BTreeMap<String, f64>>)> =
-        BTreeMap::new();
+    let mut buckets: BTreeMap<DateTime<Utc>, HourlyResampleBucket> = BTreeMap::new();
     for row in rows {
         let Some(ts) = row.ts_utc else { continue };
         let hour = floor_hour(ts);

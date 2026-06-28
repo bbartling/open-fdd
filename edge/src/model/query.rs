@@ -162,9 +162,9 @@ pub fn list_points(site_id: Option<&str>) -> Value {
     let points: Vec<Value> = sparql_rows(&query)
         .into_iter()
         .map(|row| {
-            let mapped = row.get("fdd_input").is_some()
-                || row.get("bacnet_ref").is_some()
-                || row.get("modbus_ref").is_some();
+            let mapped = row.contains_key("fdd_input")
+                || row.contains_key("bacnet_ref")
+                || row.contains_key("modbus_ref");
             json!({
                 "point_id": row.get("point_id").cloned().unwrap_or_default(),
                 "name": row.get("name").cloned().unwrap_or_default(),
