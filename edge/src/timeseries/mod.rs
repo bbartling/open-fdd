@@ -188,7 +188,7 @@ fn parse_ts(s: &str) -> Option<DateTime<Utc>> {
 }
 
 fn parse_hours(q: &str) -> i64 {
-    q.parse::<i64>().unwrap_or(24).clamp(1, 8760)
+    q.parse::<i64>().unwrap_or(24).clamp(1, 87600)
 }
 
 fn parse_keys(columns_param: &str) -> Vec<(String, String)> {
@@ -228,13 +228,23 @@ pub fn readings_json(params: &HashMap<String, String>) -> Value {
 
     let cutoff = Utc::now() - Duration::hours(hours);
     let rows: Vec<Value> = store::load_pivot_rows().unwrap_or_default();
-    let filtered: Vec<&Value> = rows
-        .iter()
-        .filter(|r| {
-            let ts = r.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
-            parse_ts(ts).map(|t| t >= cutoff).unwrap_or(true)
-        })
-        .collect();
+    let use_all = params
+        .get("all")
+        .is_some_and(|v| v == "true" || v == "1" || v == "yes");
+    let mut filtered: Vec<&Value> = if use_all {
+        rows.iter().collect()
+    } else {
+        rows.iter()
+            .filter(|r| {
+                let ts = r.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
+                parse_ts(ts).map(|t| t >= cutoff).unwrap_or(true)
+            })
+            .collect()
+    };
+    // Historical CSV imports (e.g. 2013–2018) fall outside the default hours window.
+    if filtered.is_empty() && !rows.is_empty() && !use_all {
+        filtered = rows.iter().collect();
+    }
 
     if filtered.is_empty() {
         return json!({
@@ -394,5 +404,11 @@ mod tests {
     fn readings_requires_columns() {
         let v = readings_json(&HashMap::new());
         assert!(v.get("error").is_some());
+    }
+
+    #[test]
+    fn parse_hours_accepts_multi_year_window() {
+        assert_eq!(parse_hours("8760"), 8760);
+        assert_eq!(parse_hours("87600"), 87600);
     }
 }

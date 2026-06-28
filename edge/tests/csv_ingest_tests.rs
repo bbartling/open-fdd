@@ -145,6 +145,44 @@ fn resample_kw_hourly_averages() {
 }
 
 #[test]
+fn timezone_column_not_timestamp_candidate() {
+    use open_fdd_edge_prototype::csv_ingest::timestamp::is_timestamp_candidate;
+    assert!(!is_timestamp_candidate("timezone"));
+    assert!(is_timestamp_candidate("time_local"));
+}
+
+#[test]
+fn join_schools_then_weather() {
+    let kw_csv = include_str!("fixtures/csv_ingest/school_kw_sample.csv");
+    let wx_csv = include_str!("fixtures/csv_ingest/weather_hourly_sample.csv");
+    let kw_map = FileMapping {
+        filename: "school_a.csv".into(),
+        timestamp_column: "Date".into(),
+        timezone: "America/Chicago".into(),
+        value_columns: vec!["kW".into()],
+    };
+    let kw_map_b = FileMapping {
+        filename: "school_b.csv".into(),
+        timestamp_column: "Date".into(),
+        timezone: "America/Chicago".into(),
+        value_columns: vec!["kW".into()],
+    };
+    let wx_map = FileMapping {
+        filename: "open_meteo_weather.csv".into(),
+        timestamp_column: "time_local".into(),
+        timezone: "America/Chicago".into(),
+        value_columns: vec!["temp_f".into(), "humidity".into()],
+    };
+    let left_a = parse_file_to_rows(kw_csv, &kw_map, ',', "first").unwrap();
+    let left_b = parse_file_to_rows(kw_csv, &kw_map_b, ',', "first").unwrap();
+    let left = append_rows(vec![left_a, left_b]);
+    let right = parse_file_to_rows(wx_csv, &wx_map, ',', "first").unwrap();
+    let joined = join_rows(left, right, JoinAlignment::FloorHour, FillPolicy::Forward).unwrap();
+    assert!(!joined.is_empty());
+    assert!(joined[0].values.contains_key("temp_f") || joined[0].values.contains_key("kW"));
+}
+
+#[test]
 fn plan_api_append_mode() {
     with_temp_workspace(|_| {
         use base64::Engine;
@@ -174,5 +212,15 @@ fn plan_api_append_mode() {
         });
         let planned = open_fdd_edge_prototype::csv_ingest::plan_handler(&plan_body);
         assert_eq!(planned.get("ok").and_then(|v| v.as_bool()), Some(true));
+        let fusion = open_fdd_edge_prototype::csv_ingest::fusion_preview_handler(sid, 50);
+        assert_eq!(fusion.get("ok").and_then(|v| v.as_bool()), Some(true));
+        assert!(
+            fusion
+                .get("row_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                >= 1
+        );
+        assert!(fusion.get("columns").and_then(|v| v.as_array()).is_some());
     });
 }

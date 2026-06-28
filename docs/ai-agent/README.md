@@ -1,24 +1,20 @@
-# AI agent guide (Rust edge + external orchestrators)
+# AI agents (Rust edge)
 
-How **external** AI agents (Cursor, Codex, OpenClaw, future MCP clients) assist with Open-FDD on the **3.2 Rust edge** — without requiring built-in Ollama or MCP-RAG in the bridge container.
+External orchestrators (Cursor, Codex, MCP clients) operate Open-FDD through **JWT REST**, optional **MCP stdio**, and repo scripts. The bridge container does not embed Ollama or Python agents.
 
-**Architecture:** [agent/openfdd-agent-current-standing.md](../agent/openfdd-agent-current-standing.md) · [agent/openfdd-agent-architecture.md](../agent/openfdd-agent-architecture.md) · [security/agent-safety-boundaries.md](../security/agent-safety-boundaries.md)
+**Architecture:** [agent/openfdd-agent-architecture.md](../agent/openfdd-agent-architecture.md) · **MCP:** [agent/openfdd-mcp-tool-contract.md](../agent/openfdd-mcp-tool-contract.md) · **Safety:** [security/agent-safety-boundaries.md](../security/agent-safety-boundaries.md)
 
-**Legacy Python/Ollama docs:** [legacy/README.md](../legacy/README.md)
+## Capabilities
 
-## What AI can do on this stack
+| Area | Actions | API |
+|------|---------|-----|
+| Health | Stack status, driver poll state | `/api/health/stack`, `/api/agent/tools` |
+| Model | Grid, SPARQL, assignments | `/api/model/haystack`, `/api/model/sparql`, `/api/model/assignments` |
+| Drivers | BACnet/Modbus/Haystack trees and reads | `/api/bacnet/driver/tree`, `/api/haystack/read` |
+| FDD | Draft SQL, test rules, propose bindings | `/api/fdd-rules/*`, `/api/fdd-wires/propose-assignments` |
+| MCP | Read-first tools via sidecar | [mcp/README.md](../../mcp/README.md) |
 
-| Area | Agent actions | API / UI |
-| --- | --- | --- |
-| **Deploy** | Bootstrap GHCR stack, validate health, safe updates | `openfdd_rust_edge_bootstrap.sh`, `/api/health` |
-| **Drivers** | Inspect driver tree, poll BACnet/Modbus, scan overrides | `/api/bacnet/driver/tree`, `/api/modbus/points` |
-| **Haystack model** | Read model, propose point assignments, save bindings | `/api/model/haystack`, `/api/model/assignments` |
-| **FDD Wires** | Propose AI assignments (draft), validate graph, approve | `/api/fdd-wires/propose-assignments`, FDD Wires tab |
-| **SQL rules** | Build/test/validate DataFusion SQL fault rules | `/api/fdd-rules/builder-sql`, `/api/fdd-rules/{id}/test-sql` |
-| **Operations** | Stack check-in, override exports, historian queries | `/api/health/stack`, `/api/bacnet/overrides/export` |
-| **Safety** | Read-only by default; integrator required for activation | RBAC on `/api/fdd-rules/{id}/activate` |
-
-## Session start (copy-paste)
+## Session start
 
 ```bash
 INTEGRATOR_PW="$(grep '^OFDD_INTEGRATOR_PASSWORD=' ~/open-fdd/workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
@@ -29,26 +25,15 @@ TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/agent/tools | jq '.tools | length'
 ```
 
-## Deep guides
+## Further reading
 
-- [Haystack modeling and assignments](haystack-and-assignments.md)
-- [SQL HVAC FDD rule cookbook](../rule-cookbook/sql-hvac-fdd.md)
+- [Haystack and assignments](haystack-and-assignments.md)
+- [REST API reference](../AI_AGENT_API.md)
 - [Assignment model](../ASSIGNMENT_MODEL.md)
-- [Agent API reference](../AI_AGENT_API.md)
-- [Verification checklists](../verification/README.md)
+- [Verification](../verification/README.md)
 
 ## Never
 
-- delete `workspace/`
-- `docker compose down -v` or `docker volume prune`
-- print passwords, tokens, or full `auth.env.local`
-- BACnet/Modbus **writes** without explicit human approval
-- expose bridge/MCP to the public internet
-
-## GHCR publish (maintainers)
-
-```bash
-cargo fmt --all --check && cargo test --workspace
-docker build -t openfdd-edge-rust:local .
-# Push via .github/workflows/rust-ghcr.yml on master or tag v3.2.0
-```
+- Delete `workspace/` · `docker compose down -v` · print secrets
+- Field-bus writes or rule activation without human approval
+- Expose bridge or MCP on the public internet

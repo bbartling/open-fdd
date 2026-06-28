@@ -116,6 +116,121 @@ a {
   padding: 3px 8px;
 }
 
+.brand-mcp-link {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.brand-mcp-link:hover {
+  color: var(--text);
+  border-color: var(--primary);
+  background: var(--panel-soft);
+}
+
+.brand-mcp-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.csv-workflow-guide {
+  margin-bottom: 12px;
+}
+
+.csv-workflow-steps {
+  margin: 0;
+  padding-left: 1.25rem;
+  line-height: 1.5;
+}
+
+.csv-workflow-steps li {
+  margin-bottom: 0.35rem;
+}
+
+.csv-workflow-note {
+  margin: 0.75rem 0 0;
+}
+
+.csv-assistant-panel {
+  margin-bottom: 12px;
+}
+
+.csv-assistant-tip {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  margin: 0.5rem 0;
+  font-size: 14px;
+}
+
+.csv-assistant-tip--warn {
+  border-color: var(--warn, #c9870a);
+  background: color-mix(in srgb, var(--warn, #c9870a) 8%, transparent);
+}
+
+.csv-assistant-mcp {
+  margin-top: 0.75rem;
+  font-size: 14px;
+}
+
+.csv-assistant-mcp summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.csv-preview-panel--primary {
+  border-color: var(--primary);
+}
+
+.csv-session-id-line {
+  margin: 8px 0 12px;
+  font-size: 14px;
+  word-break: break-all;
+}
+
+.csv-session-id-line code {
+  font-size: 13px;
+}
+
+.csv-agent-session-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 8px;
+}
+
+.csv-agent-session-input {
+  flex: 1;
+  min-width: 220px;
+}
+
+.csv-agent-session-active {
+  margin-top: 12px;
+}
+
+.csv-agent-warnings {
+  margin: 8px 0;
+  padding-left: 1.25rem;
+  font-size: 14px;
+}
+
+.csv-ut3-hint {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--primary);
+  background: var(--panel-soft);
+}
+
 .sidebar-hint {
   margin: 0;
   padding: 0 8px;

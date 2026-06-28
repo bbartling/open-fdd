@@ -11,7 +11,10 @@ pub use dataset::{
     delete_dataset, list_datasets, preview_dataset, query_dataset_sql, save_dataset,
 };
 pub use parse::{sanitize_filename, ParseProfile};
-pub use plan::{auto_detect_mapping, plan_from_json, ImportPlan, OperationMode, OutputRow};
+pub use plan::{
+    auto_detect_mapping, infer_ut3_plan_from_session, is_weather_filename, plan_from_json,
+    ImportPlan, OperationMode, OutputRow,
+};
 pub use session::{create_session, load_session, save_session, stage_file};
 
 use plan::{append_rows, join_rows, parse_file_to_rows, preview_rows, JoinAlignment};
@@ -142,6 +145,7 @@ pub fn plan_handler(body: &Value) -> Value {
         "plan": plan,
         "preview": preview,
         "validation_report": validation_report,
+        "fusion_url": format!("/csv?session={session_id}"),
     })
 }
 
@@ -168,22 +172,67 @@ fn execute_plan_preview(
             if plan.files.len() < 2 {
                 return Err("join requires at least two file mappings".into());
             }
-            let (profile_l, text_l) = read_staged_file(session_id, &plan.files[0].filename)?;
-            let (profile_r, text_r) = read_staged_file(session_id, &plan.files[1].filename)?;
-            let left = parse_file_to_rows(
-                &text_l,
-                &plan.files[0],
-                profile_l.delimiter,
-                &plan.ambiguous_policy,
-            )?;
-            let right = parse_file_to_rows(
-                &text_r,
-                &plan.files[1],
-                profile_r.delimiter,
-                &plan.ambiguous_policy,
-            )?;
-            let alignment = plan.join_alignment.unwrap_or(JoinAlignment::FloorHour);
-            join_rows(left, right, alignment, plan.fill_policy)
+            let weather_idx = plan
+                .files
+                .iter()
+                .position(|f| is_weather_filename(&f.filename));
+            if let Some(widx) = weather_idx {
+                let school_maps: Vec<_> = plan
+                    .files
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| *i != widx)
+                    .map(|(_, f)| f.clone())
+                    .collect();
+                let weather_map = plan.files[widx].clone();
+                let left = if school_maps.len() > 1 {
+                    let mut batches = Vec::new();
+                    for fm in &school_maps {
+                        let (profile, text) = read_staged_file(session_id, &fm.filename)?;
+                        let mut mapping = fm.clone();
+                        if mapping.timestamp_column.is_empty() {
+                            mapping = auto_detect_mapping(&fm.filename, &profile.headers);
+                        }
+                        batches.push(parse_file_to_rows(
+                            &text,
+                            &mapping,
+                            profile.delimiter,
+                            &plan.ambiguous_policy,
+                        )?);
+                    }
+                    append_rows(batches)
+                } else {
+                    let fm = &school_maps[0];
+                    let (profile, text) = read_staged_file(session_id, &fm.filename)?;
+                    parse_file_to_rows(&text, fm, profile.delimiter, &plan.ambiguous_policy)?
+                };
+                let (profile_r, text_r) = read_staged_file(session_id, &weather_map.filename)?;
+                let right = parse_file_to_rows(
+                    &text_r,
+                    &weather_map,
+                    profile_r.delimiter,
+                    &plan.ambiguous_policy,
+                )?;
+                let alignment = plan.join_alignment.unwrap_or(JoinAlignment::FloorHour);
+                join_rows(left, right, alignment, plan.fill_policy)
+            } else {
+                let (profile_l, text_l) = read_staged_file(session_id, &plan.files[0].filename)?;
+                let (profile_r, text_r) = read_staged_file(session_id, &plan.files[1].filename)?;
+                let left = parse_file_to_rows(
+                    &text_l,
+                    &plan.files[0],
+                    profile_l.delimiter,
+                    &plan.ambiguous_policy,
+                )?;
+                let right = parse_file_to_rows(
+                    &text_r,
+                    &plan.files[1],
+                    profile_r.delimiter,
+                    &plan.ambiguous_policy,
+                )?;
+                let alignment = plan.join_alignment.unwrap_or(JoinAlignment::FloorHour);
+                join_rows(left, right, alignment, plan.fill_policy)
+            }
         }
     }
 }
@@ -237,6 +286,91 @@ pub fn get_session_handler(session_id: &str) -> Value {
         Some(s) => json!({"ok": true, "session": s}),
         None => json!({"ok": false, "error": "session not found"}),
     }
+}
+
+const FUSION_PREVIEW_DEFAULT_LIMIT: usize = 2_000;
+const FUSION_PREVIEW_MAX_LIMIT: usize = 10_000;
+
+pub fn fusion_preview_handler(session_id: &str, limit: usize) -> Value {
+    let Some(mut session) = load_session(session_id) else {
+        return json!({
+            "ok": false,
+            "error": "session not found",
+            "hint": "Run UT3 Upload then Preview plan first, or restart edge after rebuild so session routes are live."
+        });
+    };
+    let status = session
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if status != "planned" && status != "previewed" && status != "executed" {
+        return json!({
+            "ok": false,
+            "error": "session has no staged files — upload CSVs via POST /api/csv/import/preview first",
+            "status": status
+        });
+    }
+    let mut plan_val = session.get("plan").cloned().unwrap_or(json!({}));
+    let mut plan: plan::ImportPlan =
+        match serde_json::from_value::<plan::ImportPlan>(plan_val.clone()) {
+            Ok(p) if !p.files.is_empty() => p,
+            _ => {
+                let inferred = infer_ut3_plan_from_session(&session);
+                if inferred.files.is_empty() {
+                    return json!({"ok": false, "error": "session has no staged files"});
+                }
+                plan_val = serde_json::to_value(&inferred).unwrap_or(json!({}));
+                session["plan"] = plan_val.clone();
+                if status == "previewed" {
+                    session["status"] = json!("planned");
+                }
+                let _ = save_session(session_id, &session);
+                inferred
+            }
+        };
+    if plan.files.is_empty() {
+        return json!({"ok": false, "error": "session plan has no file mappings — run Preview plan"});
+    }
+    let rows = match execute_plan_preview(&plan, session_id) {
+        Ok(r) => r,
+        Err(e) => return json!({"ok": false, "error": e}),
+    };
+    let total = rows.len();
+    let cap = limit.clamp(1, FUSION_PREVIEW_MAX_LIMIT);
+    let (columns, grid) = plan::output_rows_to_fusion_grid(&rows, cap);
+    let validation = session
+        .get("validation_report")
+        .cloned()
+        .unwrap_or(json!({}));
+    json!({
+        "ok": true,
+        "session_id": session_id,
+        "dataset_name": plan.output_dataset_name,
+        "status": status,
+        "row_count": total,
+        "preview_row_count": grid.len(),
+        "truncated": total > grid.len(),
+        "columns": columns,
+        "rows": grid,
+        "validation_report": validation,
+        "fusion_url_hint": format!("/csv?session={session_id}"),
+    })
+}
+
+pub fn fusion_preview_limit_from_query(limit: Option<&str>) -> usize {
+    limit
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(FUSION_PREVIEW_DEFAULT_LIMIT)
+        .clamp(1, FUSION_PREVIEW_MAX_LIMIT)
+}
+
+pub fn list_sessions_handler(limit: usize) -> Value {
+    session::list_sessions_handler(limit)
+}
+
+pub fn latest_planned_session_handler() -> Value {
+    session::latest_planned_session_handler()
 }
 
 pub fn delete_session_file_handler(body: &Value) -> Value {

@@ -1,95 +1,61 @@
-# AI-assisted Haystack modeling and assignments
+# AI-assisted Haystack modeling
 
-Open-FDD binds **drivers → Haystack IDs → FDD inputs → DataFusion SQL rules**. AI agents help draft assignments; humans approve before activation.
+Binding chain: **driver ref → Haystack point ID → FDD input → DataFusion SQL**. Agents draft; integrators approve.
 
-## Data flow
+See [ASSIGNMENT_MODEL.md](../ASSIGNMENT_MODEL.md).
 
-```text
-BACnet / Modbus / JSON point
-    → Haystack point ID (point:sat, point:oa-t)
-    → FDD input (sat, oa_t)
-    → SQL rule (fault_raw column)
-    → confirmation timer → fault output
-```
-
-See [ASSIGNMENT_MODEL.md](../ASSIGNMENT_MODEL.md) for the binding contract.
-
-## Read the site model
+## Read model state
 
 ```bash
-curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/model/haystack | jq .
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/model/haystack | jq '.rows | length'
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/model/assignments | jq .
-curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/bacnet/driver/tree | jq '.drivers[0].devices[0].points'
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/bacnet/driver/tree | jq .
 ```
 
-## AI propose assignments (draft only)
+## SPARQL (preferred for analytics)
 
-Agents call **propose** — output stays `needs_review` until an integrator approves in the UI or via API.
+Model queries run against the RDF projection — use SPARQL instead of scanning the raw grid.
+
+```bash
+# Predefined catalog
+curl -s -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8080/api/model/sparql/predefined | jq '.queries[].id'
+
+# Sites
+curl -s -X POST http://127.0.0.1:8080/api/model/sparql \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"query":"PREFIX hs: <https://project-haystack.org/def/> PREFIX ofdd: <https://open-fdd.dev/model#> SELECT ?point ?dis ?equipRef ?fddInput WHERE { ?p a hs:Point . ?p ofdd:haystackId ?point . OPTIONAL { ?p hs:dis ?dis . } OPTIONAL { ?p hs:equipRef ?eq . ?eq ofdd:haystackId ?equipRef . } OPTIONAL { ?p hs:fddInput ?fddInput . } }"}'
+```
+
+Turtle export: `GET /api/model/ttl` · Coverage: `GET /api/dashboard/model-coverage`
+
+Details: [modeling/haystack_dashboard_model.md](../modeling/haystack_dashboard_model.md)
+
+## Propose assignments (draft)
 
 ```bash
 curl -s -X POST http://127.0.0.1:8080/api/fdd-wires/propose-assignments \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"site_id":"site:demo","equipment_type":"ahu"}' | jq '.review_status, .proposals[0]'
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"site_id":"site:demo","equipment_type":"ahu"}' | jq '.review_status'
 ```
 
-Expected:
+Expect `needs_review` — do not activate without human approval.
 
-- `review_status`: `needs_review`
-- Each proposal: `ai_suggested`, confidence in `provenance`
-- No external LLM required in CI — heuristic proposals seed the workflow
-
-## Save human-reviewed assignments
+## Save reviewed bindings
 
 ```bash
 curl -s -X POST http://127.0.0.1:8080/api/model/assignments/save \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "points": [{
-      "haystack_id": "point:oa-t",
-      "driver_bindings": [{"driver":"bacnet","ref":"bacnet:5007:analog-input:1173"}],
-      "fdd_input": "oa_t"
-    }]
-  }' | jq .
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"points":[{"haystack_id":"point:oa-t","driver_bindings":[{"driver":"bacnet","ref":"bacnet:5007:analog-input:1173"}],"fdd_input":"oa_t"}]}'
 ```
 
-## FDD Wires graph (visual)
+## Agent checklist
 
-1. Open dashboard → **FDD Wires** tab
-2. Right-click canvas → **Propose assignments**
-3. Validate graph → approve → activate (integrator only)
+1. Authenticate (never log password or token).
+2. `GET /api/bacnet/driver/tree` — commissioned points.
+3. `POST /api/model/sparql` or predefined queries — model structure.
+4. `GET /api/model/assignments` — current bindings.
+5. `POST /api/fdd-wires/propose-assignments` — draft only.
+6. Present proposals to operator before save or rule activation.
 
-```bash
-curl -s -H "Authorization: Bearer $TOKEN" \
-  'http://127.0.0.1:8080/api/fdd-wires/graphs?site_id=site:demo' | jq .
-```
-
-## Agent prompt snippet
-
-```text
-You are modeling a site on Open-FDD Rust edge.
-
-1. Login as integrator (never print password).
-2. GET /api/bacnet/driver/tree — list commissioned points.
-3. GET /api/model/haystack and /api/model/assignments — current bindings.
-4. POST /api/fdd-wires/propose-assignments for equipment_type ahu — draft only.
-5. Present proposals to the human; do not activate without approval.
-6. Map each driver ref to a Haystack ID before saving SQL rules.
-7. Use /api/fdd-rules/builder-sql to preview SQL from FDD inputs.
-```
-
-## Local test bench example (profile-driven)
-
-Do **not** hardcode device instances or BACnet object IDs in production code. Map your lab bench in a gitignored local profile, for example:
-
-`workspace/smoke-profiles/local/local_validation_profile.local.toml`
-
-| BACnet ref (example) | Haystack ID | FDD input |
-| --- | --- | --- |
-| `bacnet:<device>:analog-input:<instance>` | `point:oa-t` | `oa_t` |
-| `bacnet:<device>:analog-input:<instance>` | `point:oa-h` | `oa_h` |
-| `bacnet:<device>:analog-input:<instance>` | `point:duct-t` | `duct_t` |
-| `bacnet:<device>:analog-input:<instance>` | `point:zone-t` | `zone_t` |
-
-See `workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml.example` for a copy-paste template (placeholders only).
+Lab benches: use gitignored profiles under `workspace/smoke-profiles/local/` — do not hardcode device IDs in production code.

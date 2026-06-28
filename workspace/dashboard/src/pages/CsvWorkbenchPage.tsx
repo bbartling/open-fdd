@@ -10,6 +10,7 @@ import {
   idsFromFilename,
   mergeDatasets,
   numericColumns,
+  suggestMergeKey,
   splitCsvHorizontal,
   splitCsvVertical,
   type CsvDataset,
@@ -17,6 +18,15 @@ import {
 } from "../lib/csvWorkbench";
 import CsvFusionWiresheet from "../wiresheet/CsvFusionWiresheet";
 import CsvUt3ImportPanel from "../components/CsvUt3ImportPanel";
+import CsvWorkflowGuide from "../components/CsvWorkflowGuide";
+import CsvDataAssistant from "../components/CsvDataAssistant";
+import CsvAgentSessionPanel from "../components/CsvAgentSessionPanel";
+import {
+  datasetFromFusionPreview,
+  fetchAgentSessionFusionPreview,
+  saveAgentSessionToArrow,
+  type FusionPreviewResponse,
+} from "../lib/csvAgentSession";
 
 type JobStatus = { ok?: boolean; job_id?: string; rows_committed?: number };
 type ModelPreview = {
@@ -56,6 +66,40 @@ export default function CsvWorkbenchPage() {
   const [ruleOp, setRuleOp] = useState(">");
   const [ruleThreshold, setRuleThreshold] = useState("75");
   const [purgeConfirm, setPurgeConfirm] = useState("");
+  const [ut3SessionId, setUt3SessionId] = useState("");
+  const [agentMeta, setAgentMeta] = useState<FusionPreviewResponse | null>(null);
+
+  const loadAgentSession = useCallback((ds: CsvDataset, sessionId: string, meta: FusionPreviewResponse) => {
+    setUt3SessionId(sessionId);
+    setAgentMeta(meta);
+    setDatasets([ds]);
+    setMergeKey(ds.timestampColumn ?? "ts_local");
+    setMergeMode("append");
+    setStatus(
+      `Agent session loaded — ${meta.row_count?.toLocaleString() ?? ds.rowCount.toLocaleString()} rows. Review preview, then Save to Arrow.`,
+    );
+    setError("");
+  }, []);
+
+  const openFusionFromSession = useCallback(
+    async (sessionId: string) => {
+      if (!hasToken()) {
+        setError("Sign in to load sessions.");
+        return;
+      }
+      setBusy("agent-load");
+      try {
+        const data = await fetchAgentSessionFusionPreview(sessionId);
+        if (!data.ok) throw new Error(data.error ?? "load failed");
+        loadAgentSession(datasetFromFusionPreview(data, sessionId), sessionId, data);
+      } catch (e) {
+        setError(formatApiError(e));
+      } finally {
+        setBusy("");
+      }
+    },
+    [loadAgentSession],
+  );
 
   const commitFilename = useMemo(() => {
     if (datasets.length === 1) return datasets[0].name;
@@ -155,8 +199,16 @@ export default function CsvWorkbenchPage() {
       for (const file of list) {
         added.push(fileToDataset(file, await file.text()));
       }
-      setDatasets((prev) => [...prev, ...added]);
-      if (added[0]?.timestampColumn) setMergeKey(added[0].timestampColumn);
+      setDatasets((prev) => {
+        const next = [...prev, ...added];
+        setMergeKey(suggestMergeKey(next));
+        const allHaveDate = next.every((d) => d.columns.includes("Date"));
+        const hasWeather = next.some((d) => /meteo|weather|open_meteo/i.test(d.name));
+        if (next.length > 1 && allHaveDate && !hasWeather) {
+          setMergeMode("append");
+        }
+        return next;
+      });
       setStatus(`Loaded ${added.length} file(s).`);
     } catch (e) {
       setError(formatApiError(e));
@@ -358,7 +410,31 @@ export default function CsvWorkbenchPage() {
         subtitle="Server-side Rust ingest (append, join, DST-aware timestamps, Arrow save) or client fusion wiresheet below."
       />
 
-      <CsvUt3ImportPanel />
+      <CsvWorkflowGuide variant="ut3" />
+      <CsvUt3ImportPanel
+        onPlanReady={(sid) => {
+          setUt3SessionId(sid);
+          setStatus(`UT3 plan ready (session ${sid}). Open in fusion preview when ready.`);
+        }}
+        onOpenInFusion={(sid) => void openFusionFromSession(sid)}
+      />
+
+      <CsvAgentSessionPanel
+        activeSessionId={ut3SessionId}
+        suggestedSessionId={ut3SessionId}
+        onLoaded={loadAgentSession}
+        onSaved={({ plotUrl, modelUrl, datasetId, siteId }) => {
+          setStatus(
+            `Arrow dataset "${datasetId ?? "saved"}" synced to historian${siteId ? ` (${siteId})` : ""}. Open Plot tab to chart kW + weather.`,
+          );
+          if (plotUrl || modelUrl) {
+            setAgentMeta((m) => m ?? { ok: true });
+          }
+        }}
+      />
+
+      <CsvWorkflowGuide variant="fusion" />
+      <CsvDataAssistant mergeError={mergeError} fileCount={datasets.length} />
 
       <hr className="section-divider" />
 
@@ -418,19 +494,19 @@ export default function CsvWorkbenchPage() {
               <label className="field">
                 <span className="field-label">Merge mode</span>
                 <select value={mergeMode} onChange={(e) => setMergeMode(e.target.value as MergeMode)}>
-                  <option value="inner">Join on timestamp (inner)</option>
-                  <option value="outer">Join on timestamp (outer)</option>
-                  <option value="append">Append rows (stack files)</option>
+                  <option value="append">Append rows (stack school-year files)</option>
+                  <option value="inner">Join on timestamp (same column name in all files)</option>
                 </select>
               </label>
             </div>
           </section>
 
           {merged && merged.columns.length ? (
-            <section className="panel csv-preview-panel">
+            <section className="panel csv-preview-panel csv-preview-panel--primary">
               <h3 className="panel-title">Merged preview ({merged.rowCount.toLocaleString()} rows)</h3>
               <p className="muted">
-                Join/append on <strong>{mergeKey}</strong> ({mergeMode}) — first 12 rows shown.
+                {mergeMode === "append" ? "Appended" : "Joined"} on <strong>{mergeKey}</strong> — first 12 rows
+                shown. Export or commit when this looks correct.
               </p>
               <div className="table-wrap csv-preview-table">
                 <table>
@@ -519,7 +595,70 @@ export default function CsvWorkbenchPage() {
           </section>
 
           <section className="panel">
-            <h3 className="panel-title">Split &amp; commit</h3>
+            <h3 className="panel-title">Finish — commit or export</h3>
+            <p className="muted">
+              {ut3SessionId
+                ? "This preview came from a UT3/agent session — use Save to Arrow (session) above or below. Client commit uploads the preview grid to the historian."
+                : "Commit writes the merged CSV to the Arrow historian and Haystack model. Export downloads a copy for inspection."}
+            </p>
+            <div className="toolbar">
+              {ut3SessionId ? (
+                <button
+                  type="button"
+                  className="primary-btn"
+                  disabled={!!busy}
+                  onClick={async () => {
+                    setBusy("arrow");
+                    try {
+                      const out = await saveAgentSessionToArrow(ut3SessionId);
+                      if (!out.ok) throw new Error(out.error ?? "save failed");
+                      setStatus(`Arrow dataset saved (${agentMeta?.dataset_name ?? ut3SessionId}).`);
+                    } catch (e) {
+                      setError(formatApiError(e));
+                    } finally {
+                      setBusy("");
+                    }
+                  }}
+                >
+                  {busy === "arrow" ? "Saving…" : "Save to Arrow store (session)"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={ut3SessionId ? "secondary-btn" : "primary-btn"}
+                disabled={!!busy || !merged}
+                onClick={() => void commitToHistorian()}
+              >
+                {busy === "commit" ? "Committing…" : "Commit → historian + model"}
+              </button>
+              <button
+                type="button"
+                className="secondary-btn"
+                disabled={!merged}
+                onClick={() => merged && downloadCsv("openfdd-merged.csv", merged.columns, merged.rows)}
+              >
+                Export merged CSV
+              </button>
+              <button type="button" className="secondary-btn" disabled={!!busy} onClick={() => void createRcxReport()}>
+                Draft RCx PDF
+              </button>
+              {numericCols.length ? (
+                <a className="secondary-btn" href="/plot">
+                  Open in Plots
+                </a>
+              ) : null}
+              <button type="button" className="linkish-btn" onClick={() => setDatasets([])}>
+                Clear all
+              </button>
+            </div>
+          </section>
+
+          <section className="panel">
+            <h3 className="panel-title">Advanced — split a file</h3>
+            <p className="muted">
+              Optional: break one wide or long CSV into two files before merge. Select split settings, then use Split on
+              a file in the list below.
+            </p>
             <div className="form-grid">
               <label className="field">
                 <span className="field-label">Vertical split after col #</span>
@@ -530,26 +669,7 @@ export default function CsvWorkbenchPage() {
                 <input type="number" min={1} value={splitRows} onChange={(e) => setSplitRows(Number(e.target.value))} />
               </label>
             </div>
-            <div className="toolbar">
-            <button type="button" className="secondary-btn" disabled={!merged} onClick={() => merged && downloadCsv("openfdd-merged.csv", merged.columns, merged.rows)}>
-              Export merged CSV
-            </button>
-            <button type="button" className="secondary-btn" disabled={!!busy || !merged} onClick={() => void commitToHistorian()}>
-              {busy === "commit" ? "Committing…" : "Commit → historian + model"}
-            </button>
-            <button type="button" className="secondary-btn" disabled={!!busy} onClick={() => void createRcxReport()}>
-              Draft RCx PDF
-            </button>
-            {numericCols.length ? (
-              <a className="secondary-btn" href="/plot">
-                Open in Plots
-              </a>
-            ) : null}
-            <button type="button" className="linkish-btn" onClick={() => setDatasets([])}>
-              Clear all
-            </button>
-          </div>
-        </section>
+          </section>
         </>
       ) : null}
 

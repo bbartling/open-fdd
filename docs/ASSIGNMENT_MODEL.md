@@ -36,6 +36,7 @@ GET  /api/model/assignments
 POST /api/model/assignments/save
 POST /api/model/assignments/resolve
 GET  /api/model/algorithm-bindings
+POST /api/model/sparql          # explore model (SELECT)
 GET  /api/control/cdl/bindings
 POST /api/control/cdl/bindings/save
 ```

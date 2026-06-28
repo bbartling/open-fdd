@@ -1,32 +1,74 @@
 import { Link } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
+import { apiFetch, hasToken } from "../lib/api";
+import { useEffect, useState } from "react";
 
 export default function AgentPage() {
+  const [toolCount, setToolCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!hasToken()) return;
+    apiFetch<{ tools?: unknown[] }>("/api/agent/tools")
+      .then((j) => setToolCount(j.tools?.length ?? 0))
+      .catch(() => setToolCount(null));
+  }, []);
+
   return (
     <div className="page page-wide">
       <PageHeader
-        title="AI Agent"
-        subtitle="Ollama chat, Codex tools, and building-insight narratives — planned for a future release."
+        title="MCP / Agent"
+        subtitle="Connect Cursor or Codex to the Rust edge via the openfdd-mcp sidecar (read-first tools)."
       />
 
-      <div className="panel algorithms-coming-soon">
-        <p className="algorithms-badge">COMING SOON</p>
-        <h2>Interactive agent tab</h2>
-        <p className="muted">
-          This tab will host local Ollama chat, tool use against the Haystack model and historian, and optional
-          Codex-assisted commissioning. The Rust edge already exposes agent REST hooks for automation; operator chat
-          UI is not enabled in this build.
+      <section className="panel">
+        <h3 className="panel-title">Model Context Protocol (MCP)</h3>
+        <p>
+          MCP exposes JWT-authenticated bridge APIs as tools for external agents. Use it for Haystack SPARQL, driver
+          status, BACnet reads, and CSV/model workflows — not for unsupervised field-bus writes.
         </p>
         <ul>
-          <li>Building context from Haystack + SQL FDD rules</li>
-          <li>Commissioning JSON assist (import/export workflow)</li>
-          <li>Fault narrative and operator Q&amp;A</li>
+          <li>
+            <code>openfdd_model_sparql</code> — query the Haystack RDF model
+          </li>
+          <li>
+            <code>openfdd_model_coverage</code> — mapped vs unmapped points
+          </li>
+          <li>
+            <code>openfdd_haystack_read</code> · <code>openfdd_bacnet_read</code> — live OT reads
+          </li>
         </ul>
         <p className="muted">
-          Use <Link to="/sql-fdd">SQL FDD Rules</Link> and{" "}
-          <Link to="/live-fdd-validation">Live FDD Validation</Link> for bench proof today.
+          Setup: repository <code>mcp/README.md</code> · contract{" "}
+          <code>docs/agent/openfdd-mcp-tool-contract.md</code>
         </p>
-      </div>
+        {toolCount != null ? (
+          <p className="ok">
+            Bridge reports <strong>{toolCount}</strong> REST tools via <code>/api/agent/tools</code>.
+          </p>
+        ) : null}
+      </section>
+
+      <section className="panel">
+        <h3 className="panel-title">CSV data assistant (external agent)</h3>
+        <p className="muted">
+          For Lake Geneva–style UT3 merges, ask your agent to: profile uploads via{" "}
+          <code>POST /api/csv/import/preview</code>, run <code>POST /api/csv/import/plan</code>, validate row counts,
+          then save. On the CSV tab, prefer <strong>Append</strong> for four school-year kW files (
+          <code>Date</code> + <code>kW</code>).
+        </p>
+        <p>
+          <Link to="/csv">Open CSV Fusion / UT3 Import</Link>
+        </p>
+      </section>
+
+      <section className="panel">
+        <h3 className="panel-title">In-app chat (deferred)</h3>
+        <p className="muted">
+          Built-in Ollama operator chat is not enabled in 3.2.x. Use MCP + Cursor on the bench, or{" "}
+          <Link to="/sql-fdd">SQL FDD Rules</Link> and <Link to="/live-fdd-validation">Validation runs</Link> for
+          bench proof.
+        </p>
+      </section>
     </div>
   );
 }

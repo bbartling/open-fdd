@@ -1,40 +1,101 @@
 openapi: 3.1.0
 info:
   title: Open-FDD Rust Edge API
-  version: 0.1.0
+  version: 3.2.3
+  description: |
+    Partial spec — full route list from `GET /api/agent/tools` on a running site.
+    See docs/AI_AGENT_API.md for narrative reference.
 security:
   - bearerAuth: []
 paths:
   /api/health:
     get:
       security: []
+      summary: Liveness
       responses:
-        "200": { description: OK }
+        "200":
+          description: OK
   /api/auth/login:
     post:
       security: []
+      summary: Obtain JWT
       responses:
-        "200": { description: JWT token }
+        "200":
+          description: Token payload
   /api/health/stack:
     get:
+      summary: Stack health
       responses:
-        "200": { description: Stack health }
+        "200":
+          description: Bridge and sidecar status
   /api/agent/tools:
     get:
+      summary: Agent tool manifest
       responses:
-        "200": { description: Agent tool list }
+        "200":
+          description: Tool list for external agents
+  /api/model/haystack:
+    get:
+      summary: Haystack model grid
+      responses:
+        "200":
+          description: Grid JSON with rows
+  /api/model/ttl:
+    get:
+      summary: RDF Turtle export
+      responses:
+        "200":
+          description: text/turtle
+          content:
+            text/turtle:
+              schema:
+                type: string
+  /api/model/sparql/predefined:
+    get:
+      summary: SPARQL query catalog
+      responses:
+        "200":
+          description: Predefined SELECT queries
+  /api/model/sparql:
+    post:
+      summary: Execute SPARQL SELECT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query:
+                  type: string
+      responses:
+        "200":
+          description: Bindings and row count
+  /api/model/assignments:
+    get:
+      summary: Driver and FDD bindings
+      responses:
+        "200":
+          description: Assignment layer
+  /api/model/sites:
+    get:
+      summary: Sites and active site
+      responses:
+        "200":
+          description: Site list
   /api/bacnet/driver/tree:
     get:
+      summary: BACnet driver tree
       responses:
-        "200": { description: BACnet driver tree }
-  /api/rules/save:
-    post:
+        "200":
+          description: Devices and points
+  /api/dashboard/model-coverage:
+    get:
+      summary: Model coverage metrics
       responses:
-        "200": { description: Save rule }
-  /api/rules/batch:
-    post:
-      responses:
-        "200": { description: Run batch FDD rules }
+        "200":
+          description: Equipment and point counts
 components:
   securitySchemes:
     bearerAuth:

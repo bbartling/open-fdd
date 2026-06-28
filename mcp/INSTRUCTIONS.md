@@ -16,6 +16,10 @@ Use **commission** API (`OPENFDD_COMMISSION_BASE`, default `http://127.0.0.1:909
 
 See repository doc `docs/agent/bench-driver-setup-wsl-agent.md` for WSL agent workflow, validation script `./scripts/openfdd_drivers_validate.sh`, and parity targets.
 
+## Model (Haystack RDF)
+
+Use `openfdd_model_sparql_catalog` then `openfdd_model_sparql` with a SELECT query. Do not scan `/api/model/haystack` rows in agent logic when SPARQL suffices.
+
 ## Safety
 
 Phase 2 write tools are **not** implemented. Never log tokens or Haystack passwords.

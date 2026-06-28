@@ -36,6 +36,10 @@ const CANDIDATE_NAMES: &[&str] = &[
 
 pub fn is_timestamp_candidate(name: &str) -> bool {
     let lower = name.trim().to_lowercase();
+    // IANA label column in Open-Meteo exports — not a timestamp series.
+    if lower == "timezone" || lower == "tz" {
+        return false;
+    }
     CANDIDATE_NAMES
         .iter()
         .any(|c| lower == *c || lower.contains("date") || lower.contains("time"))

@@ -515,6 +515,36 @@ pub fn preview_rows(rows: &[OutputRow], limit: usize) -> PlanPreview {
     }
 }
 
+/// Grid for dashboard fusion preview (agent session → CSV tab before Feather save).
+pub fn output_rows_to_fusion_grid(
+    rows: &[OutputRow],
+    limit: usize,
+) -> (Vec<String>, Vec<Vec<String>>) {
+    let preview = preview_rows(rows, rows.len().min(limit.max(1)));
+    let columns = preview.column_names;
+    let cap = limit.min(rows.len());
+    let mut grid = Vec::with_capacity(cap);
+    for r in rows.iter().take(cap) {
+        let mut row = Vec::with_capacity(columns.len());
+        for c in &columns {
+            let v = match c.as_str() {
+                "ts_utc" => r.ts_utc.map(|u| u.to_rfc3339()).unwrap_or_default(),
+                "ts_local" => r.ts_local.clone(),
+                "timezone" => r.timezone.clone(),
+                "source_timestamp_raw" => r.source_timestamp_raw.clone(),
+                "source_timestamp_parse_status" => r.source_timestamp_parse_status.clone(),
+                "source_file" => r.source_file.clone(),
+                "source_row_number" => r.source_row_number.to_string(),
+                "fill_created" => r.fill_created.to_string(),
+                other => r.values.get(other).cloned().unwrap_or_default(),
+            };
+            row.push(v);
+        }
+        grid.push(row);
+    }
+    (columns, grid)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -571,6 +601,11 @@ pub fn plan_from_json(body: &Value) -> Result<ImportPlan, String> {
     serde_json::from_value(body.clone()).map_err(|e| e.to_string())
 }
 
+pub fn is_weather_filename(name: &str) -> bool {
+    let n = name.to_lowercase();
+    n.contains("meteo") || n.contains("weather") || n.contains("open_meteo")
+}
+
 pub fn auto_detect_mapping(filename: &str, headers: &[String]) -> FileMapping {
     let ts_candidates = headers
         .iter()
@@ -579,7 +614,11 @@ pub fn auto_detect_mapping(filename: &str, headers: &[String]) -> FileMapping {
         .unwrap_or_else(|| headers.first().cloned().unwrap_or_else(|| "Date".into()));
     let value_columns: Vec<String> = headers
         .iter()
-        .filter(|h| *h != &ts_candidates)
+        .filter(|h| {
+            **h != ts_candidates
+                && h.trim().to_lowercase() != "timezone"
+                && h.trim().to_lowercase() != "tz"
+        })
         .take(20)
         .cloned()
         .collect();
@@ -588,5 +627,76 @@ pub fn auto_detect_mapping(filename: &str, headers: &[String]) -> FileMapping {
         timestamp_column: ts_candidates,
         timezone: "America/Chicago".into(),
         value_columns,
+    }
+}
+
+/// Build a UT3 import plan from staged session files (school kW + optional weather).
+pub fn infer_ut3_plan_from_session(session: &Value) -> ImportPlan {
+    let files_arr = session
+        .get("files")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut file_mappings = Vec::new();
+    for f in &files_arr {
+        let filename = f.get("filename").and_then(|v| v.as_str()).unwrap_or("");
+        if filename.is_empty() {
+            continue;
+        }
+        let headers: Vec<String> = f
+            .get("profile")
+            .and_then(|p| p.get("headers"))
+            .and_then(|h| h.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut mapping = auto_detect_mapping(filename, &headers);
+        if headers.iter().any(|h| h == "Date") {
+            mapping.timestamp_column = "Date".into();
+        }
+        if is_weather_filename(filename) {
+            if headers.iter().any(|h| h == "time_local") {
+                mapping.timestamp_column = "time_local".into();
+            }
+            mapping.value_columns = headers
+                .iter()
+                .filter(|h| {
+                    **h != mapping.timestamp_column
+                        && h.trim().to_lowercase() != "timezone"
+                        && h.trim().to_lowercase() != "tz"
+                })
+                .take(12)
+                .cloned()
+                .collect();
+        } else if mapping.value_columns.is_empty() {
+            mapping.value_columns = vec!["kW".into()];
+        }
+        file_mappings.push(mapping);
+    }
+    let has_weather = file_mappings
+        .iter()
+        .any(|m| is_weather_filename(&m.filename));
+    let school_count = file_mappings
+        .iter()
+        .filter(|m| !is_weather_filename(&m.filename))
+        .count();
+    let mode = if has_weather && school_count >= 1 {
+        OperationMode::Join
+    } else if school_count > 1 {
+        OperationMode::Append
+    } else {
+        OperationMode::Single
+    };
+    ImportPlan {
+        mode,
+        files: file_mappings,
+        join_alignment: Some(JoinAlignment::FloorHour),
+        fill_policy: FillPolicy::Forward,
+        ambiguous_policy: "first".into(),
+        output_dataset_name: "school_kw_merged".into(),
+        ..Default::default()
     }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearToken, fetchAuthMe, fetchAuthStatus, getBridgeBase, hasToken } from "../lib/api";
 import { useTheme } from "../contexts/theme-context";
 import StackStatusStrip from "./StackStatusStrip";
@@ -59,7 +59,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Settings",
     items: [
-      { to: "/agent", icon: "🤖", label: "AI Agent", protected: true, disabled: true, disabledHint: "Coming soon — Ollama & Codex" },
+      { to: "/agent", icon: "⎇", label: "MCP / Agent", protected: true },
     ],
   },
 ];
@@ -135,6 +135,12 @@ export default function AppLayout() {
               {roleChip}
             </span>
           ) : null}
+          <Link to="/agent" className="brand-mcp-link" title="MCP tools for Cursor / Codex">
+            <span className="brand-mcp-icon" aria-hidden="true">
+              ⎇
+            </span>
+            MCP
+          </Link>
         </div>
         <p className="sidebar-hint">Building summary is public; sign in to browse all tabs (operator read-only).</p>
         <StackStatusStrip />

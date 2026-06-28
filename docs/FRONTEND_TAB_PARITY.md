@@ -9,7 +9,7 @@ This document maps the old Open-FDD UI areas to the Rust-only UI.
 | BACnet commission | BACnet Commission | `/api/bacnet/commission/status` |
 | BACnet poll | BACnet Poll | `/api/bacnet/poll/status` |
 | Niagara | Haystack Model | `/api/haystack/read` |
-| Data model | Haystack Model | `/api/model/haystack` |
+| Data model | Haystack Model | `/api/model/haystack`, `/api/model/sparql` |
 | Rule Lab | Rule Lab | `/api/rules/save` |
 | FDD | DataFusion FDD | `/api/fdd/run` |
 | Modbus | Modbus | `/api/modbus/points` |
@@ -21,7 +21,7 @@ This document maps the old Open-FDD UI areas to the Rust-only UI.
 ## Converted or removed
 
 - Niagara WebSocket tab is converted to Project Haystack read/nav/ops.
-- Data model is Haystack-only.
+- Data model is Haystack + SPARQL over RDF.
 - FDD is DataFusion SQL only.
 - CDL algorithms get a dedicated tab.
 - MCP/RAG and Ollama are deferred.
