@@ -14,9 +14,9 @@ pub use parse::{sanitize_filename, ParseProfile};
 pub use plan::{auto_detect_mapping, plan_from_json, ImportPlan, OperationMode, OutputRow};
 pub use session::{create_session, load_session, save_session, stage_file};
 
-use plan::{append_rows, join_rows, parse_file_to_rows, preview_rows, FileMapping, JoinAlignment};
+use plan::{append_rows, join_rows, parse_file_to_rows, preview_rows, JoinAlignment};
 use serde_json::{json, Value};
-use session::{profile_to_json, read_staged_file};
+use session::read_staged_file;
 
 pub fn preview_handler(content_type: &str, body: &[u8]) -> Value {
     let files = match upload::parse_upload(content_type, body) {
@@ -182,10 +182,7 @@ fn execute_plan_preview(
                 profile_r.delimiter,
                 &plan.ambiguous_policy,
             )?;
-            let alignment = plan
-                .join_alignment
-                .clone()
-                .unwrap_or(JoinAlignment::FloorHour);
+            let alignment = plan.join_alignment.unwrap_or(JoinAlignment::FloorHour);
             join_rows(left, right, alignment, plan.fill_policy)
         }
     }

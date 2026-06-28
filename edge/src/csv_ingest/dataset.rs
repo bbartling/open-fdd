@@ -1,7 +1,7 @@
 //! Dataset registry and Arrow IPC persistence.
 
 use crate::csv_ingest::plan::OutputRow;
-use arrow::array::{BooleanArray, Float64Array, StringArray, TimestampMillisecondArray};
+use arrow::array::{BooleanArray, StringArray, TimestampMillisecondArray};
 use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use arrow::ipc::writer::FileWriter;
 use arrow::record_batch::RecordBatch;
@@ -78,7 +78,7 @@ pub fn rows_to_batch(rows: &[OutputRow], value_keys: &[String]) -> Result<Record
         fields.push(Field::new(k, DataType::Utf8, true));
     }
     let schema = Arc::new(Schema::new(fields));
-    let n = rows.len();
+    let _row_count = rows.len();
 
     let ts_utc: TimestampMillisecondArray = rows
         .iter()
@@ -269,7 +269,7 @@ fn arrow_cell_json(col: &Arc<dyn arrow::array::Array>, row: usize) -> Value {
             json!(a.value(row))
         }
         DataType::Float64 => {
-            let a = col.as_any().downcast_ref::<Float64Array>().unwrap();
+            let a = col.as_any().downcast_ref::<arrow::array::Float64Array>().unwrap();
             json!(a.value(row))
         }
         DataType::Boolean => {

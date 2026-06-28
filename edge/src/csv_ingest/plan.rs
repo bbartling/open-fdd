@@ -11,18 +11,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum OperationMode {
+    #[default]
     Single,
     Append,
     Join,
-}
-
-impl Default for OperationMode {
-    fn default() -> Self {
-        Self::Single
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,21 +30,16 @@ pub enum JoinAlignment {
     ResampleKwHourly,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum FillPolicy {
+    #[default]
     None,
     Forward,
     Backward,
     Linear,
     Constant,
     AcknowledgeOnly,
-}
-
-impl Default for FillPolicy {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,9 +127,8 @@ pub fn parse_file_to_rows(
         .trim(csv::Trim::All)
         .from_reader(csv_text.as_bytes());
     let mut rows = Vec::new();
-    let mut row_num = 0u64;
-    for rec in rdr.records() {
-        row_num += 1;
+    for (idx, rec) in rdr.records().enumerate() {
+        let row_num = (idx + 1) as u64;
         let rec = rec.map_err(|e| e.to_string())?;
         let raw_ts = rec.get(ts_idx).unwrap_or("").to_string();
         let mut values = BTreeMap::new();
