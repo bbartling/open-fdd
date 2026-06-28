@@ -11,6 +11,7 @@ export type StackService = {
   configured: boolean;
   detail: string | Record<string, unknown>;
   url?: string;
+  href?: string;
 };
 
 export type StackHealth = {

@@ -553,6 +553,15 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent"],
             model::commissioning::sync_ttl_json(),
         ),
+        ("GET", p) if p.starts_with("/api/model/ttl") => {
+            let ttl = model::rdf::haystack_to_turtle();
+            response(
+                &mut stream,
+                "200 OK",
+                "text/turtle; charset=utf-8",
+                ttl.as_bytes(),
+            )
+        }
         ("GET", "/api/haystack/about") => raw_json(&mut stream, &drivers::haystack::about_json()),
         ("GET", "/api/haystack/config") => {
             raw_json(&mut stream, &drivers::haystack::config_get_json())
@@ -997,6 +1006,12 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &principal,
             &["integrator", "agent"],
             reports::from_validation_run(&parse_json_body_or_empty(&body)),
+        ),
+        ("POST", "/api/reports/from-fdd-sql-run") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            reports::from_fdd_sql_run(&parse_json_body_or_empty(&body)),
         ),
         ("GET", "/api/reports/rcx/list") => require_role(
             &mut stream,
@@ -1444,7 +1459,7 @@ fn handle_csv_ingest_dynamic(
     path: &str,
 ) -> Option<std::io::Result<()>> {
     let parts = path_parts(path);
-    if parts.len() >= 5
+    if parts.len() >= 4
         && parts[0] == "api"
         && parts[1] == "csv"
         && parts[2] == "import"
@@ -1453,11 +1468,41 @@ fn handle_csv_ingest_dynamic(
         if method != "GET" {
             return None;
         }
+        if parts.len() == 4 {
+            let limit = query_param(path, "limit")
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(20)
+                .clamp(1, 100);
+            return Some(require_role(
+                stream,
+                principal,
+                &["integrator", "agent", "operator"],
+                csv_ingest::list_sessions_handler(limit),
+            ));
+        }
+        if parts.len() == 6 && parts[4] == "latest" && parts[5] == "planned" {
+            return Some(require_role(
+                stream,
+                principal,
+                &["integrator", "agent", "operator"],
+                csv_ingest::latest_planned_session_handler(),
+            ));
+        }
         let session_id = parts[4];
         if session_id.contains("..") {
             return Some(json_response(
                 stream,
                 json!({"ok": false, "error": "invalid session id"}),
+            ));
+        }
+        if parts.get(5) == Some(&"fusion-preview") {
+            let limit =
+                csv_ingest::fusion_preview_limit_from_query(query_param(path, "limit").as_deref());
+            return Some(require_role(
+                stream,
+                principal,
+                &["integrator", "agent", "operator"],
+                csv_ingest::fusion_preview_handler(session_id, limit),
             ));
         }
         return Some(require_role(

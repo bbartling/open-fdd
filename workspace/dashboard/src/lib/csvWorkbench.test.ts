@@ -4,6 +4,7 @@ import {
   fileToDataset,
   mergeDatasets,
   parseCsvText,
+  suggestMergeKey,
   splitCsvHorizontal,
   splitCsvVertical,
   type CsvDataset,
@@ -97,6 +98,21 @@ describe("csvWorkbench", () => {
     const merged = mergeDatasets([a, b], "Date", "inner");
     expect(merged.rowCount).toBe(1);
     expect(merged.rows[0][0]).toBe("2024-01-01");
+  });
+
+  it("does not treat timezone column as timestamp", () => {
+    const text = "time_local,temperature,timezone\n2024-01-01T00:00,32,America/Chicago\n";
+    const p = parseCsvText(text);
+    expect(p.timestampColumn).toBe("time_local");
+  });
+
+  it("suggestMergeKey prefers Date when school files differ from weather", () => {
+    const school = fileToDataset({ name: "School_2013_KW.csv", size: 1 } as File, "Date,kW\n1/1/13,100\n");
+    const weather = fileToDataset(
+      { name: "lake_geneva_open_meteo.csv", size: 1 } as File,
+      "time_local,temp,timezone\n2024-01-01T00:00,32,America/Chicago\n",
+    );
+    expect(suggestMergeKey([school, weather])).toBe("Date");
   });
 
   it("splits vertically and horizontally", () => {

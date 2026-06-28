@@ -9,5 +9,6 @@ pub mod csv_import;
 pub mod csv_workbench;
 pub mod persist;
 pub mod query;
+pub mod rdf;
 pub mod scope;
 pub mod sparql;

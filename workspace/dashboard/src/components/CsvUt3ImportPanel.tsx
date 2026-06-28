@@ -65,7 +65,13 @@ async function fileToBase64(file: File): Promise<string> {
   return btoa(binary);
 }
 
-export default function CsvUt3ImportPanel() {
+type Props = {
+  onPlanReady?: (sessionId: string) => void;
+  onOpenInFusion?: (sessionId: string) => void;
+  autoOpenFusion?: boolean;
+};
+
+export default function CsvUt3ImportPanel({ onPlanReady, onOpenInFusion, autoOpenFusion = true }: Props) {
   const [files, setFiles] = useState<FileProfile[]>([]);
   const [sessionId, setSessionId] = useState("");
   const [busy, setBusy] = useState("");
@@ -114,12 +120,27 @@ export default function CsvUt3ImportPanel() {
       if (!out.ok && !out.session_id) throw new Error(out.error ?? "preview failed");
       setSessionId(out.session_id ?? "");
       setFiles(out.files ?? []);
-      const first = out.files?.[0]?.profile;
+      const profiles = out.files ?? [];
+      const first = profiles[0]?.profile;
+      const weather = profiles.find((f) => /meteo|weather|open_meteo/i.test(f.filename));
+      const school = profiles.find((f) => /school|kw/i.test(f.filename));
       if (first?.headers?.length) {
         const tsCand = first.timestamp_candidates?.[0]?.[0];
         if (tsCand != null && first.headers[tsCand]) setTsCol(first.headers[tsCand]!);
         const vals = first.headers.filter((h) => h !== first.headers![tsCand ?? 0]).slice(0, 3);
         if (vals.length) setValueCols(vals.join(", "));
+      }
+      if (school?.profile?.headers?.includes("Date")) setTsCol("Date");
+      if (weather?.profile?.headers?.includes("time_local")) setWxTsCol("time_local");
+      else if (weather?.profile?.headers?.includes("timezone")) {
+        setWxTsCol(weather.profile.headers.find((h) => h === "time_local") ?? "time_local");
+      }
+      if (profiles.length >= 4 && profiles.filter((f) => /school|kw/i.test(f.filename)).length >= 2) {
+        setMode("append");
+        setDatasetName("school_kw_merged");
+      } else if (school && weather) {
+        setMode("join");
+        setJoinAlign("floor_hour");
       }
     } catch (e) {
       setError(formatApiError(e));
@@ -138,27 +159,39 @@ export default function CsvUt3ImportPanel() {
     try {
       const fileMappings =
         mode === "join" && files.length >= 2
-          ? [
-              {
-                filename: files[0]!.filename,
-                timestamp_column: tsCol,
+          ? (() => {
+              const weatherFile =
+                files.find((f) => /meteo|weather|open_meteo/i.test(f.filename)) ?? files[files.length - 1]!;
+              const schoolFiles = files.filter(
+                (f) => f !== weatherFile && !/meteo|weather|open_meteo/i.test(f.filename),
+              );
+              const schools = schoolFiles.length ? schoolFiles : [files[0]!];
+              return [
+                ...schools.map((f) => ({
+                  filename: f.filename,
+                  timestamp_column: f.profile?.headers?.includes("Date") ? "Date" : tsCol,
+                  timezone,
+                  value_columns: valueCols.split(",").map((s) => s.trim()).filter(Boolean),
+                })),
+                {
+                  filename: weatherFile.filename,
+                  timestamp_column: weatherFile.profile?.headers?.includes("time_local") ? "time_local" : wxTsCol,
+                  timezone,
+                  value_columns:
+                    weatherFile.profile?.headers
+                      ?.filter((h) => h !== "time_local" && h !== "timezone" && h !== "Date")
+                      .slice(0, 12) ?? [],
+                },
+              ];
+            })()
+          : files
+              .filter((f) => mode !== "append" || !/meteo|weather|open_meteo/i.test(f.filename))
+              .map((f) => ({
+                filename: f.filename,
+                timestamp_column: f.profile?.headers?.includes("Date") ? "Date" : tsCol,
                 timezone,
                 value_columns: valueCols.split(",").map((s) => s.trim()).filter(Boolean),
-              },
-              {
-                filename: files[1]!.filename,
-                timestamp_column: wxTsCol,
-                timezone,
-                value_columns:
-                  files[1]?.profile?.headers?.filter((h) => h !== wxTsCol).slice(0, 8) ?? [],
-              },
-            ]
-          : files.map((f) => ({
-              filename: f.filename,
-              timestamp_column: tsCol,
-              timezone,
-              value_columns: valueCols.split(",").map((s) => s.trim()).filter(Boolean),
-            }));
+              }));
 
       const out = await apiFetch<{
         ok?: boolean;
@@ -182,12 +215,14 @@ export default function CsvUt3ImportPanel() {
       if (!out.ok) throw new Error(out.error ?? "plan failed");
       setPreview(out.preview ?? null);
       setValidation(out.validation_report ?? null);
+      if (sessionId && onPlanReady) onPlanReady(sessionId);
+      if (sessionId && autoOpenFusion && onOpenInFusion) onOpenInFusion(sessionId);
     } catch (e) {
       setError(formatApiError(e));
     } finally {
       setBusy("");
     }
-  }, [sessionId, mode, files, tsCol, wxTsCol, timezone, valueCols, datasetName, fillPolicy, joinAlign]);
+  }, [sessionId, mode, files, tsCol, wxTsCol, timezone, valueCols, datasetName, fillPolicy, joinAlign, onPlanReady, onOpenInFusion, autoOpenFusion]);
 
   const executeSave = useCallback(async () => {
     if (!sessionId) return;
@@ -250,6 +285,16 @@ export default function CsvUt3ImportPanel() {
         <span>Drop CSV files or click to browse</span>
       </div>
 
+      {sessionId ? (
+        <p className="ok csv-session-id-line">
+          <strong>Rust import session:</strong> <code>{sessionId}</code>
+          {" · "}
+          <a href={`/csv?session=${encodeURIComponent(sessionId)}`}>fusion preview link</a>
+          {" · "}
+          shown after upload — agent uses this ID to reload your cleaned merge
+        </p>
+      ) : null}
+
       {files.length > 0 && (
         <div className="csv-ut3-files">
           <h3>File profiles</h3>
@@ -281,6 +326,19 @@ export default function CsvUt3ImportPanel() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {mode === "join" && files.length > 2 && (
+        <p className="muted csv-ut3-hint">
+          Join uses one kW file + weather file (auto-selected by filename). Other files are ignored in join mode — use
+          Append to stack all school years first.
+        </p>
+      )}
+      {mode === "append" && files.some((f) => /meteo|weather/i.test(f.filename)) && (
+        <p className="muted csv-ut3-hint">
+          Append mode skips weather files. Use Join to add Open-Meteo columns, or remove weather from the upload for
+          append-only.
+        </p>
       )}
 
       <div className="csv-ut3-controls grid-2">
@@ -348,6 +406,11 @@ export default function CsvUt3ImportPanel() {
         <button type="button" disabled={!!busy || !sessionId} onClick={() => void buildPlan()}>
           Preview plan
         </button>
+        {preview && sessionId && onOpenInFusion ? (
+          <button type="button" className="secondary-btn" disabled={!!busy} onClick={() => onOpenInFusion(sessionId)}>
+            Open in fusion preview
+          </button>
+        ) : null}
         <button type="button" disabled={!!busy || !preview} onClick={() => void executeSave()}>
           Save to Arrow store
         </button>

@@ -79,11 +79,11 @@ Use for:
 - Dashboard Agent tab and Ollama host-stats blocks are **placeholders** — not production dependencies
 - Do not block releases on Ollama availability
 
-### Future MCP (`openfdd-mcp`)
+### MCP (`openfdd-mcp`)
 
-- Separate process / `SERVICE_MODE=mcp` (design only in 3.2.x)
-- **Read-first** tool surface — see [openfdd-mcp-tool-contract.md](openfdd-mcp-tool-contract.md)
-- Rule activation, restore, and field-bus writes require **explicit human approval** tokens in tool policy
+- Stdio sidecar — [mcp/README.md](../../mcp/README.md)
+- Read-first tools including model SPARQL — [openfdd-mcp-tool-contract.md](openfdd-mcp-tool-contract.md)
+- Writes and rule activation require explicit human approval
 
 ## Session pattern (external agent)
 

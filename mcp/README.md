@@ -88,19 +88,23 @@ docker run -i --rm --network host \
   ghcr.io/bbartling/openfdd-mcp:latest
 ```
 
-## Tools (phase 1)
+## Tools
 
 | Tool | Description |
 |------|-------------|
-| `openfdd_bench_topology` | Bench layout from `OPENFDD_BENCH_TOPOLOGY_FILE` or doc pointer |
-| `openfdd_driver_status` | Haystack / Modbus / BACnet / JSON API status bundle |
 | `openfdd_health` | Bridge liveness |
-| `openfdd_haystack_status` | Haystack gateway config (redacted) |
+| `openfdd_driver_status` | Driver status bundle |
+| `openfdd_bench_topology` | Bench layout file or doc pointer |
+| `openfdd_haystack_status` | Haystack gateway status |
 | `openfdd_haystack_test` | Connection test |
-| `openfdd_haystack_read` | Filter or ids read |
+| `openfdd_haystack_read` | Haystack read by filter or ids |
 | `openfdd_bacnet_read` | Commission BACnet point read |
+| `openfdd_model_sparql_catalog` | Predefined SPARQL queries |
+| `openfdd_model_sparql` | Execute SPARQL SELECT on Haystack RDF |
+| `openfdd_model_sites` | Site list |
+| `openfdd_model_coverage` | Mapped vs unmapped points |
 
-Full contract: [docs/agent/openfdd-mcp-tool-contract.md](../docs/agent/openfdd-mcp-tool-contract.md)
+Contract: [docs/agent/openfdd-mcp-tool-contract.md](../docs/agent/openfdd-mcp-tool-contract.md)
 
 Bench agent prompt: [docs/agent/bench-driver-setup-wsl-agent.md](../docs/agent/bench-driver-setup-wsl-agent.md)
 

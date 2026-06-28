@@ -24,6 +24,7 @@ pub fn save_haystack_grid(grid: &Value) -> std::io::Result<PathBuf> {
         &path,
         serde_json::to_string_pretty(grid).unwrap_or_else(|_| "{}".into()),
     )?;
+    crate::model::rdf::invalidate_store();
     Ok(path)
 }
 

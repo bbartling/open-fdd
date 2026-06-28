@@ -737,6 +737,96 @@ pub fn from_validation_run(body: &Value) -> Value {
     })
 }
 
+/// Build a PDF report draft from an ad-hoc SQL FDD test run (SQL tab → Reports).
+pub fn from_fdd_sql_run(body: &Value) -> Value {
+    let rule_name = body
+        .get("rule_name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("FDD SQL Rule");
+    let sql = body.get("sql").and_then(|v| v.as_str()).unwrap_or("");
+    let equipment_id = body
+        .get("equipment_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let fault_code = body
+        .get("fault_code")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let run = body.get("run_result").cloned().unwrap_or(json!({}));
+    let confirmation = run.get("confirmation").cloned().unwrap_or(json!({}));
+    let confirmed_count = confirmation
+        .get("confirmed_fault_count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let raw_count = confirmation
+        .get("raw_fault_count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let row_count = run.get("row_count").and_then(|v| v.as_u64()).unwrap_or(0);
+    let sample_rows: Vec<Value> = run
+        .get("rows")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().take(25).cloned().collect())
+        .unwrap_or_default();
+    let title = format!("FDD SQL Report — {rule_name}");
+    let doc = create_draft(&json!({
+        "template_id": "fdd-sql-run",
+        "title": title,
+    }));
+    if doc.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return doc;
+    }
+    let report_id = doc
+        .get("report_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if let Some(mut saved) = load_report(&report_id) {
+        saved["metadata"] = json!({
+            "rule_name": rule_name,
+            "equipment_id": equipment_id,
+            "fault_code": fault_code,
+            "confirmed_fault_count": confirmed_count,
+            "raw_fault_count": raw_count,
+            "row_count": row_count,
+            "created_at": Utc::now().to_rfc3339(),
+            "template_id": "fdd-sql-run",
+            "pdf_ready": false,
+        });
+        if let Some(sections) = saved.get_mut("sections").and_then(|v| v.as_array_mut()) {
+            sections.push(json!({
+                "id": "fdd-sql-run",
+                "type": "fdd_sql_run",
+                "title": "SQL FDD run results",
+                "visible": true,
+                "order": 50,
+                "content": {
+                    "rule_name": rule_name,
+                    "equipment_id": equipment_id,
+                    "fault_code": fault_code,
+                    "sql": sql,
+                    "row_count": row_count,
+                    "raw_fault_count": raw_count,
+                    "confirmed_fault_count": confirmed_count,
+                    "confirmation": confirmation,
+                    "sample_rows": sample_rows,
+                }
+            }));
+        }
+        let _ = save_report(&report_id, &saved);
+    }
+    let pdf = render_pdf_bundle(&report_id);
+    json!({
+        "ok": true,
+        "report_id": report_id,
+        "rule_name": rule_name,
+        "confirmed_fault_count": confirmed_count,
+        "raw_fault_count": raw_count,
+        "dashboard_url": "/",
+        "pdf": pdf,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -841,6 +931,42 @@ mod tests {
 
         let del = delete_report(rid);
         assert_eq!(del["ok"], true);
+        std::env::remove_var("OPENFDD_WORKSPACE");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn from_fdd_sql_run_creates_report() {
+        let _guard = workspace_test_lock();
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let tmp = std::env::temp_dir().join(format!("ofdd-fdd-report-{}-{n}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", tmp.to_string_lossy().as_ref());
+
+        let out = from_fdd_sql_run(&json!({
+            "rule_name": "OA temp high",
+            "sql": "SELECT timestamp, oa_t FROM telemetry_pivot",
+            "equipment_id": "equip:test",
+            "fault_code": "OA_TEMP",
+            "run_result": {
+                "row_count": 2,
+                "confirmation": {"raw_fault_count": 1, "confirmed_fault_count": 1},
+                "rows": [{"timestamp": "2013-06-19T00:00:00Z", "confirmed_fault": true}]
+            }
+        }));
+        assert_eq!(
+            out.get("ok").and_then(|v| v.as_bool()),
+            Some(true),
+            "{out:?}"
+        );
+        assert_eq!(
+            out.get("confirmed_fault_count").and_then(|v| v.as_u64()),
+            Some(1)
+        );
+
         std::env::remove_var("OPENFDD_WORKSPACE");
         let _ = std::fs::remove_dir_all(&tmp);
     }

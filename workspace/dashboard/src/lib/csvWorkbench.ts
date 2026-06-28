@@ -62,14 +62,45 @@ function splitCsvLine(line: string): string[] {
   return out;
 }
 
+const TIMESTAMP_EXCLUDE = new Set(["timezone", "time_zone", "tz", "iana_timezone", "utc_offset"]);
+
+function isLikelyTimestampColumn(name: string): boolean {
+  const lower = name.toLowerCase();
+  if (TIMESTAMP_EXCLUDE.has(lower)) return false;
+  if (TS_CANDIDATES.some((t) => lower === t.toLowerCase())) return true;
+  if (lower === "time_local" || lower.endsWith("_local")) return true;
+  if (lower.includes("date")) return true;
+  if (lower.includes("time") && !lower.includes("zone")) return true;
+  return false;
+}
+
 function detectTimestampColumn(columns: string[]): string | null {
   for (const c of columns) {
-    const lower = c.toLowerCase();
-    if (TS_CANDIDATES.some((t) => lower === t.toLowerCase() || lower.includes("date") || lower.includes("time"))) {
-      return c;
+    if (isLikelyTimestampColumn(c)) return c;
+  }
+  const fallback = columns.find((c) => !TIMESTAMP_EXCLUDE.has(c.toLowerCase()));
+  return fallback ?? columns[0] ?? null;
+}
+
+/** Column name shared by all datasets that looks like a timestamp (for join). */
+export function suggestMergeKey(datasets: CsvDataset[]): string {
+  if (!datasets.length) return "Date";
+  if (datasets.length === 1) {
+    return datasets[0].timestampColumn ?? detectTimestampColumn(datasets[0].columns) ?? "Date";
+  }
+  const matchCounts = new Map<string, number>();
+  for (const ds of datasets) {
+    for (const col of ds.columns) {
+      if (!isLikelyTimestampColumn(col)) continue;
+      matchCounts.set(col, (matchCounts.get(col) ?? 0) + 1);
     }
   }
-  return columns[0] ?? null;
+  for (const [col, n] of matchCounts) {
+    if (n === datasets.length) return col;
+  }
+  if (datasets.some((d) => d.columns.includes("Date"))) return "Date";
+  const first = datasets[0];
+  return first.timestampColumn ?? detectTimestampColumn(first.columns) ?? "Date";
 }
 
 function dataRowsFromText(text: string): { columns: string[]; allRows: string[][] } {

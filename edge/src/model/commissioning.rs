@@ -338,19 +338,12 @@ pub fn sync_ttl_json() -> Value {
         let _ = fs::create_dir_all(parent);
     }
     let rows = query::haystack_rows();
-    let mut lines = vec![
-        "@prefix hs: <https://project-haystack.org/def/> .".to_string(),
-        "@prefix ofdd: <https://open-fdd.dev/model#> .".to_string(),
-        "".to_string(),
-    ];
-    for row in &rows {
-        if let Some(id) = row.get("id").and_then(|v| v.as_str()) {
-            let dis = row.get("dis").and_then(|v| v.as_str()).unwrap_or(id);
-            lines.push(format!("ofdd:{id} hs:dis \"{dis}\" ."));
+    let ttl = crate::model::rdf::haystack_rows_to_turtle(&rows);
+    match fs::write(&path, &ttl) {
+        Ok(()) => {
+            crate::model::rdf::invalidate_store();
+            json!({"ok": true, "path": path.display().to_string(), "rows": rows.len()})
         }
-    }
-    match fs::write(&path, lines.join("\n")) {
-        Ok(()) => json!({"ok": true, "path": path.display().to_string(), "rows": rows.len()}),
         Err(e) => json!({"ok": false, "error": e.to_string()}),
     }
 }

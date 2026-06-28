@@ -1,175 +1,90 @@
-# Open-FDD Rust Edge
+# REST API reference (Rust edge)
 
-> **Note:** Prefer `openfdd_rust_edge_bootstrap.sh` and [AGENTS.md](../AGENTS.md) for current install. This file lists REST routes; external agents use Cursor/Codex — built-in Ollama/MCP are optional/future ([agent architecture](../agent/openfdd-agent-architecture.md)).
+Authoritative route list: `GET /api/agent/tools` on a running site. Prefer [AGENTS.md](../AGENTS.md) and [quick-start/rust-edge-bootstrap.md](quick-start/rust-edge-bootstrap.md) for install.
 
-Turn-key Rust + React prototype that mirrors the Open-FDD edge split:
+**Base URL:** `http://127.0.0.1:8080` (LAN only). **Auth:** Bearer JWT except where noted.
 
-```text
-openfdd-bridge             API + dashboard + historian
-openfdd-commission         BACnet / Modbus / JSON API discover-read-poll
-openfdd-haystack-gateway   Haystack read/nav/ops integration
-MCP                         intentionally deferred
-```
+## Authentication
 
-## Start on Docker Desktop
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | `/api/health` | none | Liveness |
+| POST | `/api/auth/login` | none | Body: `{"username","password"}` → `token` / `access_token` |
+| GET | `/api/auth/me` | JWT | Current principal |
 
-```bash
-cp .env.example .env
-./scripts/edge_bootstrap.sh
-```
+Roles: `operator`, `integrator`, `agent`. Mutations on drivers, model import, rule activation, and field-bus writes require `integrator` or `agent` unless noted.
 
-Open:
+## Haystack model (RDF / SPARQL)
 
-```text
-http://localhost:8080
-```
+The Haystack grid is projected to Turtle and queried with **Oxigraph** (read-only SELECT).
 
-## Direct Docker command
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | `/api/model/haystack` | JWT | Raw Haystack grid JSON |
+| GET | `/api/model/ttl` | JWT | Turtle export (`Accept: text/turtle`) |
+| POST | `/api/model/sync-ttl` | integrator+ | Persist `workspace/data/model/data_model.ttl` |
+| GET | `/api/model/sparql/predefined` | JWT | Catalog + default query |
+| POST | `/api/model/sparql` | JWT | Body: `{"query":"<SPARQL SELECT>"}` → `bindings` |
+| GET | `/api/model/sites` | JWT | Sites + active site |
+| GET | `/api/model/sites/{id}/equipment` | JWT | Equipment for site |
+| GET | `/api/model/tree` | JWT | Site-scoped equipment + points (SPARQL-backed) |
+| GET | `/api/model/graph` | JWT | Network graph (equipment, feeds, points) |
+| GET | `/api/model/assignments` | JWT | Driver → Haystack → FDD bindings |
+| POST | `/api/model/assignments/save` | integrator+ | Save bindings |
+| POST | `/api/model/haystack/import` | integrator+ | Import from Haystack driver |
+| GET | `/api/dashboard/model-coverage` | JWT | Mapped / unmapped summary |
 
-```bash
-docker compose up --build
-```
-
-## Auth
-
-Public endpoints:
-
-```text
-GET  /api/health
-POST /api/auth/login
-```
-
-JWT login:
+Example SPARQL:
 
 ```bash
-TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"sub":"agent","role":"agent"}' | jq -r .access_token)"
+curl -s -X POST http://127.0.0.1:8080/api/model/sparql \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"query":"PREFIX hs: <https://project-haystack.org/def/> PREFIX ofdd: <https://open-fdd.dev/model#> SELECT ?site ?dis WHERE { ?s a hs:Site . ?s ofdd:haystackId ?site . OPTIONAL { ?s hs:dis ?dis . } }"}'
 ```
 
-Use:
+Vocabulary: `hs:` = Project Haystack def; `ofdd:haystackId` = canonical Haystack ref string.
 
-```bash
--H "Authorization: Bearer $TOKEN"
-```
+## Drivers
 
-Roles:
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/bacnet/driver/tree` | BACnet registry |
+| POST | `/api/bacnet/read` | Read property |
+| POST | `/api/bacnet/write` | integrator+; dry-run in prototype |
+| GET | `/api/modbus/points` | Register map |
+| POST | `/api/modbus/read` | Read registers |
+| GET | `/api/haystack/status` | Gateway status (200 when disabled) |
+| POST | `/api/haystack/read` | Read by ids or filter |
+| POST | `/api/haystack/import` | Import into model grid |
+| GET | `/api/json-api/sources` | JSON API sources |
 
-```text
-operator
-integrator
-agent
-```
+Commission OT reads (host network): `http://127.0.0.1:9091` — see [architecture/drivers-and-fdd.md](architecture/drivers-and-fdd.md).
 
-## Required Open-FDD-style endpoints now included
+## FDD and historian
 
-```text
-POST /api/auth/login
-GET  /api/health/stack
-POST /api/rules/save
-POST /api/rules/batch
-POST /api/model/haystack/import
-GET  /api/bacnet/driver/tree
-POST /api/bacnet/overrides/scan-once
-POST /api/reports/rcx/generate
-GET  /api/agent/tools
-```
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/rules` | Rule catalog |
+| POST | `/api/fdd-rules/builder-sql` | Draft SQL from inputs |
+| POST | `/api/fdd-rules/{id}/test-sql` | Dry-run against historian |
+| POST | `/api/fdd/run` | Run evaluation |
+| GET | `/api/historian/query` | Arrow / DataFusion query |
+| GET | `/api/faults` | Active faults |
+| GET | `/api/building/status` | Public building summary (no JWT) |
 
-## Driver/data APIs
+## Agent and MCP
 
-```text
-POST /api/bacnet/whois
-POST /api/bacnet/point-discovery
-GET  /api/bacnet/points
-GET  /api/bacnet/driver/tree
-POST /api/bacnet/driver/sync-discovery
-POST /api/bacnet/read
-POST /api/bacnet/write
-GET  /api/bacnet/overrides/status
-POST /api/bacnet/overrides/scan-once
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/agent/tools` | Machine-readable tool manifest |
+| GET | `/api/agent/manifest` | Agent metadata |
+| GET | `/api/health/stack` | Bridge + sidecar health |
 
-GET  /api/modbus/points
-POST /api/modbus/scan
-POST /api/modbus/read
+MCP sidecar: [mcp/README.md](../mcp/README.md) · [agent/openfdd-mcp-tool-contract.md](agent/openfdd-mcp-tool-contract.md)
 
-GET  /api/json-api/sources
-POST /api/json-api/register
-POST /api/json-api/poll-once
+## Safety
 
-GET  /api/haystack/about
-POST /api/haystack/read
-POST /api/haystack/nav
-POST /api/haystack/ops
-GET  /api/model/haystack
-POST /api/model/haystack/import
-POST /api/model/query
-```
-
-## Algorithms / FDD / historian
-
-```text
-GET  /api/algorithms
-POST /api/algorithms/run
-GET  /api/arrow/demo
-GET  /api/fdd/datafusion/demo
-POST /api/fdd/run
-GET  /api/rules
-POST /api/rules/save
-POST /api/rules/batch
-GET  /api/historian/query
-POST /api/historian/query
-```
-
-## Agent and lifecycle APIs
-
-```text
-GET  /api/agent/manifest
-GET  /api/agent/tools
-POST /api/agent/bootstrap
-POST /api/agent/update
-GET  /api/building/checkin
-GET  /api/ops/stack
-POST /api/ops/docker/update
-POST /api/reports/rcx/plan
-POST /api/reports/rcx/generate
-GET  /api/reports/rcx/list
-```
-
-## Security posture
-
-- `OPENFDD_JWT_SECRET` signs HS256 JWTs.
-- Token TTL is 8 hours.
-- Static UI and `/api/health` are public.
-- All operational `/api/*` calls require Bearer JWT.
-- BACnet write requires `integrator` role and `approved=true`.
-- Prototype BACnet writes are dry-run only.
-- Keep this edge stack on LAN/Tailscale.
-- Never run `docker compose down -v`.
-- Never delete `workspace/`.
-- Never print secrets or auth files.
-
-## Niagara integration direction
-
-Custom Niagara WebSockets are intentionally replaced by the Haystack gateway path:
-
-```text
-Niagara / BAS server -> Project Haystack read/nav/ops -> Rust Haystack gateway -> Open-FDD model + Arrow tables
-```
-
-MCP/RAG sidecar comes later; this release is focused on full JSON/JWT agent drivability.
-
-## Production Rust backend skeleton
-
-`backend/` is the production integration direction with:
-
-```text
-rusty-bacnet
-rusty-modbus
-rusty-haystack
-open-control-engine
-Apache Arrow
-DataFusion SQL
-JWT auth module
-```
-
-The fast default container uses `edge_prototype_rust/` so Docker Desktop can start quickly.
+- Do not delete `workspace/` or run `docker compose down -v`.
+- Do not log JWTs or `auth.env.local`.
+- Field-bus writes require explicit human approval.
+- Keep the edge on LAN / Tailscale, not the public internet.

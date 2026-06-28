@@ -189,11 +189,84 @@ pub fn save_dataset(
     // Register Haystack model columns from value keys
     register_haystack_from_dataset(&id, &value_keys);
 
+    let historian_sync = sync_output_rows_to_historian(&id, rows);
+
     Ok(json!({
         "ok": true,
         "dataset": metadata,
         "validation_report": validation_report,
+        "historian_sync": historian_sync,
+        "plot_url": historian_sync.get("plot_url").cloned().unwrap_or(json!(null)),
+        "model_url": historian_sync.get("model_url").cloned().unwrap_or(json!(null)),
     }))
+}
+
+/// Push merged CSV rows into historian pivot + refresh Haystack so Plot tab works.
+pub fn sync_output_rows_to_historian(dataset_id: &str, rows: &[OutputRow]) -> Value {
+    use crate::historian::store;
+    use crate::model::csv_import::{apply_pivot_aliases, column_slug, ids_from_filename};
+
+    let filename = format!("{dataset_id}.csv");
+    let (site_id, equip_id, source_id, _) = ids_from_filename(&filename);
+    let mut new_rows: Vec<Value> = Vec::new();
+    for r in rows {
+        let ts = r
+            .ts_utc
+            .map(|u| u.to_rfc3339())
+            .unwrap_or_else(|| r.ts_local.clone());
+        if ts.trim().is_empty() {
+            continue;
+        }
+        let mut row = json!({
+            "timestamp": ts,
+            "equipment_id": equip_id,
+            "site_id": site_id,
+            "source": source_id,
+            "source_driver": "csv",
+            "is_simulated": false
+        });
+        for (k, v) in &r.values {
+            if v.trim().is_empty() {
+                continue;
+            }
+            if let Ok(n) = v.parse::<f64>() {
+                let slug = column_slug(k);
+                row[slug.clone()] = json!(n);
+                apply_pivot_aliases(&mut row, &slug, n);
+            }
+        }
+        if row.as_object().map(|o| o.len()).unwrap_or(0) > 5 {
+            new_rows.push(row);
+        }
+    }
+    if new_rows.is_empty() {
+        return json!({
+            "ok": false,
+            "error": "no numeric rows synced to historian",
+            "site_id": site_id,
+            "equipment_id": equip_id
+        });
+    }
+    let mut all = store::load_pivot_rows().unwrap_or_default();
+    all.retain(|r| {
+        r.get("source")
+            .and_then(|v| v.as_str())
+            .is_none_or(|s| s != source_id.as_str())
+    });
+    all.extend(new_rows.clone());
+    match store::rewrite_all(&all) {
+        Ok(()) => json!({
+            "ok": true,
+            "rows_synced": new_rows.len(),
+            "historian_total": all.len(),
+            "site_id": site_id,
+            "equipment_id": equip_id,
+            "source_id": source_id,
+            "plot_url": format!("/plot?site={site_id}&device={equip_id}&hours=8760"),
+            "model_url": format!("/model?site={site_id}")
+        }),
+        Err(e) => json!({"ok": false, "error": e, "site_id": site_id}),
+    }
 }
 
 fn register_haystack_from_dataset(dataset_id: &str, columns: &[String]) {

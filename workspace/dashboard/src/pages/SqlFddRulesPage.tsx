@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import { apiFetch } from "../lib/api";
 import { copyToClipboard } from "../lib/clipboard";
@@ -36,6 +36,12 @@ function validationSummary(payload: Record<string, unknown> | null): string {
 function runResultSummary(payload: Record<string, unknown> | null): string {
   if (!payload) return "";
   if (typeof payload.error === "string") return payload.error;
+  const confirmation = payload.confirmation as Record<string, unknown> | undefined;
+  const confirmed = confirmation?.confirmed_fault_count;
+  const raw = confirmation?.raw_fault_count;
+  if (typeof confirmed === "number" || typeof raw === "number") {
+    return `Raw faults: ${raw ?? 0} · Confirmed: ${confirmed ?? 0}`;
+  }
   const rows = payload.rows;
   if (Array.isArray(rows)) {
     return `Preview returned ${rows.length} row(s).`;
@@ -44,6 +50,18 @@ function runResultSummary(payload: Record<string, unknown> | null): string {
   if (typeof count === "number") return `Preview returned ${count} row(s).`;
   if (payload.ok === true) return "SQL preview completed.";
   return "Preview finished.";
+}
+
+function confirmedFaultRows(payload: Record<string, unknown> | null): Record<string, unknown>[] {
+  if (!payload?.rows || !Array.isArray(payload.rows)) return [];
+  return (payload.rows as Record<string, unknown>[]).filter(
+    (r) => r.confirmed_fault === true || r.confirmed_fault === "true",
+  );
+}
+
+function ruleIdFromBuilder(builder: BuilderState): string {
+  const base = builder.fault_code.trim() || builder.name.trim() || "fdd-rule";
+  return base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "fdd-rule";
 }
 
 const DEFAULT_BUILDER: BuilderState = {
@@ -59,6 +77,7 @@ const DEFAULT_BUILDER: BuilderState = {
 
 export default function SqlFddRulesPage() {
   const siteId = useActiveSiteId();
+  const navigate = useNavigate();
   const [mode, setMode] = useState<"builder" | "raw">("builder");
   const [builder, setBuilder] = useState<BuilderState>(DEFAULT_BUILDER);
   const [sql, setSql] = useState("");
@@ -69,8 +88,10 @@ export default function SqlFddRulesPage() {
   const [busy, setBusy] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [copyStatus, setCopyStatus] = useState("");
+  const [actionStatus, setActionStatus] = useState("");
   const [error, setError] = useState("");
   const equipmentMissing = mode === "builder" && !builder.equipment_id.trim();
+  const confirmedRows = useMemo(() => confirmedFaultRows(runResult), [runResult]);
 
   useEffect(() => {
     apiFetch<{ fdd_inputs?: FddInput[] }>("/api/fdd-schema/fdd-inputs")
@@ -151,6 +172,71 @@ export default function SqlFddRulesPage() {
         body: JSON.stringify({ sql }),
       });
       setValidation(out);
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveActivateAndDashboard() {
+    const ruleId = ruleIdFromBuilder(builder);
+    setBusy(true);
+    setError("");
+    setActionStatus("");
+    try {
+      await apiFetch("/api/fdd-rules", {
+        method: "POST",
+        body: JSON.stringify({
+          rule_id: ruleId,
+          name: builder.name,
+          sql,
+          confirmation_seconds: builder.confirmation_seconds,
+          review_status: "approved",
+          severity: builder.severity,
+          output_fault_code: builder.fault_code,
+          equipment_id: builder.equipment_id,
+          site_id: siteId,
+        }),
+      });
+      await apiFetch(`/api/fdd-rules/${encodeURIComponent(ruleId)}/activate`, {
+        method: "POST",
+        body: "{}",
+      });
+      window.dispatchEvent(new CustomEvent("ofdd-dashboard-refresh"));
+      setActionStatus(`Rule "${ruleId}" saved and activated — faults appear on the main dashboard.`);
+      navigate("/");
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportPdfReport() {
+    setBusy(true);
+    setError("");
+    setActionStatus("");
+    try {
+      const out = await apiFetch<{ report_id?: string; pdf?: { download_url?: string } }>(
+        "/api/reports/from-fdd-sql-run",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            rule_name: builder.name,
+            sql,
+            equipment_id: builder.equipment_id,
+            fault_code: builder.fault_code,
+            run_result: runResult,
+          }),
+        },
+      );
+      const url = out.pdf?.download_url;
+      setActionStatus(
+        url
+          ? `PDF report ${out.report_id ?? ""} ready — open Reports tab or download.`
+          : `Report draft ${out.report_id ?? ""} created.`,
+      );
     } catch (e) {
       setError(formatApiError(e));
     } finally {
@@ -326,21 +412,59 @@ export default function SqlFddRulesPage() {
           {runResult ? (
             <section className="panel sql-test-query-panel">
               <div className="panel-head-row">
-                <h3 className="panel-title">Query results</h3>
-                <button
-                  type="button"
-                  className="secondary-btn"
-                  onClick={() => {
-                    void copyToClipboard(JSON.stringify(runResult, null, 2)).then((ok) =>
-                      setCopyStatus(ok ? "Copied JSON" : "Copy failed"),
-                    );
-                  }}
-                >
-                  Copy JSON
-                </button>
+                <h3 className="panel-title">FDD query results</h3>
+                <div className="action-bar">
+                  <button type="button" className="primary-btn" disabled={busy} onClick={() => void saveActivateAndDashboard()}>
+                    Save rule → dashboard
+                  </button>
+                  <button type="button" className="secondary-btn" disabled={busy} onClick={() => void exportPdfReport()}>
+                    Export PDF report
+                  </button>
+                  <Link className="secondary-btn" to="/">
+                    Main dashboard
+                  </Link>
+                  <Link className="secondary-btn" to="/exports">
+                    Reports tab
+                  </Link>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => {
+                      void copyToClipboard(JSON.stringify(runResult, null, 2)).then((ok) =>
+                        setCopyStatus(ok ? "Copied JSON" : "Copy failed"),
+                      );
+                    }}
+                  >
+                    Copy JSON
+                  </button>
+                </div>
               </div>
+              {actionStatus ? <p className="ok">{actionStatus}</p> : null}
               {copyStatus ? <p className="muted">{copyStatus}</p> : null}
-              <pre className="code-block sql-query-json">{JSON.stringify(runResult, null, 2)}</pre>
+              {confirmedRows.length ? (
+                <div className="table-like sql-fdd-confirmed-table">
+                  <div className="table-row table-head">
+                    <span>Timestamp</span>
+                    <span>Equipment</span>
+                    <span>Confirmed</span>
+                    <span>Minutes in fault</span>
+                  </div>
+                  {confirmedRows.slice(0, 12).map((row, i) => (
+                    <div key={i} className="table-row">
+                      <span>{String(row.timestamp ?? "")}</span>
+                      <span>{String(row.equipment_id ?? builder.equipment_id)}</span>
+                      <span>{String(row.confirmed_fault ?? true)}</span>
+                      <span>{String(row.minutes_in_fault ?? row.minutes_in_raw_fault ?? "—")}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted">No confirmed faults in this preview — adjust threshold or confirmation window.</p>
+              )}
+              <details className="advanced-json">
+                <summary>Full JSON response</summary>
+                <pre className="code-block sql-query-json">{JSON.stringify(runResult, null, 2)}</pre>
+              </details>
             </section>
           ) : null}
 

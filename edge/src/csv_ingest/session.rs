@@ -131,3 +131,63 @@ pub fn delete_staged_file(session_id: &str, filename: &str) -> Result<(), String
 pub fn session_path_ok(path: &Path) -> bool {
     path.starts_with(sessions_root())
 }
+
+/// Recent import sessions (newest first) for agent/UI pickers.
+pub fn list_sessions_handler(limit: usize) -> Value {
+    let root = sessions_root();
+    let mut sessions = Vec::new();
+    if let Ok(entries) = fs::read_dir(&root) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let id = entry.file_name().to_string_lossy().to_string();
+            let Some(session) = load_session(&id) else {
+                continue;
+            };
+            sessions.push(json!({
+                "session_id": id,
+                "status": session.get("status").cloned().unwrap_or(json!(null)),
+                "created_at": session.get("created_at").cloned().unwrap_or(json!(null)),
+                "file_count": session.get("files").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
+                "dataset_name": session.get("plan")
+                    .and_then(|p| p.get("output_dataset_name"))
+                    .cloned()
+                    .unwrap_or(json!(null)),
+                "row_count": session.get("preview_summary")
+                    .and_then(|p| p.get("row_count"))
+                    .cloned()
+                    .unwrap_or(json!(null)),
+                "fusion_url": format!("/csv?session={id}"),
+            }));
+        }
+    }
+    sessions.sort_by(|a, b| {
+        let ta = a.get("created_at").and_then(|v| v.as_str()).unwrap_or("");
+        let tb = b.get("created_at").and_then(|v| v.as_str()).unwrap_or("");
+        tb.cmp(ta)
+    });
+    sessions.truncate(limit.clamp(1, 100));
+    json!({"ok": true, "sessions": sessions})
+}
+
+pub fn latest_planned_session_handler() -> Value {
+    let listed = list_sessions_handler(20);
+    let empty = json!({"ok": false, "error": "no import session found — upload CSVs and run Preview plan in UT3 panel"});
+    let Some(arr) = listed.get("sessions").and_then(|v| v.as_array()) else {
+        return empty;
+    };
+    for s in arr {
+        let status = s.get("status").and_then(|v| v.as_str()).unwrap_or("");
+        if matches!(status, "planned" | "previewed" | "executed") {
+            return json!({
+                "ok": true,
+                "session": s.clone(),
+                "session_id": s.get("session_id").cloned().unwrap_or(json!(null)),
+                "fusion_url": s.get("fusion_url").cloned().unwrap_or(json!(null)),
+            });
+        }
+    }
+    empty
+}

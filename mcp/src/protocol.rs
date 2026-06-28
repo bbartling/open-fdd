@@ -66,6 +66,16 @@ impl Server {
             tool("openfdd_haystack_test", "POST /api/haystack/test", json!({})),
             tool("openfdd_haystack_read", "POST /api/haystack/read", json!({"filter": {"type": "string"}})),
             tool("openfdd_bacnet_read", "BACnet read via commission API", json!({"point_id": {"type": "string"}})),
+            tool("openfdd_model_sparql_catalog", "GET /api/model/sparql/predefined — Haystack RDF query catalog", json!({})),
+            tool("openfdd_model_sparql", "POST /api/model/sparql — read-only SELECT over Haystack RDF", json!({"query": {"type": "string"}})),
+            tool("openfdd_model_sites", "GET /api/model/sites", json!({})),
+            tool("openfdd_model_coverage", "GET /api/dashboard/model-coverage", json!({})),
+            tool("openfdd_csv_fusion_preview", "GET /api/csv/import/sessions/{id}/fusion-preview — merged CSV grid for browser review", json!({"session_id": {"type": "string"}, "limit": {"type": "integer"}})),
+            tool("openfdd_csv_latest_planned", "GET /api/csv/import/sessions/latest/planned — most recent UT3 plan ready for fusion preview", json!({})),
+            tool("openfdd_csv_sessions", "GET /api/csv/import/sessions — list recent import sessions", json!({"limit": {"type": "integer"}})),
+            tool("openfdd_csv_import_execute", "POST /api/csv/import/execute — save planned session to Arrow + historian (human confirms after preview)", json!({"session_id": {"type": "string"}})),
+            tool("openfdd_datasets", "GET /api/datasets — list Feather/Arrow datasets in registry", json!({})),
+            tool("openfdd_timeseries_series", "GET /api/timeseries/series — plot catalog after CSV save", json!({"site_id": {"type": "string"}})),
         ]
     }
 
@@ -84,6 +94,55 @@ impl Server {
             "openfdd_haystack_test" => self.bridge.post("/api/haystack/test", &json!({}))?,
             "openfdd_haystack_read" => self.bridge.haystack_read(&args)?,
             "openfdd_bacnet_read" => self.bridge.bacnet_read(&args)?,
+            "openfdd_model_sparql_catalog" => self.bridge.get("/api/model/sparql/predefined")?,
+            "openfdd_model_sparql" => {
+                let query = args
+                    .get("query")
+                    .and_then(|v| v.as_str())
+                    .ok_or("query required")?;
+                self.bridge
+                    .post("/api/model/sparql", &json!({ "query": query }))?
+            }
+            "openfdd_model_sites" => self.bridge.get("/api/model/sites")?,
+            "openfdd_model_coverage" => self.bridge.get("/api/dashboard/model-coverage")?,
+            "openfdd_csv_fusion_preview" => {
+                let session_id = args
+                    .get("session_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("session_id required")?;
+                let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(2000);
+                self.bridge.get(&format!(
+                    "/api/csv/import/sessions/{session_id}/fusion-preview?limit={limit}"
+                ))?
+            }
+            "openfdd_csv_latest_planned" => {
+                self.bridge.get("/api/csv/import/sessions/latest/planned")?
+            }
+            "openfdd_csv_sessions" => {
+                let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20);
+                self.bridge
+                    .get(&format!("/api/csv/import/sessions?limit={limit}"))?
+            }
+            "openfdd_csv_import_execute" => {
+                let session_id = args
+                    .get("session_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("session_id required")?;
+                self.bridge.post(
+                    "/api/csv/import/execute",
+                    &json!({ "session_id": session_id, "confirm": true }),
+                )?
+            }
+            "openfdd_datasets" => self.bridge.get("/api/datasets")?,
+            "openfdd_timeseries_series" => {
+                let site = args.get("site_id").and_then(|v| v.as_str()).unwrap_or("");
+                if site.is_empty() {
+                    self.bridge.get("/api/timeseries/series")?
+                } else {
+                    self.bridge
+                        .get(&format!("/api/timeseries/series?site_id={site}"))?
+                }
+            }
             other => return Err(format!("unknown tool: {other}")),
         };
 
