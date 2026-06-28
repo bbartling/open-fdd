@@ -228,6 +228,167 @@ pub fn group_points_by_equip() -> Value {
     json!({"ok": true, "groups": grouped})
 }
 
+/// HVAC equipment counts and feeds chains for public dashboard context (Haystack grid, not SPARQL).
+pub fn equipment_model_summary() -> Value {
+    let rows = haystack_rows();
+    let mut by_type: HashMap<String, usize> = HashMap::new();
+    let mut labels: HashMap<String, String> = HashMap::new();
+    let mut feed_edges: Vec<(String, String)> = Vec::new();
+
+    for row in &rows {
+        if row.get("equip").and_then(|v| v.as_str()) != Some("M") {
+            continue;
+        }
+        let id = row
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if id.is_empty() {
+            continue;
+        }
+        let dis = row
+            .get("dis")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&id)
+            .to_string();
+        let etype = infer_equip_type(row).to_string();
+        *by_type.entry(etype).or_insert(0) += 1;
+        labels.insert(id.clone(), dis);
+        if let Some(upstream) = row.get("feedRef").and_then(|v| v.as_str()) {
+            feed_edges.push((upstream.to_string(), id));
+        }
+    }
+
+    let feeds_chains: Vec<String> = feed_edges
+        .iter()
+        .map(|(from, to)| {
+            let from_label = labels.get(from).map(String::as_str).unwrap_or(from.as_str());
+            let to_label = labels.get(to).map(String::as_str).unwrap_or(to.as_str());
+            format!("{from_label} feeds {to_label}")
+        })
+        .collect();
+
+    json!({
+        "ok": true,
+        "equipment_by_type": by_type,
+        "feeds_chains": feeds_chains,
+        "equipment_count": labels.len(),
+        "query_engine": "haystack"
+    })
+}
+
+/// Network graph for Model explorer and dashboard feeds visualization.
+pub fn network_graph(site_id: Option<&str>) -> Value {
+    let sid = super::scope::resolve_site_id(site_id);
+    let rows = haystack_rows();
+    let mut equipment: Vec<Value> = Vec::new();
+    let mut feeds: Vec<Value> = Vec::new();
+    let mut points_by_equipment: HashMap<String, Vec<Value>> = HashMap::new();
+    let mut labels: HashMap<String, String> = HashMap::new();
+
+    for row in &rows {
+        if row.get("equip").and_then(|v| v.as_str()) == Some("M") {
+            let row_site = row.get("siteRef").and_then(|v| v.as_str());
+            if let Some(filter) = sid.as_deref() {
+                if row_site != Some(filter) {
+                    continue;
+                }
+            }
+            let equipment_id = row
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if equipment_id.is_empty() {
+                continue;
+            }
+            let name = row
+                .get("dis")
+                .and_then(|v| v.as_str())
+                .unwrap_or(&equipment_id)
+                .to_string();
+            labels.insert(equipment_id.clone(), name.clone());
+            equipment.push(json!({
+                "equipment_id": equipment_id,
+                "name": name,
+                "label": name,
+                "equipment_type": infer_equip_type(row)
+            }));
+            if let Some(upstream) = row.get("feedRef").and_then(|v| v.as_str()) {
+                feeds.push(json!({
+                    "from_equipment_id": upstream,
+                    "to_equipment_id": equipment_id
+                }));
+            }
+        }
+    }
+
+    let equip_site = super::scope::equip_site_map();
+    for row in &rows {
+        if row.get("point").and_then(|v| v.as_str()) != Some("M") {
+            continue;
+        }
+        let equip_ref = row
+            .get("equipRef")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if equip_ref.is_empty() || !labels.contains_key(&equip_ref) {
+            continue;
+        }
+        let point_site = row
+            .get("equipRef")
+            .and_then(|v| v.as_str())
+            .and_then(|e| equip_site.get(e).cloned());
+        if let Some(filter) = sid.as_deref() {
+            if point_site.as_deref() != Some(filter) {
+                continue;
+            }
+        }
+        let point_id = row
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let name = row
+            .get("dis")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&point_id)
+            .to_string();
+        points_by_equipment.entry(equip_ref).or_default().push(json!({
+            "point_id": point_id,
+            "name": name,
+            "label": name,
+            "equipment_id": row.get("equipRef").cloned().unwrap_or(json!(null)),
+            "unit": row.get("unit").cloned().unwrap_or(json!(null))
+        }));
+    }
+
+    for feed in &mut feeds {
+        if let Some(from) = feed.get("from_equipment_id").and_then(|v| v.as_str()) {
+            feed["from_label"] = json!(labels.get(from).cloned().unwrap_or_else(|| from.to_string()));
+        }
+        if let Some(to) = feed.get("to_equipment_id").and_then(|v| v.as_str()) {
+            feed["to_label"] = json!(labels.get(to).cloned().unwrap_or_else(|| to.to_string()));
+        }
+    }
+
+    let points_map: Value = points_by_equipment
+        .into_iter()
+        .map(|(k, v)| (k, json!(v)))
+        .collect();
+
+    json!({
+        "ok": true,
+        "site_id": sid,
+        "query_engine": "haystack",
+        "equipment": equipment,
+        "feeds": feeds,
+        "points_by_equipment": points_map
+    })
+}
+
 fn is_point_mapped(row: &Value) -> bool {
     row.get("fddInput").is_some()
         || row.get("bacnetRef").is_some()
@@ -241,6 +402,12 @@ fn infer_equip_type(row: &Value) -> &'static str {
         "vav"
     } else if row.get("chiller").is_some() {
         "chiller"
+    } else if row.get("boiler").is_some() {
+        "boiler"
+    } else if row.get("coolingTower").is_some() {
+        "cooling_tower"
+    } else if row.get("doas").is_some() {
+        "doas"
     } else {
         "generic"
     }

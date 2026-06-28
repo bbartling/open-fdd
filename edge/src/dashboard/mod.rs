@@ -150,6 +150,22 @@ pub fn building_status() -> Value {
     let coverage = query::model_coverage();
     let fault_summary = faults::summary_json();
     let rule_health = faults::rule_health();
+    let model_summary = query::equipment_model_summary();
+    let fdd_rules = crate::fdd::rules::list_rules();
+    let rules_preview: Vec<Value> = fdd_rules
+        .get("rules")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|rule| {
+            json!({
+                "id": rule.get("id").cloned().unwrap_or(Value::Null),
+                "name": rule.get("name").cloned().unwrap_or(Value::Null),
+                "enabled": rule.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true)
+            })
+        })
+        .collect();
     json!({
         "ok": true,
         "model_score": coverage.get("model_score").cloned().unwrap_or(json!(null)),
@@ -159,6 +175,8 @@ pub fn building_status() -> Value {
             "mapped_points": coverage.get("mapped_points").cloned().unwrap_or(json!(0)),
             "unmapped_points": coverage.get("unmapped_points").cloned().unwrap_or(json!(0))
         },
+        "model_summary": model_summary,
+        "fdd_rules": rules_preview,
         "rule_count": rule_health.get("rule_count").cloned().unwrap_or(json!(0)),
         "datafusion_ok": rule_health.get("datafusion_ok").cloned().unwrap_or(json!(false)),
         "alert_count": fault_summary.get("active_count").cloned().unwrap_or(json!(0))

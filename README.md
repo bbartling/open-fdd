@@ -168,17 +168,11 @@ Example routes:
 
 ### Future service mode
 
-MCP / agent tooling is expected to become a **separate read-first sidecar** after the core Rust edge, drivers, historian, FDD, and reports are stable. **Built-in Ollama is not required** — dashboard Agent/Ollama panels are placeholders for optional local-only helpers.
+Since **3.2.3**, MCP ships as an **optional GHCR sidecar** (`ghcr.io/bbartling/openfdd-mcp`) — not inside the bridge image. See [Optional MCP sidecar](#optional-mcp-sidecar-after-edge-update) above and [mcp/README.md](mcp/README.md). **Built-in Ollama is not required** — dashboard Agent/Ollama panels are placeholders for optional local-only helpers.
 
 See [docs/agent/openfdd-agent-architecture.md](docs/agent/openfdd-agent-architecture.md) and [docs/agent/openfdd-mcp-tool-contract.md](docs/agent/openfdd-mcp-tool-contract.md).
 
-Possible future shape:
-
-```text
-openfdd-mcp
-```
-
-or:
+Legacy note — an in-process mode was considered but not used:
 
 ```text
 SERVICE_MODE=mcp
@@ -245,6 +239,70 @@ cd ~/open-fdd
 ./scripts/openfdd_rust_site_update.sh
 ./scripts/openfdd_rust_edge_validate.sh
 ```
+
+The update script pulls and recreates the **core edge stack only** (`openfdd-bridge`, commission, Haystack gateway). It does **not** start MCP.
+
+### Optional MCP sidecar (after edge update)
+
+From **3.2.3** onward, GHCR also publishes [`ghcr.io/bbartling/openfdd-mcp`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp) — a **separate** read-first stdio server for Cursor/agents. Use the **same image tag** as the edge update (`OPENFDD_IMAGE_TAG` / `NEW_TAG`).
+
+**1. Edge must be healthy** (`curl -fsS http://127.0.0.1:8080/api/health`).
+
+**2. Pull the MCP image** (optional; Cursor can pull on first run):
+
+```bash
+cd ~/open-fdd
+export OPENFDD_COMPOSE_ROOT="$PWD"
+export OPENFDD_IMAGE_TAG=3.2.3   # match your site update tag
+
+docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar pull openfdd-mcp
+```
+
+**3. Obtain an integrator JWT** (do not log or commit the token):
+
+```bash
+source scripts/openfdd_auth_lib.sh
+INTEGRATOR_PW="$(openfdd_auth_plaintext_password workspace/auth.env.local integrator)"
+export OPENFDD_MCP_TOKEN="$(
+  curl -s -X POST http://127.0.0.1:8080/api/auth/login \
+    -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg u integrator --arg p "$INTEGRATOR_PW" '{username:$u,password:$p}')" \
+  | jq -r '.token // .access_token'
+)"
+```
+
+**4. Connect Cursor (recommended)** — add to Cursor MCP settings (WSL path to `docker`):
+
+```json
+{
+  "mcpServers": {
+    "openfdd": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm", "--network", "host",
+        "-e", "OPENFDD_API_BASE=http://127.0.0.1:8080",
+        "-e", "OPENFDD_COMMISSION_BASE=http://127.0.0.1:9091",
+        "-e", "OPENFDD_MCP_TOKEN",
+        "ghcr.io/bbartling/openfdd-mcp:3.2.3"
+      ],
+      "env": {
+        "OPENFDD_MCP_TOKEN": "<paste JWT from step 3>"
+      }
+    }
+  }
+}
+```
+
+**Smoke test** (stdio; Ctrl+D to exit):
+
+```bash
+docker run -i --rm --network host \
+  -e OPENFDD_API_BASE=http://127.0.0.1:8080 \
+  -e OPENFDD_MCP_TOKEN="$OPENFDD_MCP_TOKEN" \
+  ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-3.2.3}
+```
+
+MCP uses **stdio JSON-RPC** — it is not an HTTP service on a port. Full tool list and bench topology: [mcp/README.md](mcp/README.md).
 
 ---
 

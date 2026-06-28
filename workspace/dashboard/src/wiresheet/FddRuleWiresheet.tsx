@@ -29,10 +29,8 @@ export default function FddRuleWiresheet({ compact }: Props) {
     if (!siteId) return;
     setBusy(true);
     try {
-      const qs = `?site_id=${encodeURIComponent(siteId)}`;
-      const graph = await apiFetch<WiresheetGraph>(
-        `/api/fdd-wires/graphs/${encodeURIComponent(GRAPH_ID)}${qs}`,
-      );
+      const qs = siteId ? `?site_id=${encodeURIComponent(siteId)}` : "";
+      const graph = await fetchWiresheetGraph(GRAPH_ID, siteId);
       const flow = graphToFlow(graph);
       setNodes(flow.nodes);
       setEdges(flow.edges);

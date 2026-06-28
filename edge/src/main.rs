@@ -99,6 +99,18 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         };
         return json_response(&mut stream, body);
     }
+    if method == "GET" && clean_path.starts_with("/api/faults/") {
+        let tail = clean_path.trim_start_matches("/api/faults/").trim_matches('/');
+        if !tail.is_empty()
+            && !tail.contains('/')
+            && !matches!(
+                tail,
+                "status" | "summary" | "export.csv" | "catalog" | "tree" | "applicable"
+            )
+        {
+            return json_response(&mut stream, faults::get_fault(tail));
+        }
+    }
     if method == "GET"
         && !clean_path.starts_with("/api/")
         && !clean_path.starts_with("/openfdd-agent/")
@@ -507,6 +519,10 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &model::assignments::algorithm_bindings_json_string(),
         ),
         ("GET", "/api/model/tree") => json_response(&mut stream, model::commissioning::tree_json()),
+        ("GET", "/api/model/graph") => json_response(
+            &mut stream,
+            model::query::network_graph(query_param(&path, "site_id").as_deref()),
+        ),
         ("GET", "/api/model/commissioning-export") => json_response(
             &mut stream,
             model::commissioning::commissioning_export_json(),
@@ -1062,7 +1078,8 @@ fn parse_json_body_or_empty(body: &str) -> Value {
 }
 
 fn site_scope_param(path: &str) -> String {
-    model::scope::resolve_site_id(query_param(path, "site_id").as_deref()).unwrap_or_default()
+    model::scope::resolve_site_id(query_param(path, "site_id").as_deref())
+        .unwrap_or_else(|| fdd::wires::persistence::default_site_id())
 }
 
 fn query_param(path: &str, key: &str) -> Option<String> {
