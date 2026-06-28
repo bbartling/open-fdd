@@ -1,6 +1,5 @@
 //! JSON persistence for FDD Wires graphs and assignments.
 
-use super::schema;
 use serde_json::{json, Value};
 use std::env;
 use std::fs;
@@ -113,31 +112,4 @@ fn write_json_file(path: &Path, value: &Value) -> Result<PathBuf, String> {
     )
     .map_err(|e| e.to_string())?;
     Ok(path.to_path_buf())
-}
-
-pub fn seed_demo_graph(site_id: &str, actor: &str) -> Value {
-    let graph_id = "graph:live-fdd-validation";
-    if read_graph(site_id, graph_id).is_some() {
-        return read_graph(site_id, graph_id).unwrap();
-    }
-    let mut graph = schema::empty_graph(site_id, graph_id, actor);
-    graph["review_status"] = json!("needs_review");
-    graph["source"] = json!("ai_generated");
-    graph["nodes"] = json!([
-        {"id":"n-driver-oa","type":"driver_point","label":"BACnet Outside Air Temp","position":{"x":40,"y":80},"config":{"ref":"bacnet:validation:analog-input:1001","source_label":"live"},"source":"ai_generated","provenance":{"confidence":0.92},"validation":{"status":"ok"}},
-        {"id":"n-model-oa","type":"model_point","label":"point:oa-t","position":{"x":220,"y":80},"config":{"haystack_id":"point:oa-t"},"source":"ai_generated","validation":{"status":"ok"}},
-        {"id":"n-fdd-input","type":"fdd_input","label":"oa_t","position":{"x":400,"y":80},"config":{"fdd_input":"oa_t","unit":"degF"},"source":"ai_generated","validation":{"status":"ok"}},
-        {"id":"n-sql-rule","type":"sql_rule","label":"OA Temperature Out Of Range","position":{"x":580,"y":80},"config":{"rule_id":"oa_temp_out_of_range","sql_mode":"builder"},"source":"ai_generated","validation":{"status":"ok"}},
-        {"id":"n-confirm","type":"confirmation_timer","label":"5 min confirmation","position":{"x":760,"y":80},"config":{"confirmation_seconds":300},"source":"human_created","validation":{"status":"ok"}},
-        {"id":"n-fault","type":"fault_output","label":"OA_TEMP_OUT_OF_RANGE","position":{"x":940,"y":80},"config":{"fault_code":"OA_TEMP_OUT_OF_RANGE","severity":"medium"},"source":"human_created","validation":{"status":"ok"}}
-    ]);
-    graph["edges"] = json!([
-        {"id":"e1","type":"maps_to","from":"n-driver-oa","to":"n-model-oa"},
-        {"id":"e2","type":"feeds","from":"n-model-oa","to":"n-fdd-input"},
-        {"id":"e3","type":"rule_input","from":"n-fdd-input","to":"n-sql-rule"},
-        {"id":"e4","type":"confirms","from":"n-sql-rule","to":"n-confirm"},
-        {"id":"e5","type":"rule_output","from":"n-confirm","to":"n-fault"}
-    ]);
-    let _ = write_graph(site_id, &graph);
-    graph
 }

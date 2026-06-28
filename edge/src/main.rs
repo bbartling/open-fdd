@@ -1,7 +1,6 @@
 #![recursion_limit = "256"]
 
 mod auth;
-mod bench;
 mod control;
 mod dashboard;
 mod data_management;
@@ -32,17 +31,6 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::thread;
-
-const REPORTS: &str = r#"[
-  {"report_id":"rcx-demo-001","kind":"rcx","status":"ready","path":"workspace/reports/rcx/rcx-demo-001.md"}
-]"#;
-
-fn dev_endpoints_enabled() -> bool {
-    matches!(
-        env::var("OPENFDD_DEV").as_deref(),
-        Ok("1") | Ok("true") | Ok("TRUE") | Ok("yes") | Ok("YES")
-    )
-}
 
 fn main() -> std::io::Result<()> {
     let cfg = auth_config();
@@ -233,10 +221,10 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             agent_update(),
         ),
         ("GET", "/api/historian/query") => {
-            raw_json(&mut stream, historian::arrow_table::query_json())
+            raw_json(&mut stream, &historian::arrow_table::query_json())
         }
         ("POST", "/api/historian/query") => {
-            raw_json(&mut stream, historian::arrow_table::query_json())
+            raw_json(&mut stream, &historian::arrow_table::query_json())
         }
         ("GET", "/api/export/meta") => json_response(&mut stream, export::meta_json()),
         ("GET", "/api/export/historian.csv") => {
@@ -314,13 +302,13 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            data_management::preview_purge(&parse_json_body(&body)),
+            data_management::preview_purge(&parse_json_body_or_empty(&body)),
         ),
         ("POST", "/api/data-management/purge/execute") => require_role(
             &mut stream,
             &principal,
             &["integrator"],
-            data_management::execute_purge(&parse_json_body(&body), &principal.role),
+            data_management::execute_purge(&parse_json_body_or_empty(&body), &principal.role),
         ),
         ("GET", "/api/data-management/policies") => require_role(
             &mut stream,
@@ -332,7 +320,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator"],
-            data_management::put_policies(&parse_json_body(&body), &principal.role),
+            data_management::put_policies(&parse_json_body_or_empty(&body), &principal.role),
         ),
         ("GET", "/api/data-management/agent-tools") => require_role(
             &mut stream,
@@ -344,19 +332,19 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            import::create_job(&parse_json_body(&body)),
+            import::create_job(&parse_json_body_or_empty(&body)),
         ),
         ("POST", "/api/csv-workbench/preview") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent", "operator"],
-            model::csv_workbench::preview_model(&parse_json_body(&body)),
+            model::csv_workbench::preview_model(&parse_json_body_or_empty(&body)),
         ),
         ("POST", "/api/csv-workbench/quality") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent", "operator"],
-            model::csv_workbench::analyze_quality(&parse_json_body(&body)),
+            model::csv_workbench::analyze_quality(&parse_json_body_or_empty(&body)),
         ),
         ("GET", "/api/csv-workbench/recipes") => require_role(
             &mut stream,
@@ -368,7 +356,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            model::csv_workbench::save_recipe(&parse_json_body(&body)),
+            model::csv_workbench::save_recipe(&parse_json_body_or_empty(&body)),
         ),
         ("GET", "/api/csv-workbench/column-mappings") => require_role(
             &mut stream,
@@ -380,20 +368,23 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            model::csv_workbench::save_column_mappings(&parse_json_body(&body)),
+            model::csv_workbench::save_column_mappings(&parse_json_body_or_empty(&body)),
         ),
         ("POST", "/api/csv-workbench/draft-rule") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            model::csv_workbench::draft_rule(&parse_json_body(&body), principal.sub.as_str()),
+            model::csv_workbench::draft_rule(
+                &parse_json_body_or_empty(&body),
+                principal.sub.as_str(),
+            ),
         ),
         ("POST", "/api/csv-workbench/purge-source/preview") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
             model::csv_workbench::purge_source_preview(
-                parse_json_body(&body)
+                parse_json_body_or_empty(&body)
                     .get("source_id")
                     .and_then(|v| v.as_str())
                     .unwrap_or(""),
@@ -404,11 +395,11 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &principal,
             &["integrator", "agent"],
             model::csv_workbench::purge_source_execute(
-                parse_json_body(&body)
+                parse_json_body_or_empty(&body)
                     .get("source_id")
                     .and_then(|v| v.as_str())
                     .unwrap_or(""),
-                parse_json_body(&body)
+                parse_json_body_or_empty(&body)
                     .get("confirm")
                     .and_then(|v| v.as_str())
                     .unwrap_or(""),
@@ -437,7 +428,11 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            json!({"ok": true, "run_id": "alg-demo-001", "result": serde_json::from_str::<Value>(control::cdl::dry_run_json()).unwrap()}),
+            json!({
+                "ok": true,
+                "dry_run": true,
+                "result": serde_json::from_str::<Value>(control::cdl::dry_run_json()).unwrap_or(json!({}))
+            }),
         ),
         ("GET", "/api/model/haystack") => {
             raw_json(&mut stream, &model::persist::haystack_model_json_string())
@@ -472,7 +467,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            model::commissioning::import_commissioning(&parse_json_body(&body)),
+            model::commissioning::import_commissioning(&parse_json_body_or_empty(&body)),
         ),
         ("GET", "/api/model/health") => {
             json_response(&mut stream, model::commissioning::health_json())
@@ -500,27 +495,29 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            serde_json::from_str::<Value>(&drivers::haystack::config_save_json(&parse_json_body(
-                &body,
-            )))
+            serde_json::from_str::<Value>(&drivers::haystack::config_save_json(
+                &parse_json_body_or_empty(&body),
+            ))
             .unwrap_or(json!({"ok": false})),
         ),
         ("GET", "/api/haystack/status") => raw_json(&mut stream, &drivers::haystack::status_json()),
         ("GET", "/api/haystack/ops") => raw_json(&mut stream, &drivers::haystack::ops_json()),
         ("POST", "/api/haystack/test") => raw_json(&mut stream, &drivers::haystack::test_json()),
         ("POST", "/api/haystack/read") => {
-            let payload = parse_json_body(&body);
+            let payload = parse_json_body_or_empty(&body);
             raw_json(&mut stream, &drivers::haystack::read_json(&payload))
         }
         ("POST", "/api/haystack/write") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            serde_json::from_str::<Value>(&drivers::haystack::write_json(&parse_json_body(&body)))
-                .unwrap_or(json!({"ok": false})),
+            serde_json::from_str::<Value>(&drivers::haystack::write_json(
+                &parse_json_body_or_empty(&body),
+            ))
+            .unwrap_or(json!({"ok": false})),
         ),
         ("POST", "/api/haystack/nav") => {
-            let payload = parse_json_body(&body);
+            let payload = parse_json_body_or_empty(&body);
             raw_json(&mut stream, &drivers::haystack::nav_json(&payload))
         }
         ("POST", "/api/haystack/ops") => raw_json(&mut stream, &drivers::haystack::ops_json()),
@@ -528,9 +525,9 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            serde_json::from_str::<Value>(&drivers::haystack::poll_once_json(&parse_json_body(
-                &body,
-            )))
+            serde_json::from_str::<Value>(&drivers::haystack::poll_once_json(
+                &parse_json_body_or_empty(&body),
+            ))
             .unwrap_or(json!({"ok": false})),
         ),
         ("GET", "/api/haystack/driver/tree") => {
@@ -540,54 +537,50 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            serde_json::from_str::<Value>(&drivers::haystack::import_json(&parse_json_body(&body)))
-                .unwrap_or(json!({"ok": false})),
+            serde_json::from_str::<Value>(&drivers::haystack::import_json(
+                &parse_json_body_or_empty(&body),
+            ))
+            .unwrap_or(json!({"ok": false})),
         ),
         ("POST", "/api/model/haystack/import") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            serde_json::from_str::<Value>(&drivers::haystack::import_json(&parse_json_body(&body)))
-                .unwrap_or(json!({"ok": false})),
-        ),
-        ("POST", "/api/model/haystack/from-smoke-profile") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            model::smoke_profile::import_from_active_profile(),
+            serde_json::from_str::<Value>(&drivers::haystack::import_json(
+                &parse_json_body_or_empty(&body),
+            ))
+            .unwrap_or(json!({"ok": false})),
         ),
         ("POST", "/api/model/query") => json_response(
             &mut stream,
             json!({"ok": true, "rows": model::query::haystack_rows()}),
         ),
-        ("GET", "/api/fdd/datafusion/demo") => {
-            if dev_endpoints_enabled() {
-                raw_json(&mut stream, fdd::datafusion_sql::result_json())
-            } else {
-                json_response(
-                    &mut stream,
-                    json!({"ok": false, "error": "demo endpoints disabled; set OPENFDD_DEV=1 for lab use"}),
-                )
-            }
+        ("POST", "/api/fdd/run") => match parse_json_body(&body) {
+            Ok(payload) => require_role(
+                &mut stream,
+                &principal,
+                &["integrator", "agent"],
+                fdd::datafusion_sql::run_fdd_response(&payload),
+            ),
+            Err(err) => json_response(&mut stream, json!({"ok": false, "error": err})),
+        },
+        ("GET", "/api/rules") => {
+            json_response(&mut stream, fdd::datafusion_sql::list_rules_response())
         }
-        ("POST", "/api/fdd/run") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            serde_json::from_str::<Value>(fdd::datafusion_sql::result_json()).unwrap(),
-        ),
-        ("GET", "/api/rules") => raw_json(&mut stream, fdd::datafusion_sql::rules_json()),
-        ("POST", "/api/rules/save") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            serde_json::from_str::<Value>(fdd::datafusion_sql::save_json()).unwrap(),
-        ),
+        ("POST", "/api/rules/save") => match parse_json_body(&body) {
+            Ok(payload) => require_role(
+                &mut stream,
+                &principal,
+                &["integrator", "agent"],
+                fdd::datafusion_sql::save_rule_response(&payload, &principal.sub),
+            ),
+            Err(err) => json_response(&mut stream, json!({"ok": false, "error": err})),
+        },
         ("POST", "/api/rules/batch") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            serde_json::from_str::<Value>(fdd::datafusion_sql::batch_json()).unwrap(),
+            fdd::datafusion_sql::batch_run_response(),
         ),
 
         ("GET", "/api/fdd-schema/tables") => {
@@ -604,13 +597,13 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator"],
-            fdd::wires::api::save_rule(&parse_json_body(&body), &principal.sub),
+            fdd::wires::api::save_rule(&parse_json_body_or_empty(&body), &principal.sub),
         ),
         ("POST", "/api/fdd-rules/builder-sql") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            fdd::wires::api::builder_sql(&parse_json_body(&body)),
+            fdd::wires::api::builder_sql(&parse_json_body_or_empty(&body)),
         ),
         ("GET", "/api/fdd-wires/graphs") => raw_json(
             &mut stream,
@@ -620,24 +613,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator"],
-            fdd::wires::api::create_graph(&parse_json_body(&body), &principal.sub),
+            fdd::wires::api::create_graph(&parse_json_body_or_empty(&body), &principal.sub),
         ),
         ("POST", "/api/fdd-wires/propose-assignments") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            fdd::wires::api::propose_assignments(&parse_json_body(&body), &principal.role),
+            fdd::wires::api::propose_assignments(&parse_json_body_or_empty(&body), &principal.role),
         ),
-        ("GET", "/api/arrow/demo") => {
-            if dev_endpoints_enabled() {
-                raw_json(&mut stream, historian::arrow_table::demo_rows_json())
-            } else {
-                json_response(
-                    &mut stream,
-                    json!({"ok": false, "error": "demo endpoints disabled; set OPENFDD_DEV=1 for lab use"}),
-                )
-            }
-        }
         ("POST", "/api/bacnet/whois") => {
             let body = drivers::bacnet::whois_json();
             raw_json(&mut stream, &body)
@@ -702,7 +685,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            drivers::bacnet::remap_bacnet_device_value(&parse_json_body(&body)),
+            drivers::bacnet::remap_bacnet_device_value(&parse_json_body_or_empty(&body)),
         ),
         ("DELETE", "/api/bacnet/driver/registry") => require_role(
             &mut stream,
@@ -818,7 +801,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             raw_json(&mut stream, &response_body)
         }
         ("GET", "/api/json-api/sources") => {
-            raw_json(&mut stream, drivers::json_api::sources_json())
+            raw_json(&mut stream, &drivers::json_api::sources_json())
         }
         ("GET", "/api/json-api/poll/status") => {
             let body = drivers::json_api::poll_status_json();
@@ -834,7 +817,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
                 if let Some(url) = payload.get("url").and_then(|v| v.as_str()) {
                     drivers::json_api::poll_url(url)
                 } else {
-                    drivers::json_api::poll_test_source()
+                    drivers::json_api::poll_once_value(&payload)
                 }
             })
         }
@@ -856,13 +839,17 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            drivers::json_api::read_and_store(&serde_json::from_str::<Value>(&body).unwrap_or(json!({}))),
+            drivers::json_api::read_and_store(
+                &serde_json::from_str::<Value>(&body).unwrap_or(json!({})),
+            ),
         ),
         ("PATCH", "/api/json-api/endpoint/poll") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            drivers::json_api::patch_endpoint_poll(&serde_json::from_str::<Value>(&body).unwrap_or(json!({}))),
+            drivers::json_api::patch_endpoint_poll(
+                &serde_json::from_str::<Value>(&body).unwrap_or(json!({})),
+            ),
         ),
         ("POST", "/api/json-api/poll/once") | ("POST", "/api/json-api/poll-once") => require_role(
             &mut stream,
@@ -870,9 +857,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent"],
             drivers::json_api::poll_all_saved(),
         ),
-        ("GET", "/api/timeseries/sites") => {
-            json_response(&mut stream, timeseries::sites_json())
-        }
+        ("GET", "/api/timeseries/sites") => json_response(&mut stream, timeseries::sites_json()),
         ("GET", "/api/timeseries/series") => {
             let site = query_param(&path, "site_id").unwrap_or_default();
             json_response(&mut stream, timeseries::series_json(&site))
@@ -902,33 +887,6 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/validation/audit") => {
             json_response(&mut stream, validation::audit_status_json())
         }
-        ("GET", "/api/validation-runs/current/status") => {
-            json_response(&mut stream, bench::smoke::status_json())
-        }
-        ("POST", "/api/validation-runs/current/sample") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            bench::smoke::capture_sample(&serde_json::from_str(&body).unwrap_or(json!({}))),
-        ),
-        ("POST", "/api/validation-runs/current/eval") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            bench::smoke::evaluate_historian_fdd(),
-        ),
-        ("POST", "/api/validation-runs/current/cycle") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            bench::smoke::evaluate_sample(&serde_json::from_str(&body).unwrap_or(json!({}))),
-        ),
-        ("POST", "/api/validation-runs/current/inject-scenario") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            bench::smoke::inject_scenario(&serde_json::from_str(&body).unwrap_or(json!({}))),
-        ),
         ("GET", "/api/control/status") => raw_json(&mut stream, control::cdl::status_json()),
         ("POST", "/api/control/simulate") => require_role(
             &mut stream,
@@ -956,7 +914,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            reports::create_draft(&parse_json_body(&body)),
+            reports::create_draft(&parse_json_body_or_empty(&body)),
         ),
         ("GET", "/api/reports") => require_role(
             &mut stream,
@@ -968,14 +926,19 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            reports::from_validation_run(&parse_json_body(&body)),
+            reports::from_validation_run(&parse_json_body_or_empty(&body)),
         ),
-        ("GET", "/api/reports/rcx/list") => raw_json(&mut stream, REPORTS),
+        ("GET", "/api/reports/rcx/list") => require_role(
+            &mut stream,
+            &principal,
+            READ_EXPORT_ROLES,
+            reports::list_rcx_reports(),
+        ),
         ("POST", "/api/reports/rcx/generate") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            json!({"ok": true, "report_id": "rcx-demo-001", "path": "workspace/reports/rcx/rcx-demo-001.md", "sections": ["faults", "overrides", "plotly_trends", "recommendations"]}),
+            reports::generate_rcx(&parse_json_body_or_empty(&body)),
         ),
         _ => {
             if let Some(resp) =
@@ -1008,20 +971,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             if let Some(resp) = handle_model_dynamic(&mut stream, method.as_str(), &clean_path) {
                 return resp;
             }
-            if let Some(resp) = handle_json_api_dynamic(
-                &mut stream,
-                &principal,
-                method.as_str(),
-                &clean_path,
-            ) {
+            if let Some(resp) =
+                handle_json_api_dynamic(&mut stream, &principal, method.as_str(), &clean_path)
+            {
                 return resp;
             }
             if method == "GET" && clean_path.starts_with("/api/bacnet/jobs/") {
                 let job_id = clean_path.trim_start_matches("/api/bacnet/jobs/");
-                return json_response(
-                    &mut stream,
-                    json!({"ok": true, "job_id": job_id, "status": "complete", "result": {}}),
-                );
+                return json_response(&mut stream, drivers::bacnet::job_status_json(job_id));
             }
             if let Some(resp) = handle_fdd_wires_dynamic(
                 &mut stream,
@@ -1042,8 +999,16 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
     }
 }
 
-fn parse_json_body(body: &str) -> Value {
-    serde_json::from_str(body).unwrap_or(json!({}))
+fn parse_json_body(body: &str) -> Result<Value, String> {
+    if body.trim().is_empty() {
+        Ok(json!({}))
+    } else {
+        serde_json::from_str(body).map_err(|e| format!("invalid JSON: {e}"))
+    }
+}
+
+fn parse_json_body_or_empty(body: &str) -> Value {
+    parse_json_body(body).unwrap_or_else(|_| json!({}))
 }
 
 fn site_scope_param(path: &str) -> String {
@@ -1149,7 +1114,7 @@ fn handle_fdd_wires_dynamic(
             Some(raw_json(stream, &fdd::wires::api::get_rule_json(rule_id)))
         }
         ("PUT", ["api", "fdd-rules", rule_id]) => {
-            let mut payload = parse_json_body(body);
+            let mut payload = parse_json_body_or_empty(body);
             payload["rule_id"] = json!(rule_id);
             Some(require_role(
                 stream,
@@ -1159,7 +1124,7 @@ fn handle_fdd_wires_dynamic(
             ))
         }
         ("POST", ["api", "fdd-rules", rule_id, "validate-sql"]) => {
-            let mut payload = parse_json_body(body);
+            let mut payload = parse_json_body_or_empty(body);
             payload["rule_id"] = json!(rule_id);
             Some(require_role(
                 stream,
@@ -1169,7 +1134,7 @@ fn handle_fdd_wires_dynamic(
             ))
         }
         ("POST", ["api", "fdd-rules", rule_id, "test-sql"]) => {
-            let mut payload = parse_json_body(body);
+            let mut payload = parse_json_body_or_empty(body);
             payload["rule_id"] = json!(rule_id);
             Some(require_role(
                 stream,
@@ -1200,7 +1165,7 @@ fn handle_fdd_wires_dynamic(
                 fdd::wires::api::update_graph(
                     &site,
                     graph_id,
-                    &parse_json_body(body),
+                    &parse_json_body_or_empty(body),
                     &principal.sub,
                 ),
             ))
@@ -1314,7 +1279,7 @@ fn handle_reports_dynamic(
                 stream,
                 principal,
                 &["integrator", "agent"],
-                reports::patch_report(&report_id, &parse_json_body(body)),
+                reports::patch_report(&report_id, &parse_json_body_or_empty(body)),
             )),
             "DELETE" => Some(require_role(
                 stream,
@@ -1347,7 +1312,7 @@ fn handle_reports_dynamic(
             stream,
             principal,
             &["integrator", "agent"],
-            reports::reorder_sections(&report_id, &parse_json_body(body)),
+            reports::reorder_sections(&report_id, &parse_json_body_or_empty(body)),
         )),
         ("POST", Some("render"), Some("pdf")) => Some(require_role(
             stream,
@@ -1417,7 +1382,7 @@ fn handle_import_job_dynamic(
             stream,
             principal,
             &["integrator", "agent"],
-            import::patch_options(job_id, &parse_json_body(body)),
+            import::patch_options(job_id, &parse_json_body_or_empty(body)),
         )),
         ("POST", Some("commit")) => Some(require_role(
             stream,
@@ -1785,19 +1750,7 @@ fn agent_update() -> Value {
 }
 
 fn building_checkin() -> Value {
-    json!({
-        "ok": true,
-        "site": "Demo Site",
-        "equipment": 1,
-        "points": 5,
-        "active_faults": 2,
-        "overrides": 2,
-        "recommended_next_steps": [
-            "review SAT_DEVIATION_HIGH fault",
-            "clear or document operator P8 SAT setpoint override",
-            "confirm duct static trim/respond sequence"
-        ]
-    })
+    dashboard::building_status()
 }
 
 fn algorithms() -> Value {

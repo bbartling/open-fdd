@@ -535,6 +535,35 @@ pub fn safe_report_id(raw: &str) -> Option<String> {
     Some(sanitized)
 }
 
+pub fn list_rcx_reports() -> Value {
+    let body = list_reports();
+    let records = body
+        .get("records")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|r| {
+            r.get("report_type")
+                .and_then(|v| v.as_str())
+                .map(|t| t.contains("rcx") || t.contains("RCx"))
+                .unwrap_or(false)
+        })
+        .collect::<Vec<_>>();
+    json!({"ok": true, "reports": records, "count": records.len()})
+}
+
+pub fn generate_rcx(payload: &Value) -> Value {
+    let mut draft = payload.clone();
+    if draft.get("template_id").is_none() {
+        draft["template_id"] = json!("openfdd-branded");
+    }
+    if draft.get("title").is_none() {
+        draft["title"] = json!("RCx Report");
+    }
+    create_draft(&draft)
+}
+
 pub fn list_reports() -> Value {
     let dir = reports_dir();
     let _ = fs::create_dir_all(&dir);

@@ -4,7 +4,7 @@
 //! Do not reintroduce `simulation_phase`, `simulated_values`, or bench device IDs here.
 
 use crate::historian::store;
-use crate::validation::profile::SmokeProfile;
+use crate::validation::profile::SiteConfig;
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 
@@ -16,7 +16,7 @@ fn phase_oa_t(phase: &str) -> f64 {
     }
 }
 
-fn fixture_row(p: &SmokeProfile, ts: &str, phase: &str) -> Value {
+fn fixture_row(p: &SiteConfig, ts: &str, phase: &str) -> Value {
     store::make_pivot_row(store::PivotSample {
         timestamp: ts,
         equipment_id: &p.equipment_id,
@@ -31,7 +31,7 @@ fn fixture_row(p: &SmokeProfile, ts: &str, phase: &str) -> Value {
 }
 
 pub fn inject_scenario_rows(
-    p: &SmokeProfile,
+    p: &SiteConfig,
     start: DateTime<Utc>,
     normal_min: u64,
     fault_min: u64,

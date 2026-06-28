@@ -24,11 +24,7 @@ fn should_scan(rel: &str) -> bool {
     if rel.contains("/bench/") {
         return false;
     }
-    if rel.ends_with("/drivers/haystack/fixture.rs")
-        || rel.ends_with("/historian/arrow_table.rs")
-        || rel.ends_with("/fdd/datafusion_sql.rs")
-        || rel.ends_with("/validation/audit.rs")
-    {
+    if rel.ends_with("/drivers/haystack/fixture.rs") || rel.ends_with("/validation/audit.rs") {
         return false;
     }
     true

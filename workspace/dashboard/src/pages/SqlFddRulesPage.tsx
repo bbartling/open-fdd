@@ -18,19 +18,6 @@ type BuilderState = {
 };
 
 type FddInput = { id: string; label: string };
-type FddFault = {
-  equip: string;
-  fault_code: string;
-  severity: string;
-  sample_count: number;
-  max_abs_error: number;
-};
-
-type DemoResult = {
-  engine?: string;
-  sql?: string;
-  faults?: FddFault[];
-};
 
 function validationSummary(payload: Record<string, unknown> | null): string {
   if (!payload) return "";
@@ -79,7 +66,6 @@ export default function SqlFddRulesPage() {
   const [fddInputs, setFddInputs] = useState<FddInput[]>([]);
   const [validation, setValidation] = useState<Record<string, unknown> | null>(null);
   const [runResult, setRunResult] = useState<Record<string, unknown> | null>(null);
-  const [demo, setDemo] = useState<DemoResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [copyStatus, setCopyStatus] = useState("");
@@ -87,14 +73,8 @@ export default function SqlFddRulesPage() {
   const equipmentMissing = mode === "builder" && !builder.equipment_id.trim();
 
   useEffect(() => {
-    Promise.all([
-      apiFetch<{ fdd_inputs?: FddInput[] }>("/api/fdd-schema/fdd-inputs"),
-      apiFetch<DemoResult>("/api/fdd/datafusion/demo"),
-    ])
-      .then(([inputs, demoRes]) => {
-        setFddInputs(inputs.fdd_inputs ?? []);
-        setDemo(demoRes);
-      })
+    apiFetch<{ fdd_inputs?: FddInput[] }>("/api/fdd-schema/fdd-inputs")
+      .then((inputs) => setFddInputs(inputs.fdd_inputs ?? []))
       .catch((e) => setError(formatApiError(e)));
   }, []);
 
@@ -377,22 +357,6 @@ export default function SqlFddRulesPage() {
           ) : null}
         </section>
       </div>
-
-      <details className="panel demo-panel-collapsible">
-        <summary>DataFusion batch demo (sample data only)</summary>
-        {demo?.sql ? <pre className="sql-block">{demo.sql}</pre> : null}
-        <div className="table-like">
-          {(demo?.faults ?? []).map((f) => (
-            <div key={`${f.equip}-${f.fault_code}`} className={`table-row severity-${f.severity}`}>
-              <span>{f.equip}</span>
-              <strong>{f.fault_code}</strong>
-              <span>samples {f.sample_count}</span>
-              <span>max error {f.max_abs_error}</span>
-            </div>
-          ))}
-        </div>
-        {demo?.engine ? <p className="muted">{demo.engine}</p> : null}
-      </details>
     </div>
   );
 }

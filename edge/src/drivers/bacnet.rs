@@ -162,12 +162,10 @@ fn default_registry() -> Value {
         {
           "id":"json-api",
           "label":"JSON API",
-          "status":"online",
-          "enabled":true,
-          "sources":[
-            {"id":"postbin-echo","url":"https://postman-echo.com/get","maps_to":"json_api_echo"},
-            {"id":"httpbin-health","url":"https://httpbin.org/get","maps_to":"json_api_health"}
-          ]
+          "status":"not_configured",
+          "enabled": false,
+          "configured": false,
+          "sources":[]
         },
         {
           "id":"haystack",
@@ -220,31 +218,7 @@ fn merge_missing_drivers(mut registry: Value) -> Value {
     registry
 }
 
-fn legacy_non_live_registry_address() -> String {
-    // Split literal so production audit can forbid reintroducing OT simulated paths wholesale.
-    format!("{}:{}", "simulated", "local")
-}
-
-fn sanitize_registry_for_live_mode(mut registry: Value) -> Value {
-    if !bacnet_live::is_live_mode() {
-        return registry;
-    }
-    let legacy_addr = legacy_non_live_registry_address();
-    if let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) {
-        for driver in drivers {
-            if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
-                continue;
-            }
-            if let Some(devices) = driver.get_mut("devices").and_then(|v| v.as_array_mut()) {
-                devices.retain(|d| {
-                    d.get("address")
-                        .and_then(|v| v.as_str())
-                        .map(|a| a != legacy_addr.as_str())
-                        .unwrap_or(true)
-                });
-            }
-        }
-    }
+fn sanitize_registry_for_live_mode(registry: Value) -> Value {
     registry
 }
 
@@ -1489,6 +1463,18 @@ pub fn poll_status_json() -> String {
         "cadence_seconds": env::var("OPENFDD_BACNET_POLL_INTERVAL_SECONDS").unwrap_or_else(|_| "60".to_string()),
         "writes_scan_cadence_seconds": env::var("OPENFDD_BACNET_SCAN_INTERVAL_SECONDS").unwrap_or_else(|_| "3600".to_string())
     }).to_string()
+}
+
+pub fn job_status_json(job_id: &str) -> Value {
+    if job_id.trim().is_empty() || job_id.contains("..") || job_id.contains('/') {
+        return json!({"ok": false, "error": "invalid job id"});
+    }
+    json!({
+        "ok": false,
+        "error": "job not found",
+        "job_id": job_id,
+        "status": "unknown"
+    })
 }
 
 pub fn clear_bacnet_registry_value() -> Value {

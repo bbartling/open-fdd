@@ -1,37 +1,82 @@
-//! DataFusion SQL fault detection facade.
-//!
-//! Production direction:
-//! - register Apache Arrow RecordBatches as `hvac` tables in DataFusion.
-//! - save SQL rules under `workspace/data/rules/`.
-//! - run `/api/rules/batch` and persist results under `workspace/data/fdd/`.
+//! DataFusion SQL fault detection — runs saved rules against historian tables.
 
-pub const RULES_JSON: &str = r#"[
-  {"id":"sat_deviation","name":"SAT Deviation Detector","engine":"datafusion_sql","enabled":true,"severity":"high"},
-  {"id":"duct_static_deviation","name":"Duct Static Deviation","engine":"datafusion_sql","enabled":true,"severity":"medium"},
-  {"id":"override_watch","name":"Supervisory Override Watch","engine":"bacnet_priority_array","enabled":true,"severity":"advisory"}
-]"#;
+use crate::fdd::execution;
+use crate::fdd::rules;
+use serde_json::{json, Value};
 
-pub const RESULT_JSON: &str = r#"{
-  "engine":"Apache Arrow + DataFusion SQL (Rust production path)",
-  "sql":"SELECT equip, CASE WHEN fan_cmd > 0 AND ABS(sat - sat_sp) > 10 THEN 'SAT_DEVIATION_HIGH' WHEN fan_cmd > 0 AND ABS(duct_static - duct_static_sp) > 0.5 THEN 'DUCT_STATIC_DEVIATION' ELSE 'OK' END AS fault_code, COUNT(*) AS sample_count FROM hvac WHERE fan_cmd > 0 GROUP BY equip, fault_code HAVING fault_code <> 'OK';",
-  "faults":[
-    {"equip":"equip:validation","fault_code":"SAT_DEVIATION_HIGH","severity":"high","sample_count":3,"max_abs_error":12.3},
-    {"equip":"equip:validation","fault_code":"DUCT_STATIC_DEVIATION","severity":"medium","sample_count":1,"max_abs_error":0.60}
-  ]
-}"#;
-
-pub fn rules_json() -> &'static str {
-    RULES_JSON
+pub fn list_rules_response() -> Value {
+    rules::list_rules()
 }
 
-pub fn result_json() -> &'static str {
-    RESULT_JSON
+pub fn save_rule_response(payload: &Value, actor: &str) -> Value {
+    rules::save_rule(payload, actor)
 }
 
-pub fn save_json() -> &'static str {
-    r#"{"ok":true,"saved":true,"engine":"datafusion_sql","path":"workspace/data/rules/rule-demo.json"}"#
+pub fn batch_run_response() -> Value {
+    let evaluable = rules::evaluable_rules();
+    if evaluable.is_empty() {
+        return json!({
+            "ok": true,
+            "engine": "DataFusion",
+            "rules_run": 0,
+            "faults": [],
+            "message": "no active rules with SQL configured"
+        });
+    }
+
+    let mut faults = Vec::new();
+    let mut rules_run = 0u64;
+    for rule in evaluable {
+        let sql = rule.get("sql").and_then(|v| v.as_str()).unwrap_or("");
+        if sql.trim().is_empty() {
+            continue;
+        }
+        let confirmation = rule
+            .get("confirmation_seconds")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(300);
+        let params = rule.get("params").cloned().unwrap_or(json!({}));
+        let result = execution::run_rule_sql_from_historian(sql, confirmation, &params);
+        rules_run += 1;
+        if result.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+            continue;
+        }
+        if let Some(rows) = result.get("rows").and_then(|v| v.as_array()) {
+            for row in rows {
+                let fault = row.get("fault_raw").and_then(|v| v.as_bool()) == Some(true)
+                    || row.get("confirmed_fault").and_then(|v| v.as_bool()) == Some(true)
+                    || row.get("fault_code").is_some();
+                if fault {
+                    faults.push(json!({
+                        "rule_id": rule.get("rule_id"),
+                        "equipment_id": row.get("equipment_id"),
+                        "fault_code": rule.get("output_fault_code").or_else(|| rule.get("fault_code")),
+                        "severity": rule.get("severity"),
+                        "sample_count": 1,
+                        "row": row
+                    }));
+                }
+            }
+        }
+    }
+
+    json!({
+        "ok": true,
+        "engine": "DataFusion",
+        "rules_run": rules_run,
+        "faults": faults
+    })
 }
 
-pub fn batch_json() -> &'static str {
-    r#"{"ok":true,"engine":"DataFusion","rules_run":2,"faults":[{"equip":"equip:validation","fault_code":"SAT_DEVIATION_HIGH","severity":"high","sample_count":3,"max_abs_error":12.3},{"equip":"equip:validation","fault_code":"DUCT_STATIC_DEVIATION","severity":"medium","sample_count":1,"max_abs_error":0.60}]}"#
+pub fn run_fdd_response(payload: &Value) -> Value {
+    let sql = payload.get("sql").and_then(|v| v.as_str()).unwrap_or("");
+    if sql.trim().is_empty() {
+        return json!({"ok": false, "error": "sql required"});
+    }
+    let confirmation = payload
+        .get("confirmation_seconds")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(300);
+    let params = payload.get("params").cloned().unwrap_or(json!({}));
+    execution::run_rule_sql_from_historian(sql, confirmation, &params)
 }

@@ -116,7 +116,10 @@ pub fn series_json(site_id: &str) -> Value {
                     if is_meta_key(k) || k.starts_with('_') {
                         continue;
                     }
-                    by_equip.entry(equip.to_string()).or_default().insert(k.clone());
+                    by_equip
+                        .entry(equip.to_string())
+                        .or_default()
+                        .insert(k.clone());
                 }
             }
         }
@@ -281,7 +284,11 @@ pub fn readings_json(params: &HashMap<String, String>) -> Value {
                 .to_string(),
         );
         for (req_equip, col) in &keys {
-            let use_equip = if req_equip.is_empty() { equip } else { req_equip.as_str() };
+            let use_equip = if req_equip.is_empty() {
+                equip
+            } else {
+                req_equip.as_str()
+            };
             if !req_equip.is_empty() && equip != use_equip {
                 continue;
             }

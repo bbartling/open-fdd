@@ -12,14 +12,14 @@ use std::time::Duration;
 
 use crate::historian::store;
 
-pub const SOURCES_JSON: &str = r#"[
-  {"id":"httpbin-health","url":"https://httpbin.org/get","maps_to":"json_api_health","status":"test-bench","kind":"http-get"},
-  {"id":"postman-echo","url":"https://postman-echo.com/get","maps_to":"json_api_echo","status":"test-bench","kind":"http-get"},
-  {"id":"plant-json-api","url":"http://edge-controller.local/api/points","maps_to":"plant telemetry","status":"optional"}
-]"#;
-
-pub fn sources_json() -> &'static str {
-    SOURCES_JSON
+pub fn sources_json() -> String {
+    let endpoints = load_saved_endpoints();
+    json!({
+        "ok": true,
+        "configured": !endpoints.is_empty(),
+        "sources": endpoints
+    })
+    .to_string()
 }
 
 pub fn register_json() -> &'static str {
@@ -54,8 +54,11 @@ fn write_saved_endpoints(endpoints: &[Value]) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let doc = json!({"ok": true, "endpoints": endpoints, "updated_at": Utc::now().to_rfc3339()});
-    fs::write(&path, serde_json::to_string_pretty(&doc).unwrap_or_default())
-        .map_err(|e| e.to_string())
+    fs::write(
+        &path,
+        serde_json::to_string_pretty(&doc).unwrap_or_default(),
+    )
+    .map_err(|e| e.to_string())
 }
 
 fn host_from_url(url: &str) -> String {
@@ -132,7 +135,10 @@ pub fn http_request(payload: &Value) -> Value {
             }
         }
         "basic" => {
-            let user = payload.get("basic_user").and_then(|v| v.as_str()).unwrap_or("");
+            let user = payload
+                .get("basic_user")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             let pass = payload
                 .get("basic_password")
                 .and_then(|v| v.as_str())
@@ -147,19 +153,12 @@ pub fn http_request(payload: &Value) -> Value {
         Ok(resp) => {
             let status_code = resp.status().as_u16();
             let body_text = resp.text().unwrap_or_default();
-            let parsed: Value = serde_json::from_str(&body_text).unwrap_or(json!({"raw": body_text}));
+            let parsed: Value =
+                serde_json::from_str(&body_text).unwrap_or(json!({"raw": body_text}));
             let extracted = extract_json_path(&parsed, json_path).unwrap_or(Value::Null);
-            let present_value = if extracted.is_string() {
-                extracted.as_str().unwrap_or("").to_string()
-            } else if extracted.is_number() {
-                extracted.to_string()
-            } else if extracted.is_boolean() {
-                extracted.to_string()
-            } else {
-                extracted.to_string()
-            };
+            let present_value = extracted.to_string();
             json!({
-                "success": status_code >= 200 && status_code < 300,
+                "success": (200..300).contains(&status_code),
                 "status_code": status_code,
                 "present_value": present_value,
                 "extracted": extracted,
@@ -244,16 +243,29 @@ pub fn read_and_store(payload: &Value) -> Value {
 }
 
 pub fn patch_endpoint_poll(payload: &Value) -> Value {
-    let point_id = payload.get("point_id").and_then(|v| v.as_str()).unwrap_or("");
-    let enabled = payload.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
-    let interval = payload.get("poll_interval_s").and_then(|v| v.as_u64()).unwrap_or(300) as u64;
+    let point_id = payload
+        .get("point_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let enabled = payload
+        .get("enabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let interval = payload
+        .get("poll_interval_s")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(300);
     let mut endpoints = load_saved_endpoints();
     let mut found = false;
     for ep in &mut endpoints {
         if ep.get("point_id").and_then(|v| v.as_str()) == Some(point_id) {
             ep["enabled"] = json!(enabled);
             ep["poll_interval_s"] = json!(if enabled { interval } else { 0 });
-            ep["poll_label"] = json!(if enabled { format!("{interval}s") } else { "off".to_string() });
+            ep["poll_label"] = json!(if enabled {
+                format!("{interval}s")
+            } else {
+                "off".to_string()
+            });
             found = true;
             break;
         }
@@ -262,7 +274,9 @@ pub fn patch_endpoint_poll(payload: &Value) -> Value {
         return json!({"ok": false, "error": "endpoint not found", "point_id": point_id});
     }
     match write_saved_endpoints(&endpoints) {
-        Ok(()) => json!({"ok": true, "point_id": point_id, "enabled": enabled, "poll_interval_s": interval}),
+        Ok(()) => {
+            json!({"ok": true, "point_id": point_id, "enabled": enabled, "poll_interval_s": interval})
+        }
         Err(err) => json!({"ok": false, "error": err}),
     }
 }
@@ -307,7 +321,8 @@ pub fn poll_all_saved() -> Value {
 }
 
 pub fn saved_devices_for_tree() -> Vec<Value> {
-    let mut by_host: std::collections::BTreeMap<String, Vec<Value>> = std::collections::BTreeMap::new();
+    let mut by_host: std::collections::BTreeMap<String, Vec<Value>> =
+        std::collections::BTreeMap::new();
     for ep in load_saved_endpoints() {
         let host = ep
             .get("host")
@@ -378,15 +393,8 @@ fn normalize_point(item: &Value) -> Option<Value> {
     }))
 }
 
-pub fn poll_test_source() -> Value {
-    let url = env::var("OPENFDD_JSON_API_TEST_URL")
-        .unwrap_or_else(|_| "https://httpbin.org/get".to_string());
-    poll_url(&url)
-}
-
 pub fn poll_url(url: &str) -> Value {
-    let source_id =
-        env::var("OPENFDD_JSON_API_TEST_SOURCE").unwrap_or_else(|_| "json-api-smoke".to_string());
+    let source_id = host_from_url(url);
     let started = std::time::Instant::now();
     let client = match http_client() {
         Ok(c) => c,
@@ -450,23 +458,33 @@ pub fn poll_url(url: &str) -> Value {
 
 pub fn poll_once_value(body: &Value) -> Value {
     if let Some(url) = body.get("url").and_then(|v| v.as_str()) {
-        return poll_url(url);
+        if !url.trim().is_empty() {
+            return poll_url(url);
+        }
     }
-    poll_test_source()
+    json!({
+        "ok": false,
+        "configured": false,
+        "error": "url required — add JSON API endpoints under Integrations"
+    })
 }
 
 pub fn refresh_point(body: &Value) -> Value {
     let point_id = body.get("point_id").and_then(|v| v.as_str()).unwrap_or("");
-    let sources: Vec<Value> = serde_json::from_str(SOURCES_JSON).unwrap_or_default();
+    let sources = load_saved_endpoints();
     if point_id.is_empty() {
-        let poll = poll_test_source();
         return json!({
-            "ok": poll.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
-            "present_value": poll.get("points").and_then(|v| v.as_array()).and_then(|a| a.first()).and_then(|p| p.get("value")).cloned().unwrap_or(Value::Null)
+            "ok": false,
+            "error": "point_id required",
+            "configured": !sources.is_empty()
         });
     }
     for src in sources {
-        if src.get("maps_to").and_then(|v| v.as_str()) != Some(point_id) {
+        let maps_to = src
+            .get("maps_to")
+            .or_else(|| src.get("point_id"))
+            .and_then(|v| v.as_str());
+        if maps_to != Some(point_id) {
             continue;
         }
         let url = src.get("url").and_then(|v| v.as_str()).unwrap_or("");
@@ -489,7 +507,7 @@ pub fn refresh_point(body: &Value) -> Value {
             "source_driver": "json-api"
         });
     }
-    json!({"ok": false, "error": "point not found", "point_id": point_id})
+    json!({"ok": false, "error": "point not found", "point_id": point_id, "configured": false})
 }
 
 fn protocol_enabled(env_key: &str) -> bool {
@@ -515,10 +533,11 @@ pub fn poll_status_json() -> String {
         .count();
     json!({
         "ok": true,
-        "enabled": true,
+        "enabled": !sources.is_empty(),
+        "configured": !sources.is_empty(),
         "service": "json-api-poll",
-        "status": "ready",
-        "enabled_points": if enabled_count > 0 { enabled_count } else { sources.len() },
+        "status": if sources.is_empty() { "not_configured" } else { "ready" },
+        "enabled_points": enabled_count,
         "samples": sources.len(),
         "at": Utc::now().to_rfc3339()
     })

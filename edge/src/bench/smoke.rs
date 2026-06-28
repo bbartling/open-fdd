@@ -3,7 +3,7 @@
 use crate::drivers::{bacnet_live, json_api, modbus};
 use crate::fdd::execution;
 use crate::historian::store;
-use crate::validation::profile::{self, SmokeProfile};
+use crate::validation::profile::{self, SiteConfig};
 use bacnet_types::enums::ObjectType;
 use chrono::Utc;
 use serde_json::{json, Value};
@@ -29,8 +29,8 @@ pub fn status_json() -> Value {
         "smoke_device_instance": p.device_instance,
         "equipment_id": p.equipment_id,
         "source_id": p.source_id,
-        "short_fdd_mode": profile::short_mode(),
-        "live_fdd_required": profile::live_fdd_enabled(),
+        "short_fdd_mode": false,
+        "live_fdd_required": false,
         "data_source": data_source,
         "demo_only": demo_only,
         "historian": store::status_json(),
@@ -45,7 +45,7 @@ pub fn status_json() -> Value {
     })
 }
 
-fn artifact_dir(p: &SmokeProfile) -> std::path::PathBuf {
+fn artifact_dir(p: &SiteConfig) -> std::path::PathBuf {
     store::workspace_dir().join("logs").join(&p.artifact_subdir)
 }
 
@@ -79,7 +79,7 @@ fn detect_data_source(rows: &[Value]) -> String {
     }
 }
 
-fn bacnet_points_meta(p: &SmokeProfile) -> Value {
+fn bacnet_points_meta(p: &SiteConfig) -> Value {
     json!(effective_points(p)
         .iter()
         .map(|pt| json!({
@@ -91,14 +91,14 @@ fn bacnet_points_meta(p: &SmokeProfile) -> Value {
         .collect::<Vec<_>>())
 }
 
-fn effective_points(p: &SmokeProfile) -> Vec<profile::BacnetPointRole> {
+fn effective_points(p: &SiteConfig) -> Vec<profile::BacnetPointRole> {
     if !p.bacnet_points.is_empty() {
         return p.bacnet_points.clone();
     }
     vec![]
 }
 
-fn modbus_probe(p: &SmokeProfile) -> Value {
+fn modbus_probe(p: &SiteConfig) -> Value {
     if !profile::is_modbus_configured(p) {
         return json!({
             "configured": false,
@@ -127,11 +127,11 @@ fn modbus_probe(p: &SmokeProfile) -> Value {
     })
 }
 
-fn json_api_probe(p: &SmokeProfile) -> Value {
+fn json_api_probe(p: &SiteConfig) -> Value {
     let poll = if let Some(url) = &p.json_api_url {
         json_api::poll_url(url)
     } else {
-        json_api::poll_test_source()
+        json_api::poll_once_value(&json!({}))
     };
     json!({
         "source_id": poll.get("source_id"),
@@ -148,7 +148,7 @@ fn json_api_probe(p: &SmokeProfile) -> Value {
     })
 }
 
-fn haystack_fixture_status(p: &SmokeProfile) -> Value {
+fn haystack_fixture_status(p: &SiteConfig) -> Value {
     let site = crate::model::scope::active_site_id().unwrap_or_else(|| "site:unknown".to_string());
     json!({
         "mode": "fixture",
@@ -219,7 +219,7 @@ pub fn capture_sample(_body: &Value) -> Value {
     })
 }
 
-fn poll_live_bacnet(p: &SmokeProfile) -> Result<(f64, f64, f64, f64), String> {
+fn poll_live_bacnet(p: &SiteConfig) -> Result<(f64, f64, f64, f64), String> {
     if p.device_instance == 0 {
         return Err("smoke profile missing device_instance — set OPENFDD_SMOKE_DEVICE_INSTANCE or local profile".into());
     }
