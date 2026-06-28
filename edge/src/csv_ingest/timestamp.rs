@@ -222,6 +222,7 @@ pub fn default_tz() -> Tz {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::NaiveDate;
 
     #[test]
     fn parses_iso_local() {
