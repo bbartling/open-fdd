@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod control;
+pub mod csv_ingest;
 pub mod dashboard;
 pub mod data_management;
 pub mod drivers;

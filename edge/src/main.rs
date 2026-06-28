@@ -2,6 +2,7 @@
 
 mod auth;
 mod control;
+mod csv_ingest;
 mod dashboard;
 mod data_management;
 mod drivers;
@@ -404,6 +405,53 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
                     .and_then(|v| v.as_str())
                     .unwrap_or(""),
             ),
+        ),
+        ("POST", "/api/csv/import/preview") => {
+            let ct = header_value(&headers, "content-type");
+            let out = if ct.contains("application/json") {
+                csv_ingest::preview_json_handler(&parse_json_body_or_empty(&body))
+            } else {
+                csv_ingest::preview_handler(&ct, body.as_bytes())
+            };
+            require_role(
+                &mut stream,
+                &principal,
+                &["integrator", "agent", "operator"],
+                out,
+            )
+        }
+        ("POST", "/api/csv/import/plan") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            csv_ingest::plan_handler(&parse_json_body_or_empty(&body)),
+        ),
+        ("POST", "/api/csv/import/execute") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            csv_ingest::execute_handler(&parse_json_body_or_empty(&body)),
+        ),
+        ("GET", "/api/datasets") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            csv_ingest::list_datasets(),
+        ),
+        ("DELETE", "/api/datasets") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            match parse_json_body_or_empty(&body)
+                .get("dataset_id")
+                .and_then(|v| v.as_str())
+            {
+                Some(id) => match csv_ingest::delete_dataset(id) {
+                    Ok(()) => json!({"ok": true}),
+                    Err(e) => json!({"ok": false, "error": e}),
+                },
+                None => json!({"ok": false, "error": "dataset_id required"}),
+            },
         ),
         ("POST", "/api/ops/docker/update") => require_role(
             &mut stream,
@@ -965,6 +1013,11 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             ) {
                 return resp;
             }
+            if let Some(resp) =
+                handle_csv_ingest_dynamic(&mut stream, &principal, method.as_str(), &clean_path)
+            {
+                return resp;
+            }
             if let Some(resp) = handle_model_dynamic(&mut stream, method.as_str(), &clean_path) {
                 return resp;
             }
@@ -1348,6 +1401,72 @@ fn handle_data_management_dynamic(
         &["integrator", "agent", "operator"],
         data_management::purge_job_status(job_id),
     ))
+}
+
+fn header_value(headers: &[(String, String)], name: &str) -> String {
+    headers
+        .iter()
+        .find(|(k, _)| k == name)
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default()
+}
+
+fn handle_csv_ingest_dynamic(
+    stream: &mut TcpStream,
+    principal: &Principal,
+    method: &str,
+    path: &str,
+) -> Option<std::io::Result<()>> {
+    let parts = path_parts(path);
+    if parts.len() >= 5
+        && parts[0] == "api"
+        && parts[1] == "csv"
+        && parts[2] == "import"
+        && parts[3] == "sessions"
+    {
+        if method != "GET" {
+            return None;
+        }
+        let session_id = parts[4];
+        if session_id.contains("..") {
+            return Some(json_response(
+                stream,
+                json!({"ok": false, "error": "invalid session id"}),
+            ));
+        }
+        return Some(require_role(
+            stream,
+            principal,
+            &["integrator", "agent", "operator"],
+            csv_ingest::get_session_handler(session_id),
+        ));
+    }
+    if parts.len() >= 4 && parts[0] == "api" && parts[1] == "datasets" {
+        let dataset_id = parts[2];
+        if dataset_id.contains("..") {
+            return Some(json_response(
+                stream,
+                json!({"ok": false, "error": "invalid dataset id"}),
+            ));
+        }
+        if method == "GET" && parts.get(3) == Some(&"preview") {
+            let qs = query_string(path);
+            let offset = query_param(path, "offset")
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(0);
+            let limit = query_param(path, "limit")
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(100);
+            let _ = qs;
+            return Some(require_role(
+                stream,
+                principal,
+                &["integrator", "agent", "operator"],
+                csv_ingest::preview_dataset(dataset_id, offset, limit),
+            ));
+        }
+    }
+    None
 }
 
 fn handle_import_job_dynamic(

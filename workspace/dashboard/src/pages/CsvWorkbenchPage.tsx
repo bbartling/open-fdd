@@ -16,6 +16,7 @@ import {
   type MergeMode,
 } from "../lib/csvWorkbench";
 import CsvFusionWiresheet from "../wiresheet/CsvFusionWiresheet";
+import CsvUt3ImportPanel from "../components/CsvUt3ImportPanel";
 
 type JobStatus = { ok?: boolean; job_id?: string; rows_committed?: number };
 type ModelPreview = {
@@ -353,9 +354,13 @@ export default function CsvWorkbenchPage() {
   return (
     <div className="page page-wide csv-workbench-page">
       <PageHeader
-        title="CSV Fusion"
-        subtitle="Upload files → join or append on the fusion wiresheet → map columns → commit. AI can propose merges from filenames and headers."
+        title="CSV Fusion / UT3 Import"
+        subtitle="Server-side Rust ingest (append, join, DST-aware timestamps, Arrow save) or client fusion wiresheet below."
       />
+
+      <CsvUt3ImportPanel />
+
+      <hr className="section-divider" />
 
       {error ? <p className="error">{error}</p> : null}
       {mergeError ? <p className="error">{mergeError}</p> : null}
