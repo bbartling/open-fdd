@@ -42,6 +42,7 @@ Full detail: [architecture/overview.md](architecture/overview.md).
 | Topic | Document |
 | --- | --- |
 | Platform overview | [architecture/overview.md](architecture/overview.md) |
+| **Open-FDD OS (future concept)** | [../os/README.md](../os/README.md) — HA OS–inspired appliance image; Rust GHCR under the hood |
 | Local BACnet server (diagnostics) | [architecture/bacnet-local-server.md](architecture/bacnet-local-server.md) |
 | Drivers, historian, and FDD | [architecture/drivers-and-fdd.md](architecture/drivers-and-fdd.md) |
 | Haystack assignment model | [ASSIGNMENT_MODEL.md](ASSIGNMENT_MODEL.md) |

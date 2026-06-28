@@ -2,7 +2,7 @@
 
 use crate::fdd::confirmation;
 use crate::fdd::sql_safety;
-use crate::historian::{arrow_table, store};
+use crate::historian::store;
 use crate::model::scope;
 use arrow::array::{BooleanArray, Float64Array, StringArray, TimestampMillisecondArray};
 use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
@@ -25,11 +25,6 @@ pub fn schema_tables_json() -> Value {
                 "name": "telemetry_pivot",
                 "description": "Wide pivoted view for rule SQL",
                 "columns": ["timestamp","equipment_id","oa_t","oa_h","sat","duct_t","zn_t","sat_sp","fan_cmd","occ"]
-            },
-            {
-                "name": "hvac",
-                "description": "Legacy HVAC demo table",
-                "columns": ["ts","equip","sat","sat_sp","duct_static","duct_static_sp","oat","fan_cmd"]
             }
         ]
     })
@@ -39,7 +34,7 @@ pub fn fdd_inputs_json() -> Value {
     json!({
         "ok": true,
         "fdd_inputs": [
-            {"id":"oa_t","label":"Outside Air Temp","unit":"degF","equipment_types":["ahu","bench"]},
+            {"id":"oa_t","label":"OA temperature","unit":"degF","equipment_types":["ahu"]},
             {"id":"oa_h","label":"Outside Air Humidity","unit":"%RH","equipment_types":["ahu"]},
             {"id":"sat","label":"Supply Air Temp","unit":"degF","equipment_types":["ahu","vav"]},
             {"id":"duct_t","label":"Discharge/Duct Temp","unit":"degF","equipment_types":["ahu","vav"]},
@@ -57,7 +52,6 @@ pub fn equipment_types_json() -> Value {
         "equipment_types": [
             {"id":"ahu","label":"Air Handling Unit"},
             {"id":"vav","label":"VAV Box"},
-            {"id":"bench","label":"Validation Controller"},
             {"id":"plant","label":"Central Plant"}
         ]
     })
@@ -92,30 +86,7 @@ pub fn run_rule_sql_from_historian(sql: &str, confirmation_seconds: i64, params:
 }
 
 pub fn run_rule_sql(sql: &str, confirmation_seconds: i64, params: &Value) -> Value {
-    if !sql_safety::is_sql_safe(sql) {
-        return json!({
-            "ok": false,
-            "error": "unsafe SQL rejected",
-            "validation": sql_safety::validate_sql(sql)
-        });
-    }
-
-    let bound = bind_params(sql, params);
-    let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-    match rt.block_on(execute_query(&bound)) {
-        Ok(rows) => {
-            let confirmation = confirmation::apply_confirmation(&rows, confirmation_seconds);
-            json!({
-                "ok": true,
-                "sql": bound,
-                "row_count": rows.len(),
-                "rows": rows,
-                "confirmation": confirmation,
-                "engine": "Apache Arrow + DataFusion SQL (Rust)"
-            })
-        }
-        Err(err) => json!({"ok": false, "error": err}),
-    }
+    run_rule_sql_from_historian(sql, confirmation_seconds, params)
 }
 
 fn bind_params(sql: &str, params: &Value) -> String {
@@ -147,18 +118,6 @@ async fn execute_query_from_historian(sql: &str) -> Result<Vec<Value>, String> {
     Ok(rows)
 }
 
-async fn execute_query(sql: &str) -> Result<Vec<Value>, String> {
-    let ctx = SessionContext::new();
-    register_demo_tables(&ctx).await?;
-    let df = ctx.sql(sql).await.map_err(|e| e.to_string())?;
-    let batches = df.collect().await.map_err(|e| e.to_string())?;
-    let mut rows = Vec::new();
-    for batch in batches {
-        rows.extend(batch_to_json_rows(&batch)?);
-    }
-    Ok(rows)
-}
-
 async fn register_historian_tables(ctx: &SessionContext) -> Result<(), String> {
     let pivot_rows = store::load_pivot_rows()?;
     if pivot_rows.is_empty() {
@@ -166,25 +125,9 @@ async fn register_historian_tables(ctx: &SessionContext) -> Result<(), String> {
     }
     let pivot = store::pivot_rows_to_batch(&pivot_rows).map_err(|e| e.to_string())?;
     let telemetry = historian_pivot_to_telemetry_batch(&pivot_rows).map_err(|e| e.to_string())?;
-    let hvac = build_hvac_batch().map_err(|e| e.to_string())?;
     ctx.register_batch("telemetry_pivot", pivot)
         .map_err(|e| e.to_string())?;
     ctx.register_batch("telemetry", telemetry)
-        .map_err(|e| e.to_string())?;
-    ctx.register_batch("hvac", hvac)
-        .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-async fn register_demo_tables(ctx: &SessionContext) -> Result<(), String> {
-    let telemetry = build_telemetry_batch().map_err(|e| e.to_string())?;
-    let pivot = build_pivot_batch().map_err(|e| e.to_string())?;
-    let hvac = build_hvac_batch().map_err(|e| e.to_string())?;
-    ctx.register_batch("telemetry", telemetry)
-        .map_err(|e| e.to_string())?;
-    ctx.register_batch("telemetry_pivot", pivot)
-        .map_err(|e| e.to_string())?;
-    ctx.register_batch("hvac", hvac)
         .map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -306,203 +249,6 @@ fn historian_pivot_to_telemetry_batch(
             Arc::new(BooleanArray::from(simulated)),
         ],
     )
-}
-
-fn build_hvac_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
-    let rows: Vec<Value> = serde_json::from_str(arrow_table::demo_rows_json()).unwrap_or_default();
-    let schema = Schema::new(vec![
-        Field::new("ts", DataType::Utf8, false),
-        Field::new("equip", DataType::Utf8, false),
-        Field::new("sat", DataType::Float64, true),
-        Field::new("sat_sp", DataType::Float64, true),
-        Field::new("duct_static", DataType::Float64, true),
-        Field::new("duct_static_sp", DataType::Float64, true),
-        Field::new("oat", DataType::Float64, true),
-        Field::new("fan_cmd", DataType::Float64, true),
-    ]);
-    let ts: StringArray = rows
-        .iter()
-        .map(|r| r.get("ts").and_then(|v| v.as_str()).unwrap_or(""))
-        .collect::<Vec<_>>()
-        .into();
-    let equip: StringArray = rows
-        .iter()
-        .map(|r| r.get("equip").and_then(|v| v.as_str()).unwrap_or(""))
-        .collect::<Vec<_>>()
-        .into();
-    let f64 = |key: &str| -> Float64Array {
-        rows.iter()
-            .map(|r| r.get(key).and_then(|v| v.as_f64()))
-            .collect::<Float64Array>()
-    };
-    RecordBatch::try_new(
-        Arc::new(schema),
-        vec![
-            Arc::new(ts),
-            Arc::new(equip),
-            Arc::new(f64("sat")),
-            Arc::new(f64("sat_sp")),
-            Arc::new(f64("duct_static")),
-            Arc::new(f64("duct_static_sp")),
-            Arc::new(f64("oat")),
-            Arc::new(f64("fan_cmd")),
-        ],
-    )
-}
-
-fn build_telemetry_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
-    let rows: Vec<Value> = serde_json::from_str(arrow_table::demo_rows_json()).unwrap_or_default();
-    let schema = Schema::new(vec![
-        Field::new(
-            "timestamp",
-            DataType::Timestamp(TimeUnit::Millisecond, None),
-            false,
-        ),
-        Field::new("site_id", DataType::Utf8, false),
-        Field::new("building_id", DataType::Utf8, false),
-        Field::new("equipment_id", DataType::Utf8, false),
-        Field::new("point_id", DataType::Utf8, false),
-        Field::new("fdd_input", DataType::Utf8, false),
-        Field::new("value", DataType::Float64, true),
-        Field::new("unit", DataType::Utf8, false),
-        Field::new("quality", DataType::Utf8, false),
-        Field::new("source", DataType::Utf8, false),
-        Field::new("source_driver", DataType::Utf8, false),
-        Field::new("source_device", DataType::Utf8, false),
-        Field::new("source_object", DataType::Utf8, false),
-        Field::new("is_simulated", DataType::Boolean, false),
-    ]);
-    let mut ts = Vec::new();
-    let mut sites = Vec::new();
-    let mut equipment = Vec::new();
-    let mut points = Vec::new();
-    let mut fdd_input = Vec::new();
-    let mut value = Vec::new();
-    for row in &rows {
-        let t = row.get("ts").and_then(|v| v.as_str()).unwrap_or("");
-        let ts_ms = parse_ts_ms(t);
-        let equip = row
-            .get("equip")
-            .and_then(|v| v.as_str())
-            .map(str::to_string)
-            .unwrap_or_else(default_equipment_id);
-        let site = site_id_for_equipment(&equip);
-        for (input, key) in [
-            ("sat", "sat"),
-            ("sat_sp", "sat_sp"),
-            ("fan_cmd", "fan_cmd"),
-            ("oat", "oa_t"),
-        ] {
-            ts.push(ts_ms);
-            sites.push(site.clone());
-            equipment.push(equip.clone());
-            points.push(format!("point:{input}"));
-            fdd_input.push(input.to_string());
-            value.push(row.get(key).and_then(|v| v.as_f64()));
-        }
-    }
-    let n = ts.len();
-    let building: StringArray = std::iter::repeat_n("building:main", n)
-        .collect::<Vec<_>>()
-        .into();
-    let equip_arr: StringArray = equipment.into();
-    let point: StringArray = points.into();
-    let fdd_arr: StringArray = fdd_input.into();
-    let val_arr: Float64Array = value.into();
-    let unit: StringArray = std::iter::repeat_n("degF", n).collect::<Vec<_>>().into();
-    let quality: StringArray = std::iter::repeat_n("good", n).collect::<Vec<_>>().into();
-    let source: StringArray = std::iter::repeat_n("simulated", n)
-        .collect::<Vec<_>>()
-        .into();
-    let driver: StringArray = std::iter::repeat_n("csv", n).collect::<Vec<_>>().into();
-    let device: StringArray = equip_arr.clone();
-    let object: StringArray = std::iter::repeat_n("historian", n)
-        .collect::<Vec<_>>()
-        .into();
-    let simulated = BooleanArray::from(vec![false; n]);
-    let ts_arr = TimestampMillisecondArray::from(ts);
-    let site_arr: StringArray = sites.into();
-    RecordBatch::try_new(
-        Arc::new(schema),
-        vec![
-            Arc::new(ts_arr),
-            Arc::new(site_arr),
-            Arc::new(building),
-            Arc::new(equip_arr),
-            Arc::new(point),
-            Arc::new(fdd_arr),
-            Arc::new(val_arr),
-            Arc::new(unit),
-            Arc::new(quality),
-            Arc::new(source),
-            Arc::new(driver),
-            Arc::new(device),
-            Arc::new(object),
-            Arc::new(simulated),
-        ],
-    )
-}
-
-fn build_pivot_batch() -> Result<RecordBatch, arrow::error::ArrowError> {
-    let rows: Vec<Value> = serde_json::from_str(arrow_table::demo_rows_json()).unwrap_or_default();
-    let schema = Schema::new(vec![
-        Field::new(
-            "timestamp",
-            DataType::Timestamp(TimeUnit::Millisecond, None),
-            false,
-        ),
-        Field::new("equipment_id", DataType::Utf8, false),
-        Field::new("oa_t", DataType::Float64, true),
-        Field::new("oa_h", DataType::Float64, true),
-        Field::new("sat", DataType::Float64, true),
-        Field::new("duct_t", DataType::Float64, true),
-        Field::new("zn_t", DataType::Float64, true),
-        Field::new("sat_sp", DataType::Float64, true),
-        Field::new("fan_cmd", DataType::Float64, true),
-        Field::new("occ", DataType::Float64, true),
-    ]);
-    let mut ts = Vec::new();
-    let mut equip = Vec::new();
-    let mut sat = Vec::new();
-    let mut sat_sp = Vec::new();
-    let mut fan = Vec::new();
-    let mut oat = Vec::new();
-    for row in &rows {
-        ts.push(parse_ts_ms(
-            row.get("ts").and_then(|v| v.as_str()).unwrap_or(""),
-        ));
-        equip.push(
-            row.get("equip")
-                .and_then(|v| v.as_str())
-                .map(str::to_string)
-                .unwrap_or_else(default_equipment_id),
-        );
-        sat.push(row.get("sat").and_then(|v| v.as_f64()));
-        sat_sp.push(row.get("sat_sp").and_then(|v| v.as_f64()));
-        fan.push(row.get("fan_cmd").and_then(|v| v.as_f64()));
-        oat.push(row.get("oat").and_then(|v| v.as_f64()));
-    }
-    RecordBatch::try_new(
-        Arc::new(schema),
-        vec![
-            Arc::new(TimestampMillisecondArray::from(ts)),
-            Arc::new(StringArray::from(equip)),
-            Arc::new(Float64Array::from(oat)),
-            Arc::new(Float64Array::from(vec![None; rows.len()])),
-            Arc::new(Float64Array::from(sat)),
-            Arc::new(Float64Array::from(vec![None; rows.len()])),
-            Arc::new(Float64Array::from(vec![None; rows.len()])),
-            Arc::new(Float64Array::from(sat_sp)),
-            Arc::new(Float64Array::from(fan)),
-            Arc::new(Float64Array::from(vec![Some(1.0); rows.len()])),
-        ],
-    )
-}
-
-fn parse_ts_ms(s: &str) -> i64 {
-    DateTime::parse_from_rfc3339(s)
-        .map(|dt| dt.with_timezone(&Utc).timestamp_millis())
-        .unwrap_or(0)
 }
 
 fn batch_to_json_rows(batch: &RecordBatch) -> Result<Vec<Value>, String> {

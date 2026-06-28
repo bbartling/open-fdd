@@ -37,3 +37,17 @@ Verify platform before update:
 ```bash
 ./scripts/openfdd_rust_check_ghcr_platform.sh
 ```
+
+## Optional MCP sidecar (3.2.3+)
+
+Edge update does **not** start MCP. After a successful update, pull the MCP image at the **same tag** and connect Cursor (stdio):
+
+```bash
+cd ~/open-fdd
+export OPENFDD_COMPOSE_ROOT="$PWD"
+export OPENFDD_IMAGE_TAG=3.2.3   # match NEW_TAG / site tag
+
+docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar pull openfdd-mcp
+```
+
+Then configure Cursor or run interactively — see [mcp/README.md](../mcp/README.md) and README **Optional MCP sidecar**.

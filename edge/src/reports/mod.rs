@@ -136,6 +136,11 @@ pub fn templates() -> Value {
                 "id": "rcx-universal-3",
                 "title": "RCx Universal 3 (ASHRAE)",
                 "description": "Retro-commissioning style report: faults, trends, recommendations, and CSV-backed evidence"
+            },
+            {
+                "id": "openfdd-branded",
+                "title": "Open-FDD branded RCx",
+                "description": "RCx-style report with optional Open-FDD chiller cover branding"
             }
         ]
     })
@@ -150,11 +155,31 @@ pub fn create_draft(body: &Value) -> Value {
         .get("title")
         .and_then(|v| v.as_str())
         .unwrap_or("Open-FDD Report");
+    let include_branding = body
+        .get("include_branding")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
     let report_id = format!("rpt-{}", Utc::now().timestamp_millis());
     let coverage = query::model_coverage();
     let equips = query::list_equips(None);
     let hist_status = store::status_json();
-    let mut sections = vec![
+    let mut sections = vec![];
+    if include_branding || template == "openfdd-branded" {
+        sections.push(json!({
+            "id": "cover-branding",
+            "type": "cover",
+            "title": "Open-FDD",
+            "visible": include_branding,
+            "order": sections.len(),
+            "content": {
+                "brand": "Open-FDD",
+                "logo_url": "https://raw.githubusercontent.com/bbartling/open-fdd/master/image_new_chiller.png",
+                "accent_color": "#58a6ff",
+                "subtitle": title
+            }
+        }));
+    }
+    sections.extend(vec![
         json!({
             "id": "building-summary",
             "type": "building_summary",
@@ -232,7 +257,12 @@ pub fn create_draft(body: &Value) -> Value {
             "order": 8,
             "content": {"notes": "Review confirmed faults and model gaps before commissioning sign-off.", "items": []}
         }),
-    ];
+    ]);
+    for (i, sec) in sections.iter_mut().enumerate() {
+        if sec.get("order").is_none() {
+            sec["order"] = json!(i);
+        }
+    }
     for plot in suggested_plot_blocks() {
         sections.push(plot);
     }
@@ -503,6 +533,35 @@ pub fn safe_report_id(raw: &str) -> Option<String> {
         return None;
     }
     Some(sanitized)
+}
+
+pub fn list_rcx_reports() -> Value {
+    let body = list_reports();
+    let records = body
+        .get("records")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|r| {
+            r.get("report_type")
+                .and_then(|v| v.as_str())
+                .map(|t| t.contains("rcx") || t.contains("RCx"))
+                .unwrap_or(false)
+        })
+        .collect::<Vec<_>>();
+    json!({"ok": true, "reports": records, "count": records.len()})
+}
+
+pub fn generate_rcx(payload: &Value) -> Value {
+    let mut draft = payload.clone();
+    if draft.get("template_id").is_none() {
+        draft["template_id"] = json!("openfdd-branded");
+    }
+    if draft.get("title").is_none() {
+        draft["title"] = json!("RCx Report");
+    }
+    create_draft(&draft)
 }
 
 pub fn list_reports() -> Value {

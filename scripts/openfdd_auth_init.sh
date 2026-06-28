@@ -8,10 +8,13 @@
 #   ./scripts/openfdd_auth_init.sh --hash-password 'secret'
 #
 # After rotating credentials, recreate containers so they reload env:
-#   docker compose -f docker-compose.local.yml up -d --force-recreate openfdd-bridge
+#   docker compose -f docker-compose.yml up -d --force-recreate openfdd-bridge
+#   # or: docker compose -f docker/compose.edge.rust.yml --profile full-edge up -d --force-recreate openfdd-bridge
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/openfdd_rust_site_lib.sh
+source "$ROOT/scripts/openfdd_rust_site_lib.sh"
 AUTH_PATH="${OPENFDD_AUTH_PATH:-$ROOT/workspace/auth.env.local}"
 IMAGE="${OPENFDD_AUTH_IMAGE:-open-fdd-openfdd-bridge:local}"
 GHCR_IMAGE="${OPENFDD_RUST_GHCR_IMAGE:-ghcr.io/bbartling/openfdd-edge-rust:latest}"
@@ -196,9 +199,19 @@ echo "==> Auth env: $AUTH_PATH"
 if [[ "$RESTART" == "true" ]]; then
   export OPENFDD_RUN_UID="${OPENFDD_RUN_UID:-$(id -u)}"
   export OPENFDD_RUN_GID="${OPENFDD_RUN_GID:-$(id -g)}"
-  echo "==> Recreating openfdd-bridge to reload auth env"
-  docker compose -f "$ROOT/docker-compose.local.yml" up -d --force-recreate openfdd-bridge
+  COMPOSE="$(openfdd_rust_resolve_compose_file "$ROOT")"
+  echo "==> Recreating openfdd-bridge to reload auth env (compose: $COMPOSE)"
+  if [[ -f "$COMPOSE" ]]; then
+    compose_args=(-f "$COMPOSE")
+    if [[ -n "${COMPOSE_PROFILE:-}" ]]; then
+      compose_args+=(--profile "$COMPOSE_PROFILE")
+    fi
+    docker compose "${compose_args[@]}" up -d --force-recreate openfdd-bridge
+  else
+    echo "WARN: no compose file found under $ROOT — set COMPOSE_FILE or run from ~/open-fdd" >&2
+  fi
 else
-  echo "==> Recreate bridge after rotate/force: docker compose -f docker-compose.local.yml up -d --force-recreate openfdd-bridge"
+  echo "==> Recreate bridge after rotate/force (use the same compose file that started the stack):"
+  echo "    COMPOSE_FILE=docker-compose.yml COMPOSE_PROFILE=full-edge docker compose -f docker-compose.yml --profile full-edge up -d --force-recreate openfdd-bridge"
   echo "==> Or re-run with --restart"
 fi

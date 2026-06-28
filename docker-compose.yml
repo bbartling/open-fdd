@@ -21,7 +21,14 @@ services:
       OPENFDD_MODBUS_PORT: ${OPENFDD_MODBUS_PORT:-1502}
       OPENFDD_MODBUS_UNIT_ID: ${OPENFDD_MODBUS_UNIT_ID:-1}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     env_file:
       - path: ./workspace/data.env.local
         required: false
@@ -90,7 +97,8 @@ services:
       - ./workspace:/app/workspace
     restart: unless-stopped
 
-  # MCP will be added later. Agent JSON APIs are already exposed by openfdd-bridge.
+  # Optional MCP sidecar: see mcp/README.md and README "Optional MCP sidecar".
+  # docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar pull openfdd-mcp
 
   open-fdd-rust-backend:
     profiles: ["rust-prod"]

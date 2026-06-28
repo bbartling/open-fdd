@@ -83,9 +83,9 @@ mod tests {
     #[test]
     fn confirms_after_duration() {
         let rows = vec![
-            json!({"timestamp":"2026-06-21T00:00:00Z","fault_raw":true,"equipment_id":"equip:local-test"}),
-            json!({"timestamp":"2026-06-21T00:06:00Z","fault_raw":true,"equipment_id":"equip:local-test"}),
-            json!({"timestamp":"2026-06-21T00:11:00Z","fault_raw":false,"equipment_id":"equip:local-test"}),
+            json!({"timestamp":"2026-06-21T00:00:00Z","fault_raw":true,"equipment_id":"equip:unit-a"}),
+            json!({"timestamp":"2026-06-21T00:06:00Z","fault_raw":true,"equipment_id":"equip:unit-a"}),
+            json!({"timestamp":"2026-06-21T00:11:00Z","fault_raw":false,"equipment_id":"equip:unit-a"}),
         ];
         let out = apply_confirmation(&rows, 300);
         assert_eq!(out["confirmed_fault_count"].as_u64(), Some(1));

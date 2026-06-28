@@ -2,7 +2,7 @@
 
 use super::client::{
     about as client_about, nav as client_nav, ops as client_ops, read as client_read,
-    test_connection,
+    test_connection, write as client_write,
 };
 use super::config::{apply_save_payload, config_path, load_config, save_config, HaystackConfig};
 use super::fixture;
@@ -40,6 +40,13 @@ pub fn status_value() -> Value {
             .iter()
             .filter(|r| r.get("point").and_then(|v| v.as_str()) == Some("M"))
             .count();
+        let mut supported_ops = vec!["about", "ops", "read", "nav", "poll-once", "import"];
+        if !cfg.fixture_mode() && cfg.is_configured() {
+            let mode = cfg.auth_mode.to_ascii_lowercase();
+            if mode != "scram" && mode != "bearer" {
+                supported_ops.push("pointWrite");
+            }
+        }
         json!({
             "ok": true,
             "enabled": true,
@@ -60,7 +67,7 @@ pub fn status_value() -> Value {
             } else {
                 "not_configured"
             },
-            "supported_ops": ["about", "ops", "read", "nav", "poll-once", "import"],
+            "supported_ops": supported_ops,
             "points": point_count,
             "config": cfg.redacted_summary()
         })
@@ -90,6 +97,11 @@ pub fn nav_json(payload: &Value) -> String {
 
 pub fn read_json(payload: &Value) -> String {
     serde_json::to_string(&with_config(|cfg| client_read(cfg, payload)))
+        .unwrap_or_else(|_| "{}".to_string())
+}
+
+pub fn write_json(payload: &Value) -> String {
+    serde_json::to_string(&with_config(|cfg| client_write(cfg, payload)))
         .unwrap_or_else(|_| "{}".to_string())
 }
 

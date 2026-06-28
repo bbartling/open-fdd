@@ -16,6 +16,7 @@ import {
   type MergeMode,
 } from "../lib/csvWorkbench";
 import CsvFusionWiresheet from "../wiresheet/CsvFusionWiresheet";
+import CsvUt3ImportPanel from "../components/CsvUt3ImportPanel";
 
 type JobStatus = { ok?: boolean; job_id?: string; rows_committed?: number };
 type ModelPreview = {
@@ -353,9 +354,13 @@ export default function CsvWorkbenchPage() {
   return (
     <div className="page page-wide csv-workbench-page">
       <PageHeader
-        title="CSV Fusion"
-        subtitle="Upload files → join or append on the fusion wiresheet → map columns → commit. AI can propose merges from filenames and headers."
+        title="CSV Fusion / UT3 Import"
+        subtitle="Server-side Rust ingest (append, join, DST-aware timestamps, Arrow save) or client fusion wiresheet below."
       />
+
+      <CsvUt3ImportPanel />
+
+      <hr className="section-divider" />
 
       {error ? <p className="error">{error}</p> : null}
       {mergeError ? <p className="error">{mergeError}</p> : null}
@@ -405,6 +410,73 @@ export default function CsvWorkbenchPage() {
               onMergeKeyChange={setMergeKey}
               onMergeModeChange={setMergeMode}
             />
+            <div className="csv-merge-controls form-grid">
+              <label className="field">
+                <span className="field-label">Timestamp column</span>
+                <input value={mergeKey} onChange={(e) => setMergeKey(e.target.value)} placeholder="Date, timestamp, …" />
+              </label>
+              <label className="field">
+                <span className="field-label">Merge mode</span>
+                <select value={mergeMode} onChange={(e) => setMergeMode(e.target.value as MergeMode)}>
+                  <option value="inner">Join on timestamp (inner)</option>
+                  <option value="outer">Join on timestamp (outer)</option>
+                  <option value="append">Append rows (stack files)</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          {merged && merged.columns.length ? (
+            <section className="panel csv-preview-panel">
+              <h3 className="panel-title">Merged preview ({merged.rowCount.toLocaleString()} rows)</h3>
+              <p className="muted">
+                Join/append on <strong>{mergeKey}</strong> ({mergeMode}) — first 12 rows shown.
+              </p>
+              <div className="table-wrap csv-preview-table">
+                <table>
+                  <thead>
+                    <tr>
+                      {merged.columns.map((c) => (
+                        <th key={c}>{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {merged.rows.slice(0, 12).map((row, i) => (
+                      <tr key={i}>
+                        {row.map((cell, j) => (
+                          <td key={j}>{cell}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
+
+          <section className="panel">
+            <h3 className="panel-title">Loaded datasets ({datasets.length})</h3>
+            <ul className="csv-dataset-list">
+              {datasets.map((ds) => (
+                <li key={ds.id}>
+                  <strong>{ds.name}</strong>
+                  <span className="muted">
+                    {" "}
+                    — {ds.rowCount.toLocaleString()} rows · ts: {ds.timestampColumn ?? "auto"} · {ds.columns.length} cols
+                  </span>
+                  <button type="button" className="linkish-btn" onClick={() => splitSelectedVertical(ds)}>
+                    Split vertical
+                  </button>
+                  <button type="button" className="linkish-btn" onClick={() => splitSelectedHorizontal(ds)}>
+                    Split horizontal
+                  </button>
+                  <button type="button" className="linkish-btn" onClick={() => setDatasets((p) => p.filter((d) => d.id !== ds.id))}>
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
           </section>
 
           <section className="panel">
@@ -447,38 +519,18 @@ export default function CsvWorkbenchPage() {
           </section>
 
           <section className="panel">
-            <h3 className="panel-title">Loaded datasets ({datasets.length})</h3>
-          <ul className="csv-dataset-list">
-            {datasets.map((ds) => (
-              <li key={ds.id}>
-                <strong>{ds.name}</strong>
-                <span className="muted">
-                  {" "}
-                  — {ds.rowCount.toLocaleString()} rows · {ds.columns.length} cols
-                </span>
-                <button type="button" className="linkish-btn" onClick={() => splitSelectedVertical(ds)}>
-                  Split vertical
-                </button>
-                <button type="button" className="linkish-btn" onClick={() => splitSelectedHorizontal(ds)}>
-                  Split horizontal
-                </button>
-                <button type="button" className="linkish-btn" onClick={() => setDatasets((p) => p.filter((d) => d.id !== ds.id))}>
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="form-grid">
-            <label className="field">
-              <span className="field-label">Vertical split after col #</span>
-              <input type="number" min={1} value={splitCol} onChange={(e) => setSplitCol(Number(e.target.value))} />
-            </label>
-            <label className="field">
-              <span className="field-label">Horizontal split after rows</span>
-              <input type="number" min={1} value={splitRows} onChange={(e) => setSplitRows(Number(e.target.value))} />
-            </label>
-          </div>
-          <div className="toolbar">
+            <h3 className="panel-title">Split &amp; commit</h3>
+            <div className="form-grid">
+              <label className="field">
+                <span className="field-label">Vertical split after col #</span>
+                <input type="number" min={1} value={splitCol} onChange={(e) => setSplitCol(Number(e.target.value))} />
+              </label>
+              <label className="field">
+                <span className="field-label">Horizontal split after rows</span>
+                <input type="number" min={1} value={splitRows} onChange={(e) => setSplitRows(Number(e.target.value))} />
+              </label>
+            </div>
+            <div className="toolbar">
             <button type="button" className="secondary-btn" disabled={!merged} onClick={() => merged && downloadCsv("openfdd-merged.csv", merged.columns, merged.rows)}>
               Export merged CSV
             </button>
@@ -632,34 +684,6 @@ export default function CsvWorkbenchPage() {
             Purge this source
           </button>
         </section>
-      ) : null}
-
-      {merged && merged.columns.length ? (
-        <>
-          <section className="panel">
-            <h3 className="panel-title">Merged preview ({merged.rowCount.toLocaleString()} rows)</h3>
-            <div className="table-wrap csv-preview-table">
-              <table>
-                <thead>
-                  <tr>
-                    {merged.columns.map((c) => (
-                      <th key={c}>{c}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {merged.rows.slice(0, 8).map((row, i) => (
-                    <tr key={i}>
-                      {row.map((cell, j) => (
-                        <td key={j}>{cell}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </>
       ) : null}
     </div>
   );

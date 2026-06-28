@@ -156,11 +156,8 @@ export default function ModbusPointsTree({
   if (!sorted.length) {
     return (
       <div className="bacnet-tree-empty">
-        <p className="muted">No Modbus registers saved yet.</p>
-        <p className="muted">
-          Use <strong>Read &amp; store</strong> above, or start the fake sensor:{" "}
-          <code>./scripts/fake_modbus_temp_server.py --port 5502</code>
-        </p>
+        <p className="muted">No saved Modbus registers yet.</p>
+        <p className="muted">Use <strong>Read &amp; store to historian</strong> above to add your first register.</p>
       </div>
     );
   }

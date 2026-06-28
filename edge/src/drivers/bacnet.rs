@@ -162,12 +162,10 @@ fn default_registry() -> Value {
         {
           "id":"json-api",
           "label":"JSON API",
-          "status":"online",
-          "enabled":true,
-          "sources":[
-            {"id":"postbin-echo","url":"https://postman-echo.com/get","maps_to":"json_api_echo"},
-            {"id":"httpbin-health","url":"https://httpbin.org/get","maps_to":"json_api_health"}
-          ]
+          "status":"not_configured",
+          "enabled": false,
+          "configured": false,
+          "sources":[]
         },
         {
           "id":"haystack",
@@ -220,31 +218,7 @@ fn merge_missing_drivers(mut registry: Value) -> Value {
     registry
 }
 
-fn legacy_non_live_registry_address() -> String {
-    // Split literal so production audit can forbid reintroducing OT simulated paths wholesale.
-    format!("{}:{}", "simulated", "local")
-}
-
-fn sanitize_registry_for_live_mode(mut registry: Value) -> Value {
-    if !bacnet_live::is_live_mode() {
-        return registry;
-    }
-    let legacy_addr = legacy_non_live_registry_address();
-    if let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) {
-        for driver in drivers {
-            if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
-                continue;
-            }
-            if let Some(devices) = driver.get_mut("devices").and_then(|v| v.as_array_mut()) {
-                devices.retain(|d| {
-                    d.get("address")
-                        .and_then(|v| v.as_str())
-                        .map(|a| a != legacy_addr.as_str())
-                        .unwrap_or(true)
-                });
-            }
-        }
-    }
+fn sanitize_registry_for_live_mode(registry: Value) -> Value {
     registry
 }
 
@@ -1491,6 +1465,150 @@ pub fn poll_status_json() -> String {
     }).to_string()
 }
 
+pub fn job_status_json(job_id: &str) -> Value {
+    if job_id.trim().is_empty() || job_id.contains("..") || job_id.contains('/') {
+        return json!({"ok": false, "error": "invalid job id"});
+    }
+    json!({
+        "ok": false,
+        "error": "job not found",
+        "job_id": job_id,
+        "status": "unknown"
+    })
+}
+
+pub fn clear_bacnet_registry_value() -> Value {
+    let registry_before = read_registry();
+    let mut equipment_removed = 0_usize;
+    let mut driver_points = 0_usize;
+    if let Some(drivers) = registry_before.get("drivers").and_then(|v| v.as_array()) {
+        for driver in drivers {
+            if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
+                continue;
+            }
+            if let Some(devices) = driver.get("devices").and_then(|v| v.as_array()) {
+                for dev in devices {
+                    if dev.get("local_server").and_then(|v| v.as_bool()) == Some(true) {
+                        continue;
+                    }
+                    equipment_removed += 1;
+                    driver_points += dev
+                        .get("points")
+                        .and_then(|v| v.as_array())
+                        .map(|a| a.len())
+                        .unwrap_or(0);
+                }
+            }
+        }
+    }
+    let mut registry = registry_before;
+    if let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) {
+        for driver in drivers {
+            if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
+                continue;
+            }
+            let keep: Vec<Value> = driver
+                .get("devices")
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+                .filter(|d| d.get("local_server").and_then(|v| v.as_bool()) == Some(true))
+                .cloned()
+                .collect();
+            driver["devices"] = json!(keep);
+        }
+    }
+    write_registry(&registry);
+    let model_sync = crate::model::commissioning::remove_bacnet_bindings_from_model();
+    if model_sync.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+        return json!({
+            "ok": false,
+            "error": model_sync
+                .get("error")
+                .and_then(|v| v.as_str())
+                .unwrap_or("model sync failed after registry clear"),
+            "driver_points_removed": driver_points
+        });
+    }
+    json!({
+        "ok": true,
+        "message": "BACnet driver registry cleared",
+        "driver_points_removed": driver_points,
+        "model": {
+            "points_removed": model_sync
+                .get("points_removed")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(driver_points as u64),
+            "equipment_removed": model_sync
+                .get("equipment_removed")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(equipment_removed as u64)
+        }
+    })
+}
+
+pub fn remap_bacnet_device_value(body: &Value) -> Value {
+    let Some(old_inst) = body.get("device_instance").and_then(|v| v.as_u64()) else {
+        return json!({"ok": false, "error": "device_instance required"});
+    };
+    let Some(new_inst) = body.get("new_device_instance").and_then(|v| v.as_u64()) else {
+        return json!({"ok": false, "error": "new_device_instance required"});
+    };
+    let new_addr = body
+        .get("new_device_address")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let old_inst = old_inst as u32;
+    let new_inst = new_inst as u32;
+    let mut registry = read_registry();
+    let mut found = false;
+    if let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) {
+        for driver in drivers {
+            if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
+                continue;
+            }
+            if let Some(devices) = driver.get_mut("devices").and_then(|v| v.as_array_mut()) {
+                for device in devices.iter_mut() {
+                    if device.get("device_instance").and_then(|v| v.as_u64())
+                        != Some(old_inst as u64)
+                    {
+                        continue;
+                    }
+                    device["device_instance"] = json!(new_inst);
+                    device["name"] = json!(format!("BACnet Device {new_inst}"));
+                    if !new_addr.is_empty() {
+                        device["address"] = json!(new_addr);
+                    }
+                    if let Some(points) = device.get_mut("points").and_then(|v| v.as_array_mut()) {
+                        for pt in points.iter_mut() {
+                            pt["device_instance"] = json!(new_inst);
+                            if !new_addr.is_empty() {
+                                pt["address"] = json!(new_addr);
+                            }
+                        }
+                    }
+                    found = true;
+                }
+            }
+        }
+    }
+    if !found {
+        return json!({
+            "ok": false,
+            "error": format!("device instance {old_inst} not found in BACnet registry")
+        });
+    }
+    write_registry(&registry);
+    json!({
+        "ok": true,
+        "device_instance": old_inst,
+        "new_device_instance": new_inst,
+        "new_device_address": if new_addr.is_empty() { Value::Null } else { json!(new_addr) }
+    })
+}
+
 #[cfg(test)]
 mod override_export_tests {
     use super::*;
@@ -1570,6 +1688,40 @@ mod override_export_tests {
             let kept = fs::read_to_string(&path).unwrap_or_default();
             assert!(kept.contains(&recent));
             assert!(!kept.contains(&old));
+        });
+    }
+
+    #[test]
+    fn remap_device_updates_instance_and_address() {
+        crate::test_support::with_temp_workspace(|_| {
+            let mut registry = default_registry();
+            if let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) {
+                for driver in drivers {
+                    if driver.get("id").and_then(|v| v.as_str()) == Some("bacnet-ip") {
+                        driver["devices"] = json!([{
+                            "device_instance": 100,
+                            "name": "BACnet Device 100",
+                            "address": "192.168.1.10",
+                            "points": [{"device_instance": 100, "object_type": "analog-input", "object_instance": 1}]
+                        }]);
+                    }
+                }
+            }
+            write_registry(&registry);
+            let out = remap_bacnet_device_value(&json!({
+                "device_instance": 100,
+                "new_device_instance": 5007,
+                "new_device_address": "198.51.100.50"
+            }));
+            assert_eq!(out["ok"], true);
+            let updated = read_registry();
+            let device = &updated["drivers"][0]["devices"][0];
+            let inst = device["device_instance"].as_u64().unwrap();
+            assert_eq!(inst, 5007);
+            assert_eq!(device["address"].as_str(), Some("198.51.100.50"));
+            let pt = &device["points"][0];
+            assert_eq!(pt["device_instance"].as_u64(), Some(5007));
+            assert_eq!(pt["address"].as_str(), Some("198.51.100.50"));
         });
     }
 }

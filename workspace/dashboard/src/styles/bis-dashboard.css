@@ -19,6 +19,19 @@
   width: 100%;
 }
 
+.bis-setup-banner {
+  border: 1px dashed var(--border);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
+.bis-setup-banner h3 {
+  margin: 0 0 0.35rem;
+}
+
+.bis-setup-banner p {
+  margin: 0;
+}
+
 /* Top summary strip */
 .bis-building-strip {
   display: grid;

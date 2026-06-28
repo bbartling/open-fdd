@@ -18,26 +18,32 @@ const POLL_INTERVALS = [
 
 const PRESETS = [
   {
-    name: "Todo title",
+    id: "get-todo",
+    name: "GET example — todo title",
+    description: "JSONPlaceholder read: extract title field",
     url: "https://jsonplaceholder.typicode.com/todos/1",
     method: "GET" as const,
     json_path: "title",
     label: "todo-title",
   },
   {
-    name: "User name",
-    url: "https://jsonplaceholder.typicode.com/users/1",
-    method: "GET" as const,
-    json_path: "name",
-    label: "user-name",
-  },
-  {
-    name: "POST todo",
+    id: "post-todo",
+    name: "POST example — create todo",
+    description: "JSONPlaceholder write: POST body, read title from response",
     url: "https://jsonplaceholder.typicode.com/todos",
     method: "POST" as const,
     json_path: "title",
     label: "post-title",
-    body: '{"title": "OT bench poll", "userId": 1, "completed": false}',
+    body: '{"title": "Open-FDD poll test", "userId": 1, "completed": false}',
+  },
+  {
+    id: "get-user",
+    name: "GET example — user name",
+    description: "Simple nested field extraction",
+    url: "https://jsonplaceholder.typicode.com/users/1",
+    method: "GET" as const,
+    json_path: "name",
+    label: "user-name",
   },
 ];
 
@@ -69,7 +75,10 @@ export default function JsonApiPage() {
   } | null>(null);
   const [selectedPointIds, setSelectedPointIds] = useState<Set<string>>(() => new Set());
   const [bulkPollPending, setBulkPollPending] = useState(false);
-  const [pollOncePending, setPollOncePending] = useState(false);
+  const [owmLat, setOwmLat] = useState("42.3601");
+  const [owmLon, setOwmLon] = useState("-71.0589");
+  const [owmAppId, setOwmAppId] = useState("");
+  const [owmUnits, setOwmUnits] = useState<"imperial" | "metric">("imperial");
 
   const loadDriverTree = useCallback(async () => {
     setTreeLoading(true);
@@ -112,6 +121,23 @@ export default function JsonApiPage() {
     setJsonPath(p.json_path);
     setLabel(p.label);
     setBody("body" in p ? p.body : "");
+    setLog(`Loaded preset: ${p.name}`);
+  }
+
+  function applyOpenWeatherPreset() {
+    const q = new URLSearchParams({
+      lat: owmLat,
+      lon: owmLon,
+      appid: owmAppId || "YOUR_API_KEY",
+      units: owmUnits,
+    });
+    setUrl(`https://api.openweathermap.org/data/2.5/weather?${q.toString()}`);
+    setMethod("GET");
+    setJsonPath("main.temp");
+    setLabel("oa-t-weather");
+    setBody("");
+    setAuthType("none");
+    setLog("OpenWeatherMap preset — set your API key in the URL (appid=) before storing to historian.");
   }
 
   function patchPointValue(pointId: string, presentValue: string) {
@@ -353,21 +379,60 @@ export default function JsonApiPage() {
       ) : null}
 
       <div className="panel">
-        <h3 className="panel-title">Add endpoint</h3>
+        <h3 className="panel-title">Commission HTTP endpoint</h3>
         <p className="muted">
-          Demo API:{" "}
-          <a href="https://jsonplaceholder.typicode.com/" target="_blank" rel="noreferrer">
-            JSONPlaceholder
-          </a>{" "}
-          — free fake REST for testing.
+          Test a GET or POST URL, extract one JSON field as a historian column, then optionally save the endpoint for
+          scheduled polling.
         </p>
-        <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
-          {PRESETS.map((p, i) => (
-            <button key={p.name} type="button" className="secondary-btn" onClick={() => applyPreset(i)}>
-              {p.name}
-            </button>
-          ))}
+
+        <div className="json-api-presets">
+          <h4 className="panel-subtitle">Quick examples</h4>
+          <div className="preset-card-grid">
+            {PRESETS.map((p, i) => (
+              <button key={p.id} type="button" className="preset-card" onClick={() => applyPreset(i)}>
+                <strong>{p.name}</strong>
+                <span className="muted">{p.description}</span>
+                <span className="chip">{p.method}</span>
+              </button>
+            ))}
+          </div>
         </div>
+
+        <div className="json-api-presets owm-preset-block">
+          <h4 className="panel-subtitle">OpenWeatherMap (outdoor air temp)</h4>
+          <div className="form-grid form-grid-4">
+            <label className="field">
+              <span className="field-label">Latitude</span>
+              <input value={owmLat} onChange={(e) => setOwmLat(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="field-label">Longitude</span>
+              <input value={owmLon} onChange={(e) => setOwmLon(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="field-label">API key (appid)</span>
+              <input
+                type="password"
+                autoComplete="off"
+                value={owmAppId}
+                onChange={(e) => setOwmAppId(e.target.value)}
+                placeholder="OpenWeatherMap appid"
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">Units</span>
+              <select value={owmUnits} onChange={(e) => setOwmUnits(e.target.value as "imperial" | "metric")}>
+                <option value="imperial">imperial (°F)</option>
+                <option value="metric">metric (°C)</option>
+              </select>
+            </label>
+          </div>
+          <button type="button" className="secondary-btn" onClick={applyOpenWeatherPreset}>
+            Load OpenWeatherMap GET preset
+          </button>
+        </div>
+
+        <h4 className="panel-subtitle">Request</h4>
         <div className="form-grid">
           <div className="field" style={{ gridColumn: "1 / -1" }}>
             <label className="field-label" htmlFor="ja-url">
@@ -518,9 +583,12 @@ export default function JsonApiPage() {
             </ActionButton>
           </div>
         ) : null}
+        {driverDevices.length === 0 && !treeLoading ? (
+          <p className="muted">No saved endpoints — use <strong>Request &amp; store</strong> above to add one.</p>
+        ) : null}
         {treeLoading && driverDevices.length === 0 ? (
           <Spinner label="Loading JSON API tree…" />
-        ) : (
+        ) : driverDevices.length > 0 ? (
           <JsonApiPointsTree
             devices={driverDevices}
             selectedPointIds={selectedPointIds}
@@ -535,7 +603,7 @@ export default function JsonApiPage() {
             onDeleteDevice={deleteDevice}
             onCopy={(text) => navigator.clipboard.writeText(text).catch(() => undefined)}
           />
-        )}
+        ) : null}
       </div>
 
       <div className="panel">

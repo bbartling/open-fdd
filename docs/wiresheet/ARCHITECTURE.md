@@ -1,4 +1,4 @@
-# Open-FDD Wiresheet Architecture (v3.2.2)
+# Open-FDD Wiresheet Architecture (v3.2.2 — shipped; development continues on 3.2.3)
 
 Original visual workflow editor for HVAC supervisory FDD. Inspired by electrical wiresheets and flow-based automation, optimized for Haystack + Arrow + DataFusion.
 

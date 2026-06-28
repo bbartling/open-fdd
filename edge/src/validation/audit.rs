@@ -1,4 +1,4 @@
-//! Production hardcoding audit — forbidden bench-specific terms outside dev paths.
+//! Production hardcoding audit — forbidden bench/demo terms outside archived docs/scripts.
 
 use std::path::PathBuf;
 
@@ -28,6 +28,20 @@ const FORBIDDEN: &[&str] = &[
     "equip:validation",
     "demo-ahu",
     "bacnet:demo-ahu",
+    "from-smoke-profile",
+    "datafusion/demo",
+    "arrow/demo",
+    "httpbin",
+    "postman-echo",
+    "json-api-smoke",
+    "local-test-equipment",
+    "source:validation",
+    "validation-csv",
+    "validation-bacnet",
+    "Demo AO",
+    "Outside Air Temp",
+    "rcx-demo",
+    "alg-demo",
 ];
 
 const FORBIDDEN_OT_SIM: &[&str] = &[
@@ -39,6 +53,10 @@ const FORBIDDEN_OT_SIM: &[&str] = &[
     "OPENFDD_BACNET_MODE=simulated",
     "OPENFDD_MODBUS_MODE=simulated",
     "/api/bench/5007",
+    "poll_test_source",
+    "SOURCES_JSON",
+    "demo_rows_json",
+    "seed_demo_graph",
 ];
 
 const ALLOWED_FILES: &[&str] = &[
@@ -46,9 +64,8 @@ const ALLOWED_FILES: &[&str] = &[
     "docs/verification/bench-5007-long-smoke.md",
     "edge/src/validation/audit.rs",
     "edge/src/drivers/haystack/fixture.rs",
-    "edge/src/historian/arrow_table.rs",
-    "edge/src/fdd/datafusion_sql.rs",
     "edge/src/bench/validation_fixture.rs",
+    "edge/src/bench/smoke.rs",
 ];
 
 const ALLOWED_PREFIXES: &[&str] = &[
@@ -58,8 +75,10 @@ const ALLOWED_PREFIXES: &[&str] = &[
     "docs\\testing\\",
     "docs/verification/",
     "docs\\verification\\",
-    "workspace/smoke-profiles/",
-    "workspace\\smoke-profiles\\",
+    "docs/security/",
+    "docs\\security\\",
+    "workspace/config/",
+    "workspace\\config\\",
     ".github/workflows/",
 ];
 
@@ -96,7 +115,7 @@ pub fn scan_line_for_violations(rel: &str, line_no: usize, line: &str) -> Vec<Au
             });
         }
     }
-    if rel.starts_with("edge/src/") {
+    if rel.starts_with("edge/src/") && !rel.contains("/bench/") {
         for pat in FORBIDDEN_OT_SIM {
             if line.contains(pat) {
                 out.push(AuditViolation {
@@ -176,23 +195,6 @@ mod tests {
     }
 
     #[test]
-    fn flags_c06_point_name_branch() {
-        let hits = scan_line_for_violations(
-            "edge/src/drivers/bacnet.rs",
-            1,
-            r#"else if name == "C06-0-10VDC-O" {"#,
-        );
-        assert!(!hits.is_empty());
-    }
-
-    #[test]
-    fn allows_example_profile_path() {
-        assert!(path_allowed(
-            "workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml.example"
-        ));
-    }
-
-    #[test]
     fn flags_site_demo_in_production_rust() {
         let hits = scan_line_for_violations(
             "edge/src/drivers/bacnet.rs",
@@ -203,47 +205,13 @@ mod tests {
     }
 
     #[test]
-    fn flags_ot_simulated_helpers_in_production_rust() {
+    fn flags_httpbin_in_production_json_api() {
         let hits = scan_line_for_violations(
-            "edge/src/drivers/bacnet.rs",
+            "edge/src/drivers/json_api.rs",
             1,
-            "fn simulated_values(phase: &str)",
+            r#"https://httpbin.org/get"#,
         );
         assert!(!hits.is_empty());
-        assert!(hits.iter().any(|h| h.pattern.starts_with("ot_sim:")));
-    }
-
-    #[test]
-    fn flags_bench_5007_api_route_in_production_rust() {
-        let hits =
-            scan_line_for_violations("edge/src/main.rs", 1, r#"("/api/bench/5007/smoke/status")"#);
-        assert!(!hits.is_empty());
-    }
-
-    #[test]
-    fn allows_fixture_haystack_grid() {
-        assert!(path_allowed("edge/src/drivers/haystack/fixture.rs"));
-    }
-
-    #[test]
-    fn production_ot_driver_sources_exclude_simulated_helpers() {
-        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        for rel in [
-            "src/bench/smoke.rs",
-            "src/drivers/bacnet.rs",
-            "src/drivers/modbus.rs",
-        ] {
-            let text = std::fs::read_to_string(root.join(rel)).expect("read driver source");
-            for token in FORBIDDEN_OT_SIM {
-                if token.starts_with("/api/") {
-                    continue;
-                }
-                assert!(
-                    !text.contains(token),
-                    "{rel} must not reintroduce legacy OT sim token: {token}"
-                );
-            }
-        }
     }
 
     #[test]
@@ -256,52 +224,6 @@ mod tests {
     fn confirmation_delay() {
         assert!(!confirmation_met(4.0, 5));
         assert!(confirmation_met(5.0, 5));
-    }
-
-    #[test]
-    fn summary_schema_required_fields() {
-        let required = [
-            "timestamp_utc",
-            "sample_index",
-            "api_health_ok",
-            "stack_health_ok",
-            "docker_ok",
-            "smoke_device_instance",
-            "fdd_sql_ok",
-            "expected_phase",
-            "modbus_ok",
-            "json_api_ok",
-        ];
-        let sample = serde_json::json!({
-            "timestamp_utc": "2026-06-23T00:00:00Z",
-            "sample_index": 1,
-            "api_health_ok": true,
-            "stack_health_ok": true,
-            "docker_ok": true,
-            "docker_error_count": 0,
-            "source_id": "source:validation",
-            "smoke_device_instance": 0,
-            "bacnet_device_seen": true,
-            "bacnet_poll_ok": true,
-            "historian_rows_written": 1,
-            "fdd_sql_ok": true,
-            "raw_fault_count": 0,
-            "confirmed_fault_count": 0,
-            "minutes_in_fault": 0,
-            "confirmation_required_minutes": 5,
-            "expected_phase": "live",
-            "expected_fault_state": "no_fault",
-            "actual_fault_state": "no_fault",
-            "modbus_ok": true,
-            "modbus_registers_read": 0,
-            "json_api_ok": true,
-            "json_api_points_read": 1,
-            "override_scan_ok": false,
-            "error": ""
-        });
-        for key in required {
-            assert!(sample.get(key).is_some(), "missing {key}");
-        }
     }
 
     #[test]

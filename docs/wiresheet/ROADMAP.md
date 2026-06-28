@@ -1,23 +1,20 @@
 # Wiresheet Roadmap
 
-## 3.2.2 (current)
+## 3.2.2 (released)
 
 - Wiresheet Studio with React Flow
-- CSV Fusion page (plot removed from CSV tab)
+- CSV Fusion wiresheet (join/append per file)
+- Model & FDD assignments hub + FDD wiresheet tab
+- Live-only BACnet/Modbus drivers
 - Architecture documentation
-- Nav + routes
 
-## 3.2.2b
+## 3.2.3 (current)
 
-- TanStack Query for graphs
-- Haystack tree from live model API
-- Drag-drop assignment edges
-
-## 3.2.3
-
+- TanStack Query for graph persistence
+- Haystack tree drag-drop on canvas
 - CSV → parquet dataset registry
-- DataFusion SQL preview panel in CSV Fusion
-- Duplicate/null analysis widgets
+- DataFusion SQL preview in CSV Fusion
+- AI commissioning → auto-refresh wiresheets
 
 ## 3.3.0
 

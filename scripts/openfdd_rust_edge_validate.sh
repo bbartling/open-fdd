@@ -24,9 +24,12 @@ openfdd_rust_check_docker
 COMPOSE="$(openfdd_rust_resolve_compose_file "$ROOT")"
 [[ -f "$COMPOSE" ]] && docker compose -f "$COMPOSE" config >/dev/null
 
+openfdd_rust_ensure_container_workspace "$ROOT"
+
 AUTH="$ROOT/workspace/auth.env.local"
 check test -d "$ROOT/workspace"
 check test -w "$ROOT/workspace"
+check test -d "$ROOT/workspace/reports/generated"
 check test -f "$AUTH"
 [[ -f "$AUTH" ]] && chmod 600 "$AUTH" 2>/dev/null || true
 
@@ -58,6 +61,19 @@ fi
 
 if [[ -n "$TOKEN" ]] && curl -fsS "${BASE}/api/validation-runs/current/status" -H "Authorization: Bearer $TOKEN" >/dev/null 2>&1; then
   echo "OK: validation-runs status endpoint present"
+fi
+
+if [[ -n "$TOKEN" ]]; then
+  if curl -fsS -X POST "${BASE}/api/reports/draft" \
+    -H "Authorization: Bearer ${TOKEN}" \
+    -H 'Content-Type: application/json' \
+    -d '{"title":"edge-validate-smoke","report_id":"edge-validate-smoke"}' \
+    | jq -e '.ok == true' >/dev/null 2>&1; then
+    echo "OK: reports draft API (container workspace writable)"
+  else
+    echo "FAIL: POST /api/reports/draft — check workspace/reports permissions (uid $(openfdd_rust_container_uid))" >&2
+    FAIL=1
+  fi
 fi
 
 if [[ "$LIVE_BACNET" == "1" ]]; then

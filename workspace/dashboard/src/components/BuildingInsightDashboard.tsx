@@ -124,6 +124,7 @@ export default function BuildingInsightDashboard() {
           .join(" · ");
 
   const days = insight?.lookback_days ?? 14;
+  const needsModelSetup = !faults?.model_configured && (faults?.alert_count ?? 0) === 0;
 
   if (streamError && !snapshot) {
     return (
@@ -145,21 +146,6 @@ export default function BuildingInsightDashboard() {
     );
   }
 
-  if (!faults?.model_configured && faults.alert_count === 0) {
-    return (
-      <div className="bis-dashboard">
-        <div className="bis-card">
-          <h2>Building insight</h2>
-          <p className="muted">No building model configured yet.</p>
-          <p className="muted">
-            Import a Haystack model under <Link to="/model">Model & assignments</Link> to enable fault
-            detection and comfort analytics.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const pillClass =
     healthIndex.overallTraffic === "red"
       ? "bis-pill-critical"
@@ -169,6 +155,18 @@ export default function BuildingInsightDashboard() {
 
   return (
     <div className="bis-dashboard">
+      {needsModelSetup ? (
+        <div className="bis-card bis-setup-banner">
+          <h3>Get started</h3>
+          <p className="muted">
+            No Haystack model loaded yet — stack health and gauges below reflect the live edge only.
+            Sign in and import a model under{" "}
+            <Link to="/model">Model &amp; assignments</Link> (or CSV Fusion) to enable fault detection
+            and comfort analytics.
+          </p>
+        </div>
+      ) : null}
+
       <BuildingStrip
         siteName="Active site"
         siteDetail={`${days}-day analytics · Open FDD`}
@@ -258,6 +256,7 @@ export default function BuildingInsightDashboard() {
           refreshKey={snapshot?.faults.alert_count}
           insight={insight}
           insightError={insightError}
+          buildingMeta={buildingMeta}
         />
       </div>
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiFetch } from "../../lib/api";
+import { apiFetch, hasToken } from "../../lib/api";
 import type {
   DashboardAnalytics,
   DashboardSummary,
@@ -8,10 +8,32 @@ import type {
 } from "../../lib/dashboardSummaryTypes";
 import type { InsightResponse } from "../../lib/insightTypes";
 
+type BuildingMeta = {
+  ok?: boolean;
+  model_score?: number | null;
+  model_counts?: {
+    equipment?: number;
+    points?: number;
+    mapped_points?: number;
+    unmapped_points?: number;
+  };
+  model_summary?: {
+    equipment_by_type?: Record<string, number>;
+    feeds_chains?: string[];
+    equipment_count?: number;
+    query_engine?: string;
+  };
+  fdd_rules?: Array<{ id?: string; name?: string; enabled?: boolean }>;
+  alert_count?: number;
+  rule_count?: number;
+  datafusion_ok?: boolean;
+};
+
 type Props = {
   refreshKey?: number;
   insight?: InsightResponse | null;
   insightError?: string;
+  buildingMeta?: BuildingMeta | null;
 };
 
 function formatProtocolLabel(protocol: string): string {
@@ -25,13 +47,47 @@ function formatProtocolLabel(protocol: string): string {
   }
 }
 
-export default function OperationalContextPanel({ refreshKey, insight, insightError }: Props) {
+function formatEquipTypeLabel(raw: string): string {
+  return raw.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export default function OperationalContextPanel({
+  refreshKey,
+  insight,
+  insightError,
+  buildingMeta,
+}: Props) {
+  const [publicMeta, setPublicMeta] = useState<BuildingMeta | null>(null);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [rules, setRules] = useState<FddRulesResponse | null>(null);
   const [loadError, setLoadError] = useState("");
+  const signedIn = hasToken();
+
+  const meta = publicMeta ?? buildingMeta;
 
   useEffect(() => {
+    let cancelled = false;
+    apiFetch<BuildingMeta>("/api/building/status")
+      .then((data) => {
+        if (!cancelled) setPublicMeta(data);
+      })
+      .catch(() => {
+        if (!cancelled) setPublicMeta(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  useEffect(() => {
+    if (!signedIn) {
+      setSummary(null);
+      setAnalytics(null);
+      setRules(null);
+      setLoadError("");
+      return;
+    }
     let cancelled = false;
     setLoadError("");
     Promise.all([
@@ -55,15 +111,31 @@ export default function OperationalContextPanel({ refreshKey, insight, insightEr
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [refreshKey, signedIn]);
 
   const model = summary?.model_coverage;
+  const modelSummary = meta?.model_summary;
   const ruleHealth = analytics?.rule_health;
-  const ruleList = rules?.rules ?? [];
+  const ruleList = rules?.rules ?? meta?.fdd_rules ?? [];
   const enabledRules = ruleList.filter((r) => r.enabled !== false);
-  const ruleCount = ruleHealth?.rule_count ?? ruleList.length;
-  const activeFaults = summary?.faults?.active_count ?? 0;
+  const ruleCount =
+    ruleHealth?.rule_count ?? ruleList.length ?? meta?.rule_count ?? buildingMeta?.rule_count ?? 0;
+  const activeFaults =
+    summary?.faults?.active_count ?? meta?.alert_count ?? buildingMeta?.alert_count ?? 0;
   const historian = summary?.historian_health;
+
+  const hvacLine = useMemo(() => {
+    const byType = modelSummary?.equipment_by_type;
+    if (!byType || !Object.keys(byType).length) return null;
+    return Object.entries(byType)
+      .sort((a, b) => b[1] - a[1])
+      .map(([type, count]) => `${count} ${formatEquipTypeLabel(type)}`)
+      .join(" · ");
+  }, [modelSummary]);
+
+  const feedsChains = modelSummary?.feeds_chains?.length
+    ? modelSummary.feeds_chains
+    : insight?.brick_model?.feeds_chains ?? [];
 
   const mappedSources = useMemo(() => {
     const fromHealth =
@@ -89,12 +161,21 @@ export default function OperationalContextPanel({ refreshKey, insight, insightEr
       ? `${model.equipment_count ?? 0} equipment · ${model.point_count ?? 0} points · ${model.mapped_points ?? 0} mapped${
           (model.unmapped_points ?? 0) > 0 ? ` · ${model.unmapped_points} unmapped` : ""
         }${model.model_score != null ? ` · ${model.model_score}% coverage` : ""}`
-      : "No Haystack model loaded — import under Model & assignments.";
+      : meta?.model_counts &&
+          ((meta.model_counts.equipment ?? 0) > 0 || (meta.model_counts.points ?? 0) > 0)
+        ? `${meta.model_counts.equipment ?? 0} equipment · ${meta.model_counts.points ?? 0} points · ${meta.model_counts.mapped_points ?? 0} mapped${
+            (meta.model_counts.unmapped_points ?? 0) > 0
+              ? ` · ${meta.model_counts.unmapped_points} unmapped`
+              : ""
+          }${meta.model_score != null ? ` · ${meta.model_score}% coverage` : ""}`
+        : "No Haystack model loaded — import under Model & assignments.";
 
   const rulesLine =
     ruleCount > 0
       ? `${enabledRules.length || ruleCount} FDD rule${ruleCount === 1 ? "" : "s"} configured${
-          ruleHealth?.datafusion_ok === false ? " · DataFusion check failed" : ""
+          (ruleHealth?.datafusion_ok ?? meta?.datafusion_ok ?? buildingMeta?.datafusion_ok) === false
+            ? " · DataFusion check failed"
+            : ""
         }`
       : "No FDD rules configured — add rules under SQL FDD.";
 
@@ -107,10 +188,11 @@ export default function OperationalContextPanel({ refreshKey, insight, insightEr
     ? `${historian.row_count ?? 0} historian rows${
         historian.latest_sample_at ? ` · latest ${historian.latest_sample_at}` : ""
       }${historian.subdir_count ? ` · ${historian.subdir_count} partition(s)` : ""}`
-    : "Historian status unavailable.";
+    : signedIn
+      ? "Historian status unavailable."
+      : "Sign in for historian row counts and validation profile details.";
 
   const validationProfile = summary?.validation?.profile_id;
-  const feeds = insight?.brick_model?.feeds_chains ?? [];
 
   return (
     <div className="bis-card">
@@ -121,7 +203,21 @@ export default function OperationalContextPanel({ refreshKey, insight, insightEr
         <Link to="/model" className="bis-inline-link">
           Model
         </Link>
+        {modelSummary?.query_engine ? (
+          <span className="muted"> · {modelSummary.query_engine} query</span>
+        ) : null}
       </p>
+      {hvacLine ? (
+        <p className="bis-muted-line">
+          <strong>HVAC equipment:</strong> {hvacLine}
+        </p>
+      ) : null}
+      {feedsChains.length ? (
+        <p className="bis-muted-line">
+          <strong>Haystack feeds:</strong> {feedsChains.slice(0, 5).join("; ")}
+          {feedsChains.length > 5 ? " …" : ""}
+        </p>
+      ) : null}
       {mappedSources.length ? (
         <p className="bis-muted-line">
           <strong>Mapped sources:</strong>{" "}
@@ -148,6 +244,9 @@ export default function OperationalContextPanel({ refreshKey, insight, insightEr
       ) : null}
       <p className="bis-muted-line">
         <strong>Faults:</strong> {faultLine}
+        {!signedIn ? (
+          <span className="muted"> · sign in to clear acknowledged faults</span>
+        ) : null}
       </p>
       <p className="bis-muted-line">
         <strong>Historian:</strong> {historianLine}
@@ -162,15 +261,6 @@ export default function OperationalContextPanel({ refreshKey, insight, insightEr
         </p>
       ) : null}
 
-      {feeds.length ? (
-        <>
-          <h3 className="bis-subhead">Feeds &amp; research</h3>
-          <p className="bis-muted-line">
-            <strong>Haystack feeds:</strong> {feeds.slice(0, 5).join("; ")}
-            {feeds.length > 5 ? " …" : ""}
-          </p>
-        </>
-      ) : null}
       {insight?.zone_temps?.struggling_zones?.length ? (
         <p className="bis-muted-line">
           <strong>Slow recovery:</strong>{" "}
@@ -192,7 +282,7 @@ export default function OperationalContextPanel({ refreshKey, insight, insightEr
       ) : null}
 
       <p className="bis-foot-meta">
-        Rule-based summary from bridge APIs
+        Live Haystack model + Rust FDD from bridge APIs
         {insight?.source === "ollama" ? " · insight agent available" : ""}
         {insight?.generated_at != null
           ? ` · insight ${new Date(insight.generated_at * 1000).toLocaleString()}`

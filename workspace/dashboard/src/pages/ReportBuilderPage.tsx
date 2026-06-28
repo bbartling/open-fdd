@@ -71,6 +71,7 @@ export default function ReportBuilderPage() {
   const [busy, setBusy] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState("validation-summary");
+  const [includeBranding, setIncludeBranding] = useState(true);
 
   const loadReports = useCallback(async () => {
     try {
@@ -79,7 +80,7 @@ export default function ReportBuilderPage() {
     } catch (e) {
       setError(formatApiError(e));
     }
-  }, [templateId]);
+  }, [templateId, includeBranding]);
 
   const sections = useMemo(
     () => [...(report?.sections ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
@@ -97,7 +98,10 @@ export default function ReportBuilderPage() {
           title:
             templateId === "rcx-universal-3"
               ? "RCx Universal 3 Report"
-              : "Open-FDD Validation Report",
+              : templateId === "openfdd-branded"
+                ? "Open-FDD Building Report"
+                : "Open-FDD Validation Report",
+          include_branding: includeBranding,
         }),
       });
       setReport(draft);
@@ -225,43 +229,19 @@ export default function ReportBuilderPage() {
 
       {error ? <div className="error-banner">{error}</div> : null}
 
-      <section className="panel">
-        <h2>Validation reports</h2>
-        {reports.length === 0 ? (
-          <p className="hint">No reports yet. Run a validation workflow from Reports or complete a site validation harness to generate a PDF.</p>
-        ) : (
-          <ul className="report-list">
-            {reports.map((r) => {
-              const id = String(r.report_id ?? "");
-              return (
-                <li key={id} className="report-list-row">
-                  <span className={`badge ${r.status === "pass" ? "ok" : r.status === "fail" ? "bad" : ""}`}>
-                    {String(r.status ?? "draft")}
-                  </span>
-                  <strong>{String(r.title ?? id)}</strong>
-                  <span className="muted">{String(r.created_at ?? "—")}</span>
-                  <span className="muted">{Number(r.size_bytes ?? 0) > 0 ? `${r.size_bytes} B` : "no PDF"}</span>
-                  <button type="button" className="secondary-btn" disabled={busy} onClick={() => void downloadListedReport(id)}>
-                    Download PDF
-                  </button>
-                  <button type="button" className="secondary-btn" disabled={busy} onClick={() => void deleteReport(id)}>
-                    Delete
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      <div className="toolbar">
+      <div className="report-builder-toolbar action-bar">
         <label className="field">
           <span className="field-label">Template</span>
           <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
             <option value="validation-summary">Validation summary</option>
             <option value="equipment-fdd">Equipment FDD</option>
             <option value="rcx-universal-3">RCx Universal 3 (ASHRAE)</option>
+            <option value="openfdd-branded">Open-FDD branded (cover + RCx)</option>
           </select>
+        </label>
+        <label className="checkbox-row report-brand-toggle">
+          <input type="checkbox" checked={includeBranding} onChange={(e) => setIncludeBranding(e.target.checked)} />
+          Include chiller cover branding
         </label>
         <button type="button" className="secondary-btn" onClick={() => void createDraft()} disabled={busy}>
           Regenerate draft
@@ -274,31 +254,62 @@ export default function ReportBuilderPage() {
         </button>
       </div>
 
-      <div className="report-builder-grid">
-        <section className="report-canvas">
-          <h2>Suggested sections</h2>
-          <p className="hint">Auto-selected from model coverage, rules, faults, and historian. Hide or reorder as needed.</p>
-          {sections.map((sec, idx) => (
-            <ReportSectionCard
-              key={sec.id}
-              section={sec}
-              onMoveUp={() => moveSection(idx, -1)}
-              onMoveDown={() => moveSection(idx, 1)}
-              onToggle={() => updateSection(idx, { visible: sec.visible === false })}
-              onTitle={(title) => updateSection(idx, { title })}
-            />
-          ))}
-        </section>
+      <section className="panel report-list-panel">
+        <h2 className="panel-title">Saved reports</h2>
+        {reports.length === 0 ? (
+          <p className="hint">No reports yet — generate a draft below.</p>
+        ) : (
+          <ul className="report-list report-list-pro">
+            {reports.map((r) => {
+              const id = String(r.report_id ?? "");
+              return (
+                <li key={id} className="report-list-row">
+                  <span className={`badge ${r.status === "pass" ? "ok" : r.status === "fail" ? "bad" : ""}`}>
+                    {String(r.status ?? "draft")}
+                  </span>
+                  <strong className="report-list-title">{String(r.title ?? id)}</strong>
+                  <span className="muted report-list-meta">{String(r.created_at ?? "—")}</span>
+                  <span className="muted report-list-meta">
+                    {Number(r.size_bytes ?? 0) > 0 ? `${r.size_bytes} B` : "no PDF"}
+                  </span>
+                  <div className="report-list-actions">
+                    <button type="button" className="secondary-btn" disabled={busy} onClick={() => void downloadListedReport(id)}>
+                      Download
+                    </button>
+                    <button type="button" className="secondary-btn" disabled={busy} onClick={() => void deleteReport(id)}>
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
-        <section className="report-preview-frame">
-          <h2>Preview</h2>
-          {previewUrl ? (
-            <iframe title="Report preview" src={previewUrl} className="report-preview-iframe" />
-          ) : (
-            <p className="hint">Click Preview PDF to render the report bundle.</p>
-          )}
-        </section>
-      </div>
+      <section className="panel report-canvas">
+        <h2 className="panel-title">Suggested sections</h2>
+        <p className="hint">Auto-selected from model coverage, rules, faults, and historian.</p>
+        {sections.map((sec, idx) => (
+          <ReportSectionCard
+            key={sec.id}
+            section={sec}
+            onMoveUp={() => moveSection(idx, -1)}
+            onMoveDown={() => moveSection(idx, 1)}
+            onToggle={() => updateSection(idx, { visible: sec.visible === false })}
+            onTitle={(title) => updateSection(idx, { title })}
+          />
+        ))}
+      </section>
+
+      <section className="panel report-preview-frame report-preview-full">
+        <h2 className="panel-title">PDF preview</h2>
+        {previewUrl ? (
+          <iframe title="Report preview" src={previewUrl} className="report-preview-iframe" />
+        ) : (
+          <p className="hint">Click Preview PDF to render a full-width preview.</p>
+        )}
+      </section>
 
       {report?.report_id ? (
         <p className="hint">

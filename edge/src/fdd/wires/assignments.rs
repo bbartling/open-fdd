@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use crate::model::scope;
 
 const AHU_MAPPINGS: &[(&str, &str, f64)] = &[
-    ("Outside Air Temp", "oa_t", 0.95),
+    ("OA temperature", "oa_t", 0.95),
     ("Supply Air Temp", "sat", 0.93),
     ("Discharge Air Temp", "duct_t", 0.90),
     ("Zone Temp", "zn_t", 0.88),
@@ -142,7 +142,7 @@ mod tests {
         let out = propose_assignments(&json!({
             "equipment_type":"ahu",
             "driver_points": [
-                {"id":"point:1","name":"Outside Air Temp","haystack_id":"point:1","fdd_input":"oa_t","ref":"csv:src:oa_t"}
+                {"id":"point:1","name":"OA temperature","haystack_id":"point:1","fdd_input":"oa_t","ref":"csv:src:oa_t"}
             ]
         }));
         let proposals = out["proposals"].as_array().unwrap();

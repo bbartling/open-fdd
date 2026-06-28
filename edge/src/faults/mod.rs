@@ -290,9 +290,21 @@ pub fn list_json(filter: Option<&str>) -> Value {
 }
 
 pub fn get_fault(fault_id: &str) -> Value {
+    let all_rows = eval_rows();
     for rec in list_records() {
         if rec.get("fault_id").and_then(|v| v.as_str()) == Some(fault_id) {
-            return json!({"ok": true, "fault": rec});
+            let source = rec
+                .get("source")
+                .and_then(|v| v.as_str())
+                .unwrap_or("fdd_rule");
+            let analytics = if source == "bacnet_override" {
+                rec.get("analytics").cloned().unwrap_or(json!({}))
+            } else {
+                fault_analytics_for_record(&rec, &all_rows)
+            };
+            let mut fault = rec.clone();
+            fault["analytics"] = analytics;
+            return json!({"ok": true, "fault": fault});
         }
     }
     json!({"ok": false, "error": "fault not found", "fault_id": fault_id})
@@ -716,13 +728,13 @@ mod tests {
     #[test]
     fn fault_analytics_includes_hours() {
         let rec = json!({
-            "equipment_id": "equip:local-test",
+            "equipment_id": "equip:unit-a",
             "minutes_in_fault": 90,
             "input_points": ["oa_t"]
         });
         let rows = vec![
-            json!({"equipment_id":"equip:local-test","timestamp":"2026-06-21T10:00:00Z","raw_fault":true,"oa_t":120.0}),
-            json!({"equipment_id":"equip:local-test","timestamp":"2026-06-21T11:00:00Z","raw_fault":false,"oa_t":70.0}),
+            json!({"equipment_id":"equip:unit-a","timestamp":"2026-06-21T10:00:00Z","raw_fault":true,"oa_t":120.0}),
+            json!({"equipment_id":"equip:unit-a","timestamp":"2026-06-21T11:00:00Z","raw_fault":false,"oa_t":70.0}),
         ];
         let analytics = fault_analytics_for_record(&rec, &rows);
         assert_eq!(

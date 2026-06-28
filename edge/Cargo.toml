@@ -1,6 +1,6 @@
 [package]
 name = "open_fdd_edge_prototype"
-version = "3.2.2"
+version = "3.2.3"
 edition = "2021"
 
 [[bin]]
@@ -24,6 +24,8 @@ rusty-bacnet-server = { package = "bacnet-server", version = "0.9" }
 bacnet-transport = "0.9"
 bacnet-types = "0.9"
 chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+encoding_rs = "0.8"
 clap = { version = "4", features = ["derive"] }
 csv = "1.3"
 datafusion = "43"

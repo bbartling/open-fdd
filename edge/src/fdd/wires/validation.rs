@@ -151,12 +151,19 @@ pub fn validate_rule_object(rule: &Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fdd::wires::persistence;
 
     #[test]
     fn ai_graph_cannot_activate_without_approval() {
         let site = "site:test";
-        let mut graph = persistence::seed_demo_graph(site, "tester");
+        let mut graph = super::super::schema::empty_graph(site, "graph:test", "tester");
+        graph["nodes"] = json!([{
+            "id": "n-driver",
+            "type": "driver_point",
+            "label": "oa sensor",
+            "source": "ai_generated",
+            "config": {"source_label": "live", "ref": "bacnet:1:analog-input:1"}
+        }]);
+        graph["edges"] = json!([]);
         graph["review_status"] = json!("active");
         graph["source"] = json!("ai_generated");
         let out = validate_graph(&graph);
