@@ -201,7 +201,8 @@ pub fn join_rows(
         }
         JoinAlignment::ResampleWeather15m => join_weather_to_15m(left, right, fill),
         JoinAlignment::ResampleKwHourly => {
-            Err("resample kW hourly not yet implemented in preview".into())
+            let left_hourly = resample_kw_hourly(left);
+            join_asof(left_hourly, right, true, fill)
         }
     }
 }
@@ -259,15 +260,138 @@ fn join_asof(
             for (k, v) in &r.values {
                 l.values.insert(k.clone(), v.clone());
             }
-        } else if matches!(fill, FillPolicy::Forward | FillPolicy::Backward) {
-            // no prior weather — leave gaps
         }
         out.push(l);
     }
-    if matches!(fill, FillPolicy::Forward) {
-        forward_fill_numeric(&mut out);
-    }
+    apply_fill_policy(&mut out, fill);
     Ok(out)
+}
+
+fn resample_kw_hourly(rows: Vec<OutputRow>) -> Vec<OutputRow> {
+    let mut buckets: BTreeMap<DateTime<Utc>, (OutputRow, Vec<BTreeMap<String, f64>>)> =
+        BTreeMap::new();
+    for row in rows {
+        let Some(ts) = row.ts_utc else { continue };
+        let hour = floor_hour(ts);
+        let entry = buckets.entry(hour).or_insert_with(|| {
+            let mut base = row.clone();
+            base.ts_utc = Some(hour);
+            base.ts_local = hour.format("%Y-%m-%d %H:%M:%S").to_string();
+            base.source_timestamp_fold = Some("resample_kw_hourly".into());
+            base.values.clear();
+            base.fill_created = false;
+            (base, Vec::new())
+        });
+        let mut nums = BTreeMap::new();
+        for (k, v) in &row.values {
+            if let Ok(n) = v.trim().parse::<f64>() {
+                nums.insert(k.clone(), n);
+            }
+        }
+        if !nums.is_empty() {
+            entry.1.push(nums);
+        }
+    }
+    buckets
+        .into_iter()
+        .map(|(_, (mut base, samples))| {
+            if !samples.is_empty() {
+                let mut sums: BTreeMap<String, f64> = BTreeMap::new();
+                for sample in &samples {
+                    for (k, v) in sample {
+                        *sums.entry(k.clone()).or_insert(0.0) += v;
+                    }
+                }
+                for (k, sum) in sums {
+                    let avg = sum / samples.len() as f64;
+                    base.values.insert(k, format!("{avg:.4}"));
+                }
+            }
+            base
+        })
+        .collect()
+}
+
+fn apply_fill_policy(rows: &mut [OutputRow], fill: FillPolicy) {
+    match fill {
+        FillPolicy::Forward => forward_fill_numeric(rows),
+        FillPolicy::Backward => backward_fill_numeric(rows),
+        FillPolicy::Linear => linear_fill_numeric(rows),
+        _ => {}
+    }
+}
+
+fn backward_fill_numeric(rows: &mut [OutputRow]) {
+    let mut next: BTreeMap<String, String> = BTreeMap::new();
+    for row in rows.iter_mut().rev() {
+        for (k, v) in row.values.clone() {
+            if v.trim().is_empty() {
+                if let Some(nxt) = next.get(&k) {
+                    row.values.insert(k, nxt.clone());
+                    row.fill_created = true;
+                }
+            } else {
+                next.insert(k, v);
+            }
+        }
+    }
+}
+
+fn linear_fill_numeric(rows: &mut [OutputRow]) {
+    if rows.is_empty() {
+        return;
+    }
+    let col_keys: Vec<String> = rows
+        .iter()
+        .flat_map(|r| r.values.keys().cloned())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    for col in col_keys {
+        let mut i = 0usize;
+        while i < rows.len() {
+            if rows[i]
+                .values
+                .get(&col)
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false)
+            {
+                i += 1;
+                continue;
+            }
+            let gap_start = i;
+            while i < rows.len()
+                && rows[i]
+                    .values
+                    .get(&col)
+                    .map(|s| s.trim().is_empty())
+                    .unwrap_or(true)
+            {
+                i += 1;
+            }
+            let gap_end = i;
+            let prev_idx = gap_start.checked_sub(1);
+            let next_idx = if gap_end < rows.len() {
+                Some(gap_end)
+            } else {
+                None
+            };
+            let (Some(p), Some(n)) = (prev_idx, next_idx) else {
+                continue;
+            };
+            let v0 = rows[p].values.get(&col).and_then(|s| s.parse::<f64>().ok());
+            let v1 = rows[n].values.get(&col).and_then(|s| s.parse::<f64>().ok());
+            if let (Some(a), Some(b)) = (v0, v1) {
+                let steps = (gap_end - gap_start + 1) as f64;
+                for (j, idx) in (gap_start..gap_end).enumerate() {
+                    let t = (j as f64 + 1.0) / steps;
+                    let v = a + (b - a) * t;
+                    rows[idx].values.insert(col.clone(), format!("{v:.4}"));
+                    rows[idx].fill_created = true;
+                }
+            }
+        }
+    }
 }
 
 fn join_weather_to_15m(
@@ -388,6 +512,58 @@ pub fn preview_rows(rows: &[OutputRow], limit: usize) -> PlanPreview {
         timestamp_analysis,
         warnings,
         time_range,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn linear_fill_between_known_points() {
+        let mut rows = vec![
+            OutputRow {
+                ts_utc: Some(Utc.with_ymd_and_hms(2013, 6, 19, 0, 0, 0).unwrap()),
+                ts_local: String::new(),
+                timezone: "UTC".into(),
+                source_timestamp_raw: String::new(),
+                source_timestamp_parse_status: "ok".into(),
+                source_timestamp_fold: None,
+                source_file: "t.csv".into(),
+                source_row_number: 1,
+                values: BTreeMap::from([("kw".into(), "10".into())]),
+                fill_created: false,
+            },
+            OutputRow {
+                ts_utc: Some(Utc.with_ymd_and_hms(2013, 6, 19, 1, 0, 0).unwrap()),
+                ts_local: String::new(),
+                timezone: "UTC".into(),
+                source_timestamp_raw: String::new(),
+                source_timestamp_parse_status: "ok".into(),
+                source_timestamp_fold: None,
+                source_file: "t.csv".into(),
+                source_row_number: 2,
+                values: BTreeMap::from([("kw".into(), String::new())]),
+                fill_created: false,
+            },
+            OutputRow {
+                ts_utc: Some(Utc.with_ymd_and_hms(2013, 6, 19, 2, 0, 0).unwrap()),
+                ts_local: String::new(),
+                timezone: "UTC".into(),
+                source_timestamp_raw: String::new(),
+                source_timestamp_parse_status: "ok".into(),
+                source_timestamp_fold: None,
+                source_file: "t.csv".into(),
+                source_row_number: 3,
+                values: BTreeMap::from([("kw".into(), "20".into())]),
+                fill_created: false,
+            },
+        ];
+        apply_fill_policy(&mut rows, FillPolicy::Linear);
+        let mid = rows[1].values.get("kw").unwrap();
+        let v: f64 = mid.parse().unwrap();
+        assert!(v > 10.0 && v < 20.0);
     }
 }
 

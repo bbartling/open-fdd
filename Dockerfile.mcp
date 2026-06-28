@@ -2,6 +2,7 @@
 FROM rust:1.95-bookworm AS builder
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
+COPY edge ./edge
 COPY mcp ./mcp
 RUN cargo build --release -p openfdd-mcp
 

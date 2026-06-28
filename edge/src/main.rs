@@ -620,6 +620,13 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             json!({"ok": true, "rows": model::query::haystack_rows()}),
         ),
+        ("GET", "/api/model/sparql/predefined") => {
+            json_response(&mut stream, model::sparql::predefined())
+        }
+        ("POST", "/api/model/sparql") => json_response(
+            &mut stream,
+            model::sparql::execute(&parse_json_body_or_empty(&body)),
+        ),
         ("POST", "/api/fdd/run") => match parse_json_body(&body) {
             Ok(payload) => require_role(
                 &mut stream,

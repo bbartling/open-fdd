@@ -10,3 +10,4 @@ pub mod csv_workbench;
 pub mod persist;
 pub mod query;
 pub mod scope;
+pub mod sparql;

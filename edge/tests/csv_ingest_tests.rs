@@ -119,6 +119,32 @@ fn timestamp_column_detection() {
 }
 
 #[test]
+fn resample_kw_hourly_averages() {
+    let kw_csv = include_str!("fixtures/csv_ingest/school_kw_sample.csv");
+    let kw_map = FileMapping {
+        filename: "kw.csv".into(),
+        timestamp_column: "Date".into(),
+        timezone: "America/Chicago".into(),
+        value_columns: vec!["kW".into()],
+    };
+    let left = parse_file_to_rows(kw_csv, &kw_map, ',', "first").unwrap();
+    assert_eq!(left.len(), 3);
+    let hourly = join_rows(
+        left,
+        vec![],
+        JoinAlignment::ResampleKwHourly,
+        FillPolicy::None,
+    )
+    .unwrap();
+    assert_eq!(hourly.len(), 1);
+    let kw = hourly[0]
+        .values
+        .get("kw")
+        .or_else(|| hourly[0].values.get("kW"));
+    assert!(kw.is_some());
+}
+
+#[test]
 fn plan_api_append_mode() {
     with_temp_workspace(|_| {
         use base64::Engine;
@@ -137,7 +163,7 @@ fn plan_api_append_mode() {
                 "mode": "append",
                 "output_dataset_name": "school_kw_test",
                 "ambiguous_policy": "first",
-                "fill_policy": "none",
+                "fill_policy": "linear",
                 "files": [{
                     "filename": "school.csv",
                     "timestamp_column": "Date",
