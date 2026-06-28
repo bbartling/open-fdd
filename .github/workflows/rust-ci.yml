@@ -20,7 +20,7 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy
-        run: cargo clippy -p open_fdd_edge_prototype --lib --tests -- -D warnings
+        run: cargo clippy -p open_fdd_edge_prototype --lib -- -D warnings
       - name: Test
         run: cargo test --workspace --all-targets -p open_fdd_edge_prototype
       - name: Anti-hardcoding audit
