@@ -24,8 +24,9 @@ type BuildingStatusResponse = {
 };
 
 const INSIGHT_POLL_MS = 15 * 60 * 1000;
+const ANALYTICS_POLL_MS = 15 * 60 * 1000;
 
-/** Insight agent is optional; only fetch on operator request to avoid 404 noise on older bridges. */
+/** Main dashboard — live faults (15s) + AI building insight + analytics (15 min). */
 export default function BuildingInsightDashboard() {
   const { snapshot, error: streamError, live } = useDashboardStream();
   const [insight, setInsight] = useState<InsightResponse | null>(null);
@@ -60,10 +61,13 @@ export default function BuildingInsightDashboard() {
   }, []);
 
   useEffect(() => {
-    if (!insight) return;
+    void loadInsight(false);
+  }, [loadInsight]);
+
+  useEffect(() => {
     const t = window.setInterval(() => void loadInsight(false), INSIGHT_POLL_MS);
     return () => window.clearInterval(t);
-  }, [loadInsight, insight]);
+  }, [loadInsight]);
 
   useEffect(() => {
     apiFetch<BuildingStatusResponse>("/api/building/status")
@@ -205,7 +209,18 @@ export default function BuildingInsightDashboard() {
               />
             ))}
           </div>
-          {insight?.sentence ? <p className="bis-insight-one-liner">{insight.sentence}</p> : null}
+          {insight?.sentence ? (
+            <p className="bis-insight-one-liner">{insight.sentence}</p>
+          ) : insightLoading ? (
+            <p className="muted bis-insight-one-liner">Loading AI building insight…</p>
+          ) : null}
+          {insight?.refresh_interval_s ? (
+            <p className="muted bis-insight-meta">
+              Insight refresh every {Math.round(insight.refresh_interval_s / 60)} min
+              {insight.source === "ollama" ? " · Ollama" : insight.source === "rules" ? " · live model" : ""}
+              {insight.cached ? " · cached" : ""}
+            </p>
+          ) : null}
         </div>
 
         <ComfortZonePanel
@@ -254,6 +269,7 @@ export default function BuildingInsightDashboard() {
 
         <OperationalContextPanel
           refreshKey={snapshot?.faults.alert_count}
+          analyticsPollMs={ANALYTICS_POLL_MS}
           insight={insight}
           insightError={insightError}
           buildingMeta={buildingMeta}

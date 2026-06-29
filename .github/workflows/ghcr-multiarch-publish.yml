@@ -1,23 +1,37 @@
-# LEGACY Python stack only — publishes openfdd-bridge, openfdd-commission, openfdd-mcp-rag.
-# Current Rust deployments use .github/workflows/rust-ghcr.yml → ghcr.io/bbartling/openfdd-edge-rust
-# Copy to .github/workflows/ghcr-multiarch-publish.yml (requires workflow OAuth scope to push).
-# Then: gh workflow run "Publish multi-arch GHCR images" -f image_tag=3.1.6
-name: Publish multi-arch GHCR images
+# ARCHIVED — Python-era multi-arch GHCR (openfdd-bridge, openfdd-commission, openfdd-mcp-rag).
+# Rust 3.2.x: use .github/workflows/rust-release.yml → ghcr.io/bbartling/openfdd-edge-rust
+name: "[ARCHIVED] Publish multi-arch GHCR images (Python stack)"
 
 on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "GHCR tag (e.g. 3.1.6)"
+        description: "Legacy SemVer (archived stack only)"
         required: true
-        default: "3.2.0"
+        default: "3.1.6"
+      confirm_archived:
+        description: "Type YES to confirm publishing archived Python-era images"
+        required: true
+        default: ""
 
 permissions:
   contents: read
   packages: write
 
 jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Block unless explicitly confirmed
+        run: |
+          if [[ "${{ inputs.confirm_archived }}" != "YES" ]]; then
+            echo "Refusing to publish archived Python-era images without confirm_archived=YES" >&2
+            echo "Use .github/workflows/rust-release.yml for Rust 3.2.x instead." >&2
+            exit 1
+          fi
+
   publish:
+    needs: guard
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

@@ -286,6 +286,15 @@ pub fn historian_csv(query: &ExportQuery) -> String {
         let protocol = row
             .get("source_driver")
             .and_then(|v| v.as_str())
+            .or_else(|| {
+                row.get("source").and_then(|v| v.as_str()).and_then(|s| {
+                    if s.starts_with("csv:") || s == "csv" {
+                        Some("csv")
+                    } else {
+                        None
+                    }
+                })
+            })
             .unwrap_or("bacnet");
         let device = row
             .get("source_device")

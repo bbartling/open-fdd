@@ -23,15 +23,9 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [{ to: "/", end: true, icon: "🏠", label: "Dashboard" }],
   },
   {
-    title: "Wiresheet",
-    items: [
-      { to: "/wiresheet", icon: "🔗", label: "FDD Studio", protected: true },
-      { to: "/csv", icon: "📂", label: "CSV Fusion", protected: true },
-    ],
-  },
-  {
     title: "Integrations",
     items: [
+      { to: "/csv", icon: "📂", label: "CSV Fusion", protected: true },
       { to: "/bacnet", icon: "📡", label: "BACnet", protected: true },
       { to: "/haystack", icon: "🌿", label: "Haystack", protected: true },
       { to: "/modbus", icon: "🔌", label: "Modbus", protected: true },

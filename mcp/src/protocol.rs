@@ -1,4 +1,5 @@
 use crate::bridge::BridgeClient;
+use crate::gate::require_write_confirm;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 
@@ -76,12 +77,116 @@ impl Server {
             tool("openfdd_model_sparql", "POST /api/model/sparql — read-only SELECT over Haystack RDF", json!({"query": {"type": "string"}})),
             tool("openfdd_model_sites", "GET /api/model/sites", json!({})),
             tool("openfdd_model_coverage", "GET /api/dashboard/model-coverage", json!({})),
+            tool("openfdd_csv_import_preview", "POST /api/csv/import/preview — stage CSVs from host path or base64; optional session_id to append", json!({
+                "session_id": {"type": "string", "description": "Existing session to append files into"},
+                "files": {"type": "array", "description": "Array of {filename, path} or {filename, content_base64}"}
+            })),
+            tool("openfdd_csv_import_plan", "POST /api/csv/import/plan — append/join plan + validation preview", json!({
+                "session_id": {"type": "string"},
+                "plan": {"type": "object", "description": "ImportPlan: mode, files, join_alignment, fill_policy, output_dataset_name"}
+            })),
+            tool("openfdd_ingest_contract", "GET /api/ingest/contract — machine-readable ingest mold (historian_wide_csv, commissioning, import_plan)", json!({})),
+            tool("openfdd_csv_import_preflight", "POST /api/csv/import/preflight — strict validation gate; must verdict pass before execute", json!({
+                "session_id": {"type": "string"},
+                "plan": {"type": "object", "description": "Optional re-plan before validation"}
+            })),
+            tool("openfdd_csv_workbench_quality", "POST /api/csv-workbench/quality — CSV quality analysis", json!({
+                "source_id": {"type": "string"}
+            })),
+            tool("openfdd_model_commissioning_export", "GET /api/model/commissioning-export — sites/equipment/points/assignments/fdd_rules bundle", json!({})),
+            tool("openfdd_model_commissioning_import", "POST /api/model/commissioning-import — fail-closed commissioning bundle (write: confirm + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"},
+                "payload": {"type": "object"}
+            })),
+            tool("openfdd_rules_batch", "POST /api/rules/batch — run all active saved FDD SQL rules (write: confirm + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"}
+            })),
+            tool("openfdd_fdd_rules_save", "POST /api/fdd-rules — save SQL fault rule (write: confirm + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"},
+                "rule_id": {"type": "string"},
+                "name": {"type": "string"},
+                "sql": {"type": "string"}
+            })),
+            tool("openfdd_fdd_rules_activate", "POST /api/fdd-rules/{id}/activate — activate saved rule (write: confirm + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"},
+                "rule_id": {"type": "string"}
+            })),
+            tool("openfdd_reports_from_fdd_sql_run", "POST /api/reports/from-fdd-sql-run — PDF report from SQL FDD test run (write: confirm + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"},
+                "rule_name": {"type": "string"},
+                "sql": {"type": "string"},
+                "run_result": {"type": "object"}
+            })),
+            tool("openfdd_integration_smoke", "Agent playbook smoke: health + contract + optional CSV preflight/execute + commissioning/FDD/report writes", json!({
+                "import_dir": {"type": "string", "description": "Host path to folder of CSVs for preview"},
+                "session_id": {"type": "string"},
+                "confirm": {"type": "boolean", "description": "Enable write steps (execute, commissioning, batch, report)"},
+                "commissioning": {"type": "object"},
+                "run_fdd": {"type": "boolean"},
+                "run_report": {"type": "boolean"},
+                "report": {"type": "object"}
+            })),
+            tool("openfdd_historian_query", "GET/POST /api/historian/query — historian pivot rows (optional limit, site_id, equipment_id)", json!({
+                "limit": {"type": "integer"},
+                "site_id": {"type": "string"},
+                "equipment_id": {"type": "string"}
+            })),
+            tool("openfdd_fdd_rules_list", "GET /api/fdd-rules — list wire/SQL fault rules", json!({})),
+            tool("openfdd_fdd_rule_test_sql", "POST /api/fdd-rules/{id}/test-sql — dry-run rule SQL on sample/historian data", json!({
+                "rule_id": {"type": "string"},
+                "sql": {"type": "string"},
+                "params": {"type": "object"},
+                "confirmation_seconds": {"type": "integer"}
+            })),
+            tool("openfdd_fdd_run", "POST /api/fdd/run — execute ad-hoc DataFusion SQL FDD (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean", "description": "Must be true"},
+                "sql": {"type": "string"},
+                "params": {"type": "object"},
+                "confirmation_seconds": {"type": "integer"}
+            })),
+            tool("openfdd_model_assignments_save", "POST /api/model/assignments/save — persist Haystack assignments (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"},
+                "points": {"type": "array"},
+                "fault_equation_bindings": {"type": "array"},
+                "assignments": {"type": "object", "description": "Alternative wrapper for full assignments doc"}
+            })),
+            tool("openfdd_reports_draft", "POST /api/reports/draft — create report draft (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"},
+                "title": {"type": "string"},
+                "template_id": {"type": "string"},
+                "include_branding": {"type": "boolean"}
+            })),
+            tool("openfdd_reports_patch", "PATCH /api/reports/{id} — update title/sections (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"},
+                "report_id": {"type": "string"},
+                "title": {"type": "string"},
+                "sections": {"type": "array"}
+            })),
+            tool("openfdd_reports_render_pdf", "POST /api/reports/{id}/render/pdf — render PDF bundle (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"},
+                "report_id": {"type": "string"}
+            })),
             tool("openfdd_csv_fusion_preview", "GET /api/csv/import/sessions/{id}/fusion-preview — merged CSV grid for browser review", json!({"session_id": {"type": "string"}, "limit": {"type": "integer"}})),
             tool("openfdd_csv_latest_planned", "GET /api/csv/import/sessions/latest/planned — most recent UT3 plan ready for fusion preview", json!({})),
             tool("openfdd_csv_sessions", "GET /api/csv/import/sessions — list recent import sessions", json!({"limit": {"type": "integer"}})),
-            tool("openfdd_csv_import_execute", "POST /api/csv/import/execute — save planned session to Arrow + historian (human confirms after preview)", json!({"session_id": {"type": "string"}})),
+            tool("openfdd_csv_import_execute", "POST /api/csv/import/execute — save planned session to Arrow + historian (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "session_id": {"type": "string"},
+                "confirm": {"type": "boolean", "description": "Must be true"}
+            })),
             tool("openfdd_datasets", "GET /api/datasets — list Feather/Arrow datasets in registry", json!({})),
             tool("openfdd_timeseries_series", "GET /api/timeseries/series — plot catalog after CSV save", json!({"site_id": {"type": "string"}})),
+            tool("openfdd_auth_credentials_hint", "Where MCP/agents find Open-FDD login (workspace/bootstrap_credentials.once.txt, auth.env.local) — no secrets returned", json!({})),
+            tool("openfdd_auth_login", "Login as integrator/agent/operator/admin — returns JWT from handoff/env (password never echoed)", json!({
+                "role": {"type": "string", "description": "integrator (default), agent, operator, admin"}
+            })),
+            tool("openfdd_fdd_wires_propose", "POST /api/fdd-wires/propose-assignments — AI map driver points → FDD inputs → rules; syncs wiresheet graph", json!({
+                "site_id": {"type": "string"},
+                "equipment_type": {"type": "string", "description": "e.g. ahu"}
+            })),
+            tool("openfdd_fdd_wires_sync", "POST /api/fdd-wires/sync-from-assignments — rebuild FDD wiresheet from saved model assignments", json!({
+                "site_id": {"type": "string"},
+                "graph_id": {"type": "string", "description": "default graph:live-fdd-validation"}
+            })),
         ];
         // Bench profile short aliases (same handlers as openfdd_* tools).
         for (alias, target) in [
@@ -134,6 +239,73 @@ impl Server {
             }
             "openfdd_model_sites" => self.bridge.get("/api/model/sites"),
             "openfdd_model_coverage" => self.bridge.get("/api/dashboard/model-coverage"),
+            "openfdd_csv_import_preview" => self.bridge.csv_import_preview(args),
+            "openfdd_csv_import_plan" => self.bridge.csv_import_plan(args),
+            "openfdd_ingest_contract" => self.bridge.ingest_contract(),
+            "openfdd_csv_import_preflight" => self.bridge.csv_import_preflight(args),
+            "openfdd_csv_workbench_quality" => self.bridge.csv_workbench_quality(args),
+            "openfdd_model_commissioning_export" => self.bridge.commissioning_export(),
+            "openfdd_model_commissioning_import" => {
+                require_write_confirm(args, "openfdd_model_commissioning_import")?;
+                self.bridge.commissioning_import(args)
+            }
+            "openfdd_rules_batch" => {
+                require_write_confirm(args, "openfdd_rules_batch")?;
+                self.bridge.rules_batch()
+            }
+            "openfdd_fdd_rules_save" => {
+                require_write_confirm(args, "openfdd_fdd_rules_save")?;
+                let mut body = args.clone();
+                if let Some(obj) = body.as_object_mut() {
+                    obj.remove("confirm");
+                }
+                self.bridge.fdd_rules_save(&body)
+            }
+            "openfdd_fdd_rules_activate" => {
+                require_write_confirm(args, "openfdd_fdd_rules_activate")?;
+                let rule_id = args
+                    .get("rule_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("rule_id required")?;
+                self.bridge.fdd_rules_activate(rule_id)
+            }
+            "openfdd_reports_from_fdd_sql_run" => {
+                require_write_confirm(args, "openfdd_reports_from_fdd_sql_run")?;
+                let mut body = args.clone();
+                if let Some(obj) = body.as_object_mut() {
+                    obj.remove("confirm");
+                }
+                self.bridge.reports_from_fdd_sql_run(&body)
+            }
+            "openfdd_integration_smoke" => {
+                if args.get("confirm").and_then(|v| v.as_bool()) == Some(true) {
+                    require_write_confirm(args, "openfdd_integration_smoke")?;
+                }
+                self.bridge.integration_smoke(args)
+            }
+            "openfdd_historian_query" => self.bridge.historian_query(args),
+            "openfdd_fdd_rules_list" => self.bridge.fdd_rules_list(),
+            "openfdd_fdd_rule_test_sql" => self.bridge.fdd_rule_test_sql(args),
+            "openfdd_fdd_run" => {
+                require_write_confirm(args, "openfdd_fdd_run")?;
+                self.bridge.fdd_run(args)
+            }
+            "openfdd_model_assignments_save" => {
+                require_write_confirm(args, "openfdd_model_assignments_save")?;
+                self.bridge.model_assignments_save(args)
+            }
+            "openfdd_reports_draft" => {
+                require_write_confirm(args, "openfdd_reports_draft")?;
+                self.bridge.reports_draft(args)
+            }
+            "openfdd_reports_patch" => {
+                require_write_confirm(args, "openfdd_reports_patch")?;
+                self.bridge.reports_patch(args)
+            }
+            "openfdd_reports_render_pdf" => {
+                require_write_confirm(args, "openfdd_reports_render_pdf")?;
+                self.bridge.reports_render_pdf(args)
+            }
             "openfdd_csv_fusion_preview" => {
                 let session_id = args
                     .get("session_id")
@@ -153,6 +325,7 @@ impl Server {
                     .get(&format!("/api/csv/import/sessions?limit={limit}"))
             }
             "openfdd_csv_import_execute" => {
+                require_write_confirm(args, "openfdd_csv_import_execute")?;
                 let session_id = args
                     .get("session_id")
                     .and_then(|v| v.as_str())
@@ -172,6 +345,27 @@ impl Server {
                         .get(&format!("/api/timeseries/series?site_id={site}"))
                 }
             }
+            "openfdd_auth_credentials_hint" => Ok(crate::auth::credentials_hint()),
+            "openfdd_auth_login" => {
+                let role = args.get("role").and_then(|v| v.as_str()).unwrap_or("integrator");
+                let base = std::env::var("OPENFDD_API_BASE")
+                    .unwrap_or_else(|_| "http://127.0.0.1:8080".into());
+                crate::auth::login_role(role, &base)
+            }
+            "openfdd_fdd_wires_propose" => self.bridge.post(
+                "/api/fdd-wires/propose-assignments",
+                &json!({
+                    "site_id": args.get("site_id"),
+                    "equipment_type": args.get("equipment_type").cloned().unwrap_or(json!("ahu"))
+                }),
+            ),
+            "openfdd_fdd_wires_sync" => self.bridge.post(
+                "/api/fdd-wires/sync-from-assignments",
+                &json!({
+                    "site_id": args.get("site_id"),
+                    "graph_id": args.get("graph_id").cloned().unwrap_or(json!("graph:live-fdd-validation"))
+                }),
+            ),
             other => Err(format!("unknown tool: {other}")),
         }
     }

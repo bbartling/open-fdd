@@ -43,7 +43,11 @@ if ! curl -fsS --max-time 3 http://127.0.0.1:8080/api/health >/dev/null 2>&1; th
     "$ROOT/scripts/openfdd_local_up.sh"
   elif [[ -x "$ROOT/target/release/open_fdd_edge_prototype" ]]; then
     mkdir -p "$ROOT/workspace/logs"
-    OPENFDD_WORKSPACE="$ROOT/workspace" OPENFDD_CORS_ORIGIN="http://127.0.0.1:5173" \
+    OPENFDD_WORKSPACE="$ROOT/workspace" \
+      OPENFDD_BIND_HOST="0.0.0.0" \
+      OPENFDD_ALLOW_INSECURE_AUTH="${OPENFDD_ALLOW_INSECURE_AUTH:-1}" \
+      OPENFDD_BACNET_SERVER_ENABLED="${OPENFDD_BACNET_SERVER_ENABLED:-0}" \
+      OPENFDD_CORS_ORIGIN="${OPENFDD_CORS_ORIGIN:-http://127.0.0.1:5173}" \
       nohup "$ROOT/target/release/open_fdd_edge_prototype" >>"$ROOT/workspace/logs/edge-dev.log" 2>&1 &
     sleep 2
   else

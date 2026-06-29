@@ -11,6 +11,7 @@ pub mod faults;
 pub mod fdd;
 pub mod historian;
 pub mod import;
+pub mod ingest;
 pub mod model;
 pub mod ops;
 pub mod reports;

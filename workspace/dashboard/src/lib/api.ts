@@ -121,6 +121,31 @@ export async function apiFetch<T>(
   return res.json() as Promise<T>;
 }
 
+/** Upload multipart form data (CSV import preview). */
+export async function apiUploadForm<T>(path: string, form: FormData): Promise<T> {
+  const base = getBridgeBase();
+  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...authHeaders(),
+    },
+    body: form,
+  });
+  if (res.status === 401 && !path.startsWith("/api/auth/login")) {
+    sessionStorage.removeItem(TOKEN_KEY);
+    if (shouldRedirectLogin()) {
+      window.location.assign("/login");
+    }
+    throw new Error("unauthorized");
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    throw parseErrorBody(text, res.status);
+  }
+  return res.json() as Promise<T>;
+}
+
 /** Upload raw CSV/text bodies (import job upload endpoint). */
 export async function apiUploadRaw<T>(
   path: string,
@@ -251,6 +276,32 @@ export async function login(username: string, password: string) {
     method: "POST",
     body: JSON.stringify({ username, password }),
   });
+}
+
+/** Dev-only one-click login (edge OPENFDD_ALLOW_INSECURE_AUTH=1). */
+export async function devQuickLogin(role: "integrator" | "admin" | "operator" | "agent") {
+  return apiFetch<{
+    ok?: boolean;
+    token?: string;
+    access_token?: string;
+    role?: string;
+    username?: string;
+    error?: string;
+  }>("/api/dev/quick-login", {
+    method: "POST",
+    body: JSON.stringify({ role }),
+  });
+}
+
+/** Dev-only start local script (ui dev, codex setup). */
+export async function devRunScript(script: "ui_dev" | "codex_setup" | "codex_reset") {
+  return apiFetch<{ ok?: boolean; hint?: string; error?: string; log?: string }>(
+    "/api/dev/run-script",
+    {
+      method: "POST",
+      body: JSON.stringify({ script }),
+    },
+  );
 }
 
 /** Short-lived ticket for /ws/dashboard (not the long-lived Bearer token). */

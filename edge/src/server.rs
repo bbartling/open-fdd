@@ -8,7 +8,7 @@ use crate::auth::login::{authenticate, login_response};
 use crate::auth::rbac::{can_write_field_bus, role_allowed};
 use crate::{
     control, csv_ingest, dashboard, data_management, drivers, export, faults, fdd, historian,
-    import, model, ops, reports, timeseries, validation, version,
+    import, ingest, model, ops, reports, timeseries, validation, version,
 };
 
 use serde_json::{json, Value};
@@ -21,7 +21,36 @@ use std::thread;
 use std::time::Duration;
 
 const MAX_BODY_BYTES: usize = 1_048_576;
+const MAX_CSV_UPLOAD_BYTES: usize = 128 * 1024 * 1024;
 const READ_TIMEOUT_SECS: u64 = 30;
+const CSV_READ_TIMEOUT_SECS: u64 = 600;
+
+fn max_body_bytes_for_path(path: &str) -> usize {
+    let route = path.split('?').next().unwrap_or(path);
+    if route == "/api/csv/import/preview" {
+        env::var("OPENFDD_MAX_CSV_UPLOAD_BYTES")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(MAX_CSV_UPLOAD_BYTES)
+    } else {
+        env::var("OPENFDD_MAX_BODY_BYTES")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(MAX_BODY_BYTES)
+    }
+}
+
+fn read_timeout_secs_for_path(path: &str) -> u64 {
+    let route = path.split('?').next().unwrap_or(path);
+    if route.starts_with("/api/csv/import/") {
+        env::var("OPENFDD_CSV_READ_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(CSV_READ_TIMEOUT_SECS)
+    } else {
+        READ_TIMEOUT_SECS
+    }
+}
 
 pub fn run() -> std::io::Result<()> {
     let cfg = auth_config();
@@ -89,6 +118,18 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             json!({"ok": true, "auth_required": cfg.required}),
         );
     }
+    if method == "POST" && route_path == "/api/dev/quick-login" {
+        return json_response(
+            &mut stream,
+            ops::dev_stack::quick_login(&parse_json_body_or_empty(&body)),
+        );
+    }
+    if method == "POST" && route_path == "/api/dev/run-script" {
+        return json_response(
+            &mut stream,
+            ops::dev_stack::run_script(&parse_json_body_or_empty(&body)),
+        );
+    }
     // Public read-only dashboard endpoints (home/login view without JWT).
     if method == "GET"
         && (route_path == "/api/building/snapshot" || route_path == "/api/building/status")
@@ -149,7 +190,8 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         }
         ("GET", "/api/building/status") => json_response(&mut stream, dashboard::building_status()),
         ("GET", "/openfdd-agent/building-insight") => {
-            json_response(&mut stream, dashboard::building_insight_stub())
+            let force = query_string(&path).contains("force=true");
+            json_response(&mut stream, dashboard::building_insight(force))
         }
         ("GET", "/api/dashboard/summary") => json_response(&mut stream, dashboard::summary()),
         ("GET", "/api/dashboard/sites") => json_response(&mut stream, dashboard::sites()),
@@ -210,6 +252,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/bridge/status") => raw_json(&mut stream, ops::bridge::status_json()),
         ("GET", "/api/agent/manifest") => json_response(&mut stream, agent_manifest()),
         ("GET", "/api/agent/tools") => json_response(&mut stream, agent_tools()),
+        ("GET", "/api/ingest/contract") => json_response(&mut stream, ingest::contract_json()),
         ("POST", "/api/agent/dev-harness") => require_role_lazy(
             &mut stream,
             &principal,
@@ -234,6 +277,12 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent", "operator"],
             ops::agent_chat::cancel_reply,
         ),
+        ("POST", "/api/agent/reset") => require_role_lazy(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            ops::agent_chat::reset_reply,
+        ),
         ("POST", "/api/agent/bootstrap") => require_role(
             &mut stream,
             &principal,
@@ -249,9 +298,10 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/historian/query") => {
             raw_json(&mut stream, &historian::arrow_table::query_json())
         }
-        ("POST", "/api/historian/query") => {
-            raw_json(&mut stream, &historian::arrow_table::query_json())
-        }
+        ("POST", "/api/historian/query") => raw_json(
+            &mut stream,
+            &historian::arrow_table::query_json_from_body(&parse_json_body_or_empty(&body)),
+        ),
         ("GET", "/api/export/meta") => json_response(&mut stream, export::meta_json()),
         ("GET", "/api/export/historian.csv") => {
             let q = export::parse_query(query_string(&path));
@@ -436,7 +486,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let out = if ct.contains("application/json") {
                 csv_ingest::preview_json_handler(&parse_json_body_or_empty(&body))
             } else {
-                csv_ingest::preview_handler(&ct, body.as_bytes())
+                csv_ingest::preview_handler(&ct, body.as_bytes(), None)
             };
             require_role(
                 &mut stream,
@@ -450,6 +500,12 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &principal,
             &["integrator", "agent"],
             csv_ingest::plan_handler(&parse_json_body_or_empty(&body)),
+        ),
+        ("POST", "/api/csv/import/preflight") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            csv_ingest::preflight_handler(&parse_json_body_or_empty(&body)),
         ),
         ("POST", "/api/csv/import/execute") => require_role(
             &mut stream,
@@ -522,7 +578,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            serde_json::from_str::<Value>(model::assignments::save_assignment_json()).unwrap(),
+            model::assignments::save_from_request(&parse_json_body_or_empty(&body)),
         ),
         ("POST", "/api/model/assignments/resolve") => {
             raw_json(&mut stream, model::assignments::resolve_json())
@@ -712,6 +768,16 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &principal,
             &["integrator", "agent"],
             fdd::wires::api::propose_assignments(&parse_json_body_or_empty(&body), &principal.role),
+        ),
+        ("POST", "/api/fdd-wires/sync-from-assignments") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            fdd::wires::api::sync_from_assignments(
+                &parse_json_body_or_empty(&body),
+                &principal.sub,
+                &principal.role,
+            ),
         ),
         ("POST", "/api/bacnet/whois") => {
             let body = drivers::bacnet::whois_json();
@@ -1722,6 +1788,33 @@ fn require_role_csv(
     }
 }
 
+fn request_path_from_buf(buf: &[u8]) -> String {
+    let header_end = buf
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .unwrap_or(buf.len());
+    let first = buf
+        .get(..header_end.min(buf.len()))
+        .and_then(|h| h.split(|&b| b == b'\n').next())
+        .and_then(|line| {
+            let line = if line.ends_with(b"\r") {
+                &line[..line.len().saturating_sub(1)]
+            } else {
+                line
+            };
+            std::str::from_utf8(line).ok()
+        })
+        .unwrap_or("");
+    first
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or("/")
+        .split('?')
+        .next()
+        .unwrap_or("/")
+        .to_string()
+}
+
 fn read_http_request(stream: &mut TcpStream) -> std::io::Result<String> {
     let mut buf = Vec::with_capacity(4096);
     let mut chunk = [0_u8; 4096];
@@ -1747,6 +1840,8 @@ fn read_http_request(stream: &mut TcpStream) -> std::io::Result<String> {
         .map(|i| i + 4)
         .unwrap_or(buf.len());
     let headers = &buf[..header_end];
+    let route_path = request_path_from_buf(&buf);
+    let max_body = max_body_bytes_for_path(&route_path);
     let content_length = headers
         .split(|&b| b == b'\n')
         .filter_map(|line| {
@@ -1765,10 +1860,13 @@ fn read_http_request(stream: &mut TcpStream) -> std::io::Result<String> {
         })
         .next()
         .unwrap_or(0);
-    if content_length > MAX_BODY_BYTES {
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(read_timeout_secs_for_path(
+        &route_path,
+    ))));
+    if content_length > max_body {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            "request body too large",
+            format!("request body too large (max {max_body} bytes for {route_path})"),
         ));
     }
     let body_start = header_end;
@@ -1954,16 +2052,27 @@ fn agent_tools() -> Value {
             {"name":"fdd.run","method":"POST","path":"/api/fdd/run","requires":"integrator|agent"},
             {"name":"fdd.wires.graphs","method":"GET","path":"/api/fdd-wires/graphs","requires":"JWT"},
             {"name":"fdd.wires.propose","method":"POST","path":"/api/fdd-wires/propose-assignments","requires":"integrator|agent"},
-            {"name":"fdd.rules.list","method":"GET","path":"/api/fdd-rules","requires":"JWT"},
-            {"name":"fdd.rules.activate","method":"POST","path":"/api/fdd-rules/{id}/activate","requires":"integrator"},
-            {"name":"rules.batch","method":"POST","path":"/api/rules/batch","requires":"integrator|agent"},
+            {"name":"csv.import.preview","method":"POST","path":"/api/csv/import/preview","requires":"integrator|agent"},
+            {"name":"csv.import.plan","method":"POST","path":"/api/csv/import/plan","requires":"integrator|agent"},
+            {"name":"csv.import.preflight","method":"POST","path":"/api/csv/import/preflight","requires":"integrator|agent"},
+            {"name":"csv.import.execute","method":"POST","path":"/api/csv/import/execute","requires":"integrator|agent"},
+            {"name":"ingest.contract","method":"GET","path":"/api/ingest/contract","public":true},
+            {"name":"csv.workbench.quality","method":"POST","path":"/api/csv-workbench/quality","requires":"integrator|agent"},
+            {"name":"model.commissioning_export","method":"GET","path":"/api/model/commissioning-export","requires":"JWT"},
+            {"name":"model.commissioning_import","method":"POST","path":"/api/model/commissioning-import","requires":"integrator|agent"},
+            {"name":"reports.from_fdd_sql_run","method":"POST","path":"/api/reports/from-fdd-sql-run","requires":"integrator|agent"},
+            {"name":"fdd.rules.save","method":"POST","path":"/api/fdd-rules","requires":"integrator"},
+            {"name":"fdd.rules.test_sql","method":"POST","path":"/api/fdd-rules/{id}/test-sql","requires":"integrator|agent"},
             {"name":"historian.query","method":"POST","path":"/api/historian/query","requires":"JWT"},
             {"name":"reports.templates","method":"GET","path":"/api/reports/templates","requires":"JWT"},
             {"name":"reports.draft","method":"POST","path":"/api/reports/draft","requires":"integrator|agent"},
             {"name":"reports.render_pdf","method":"POST","path":"/api/reports/{id}/render/pdf","requires":"integrator|agent"},
             {"name":"reports.download_pdf","method":"GET","path":"/api/reports/{id}/download.pdf","requires":"JWT"},
             {"name":"reports.rcx_plan","method":"POST","path":"/api/reports/rcx/plan","requires":"JWT"},
-            {"name":"reports.rcx_generate","method":"POST","path":"/api/reports/rcx/generate","requires":"integrator|agent"},
+            {"name":"fdd.rules.list","method":"GET","path":"/api/fdd-rules","requires":"JWT"},
+            {"name":"fdd.rules.activate","method":"POST","path":"/api/fdd-rules/{id}/activate","requires":"integrator"},
+            {"name":"rules.batch","method":"POST","path":"/api/rules/batch","requires":"integrator|agent"},
+            {"name":"timeseries.series","method":"GET","path":"/api/timeseries/series","requires":"JWT"},
             {"name":"ops.update","method":"POST","path":"/api/ops/docker/update","requires":"integrator|agent"}
         ]
     })

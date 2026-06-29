@@ -15,16 +15,44 @@ use std::sync::Arc;
 pub fn schema_tables_json() -> Value {
     json!({
         "ok": true,
+        "dialect": "DataFusion",
+        "time_column": "timestamp",
         "tables": [
             {
                 "name": "telemetry",
-                "description": "Normalized long-format telemetry rows",
-                "columns": ["timestamp","site_id","building_id","equipment_id","point_id","fdd_input","value","unit","quality","source","source_driver","source_device","source_object","is_simulated"]
+                "description": "Normalized long-format telemetry rows (timestamp, point_id, fdd_input, value)",
+                "columns": [
+                    {"name": "timestamp", "type": "TIMESTAMP", "is_primary": true},
+                    {"name": "site_id", "type": "VARCHAR"},
+                    {"name": "building_id", "type": "VARCHAR"},
+                    {"name": "equipment_id", "type": "VARCHAR"},
+                    {"name": "point_id", "type": "VARCHAR"},
+                    {"name": "fdd_input", "type": "VARCHAR"},
+                    {"name": "value", "type": "DOUBLE"},
+                    {"name": "unit", "type": "VARCHAR"},
+                    {"name": "quality", "type": "VARCHAR"},
+                    {"name": "source", "type": "VARCHAR"},
+                    {"name": "source_driver", "type": "VARCHAR"},
+                    {"name": "source_device", "type": "VARCHAR"},
+                    {"name": "source_object", "type": "VARCHAR"},
+                    {"name": "is_simulated", "type": "BOOLEAN"}
+                ]
             },
             {
                 "name": "telemetry_pivot",
-                "description": "Wide pivoted view for rule SQL",
-                "columns": ["timestamp","equipment_id","oa_t","oa_h","sat","duct_t","zn_t","sat_sp","fan_cmd","occ"]
+                "description": "Wide pivoted historian view — primary table for FDD rule SQL",
+                "columns": [
+                    {"name": "timestamp", "type": "TIMESTAMP", "is_primary": true},
+                    {"name": "equipment_id", "type": "VARCHAR"},
+                    {"name": "oa_t", "type": "DOUBLE", "fdd_input": true, "unit": "degF"},
+                    {"name": "oa_h", "type": "DOUBLE", "fdd_input": true, "unit": "%RH"},
+                    {"name": "sat", "type": "DOUBLE", "fdd_input": true, "unit": "degF"},
+                    {"name": "duct_t", "type": "DOUBLE", "fdd_input": true, "unit": "degF"},
+                    {"name": "zn_t", "type": "DOUBLE", "fdd_input": true, "unit": "degF"},
+                    {"name": "sat_sp", "type": "DOUBLE", "fdd_input": true, "unit": "degF"},
+                    {"name": "fan_cmd", "type": "BOOLEAN", "fdd_input": true},
+                    {"name": "occ", "type": "BOOLEAN", "fdd_input": true}
+                ]
             }
         ]
     })

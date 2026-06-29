@@ -207,7 +207,8 @@ pub fn sync_output_rows_to_historian(dataset_id: &str, rows: &[OutputRow]) -> Va
     use crate::model::csv_import::{apply_pivot_aliases, column_slug, ids_from_filename};
 
     let filename = format!("{dataset_id}.csv");
-    let (site_id, equip_id, source_id, _) = ids_from_filename(&filename);
+    let (default_site, default_equip, _, _) = ids_from_filename(&filename);
+    let source_tag = format!("csv:{dataset_id}");
     let mut new_rows: Vec<Value> = Vec::new();
     for r in rows {
         let ts = r
@@ -217,15 +218,31 @@ pub fn sync_output_rows_to_historian(dataset_id: &str, rows: &[OutputRow]) -> Va
         if ts.trim().is_empty() {
             continue;
         }
+        let row_equip = r
+            .values
+            .get("equipment_id")
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .unwrap_or(default_equip.as_str());
+        let row_site = r
+            .values
+            .get("site_id")
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .unwrap_or(default_site.as_str());
         let mut row = json!({
             "timestamp": ts,
-            "equipment_id": equip_id,
-            "site_id": site_id,
-            "source": source_id,
+            "equipment_id": row_equip,
+            "site_id": row_site,
+            "source": source_tag,
             "source_driver": "csv",
             "is_simulated": false
         });
         for (k, v) in &r.values {
+            let lk = k.to_ascii_lowercase();
+            if lk == "equipment_id" || lk == "site_id" {
+                continue;
+            }
             if v.trim().is_empty() {
                 continue;
             }
@@ -243,29 +260,39 @@ pub fn sync_output_rows_to_historian(dataset_id: &str, rows: &[OutputRow]) -> Va
         return json!({
             "ok": false,
             "error": "no numeric rows synced to historian",
-            "site_id": site_id,
-            "equipment_id": equip_id
+            "site_id": default_site,
+            "equipment_id": default_equip
         });
     }
     let mut all = store::load_pivot_rows().unwrap_or_default();
     all.retain(|r| {
         r.get("source")
             .and_then(|v| v.as_str())
-            .is_none_or(|s| s != source_id.as_str())
+            .is_none_or(|s| s != source_tag.as_str())
     });
     all.extend(new_rows.clone());
     match store::rewrite_all(&all) {
-        Ok(()) => json!({
-            "ok": true,
-            "rows_synced": new_rows.len(),
-            "historian_total": all.len(),
-            "site_id": site_id,
-            "equipment_id": equip_id,
-            "source_id": source_id,
-            "plot_url": format!("/plot?site={site_id}&device={equip_id}&hours=8760"),
-            "model_url": format!("/model?site={site_id}")
-        }),
-        Err(e) => json!({"ok": false, "error": e, "site_id": site_id}),
+        Ok(()) => {
+            let sync_site = new_rows
+                .first()
+                .and_then(|r| r.get("site_id").and_then(|v| v.as_str()))
+                .unwrap_or(default_site.as_str());
+            let sync_equip = new_rows
+                .first()
+                .and_then(|r| r.get("equipment_id").and_then(|v| v.as_str()))
+                .unwrap_or(default_equip.as_str());
+            json!({
+                "ok": true,
+                "rows_synced": new_rows.len(),
+                "historian_total": all.len(),
+                "site_id": sync_site,
+                "equipment_id": sync_equip,
+                "source_id": source_tag,
+                "plot_url": format!("/plot?site={sync_site}&device={sync_equip}&hours=8760"),
+                "model_url": format!("/model?site={sync_site}")
+            })
+        }
+        Err(e) => json!({"ok": false, "error": e, "site_id": default_site}),
     }
 }
 

@@ -270,7 +270,7 @@ The **`openfdd-mcp` binary ships inside `openfdd-edge-rust`** (same Cargo worksp
 ```bash
 cd ~/open-fdd
 export OPENFDD_COMPOSE_ROOT="$PWD"
-export OPENFDD_IMAGE_TAG=3.2.4
+export OPENFDD_IMAGE_TAG=latest
 
 docker compose -f docker/compose.edge.rust.yml --profile desktop-json-csv --profile cursor pull
 ```
@@ -301,7 +301,7 @@ export OPENFDD_MCP_TOKEN="$(
         "-e", "OPENFDD_API_BASE=http://127.0.0.1:8080",
         "-e", "OPENFDD_COMMISSION_BASE=http://127.0.0.1:9091",
         "-e", "OPENFDD_MCP_TOKEN",
-        "ghcr.io/bbartling/openfdd-edge-rust:3.2.4"
+        "ghcr.io/bbartling/openfdd-edge-rust:latest"
       ],
       "env": {
         "OPENFDD_MCP_TOKEN": "<paste JWT from step 3>"
@@ -317,7 +317,7 @@ export OPENFDD_MCP_TOKEN="$(
 docker run -i --rm --network host --entrypoint openfdd-mcp \
   -e OPENFDD_API_BASE=http://127.0.0.1:8080 \
   -e OPENFDD_MCP_TOKEN="$OPENFDD_MCP_TOKEN" \
-  ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-3.2.4}
+  ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-latest}
 ```
 
 MCP uses **stdio JSON-RPC** — it is not an HTTP service on a port. Full tool list and bench topology: [mcp/README.md](mcp/README.md).
@@ -327,6 +327,8 @@ MCP uses **stdio JSON-RPC** — it is not an HTTP service on a port. Full tool l
 ---
 
 ## Develop (Rust)
+
+Tested on Windows Subsystem for Linux (WSL)
 
 ```bash
 git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
@@ -350,6 +352,21 @@ Production-style local stack with Caddy TLS:
 docker compose -f docker-compose.prod.yml up -d
 ./scripts/openfdd_prod_validate.sh
 ```
+
+
+## Releases (Rust 3.2.x)
+
+| Channel | Image |
+|---------|--------|
+| **Default (early dev)** | `ghcr.io/bbartling/openfdd-edge-rust:latest` |
+| **Pinned version** | `ghcr.io/bbartling/openfdd-edge-rust:3.2.4` or `:v3.2.4` |
+| **Short SHA** | `ghcr.io/bbartling/openfdd-edge-rust:sha-abc1234` |
+
+**Publish a release** (maintainers): GitHub Actions → **Rust Release (GHCR + GitHub Release)** → version `3.2.4`. Runs CI, pushes edge + MCP images, creates tag `v3.2.4`, and opens a GitHub Release.
+
+Python-era 3.1.x GHCR packages (`openfdd-bridge`, `openfdd-commission`, `openfdd-mcp-rag`, `openfdd-cloud-exporter`) are **archived** and no longer updated. Primary runtime: **`openfdd-edge-rust`** (includes `openfdd-mcp` binary). Slim `openfdd-mcp` image is transitional.
+
+Open-FDD is for **LAN / VPN / OT networks**, not public internet hosting.
 
 
 ## License

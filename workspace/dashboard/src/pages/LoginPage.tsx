@@ -1,6 +1,13 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchAuthStatus, login, sanitizeBridgeBaseOverride, setToken } from "../lib/api";
+import {
+  devQuickLogin,
+  devRunScript,
+  fetchAuthStatus,
+  login,
+  sanitizeBridgeBaseOverride,
+  setToken,
+} from "../lib/api";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -9,6 +16,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [authRequired, setAuthRequired] = useState(true);
   const [hint, setHint] = useState("");
+  const [devBusy, setDevBusy] = useState<string | null>(null);
 
   useEffect(() => {
     if (sanitizeBridgeBaseOverride()) {
@@ -28,6 +36,14 @@ export default function LoginPage() {
       });
   }, [navigate]);
 
+  async function completeLogin(token: string | undefined) {
+    if (!token) {
+      throw new Error("Login succeeded but no session token was returned.");
+    }
+    setToken(token);
+    navigate("/");
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
@@ -41,14 +57,39 @@ export default function LoginPage() {
     }
     try {
       const res = await login(user, pass);
-      const token = res.token ?? res.access_token;
-      if (!token) {
-        throw new Error("Login succeeded but no session token was returned.");
-      }
-      setToken(token);
-      navigate("/");
+      await completeLogin(res.token ?? res.access_token);
     } catch (err) {
       setError(err instanceof Error ? err.message : "login failed");
+    }
+  }
+
+  async function quickSignIn(role: "integrator" | "admin") {
+    setDevBusy(role);
+    setError("");
+    try {
+      const res = await devQuickLogin(role);
+      if (!res.ok) {
+        throw new Error(res.error ?? "dev quick-login failed");
+      }
+      await completeLogin(res.token ?? res.access_token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "dev quick-login failed");
+    } finally {
+      setDevBusy(null);
+    }
+  }
+
+  async function startUiDev() {
+    setDevBusy("ui");
+    setHint("");
+    try {
+      const res = await devRunScript("ui_dev");
+      if (!res.ok) throw new Error(res.error ?? "failed to start UI dev");
+      setHint(res.hint ?? "UI dev server starting — open http://127.0.0.1:5173/");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "UI dev start failed");
+    } finally {
+      setDevBusy(null);
     }
   }
 
@@ -83,6 +124,39 @@ export default function LoginPage() {
         </div>
         {error ? <p className="error">{error}</p> : null}
         <button type="submit">Sign in</button>
+
+        <div className="login-dev-actions">
+          <p className="muted">Local dev (requires edge OPENFDD_ALLOW_INSECURE_AUTH=1):</p>
+          <div className="toolbar">
+            <button
+              type="button"
+              className="secondary-btn"
+              disabled={devBusy !== null}
+              onClick={() => void quickSignIn("integrator")}
+            >
+              {devBusy === "integrator" ? "Signing in…" : "Sign in as integrator"}
+            </button>
+            <button
+              type="button"
+              className="secondary-btn"
+              disabled={devBusy !== null}
+              onClick={() => void quickSignIn("admin")}
+            >
+              {devBusy === "admin" ? "Signing in…" : "Sign in as admin"}
+            </button>
+            <button
+              type="button"
+              className="secondary-btn"
+              disabled={devBusy !== null}
+              onClick={() => void startUiDev()}
+            >
+              {devBusy === "ui" ? "Starting…" : "Start UI dev (5173)"}
+            </button>
+          </div>
+          <p className="muted">
+            Manual password: <code>workspace/bootstrap_credentials.once.txt</code>
+          </p>
+        </div>
       </form>
     </div>
   );

@@ -1,18 +1,12 @@
-# PyPI: open-fdd wheel (Arrow runtime + playground). Tag-triggered only — no publish from branches.
-# Tags: vX.Y.Z (preferred) or legacy open-fdd-vX.Y.Z
-# Configure PyPI Trusted Publishing for bbartling/open-fdd → this workflow → environment pypi
-
-name: Publish open-fdd to PyPI
+# ARCHIVED — PyPI open-fdd wheel (Python 3.1.x era). Rust 3.2.x uses GHCR only.
+# Manual dry-run only; tag pushes no longer publish to PyPI or create Python GitHub Releases.
+name: "[ARCHIVED] Publish open-fdd to PyPI"
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
-      - "open-fdd-v*"
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Build and test only (no PyPI upload)"
+        description: "Build and test only (never uploads in archived workflow)"
         required: false
         default: "true"
         type: choice
@@ -40,21 +34,21 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - name: Archived workflow notice
+        run: |
+          echo "Python-era PyPI publish is archived. Use rust-release.yml for Rust 3.2.x GHCR releases." >&2
+          if [[ "${{ inputs.dry_run }}" != "true" ]]; then
+            echo "Refusing PyPI upload from archived workflow." >&2
+            exit 1
+          fi
+
       - name: Install build and test deps
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[test,dev,analytics]"
           python -m pip install build twine
 
-      - name: Check version matches tag
-        if: startsWith(github.ref, 'refs/tags/')
-        run: python scripts/release/check_version.py --tag "${GITHUB_REF_NAME}"
-
-      - name: Version consistency (local)
-        if: "!startsWith(github.ref, 'refs/tags/')"
-        run: python scripts/release/check_version.py
-
-      - name: Run package tests
+      - name: Run package tests (dry-run validation)
         run: |
           python -m pytest open_fdd/tests/arrow_runtime -q
           python -m pytest open_fdd/tests/playground -q
@@ -67,71 +61,7 @@ jobs:
           rm -rf dist build *.egg-info
           python -m build
 
-      - name: Check dist metadata
-        run: python -m twine check dist/*
-
-      - name: Verify wheel smoke
-        run: |
-          python -m venv /tmp/ofdd-wheel-smoke
-          wheel="$(ls -1t dist/*.whl | head -n 1)"
-          /tmp/ofdd-wheel-smoke/bin/pip install "$wheel"
-          /tmp/ofdd-wheel-smoke/bin/python -c "
-          import open_fdd
-          import pyarrow as pa
-          from open_fdd.arrow_runtime import run_arrow_rule
-          from open_fdd.playground.sandbox import lint_python
-          code = '''import pyarrow.compute as pc
-          def apply_faults_arrow(table, cfg, context=None):
-              return pc.greater(table['SAT'], float(cfg['high']))
-          '''
-          assert lint_python(code)['ok']
-          out = run_arrow_rule(code, pa.table({'SAT': [70.0, 90.0]}), {'high': 85})
-          assert out.true_count >= 1
-          "
-          if [ -f scripts/validate_acme_rules_pypi.py ]; then
-            env -u PYTHONPATH OFDD_WHEEL_SMOKE=1 /tmp/ofdd-wheel-smoke/bin/python scripts/validate_acme_rules_pypi.py
-          fi
-
       - uses: actions/upload-artifact@v4
         with:
-          name: python-dist
+          name: python-dist-archived-dry-run
           path: dist/*
-
-  publish:
-    needs: build
-    if: >-
-      startsWith(github.ref, 'refs/tags/') &&
-      (github.event_name != 'workflow_dispatch' || github.event.inputs.dry_run == 'false')
-    runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: python-dist
-          path: dist
-
-      - name: Publish to PyPI (Trusted Publishing)
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist/
-
-  github-release:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: python-dist
-          path: dist
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: dist/*

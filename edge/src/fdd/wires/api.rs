@@ -1,6 +1,7 @@
 //! HTTP API handlers for FDD Wires and SQL rules.
 
 use super::assignments;
+use super::graph_sync;
 use super::persistence;
 use super::validation;
 use crate::fdd::execution;
@@ -194,7 +195,39 @@ pub fn propose_assignments(payload: &Value, role: &str) -> Value {
     if !["integrator", "agent"].contains(&role) {
         return json!({"ok": false, "error": "integrator or agent role required"});
     }
-    assignments::propose_assignments(payload)
+    let mut out = assignments::propose_assignments(payload);
+    let site_id = out
+        .get("site_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&persistence::default_site_id())
+        .to_string();
+    let graph_id = payload
+        .get("graph_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or(graph_sync::DEFAULT_GRAPH_ID);
+    let sync = graph_sync::sync_from_proposal(&out, &site_id, graph_id, role);
+    if let Some(obj) = out.as_object_mut() {
+        let proposals = obj.get("proposals").cloned().unwrap_or(json!([]));
+        obj.insert("proposed".to_string(), proposals);
+        obj.insert("wiresheet_sync".to_string(), sync);
+    }
+    out
+}
+
+pub fn sync_from_assignments(payload: &Value, actor: &str, role: &str) -> Value {
+    if !["integrator", "agent"].contains(&role) {
+        return json!({"ok": false, "error": "integrator or agent role required"});
+    }
+    let site_id = payload
+        .get("site_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&persistence::default_site_id())
+        .to_string();
+    let graph_id = payload
+        .get("graph_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or(graph_sync::DEFAULT_GRAPH_ID);
+    graph_sync::sync_from_assignments(&site_id, graph_id, actor)
 }
 
 pub fn schema_tables_json() -> String {
