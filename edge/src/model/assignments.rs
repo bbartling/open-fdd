@@ -66,12 +66,22 @@ pub fn save_from_request(body: &Value) -> Value {
         });
     };
     match save_assignments_value(&doc) {
-        Ok(path) => json!({
-            "ok": true,
-            "saved": true,
-            "scope": "haystack-assignment",
-            "path": path.display().to_string()
-        }),
+        Ok(path) => {
+            let site_id =
+                crate::model::scope::active_site_id().unwrap_or_else(|| "site:unknown".to_string());
+            let wire_sync = crate::fdd::wires::graph_sync::sync_from_assignments(
+                &site_id,
+                crate::fdd::wires::graph_sync::DEFAULT_GRAPH_ID,
+                "assignments-save",
+            );
+            json!({
+                "ok": true,
+                "saved": true,
+                "scope": "haystack-assignment",
+                "path": path.display().to_string(),
+                "wiresheet_sync": wire_sync
+            })
+        }
         Err(err) => json!({"ok": false, "error": err.to_string()}),
     }
 }

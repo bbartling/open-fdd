@@ -1,6 +1,7 @@
 //! Minimal MCP (Model Context Protocol) stdio server for Open-FDD bridge REST.
 //! Read-first tools only — see docs/agent/openfdd-mcp-tool-contract.md
 
+mod auth;
 mod bridge;
 mod gate;
 mod protocol;

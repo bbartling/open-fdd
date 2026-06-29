@@ -94,7 +94,7 @@ export default function AgentPage() {
     <div className="page page-wide">
       <PageHeader
         title="AI integrations"
-        subtitle="In-app chat: Codex CLI (WSL) → Cursor → Ollama → live bridge tools."
+        subtitle="In-app chat: Codex → Cursor → Ollama (Hermes/llama/etc.) → live bridge tools. External agents use MCP + JWT from workspace credentials."
       />
 
       {!hasToken() ? (
@@ -127,6 +127,28 @@ export default function AgentPage() {
             {actionBusy ? "Restarting…" : "Restart agent"}
           </button>
         </div>
+      </section>
+
+      <section className="panel">
+        <h3 className="panel-title">MCP credentials (Cursor, Claude, Codex, OpenClaw)</h3>
+        <p className="muted">
+          MCP sidecar reads login from the host workspace — not from the browser session. One-time passwords:{" "}
+          <code>workspace/bootstrap_credentials.once.txt</code> (delete after saving). Ongoing:{" "}
+          <code>workspace/auth.env.local</code> + <code>OPENFDD_INTEGRATOR_PASSWORD</code> env or{" "}
+          <code>scripts/openfdd_auth_lib.sh</code>.
+        </p>
+        <ul className="muted">
+          <li>
+            MCP tools: <code>openfdd_auth_credentials_hint</code>, <code>openfdd_auth_login</code> (returns JWT only)
+          </li>
+          <li>
+            Model + FDD wiresheet: <code>openfdd_model_assignments_save</code> then{" "}
+            <code>openfdd_fdd_wires_sync</code> — or save auto-syncs wiresheet
+          </li>
+          <li>
+            Dashboard login (UI): integrator role from bootstrap handoff file
+          </li>
+        </ul>
       </section>
 
       <section className="panel">

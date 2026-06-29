@@ -134,6 +134,18 @@ impl Server {
             })),
             tool("openfdd_datasets", "GET /api/datasets — list Feather/Arrow datasets in registry", json!({})),
             tool("openfdd_timeseries_series", "GET /api/timeseries/series — plot catalog after CSV save", json!({"site_id": {"type": "string"}})),
+            tool("openfdd_auth_credentials_hint", "Where MCP/agents find Open-FDD login (workspace/bootstrap_credentials.once.txt, auth.env.local) — no secrets returned", json!({})),
+            tool("openfdd_auth_login", "Login as integrator/agent/operator/admin — returns JWT from handoff/env (password never echoed)", json!({
+                "role": {"type": "string", "description": "integrator (default), agent, operator, admin"}
+            })),
+            tool("openfdd_fdd_wires_propose", "POST /api/fdd-wires/propose-assignments — AI map driver points → FDD inputs → rules; syncs wiresheet graph", json!({
+                "site_id": {"type": "string"},
+                "equipment_type": {"type": "string", "description": "e.g. ahu"}
+            })),
+            tool("openfdd_fdd_wires_sync", "POST /api/fdd-wires/sync-from-assignments — rebuild FDD wiresheet from saved model assignments", json!({
+                "site_id": {"type": "string"},
+                "graph_id": {"type": "string", "description": "default graph:live-fdd-validation"}
+            })),
         ];
         // Bench profile short aliases (same handlers as openfdd_* tools).
         for (alias, target) in [
@@ -250,6 +262,27 @@ impl Server {
                         .get(&format!("/api/timeseries/series?site_id={site}"))
                 }
             }
+            "openfdd_auth_credentials_hint" => Ok(crate::auth::credentials_hint()),
+            "openfdd_auth_login" => {
+                let role = args.get("role").and_then(|v| v.as_str()).unwrap_or("integrator");
+                let base = std::env::var("OPENFDD_API_BASE")
+                    .unwrap_or_else(|_| "http://127.0.0.1:8080".into());
+                crate::auth::login_role(role, &base)
+            }
+            "openfdd_fdd_wires_propose" => self.bridge.post(
+                "/api/fdd-wires/propose-assignments",
+                &json!({
+                    "site_id": args.get("site_id"),
+                    "equipment_type": args.get("equipment_type").cloned().unwrap_or(json!("ahu"))
+                }),
+            ),
+            "openfdd_fdd_wires_sync" => self.bridge.post(
+                "/api/fdd-wires/sync-from-assignments",
+                &json!({
+                    "site_id": args.get("site_id"),
+                    "graph_id": args.get("graph_id").cloned().unwrap_or(json!("graph:live-fdd-validation"))
+                }),
+            ),
             other => Err(format!("unknown tool: {other}")),
         }
     }

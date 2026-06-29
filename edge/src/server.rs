@@ -749,6 +749,16 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent"],
             fdd::wires::api::propose_assignments(&parse_json_body_or_empty(&body), &principal.role),
         ),
+        ("POST", "/api/fdd-wires/sync-from-assignments") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            fdd::wires::api::sync_from_assignments(
+                &parse_json_body_or_empty(&body),
+                &principal.sub,
+                &principal.role,
+            ),
+        ),
         ("POST", "/api/bacnet/whois") => {
             let body = drivers::bacnet::whois_json();
             raw_json(&mut stream, &body)

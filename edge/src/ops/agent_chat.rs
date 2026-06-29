@@ -24,6 +24,7 @@ pub fn config_json() -> Value {
         sources.push("cursor");
     }
     sources.push("ollama");
+    let ws = crate::validation::profile::workspace_dir();
     json!({
         "ok": true,
         "codex": codex_status,
@@ -32,7 +33,21 @@ pub fn config_json() -> Value {
         "cursor_chat_enabled": cursor_ok,
         "ollama": ollama_status,
         "chat_endpoint": "/api/agent/chat",
-        "sources": sources
+        "sources": sources,
+        "agent_providers": {
+            "in_app_priority": sources,
+            "external_mcp_hosts": ["Cursor", "Claude Desktop", "Codex CLI", "OpenClaw", "VS Code Copilot"],
+            "local_llm": "Ollama — llama3.2, Hermes, Mistral, or any model in workspace/ollama.env.local"
+        },
+        "credentials_hint": {
+            "bootstrap_handoff": ws.join("bootstrap_credentials.once.txt").display().to_string(),
+            "auth_env_local": ws.join("auth.env.local").display().to_string(),
+            "preferred_mcp_role": "integrator",
+            "write_tools_role": "agent",
+            "mcp_tools": ["openfdd_auth_credentials_hint", "openfdd_auth_login"],
+            "shell": "scripts/openfdd_auth_lib.sh → openfdd_auth_login_token",
+            "note": "Passwords live in bootstrap_credentials.once.txt (one-time) or OPENFDD_*_PASSWORD env — bcrypt hashes in auth.env.local are NOT login passwords"
+        }
     })
 }
 

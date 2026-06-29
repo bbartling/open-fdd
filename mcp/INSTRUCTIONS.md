@@ -2,6 +2,27 @@
 
 Read-first MCP sidecar for the Rust edge bridge. Requires JWT via `OPENFDD_MCP_TOKEN` or unauthenticated `/api/health` only.
 
+## Login / credentials (agents)
+
+MCP runs on the **host** and resolves passwords locally — never from bcrypt hashes in `auth.env.local`.
+
+| Source | Path / env |
+|--------|------------|
+| One-time handoff | `workspace/bootstrap_credentials.once.txt` — lines `integrator: …`, `agent: …` |
+| Env override | `OPENFDD_INTEGRATOR_PASSWORD`, `OPENFDD_AGENT_PASSWORD` |
+| Shell helper | `scripts/openfdd_auth_lib.sh` → `openfdd_auth_login_token` |
+
+**MCP tools:**
+
+- `openfdd_auth_credentials_hint` — paths and roles (no secrets)
+- `openfdd_auth_login` — `{ "role": "integrator" }` → JWT for `OPENFDD_MCP_TOKEN`
+
+Works with **Cursor, Claude Desktop, Codex CLI, OpenClaw**, or any MCP host. In-app chat uses Codex → Cursor → Ollama (Hermes/llama/etc.) → tools fallback.
+
+## Model + FDD wiresheet
+
+After `openfdd_model_assignments_save` (with `confirm: true`), the **FDD wiresheet** on Model → **FDD wiresheet** tab auto-syncs (`graph:live-fdd-validation`). Or call `openfdd_fdd_wires_sync` / `openfdd_fdd_wires_propose`.
+
 ## Write tools (Phase 2)
 
 Set **`OPENFDD_MCP_ALLOW_WRITES=1`** on the MCP server and pass **`confirm: true`** on each write tool call:
