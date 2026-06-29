@@ -178,7 +178,8 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         }
         ("GET", "/api/building/status") => json_response(&mut stream, dashboard::building_status()),
         ("GET", "/openfdd-agent/building-insight") => {
-            json_response(&mut stream, dashboard::building_insight_stub())
+            let force = query_string(&path).contains("force=true");
+            json_response(&mut stream, dashboard::building_insight(force))
         }
         ("GET", "/api/dashboard/summary") => json_response(&mut stream, dashboard::summary()),
         ("GET", "/api/dashboard/sites") => json_response(&mut stream, dashboard::sites()),
