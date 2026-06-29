@@ -429,6 +429,8 @@ a {
   gap: 10px;
   margin: 12px 0;
 }
+
+.agent-rail-toggle {
   position: fixed;
   right: 12px;
   bottom: 12px;
