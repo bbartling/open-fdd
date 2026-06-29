@@ -38,3 +38,6 @@ frontend/index.html
 **/*.db
 .DS_Store
 workspace/frontend/
+# Operator-sidecar TADCO prep (agent toolshed pattern — not product code)
+scripts/tadco_hvac_prepare.py
+scripts/openfdd_tadco_hvac_integration.sh

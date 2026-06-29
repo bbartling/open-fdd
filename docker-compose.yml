@@ -96,9 +96,15 @@ services:
       - ./workspace/auth.env.local
     volumes:
       - ./workspace:/app/workspace
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9092/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
 
-  # Optional MCP sidecar: see mcp/README.md and README "Optional MCP sidecar".
+  # Optional MCP sidecar:
   # docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar pull openfdd-mcp
 
   open-fdd-rust-backend:

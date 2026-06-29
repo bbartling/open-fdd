@@ -39,22 +39,29 @@ AUTH_H=()
 
 # --- JSON API ---
 json_api_endpoints="$ROOT/workspace/data/json_api/endpoints.json"
+json_endpoint_count() {
+  jq 'if type == "array" then length elif .endpoints then (.endpoints | length) else 0 end' "$1" 2>/dev/null || echo 0
+}
 if [[ ! -f "$json_api_endpoints" ]]; then
-  if grep -q '^OPENFDD_JSON_API_URL=' "$ROOT/workspace/data.env.local" 2>/dev/null; then
+  if grep -qE '^OPENFDD_JSON_API_URL=' "$ROOT/workspace/data.env.local" 2>/dev/null; then
     record json-api SKIP "restart bridge after OPENFDD_JSON_API_URL seed (3.2.4+)"
   else
     record json-api SKIP "no workspace/data/json_api/endpoints.json — set OPENFDD_JSON_API_URL or add endpoints"
   fi
 else
-  count="$(jq 'length' "$json_api_endpoints" 2>/dev/null || echo 0)"
+  count="$(json_endpoint_count "$json_api_endpoints")"
   if [[ "$count" -eq 0 ]]; then
     record json-api SKIP "endpoints.json empty"
   elif curl -fsS "${AUTH_H[@]}" "$BRIDGE/api/json-api/poll/status" -o "$LOG_DIR/json_api_status.json" 2>/dev/null; then
     ok="$(jq -r '.ok // false' "$LOG_DIR/json_api_status.json" 2>/dev/null || echo false)"
-    if [[ "$ok" == "true" ]]; then
-      record json-api PASS "$(jq -r '.last_poll // "polled"' "$LOG_DIR/json_api_status.json" 2>/dev/null || echo ok)"
+    configured="$(jq -r '.configured // false' "$LOG_DIR/json_api_status.json" 2>/dev/null || echo false)"
+    status="$(jq -r '.status // ""' "$LOG_DIR/json_api_status.json" 2>/dev/null || echo "")"
+    if [[ "$ok" == "true" && "$configured" == "true" && "$status" == "ready" ]]; then
+      record json-api PASS "configured points=$count"
+    elif [[ "$ok" == "true" && "$configured" != "true" ]]; then
+      record json-api FAIL "not_configured (set OPENFDD_JSON_API_URL + restart bridge, or POST /api/json-api/register)"
     else
-      record json-api FAIL "$(jq -r '.error // "status not ok"' "$LOG_DIR/json_api_status.json" 2>/dev/null)"
+      record json-api FAIL "$(jq -r '.error // .message // "status not ok"' "$LOG_DIR/json_api_status.json" 2>/dev/null)"
     fi
   else
     record json-api FAIL "GET /api/json-api/poll/status"
@@ -99,9 +106,13 @@ else
 fi
 
 # --- Haystack ---
+STRICT="${OPENFDD_DRIVERS_VALIDATE_STRICT:-0}"
 if curl -fsS "${AUTH_H[@]}" "$BRIDGE/api/haystack/status" -o "$LOG_DIR/haystack_status.json" 2>/dev/null; then
   enabled="$(jq -r '.enabled // .config.enabled // false' "$LOG_DIR/haystack_status.json" 2>/dev/null)"
-  if [[ "$enabled" != "true" ]]; then
+  password_set="$(jq -r '.password_set // .config.password_set // false' "$LOG_DIR/haystack_status.json" 2>/dev/null)"
+  if [[ "$STRICT" == "1" && "$password_set" != "true" ]]; then
+    record haystack FAIL "OPENFDD_HAYSTACK_PASS not set in workspace/data.env.local"
+  elif [[ "$enabled" != "true" ]]; then
     record haystack SKIP "not enabled — configure workspace/haystack/local.nhaystack.toml + OPENFDD_HAYSTACK_*"
   elif curl -fsS "${AUTH_H[@]}" -X POST "$BRIDGE/api/haystack/test" -H 'Content-Type: application/json' -d '{}' \
     -o "$LOG_DIR/haystack_test.json" 2>/dev/null; then

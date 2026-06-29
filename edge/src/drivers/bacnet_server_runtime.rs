@@ -240,7 +240,12 @@ pub fn start_background() {
         return;
     }
     std::thread::spawn(|| {
-        super::bacnet_live::block_on(async {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .thread_name("openfdd-bacnet-server")
+            .build()
+            .expect("bacnet server tokio runtime");
+        rt.block_on(async {
             if let Err(e) = run_server().await {
                 eprintln!("Open-FDD BACnet server error: {e}");
             }

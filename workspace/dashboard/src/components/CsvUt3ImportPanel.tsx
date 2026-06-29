@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { apiFetch, hasToken } from "../lib/api";
+import { apiFetch, apiUploadForm, hasToken } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 
 type FileProfile = {
@@ -65,6 +65,32 @@ async function fileToBase64(file: File): Promise<string> {
   return btoa(binary);
 }
 
+const SMALL_UPLOAD_MAX_BYTES = 900_000;
+
+async function uploadFilesForPreview(
+  fileList: FileList | File[],
+  existingSessionId?: string,
+): Promise<{ session_id?: string; files?: FileProfile[]; ok?: boolean; error?: string; errors?: { file?: string; error?: string }[] }> {
+  const files = Array.from(fileList);
+  const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+  if (totalBytes <= SMALL_UPLOAD_MAX_BYTES) {
+    const payload = await Promise.all(
+      files.map(async (f) => ({
+        filename: f.name,
+        content_base64: await fileToBase64(f),
+      })),
+    );
+    return apiFetch("/api/csv/import/preview", {
+      method: "POST",
+      body: JSON.stringify({ session_id: existingSessionId || undefined, files: payload }),
+    });
+  }
+  const form = new FormData();
+  for (const f of files) form.append("file", f, f.name);
+  if (existingSessionId) form.append("session_id", existingSessionId);
+  return apiUploadForm("/api/csv/import/preview", form);
+}
+
 type Props = {
   onPlanReady?: (sessionId: string) => void;
   onOpenInFusion?: (sessionId: string) => void;
@@ -107,17 +133,12 @@ export default function CsvUt3ImportPanel({ onPlanReady, onOpenInFusion, autoOpe
     setError("");
     setBusy("Uploading and profiling…");
     try {
-      const payload = await Promise.all(
-        Array.from(fileList).map(async (f) => ({
-          filename: f.name,
-          content_base64: await fileToBase64(f),
-        })),
-      );
-      const out = await apiFetch<{ session_id?: string; files?: FileProfile[]; ok?: boolean; error?: string }>(
-        "/api/csv/import/preview",
-        { method: "POST", body: JSON.stringify({ files: payload }) },
-      );
+      const out = await uploadFilesForPreview(fileList, sessionId || undefined);
       if (!out.ok && !out.session_id) throw new Error(out.error ?? "preview failed");
+      if (out.errors?.length) {
+        const detail = out.errors.map((e) => `${e.file ?? "?"}: ${e.error ?? "error"}`).join("; ");
+        throw new Error(detail || "one or more files failed to upload");
+      }
       setSessionId(out.session_id ?? "");
       setFiles(out.files ?? []);
       const profiles = out.files ?? [];
@@ -135,19 +156,21 @@ export default function CsvUt3ImportPanel({ onPlanReady, onOpenInFusion, autoOpe
       else if (weather?.profile?.headers?.includes("timezone")) {
         setWxTsCol(weather.profile.headers.find((h) => h === "time_local") ?? "time_local");
       }
-      if (profiles.length >= 4 && profiles.filter((f) => /school|kw/i.test(f.filename)).length >= 2) {
-        setMode("append");
-        setDatasetName("school_kw_merged");
-      } else if (school && weather) {
+      const schoolCount = profiles.filter((f) => /school|kw/i.test(f.filename)).length;
+      if (weather && schoolCount >= 1) {
         setMode("join");
         setJoinAlign("floor_hour");
+        setDatasetName("school_kw_merged");
+      } else if (schoolCount >= 2) {
+        setMode("append");
+        setDatasetName("school_kw_merged");
       }
     } catch (e) {
       setError(formatApiError(e));
     } finally {
       setBusy("");
     }
-  }, []);
+  }, [sessionId]);
 
   const buildPlan = useCallback(async () => {
     if (!sessionId) {
@@ -328,10 +351,10 @@ export default function CsvUt3ImportPanel({ onPlanReady, onOpenInFusion, autoOpe
         </div>
       )}
 
-      {mode === "join" && files.length > 2 && (
+      {mode === "join" && files.filter((f) => !/meteo|weather|open_meteo/i.test(f.filename)).length > 1 && (
         <p className="muted csv-ut3-hint">
-          Join uses one kW file + weather file (auto-selected by filename). Other files are ignored in join mode — use
-          Append to stack all school years first.
+          Join mode appends all school kW files by timestamp, then joins hourly weather using floor-hour
+          alignment.
         </p>
       )}
       {mode === "append" && files.some((f) => /meteo|weather/i.test(f.filename)) && (

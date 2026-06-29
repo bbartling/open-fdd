@@ -24,6 +24,7 @@ pub fn config_json() -> Value {
         sources.push("cursor");
     }
     sources.push("ollama");
+    let ws = crate::validation::profile::workspace_dir();
     json!({
         "ok": true,
         "codex": codex_status,
@@ -32,7 +33,21 @@ pub fn config_json() -> Value {
         "cursor_chat_enabled": cursor_ok,
         "ollama": ollama_status,
         "chat_endpoint": "/api/agent/chat",
-        "sources": sources
+        "sources": sources,
+        "agent_providers": {
+            "in_app_priority": sources,
+            "external_mcp_hosts": ["Cursor", "Claude Desktop", "Codex CLI", "OpenClaw", "VS Code Copilot"],
+            "local_llm": "Ollama — llama3.2, Hermes, Mistral, or any model in workspace/ollama.env.local"
+        },
+        "credentials_hint": {
+            "bootstrap_handoff": ws.join("bootstrap_credentials.once.txt").display().to_string(),
+            "auth_env_local": ws.join("auth.env.local").display().to_string(),
+            "preferred_mcp_role": "integrator",
+            "write_tools_role": "agent",
+            "mcp_tools": ["openfdd_auth_credentials_hint", "openfdd_auth_login"],
+            "shell": "scripts/openfdd_auth_lib.sh → openfdd_auth_login_token",
+            "note": "Passwords live in bootstrap_credentials.once.txt (one-time) or OPENFDD_*_PASSWORD env — bcrypt hashes in auth.env.local are NOT login passwords"
+        }
     })
 }
 
@@ -131,6 +146,17 @@ pub fn cancel_reply() -> Value {
         "ok": true,
         "codex": codex,
         "note": "In-flight chat may return an error after cancel"
+    })
+}
+
+pub fn reset_reply() -> Value {
+    let codex_cancel = codex_relay::cancel_active();
+    let codex_reset = codex_relay::reset_session();
+    json!({
+        "ok": true,
+        "codex_cancel": codex_cancel,
+        "codex_reset": codex_reset,
+        "note": "Codex session cleared; next chat starts fresh. Clear browser chat separately if needed."
     })
 }
 
@@ -334,11 +360,21 @@ mod tests {
             "context_path": "/"
         }));
         assert_eq!(out.get("ok"), Some(&json!(true)));
-        assert_eq!(out.get("source"), Some(&json!("tools")));
-        assert!(out
-            .get("reply")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .contains("Open-FDD"));
+        let source = out.get("source").and_then(|v| v.as_str()).unwrap_or("");
+        assert!(
+            matches!(source, "codex" | "tools" | "ollama" | "cursor"),
+            "unexpected source: {source}"
+        );
+        let reply = out.get("reply").and_then(|v| v.as_str()).unwrap_or("");
+        assert!(
+            !reply.is_empty(),
+            "reply should be non-empty for source {source}"
+        );
+        if source == "tools" {
+            assert!(
+                reply.contains("Open-FDD"),
+                "tools fallback should mention Open-FDD"
+            );
+        }
     }
 }

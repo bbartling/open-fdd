@@ -1,16 +1,16 @@
+# Transitional MCP-only image — MCP binary is also bundled in openfdd-edge-rust.
 name: Publish Open-FDD MCP to GHCR
 
 on:
   push:
     tags:
       - "v*.*.*"
-      - "open-fdd-v*"
     branches:
       - master
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Image tag (default VERSION file)"
+        description: "Optional version tag override (default VERSION file)"
         required: false
         default: ""
 
@@ -19,8 +19,7 @@ permissions:
   packages: write
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE: ghcr.io/bbartling/openfdd-mcp
+  MCP_IMAGE: ghcr.io/bbartling/openfdd-mcp
 
 jobs:
   test:
@@ -48,22 +47,38 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - id: meta
+      - id: ver
         run: |
           chmod +x scripts/resolve_ghcr_publish_tag.sh
           # shellcheck source=scripts/resolve_ghcr_publish_tag.sh
           source scripts/resolve_ghcr_publish_tag.sh
           tag="$(resolve_ghcr_publish_tag "${GITHUB_REF_NAME}" "${{ inputs.image_tag }}")"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
-      - id: tags
-        run: |
-          tags="${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}"
-          tags="${tags},${{ env.IMAGE }}:${{ github.sha }}"
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
           if [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
-            tags="${tags},${{ env.IMAGE }}:latest"
+            echo "latest=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "latest=0" >> "$GITHUB_OUTPUT"
           fi
-          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF_NAME}" == v* ]]; then
+            echo "version_tag=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "version_tag=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.MCP_IMAGE }}
+          tags: |
+            type=raw,value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' || github.event_name == 'workflow_dispatch' }}
+            type=raw,value=v${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' }}
+            type=raw,value=latest,enable=${{ steps.ver.outputs.latest == '1' }}
+            type=sha,prefix=sha-,format=short
+          labels: |
+            org.opencontainers.image.title=Open-FDD MCP
+            org.opencontainers.image.source=https://github.com/bbartling/open-fdd
+            org.opencontainers.image.description=Transitional MCP image — prefer openfdd-edge-rust with entrypoint openfdd-mcp
+            org.opencontainers.image.version=${{ steps.ver.outputs.version }}
 
       - uses: docker/build-push-action@v6
         with:
@@ -71,6 +86,7 @@ jobs:
           file: Dockerfile.mcp
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

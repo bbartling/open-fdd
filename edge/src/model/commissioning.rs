@@ -71,6 +71,14 @@ pub fn commissioning_export_json() -> Value {
 
 pub fn import_commissioning(body: &Value) -> Value {
     let payload = body.get("payload").cloned().unwrap_or_else(|| body.clone());
+    let validation = crate::ingest::validate_commissioning(&payload);
+    if validation.get("verdict") != Some(&json!("pass")) {
+        return json!({
+            "ok": false,
+            "error": "commissioning import rejected — fix validation.checks before retry",
+            "validation": validation,
+        });
+    }
     let sites = payload.get("sites").and_then(|v| v.as_array()).cloned();
     let equipment = payload.get("equipment").and_then(|v| v.as_array()).cloned();
     let points = payload.get("points").and_then(|v| v.as_array()).cloned();

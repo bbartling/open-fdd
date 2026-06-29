@@ -31,6 +31,7 @@ type BuildingMeta = {
 
 type Props = {
   refreshKey?: number;
+  analyticsPollMs?: number;
   insight?: InsightResponse | null;
   insightError?: string;
   buildingMeta?: BuildingMeta | null;
@@ -53,6 +54,7 @@ function formatEquipTypeLabel(raw: string): string {
 
 export default function OperationalContextPanel({
   refreshKey,
+  analyticsPollMs = 15 * 60 * 1000,
   insight,
   insightError,
   buildingMeta,
@@ -62,9 +64,15 @@ export default function OperationalContextPanel({
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [rules, setRules] = useState<FddRulesResponse | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [analyticsTick, setAnalyticsTick] = useState(0);
   const signedIn = hasToken();
 
   const meta = publicMeta ?? buildingMeta;
+
+  useEffect(() => {
+    const t = window.setInterval(() => setAnalyticsTick((n) => n + 1), analyticsPollMs);
+    return () => window.clearInterval(t);
+  }, [analyticsPollMs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,7 +119,7 @@ export default function OperationalContextPanel({
     return () => {
       cancelled = true;
     };
-  }, [refreshKey, signedIn]);
+  }, [refreshKey, signedIn, analyticsTick]);
 
   const model = summary?.model_coverage;
   const modelSummary = meta?.model_summary;

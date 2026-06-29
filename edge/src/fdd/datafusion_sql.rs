@@ -12,6 +12,10 @@ pub fn save_rule_response(payload: &Value, actor: &str) -> Value {
     rules::save_rule(payload, actor)
 }
 
+pub fn patch_rule_response(rule_id: &str, patch: &Value, actor: &str) -> Value {
+    rules::patch_rule(rule_id, patch, actor)
+}
+
 pub fn batch_run_response() -> Value {
     let evaluable = rules::evaluable_rules();
     if evaluable.is_empty() {

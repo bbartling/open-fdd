@@ -75,6 +75,7 @@ export default function JsonApiPage() {
   } | null>(null);
   const [selectedPointIds, setSelectedPointIds] = useState<Set<string>>(() => new Set());
   const [bulkPollPending, setBulkPollPending] = useState(false);
+  const [pollOncePending, setPollOncePending] = useState(false);
   const [owmLat, setOwmLat] = useState("42.3601");
   const [owmLon, setOwmLon] = useState("-71.0589");
   const [owmAppId, setOwmAppId] = useState("");

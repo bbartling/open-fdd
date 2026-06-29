@@ -492,6 +492,7 @@ pub fn render_pdf_bundle(report_id: &str) -> Value {
                 "report_id": report_id,
                 "html_path": html_path.display().to_string(),
                 "pdf_path": pdf_path.display().to_string(),
+                "download_url": format!("/api/reports/{report_id}/download.pdf"),
                 "render_engine": "rust-text-pdf",
                 "size_bytes": fs::metadata(&pdf_path).map(|m| m.len()).unwrap_or(0)
             })

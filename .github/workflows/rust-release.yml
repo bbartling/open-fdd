@@ -1,0 +1,200 @@
+# Manual Rust 3.2.x release: CI → GHCR (edge + MCP) → git tag → GitHub Release.
+# Python-era GHCR/PyPI workflows are archived — Rust only.
+name: Rust Release (GHCR + GitHub Release)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "SemVer release version (e.g. 3.2.4)"
+        required: true
+        default: "3.2.4"
+      prerelease:
+        description: "Mark GitHub Release as pre-release (skips :latest on GHCR)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  EDGE_IMAGE: ghcr.io/bbartling/openfdd-edge-rust
+  MCP_IMAGE: ghcr.io/bbartling/openfdd-mcp
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: ver
+        run: |
+          v="${{ inputs.version }}"
+          v="${v#v}"
+          if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.+-]+)?$ ]]; then
+            echo "Invalid SemVer: $v" >&2
+            exit 1
+          fi
+          file_ver="$(tr -d '[:space:]' < VERSION)"
+          if [[ "$file_ver" != "$v" ]]; then
+            echo "VERSION file ($file_ver) does not match input ($v)" >&2
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          components: rustfmt, clippy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace --all-targets
+      - run: |
+          cd workspace/dashboard
+          npm ci
+          npm run lint
+          npm run test
+          npm run build
+          test -f ../../frontend/index.html
+      - run: |
+          mkdir -p workspace/bacnet/commissioning
+          echo 'OFDD_AUTH_REQUIRED=true' > workspace/auth.env.local
+          touch workspace/data.env.local workspace/bacnet/commissioning/commission.env
+          export OPENFDD_COMPOSE_ROOT="$PWD"
+          docker compose -f docker/compose.edge.rust.yml config
+
+  publish-edge:
+    needs: [validate, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.EDGE_IMAGE }}
+          tags: |
+            type=raw,value=${{ needs.validate.outputs.version }}
+            type=raw,value=v${{ needs.validate.outputs.version }}
+            type=raw,value=latest,enable=${{ inputs.prerelease == false }}
+            type=sha,prefix=sha-,format=short
+          labels: |
+            org.opencontainers.image.title=Open-FDD Rust Edge
+            org.opencontainers.image.source=https://github.com/bbartling/open-fdd
+            org.opencontainers.image.version=${{ needs.validate.outputs.version }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            OPENFDD_IMAGE_TAG=${{ needs.validate.outputs.version }}
+            OPENFDD_BUILD_GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  publish-mcp:
+    needs: [validate, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.MCP_IMAGE }}
+          tags: |
+            type=raw,value=${{ needs.validate.outputs.version }}
+            type=raw,value=v${{ needs.validate.outputs.version }}
+            type=raw,value=latest,enable=${{ inputs.prerelease == false }}
+            type=sha,prefix=sha-,format=short
+          labels: |
+            org.opencontainers.image.title=Open-FDD MCP (transitional slim image)
+            org.opencontainers.image.source=https://github.com/bbartling/open-fdd
+            org.opencontainers.image.description=MCP stdio sidecar — also bundled in openfdd-edge-rust as /usr/local/bin/openfdd-mcp
+            org.opencontainers.image.version=${{ needs.validate.outputs.version }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.mcp
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    needs: [validate, publish-edge, publish-mcp]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ needs.validate.outputs.version }}" -m "Open-FDD v${{ needs.validate.outputs.version }} — Rust Edge"
+          git push origin "v${{ needs.validate.outputs.version }}"
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.validate.outputs.version }}
+          name: Open-FDD v${{ needs.validate.outputs.version }} — Rust Edge
+          prerelease: ${{ inputs.prerelease }}
+          make_latest: ${{ inputs.prerelease == false }}
+          body: |
+            ## Open-FDD Rust Edge v${{ needs.validate.outputs.version }}
+
+            **Primary runtime image (LAN/VPN/OT — not public internet):**
+            ```bash
+            ghcr.io/bbartling/openfdd-edge-rust:latest
+            ghcr.io/bbartling/openfdd-edge-rust:${{ needs.validate.outputs.version }}
+            ```
+
+            **MCP sidecar** (transitional — also included in edge image as `openfdd-mcp`):
+            ```bash
+            ghcr.io/bbartling/openfdd-mcp:latest
+            ghcr.io/bbartling/openfdd-mcp:${{ needs.validate.outputs.version }}
+            ```
+
+            ### Rust 3.2.x line
+            - Single `openfdd-edge-rust` image: bridge, dashboard, historian, commission, Haystack modes
+            - MCP binary bundled at `/usr/local/bin/openfdd-mcp`
+            - Python-era 3.1.x GHCR packages (`openfdd-bridge`, `openfdd-commission`, etc.) are **archived** and no longer published
+
+            ### Deploy
+            ```bash
+            export OPENFDD_IMAGE_TAG=latest   # early dev default
+            ./scripts/openfdd_rust_edge_bootstrap.sh --start
+            ```

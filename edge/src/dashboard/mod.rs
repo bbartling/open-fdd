@@ -1,5 +1,7 @@
 //! Dashboard analytics API (Haystack model + historian + DataFusion faults).
 
+mod building_insight;
+
 use crate::data_management;
 use crate::drivers::bacnet;
 use crate::export;
@@ -174,24 +176,9 @@ pub fn building_snapshot() -> Value {
     })
 }
 
-/// Intentional stub until building-insight agent is ported (issue #402 L-03).
-pub fn building_insight_stub() -> Value {
-    json!({
-        "ok": true,
-        "stub": true,
-        "message": "Building insight agent not yet ported to Rust edge",
-        "generated_at": null,
-        "lookback_days": 14,
-        "device_sentence": null,
-        "device_poll_health": {
-            "healthy_count": 0,
-            "offline_equipment": [],
-            "flaky_equipment": []
-        },
-        "zone_temps": null,
-        "worst_zones": [],
-        "brick_model": { "feeds_chains": [], "equipment_count": 0 }
-    })
+/// Context-aware HVAC building insight (15-minute cache; optional Ollama enhancement).
+pub fn building_insight(force: bool) -> Value {
+    building_insight::generate(force)
 }
 
 pub fn building_status() -> Value {

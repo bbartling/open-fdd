@@ -4,6 +4,7 @@ import { apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import { useActiveSiteId } from "../lib/useActiveSiteId";
 import { graphToFlow, newNodeId } from "../wiresheet/graphAdapter";
+import { fetchWiresheetGraph } from "../wiresheet/wiresheetApi";
 import WiresheetCanvas, { connectEdge, createFlowNode } from "../wiresheet/WiresheetCanvas";
 import { useEdgesState, useNodesState, type Connection, type Node } from "@xyflow/react";
 import type { WiresheetGraph } from "../wiresheet/types";
@@ -21,6 +22,7 @@ export default function FddRuleWiresheet({ compact }: Props) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [graphMeta, setGraphMeta] = useState<Partial<WiresheetGraph>>({});
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -45,7 +47,13 @@ export default function FddRuleWiresheet({ compact }: Props) {
 
   useEffect(() => {
     void loadGraph();
-  }, [loadGraph]);
+  }, [loadGraph, refreshKey]);
+
+  useEffect(() => {
+    const onChange = () => setRefreshKey((k) => k + 1);
+    window.addEventListener("ofdd-assignments-changed", onChange);
+    return () => window.removeEventListener("ofdd-assignments-changed", onChange);
+  }, []);
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -58,14 +66,14 @@ export default function FddRuleWiresheet({ compact }: Props) {
     setBusy(true);
     setError("");
     try {
-      const out = await apiFetch<{ proposed?: unknown[]; review_status?: string }>(
+      const out = await apiFetch<{ proposed?: unknown[]; proposals?: unknown[]; review_status?: string }>(
         "/api/fdd-wires/propose-assignments",
         {
           method: "POST",
           body: JSON.stringify({ site_id: siteId || undefined, equipment_type: "ahu" }),
         },
       );
-      setStatus(`AI proposed ${out.proposed?.length ?? 0} bindings — reload to view.`);
+      setStatus(`AI proposed ${out.proposed?.length ?? out.proposals?.length ?? 0} bindings — reload to view.`);
       await loadGraph();
     } catch (e) {
       setError(formatApiError(e));
