@@ -7,15 +7,13 @@ pub mod session;
 pub mod timestamp;
 mod upload;
 
-pub use dataset::{
-    delete_dataset, list_datasets, preview_dataset, query_dataset_sql, save_dataset,
-};
-pub use parse::{sanitize_filename, ParseProfile};
-pub use plan::{
+pub use dataset::{delete_dataset, list_datasets, preview_dataset, save_dataset};
+
+use plan::{
     auto_detect_mapping, infer_ut3_plan_from_session, is_weather_filename, plan_from_json,
-    ImportPlan, OperationMode, OutputRow,
+    OutputRow,
 };
-pub use session::{create_session, load_session, save_session, stage_file};
+use session::{create_session, load_session, save_session, stage_file};
 
 use plan::{append_rows, join_rows, parse_file_to_rows, preview_rows, JoinAlignment};
 use serde_json::{json, Value};

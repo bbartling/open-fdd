@@ -1,0 +1,39 @@
+# Bench automation expectations (openfdd_mcp_eval.sh, patch cycle).
+# MCP tool names use openfdd_* prefix; legacy short aliases are also registered.
+
+[mcp]
+required_tools = [
+  "openfdd_health",
+  "openfdd_stack_status",
+  "openfdd_driver_status",
+  "openfdd_haystack_status",
+  "openfdd_haystack_test",
+  "openfdd_bacnet_whois",
+  "openfdd_validation_run_status",
+  "openfdd_reports_list",
+  "openfdd_model_sparql_catalog",
+  "openfdd_model_sparql",
+  "openfdd_bench_topology",
+]
+
+[mcp.aliases]
+site_health = "openfdd_health"
+stack_status = "openfdd_stack_status"
+haystack_test = "openfdd_haystack_test"
+driver_poll_status = "openfdd_driver_status"
+report_list = "openfdd_reports_list"
+bacnet_whois = "openfdd_bacnet_whois"
+validation_run_status = "openfdd_validation_run_status"
+
+[sparql]
+# Routes: GET /api/model/sparql/predefined, POST /api/model/sparql (JWT required)
+min_version = "3.2.3"
+skip_below_version = true
+
+[haystack]
+requires_env = ["OPENFDD_HAYSTACK_PASS"]
+requires_toml = "workspace/haystack/local.nhaystack.toml"
+
+[json_api]
+requires_endpoints_file = "workspace/data/json_api/endpoints.json"
+env_seed_url = "OPENFDD_JSON_API_URL"

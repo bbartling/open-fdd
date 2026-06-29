@@ -516,6 +516,54 @@ fn protocol_enabled(env_key: &str) -> bool {
         .unwrap_or(true)
 }
 
+/// Seed `workspace/data/json_api/endpoints.json` from `OPENFDD_JSON_API_URL` when missing.
+pub fn seed_from_env_if_needed() {
+    if !protocol_enabled("OPENFDD_JSON_API_ENABLED") {
+        return;
+    }
+    let path = endpoints_path();
+    if path.exists() {
+        let text = fs::read_to_string(&path).unwrap_or_default();
+        if !text.trim().is_empty() {
+            let parsed = serde_json::from_str::<Value>(&text);
+            if parsed.is_err() {
+                eprintln!("json_api: endpoints.json invalid — skipping env seed");
+                return;
+            }
+            if !load_saved_endpoints().is_empty() {
+                return;
+            }
+        }
+    } else if !load_saved_endpoints().is_empty() {
+        return;
+    }
+    let url = match env::var("OPENFDD_JSON_API_URL") {
+        Ok(v) if !v.trim().is_empty() => v,
+        _ => return,
+    };
+    let label = env::var("OPENFDD_JSON_API_LABEL").unwrap_or_else(|_| "env-probe".into());
+    let point_id = format!(
+        "json-api:{}",
+        label.replace(|c: char| !c.is_ascii_alphanumeric(), "-")
+    );
+    let endpoint = json!({
+        "point_id": point_id,
+        "label": label,
+        "url": url,
+        "method": "GET",
+        "json_path": "",
+        "auth_type": "none",
+        "enabled": true,
+        "poll_interval_s": 300,
+        "poll_label": "5m",
+        "host": host_from_url(&url),
+        "source": "env:OPENFDD_JSON_API_URL"
+    });
+    if let Err(err) = write_saved_endpoints(&[endpoint]) {
+        eprintln!("json_api: env seed write failed: {err}");
+    }
+}
+
 pub fn poll_status_json() -> String {
     if !protocol_enabled("OPENFDD_JSON_API_ENABLED") {
         return json!({

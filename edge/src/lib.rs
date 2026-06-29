@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 pub mod auth;
 pub mod control;
 pub mod csv_ingest;
@@ -12,7 +14,9 @@ pub mod import;
 pub mod model;
 pub mod ops;
 pub mod reports;
+pub mod server;
 pub mod test_support;
+pub mod timeseries;
 pub mod tls;
 pub mod validation;
 pub mod version;

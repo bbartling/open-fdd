@@ -70,7 +70,7 @@ jobs:
           ./scripts/audit_no_private_bench_hardcoding.sh
           test -f docker-compose.bacnet-live.yml
           test -f VERSION
-          grep -q "3.2.3" VERSION
+          grep -q "3.2.4" VERSION
 
   docker:
     name: Docker image build

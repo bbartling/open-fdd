@@ -40,7 +40,11 @@ AUTH_H=()
 # --- JSON API ---
 json_api_endpoints="$ROOT/workspace/data/json_api/endpoints.json"
 if [[ ! -f "$json_api_endpoints" ]]; then
-  record json-api SKIP "no workspace/data/json_api/endpoints.json"
+  if grep -q '^OPENFDD_JSON_API_URL=' "$ROOT/workspace/data.env.local" 2>/dev/null; then
+    record json-api SKIP "restart bridge after OPENFDD_JSON_API_URL seed (3.2.4+)"
+  else
+    record json-api SKIP "no workspace/data/json_api/endpoints.json — set OPENFDD_JSON_API_URL or add endpoints"
+  fi
 else
   count="$(jq 'length' "$json_api_endpoints" 2>/dev/null || echo 0)"
   if [[ "$count" -eq 0 ]]; then
@@ -114,6 +118,20 @@ if curl -fsS "${AUTH_H[@]}" "$BRIDGE/api/haystack/status" -o "$LOG_DIR/haystack_
   fi
 else
   record haystack FAIL "GET /api/haystack/status"
+fi
+
+# --- SPARQL (JWT; skip on older images) ---
+if [[ -n "$TOKEN" ]]; then
+  code="$(curl -s -o "$LOG_DIR/sparql_catalog.json" -w '%{http_code}' "${AUTH_H[@]}" "$BRIDGE/api/model/sparql/predefined" || echo 000)"
+  if [[ "$code" == "200" ]]; then
+    record sparql PASS "GET /api/model/sparql/predefined"
+  elif [[ "$code" == "404" ]]; then
+    record sparql SKIP "routes not in image (pre-3.2.3 SPARQL)"
+  else
+    record sparql FAIL "GET /api/model/sparql/predefined HTTP $code"
+  fi
+else
+  record sparql SKIP "no integrator JWT"
 fi
 
 echo ""

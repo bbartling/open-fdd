@@ -170,9 +170,37 @@ fn template_oa_rule() -> Value {
     })
 }
 
+fn template_kw_flatline_or_zero_rule() -> Value {
+    json!({
+        "rule_id": "kw_flatline_or_zero",
+        "name": "kW Flatline or Zero",
+        "description": "Flags sustained flatlined power or any zero kW reading.",
+        "equipment_types": ["ahu", "plant", "general"],
+        "required_inputs": ["kw"],
+        "optional_inputs": [],
+        "sql": "SELECT timestamp, equipment_id, kw, CASE WHEN kw IS NULL THEN false WHEN kw = 0.0 THEN true WHEN COUNT(*) OVER w >= 4 AND MAX(kw) OVER w = MIN(kw) OVER w THEN true ELSE false END AS fault_raw FROM telemetry_pivot WINDOW w AS (PARTITION BY equipment_id ORDER BY timestamp ROWS BETWEEN 3 PRECEDING AND CURRENT ROW)",
+        "builder_config": {
+            "input": "kw",
+            "operator": "flatline_or_zero",
+            "window_samples": 4,
+            "zero_threshold": 0.0
+        },
+        "confirmation_seconds": 900,
+        "clear_behavior": "immediate",
+        "severity": "warning",
+        "output_fault_code": "KW_FLATLINE_OR_ZERO",
+        "source": "human_created",
+        "review_status": "draft",
+        "sql_mode": "builder"
+    })
+}
+
 pub fn rule_template(rule_id: &str) -> Value {
     if rule_id == "oa_temp_out_of_range" {
         return json!({"ok": true, "rule": template_oa_rule(), "template": true});
+    }
+    if rule_id == "kw_flatline_or_zero" {
+        return json!({"ok": true, "rule": template_kw_flatline_or_zero_rule(), "template": true});
     }
     json!({"ok": false, "error": "template not found", "rule_id": rule_id})
 }
@@ -210,5 +238,12 @@ mod tests {
             let body = list_rules();
             assert_eq!(body["count"].as_u64(), Some(0));
         });
+    }
+
+    #[test]
+    fn kw_flatline_template_exists() {
+        let body = rule_template("kw_flatline_or_zero");
+        assert_eq!(body["ok"], true);
+        assert_eq!(body["rule"]["required_inputs"], json!(["kw"]));
     }
 }

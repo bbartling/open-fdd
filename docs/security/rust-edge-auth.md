@@ -93,6 +93,15 @@ CORS is denied by default. Set `OPENFDD_CORS_ORIGIN` for explicit local dev orig
 
 ## Network posture
 
-Bind to OT-LAN or localhost. Use VPN/Tailscale/reverse proxy for remote access. Do not expose Open-FDD directly to the public internet.
+**Open-FDD is intended for localhost, LAN, OT networks, Tailscale, VPN, or reverse-proxy-controlled deployments. Do not expose the bridge API directly to the public internet.**
 
-Auth complements—but does not replace—OT network segmentation and BACnet/Modbus write guards.
+| Binding | Default | Override |
+|---------|---------|----------|
+| Bridge HTTP | `127.0.0.1:8080` | `OPENFDD_BIND_HOST=0.0.0.0` for intentional LAN-only exposure |
+| Vite dev UI | `127.0.0.1:5173` | `./scripts/openfdd_ui_dev.sh --lan` |
+
+BACnet/IP and Modbus/TCP must never be forwarded to the internet. Use Caddy TLS (`docker/compose.edge.rust.yml` profile `caddy-tls`) when remote operators need HTTPS.
+
+Public `GET /api/health` returns only `ok`, `version`, `image_tag`, and `auth_required` — no OT hostnames, credentials, or service inventory.
+
+Bind to OT-LAN or localhost. Use VPN/Tailscale/reverse proxy for remote access.
