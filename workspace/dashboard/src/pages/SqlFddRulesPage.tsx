@@ -252,7 +252,7 @@ export default function SqlFddRulesPage() {
           <>
             DataFusion SQL rules for site <code>{siteId || "…"}</code>. Map points on{" "}
             <Link to="/model">Model & FDD assignments</Link> or the{" "}
-            <Link to="/wiresheet">FDD Wiresheet</Link>.
+            <Link to="/model">Model &amp; FDD assignments</Link>.
           </>
         }
       />
@@ -294,8 +294,8 @@ export default function SqlFddRulesPage() {
               >
                 Test query
               </button>
-              <Link className="secondary-btn" to="/wiresheet">
-                FDD Wiresheet
+              <Link className="secondary-btn" to="/model">
+                FDD mapping
               </Link>
             </div>
           </div>

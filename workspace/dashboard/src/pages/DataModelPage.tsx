@@ -9,12 +9,12 @@ import DataModelSparqlPanel from "../components/DataModelSparqlPanel";
 import CommissioningImportExportPanel from "../components/CommissioningImportExportPanel";
 import ModelSyncBar from "../components/ModelSyncBar";
 import PageHeader from "../components/PageHeader";
-import FddWiresheetSummary from "../components/FddWiresheetSummary";
+import ModelFddMappingPanel from "../components/ModelFddMappingPanel";
 
 type SiteRow = { id: string; name: string };
 
 export default function DataModelPage() {
-  const [activeTab, setActiveTab] = useState<"import" | "explorer" | "wiresheet" | "sparql" | "advanced">("import");
+  const [activeTab, setActiveTab] = useState<"import" | "explorer" | "mapping" | "sparql" | "advanced">("import");
   const [out, setOut] = useState("");
   const [ttlLoading, setTtlLoading] = useState(false);
   const [copiedKey, setCopiedKey] = useState("");
@@ -100,8 +100,8 @@ export default function DataModelPage() {
         subtitle={
           <>
             Haystack site <code>{activeSiteId || "…"}</code> · {eqCount} equipment · {pointCount} points · {ruleCount}{" "}
-            rules · {boundPoints} bound points · import/export commissioning JSON or use AI to populate model + FDD
-            wiresheet
+            rules · {boundPoints} bound points · import/export commissioning JSON or use AI to populate FDD
+            mappings
           </>
         }
       />
@@ -123,10 +123,10 @@ export default function DataModelPage() {
         </button>
         <button
           type="button"
-          className={activeTab === "wiresheet" ? "" : "secondary-btn"}
-          onClick={() => setActiveTab("wiresheet")}
+          className={activeTab === "mapping" ? "" : "secondary-btn"}
+          onClick={() => setActiveTab("mapping")}
         >
-          FDD wiresheet
+          FDD mapping
         </button>
         <button
           type="button"
@@ -163,7 +163,7 @@ export default function DataModelPage() {
         </>
       ) : null}
 
-      {activeTab === "wiresheet" ? <FddWiresheetSummary onStatus={setOut} /> : null}
+      {activeTab === "mapping" ? <ModelFddMappingPanel onStatus={setOut} /> : null}
 
       {activeTab === "sparql" ? <DataModelSparqlPanel onStatus={setOut} /> : null}
 

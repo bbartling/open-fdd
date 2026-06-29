@@ -283,6 +283,7 @@ fn build_nodes_edges(
     (nodes, edges)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn add_rule_chain(
     nodes: &mut Vec<Value>,
     edges: &mut Vec<Value>,

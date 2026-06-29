@@ -278,6 +278,32 @@ export async function login(username: string, password: string) {
   });
 }
 
+/** Dev-only one-click login (edge OPENFDD_ALLOW_INSECURE_AUTH=1). */
+export async function devQuickLogin(role: "integrator" | "admin" | "operator" | "agent") {
+  return apiFetch<{
+    ok?: boolean;
+    token?: string;
+    access_token?: string;
+    role?: string;
+    username?: string;
+    error?: string;
+  }>("/api/dev/quick-login", {
+    method: "POST",
+    body: JSON.stringify({ role }),
+  });
+}
+
+/** Dev-only start local script (ui dev, codex setup). */
+export async function devRunScript(script: "ui_dev" | "codex_setup" | "codex_reset") {
+  return apiFetch<{ ok?: boolean; hint?: string; error?: string; log?: string }>(
+    "/api/dev/run-script",
+    {
+      method: "POST",
+      body: JSON.stringify({ script }),
+    },
+  );
+}
+
 /** Short-lived ticket for /ws/dashboard (not the long-lived Bearer token). */
 export async function fetchWsTicket(): Promise<string | null> {
   try {

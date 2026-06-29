@@ -957,6 +957,18 @@ textarea {
   width: min(400px, 92vw);
 }
 
+.login-dev-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.login-dev-actions .btn {
+  flex: 1 1 auto;
+  min-width: 8rem;
+}
+
 .sign-out-btn {
   margin-top: auto;
 }

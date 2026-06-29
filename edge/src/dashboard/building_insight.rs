@@ -3,7 +3,6 @@
 use super::{analytics, building_status, summary};
 use crate::faults;
 use crate::ops::ollama;
-use chrono::Utc;
 use serde_json::{json, Value};
 use std::env;
 use std::fs;
@@ -77,7 +76,7 @@ fn gather_context() -> Value {
     let fault_summary = sum
         .get("faults")
         .cloned()
-        .unwrap_or_else(|| faults::summary_json());
+        .unwrap_or_else(faults::summary_json);
     let active_count = fault_summary
         .get("active_count")
         .and_then(|v| v.as_u64())
@@ -131,6 +130,7 @@ fn gather_context() -> Value {
         "prior_issues": prior.get("active_issues").cloned().unwrap_or(json!([])),
         "equipment_count": eq_count,
         "point_count": pt_count,
+        "mapped_points": mapped,
         "historian_rows": row_count,
         "updated_at": now_unix()
     });

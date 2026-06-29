@@ -118,6 +118,18 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             json!({"ok": true, "auth_required": cfg.required}),
         );
     }
+    if method == "POST" && route_path == "/api/dev/quick-login" {
+        return json_response(
+            &mut stream,
+            ops::dev_stack::quick_login(&parse_json_body_or_empty(&body)),
+        );
+    }
+    if method == "POST" && route_path == "/api/dev/run-script" {
+        return json_response(
+            &mut stream,
+            ops::dev_stack::run_script(&parse_json_body_or_empty(&body)),
+        );
+    }
     // Public read-only dashboard endpoints (home/login view without JWT).
     if method == "GET"
         && (route_path == "/api/building/snapshot" || route_path == "/api/building/status")

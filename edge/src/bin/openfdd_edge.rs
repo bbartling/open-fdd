@@ -190,7 +190,7 @@ fn main() -> std::io::Result<()> {
                     out_dir,
                     lan_ip,
                 })
-                .map_err(|e| std::io::Error::other(e))?;
+                .map_err(std::io::Error::other)?;
                 eprintln!("wrote {}", result.cert_path.display());
                 eprintln!("wrote {}", result.key_path.display());
                 Ok(())
@@ -215,7 +215,7 @@ fn main() -> std::io::Result<()> {
                         out_dir,
                         lan_ip,
                     })
-                    .map_err(|e| std::io::Error::other(e))?;
+                    .map_err(std::io::Error::other)?;
                     eprintln!("TLS cert: {}", result.cert_path.display());
                     eprintln!("TLS key:  {}", result.key_path.display());
                 }
