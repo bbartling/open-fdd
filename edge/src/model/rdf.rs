@@ -7,7 +7,7 @@ use oxigraph::model::Term;
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use serde_json::Value;
-use std::collections::hash_map::DefaultHasher;
+use std::collections::{hash_map::DefaultHasher, HashMap};
 use std::hash::{Hash, Hasher};
 use std::sync::RwLock;
 
@@ -30,6 +30,23 @@ impl StoreState {
     }
 }
 
+/// Open-FDD application metadata uses `ofdd:` in Turtle (not Project Haystack `hs:`).
+const OFDD_LITERAL_KEYS: &[&str] = &["fddInput", "importJob", "protocol"];
+const OFDD_REF_KEYS: &[&str] = &["csvRef"];
+const TYPE_MARKER_KEYS: &[&str] = &[
+    "site",
+    "equip",
+    "point",
+    "ahu",
+    "vav",
+    "chiller",
+    "boiler",
+    "coolingTower",
+    "doas",
+    "source",
+];
+const POINT_ROLE_KEYS: &[&str] = &["sensor", "cmd", "sp", "synthetic"];
+
 /// Drop cached store so the next query reloads from the current Haystack grid.
 pub fn invalidate_store() {
     if let Ok(mut guard) = STORE.write() {
@@ -43,6 +60,10 @@ fn grid_fingerprint(rows: &[Value]) -> u64 {
         .unwrap_or_default()
         .hash(&mut hasher);
     hasher.finish()
+}
+
+fn legacy_hs_custom_tags() -> bool {
+    std::env::var("OPENFDD_RDF_LEGACY_HS_CUSTOM_TAGS").as_deref() == Ok("1")
 }
 
 /// Turtle local name for a Haystack ref id (`site:lab` → `site_lab`).
@@ -71,6 +92,18 @@ pub fn turtle_escape(s: &str) -> String {
 
 fn is_marker(v: &Value) -> bool {
     matches!(v.as_str(), Some("M")) || v.as_bool() == Some(true)
+}
+
+fn is_ofdd_key(key: &str) -> bool {
+    OFDD_LITERAL_KEYS.contains(&key) || OFDD_REF_KEYS.contains(&key)
+}
+
+fn predicate_for_key(key: &str) -> String {
+    if is_ofdd_key(key) {
+        format!("ofdd:{key}")
+    } else {
+        format!("hs:{key}")
+    }
 }
 
 fn infer_equip_type(row: &Value) -> &'static str {
@@ -132,16 +165,77 @@ fn literal_object(v: &Value) -> Option<String> {
         ));
     }
     if let Some(b) = v.as_bool() {
-        return Some(format!(
-            "\"{}\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
-            b
-        ));
+        return Some(if b { "true".into() } else { "false".into() });
     }
     None
 }
 
+fn enrich_rows(rows: &[Value]) -> Vec<Value> {
+    let mut equip_site: HashMap<String, String> = HashMap::new();
+    for row in rows {
+        let Some(eid) = row.get("id").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        if row.get("equip").is_some() {
+            if let Some(site) = row.get("siteRef").and_then(|v| v.as_str()) {
+                equip_site.insert(eid.to_string(), site.to_string());
+            }
+        }
+    }
+
+    rows.iter()
+        .map(|row| {
+            if row.get("point").is_none() {
+                return row.clone();
+            }
+            if row.get("siteRef").is_some() {
+                return row.clone();
+            }
+            let Some(equip_ref) = row.get("equipRef").and_then(|v| v.as_str()) else {
+                return row.clone();
+            };
+            let Some(site) = equip_site.get(equip_ref) else {
+                return row.clone();
+            };
+            let mut obj = row
+                .as_object()
+                .cloned()
+                .unwrap_or_else(serde_json::Map::new);
+            obj.insert("siteRef".into(), Value::String(site.clone()));
+            Value::Object(obj)
+        })
+        .collect()
+}
+
+fn point_has_role_marker(row: &Value) -> bool {
+    POINT_ROLE_KEYS.iter().any(|key| row.get(*key).is_some())
+}
+
+fn format_subject_block(subj: &str, triples: &[(String, String)]) -> String {
+    if triples.is_empty() {
+        return String::new();
+    }
+    let mut lines = vec![subj.to_string()];
+    for (i, (pred, obj)) in triples.iter().enumerate() {
+        let end = if i + 1 == triples.len() { " ." } else { " ;" };
+        lines.push(format!("  {pred} {obj}{end}"));
+    }
+    lines.join("\n")
+}
+
+fn push_triple(triples: &mut Vec<(String, String)>, pred: String, obj: String) {
+    triples.push((pred, obj));
+}
+
+fn push_legacy_hs_triple(triples: &mut Vec<(String, String)>, key: &str, obj: String) {
+    if legacy_hs_custom_tags() && is_ofdd_key(key) {
+        triples.push((format!("hs:{key}"), obj));
+    }
+}
+
 /// Build Turtle from Haystack grid rows (full semantic projection for SPARQL).
 pub fn haystack_rows_to_turtle(rows: &[Value]) -> String {
+    let rows = enrich_rows(rows);
     let mut lines = vec![
         format!("@prefix hs: <{HS_PREFIX}> ."),
         format!("@prefix ofdd: <{OFDD_PREFIX}> ."),
@@ -149,7 +243,7 @@ pub fn haystack_rows_to_turtle(rows: &[Value]) -> String {
         String::new(),
     ];
 
-    for row in rows {
+    for row in &rows {
         let Some(id) = row.get("id").and_then(|v| v.as_str()) else {
             continue;
         };
@@ -157,48 +251,64 @@ pub fn haystack_rows_to_turtle(rows: &[Value]) -> String {
             continue;
         }
         let subj = turtle_subject(id);
-        let mut preds: Vec<String> = Vec::new();
-
-        preds.push(format!(
-            "{subj} ofdd:haystackId \"{}\" .",
-            turtle_escape(id)
-        ));
+        let mut triples: Vec<(String, String)> = Vec::new();
 
         for rdf_type in haystack_type_triples(row) {
-            preds.push(format!("{subj} a {rdf_type} ."));
+            push_triple(&mut triples, "a".into(), rdf_type);
         }
 
+        push_triple(
+            &mut triples,
+            "ofdd:haystackId".into(),
+            format!("\"{}\"", turtle_escape(id)),
+        );
+
         if row.get("equip").is_some() {
-            preds.push(format!(
-                "{subj} ofdd:equipType \"{}\" .",
-                turtle_escape(infer_equip_type(row))
-            ));
+            push_triple(
+                &mut triples,
+                "ofdd:equipType".into(),
+                format!("\"{}\"", turtle_escape(infer_equip_type(row))),
+            );
         }
 
         for (key, value) in row.as_object().into_iter().flatten() {
-            if key == "id" {
+            if key == "id" || TYPE_MARKER_KEYS.contains(&key.as_str()) {
                 continue;
             }
-            let pred = format!("hs:{key}");
+            if POINT_ROLE_KEYS.contains(&key.as_str()) && is_marker(value) {
+                push_triple(&mut triples, format!("hs:{key}"), "true".into());
+                continue;
+            }
+            if is_marker(value) {
+                continue;
+            }
             if key.ends_with("Ref") {
                 if let Some(ref_id) = value.as_str() {
                     if !ref_id.is_empty() {
-                        preds.push(format!("{subj} {pred} {} .", turtle_subject(ref_id)));
+                        let obj = turtle_subject(ref_id);
+                        let pred = predicate_for_key(key);
+                        push_triple(&mut triples, pred, obj.clone());
+                        push_legacy_hs_triple(&mut triples, key, obj);
                     }
                 }
                 continue;
             }
-            if is_marker(value) {
-                // Marker tags are represented via rdf:type (hs:Site, hs:Equip, …) above.
-                continue;
-            }
             if let Some(lit) = literal_object(value) {
-                preds.push(format!("{subj} {pred} {lit} ."));
+                let pred = predicate_for_key(key);
+                push_triple(&mut triples, pred.clone(), lit.clone());
+                push_legacy_hs_triple(&mut triples, key, lit);
             }
         }
 
-        lines.extend(preds);
-        lines.push(String::new());
+        if row.get("point").is_some() && !point_has_role_marker(row) {
+            push_triple(&mut triples, "hs:sensor".into(), "true".into());
+        }
+
+        let block = format_subject_block(&subj, &triples);
+        if !block.is_empty() {
+            lines.push(block);
+            lines.push(String::new());
+        }
     }
 
     lines.join("\n")
@@ -321,6 +431,42 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    fn school_kw_fixture_rows() -> Vec<Value> {
+        vec![
+            json!({
+                "id": "site:school-kw-merged",
+                "dis": "school_kw_merged",
+                "site": "M"
+            }),
+            json!({
+                "id": "source:csv:school-kw-merged",
+                "dis": "CSV source (school-kw-merged)",
+                "source": "M",
+                "protocol": "csv",
+                "importJob": "dataset-school_kw_merged"
+            }),
+            json!({
+                "id": "equip:school-kw-merged",
+                "dis": "school_kw_merged",
+                "equip": "M",
+                "siteRef": "site:school-kw-merged",
+                "sourceRef": "source:csv:school-kw-merged"
+            }),
+            json!({
+                "id": "point:school-kw-merged-temp_f",
+                "dis": "temp_f",
+                "point": "M",
+                "sensor": "M",
+                "kind": "Number",
+                "unit": "°F",
+                "equipRef": "equip:school-kw-merged",
+                "sourceRef": "source:csv:school-kw-merged",
+                "fddInput": "temp_f",
+                "csvRef": "csv:source:csv:school-kw-merged:temp_f"
+            }),
+        ]
+    }
+
     #[test]
     fn turtle_includes_types_and_refs() {
         let rows = vec![
@@ -348,8 +494,75 @@ mod tests {
         assert!(ttl.contains("a hs:Site"));
         assert!(ttl.contains("a hs:Equip"));
         assert!(ttl.contains("hs:siteRef ofdd:site_lab"));
-        assert!(ttl.contains("hs:fddInput \"oa_t\""));
+        assert!(ttl.contains("ofdd:fddInput \"oa_t\""));
         assert!(ttl.contains("ofdd:equipType \"ahu\""));
+        assert!(ttl.contains("hs:sensor true"));
+        Store::new()
+            .unwrap()
+            .load_from_reader(RdfFormat::Turtle, ttl.as_bytes())
+            .expect("turtle parses");
+    }
+
+    #[test]
+    fn csv_import_fixture_semantic_shape() {
+        let ttl = haystack_rows_to_turtle(&school_kw_fixture_rows());
+        assert!(ttl.contains("hs:siteRef ofdd:site_school_kw_merged"));
+        assert!(ttl.contains("hs:equipRef ofdd:equip_school_kw_merged"));
+        assert!(ttl.contains("ofdd:csvRef ofdd:csv_source_csv_school_kw_merged_temp_f"));
+        assert!(ttl.contains("ofdd:fddInput \"temp_f\""));
+        assert!(ttl.contains("ofdd:importJob \"dataset-school_kw_merged\""));
+        assert!(ttl.contains("ofdd:protocol \"csv\""));
+        assert!(ttl.contains("hs:sensor true"));
+        assert!(!ttl.contains("hs:csvRef"));
+        assert!(!ttl.contains("hs:fddInput"));
+        assert!(!ttl.contains("hs:importJob"));
+        assert!(!ttl.contains("hs:protocol"));
+
+        let store = Store::new().unwrap();
+        store
+            .load_from_reader(RdfFormat::Turtle, ttl.as_bytes())
+            .expect("fixture turtle parses");
+
+        let q = r#"
+            PREFIX hs: <https://project-haystack.org/def/>
+            PREFIX ofdd: <https://open-fdd.dev/model#>
+            SELECT ?point WHERE {
+              ?p a hs:Point .
+              ?p ofdd:haystackId ?point .
+              ?p hs:siteRef ?site .
+              ?p hs:equipRef ?eq .
+              ?p hs:dis ?dis .
+              ?p hs:sensor ?role .
+              ?p ofdd:fddInput ?fdd .
+              ?p ofdd:csvRef ?csv .
+            }
+        "#;
+        let rows = SparqlEvaluator::new()
+            .parse_query(q)
+            .unwrap()
+            .on_store(&store)
+            .execute()
+            .unwrap();
+        match rows {
+            QueryResults::Solutions(solutions) => {
+                let count = solutions.into_iter().count();
+                assert_eq!(count, 1);
+            }
+            _ => panic!("expected SELECT results"),
+        }
+    }
+
+    #[test]
+    fn every_point_has_site_ref_via_enrichment() {
+        let rows = vec![
+            json!({"id": "site:a", "dis": "A", "site": "M"}),
+            json!({"id": "equip:e1", "dis": "E1", "equip": "M", "siteRef": "site:a"}),
+            json!({"id": "point:p1", "dis": "P1", "point": "M", "equipRef": "equip:e1"}),
+        ];
+        let ttl = haystack_rows_to_turtle(&rows);
+        assert!(ttl.contains("ofdd:point_p1"));
+        assert!(ttl.contains("hs:siteRef ofdd:site_a"));
+        assert!(ttl.contains("hs:equipRef ofdd:equip_e1"));
     }
 
     #[test]

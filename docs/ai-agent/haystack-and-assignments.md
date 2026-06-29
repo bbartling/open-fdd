@@ -24,7 +24,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 # Sites
 curl -s -X POST http://127.0.0.1:8080/api/model/sparql \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"query":"PREFIX hs: <https://project-haystack.org/def/> PREFIX ofdd: <https://open-fdd.dev/model#> SELECT ?point ?dis ?equipRef ?fddInput WHERE { ?p a hs:Point . ?p ofdd:haystackId ?point . OPTIONAL { ?p hs:dis ?dis . } OPTIONAL { ?p hs:equipRef ?eq . ?eq ofdd:haystackId ?equipRef . } OPTIONAL { ?p hs:fddInput ?fddInput . } }"}'
+  -d '{"query":"PREFIX hs: <https://project-haystack.org/def/> PREFIX ofdd: <https://open-fdd.dev/model#> SELECT ?point ?dis ?equipRef ?fddInput WHERE { ?p a hs:Point . ?p ofdd:haystackId ?point . OPTIONAL { ?p hs:dis ?dis . } OPTIONAL { ?p hs:equipRef ?eq . ?eq ofdd:haystackId ?equipRef . } OPTIONAL { ?p ofdd:fddInput ?fddInput . } }"}'
 ```
 
 Turtle export: `GET /api/model/ttl` · Coverage: `GET /api/dashboard/model-coverage`

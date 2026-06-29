@@ -239,6 +239,7 @@ pub fn import_from_csv_commit(
             "sensor": "M",
             "kind": "Number",
             "unit": infer_unit(slug),
+            "siteRef": site_id,
             "equipRef": equip_id,
             "sourceRef": source_id,
             "fddInput": fdd_input,

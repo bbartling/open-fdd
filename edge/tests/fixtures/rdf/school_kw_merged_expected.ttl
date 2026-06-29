@@ -1,0 +1,35 @@
+@prefix hs: <https://project-haystack.org/def/> .
+@prefix ofdd: <https://open-fdd.dev/model#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ofdd:site_school_kw_merged
+  a hs:Site ;
+  ofdd:haystackId "site:school-kw-merged" ;
+  hs:dis "school_kw_merged" .
+
+ofdd:source_csv_school_kw_merged
+  ofdd:haystackId "source:csv:school-kw-merged" ;
+  hs:dis "CSV source (school-kw-merged)" ;
+  ofdd:importJob "dataset-school_kw_merged" ;
+  ofdd:protocol "csv" .
+
+ofdd:equip_school_kw_merged
+  a hs:Equip ;
+  ofdd:haystackId "equip:school-kw-merged" ;
+  ofdd:equipType "generic" ;
+  hs:dis "school_kw_merged" ;
+  hs:siteRef ofdd:site_school_kw_merged ;
+  hs:sourceRef ofdd:source_csv_school_kw_merged .
+
+ofdd:point_school_kw_merged_temp_f
+  a hs:Point ;
+  ofdd:haystackId "point:school-kw-merged-temp_f" ;
+  hs:dis "temp_f" ;
+  hs:siteRef ofdd:site_school_kw_merged ;
+  hs:equipRef ofdd:equip_school_kw_merged ;
+  hs:sourceRef ofdd:source_csv_school_kw_merged ;
+  ofdd:csvRef ofdd:csv_source_csv_school_kw_merged_temp_f ;
+  ofdd:fddInput "temp_f" ;
+  hs:sensor true ;
+  hs:kind "Number" ;
+  hs:unit "°F" .

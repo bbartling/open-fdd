@@ -151,9 +151,9 @@ pub fn list_points(site_id: Option<&str>) -> Value {
           ?p a hs:Point .
           ?p ofdd:haystackId ?point_id .
           OPTIONAL {{ ?p hs:dis ?name . }}
+          OPTIONAL {{ ?p hs:siteRef ?siteRes . ?siteRes ofdd:haystackId ?site_id . }}
           OPTIONAL {{ ?p hs:equipRef ?eq . ?eq ofdd:haystackId ?equip_ref . }}
-          OPTIONAL {{ ?eq hs:siteRef ?siteRes . ?siteRes ofdd:haystackId ?site_id . }}
-          OPTIONAL {{ ?p hs:fddInput ?fdd_input . }}
+          OPTIONAL {{ ?p ofdd:fddInput ?fdd_input . }}
           OPTIONAL {{ ?p hs:bacnetRef ?bacnet_ref . }}
           OPTIONAL {{ ?p hs:modbusRef ?modbus_ref . }}
           {filter}
@@ -219,10 +219,10 @@ pub fn source_coverage() -> Value {
                 IF(BOUND(?modbus), \"modbus\",
                   IF(BOUND(?fdd), \"json_api\", \"unmapped\"))))
             AS ?protocol)
-          OPTIONAL {{ ?p hs:csvRef ?csv . }}
+          OPTIONAL {{ ?p ofdd:csvRef ?csv . }}
           OPTIONAL {{ ?p hs:bacnetRef ?bacnet . }}
           OPTIONAL {{ ?p hs:modbusRef ?modbus . }}
-          OPTIONAL {{ ?p hs:fddInput ?fdd . }}
+          OPTIONAL {{ ?p ofdd:fddInput ?fdd . }}
         }} GROUP BY ?protocol"
     );
     let protocols: Vec<Value> = sparql_rows(&query)
@@ -266,9 +266,10 @@ pub fn group_points_by_equip() -> Value {
           OPTIONAL {{ ?p hs:dis ?name . }}
           OPTIONAL {{ ?p hs:equipRef ?eq . ?eq ofdd:haystackId ?equip_ref . }}
           BIND(
-            EXISTS {{ ?p hs:fddInput ?x }} ||
+            EXISTS {{ ?p ofdd:fddInput ?x }} ||
             EXISTS {{ ?p hs:bacnetRef ?y }} ||
-            EXISTS {{ ?p hs:modbusRef ?z }}
+            EXISTS {{ ?p hs:modbusRef ?z }} ||
+            EXISTS {{ ?p ofdd:csvRef ?w }}
             AS ?mapped)
         }}"
     );
@@ -391,7 +392,7 @@ pub fn network_graph(site_id: Option<&str>) -> Value {
           OPTIONAL {{ ?p hs:unit ?unit . }}
           ?p hs:equipRef ?eq .
           ?eq ofdd:haystackId ?equip_ref .
-          OPTIONAL {{ ?eq hs:siteRef ?siteRes . ?siteRes ofdd:haystackId ?site_id . }}
+          OPTIONAL {{ ?p hs:siteRef ?siteRes . ?siteRes ofdd:haystackId ?site_id . }}
           {site_filter}
         }}"
     );

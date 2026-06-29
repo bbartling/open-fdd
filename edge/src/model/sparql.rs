@@ -91,7 +91,7 @@ pub fn catalog() -> Vec<Value> {
             "label": "All points",
             "short_label": "Points",
             "category": "hvac",
-            "query": format!("{PREFIXES}\nSELECT ?point ?dis ?equipRef ?fddInput WHERE {{\n  ?p a hs:Point .\n  ?p ofdd:haystackId ?point .\n  OPTIONAL {{ ?p hs:dis ?dis . }}\n  OPTIONAL {{ ?p hs:equipRef ?eq . ?eq ofdd:haystackId ?equipRef . }}\n  OPTIONAL {{ ?p hs:fddInput ?fddInput . }}\n}}")
+            "query": format!("{PREFIXES}\nSELECT ?point ?dis ?equipRef ?siteRef ?fddInput WHERE {{\n  ?p a hs:Point .\n  ?p ofdd:haystackId ?point .\n  OPTIONAL {{ ?p hs:dis ?dis . }}\n  OPTIONAL {{ ?p hs:equipRef ?eq . ?eq ofdd:haystackId ?equipRef . }}\n  OPTIONAL {{ ?p hs:siteRef ?site . ?site ofdd:haystackId ?siteRef . }}\n  OPTIONAL {{ ?p ofdd:fddInput ?fddInput . }}\n}}")
         }),
         json!({
             "id": "hvac_points_bacnet",
@@ -106,7 +106,7 @@ pub fn catalog() -> Vec<Value> {
             "label": "Unmapped points (no fddInput / driver ref)",
             "short_label": "Unmapped",
             "category": "engineering",
-            "query": format!("{PREFIXES}\nSELECT ?point ?dis ?equipRef WHERE {{\n  ?p a hs:Point .\n  ?p ofdd:haystackId ?point .\n  OPTIONAL {{ ?p hs:dis ?dis . }}\n  OPTIONAL {{ ?p hs:equipRef ?eq . ?eq ofdd:haystackId ?equipRef . }}\n  FILTER NOT EXISTS {{ ?p hs:fddInput ?x }}\n  FILTER NOT EXISTS {{ ?p hs:bacnetRef ?y }}\n  FILTER NOT EXISTS {{ ?p hs:modbusRef ?z }}\n  FILTER NOT EXISTS {{ ?p hs:csvRef ?w }}\n}}")
+            "query": format!("{PREFIXES}\nSELECT ?point ?dis ?equipRef WHERE {{\n  ?p a hs:Point .\n  ?p ofdd:haystackId ?point .\n  OPTIONAL {{ ?p hs:dis ?dis . }}\n  OPTIONAL {{ ?p hs:equipRef ?eq . ?eq ofdd:haystackId ?equipRef . }}\n  FILTER NOT EXISTS {{ ?p ofdd:fddInput ?x }}\n  FILTER NOT EXISTS {{ ?p hs:bacnetRef ?y }}\n  FILTER NOT EXISTS {{ ?p hs:modbusRef ?z }}\n  FILTER NOT EXISTS {{ ?p ofdd:csvRef ?w }}\n}}")
         }),
         json!({
             "id": "hvac_feeds",
@@ -114,6 +114,13 @@ pub fn catalog() -> Vec<Value> {
             "short_label": "Feeds",
             "category": "hvac",
             "query": format!("{PREFIXES}\nSELECT ?from ?to ?fromLabel ?toLabel WHERE {{\n  ?toRes hs:feedRef ?fromRes .\n  ?fromRes ofdd:haystackId ?from .\n  ?toRes ofdd:haystackId ?to .\n  OPTIONAL {{ ?fromRes hs:dis ?fromLabel . }}\n  OPTIONAL {{ ?toRes hs:dis ?toLabel . }}\n}}")
+        }),
+        json!({
+            "id": "eng_points_by_site",
+            "label": "Points by site",
+            "short_label": "Pts / site",
+            "category": "engineering",
+            "query": format!("{PREFIXES}\nSELECT ?siteRef ?point ?dis WHERE {{\n  ?p a hs:Point .\n  ?p ofdd:haystackId ?point .\n  ?p hs:siteRef ?site .\n  ?site ofdd:haystackId ?siteRef .\n  OPTIONAL {{ ?p hs:dis ?dis . }}\n}} ORDER BY ?siteRef ?point")
         }),
         json!({
             "id": "eng_sites",
