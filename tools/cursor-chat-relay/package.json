@@ -1,0 +1,17 @@
+{
+  "name": "openfdd-cursor-chat-relay",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local HTTP bridge: Open-FDD edge chat → Cursor SDK agent",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node -e \"import('@cursor/sdk').then(() => console.log('ok'))\""
+  },
+  "dependencies": {
+    "@cursor/sdk": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -52,8 +52,8 @@ impl BridgeClient {
             "ok": true,
             "dry_run": true,
             "steps": [
+                "DRY_RUN=1 NEW_TAG=<tag> ./scripts/openfdd_rust_site_update.sh",
                 "./scripts/openfdd_rust_site_backup.sh",
-                "NEW_TAG=<tag> ./scripts/openfdd_rust_site_update.sh",
                 "./scripts/openfdd_rust_edge_validate.sh",
                 "./scripts/openfdd_drivers_validate.sh"
             ],

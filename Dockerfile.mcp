@@ -1,4 +1,5 @@
-# Open-FDD MCP server image (stdio transport for Cursor / agents).
+# MCP alias image — same binaries as openfdd-edge-rust; stdio entrypoint only.
+# Prefer: docker run -i --entrypoint openfdd-mcp ghcr.io/bbartling/openfdd-edge-rust:<tag>
 FROM rust:1.95-bookworm AS builder
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./

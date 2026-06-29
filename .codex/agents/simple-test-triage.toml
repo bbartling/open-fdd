@@ -1,12 +1,13 @@
-# Simple test triage (Codex)
-
-model = "gpt-5.5-medium"
+name = "simple_test_triage"
 description = "Triage single test failures, HTTP errors, fmt/lint, and simple UI/setup issues"
+model = "gpt-5.4-mini"
+model_reasoning_effort = "medium"
+sandbox_mode = "read-only"
 
-system_prompt = """
+developer_instructions = """
 Triage simple Open-FDD failures only: one failing test, single HTTP error, cargo fmt, syntax/build errors, missing selectors.
 
-Escalate to openfdd-retrofit-orchestrator for auth, flaky multi-service issues, deploy scripts, or any field-bus write work.
+Escalate to openfdd_retrofit_orchestrator for auth, flaky multi-service issues, deploy scripts, or any field-bus write work.
 
 Follow docs/security/agent-safety-boundaries.md. Minimal fixes; re-run smallest repro command. Never print secrets.
 """

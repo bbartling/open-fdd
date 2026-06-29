@@ -22,6 +22,8 @@ stack_status = "openfdd_stack_status"
 haystack_test = "openfdd_haystack_test"
 driver_poll_status = "openfdd_driver_status"
 report_list = "openfdd_reports_list"
+bacnet_whois = "openfdd_bacnet_whois"
+validation_run_status = "openfdd_validation_run_status"
 
 [sparql]
 # Routes: GET /api/model/sparql/predefined, POST /api/model/sparql (JWT required)

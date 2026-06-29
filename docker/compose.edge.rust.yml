@@ -3,6 +3,8 @@
 # Profiles:
 #   desktop-json-csv — bridge only (set OPENFDD_*_ENABLED=0 in .env for JSON/CSV mode)
 #   full-edge        — bridge + BACnet/Modbus commission + Haystack gateway
+#   cursor           — Cursor SDK chat relay for in-app Agent assist (same edge image)
+#   ai               — Ollama LLM + optional cursor relay
 #   caddy-http       — Caddy LAN ingress on port 80 (use with desktop-json-csv or full-edge)
 #   caddy-tls        — Caddy TLS on 443 with self-signed certs (run openfdd-edge tls generate first)
 #
@@ -43,6 +45,10 @@ services:
     # Docker Compose mangles bcrypt `$` in hash values).
     env_file:
       - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/data.env.local
+        required: false
+      - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/ollama.env.local
+        required: false
+      - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/cursor.env.local
         required: false
       - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/bacnet/commissioning/commission.env
         required: false
@@ -139,9 +145,10 @@ services:
 
   openfdd-mcp:
     profiles: ["mcp-sidecar"]
-    image: ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-latest}
+    image: ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-latest}
     pull_policy: always
     container_name: openfdd-mcp
+    entrypoint: ["openfdd-mcp"]
     network_mode: host
     stdin_open: true
     tty: false
@@ -153,3 +160,41 @@ services:
     volumes:
       - ${OPENFDD_COMPOSE_ROOT:?}/workspace:/var/openfdd/workspace:ro
     restart: "no"
+
+  openfdd-cursor-relay:
+    profiles: ["cursor", "ai"]
+    image: ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: openfdd-cursor-relay
+    entrypoint: ["node", "/app/cursor-chat-relay/server.mjs"]
+    expose:
+      - "8787"
+    volumes:
+      - ${OPENFDD_COMPOSE_ROOT:?}/workspace:/var/openfdd/workspace
+    env_file:
+      - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/cursor.env.local
+        required: false
+    environment:
+      OPENFDD_WORKSPACE: /var/openfdd/workspace
+      OFDD_CURSOR_CHAT_PORT: "8787"
+      OFDD_CURSOR_CHAT_HOST: "0.0.0.0"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8787/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  ollama:
+    profiles: ["ai"]
+    image: ollama/ollama:latest
+    container_name: openfdd-ollama
+    ports:
+      - "${OPENFDD_BIND_HOST:-127.0.0.1}:11434:11434"
+    volumes:
+      - openfdd_ollama_data:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  openfdd_ollama_data:

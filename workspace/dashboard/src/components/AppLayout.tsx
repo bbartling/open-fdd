@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearToken, fetchAuthMe, fetchAuthStatus, getBridgeBase, hasToken } from "../lib/api";
 import { useTheme } from "../contexts/theme-context";
 import StackStatusStrip from "./StackStatusStrip";
+import DevAgentPanel from "./DevAgentPanel";
 
 type HealthInfo = { version?: string; image_tag?: string };
 
@@ -59,7 +60,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Settings",
     items: [
-      { to: "/agent", icon: "⎇", label: "MCP / Agent", protected: true },
+      { to: "/agent", icon: "🤖", label: "AI integrations", protected: true },
     ],
   },
 ];
@@ -199,8 +200,11 @@ export default function AppLayout() {
         )}
       </aside>
       <main className="app-main">
-        <div className="content">
-          <Outlet />
+        <div className={`content-row${signedIn ? " content-row--with-agent" : ""}`}>
+          <div className="content">
+            <Outlet />
+          </div>
+          {signedIn ? <DevAgentPanel /> : null}
         </div>
       </main>
     </div>

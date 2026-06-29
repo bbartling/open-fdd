@@ -30,9 +30,12 @@ pub fn run() -> std::io::Result<()> {
     drivers::bacnet::start_hourly_override_scanner(service_mode.clone());
     drivers::bacnet::start_bacnet_poll_loop(service_mode.clone());
     drivers::bacnet_server_runtime::start_background();
-    drivers::json_api::seed_from_env_if_needed();
-    let listener = TcpListener::bind(format!("0.0.0.0:{port}"))?;
-    println!("Open-FDD Rust Edge API listening on http://0.0.0.0:{port}");
+    if service_mode == "bridge" {
+        drivers::json_api::seed_from_env_if_needed();
+    }
+    let bind_host = env::var("OPENFDD_BIND_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let listener = TcpListener::bind(format!("{bind_host}:{port}"))?;
+    println!("Open-FDD Rust Edge API listening on http://{bind_host}:{port}");
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
@@ -85,20 +88,6 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             dashboard::building_status()
         };
         return json_response(&mut stream, body);
-    }
-    if method == "GET" && clean_path.starts_with("/api/faults/") {
-        let tail = clean_path
-            .trim_start_matches("/api/faults/")
-            .trim_matches('/');
-        if !tail.is_empty()
-            && !tail.contains('/')
-            && !matches!(
-                tail,
-                "status" | "summary" | "export.csv" | "catalog" | "tree" | "applicable"
-            )
-        {
-            return json_response(&mut stream, faults::get_fault(tail));
-        }
     }
     if method == "GET"
         && !clean_path.starts_with("/api/")
@@ -210,6 +199,24 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/bridge/status") => raw_json(&mut stream, ops::bridge::status_json()),
         ("GET", "/api/agent/manifest") => json_response(&mut stream, agent_manifest()),
         ("GET", "/api/agent/tools") => json_response(&mut stream, agent_tools()),
+        ("POST", "/api/agent/dev-harness") => require_role_lazy(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            || ops::agent_chat::chat_reply(&parse_json_body_or_empty(&body)),
+        ),
+        ("GET", "/api/agent/config") => require_role_lazy(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            ops::agent_chat::config_json,
+        ),
+        ("POST", "/api/agent/chat") => require_role_lazy(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            || ops::agent_chat::chat_reply(&parse_json_body_or_empty(&body)),
+        ),
         ("POST", "/api/agent/bootstrap") => require_role(
             &mut stream,
             &principal,
@@ -1985,7 +1992,7 @@ fn status_json(stream: &mut TcpStream, status: &str, value: Value) -> std::io::R
 fn options(stream: &mut TcpStream) -> std::io::Result<()> {
     let origin = cors_origin();
     let headers = format!(
-        "HTTP/1.1 204 No Content\r\n{origin}Access-Control-Allow-Methods: GET,POST,PUT,OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nContent-Length: 0\r\n\r\n"
+        "HTTP/1.1 204 No Content\r\n{origin}Access-Control-Allow-Methods: GET,POST,PUT,PATCH,DELETE,OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nContent-Length: 0\r\n\r\n"
     );
     stream.write_all(headers.as_bytes())
 }

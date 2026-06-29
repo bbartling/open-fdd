@@ -15,170 +15,34 @@
 </p>
 
 
-<p align="center">
-  Open-source HVAC supervisory fault detection for buildings — local-first, on-prem, vendor-neutral, and free to run at the edge.
-</p>
+> **Open-source semantic building analytics and HVAC supervisory fault detection. Local-first. On-premises. Vendor-neutral. Free to run at the edge or offline.**
 
-<p align="center">
-  The <strong>Open-FDD Rust edge</strong> ships JWT auth, a React dashboard, an Apache Arrow/Feather historian, DataFusion SQL fault rules, BACnet/Modbus/Haystack/JSON drivers, PDF reports, and Docker/GHCR lifecycle scripts. Telemetry and assignments flow through a <strong>Project Haystack knowledge graph</strong> (sites, equipment, points, and driver bindings) so FDD rules and reports stay protocol-agnostic.
-</p>
+Open-FDD Rust Edge is an open-source analytics platform for building automation systems that combines **semantic knowledge graph modeling**, **live operational technology (OT) data**, and **high-performance columnar analytics** into a single workflow.
 
-<p align="center">
-  Built for local building networks, Raspberry Pi / edge servers, and on-prem BAS integration — no cloud service required. Field benches use <strong>live OT drivers</strong> (for example BACnet MSTP device discovery); simulated devices are CI-only, not production defaults.
-</p>
+The platform includes:
 
-## Docker at a glance
+- Semantic building modeling using **Project Haystack** knowledge graphs
+- JWT authentication and a modern React web interface
+- Apache Arrow & Feather columnar data storage
+- Apache DataFusion SQL analytics and fault detection
+- BACnet, Modbus, Haystack, and JSON API drivers
+- Interactive plotting, dashboards, and PDF reporting
+- AI-assisted engineering workflows with integrated MCP support
+- Docker and GitHub Container Registry deployment
 
-One GHCR image (`ghcr.io/bbartling/openfdd-edge-rust`) runs as different containers via Compose profiles:
+Open-FDD supports two complementary deployment models.
 
-| Profile | Containers | What runs inside |
-| --- | ---: | --- |
-| **`desktop-json-csv`** | 1 | **`openfdd-bridge`** — REST API, React UI, JWT auth, historian, DataFusion FDD, Modbus/JSON/CSV drivers, reports |
-| **`full-edge`** | 3 | **`openfdd-bridge`** (above) + **`openfdd-commission`** (BACnet Who-Is, point browse, poll, override scan; host network) + **`openfdd-haystack-gateway`** (Haystack read/nav on port 9092) |
-| **`caddy-http`** or **`caddy-tls`** | +1 | **`openfdd-caddy`** — LAN reverse proxy in front of bridge (HTTP :80 or TLS :443) |
+### Live OT Edge
 
-Bridge-owned sidecars (same container as bridge): Modbus/TCP, JSON API ingest, CSV import/export, fault analytics, Haystack model APIs.
+Deploy on Linux IoT edge systems located within client environments, including industrial PCs, virtual machines, or edge servers connected to building automation networks. These systems can be securely subnetted to operational technology (OT) LANs for direct communication with BACnet, Modbus, Haystack, and other building control protocols while remaining isolated from the public Internet.
 
-Never run `docker compose down -v` or delete `workspace/` — site state lives in the bind mount.
+### Offline Engineering & Analytics
 
-## Architecture
+Run Open-FDD in Docker on engineering workstations to perform offline analysis of exported building data. Engineers can import and combine CSV files from multiple vendors, normalize timestamps, append or merge datasets, visualize trends, build semantic models, execute DataFusion SQL fault detection rules, and generate reports—all without requiring a live connection to the building automation network.
 
-Open-FDD is a Rust-based edge application for building telemetry, supervisory fault detection, reporting, and HVAC diagnostics.
+Both deployment models share the same analytics engine, semantic data model, Apache Arrow storage format, and DataFusion SQL execution layer, allowing engineering workflows to move seamlessly between offline analysis and live edge deployments.
 
-Telemetry from BACnet, Haystack, Modbus, JSON APIs, and CSV imports is normalized into an Arrow-native historian and persisted as Feather files. DataFusion SQL runs fault rules, validation checks, analytics, and report queries directly against that local historian.
-
-<details>
-<summary><strong>Service modes and driver locations</strong></summary>
-
-Open-FDD currently publishes one Rust GHCR image:
-
-```text
-ghcr.io/bbartling/openfdd-edge-rust
-```
-
-Docker Compose can run that same image as multiple service containers by changing the service mode.
-
-### `openfdd-bridge`
-
-Main application service.
-
-Responsibilities:
-
-* Main REST API service
-* React dashboard static serving
-* JWT auth / RBAC
-* Arrow / Feather historian
-* DataFusion SQL FDD
-* Reports / PDF generation
-* Building dashboard summary APIs
-* Fault analytics APIs
-* Trend / timeseries APIs
-* Data export / purge APIs
-* Model and assignment APIs
-
-Bridge-owned drivers:
-
-#### Modbus driver
-
-The Modbus driver currently lives in `openfdd-bridge` unless it is split into its own service later.
-
-Responsibilities:
-
-* Modbus/TCP connection config
-* Modbus register reads
-* Modbus poll status
-* Modbus driver tree API
-
-Example routes:
-
-```text
-/api/modbus/driver/tree
-/api/modbus/poll/status
-/api/modbus/read
-/api/modbus/poll-once
-```
-
-#### JSON API driver
-
-The JSON API driver currently lives in `openfdd-bridge` unless it is split into its own service later.
-
-Responsibilities:
-
-* REST/JSON source config
-* HTTP polling
-* JSON path/value mapping
-* JSON API poll status
-* JSON API driver tree API
-
-Example routes:
-
-```text
-/api/json-api/driver/tree
-/api/json-api/poll/status
-/api/json-api/poll-once
-```
-
-### `openfdd-commission`
-
-BACnet-specific service mode.
-
-Responsibilities:
-
-* BACnet discovery / Who-Is
-* BACnet point browsing
-* BACnet polling
-* BACnet driver tree generation
-* BACnet override scans
-* BACnet priority-array checks
-* BACnet CSV artifacts for override summaries
-
-Example routes or APIs exposed through bridge/service wiring:
-
-```text
-/api/bacnet/driver/tree
-/api/bacnet/overrides/scan-once
-/api/bacnet/poll/status
-```
-
-### `openfdd-haystack-gateway`
-
-Haystack-specific service mode.
-
-Responsibilities:
-
-* Project Haystack read/nav/ops
-* Niagara nHaystack integration path
-* Haystack source browsing
-* Haystack point reads
-* Haystack model/source import
-* Haystack-to-Open-FDD model mapping
-
-Example routes:
-
-```text
-/api/haystack/status
-/api/haystack/about
-/api/haystack/ops
-/api/haystack/nav
-/api/haystack/read
-/api/haystack/import
-/api/haystack/driver/tree
-/api/model/haystack
-```
-
-### Future service mode
-
-Since **3.2.3**, MCP ships as an **optional GHCR sidecar** (`ghcr.io/bbartling/openfdd-mcp`) — not inside the bridge image. See [Optional MCP sidecar](#optional-mcp-sidecar-after-edge-update) above and [mcp/README.md](mcp/README.md). **Built-in Ollama is not required** — dashboard Agent/Ollama panels are placeholders for optional local-only helpers.
-
-See [docs/agent/openfdd-agent-architecture.md](docs/agent/openfdd-agent-architecture.md) and [docs/agent/openfdd-mcp-tool-contract.md](docs/agent/openfdd-mcp-tool-contract.md).
-
-Legacy note — an in-process mode was considered but not used:
-
-```text
-SERVICE_MODE=mcp
-```
-
-</details>
+Open-FDD is designed to be **local-first**. No cloud services are required. AI assistants and MCP integrations enhance engineering workflows while keeping building telemetry, semantic models, and analytics under the owner's control.
 
 
 <p align="center">
@@ -204,8 +68,8 @@ SERVICE_MODE=mcp
 
 | Image | Role |
 |-------|------|
-| [`ghcr.io/bbartling/openfdd-edge-rust`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-edge-rust) | API, dashboard, historian, commission, Haystack (same image, `SERVICE_MODE`) |
-| [`ghcr.io/bbartling/openfdd-mcp`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp) | Read-first MCP stdio sidecar for Cursor/agents ([mcp/README.md](mcp/README.md)) |
+| [`ghcr.io/bbartling/openfdd-edge-rust`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-edge-rust) | **One image** — bridge, dashboard, historian, commission, Haystack (`SERVICE_MODE`); **`openfdd-mcp`** binary (`docker run --entrypoint openfdd-mcp …`); **Cursor chat relay** (`compose --profile cursor`). Slim [`openfdd-mcp`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp) tag = MCP-only entrypoint (same repo build). |
+
 
 GHCR publishes **multi-arch** images (`linux/amd64` + `linux/arm64`). Edge scripts **auto-detect** the host CPU.
 
@@ -214,7 +78,7 @@ GHCR publishes **multi-arch** images (`linux/amd64` + `linux/arm64`). Edge scrip
 | `x86_64`, `amd64` | `linux/amd64` | Intel/AMD servers, VMs |
 | `aarch64`, `arm64` | `linux/arm64` | Raspberry Pi 4/5 (64-bit OS) |
 
-Verify before pull (optional on Pi):
+Verify before pull (optional on Linux):
 
 ```bash
 cd ~/open-fdd
@@ -229,7 +93,6 @@ curl -fsSL -o /tmp/openfdd_rust_edge_bootstrap.sh \
 bash /tmp/openfdd_rust_edge_bootstrap.sh --start
 ```
 
-Open `http://127.0.0.1:8080` — sign in with **integrator** credentials from `workspace/bootstrap_credentials.once.txt` (password never printed by bootstrap).
 
 ### Update an existing site
 
@@ -240,69 +103,7 @@ cd ~/open-fdd
 ./scripts/openfdd_rust_edge_validate.sh
 ```
 
-The update script pulls and recreates the **core edge stack only** (`openfdd-bridge`, commission, Haystack gateway). It does **not** start MCP.
 
-### Optional MCP sidecar (after edge update)
-
-From **3.2.3** onward, GHCR also publishes [`ghcr.io/bbartling/openfdd-mcp`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp) — a **separate** read-first stdio server for Cursor/agents. Use the **same image tag** as the edge update (`OPENFDD_IMAGE_TAG` / `NEW_TAG`).
-
-**1. Edge must be healthy** (`curl -fsS http://127.0.0.1:8080/api/health`).
-
-**2. Pull the MCP image** (optional; Cursor can pull on first run):
-
-```bash
-cd ~/open-fdd
-export OPENFDD_COMPOSE_ROOT="$PWD"
-export OPENFDD_IMAGE_TAG=3.2.3   # match your site update tag
-
-docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar pull openfdd-mcp
-```
-
-**3. Obtain an integrator JWT** (do not log or commit the token):
-
-```bash
-source scripts/openfdd_auth_lib.sh
-INTEGRATOR_PW="$(openfdd_auth_plaintext_password workspace/auth.env.local integrator)"
-export OPENFDD_MCP_TOKEN="$(
-  curl -s -X POST http://127.0.0.1:8080/api/auth/login \
-    -H 'Content-Type: application/json' \
-    -d "$(jq -nc --arg u integrator --arg p "$INTEGRATOR_PW" '{username:$u,password:$p}')" \
-  | jq -r '.token // .access_token'
-)"
-```
-
-**4. Connect Cursor (recommended)** — add to Cursor MCP settings (WSL path to `docker`):
-
-```json
-{
-  "mcpServers": {
-    "openfdd": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm", "--network", "host",
-        "-e", "OPENFDD_API_BASE=http://127.0.0.1:8080",
-        "-e", "OPENFDD_COMMISSION_BASE=http://127.0.0.1:9091",
-        "-e", "OPENFDD_MCP_TOKEN",
-        "ghcr.io/bbartling/openfdd-mcp:3.2.3"
-      ],
-      "env": {
-        "OPENFDD_MCP_TOKEN": "<paste JWT from step 3>"
-      }
-    }
-  }
-}
-```
-
-**Smoke test** (stdio; Ctrl+D to exit):
-
-```bash
-docker run -i --rm --network host \
-  -e OPENFDD_API_BASE=http://127.0.0.1:8080 \
-  -e OPENFDD_MCP_TOKEN="$OPENFDD_MCP_TOKEN" \
-  ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-3.2.3}
-```
-
-MCP uses **stdio JSON-RPC** — it is not an HTTP service on a port. Full tool list and bench topology: [mcp/README.md](mcp/README.md).
 
 ---
 
@@ -431,6 +232,79 @@ Report: backup size, image tag, health pass/fail, whether backup was purged.
 
 </details>
 
+<details>
+<summary><strong>Optional: MCP sidecar for Cursor (after edge update)</strong></summary>
+
+`openfdd_rust_site_update.sh` pulls the **core edge stack only**. MCP and Cursor chat relay are opt-in compose profiles.
+
+The **`openfdd-mcp` binary ships inside `openfdd-edge-rust`** (same Cargo workspace). Use either image:
+
+- **Full edge:** `ghcr.io/bbartling/openfdd-edge-rust:<tag>` with `--entrypoint openfdd-mcp` for stdio MCP
+- **Slim MCP-only:** `ghcr.io/bbartling/openfdd-mcp:<tag>` (stdio entrypoint baked in)
+
+**In-app chat (Cursor SDK):** `compose --profile cursor` starts `openfdd-cursor-relay` from the **same edge image**. Set `CURSOR_API_KEY` in `workspace/cursor.env.local`.
+
+**1. Edge must be healthy** (`curl -fsS http://127.0.0.1:8080/api/health`).
+
+**2. Pull** (optional):
+
+```bash
+cd ~/open-fdd
+export OPENFDD_COMPOSE_ROOT="$PWD"
+export OPENFDD_IMAGE_TAG=3.2.4
+
+docker compose -f docker/compose.edge.rust.yml --profile desktop-json-csv --profile cursor pull
+```
+
+**3. Obtain an integrator JWT** (do not log or commit the token):
+
+```bash
+source scripts/openfdd_auth_lib.sh
+INTEGRATOR_PW="$(openfdd_auth_plaintext_password workspace/auth.env.local integrator)"
+export OPENFDD_MCP_TOKEN="$(
+  curl -s -X POST http://127.0.0.1:8080/api/auth/login \
+    -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg u integrator --arg p "$INTEGRATOR_PW" '{username:$u,password:$p}')" \
+  | jq -r '.token // .access_token'
+)"
+```
+
+**4. Connect Cursor** — add to Cursor MCP settings (WSL path to `docker`):
+
+```json
+{
+  "mcpServers": {
+    "openfdd": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm", "--network", "host",
+        "--entrypoint", "openfdd-mcp",
+        "-e", "OPENFDD_API_BASE=http://127.0.0.1:8080",
+        "-e", "OPENFDD_COMMISSION_BASE=http://127.0.0.1:9091",
+        "-e", "OPENFDD_MCP_TOKEN",
+        "ghcr.io/bbartling/openfdd-edge-rust:3.2.4"
+      ],
+      "env": {
+        "OPENFDD_MCP_TOKEN": "<paste JWT from step 3>"
+      }
+    }
+  }
+}
+```
+
+**Smoke test** (stdio; Ctrl+D to exit):
+
+```bash
+docker run -i --rm --network host --entrypoint openfdd-mcp \
+  -e OPENFDD_API_BASE=http://127.0.0.1:8080 \
+  -e OPENFDD_MCP_TOKEN="$OPENFDD_MCP_TOKEN" \
+  ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-3.2.4}
+```
+
+MCP uses **stdio JSON-RPC** — it is not an HTTP service on a port. Full tool list and bench topology: [mcp/README.md](mcp/README.md).
+
+</details>
+
 ---
 
 ## Develop (Rust)
@@ -438,16 +312,23 @@ Report: backup size, image tag, health pass/fail, whether backup was purged.
 ```bash
 git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
 cp .env.example .env
-docker compose up --build
-# or
+
+# GHCR bridge (recommended — no local Rust/npm in Docker):
+./scripts/openfdd_local_up.sh
+./scripts/openfdd_ui_dev.sh              # Vite :5173, API proxied to :8080
+
+# Native edge (WSL / Linux):
 cargo test --workspace
-cargo run -p open_fdd_edge_prototype
+cargo build --release -p open_fdd_edge_prototype
+OPENFDD_WORKSPACE=$PWD/workspace ./target/release/open_fdd_edge_prototype
 ```
+
+Avoid `docker compose up --build` on small hosts — it compiles Rust + npm in Docker and can OOM. Use `openfdd_local_up.sh` or GHCR images instead.
 
 Production-style local stack with Caddy TLS:
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml up -d
 ./scripts/openfdd_prod_validate.sh
 ```
 

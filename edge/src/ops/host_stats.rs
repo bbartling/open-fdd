@@ -150,11 +150,7 @@ pub fn stats_json() -> Value {
         "memory": memory_block(),
         "storage": storage,
         "network": {"available": false, "note": "Network counters not collected in Rust edge yet"},
-        "ollama": {
-            "api_ok": false,
-            "interactive_chat_enabled": false,
-            "error": "Ollama not wired in Rust edge host stats"
-        },
+        "ollama": super::ollama::probe_status(),
         "container_revisions": {
             "image_tag": env::var("OPENFDD_IMAGE_TAG").unwrap_or_else(|_| "local".into()),
             "git_sha": env::var("OPENFDD_GIT_SHA").unwrap_or_else(|_| "unknown".into()),
