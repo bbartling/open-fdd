@@ -1,0 +1,36 @@
+{
+  "rows": [
+    {
+      "id": "site:school-kw-merged",
+      "dis": "school_kw_merged",
+      "site": "M"
+    },
+    {
+      "id": "source:csv:school-kw-merged",
+      "dis": "CSV source (school-kw-merged)",
+      "source": "M",
+      "protocol": "csv",
+      "importJob": "dataset-school_kw_merged"
+    },
+    {
+      "id": "equip:school-kw-merged",
+      "dis": "school_kw_merged",
+      "equip": "M",
+      "siteRef": "site:school-kw-merged",
+      "sourceRef": "source:csv:school-kw-merged"
+    },
+    {
+      "id": "point:school-kw-merged-temp_f",
+      "dis": "temp_f",
+      "point": "M",
+      "sensor": "M",
+      "kind": "Number",
+      "unit": "°F",
+      "siteRef": "site:school-kw-merged",
+      "equipRef": "equip:school-kw-merged",
+      "sourceRef": "source:csv:school-kw-merged",
+      "fddInput": "temp_f",
+      "csvRef": "csv:source:csv:school-kw-merged:temp_f"
+    }
+  ]
+}
