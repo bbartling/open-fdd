@@ -51,7 +51,17 @@ fn service_status_link(
     obj
 }
 
+/// Stack strip for authenticated callers (may include bind hints).
 pub fn stack_health() -> Value {
+    stack_health_inner(true)
+}
+
+/// Public dashboard snapshot — no BACnet bind or other OT addressing.
+pub fn stack_health_public() -> Value {
+    stack_health_inner(false)
+}
+
+fn stack_health_inner(include_sensitive: bool) -> Value {
     let bacnet_on = protocol_enabled("OPENFDD_BACNET_ENABLED");
     let modbus_on = protocol_enabled("OPENFDD_MODBUS_ENABLED");
     let haystack_on = protocol_enabled("OPENFDD_HAYSTACK_ENABLED");
@@ -141,17 +151,25 @@ pub fn stack_health() -> Value {
         "green"
     };
 
-    json!({
+    let mut body = json!({
         "ok": true,
         "overall": overall,
         "services": services,
-        "bacnet_bind": env::var("OPENFDD_BACNET_BIND").ok()
-    })
+    });
+    if include_sensitive {
+        if let Some(map) = body.as_object_mut() {
+            map.insert(
+                "bacnet_bind".into(),
+                json!(env::var("OPENFDD_BACNET_BIND").ok()),
+            );
+        }
+    }
+    body
 }
 
 pub fn building_snapshot() -> Value {
     json!({
-        "stack": stack_health(),
+        "stack": stack_health_public(),
         "faults": faults::status_json()
     })
 }
@@ -422,6 +440,12 @@ mod tests {
         assert_eq!(body.get("ok").and_then(|v| v.as_bool()), Some(true));
         assert!(body.get("overall").is_some());
         assert!(body.get("services").and_then(|v| v.as_array()).is_some());
+    }
+
+    #[test]
+    fn public_stack_omits_bacnet_bind() {
+        let body = stack_health_public();
+        assert!(body.get("bacnet_bind").is_none());
     }
 
     #[test]

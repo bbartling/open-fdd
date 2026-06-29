@@ -47,6 +47,42 @@ impl BridgeClient {
             .map_err(|e| e.to_string())
     }
 
+    pub fn site_update_dry_run(&self) -> Value {
+        json!({
+            "ok": true,
+            "dry_run": true,
+            "steps": [
+                "./scripts/openfdd_rust_site_backup.sh",
+                "NEW_TAG=<tag> ./scripts/openfdd_rust_site_update.sh",
+                "./scripts/openfdd_rust_edge_validate.sh",
+                "./scripts/openfdd_drivers_validate.sh"
+            ],
+            "doc": "docs/quick-start/rust-site-lifecycle.md",
+            "note": "MCP does not execute site update — operator or bench agent runs scripts on host."
+        })
+    }
+
+    pub fn ghcr_manifest_check(&self, args: &Value) -> Result<Value, String> {
+        let health = self.get("/api/health")?;
+        let running = health
+            .get("image_tag")
+            .or_else(|| health.get("version"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let expected = args
+            .get("expected_tag")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .or_else(|| env::var("OPENFDD_IMAGE_TAG").ok())
+            .unwrap_or_default();
+        Ok(json!({
+            "ok": !expected.is_empty() && running == expected,
+            "running_tag": running,
+            "expected_tag": expected,
+            "doc": "scripts/openfdd_rust_check_ghcr_platform.sh"
+        }))
+    }
+
     pub fn bench_topology(&self) -> Value {
         if let Ok(path) = env::var("OPENFDD_BENCH_TOPOLOGY_FILE") {
             if let Ok(text) = std::fs::read_to_string(&path) {

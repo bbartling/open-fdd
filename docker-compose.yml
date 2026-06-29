@@ -21,7 +21,7 @@ services:
       OPENFDD_MODBUS_PORT: ${OPENFDD_MODBUS_PORT:-1502}
       OPENFDD_MODBUS_UNIT_ID: ${OPENFDD_MODBUS_UNIT_ID:-1}
     ports:
-      - "127.0.0.1:8080:8080"
+      - "${OPENFDD_BIND_HOST:-127.0.0.1}:8080:8080"
     read_only: true
     tmpfs:
       - /tmp

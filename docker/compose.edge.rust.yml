@@ -25,7 +25,7 @@ services:
     pull_policy: always
     container_name: openfdd-bridge
     ports:
-      - "127.0.0.1:8080:8080"
+      - "${OPENFDD_BIND_HOST:-127.0.0.1}:8080:8080"
     volumes:
       - ${OPENFDD_COMPOSE_ROOT:?}/workspace:/var/openfdd/workspace
     environment:
@@ -81,7 +81,7 @@ services:
     image: caddy:2-alpine
     container_name: openfdd-caddy
     ports:
-      - "${OPENFDD_CADDY_HTTP_PORT:-80}:80"
+      - "${OPENFDD_BIND_HOST:-127.0.0.1}:${OPENFDD_CADDY_HTTP_PORT:-80}:80"
     volumes:
       - ${OPENFDD_COMPOSE_ROOT:?}/docker/caddy/Caddyfile.http:/etc/caddy/Caddyfile:ro
     environment:
@@ -97,8 +97,8 @@ services:
     image: caddy:2-alpine
     container_name: openfdd-caddy
     ports:
-      - "${OPENFDD_CADDY_HTTP_PORT:-80}:80"
-      - "${OPENFDD_CADDY_HTTPS_PORT:-443}:443"
+      - "${OPENFDD_BIND_HOST:-127.0.0.1}:${OPENFDD_CADDY_HTTP_PORT:-80}:80"
+      - "${OPENFDD_BIND_HOST:-127.0.0.1}:${OPENFDD_CADDY_HTTPS_PORT:-443}:443"
     volumes:
       - ${OPENFDD_COMPOSE_ROOT:?}/docker/caddy/Caddyfile.tls:/etc/caddy/Caddyfile:ro
       - ${OPENFDD_COMPOSE_ROOT:?}/${OPENFDD_CADDY_CERT_DIR:-workspace/deploy/caddy/certs}:/certs:ro
@@ -126,6 +126,15 @@ services:
       PORT: "9092"
       OPENFDD_WORKSPACE: /var/openfdd/workspace
       OPENFDD_HAYSTACK_ENABLED: ${OPENFDD_HAYSTACK_ENABLED:-1}
+    env_file:
+      - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/data.env.local
+        required: false
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9092/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
 
   openfdd-mcp:

@@ -44,6 +44,7 @@ fn main() -> std::io::Result<()> {
     drivers::bacnet::start_hourly_override_scanner(service_mode.clone());
     drivers::bacnet::start_bacnet_poll_loop(service_mode.clone());
     drivers::bacnet_server_runtime::start_background();
+    drivers::json_api::seed_from_env_if_needed();
     let listener = TcpListener::bind(format!("0.0.0.0:{port}"))?;
     println!("Open-FDD Rust Edge API listening on http://0.0.0.0:{port}");
     for stream in listener.incoming() {
@@ -901,8 +902,10 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             })
         }
         ("POST", "/api/json-api/refresh") => {
-            let payload = serde_json::from_str::<Value>(&body).unwrap_or(json!({}));
-            json_response(&mut stream, drivers::json_api::refresh_point(&payload))
+            require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {
+                let payload = serde_json::from_str::<Value>(&body).unwrap_or(json!({}));
+                drivers::json_api::refresh_point(&payload)
+            })
         }
         ("POST", "/api/json-api/register") => require_role(
             &mut stream,
@@ -911,8 +914,10 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             serde_json::from_str::<Value>(drivers::json_api::register_json()).unwrap(),
         ),
         ("POST", "/api/json-api/request") => {
-            let payload = serde_json::from_str::<Value>(&body).unwrap_or(json!({}));
-            json_response(&mut stream, drivers::json_api::http_request(&payload))
+            require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {
+                let payload = serde_json::from_str::<Value>(&body).unwrap_or(json!({}));
+                drivers::json_api::http_request(&payload)
+            })
         }
         ("POST", "/api/json-api/read_and_store") => require_role(
             &mut stream,
@@ -1082,7 +1087,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
                 status_json(
                     &mut stream,
                     "404 Not Found",
-                    json!({"ok": false, "error": "unknown endpoint", "path": clean_path}),
+                    json!({"ok": false, "error": "unknown endpoint"}),
                 )
             }
         }
@@ -1904,6 +1909,8 @@ fn agent_tools() -> Value {
             {"name":"model.import","method":"POST","path":"/api/model/haystack/import","requires":"integrator|agent"},
             {"name":"model.assignments","method":"GET","path":"/api/model/assignments","requires":"JWT"},
             {"name":"model.assignments_save","method":"POST","path":"/api/model/assignments/save","requires":"integrator|agent"},
+            {"name":"model.sparql_catalog","method":"GET","path":"/api/model/sparql/predefined","requires":"JWT"},
+            {"name":"model.sparql","method":"POST","path":"/api/model/sparql","requires":"JWT"},
             {"name":"model.resolve","method":"POST","path":"/api/model/assignments/resolve","requires":"JWT"},
             {"name":"control.cdl_bindings","method":"GET","path":"/api/control/cdl/bindings","requires":"JWT"},
             {"name":"control.cdl_bindings_save","method":"POST","path":"/api/control/cdl/bindings/save","requires":"integrator|agent"},
@@ -2007,8 +2014,8 @@ fn cors_origin() -> String {
 fn security_headers(content_type: &str, is_auth: bool) -> String {
     let mut h = String::new();
     h.push_str("X-Content-Type-Options: nosniff\r\n");
-    h.push_str("Referrer-Policy: strict-origin-when-cross-origin\r\n");
-    h.push_str("X-Frame-Options: SAMEORIGIN\r\n");
+    h.push_str("Referrer-Policy: no-referrer\r\n");
+    h.push_str("X-Frame-Options: DENY\r\n");
     h.push_str("Cross-Origin-Opener-Policy: same-origin\r\n");
     h.push_str("Cross-Origin-Resource-Policy: same-origin\r\n");
     h.push_str("Permissions-Policy: geolocation=(), microphone=(), camera=()\r\n");
