@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import { apiFetch, hasToken } from "../lib/api";
+import { notifyClearAgentChat } from "../lib/agentChatStore";
 import { formatApiError } from "../lib/formatApiError";
 
 type AgentConfig = {
@@ -43,6 +44,8 @@ export default function AgentPage() {
   const [config, setConfig] = useState<AgentConfig | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [actionMsg, setActionMsg] = useState("");
+  const [actionBusy, setActionBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!hasToken()) return;
@@ -60,6 +63,27 @@ export default function AgentPage() {
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  const clearChatHistory = useCallback(() => {
+    notifyClearAgentChat();
+    setActionMsg("Chat history cleared in this browser.");
+  }, []);
+
+  const restartAgent = useCallback(async () => {
+    if (!hasToken()) return;
+    setActionBusy(true);
+    setActionMsg("");
+    setError("");
+    try {
+      await apiFetch("/api/agent/reset", { method: "POST" });
+      setActionMsg("Agent session restarted — next prompt starts a fresh Codex run.");
+      await refresh();
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setActionBusy(false);
+    }
   }, [refresh]);
 
   const ollama = config?.ollama;
@@ -80,6 +104,30 @@ export default function AgentPage() {
       ) : null}
 
       {error ? <p className="error">{error}</p> : null}
+      {actionMsg ? <p className="muted">{actionMsg}</p> : null}
+
+      <section className="panel">
+        <div className="toolbar">
+          <h3 className="panel-title">Chat session</h3>
+        </div>
+        <p className="muted">
+          Clear local chat history in the agent rail, or restart the Codex relay session (cancels in-flight work and
+          drops server-side session state).
+        </p>
+        <div className="toolbar">
+          <button type="button" className="secondary-btn" disabled={!hasToken()} onClick={clearChatHistory}>
+            Clear chat history
+          </button>
+          <button
+            type="button"
+            className="secondary-btn"
+            disabled={!hasToken() || actionBusy}
+            onClick={() => void restartAgent()}
+          >
+            {actionBusy ? "Restarting…" : "Restart agent"}
+          </button>
+        </div>
+      </section>
 
       <section className="panel">
         <div className="toolbar">

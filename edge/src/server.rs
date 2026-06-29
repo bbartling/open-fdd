@@ -234,6 +234,12 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent", "operator"],
             ops::agent_chat::cancel_reply,
         ),
+        ("POST", "/api/agent/reset") => require_role_lazy(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            ops::agent_chat::reset_reply,
+        ),
         ("POST", "/api/agent/bootstrap") => require_role(
             &mut stream,
             &principal,

@@ -134,6 +134,17 @@ pub fn cancel_reply() -> Value {
     })
 }
 
+pub fn reset_reply() -> Value {
+    let codex_cancel = codex_relay::cancel_active();
+    let codex_reset = codex_relay::reset_session();
+    json!({
+        "ok": true,
+        "codex_cancel": codex_cancel,
+        "codex_reset": codex_reset,
+        "note": "Codex session cleared; next chat starts fresh. Clear browser chat separately if needed."
+    })
+}
+
 fn parse_history(raw: Option<&Value>) -> Vec<Value> {
     let Some(arr) = raw.and_then(|v| v.as_array()) else {
         return Vec::new();

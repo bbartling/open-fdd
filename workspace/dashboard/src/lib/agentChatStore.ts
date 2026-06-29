@@ -166,6 +166,14 @@ export function deleteMessageAndAfter(state: AgentChatState, id: string): AgentC
   };
 }
 
+export const AGENT_CHAT_CLEAR_EVENT = "ofdd-agent-chat-clear";
+
 export function clearAgentChat(): void {
   localStorage.removeItem(STORAGE_KEY);
+}
+
+/** Clear persisted chat and notify open agent panels to reset UI state. */
+export function notifyClearAgentChat(): void {
+  clearAgentChat();
+  window.dispatchEvent(new CustomEvent(AGENT_CHAT_CLEAR_EVENT));
 }

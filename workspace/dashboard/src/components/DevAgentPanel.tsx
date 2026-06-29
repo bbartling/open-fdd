@@ -7,6 +7,7 @@ import {
   appendPendingAssistant,
   appendUserMessage,
   buildChatHistoryPayload,
+  AGENT_CHAT_CLEAR_EVENT,
   loadAgentChat,
   resolveAssistant,
   saveAgentChat,
@@ -39,6 +40,16 @@ export default function DevAgentPanel() {
   useEffect(() => {
     saveAgentChat(chat);
   }, [chat]);
+
+  useEffect(() => {
+    const onClear = () => {
+      queueRef.current = [];
+      setQueue([]);
+      setChat(loadAgentChat());
+    };
+    window.addEventListener(AGENT_CHAT_CLEAR_EVENT, onClear);
+    return () => window.removeEventListener(AGENT_CHAT_CLEAR_EVENT, onClear);
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

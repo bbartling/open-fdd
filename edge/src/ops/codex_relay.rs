@@ -128,15 +128,22 @@ pub fn chat(body: &Value) -> Result<Value, String> {
 }
 
 pub fn cancel_active() -> Value {
-    let base = base_url();
+    post_short(&format!("{}/cancel", base_url()))
+}
+
+pub fn reset_session() -> Value {
+    post_short(&format!("{}/reset", base_url()))
+}
+
+fn post_short(url: &str) -> Value {
     match client()
-        .post(format!("{base}/cancel"))
+        .post(url)
         .timeout(Duration::from_secs(5))
         .send()
     {
         Ok(resp) => resp
             .json()
-            .unwrap_or(json!({"ok": true, "cancelled": true})),
+            .unwrap_or(json!({"ok": true})),
         Err(err) => json!({
             "ok": false,
             "error": err.to_string(),
