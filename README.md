@@ -233,6 +233,25 @@ Report: backup size, image tag, health pass/fail, whether backup was purged.
 </details>
 
 <details>
+<summary><strong>Field bench: required workspace/data.env.local keys</strong></summary>
+
+Copy `workspace/bench/data.env.local.example` → `workspace/data.env.local` on OT benches. Never commit filled secrets.
+
+| Key | Required for | Notes |
+|-----|----------------|-------|
+| `OPENFDD_MODBUS_HOST` / `PORT` | Modbus live gate | Set `OPENFDD_MODBUS_MODE=live` |
+| `OPENFDD_BACNET_SERVER_ENABLED=0` | BACnet Who-Is on commission :9091 | Bench uses host-network commission |
+| `OPENFDD_JSON_API_ENABLED=1` | JSON API driver | Also set `OPENFDD_JSON_API_URL` (bridge seeds endpoints on 3.2.4+) |
+| `OPENFDD_HAYSTACK_USER` | Haystack Niagara | HTTP **Basic** auth — not SCRAM |
+| `OPENFDD_HAYSTACK_PASS` | Haystack strict gate | Niagara password; restart bridge after set |
+
+After editing: `./scripts/openfdd_bench_safe_restart.sh` then `OPENFDD_DRIVERS_VALIDATE_STRICT=1 ./scripts/openfdd_drivers_validate.sh`.
+
+See [docs/bench-validation.md](docs/bench-validation.md).
+
+</details>
+
+<details>
 <summary><strong>Optional: MCP sidecar for Cursor (after edge update)</strong></summary>
 
 `openfdd_rust_site_update.sh` pulls the **core edge stack only**. MCP and Cursor chat relay are opt-in compose profiles.
