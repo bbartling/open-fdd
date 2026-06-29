@@ -8,7 +8,7 @@ on:
       version:
         description: "SemVer release version (e.g. 3.2.4)"
         required: true
-        default: "3.2.4"
+        default: "3.2.5"
       prerelease:
         description: "Mark GitHub Release as pre-release (skips :latest on GHCR)"
         required: false
