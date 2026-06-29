@@ -8,9 +8,7 @@ pub mod login;
 pub mod password;
 pub mod rbac;
 
-pub use config::{AuthConfig, Principal};
-pub use jwt::Claims;
-pub use login::LoginResult;
+pub use config::AuthConfig;
 
 use std::sync::OnceLock;
 
@@ -18,8 +16,4 @@ static AUTH: OnceLock<AuthConfig> = OnceLock::new();
 
 pub fn auth_config() -> &'static AuthConfig {
     AUTH.get_or_init(AuthConfig::load)
-}
-
-pub fn reload_auth_config_for_tests() -> AuthConfig {
-    AuthConfig::load()
 }
