@@ -65,10 +65,7 @@ fn client() -> Client {
 
 pub fn probe_quick() -> Option<String> {
     let url = base_url();
-    let resp = client()
-        .get(format!("{url}/health"))
-        .send()
-        .ok()?;
+    let resp = client().get(format!("{url}/health")).send().ok()?;
     if resp.status() != StatusCode::OK {
         return None;
     }
