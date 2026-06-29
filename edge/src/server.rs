@@ -1223,6 +1223,26 @@ fn handle_fdd_wires_dynamic(
                 fdd::wires::api::save_rule(&payload, &principal.sub),
             ))
         }
+        ("PATCH", ["api", "fdd-rules", rule_id]) => Some(require_role(
+            stream,
+            principal,
+            &["integrator", "agent"],
+            fdd::datafusion_sql::patch_rule_response(
+                rule_id,
+                &parse_json_body_or_empty(body),
+                &principal.sub,
+            ),
+        )),
+        ("PATCH", ["api", "rules", rule_id]) => Some(require_role(
+            stream,
+            principal,
+            &["integrator", "agent"],
+            fdd::datafusion_sql::patch_rule_response(
+                rule_id,
+                &parse_json_body_or_empty(body),
+                &principal.sub,
+            ),
+        )),
         ("POST", ["api", "fdd-rules", rule_id, "validate-sql"]) => {
             let mut payload = parse_json_body_or_empty(body);
             payload["rule_id"] = json!(rule_id);

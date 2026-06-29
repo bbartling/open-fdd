@@ -1,39 +1,26 @@
-# Bench automation expectations (openfdd_mcp_eval.sh, patch cycle).
-# MCP tool names use openfdd_* prefix; legacy short aliases are also registered.
+# Bench discovery profile — copy values into workspace/smoke-profiles or export as env.
+# No hardcoded secrets in repo; operator fills workspace/data.env.local.
 
-[mcp]
-required_tools = [
-  "openfdd_health",
-  "openfdd_stack_status",
-  "openfdd_driver_status",
-  "openfdd_haystack_status",
-  "openfdd_haystack_test",
-  "openfdd_bacnet_whois",
-  "openfdd_validation_run_status",
-  "openfdd_reports_list",
-  "openfdd_model_sparql_catalog",
-  "openfdd_model_sparql",
-  "openfdd_bench_topology",
-]
+[bench]
+nic = "enp3s0"
+bridge = "http://127.0.0.1:8080"
+commission = "http://127.0.0.1:9091"
 
-[mcp.aliases]
-site_health = "openfdd_health"
-stack_status = "openfdd_stack_status"
-haystack_test = "openfdd_haystack_test"
-driver_poll_status = "openfdd_driver_status"
-report_list = "openfdd_reports_list"
-bacnet_whois = "openfdd_bacnet_whois"
-validation_run_status = "openfdd_validation_run_status"
+[modbus]
+host = "192.168.204.14"
+port = 1502
+unit_id = 1
 
-[sparql]
-# Routes: GET /api/model/sparql/predefined, POST /api/model/sparql (JWT required)
-min_version = "3.2.3"
-skip_below_version = true
+[bacnet]
+validate_device = "5007"
+validate_host = "192.168.204.11"
+commission_nic = "192.168.204.55"
 
 [haystack]
-requires_env = ["OPENFDD_HAYSTACK_PASS"]
-requires_toml = "workspace/haystack/local.nhaystack.toml"
+base_url = "https://192.168.204.11/haystack"
+auth = "basic"
+tls_verify = false
 
-[json_api]
-requires_endpoints_file = "workspace/data/json_api/endpoints.json"
-env_seed_url = "OPENFDD_JSON_API_URL"
+[mcp]
+expected_tools_prefix = "openfdd_"
+expected_tool_count_min = 15

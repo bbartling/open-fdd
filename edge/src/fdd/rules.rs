@@ -94,6 +94,24 @@ pub fn save_rule(payload: &Value, actor: &str) -> Value {
     json!({"ok": true, "saved": true, "rule_id": rule_id, "path": path.display().to_string(), "review_status": rule["review_status"]})
 }
 
+/// Merge partial updates into an existing rule (PATCH semantics).
+pub fn patch_rule(rule_id: &str, patch: &Value, actor: &str) -> Value {
+    let existing = get_rule(rule_id);
+    if existing.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return existing;
+    }
+    let mut rule = existing.get("rule").cloned().unwrap_or_else(|| json!({}));
+    if let Some(obj) = patch.as_object() {
+        for (key, value) in obj {
+            if key != "rule_id" {
+                rule[key] = value.clone();
+            }
+        }
+    }
+    rule["rule_id"] = json!(rule_id);
+    save_rule(&rule, actor)
+}
+
 pub fn validate_rule_sql(payload: &Value) -> Value {
     let sql = payload.get("sql").and_then(|v| v.as_str()).unwrap_or("");
     let mut validation = sql_safety::validate_sql(sql);
@@ -245,5 +263,21 @@ mod tests {
         let body = rule_template("kw_flatline_or_zero");
         assert_eq!(body["ok"], true);
         assert_eq!(body["rule"]["required_inputs"], json!(["kw"]));
+    }
+
+    #[test]
+    fn patch_rule_updates_confirmation_seconds() {
+        with_temp_workspace(|_| {
+            let rule = template_oa_rule();
+            let _ = save_rule(&rule, "integrator");
+            let out = patch_rule(
+                "oa_temp_out_of_range",
+                &json!({"confirmation_seconds": 600}),
+                "agent",
+            );
+            assert_eq!(out["ok"].as_bool(), Some(true));
+            let loaded = get_rule("oa_temp_out_of_range");
+            assert_eq!(loaded["rule"]["confirmation_seconds"].as_i64(), Some(600));
+        });
     }
 }
