@@ -183,6 +183,116 @@ fn join_schools_then_weather() {
 }
 
 #[test]
+fn preflight_and_execute_fail_closed() {
+    with_temp_workspace(|_| {
+        use base64::Engine;
+        let prev = open_fdd_edge_prototype::csv_ingest::preview_json_handler(&json!({
+            "files": [{
+                "filename": "bad.csv",
+                "content_base64": base64::engine::general_purpose::STANDARD.encode("not,a,csv\n1,2,3")
+            }]
+        }));
+        let sid = prev.get("session_id").and_then(|v| v.as_str()).unwrap();
+        let plan_body = json!({
+            "session_id": sid,
+            "plan": {
+                "mode": "single",
+                "output_dataset_name": "bad_test",
+                "ambiguous_policy": "first",
+                "fill_policy": "none",
+                "files": [{
+                    "filename": "bad.csv",
+                    "timestamp_column": "not",
+                    "timezone": "UTC",
+                    "value_columns": ["a"]
+                }]
+            }
+        });
+        let _planned = open_fdd_edge_prototype::csv_ingest::plan_handler(&plan_body);
+        let preflight = open_fdd_edge_prototype::csv_ingest::preflight_handler(&json!({
+            "session_id": sid
+        }));
+        assert_ne!(
+            preflight.get("verdict").and_then(|v| v.as_str()),
+            Some("fail")
+        );
+        let exec = open_fdd_edge_prototype::csv_ingest::execute_handler(&json!({
+            "session_id": sid
+        }));
+        assert_eq!(exec.get("ok").and_then(|v| v.as_bool()), Some(false));
+        assert!(
+            exec.get("validation").is_some() || exec.get("error").is_some(),
+            "{exec:?}"
+        );
+    });
+}
+
+#[test]
+fn ingest_contract_json_shape() {
+    let c = open_fdd_edge_prototype::ingest::contract_json();
+    assert_eq!(
+        c.get("contract_id").and_then(|v| v.as_str()),
+        Some("openfdd-ingest-v1")
+    );
+    assert!(c
+        .get("profiles")
+        .and_then(|v| v.get("historian_wide_csv"))
+        .is_some());
+}
+
+#[test]
+fn preflight_passes_school_sample() {
+    with_temp_workspace(|_| {
+        use base64::Engine;
+        let prev = open_fdd_edge_prototype::csv_ingest::preview_json_handler(&json!({
+            "files": [{
+                "filename": "school.csv",
+                "content_base64": base64::engine::general_purpose::STANDARD.encode(
+                    include_str!("fixtures/csv_ingest/school_kw_sample.csv")
+                )
+            }]
+        }));
+        let sid = prev.get("session_id").and_then(|v| v.as_str()).unwrap();
+        open_fdd_edge_prototype::csv_ingest::plan_handler(&json!({
+            "session_id": sid,
+            "plan": {
+                "mode": "single",
+                "output_dataset_name": "school_preflight",
+                "ambiguous_policy": "first",
+                "fill_policy": "none",
+                "files": [{
+                    "filename": "school.csv",
+                    "timestamp_column": "Date",
+                    "timezone": "America/Chicago",
+                    "value_columns": ["kW"]
+                }]
+            }
+        }));
+        let preflight = open_fdd_edge_prototype::csv_ingest::preflight_handler(&json!({
+            "session_id": sid
+        }));
+        assert_ne!(
+            preflight.get("verdict").and_then(|v| v.as_str()),
+            Some("fail")
+        );
+        assert!(
+            preflight
+                .get("preview")
+                .and_then(|v| v.get("row_count"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                > 0
+        );
+        if preflight.get("verdict").and_then(|v| v.as_str()) == Some("pass") {
+            assert_eq!(
+                preflight.get("can_execute").and_then(|v| v.as_bool()),
+                Some(true)
+            );
+        }
+    });
+}
+
+#[test]
 fn plan_api_append_mode() {
     with_temp_workspace(|_| {
         use base64::Engine;

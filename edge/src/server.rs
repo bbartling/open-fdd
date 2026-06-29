@@ -8,7 +8,7 @@ use crate::auth::login::{authenticate, login_response};
 use crate::auth::rbac::{can_write_field_bus, role_allowed};
 use crate::{
     control, csv_ingest, dashboard, data_management, drivers, export, faults, fdd, historian,
-    import, model, ops, reports, timeseries, validation, version,
+    import, ingest, model, ops, reports, timeseries, validation, version,
 };
 
 use serde_json::{json, Value};
@@ -252,6 +252,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/bridge/status") => raw_json(&mut stream, ops::bridge::status_json()),
         ("GET", "/api/agent/manifest") => json_response(&mut stream, agent_manifest()),
         ("GET", "/api/agent/tools") => json_response(&mut stream, agent_tools()),
+        ("GET", "/api/ingest/contract") => json_response(&mut stream, ingest::contract_json()),
         ("POST", "/api/agent/dev-harness") => require_role_lazy(
             &mut stream,
             &principal,
@@ -499,6 +500,12 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &principal,
             &["integrator", "agent"],
             csv_ingest::plan_handler(&parse_json_body_or_empty(&body)),
+        ),
+        ("POST", "/api/csv/import/preflight") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            csv_ingest::preflight_handler(&parse_json_body_or_empty(&body)),
         ),
         ("POST", "/api/csv/import/execute") => require_role(
             &mut stream,
@@ -2025,16 +2032,27 @@ fn agent_tools() -> Value {
             {"name":"fdd.run","method":"POST","path":"/api/fdd/run","requires":"integrator|agent"},
             {"name":"fdd.wires.graphs","method":"GET","path":"/api/fdd-wires/graphs","requires":"JWT"},
             {"name":"fdd.wires.propose","method":"POST","path":"/api/fdd-wires/propose-assignments","requires":"integrator|agent"},
-            {"name":"fdd.rules.list","method":"GET","path":"/api/fdd-rules","requires":"JWT"},
-            {"name":"fdd.rules.activate","method":"POST","path":"/api/fdd-rules/{id}/activate","requires":"integrator"},
-            {"name":"rules.batch","method":"POST","path":"/api/rules/batch","requires":"integrator|agent"},
+            {"name":"csv.import.preview","method":"POST","path":"/api/csv/import/preview","requires":"integrator|agent"},
+            {"name":"csv.import.plan","method":"POST","path":"/api/csv/import/plan","requires":"integrator|agent"},
+            {"name":"csv.import.preflight","method":"POST","path":"/api/csv/import/preflight","requires":"integrator|agent"},
+            {"name":"csv.import.execute","method":"POST","path":"/api/csv/import/execute","requires":"integrator|agent"},
+            {"name":"ingest.contract","method":"GET","path":"/api/ingest/contract","public":true},
+            {"name":"csv.workbench.quality","method":"POST","path":"/api/csv-workbench/quality","requires":"integrator|agent"},
+            {"name":"model.commissioning_export","method":"GET","path":"/api/model/commissioning-export","requires":"JWT"},
+            {"name":"model.commissioning_import","method":"POST","path":"/api/model/commissioning-import","requires":"integrator|agent"},
+            {"name":"reports.from_fdd_sql_run","method":"POST","path":"/api/reports/from-fdd-sql-run","requires":"integrator|agent"},
+            {"name":"fdd.rules.save","method":"POST","path":"/api/fdd-rules","requires":"integrator"},
+            {"name":"fdd.rules.test_sql","method":"POST","path":"/api/fdd-rules/{id}/test-sql","requires":"integrator|agent"},
             {"name":"historian.query","method":"POST","path":"/api/historian/query","requires":"JWT"},
             {"name":"reports.templates","method":"GET","path":"/api/reports/templates","requires":"JWT"},
             {"name":"reports.draft","method":"POST","path":"/api/reports/draft","requires":"integrator|agent"},
             {"name":"reports.render_pdf","method":"POST","path":"/api/reports/{id}/render/pdf","requires":"integrator|agent"},
             {"name":"reports.download_pdf","method":"GET","path":"/api/reports/{id}/download.pdf","requires":"JWT"},
             {"name":"reports.rcx_plan","method":"POST","path":"/api/reports/rcx/plan","requires":"JWT"},
-            {"name":"reports.rcx_generate","method":"POST","path":"/api/reports/rcx/generate","requires":"integrator|agent"},
+            {"name":"fdd.rules.list","method":"GET","path":"/api/fdd-rules","requires":"JWT"},
+            {"name":"fdd.rules.activate","method":"POST","path":"/api/fdd-rules/{id}/activate","requires":"integrator"},
+            {"name":"rules.batch","method":"POST","path":"/api/rules/batch","requires":"integrator|agent"},
+            {"name":"timeseries.series","method":"GET","path":"/api/timeseries/series","requires":"JWT"},
             {"name":"ops.update","method":"POST","path":"/api/ops/docker/update","requires":"integrator|agent"}
         ]
     })

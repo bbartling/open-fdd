@@ -2,6 +2,7 @@
 
 use super::{analytics, building_status, summary};
 use crate::faults;
+use crate::historian::store;
 use crate::ops::ollama;
 use serde_json::{json, Value};
 use std::env;
@@ -111,12 +112,29 @@ fn gather_context() -> Value {
         }
     }
 
-    let deployment_mode = classify_deployment(&active_sources, eq_count, pt_count);
     let historian = sum.get("historian_health").cloned().unwrap_or(json!({}));
     let row_count = historian
         .get("row_count")
         .and_then(|v| v.as_u64())
         .unwrap_or(0);
+    if row_count > 0 {
+        if let Ok(rows) = store::load_pivot_rows() {
+            let csv_rows = rows
+                .iter()
+                .filter(|r| {
+                    r.get("source_driver").and_then(|v| v.as_str()) == Some("csv")
+                        || r.get("source")
+                            .and_then(|v| v.as_str())
+                            .is_some_and(|s| s.starts_with("csv:") || s == "csv")
+                })
+                .count();
+            if csv_rows > 0 && !active_sources.iter().any(|s| s.starts_with("csv")) {
+                active_sources.push(format!("csv ({csv_rows} historian rows)"));
+            }
+        }
+    }
+
+    let deployment_mode = classify_deployment(&active_sources, eq_count, pt_count);
 
     let prior = read_cache()
         .and_then(|c| c.get("memory").cloned())

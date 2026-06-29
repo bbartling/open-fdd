@@ -2,8 +2,8 @@
 
 use crate::csv_ingest::parse::parse_csv_text;
 use crate::csv_ingest::timestamp::{
-    analyze_timestamps, default_tz, is_timestamp_candidate, localize_timestamp,
-    parse_timestamp_loose, ParseStatus, ParsedTimestamp, TimestampAnalysis,
+    analyze_timestamps, default_tz, is_timestamp_candidate, ParseStatus, ParsedTimestamp,
+    TimestampAnalysis,
 };
 use chrono::{DateTime, Timelike, Utc};
 use chrono_tz::Tz;
@@ -138,17 +138,7 @@ pub fn parse_file_to_rows(
                 rec.get(*idx).unwrap_or("").to_string(),
             );
         }
-        let pt = if let Some(naive) = parse_timestamp_loose(&raw_ts) {
-            localize_timestamp(naive, tz, ambiguous_policy)
-        } else {
-            ParsedTimestamp {
-                ts_utc: None,
-                ts_local: None,
-                raw: raw_ts.clone(),
-                status: ParseStatus::Failed,
-                fold: None,
-            }
-        };
+        let pt = crate::csv_ingest::timestamp::parse_row_timestamp(&raw_ts, tz, ambiguous_policy);
         rows.push(OutputRow {
             ts_utc: pt.ts_utc,
             ts_local: pt

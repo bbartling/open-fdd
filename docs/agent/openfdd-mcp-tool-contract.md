@@ -27,11 +27,21 @@ Read-first sidecar. JWT via `OPENFDD_MCP_TOKEN`. Bind `127.0.0.1` or site VLAN o
 | `openfdd_model_coverage` | `GET /api/dashboard/model-coverage` | JWT |
 | `openfdd_csv_import_preview` | `POST /api/csv/import/preview` (path/base64/multipart) | JWT |
 | `openfdd_csv_import_plan` | `POST /api/csv/import/plan` | JWT |
+| `openfdd_ingest_contract` | `GET /api/ingest/contract` | none |
+| `openfdd_csv_import_preflight` | `POST /api/csv/import/preflight` | JWT |
+| `openfdd_csv_workbench_quality` | `POST /api/csv-workbench/quality` | JWT |
+| `openfdd_model_commissioning_export` | `GET /api/model/commissioning-export` | JWT |
+| `openfdd_model_commissioning_import` | `POST /api/model/commissioning-import` | JWT + write gate |
 | `openfdd_csv_fusion_preview` | `GET /api/csv/import/sessions/{id}/fusion-preview` | JWT |
-| `openfdd_csv_import_execute` | `POST /api/csv/import/execute` | JWT + write gate |
+| `openfdd_csv_import_execute` | `POST /api/csv/import/execute` | JWT + write gate + preflight pass |
 | `openfdd_historian_query` | `GET/POST /api/historian/query` | JWT |
 | `openfdd_fdd_rules_list` | `GET /api/fdd-rules` | JWT |
 | `openfdd_fdd_rule_test_sql` | `POST /api/fdd-rules/{id}/test-sql` | JWT |
+| `openfdd_rules_batch` | `POST /api/rules/batch` | JWT + write gate |
+| `openfdd_fdd_rules_save` | `POST /api/fdd-rules` | JWT + write gate |
+| `openfdd_fdd_rules_activate` | `POST /api/fdd-rules/{id}/activate` | JWT + write gate |
+| `openfdd_reports_from_fdd_sql_run` | `POST /api/reports/from-fdd-sql-run` | JWT + write gate |
+| `openfdd_integration_smoke` | Composite playbook | JWT (+ write gate if confirm) |
 | `openfdd_fdd_run` | `POST /api/fdd/run` | JWT + write gate |
 | `openfdd_model_assignments_save` | `POST /api/model/assignments/save` | JWT + write gate |
 | `openfdd_reports_draft` | `POST /api/reports/draft` | JWT + write gate |
@@ -68,8 +78,13 @@ Requires **`OPENFDD_MCP_ALLOW_WRITES=1`** and **`confirm: true`** on each tool c
 
 | Tool | REST | Risk |
 |------|------|------|
-| `openfdd_csv_import_execute` | `POST /api/csv/import/execute` | Arrow/historian write |
-| `openfdd_fdd_run` | `POST /api/fdd/run` | Live FDD evaluation |
+| `openfdd_csv_import_execute` | `POST /api/csv/import/execute` | Arrow/historian write (preflight pass required) |
+| `openfdd_model_commissioning_import` | `POST /api/model/commissioning-import` | Model + rules import |
+| `openfdd_rules_batch` | `POST /api/rules/batch` | Run saved FDD rules |
+| `openfdd_fdd_rules_save` | `POST /api/fdd-rules` | Save SQL rule |
+| `openfdd_fdd_rules_activate` | `POST /api/fdd-rules/{id}/activate` | Activate rule |
+| `openfdd_reports_from_fdd_sql_run` | `POST /api/reports/from-fdd-sql-run` | PDF from SQL run |
+| `openfdd_fdd_run` | `POST /api/fdd/run` | Live FDD evaluation (ad-hoc SQL) |
 | `openfdd_model_assignments_save` | `POST /api/model/assignments/save` | Model binding |
 | `openfdd_reports_draft` | `POST /api/reports/draft` | Report create |
 | `openfdd_reports_patch` | `PATCH /api/reports/{id}` | Report edit |

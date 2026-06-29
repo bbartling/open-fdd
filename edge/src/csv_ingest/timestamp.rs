@@ -116,6 +116,40 @@ pub fn parse_timestamp_loose(s: &str) -> Option<NaiveDateTime> {
     None
 }
 
+/// Parse timestamp for ingest: preserve RFC3339 offset as UTC; otherwise localize with plan timezone.
+pub fn parse_row_timestamp(raw: &str, tz: Tz, ambiguous_policy: &str) -> ParsedTimestamp {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return ParsedTimestamp {
+            ts_utc: None,
+            ts_local: None,
+            raw: raw.to_string(),
+            status: ParseStatus::Failed,
+            fold: None,
+        };
+    }
+    if let Ok(dt) = DateTime::parse_from_rfc3339(trimmed) {
+        let utc = dt.with_timezone(&Utc);
+        return ParsedTimestamp {
+            ts_utc: Some(utc),
+            ts_local: Some(utc.naive_utc()),
+            raw: raw.to_string(),
+            status: ParseStatus::Ok,
+            fold: Some("rfc3339_offset_preserved".into()),
+        };
+    }
+    if let Some(naive) = parse_timestamp_loose(trimmed) {
+        return localize_timestamp(naive, tz, ambiguous_policy);
+    }
+    ParsedTimestamp {
+        ts_utc: None,
+        ts_local: None,
+        raw: raw.to_string(),
+        status: ParseStatus::Failed,
+        fold: None,
+    }
+}
+
 pub fn localize_timestamp(naive: NaiveDateTime, tz: Tz, ambiguous_policy: &str) -> ParsedTimestamp {
     let raw = naive.format("%Y-%m-%d %H:%M:%S").to_string();
     match tz.from_local_datetime(&naive) {
@@ -259,5 +293,17 @@ mod tests {
             .unwrap();
         let pt = localize_timestamp(naive, tz, "first");
         assert_eq!(pt.status, ParseStatus::Gap);
+    }
+
+    #[test]
+    fn rfc3339_offset_preserved_as_utc() {
+        let tz: Tz = "America/Chicago".parse().unwrap();
+        let pt = parse_row_timestamp("2013-06-19T05:15:00-05:00", tz, "first");
+        assert_eq!(pt.status, ParseStatus::Ok);
+        assert_eq!(pt.fold.as_deref(), Some("rfc3339_offset_preserved"));
+        let expected = DateTime::parse_from_rfc3339("2013-06-19T05:15:00-05:00")
+            .unwrap()
+            .with_timezone(&Utc);
+        assert_eq!(pt.ts_utc, Some(expected));
     }
 }

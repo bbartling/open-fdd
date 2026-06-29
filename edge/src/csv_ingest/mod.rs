@@ -168,12 +168,14 @@ pub fn plan_handler(body: &Value) -> Value {
         Err(e) => return json!({"ok": false, "error": e}),
     };
     let preview = preview_rows(&rows, 100);
-    let validation_report = json!({
-        "timestamp_analysis": preview.timestamp_analysis,
-        "warnings": preview.warnings,
-        "row_count": preview.row_count,
-        "quarantined": 0,
-    });
+    let files = session
+        .get("files")
+        .and_then(|v| v.as_array())
+        .map(|a| a.as_slice())
+        .unwrap_or(&[]);
+    let quarantined = crate::ingest::validate::quarantined_count_from_session(&session);
+    let validation_report =
+        crate::ingest::validate::merge_validation_report(&preview, files, quarantined);
     session["plan"] = serde_json::to_value(&plan).unwrap_or(json!({}));
     session["status"] = json!("planned");
     session["validation_report"] = validation_report.clone();
@@ -282,6 +284,77 @@ fn execute_plan_preview(
     }
 }
 
+pub fn preflight_handler(body: &Value) -> Value {
+    let session_id = body
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let Some(mut session) = load_session(session_id) else {
+        return json!({"ok": false, "error": "session not found"});
+    };
+
+    let plan = if body.get("plan").is_some() {
+        match plan_from_json(body.get("plan").unwrap_or(body)) {
+            Ok(p) => p,
+            Err(e) => return json!({"ok": false, "error": e}),
+        }
+    } else {
+        match session.get("plan").cloned() {
+            Some(v) => match serde_json::from_value(v) {
+                Ok(p) => p,
+                Err(e) => return json!({"ok": false, "error": e.to_string()}),
+            },
+            None => {
+                return json!({"ok": false, "error": "no plan on session — POST /api/csv/import/plan first"})
+            }
+        }
+    };
+
+    let rows = match execute_plan_preview(&plan, session_id) {
+        Ok(r) => r,
+        Err(e) => return json!({"ok": false, "error": e}),
+    };
+    let preview = preview_rows(&rows, 100);
+    let files: Vec<Value> = session
+        .get("files")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let quarantined = crate::ingest::validate::quarantined_count_from_session(&session);
+    let validation_report =
+        crate::ingest::validate::merge_validation_report(&preview, &files, quarantined);
+
+    if body.get("plan").is_some() {
+        session["plan"] = serde_json::to_value(&plan).unwrap_or(json!({}));
+        session["validation_report"] = validation_report.clone();
+        session["status"] = json!("planned");
+        let _ = save_session(session_id, &session);
+    }
+
+    let validation =
+        crate::ingest::validate::evaluate_csv_session(crate::ingest::validate::ValidationInput {
+            session_files: &files,
+            plan: Some(&plan),
+            preview: Some(&preview),
+            validation_report: Some(&validation_report),
+        });
+
+    json!({
+        "ok": validation.get("ok"),
+        "session_id": session_id,
+        "verdict": validation.get("verdict"),
+        "validation": validation,
+        "validation_report": validation_report,
+        "preview": {
+            "row_count": preview.row_count,
+            "column_names": preview.column_names,
+            "time_range": preview.time_range,
+            "timestamp_analysis": preview.timestamp_analysis
+        },
+        "can_execute": validation.get("verdict") == Some(&json!("pass")) || !crate::ingest::validate::csv_strict_enabled()
+    })
+}
+
 pub fn execute_handler(body: &Value) -> Value {
     let session_id = body
         .get("session_id")
@@ -304,10 +377,34 @@ pub fn execute_handler(body: &Value) -> Value {
         Err(e) => return json!({"ok": false, "error": e}),
     };
     let preview = preview_rows(&rows, 5);
-    let validation_report = session
-        .get("validation_report")
-        .cloned()
-        .unwrap_or_else(|| json!({"warnings": preview.warnings}));
+    let files = session
+        .get("files")
+        .and_then(|v| v.as_array())
+        .map(|a| a.as_slice())
+        .unwrap_or(&[]);
+    let quarantined = crate::ingest::validate::quarantined_count_from_session(&session);
+    let validation_report =
+        crate::ingest::validate::merge_validation_report(&preview, files, quarantined);
+
+    if crate::ingest::validate::csv_strict_enabled() {
+        let validation = crate::ingest::validate::evaluate_csv_session(
+            crate::ingest::validate::ValidationInput {
+                session_files: files,
+                plan: Some(&plan),
+                preview: Some(&preview),
+                validation_report: Some(&validation_report),
+            },
+        );
+        if validation.get("verdict") != Some(&json!("pass")) {
+            return json!({
+                "ok": false,
+                "error": "ingest rejected — preflight verdict must be pass (see validation.checks)",
+                "validation": validation,
+                "hint": "POST /api/csv/import/preflight and fix data in agent toolshed before execute"
+            });
+        }
+    }
+
     let dataset_id = plan.output_dataset_name.clone();
     match save_dataset(
         &dataset_id,

@@ -150,6 +150,205 @@ impl BridgeClient {
         self.post("/api/csv/import/plan", &body)
     }
 
+    pub fn csv_import_preflight(&self, args: &Value) -> Result<Value, String> {
+        let session_id = args
+            .get("session_id")
+            .and_then(|v| v.as_str())
+            .ok_or("session_id required")?;
+        let mut body = json!({ "session_id": session_id });
+        if let Some(plan) = args.get("plan") {
+            body["plan"] = plan.clone();
+        }
+        self.post("/api/csv/import/preflight", &body)
+    }
+
+    pub fn ingest_contract(&self) -> Result<Value, String> {
+        self.get("/api/ingest/contract")
+    }
+
+    pub fn commissioning_export(&self) -> Result<Value, String> {
+        self.get("/api/model/commissioning-export")
+    }
+
+    pub fn commissioning_import(&self, args: &Value) -> Result<Value, String> {
+        let payload = args.get("payload").cloned().unwrap_or_else(|| args.clone());
+        self.post(
+            "/api/model/commissioning-import",
+            &json!({ "payload": payload }),
+        )
+    }
+
+    pub fn rules_batch(&self) -> Result<Value, String> {
+        self.post("/api/rules/batch", &json!({}))
+    }
+
+    pub fn fdd_rules_save(&self, args: &Value) -> Result<Value, String> {
+        self.post("/api/fdd-rules", args)
+    }
+
+    pub fn fdd_rules_activate(&self, rule_id: &str) -> Result<Value, String> {
+        self.post(&format!("/api/fdd-rules/{rule_id}/activate"), &json!({}))
+    }
+
+    pub fn reports_from_fdd_sql_run(&self, args: &Value) -> Result<Value, String> {
+        self.post("/api/reports/from-fdd-sql-run", args)
+    }
+
+    pub fn csv_workbench_quality(&self, args: &Value) -> Result<Value, String> {
+        self.post("/api/csv-workbench/quality", args)
+    }
+
+    pub fn integration_smoke(&self, args: &Value) -> Result<Value, String> {
+        let mut steps: Vec<Value> = Vec::new();
+        let mut agent_next: Vec<String> = Vec::new();
+
+        let health = self.get("/api/health")?;
+        steps.push(smoke_step(
+            "health",
+            health.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
+            health,
+        ));
+
+        let stack = self
+            .get("/api/health/stack")
+            .unwrap_or_else(|e| json!({"ok": false, "error": e}));
+        steps.push(smoke_step(
+            "stack",
+            stack.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+            stack,
+        ));
+
+        let contract = self
+            .ingest_contract()
+            .unwrap_or_else(|e| json!({"ok": false, "error": e}));
+        steps.push(smoke_step(
+            "ingest_contract",
+            contract.get("ok").and_then(|v| v.as_bool()) == Some(true),
+            contract,
+        ));
+
+        let mut session_id = args
+            .get("session_id")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+
+        if session_id.is_none() {
+            if let Some(dir) = args.get("import_dir").and_then(|v| v.as_str()) {
+                match list_csv_files(dir) {
+                    Ok(file_specs) if !file_specs.is_empty() => {
+                        let preview = self.csv_import_preview(&json!({ "files": file_specs }))?;
+                        session_id = preview
+                            .get("session_id")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_string);
+                        steps.push(smoke_step(
+                            "csv_preview",
+                            preview.get("ok").and_then(|v| v.as_bool()) == Some(true),
+                            preview,
+                        ));
+                    }
+                    Ok(_) => steps.push(smoke_step(
+                        "csv_preview",
+                        false,
+                        json!({"ok": false, "error": "import_dir has no .csv files"}),
+                    )),
+                    Err(e) => steps.push(smoke_step(
+                        "csv_preview",
+                        false,
+                        json!({"ok": false, "error": e}),
+                    )),
+                }
+            }
+        }
+
+        let mut preflight_pass = false;
+        if let Some(sid) = session_id.as_deref() {
+            let preflight = self.csv_import_preflight(&json!({ "session_id": sid }))?;
+            let verdict = preflight
+                .get("verdict")
+                .and_then(|v| v.as_str())
+                .unwrap_or("fail");
+            preflight_pass = verdict == "pass";
+            steps.push(smoke_step("preflight", preflight_pass, preflight.clone()));
+            if !preflight_pass {
+                if let Some(hints) = preflight
+                    .get("validation")
+                    .and_then(|v| v.get("agent_hints"))
+                    .and_then(|v| v.as_array())
+                {
+                    for h in hints {
+                        if let Some(s) = h.as_str() {
+                            agent_next.push(s.to_string());
+                        }
+                    }
+                }
+                agent_next
+                    .push("Clean data in workspace/agent-toolshed/ and re-run preflight".into());
+            }
+
+            if args.get("confirm").and_then(|v| v.as_bool()) == Some(true) && preflight_pass {
+                let exec = self.post(
+                    "/api/csv/import/execute",
+                    &json!({ "session_id": sid, "confirm": true }),
+                )?;
+                steps.push(smoke_step(
+                    "execute",
+                    exec.get("ok").and_then(|v| v.as_bool()) == Some(true),
+                    exec,
+                ));
+            }
+        }
+
+        if args.get("confirm").and_then(|v| v.as_bool()) == Some(true) {
+            if let Some(bundle) = args.get("commissioning") {
+                let imported = self.commissioning_import(bundle)?;
+                steps.push(smoke_step(
+                    "commissioning_import",
+                    imported.get("ok").and_then(|v| v.as_bool()) == Some(true),
+                    imported,
+                ));
+            }
+            if args
+                .get("run_fdd")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                let batch = self.rules_batch()?;
+                steps.push(smoke_step(
+                    "rules_batch",
+                    batch.get("ok").and_then(|v| v.as_bool()) == Some(true),
+                    batch,
+                ));
+            }
+            if args
+                .get("run_report")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                if let Some(report_body) = args.get("report") {
+                    let report = self.reports_from_fdd_sql_run(report_body)?;
+                    steps.push(smoke_step(
+                        "reports_from_fdd_sql_run",
+                        report.get("ok").and_then(|v| v.as_bool()) == Some(true),
+                        report,
+                    ));
+                }
+            }
+        }
+
+        let all_ok = steps
+            .iter()
+            .all(|s| s.get("ok").and_then(|v| v.as_bool()) == Some(true));
+        Ok(json!({
+            "ok": all_ok,
+            "verdict": if all_ok { "pass" } else { "fail" },
+            "session_id": session_id,
+            "preflight_pass": preflight_pass,
+            "steps": steps,
+            "agent_next_actions": agent_next
+        }))
+    }
+
     pub fn historian_query(&self, args: &Value) -> Result<Value, String> {
         if args.as_object().map(|o| o.is_empty()).unwrap_or(true) {
             self.get("/api/historian/query")
@@ -320,6 +519,43 @@ impl BridgeClient {
             .json()
             .map_err(|e| e.to_string())
     }
+}
+
+fn smoke_step(name: &str, ok: bool, detail: Value) -> Value {
+    json!({ "name": name, "ok": ok, "detail": detail })
+}
+
+fn list_csv_files(dir: &str) -> Result<Vec<Value>, String> {
+    if dir.contains("..") {
+        return Err("path traversal (..) not allowed".into());
+    }
+    let p = Path::new(dir);
+    if !p.is_dir() {
+        return Err(format!("import_dir not found: {dir}"));
+    }
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(p).map_err(|e| format!("read_dir {dir}: {e}"))? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if path.is_file()
+            && path
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| e.eq_ignore_ascii_case("csv"))
+        {
+            out.push(json!({
+                "filename": path.file_name().and_then(|n| n.to_str()).unwrap_or("upload.csv"),
+                "path": path.display().to_string()
+            }));
+        }
+    }
+    out.sort_by(|a, b| {
+        a.get("filename")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .cmp(b.get("filename").and_then(|v| v.as_str()).unwrap_or(""))
+    });
+    Ok(out)
 }
 
 fn read_local_csv_path(path: &str) -> Result<Vec<u8>, String> {

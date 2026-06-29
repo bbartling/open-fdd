@@ -105,8 +105,30 @@ pub fn series_json(site_id: &str) -> Value {
 
     if series_options.is_empty() {
         let rows = store::load_pivot_rows().unwrap_or_default();
+        let equip_site = crate::model::scope::equip_site_map();
         let mut by_equip: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         for row in &rows {
+            if !sid.is_empty() {
+                let row_site = row.get("site_id").and_then(|v| v.as_str()).unwrap_or("");
+                let equip = row
+                    .get("equipment_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let mapped_site = equip_site
+                    .get(equip)
+                    .map(String::as_str)
+                    .unwrap_or(row_site);
+                if !row_site.is_empty() && row_site != sid.as_str() && mapped_site != sid.as_str() {
+                    continue;
+                }
+                if row_site.is_empty() && !equip.is_empty() {
+                    if let Some(es) = equip_site.get(equip) {
+                        if es != &sid {
+                            continue;
+                        }
+                    }
+                }
+            }
             let equip = row
                 .get("equipment_id")
                 .and_then(|v| v.as_str())
