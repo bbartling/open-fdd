@@ -127,6 +127,24 @@ pub fn chat(body: &Value) -> Result<Value, String> {
     Ok(parsed)
 }
 
+pub fn cancel_active() -> Value {
+    let base = base_url();
+    match client()
+        .post(format!("{base}/cancel"))
+        .timeout(Duration::from_secs(5))
+        .send()
+    {
+        Ok(resp) => resp
+            .json()
+            .unwrap_or(json!({"ok": true, "cancelled": true})),
+        Err(err) => json!({
+            "ok": false,
+            "error": err.to_string(),
+            "hint": "Codex relay may be offline"
+        }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

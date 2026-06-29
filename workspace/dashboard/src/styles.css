@@ -350,6 +350,9 @@ a {
 .agent-rail-title {
   font-weight: 600;
   font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .agent-rail-context {
@@ -456,7 +459,7 @@ a {
 }
 
 .csv-sidecart {
-  width: 240px;
+  width: min(360px, 100%);
   flex-shrink: 0;
   padding: 12px;
   border: 1px solid var(--border);
@@ -515,6 +518,135 @@ a {
 
 .csv-sidecart-error {
   font-size: 12px;
+}
+
+.csv-sidecart-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.csv-sidecart-preview-btn {
+  font-size: 11px;
+  flex-shrink: 0;
+  padding: 2px 6px;
+}
+
+.csv-preview-panel {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.csv-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.csv-preview-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.csv-preview-meta,
+.csv-preview-status {
+  font-size: 11px;
+  margin: 4px 0;
+}
+
+.csv-preview-scroll {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.csv-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+
+.csv-preview-table th,
+.csv-preview-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.csv-preview-table th {
+  position: sticky;
+  top: 0;
+  background: var(--panel-soft);
+  text-align: left;
+}
+
+.csv-preview-more {
+  font-size: 10px;
+  padding: 6px 8px;
+  margin: 0;
+}
+
+.codex-spinner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.codex-spinner-icon {
+  animation: codex-spin 0.85s linear infinite;
+}
+
+.codex-spinner-track {
+  stroke: var(--border);
+  opacity: 0.35;
+}
+
+.codex-spinner-arc {
+  stroke: var(--accent);
+}
+
+.codex-spinner-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@keyframes codex-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.agent-rail-working {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.agent-rail-pending {
+  display: inline-flex;
+  align-items: center;
+}
+
+.agent-rail-queue {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 14px 0;
+  font-size: 11px;
+}
+
+.agent-stop-btn {
+  flex-shrink: 0;
 }
 
 .page {

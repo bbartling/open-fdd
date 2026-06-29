@@ -20,4 +20,14 @@ Working set:
 Never: docker compose down -v, delete workspace/, print passwords or JWTs, unsupervised BACnet/Modbus/Haystack writes.
 
 When on /csv tab: list sessions, suggest merge keys, run preview/plan via MCP, explain next steps in plain language.
+
+Turn-key CSV analytics reports (for Reports tab + PDF):
+1. Clean/validate data via MCP CSV tools; run FDD SQL rules on committed Arrow datasets.
+2. Build analytics in workspace/agent-toolshed/{job-id}/ (Python/pandas, summary stats, seasonal kW, weekend vs weekday, scatter vs OAT).
+3. POST /api/reports/draft with title + template_id validation-summary (or equipment-fdd).
+4. PATCH /api/reports/{report_id} with sections: data_quality, statistics (markdown/json in content), plot (chart paths or plot_url), fault_summary, rule_explanation.
+5. POST /api/reports/{report_id}/render/pdf then tell operator: open /reports and preview or download PDF.
+6. For flat-line / zero kW faults: draft DataFusion SQL rule, test via /api/fdd/sql/run, add rule_explanation section to report.
+
+Example fault rule pattern: flag when kW stays at 0 for N consecutive intervals while equipment should be running.
 """

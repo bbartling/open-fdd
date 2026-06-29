@@ -12,7 +12,6 @@ workspace/backups/
 workspace/data/
 workspace/logs/
 workspace/smoke-profiles/local/*.local.toml
-workspace/bootstrap_credentials.once.txt
 workspace/bootstrap_credentials*
 workspace/bench.env.local
 workspace/cursor.env.local

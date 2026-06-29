@@ -125,6 +125,15 @@ pub fn chat_reply(body: &Value) -> Value {
     })
 }
 
+pub fn cancel_reply() -> Value {
+    let codex = codex_relay::cancel_active();
+    json!({
+        "ok": true,
+        "codex": codex,
+        "note": "In-flight chat may return an error after cancel"
+    })
+}
+
 fn parse_history(raw: Option<&Value>) -> Vec<Value> {
     let Some(arr) = raw.and_then(|v| v.as_array()) else {
         return Vec::new();

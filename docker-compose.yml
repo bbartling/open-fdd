@@ -9,6 +9,7 @@ services:
     environment:
       SERVICE_MODE: bridge
       PORT: "8080"
+      OPENFDD_BIND_HOST: "0.0.0.0"
       FRONTEND_DIR: /app/frontend
       OPENFDD_WORKSPACE: /app/workspace
       OPENFDD_BACNET_POLL_INTERVAL_SECONDS: ${OPENFDD_BACNET_POLL_INTERVAL_SECONDS:-60}

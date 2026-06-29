@@ -18,10 +18,20 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::thread;
+use std::time::Duration;
+
+const MAX_BODY_BYTES: usize = 1_048_576;
+const READ_TIMEOUT_SECS: u64 = 30;
 
 pub fn run() -> std::io::Result<()> {
     let cfg = auth_config();
     if let Err(err) = cfg.validate_for_production() {
+        if env::var("OPENFDD_ALLOW_INSECURE_AUTH").as_deref() != Ok("1") {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                err,
+            ));
+        }
         eprintln!("auth configuration warning: {err}");
     }
     let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
@@ -33,7 +43,7 @@ pub fn run() -> std::io::Result<()> {
     if service_mode == "bridge" {
         drivers::json_api::seed_from_env_if_needed();
     }
-    let bind_host = env::var("OPENFDD_BIND_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let bind_host = env::var("OPENFDD_BIND_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let listener = TcpListener::bind(format!("{bind_host}:{port}"))?;
     println!("Open-FDD Rust Edge API listening on http://{bind_host}:{port}");
     for stream in listener.incoming() {
@@ -41,6 +51,7 @@ pub fn run() -> std::io::Result<()> {
             Ok(stream) => {
                 let root = root.clone();
                 thread::spawn(move || {
+                    let _ = stream.set_read_timeout(Some(Duration::from_secs(READ_TIMEOUT_SECS)));
                     let _ = handle(stream, Path::new(&root));
                 });
             }
@@ -53,25 +64,25 @@ pub fn run() -> std::io::Result<()> {
 fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
     let req = read_http_request(&mut stream)?;
     let (method, path, headers, body) = parse_request(&req);
-    let clean_path = path.split('?').next().unwrap_or(path.as_str()).to_string();
+    let route_path = path.split('?').next().unwrap_or(path.as_str()).to_string();
 
     if method == "OPTIONS" {
         return options(&mut stream);
     }
-    if method == "GET" && (clean_path == "/api/health" || clean_path == "/health") {
+    if method == "GET" && (route_path == "/api/health" || route_path == "/health") {
         return json_response(&mut stream, version::health_json(auth_config().required));
     }
-    if method == "POST" && clean_path == "/api/auth/login" {
+    if method == "POST" && route_path == "/api/auth/login" {
         return login_handler(&mut stream, &body);
     }
-    if method == "POST" && clean_path == "/api/auth/logout" {
+    if method == "POST" && route_path == "/api/auth/logout" {
         audit::log_event(
             "logout",
             json!({"note":"stateless JWT cleared client-side"}),
         );
         return json_response(&mut stream, json!({"ok": true}));
     }
-    if method == "GET" && clean_path == "/api/auth/status" {
+    if method == "GET" && route_path == "/api/auth/status" {
         let cfg = auth_config();
         return json_response(
             &mut stream,
@@ -80,9 +91,9 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
     }
     // Public read-only dashboard endpoints (home/login view without JWT).
     if method == "GET"
-        && (clean_path == "/api/building/snapshot" || clean_path == "/api/building/status")
+        && (route_path == "/api/building/snapshot" || route_path == "/api/building/status")
     {
-        let body = if clean_path == "/api/building/snapshot" {
+        let body = if route_path == "/api/building/snapshot" {
             dashboard::building_snapshot()
         } else {
             dashboard::building_status()
@@ -90,10 +101,10 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         return json_response(&mut stream, body);
     }
     if method == "GET"
-        && !clean_path.starts_with("/api/")
-        && !clean_path.starts_with("/openfdd-agent/")
+        && !route_path.starts_with("/api/")
+        && !route_path.starts_with("/openfdd-agent/")
     {
-        return static_file(&mut stream, frontend, &clean_path);
+        return static_file(&mut stream, frontend, &route_path);
     }
 
     let principal = match authorize(&headers) {
@@ -108,7 +119,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         }
     };
 
-    match (method.as_str(), clean_path.as_str()) {
+    match (method.as_str(), route_path.as_str()) {
         ("GET", "/api/auth/whoami") => json_response(
             &mut stream,
             json!({"ok": true, "principal": {"sub": principal.sub, "role": principal.role}}),
@@ -178,7 +189,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/faults/catalog") => json_response(&mut stream, faults::catalog_json()),
         ("GET", "/api/faults/tree") => json_response(&mut stream, faults::tree_json()),
         ("GET", "/api/faults/applicable") => {
-            let site = query_param(&clean_path, "site_id");
+            let site = query_param(&path, "site_id");
             json_response(&mut stream, faults::applicable_json(site.as_deref()))
         }
         ("POST", "/api/faults/validate-scope") => json_response(
@@ -217,6 +228,12 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent", "operator"],
             || ops::agent_chat::chat_reply(&parse_json_body_or_empty(&body)),
         ),
+        ("POST", "/api/agent/chat/cancel") => require_role_lazy(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            ops::agent_chat::cancel_reply,
+        ),
         ("POST", "/api/agent/bootstrap") => require_role(
             &mut stream,
             &principal,
@@ -237,13 +254,13 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         }
         ("GET", "/api/export/meta") => json_response(&mut stream, export::meta_json()),
         ("GET", "/api/export/historian.csv") => {
-            let q = export::parse_query(query_string(&clean_path));
+            let q = export::parse_query(query_string(&path));
             let body = export::historian_csv(&q);
             let name = export::export_filename("historian");
             require_role_csv(&mut stream, &principal, READ_EXPORT_ROLES, body, &name)
         }
         ("GET", "/api/export/faults.csv") => {
-            let qs = query_string(&clean_path);
+            let qs = query_string(&path);
             let q = export::parse_query(qs);
             let summary = qs
                 .split('&')
@@ -257,7 +274,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             require_role_csv(&mut stream, &principal, READ_EXPORT_ROLES, body, &name)
         }
         ("GET", "/api/export/fault-summary.csv") => {
-            let q = export::parse_query(query_string(&clean_path));
+            let q = export::parse_query(query_string(&path));
             let body = export::faults_csv(&q, true);
             let name = export::export_filename("fault_summary");
             require_role_csv(&mut stream, &principal, READ_EXPORT_ROLES, body, &name)
@@ -279,7 +296,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             )
         }
         ("GET", "/api/export/validation-runs.csv") => {
-            let q = export::parse_query(query_string(&clean_path));
+            let q = export::parse_query(query_string(&path));
             let body = export::validation_runs_csv(&q);
             let name = export::export_filename("validation_runs");
             require_role_csv(&mut stream, &principal, READ_EXPORT_ROLES, body, &name)
@@ -289,23 +306,23 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let name = export::export_filename("import_jobs");
             require_role_csv(&mut stream, &principal, READ_EXPORT_ROLES, body, &name)
         }
-        ("GET", "/api/data-management/summary") => require_role(
+        ("GET", "/api/data-management/summary") => require_role_lazy(
             &mut stream,
             &principal,
             &["integrator", "agent", "operator"],
-            data_management::storage_summary(),
+            data_management::storage_summary,
         ),
-        ("GET", "/api/data-management/storage") => require_role(
+        ("GET", "/api/data-management/storage") => require_role_lazy(
             &mut stream,
             &principal,
             &["integrator", "agent", "operator"],
-            data_management::storage_summary(),
+            data_management::storage_summary,
         ),
-        ("GET", "/api/host/stats") => require_role(
+        ("GET", "/api/host/stats") => require_role_lazy(
             &mut stream,
             &principal,
             &["integrator", "agent", "operator"],
-            ops::host_stats::stats_json(),
+            ops::host_stats::stats_json,
         ),
         ("POST", "/api/data-management/purge/preview") => require_role(
             &mut stream,
@@ -319,11 +336,11 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator"],
             data_management::execute_purge(&parse_json_body_or_empty(&body), &principal.role),
         ),
-        ("GET", "/api/data-management/policies") => require_role(
+        ("GET", "/api/data-management/policies") => require_role_lazy(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            data_management::get_policies(),
+            data_management::get_policies,
         ),
         ("PUT", "/api/data-management/policies") => require_role(
             &mut stream,
@@ -331,11 +348,11 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator"],
             data_management::put_policies(&parse_json_body_or_empty(&body), &principal.role),
         ),
-        ("GET", "/api/data-management/agent-tools") => require_role(
+        ("GET", "/api/data-management/agent-tools") => require_role_lazy(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            data_management::agent_tools(),
+            data_management::agent_tools,
         ),
         ("POST", "/api/import/jobs") => require_role(
             &mut stream,
@@ -837,7 +854,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             } else {
                 audit::log_event(
                     "forbidden",
-                    json!({"route": clean_path, "role": principal.role.clone()}),
+                    json!({"route": route_path, "role": principal.role.clone()}),
                 );
                 status_json(
                     &mut stream,
@@ -1025,54 +1042,47 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ),
         _ => {
             if let Some(resp) =
-                handle_reports_dynamic(&mut stream, &principal, method.as_str(), &clean_path, &body)
+                handle_reports_dynamic(&mut stream, &principal, method.as_str(), &path, &body)
             {
                 return resp;
             }
             if let Some(resp) =
-                handle_faults_dynamic(&mut stream, &principal, method.as_str(), &clean_path)
+                handle_faults_dynamic(&mut stream, &principal, method.as_str(), &path)
             {
-                return resp;
-            }
-            if let Some(resp) = handle_data_management_dynamic(
-                &mut stream,
-                &principal,
-                method.as_str(),
-                &clean_path,
-            ) {
-                return resp;
-            }
-            if let Some(resp) = handle_import_job_dynamic(
-                &mut stream,
-                &principal,
-                method.as_str(),
-                &clean_path,
-                &body,
-            ) {
                 return resp;
             }
             if let Some(resp) =
-                handle_csv_ingest_dynamic(&mut stream, &principal, method.as_str(), &clean_path)
+                handle_data_management_dynamic(&mut stream, &principal, method.as_str(), &path)
             {
-                return resp;
-            }
-            if let Some(resp) = handle_model_dynamic(&mut stream, method.as_str(), &clean_path) {
                 return resp;
             }
             if let Some(resp) =
-                handle_json_api_dynamic(&mut stream, &principal, method.as_str(), &clean_path)
+                handle_import_job_dynamic(&mut stream, &principal, method.as_str(), &path, &body)
             {
                 return resp;
             }
-            if method == "GET" && clean_path.starts_with("/api/bacnet/jobs/") {
-                let job_id = clean_path.trim_start_matches("/api/bacnet/jobs/");
+            if let Some(resp) =
+                handle_csv_ingest_dynamic(&mut stream, &principal, method.as_str(), &path)
+            {
+                return resp;
+            }
+            if let Some(resp) = handle_model_dynamic(&mut stream, method.as_str(), &path) {
+                return resp;
+            }
+            if let Some(resp) =
+                handle_json_api_dynamic(&mut stream, &principal, method.as_str(), &path)
+            {
+                return resp;
+            }
+            if method == "GET" && route_path.starts_with("/api/bacnet/jobs/") {
+                let job_id = route_path.trim_start_matches("/api/bacnet/jobs/");
                 return json_response(&mut stream, drivers::bacnet::job_status_json(job_id));
             }
             if let Some(resp) = handle_fdd_wires_dynamic(
                 &mut stream,
                 &principal,
                 method.as_str(),
-                &clean_path,
+                &route_path,
                 &body,
             ) {
                 resp
@@ -1131,7 +1141,8 @@ fn query_params_map(path: &str) -> std::collections::HashMap<String, String> {
 }
 
 fn path_parts(path: &str) -> Vec<&str> {
-    path.trim_matches('/').split('/').collect()
+    let route = path.split('?').next().unwrap_or(path);
+    route.trim_matches('/').split('/').collect()
 }
 
 fn handle_model_dynamic(
@@ -1305,11 +1316,12 @@ fn handle_faults_dynamic(
     method: &str,
     path: &str,
 ) -> Option<std::io::Result<()>> {
+    let route = path.split('?').next().unwrap_or(path);
     let prefix = "/api/faults/";
-    if !path.starts_with(prefix) {
+    if !route.starts_with(prefix) {
         return None;
     }
-    let tail = path.trim_start_matches(prefix);
+    let tail = route.trim_start_matches(prefix);
     if tail.ends_with("/clear") && method == "POST" {
         let fault_id = tail.trim_end_matches("/clear").trim_end_matches('/');
         if fault_id.is_empty() {
@@ -1338,7 +1350,12 @@ fn handle_faults_dynamic(
     {
         return None;
     }
-    Some(json_response(stream, faults::get_fault(tail)))
+    Some(require_role(
+        stream,
+        principal,
+        &["operator", "integrator", "agent"],
+        faults::get_fault(tail),
+    ))
 }
 
 fn handle_reports_dynamic(
@@ -1728,6 +1745,12 @@ fn read_http_request(stream: &mut TcpStream) -> std::io::Result<String> {
         })
         .next()
         .unwrap_or(0);
+    if content_length > MAX_BODY_BYTES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "request body too large",
+        ));
+    }
     let body_start = header_end;
     while buf.len().saturating_sub(body_start) < content_length {
         let n = stream.read(&mut chunk)?;

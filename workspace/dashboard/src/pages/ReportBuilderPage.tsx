@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import { apiDownloadBlob, apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
@@ -65,6 +66,7 @@ function ReportSectionCard({
 }
 
 export default function ReportBuilderPage() {
+  const [searchParams] = useSearchParams();
   const [report, setReport] = useState<ReportDoc | null>(null);
   const [reports, setReports] = useState<Array<Record<string, unknown>>>([]);
   const [error, setError] = useState("");
@@ -112,10 +114,28 @@ export default function ReportBuilderPage() {
     }
   }, [templateId]);
 
+  const loadReportById = useCallback(async (reportId: string) => {
+    setBusy(true);
+    setError("");
+    try {
+      const doc = await apiFetch<ReportDoc>(`/api/reports/${encodeURIComponent(reportId)}`);
+      setReport(doc);
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
   useEffect(() => {
-    void createDraft();
     void loadReports();
-  }, [createDraft, loadReports]);
+    const id = searchParams.get("id");
+    if (id) {
+      void loadReportById(id);
+    } else {
+      void createDraft();
+    }
+  }, [searchParams]);
 
   async function deleteReport(reportId: string) {
     setBusy(true);
@@ -273,6 +293,14 @@ export default function ReportBuilderPage() {
                     {Number(r.size_bytes ?? 0) > 0 ? `${r.size_bytes} B` : "no PDF"}
                   </span>
                   <div className="report-list-actions">
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      disabled={busy}
+                      onClick={() => void loadReportById(id)}
+                    >
+                      Open
+                    </button>
                     <button type="button" className="secondary-btn" disabled={busy} onClick={() => void downloadListedReport(id)}>
                       Download
                     </button>

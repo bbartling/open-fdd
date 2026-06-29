@@ -25,6 +25,9 @@ const SESSION_FILE = path.join(SESSION_DIR, "codex-session-id.txt");
 const TOOLSHED = path.join(REPO_ROOT, "workspace/agent-toolshed");
 const EXEC_TIMEOUT_MS = Number(process.env.OFDD_CODEX_EXEC_TIMEOUT_MS || 600000);
 
+/** @type {import('node:child_process').ChildProcess | null} */
+let activeExec = null;
+
 function readJson(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -98,10 +101,16 @@ function runProcess(cmd, args, { input, env, cwd, timeoutMs }) {
 
     child.on("close", (code) => {
       clearTimeout(timer);
+      if (activeExec === child) activeExec = null;
       if (code === 0) resolve({ stdout, stderr });
       else reject(new Error(stderr.trim() || stdout.trim() || `codex exit ${code}`));
     });
-    child.on("error", reject);
+    child.on("error", (err) => {
+      if (activeExec === child) activeExec = null;
+      reject(err);
+    });
+
+    activeExec = child;
   });
 }
 
@@ -214,6 +223,18 @@ const server = http.createServer(async (req, res) => {
       } catch (e) {
         return sendJson(res, 502, { ok: false, error: String(e.message || e), source: "codex" });
       }
+    }
+    if (req.method === "POST" && req.url === "/cancel") {
+      if (activeExec) {
+        try {
+          activeExec.kill("SIGTERM");
+        } catch {
+          /* ignore */
+        }
+        activeExec = null;
+        return sendJson(res, 200, { ok: true, cancelled: true });
+      }
+      return sendJson(res, 200, { ok: true, cancelled: false, note: "no active exec" });
     }
     if (req.method === "POST" && req.url === "/reset") {
       for (const f of [SESSION_FILE]) {
