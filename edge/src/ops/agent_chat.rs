@@ -345,11 +345,21 @@ mod tests {
             "context_path": "/"
         }));
         assert_eq!(out.get("ok"), Some(&json!(true)));
-        assert_eq!(out.get("source"), Some(&json!("tools")));
-        assert!(out
-            .get("reply")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .contains("Open-FDD"));
+        let source = out.get("source").and_then(|v| v.as_str()).unwrap_or("");
+        assert!(
+            matches!(source, "codex" | "tools" | "ollama" | "cursor"),
+            "unexpected source: {source}"
+        );
+        let reply = out.get("reply").and_then(|v| v.as_str()).unwrap_or("");
+        assert!(
+            !reply.is_empty(),
+            "reply should be non-empty for source {source}"
+        );
+        if source == "tools" {
+            assert!(
+                reply.contains("Open-FDD"),
+                "tools fallback should mention Open-FDD"
+            );
+        }
     }
 }

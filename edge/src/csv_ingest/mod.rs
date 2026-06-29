@@ -18,56 +18,30 @@ use session::{create_session, load_session, save_session, stage_file};
 use plan::{append_rows, join_rows, parse_file_to_rows, preview_rows, JoinAlignment};
 use serde_json::{json, Value};
 use session::read_staged_file;
+use std::collections::BTreeMap;
 
-pub fn preview_handler(content_type: &str, body: &[u8]) -> Value {
-    let files = match upload::parse_upload(content_type, body) {
-        Ok(f) => f,
+pub fn preview_handler(content_type: &str, body: &[u8], session_id_hint: Option<&str>) -> Value {
+    let (files, sid_hint) = match upload::parse_upload(content_type, body) {
+        Ok(parsed) => parsed,
         Err(e) => return json!({"ok": false, "error": e}),
     };
     if files.is_empty() {
         return json!({"ok": false, "error": "no files in upload"});
     }
-    let session = create_session();
-    let session_id = session
-        .get("session_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    if session_id.is_empty() {
-        return session;
-    }
-    let mut staged = Vec::new();
-    let mut errors = Vec::new();
-    for (name, raw) in files {
-        match stage_file(&session_id, &name, &raw) {
-            Ok(meta) => staged.push(meta),
-            Err(e) => errors.push(json!({"file": name, "error": e})),
-        }
-    }
-    let mut session = load_session(&session_id).unwrap_or(session);
-    session["files"] = json!(staged);
-    session["status"] = json!("previewed");
-    let _ = save_session(&session_id, &session);
-    json!({
-        "ok": errors.is_empty(),
-        "session_id": session_id,
-        "files": staged,
-        "errors": errors,
-    })
+    preview_upload_files(session_id_hint.or(sid_hint.as_deref()), files)
 }
 
 pub fn preview_json_handler(body: &Value) -> Value {
-    let session = create_session();
-    let session_id = session
+    let session_id_hint = body
         .get("session_id")
         .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let files = body.get("files").and_then(|v| v.as_array());
-    let Some(files) = files else {
+        .filter(|s| !s.is_empty());
+    let files_arr = body.get("files").and_then(|v| v.as_array());
+    let Some(files) = files_arr else {
         return json!({"ok": false, "error": "files array required"});
     };
-    let mut staged = Vec::new();
+    let mut uploads = Vec::new();
+    let mut errors = Vec::new();
     for f in files {
         let name = f
             .get("filename")
@@ -80,20 +54,93 @@ pub fn preview_json_handler(body: &Value) -> Value {
         let raw = match base64_decode(content) {
             Ok(b) => b,
             Err(e) => {
-                staged.push(json!({"filename": name, "error": e}));
+                errors.push(json!({"file": name, "error": e}));
                 continue;
             }
         };
-        match stage_file(&session_id, name, &raw) {
+        uploads.push((name.to_string(), raw));
+    }
+    let mut out = preview_upload_files(session_id_hint, uploads);
+    if let Some(arr) = out.get_mut("errors").and_then(|v| v.as_array_mut()) {
+        arr.extend(errors);
+        if !arr.is_empty() {
+            out["ok"] = json!(false);
+        }
+    } else if !errors.is_empty() {
+        out["errors"] = json!(errors);
+        out["ok"] = json!(false);
+    }
+    out
+}
+
+fn preview_upload_files(session_id_hint: Option<&str>, files: Vec<(String, Vec<u8>)>) -> Value {
+    let (session, session_id) = match resolve_or_create_session(session_id_hint) {
+        Ok(v) => v,
+        Err(e) => return json!({"ok": false, "error": e}),
+    };
+    let mut staged = Vec::new();
+    let mut errors = Vec::new();
+    for (name, raw) in files {
+        match stage_file(&session_id, &name, &raw) {
             Ok(meta) => staged.push(meta),
-            Err(e) => staged.push(json!({"filename": name, "error": e})),
+            Err(e) => errors.push(json!({"file": name, "error": e})),
         }
     }
+    if staged.is_empty() && !errors.is_empty() {
+        return json!({"ok": false, "session_id": session_id, "errors": errors});
+    }
+    let merged = merge_session_files(&session, &staged);
     let mut session = load_session(&session_id).unwrap_or(session);
-    session["files"] = json!(staged);
+    session["files"] = json!(merged);
     session["status"] = json!("previewed");
     let _ = save_session(&session_id, &session);
-    json!({"ok": true, "session_id": session_id, "files": staged})
+    json!({
+        "ok": errors.is_empty(),
+        "session_id": session_id,
+        "files": merged,
+        "errors": errors,
+    })
+}
+
+fn resolve_or_create_session(session_id_hint: Option<&str>) -> Result<(Value, String), String> {
+    if let Some(sid) = session_id_hint {
+        let Some(session) = load_session(sid) else {
+            return Err(format!("session not found: {sid}"));
+        };
+        return Ok((session, sid.to_string()));
+    }
+    let session = create_session();
+    let session_id = session
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if session_id.is_empty() {
+        return Err("failed to create session".into());
+    }
+    Ok((session, session_id))
+}
+
+fn merge_session_files(session: &Value, new_files: &[Value]) -> Vec<Value> {
+    let mut by_name: BTreeMap<String, Value> = session
+        .get("files")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|f| {
+                    f.get("filename")
+                        .and_then(|v| v.as_str())
+                        .map(|n| (n.to_string(), f.clone()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    for f in new_files {
+        if let Some(name) = f.get("filename").and_then(|v| v.as_str()) {
+            by_name.insert(name.to_string(), f.clone());
+        }
+    }
+    by_name.into_values().collect()
 }
 
 fn base64_decode(s: &str) -> Result<Vec<u8>, String> {

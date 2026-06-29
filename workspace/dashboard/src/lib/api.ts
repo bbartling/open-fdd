@@ -121,6 +121,31 @@ export async function apiFetch<T>(
   return res.json() as Promise<T>;
 }
 
+/** Upload multipart form data (CSV import preview). */
+export async function apiUploadForm<T>(path: string, form: FormData): Promise<T> {
+  const base = getBridgeBase();
+  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...authHeaders(),
+    },
+    body: form,
+  });
+  if (res.status === 401 && !path.startsWith("/api/auth/login")) {
+    sessionStorage.removeItem(TOKEN_KEY);
+    if (shouldRedirectLogin()) {
+      window.location.assign("/login");
+    }
+    throw new Error("unauthorized");
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    throw parseErrorBody(text, res.status);
+  }
+  return res.json() as Promise<T>;
+}
+
 /** Upload raw CSV/text bodies (import job upload endpoint). */
 export async function apiUploadRaw<T>(
   path: string,

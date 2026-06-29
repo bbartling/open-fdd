@@ -48,8 +48,36 @@ pub fn assignments_json_string() -> String {
     load_assignments_value().to_string()
 }
 
+pub fn save_from_request(body: &Value) -> Value {
+    if body.get("confirm").and_then(|v| v.as_bool()) != Some(true) {
+        return json!({
+            "ok": false,
+            "error": "confirm:true required to save Haystack assignments"
+        });
+    }
+    let doc = if body.get("points").is_some() || body.get("fault_equation_bindings").is_some() {
+        body.clone()
+    } else if let Some(inner) = body.get("assignments") {
+        inner.clone()
+    } else {
+        return json!({
+            "ok": false,
+            "error": "assignments document required (points / fault_equation_bindings or assignments wrapper)"
+        });
+    };
+    match save_assignments_value(&doc) {
+        Ok(path) => json!({
+            "ok": true,
+            "saved": true,
+            "scope": "haystack-assignment",
+            "path": path.display().to_string()
+        }),
+        Err(err) => json!({"ok": false, "error": err.to_string()}),
+    }
+}
+
 pub fn save_assignment_json() -> &'static str {
-    r#"{"ok":true,"saved":true,"scope":"haystack-assignment","path":"workspace/data/model/assignments.json"}"#
+    r#"{"ok":false,"error":"POST JSON body with assignments and confirm:true"}"#
 }
 
 pub fn resolve_json() -> &'static str {
@@ -63,4 +91,31 @@ pub fn algorithm_bindings_json_string() -> String {
         "algorithm_bindings": v.get("algorithm_bindings").cloned().unwrap_or(json!([]))
     })
     .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::with_temp_workspace;
+    use serde_json::json;
+
+    #[test]
+    fn save_requires_confirm() {
+        let out = save_from_request(&json!({"points": []}));
+        assert_eq!(out.get("ok").and_then(|v| v.as_bool()), Some(false));
+    }
+
+    #[test]
+    fn save_persists_assignments() {
+        with_temp_workspace(|_| {
+            let doc = json!({
+                "confirm": true,
+                "points": [{"point_id": "p1", "haystack_ref": "point:test"}]
+            });
+            let out = save_from_request(&doc);
+            assert_eq!(out.get("ok").and_then(|v| v.as_bool()), Some(true));
+            let loaded = load_assignments_value();
+            assert_eq!(loaded["points"].as_array().map(|a| a.len()), Some(1));
+        });
+    }
 }

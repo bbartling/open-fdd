@@ -22,7 +22,7 @@ fn lake_geneva_append_four_school_files() {
         "School_2013_2014_KW.csv",
         "School_2014_2015 KW.csv",
         "School_2015_2016 KW.csv",
-        "School_2016_2017 KW.csv",
+        "School_2016_2017_KW.csv",
     ];
     let mut batches = Vec::new();
     for name in names {

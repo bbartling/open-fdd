@@ -136,14 +136,8 @@ pub fn reset_session() -> Value {
 }
 
 fn post_short(url: &str) -> Value {
-    match client()
-        .post(url)
-        .timeout(Duration::from_secs(5))
-        .send()
-    {
-        Ok(resp) => resp
-            .json()
-            .unwrap_or(json!({"ok": true})),
+    match client().post(url).timeout(Duration::from_secs(5)).send() {
+        Ok(resp) => resp.json().unwrap_or(json!({"ok": true})),
         Err(err) => json!({
             "ok": false,
             "error": err.to_string(),

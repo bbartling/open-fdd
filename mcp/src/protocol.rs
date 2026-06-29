@@ -1,4 +1,5 @@
 use crate::bridge::BridgeClient;
+use crate::gate::require_write_confirm;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 
@@ -76,10 +77,61 @@ impl Server {
             tool("openfdd_model_sparql", "POST /api/model/sparql — read-only SELECT over Haystack RDF", json!({"query": {"type": "string"}})),
             tool("openfdd_model_sites", "GET /api/model/sites", json!({})),
             tool("openfdd_model_coverage", "GET /api/dashboard/model-coverage", json!({})),
+            tool("openfdd_csv_import_preview", "POST /api/csv/import/preview — stage CSVs from host path or base64; optional session_id to append", json!({
+                "session_id": {"type": "string", "description": "Existing session to append files into"},
+                "files": {"type": "array", "description": "Array of {filename, path} or {filename, content_base64}"}
+            })),
+            tool("openfdd_csv_import_plan", "POST /api/csv/import/plan — append/join plan + validation preview", json!({
+                "session_id": {"type": "string"},
+                "plan": {"type": "object", "description": "ImportPlan: mode, files, join_alignment, fill_policy, output_dataset_name"}
+            })),
+            tool("openfdd_historian_query", "GET/POST /api/historian/query — historian pivot rows (optional limit, site_id, equipment_id)", json!({
+                "limit": {"type": "integer"},
+                "site_id": {"type": "string"},
+                "equipment_id": {"type": "string"}
+            })),
+            tool("openfdd_fdd_rules_list", "GET /api/fdd-rules — list wire/SQL fault rules", json!({})),
+            tool("openfdd_fdd_rule_test_sql", "POST /api/fdd-rules/{id}/test-sql — dry-run rule SQL on sample/historian data", json!({
+                "rule_id": {"type": "string"},
+                "sql": {"type": "string"},
+                "params": {"type": "object"},
+                "confirmation_seconds": {"type": "integer"}
+            })),
+            tool("openfdd_fdd_run", "POST /api/fdd/run — execute ad-hoc DataFusion SQL FDD (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean", "description": "Must be true"},
+                "sql": {"type": "string"},
+                "params": {"type": "object"},
+                "confirmation_seconds": {"type": "integer"}
+            })),
+            tool("openfdd_model_assignments_save", "POST /api/model/assignments/save — persist Haystack assignments (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"},
+                "points": {"type": "array"},
+                "fault_equation_bindings": {"type": "array"},
+                "assignments": {"type": "object", "description": "Alternative wrapper for full assignments doc"}
+            })),
+            tool("openfdd_reports_draft", "POST /api/reports/draft — create report draft (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"},
+                "title": {"type": "string"},
+                "template_id": {"type": "string"},
+                "include_branding": {"type": "boolean"}
+            })),
+            tool("openfdd_reports_patch", "PATCH /api/reports/{id} — update title/sections (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"},
+                "report_id": {"type": "string"},
+                "title": {"type": "string"},
+                "sections": {"type": "array"}
+            })),
+            tool("openfdd_reports_render_pdf", "POST /api/reports/{id}/render/pdf — render PDF bundle (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"},
+                "report_id": {"type": "string"}
+            })),
             tool("openfdd_csv_fusion_preview", "GET /api/csv/import/sessions/{id}/fusion-preview — merged CSV grid for browser review", json!({"session_id": {"type": "string"}, "limit": {"type": "integer"}})),
             tool("openfdd_csv_latest_planned", "GET /api/csv/import/sessions/latest/planned — most recent UT3 plan ready for fusion preview", json!({})),
             tool("openfdd_csv_sessions", "GET /api/csv/import/sessions — list recent import sessions", json!({"limit": {"type": "integer"}})),
-            tool("openfdd_csv_import_execute", "POST /api/csv/import/execute — save planned session to Arrow + historian (human confirms after preview)", json!({"session_id": {"type": "string"}})),
+            tool("openfdd_csv_import_execute", "POST /api/csv/import/execute — save planned session to Arrow + historian (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "session_id": {"type": "string"},
+                "confirm": {"type": "boolean", "description": "Must be true"}
+            })),
             tool("openfdd_datasets", "GET /api/datasets — list Feather/Arrow datasets in registry", json!({})),
             tool("openfdd_timeseries_series", "GET /api/timeseries/series — plot catalog after CSV save", json!({"site_id": {"type": "string"}})),
         ];
@@ -134,6 +186,31 @@ impl Server {
             }
             "openfdd_model_sites" => self.bridge.get("/api/model/sites"),
             "openfdd_model_coverage" => self.bridge.get("/api/dashboard/model-coverage"),
+            "openfdd_csv_import_preview" => self.bridge.csv_import_preview(args),
+            "openfdd_csv_import_plan" => self.bridge.csv_import_plan(args),
+            "openfdd_historian_query" => self.bridge.historian_query(args),
+            "openfdd_fdd_rules_list" => self.bridge.fdd_rules_list(),
+            "openfdd_fdd_rule_test_sql" => self.bridge.fdd_rule_test_sql(args),
+            "openfdd_fdd_run" => {
+                require_write_confirm(args, "openfdd_fdd_run")?;
+                self.bridge.fdd_run(args)
+            }
+            "openfdd_model_assignments_save" => {
+                require_write_confirm(args, "openfdd_model_assignments_save")?;
+                self.bridge.model_assignments_save(args)
+            }
+            "openfdd_reports_draft" => {
+                require_write_confirm(args, "openfdd_reports_draft")?;
+                self.bridge.reports_draft(args)
+            }
+            "openfdd_reports_patch" => {
+                require_write_confirm(args, "openfdd_reports_patch")?;
+                self.bridge.reports_patch(args)
+            }
+            "openfdd_reports_render_pdf" => {
+                require_write_confirm(args, "openfdd_reports_render_pdf")?;
+                self.bridge.reports_render_pdf(args)
+            }
             "openfdd_csv_fusion_preview" => {
                 let session_id = args
                     .get("session_id")
@@ -153,6 +230,7 @@ impl Server {
                     .get(&format!("/api/csv/import/sessions?limit={limit}"))
             }
             "openfdd_csv_import_execute" => {
+                require_write_confirm(args, "openfdd_csv_import_execute")?;
                 let session_id = args
                     .get("session_id")
                     .and_then(|v| v.as_str())

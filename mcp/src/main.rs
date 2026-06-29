@@ -2,6 +2,7 @@
 //! Read-first tools only — see docs/agent/openfdd-mcp-tool-contract.md
 
 mod bridge;
+mod gate;
 mod protocol;
 
 use protocol::Server;

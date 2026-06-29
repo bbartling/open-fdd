@@ -546,58 +546,6 @@ pub fn output_rows_to_fusion_grid(
     (columns, grid)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::TimeZone;
-
-    #[test]
-    fn linear_fill_between_known_points() {
-        let mut rows = vec![
-            OutputRow {
-                ts_utc: Some(Utc.with_ymd_and_hms(2013, 6, 19, 0, 0, 0).unwrap()),
-                ts_local: String::new(),
-                timezone: "UTC".into(),
-                source_timestamp_raw: String::new(),
-                source_timestamp_parse_status: "ok".into(),
-                source_timestamp_fold: None,
-                source_file: "t.csv".into(),
-                source_row_number: 1,
-                values: BTreeMap::from([("kw".into(), "10".into())]),
-                fill_created: false,
-            },
-            OutputRow {
-                ts_utc: Some(Utc.with_ymd_and_hms(2013, 6, 19, 1, 0, 0).unwrap()),
-                ts_local: String::new(),
-                timezone: "UTC".into(),
-                source_timestamp_raw: String::new(),
-                source_timestamp_parse_status: "ok".into(),
-                source_timestamp_fold: None,
-                source_file: "t.csv".into(),
-                source_row_number: 2,
-                values: BTreeMap::from([("kw".into(), String::new())]),
-                fill_created: false,
-            },
-            OutputRow {
-                ts_utc: Some(Utc.with_ymd_and_hms(2013, 6, 19, 2, 0, 0).unwrap()),
-                ts_local: String::new(),
-                timezone: "UTC".into(),
-                source_timestamp_raw: String::new(),
-                source_timestamp_parse_status: "ok".into(),
-                source_timestamp_fold: None,
-                source_file: "t.csv".into(),
-                source_row_number: 3,
-                values: BTreeMap::from([("kw".into(), "20".into())]),
-                fill_created: false,
-            },
-        ];
-        apply_fill_policy(&mut rows, FillPolicy::Linear);
-        let mid = rows[1].values.get("kw").unwrap();
-        let v: f64 = mid.parse().unwrap();
-        assert!(v > 10.0 && v < 20.0);
-    }
-}
-
 pub fn plan_from_json(body: &Value) -> Result<ImportPlan, String> {
     serde_json::from_value(body.clone()).map_err(|e| e.to_string())
 }
@@ -699,5 +647,57 @@ pub fn infer_ut3_plan_from_session(session: &Value) -> ImportPlan {
         ambiguous_policy: "first".into(),
         output_dataset_name: "school_kw_merged".into(),
         ..Default::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn linear_fill_between_known_points() {
+        let mut rows = vec![
+            OutputRow {
+                ts_utc: Some(Utc.with_ymd_and_hms(2013, 6, 19, 0, 0, 0).unwrap()),
+                ts_local: String::new(),
+                timezone: "UTC".into(),
+                source_timestamp_raw: String::new(),
+                source_timestamp_parse_status: "ok".into(),
+                source_timestamp_fold: None,
+                source_file: "t.csv".into(),
+                source_row_number: 1,
+                values: BTreeMap::from([("kw".into(), "10".into())]),
+                fill_created: false,
+            },
+            OutputRow {
+                ts_utc: Some(Utc.with_ymd_and_hms(2013, 6, 19, 1, 0, 0).unwrap()),
+                ts_local: String::new(),
+                timezone: "UTC".into(),
+                source_timestamp_raw: String::new(),
+                source_timestamp_parse_status: "ok".into(),
+                source_timestamp_fold: None,
+                source_file: "t.csv".into(),
+                source_row_number: 2,
+                values: BTreeMap::from([("kw".into(), String::new())]),
+                fill_created: false,
+            },
+            OutputRow {
+                ts_utc: Some(Utc.with_ymd_and_hms(2013, 6, 19, 2, 0, 0).unwrap()),
+                ts_local: String::new(),
+                timezone: "UTC".into(),
+                source_timestamp_raw: String::new(),
+                source_timestamp_parse_status: "ok".into(),
+                source_timestamp_fold: None,
+                source_file: "t.csv".into(),
+                source_row_number: 3,
+                values: BTreeMap::from([("kw".into(), "20".into())]),
+                fill_created: false,
+            },
+        ];
+        apply_fill_policy(&mut rows, FillPolicy::Linear);
+        let mid = rows[1].values.get("kw").unwrap();
+        let v: f64 = mid.parse().unwrap();
+        assert!(v > 10.0 && v < 20.0);
     }
 }

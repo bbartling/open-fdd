@@ -21,7 +21,36 @@ use std::thread;
 use std::time::Duration;
 
 const MAX_BODY_BYTES: usize = 1_048_576;
+const MAX_CSV_UPLOAD_BYTES: usize = 128 * 1024 * 1024;
 const READ_TIMEOUT_SECS: u64 = 30;
+const CSV_READ_TIMEOUT_SECS: u64 = 600;
+
+fn max_body_bytes_for_path(path: &str) -> usize {
+    let route = path.split('?').next().unwrap_or(path);
+    if route == "/api/csv/import/preview" {
+        env::var("OPENFDD_MAX_CSV_UPLOAD_BYTES")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(MAX_CSV_UPLOAD_BYTES)
+    } else {
+        env::var("OPENFDD_MAX_BODY_BYTES")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(MAX_BODY_BYTES)
+    }
+}
+
+fn read_timeout_secs_for_path(path: &str) -> u64 {
+    let route = path.split('?').next().unwrap_or(path);
+    if route.starts_with("/api/csv/import/") {
+        env::var("OPENFDD_CSV_READ_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(CSV_READ_TIMEOUT_SECS)
+    } else {
+        READ_TIMEOUT_SECS
+    }
+}
 
 pub fn run() -> std::io::Result<()> {
     let cfg = auth_config();
@@ -255,9 +284,10 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/historian/query") => {
             raw_json(&mut stream, &historian::arrow_table::query_json())
         }
-        ("POST", "/api/historian/query") => {
-            raw_json(&mut stream, &historian::arrow_table::query_json())
-        }
+        ("POST", "/api/historian/query") => raw_json(
+            &mut stream,
+            &historian::arrow_table::query_json_from_body(&parse_json_body_or_empty(&body)),
+        ),
         ("GET", "/api/export/meta") => json_response(&mut stream, export::meta_json()),
         ("GET", "/api/export/historian.csv") => {
             let q = export::parse_query(query_string(&path));
@@ -442,7 +472,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let out = if ct.contains("application/json") {
                 csv_ingest::preview_json_handler(&parse_json_body_or_empty(&body))
             } else {
-                csv_ingest::preview_handler(&ct, body.as_bytes())
+                csv_ingest::preview_handler(&ct, body.as_bytes(), None)
             };
             require_role(
                 &mut stream,
@@ -528,7 +558,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            serde_json::from_str::<Value>(model::assignments::save_assignment_json()).unwrap(),
+            model::assignments::save_from_request(&parse_json_body_or_empty(&body)),
         ),
         ("POST", "/api/model/assignments/resolve") => {
             raw_json(&mut stream, model::assignments::resolve_json())
@@ -1708,6 +1738,33 @@ fn require_role_csv(
     }
 }
 
+fn request_path_from_buf(buf: &[u8]) -> String {
+    let header_end = buf
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .unwrap_or(buf.len());
+    let first = buf
+        .get(..header_end.min(buf.len()))
+        .and_then(|h| h.split(|&b| b == b'\n').next())
+        .and_then(|line| {
+            let line = if line.ends_with(b"\r") {
+                &line[..line.len().saturating_sub(1)]
+            } else {
+                line
+            };
+            std::str::from_utf8(line).ok()
+        })
+        .unwrap_or("");
+    first
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or("/")
+        .split('?')
+        .next()
+        .unwrap_or("/")
+        .to_string()
+}
+
 fn read_http_request(stream: &mut TcpStream) -> std::io::Result<String> {
     let mut buf = Vec::with_capacity(4096);
     let mut chunk = [0_u8; 4096];
@@ -1733,6 +1790,8 @@ fn read_http_request(stream: &mut TcpStream) -> std::io::Result<String> {
         .map(|i| i + 4)
         .unwrap_or(buf.len());
     let headers = &buf[..header_end];
+    let route_path = request_path_from_buf(&buf);
+    let max_body = max_body_bytes_for_path(&route_path);
     let content_length = headers
         .split(|&b| b == b'\n')
         .filter_map(|line| {
@@ -1751,10 +1810,13 @@ fn read_http_request(stream: &mut TcpStream) -> std::io::Result<String> {
         })
         .next()
         .unwrap_or(0);
-    if content_length > MAX_BODY_BYTES {
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(read_timeout_secs_for_path(
+        &route_path,
+    ))));
+    if content_length > max_body {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            "request body too large",
+            format!("request body too large (max {max_body} bytes for {route_path})"),
         ));
     }
     let body_start = header_end;

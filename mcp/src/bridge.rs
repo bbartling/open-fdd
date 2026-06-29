@@ -1,10 +1,12 @@
-use reqwest::blocking::Client;
+use reqwest::blocking::{multipart, Client};
 use serde_json::{json, Value};
 use std::env;
+use std::path::Path;
 use std::time::Duration;
 
 pub struct BridgeClient {
     http: Client,
+    http_long: Client,
     base: String,
     token: Option<String>,
 }
@@ -16,35 +18,201 @@ impl BridgeClient {
             .ok()
             .filter(|t| !t.is_empty())
             .or_else(|| env::var("OPENFDD_INTEGRATOR_TOKEN").ok());
+        let timeout_secs = env::var("OPENFDD_MCP_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(120);
+        let long_secs = env::var("OPENFDD_MCP_CSV_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(600);
         let http = Client::builder()
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(timeout_secs))
             .build()
             .expect("reqwest client");
-        Self { http, base, token }
+        let http_long = Client::builder()
+            .timeout(Duration::from_secs(long_secs))
+            .build()
+            .expect("reqwest long client");
+        Self {
+            http,
+            http_long,
+            base,
+            token,
+        }
     }
 
     pub fn get(&self, path: &str) -> Result<Value, String> {
-        let url = format!("{}{}", self.base.trim_end_matches('/'), path);
-        let mut req = self.http.get(&url);
+        self.request(self.http.get(self.url(path)))
+    }
+
+    pub fn post(&self, path: &str, body: &Value) -> Result<Value, String> {
+        self.request(self.http.post(self.url(path)).json(body))
+    }
+
+    pub fn patch(&self, path: &str, body: &Value) -> Result<Value, String> {
+        self.request(self.http.patch(self.url(path)).json(body))
+    }
+
+    fn url(&self, path: &str) -> String {
+        format!("{}{}", self.base.trim_end_matches('/'), path)
+    }
+
+    fn auth(&self, req: reqwest::blocking::RequestBuilder) -> reqwest::blocking::RequestBuilder {
         if let Some(t) = &self.token {
-            req = req.header("Authorization", format!("Bearer {t}"));
+            req.header("Authorization", format!("Bearer {t}"))
+        } else {
+            req
         }
-        req.send()
+    }
+
+    fn request(&self, req: reqwest::blocking::RequestBuilder) -> Result<Value, String> {
+        self.auth(req)
+            .send()
             .map_err(|e| e.to_string())?
             .json()
             .map_err(|e| e.to_string())
     }
 
-    pub fn post(&self, path: &str, body: &Value) -> Result<Value, String> {
-        let url = format!("{}{}", self.base.trim_end_matches('/'), path);
-        let mut req = self.http.post(&url).json(body);
-        if let Some(t) = &self.token {
-            req = req.header("Authorization", format!("Bearer {t}"));
+    pub fn csv_import_preview(&self, args: &Value) -> Result<Value, String> {
+        let files = args.get("files").and_then(|v| v.as_array()).ok_or(
+            "files array required — each entry: {filename, path} or {filename, content_base64}",
+        )?;
+        if files.is_empty() {
+            return Err("files array is empty".into());
         }
-        req.send()
+        let session_id = args.get("session_id").and_then(|v| v.as_str());
+        let mut total_bytes = 0usize;
+        let mut staged: Vec<(String, Vec<u8>)> = Vec::new();
+        for f in files {
+            let name = f
+                .get("filename")
+                .and_then(|v| v.as_str())
+                .unwrap_or("upload.csv");
+            let raw = if let Some(path) = f.get("path").and_then(|v| v.as_str()) {
+                read_local_csv_path(path)?
+            } else if let Some(b64) = f.get("content_base64").and_then(|v| v.as_str()) {
+                use base64::Engine;
+                base64::engine::general_purpose::STANDARD
+                    .decode(b64)
+                    .map_err(|e| e.to_string())?
+            } else {
+                return Err(format!(
+                    "file {name}: provide path (host filesystem) or content_base64"
+                ));
+            };
+            total_bytes += raw.len();
+            staged.push((name.to_string(), raw));
+        }
+        if total_bytes <= 900_000 {
+            let payload = json!({
+                "session_id": session_id,
+                "files": staged.iter().map(|(name, raw)| {
+                    use base64::Engine;
+                    json!({
+                        "filename": name,
+                        "content_base64": base64::engine::general_purpose::STANDARD.encode(raw)
+                    })
+                }).collect::<Vec<_>>()
+            });
+            return self.post("/api/csv/import/preview", &payload);
+        }
+        let mut form = multipart::Form::new();
+        if let Some(sid) = session_id {
+            form = form.text("session_id", sid.to_string());
+        }
+        for (name, raw) in staged {
+            let part = multipart::Part::bytes(raw).file_name(name.clone());
+            form = form.part("file", part);
+        }
+        let req = self
+            .http_long
+            .post(self.url("/api/csv/import/preview"))
+            .multipart(form);
+        self.auth(req)
+            .send()
             .map_err(|e| e.to_string())?
             .json()
             .map_err(|e| e.to_string())
+    }
+
+    pub fn csv_import_plan(&self, args: &Value) -> Result<Value, String> {
+        let session_id = args
+            .get("session_id")
+            .and_then(|v| v.as_str())
+            .ok_or("session_id required")?;
+        let plan = args.get("plan").cloned().unwrap_or_else(|| args.clone());
+        let body = if plan.get("mode").is_some() || plan.get("files").is_some() {
+            json!({ "session_id": session_id, "plan": plan })
+        } else {
+            args.clone()
+        };
+        self.post("/api/csv/import/plan", &body)
+    }
+
+    pub fn historian_query(&self, args: &Value) -> Result<Value, String> {
+        if args.as_object().map(|o| o.is_empty()).unwrap_or(true) {
+            self.get("/api/historian/query")
+        } else {
+            self.post("/api/historian/query", args)
+        }
+    }
+
+    pub fn fdd_rules_list(&self) -> Result<Value, String> {
+        self.get("/api/fdd-rules")
+    }
+
+    pub fn fdd_rule_test_sql(&self, args: &Value) -> Result<Value, String> {
+        let rule_id = args
+            .get("rule_id")
+            .and_then(|v| v.as_str())
+            .ok_or("rule_id required")?;
+        let mut body = args.clone();
+        if let Some(obj) = body.as_object_mut() {
+            obj.remove("rule_id");
+        }
+        self.post(&format!("/api/fdd-rules/{rule_id}/test-sql"), &body)
+    }
+
+    pub fn fdd_run(&self, args: &Value) -> Result<Value, String> {
+        let mut body = args.clone();
+        if let Some(obj) = body.as_object_mut() {
+            obj.remove("confirm");
+        }
+        self.post("/api/fdd/run", &body)
+    }
+
+    pub fn model_assignments_save(&self, args: &Value) -> Result<Value, String> {
+        self.post("/api/model/assignments/save", args)
+    }
+
+    pub fn reports_draft(&self, args: &Value) -> Result<Value, String> {
+        let mut body = args.clone();
+        if let Some(obj) = body.as_object_mut() {
+            obj.remove("confirm");
+        }
+        self.post("/api/reports/draft", &body)
+    }
+
+    pub fn reports_patch(&self, args: &Value) -> Result<Value, String> {
+        let report_id = args
+            .get("report_id")
+            .and_then(|v| v.as_str())
+            .ok_or("report_id required")?;
+        let mut body = args.clone();
+        if let Some(obj) = body.as_object_mut() {
+            obj.remove("report_id");
+            obj.remove("confirm");
+        }
+        self.patch(&format!("/api/reports/{report_id}"), &body)
+    }
+
+    pub fn reports_render_pdf(&self, args: &Value) -> Result<Value, String> {
+        let report_id = args
+            .get("report_id")
+            .and_then(|v| v.as_str())
+            .ok_or("report_id required")?;
+        self.post(&format!("/api/reports/{report_id}/render/pdf"), &json!({}))
     }
 
     pub fn site_update_dry_run(&self) -> Value {
@@ -151,5 +319,26 @@ impl BridgeClient {
             .map_err(|e| e.to_string())?
             .json()
             .map_err(|e| e.to_string())
+    }
+}
+
+fn read_local_csv_path(path: &str) -> Result<Vec<u8>, String> {
+    if path.contains("..") {
+        return Err("path traversal (..) not allowed".into());
+    }
+    let p = Path::new(path);
+    if !p.is_file() {
+        return Err(format!("file not found: {path}"));
+    }
+    std::fs::read(p).map_err(|e| format!("read {path}: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_path_traversal() {
+        assert!(read_local_csv_path("../etc/passwd").is_err());
     }
 }

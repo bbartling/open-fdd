@@ -25,6 +25,18 @@ Read-first sidecar. JWT via `OPENFDD_MCP_TOKEN`. Bind `127.0.0.1` or site VLAN o
 | `openfdd_model_sparql` | `POST /api/model/sparql` | JWT |
 | `openfdd_model_sites` | `GET /api/model/sites` | JWT |
 | `openfdd_model_coverage` | `GET /api/dashboard/model-coverage` | JWT |
+| `openfdd_csv_import_preview` | `POST /api/csv/import/preview` (path/base64/multipart) | JWT |
+| `openfdd_csv_import_plan` | `POST /api/csv/import/plan` | JWT |
+| `openfdd_csv_fusion_preview` | `GET /api/csv/import/sessions/{id}/fusion-preview` | JWT |
+| `openfdd_csv_import_execute` | `POST /api/csv/import/execute` | JWT + write gate |
+| `openfdd_historian_query` | `GET/POST /api/historian/query` | JWT |
+| `openfdd_fdd_rules_list` | `GET /api/fdd-rules` | JWT |
+| `openfdd_fdd_rule_test_sql` | `POST /api/fdd-rules/{id}/test-sql` | JWT |
+| `openfdd_fdd_run` | `POST /api/fdd/run` | JWT + write gate |
+| `openfdd_model_assignments_save` | `POST /api/model/assignments/save` | JWT + write gate |
+| `openfdd_reports_draft` | `POST /api/reports/draft` | JWT + write gate |
+| `openfdd_reports_patch` | `PATCH /api/reports/{id}` | JWT + write gate |
+| `openfdd_reports_render_pdf` | `POST /api/reports/{id}/render/pdf` | JWT + write gate |
 
 ### `openfdd_model_sparql`
 
@@ -50,14 +62,19 @@ Use the same JWT against the bridge directly — see [AI_AGENT_API.md](../AI_AGE
 | Test SQL rule | POST | `/api/fdd-rules/{id}/test-sql` |
 | Stack health | GET | `/api/health/stack` |
 
-## Phase 2 — gated (not in MCP by default)
+## Phase 2 — write tools (gated)
 
-Requires `OPENFDD_MCP_ALLOW_WRITES=1` and per-call approval record:
+Requires **`OPENFDD_MCP_ALLOW_WRITES=1`** and **`confirm: true`** on each tool call:
 
 | Tool | REST | Risk |
 |------|------|------|
-| Rule activation | `POST /api/fdd-rules/{id}/activate` | Live FDD |
-| Save assignments | `POST /api/model/assignments/save` | OT binding |
+| `openfdd_csv_import_execute` | `POST /api/csv/import/execute` | Arrow/historian write |
+| `openfdd_fdd_run` | `POST /api/fdd/run` | Live FDD evaluation |
+| `openfdd_model_assignments_save` | `POST /api/model/assignments/save` | Model binding |
+| `openfdd_reports_draft` | `POST /api/reports/draft` | Report create |
+| `openfdd_reports_patch` | `PATCH /api/reports/{id}` | Report edit |
+| `openfdd_reports_render_pdf` | `POST /api/reports/{id}/render/pdf` | PDF output |
+| Rule activation | `POST /api/fdd-rules/{id}/activate` | Live FDD (REST only — not in MCP yet) |
 | BACnet write | `POST /api/bacnet/write` | Field bus |
 | Haystack write | `POST /api/haystack/write` | Station write |
 | Site restore | backup/restore scripts | Data loss |

@@ -176,8 +176,8 @@ fn main() -> std::io::Result<()> {
                 Ok(())
             }
             AuthCommands::HashPassword { password } => {
-                let hashed = hash_password(&password)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+                let hashed =
+                    hash_password(&password).map_err(|e| std::io::Error::other(e.to_string()))?;
                 println!("{hashed}");
                 Ok(())
             }
@@ -190,7 +190,7 @@ fn main() -> std::io::Result<()> {
                     out_dir,
                     lan_ip,
                 })
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                .map_err(|e| std::io::Error::other(e))?;
                 eprintln!("wrote {}", result.cert_path.display());
                 eprintln!("wrote {}", result.key_path.display());
                 Ok(())
@@ -215,7 +215,7 @@ fn main() -> std::io::Result<()> {
                         out_dir,
                         lan_ip,
                     })
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                    .map_err(|e| std::io::Error::other(e))?;
                     eprintln!("TLS cert: {}", result.cert_path.display());
                     eprintln!("TLS key:  {}", result.key_path.display());
                 }

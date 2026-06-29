@@ -103,6 +103,16 @@ docker run -i --rm --network host \
 | `openfdd_model_sparql` | Execute SPARQL SELECT on Haystack RDF |
 | `openfdd_model_sites` | Site list |
 | `openfdd_model_coverage` | Mapped vs unmapped points |
+| `openfdd_csv_import_preview` | Stage CSVs from host path or base64 |
+| `openfdd_csv_import_plan` | Append/join plan + validation preview |
+| `openfdd_csv_fusion_preview` | Merged grid preview |
+| `openfdd_csv_import_execute` | Save to Arrow (write gate) |
+| `openfdd_historian_query` | Historian pivot query |
+| `openfdd_fdd_rules_list` | FDD rule catalog |
+| `openfdd_fdd_rule_test_sql` | Test rule SQL |
+| `openfdd_fdd_run` | Run ad-hoc FDD SQL (write gate) |
+| `openfdd_model_assignments_save` | Save assignments (write gate) |
+| `openfdd_reports_draft` / `patch` / `render_pdf` | Report → PDF pipeline (write gate) |
 
 Contract: [docs/agent/openfdd-mcp-tool-contract.md](../docs/agent/openfdd-mcp-tool-contract.md)
 
@@ -122,6 +132,9 @@ docker build -f Dockerfile.mcp -t openfdd-mcp:local .
 | `OPENFDD_API_BASE` | `http://127.0.0.1:8080` | Bridge REST |
 | `OPENFDD_COMMISSION_BASE` | `http://127.0.0.1:9091` | BACnet OT reads |
 | `OPENFDD_MCP_TOKEN` | — | Bearer JWT (integrator/agent) |
+| `OPENFDD_MCP_ALLOW_WRITES` | — | Set to `1` to enable write tools (requires `confirm:true` per call) |
+| `OPENFDD_MCP_TIMEOUT_SECS` | `120` | Default REST timeout |
+| `OPENFDD_MCP_CSV_TIMEOUT_SECS` | `600` | Large CSV multipart upload timeout |
 | `OPENFDD_BENCH_TOPOLOGY_FILE` | — | Gitignored JSON with bench IPs |
 
 Obtain token: `scripts/openfdd_auth_lib.sh` → `openfdd_auth_login_token`.
