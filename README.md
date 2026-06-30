@@ -46,10 +46,10 @@ Open-FDD is designed to be **local-first**. No cloud services are required. AI a
 
 
 <p align="center">
-  <a href="docs/README.md">
+  <a href="https://bbartling.github.io/open-fdd/">
     <img src="https://img.shields.io/badge/Docs-online-2563EB?style=for-the-badge" alt="Online docs">
   </a>
-  <a href="docs/quick-start/rust-edge-bootstrap.md">
+  <a href="https://bbartling.github.io/open-fdd/quick-start/docker-ghcr.html">
     <img src="https://img.shields.io/badge/Quick%20Start-Rust%20Edge-059669?style=for-the-badge" alt="Rust edge quick start">
   </a>
   <a href="https://arrow.apache.org/">
@@ -204,7 +204,7 @@ Report faults, stale points, and recommended next steps in plain language.
 <details>
 <summary><strong>Copy-paste: OpenClaw — backup, update & restore</strong></summary>
 
-Full reference: [Rust site lifecycle](docs/quick-start/rust-site-lifecycle.md).
+Full reference: [site lifecycle](https://bbartling.github.io/open-fdd/quick-start/site-lifecycle.html).
 
 ```text
 You are OpenClaw upgrading an Open-FDD Rust edge site at ~/open-fdd.
@@ -247,7 +247,7 @@ Copy `workspace/bench/data.env.local.example` → `workspace/data.env.local` on 
 
 After editing: `./scripts/openfdd_bench_safe_restart.sh` then `OPENFDD_DRIVERS_VALIDATE_STRICT=1 ./scripts/openfdd_drivers_validate.sh`.
 
-See [docs/bench-validation.md](docs/bench-validation.md).
+See [operations troubleshooting](https://bbartling.github.io/open-fdd/operations/troubleshooting.html) and driver docs on the site.
 
 </details>
 

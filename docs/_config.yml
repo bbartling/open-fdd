@@ -1,0 +1,46 @@
+title: Open-FDD
+description: Local-first Rust edge platform for building telemetry, semantic modeling, and HVAC fault detection.
+theme: just-the-docs
+
+url: https://bbartling.github.io
+baseurl: /open-fdd
+
+search_enabled: true
+heading_announcement: false
+
+aux_links:
+  GitHub:
+    - //github.com/bbartling/open-fdd
+  GHCR:
+    - //github.com/bbartling/open-fdd/pkgs/container/openfdd-edge-rust
+
+callouts:
+  warning:
+    title: Warning
+    color: yellow
+  important:
+    title: Important
+    color: blue
+
+exclude:
+  - archive
+  - Gemfile
+  - Gemfile.lock
+  - openapi.yaml
+  - README.md
+  - vendor
+  - .sass-cache
+  - .jekyll-cache
+
+plugins:
+  - jekyll-seo-tag
+  - jekyll-github-metadata
+
+github:
+  repository: bbartling/open-fdd
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default

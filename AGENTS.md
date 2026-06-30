@@ -9,7 +9,7 @@ Open-FDD **3.2.x** is a **deterministic Rust edge runtime** (`ghcr.io/bbartling/
 | **Optional Ollama** | Local-only doc helper for operators — not a bridge dependency |
 | **Optional MCP** | Read-first `openfdd-mcp` GHCR sidecar (3.2.3+) — [mcp/README.md](mcp/README.md); not started by site update |
 
-**Agent docs:** [docs/agent/openfdd-agent-current-standing.md](docs/agent/openfdd-agent-current-standing.md) · [architecture](docs/agent/openfdd-agent-architecture.md) · [bench WSL agent prompt](docs/agent/bench-driver-setup-wsl-agent.md) · [safety boundaries](docs/security/agent-safety-boundaries.md)
+**Agent docs:** [MCP & agents](https://bbartling.github.io/open-fdd/mcp-agents/) · [API routes](https://bbartling.github.io/open-fdd/api/routes.html) · [agent safety](https://bbartling.github.io/open-fdd/mcp-agents/agent-safety.html) · [mcp/README.md](mcp/README.md)
 
 **Cursor agents:** `.cursor/agents/openfdd-retrofit-orchestrator.md` · `.cursor/agents/simple-test-triage.md`
 
@@ -80,6 +80,4 @@ Bind drivers → Haystack IDs → FDD/CDL via `/api/model/assignments`.
 
 ## Legacy (Python / built-in Ollama / MCP-RAG)
 
-Older docs or UI labels may reference Rule Lab, FastAPI bridge, or `openfdd-mcp-rag`. See [docs/legacy/README.md](docs/legacy/README.md) and [docs/agent/openfdd-agent-current-standing.md](docs/agent/openfdd-agent-current-standing.md) before following them.
-
-See also [docs/ai-agent-context.md](docs/ai-agent-context.md).
+Older docs or UI labels may reference Rule Lab, FastAPI bridge, or `openfdd-mcp-rag`. Archived material is under `docs/archive/` — use the [online docs](https://bbartling.github.io/open-fdd/) for current Rust 3.2.x guidance.
