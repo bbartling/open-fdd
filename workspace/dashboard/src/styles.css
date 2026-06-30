@@ -4578,10 +4578,10 @@ button.linkish {
 }
 
 .gf-editor-panel {
-  border: 1px solid var(--gf-editor-border);
+  border: 1px solid #ddd;
   border-radius: 10px;
   overflow: hidden;
-  background: var(--gf-editor-bg);
+  background: #f8f8f8;
 }
 
 .gf-editor-panel__head {
@@ -4590,9 +4590,9 @@ button.linkish {
   align-items: center;
   gap: 0.5rem 0.75rem;
   padding: 0.55rem 0.85rem;
-  border-bottom: 1px solid var(--gf-editor-border);
-  background: var(--gf-editor-head-bg);
-  color: var(--gf-editor-text);
+  border-bottom: 1px solid #ddd;
+  background: #f0f0f0;
+  color: #333;
 }
 
 .gf-section-title {
@@ -4601,12 +4601,13 @@ button.linkish {
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--gf-editor-text);
+  color: #333;
 }
 
 .gf-editor-panel__hint {
   margin-left: auto;
   font-size: 0.75rem;
+  color: #666;
 }
 
 .gf-sql-editor {
@@ -4615,39 +4616,21 @@ button.linkish {
   min-height: 200px;
 }
 
-.gf-sql-editor__gutter {
-  padding: 0.75rem 0.55rem;
-  border-right: 1px solid var(--gf-editor-border);
-  color: var(--gf-editor-gutter);
-  background: color-mix(in srgb, var(--gf-editor-bg) 85%, var(--gf-editor-head-bg));
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.78rem;
-  line-height: 1.55;
-  user-select: none;
-  text-align: right;
-}
-
-.gf-sql-editor__gutter span {
+.gf-sql-editor--codemirror {
   display: block;
 }
 
-.gf-sql-editor__input {
-  width: 100%;
-  border: none;
-  outline: none;
-  resize: vertical;
-  min-height: 200px;
-  padding: 0.75rem 1rem;
-  background: var(--gf-editor-bg);
-  color: var(--gf-editor-text);
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+.gf-sql-editor--codemirror .cm-editor {
   font-size: 0.88rem;
-  line-height: 1.55;
-  tab-size: 2;
+  background: #f8f8f8;
 }
 
-.gf-sql-editor__input::placeholder {
-  color: color-mix(in srgb, var(--gf-editor-gutter) 70%, transparent);
+.gf-sql-editor--codemirror .cm-editor.cm-focused {
+  outline: none;
+}
+
+.gf-sql-editor--codemirror .cm-scroller {
+  min-height: 200px;
 }
 
 .plot-range-field {
