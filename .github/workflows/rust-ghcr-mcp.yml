@@ -54,7 +54,10 @@ jobs:
           source scripts/resolve_ghcr_publish_tag.sh
           tag="$(resolve_ghcr_publish_tag "${GITHUB_REF_NAME}" "${{ inputs.image_tag }}")"
           echo "version=$tag" >> "$GITHUB_OUTPUT"
-          if [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
+          # :latest is owned by rust-release.yml — master pushes must not move it.
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.image_tag }}" && "${{ inputs.image_tag }}" != "latest" ]]; then
+            echo "latest=0" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF_NAME}" == v* ]]; then
             echo "latest=1" >> "$GITHUB_OUTPUT"
           else
             echo "latest=0" >> "$GITHUB_OUTPUT"
