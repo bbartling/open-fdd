@@ -114,9 +114,9 @@ docker run -i --rm --network host \
 | `openfdd_model_assignments_save` | Save assignments (write gate) |
 | `openfdd_reports_draft` / `patch` / `render_pdf` | Report → PDF pipeline (write gate) |
 
-Contract: [docs/agent/openfdd-mcp-tool-contract.md](../docs/agent/openfdd-mcp-tool-contract.md)
+Contract: [ingest contract (archive)](../docs/archive/agent/ingest-contract-v1.md) · [MCP docs](https://bbartling.github.io/open-fdd/mcp-agents/mcp.html)
 
-Bench agent prompt: [docs/agent/bench-driver-setup-wsl-agent.md](../docs/agent/bench-driver-setup-wsl-agent.md)
+Bench agent prompt (archive): [docs/archive/agent/bench-driver-setup-wsl-agent.md](../docs/archive/agent/bench-driver-setup-wsl-agent.md)
 
 ## Build
 

@@ -39,7 +39,7 @@ Composite: **`openfdd_integration_smoke`** — `{ import_dir?, session_id?, conf
 
 Helper script (bash only): `scripts/openfdd_csv_preflight.sh <session_id>`.
 
-See [docs/agent/ingest-contract-v1.md](../docs/agent/ingest-contract-v1.md).
+See [ingest contract (archive)](../docs/archive/agent/ingest-contract-v1.md) or [MCP docs](https://bbartling.github.io/open-fdd/mcp-agents/).
 
 ## Write tools (Phase 2)
 

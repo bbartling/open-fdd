@@ -1,5 +1,4 @@
-# Rust edge docs live as markdown in docs/ (no Jekyll Gemfile).
-# Skip Pages build until a static site generator is wired for the Rust line.
+# Build and deploy Open-FDD docs to GitHub Pages (Just the Docs / Jekyll).
 
 name: Docs (GitHub Pages)
 
@@ -13,12 +12,41 @@ on:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
-  skip-rust-docs:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Rust docs are in-repo markdown
-        run: |
-          echo "Open-FDD 3.2 Rust docs: https://github.com/bbartling/open-fdd/tree/master/docs"
-          echo "Skipping legacy Jekyll Pages build (no docs/Gemfile on Rust line)."
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+          working-directory: docs
+
+      - name: Jekyll build
+        run: bundle exec jekyll build --trace
+        working-directory: docs
+        env:
+          JEKYLL_ENV: production
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/_site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
