@@ -119,3 +119,18 @@ jobs:
 
       - name: Published tags
         run: docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:sha-${GITHUB_SHA::7}" || docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:${{ steps.ver.outputs.version }}"
+
+      - name: Prune stale GHCR versions (beta retention)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          chmod +x scripts/ghcr_prune_packages.sh
+          ./scripts/ghcr_prune_packages.sh \
+            --all-images \
+            --keep-releases 2 \
+            --delete-untagged-older-than-days 7 \
+            --delete-sha-older-than-days 7 \
+            --protect-tag "${{ steps.ver.outputs.version }}" \
+            --protect-tag "v${{ steps.ver.outputs.version }}" \
+            --protected-tags-file scripts/ghcr-retention-protected-tags.txt \
+            --confirm-delete

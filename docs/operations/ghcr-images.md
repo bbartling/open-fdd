@@ -50,3 +50,27 @@ docker manifest inspect ghcr.io/bbartling/openfdd-edge-rust:3.2.4
 ## OCI labels
 
 Release images include `org.opencontainers.image.version`, `revision`, `source`, and title `Open-FDD Rust Edge`.
+
+## Retention and pruning (beta)
+
+Open-FDD is in **beta** — old GHCR revisions are pruned automatically:
+
+| Trigger | Policy |
+|---------|--------|
+| After **master** edge publish | Keep **2** semver releases + `latest`; delete `sha-*` and untagged versions older than **7 days** |
+| After **rust-release** | Same, protecting the released version |
+| **Weekly** (Sundays 06:00 UTC) | Scheduled prune (`ghcr-prune.yml`) |
+
+Manual dry-run:
+
+```bash
+gh workflow run "Prune old GHCR images" -f dry_run=true
+```
+
+Bench sites should **pin semver** (`OPENFDD_IMAGE_TAG=3.2.4`) — not `sha-*`. Diagnose pulls:
+
+```bash
+./scripts/openfdd_ghcr_diagnose.sh 3.2.4
+```
+
+Do not delete package versions manually in the GitHub UI — use the prune workflow to avoid orphaned tags.

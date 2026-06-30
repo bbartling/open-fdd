@@ -1,8 +1,10 @@
-# Manual GHCR retention cleanup — dry-run by default.
+# GHCR retention — beta: keep 2 semver releases; prune after publish + weekly schedule.
 
 name: Prune old GHCR images
 
 on:
+  schedule:
+    - cron: "0 6 * * 0"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -14,7 +16,7 @@ on:
       keep_releases:
         description: "Number of release tags to keep per image"
         required: true
-        default: "5"
+        default: "2"
       delete_untagged_older_than_days:
         description: "Delete untagged versions older than N days"
         required: true
@@ -22,7 +24,7 @@ on:
       delete_sha_older_than_days:
         description: "Delete sha/dev versions older than N days"
         required: true
-        default: "30"
+        default: "7"
       current_acme_tag:
         description: "Current Acme deployed tag to protect"
         required: false
@@ -50,11 +52,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p reports
+          DRY="${{ github.event_name == 'schedule' && 'false' || inputs.dry_run }}"
+          KEEP="${{ inputs.keep_releases || '2' }}"
+          UNTAG="${{ inputs.delete_untagged_older_than_days || '7' }}"
+          SHA="${{ inputs.delete_sha_older_than_days || '7' }}"
           ARGS=(
             --all-images
-            --keep-releases "${{ inputs.keep_releases }}"
-            --delete-untagged-older-than-days "${{ inputs.delete_untagged_older_than_days }}"
-            --delete-sha-older-than-days "${{ inputs.delete_sha_older_than_days }}"
+            --keep-releases "$KEEP"
+            --delete-untagged-older-than-days "$UNTAG"
+            --delete-sha-older-than-days "$SHA"
             --protected-tags-file scripts/ghcr-retention-protected-tags.txt
             --current-acme-tag "${{ inputs.current_acme_tag }}"
             --previous-acme-tag "${{ inputs.previous_acme_tag }}"
@@ -62,7 +68,7 @@ jobs:
             --markdown-out reports/ghcr-prune-plan.md
           )
 
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
+          if [ "$DRY" = "true" ]; then
             ARGS+=(--dry-run)
           else
             ARGS+=(--confirm-delete)

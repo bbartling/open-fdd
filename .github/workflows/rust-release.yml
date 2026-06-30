@@ -194,6 +194,29 @@ jobs:
 
             ### Deploy
             ```bash
-            export OPENFDD_IMAGE_TAG=latest   # early dev default
+            export OPENFDD_IMAGE_TAG=${{ needs.validate.outputs.version }}
             ./scripts/openfdd_rust_edge_bootstrap.sh --start
             ```
+
+  prune-ghcr:
+    needs: [validate, publish-edge, publish-mcp]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prune stale GHCR versions (beta retention)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          chmod +x scripts/ghcr_prune_packages.sh
+          ./scripts/ghcr_prune_packages.sh \
+            --all-images \
+            --keep-releases 2 \
+            --delete-untagged-older-than-days 7 \
+            --delete-sha-older-than-days 7 \
+            --protect-tag "${{ needs.validate.outputs.version }}" \
+            --protect-tag "v${{ needs.validate.outputs.version }}" \
+            --protected-tags-file scripts/ghcr-retention-protected-tags.txt \
+            --confirm-delete
