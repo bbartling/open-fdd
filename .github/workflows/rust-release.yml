@@ -156,14 +156,21 @@ jobs:
   release:
     needs: [validate, publish-edge, publish-mcp]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Create git tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${{ needs.validate.outputs.version }}" -m "Open-FDD v${{ needs.validate.outputs.version }} — Rust Edge"
-          git push origin "v${{ needs.validate.outputs.version }}"
+          TAG="v${{ needs.validate.outputs.version }}"
+          if git ls-remote --exit-code origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists on origin — skipping create/push (republish)"
+          else
+            git tag -a "${TAG}" -m "Open-FDD ${TAG} — Rust Edge"
+            git push origin "${TAG}"
+          fi
 
       - name: GitHub Release
         uses: softprops/action-gh-release@v2
