@@ -1,7 +1,7 @@
 const TOKEN_KEY = "ofdd_token";
 const BRIDGE_OVERRIDE_KEY = "ofdd-bridge-base-override";
 
-function isLocalhostHost(hostname: string): boolean {
+export function isLocalhostHost(hostname: string): boolean {
   return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
 }
 

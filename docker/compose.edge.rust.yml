@@ -33,6 +33,7 @@ services:
     environment:
       SERVICE_MODE: bridge
       PORT: "8080"
+      OPENFDD_BIND_HOST: "0.0.0.0"
       FRONTEND_DIR: /app/frontend
       OPENFDD_WORKSPACE: /var/openfdd/workspace
       OPENFDD_IMAGE_TAG: ${OPENFDD_IMAGE_TAG:-latest}
@@ -95,6 +96,7 @@ services:
     environment:
       OPENFDD_CADDY_ENABLED: "1"
       OPENFDD_CADDY_MODE: http
+      OPENFDD_CADDY_UPSTREAM: ${OPENFDD_CADDY_UPSTREAM:-openfdd-bridge:8080}
     depends_on:
       openfdd-bridge:
         condition: service_healthy
@@ -115,6 +117,7 @@ services:
       OPENFDD_CADDY_MODE: tls
       OPENFDD_CADDY_HOSTNAME: ${OPENFDD_CADDY_HOSTNAME:-openfdd.local}
       OPENFDD_CADDY_TLS_CN: ${OPENFDD_CADDY_TLS_CN:-openfdd.local}
+      OPENFDD_CADDY_UPSTREAM: ${OPENFDD_CADDY_UPSTREAM:-openfdd-bridge:8080}
     depends_on:
       openfdd-bridge:
         condition: service_healthy

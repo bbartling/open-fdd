@@ -58,6 +58,31 @@ openfdd_rust_resolve_compose_file() {
   printf '%s' "$compose"
 }
 
+# Pass base compose + docker-compose.override.yml when present (Compose does not auto-merge override).
+openfdd_rust_dcompose() {
+  local root="$1"
+  shift
+  local base
+  base="$(openfdd_rust_resolve_compose_file "$root")"
+  [[ -n "$base" && -f "$base" ]] || {
+    echo "ERROR: compose file not found under $root" >&2
+    return 1
+  }
+  local args=(-f "$base")
+  if [[ -f "$root/docker-compose.override.yml" ]]; then
+    args+=(-f "$root/docker-compose.override.yml")
+  fi
+  docker compose "${args[@]}" "$@"
+}
+
+openfdd_rust_ensure_bridge_host_network() {
+  local root="$1"
+  local override="$root/docker-compose.override.yml"
+  [[ -f "$override" ]] || return 0
+  grep -q 'network_mode: host' "$override" 2>/dev/null || return 0
+  openfdd_rust_dcompose "$root" up -d --force-recreate --no-deps openfdd-bridge 2>/dev/null || true
+}
+
 openfdd_rust_redact_line() {
   local line="$1"
   if [[ "$line" =~ (SECRET|PASSWORD|TOKEN|AUTH)= ]]; then

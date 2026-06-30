@@ -4,6 +4,7 @@ import {
   devQuickLogin,
   devRunScript,
   fetchAuthStatus,
+  isLocalhostHost,
   login,
   sanitizeBridgeBaseOverride,
   setToken,
@@ -17,6 +18,8 @@ export default function LoginPage() {
   const [authRequired, setAuthRequired] = useState(true);
   const [hint, setHint] = useState("");
   const [devBusy, setDevBusy] = useState<string | null>(null);
+  const showDevShortcuts =
+    typeof window !== "undefined" && isLocalhostHost(window.location.hostname);
 
   useEffect(() => {
     if (sanitizeBridgeBaseOverride()) {
@@ -125,6 +128,7 @@ export default function LoginPage() {
         {error ? <p className="error">{error}</p> : null}
         <button type="submit">Sign in</button>
 
+        {showDevShortcuts ? (
         <div className="login-dev-actions">
           <p className="muted">Local dev (requires edge OPENFDD_ALLOW_INSECURE_AUTH=1):</p>
           <div className="toolbar">
@@ -157,6 +161,7 @@ export default function LoginPage() {
             Manual password: <code>workspace/bootstrap_credentials.once.txt</code>
           </p>
         </div>
+        ) : null}
       </form>
     </div>
   );
