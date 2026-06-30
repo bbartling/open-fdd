@@ -70,8 +70,8 @@ jobs:
         with:
           images: ${{ env.MCP_IMAGE }}
           tags: |
-            type=raw,value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' || github.event_name == 'workflow_dispatch' }}
-            type=raw,value=v${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' }}
+            type=raw,value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch' }}
+            type=raw,value=v${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' || github.ref == 'refs/heads/master' }}
             type=raw,value=latest,enable=${{ steps.ver.outputs.latest == '1' }}
             type=sha,prefix=sha-,format=short
           labels: |
@@ -88,5 +88,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            OPENFDD_IMAGE_TAG=${{ steps.ver.outputs.version }}
+            OPENFDD_BUILD_GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

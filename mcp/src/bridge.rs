@@ -443,9 +443,12 @@ impl BridgeClient {
             .or_else(|| env::var("OPENFDD_IMAGE_TAG").ok())
             .unwrap_or_default();
         Ok(json!({
-            "ok": !expected.is_empty() && running == expected,
+            "ok": !expected.is_empty() && (running == expected || running == format!("v{expected}")),
             "running_tag": running,
             "expected_tag": expected,
+            "git_sha": health.get("git_sha").cloned().unwrap_or(Value::Null),
+            "git_sha_short": health.get("git_sha_short").cloned().unwrap_or(Value::Null),
+            "image_ref": health.get("image_ref").cloned().unwrap_or(Value::Null),
             "doc": "scripts/openfdd_rust_check_ghcr_platform.sh"
         }))
     }

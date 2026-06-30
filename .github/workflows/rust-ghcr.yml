@@ -90,8 +90,8 @@ jobs:
         with:
           images: ${{ env.EDGE_IMAGE }}
           tags: |
-            type=raw,value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' || github.event_name == 'workflow_dispatch' }}
-            type=raw,value=v${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' }}
+            type=raw,value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch' }}
+            type=raw,value=v${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' || github.ref == 'refs/heads/master' }}
             type=raw,value=latest,enable=${{ steps.ver.outputs.latest == '1' }}
             type=sha,prefix=sha-,format=short
           labels: |

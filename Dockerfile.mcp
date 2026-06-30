@@ -8,10 +8,14 @@ COPY mcp ./mcp
 RUN cargo build --release -p openfdd-mcp
 
 FROM debian:bookworm-slim AS runtime
+ARG OPENFDD_IMAGE_TAG=dev
+ARG OPENFDD_BUILD_GIT_SHA=unknown
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates \
   && rm -rf /var/lib/apt/lists/* \
   && useradd --create-home --uid 10002 --shell /usr/sbin/nologin openfdd-mcp
 COPY --from=builder /app/target/release/openfdd-mcp /usr/local/bin/openfdd-mcp
+ENV OPENFDD_IMAGE_TAG=${OPENFDD_IMAGE_TAG} \
+    OPENFDD_GIT_SHA=${OPENFDD_BUILD_GIT_SHA}
 USER openfdd-mcp
 ENTRYPOINT ["openfdd-mcp"]
