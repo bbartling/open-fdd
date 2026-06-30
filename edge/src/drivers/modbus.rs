@@ -31,7 +31,7 @@ fn live_points_from_profile() -> String {
     let mut points = points;
     if p.modbus_register > 0 {
         let reg = p.modbus_register;
-        let func = if reg >= 30001 && reg < 40001 {
+        let func = if (30001..40001).contains(&reg) {
             "input_register"
         } else {
             "holding_register"

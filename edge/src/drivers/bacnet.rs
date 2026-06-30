@@ -1240,7 +1240,7 @@ pub fn poll_metrics() -> Value {
             .lock()
             .ok()
             .and_then(|g| g.clone())
-            .unwrap_or_else(|| now_rfc3339())
+            .unwrap_or_else(now_rfc3339)
     })
 }
 
