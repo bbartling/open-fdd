@@ -159,7 +159,12 @@ export default function SqlFddRulesPage() {
   }
 
   const selectedTable = schemaTables.find((t) => t.name === table);
-  const historianPath = historian?.historian_path ?? historian?.jsonl ?? "workspace/data/historian/validation/";
+  const columnHint = selectedTable
+    ? (selectedTable.columns ?? [])
+        .map((c) => (typeof c === "string" ? c : c.name))
+        .slice(0, 8)
+        .join(", ")
+    : "";
 
   return (
     <div className="page page-wide sql-fdd-page gf-query-page">
@@ -214,24 +219,14 @@ export default function SqlFddRulesPage() {
           <span className="gf-pill gf-pill--muted">
             {String(historian?.row_count ?? 0).toLocaleString()} rows
           </span>
+          {columnHint ? (
+            <span className="gf-pill gf-pill--muted" title={(selectedTable?.columns ?? []).map((c) => (typeof c === "string" ? c : c.name)).join(", ")}>
+              {columnHint}
+              {(selectedTable?.columns?.length ?? 0) > 8 ? "…" : ""}
+            </span>
+          ) : null}
         </div>
       </div>
-
-      <p className="muted sql-fdd-help">
-        Data lives under <code>{String(historianPath)}</code> as JSONL + Arrow. Rows are keyed by{" "}
-        <code>equipment_id</code> and sensor columns (<code>oa_t</code>, <code>zn_t</code>, …). Rules with
-        multiple sensors should list each column in <code>required_inputs</code> — dashboard analytics
-        reports per-sensor averages in alarm vs normal.
-      </p>
-
-      {selectedTable ? (
-        <p className="muted sql-fdd-help">
-          Columns:{" "}
-          {(selectedTable.columns ?? [])
-            .map((c) => (typeof c === "string" ? c : c.name))
-            .join(", ")}
-        </p>
-      ) : null}
 
       <div className="gf-query-main">
         <div className="gf-query-toolbar">

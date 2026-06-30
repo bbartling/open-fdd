@@ -4335,13 +4335,19 @@ button.linkish {
 
 /* ── Grafana-style SQL FDD query workbench ── */
 .gf-query-page {
-  --gf-editor-bg: color-mix(in srgb, var(--bg) 70%, #0b0e14);
-  --gf-editor-border: color-mix(in srgb, var(--border) 80%, #1f2735);
+  --gf-editor-bg: #f4f7fb;
+  --gf-editor-border: #b8c4d4;
+  --gf-editor-text: #0f172a;
+  --gf-editor-gutter: #64748b;
+  --gf-editor-head-bg: #e8eef6;
 }
 
 [data-theme="dark"] .gf-query-page {
-  --gf-editor-bg: #0b0e14;
-  --gf-editor-border: #273043;
+  --gf-editor-bg: #1a2234;
+  --gf-editor-border: #3d4f6a;
+  --gf-editor-text: #e8edf6;
+  --gf-editor-gutter: #94a3b8;
+  --gf-editor-head-bg: #141c2b;
 }
 
 .gf-context-bar {
@@ -4585,7 +4591,8 @@ button.linkish {
   gap: 0.5rem 0.75rem;
   padding: 0.55rem 0.85rem;
   border-bottom: 1px solid var(--gf-editor-border);
-  background: color-mix(in srgb, var(--panel) 60%, var(--gf-editor-bg));
+  background: var(--gf-editor-head-bg);
+  color: var(--gf-editor-text);
 }
 
 .gf-section-title {
@@ -4594,6 +4601,7 @@ button.linkish {
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  color: var(--gf-editor-text);
 }
 
 .gf-editor-panel__hint {
@@ -4610,7 +4618,8 @@ button.linkish {
 .gf-sql-editor__gutter {
   padding: 0.75rem 0.55rem;
   border-right: 1px solid var(--gf-editor-border);
-  color: var(--muted);
+  color: var(--gf-editor-gutter);
+  background: color-mix(in srgb, var(--gf-editor-bg) 85%, var(--gf-editor-head-bg));
   font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 0.78rem;
   line-height: 1.55;
@@ -4629,12 +4638,51 @@ button.linkish {
   resize: vertical;
   min-height: 200px;
   padding: 0.75rem 1rem;
-  background: transparent;
-  color: var(--input-text);
+  background: var(--gf-editor-bg);
+  color: var(--gf-editor-text);
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 0.88rem;
   line-height: 1.55;
   tab-size: 2;
+}
+
+.gf-sql-editor__input::placeholder {
+  color: color-mix(in srgb, var(--gf-editor-gutter) 70%, transparent);
+}
+
+.plot-range-field {
+  min-width: min(420px, 100%);
+}
+
+.plot-custom-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.plot-custom-range input[type="datetime-local"] {
+  font-size: 0.85rem;
+}
+
+.plot-range-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: inherit;
+  text-decoration: underline;
 }
 
 .gf-visual-builder,

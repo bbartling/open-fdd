@@ -213,6 +213,81 @@ fn parse_hours(q: &str) -> i64 {
     q.parse::<i64>().unwrap_or(24).clamp(1, 87600)
 }
 
+fn row_timestamp(row: &Value) -> Option<DateTime<Utc>> {
+    row.get("timestamp")
+        .and_then(|v| v.as_str())
+        .and_then(parse_ts)
+}
+
+fn data_bounds(rows: &[Value]) -> Value {
+    let mut earliest: Option<DateTime<Utc>> = None;
+    let mut latest: Option<DateTime<Utc>> = None;
+    for row in rows {
+        if let Some(ts) = row_timestamp(row) {
+            earliest = Some(earliest.map_or(ts, |e| e.min(ts)));
+            latest = Some(latest.map_or(ts, |l| l.max(ts)));
+        }
+    }
+    json!({
+        "earliest": earliest.map(|t| t.to_rfc3339()),
+        "latest": latest.map(|t| t.to_rfc3339())
+    })
+}
+
+fn filter_rows<'a>(rows: &'a [Value], params: &HashMap<String, String>) -> Vec<&'a Value> {
+    let use_all = params
+        .get("all")
+        .is_some_and(|v| v == "true" || v == "1" || v == "yes");
+    if use_all {
+        return rows.iter().collect();
+    }
+
+    let after = params
+        .get("after_utc")
+        .map(String::as_str)
+        .and_then(parse_ts);
+    let before = params
+        .get("before_utc")
+        .map(String::as_str)
+        .and_then(parse_ts);
+
+    if after.is_some() || before.is_some() {
+        return rows
+            .iter()
+            .filter(|r| {
+                let Some(ts) = row_timestamp(r) else {
+                    return true;
+                };
+                if let Some(a) = after {
+                    if ts < a {
+                        return false;
+                    }
+                }
+                if let Some(b) = before {
+                    if ts > b {
+                        return false;
+                    }
+                }
+                true
+            })
+            .collect();
+    }
+
+    let hours = parse_hours(params.get("hours").map(String::as_str).unwrap_or("24"));
+    let cutoff = Utc::now() - Duration::hours(hours);
+    let filtered: Vec<&Value> = rows
+        .iter()
+        .filter(|r| row_timestamp(r).map(|t| t >= cutoff).unwrap_or(true))
+        .collect();
+
+    // Historical CSV imports (e.g. 2013–2018) fall outside the default hours window.
+    if filtered.is_empty() && !rows.is_empty() {
+        rows.iter().collect()
+    } else {
+        filtered
+    }
+}
+
 fn parse_keys(columns_param: &str) -> Vec<(String, String)> {
     columns_param
         .split(',')
@@ -248,31 +323,27 @@ pub fn readings_json(params: &HashMap<String, String>) -> Value {
         return json!({"ok": false, "error": "columns query param required"});
     }
 
-    let cutoff = Utc::now() - Duration::hours(hours);
     let rows: Vec<Value> = store::load_pivot_rows().unwrap_or_default();
-    let use_all = params
-        .get("all")
-        .is_some_and(|v| v == "true" || v == "1" || v == "yes");
-    let mut filtered: Vec<&Value> = if use_all {
-        rows.iter().collect()
-    } else {
-        rows.iter()
-            .filter(|r| {
-                let ts = r.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
-                parse_ts(ts).map(|t| t >= cutoff).unwrap_or(true)
-            })
-            .collect()
-    };
-    // Historical CSV imports (e.g. 2013–2018) fall outside the default hours window.
-    if filtered.is_empty() && !rows.is_empty() && !use_all {
-        filtered = rows.iter().collect();
-    }
+    let bounds = data_bounds(&rows);
+    let filtered = filter_rows(&rows, params);
+    let range_label = params
+        .get("after_utc")
+        .map(|_| "custom")
+        .or_else(|| {
+            params
+                .get("all")
+                .filter(|v| **v == "true" || **v == "1" || **v == "yes")
+                .map(|_| "all")
+        })
+        .unwrap_or("hours");
 
     if filtered.is_empty() {
         return json!({
             "ok": true,
             "site_id": site_id,
             "hours": hours,
+            "range_mode": range_label,
+            "data_bounds": bounds,
             "timestamps": [],
             "series": {},
             "series_kinds": {},
@@ -354,6 +425,8 @@ pub fn readings_json(params: &HashMap<String, String>) -> Value {
         "ok": true,
         "site_id": site_id,
         "hours": hours,
+        "range_mode": range_label,
+        "data_bounds": bounds,
         "timestamps": timestamps,
         "series": series,
         "series_kinds": kinds,
@@ -432,5 +505,23 @@ mod tests {
     fn parse_hours_accepts_multi_year_window() {
         assert_eq!(parse_hours("8760"), 8760);
         assert_eq!(parse_hours("87600"), 87600);
+    }
+
+    #[test]
+    fn filter_rows_respects_after_before_utc() {
+        let rows = vec![
+            json!({"timestamp": "2020-01-01T00:00:00Z", "oa_t": 1.0}),
+            json!({"timestamp": "2021-06-01T00:00:00Z", "oa_t": 2.0}),
+            json!({"timestamp": "2022-01-01T00:00:00Z", "oa_t": 3.0}),
+        ];
+        let mut params = HashMap::new();
+        params.insert("after_utc".into(), "2020-06-01T00:00:00Z".into());
+        params.insert("before_utc".into(), "2021-12-31T23:59:59Z".into());
+        let filtered = filter_rows(&rows, &params);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(
+            filtered[0].get("timestamp").and_then(|v| v.as_str()),
+            Some("2021-06-01T00:00:00Z")
+        );
     }
 }

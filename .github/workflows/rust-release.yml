@@ -114,6 +114,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Verify published semver tags
+        run: |
+          VER="${{ needs.validate.outputs.version }}"
+          for tag in "${VER}" "v${VER}"; do
+            echo "Inspecting ${{ env.EDGE_IMAGE }}:${tag}"
+            docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:${tag}"
+          done
+          if [[ "${{ inputs.prerelease }}" == "false" ]]; then
+            docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:latest"
+          fi
+
   publish-mcp:
     needs: [validate, test]
     runs-on: ubuntu-latest
@@ -152,6 +163,17 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Verify published semver tags
+        run: |
+          VER="${{ needs.validate.outputs.version }}"
+          for tag in "${VER}" "v${VER}"; do
+            echo "Inspecting ${{ env.MCP_IMAGE }}:${tag}"
+            docker buildx imagetools inspect "${{ env.MCP_IMAGE }}:${tag}"
+          done
+          if [[ "${{ inputs.prerelease }}" == "false" ]]; then
+            docker buildx imagetools inspect "${{ env.MCP_IMAGE }}:latest"
+          fi
 
   release:
     needs: [validate, publish-edge, publish-mcp]
