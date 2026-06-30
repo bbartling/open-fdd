@@ -45,7 +45,7 @@ After a release merge to `master`, run `openfdd_rust_site_update.sh` to pull the
 **Optional MCP (3.2.3+):** site update does not pull/start MCP. After validate:
 
 ```bash
-export OPENFDD_COMPOSE_ROOT=~/open-fdd OPENFDD_IMAGE_TAG=3.2.5
+export OPENFDD_COMPOSE_ROOT=~/open-fdd OPENFDD_IMAGE_TAG=3.2.6
 docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar pull openfdd-mcp
 export OPENFDD_MCP_TOKEN="$TOKEN"
 ```

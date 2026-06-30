@@ -41,6 +41,20 @@ export type FaultAnalytics = {
   fault_span_sec?: number;
   sample_period_sec?: number;
   value_columns?: string[];
+  /** Per-sensor breakdown when rule binds multiple historian columns. */
+  sensors?: SensorAnalytics[];
+};
+
+export type SensorAnalytics = {
+  column: string;
+  label?: string;
+  value_unit?: string;
+  avg_value_fault?: number | null;
+  avg_value_normal?: number | null;
+  min_value_fault?: number | null;
+  max_value_fault?: number | null;
+  fault_samples?: number;
+  total_samples?: number;
 };
 
 export type FaultAlert = {

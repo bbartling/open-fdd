@@ -4,8 +4,8 @@
 # Pin semver tags (not sha-*) — must match ~/open-fdd/.env OPENFDD_IMAGE_TAG after site update.
 
 [images]
-edge = "ghcr.io/bbartling/openfdd-edge-rust:3.2.5"
-mcp = "ghcr.io/bbartling/openfdd-mcp:3.2.5"
+edge = "ghcr.io/bbartling/openfdd-edge-rust:3.2.6"
+mcp = "ghcr.io/bbartling/openfdd-mcp:3.2.6"
 # Released line on GHCR: 3.2.4 — use same tag for edge + MCP
 
 [bench]

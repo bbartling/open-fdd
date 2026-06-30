@@ -168,6 +168,21 @@ mod tests {
     }
 
     #[test]
+    fn default_model_when_no_file_on_disk() {
+        with_temp_workspace(|root| {
+            let path = root.join("data/model/haystack_grid.json");
+            assert!(!path.exists());
+            let grid = persist::haystack_model_value();
+            let rows = grid.get("rows").and_then(|v| v.as_array()).unwrap();
+            assert_eq!(rows.len(), 2);
+            assert_eq!(
+                rows[0].get("id").and_then(|v| v.as_str()),
+                Some("site:local")
+            );
+        });
+    }
+
+    #[test]
     fn site_for_equipment_from_equip_row() {
         with_grid(
             vec![

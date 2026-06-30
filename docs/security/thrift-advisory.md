@@ -1,3 +1,10 @@
+---
+title: thrift advisory
+parent: Operations
+nav_order: 10
+permalink: /operations/thrift-advisory.html
+---
+
 # Transitive dependency advisory tracking (Open-FDD 3.2.x)
 
 ## thrift (CVE-2026-43868) — medium

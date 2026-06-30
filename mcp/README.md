@@ -6,12 +6,12 @@ Read-first [Model Context Protocol](https://modelcontextprotocol.io/) server for
 
 ## After a Docker / GHCR site update
 
-`openfdd_rust_site_update.sh` updates the **edge stack only**. MCP is opt-in — pull and wire it **after** the edge is healthy, using the **same semver tag** as the edge (`OPENFDD_IMAGE_TAG`, e.g. `3.2.5` or pinned `3.2.4`).
+`openfdd_rust_site_update.sh` updates the **edge stack only**. MCP is opt-in — pull and wire it **after** the edge is healthy, using the **same semver tag** as the edge (`OPENFDD_IMAGE_TAG`, e.g. `3.2.6` or pinned `3.2.5`).
 
 ```bash
 cd ~/open-fdd
 export OPENFDD_COMPOSE_ROOT="$PWD"
-export OPENFDD_IMAGE_TAG=3.2.5
+export OPENFDD_IMAGE_TAG=3.2.6
 
 # Pull MCP image (optional — docker run will pull if missing)
 docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar pull openfdd-mcp

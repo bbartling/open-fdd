@@ -1,4 +1,5 @@
 import type { FaultAlert, FaultFamily } from "./dashboardStream";
+import { formatRange, formatSensorValue } from "./formatNumbers";
 
 export type DisplayFault = {
   id: string;
@@ -162,19 +163,19 @@ function alertToDisplay(a: FaultAlert, equipmentLabel: string): DisplayFault {
   if (analytics?.avg_value_fault != null) {
     meta.push({
       label: "Avg in fault",
-      value: `${analytics.avg_value_fault}${analytics.value_unit ? ` ${analytics.value_unit}` : ""}`,
+      value: formatSensorValue(analytics.avg_value_fault, analytics.value_unit),
     });
   }
   if (analytics?.avg_value_normal != null) {
     meta.push({
       label: "Avg normal",
-      value: `${analytics.avg_value_normal}${analytics.value_unit ? ` ${analytics.value_unit}` : ""}`,
+      value: formatSensorValue(analytics.avg_value_normal, analytics.value_unit),
     });
   }
   if (analytics?.min_value_fault != null && analytics?.max_value_fault != null) {
     meta.push({
       label: "In-fault range",
-      value: `${analytics.min_value_fault} – ${analytics.max_value_fault}${analytics.value_unit ? ` ${analytics.value_unit}` : ""}`,
+      value: formatRange(analytics.min_value_fault, analytics.max_value_fault, analytics.value_unit),
     });
   }
   if (analytics?.fault_samples != null && analytics?.total_samples != null) {
