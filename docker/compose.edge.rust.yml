@@ -33,8 +33,10 @@ services:
     environment:
       SERVICE_MODE: bridge
       PORT: "8080"
+      OPENFDD_BIND_HOST: "0.0.0.0"
       FRONTEND_DIR: /app/frontend
       OPENFDD_WORKSPACE: /var/openfdd/workspace
+      OPENFDD_IMAGE_TAG: ${OPENFDD_IMAGE_TAG:-latest}
       OPENFDD_BACNET_ENABLED: ${OPENFDD_BACNET_ENABLED:-1}
       OPENFDD_MODBUS_ENABLED: ${OPENFDD_MODBUS_ENABLED:-1}
       OPENFDD_HAYSTACK_ENABLED: ${OPENFDD_HAYSTACK_ENABLED:-1}
@@ -72,6 +74,7 @@ services:
       SERVICE_MODE: commission
       PORT: "9091"
       OPENFDD_WORKSPACE: /var/openfdd/workspace
+      OPENFDD_IMAGE_TAG: ${OPENFDD_IMAGE_TAG:-latest}
       OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-live}
       OPENFDD_BACNET_ENABLED: ${OPENFDD_BACNET_ENABLED:-1}
       OPENFDD_MODBUS_ENABLED: ${OPENFDD_MODBUS_ENABLED:-1}
@@ -93,6 +96,7 @@ services:
     environment:
       OPENFDD_CADDY_ENABLED: "1"
       OPENFDD_CADDY_MODE: http
+      OPENFDD_CADDY_UPSTREAM: ${OPENFDD_CADDY_UPSTREAM:-openfdd-bridge:8080}
     depends_on:
       openfdd-bridge:
         condition: service_healthy
@@ -113,6 +117,7 @@ services:
       OPENFDD_CADDY_MODE: tls
       OPENFDD_CADDY_HOSTNAME: ${OPENFDD_CADDY_HOSTNAME:-openfdd.local}
       OPENFDD_CADDY_TLS_CN: ${OPENFDD_CADDY_TLS_CN:-openfdd.local}
+      OPENFDD_CADDY_UPSTREAM: ${OPENFDD_CADDY_UPSTREAM:-openfdd-bridge:8080}
     depends_on:
       openfdd-bridge:
         condition: service_healthy
@@ -131,6 +136,7 @@ services:
       SERVICE_MODE: haystack-gateway
       PORT: "9092"
       OPENFDD_WORKSPACE: /var/openfdd/workspace
+      OPENFDD_IMAGE_TAG: ${OPENFDD_IMAGE_TAG:-latest}
       OPENFDD_HAYSTACK_ENABLED: ${OPENFDD_HAYSTACK_ENABLED:-1}
     env_file:
       - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/data.env.local
@@ -157,6 +163,7 @@ services:
       OPENFDD_COMMISSION_BASE: ${OPENFDD_COMMISSION_BASE:-http://127.0.0.1:9091}
       OPENFDD_MCP_TOKEN: ${OPENFDD_MCP_TOKEN:-}
       OPENFDD_BENCH_TOPOLOGY_FILE: ${OPENFDD_BENCH_TOPOLOGY_FILE:-}
+      OPENFDD_IMAGE_TAG: ${OPENFDD_IMAGE_TAG:-latest}
     volumes:
       - ${OPENFDD_COMPOSE_ROOT:?}/workspace:/var/openfdd/workspace:ro
     restart: "no"

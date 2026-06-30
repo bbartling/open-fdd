@@ -15,9 +15,9 @@ on:
         required: false
         default: ""
       tag_latest:
-        description: "Also tag :latest"
+        description: "Also tag :latest (default false — use rust-release.yml for latest)"
         required: false
-        default: "true"
+        default: "false"
 
 permissions:
   contents: read
@@ -74,7 +74,10 @@ jobs:
           source scripts/resolve_ghcr_publish_tag.sh
           tag="$(resolve_ghcr_publish_tag "${GITHUB_REF_NAME}" "${{ inputs.image_tag }}")"
           echo "version=$tag" >> "$GITHUB_OUTPUT"
-          if [[ "${{ github.ref }}" == "refs/heads/master" ]] || [[ "${{ inputs.tag_latest }}" == "true" ]]; then
+          # :latest is owned by rust-release.yml — master pushes must not move it.
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.tag_latest }}" == "true" ]]; then
+            echo "latest=1" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF_NAME}" == v* ]]; then
             echo "latest=1" >> "$GITHUB_OUTPUT"
           else
             echo "latest=0" >> "$GITHUB_OUTPUT"
@@ -90,8 +93,8 @@ jobs:
         with:
           images: ${{ env.EDGE_IMAGE }}
           tags: |
-            type=raw,value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' || github.event_name == 'workflow_dispatch' }}
-            type=raw,value=v${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' }}
+            type=raw,value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch' }}
+            type=raw,value=v${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' || github.ref == 'refs/heads/master' }}
             type=raw,value=latest,enable=${{ steps.ver.outputs.latest == '1' }}
             type=sha,prefix=sha-,format=short
           labels: |
@@ -116,3 +119,18 @@ jobs:
 
       - name: Published tags
         run: docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:sha-${GITHUB_SHA::7}" || docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:${{ steps.ver.outputs.version }}"
+
+      - name: Prune stale GHCR versions (beta retention)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          chmod +x scripts/ghcr_prune_packages.sh
+          ./scripts/ghcr_prune_packages.sh \
+            --all-images \
+            --keep-releases 2 \
+            --delete-untagged-older-than-days 7 \
+            --delete-sha-older-than-days 7 \
+            --protect-tag "${{ steps.ver.outputs.version }}" \
+            --protect-tag "v${{ steps.ver.outputs.version }}" \
+            --protected-tags-file scripts/ghcr-retention-protected-tags.txt \
+            --confirm-delete

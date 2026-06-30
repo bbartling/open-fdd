@@ -68,11 +68,12 @@ pub fn run() -> std::io::Result<()> {
     let service_mode = env::var("SERVICE_MODE").unwrap_or_else(|_| "bridge".to_string());
     drivers::bacnet::start_hourly_override_scanner(service_mode.clone());
     drivers::bacnet::start_bacnet_poll_loop(service_mode.clone());
+    drivers::modbus::start_modbus_poll_loop(service_mode.clone());
     drivers::bacnet_server_runtime::start_background();
     if service_mode == "bridge" {
         drivers::json_api::seed_from_env_if_needed();
     }
-    let bind_host = env::var("OPENFDD_BIND_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let bind_host = env::var("OPENFDD_BIND_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let listener = TcpListener::bind(format!("{bind_host}:{port}"))?;
     println!("Open-FDD Rust Edge API listening on http://{bind_host}:{port}");
     for stream in listener.incoming() {

@@ -12,8 +12,13 @@ use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
+
+static BACNET_POLL_SAMPLES: AtomicU64 = AtomicU64::new(0);
+static BACNET_LAST_POLL: Mutex<Option<String>> = Mutex::new(None);
 
 fn profile_device_instance() -> u32 {
     let p = active_profile();
@@ -799,7 +804,7 @@ pub fn poll_interval_s() -> u64 {
 }
 
 pub fn start_bacnet_poll_loop(service_mode: String) {
-    if service_mode != "commission" {
+    if service_mode != "bridge" && service_mode != "commission" {
         return;
     }
     thread::spawn(move || loop {
@@ -818,6 +823,7 @@ pub fn poll_cycle_value() -> Value {
     let mut updated = 0_u64;
     let mut samples = 0_u64;
     let mut working = registry.clone();
+    let mut all_reads: Vec<Value> = Vec::new();
     if let Some(drivers) = registry.get("drivers").and_then(|v| v.as_array()) {
         for driver in drivers {
             if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
@@ -857,10 +863,19 @@ pub fn poll_cycle_value() -> Value {
                         &objects,
                     )) {
                         samples += reads.len() as u64;
+                        all_reads.extend(reads.iter().cloned());
                         updated += apply_poll_reads(&mut working, device_instance, &reads);
                     }
                 }
             }
+        }
+    }
+    if updated > 0 {
+        write_registry(&working);
+        persist_bacnet_reads_to_historian(&all_reads);
+        BACNET_POLL_SAMPLES.fetch_add(samples, Ordering::Relaxed);
+        if let Ok(mut g) = BACNET_LAST_POLL.lock() {
+            *g = Some(now_rfc3339());
         }
     }
     json!({
@@ -1219,10 +1234,42 @@ pub fn poll_metrics() -> Value {
         .filter(|p| p.get("polling_enabled").and_then(|v| v.as_bool()) == Some(true))
         .count();
     json!({
-        "samples": points.len(),
+        "samples": BACNET_POLL_SAMPLES.load(Ordering::Relaxed),
         "enabled_points": enabled,
-        "at": now_rfc3339()
+        "at": BACNET_LAST_POLL
+            .lock()
+            .ok()
+            .and_then(|g| g.clone())
+            .unwrap_or_else(now_rfc3339)
     })
+}
+
+fn persist_bacnet_reads_to_historian(reads: &[Value]) {
+    use crate::historian::store;
+    let oa_t = reads
+        .iter()
+        .find_map(|r| r.get("present_value").and_then(|v| v.as_f64()));
+    let Some(oa_t) = oa_t else {
+        return;
+    };
+    let profile = active_profile();
+    if profile.equipment_id.is_empty() {
+        return;
+    }
+    let equipment_id = profile.equipment_id.clone();
+    let ts = Utc::now().to_rfc3339();
+    let row = store::make_pivot_row(store::PivotSample {
+        timestamp: &ts,
+        equipment_id: &equipment_id,
+        oa_t,
+        oa_h: 0.0,
+        duct_t: 0.0,
+        zn_t: 0.0,
+        source: "source:bacnet:poll",
+        source_driver: "bacnet",
+        is_simulated: false,
+    });
+    let _ = store::append_pivot_row(&row);
 }
 
 pub fn count_discovered_devices(registry: &Value) -> u64 {
@@ -1455,13 +1502,18 @@ pub fn commission_status_json() -> String {
 }
 
 pub fn poll_status_json() -> String {
+    let metrics = poll_metrics();
     json!({
         "ok": true,
         "service": "bacnet-poll",
         "status": "ready",
         "config": bacnet_config_value(),
         "cadence_seconds": env::var("OPENFDD_BACNET_POLL_INTERVAL_SECONDS").unwrap_or_else(|_| "60".to_string()),
-        "writes_scan_cadence_seconds": env::var("OPENFDD_BACNET_SCAN_INTERVAL_SECONDS").unwrap_or_else(|_| "3600".to_string())
+        "writes_scan_cadence_seconds": env::var("OPENFDD_BACNET_SCAN_INTERVAL_SECONDS").unwrap_or_else(|_| "3600".to_string()),
+        "scan_interval_seconds": env::var("OPENFDD_BACNET_SCAN_INTERVAL_SECONDS").unwrap_or_else(|_| "3600".to_string()),
+        "samples": metrics.get("samples").cloned().unwrap_or(json!(0)),
+        "enabled_points": metrics.get("enabled_points").cloned().unwrap_or(json!(0)),
+        "last_poll": metrics.get("at").cloned().unwrap_or(Value::Null)
     }).to_string()
 }
 

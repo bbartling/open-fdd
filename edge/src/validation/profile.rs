@@ -126,7 +126,7 @@ fn from_env_defaults() -> SiteConfig {
         poll_interval_seconds: 300,
         duration_hours: 0.0,
         confirmation_minutes: 5,
-        historian_subdir: "historian".into(),
+        historian_subdir: "validation".into(),
         artifact_subdir: "validation_runs".into(),
         fdd_rule_id: String::new(),
         bacnet_points: Vec::new(),

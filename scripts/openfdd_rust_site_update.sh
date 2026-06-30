@@ -48,8 +48,9 @@ docker compose -f "$COMPOSE" config >/dev/null
 "$ROOT/scripts/openfdd_rust_check_ghcr_platform.sh" || echo "WARN: GHCR platform check failed — continuing with pull attempt"
 
 echo "==> Pull and recreate containers (env files reload at create time)"
-docker compose -f "$COMPOSE" pull
-docker compose -f "$COMPOSE" up -d --force-recreate
+openfdd_rust_dcompose "$ROOT" pull
+openfdd_rust_dcompose "$ROOT" up -d --force-recreate
+openfdd_rust_ensure_bridge_host_network "$ROOT"
 
 openfdd_rust_wait_for_health "http://127.0.0.1:8080/api/health" "$HEALTH_TIMEOUT"
 curl -fsS http://127.0.0.1:8080/api/health | jq -e '.ok == true'

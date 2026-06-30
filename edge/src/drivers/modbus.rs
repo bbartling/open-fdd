@@ -2,9 +2,18 @@
 
 use super::live_gate;
 use super::modbus_live;
+use crate::historian::store;
 use crate::validation::profile::{active_profile, is_modbus_configured};
+use chrono::Utc;
 use serde_json::{json, Value};
 use std::env;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
+
+static MODBUS_SAMPLES: AtomicU64 = AtomicU64::new(0);
+static MODBUS_LAST_POLL: Mutex<Option<String>> = Mutex::new(None);
 
 fn live_points_from_profile() -> String {
     let p = active_profile();
@@ -19,6 +28,32 @@ fn live_points_from_profile() -> String {
         json!({"id":format!("modbus:tcp:{unit}:40003"),"name":"Setpoint °F","register":40003,"function":"holding_register","scale":0.1,"unit":"°F","writable":true,"address":addr,"unit_id":unit,"haystack_id":"point:modbus-sp-f"}),
         json!({"id":format!("modbus:tcp:{unit}:30003"),"name":"Humidity","register":30003,"function":"input_register","scale":0.1,"unit":"%RH","address":addr,"unit_id":unit,"haystack_id":"point:modbus-rh"}),
     ];
+    let mut points = points;
+    if p.modbus_register > 0 {
+        let reg = p.modbus_register;
+        let func = if (30001..40001).contains(&reg) {
+            "input_register"
+        } else {
+            "holding_register"
+        };
+        let id = format!("modbus:tcp:{unit}:{reg}");
+        if !points
+            .iter()
+            .any(|pt| pt.get("register").and_then(|v| v.as_u64()) == Some(reg as u64))
+        {
+            points.push(json!({
+                "id": id,
+                "name": "Profile register",
+                "register": reg,
+                "function": func,
+                "scale": 0.1,
+                "unit": "°F",
+                "address": addr,
+                "unit_id": unit,
+                "haystack_id": "point:modbus-profile"
+            }));
+        }
+    }
     serde_json::to_string(&points).unwrap_or_else(|_| "[]".to_string())
 }
 
@@ -178,10 +213,107 @@ pub fn poll_status_json() -> String {
         "service": "modbus-poll",
         "status": commission_status_mode(),
         "enabled_points": points.len(),
-        "samples": 0,
+        "samples": MODBUS_SAMPLES.load(Ordering::Relaxed),
+        "last_poll": MODBUS_LAST_POLL
+            .lock()
+            .ok()
+            .and_then(|g| g.clone())
+            .map(Value::String)
+            .unwrap_or(Value::Null),
         "config": cfg
     })
     .to_string()
+}
+
+pub fn poll_interval_s() -> u64 {
+    let p = active_profile();
+    if p.modbus_poll_interval_seconds > 0 {
+        p.modbus_poll_interval_seconds
+    } else {
+        env::var("OPENFDD_MODBUS_POLL_INTERVAL_SECONDS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(60)
+    }
+}
+
+fn poll_cycle_and_persist() -> u64 {
+    let points: Vec<Value> = serde_json::from_str(&live_points_from_profile()).unwrap_or_default();
+    if points.is_empty() {
+        return 0;
+    }
+    let profile = active_profile();
+    if profile.equipment_id.is_empty() {
+        return 0;
+    }
+    let equipment_id = profile.equipment_id.clone();
+    let ts = Utc::now().to_rfc3339();
+    let mut oa_t = None::<f64>;
+    let mut oa_h = None::<f64>;
+    let mut written = 0_u64;
+
+    for pt in &points {
+        let register = pt
+            .get("register")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u16);
+        let function = pt
+            .get("function")
+            .and_then(|v| v.as_str())
+            .unwrap_or("holding_register");
+        let scale = pt.get("scale").and_then(|v| v.as_f64()).unwrap_or(0.1);
+        let unit = pt.get("unit").and_then(|v| v.as_str()).unwrap_or("raw");
+        let Some(reg) = register else { continue };
+        let Ok(v) = modbus_live::read_scaled_register(reg, function, scale, unit) else {
+            continue;
+        };
+        let value = v.get("value").and_then(|x| x.as_f64());
+        let haystack = pt.get("haystack_id").and_then(|x| x.as_str()).unwrap_or("");
+        if haystack.contains("temp") || haystack.contains("oa") || reg == profile.modbus_register {
+            oa_t = value.or(oa_t);
+        } else if haystack.contains("rh") || haystack.contains("humidity") {
+            oa_h = value.or(oa_h);
+        }
+    }
+
+    if oa_t.is_some() || oa_h.is_some() {
+        let row = store::make_pivot_row(store::PivotSample {
+            timestamp: &ts,
+            equipment_id: &equipment_id,
+            oa_t: oa_t.unwrap_or(0.0),
+            oa_h: oa_h.unwrap_or(0.0),
+            duct_t: 0.0,
+            zn_t: 0.0,
+            source: "source:modbus:poll",
+            source_driver: "modbus",
+            is_simulated: false,
+        });
+        if store::append_pivot_row(&row).is_ok() {
+            written = 1;
+        }
+    }
+    written
+}
+
+pub fn start_modbus_poll_loop(service_mode: String) {
+    if service_mode != "bridge" {
+        return;
+    }
+    thread::spawn(|| loop {
+        if modbus_live::is_live_mode() && protocol_enabled("OPENFDD_MODBUS_ENABLED") {
+            let cfg = modbus_config_value();
+            if cfg.get("status").and_then(|v| v.as_str()) != Some("not_configured") {
+                let n = poll_cycle_and_persist();
+                if n > 0 {
+                    MODBUS_SAMPLES.fetch_add(n, Ordering::Relaxed);
+                    if let Ok(mut g) = MODBUS_LAST_POLL.lock() {
+                        *g = Some(Utc::now().to_rfc3339());
+                    }
+                }
+            }
+        }
+        thread::sleep(Duration::from_secs(poll_interval_s()));
+    });
 }
 
 pub fn driver_tree_json() -> String {

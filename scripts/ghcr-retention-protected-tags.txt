@@ -1,0 +1,4 @@
+# Tags never deleted by ghcr_prune_packages.sh (one per line).
+# Semver lines are also protected when within --keep-releases window.
+latest
+dev

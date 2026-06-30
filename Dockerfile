@@ -34,6 +34,8 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/* \
   && useradd --create-home --uid 10001 --shell /usr/sbin/nologin openfdd
 
+ARG OPENFDD_IMAGE_TAG=dev
+ARG OPENFDD_BUILD_GIT_SHA=unknown
 WORKDIR /app
 COPY --from=builder /app/target/release/open_fdd_edge_prototype /usr/local/bin/open_fdd_edge_prototype
 COPY --from=builder /app/target/release/openfdd-edge /usr/local/bin/openfdd-edge
@@ -46,7 +48,9 @@ ENV FRONTEND_DIR=/app/frontend \
     OPENFDD_WORKSPACE=/var/openfdd/workspace \
     SERVICE_MODE=bridge \
     OFDD_CURSOR_CHAT_PORT=8787 \
-    OFDD_CURSOR_CHAT_HOST=0.0.0.0
+    OFDD_CURSOR_CHAT_HOST=0.0.0.0 \
+    OPENFDD_IMAGE_TAG=${OPENFDD_IMAGE_TAG} \
+    OPENFDD_GIT_SHA=${OPENFDD_BUILD_GIT_SHA}
 
 RUN mkdir -p /var/openfdd/workspace && chown -R openfdd:openfdd /var/openfdd/workspace /app
 
