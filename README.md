@@ -375,4 +375,4 @@ Open-FDD is for **LAN / VPN / OT networks**, not public internet hosting.
 
 MIT — see [LICENSE](LICENSE).
 
-Version: **3.2.6** (development — released line **3.2.5** on GHCR)
+Version: **3.2.7** (development — released line **3.2.6** on GHCR)
