@@ -12,8 +12,8 @@ export default function CsvDataAssistant({ mergeError, fileCount = 0 }: Props) {
     <section className="panel csv-assistant-panel">
       <h3 className="panel-title">Data assistant</h3>
       <p className="muted">
-        Use an external agent (Cursor + MCP) to profile columns, pick join keys, and draft merge recipes. In-app chat
-        is on the <Link to="/agent">MCP / Agent</Link> tab.
+        Use an external MCP agent to profile columns, pick join keys, and draft merge recipes. Setup on the{" "}
+        <Link to="/agent">External agents</Link> tab.
       </p>
       {hasTimezoneError ? (
         <div className="csv-assistant-tip csv-assistant-tip--warn">
@@ -29,7 +29,7 @@ export default function CsvDataAssistant({ mergeError, fileCount = 0 }: Props) {
         </div>
       ) : null}
       <details className="csv-assistant-mcp">
-        <summary>MCP tools for CSV &amp; model (Cursor)</summary>
+        <summary>MCP tools for CSV &amp; model</summary>
         <ul>
           <li>
             <code>openfdd_model_sparql</code> — list sites, equipment, points after commit
@@ -42,7 +42,7 @@ export default function CsvDataAssistant({ mergeError, fileCount = 0 }: Props) {
           </li>
         </ul>
         <p className="muted">
-          Setup: <Link to="/agent">MCP / Agent</Link> · repo <code>mcp/README.md</code>
+          Setup: <Link to="/agent">External agents</Link> · repo <code>mcp/README.md</code>
         </p>
       </details>
     </section>

@@ -27,7 +27,8 @@ The platform includes:
 - Apache DataFusion SQL analytics and fault detection
 - BACnet, Modbus, Haystack, and JSON API drivers
 - Interactive plotting, dashboards, and PDF reporting
-- AI-assisted engineering workflows with integrated MCP support
+- Deterministic CSV import, Haystack modeling, DataFusion SQL FDD, and reporting workflows
+- Optional **external** agent integration via MCP stdio and JWT REST (no embedded chatbot)
 - Docker and GitHub Container Registry deployment
 
 Open-FDD supports two complementary deployment models.
@@ -42,7 +43,7 @@ Run Open-FDD in Docker on engineering workstations to perform offline analysis o
 
 Both deployment models share the same analytics engine, semantic data model, Apache Arrow storage format, and DataFusion SQL execution layer, allowing engineering workflows to move seamlessly between offline analysis and live edge deployments.
 
-Open-FDD is designed to be **local-first**. No cloud services are required. AI assistants and MCP integrations enhance engineering workflows while keeping building telemetry, semantic models, and analytics under the owner's control.
+Open-FDD is designed to be **local-first**. No cloud services are required. External agents connect through optional MCP and REST while building telemetry, semantic models, and analytics stay under the owner's control.
 
 
 <p align="center">
@@ -68,7 +69,10 @@ Open-FDD is designed to be **local-first**. No cloud services are required. AI a
 
 | Image | Role |
 |-------|------|
-| [`ghcr.io/bbartling/openfdd-edge-rust`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-edge-rust) | **One image** — bridge, dashboard, historian, commission, Haystack (`SERVICE_MODE`); **`openfdd-mcp`** binary (`docker run --entrypoint openfdd-mcp …`); **Cursor chat relay** (`compose --profile cursor`). Slim [`openfdd-mcp`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp) tag = MCP-only entrypoint (same repo build). |
+| [`ghcr.io/bbartling/openfdd-edge-rust`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-edge-rust) | **Primary runtime** — bridge, dashboard, historian, commission, Haystack (`SERVICE_MODE`); **`openfdd-mcp`** binary (`docker run --entrypoint openfdd-mcp …`) |
+| [`ghcr.io/bbartling/openfdd-mcp`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp) | **Optional slim MCP image** — same `openfdd-mcp` binary, stdio entrypoint only (smaller pull) |
+
+Open-FDD does **not** ship an embedded AI chatbot or vendor-specific chat relay. External agents (Codex CLI, Cursor, Claude Desktop, OpenClaw, etc.) connect via MCP or REST — see [docs/examples/external-agents.md](docs/examples/external-agents.md).
 
 
 GHCR publishes **multi-arch** images (`linux/amd64` + `linux/arm64`). Edge scripts **auto-detect** the host CPU.
@@ -252,16 +256,14 @@ See [operations troubleshooting](https://bbartling.github.io/open-fdd/operations
 </details>
 
 <details>
-<summary><strong>Optional: MCP sidecar for Cursor (after edge update)</strong></summary>
+<summary><strong>Optional: MCP for external agents (after edge update)</strong></summary>
 
-`openfdd_rust_site_update.sh` pulls the **core edge stack only**. MCP and Cursor chat relay are opt-in compose profiles.
+`openfdd_rust_site_update.sh` pulls the **core edge stack only**. MCP is opt-in.
 
 The **`openfdd-mcp` binary ships inside `openfdd-edge-rust`** (same Cargo workspace). Use either image:
 
 - **Full edge:** `ghcr.io/bbartling/openfdd-edge-rust:<tag>` with `--entrypoint openfdd-mcp` for stdio MCP
 - **Slim MCP-only:** `ghcr.io/bbartling/openfdd-mcp:<tag>` (stdio entrypoint baked in)
-
-**In-app chat (Cursor SDK):** `compose --profile cursor` starts `openfdd-cursor-relay` from the **same edge image**. Set `CURSOR_API_KEY` in `workspace/cursor.env.local`.
 
 **1. Edge must be healthy** (`curl -fsS http://127.0.0.1:8080/api/health`).
 
@@ -272,7 +274,7 @@ cd ~/open-fdd
 export OPENFDD_COMPOSE_ROOT="$PWD"
 export OPENFDD_IMAGE_TAG=latest
 
-docker compose -f docker/compose.edge.rust.yml --profile desktop-json-csv --profile cursor pull
+docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar pull openfdd-mcp
 ```
 
 **3. Obtain an integrator JWT** (do not log or commit the token):

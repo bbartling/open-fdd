@@ -40,8 +40,8 @@ pub fn sync_from_proposal(proposal: &Value, site_id: &str, graph_id: &str, actor
                     "haystack_ref": haystack,
                     "driver_ref": driver,
                     "fdd_input": fdd_input,
-                    "source": "ai_generated",
-                    "review_status": "ai_suggested"
+                    "source": "agent_proposed",
+                    "review_status": "proposed"
                 }));
             }
         }
@@ -64,7 +64,7 @@ pub fn sync_from_proposal(proposal: &Value, site_id: &str, graph_id: &str, actor
         site_id,
         graph_id,
         actor,
-        "ai_generated",
+        "agent_proposed",
         "needs_review",
     )
 }
@@ -392,7 +392,7 @@ fn node(
         "position": position,
         "config": config,
         "source": source,
-        "review_status": if source == "ai_generated" { "ai_suggested" } else { "draft" }
+        "review_status": if source == "agent_proposed" { "proposed" } else { "draft" }
     })
 }
 
@@ -420,7 +420,7 @@ mod tests {
                     "driver_ref": "csv:oa_t",
                     "fdd_input": "oa_t",
                     "fdd_rule_ids": ["oa_temp_out_of_range"],
-                    "source": "ai_generated"
+                    "source": "agent_proposed"
                 }],
                 "fault_equation_bindings": []
             });

@@ -37,7 +37,7 @@ pub const REVIEW_STATUSES: &[&str] = &[
     "approved",
     "rejected",
     "active",
-    "ai_suggested",
+    "proposed",
     "human_modified",
     "disabled",
 ];

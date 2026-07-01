@@ -54,21 +54,11 @@ pub fn run_script(body: &Value) -> Value {
     let script_key = body.get("script").and_then(|v| v.as_str()).unwrap_or("");
     let (label, rel, extra): (&str, &str, &str) = match script_key {
         "ui_dev" => ("Vite UI dev server", "scripts/openfdd_ui_dev.sh", "--lan"),
-        "codex_setup" => (
-            "Codex agent chat relay",
-            "scripts/openfdd_agent_chat_setup.sh",
-            "",
-        ),
-        "codex_reset" => (
-            "Codex relay reset",
-            "scripts/openfdd_agent_chat_reset.sh",
-            "",
-        ),
         other => {
             return json!({
                 "ok": false,
                 "error": format!("unknown dev script: {other}"),
-                "allowed": ["ui_dev", "codex_setup", "codex_reset"]
+                "allowed": ["ui_dev"]
             });
         }
     };

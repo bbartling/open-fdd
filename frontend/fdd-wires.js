@@ -16,11 +16,25 @@
     simulated: "badge-sim",
     fixture: "badge-fix",
     real: "badge-real",
-    ai_suggested: "badge-ai",
+    proposed: "badge-proposed",
     approved: "badge-ok",
     active: "badge-ok",
     failing: "badge-bad"
   };
+
+  function isProposedReview(status) {
+    return status === "proposed" || status === "ai_suggested";
+  }
+
+  function isAgentProposedSource(source) {
+    return source === "agent_proposed" || source === "ai_generated";
+  }
+
+  function reviewBadgeKind(status) {
+    if (status === "active") return "active";
+    if (isProposedReview(status || "")) return "proposed";
+    return "draft";
+  }
 
   function badge(label, kind) {
     return React.createElement("span", { className: cx("badge", BADGE_CLASS[kind] || "") }, label);
@@ -171,7 +185,7 @@
         drivers: (driverTree && driverTree.drivers) || []
       });
       setProposals(out);
-      setMessage("AI assignment proposals loaded — review required before activation.");
+      setMessage("Assignment proposals loaded — review required before activation.");
     }
 
     async function validateGraph() {
@@ -225,7 +239,7 @@
           { label: "Validate graph", action: validateGraph },
           { label: "Test graph", action: testGraph },
           { label: "Export graph JSON", action: exportJson },
-          { label: "Propose assignments (AI draft)", action: propose }
+          { label: "Propose assignments", action: propose }
         ]
       });
     }
@@ -260,15 +274,15 @@
         ),
         React.createElement("div", { className: "graph-list" },
           graphs.map(g => React.createElement("div", { key: g.graph_id, className: "list-row" },
-            g.graph_id, " ", badge(g.review_status || "draft", g.review_status === "active" ? "active" : "ai_suggested")
+            g.graph_id, " ", badge(g.review_status || "draft", reviewBadgeKind(g.review_status))
           ))
         )
       ),
       React.createElement("section", { className: "fdd-center" },
         React.createElement("div", { className: "toolbar" },
           React.createElement("strong", null, "FDD Wires — Rule Graph"),
-          badge(graph && graph.review_status, graph && graph.review_status === "active" ? "active" : "ai_suggested"),
-          graph && graph.source === "ai_generated" && badge("AI suggested", "ai_suggested"),
+          badge(graph && graph.review_status, reviewBadgeKind(graph && graph.review_status)),
+          graph && isAgentProposedSource(graph.source) && badge("Proposed", "proposed"),
           React.createElement("button", { onClick: validateGraph }, "Validate"),
           React.createElement("button", { onClick: testGraph }, "Test"),
           React.createElement("button", { onClick: approveGraph }, "Approve"),
@@ -288,7 +302,7 @@
             React.createElement("div", { className: "wire-node-title" }, node.label || node.id),
             React.createElement("div", { className: "wire-node-meta" }, node.type),
             node.config && node.config.source_label && badge(node.config.source_label, node.config.source_label === "simulated" ? "simulated" : "real"),
-            node.source === "ai_generated" && badge("AI", "ai_suggested")
+            isAgentProposedSource(node.source) && badge("Draft", "proposed")
           )),
           edges.map(e => React.createElement("div", { key: e.id, className: "wire-edge-label" }, `${e.from} → ${e.to} (${e.type})`))
         )

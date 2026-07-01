@@ -254,35 +254,11 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/agent/manifest") => json_response(&mut stream, agent_manifest()),
         ("GET", "/api/agent/tools") => json_response(&mut stream, agent_tools()),
         ("GET", "/api/ingest/contract") => json_response(&mut stream, ingest::contract_json()),
-        ("POST", "/api/agent/dev-harness") => require_role_lazy(
-            &mut stream,
-            &principal,
-            &["integrator", "agent", "operator"],
-            || ops::agent_chat::chat_reply(&parse_json_body_or_empty(&body)),
-        ),
         ("GET", "/api/agent/config") => require_role_lazy(
             &mut stream,
             &principal,
             &["integrator", "agent", "operator"],
-            ops::agent_chat::config_json,
-        ),
-        ("POST", "/api/agent/chat") => require_role_lazy(
-            &mut stream,
-            &principal,
-            &["integrator", "agent", "operator"],
-            || ops::agent_chat::chat_reply(&parse_json_body_or_empty(&body)),
-        ),
-        ("POST", "/api/agent/chat/cancel") => require_role_lazy(
-            &mut stream,
-            &principal,
-            &["integrator", "agent", "operator"],
-            ops::agent_chat::cancel_reply,
-        ),
-        ("POST", "/api/agent/reset") => require_role_lazy(
-            &mut stream,
-            &principal,
-            &["integrator", "agent", "operator"],
-            ops::agent_chat::reset_reply,
+            ops::agent_config::config_json,
         ),
         ("POST", "/api/agent/bootstrap") => require_role(
             &mut stream,

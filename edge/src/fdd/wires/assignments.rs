@@ -59,8 +59,8 @@ pub fn propose_assignments(payload: &Value) -> Value {
             "driver_ref": chosen.get("ref").or_else(|| chosen.get("id")).cloned().unwrap_or(json!(null)),
             "confidence": confidence,
             "explanation": format!("Mapped {label} to FDD input {fdd_input} via name/tag similarity"),
-            "source": "ai_generated",
-            "review_status": "ai_suggested"
+            "source": "agent_proposed",
+            "review_status": "proposed"
         }));
     }
 
@@ -69,15 +69,15 @@ pub fn propose_assignments(payload: &Value) -> Value {
         "name": "OA Temperature Out Of Range",
         "required_inputs": ["oa_t"],
         "confidence": 0.91,
-        "source": "ai_generated",
-        "review_status": "ai_suggested"
+        "source": "agent_proposed",
+        "review_status": "proposed"
     })];
 
     json!({
         "ok": true,
         "site_id": site_id,
         "equipment_type": equipment_type,
-        "source": "ai_generated",
+        "source": "agent_proposed",
         "review_status": "needs_review",
         "proposals": proposals,
         "rule_bindings": rule_bindings,

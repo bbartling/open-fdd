@@ -4,6 +4,10 @@ use super::schema::{EDGE_TYPES, NODE_TYPES};
 use crate::fdd::sql_safety;
 use serde_json::{json, Value};
 
+fn is_agent_proposed_source(source: &str) -> bool {
+    matches!(source, "agent_proposed" | "ai_generated")
+}
+
 pub fn validate_graph(graph: &Value) -> Value {
     let mut errors: Vec<String> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
@@ -30,10 +34,12 @@ pub fn validate_graph(graph: &Value) -> Value {
             if !NODE_TYPES.contains(&ty) {
                 errors.push(format!("unknown node type: {ty}"));
             }
-            if n.get("source").and_then(|s| s.as_str()) == Some("ai_generated")
+            if n.get("source")
+                .and_then(|s| s.as_str())
+                .is_some_and(is_agent_proposed_source)
                 && graph.get("review_status").and_then(|s| s.as_str()) == Some("active")
             {
-                errors.push("AI-generated graph cannot be active without human approval".into());
+                errors.push("Agent-proposed graph cannot be active without human approval".into());
             }
             if let Some(label) = n
                 .get("config")
@@ -153,19 +159,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ai_graph_cannot_activate_without_approval() {
+    fn agent_proposed_graph_cannot_activate_without_approval() {
         let site = "site:test";
         let mut graph = super::super::schema::empty_graph(site, "graph:test", "tester");
         graph["nodes"] = json!([{
             "id": "n-driver",
             "type": "driver_point",
             "label": "oa sensor",
-            "source": "ai_generated",
+            "source": "agent_proposed",
             "config": {"source_label": "live", "ref": "bacnet:1:analog-input:1"}
         }]);
         graph["edges"] = json!([]);
         graph["review_status"] = json!("active");
-        graph["source"] = json!("ai_generated");
+        graph["source"] = json!("agent_proposed");
         let out = validate_graph(&graph);
         assert_eq!(out["ok"].as_bool(), Some(false));
     }

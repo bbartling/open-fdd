@@ -17,7 +17,7 @@ MCP runs on the **host** and resolves passwords locally — never from bcrypt ha
 - `openfdd_auth_credentials_hint` — paths and roles (no secrets)
 - `openfdd_auth_login` — `{ "role": "integrator" }` → JWT for `OPENFDD_MCP_TOKEN`
 
-Works with **Cursor, Claude Desktop, Codex CLI, OpenClaw**, or any MCP host. In-app chat uses Codex → Cursor → Ollama (Hermes/llama/etc.) → tools fallback.
+Works with **Cursor, Claude Desktop, Codex CLI, OpenClaw**, or any MCP host. Open-FDD does **not** ship a built-in chatbot — connect external agents through this stdio server or JWT REST.
 
 ## Model + FDD wiresheet
 

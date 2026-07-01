@@ -2,6 +2,8 @@
 
 Read-first [Model Context Protocol](https://modelcontextprotocol.io/) server for Open-FDD Rust edge. Proxies JWT-authenticated REST calls to `openfdd-bridge` and commission BACnet reads.
 
+Open-FDD does **not** include a built-in AI chatbot. External agents (Codex CLI, Cursor, Claude Desktop, OpenClaw, etc.) connect through this optional stdio server or JWT REST — see [docs/examples/external-agents.md](../docs/examples/external-agents.md).
+
 **Image:** `openfdd-mcp` binary is bundled in `ghcr.io/bbartling/openfdd-edge-rust`. The slim `ghcr.io/bbartling/openfdd-mcp` image is MCP stdio entrypoint only (same release tag).
 
 ## After a Docker / GHCR site update
