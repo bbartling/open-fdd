@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import TrafficLight from "./TrafficLight";
 import { useDashboardStream, type FaultAlert, type FaultAnalytics } from "../lib/dashboardStream";
+import { formatSensorValue } from "../lib/formatNumbers";
 
 function FaultAnalyticsBlock({ a }: { a: FaultAnalytics }) {
   const rows: { label: string; value: string }[] = [];
@@ -13,12 +14,12 @@ function FaultAnalyticsBlock({ a }: { a: FaultAnalytics }) {
       a.bounds_low != null && a.bounds_high != null
         ? ` (band ${a.bounds_low}–${a.bounds_high}${unit})`
         : "";
-    rows.push({ label: "Avg while fault", value: `${a.avg_value_fault}${unit}${band}` });
+    rows.push({ label: "Avg while fault", value: `${formatSensorValue(a.avg_value_fault, unit)}${band}` });
   }
   if (a.min_value_fault != null && a.max_value_fault != null) {
     rows.push({
       label: "Range while fault",
-      value: `${a.min_value_fault}–${a.max_value_fault}${a.value_unit || ""}`,
+      value: `${formatSensorValue(a.min_value_fault, a.value_unit)}–${formatSensorValue(a.max_value_fault, a.value_unit)}`,
     });
   }
   const dur = a.estimated_fault_duration_label || a.fault_span_label;

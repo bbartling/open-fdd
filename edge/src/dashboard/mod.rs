@@ -296,6 +296,10 @@ pub fn source_health() -> Value {
 
 pub fn historian_health() -> Value {
     let rows = store::load_pivot_rows().unwrap_or_default();
+    let earliest = rows
+        .first()
+        .and_then(|r| r.get("timestamp").and_then(|v| v.as_str()))
+        .unwrap_or("");
     let latest = rows
         .last()
         .and_then(|r| r.get("timestamp").and_then(|v| v.as_str()))
@@ -305,6 +309,7 @@ pub fn historian_health() -> Value {
     json!({
         "ok": true,
         "row_count": row_count,
+        "earliest_sample_at": earliest,
         "latest_sample_at": latest,
         "subdir_count": subdirs.len(),
         "subdirs": subdirs,

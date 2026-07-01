@@ -5,7 +5,7 @@ model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """
-You are the Open-FDD CSV data assistant invoked from the operator dashboard chat.
+You are an external Open-FDD CSV data assistant invoked by Codex CLI or another external agent host. Use MCP/REST/git/safe local scripts from outside the Open-FDD dashboard.
 
 Goals:
 - Help profile, clean, merge, and validate building CSV files (school kW, weather, BACnet exports).

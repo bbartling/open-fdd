@@ -4,6 +4,7 @@ import { apiFetch, hasToken } from "../../lib/api";
 import { formatApiError } from "../../lib/formatApiError";
 import type { DisplayFault } from "../../lib/displayFaults";
 import type { FaultAnalytics } from "../../lib/dashboardStream";
+import { formatRange, formatSensorValue } from "../../lib/formatNumbers";
 
 type FaultRecord = {
   fault_id?: string;
@@ -198,27 +199,24 @@ export default function FaultDetailModal({ fault, onClose, onCleared }: Props) {
                 {analytics.avg_value_fault != null ? (
                   <div>
                     <dt>Avg while in alarm</dt>
-                    <dd>
-                      {analytics.avg_value_fault}
-                      {analytics.value_unit ? ` ${analytics.value_unit}` : ""}
-                    </dd>
+                    <dd>{formatSensorValue(analytics.avg_value_fault, analytics.value_unit)}</dd>
                   </div>
                 ) : null}
                 {analytics.avg_value_normal != null ? (
                   <div>
                     <dt>Avg while normal</dt>
-                    <dd>
-                      {analytics.avg_value_normal}
-                      {analytics.value_unit ? ` ${analytics.value_unit}` : ""}
-                    </dd>
+                    <dd>{formatSensorValue(analytics.avg_value_normal, analytics.value_unit)}</dd>
                   </div>
                 ) : null}
                 {analytics.min_value_fault != null && analytics.max_value_fault != null ? (
                   <div>
                     <dt>In-alarm range</dt>
                     <dd>
-                      {analytics.min_value_fault} – {analytics.max_value_fault}
-                      {analytics.value_unit ? ` ${analytics.value_unit}` : ""}
+                      {formatRange(
+                        analytics.min_value_fault,
+                        analytics.max_value_fault,
+                        analytics.value_unit,
+                      )}
                     </dd>
                   </div>
                 ) : null}
@@ -231,6 +229,26 @@ export default function FaultDetailModal({ fault, onClose, onCleared }: Props) {
                   </div>
                 ) : null}
               </dl>
+              {analytics.sensors && analytics.sensors.length > 1 ? (
+                <table className="bis-sensor-table">
+                  <thead>
+                    <tr>
+                      <th>Sensor</th>
+                      <th>Avg in alarm</th>
+                      <th>Avg normal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analytics.sensors.map((s) => (
+                      <tr key={s.column}>
+                        <td>{s.label ?? s.column}</td>
+                        <td>{formatSensorValue(s.avg_value_fault, s.value_unit)}</td>
+                        <td>{formatSensorValue(s.avg_value_normal, s.value_unit)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : null}
             </section>
           ) : null}
 

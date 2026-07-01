@@ -36,8 +36,27 @@ pub fn empty_haystack_grid() -> Value {
     })
 }
 
+pub fn default_local_haystack_grid() -> Value {
+    json!({
+        "meta": {"ver": "3.0", "mode": "default-local"},
+        "cols": [
+            {"name": "id"},
+            {"name": "dis"},
+            {"name": "site"},
+            {"name": "equip"},
+            {"name": "siteRef"}
+        ],
+        "rows": [
+            {"id": "site:local", "dis": "Local site", "site": "M"}
+        ]
+    })
+}
+
 pub fn haystack_model_value() -> Value {
-    load_haystack_grid().unwrap_or_else(empty_haystack_grid)
+    if haystack_grid_path().exists() {
+        return load_haystack_grid().unwrap_or_else(empty_haystack_grid);
+    }
+    default_local_haystack_grid()
 }
 
 pub fn haystack_model_json_string() -> String {

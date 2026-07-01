@@ -6,6 +6,16 @@ nav_order: 1
 
 # DataFusion SQL
 
+## Workbench (3.2.6+)
+
+The **SQL FDD Rules** tab (`/sql-fdd`) provides:
+
+- Historian table picker (`telemetry_pivot`, `telemetry`)
+- Equipment-scoped SQL editor with **Format SQL**
+- Validate / Run against live historian rows
+
+See [SQL FDD Rules tab]({{ site.baseurl }}/web-app/sql-fdd-rules.html).
+
 ## Rule lifecycle
 
 1. Author SQL in the workbench or via API

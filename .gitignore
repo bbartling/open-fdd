@@ -31,8 +31,8 @@ workspace/overrides/
 workspace/bacnet/
 workspace/fixtures/ahu_data/*.csv
 workspace/dashboard/node_modules/
-tools/cursor-chat-relay/node_modules/
-tools/codex-chat-relay/node_modules/
+tools/cursor-chat-relay/
+tools/codex-chat-relay/
 frontend/assets/
 frontend/index.html
 **/*.db

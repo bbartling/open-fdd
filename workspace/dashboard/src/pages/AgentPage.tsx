@@ -1,51 +1,44 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
-import { apiFetch, devRunScript, hasToken } from "../lib/api";
-import { notifyClearAgentChat } from "../lib/agentChatStore";
+import { apiFetch, hasToken } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 
 type AgentConfig = {
   ok?: boolean;
-  codex_chat_enabled?: boolean;
-  codex?: {
-    ok?: boolean;
-    base_url?: string;
-    codex_logged_in?: boolean;
-    openfdd_mcp_configured?: boolean;
-    error?: string;
-  };
-  cursor_chat_enabled?: boolean;
-  cursor?: { ok?: boolean; base_url?: string; model?: string; error?: string };
-  ollama?: {
-    api_ok?: boolean;
-    configured_model?: string;
-    models_installed?: string[];
-    interactive_chat_enabled?: boolean;
-    error?: string;
-  };
-  chat_endpoint?: string;
+  embedded_chat?: boolean;
+  external_agent_workflow?: boolean;
+  mcp_binary?: string;
+  tools_endpoint?: string;
+  manifest_endpoint?: string;
+  mcp_docs?: string;
+  example_hosts?: string[];
+  workflow?: string[];
   credentials_hint?: {
     bootstrap_handoff?: string;
     auth_env_local?: string;
     mcp_tools?: string[];
+    note?: string;
   };
 };
 
 export default function AgentPage() {
   const [config, setConfig] = useState<AgentConfig | null>(null);
+  const [toolCount, setToolCount] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [actionMsg, setActionMsg] = useState("");
-  const [actionBusy, setActionBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!hasToken()) return;
     setBusy(true);
     setError("");
     try {
-      const out = await apiFetch<AgentConfig>("/api/agent/config");
-      setConfig(out);
+      const [cfg, tools] = await Promise.all([
+        apiFetch<AgentConfig>("/api/agent/config"),
+        apiFetch<{ tools?: unknown[] }>("/api/agent/tools"),
+      ]);
+      setConfig(cfg);
+      setToolCount(tools.tools?.length ?? 0);
     } catch (e) {
       setError(formatApiError(e));
     } finally {
@@ -57,134 +50,93 @@ export default function AgentPage() {
     void refresh();
   }, [refresh]);
 
-  const runDev = useCallback(async (script: "ui_dev" | "codex_setup" | "codex_reset", label: string) => {
-    setActionBusy(true);
-    setActionMsg("");
-    setError("");
-    try {
-      const res = await devRunScript(script);
-      if (!res.ok) throw new Error(res.error ?? `failed to start ${label}`);
-      setActionMsg(res.hint ?? `${label} started.`);
-      if (script !== "ui_dev") await refresh();
-    } catch (e) {
-      setError(formatApiError(e));
-    } finally {
-      setActionBusy(false);
-    }
-  }, [refresh]);
-
-  const ollama = config?.ollama;
-  const codex = config?.codex;
-  const cursor = config?.cursor;
-
   return (
     <div className="page page-wide">
       <PageHeader
-        title="AI integrations"
-        subtitle="Codex → Cursor → Ollama → bridge tools. MCP agents (Cursor, Claude, OpenClaw) use JWT from workspace credentials."
+        title="External agents"
+        subtitle="Open-FDD does not ship an embedded chatbot. Connect Codex CLI, Cursor, Claude Desktop, OpenClaw, or any MCP host through optional openfdd-mcp (stdio) or JWT REST."
       />
 
-      {!hasToken() ? (
-        <p className="muted">
-          <Link to="/login">Sign in</Link> to view integration status.
-        </p>
+      {error ? <p className="error">{error}</p> : null}
+      {!config && error ? (
+        <button type="button" className="secondary-btn" disabled={busy} onClick={() => void refresh()}>
+          Retry
+        </button>
       ) : null}
 
-      {error ? <p className="error">{error}</p> : null}
-      {actionMsg ? <p className="muted">{actionMsg}</p> : null}
-
-      <section className="panel">
-        <h3 className="panel-title">Local dev stack</h3>
-        <p className="muted">One-click helpers (edge dev mode only). Passwords: bootstrap handoff or auth.env.local.</p>
-        <div className="toolbar">
-          <button
-            type="button"
-            className="primary-btn"
-            disabled={actionBusy}
-            onClick={() => void runDev("ui_dev", "UI dev server")}
-          >
-            Start UI dev (:5173)
-          </button>
-          <button
-            type="button"
-            className="secondary-btn"
-            disabled={actionBusy}
-            onClick={() => void runDev("codex_setup", "Codex relay")}
-          >
-            Start Codex relay
-          </button>
-          <button
-            type="button"
-            className="secondary-btn"
-            disabled={actionBusy}
-            onClick={() => void runDev("codex_reset", "Codex reset")}
-          >
-            Reset Codex relay
-          </button>
-          <button type="button" className="secondary-btn" disabled={busy} onClick={() => void refresh()}>
-            {busy ? "Checking…" : "Refresh status"}
-          </button>
-        </div>
-      </section>
-
-      <section className="panel">
-        <h3 className="panel-title">MCP & credentials</h3>
-        <p className="muted">
-          MCP tools: <code>openfdd_auth_credentials_hint</code>, <code>openfdd_auth_login</code>,{" "}
-          <code>openfdd_model_assignments_save</code>. Handoff:{" "}
-          <code>{config?.credentials_hint?.bootstrap_handoff ?? "workspace/bootstrap_credentials.once.txt"}</code>
+      <div className="panel">
+        <h3 className="panel-title">Architecture</h3>
+        <p>
+          Open-FDD is the edge FDD platform. The agent is the operator <strong>outside</strong> the
+          platform — vendor-neutral, local-first, read-first by default.
         </p>
-      </section>
+        <ul>
+          <li>
+            <code>openfdd-mcp</code> — stdio MCP server bundled in{" "}
+            <code>ghcr.io/bbartling/openfdd-edge-rust</code> (or slim <code>openfdd-mcp</code> image)
+          </li>
+          <li>
+            REST — <code>/api/agent/tools</code> catalog; same JWT auth as the dashboard
+          </li>
+          <li>
+            Writes — <code>OPENFDD_MCP_ALLOW_WRITES=1</code> and <code>confirm:true</code> on mutating
+            tools; BACnet writes need explicit human approval
+          </li>
+        </ul>
+        <p>
+          Full setup: ensure the <Link to="/">dashboard</Link> is healthy, obtain an integrator JWT, then wire MCP
+          in your external tool. Documentation lives in the GitHub repo — start at{" "}
+          <a href="https://github.com/bbartling/open-fdd/blob/master/README.md" target="_blank" rel="noreferrer">
+            README.md on master
+          </a>{" "}
+          and search for <strong>MCP</strong>, <strong>external agents</strong>, or <strong>openfdd-mcp</strong>.
+        </p>
+      </div>
 
-      <section className="panel">
-        <h3 className="panel-title">Agent providers</h3>
-        <div className="status-kv-grid">
-          <div className="status-kv">
-            <span className="status-kv-label">Codex</span>
-            <span className={`status-kv-value ${config?.codex_chat_enabled ? "ok" : ""}`}>
-              {config?.codex_chat_enabled ? "online" : "offline (optional)"}
-            </span>
-          </div>
-          <div className="status-kv">
-            <span className="status-kv-label">Cursor</span>
-            <span className={`status-kv-value ${config?.cursor_chat_enabled ? "ok" : ""}`}>
-              {config?.cursor_chat_enabled ? "online" : "offline (optional)"}
-            </span>
-          </div>
-          <div className="status-kv">
-            <span className="status-kv-label">Ollama</span>
-            <span className={`status-kv-value ${ollama?.api_ok ? "ok" : ""}`}>
-              {ollama?.api_ok ? ollama.configured_model ?? "reachable" : "offline (optional)"}
-            </span>
-          </div>
-        </div>
-        {!config?.codex_chat_enabled && !config?.cursor_chat_enabled && !ollama?.api_ok ? (
+      {config ? (
+        <div className="panel">
+          <h3 className="panel-title">Edge status</h3>
           <p className="muted">
-            No external LLM relay required — dashboard insight and Agent assist tools fallback use live bridge data.
-            Start Codex or Ollama when you want richer chat.
+            {busy ? "Refreshing…" : null}
+            Embedded chat: {config.embedded_chat === false ? "disabled" : "unknown"} · MCP binary:{" "}
+            <code>{config.mcp_binary ?? "openfdd-mcp"}</code>
+            {toolCount != null ? ` · ${toolCount} REST tools cataloged` : null}
           </p>
-        ) : null}
-        {codex?.error && !config?.codex_chat_enabled ? (
-          <p className="muted">Codex: {codex.error}</p>
-        ) : null}
-      </section>
-
-      <section className="panel">
-        <h3 className="panel-title">Chat session</h3>
-        <div className="toolbar">
-          <button type="button" className="secondary-btn" disabled={!hasToken()} onClick={() => notifyClearAgentChat()}>
-            Clear chat history
-          </button>
-          <button
-            type="button"
-            className="secondary-btn"
-            disabled={!hasToken() || actionBusy}
-            onClick={() => void apiFetch("/api/agent/reset", { method: "POST" }).then(() => refresh())}
-          >
-            Restart agent session
+          {config.workflow?.length ? (
+            <ol>
+              {config.workflow.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          ) : null}
+          {config.example_hosts?.length ? (
+            <p className="muted">Example external hosts: {config.example_hosts.join(", ")}</p>
+          ) : null}
+          <button type="button" className="secondary-btn" disabled={busy} onClick={() => void refresh()}>
+            Refresh
           </button>
         </div>
-      </section>
+      ) : null}
+
+      <div className="panel">
+        <h3 className="panel-title">Cursor MCP (example)</h3>
+        <pre className="code-block">{`{
+  "mcpServers": {
+    "openfdd": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm", "--network", "host",
+        "--entrypoint", "openfdd-mcp",
+        "-e", "OPENFDD_API_BASE=http://127.0.0.1:8080",
+        "-e", "OPENFDD_MCP_TOKEN",
+        "ghcr.io/bbartling/openfdd-edge-rust:latest"
+      ],
+      "env": { "OPENFDD_MCP_TOKEN": "<integrator JWT>" }
+    }
+  }
+}`}</pre>
+        <p className="muted">Never commit tokens. MCP uses stdio — not an HTTP port.</p>
+      </div>
     </div>
   );
 }

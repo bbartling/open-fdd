@@ -642,6 +642,25 @@
   border-top: 1px solid var(--border);
 }
 
+.bis-sensor-table {
+  width: 100%;
+  margin-top: 0.75rem;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.bis-sensor-table th,
+.bis-sensor-table td {
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.bis-sensor-table th {
+  font-weight: 600;
+  color: var(--muted);
+}
+
 @media (max-width: 1100px) {
   .bis-building-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));

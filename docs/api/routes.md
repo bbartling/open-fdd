@@ -78,8 +78,7 @@ Routes are registered in `edge/src/server.rs`. Below is a concise map — not ev
 
 | Method | Path |
 |--------|------|
-| GET | `/api/agent/manifest`, `/api/agent/tools` |
-| POST | `/api/agent/chat` |
+| GET | `/api/agent/manifest`, `/api/agent/tools`, `/api/agent/config` |
 
 MCP stdio tools wrap these REST endpoints — see [MCP]({{ site.baseurl }}/mcp-agents/mcp.html).
 

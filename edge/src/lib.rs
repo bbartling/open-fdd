@@ -1,6 +1,7 @@
 #![recursion_limit = "256"]
 
 pub mod auth;
+pub mod bench;
 pub mod control;
 pub mod csv_ingest;
 pub mod dashboard;

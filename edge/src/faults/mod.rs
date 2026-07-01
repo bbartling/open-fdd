@@ -393,19 +393,88 @@ pub fn status_json() -> Value {
     })
 }
 
+fn round_display(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
+}
+
+fn avg_rounded(vals: &[f64]) -> Value {
+    if vals.is_empty() {
+        Value::Null
+    } else {
+        json!(round_display(vals.iter().sum::<f64>() / vals.len() as f64))
+    }
+}
+
+fn unit_for_column(col: &str) -> &'static str {
+    if col.contains("_h") || col.ends_with("_rh") {
+        "%RH"
+    } else if col.contains("kw") || col.ends_with("_kw") {
+        "kW"
+    } else {
+        "°F"
+    }
+}
+
+fn sensor_stats_for_column(col: &str, equipment: &str, all_rows: &[Value]) -> Value {
+    let mut fault_vals = Vec::new();
+    let mut normal_vals = Vec::new();
+    let mut fault_samples = 0_usize;
+    let mut total_samples = 0_usize;
+
+    for row in all_rows {
+        if row.get("equipment_id").and_then(|v| v.as_str()) != Some(equipment) {
+            continue;
+        }
+        let is_fault = row.get("raw_fault").and_then(|v| v.as_bool()) == Some(true)
+            || row.get("confirmed_fault").and_then(|v| v.as_bool()) == Some(true);
+        if let Some(v) = row.get(col).and_then(|v| v.as_f64()) {
+            total_samples += 1;
+            if is_fault {
+                fault_samples += 1;
+                fault_vals.push(v);
+            } else {
+                normal_vals.push(v);
+            }
+        }
+    }
+
+    let min = |vals: &[f64]| vals.iter().copied().fold(f64::INFINITY, f64::min);
+    let max = |vals: &[f64]| vals.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+
+    json!({
+        "column": col,
+        "label": col.replace('_', " "),
+        "value_unit": unit_for_column(col),
+        "fault_samples": fault_samples,
+        "total_samples": total_samples,
+        "avg_value_fault": avg_rounded(&fault_vals),
+        "avg_value_normal": avg_rounded(&normal_vals),
+        "min_value_fault": if fault_vals.is_empty() { Value::Null } else { json!(round_display(min(&fault_vals))) },
+        "max_value_fault": if fault_vals.is_empty() { Value::Null } else { json!(round_display(max(&fault_vals))) }
+    })
+}
+
 fn fault_analytics_for_record(rec: &Value, all_rows: &[Value]) -> Value {
     let equipment = rec
         .get("equipment_id")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    let input_col = rec
+    let input_cols: Vec<String> = rec
         .get("input_points")
         .and_then(|v| v.as_array())
-        .and_then(|a| a.first())
-        .and_then(|v| v.as_str())
-        .unwrap_or("oa_t");
-    let mut fault_vals = Vec::new();
-    let mut normal_vals = Vec::new();
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| {
+                    v.as_str()
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                })
+                .collect()
+        })
+        .filter(|cols: &Vec<String>| !cols.is_empty())
+        .unwrap_or_else(|| vec!["oa_t".to_string()]);
+
     let mut fault_samples = 0_usize;
     let mut total_samples = 0_usize;
     let mut first_fault: Option<String> = None;
@@ -418,13 +487,6 @@ fn fault_analytics_for_record(rec: &Value, all_rows: &[Value]) -> Value {
         total_samples += 1;
         let is_fault = row.get("raw_fault").and_then(|v| v.as_bool()) == Some(true)
             || row.get("confirmed_fault").and_then(|v| v.as_bool()) == Some(true);
-        if let Some(v) = row.get(input_col).and_then(|v| v.as_f64()) {
-            if is_fault {
-                fault_vals.push(v);
-            } else {
-                normal_vals.push(v);
-            }
-        }
         if is_fault {
             fault_samples += 1;
             let ts = row.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
@@ -435,31 +497,38 @@ fn fault_analytics_for_record(rec: &Value, all_rows: &[Value]) -> Value {
         }
     }
 
+    let sensors: Vec<Value> = input_cols
+        .iter()
+        .map(|col| sensor_stats_for_column(col, equipment, all_rows))
+        .collect();
+    let primary = sensors.first().cloned().unwrap_or_else(|| json!({}));
+    let input_col = input_cols.first().map(String::as_str).unwrap_or("oa_t");
+    let primary_unit = primary
+        .get("value_unit")
+        .and_then(|v| v.as_str())
+        .unwrap_or_else(|| unit_for_column(input_col));
+    let (bounds_low, bounds_high) = if primary_unit == "°F" {
+        (json!(40.0), json!(110.0))
+    } else {
+        (Value::Null, Value::Null)
+    };
+
     let minutes = rec
         .get("minutes_in_fault")
         .and_then(|v| v.as_i64())
         .unwrap_or(0);
     let hours = minutes as f64 / 60.0;
-    let avg = |vals: &[f64]| {
-        if vals.is_empty() {
-            Value::Null
-        } else {
-            json!(vals.iter().sum::<f64>() / vals.len() as f64)
-        }
-    };
-    let min = |vals: &[f64]| vals.iter().copied().fold(f64::INFINITY, f64::min);
-    let max = |vals: &[f64]| vals.iter().copied().fold(f64::NEG_INFINITY, f64::max);
 
     json!({
         "fault_samples": fault_samples,
         "total_samples": total_samples,
-        "avg_value_fault": avg(&fault_vals),
-        "avg_value_normal": avg(&normal_vals),
-        "min_value_fault": if fault_vals.is_empty() { Value::Null } else { json!(min(&fault_vals)) },
-        "max_value_fault": if fault_vals.is_empty() { Value::Null } else { json!(max(&fault_vals)) },
-        "value_unit": if input_col.contains("_h") { "%RH" } else { "°F" },
-        "bounds_low": 40.0,
-        "bounds_high": 110.0,
+        "avg_value_fault": primary.get("avg_value_fault").cloned().unwrap_or(Value::Null),
+        "avg_value_normal": primary.get("avg_value_normal").cloned().unwrap_or(Value::Null),
+        "min_value_fault": primary.get("min_value_fault").cloned().unwrap_or(Value::Null),
+        "max_value_fault": primary.get("max_value_fault").cloned().unwrap_or(Value::Null),
+        "value_unit": primary.get("value_unit").cloned().unwrap_or(json!(unit_for_column(input_col))),
+        "bounds_low": bounds_low,
+        "bounds_high": bounds_high,
         "fault_span_label": match (&first_fault, &last_fault) {
             (Some(a), Some(b)) if a == b => json!(a),
             (Some(a), Some(b)) => json!(format!("{a} → {b}")),
@@ -467,10 +536,11 @@ fn fault_analytics_for_record(rec: &Value, all_rows: &[Value]) -> Value {
         },
         "estimated_fault_duration_label": format!("{hours:.1} h"),
         "estimated_fault_duration_hours": hours,
-        "hours_in_fault": hours,
+        "hours_in_fault": round_display(hours),
         "first_seen_at": first_fault,
         "last_seen_at": last_fault,
-        "value_columns": [input_col]
+        "value_columns": input_cols,
+        "sensors": sensors
     })
 }
 
@@ -742,5 +812,33 @@ mod tests {
             Some(1.5)
         );
         assert!(analytics.get("fault_span_label").is_some());
+        let avg_normal = analytics
+            .get("avg_value_normal")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        assert_eq!(avg_normal, 70.0);
+        let sensors = analytics.get("sensors").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(sensors.len(), 1);
+    }
+
+    #[test]
+    fn fault_analytics_multi_sensor_rounds() {
+        let rec = json!({
+            "equipment_id": "equip:unit-a",
+            "minutes_in_fault": 60,
+            "input_points": ["oa_t", "zn_t"]
+        });
+        let rows = vec![
+            json!({"equipment_id":"equip:unit-a","timestamp":"2026-06-21T10:00:00Z","raw_fault":true,"oa_t":120.123,"zn_t":72.456}),
+            json!({"equipment_id":"equip:unit-a","timestamp":"2026-06-21T11:00:00Z","raw_fault":false,"oa_t":70.111,"zn_t":68.999}),
+        ];
+        let analytics = fault_analytics_for_record(&rec, &rows);
+        let sensors = analytics.get("sensors").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(sensors.len(), 2);
+        let zn = &sensors[1];
+        assert_eq!(
+            zn.get("avg_value_normal").and_then(|v| v.as_f64()),
+            Some(69.0)
+        );
     }
 }

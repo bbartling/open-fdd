@@ -63,14 +63,57 @@ export function extractWhoisDevices(res: unknown): WhoisDeviceRow[] {
 
 export function extractPointDiscoveryObjects(result: unknown): PointDiscoveryObjectRow[] {
   if (!result || typeof result !== "object") return [];
-  const r = result as { objects?: unknown[] };
-  if (!Array.isArray(r.objects)) return [];
-  return r.objects.map((o) => {
-    const row = o as Record<string, unknown>;
-    return {
-      object_identifier: String(row.object_identifier ?? "—"),
-      name: String(row.name ?? "—"),
-      commandable: Boolean(row.commandable),
-    };
-  });
+  const r = result as { objects?: unknown[]; points?: unknown[] };
+  if (Array.isArray(r.objects)) {
+    return r.objects.map((o) => {
+      const row = o as Record<string, unknown>;
+      return {
+        object_identifier: String(row.object_identifier ?? "—"),
+        name: String(row.name ?? "—"),
+        commandable: Boolean(row.commandable),
+      };
+    });
+  }
+  if (Array.isArray(r.points)) {
+    return pointsToDiscoveryObjects(r.points);
+  }
+  return [];
+}
+
+export function pointsToDiscoveryObjects(points: unknown[]): PointDiscoveryObjectRow[] {
+  return points
+    .map((p) => {
+      const row = p as Record<string, unknown>;
+      const id = String(row.id ?? "");
+      const parts = id.split(":");
+      if (parts.length === 4 && parts[0] === "bacnet") {
+        return {
+          object_identifier: `${parts[2]},${parts[3]}`,
+          name: String(row.name ?? parts[2]),
+          commandable: Boolean(row.writable),
+        };
+      }
+      const oid = row.object_id;
+      if (Array.isArray(oid) && oid.length >= 2) {
+        const typeNames = [
+          "analog-input",
+          "analog-output",
+          "analog-value",
+          "binary-input",
+          "binary-output",
+          "binary-value",
+        ];
+        const typeCode = Number(oid[0]);
+        const inst = String(oid[1]);
+        const ot = typeNames[typeCode];
+        if (!ot) return null;
+        return {
+          object_identifier: `${ot},${inst}`,
+          name: String(row.name ?? ot),
+          commandable: Boolean(row.writable),
+        };
+      }
+      return null;
+    })
+    .filter((x): x is PointDiscoveryObjectRow => x !== null);
 }

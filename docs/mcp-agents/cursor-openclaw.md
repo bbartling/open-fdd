@@ -13,7 +13,7 @@ nav_order: 3
 3. Configure MCP server pointing at `openfdd-mcp` or edge entrypoint
 4. Use tools for health, assignments, CSV preflight, rules, reports
 
-Optional **cursor** compose profile enables in-dashboard chat relay (`compose --profile cursor`).
+Open-FDD does **not** ship an in-dashboard chatbot. Connect Cursor to **`openfdd-mcp`** (stdio) — see [external agents examples](../examples/external-agents.md).
 
 ## OpenClaw on Raspberry Pi
 

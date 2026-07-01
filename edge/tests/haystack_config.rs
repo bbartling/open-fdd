@@ -69,6 +69,31 @@ fn disabled_status_is_clean() {
 }
 
 #[test]
+fn flat_root_toml_parses_without_haystack_section() {
+    let _lock = workspace_env_lock();
+    let cfg_path =
+        std::env::temp_dir().join(format!("openfdd-haystack-flat-{}.toml", std::process::id()));
+    fs::write(
+        &cfg_path,
+        "enabled = true\nbase_url = \"https://station.example/haystack\"\n",
+    )
+    .unwrap();
+    let key_cfg = "OPENFDD_HAYSTACK_CONFIG";
+    let prev_cfg = env::var(key_cfg).ok();
+    env::set_var(key_cfg, cfg_path.to_string_lossy().to_string());
+    env::remove_var("OPENFDD_HAYSTACK_DISABLED");
+    env::remove_var("OPENFDD_HAYSTACK_BASE");
+    let cfg = load_config();
+    assert_eq!(cfg.base_url, "https://station.example/haystack");
+    assert!(cfg.enabled);
+    match prev_cfg {
+        Some(v) => env::set_var(key_cfg, v),
+        None => env::remove_var(key_cfg),
+    }
+    let _ = fs::remove_file(cfg_path);
+}
+
+#[test]
 fn fixture_import_populates_model() {
     let _lock = workspace_env_lock();
     env::set_var("OPENFDD_HAYSTACK_FIXTURE", "1");

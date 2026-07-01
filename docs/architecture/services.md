@@ -38,8 +38,7 @@ ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-latest}
 | Profile | Service | Notes |
 |---------|---------|-------|
 | `caddy-http` / `caddy-tls` | Caddy reverse proxy | TLS termination for LAN ingress |
-| `cursor` | Cursor SDK relay | In-dashboard agent assist |
-| `mcp-sidecar` | `openfdd-mcp` slim image | Transitional stdio MCP container |
+| `mcp-sidecar` | `openfdd-mcp` | Optional stdio MCP for external agents (Codex, Cursor, OpenClaw, …) |
 
 ## MCP binary
 

@@ -37,7 +37,7 @@ From `docker/compose.edge.rust.yml`:
 | `desktop-json-csv` | Bridge only — CSV/JSON workflows on a workstation |
 | `full-edge` | Bridge + BACnet commission + Haystack gateway |
 | `caddy-http` / `caddy-tls` | Reverse proxy in front of the bridge |
-| `cursor` | In-app Cursor SDK chat relay (optional) |
+| `mcp-sidecar` | Optional `openfdd-mcp` stdio sidecar for external agents |
 
 Examples:
 

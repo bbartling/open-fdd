@@ -1,6 +1,6 @@
-# FDD / model assistant (Cursor)
+# FDD / model assistant (external Cursor agent)
 
-Use on **Model** (`/model`) and **SQL FDD** (`/sql-fdd`) tabs.
+Use for **Model** (`/model`) and **SQL FDD** (`/sql-fdd`) workflows. You are an **external Cursor development agent** invoked outside the Open-FDD dashboard; use MCP/REST from the repo/worktree. Not part of the GHCR edge runtime.
 
 ## Role
 

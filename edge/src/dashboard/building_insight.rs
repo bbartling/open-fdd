@@ -1,9 +1,8 @@
-//! Building insight agent — context-aware HVAC FDD summary with 15-minute cache + optional Ollama.
+//! Building insight — context-aware HVAC FDD summary with 15-minute cache.
 
 use super::{analytics, building_status, summary};
 use crate::faults;
 use crate::historian::store;
-use crate::ops::ollama;
 use serde_json::{json, Value};
 use std::env;
 use std::fs;
@@ -48,18 +47,7 @@ pub fn generate(force: bool) -> Value {
     let ctx = gather_context();
     let mut out = build_deterministic(&ctx);
     out["cached"] = json!(false);
-
-    if let Ok(llm) = try_ollama_sentence(&ctx, &out) {
-        out["sentence"] = json!(llm);
-        out["source"] = json!("ollama");
-        out["ollama_ok"] = json!(true);
-    } else {
-        out["source"] = json!("rules");
-        out["ollama_ok"] = json!(false);
-        if ollama::probe_quick().is_none() {
-            out["error"] = json!("Ollama offline — showing rule-based HVAC summary");
-        }
-    }
+    out["source"] = json!("rules");
 
     let ts = now_unix();
     out["generated_at"] = json!(ts);
@@ -343,46 +331,6 @@ fn build_deterministic(ctx: &Value) -> Value {
         },
         "faults_linked": []
     })
-}
-
-fn try_ollama_sentence(ctx: &Value, base: &Value) -> Result<String, String> {
-    let base_url = ollama::probe_quick().ok_or("ollama unavailable")?;
-    let prompt = format!(
-        "You are an HVAC fault-detection operator assistant for Open-FDD.\n\
-         Deployment: {}\n\
-         Data sources: {}\n\
-         Equipment: {}, points: {}, active faults: {}\n\
-         Prior issues memory: {}\n\
-         Rule-based summary: {}\n\
-         Write 2 concise sentences for the main dashboard: (1) what data path is active (CSV vs BACnet/OT LAN), \
-         (2) top current HVAC/FDD concern or all-clear. Plain English, no markdown.",
-        ctx.get("deployment_mode").and_then(|v| v.as_str()).unwrap_or("?"),
-        ctx.get("active_sources").cloned().unwrap_or(json!([])),
-        ctx.get("coverage")
-            .and_then(|c| c.get("equipment_count"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0),
-        ctx.get("coverage")
-            .and_then(|c| c.get("point_count"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0),
-        ctx.get("active_count").and_then(|v| v.as_u64()).unwrap_or(0),
-        ctx.get("memory")
-            .and_then(|m| m.get("prior_issues"))
-            .cloned()
-            .unwrap_or(json!([])),
-        base.get("sentence").and_then(|v| v.as_str()).unwrap_or("")
-    );
-    let messages = vec![
-        json!({"role": "system", "content": "HVAC FDD building insight — brief operator briefing only."}),
-        json!({"role": "user", "content": prompt}),
-    ];
-    let result = ollama::chat_at(&base_url, &messages, None)?;
-    let text = result.content.trim();
-    if text.is_empty() {
-        return Err("empty ollama response".into());
-    }
-    Ok(text.to_string())
 }
 
 fn read_cache() -> Option<Value> {

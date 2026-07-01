@@ -293,8 +293,8 @@ export async function devQuickLogin(role: "integrator" | "admin" | "operator" | 
   });
 }
 
-/** Dev-only start local script (ui dev, codex setup). */
-export async function devRunScript(script: "ui_dev" | "codex_setup" | "codex_reset") {
+/** Dev-only start local script (Vite UI). */
+export async function devRunScript(script: "ui_dev") {
   return apiFetch<{ ok?: boolean; hint?: string; error?: string; log?: string }>(
     "/api/dev/run-script",
     {

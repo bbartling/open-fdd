@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import Plotly from "plotly.js-dist-min";
 import { apiFetch } from "../lib/api";
 import { appendHostHistory } from "../lib/hostHistory";
@@ -49,7 +50,7 @@ type HostStats = {
   memory: MemBlock;
   storage: StorageBlock;
   network: { available?: boolean; rx_bytes?: number; tx_bytes?: number };
-  ollama: {
+  ollama?: {
     api_ok?: boolean;
     base_url?: string;
     active_base_url?: string;
@@ -172,7 +173,7 @@ export default function HostStatsPage() {
       setHistory((prev) =>
         appendHistory(prev, {
           at: data.collected_at,
-          cpu: data.cpu.usage_percent,
+          cpu: data.cpu?.usage_percent ?? null,
           mem: data.memory?.percent_used ?? null,
         }),
       );
@@ -250,6 +251,7 @@ export default function HostStatsPage() {
 
   const mem = stats?.memory;
   const storage = stats?.storage;
+  const ollama = stats?.ollama;
   const diskWarn =
     storage?.available && (storage.percent_used ?? 0) >= 85
       ? "Disk is getting full — feather store may fail soon."
@@ -283,7 +285,7 @@ export default function HostStatsPage() {
             <div ref={chartRef} className="host-stats-chart" />
             <div className="host-now-row">
               <span className="muted">
-                Now: CPU {stats.cpu.usage_percent ?? "—"}% · RAM {mem?.percent_used ?? "—"}%
+                Now: CPU {stats.cpu?.usage_percent ?? "—"}% · RAM {mem?.percent_used ?? "—"}%
               </span>
             </div>
           </div>
@@ -320,80 +322,89 @@ export default function HostStatsPage() {
           )}
 
           <div className="panel">
-            <h3 className="panel-title">Ollama (API health)</h3>
-            <div className="host-ollama-grid">
-              <div className="status-kv">
-                <span className="status-kv-label">API</span>
-                <span className={`status-kv-value ${stats.ollama.api_ok ? "ok" : "error"}`}>
-                  {stats.ollama.api_ok ? "reachable" : "unreachable"}
-                </span>
-              </div>
-              {stats.ollama.active_base_url || stats.ollama.base_url ? (
-                <div className="status-kv">
-                  <span className="status-kv-label">URL</span>
-                  <span className="status-kv-value mono">
-                    {stats.ollama.active_base_url || stats.ollama.base_url}
-                  </span>
+            <h3 className="panel-title">Local LLM (Ollama)</h3>
+            {ollama ? (
+              <>
+                <div className="host-ollama-grid">
+                  <div className="status-kv">
+                    <span className="status-kv-label">API</span>
+                    <span className={`status-kv-value ${ollama.api_ok ? "ok" : "error"}`}>
+                      {ollama.api_ok ? "reachable" : "unreachable"}
+                    </span>
+                  </div>
+                  {ollama.active_base_url || ollama.base_url ? (
+                    <div className="status-kv">
+                      <span className="status-kv-label">URL</span>
+                      <span className="status-kv-value mono">
+                        {ollama.active_base_url || ollama.base_url}
+                      </span>
+                    </div>
+                  ) : null}
+                  {ollama.configured_model ? (
+                    <div className="status-kv">
+                      <span className="status-kv-label">Model</span>
+                      <span className="status-kv-value">{ollama.configured_model}</span>
+                    </div>
+                  ) : null}
+                  {ollama.configured_ram_tier ? (
+                    <div className="status-kv">
+                      <span className="status-kv-label">Runtime</span>
+                      <span className="status-kv-value">
+                        {ollama.configured_ram_tier}
+                        {ollama.gpu_mode ? `, ${ollama.gpu_mode}` : ""}
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="status-kv">
+                    <span className="status-kv-label">GPU</span>
+                    <span className={`status-kv-value ${ollama.gpu_available ? "ok" : ""}`}>
+                      {ollama.gpu_available ? "available" : "not detected"}
+                    </span>
+                  </div>
+                  <div className="status-kv">
+                    <span className="status-kv-label">Agent chat</span>
+                    <span className={`status-kv-value ${ollama.interactive_chat_enabled ? "ok" : ""}`}>
+                      {ollama.interactive_chat_enabled ? "enabled" : "disabled (CPU-only)"}
+                    </span>
+                  </div>
+                  {ollama.health_timeout_s != null ? (
+                    <div className="status-kv">
+                      <span className="status-kv-label">Health probe</span>
+                      <span className="status-kv-value">{formatDurationMs(ollama.health_timeout_s * 1000)}</span>
+                    </div>
+                  ) : null}
+                  {ollama.chat_timeout_s != null ? (
+                    <div className="status-kv">
+                      <span className="status-kv-label">Agent chat timeout</span>
+                      <span className="status-kv-value">{formatDurationMs(ollama.chat_timeout_s * 1000)}</span>
+                    </div>
+                  ) : null}
+                  {ollama.process?.rss_bytes || ollama.rss_bytes ? (
+                    <div className="status-kv">
+                      <span className="status-kv-label">Host process RAM</span>
+                      <span className="status-kv-value">
+                        {fmtBytes(ollama.process?.rss_bytes ?? ollama.rss_bytes)}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-              {stats.ollama.configured_model ? (
-                <div className="status-kv">
-                  <span className="status-kv-label">Model</span>
-                  <span className="status-kv-value">{stats.ollama.configured_model}</span>
-                </div>
-              ) : null}
-              {stats.ollama.configured_ram_tier ? (
-                <div className="status-kv">
-                  <span className="status-kv-label">Runtime</span>
-                  <span className="status-kv-value">
-                    {stats.ollama.configured_ram_tier}
-                    {stats.ollama.gpu_mode ? `, ${stats.ollama.gpu_mode}` : ""}
-                  </span>
-                </div>
-              ) : null}
-              <div className="status-kv">
-                <span className="status-kv-label">GPU</span>
-                <span className={`status-kv-value ${stats.ollama.gpu_available ? "ok" : ""}`}>
-                  {stats.ollama.gpu_available ? "available" : "not detected"}
-                </span>
-              </div>
-              <div className="status-kv">
-                <span className="status-kv-label">Agent chat</span>
-                <span className={`status-kv-value ${stats.ollama.interactive_chat_enabled ? "ok" : ""}`}>
-                  {stats.ollama.interactive_chat_enabled ? "enabled" : "disabled (CPU-only)"}
-                </span>
-              </div>
-              {stats.ollama.health_timeout_s != null ? (
-                <div className="status-kv">
-                  <span className="status-kv-label">Health probe</span>
-                  <span className="status-kv-value">{formatDurationMs(stats.ollama.health_timeout_s * 1000)}</span>
-                </div>
-              ) : null}
-              {stats.ollama.chat_timeout_s != null ? (
-                <div className="status-kv">
-                  <span className="status-kv-label">Agent chat timeout</span>
-                  <span className="status-kv-value">{formatDurationMs(stats.ollama.chat_timeout_s * 1000)}</span>
-                </div>
-              ) : null}
-              {stats.ollama.process?.rss_bytes || stats.ollama.rss_bytes ? (
-                <div className="status-kv">
-                  <span className="status-kv-label">Host process RAM</span>
-                  <span className="status-kv-value">
-                    {fmtBytes(stats.ollama.process?.rss_bytes ?? stats.ollama.rss_bytes)}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-            {stats.ollama.error && !stats.ollama.api_ok ? (
-              <p className="muted host-storage-note">{stats.ollama.error}</p>
-            ) : null}
-            {!stats.ollama.api_ok && stats.ollama.tried_urls?.length ? (
-              <p className="muted host-storage-note">
-                Probed: {stats.ollama.tried_urls.join(", ")} — use{" "}
-                <code>docker compose --profile ai up -d</code> or set <code>OFDD_OLLAMA_BASE_URL</code> in{" "}
-                <code>workspace/ollama.env.local</code>.
+                {ollama.error && !ollama.api_ok ? (
+                  <p className="muted host-storage-note">{ollama.error}</p>
+                ) : null}
+                {!ollama.api_ok && ollama.tried_urls?.length ? (
+                  <p className="muted host-storage-note">
+                    Probed: {ollama.tried_urls.join(", ")} — use{" "}
+                    <code>docker compose --profile ai up -d</code> or set <code>OFDD_OLLAMA_BASE_URL</code> in{" "}
+                    <code>workspace/ollama.env.local</code>.
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <p className="muted">
+                Not bundled on this Rust edge stack (external-agent architecture). Model routing runs in Codex,
+                Cursor, or MCP — see <Link to="/agent">External agents</Link>.
               </p>
-            ) : null}
+            )}
           </div>
 
           {stats.container_revisions?.services?.length ? (
@@ -434,15 +445,15 @@ export default function HostStatsPage() {
             <div className="host-info-grid">
               <div>
                 <span className="status-kv-label">Hostname</span>
-                <div>{stats.host.hostname}</div>
+                <div>{stats.host?.hostname ?? "—"}</div>
               </div>
               <div>
                 <span className="status-kv-label">Uptime</span>
-                <div>{fmtUptime(stats.host.uptime_seconds)}</div>
+                <div>{fmtUptime(stats.host?.uptime_seconds)}</div>
               </div>
               <div>
                 <span className="status-kv-label">CPU cores</span>
-                <div>{stats.cpu.logical_cores}</div>
+                <div>{stats.cpu?.logical_cores ?? "—"}</div>
               </div>
             </div>
           </div>

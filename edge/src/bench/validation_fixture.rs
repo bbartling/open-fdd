@@ -6,7 +6,7 @@
 use crate::historian::store;
 use crate::validation::profile::SiteConfig;
 use chrono::{DateTime, Utc};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 fn phase_oa_t(phase: &str) -> f64 {
     match phase {

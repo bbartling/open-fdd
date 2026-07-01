@@ -526,3 +526,10 @@ pub fn delete_session_file_handler(body: &Value) -> Value {
         Err(e) => json!({"ok": false, "error": e}),
     }
 }
+
+pub fn delete_session_handler(session_id: &str) -> Value {
+    match session::delete_session(session_id) {
+        Ok(()) => json!({"ok": true}),
+        Err(e) => json!({"ok": false, "error": e}),
+    }
+}

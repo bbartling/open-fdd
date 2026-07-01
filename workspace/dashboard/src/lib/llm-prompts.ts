@@ -15,7 +15,7 @@ When the export is available:
 Open-FDD import contract (POST /api/model/commissioning-import):
 - Include non-empty sites, equipment, points arrays.
 - points[].site_id must exist in sites[].id; points[].equipment_id must exist in equipment[].id when set.
-- fdd_rule_ids on points is the preferred human/AI assignment surface; fdd_rules[] bindings are merged on import.
+- fdd_rule_ids on points is the preferred human/agent assignment surface; fdd_rules[] bindings are merged on import.
 
 OUTPUT — return ONLY one JSON object with keys:
 - validation_notes (string)

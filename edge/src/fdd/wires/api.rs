@@ -65,7 +65,11 @@ pub fn update_graph(site_id: &str, graph_id: &str, payload: &Value, actor: &str)
     }
     graph["updated_at"] = json!(Utc::now().to_rfc3339());
     graph["updated_by"] = json!(actor);
-    if payload.get("source").and_then(|v| v.as_str()) == Some("ai_generated") {
+    if payload
+        .get("source")
+        .and_then(|v| v.as_str())
+        .is_some_and(|s| matches!(s, "agent_proposed" | "ai_generated"))
+    {
         graph["review_status"] = json!("needs_review");
     }
     match persistence::write_graph(site_id, &graph) {

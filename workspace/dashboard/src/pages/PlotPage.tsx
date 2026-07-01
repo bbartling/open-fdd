@@ -10,6 +10,19 @@ import { copyToClipboard } from "../lib/clipboard";
 import { formatApiError } from "../lib/formatApiError";
 import { buildPlotTraces, type PlotReadingsResponse } from "../lib/plot-chart";
 import {
+  datetimeLocalToUtcIso,
+  defaultPlotRange,
+  formatDataBoundsHint,
+  isoToDatetimeLocal,
+  PLOT_RANGE_PRESETS,
+  plotRangeFromPreset,
+  plotRangeLabel,
+  plotRangeQueryParams,
+  type DataBounds,
+  type PlotRangePreset,
+  type PlotRangeState,
+} from "../lib/plotDateRange";
+import {
   defaultKeysForEquipment,
   useTelemetryCatalog,
   type SeriesOption,
@@ -62,7 +75,11 @@ export default function PlotPage() {
   const [enabledFaults, setEnabledFaults] = useState<Set<string>>(new Set());
   const [faultPanels, setFaultPanels] = useState<PlotReadingsResponse["fault_panels"]>([]);
   const [plotData, setPlotData] = useState<PlotReadingsResponse | null>(null);
-  const [hours, setHours] = useState(24);
+  const [plotRange, setPlotRange] = useState<PlotRangeState>(() => defaultPlotRange());
+  const [rangePreset, setRangePreset] = useState<PlotRangePreset>("24h");
+  const [customAfterLocal, setCustomAfterLocal] = useState("");
+  const [customBeforeLocal, setCustomBeforeLocal] = useState("");
+  const [dataBounds, setDataBounds] = useState<DataBounds | null>(null);
   const [rollingAvgMinutes, setRollingAvgMinutes] = useState(() =>
     normalizeRollingMinutes(localStorage.getItem(ROLLING_STORAGE_KEY) || "5"),
   );
@@ -76,6 +93,20 @@ export default function PlotPage() {
   const [chartLoading, setChartLoading] = useState(false);
   const [pinMenu, setPinMenu] = useState<(RulePinTarget & { x: number; y: number }) | null>(null);
   const [pinStatus, setPinStatus] = useState("");
+
+  useEffect(() => {
+    apiFetch<Record<string, unknown>>("/api/dashboard/historian-health")
+      .then((hist) => {
+        const bounds: DataBounds = {
+          earliest: String(hist.earliest_sample_at ?? ""),
+          latest: String(hist.latest_sample_at ?? ""),
+        };
+        if (bounds.earliest || bounds.latest) setDataBounds(bounds);
+      })
+      .catch(() => {});
+  }, []);
+
+  const rangeLabel = useMemo(() => plotRangeLabel(plotRange), [plotRange]);
 
   const optionByKey = useMemo(() => {
     const m = new Map<string, SeriesOption>();
@@ -109,7 +140,7 @@ export default function PlotPage() {
           traces as Plotly.Data[],
           {
             ...layout,
-            title: `Feather · ${data.site_id ?? siteId} · ${data.hours ?? hours}h`,
+            title: `Feather · ${data.site_id ?? siteId} · ${rangeLabel}`,
             height: 460,
           },
           { responsive: true, displayModeBar: true },
@@ -120,7 +151,7 @@ export default function PlotPage() {
         throw e;
       }
     },
-    [enabledFaults, showBounds, showRollingAvg, theme, siteId, hours],
+    [enabledFaults, showBounds, showRollingAvg, theme, siteId, rangeLabel],
   );
 
   useEffect(() => {
@@ -142,7 +173,7 @@ export default function PlotPage() {
     setError("");
     const keys = [...selected];
     const cols = [...new Set(keys.map((k) => optionByKey.get(k)?.column ?? k))];
-    PLOT_LOG("fetch readings", { siteId, keys: keys.length, cols, hours, includeFaults });
+    PLOT_LOG("fetch readings", { siteId, keys: keys.length, cols, range: plotRange, includeFaults });
     const t0 = performance.now();
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -150,10 +181,10 @@ export default function PlotPage() {
       const qs = new URLSearchParams({
         site_id: siteId,
         columns: keys.join(","),
-        hours: String(hours),
         include_faults: String(includeFaults),
         rolling_avg_minutes: String(normalizeRollingMinutes(rollingAvgMinutes)),
         show_rolling_avg: String(showRollingAvg),
+        ...plotRangeQueryParams(plotRange),
       });
       const res = await apiFetch<PlotReadingsResponse>(`/api/timeseries/readings?${qs}`, {
         signal: controller.signal,
@@ -189,7 +220,7 @@ export default function PlotPage() {
       window.clearTimeout(timer);
       if (gen === fetchGen.current) setChartLoading(false);
     }
-  }, [siteId, selected, hours, includeFaults, rollingAvgMinutes, showRollingAvg, optionByKey]);
+  }, [siteId, selected, plotRange, includeFaults, rollingAvgMinutes, showRollingAvg, optionByKey]);
 
   useEffect(() => {
     if (!selected.size || !siteId) return;
@@ -200,7 +231,7 @@ export default function PlotPage() {
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
-  }, [siteId, hours, includeFaults, rollingAvgMinutes, showRollingAvg, selected, refreshChart]);
+  }, [siteId, plotRange, includeFaults, rollingAvgMinutes, showRollingAvg, selected, refreshChart]);
 
   useEffect(() => {
     return () => {
@@ -252,6 +283,45 @@ export default function PlotPage() {
       ? `/plot?site=${encodeURIComponent(siteId)}&device=${encodeURIComponent(equipmentId)}`
       : "/plot";
 
+  function onRangePresetChange(id: PlotRangePreset) {
+    setRangePreset(id);
+    if (id === "custom") {
+      const next = plotRangeFromPreset("custom", dataBounds ?? undefined);
+      setPlotRange(next);
+      if (next.mode === "custom") {
+        setCustomAfterLocal(isoToDatetimeLocal(next.afterUtc));
+        setCustomBeforeLocal(isoToDatetimeLocal(next.beforeUtc));
+      }
+      return;
+    }
+    setPlotRange(plotRangeFromPreset(id, dataBounds ?? undefined));
+  }
+
+  function applyCustomRange() {
+    const afterUtc = datetimeLocalToUtcIso(customAfterLocal);
+    const beforeUtc = datetimeLocalToUtcIso(customBeforeLocal);
+    if (!afterUtc && !beforeUtc) return;
+    setPlotRange({
+      mode: "custom",
+      afterUtc,
+      beforeUtc,
+    });
+  }
+
+  function useFullDatasetSpan() {
+    if (!dataBounds?.earliest && !dataBounds?.latest) return;
+    setRangePreset("custom");
+    setPlotRange({
+      mode: "custom",
+      afterUtc: dataBounds.earliest ?? "",
+      beforeUtc: dataBounds.latest ?? "",
+    });
+    setCustomAfterLocal(isoToDatetimeLocal(dataBounds.earliest ?? ""));
+    setCustomBeforeLocal(isoToDatetimeLocal(dataBounds.latest ?? ""));
+  }
+
+  const boundsHint = formatDataBoundsHint(dataBounds);
+
   async function copyScopeLink() {
     const url = `${window.location.origin}${plotScopePath}`;
     try {
@@ -268,8 +338,8 @@ export default function PlotPage() {
     const qs = new URLSearchParams({
       site_id: siteId,
       columns: keys.join(","),
-      hours: String(hours),
       include_faults: String(includeFaults),
+      ...plotRangeQueryParams(plotRange),
     });
     const base = getBridgeBase();
     const token = sessionStorage.getItem("ofdd_token");
@@ -281,7 +351,7 @@ export default function PlotPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `openfdd_timeseries_${siteId}_${hours}h.csv`;
+    a.download = `openfdd_timeseries_${siteId}_${rangeLabel.replace(/\s+/g, "_")}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     setStatus(
@@ -317,17 +387,51 @@ export default function PlotPage() {
             onEquipmentChange={onEquipmentChange}
             disabled={catalogLoading}
           />
-          <div className="field">
-            <label className="field-label" htmlFor="plot-hours">
-              History
+          <div className="field plot-range-field">
+            <label className="field-label" htmlFor="plot-range">
+              Date range
             </label>
-            <select id="plot-hours" value={hours} onChange={(e) => setHours(Number(e.target.value))}>
-              <option value={1}>1 h</option>
-              <option value={6}>6 h</option>
-              <option value={24}>24 h</option>
-              <option value={72}>3 d</option>
-              <option value={168}>7 d</option>
+            <select
+              id="plot-range"
+              value={rangePreset}
+              onChange={(e) => onRangePresetChange(e.target.value as PlotRangePreset)}
+            >
+              {PLOT_RANGE_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
             </select>
+            {rangePreset === "custom" ? (
+              <div className="plot-custom-range">
+                <input
+                  type="datetime-local"
+                  aria-label="Range start"
+                  value={customAfterLocal}
+                  onChange={(e) => setCustomAfterLocal(e.target.value)}
+                />
+                <span className="muted">→</span>
+                <input
+                  type="datetime-local"
+                  aria-label="Range end"
+                  value={customBeforeLocal}
+                  onChange={(e) => setCustomBeforeLocal(e.target.value)}
+                />
+                <button type="button" className="secondary-btn" onClick={applyCustomRange}>
+                  Apply
+                </button>
+              </div>
+            ) : null}
+            {boundsHint ? (
+              <div className="plot-range-meta">
+                <span className="muted">{boundsHint}</span>
+                {rangePreset !== "all" && dataBounds?.earliest ? (
+                  <button type="button" className="link-btn" onClick={useFullDatasetSpan}>
+                    Use full span
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <label className="checkbox-inline" title="Evaluates all saved rules — slow on large sites">
             <input type="checkbox" checked={includeFaults} onChange={(e) => setIncludeFaults(e.target.checked)} />

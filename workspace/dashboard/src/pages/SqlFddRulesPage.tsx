@@ -3,32 +3,27 @@ import { Link, useNavigate } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import SqlFddQueryEditor from "../components/sqlFdd/SqlFddQueryEditor";
 import SqlFddResultsPanel from "../components/sqlFdd/SqlFddResultsPanel";
-import SqlFddSchemaExplorer from "../components/sqlFdd/SqlFddSchemaExplorer";
-import SqlFddVisualBuilder from "../components/sqlFdd/SqlFddVisualBuilder";
 import {
   DEFAULT_BUILDER,
   type BuilderState,
   type EquipmentRow,
-  type FddInput,
-  type QueryMode,
   type SchemaTable,
   ruleIdFromBuilder,
 } from "../components/sqlFdd/types";
 import { apiFetch } from "../lib/api";
-import { compileNaturalLanguagePrompt, expandTimeMacros } from "../lib/fddSqlCompiler";
+import { DEFAULT_TELEMETRY_PIVOT_SQL, formatSql, setSqlEquipmentId } from "../lib/formatSql";
+import { expandTimeMacros } from "../lib/fddSqlCompiler";
 import { formatApiError } from "../lib/formatApiError";
 import { useActiveSiteId } from "../lib/useActiveSiteId";
+
+const HISTORIAN_TABLES = ["telemetry_pivot", "telemetry"] as const;
 
 export default function SqlFddRulesPage() {
   const siteId = useActiveSiteId();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<QueryMode>("visual");
   const [builder, setBuilder] = useState<BuilderState>(DEFAULT_BUILDER);
-  const [sql, setSql] = useState("");
-  const [sqlLocked, setSqlLocked] = useState(true);
-  const [prompt, setPrompt] = useState("Show OA temperature above 110 as an FDD fault");
-  const [compileResult, setCompileResult] = useState<ReturnType<typeof compileNaturalLanguagePrompt> | null>(null);
-  const [fddInputs, setFddInputs] = useState<FddInput[]>([]);
+  const [table, setTable] = useState<(typeof HISTORIAN_TABLES)[number]>("telemetry_pivot");
+  const [sql, setSql] = useState(DEFAULT_TELEMETRY_PIVOT_SQL);
   const [schemaTables, setSchemaTables] = useState<SchemaTable[]>([]);
   const [equipment, setEquipment] = useState<EquipmentRow[]>([]);
   const [historian, setHistorian] = useState<Record<string, unknown> | null>(null);
@@ -43,12 +38,10 @@ export default function SqlFddRulesPage() {
 
   useEffect(() => {
     Promise.all([
-      apiFetch<{ fdd_inputs?: FddInput[] }>("/api/fdd-schema/fdd-inputs"),
       apiFetch<{ tables?: SchemaTable[] }>("/api/fdd-schema/tables"),
       apiFetch<Record<string, unknown>>("/api/dashboard/historian-health"),
     ])
-      .then(([inputs, schema, hist]) => {
-        setFddInputs(inputs.fdd_inputs ?? []);
+      .then(([schema, hist]) => {
         setSchemaTables(schema.tables ?? []);
         setHistorian(hist);
       })
@@ -61,35 +54,21 @@ export default function SqlFddRulesPage() {
       .then((res) => {
         setEquipment(res.equipment ?? []);
         const first = res.equipment?.[0]?.id ?? res.equipment?.[0]?.equipment_id;
-        if (first) setBuilder((b) => (b.equipment_id ? b : { ...b, equipment_id: first }));
+        if (first) {
+          setBuilder((b) => (b.equipment_id ? b : { ...b, equipment_id: first }));
+          setSql((prev) => setSqlEquipmentId(prev, first));
+        }
       })
       .catch(() => setError("Could not load equipment for this site."));
   }, [siteId]);
 
-  const previewBuilder = useCallback(async () => {
-    try {
-      const out = await apiFetch<{ sql?: string; validation?: Record<string, unknown> }>(
-        "/api/fdd-rules/builder-sql",
-        { method: "POST", body: JSON.stringify(builder) },
-      );
-      if (mode === "visual" && sqlLocked) setSql(out.sql ?? "");
-      setValidation(out.validation ?? null);
-    } catch (e) {
-      setError(formatApiError(e));
-    }
-  }, [builder, mode, sqlLocked]);
-
-  useEffect(() => {
-    if (mode === "visual") void previewBuilder();
-  }, [mode, builder.input, builder.operator, builder.value, builder.equipment_id, previewBuilder]);
-
-  const insertSnippet = useCallback((snippet: string) => {
-    setSql((prev) => (prev ? `${prev}${prev.endsWith(" ") ? "" : " "}${snippet}` : snippet));
-    if (mode === "visual") {
-      setMode("sql");
-      setSqlLocked(false);
-    }
-  }, [mode]);
+  const onTableChange = useCallback(
+    (next: (typeof HISTORIAN_TABLES)[number]) => {
+      setTable(next);
+      setSql((prev) => prev.replace(/\bFROM\s+\w+/i, `FROM ${next}`));
+    },
+    [],
+  );
 
   async function validateSql() {
     setBusy(true);
@@ -137,25 +116,6 @@ export default function SqlFddRulesPage() {
     }
   }
 
-  function compilePrompt() {
-    setError("");
-    const out = compileNaturalLanguagePrompt({
-      userPrompt: prompt,
-      equipmentId: builder.equipment_id,
-      schema: schemaTables,
-      fddInputs,
-    });
-    setCompileResult(out);
-    if (out.ok && out.sql) {
-      setSql(out.sql);
-      setSqlLocked(false);
-      setMode("prompt");
-      setValidation(out.validation ?? null);
-    } else {
-      setError(out.error ?? "Could not compile prompt");
-    }
-  }
-
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") void runSql();
@@ -194,31 +154,13 @@ export default function SqlFddRulesPage() {
     }
   }
 
-  async function exportPdfReport() {
-    setBusy(true);
-    setError("");
-    try {
-      const out = await apiFetch<{ report_id?: string }>("/api/reports/from-fdd-sql-run", {
-        method: "POST",
-        body: JSON.stringify({
-          rule_name: builder.name,
-          sql,
-          equipment_id: builder.equipment_id,
-          fault_code: builder.fault_code,
-          run_result: runResult,
-        }),
-      });
-      setActionStatus(`PDF report ${out.report_id ?? ""} created — see Reports tab.`);
-    } catch (e) {
-      setError(formatApiError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const selectedEquip = equipment.find(
-    (e) => (e.id ?? e.equipment_id) === builder.equipment_id,
-  );
+  const selectedTable = schemaTables.find((t) => t.name === table);
+  const columnHint = selectedTable
+    ? (selectedTable.columns ?? [])
+        .map((c) => (typeof c === "string" ? c : c.name))
+        .slice(0, 8)
+        .join(", ")
+    : "";
 
   return (
     <div className="page page-wide sql-fdd-page gf-query-page">
@@ -226,7 +168,7 @@ export default function SqlFddRulesPage() {
         title="SQL FDD Rules"
         subtitle={
           <>
-            DataFusion read-only SQL against site <code>{siteId || "…"}</code>. Point bindings live on{" "}
+            Read-only DataFusion SQL over the historian pivot. Point bindings live on{" "}
             <Link to="/model">Model &amp; FDD assignments</Link>.
           </>
         }
@@ -236,10 +178,24 @@ export default function SqlFddRulesPage() {
 
       <div className="gf-context-bar">
         <label className="gf-context-bar__field">
-          <span className="gf-field__label">Test against equipment</span>
+          <span className="gf-field__label">Historian table</span>
+          <select value={table} onChange={(e) => onTableChange(e.target.value as typeof table)}>
+            {HISTORIAN_TABLES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="gf-context-bar__field">
+          <span className="gf-field__label">Equipment scope</span>
           <select
             value={builder.equipment_id}
-            onChange={(e) => setBuilder({ ...builder, equipment_id: e.target.value })}
+            onChange={(e) => {
+              const id = e.target.value;
+              setBuilder({ ...builder, equipment_id: id });
+              setSql((prev) => setSqlEquipmentId(prev, id));
+            }}
           >
             <option value="">Select equipment…</option>
             {equipment.map((eq) => {
@@ -254,115 +210,56 @@ export default function SqlFddRulesPage() {
           </select>
         </label>
         <div className="gf-context-bar__meta">
-          <span className="gf-pill">{selectedEquip?.equipment_type ? String(selectedEquip.equipment_type) : "equip"}</span>
           <span className="gf-pill gf-pill--muted">
-            Historian: {String(historian?.row_count ?? 0).toLocaleString()} rows
+            {Number(historian?.row_count ?? 0).toLocaleString()} rows
           </span>
-          {historian?.latest_sample_at ? (
-            <span className="gf-pill gf-pill--muted">Latest: {String(historian.latest_sample_at)}</span>
+          {columnHint ? (
+            <span className="gf-pill gf-pill--muted" title={(selectedTable?.columns ?? []).map((c) => (typeof c === "string" ? c : c.name)).join(", ")}>
+              {columnHint}
+              {(selectedTable?.columns?.length ?? 0) > 8 ? "…" : ""}
+            </span>
           ) : null}
         </div>
       </div>
 
-      <div className="gf-query-layout">
-        <SqlFddSchemaExplorer tables={schemaTables} fddInputs={fddInputs} onInsert={insertSnippet} />
-
-        <div className="gf-query-main">
-          <div className="gf-query-toolbar">
-            <div className="gf-query-toolbar__modes">
-              {(["visual", "sql", "prompt"] as QueryMode[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  className={`gf-mode-btn${mode === m ? " is-active" : ""}`}
-                  onClick={() => setMode(m)}
-                >
-                  {m === "visual" ? "Visual rule" : m === "sql" ? "SQL editor" : "NL prompt"}
-                </button>
-              ))}
-            </div>
-            <div className="gf-query-toolbar__actions">
-              {mode !== "visual" || !sqlLocked ? (
-                <button type="button" className="secondary-btn" disabled={busy} onClick={() => void validateSql()}>
-                  Validate
-                </button>
-              ) : (
-                <button type="button" className="secondary-btn" onClick={() => setSqlLocked(false)}>
-                  Edit SQL
-                </button>
-              )}
-              <button
-                type="button"
-                className="primary-btn gf-run-btn"
-                disabled={busy || !sql.trim() || equipmentMissing}
-                onClick={() => void runSql()}
-              >
-                {busy ? "Running…" : "Run query"}
-              </button>
-            </div>
+      <div className="gf-query-main">
+        <div className="gf-query-toolbar">
+          <div className="gf-query-toolbar__actions">
+            <button type="button" className="secondary-btn" onClick={() => setSql(formatSql(sql))}>
+              Format SQL
+            </button>
+            <button type="button" className="secondary-btn" disabled={busy} onClick={() => void validateSql()}>
+              Validate
+            </button>
+            <button
+              type="button"
+              className="primary-btn gf-run-btn"
+              disabled={busy || !sql.trim() || equipmentMissing}
+              onClick={() => void runSql()}
+            >
+              {busy ? "Running…" : "Run query"}
+            </button>
           </div>
-
-          <div className="gf-editor-panel">
-            <div className="gf-editor-panel__head">
-              <span className="gf-section-title">Query</span>
-              <span className="gf-pill gf-pill--dialect">DataFusion · telemetry_pivot</span>
-              <span className="muted gf-editor-panel__hint">Ctrl+Enter to run · read-only SELECT only</span>
-            </div>
-            <SqlFddQueryEditor
-              sql={sql}
-              readOnly={mode === "visual" && sqlLocked}
-              onChange={(next) => {
-                setSql(next);
-                setSqlLocked(false);
-                if (mode === "visual") setMode("sql");
-              }}
-            />
-          </div>
-
-          {mode === "visual" ? (
-            <SqlFddVisualBuilder builder={builder} fddInputs={fddInputs} onChange={setBuilder} />
-          ) : null}
-
-          {mode === "prompt" ? (
-            <div className="gf-prompt-panel">
-              <label className="gf-field">
-                <span className="gf-field__label">Natural language request</span>
-                <textarea
-                  className="gf-prompt-input"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  rows={3}
-                  placeholder="Show supply air temperature above 75 for the selected AHU over the historian range"
-                />
-              </label>
-              <button type="button" className="secondary-btn" disabled={busy} onClick={compilePrompt}>
-                Compile to SQL
-              </button>
-              {compileResult?.ok ? (
-                <pre className="gf-compile-json">{JSON.stringify(
-                  {
-                    sql: compileResult.sql,
-                    explanation: compileResult.explanation,
-                    dialect: compileResult.dialect,
-                  },
-                  null,
-                  2,
-                )}</pre>
-              ) : null}
-            </div>
-          ) : null}
-
-          <SqlFddResultsPanel
-            validation={validation}
-            runResult={runResult}
-            compileResult={compileResult}
-            equipmentId={builder.equipment_id}
-            busy={busy}
-            onSave={() => void saveActivateAndDashboard()}
-            onExportPdf={() => void exportPdfReport()}
-            actionStatus={actionStatus}
-          />
         </div>
+
+        <div className="gf-editor-panel">
+          <div className="gf-editor-panel__head">
+            <span className="gf-section-title">SQL</span>
+            <span className="muted gf-editor-panel__hint">Ctrl+Enter to run · SELECT only</span>
+          </div>
+          <SqlFddQueryEditor sql={sql} onChange={setSql} />
+        </div>
+
+        <SqlFddResultsPanel
+          validation={validation}
+          runResult={runResult}
+          compileResult={null}
+          equipmentId={builder.equipment_id}
+          busy={busy}
+          onSave={() => void saveActivateAndDashboard()}
+          onExportPdf={() => setActionStatus("PDF export — use Reports tab after saving a rule.")}
+          actionStatus={actionStatus}
+        />
       </div>
     </div>
   );

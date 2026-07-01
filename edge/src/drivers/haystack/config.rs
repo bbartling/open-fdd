@@ -226,8 +226,14 @@ pub fn load_config() -> HaystackConfig {
 
 pub fn load_config_from_path(path: &Path) -> Option<HaystackConfig> {
     let raw = fs::read_to_string(path).ok()?;
-    let parsed: HaystackConfigFile = toml::from_str(&raw).ok()?;
-    Some(parsed.haystack)
+    let has_haystack_table = raw.lines().any(|line| line.trim() == "[haystack]");
+    if let Ok(parsed) = toml::from_str::<HaystackConfigFile>(&raw) {
+        return Some(parsed.haystack);
+    }
+    if has_haystack_table {
+        return None;
+    }
+    toml::from_str::<HaystackConfig>(&raw).ok()
 }
 
 pub fn save_config(cfg: &HaystackConfig) -> Result<(), String> {

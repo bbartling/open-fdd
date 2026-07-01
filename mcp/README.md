@@ -2,16 +2,18 @@
 
 Read-first [Model Context Protocol](https://modelcontextprotocol.io/) server for Open-FDD Rust edge. Proxies JWT-authenticated REST calls to `openfdd-bridge` and commission BACnet reads.
 
+Open-FDD does **not** include a built-in AI chatbot. External agents (Codex CLI, Cursor, Claude Desktop, OpenClaw, etc.) connect through this optional stdio server or JWT REST — see [docs/examples/external-agents.md](../docs/examples/external-agents.md).
+
 **Image:** `openfdd-mcp` binary is bundled in `ghcr.io/bbartling/openfdd-edge-rust`. The slim `ghcr.io/bbartling/openfdd-mcp` image is MCP stdio entrypoint only (same release tag).
 
 ## After a Docker / GHCR site update
 
-`openfdd_rust_site_update.sh` updates the **edge stack only**. MCP is opt-in — pull and wire it **after** the edge is healthy, using the **same semver tag** as the edge (`OPENFDD_IMAGE_TAG`, e.g. `3.2.5` or pinned `3.2.4`).
+`openfdd_rust_site_update.sh` updates the **edge stack only**. MCP is opt-in — pull and wire it **after** the edge is healthy, using the **same semver tag** as the edge (`OPENFDD_IMAGE_TAG`, e.g. `3.2.6` or pinned `3.2.5`).
 
 ```bash
 cd ~/open-fdd
 export OPENFDD_COMPOSE_ROOT="$PWD"
-export OPENFDD_IMAGE_TAG=3.2.5
+export OPENFDD_IMAGE_TAG=3.2.6
 
 # Pull MCP image (optional — docker run will pull if missing)
 docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar pull openfdd-mcp
@@ -39,7 +41,7 @@ export OPENFDD_MCP_TOKEN="$(
         "-e", "OPENFDD_API_BASE=http://127.0.0.1:8080",
         "-e", "OPENFDD_COMMISSION_BASE=http://127.0.0.1:9091",
         "-e", "OPENFDD_MCP_TOKEN",
-        "ghcr.io/bbartling/openfdd-mcp:3.2.3"
+        "ghcr.io/bbartling/openfdd-mcp:3.2.6"
       ],
       "env": {
         "OPENFDD_MCP_TOKEN": "<JWT from login above>"

@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "ver": "3.0",
+    "mode": "default-local"
+  },
+  "cols": [
+    { "name": "id" },
+    { "name": "dis" },
+    { "name": "site" },
+    { "name": "equip" },
+    { "name": "siteRef" }
+  ],
+  "rows": [
+    {
+      "id": "site:local",
+      "dis": "Local site",
+      "site": "M"
+    }
+  ]
+}

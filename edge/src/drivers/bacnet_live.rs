@@ -78,21 +78,96 @@ fn parse_bind() -> (Ipv4Addr, u16, Ipv4Addr) {
 }
 
 fn discover_low_high() -> (u32, u32) {
+    if let (Ok(low_s), Ok(high_s)) = (
+        env::var("OPENFDD_BACNET_DISCOVER_LOW"),
+        env::var("OPENFDD_BACNET_DISCOVER_HIGH"),
+    ) {
+        if let (Ok(low), Ok(high)) = (low_s.parse::<u32>(), high_s.parse::<u32>()) {
+            return (low, high);
+        }
+    }
     let profile = crate::validation::profile::active_profile();
-    let default_inst = if profile.device_instance > 0 {
-        profile.device_instance
+    let field = profile.device_instance;
+    let local = super::bacnet_server::device_instance();
+    let mut low = if field > 0 { field } else { 0 };
+    let mut high = if field > 0 { field } else { 0 };
+    if local > 0 {
+        low = low.min(local);
+        high = high.max(local);
+    }
+    if low == 0 && high == 0 {
+        (0, 4_194_303)
     } else {
-        0
+        (low, high)
+    }
+}
+
+fn server_udp_port() -> u16 {
+    env::var("OPENFDD_BACNET_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(47808)
+}
+
+fn local_server_bip_mac() -> Vec<u8> {
+    let (iface, _, _) = parse_bind();
+    let ip = if iface == Ipv4Addr::UNSPECIFIED {
+        Ipv4Addr::LOCALHOST
+    } else {
+        iface
     };
-    let low = env::var("OPENFDD_BACNET_DISCOVER_LOW")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(default_inst);
-    let high = env::var("OPENFDD_BACNET_DISCOVER_HIGH")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(low);
-    (low, high)
+    let port = server_udp_port();
+    let mut mac = Vec::with_capacity(6);
+    mac.extend_from_slice(&ip.octets());
+    mac.extend_from_slice(&port.to_be_bytes());
+    mac
+}
+
+async fn run_whois(
+    client: &mut BACnetClient<BipTransport>,
+    low: u32,
+    high: u32,
+) -> Result<(), String> {
+    client
+        .who_is(Some(low), Some(high))
+        .await
+        .map_err(|e| e.to_string())?;
+    if let Some((_, mstp_net)) = router_network() {
+        client
+            .who_is_network(mstp_net, Some(low), Some(high))
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+async fn prepare_device_for_read(
+    client: &mut BACnetClient<BipTransport>,
+    device_instance: u32,
+) -> Result<(), String> {
+    let local = super::bacnet_server::device_instance();
+    if device_instance == local {
+        if client.get_device(local).await.is_none() {
+            let mac = local_server_bip_mac();
+            client
+                .add_device(local, &mac)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
+    let (mut low, mut high) = discover_low_high();
+    if device_instance > 0 {
+        low = low.min(device_instance);
+        high = high.max(device_instance);
+    }
+    run_whois(client, low, high).await?;
+    sleep(Duration::from_secs(2)).await;
+    Ok(())
+}
+
+async fn stop_client(mut client: BACnetClient<BipTransport>) {
+    let _ = client.stop().await;
 }
 
 fn discover_timeout_secs() -> u64 {
@@ -230,27 +305,27 @@ fn device_to_json(dev: &DiscoveredDevice) -> Value {
     })
 }
 
-pub async fn whois_devices() -> Result<Vec<Value>, String> {
-    let (low, high) = discover_low_high();
-    let timeout = discover_timeout_secs();
+pub async fn whois_devices_with_range(
+    low: Option<u32>,
+    high: Option<u32>,
+) -> Result<Vec<Value>, String> {
+    let (default_low, default_high) = discover_low_high();
+    let low = low.unwrap_or(default_low);
+    let high = high.unwrap_or(default_high);
     let mut client = build_client().await.map_err(|e| e.to_string())?;
-
-    client
-        .who_is(Some(low), Some(high))
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if let Some((_router_ip, mstp_net)) = router_network() {
-        client
-            .who_is_network(mstp_net, Some(low), Some(high))
-            .await
-            .map_err(|e| e.to_string())?;
+    let result = async {
+        run_whois(&mut client, low, high).await?;
+        sleep(Duration::from_secs(discover_timeout_secs())).await;
+        let devices = client.discovered_devices().await;
+        Ok(devices.iter().map(device_to_json).collect())
     }
+    .await;
+    stop_client(client).await;
+    result
+}
 
-    sleep(Duration::from_secs(timeout)).await;
-    let devices = client.discovered_devices().await;
-    let _ = client.stop().await;
-    Ok(devices.iter().map(device_to_json).collect())
+pub async fn whois_devices() -> Result<Vec<Value>, String> {
+    whois_devices_with_range(None, None).await
 }
 
 pub async fn read_present_value(
@@ -259,35 +334,31 @@ pub async fn read_present_value(
     instance: u32,
 ) -> Result<Value, String> {
     let mut client = build_client().await.map_err(|e| e.to_string())?;
-    let (low, high) = discover_low_high();
-    client
-        .who_is(Some(low), Some(high))
-        .await
-        .map_err(|e| e.to_string())?;
-    if let Some((_, mstp_net)) = router_network() {
-        let _ = client.who_is_network(mstp_net, Some(low), Some(high)).await;
-    }
-    sleep(Duration::from_secs(2)).await;
+    let result = async {
+        prepare_device_for_read(&mut client, device_instance).await?;
 
-    let oid = ObjectIdentifier::new(object_type, instance).map_err(|e| e.to_string())?;
-    let ack = client
-        .read_property_from_device(
-            device_instance,
-            oid,
-            PropertyIdentifier::PRESENT_VALUE,
-            None,
-        )
-        .await
-        .map_err(|e| e.to_string())?;
-    let (value, _) = decode_application_value(&ack.property_value, 0).map_err(|e| e.to_string())?;
-    let out = json!({
-        "device_instance": device_instance,
-        "object_id": [object_type.to_raw(), instance],
-        "value": property_value_to_json(&value),
-        "source": "rusty-bacnet"
-    });
-    let _ = client.stop().await;
-    Ok(out)
+        let oid = ObjectIdentifier::new(object_type, instance).map_err(|e| e.to_string())?;
+        let ack = client
+            .read_property_from_device(
+                device_instance,
+                oid,
+                PropertyIdentifier::PRESENT_VALUE,
+                None,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+        let (value, _) =
+            decode_application_value(&ack.property_value, 0).map_err(|e| e.to_string())?;
+        Ok(json!({
+            "device_instance": device_instance,
+            "object_id": [object_type.to_raw(), instance],
+            "value": property_value_to_json(&value),
+            "source": "rusty-bacnet"
+        }))
+    }
+    .await;
+    stop_client(client).await;
+    result
 }
 
 pub async fn read_priority_array(
@@ -676,65 +747,62 @@ pub async fn poll_present_values_rpm(
     if objects.is_empty() {
         return Ok(Vec::new());
     }
+    let objects = objects.to_vec();
     let mut client = build_client().await.map_err(|e| e.to_string())?;
-    let (low, high) = discover_low_high();
-    client
-        .who_is(Some(low), Some(high))
-        .await
-        .map_err(|e| e.to_string())?;
-    if let Some((_, mstp_net)) = router_network() {
-        let _ = client.who_is_network(mstp_net, Some(low), Some(high)).await;
-    }
-    sleep(Duration::from_secs(2)).await;
+    let result = async {
+        prepare_device_for_read(&mut client, device_instance).await?;
 
-    let specs: Vec<ReadAccessSpecification> = objects
-        .iter()
-        .filter_map(|(object_type, instance)| {
-            ObjectIdentifier::new(*object_type, *instance)
-                .ok()
-                .map(|oid| ReadAccessSpecification {
-                    object_identifier: oid,
-                    list_of_property_references: vec![PropertyReference {
-                        property_identifier: PropertyIdentifier::PRESENT_VALUE,
-                        property_array_index: None,
-                    }],
-                })
-        })
-        .collect();
+        let specs: Vec<ReadAccessSpecification> = objects
+            .iter()
+            .filter_map(|(object_type, instance)| {
+                ObjectIdentifier::new(*object_type, *instance)
+                    .ok()
+                    .map(|oid| ReadAccessSpecification {
+                        object_identifier: oid,
+                        list_of_property_references: vec![PropertyReference {
+                            property_identifier: PropertyIdentifier::PRESENT_VALUE,
+                            property_array_index: None,
+                        }],
+                    })
+            })
+            .collect();
 
-    let rpm = client
-        .read_property_multiple_from_device(device_instance, specs)
-        .await
-        .map_err(|e| e.to_string())?;
+        let rpm = client
+            .read_property_multiple_from_device(device_instance, specs)
+            .await
+            .map_err(|e| e.to_string())?;
 
-    let mut samples = Vec::new();
-    let at = chrono::Utc::now().to_rfc3339();
-    for result in rpm.list_of_read_access_results {
-        let ot = result.object_identifier.object_type();
-        let inst = result.object_identifier.instance_number();
-        let mut value = Value::Null;
-        for prop in result.list_of_results {
-            if prop.error.is_some() {
-                continue;
+        let mut samples = Vec::new();
+        let at = chrono::Utc::now().to_rfc3339();
+        for result in rpm.list_of_read_access_results {
+            let ot = result.object_identifier.object_type();
+            let inst = result.object_identifier.instance_number();
+            let mut value = Value::Null;
+            for prop in result.list_of_results {
+                if prop.error.is_some() {
+                    continue;
+                }
+                let Some(bytes) = prop.property_value.as_ref() else {
+                    continue;
+                };
+                if let Some(val) = decode_prop(bytes) {
+                    value = property_value_to_json(&val);
+                }
             }
-            let Some(bytes) = prop.property_value.as_ref() else {
-                continue;
-            };
-            if let Some(val) = decode_prop(bytes) {
-                value = property_value_to_json(&val);
-            }
+            samples.push(json!({
+                "device_instance": device_instance,
+                "object_id": [ot.to_raw(), inst],
+                "id": format!("bacnet:{}:{}:{}", device_instance, object_type_name(ot), inst),
+                "present_value": value,
+                "last_read_at": at,
+                "read_method": "ReadPropertyMultiple"
+            }));
         }
-        samples.push(json!({
-            "device_instance": device_instance,
-            "object_id": [ot.to_raw(), inst],
-            "id": format!("bacnet:{}:{}:{}", device_instance, object_type_name(ot), inst),
-            "present_value": value,
-            "last_read_at": at,
-            "read_method": "ReadPropertyMultiple"
-        }));
+        Ok(samples)
     }
-    let _ = client.stop().await;
-    Ok(samples)
+    .await;
+    stop_client(client).await;
+    result
 }
 
 pub async fn write_present_value(

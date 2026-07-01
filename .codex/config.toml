@@ -1,5 +1,6 @@
-# Project-scoped Codex config for Open-FDD (WSL dev).
-# MCP + agent roles for in-app chat relay — not used by GHCR edge runtime.
+# Project-scoped Codex config for Open-FDD external-agent workflows.
+# Codex runs outside the Open-FDD runtime and may use MCP/REST/git/safe scripts when
+# explicitly configured by the operator. This is not part of the GHCR edge runtime.
 # Skills: .agents/skills/ (research_review_agent_skills v1 + project). See docs/agent/model-routing.md.
 
 [mcp_servers.openfdd]
@@ -12,11 +13,11 @@ max_depth = 1
 job_max_runtime_seconds = 1800
 
 [agents.csv_assistant]
-description = "CSV profiling, merge, and cleanup via MCP + local toolshed"
+description = "CSV profiling, merge, and cleanup via MCP + local toolshed (external Codex)"
 config_file = "./agents/csv-data-assistant.toml"
 
 [agents.fdd_model]
-description = "Haystack model, FDD assignments, SQL rules"
+description = "Haystack model, FDD assignments, SQL rules (external Codex)"
 config_file = "./agents/fdd-model-assistant.toml"
 
 [agents.retrofit_orchestrator]

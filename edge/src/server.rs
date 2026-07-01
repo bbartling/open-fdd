@@ -7,8 +7,8 @@ use crate::auth::config::Principal;
 use crate::auth::login::{authenticate, login_response};
 use crate::auth::rbac::{can_write_field_bus, role_allowed};
 use crate::{
-    control, csv_ingest, dashboard, data_management, drivers, export, faults, fdd, historian,
-    import, ingest, model, ops, reports, timeseries, validation, version,
+    bench, control, csv_ingest, dashboard, data_management, drivers, export, faults, fdd,
+    historian, import, ingest, model, ops, reports, timeseries, validation, version,
 };
 
 use serde_json::{json, Value};
@@ -254,35 +254,11 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         ("GET", "/api/agent/manifest") => json_response(&mut stream, agent_manifest()),
         ("GET", "/api/agent/tools") => json_response(&mut stream, agent_tools()),
         ("GET", "/api/ingest/contract") => json_response(&mut stream, ingest::contract_json()),
-        ("POST", "/api/agent/dev-harness") => require_role_lazy(
-            &mut stream,
-            &principal,
-            &["integrator", "agent", "operator"],
-            || ops::agent_chat::chat_reply(&parse_json_body_or_empty(&body)),
-        ),
         ("GET", "/api/agent/config") => require_role_lazy(
             &mut stream,
             &principal,
             &["integrator", "agent", "operator"],
-            ops::agent_chat::config_json,
-        ),
-        ("POST", "/api/agent/chat") => require_role_lazy(
-            &mut stream,
-            &principal,
-            &["integrator", "agent", "operator"],
-            || ops::agent_chat::chat_reply(&parse_json_body_or_empty(&body)),
-        ),
-        ("POST", "/api/agent/chat/cancel") => require_role_lazy(
-            &mut stream,
-            &principal,
-            &["integrator", "agent", "operator"],
-            ops::agent_chat::cancel_reply,
-        ),
-        ("POST", "/api/agent/reset") => require_role_lazy(
-            &mut stream,
-            &principal,
-            &["integrator", "agent", "operator"],
-            ops::agent_chat::reset_reply,
+            ops::agent_config::config_json,
         ),
         ("POST", "/api/agent/bootstrap") => require_role(
             &mut stream,
@@ -351,6 +327,24 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let body = export::validation_runs_csv(&q);
             let name = export::export_filename("validation_runs");
             require_role_csv(&mut stream, &principal, READ_EXPORT_ROLES, body, &name)
+        }
+        ("GET", "/api/validation-runs/current/status") => require_role_lazy(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            bench::smoke::status_json,
+        ),
+        ("POST", "/api/validation-runs/current/cycle") => {
+            let payload = parse_json_body_or_empty(&body);
+            require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {
+                bench::smoke::evaluate_sample(&payload)
+            })
+        }
+        ("POST", "/api/validation-runs/current/inject-scenario") => {
+            let payload = parse_json_body_or_empty(&body);
+            require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {
+                bench::smoke::inject_scenario(&payload)
+            })
         }
         ("GET", "/api/export/import-jobs.csv") => {
             let body = export::import_jobs_csv();
@@ -781,7 +775,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             ),
         ),
         ("POST", "/api/bacnet/whois") => {
-            let body = drivers::bacnet::whois_json();
+            let body = drivers::bacnet::whois_json(&parse_json_body_or_empty(&body));
             raw_json(&mut stream, &body)
         }
         ("GET", "/api/bacnet/points") => {
@@ -828,18 +822,18 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let body = drivers::bacnet::driver_tree_json();
             raw_json(&mut stream, &body)
         }
-        ("POST", "/api/bacnet/driver/sync-discovery") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            drivers::bacnet::sync_discovery_value(),
-        ),
-        ("PATCH", "/api/bacnet/driver/point") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            json!({"ok": true, "updated": "point polling settings"}),
-        ),
+        ("POST", "/api/bacnet/driver/sync-discovery") => {
+            let payload = parse_json_body_or_empty(&body);
+            require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {
+                drivers::bacnet::sync_discovery_value(&payload)
+            })
+        }
+        ("PATCH", "/api/bacnet/driver/point") => {
+            let payload = parse_json_body_or_empty(&body);
+            require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {
+                drivers::bacnet::patch_bacnet_point_value(&payload)
+            })
+        }
         ("PATCH", "/api/bacnet/driver/device/remap") => {
             require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {
                 drivers::bacnet::remap_bacnet_device_value(&parse_json_body_or_empty(&body))
@@ -1567,6 +1561,23 @@ fn handle_csv_ingest_dynamic(
         && parts[2] == "import"
         && parts[3] == "sessions"
     {
+        if parts.len() == 5 {
+            let session_id = parts[4];
+            if session_id.contains("..") {
+                return Some(json_response(
+                    stream,
+                    json!({"ok": false, "error": "invalid session id"}),
+                ));
+            }
+            if method == "DELETE" {
+                return Some(require_role_lazy(
+                    stream,
+                    principal,
+                    &["integrator", "agent"],
+                    || csv_ingest::delete_session_handler(session_id),
+                ));
+            }
+        }
         if method != "GET" {
             return None;
         }
