@@ -162,5 +162,18 @@ export const DEFAULT_TELEMETRY_PIVOT_SQL = `SELECT
     WHEN oa_t > 110.0 THEN true
     ELSE false
   END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:local-test-equipment'`;
+FROM telemetry_pivot`;
+
+/** Insert or replace equipment_id filter in historian SQL (tolerates whitespace/format edits). */
+export function setSqlEquipmentId(sql: string, equipmentId: string): string {
+  const escaped = equipmentId.replace(/'/g, "''");
+  const clause = `equipment_id = '${escaped}'`;
+  if (/equipment_id\s*=\s*['"][^'"]*['"]/i.test(sql)) {
+    return sql.replace(/equipment_id\s*=\s*['"][^'"]*['"]/i, clause);
+  }
+  const trimmed = sql.trimEnd();
+  if (/\bWHERE\b/i.test(trimmed)) {
+    return `${trimmed}\n  AND ${clause}`;
+  }
+  return `${trimmed}\nWHERE ${clause}`;
+}

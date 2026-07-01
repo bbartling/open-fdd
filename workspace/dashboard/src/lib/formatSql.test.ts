@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TELEMETRY_PIVOT_SQL, formatSql } from "./formatSql";
+import { DEFAULT_TELEMETRY_PIVOT_SQL, formatSql, setSqlEquipmentId } from "./formatSql";
 
 describe("formatSql", () => {
   it("formats a one-line SELECT with CASE block", () => {
@@ -23,5 +23,16 @@ WHERE equipment_id = 'equip:validation'`,
 
   it("leaves already-formatted SQL stable", () => {
     expect(formatSql(DEFAULT_TELEMETRY_PIVOT_SQL)).toBe(DEFAULT_TELEMETRY_PIVOT_SQL);
+  });
+
+  it("setSqlEquipmentId replaces existing filter with flexible whitespace", () => {
+    const sql = `${DEFAULT_TELEMETRY_PIVOT_SQL}\nWHERE equipment_id='equip:old'`;
+    expect(setSqlEquipmentId(sql, "equip:new")).toContain("equipment_id = 'equip:new'");
+  });
+
+  it("setSqlEquipmentId appends WHERE when missing", () => {
+    expect(setSqlEquipmentId(DEFAULT_TELEMETRY_PIVOT_SQL, "equip:site-a")).toBe(
+      `${DEFAULT_TELEMETRY_PIVOT_SQL}\nWHERE equipment_id = 'equip:site-a'`,
+    );
   });
 });

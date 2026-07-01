@@ -115,8 +115,9 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Verify published semver tags
+        env:
+          VER: ${{ needs.validate.outputs.version }}
         run: |
-          VER="${{ needs.validate.outputs.version }}"
           for tag in "${VER}" "v${VER}"; do
             echo "Inspecting ${{ env.EDGE_IMAGE }}:${tag}"
             docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:${tag}"
@@ -165,8 +166,9 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Verify published semver tags
+        env:
+          VER: ${{ needs.validate.outputs.version }}
         run: |
-          VER="${{ needs.validate.outputs.version }}"
           for tag in "${VER}" "v${VER}"; do
             echo "Inspecting ${{ env.MCP_IMAGE }}:${tag}"
             docker buildx imagetools inspect "${{ env.MCP_IMAGE }}:${tag}"

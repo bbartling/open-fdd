@@ -11,7 +11,7 @@ import {
   ruleIdFromBuilder,
 } from "../components/sqlFdd/types";
 import { apiFetch } from "../lib/api";
-import { DEFAULT_TELEMETRY_PIVOT_SQL, formatSql } from "../lib/formatSql";
+import { DEFAULT_TELEMETRY_PIVOT_SQL, formatSql, setSqlEquipmentId } from "../lib/formatSql";
 import { expandTimeMacros } from "../lib/fddSqlCompiler";
 import { formatApiError } from "../lib/formatApiError";
 import { useActiveSiteId } from "../lib/useActiveSiteId";
@@ -56,11 +56,7 @@ export default function SqlFddRulesPage() {
         const first = res.equipment?.[0]?.id ?? res.equipment?.[0]?.equipment_id;
         if (first) {
           setBuilder((b) => (b.equipment_id ? b : { ...b, equipment_id: first }));
-          setSql((prev) =>
-            prev.includes("WHERE equipment_id")
-              ? prev.replace(/WHERE equipment_id = '[^']*'/, `WHERE equipment_id = '${first}'`)
-              : prev,
-          );
+          setSql((prev) => setSqlEquipmentId(prev, first));
         }
       })
       .catch(() => setError("Could not load equipment for this site."));
@@ -198,9 +194,7 @@ export default function SqlFddRulesPage() {
             onChange={(e) => {
               const id = e.target.value;
               setBuilder({ ...builder, equipment_id: id });
-              setSql((prev) =>
-                prev.replace(/WHERE equipment_id = '[^']*'/, `WHERE equipment_id = '${id}'`),
-              );
+              setSql((prev) => setSqlEquipmentId(prev, id));
             }}
           >
             <option value="">Select equipment…</option>
@@ -217,7 +211,7 @@ export default function SqlFddRulesPage() {
         </label>
         <div className="gf-context-bar__meta">
           <span className="gf-pill gf-pill--muted">
-            {String(historian?.row_count ?? 0).toLocaleString()} rows
+            {Number(historian?.row_count ?? 0).toLocaleString()} rows
           </span>
           {columnHint ? (
             <span className="gf-pill gf-pill--muted" title={(selectedTable?.columns ?? []).map((c) => (typeof c === "string" ? c : c.name)).join(", ")}>

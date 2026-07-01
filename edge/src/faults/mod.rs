@@ -464,7 +464,12 @@ fn fault_analytics_for_record(rec: &Value, all_rows: &[Value]) -> Value {
         .and_then(|v| v.as_array())
         .map(|arr| {
             arr.iter()
-                .filter_map(|v| v.as_str().map(str::to_string))
+                .filter_map(|v| {
+                    v.as_str()
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                })
                 .collect()
         })
         .filter(|cols: &Vec<String>| !cols.is_empty())
@@ -498,6 +503,15 @@ fn fault_analytics_for_record(rec: &Value, all_rows: &[Value]) -> Value {
         .collect();
     let primary = sensors.first().cloned().unwrap_or_else(|| json!({}));
     let input_col = input_cols.first().map(String::as_str).unwrap_or("oa_t");
+    let primary_unit = primary
+        .get("value_unit")
+        .and_then(|v| v.as_str())
+        .unwrap_or_else(|| unit_for_column(input_col));
+    let (bounds_low, bounds_high) = if primary_unit == "°F" {
+        (json!(40.0), json!(110.0))
+    } else {
+        (Value::Null, Value::Null)
+    };
 
     let minutes = rec
         .get("minutes_in_fault")
@@ -513,8 +527,8 @@ fn fault_analytics_for_record(rec: &Value, all_rows: &[Value]) -> Value {
         "min_value_fault": primary.get("min_value_fault").cloned().unwrap_or(Value::Null),
         "max_value_fault": primary.get("max_value_fault").cloned().unwrap_or(Value::Null),
         "value_unit": primary.get("value_unit").cloned().unwrap_or(json!(unit_for_column(input_col))),
-        "bounds_low": 40.0,
-        "bounds_high": 110.0,
+        "bounds_low": bounds_low,
+        "bounds_high": bounds_high,
         "fault_span_label": match (&first_fault, &last_fault) {
             (Some(a), Some(b)) if a == b => json!(a),
             (Some(a), Some(b)) => json!(format!("{a} → {b}")),
