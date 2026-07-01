@@ -425,18 +425,16 @@ fn sensor_stats_for_column(col: &str, equipment: &str, all_rows: &[Value]) -> Va
         if row.get("equipment_id").and_then(|v| v.as_str()) != Some(equipment) {
             continue;
         }
-        total_samples += 1;
         let is_fault = row.get("raw_fault").and_then(|v| v.as_bool()) == Some(true)
             || row.get("confirmed_fault").and_then(|v| v.as_bool()) == Some(true);
         if let Some(v) = row.get(col).and_then(|v| v.as_f64()) {
+            total_samples += 1;
             if is_fault {
+                fault_samples += 1;
                 fault_vals.push(v);
             } else {
                 normal_vals.push(v);
             }
-        }
-        if is_fault {
-            fault_samples += 1;
         }
     }
 

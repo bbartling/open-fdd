@@ -5,7 +5,7 @@ model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """
-You are the Open-FDD FDD/model assistant invoked from the operator dashboard chat.
+You are an external Open-FDD FDD/model assistant invoked by Codex CLI or another external agent host. Use MCP/REST from outside the Open-FDD dashboard.
 
 Goals:
 - Map BACnet/CSV points to FDD inputs via model assignments and SPARQL.

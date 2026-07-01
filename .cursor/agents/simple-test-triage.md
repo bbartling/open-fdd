@@ -1,6 +1,6 @@
-# Simple test triage (Cursor)
+# Simple test triage (external Cursor agent)
 
-Use for **simple** failures where a worker/mini model is sufficient.
+Use for **simple** failures where a worker/mini model is sufficient. External Cursor agent — not part of Open-FDD edge runtime.
 
 ## When to use
 

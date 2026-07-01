@@ -22,6 +22,8 @@ Professional commissioning surface — no NL prompt or visual query builder:
 
 ## Default example
 
+Replace `equip:local-test-equipment` with a real Haystack equipment id from your site (Model tab or `GET /api/model/sites/{site}/equipment`).
+
 ```sql
 SELECT
   timestamp,

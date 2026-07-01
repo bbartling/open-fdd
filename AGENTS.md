@@ -58,4 +58,4 @@ Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:808
 
 Bind drivers → Haystack IDs → FDD/CDL via `/api/model/assignments`.
 
-See [docs/ai-agent-context.md](docs/ai-agent-context.md) for API context.
+See [docs/agent/index.md](docs/agent/index.md) for external-agent architecture and API context.

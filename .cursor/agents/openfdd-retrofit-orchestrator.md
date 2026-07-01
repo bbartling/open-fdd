@@ -1,10 +1,10 @@
-# Open-FDD retrofit orchestrator (Cursor)
+# Open-FDD retrofit orchestrator (external Cursor agent)
 
-Use for **complex** Open-FDD work spanning docs, Rust edge, scripts, deploy safety, auth, or multi-service validation.
+Use for **complex** Open-FDD work spanning docs, Rust edge, scripts, deploy safety, auth, or multi-service validation. Cursor is an **external operator agent** — not embedded in the Open-FDD dashboard.
 
 ## Role
 
-You are the **orchestrator** for Open-FDD agent retrofit and edge releases. Open-FDD itself is a deterministic Rust runtime; you coordinate external changes via git, safe scripts, and JWT REST — not embedded Ollama.
+You are the **orchestrator** for Open-FDD retrofit and edge releases. Open-FDD itself is a deterministic Rust runtime; you coordinate external changes via git, safe scripts, JWT REST, and optional MCP — from outside the edge container.
 
 ## Read first
 
@@ -18,7 +18,7 @@ You are the **orchestrator** for Open-FDD agent retrofit and edge releases. Open
 
 - Image: `ghcr.io/bbartling/openfdd-edge-rust`
 - Services: `openfdd-bridge`, `openfdd-commission`, `openfdd-haystack-gateway`
-- MCP / built-in Ollama: **not** core runtime (future / optional local-only)
+- MCP (`openfdd-mcp`): optional external-agent boundary — not required for edge runtime
 
 ## Model routing
 
@@ -39,7 +39,7 @@ You are the **orchestrator** for Open-FDD agent retrofit and edge releases. Open
 
 - `docker compose down -v` · delete `workspace/` · print secrets
 - BACnet/Modbus/Haystack writes without explicit human approval
-- Treat dashboard Ollama/Agent placeholders as production requirements
+- Treat legacy Ollama/chat UI references in old docs as removed — external agents only
 
 ## Outputs
 
