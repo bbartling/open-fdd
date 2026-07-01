@@ -1,4 +1,4 @@
-import { sql } from "@codemirror/lang-sql";
+import { sql as sqlLanguage } from "@codemirror/lang-sql";
 import CodeMirror from "@uiw/react-codemirror";
 import { sqlEditorTheme, sqlSyntaxHighlight } from "../../lib/sqlEditorTheme";
 
@@ -25,7 +25,7 @@ export default function SqlFddQueryEditor({ sql, readOnly, onChange, lineCount }
           highlightActiveLine: true,
           autocompletion: false,
         }}
-        extensions={[sql(), sqlEditorTheme, sqlSyntaxHighlight]}
+        extensions={[sqlLanguage(), sqlEditorTheme, sqlSyntaxHighlight]}
         onChange={(value) => onChange?.(value)}
         placeholder="SELECT timestamp, equipment_id, oa_t, … AS fault_raw FROM telemetry_pivot WHERE equipment_id = '…'"
       />

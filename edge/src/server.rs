@@ -1561,6 +1561,23 @@ fn handle_csv_ingest_dynamic(
         && parts[2] == "import"
         && parts[3] == "sessions"
     {
+        if parts.len() == 5 {
+            let session_id = parts[4];
+            if session_id.contains("..") {
+                return Some(json_response(
+                    stream,
+                    json!({"ok": false, "error": "invalid session id"}),
+                ));
+            }
+            if method == "DELETE" {
+                return Some(require_role_lazy(
+                    stream,
+                    principal,
+                    &["integrator", "agent"],
+                    || csv_ingest::delete_session_handler(session_id),
+                ));
+            }
+        }
         if method != "GET" {
             return None;
         }

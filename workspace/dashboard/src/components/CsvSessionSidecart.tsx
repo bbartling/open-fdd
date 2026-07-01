@@ -44,6 +44,39 @@ export default function CsvSessionSidecart({ activeSessionId, onOpenSession }: P
     void refresh();
   }, [refresh]);
 
+  async function deleteSession(sessionId: string, e: MouseEvent) {
+    e.stopPropagation();
+    if (!window.confirm(`Delete import session ${sessionId}? This cannot be undone.`)) return;
+    setError("");
+    try {
+      await apiFetch(`/api/csv/import/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+      if (preview.kind === "session" && preview.id === sessionId) {
+        setPreview({ kind: "none" });
+      }
+      await refresh();
+    } catch (err) {
+      setError(formatApiError(err));
+    }
+  }
+
+  async function deleteDataset(datasetId: string, e: MouseEvent) {
+    e.stopPropagation();
+    if (!window.confirm(`Delete dataset ${datasetId}? This cannot be undone.`)) return;
+    setError("");
+    try {
+      await apiFetch("/api/datasets", {
+        method: "DELETE",
+        body: JSON.stringify({ dataset_id: datasetId }),
+      });
+      if (preview.kind === "dataset" && preview.id === datasetId) {
+        setPreview({ kind: "none" });
+      }
+      await refresh();
+    } catch (err) {
+      setError(formatApiError(err));
+    }
+  }
+
   async function previewSession(sessionId: string, e: MouseEvent) {
     e.stopPropagation();
     setPreviewLoading(true);
@@ -63,6 +96,7 @@ export default function CsvSessionSidecart({ activeSessionId, onOpenSession }: P
       });
     } catch (err) {
       setPreviewError(formatApiError(err));
+      setPreview({ kind: "none" });
     } finally {
       setPreviewLoading(false);
     }
@@ -99,6 +133,7 @@ export default function CsvSessionSidecart({ activeSessionId, onOpenSession }: P
       });
     } catch (err) {
       setPreviewError(formatApiError(err));
+      setPreview({ kind: "none" });
     } finally {
       setPreviewLoading(false);
     }
@@ -139,6 +174,14 @@ export default function CsvSessionSidecart({ activeSessionId, onOpenSession }: P
                   >
                     Preview
                   </button>
+                  <button
+                    type="button"
+                    className="linkish-btn csv-sidecart-delete-btn"
+                    onClick={(e) => void deleteSession(id, e)}
+                    title="Delete session"
+                  >
+                    Delete
+                  </button>
                 </li>
               );
             })}
@@ -156,7 +199,7 @@ export default function CsvSessionSidecart({ activeSessionId, onOpenSession }: P
               const id = d.id ?? d.name ?? "";
               const name = d.name ?? d.id ?? "";
               return (
-                <li key={id}>
+                <li key={id} className="csv-sidecart-row">
                   <button
                     type="button"
                     className="csv-sidecart-item csv-sidecart-item--dataset"
@@ -164,6 +207,14 @@ export default function CsvSessionSidecart({ activeSessionId, onOpenSession }: P
                   >
                     <span className="csv-sidecart-item-id">{name}</span>
                     {d.row_count != null ? <span className="muted"> · {d.row_count} rows</span> : null}
+                  </button>
+                  <button
+                    type="button"
+                    className="linkish-btn csv-sidecart-delete-btn"
+                    onClick={(e) => void deleteDataset(id, e)}
+                    title="Delete dataset"
+                  >
+                    Delete
                   </button>
                 </li>
               );

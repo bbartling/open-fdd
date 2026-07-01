@@ -160,6 +160,11 @@ export class TabErrorBoundary extends Component<BoundaryProps, BoundaryState> {
       return (
         <div className="panel error">
           <strong>{this.props.tab} crashed:</strong> {this.state.error}
+          <div className="toolbar" style={{ marginTop: "0.75rem" }}>
+            <button type="button" className="secondary-btn" onClick={() => this.setState({ error: null })}>
+              Retry tab
+            </button>
+          </div>
         </div>
       );
     }

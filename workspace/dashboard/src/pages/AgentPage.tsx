@@ -58,6 +58,11 @@ export default function AgentPage() {
       />
 
       {error ? <p className="error">{error}</p> : null}
+      {!config && error ? (
+        <button type="button" className="secondary-btn" disabled={busy} onClick={() => void refresh()}>
+          Retry
+        </button>
+      ) : null}
 
       <div className="panel">
         <h3 className="panel-title">Architecture</h3>
@@ -79,9 +84,12 @@ export default function AgentPage() {
           </li>
         </ul>
         <p>
-          Full setup: <Link to="/">dashboard</Link> healthy → obtain integrator JWT → wire MCP in your
-          external tool. See <a href="https://github.com/bbartling/open-fdd/blob/master/mcp/README.md">mcp/README.md</a>{" "}
-          and <a href="https://github.com/bbartling/open-fdd/blob/master/docs/examples/external-agents.md">docs/examples/external-agents.md</a>.
+          Full setup: ensure the <Link to="/">dashboard</Link> is healthy, obtain an integrator JWT, then wire MCP
+          in your external tool. Documentation lives in the GitHub repo — start at{" "}
+          <a href="https://github.com/bbartling/open-fdd/blob/master/README.md" target="_blank" rel="noreferrer">
+            README.md on master
+          </a>{" "}
+          and search for <strong>MCP</strong>, <strong>external agents</strong>, or <strong>openfdd-mcp</strong>.
         </p>
       </div>
 

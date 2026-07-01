@@ -128,6 +128,17 @@ pub fn delete_staged_file(session_id: &str, filename: &str) -> Result<(), String
     Ok(())
 }
 
+pub fn delete_session(session_id: &str) -> Result<(), String> {
+    let dir = session_dir(session_id);
+    if !dir.starts_with(sessions_root()) {
+        return Err("invalid session id".into());
+    }
+    if dir.exists() {
+        fs::remove_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 pub fn session_path_ok(path: &Path) -> bool {
     path.starts_with(sessions_root())
 }
@@ -190,4 +201,22 @@ pub fn latest_planned_session_handler() -> Value {
         }
     }
     empty
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn delete_session_removes_directory() {
+        let id = "test-delete-session";
+        let dir = session_dir(id);
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("files")).unwrap();
+        fs::write(dir.join("session.json"), r#"{"status":"planned"}"#).unwrap();
+        assert!(dir.exists());
+        delete_session(id).unwrap();
+        assert!(!dir.exists());
+    }
 }
