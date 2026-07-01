@@ -326,16 +326,16 @@ pub fn readings_json(params: &HashMap<String, String>) -> Value {
     let rows: Vec<Value> = store::load_pivot_rows().unwrap_or_default();
     let bounds = data_bounds(&rows);
     let filtered = filter_rows(&rows, params);
-    let range_label = params
-        .get("after_utc")
-        .map(|_| "custom")
-        .or_else(|| {
-            params
-                .get("all")
-                .filter(|v| **v == "true" || **v == "1" || **v == "yes")
-                .map(|_| "all")
-        })
-        .unwrap_or("hours");
+    let use_all = params
+        .get("all")
+        .is_some_and(|v| v == "true" || v == "1" || v == "yes");
+    let range_label = if use_all {
+        "all"
+    } else if params.get("after_utc").is_some() || params.get("before_utc").is_some() {
+        "custom"
+    } else {
+        "hours"
+    };
 
     if filtered.is_empty() {
         return json!({

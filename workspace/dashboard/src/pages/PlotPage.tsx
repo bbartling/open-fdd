@@ -298,10 +298,13 @@ export default function PlotPage() {
   }
 
   function applyCustomRange() {
+    const afterUtc = datetimeLocalToUtcIso(customAfterLocal);
+    const beforeUtc = datetimeLocalToUtcIso(customBeforeLocal);
+    if (!afterUtc && !beforeUtc) return;
     setPlotRange({
       mode: "custom",
-      afterUtc: datetimeLocalToUtcIso(customAfterLocal),
-      beforeUtc: datetimeLocalToUtcIso(customBeforeLocal),
+      afterUtc,
+      beforeUtc,
     });
   }
 

@@ -332,25 +332,19 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent", "operator"],
-            || bench::smoke::status_json(),
+            bench::smoke::status_json,
         ),
         ("POST", "/api/validation-runs/current/cycle") => {
             let payload = parse_json_body_or_empty(&body);
-            require_role(
-                &mut stream,
-                &principal,
-                &["integrator", "agent"],
-                bench::smoke::evaluate_sample(&payload),
-            )
+            require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {
+                bench::smoke::evaluate_sample(&payload)
+            })
         }
         ("POST", "/api/validation-runs/current/inject-scenario") => {
             let payload = parse_json_body_or_empty(&body);
-            require_role(
-                &mut stream,
-                &principal,
-                &["integrator", "agent"],
-                bench::smoke::inject_scenario(&payload),
-            )
+            require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {
+                bench::smoke::inject_scenario(&payload)
+            })
         }
         ("GET", "/api/export/import-jobs.csv") => {
             let body = export::import_jobs_csv();
@@ -828,18 +822,18 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let body = drivers::bacnet::driver_tree_json();
             raw_json(&mut stream, &body)
         }
-        ("POST", "/api/bacnet/driver/sync-discovery") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            drivers::bacnet::sync_discovery_value(&parse_json_body_or_empty(&body)),
-        ),
-        ("PATCH", "/api/bacnet/driver/point") => require_role(
-            &mut stream,
-            &principal,
-            &["integrator", "agent"],
-            drivers::bacnet::patch_bacnet_point_value(&parse_json_body_or_empty(&body)),
-        ),
+        ("POST", "/api/bacnet/driver/sync-discovery") => {
+            let payload = parse_json_body_or_empty(&body);
+            require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {
+                drivers::bacnet::sync_discovery_value(&payload)
+            })
+        }
+        ("PATCH", "/api/bacnet/driver/point") => {
+            let payload = parse_json_body_or_empty(&body);
+            require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {
+                drivers::bacnet::patch_bacnet_point_value(&payload)
+            })
+        }
         ("PATCH", "/api/bacnet/driver/device/remap") => {
             require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {
                 drivers::bacnet::remap_bacnet_device_value(&parse_json_body_or_empty(&body))

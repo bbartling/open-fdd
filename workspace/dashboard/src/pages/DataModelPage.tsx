@@ -58,7 +58,7 @@ export default function DataModelPage() {
       await copyToClipboard(buildLlmCommissioningBundle(MODEL_COMMISSIONING_PROMPT, bundle));
       setCopiedKey("llm");
       window.setTimeout(() => setCopiedKey(""), 2000);
-      setOut("Copied LLM prompt + commissioning JSON (Haystack + FDD assignments) — paste into your chat session.");
+      setOut("Copied external-agent prompt + commissioning JSON (Haystack + FDD assignments).");
     } catch (error) {
       setOut(`Copy failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
@@ -159,7 +159,7 @@ export default function DataModelPage() {
       {activeTab === "advanced" ? (
         <div className="dm-advanced panel">
           <p className="muted">
-            <strong>Copy prompt + commissioning JSON for LLM</strong> bundles Haystack redesign instructions with live
+            <strong>Copy prompt + commissioning JSON for external agent</strong> bundles Haystack redesign instructions with live
             export including <code>fdd_rules</code> and per-point <code>fdd_rule_ids</code>.
           </p>
           <div className="row">

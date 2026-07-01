@@ -356,6 +356,7 @@ pub fn merge_live_discovery_into_registry(device_instance: u32) -> Value {
 
     let mut registry = read_registry();
     registry["bacnet_config"] = bacnet_config_value();
+    let points_before = collect_bacnet_points(&registry).len();
 
     let device_address = discovered
         .first()
@@ -444,7 +445,7 @@ pub fn merge_live_discovery_into_registry(device_instance: u32) -> Value {
         "ok": true,
         "device_instance": device_instance,
         "points": total,
-        "rows_added": total,
+        "rows_added": total.saturating_sub(points_before),
         "total": total,
         "commandable_points": commandable_points(&registry).len(),
         "source": "rusty-bacnet"
@@ -522,6 +523,10 @@ fn merge_ui_objects_into_registry(device_instance: u32, body: &Value, objects: &
         }));
     }
 
+    if discovered.is_empty() {
+        return json!({"ok": false, "error": "no valid BACnet objects supplied"});
+    }
+
     let mut registry = read_registry();
     registry["bacnet_config"] = bacnet_config_value();
 
@@ -558,6 +563,19 @@ fn merge_ui_objects_into_registry(device_instance: u32, body: &Value, objects: &
                 }
             }
 
+            let prior_count = if replace {
+                0
+            } else if let Some(idx) = existing_idx {
+                devices[idx]
+                    .get("points")
+                    .and_then(|v| v.as_array())
+                    .map(|pts| pts.len())
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+
+            let discovered_count = discovered.len();
             for p in discovered {
                 let id = p
                     .get("id")
@@ -571,7 +589,11 @@ fn merge_ui_objects_into_registry(device_instance: u32, body: &Value, objects: &
             }
 
             let points: Vec<Value> = merged_by_id.into_values().collect();
-            let rows_added = points.len();
+            let rows_added = if replace {
+                discovered_count
+            } else {
+                points.len().saturating_sub(prior_count)
+            };
             let mut device = if let Some(idx) = existing_idx {
                 devices[idx].clone()
             } else {
@@ -1334,14 +1356,38 @@ pub fn whois_json(body: &Value) -> String {
     if let Some(err) = live_gate::bacnet_live_required("whois") {
         return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
     }
-    let low = body
-        .get("low_limit")
-        .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
-    let high = body
-        .get("high_limit")
-        .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+    let low = match body.get("low_limit") {
+        Some(v) => match v.as_u64() {
+            Some(n) => match u32::try_from(n) {
+                Ok(v) => Some(v),
+                Err(_) => {
+                    return serde_json::to_string(&json!({
+                        "ok": false,
+                        "error": "low_limit out of range for u32"
+                    }))
+                    .unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
+                }
+            },
+            None => None,
+        },
+        None => None,
+    };
+    let high = match body.get("high_limit") {
+        Some(v) => match v.as_u64() {
+            Some(n) => match u32::try_from(n) {
+                Ok(v) => Some(v),
+                Err(_) => {
+                    return serde_json::to_string(&json!({
+                        "ok": false,
+                        "error": "high_limit out of range for u32"
+                    }))
+                    .unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
+                }
+            },
+            None => None,
+        },
+        None => None,
+    };
     match bacnet_live::block_on(bacnet_live::whois_devices_with_range(low, high)) {
         Ok(devices) => serde_json::to_string(&devices).unwrap_or_else(|_| "[]".to_string()),
         Err(err) => serde_json::to_string(&json!({"ok": false, "error": err}))
@@ -1461,11 +1507,6 @@ pub fn read_present_value_json(body: &Value) -> String {
             instance,
         )) {
             Ok(value) => {
-                if let Some(reads) = value.get("value").and_then(|v| v.as_f64()) {
-                    persist_bacnet_reads_to_historian(&[json!({
-                        "present_value": reads
-                    })]);
-                }
                 return serde_json::to_string(&value).unwrap_or_else(|_| "{}".to_string());
             }
             Err(err) => {

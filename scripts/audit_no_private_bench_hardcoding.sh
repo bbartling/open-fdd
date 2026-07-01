@@ -40,7 +40,9 @@ is_allowed() {
     tests/fixtures/*) return 0 ;;
     docs/validation/*|docs/verification/*|docs/testing/*|docs/release_cleanup/*) return 0 ;;
     docs/agent/bench-driver-setup-wsl-agent.md) return 0 ;;
-    docs/archive/*) return 0 ;;
+    docs/archive/agent/bench-driver-setup-wsl-agent.md) return 0 ;;
+    docs/archive/verification/bacnet-nic-setup.md) return 0 ;;
+    docs/archive/release_cleanup/current_pr_issue_ledger.md) return 0 ;;
     edge/src/validation/audit.rs) return 0 ;;
     edge/src/main.rs) return 0 ;;
     scripts/bench_5007_long_smoke.sh) return 0 ;;

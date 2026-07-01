@@ -32,6 +32,7 @@
 
   function reviewBadgeKind(status) {
     if (status === "active") return "active";
+    if (status === "approved") return "approved";
     if (isProposedReview(status || "")) return "proposed";
     return "draft";
   }

@@ -105,7 +105,8 @@ export function pointsToDiscoveryObjects(points: unknown[]): PointDiscoveryObjec
         ];
         const typeCode = Number(oid[0]);
         const inst = String(oid[1]);
-        const ot = typeNames[typeCode] ?? "analog-value";
+        const ot = typeNames[typeCode];
+        if (!ot) return null;
         return {
           object_identifier: `${ot},${inst}`,
           name: String(row.name ?? ot),

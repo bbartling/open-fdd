@@ -34,7 +34,7 @@ External orchestrators (Codex, cloud agents) should follow [openfdd-agent-archit
 
 `workspace/bacnet/commissioning/commission.env` must keep:
 
-```
+```text
 OPENFDD_BACNET_SERVER_ENABLED=0
 ```
 
@@ -140,7 +140,7 @@ tls_verify = false
 
 Ensure:
 
-```
+```text
 OPENFDD_HAYSTACK_ENABLED=1
 OPENFDD_HAYSTACK_CONFIG=/var/openfdd/workspace/haystack/local.nhaystack.toml
 OPENFDD_HAYSTACK_USER=open_fdd
@@ -224,7 +224,7 @@ Minimum tool surface — see [openfdd-mcp-tool-contract.md](openfdd-mcp-tool-con
 
 ### Haystack-specific MCP knowledge (server instructions)
 
-```
+```text
 Niagara nHaystack:
   URL: https://192.168.204.11/haystack
   Auth: HTTP Basic (HTTPBasicScheme) — NOT SCRAM

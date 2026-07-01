@@ -53,11 +53,11 @@ If a tool supports MCP or shell-driven REST workflows, use the same JWT + `/api/
 
 ## What Open-FDD ships
 
-| In product | External only |
-|------------|----------------|
-| REST API + JWT | Codex, Cursor, Claude, OpenClaw, … |
-| `openfdd-mcp` stdio server | Model routing / LLM runtime |
-| Deterministic CSV/FDD/Haystack tools | In-dashboard chat panels |
-| Human review on proposals | `CURSOR_API_KEY` in edge stack |
+| In product | External only | Not shipped |
+|------------|---------------|-------------|
+| REST API + JWT | Codex, Cursor, Claude, OpenClaw, … | In-dashboard chat panels |
+| `openfdd-mcp` stdio server | Model routing / LLM runtime | `CURSOR_API_KEY` in edge stack |
+| Deterministic CSV/FDD/Haystack tools | | |
+| Human review on proposals | | |
 
 See also [AGENTS.md](../../AGENTS.md) and [mcp/README.md](../../mcp/README.md).

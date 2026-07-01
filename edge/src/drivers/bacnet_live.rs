@@ -156,7 +156,11 @@ async fn prepare_device_for_read(
         }
         return Ok(());
     }
-    let (low, high) = discover_low_high();
+    let (mut low, mut high) = discover_low_high();
+    if device_instance > 0 {
+        low = low.min(device_instance);
+        high = high.max(device_instance);
+    }
     run_whois(client, low, high).await?;
     sleep(Duration::from_secs(2)).await;
     Ok(())

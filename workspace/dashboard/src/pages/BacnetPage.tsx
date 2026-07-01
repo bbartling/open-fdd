@@ -274,6 +274,11 @@ export default function BacnetPage() {
         const jobId = res.job_id ?? res.id;
         if (jobId) {
           const job = await waitForJob(String(jobId));
+          if (!objects.length && job.error) {
+            const err = String(job.error);
+            setActionError(err);
+            return { instance, ok: false, objectCount: 0, error: err };
+          }
           objects = extractPointDiscoveryObjects(job.result);
         }
       }
