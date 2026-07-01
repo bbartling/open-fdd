@@ -245,7 +245,7 @@ pub fn bacnet_sync_status_json() -> Value {
 }
 
 pub fn bacnet_sync_apply_json() -> Value {
-    let sync = bacnet::sync_discovery_value();
+    let sync = bacnet::sync_discovery_value(&json!({}));
     let status = bacnet_sync_status_json();
     json!({
         "ok": sync.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),

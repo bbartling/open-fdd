@@ -11,6 +11,7 @@ import Spinner from "../components/Spinner";
 import { TabDebugPanel } from "../components/TabDebugPanel";
 import {
   extractPointDiscoveryObjects,
+  pointsToDiscoveryObjects,
   extractWhoisDevices,
   parseDeviceInstanceFromWhoisRow,
   type PointDiscoveryObjectRow,
@@ -255,22 +256,30 @@ export default function BacnetPage() {
     setActionError("");
     try {
       const addr = addressOverride || whoisAddress(instance);
-      const res = await apiFetch<DiscoverJob>("/api/bacnet/point-discovery", {
-        method: "POST",
-        body: JSON.stringify({
-          device_instance: instance,
-          device_address: addr,
-        }),
-      });
-      const jobId = res.job_id ?? res.id;
-      if (!jobId) throw new Error("No job_id returned");
-      const job = await waitForJob(jobId);
-      const objects = extractPointDiscoveryObjects(job.result);
-      const syncAddr =
-        addr ||
-        String((job.result as { device_address?: string } | undefined)?.device_address ?? "");
+      const res = await apiFetch<DiscoverJob & { points?: unknown[]; objects?: unknown[] }>(
+        "/api/bacnet/point-discovery",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            device_instance: instance,
+            device_address: addr,
+          }),
+        },
+      );
+      let objects = extractPointDiscoveryObjects(res.result ?? res);
+      if (!objects.length && Array.isArray(res.points)) {
+        objects = pointsToDiscoveryObjects(res.points);
+      }
+      if (res.job_id ?? res.id) {
+        const jobId = res.job_id ?? res.id;
+        if (jobId) {
+          const job = await waitForJob(String(jobId));
+          objects = extractPointDiscoveryObjects(job.result);
+        }
+      }
+      const syncAddr = addr;
       let synced = 0;
-      if (job.status === "ok" && objects.length) {
+      if (objects.length) {
         try {
           const sync = await syncDiscoveryToDriver(instance, syncAddr, objects);
           synced = sync.rows_added ?? objects.length;
@@ -283,11 +292,6 @@ export default function BacnetPage() {
         }
       }
       setDiscoveryPreview(objects);
-      if (job.status !== "ok") {
-        const err = job.error || `Add device failed for ${instance}`;
-        setActionError(err);
-        return { instance, ok: false, objectCount: objects.length, error: err };
-      }
       if (!objects.length) {
         const err = `Device ${instance} responded but returned 0 points — check segmentation / object-list support.`;
         setActionError(err);

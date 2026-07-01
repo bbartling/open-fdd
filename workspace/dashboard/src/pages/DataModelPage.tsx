@@ -9,12 +9,11 @@ import DataModelSparqlPanel from "../components/DataModelSparqlPanel";
 import CommissioningImportExportPanel from "../components/CommissioningImportExportPanel";
 import ModelSyncBar from "../components/ModelSyncBar";
 import PageHeader from "../components/PageHeader";
-import ModelFddMappingPanel from "../components/ModelFddMappingPanel";
 
 type SiteRow = { id: string; name: string };
 
 export default function DataModelPage() {
-  const [activeTab, setActiveTab] = useState<"import" | "explorer" | "mapping" | "sparql" | "advanced">("import");
+  const [activeTab, setActiveTab] = useState<"import" | "explorer" | "sparql" | "advanced">("import");
   const [out, setOut] = useState("");
   const [ttlLoading, setTtlLoading] = useState(false);
   const [copiedKey, setCopiedKey] = useState("");
@@ -100,8 +99,7 @@ export default function DataModelPage() {
         subtitle={
           <>
             Haystack site <code>{activeSiteId || "…"}</code> · {eqCount} equipment · {pointCount} points · {ruleCount}{" "}
-            rules · {boundPoints} bound points · import/export commissioning JSON or use AI to populate FDD
-            mappings
+            rules · {boundPoints} bound points · import/export commissioning JSON or use external agents via MCP
           </>
         }
       />
@@ -120,13 +118,6 @@ export default function DataModelPage() {
           onClick={() => setActiveTab("explorer")}
         >
           Explorer
-        </button>
-        <button
-          type="button"
-          className={activeTab === "mapping" ? "" : "secondary-btn"}
-          onClick={() => setActiveTab("mapping")}
-        >
-          FDD mapping
         </button>
         <button
           type="button"
@@ -156,14 +147,12 @@ export default function DataModelPage() {
           <ModelSyncBar refreshKey={refreshKey} onStatus={setOut} />
           <p className="muted panel">
             BACnet poll → model sync keeps <code>model.json</code> aligned with live polling. Pin FDD rules by editing{" "}
-            <code>points[].fdd_rule_ids</code> in the <strong>Import / export</strong> tab (or ask your AI agent to
-            return commissioning JSON). SQL FDD rules and assignments live in this JSON workflow. Trend
-            context: <a href="/plot">Trend plot</a>.
+            <code>points[].fdd_rule_ids</code> in the <strong>Import / export</strong> tab (or ask your external agent
+            to return commissioning JSON). SQL FDD rules live on the{" "}
+            <a href="/sql-fdd">SQL FDD Rules</a> tab. Trend context: <a href="/plot">Trend plot</a>.
           </p>
         </>
       ) : null}
-
-      {activeTab === "mapping" ? <ModelFddMappingPanel onStatus={setOut} /> : null}
 
       {activeTab === "sparql" ? <DataModelSparqlPanel onStatus={setOut} /> : null}
 
@@ -181,21 +170,13 @@ export default function DataModelPage() {
               View commissioning JSON (new tab)
             </button>
             <button type="button" className="secondary-btn" disabled={copyBusy} onClick={() => void copyForLlm()}>
-              {copiedKey === "llm" ? "Copied for LLM" : copyBusy ? "Copying…" : "Copy prompt + JSON for LLM"}
+              {copyBusy ? "Copying…" : copiedKey === "llm" ? "Copied" : "Copy for external agent"}
             </button>
           </div>
-          <details className="dm-prompt-details">
-            <summary>LLM prompt preview</summary>
-            <textarea readOnly className="dm-json-editor dm-prompt-preview" value={MODEL_COMMISSIONING_PROMPT} />
-          </details>
         </div>
       ) : null}
 
-      {out ? (
-        <div className="status-bar" role="status">
-          {out}
-        </div>
-      ) : null}
+      {out ? <p className="panel muted">{out}</p> : null}
     </div>
   );
 }

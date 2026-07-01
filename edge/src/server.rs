@@ -7,8 +7,8 @@ use crate::auth::config::Principal;
 use crate::auth::login::{authenticate, login_response};
 use crate::auth::rbac::{can_write_field_bus, role_allowed};
 use crate::{
-    bench, control, csv_ingest, dashboard, data_management, drivers, export, faults, fdd, historian,
-    import, ingest, model, ops, reports, timeseries, validation, version,
+    bench, control, csv_ingest, dashboard, data_management, drivers, export, faults, fdd,
+    historian, import, ingest, model, ops, reports, timeseries, validation, version,
 };
 
 use serde_json::{json, Value};
@@ -832,13 +832,13 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            drivers::bacnet::sync_discovery_value(),
+            drivers::bacnet::sync_discovery_value(&parse_json_body_or_empty(&body)),
         ),
         ("PATCH", "/api/bacnet/driver/point") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            json!({"ok": true, "updated": "point polling settings"}),
+            drivers::bacnet::patch_bacnet_point_value(&parse_json_body_or_empty(&body)),
         ),
         ("PATCH", "/api/bacnet/driver/device/remap") => {
             require_role_lazy(&mut stream, &principal, &["integrator", "agent"], || {

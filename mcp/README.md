@@ -41,7 +41,7 @@ export OPENFDD_MCP_TOKEN="$(
         "-e", "OPENFDD_API_BASE=http://127.0.0.1:8080",
         "-e", "OPENFDD_COMMISSION_BASE=http://127.0.0.1:9091",
         "-e", "OPENFDD_MCP_TOKEN",
-        "ghcr.io/bbartling/openfdd-mcp:3.2.3"
+        "ghcr.io/bbartling/openfdd-mcp:3.2.6"
       ],
       "env": {
         "OPENFDD_MCP_TOKEN": "<JWT from login above>"

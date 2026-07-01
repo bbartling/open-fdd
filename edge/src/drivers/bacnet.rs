@@ -439,13 +439,201 @@ pub fn merge_live_discovery_into_registry(device_instance: u32) -> Value {
     }
 
     write_registry(&registry);
+    let total = collect_bacnet_points(&registry).len();
     json!({
         "ok": true,
         "device_instance": device_instance,
-        "points": collect_bacnet_points(&registry).len(),
+        "points": total,
+        "rows_added": total,
+        "total": total,
         "commandable_points": commandable_points(&registry).len(),
         "source": "rusty-bacnet"
     })
+}
+
+fn registry_pollable_point_count(registry: &Value) -> usize {
+    let mut count = 0_usize;
+    if let Some(drivers) = registry.get("drivers").and_then(|v| v.as_array()) {
+        for driver in drivers {
+            if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
+                continue;
+            }
+            if let Some(devs) = driver.get("devices").and_then(|v| v.as_array()) {
+                for device in devs {
+                    if let Some(pts) = device.get("points").and_then(|v| v.as_array()) {
+                        count += pts
+                            .iter()
+                            .filter(|p| {
+                                p.get("polling_enabled").and_then(|v| v.as_bool()) == Some(true)
+                            })
+                            .count();
+                    }
+                }
+            }
+        }
+    }
+    count
+}
+
+fn merge_ui_objects_into_registry(device_instance: u32, body: &Value, objects: &[Value]) -> Value {
+    if objects.is_empty() {
+        return json!({"ok": false, "error": "objects array empty"});
+    }
+    let device_address = body
+        .get("device_address")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let replace = body
+        .get("replace")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let mut discovered: Vec<Value> = Vec::new();
+    for obj in objects {
+        let Some(oid_str) = obj.get("object_identifier").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let Some((ot_name, inst)) = oid_str.split_once(',') else {
+            continue;
+        };
+        let instance: u32 = match inst.trim().parse() {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        let name = obj
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or(ot_name)
+            .to_string();
+        let writable = obj
+            .get("commandable")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        discovered.push(json!({
+            "id": format!("bacnet:{device_instance}:{}:{instance}", ot_name.trim()),
+            "device_instance": device_instance,
+            "object_id": [object_type_class(ot_name.trim()), instance],
+            "name": name,
+            "polling_enabled": true,
+            "writable": writable,
+            "present_value": Value::Null,
+            "address": device_address,
+        }));
+    }
+
+    let mut registry = read_registry();
+    registry["bacnet_config"] = bacnet_config_value();
+
+    if let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) {
+        for driver in drivers {
+            if driver.get("id").and_then(|v| v.as_str()).unwrap_or("") != "bacnet-ip" {
+                continue;
+            }
+            let mut devices = driver
+                .get("devices")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+
+            let existing_idx = devices.iter().position(|d| {
+                d.get("device_instance")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32
+                    == device_instance
+            });
+
+            let mut merged_by_id: BTreeMap<String, Value> = BTreeMap::new();
+            if !replace {
+                if let Some(idx) = existing_idx {
+                    if let Some(existing_pts) =
+                        devices[idx].get("points").and_then(|v| v.as_array())
+                    {
+                        for p in existing_pts {
+                            if let Some(id) = p.get("id").and_then(|v| v.as_str()) {
+                                merged_by_id.insert(id.to_string(), p.clone());
+                            }
+                        }
+                    }
+                }
+            }
+
+            for p in discovered {
+                let id = p
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                if id.is_empty() {
+                    continue;
+                }
+                merged_by_id.insert(id, p);
+            }
+
+            let points: Vec<Value> = merged_by_id.into_values().collect();
+            let rows_added = points.len();
+            let mut device = if let Some(idx) = existing_idx {
+                devices[idx].clone()
+            } else {
+                json!({
+                    "device_instance": device_instance,
+                    "name": format!("BACnet Device {device_instance}"),
+                    "address": device_address,
+                    "polling_enabled": true,
+                    "points": []
+                })
+            };
+            device["points"] = json!(points);
+            if let Some(idx) = existing_idx {
+                devices[idx] = device;
+            } else {
+                devices.push(device);
+            }
+            driver["devices"] = json!(devices);
+            write_registry(&registry);
+            let total = collect_bacnet_points(&registry).len();
+            return json!({
+                "ok": true,
+                "device_instance": device_instance,
+                "rows_added": rows_added,
+                "total": total,
+                "points": total,
+                "source": "ui-sync"
+            });
+        }
+    }
+    json!({"ok": false, "error": "bacnet-ip driver missing from registry"})
+}
+
+fn object_type_class(object_type: &str) -> u8 {
+    match object_type {
+        "analog-input" => 0,
+        "analog-output" => 1,
+        "analog-value" => 2,
+        "binary-input" => 3,
+        "binary-output" => 4,
+        "binary-value" => 5,
+        "multi-state-value" => 19,
+        _ => 2,
+    }
+}
+
+fn discovery_objects_from_points(points: &[Value]) -> Vec<Value> {
+    points
+        .iter()
+        .filter_map(|p| {
+            let id = p.get("id").and_then(|v| v.as_str())?;
+            let parts: Vec<&str> = id.split(':').collect();
+            if parts.len() != 4 || parts[0] != "bacnet" {
+                return None;
+            }
+            Some(json!({
+                "object_identifier": format!("{},{}", parts[2], parts[3]),
+                "name": p.get("name").cloned().unwrap_or(json!(parts[2])),
+                "commandable": p.get("writable").and_then(|v| v.as_bool()).unwrap_or(false),
+            }))
+        })
+        .collect()
 }
 
 fn read_priority_array_for_point(point: &Value) -> Vec<(u8, Value)> {
@@ -819,7 +1007,14 @@ pub fn poll_cycle_value() -> Value {
     if let Some(err) = live_gate::bacnet_live_required("poll") {
         return err;
     }
-    let registry = read_registry();
+    let mut registry = read_registry();
+    if registry_pollable_point_count(&registry) == 0 {
+        let inst = profile_device_instance();
+        if inst > 0 {
+            merge_live_discovery_into_registry(inst);
+            registry = read_registry();
+        }
+    }
     let mut updated = 0_u64;
     let mut samples = 0_u64;
     let mut working = registry.clone();
@@ -1139,7 +1334,10 @@ pub fn whois_json(body: &Value) -> String {
     if let Some(err) = live_gate::bacnet_live_required("whois") {
         return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
     }
-    let low = body.get("low_limit").and_then(|v| v.as_u64()).map(|v| v as u32);
+    let low = body
+        .get("low_limit")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
     let high = body
         .get("high_limit")
         .and_then(|v| v.as_u64())
@@ -1171,22 +1369,79 @@ pub fn point_discovery_value(body: &Value) -> Value {
     match bacnet_live::block_on(bacnet_live::discover_device_points_with_fallback(
         device_instance,
     )) {
-        Ok(points) => json!({
-            "ok": true,
-            "device_instance": device_instance,
-            "points": points,
-            "source": "rusty-bacnet"
-        }),
+        Ok(points) => {
+            let objects = discovery_objects_from_points(&points);
+            json!({
+                "ok": true,
+                "status": "ok",
+                "device_instance": device_instance,
+                "points": points,
+                "objects": objects,
+                "result": {"objects": objects},
+                "source": "rusty-bacnet"
+            })
+        }
         Err(err) => json!({"ok": false, "error": err}),
     }
 }
 
-pub fn sync_discovery_value() -> Value {
+pub fn sync_discovery_value(body: &Value) -> Value {
     if let Some(err) = live_gate::bacnet_live_required("sync_discovery") {
         return err;
     }
-    let device_instance = bench_device_instance();
+    let device_instance = body
+        .get("device_instance")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32)
+        .filter(|v| *v > 0)
+        .unwrap_or_else(bench_device_instance);
+
+    if let Some(objects) = body.get("objects").and_then(|v| v.as_array()) {
+        if !objects.is_empty() {
+            return merge_ui_objects_into_registry(device_instance, body, objects);
+        }
+    }
     merge_live_discovery_into_registry(device_instance)
+}
+
+pub fn patch_bacnet_point_value(body: &Value) -> Value {
+    let point_id = body.get("point_id").and_then(|v| v.as_str()).unwrap_or("");
+    if point_id.is_empty() {
+        return json!({"ok": false, "error": "point_id required"});
+    }
+    let mut registry = read_registry();
+    let mut updated = false;
+    if let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) {
+        for driver in drivers {
+            if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
+                continue;
+            }
+            if let Some(devices) = driver.get_mut("devices").and_then(|v| v.as_array_mut()) {
+                for device in devices.iter_mut() {
+                    if let Some(points) = device.get_mut("points").and_then(|v| v.as_array_mut()) {
+                        for pt in points.iter_mut() {
+                            if pt.get("id").and_then(|v| v.as_str()) != Some(point_id) {
+                                continue;
+                            }
+                            if let Some(v) = body.get("polling_enabled").and_then(|v| v.as_bool()) {
+                                pt["polling_enabled"] = json!(v);
+                                updated = true;
+                            }
+                            if let Some(v) = body.get("poll_interval_s").and_then(|v| v.as_u64()) {
+                                pt["poll_interval_s"] = json!(v);
+                                updated = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if !updated {
+        return json!({"ok": false, "error": "point not found in registry"});
+    }
+    write_registry(&registry);
+    json!({"ok": true, "point_id": point_id, "updated": true})
 }
 
 pub fn read_present_value_json(body: &Value) -> String {
@@ -1205,7 +1460,14 @@ pub fn read_present_value_json(body: &Value) -> String {
             object_type,
             instance,
         )) {
-            Ok(value) => return serde_json::to_string(&value).unwrap_or_else(|_| "{}".to_string()),
+            Ok(value) => {
+                if let Some(reads) = value.get("value").and_then(|v| v.as_f64()) {
+                    persist_bacnet_reads_to_historian(&[json!({
+                        "present_value": reads
+                    })]);
+                }
+                return serde_json::to_string(&value).unwrap_or_else(|_| "{}".to_string());
+            }
             Err(err) => {
                 return serde_json::to_string(&json!({"ok": false, "error": err}))
                     .unwrap_or_else(|_| r#"{"ok":false}"#.to_string())

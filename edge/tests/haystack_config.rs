@@ -71,10 +71,8 @@ fn disabled_status_is_clean() {
 #[test]
 fn flat_root_toml_parses_without_haystack_section() {
     let _lock = workspace_env_lock();
-    let cfg_path = std::env::temp_dir().join(format!(
-        "openfdd-haystack-flat-{}.toml",
-        std::process::id()
-    ));
+    let cfg_path =
+        std::env::temp_dir().join(format!("openfdd-haystack-flat-{}.toml", std::process::id()));
     fs::write(
         &cfg_path,
         "enabled = true\nbase_url = \"https://station.example/haystack\"\n",
