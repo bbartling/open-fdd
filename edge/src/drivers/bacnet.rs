@@ -1135,11 +1135,16 @@ fn collect_bacnet_points(registry: &Value) -> Vec<Value> {
     points
 }
 
-pub fn whois_json() -> String {
+pub fn whois_json(body: &Value) -> String {
     if let Some(err) = live_gate::bacnet_live_required("whois") {
         return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
     }
-    match bacnet_live::block_on(bacnet_live::whois_devices()) {
+    let low = body.get("low_limit").and_then(|v| v.as_u64()).map(|v| v as u32);
+    let high = body
+        .get("high_limit")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+    match bacnet_live::block_on(bacnet_live::whois_devices_with_range(low, high)) {
         Ok(devices) => serde_json::to_string(&devices).unwrap_or_else(|_| "[]".to_string()),
         Err(err) => serde_json::to_string(&json!({"ok": false, "error": err}))
             .unwrap_or_else(|_| r#"{"ok":false}"#.to_string()),

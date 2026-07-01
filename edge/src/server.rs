@@ -7,7 +7,7 @@ use crate::auth::config::Principal;
 use crate::auth::login::{authenticate, login_response};
 use crate::auth::rbac::{can_write_field_bus, role_allowed};
 use crate::{
-    control, csv_ingest, dashboard, data_management, drivers, export, faults, fdd, historian,
+    bench, control, csv_ingest, dashboard, data_management, drivers, export, faults, fdd, historian,
     import, ingest, model, ops, reports, timeseries, validation, version,
 };
 
@@ -327,6 +327,30 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let body = export::validation_runs_csv(&q);
             let name = export::export_filename("validation_runs");
             require_role_csv(&mut stream, &principal, READ_EXPORT_ROLES, body, &name)
+        }
+        ("GET", "/api/validation-runs/current/status") => require_role_lazy(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            || bench::smoke::status_json(),
+        ),
+        ("POST", "/api/validation-runs/current/cycle") => {
+            let payload = parse_json_body_or_empty(&body);
+            require_role(
+                &mut stream,
+                &principal,
+                &["integrator", "agent"],
+                bench::smoke::evaluate_sample(&payload),
+            )
+        }
+        ("POST", "/api/validation-runs/current/inject-scenario") => {
+            let payload = parse_json_body_or_empty(&body);
+            require_role(
+                &mut stream,
+                &principal,
+                &["integrator", "agent"],
+                bench::smoke::inject_scenario(&payload),
+            )
         }
         ("GET", "/api/export/import-jobs.csv") => {
             let body = export::import_jobs_csv();
@@ -757,7 +781,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             ),
         ),
         ("POST", "/api/bacnet/whois") => {
-            let body = drivers::bacnet::whois_json();
+            let body = drivers::bacnet::whois_json(&parse_json_body_or_empty(&body));
             raw_json(&mut stream, &body)
         }
         ("GET", "/api/bacnet/points") => {

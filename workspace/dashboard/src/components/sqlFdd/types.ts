@@ -37,17 +37,6 @@ export type EquipmentRow = {
   equipment_type?: string;
 };
 
-export type SqlCompileResult = {
-  ok: boolean;
-  sql?: string;
-  explanation?: string;
-  dialect?: string;
-  error?: string;
-  validation?: Record<string, unknown>;
-};
-
-export type QueryMode = "visual" | "sql" | "prompt";
-
 export function ruleIdFromBuilder(builder: BuilderState): string {
   const base = builder.fault_code.trim() || builder.name.trim() || "fdd-rule";
   return base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "fdd-rule";
