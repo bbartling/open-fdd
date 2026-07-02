@@ -133,7 +133,7 @@ Install and bootstrap Open-FDD Rust edge from https://github.com/bbartling/open-
 
 Important project facts:
 - Open-FDD 3.2 edge is a Rust edge runtime — use openfdd_rust_edge_bootstrap.sh, not the legacy Python bootstrap.
-- Primary GHCR image: ghcr.io/bbartling/openfdd-edge-rust:3.2.6 (pin OPENFDD_IMAGE_TAG — avoid :latest on field benches)
+- Primary GHCR image: ghcr.io/bbartling/openfdd-edge-rust:3.2.8 (pin `OPENFDD_IMAGE_TAG` — avoid `:latest` on field benches)
 - Bootstrap script:
   https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_rust_edge_bootstrap.sh
 - ARM64: verify GHCR manifest with openfdd_rust_check_ghcr_platform.sh
@@ -360,7 +360,7 @@ docker compose -f docker-compose.prod.yml up -d
 
 | Channel | Image |
 |---------|--------|
-| **Default (early dev)** | `ghcr.io/bbartling/openfdd-edge-rust:latest` |
+| **Default (early dev)** | Pin `OPENFDD_IMAGE_TAG=3.2.8` (avoid `:latest` on benches) |
 | **Pinned version** | `ghcr.io/bbartling/openfdd-edge-rust:3.2.4` or `:v3.2.4` |
 | **Short SHA** | `ghcr.io/bbartling/openfdd-edge-rust:sha-abc1234` |
 
@@ -375,4 +375,4 @@ Open-FDD is for **LAN / VPN / OT networks**, not public internet hosting.
 
 MIT — see [LICENSE](LICENSE).
 
-Version: **3.2.7** (development — released line **3.2.6** on GHCR)
+Version: **3.2.8**

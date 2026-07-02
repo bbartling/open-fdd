@@ -1,6 +1,7 @@
 //! BACnet driver facade — live rusty-bacnet only (no simulated OT data).
 
 use super::bacnet_live;
+use super::bacnet_server;
 use super::live_gate;
 use crate::validation::profile::active_profile;
 use bacnet_types::enums::ObjectType;
@@ -98,7 +99,6 @@ fn now_rfc3339() -> String {
 }
 
 pub fn bacnet_config_value() -> Value {
-    let inst = profile_device_instance();
     let mode = if bacnet_live::is_live_mode() {
         "live"
     } else {
@@ -114,8 +114,8 @@ pub fn bacnet_config_value() -> Value {
         "poll_interval_seconds": env::var("OPENFDD_BACNET_POLL_INTERVAL_SECONDS").unwrap_or_else(|_| "60".to_string()),
         "router_ip": env::var("OPENFDD_BACNET_ROUTER_IP").unwrap_or_default(),
         "mstp_network": env::var("OPENFDD_BACNET_MSTP_NET").unwrap_or_default(),
-        "discover_low": env::var("OPENFDD_BACNET_DISCOVER_LOW").unwrap_or_else(|_| inst.to_string()),
-        "discover_high": env::var("OPENFDD_BACNET_DISCOVER_HIGH").unwrap_or_else(|_| inst.to_string())
+        "discover_low": env::var("OPENFDD_BACNET_DISCOVER_LOW").unwrap_or_else(|_| "0".to_string()),
+        "discover_high": env::var("OPENFDD_BACNET_DISCOVER_HIGH").unwrap_or_else(|_| "4194303".to_string())
     })
 }
 
@@ -849,18 +849,19 @@ fn whois_discovered_instances() -> Vec<u32> {
     out
 }
 
-/// When the persisted registry has no field devices, merge Who-Is discoveries.
+/// When the persisted registry lacks field devices, merge Who-Is discoveries.
 fn ensure_field_devices_from_whois() {
-    let registry = read_registry();
-    if !field_device_instances(&registry).is_empty() {
-        return;
-    }
+    let existing = field_device_instances(&read_registry());
+    let existing: std::collections::HashSet<u32> = existing.into_iter().collect();
     for inst in whois_discovered_instances() {
-        merge_live_discovery_into_registry(inst);
+        if !existing.contains(&inst) {
+            merge_live_discovery_into_registry(inst);
+        }
     }
 }
 
 fn field_device_instances(registry: &Value) -> Vec<u32> {
+    let local = bacnet_server::device_instance();
     let mut devices = Vec::new();
     if let Some(drivers) = registry.get("drivers").and_then(|v| v.as_array()) {
         for driver in drivers {
@@ -873,7 +874,10 @@ fn field_device_instances(registry: &Value) -> Vec<u32> {
                         continue;
                     }
                     if let Some(inst) = device.get("device_instance").and_then(|v| v.as_u64()) {
-                        devices.push(inst as u32);
+                        let inst = inst as u32;
+                        if inst != local {
+                            devices.push(inst);
+                        }
                     }
                 }
             }
@@ -1077,10 +1081,15 @@ pub fn poll_cycle_value() -> Value {
     }
     let mut registry = read_registry();
     if registry_pollable_point_count(&registry) == 0 {
-        let inst = profile_device_instance();
-        if inst > 0 {
-            merge_live_discovery_into_registry(inst);
-            registry = read_registry();
+        ensure_field_devices_from_whois();
+        registry = read_registry();
+        if registry_pollable_point_count(&registry) == 0 {
+            let inst = bench_device_instance();
+            let local = bacnet_server::device_instance();
+            if inst > 0 && inst != local {
+                merge_live_discovery_into_registry(inst);
+                registry = read_registry();
+            }
         }
     }
     let mut updated = 0_u64;
@@ -1403,7 +1412,7 @@ pub fn whois_json(body: &Value) -> String {
     if let Some(err) = live_gate::bacnet_live_required("whois") {
         return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
     }
-    let low = match body.get("low_limit") {
+    let low = match body.get("low_limit").or_else(|| body.get("range_low")) {
         Some(v) => match v.as_u64() {
             Some(n) => match u32::try_from(n) {
                 Ok(v) => Some(v),
@@ -1419,7 +1428,7 @@ pub fn whois_json(body: &Value) -> String {
         },
         None => None,
     };
-    let high = match body.get("high_limit") {
+    let high = match body.get("high_limit").or_else(|| body.get("range_high")) {
         Some(v) => match v.as_u64() {
             Some(n) => match u32::try_from(n) {
                 Ok(v) => Some(v),

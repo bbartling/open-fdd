@@ -69,7 +69,7 @@ async function copyText(text: string): Promise<void> {
 export default function AgentPage() {
   const [config, setConfig] = useState<AgentConfig | null>(null);
   const [toolCount, setToolCount] = useState<number | null>(null);
-  const [imageTag, setImageTag] = useState("3.2.7");
+  const [imageTag, setImageTag] = useState("3.2.8");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState<"" | "mcp" | "brief">("");
   const [busy, setBusy] = useState(false);

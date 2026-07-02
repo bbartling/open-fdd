@@ -135,7 +135,7 @@ fn from_env_defaults() -> SiteConfig {
         modbus_unit_id: 0,
         modbus_register: 0,
         modbus_enabled: false,
-        modbus_poll_interval_seconds: 300,
+        modbus_poll_interval_seconds: 60,
         haystack_enabled: false,
         haystack_base_url: String::new(),
         haystack_username: String::new(),
@@ -156,11 +156,6 @@ fn apply_env_overrides(p: &mut SiteConfig) {
     if let Ok(v) = env::var("OPENFDD_SITE_CONFIG_ID") {
         if !v.is_empty() {
             p.profile_id = v;
-        }
-    }
-    if let Ok(v) = env::var("OPENFDD_BACNET_DEVICE_INSTANCE") {
-        if let Ok(inst) = v.parse::<u32>() {
-            p.device_instance = inst;
         }
     }
     if let Ok(v) = env::var("OPENFDD_VALIDATION_DURATION_HOURS") {
@@ -193,6 +188,16 @@ fn apply_env_overrides(p: &mut SiteConfig) {
     if let Ok(v) = env::var("OPENFDD_MODBUS_PORT") {
         if let Ok(port) = v.parse() {
             p.modbus_port = port;
+        }
+    }
+    if let Ok(v) = env::var("OPENFDD_MODBUS_UNIT_ID") {
+        if let Ok(unit) = v.parse() {
+            p.modbus_unit_id = unit;
+        }
+    }
+    if let Ok(v) = env::var("OPENFDD_MODBUS_POLL_INTERVAL_SECONDS") {
+        if let Ok(s) = v.parse() {
+            p.modbus_poll_interval_seconds = s;
         }
     }
     if let Ok(v) = env::var("OPENFDD_HAYSTACK_BASE") {
@@ -510,13 +515,13 @@ mod tests {
     }
 
     #[test]
-    fn env_overrides_device_instance() {
+    fn env_does_not_override_device_instance_from_bacnet_server_env() {
         let _lock = test_lock();
         let ws = std::env::temp_dir().join(format!("ofdd-prof-{}", std::process::id()));
         std::env::set_var("OPENFDD_WORKSPACE", &ws);
         std::env::set_var("OPENFDD_BACNET_DEVICE_INSTANCE", "42");
         let p = active_profile();
-        assert_eq!(p.device_instance, 42);
+        assert_eq!(p.device_instance, 0);
         std::env::remove_var("OPENFDD_WORKSPACE");
         std::env::remove_var("OPENFDD_BACNET_DEVICE_INSTANCE");
         let _ = fs::remove_dir_all(ws);
