@@ -354,7 +354,7 @@ export default function BacnetPage() {
     try {
       const res = await apiFetch<unknown>("/api/bacnet/whois", {
         method: "POST",
-        body: JSON.stringify({ range_low: whoisLow, range_high: whoisHigh }),
+        body: JSON.stringify({ low_limit: whoisLow, high_limit: whoisHigh }),
       });
       const devices = extractWhoisDevices(res);
       setWhoisDevices(devices);

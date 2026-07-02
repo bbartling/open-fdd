@@ -93,17 +93,10 @@ fn discover_low_high() -> (u32, u32) {
     let profile = crate::validation::profile::active_profile();
     let field = profile.device_instance;
     let local = super::bacnet_server::device_instance();
-    let mut low = if field > 0 { field } else { 0 };
-    let mut high = if field > 0 { field } else { 0 };
-    if local > 0 {
-        low = low.min(local);
-        high = high.max(local);
+    if field > 0 && field != local {
+        return (field, field);
     }
-    if low == 0 && high == 0 {
-        (0, 4_194_303)
-    } else {
-        (low, high)
-    }
+    (0, 4_194_303)
 }
 
 fn server_udp_port() -> u16 {

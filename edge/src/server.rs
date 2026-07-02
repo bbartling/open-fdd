@@ -957,6 +957,16 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let response_body = drivers::modbus::read_value(&payload);
             raw_json(&mut stream, &response_body)
         }
+        ("POST", "/api/modbus/refresh") => {
+            let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
+            let response_body = drivers::modbus::read_value(&payload);
+            raw_json(&mut stream, &response_body)
+        }
+        ("POST", "/api/modbus/poll-once") | ("POST", "/api/modbus/poll/once") => {
+            require_role(&mut stream, &principal, &["integrator", "agent"], {
+                drivers::modbus::poll_once_value()
+            })
+        }
         ("GET", "/api/json-api/sources") => {
             raw_json(&mut stream, &drivers::json_api::sources_json())
         }
@@ -2038,6 +2048,8 @@ fn agent_tools() -> Value {
             {"name":"bacnet.driver_remap","method":"PATCH","path":"/api/bacnet/driver/device/remap","requires":"integrator|agent"},
             {"name":"bacnet.driver_registry_clear","method":"DELETE","path":"/api/bacnet/driver/registry","requires":"integrator|agent"},
             {"name":"modbus.points","method":"GET","path":"/api/modbus/points","requires":"JWT"},
+            {"name":"modbus.read","method":"POST","path":"/api/modbus/read","requires":"JWT"},
+            {"name":"modbus.poll_once","method":"POST","path":"/api/modbus/poll-once","requires":"integrator|agent"},
             {"name":"modbus.scan","method":"POST","path":"/api/modbus/scan","requires":"integrator|agent"},
             {"name":"json_api.sources","method":"GET","path":"/api/json-api/sources","requires":"JWT"},
             {"name":"json_api.register","method":"POST","path":"/api/json-api/register","requires":"integrator|agent"},
@@ -2132,7 +2144,7 @@ fn agent_update(body: &Value) -> Value {
     let tag = body
         .get("image_tag")
         .and_then(|v| v.as_str())
-        .unwrap_or("3.2.7");
+        .unwrap_or("3.2.8");
     json!({
         "ok": true,
         "dry_run": dry_run,
@@ -2157,10 +2169,17 @@ fn agent_update(body: &Value) -> Value {
 
 fn agent_validate() -> Value {
     let smoke = bench::smoke::status_json();
+    let modbus_poll: Value =
+        serde_json::from_str(&drivers::modbus::poll_status_json()).unwrap_or(json!({}));
+    let historian_rows = crate::historian::store::row_count();
     json!({
         "ok": true,
         "report": "agent_validation_snapshot",
         "validation": smoke,
+        "drivers": {
+            "modbus_poll": modbus_poll,
+            "historian_row_count": historian_rows,
+        },
         "scripts": {
             "rigorous_bench": "scripts/openfdd_rev326_rigorous_report.sh",
             "drivers": "scripts/openfdd_drivers_validate.sh",
@@ -2168,7 +2187,8 @@ fn agent_validate() -> Value {
         },
         "api": {
             "validation_status": "/api/validation-runs/current/status",
-            "health_stack": "/api/health/stack"
+            "health_stack": "/api/health/stack",
+            "modbus_poll_once": "POST /api/modbus/poll-once"
         }
     })
 }

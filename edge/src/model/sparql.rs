@@ -123,6 +123,13 @@ pub fn catalog() -> Vec<Value> {
             "query": format!("{PREFIXES}\nSELECT ?siteRef ?point ?dis WHERE {{\n  ?p a hs:Point .\n  ?p ofdd:haystackId ?point .\n  ?p hs:siteRef ?site .\n  ?site ofdd:haystackId ?siteRef .\n  OPTIONAL {{ ?p hs:dis ?dis . }}\n}} ORDER BY ?siteRef ?point")
         }),
         json!({
+            "id": "fdd_zn_t_points",
+            "label": "Zone temperature points (zn_t FDD inputs)",
+            "short_label": "zn_t",
+            "category": "fdd",
+            "query": format!("{PREFIXES}\nSELECT ?point ?dis ?equipRef ?siteRef WHERE {{\n  ?p a hs:Point .\n  ?p ofdd:haystackId ?point .\n  ?p ofdd:fddInput \"zn_t\" .\n  OPTIONAL {{ ?p hs:dis ?dis . }}\n  OPTIONAL {{ ?p hs:equipRef ?eq . ?eq ofdd:haystackId ?equipRef . }}\n  OPTIONAL {{ ?p hs:siteRef ?site . ?site ofdd:haystackId ?siteRef . }}\n}} ORDER BY ?siteRef ?equipRef ?point")
+        }),
+        json!({
             "id": "eng_sites",
             "label": "Sites",
             "short_label": "Sites",
