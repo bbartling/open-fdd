@@ -361,6 +361,7 @@ pub fn execute_handler(body: &Value) -> Value {
         .and_then(|v| v.as_str())
         .unwrap_or("");
     let confirm = body.get("confirm").and_then(|v| v.as_bool()) == Some(true);
+    let delete_staged = body.get("delete_staged_files").and_then(|v| v.as_bool()) == Some(true);
     if !confirm {
         return json!({"ok": false, "error": "confirm:true required to write Feather/Arrow store"});
     }
@@ -417,6 +418,11 @@ pub fn execute_handler(body: &Value) -> Value {
             session["status"] = json!("executed");
             session["result"] = result.clone();
             let _ = save_session(session_id, &session);
+            if delete_staged {
+                for name in session::list_staged_files(session_id) {
+                    let _ = session::delete_staged_file(session_id, &name);
+                }
+            }
             result
         }
         Err(e) => json!({"ok": false, "error": e}),

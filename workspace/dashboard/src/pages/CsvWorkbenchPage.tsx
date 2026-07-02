@@ -1,35 +1,64 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import CsvSessionSidecart from "../components/CsvSessionSidecart";
+import Spinner from "../components/Spinner";
 import { hasToken } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import {
-  datasetsToCsv,
-  downloadCsv,
-  fileToDataset,
-  mergeDatasets,
-  suggestMergeKey,
-  type CsvDataset,
-  type MergeMode,
-} from "../lib/csvWorkbench";
-import CsvFusionWiresheet from "../wiresheet/CsvFusionWiresheet";
+  uploadFilesForPreview,
+  type CsvPreviewFileProfile,
+} from "../lib/csvImportUpload";
 import {
   datasetFromFusionPreview,
   fetchAgentSessionFusionPreview,
   saveAgentSessionToArrow,
 } from "../lib/csvAgentSession";
 
+type UploadCard = CsvPreviewFileProfile & { sessionId?: string };
+
 export default function CsvWorkbenchPage() {
-  const [datasets, setDatasets] = useState<CsvDataset[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
-  const [mergeKey, setMergeKey] = useState("Date");
-  const [mergeMode, setMergeMode] = useState<MergeMode>("append");
-  const [ut3SessionId, setUt3SessionId] = useState("");
+  const [sessionId, setSessionId] = useState("");
+  const [uploadCards, setUploadCards] = useState<UploadCard[]>([]);
 
-  const openFusionFromSession = useCallback(async (sessionId: string) => {
+  const ingestFiles = useCallback(
+    async (files: FileList | File[]) => {
+      if (!hasToken()) {
+        setError("Sign in to upload CSV files.");
+        return;
+      }
+      const list = Array.from(files).filter((f) => f.name.toLowerCase().endsWith(".csv"));
+      if (!list.length) {
+        setError("Choose one or more .csv files.");
+        return;
+      }
+      setError("");
+      setBusy("upload");
+      try {
+        const res = await uploadFilesForPreview(list, sessionId || undefined);
+        if (!res.ok && res.error) throw new Error(res.error);
+        const sid = res.session_id ?? sessionId;
+        if (sid) setSessionId(sid);
+        const cards: UploadCard[] = (res.files ?? []).map((f) => ({ ...f, sessionId: sid }));
+        setUploadCards((prev) => [...cards, ...prev]);
+        const rejected = cards.filter((c) => c.error).length;
+        const ok = cards.length - rejected;
+        setStatus(
+          `Uploaded ${ok} file(s)${rejected ? ` · ${rejected} rejected` : ""}${sid ? ` · session ${sid}` : ""}`,
+        );
+      } catch (e) {
+        setError(formatApiError(e));
+      } finally {
+        setBusy("");
+      }
+    },
+    [sessionId],
+  );
+
+  const openSession = useCallback(async (id: string) => {
     if (!hasToken()) {
       setError("Sign in to load sessions.");
       return;
@@ -37,16 +66,13 @@ export default function CsvWorkbenchPage() {
     setBusy("load");
     setError("");
     try {
-      const data = await fetchAgentSessionFusionPreview(sessionId);
+      const data = await fetchAgentSessionFusionPreview(id);
       if (!data.ok) throw new Error(data.error ?? "load failed");
-      const ds = datasetFromFusionPreview(data, sessionId);
-      setUt3SessionId(sessionId);
-      setDatasets([ds]);
-      setMergeKey(ds.timestampColumn ?? "ts_local");
-      setMergeMode("append");
+      setSessionId(id);
       setStatus(
-        `Session ${sessionId} — ${data.row_count?.toLocaleString() ?? ds.rowCount} rows in wiresheet.`,
+        `Session ${id} — ${data.row_count?.toLocaleString() ?? "?"} rows ready for plan/execute via agent or UT3 panel.`,
       );
+      void datasetFromFusionPreview(data, id);
     } catch (e) {
       setError(formatApiError(e));
     } finally {
@@ -54,62 +80,16 @@ export default function CsvWorkbenchPage() {
     }
   }, []);
 
-  const merged = useMemo(() => {
-    if (!datasets.length) return null;
-    try {
-      return mergeDatasets(datasets, mergeKey, mergeMode);
-    } catch {
-      return null;
-    }
-  }, [datasets, mergeKey, mergeMode]);
-
-  const mergeError = useMemo(() => {
-    if (datasets.length < 2) return "";
-    try {
-      mergeDatasets(datasets, mergeKey, mergeMode);
-      return "";
-    } catch (e) {
-      return formatApiError(e);
-    }
-  }, [datasets, mergeKey, mergeMode]);
-
-  const ingestFiles = useCallback(async (files: FileList | File[]) => {
-    setError("");
-    const list = Array.from(files).filter((f) => f.name.toLowerCase().endsWith(".csv"));
-    if (!list.length) {
-      setError("Choose one or more .csv files.");
-      return;
-    }
-    setBusy("parse");
-    try {
-      const added: CsvDataset[] = [];
-      for (const file of list) {
-        added.push(fileToDataset(file, await file.text()));
-      }
-      setDatasets((prev) => {
-        const next = [...prev, ...added];
-        setMergeKey(suggestMergeKey(next));
-        return next;
-      });
-      setUt3SessionId("");
-      setStatus(`Loaded ${added.length} file(s).`);
-    } catch (e) {
-      setError(formatApiError(e));
-    } finally {
-      setBusy("");
-    }
-  }, []);
-
-  async function saveSessionToArrow() {
-    if (!ut3SessionId) {
-      setError("Open an import session from the sidecart first.");
+  async function saveToArrow() {
+    if (!sessionId) {
+      setError("Upload or open a session first.");
       return;
     }
     setBusy("arrow");
     try {
-      const out = await saveAgentSessionToArrow(ut3SessionId);
+      const out = await saveAgentSessionToArrow(sessionId);
       if (!out.ok) throw new Error(out.error ?? "save failed");
-      setStatus(`Saved to Arrow (${out.dataset_id ?? ut3SessionId}). Open Plots to chart.`);
+      setStatus(`Saved to Arrow (${out.dataset_id ?? sessionId}). Open Plots to chart.`);
     } catch (e) {
       setError(formatApiError(e));
     } finally {
@@ -119,102 +99,93 @@ export default function CsvWorkbenchPage() {
 
   return (
     <div className="page page-wide csv-workbench-page">
-      <PageHeader title="CSV Fusion" subtitle="Drop building CSVs · wiresheet merge · save via agent or Arrow store" />
+      <PageHeader
+        title="CSV import"
+        subtitle="Drop building CSVs for server-side preview, preflight, and historian import — same pipeline as MCP agents."
+      />
 
-      <div className="csv-page-layout">
-        <CsvSessionSidecart activeSessionId={ut3SessionId} onOpenSession={(id) => void openFusionFromSession(id)} />
+      {error ? <p className="error">{error}</p> : null}
+      {status ? <p className="ok">{status}</p> : null}
 
-        <div className="csv-page-main">
-          {error ? <p className="error">{error}</p> : null}
-          {mergeError ? <p className="error">{mergeError}</p> : null}
-          {status ? <p className="ok">{status}</p> : null}
-
-          <div
-            className={`csv-drop-zone${dragOver ? " csv-drop-zone-active" : ""}`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
+      <div
+        className={`csv-drop-zone${dragOver ? " csv-drop-zone-active" : ""}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          void ingestFiles(e.dataTransfer.files);
+        }}
+      >
+        <p className="csv-drop-title">Drop CSV files here</p>
+        <p className="muted">Multiple files append to one import session · long Niagara exports may need agent pivot before preflight pass</p>
+        <label className="primary-btn csv-drop-btn">
+          {busy === "upload" ? (
+            <>
+              <Spinner inline /> Uploading…
+            </>
+          ) : (
+            "Choose files"
+          )}
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            multiple
+            hidden
+            disabled={busy === "upload"}
+            onChange={(e) => {
+              if (e.target.files?.length) void ingestFiles(e.target.files);
+              e.target.value = "";
             }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              void ingestFiles(e.dataTransfer.files);
-            }}
-          >
-            <p className="csv-drop-title">Drop CSV files here</p>
-            <p className="muted">Any wide-format building CSV — site/equip/source derived from filename</p>
-            <label className="primary-btn csv-drop-btn">
-              {busy === "parse" ? "Parsing…" : "Choose files"}
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                multiple
-                hidden
-                onChange={(e) => {
-                  if (e.target.files?.length) void ingestFiles(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-          </div>
-
-          {datasets.length > 0 ? (
-            <section className="panel csv-fusion-panel">
-              <h3 className="panel-title">Fusion wiresheet</h3>
-              <CsvFusionWiresheet
-                datasets={datasets}
-                mergeKey={mergeKey}
-                mergeMode={mergeMode}
-                onMergeKeyChange={setMergeKey}
-                onMergeModeChange={setMergeMode}
-              />
-              <div className="csv-merge-controls form-grid">
-                <label className="field">
-                  <span className="field-label">Timestamp column</span>
-                  <input value={mergeKey} onChange={(e) => setMergeKey(e.target.value)} />
-                </label>
-                <label className="field">
-                  <span className="field-label">Merge mode</span>
-                  <select value={mergeMode} onChange={(e) => setMergeMode(e.target.value as MergeMode)}>
-                    <option value="append">Append rows</option>
-                    <option value="inner">Join on timestamp</option>
-                  </select>
-                </label>
-              </div>
-              <div className="toolbar">
-                {ut3SessionId ? (
-                  <button type="button" className="primary-btn" disabled={!!busy} onClick={() => void saveSessionToArrow()}>
-                    {busy === "arrow" ? "Saving…" : "Save to Arrow store"}
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="secondary-btn"
-                  disabled={!merged}
-                  onClick={() => merged && downloadCsv("openfdd-merged.csv", merged.columns, merged.rows)}
-                >
-                  Export merged CSV
-                </button>
-                <a className="secondary-btn" href="/plot">
-                  Open Plots
-                </a>
-                <button
-                  type="button"
-                  className="linkish-btn"
-                  onClick={() => {
-                    setDatasets([]);
-                    setUt3SessionId("");
-                    setStatus("");
-                  }}
-                >
-                  Clear
-                </button>
-              </div>
-            </section>
-          ) : null}
-        </div>
+          />
+        </label>
       </div>
+
+      {uploadCards.length > 0 ? (
+        <section className="panel">
+          <h3 className="panel-title">Parse results</h3>
+          <ul className="csv-upload-results">
+            {uploadCards.map((card, i) => (
+              <li key={`${card.filename}-${i}`} className={card.error ? "csv-upload-reject" : "csv-upload-ok"}>
+                <strong>{card.error ? "✗" : "✓"} {card.filename}</strong>
+                {card.error ? (
+                  <span className="muted"> — {card.error}</span>
+                ) : (
+                  <span className="muted">
+                    {" "}
+                    — {card.profile?.row_count?.toLocaleString() ?? "?"} rows
+                    {card.profile?.headers?.includes("ts") || card.profile?.headers?.includes("timestamp")
+                      ? " · timestamp detected"
+                      : " · no timestamp column"}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <section className="panel">
+        <div className="toolbar toolbar-spaced">
+          {sessionId ? (
+            <>
+              <span className="muted">Active session: <code>{sessionId}</code></span>
+              <button type="button" className="secondary-btn" disabled={!!busy} onClick={() => void saveToArrow()}>
+                {busy === "arrow" ? "Saving…" : "Save session to Arrow"}
+              </button>
+            </>
+          ) : (
+            <span className="muted">Sessions appear below after upload.</span>
+          )}
+          <a className="secondary-btn" href="/plot">
+            Open Plots
+          </a>
+        </div>
+        <CsvSessionSidecart activeSessionId={sessionId} onOpenSession={(id) => void openSession(id)} />
+      </section>
     </div>
   );
 }

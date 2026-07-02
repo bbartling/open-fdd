@@ -203,9 +203,9 @@ export default function ModbusPage() {
 
   async function refreshPoint(device: ModbusDevice, point: ModbusPoint): Promise<boolean> {
     try {
-      const res = await apiFetch<{ present_value?: string; value?: unknown }>("/api/modbus/refresh", {
+      const res = await apiFetch<{ present_value?: string; value?: unknown }>("/api/modbus/read", {
         method: "POST",
-        body: JSON.stringify({ point_id: point.point_id, store: false }),
+        body: JSON.stringify({ point_id: point.point_id }),
       });
       const formatted = String(res.present_value ?? res.value ?? "—");
       patchPointValue(point.point_id, formatted);

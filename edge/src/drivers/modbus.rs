@@ -3,6 +3,7 @@
 use super::live_gate;
 use super::modbus_live;
 use crate::historian::store;
+use crate::model::scope;
 use crate::validation::profile::{active_profile, is_modbus_configured};
 use chrono::Utc;
 use serde_json::{json, Value};
@@ -243,10 +244,11 @@ fn poll_cycle_and_persist() -> u64 {
         return 0;
     }
     let profile = active_profile();
-    if profile.equipment_id.is_empty() {
+    let equipment_id = scope::resolve_equipment_id(Some(profile.equipment_id.as_str()))
+        .unwrap_or_else(|| "equip:local-default".to_string());
+    if equipment_id.is_empty() {
         return 0;
     }
-    let equipment_id = profile.equipment_id.clone();
     let ts = Utc::now().to_rfc3339();
     let mut oa_t = None::<f64>;
     let mut oa_h = None::<f64>;

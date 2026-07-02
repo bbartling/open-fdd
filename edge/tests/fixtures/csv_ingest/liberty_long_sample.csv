@@ -1,0 +1,3 @@
+site,serving_ahu,point_role,point_name,kind,unit,value,status,ts
+LibertyCenter,LIBERTY_50_AHU_1,outside_air_temp,OA-T,Number,°F,81.5,ok,2026-06-28T15:49:51+00:00
+LibertyCenter,LIBERTY_50_AHU_1,zone_temp,ZN-T,Number,°F,72.1,ok,2026-06-28T15:49:51+00:00

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { apiFetch } from "../lib/api";
+import { apiFetch, apiDownloadBlob } from "../lib/api";
 
 type OverrideMeta = {
   ok?: boolean;
@@ -9,9 +9,20 @@ type OverrideMeta = {
   last_scan?: string | null;
 };
 
+async function downloadExport(path: string, fallbackName: string) {
+  const { blob, filename } = await apiDownloadBlob(path);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename || fallbackName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function BacnetOverridePanel() {
   const [meta, setMeta] = useState<OverrideMeta | null>(null);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -26,6 +37,18 @@ export default function BacnetOverridePanel() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function onExport(path: string, name: string) {
+    setBusy(name);
+    setError("");
+    try {
+      await downloadExport(path, name);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setBusy("");
+    }
+  }
 
   return (
     <section className="panel bacnet-override-panel">
@@ -54,15 +77,30 @@ export default function BacnetOverridePanel() {
         <p className="muted">Loading…</p>
       )}
       <div className="action-bar action-bar-spaced">
-        <a className="secondary-btn" href="/api/bacnet/overrides/export">
-          All overrides CSV
-        </a>
-        <a className="secondary-btn" href="/api/bacnet/overrides/export/p8">
-          P8 overrides CSV
-        </a>
-        <a className="secondary-btn" href="/api/bacnet/overrides/export/non-p8">
-          Non-P8 CSV
-        </a>
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={!!busy}
+          onClick={() => void onExport("/api/bacnet/overrides/export", "bacnet_overrides_export.csv")}
+        >
+          {busy === "bacnet_overrides_export.csv" ? "Exporting…" : "All overrides CSV"}
+        </button>
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={!!busy}
+          onClick={() => void onExport("/api/bacnet/overrides/export/p8", "bacnet_overrides_p8.csv")}
+        >
+          {busy === "bacnet_overrides_p8.csv" ? "Exporting…" : "P8 overrides CSV"}
+        </button>
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={!!busy}
+          onClick={() => void onExport("/api/bacnet/overrides/export/non-p8", "bacnet_overrides_non_p8.csv")}
+        >
+          {busy === "bacnet_overrides_non_p8.csv" ? "Exporting…" : "Non-P8 CSV"}
+        </button>
         <button type="button" className="linkish-btn" onClick={() => void load()}>
           Refresh status
         </button>

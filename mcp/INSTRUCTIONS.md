@@ -39,6 +39,16 @@ Composite: **`openfdd_integration_smoke`** — `{ import_dir?, session_id?, conf
 
 Helper script (bash only): `scripts/openfdd_csv_preflight.sh <session_id>`.
 
+### Liberty Center / Niagara long-format CSV (TADCO)
+
+Field exports such as `hvac_systems_CLEANED/` are **long-format** Niagara grids — not historian-wide shape. Agent must pivot before preflight pass.
+
+1. Copy raw files to `workspace/agent-toolshed/<job-id>/` (gitignored).
+2. Pivot long → wide per `serving_ahu` (or equipment slug) using `point_role` → FDD alias map from **`openfdd_ingest_contract`** (`outside_air_temp`→`oa_t`, `zone_temp`→`zn_t`, `discharge_air_temp`→`duct_t`, …).
+3. Reject metadata-only files (e.g. `equipment_inventory.csv` with no `ts`) — use commissioning import instead.
+4. **`openfdd_csv_import_preview`** on cleaned wide CSV(s) → **`openfdd_csv_import_plan`** with `timestamp`, `equipment_id`, `site_id`, FDD columns → preflight loop until `verdict: pass` → **`openfdd_csv_import_execute`** with `confirm: true` (optional `delete_staged_files: true`).
+5. Optional env test: `OPENFDD_TADCO_IMPORT_DIR=/path/to/hvac_systems_CLEANED cargo test tadco_env_preflight -- --ignored`.
+
 See [ingest contract (archive)](../docs/archive/agent/ingest-contract-v1.md) or [MCP docs](https://bbartling.github.io/open-fdd/mcp-agents/).
 
 ## Write tools (Phase 2)

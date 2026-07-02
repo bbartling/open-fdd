@@ -334,3 +334,30 @@ fn plan_api_append_mode() {
         assert!(fusion.get("columns").and_then(|v| v.as_array()).is_some());
     });
 }
+
+#[test]
+fn liberty_long_sample_has_ts_column() {
+    let csv = include_str!("fixtures/csv_ingest/liberty_long_sample.csv");
+    let (profile, _) = parse_csv_bytes(csv.as_bytes(), None).unwrap();
+    assert!(profile.headers.iter().any(|h| h == "ts"));
+    let ts_cols = detect_timestamp_columns(&profile.headers, &profile.sample_rows);
+    assert!(!ts_cols.is_empty());
+}
+
+#[test]
+fn delete_staged_file_removes_bytes() {
+    use open_fdd_edge_prototype::csv_ingest::session;
+    with_temp_workspace(|root| {
+        let sid = "csv-test-delete";
+        let dir = root
+            .join("data/csv_import_sessions")
+            .join(sid)
+            .join("files");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("sample.csv");
+        std::fs::write(&path, b"a,b\n1,2\n").unwrap();
+        assert!(path.exists());
+        session::delete_staged_file(sid, "sample.csv").unwrap();
+        assert!(!path.exists());
+    });
+}

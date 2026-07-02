@@ -46,7 +46,6 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: "/exports", icon: "⬇️", label: "Data export", protected: true },
       { to: "/data-management", icon: "🗄️", label: "Historian storage", protected: true },
       { to: "/host", icon: "📊", label: "Host stats", protected: true },
-      { to: "/live-fdd-validation", icon: "🧪", label: "Validation runs", protected: true },
       { to: "/algorithms", icon: "⚙️", label: "Algorithms", protected: true },
     ],
   },

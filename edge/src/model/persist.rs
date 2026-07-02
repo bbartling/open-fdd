@@ -47,7 +47,8 @@ pub fn default_local_haystack_grid() -> Value {
             {"name": "siteRef"}
         ],
         "rows": [
-            {"id": "site:local", "dis": "Local site", "site": "M"}
+            {"id": "site:local", "dis": "Local site", "site": "M"},
+            {"id": "equip:local-default", "dis": "Local default equipment", "equip": "M", "siteRef": "site:local"}
         ]
     })
 }

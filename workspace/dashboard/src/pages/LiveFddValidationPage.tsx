@@ -77,8 +77,8 @@ export default function LiveFddValidationPage() {
   return (
     <div className="bench-smoke-page">
       <PageHeader
-        title="Live FDD Validation"
-        subtitle="Configured BACnet source → Arrow historian → DataFusion SQL → raw fault → fault confirmation → confirmed fault."
+        title="Live FDD Validation (developer demo)"
+        subtitle="Static demo data only — not for OT sign-off. Use SQL FDD Rules and live historian for production FDD."
       />
 
       {error ? <div className="error-banner">{error}</div> : null}

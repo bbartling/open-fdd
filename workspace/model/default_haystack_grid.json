@@ -15,6 +15,12 @@
       "id": "site:local",
       "dis": "Local site",
       "site": "M"
+    },
+    {
+      "id": "equip:local-default",
+      "dis": "Local default equipment",
+      "equip": "M",
+      "siteRef": "site:local"
     }
   ]
 }

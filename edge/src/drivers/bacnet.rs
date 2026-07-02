@@ -818,6 +818,48 @@ fn write_override_registry(value: &Value) {
     );
 }
 
+fn whois_discovered_instances() -> Vec<u32> {
+    if !bacnet_live::is_live_mode() {
+        return Vec::new();
+    }
+    let devices = match bacnet_live::block_on(bacnet_live::whois_devices_with_range(None, None)) {
+        Ok(d) => d,
+        Err(_) => return Vec::new(),
+    };
+    let local_inst = env::var("OPENFDD_BACNET_DEVICE_INSTANCE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(599999);
+    let mut out = Vec::new();
+    for dev in devices {
+        let Some(inst) = dev
+            .get("object_identifier")
+            .and_then(|o| o.get("instance"))
+            .and_then(|v| v.as_u64())
+            .map(|n| n as u32)
+        else {
+            continue;
+        };
+        if inst != local_inst {
+            out.push(inst);
+        }
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+/// When the persisted registry has no field devices, merge Who-Is discoveries.
+fn ensure_field_devices_from_whois() {
+    let registry = read_registry();
+    if !field_device_instances(&registry).is_empty() {
+        return;
+    }
+    for inst in whois_discovered_instances() {
+        merge_live_discovery_into_registry(inst);
+    }
+}
+
 fn field_device_instances(registry: &Value) -> Vec<u32> {
     let mut devices = Vec::new();
     if let Some(drivers) = registry.get("drivers").and_then(|v| v.as_array()) {
@@ -843,7 +885,11 @@ fn field_device_instances(registry: &Value) -> Vec<u32> {
 }
 
 fn pick_scan_device(registry: &Value, override_reg: &Value) -> (u32, usize, u32) {
-    let devices = field_device_instances(registry);
+    let mut devices = field_device_instances(registry);
+    if devices.is_empty() {
+        ensure_field_devices_from_whois();
+        devices = field_device_instances(&read_registry());
+    }
     if devices.is_empty() {
         let fallback = bench_device_instance();
         return (fallback, 0, fallback);
@@ -1159,11 +1205,12 @@ pub fn scan_once_value() -> Value {
         return err;
     }
     let operator_priority = operator_override_priority();
+    ensure_field_devices_from_whois();
     let registry = read_registry();
     let override_reg = read_override_registry();
     let (device_instance, next_rotation, next_device) = pick_scan_device(&registry, &override_reg);
     let merge = merge_live_discovery_into_registry(device_instance);
-    let device_count = field_device_instances(&registry).len().max(1) as u64;
+    let device_count = field_device_instances(&read_registry()).len().max(1) as u64;
 
     let mut scan_health = "ok".to_string();
     let mut scan_error: Option<String> = None;
@@ -1523,6 +1570,7 @@ pub fn read_present_value_json(body: &Value) -> String {
 }
 
 pub fn driver_tree_json() -> String {
+    ensure_field_devices_from_whois();
     super::tree::driver_tree_compat_json()
 }
 
@@ -1554,6 +1602,7 @@ pub fn poll_metrics() -> Value {
 
 fn persist_bacnet_reads_to_historian(reads: &[Value]) {
     use crate::historian::store;
+    use crate::model::scope;
     let oa_t = reads
         .iter()
         .find_map(|r| r.get("present_value").and_then(|v| v.as_f64()));
@@ -1561,10 +1610,11 @@ fn persist_bacnet_reads_to_historian(reads: &[Value]) {
         return;
     };
     let profile = active_profile();
-    if profile.equipment_id.is_empty() {
+    let equipment_id = scope::resolve_equipment_id(Some(profile.equipment_id.as_str()))
+        .unwrap_or_else(|| "equip:local-default".to_string());
+    if equipment_id.is_empty() {
         return;
     }
-    let equipment_id = profile.equipment_id.clone();
     let ts = Utc::now().to_rfc3339();
     let row = store::make_pivot_row(store::PivotSample {
         timestamp: &ts,
