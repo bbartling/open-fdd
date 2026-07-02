@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { apiFetch, getBridgeBase } from "../lib/api";
+import { apiFetch, apiDownloadBlob } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import ActionButton from "../components/ActionButton";
 import BacnetPointsTree, { type DriverDevice, type DriverPoint } from "../components/BacnetPointsTree";
@@ -141,17 +141,11 @@ export default function BacnetPage() {
   }, [refresh]);
 
   async function downloadOverrideExport() {
-    const base = getBridgeBase();
-    const token = sessionStorage.getItem("ofdd_token");
-    const res = await fetch(`${base}/api/bacnet/overrides/export`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) throw new Error(`export failed (${res.status})`);
-    const blob = await res.blob();
+    const { blob, filename } = await apiDownloadBlob("/api/bacnet/overrides/export");
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "bacnet_overrides_export.csv";
+    a.download = filename || "bacnet_overrides_export.csv";
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -581,12 +575,7 @@ export default function BacnetPage() {
     try {
       const res = await apiFetch<{ value?: unknown }>("/api/bacnet/read", {
         method: "POST",
-        body: JSON.stringify({
-          device_instance: Number(device.device_instance),
-          device_address: device.device_address || "",
-          object_identifier: point.object_identifier,
-          property_identifier: "present-value",
-        }),
+        body: JSON.stringify({ point_id: point.point_id }),
       });
       const formatted = formatBacnetValue(res.value);
       patchPointPresentValue(point.point_id, formatted);
@@ -604,11 +593,7 @@ export default function BacnetPage() {
     try {
       const res = await apiFetch<{ priority_array?: PrioritySlot[] }>("/api/bacnet/priority-array", {
         method: "POST",
-        body: JSON.stringify({
-          device_instance: Number(device.device_instance),
-          device_address: device.device_address || "",
-          object_identifier: point.object_identifier,
-        }),
+        body: JSON.stringify({ point_id: point.point_id }),
       });
       const slots = res.priority_array ?? [];
       setPriorityByPointId((prev) => ({ ...prev, [point.point_id]: slots }));

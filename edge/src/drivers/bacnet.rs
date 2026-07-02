@@ -1554,6 +1554,7 @@ pub fn poll_metrics() -> Value {
 
 fn persist_bacnet_reads_to_historian(reads: &[Value]) {
     use crate::historian::store;
+    use crate::model::scope;
     let oa_t = reads
         .iter()
         .find_map(|r| r.get("present_value").and_then(|v| v.as_f64()));
@@ -1561,10 +1562,11 @@ fn persist_bacnet_reads_to_historian(reads: &[Value]) {
         return;
     };
     let profile = active_profile();
-    if profile.equipment_id.is_empty() {
+    let equipment_id = scope::resolve_equipment_id(Some(profile.equipment_id.as_str()))
+        .unwrap_or_else(|| "equip:local-test-equipment".to_string());
+    if equipment_id.is_empty() {
         return;
     }
-    let equipment_id = profile.equipment_id.clone();
     let ts = Utc::now().to_rfc3339();
     let row = store::make_pivot_row(store::PivotSample {
         timestamp: &ts,

@@ -2177,7 +2177,7 @@ fn security_headers(content_type: &str, is_auth: bool) -> String {
     h.push_str("Cross-Origin-Resource-Policy: same-origin\r\n");
     h.push_str("Permissions-Policy: geolocation=(), microphone=(), camera=()\r\n");
     h.push_str(
-        "Content-Security-Policy: default-src 'self'; script-src 'self' https://unpkg.com https://cdn.plot.ly; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; frame-ancestors 'self'\r\n",
+        "Content-Security-Policy: default-src 'self'; script-src 'self' https://unpkg.com https://cdn.plot.ly; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; frame-src 'self' blob:; frame-ancestors 'self'\r\n",
     );
     if is_auth || content_type.contains("json") {
         h.push_str(

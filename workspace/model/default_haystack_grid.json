@@ -15,6 +15,12 @@
       "id": "site:local",
       "dis": "Local site",
       "site": "M"
+    },
+    {
+      "id": "equip:local-test-equipment",
+      "dis": "Local test equipment",
+      "equip": "M",
+      "siteRef": "site:local"
     }
   ]
 }

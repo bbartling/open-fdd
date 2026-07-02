@@ -174,10 +174,14 @@ mod tests {
             assert!(!path.exists());
             let grid = persist::haystack_model_value();
             let rows = grid.get("rows").and_then(|v| v.as_array()).unwrap();
-            assert_eq!(rows.len(), 1);
+            assert_eq!(rows.len(), 2);
             assert_eq!(
                 rows[0].get("id").and_then(|v| v.as_str()),
                 Some("site:local")
+            );
+            assert_eq!(
+                rows[1].get("id").and_then(|v| v.as_str()),
+                Some("equip:local-test-equipment")
             );
         });
     }

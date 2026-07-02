@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
-import { apiFetch, hasToken } from "../lib/api";
+import { apiFetch, getBridgeBase, hasToken } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 
 type AgentConfig = {
@@ -10,87 +10,150 @@ type AgentConfig = {
   external_agent_workflow?: boolean;
   mcp_binary?: string;
   tools_endpoint?: string;
-  manifest_endpoint?: string;
-  mcp_docs?: string;
-  example_hosts?: string[];
   workflow?: string[];
-  credentials_hint?: {
-    bootstrap_handoff?: string;
-    auth_env_local?: string;
-    mcp_tools?: string[];
-    note?: string;
-  };
 };
+
+type HealthInfo = { version?: string; image_tag?: string };
+
+function benchApiBase(): string {
+  if (typeof window !== "undefined" && window.location.hostname !== "localhost") {
+    return `${window.location.protocol}//${window.location.hostname}:8080`;
+  }
+  return "http://127.0.0.1:8080";
+}
+
+function mcpConfigJson(imageTag: string, apiBase: string): string {
+  return JSON.stringify(
+    {
+      mcpServers: {
+        openfdd: {
+          command: "docker",
+          args: [
+            "run",
+            "-i",
+            "--rm",
+            "--network",
+            "host",
+            "--entrypoint",
+            "openfdd-mcp",
+            "-e",
+            `OPENFDD_API_BASE=${apiBase}`,
+            "-e",
+            "OPENFDD_COMMISSION_BASE=http://127.0.0.1:9091",
+            "-e",
+            "OPENFDD_MCP_TOKEN",
+            `ghcr.io/bbartling/openfdd-edge-rust:${imageTag}`,
+          ],
+          env: { OPENFDD_MCP_TOKEN: "<integrator JWT from dashboard login — never commit>" },
+        },
+      },
+    },
+    null,
+    2,
+  );
+}
+
+function agentBriefing(imageTag: string, apiBase: string): string {
+  return `You help a human operator on Open-FDD (edge ${imageTag}, ${apiBase}).
+
+Start read-only: openfdd_health · openfdd_driver_status.
+CSV: openfdd_csv_* for preview → plan → preflight → execute (human must approve writes).
+Writes need OPENFDD_MCP_ALLOW_WRITES=1 and confirm:true. No BACnet writes without explicit human OK.
+Long Niagara CSV exports must be pivoted to wide historian shape before preflight pass.`;
+}
+
+async function copyText(text: string): Promise<void> {
+  await navigator.clipboard.writeText(text);
+}
 
 export default function AgentPage() {
   const [config, setConfig] = useState<AgentConfig | null>(null);
   const [toolCount, setToolCount] = useState<number | null>(null);
+  const [imageTag, setImageTag] = useState("3.2.7");
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState<"" | "mcp" | "brief">("");
   const [busy, setBusy] = useState(false);
+
+  const apiBase = useMemo(() => benchApiBase(), []);
 
   const refresh = useCallback(async () => {
     if (!hasToken()) return;
     setBusy(true);
     setError("");
     try {
-      const [cfg, tools] = await Promise.all([
+      const base = getBridgeBase();
+      const [cfg, tools, health] = await Promise.all([
         apiFetch<AgentConfig>("/api/agent/config"),
         apiFetch<{ tools?: unknown[] }>("/api/agent/tools"),
+        fetch(`${base}/api/health`).then((r) => r.json() as Promise<HealthInfo>),
       ]);
       setConfig(cfg);
       setToolCount(tools.tools?.length ?? 0);
+      setImageTag(health.image_tag || health.version || imageTag);
     } catch (e) {
       setError(formatApiError(e));
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [imageTag]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
+  const mcpJson = useMemo(() => mcpConfigJson(imageTag, apiBase), [imageTag, apiBase]);
+  const briefing = useMemo(() => agentBriefing(imageTag, apiBase), [imageTag, apiBase]);
+
+  async function onCopy(kind: "mcp" | "brief") {
+    try {
+      await copyText(kind === "mcp" ? mcpJson : briefing);
+      setCopied(kind);
+      window.setTimeout(() => setCopied(""), 2500);
+    } catch (e) {
+      setError(formatApiError(e));
+    }
+  }
+
   return (
     <div className="page page-wide">
       <PageHeader
         title="External agents"
-        subtitle="Open-FDD does not ship an embedded chatbot. Connect Codex CLI, Cursor, Claude Desktop, OpenClaw, or any MCP host through optional openfdd-mcp (stdio) or JWT REST."
+        subtitle="Open-FDD has no embedded chatbot. Wire any MCP-capable host via stdio openfdd-mcp, then reload that host so tools register."
       />
 
       {error ? <p className="error">{error}</p> : null}
-      {!config && error ? (
-        <button type="button" className="secondary-btn" disabled={busy} onClick={() => void refresh()}>
-          Retry
-        </button>
-      ) : null}
 
       <div className="panel">
-        <h3 className="panel-title">Architecture</h3>
+        <h3 className="panel-title">What this is</h3>
         <p>
-          Open-FDD is the edge FDD platform. The agent is the operator <strong>outside</strong> the
-          platform — vendor-neutral, local-first, read-first by default.
+          Connect <strong>Codex, Cursor, Claude Desktop, OpenClaw</strong>, or any MCP host to this edge.
+          The agent assists the human operator on your OT LAN — read-first by default; writes require explicit approval.
         </p>
-        <ul>
-          <li>
-            <code>openfdd-mcp</code> — stdio MCP server bundled in{" "}
-            <code>ghcr.io/bbartling/openfdd-edge-rust</code> (or slim <code>openfdd-mcp</code> image)
-          </li>
-          <li>
-            REST — <code>/api/agent/tools</code> catalog; same JWT auth as the dashboard
-          </li>
-          <li>
-            Writes — <code>OPENFDD_MCP_ALLOW_WRITES=1</code> and <code>confirm:true</code> on mutating
-            tools; BACnet writes need explicit human approval
-          </li>
-        </ul>
-        <p>
-          Full setup: ensure the <Link to="/">dashboard</Link> is healthy, obtain an integrator JWT, then wire MCP
-          in your external tool. Documentation lives in the GitHub repo — start at{" "}
-          <a href="https://github.com/bbartling/open-fdd/blob/master/README.md" target="_blank" rel="noreferrer">
-            README.md on master
-          </a>{" "}
-          and search for <strong>MCP</strong>, <strong>external agents</strong>, or <strong>openfdd-mcp</strong>.
+      </div>
+
+      <div className="panel">
+        <h3 className="panel-title">Copy MCP host configuration</h3>
+        <p className="muted">
+          Paste into your external agent&apos;s MCP settings, replace the JWT placeholder, then <strong>restart or reload</strong>{" "}
+          that host (tools load at session start — they do not hot-plug).
         </p>
+        <p className="muted">
+          Same machine as edge: use <code>{apiBase}</code> and <code>--network host</code>. Remote OT-LAN PC: set{" "}
+          <code>OPENFDD_API_BASE</code> to <code>http://&lt;bench-ip&gt;:8080</code> and omit <code>--network host</code> when Docker runs remotely.
+        </p>
+        <pre className="code-block">{mcpJson}</pre>
+        <button type="button" className="primary-btn" onClick={() => void onCopy("mcp")}>
+          {copied === "mcp" ? "Copied MCP config" : "Copy MCP configuration"}
+        </button>
+      </div>
+
+      <div className="panel">
+        <h3 className="panel-title">Copy first message to external agent</h3>
+        <p className="muted">Paste as the opening turn after MCP tools appear in the host session.</p>
+        <pre className="code-block">{briefing}</pre>
+        <button type="button" className="primary-btn" onClick={() => void onCopy("brief")}>
+          {copied === "brief" ? "Copied briefing" : "Copy agent briefing"}
+        </button>
       </div>
 
       {config ? (
@@ -98,45 +161,21 @@ export default function AgentPage() {
           <h3 className="panel-title">Edge status</h3>
           <p className="muted">
             {busy ? "Refreshing…" : null}
-            Embedded chat: {config.embedded_chat === false ? "disabled" : "unknown"} · MCP binary:{" "}
-            <code>{config.mcp_binary ?? "openfdd-mcp"}</code>
-            {toolCount != null ? ` · ${toolCount} REST tools cataloged` : null}
+            Image tag <code>{imageTag}</code>
+            {toolCount != null ? ` · ${toolCount} REST tools at /api/agent/tools` : null}
+            {config.embedded_chat === false ? " · embedded chat disabled" : null}
           </p>
-          {config.workflow?.length ? (
-            <ol>
-              {config.workflow.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
-          ) : null}
-          {config.example_hosts?.length ? (
-            <p className="muted">Example external hosts: {config.example_hosts.join(", ")}</p>
-          ) : null}
+          <p className="muted">
+            CSV workflow: <Link to="/csv">CSV import tab</Link> · MCP tools <code>openfdd_csv_*</code> · see{" "}
+            <a href="https://github.com/bbartling/open-fdd/blob/master/mcp/README.md" target="_blank" rel="noreferrer">
+              mcp/README.md
+            </a>
+          </p>
           <button type="button" className="secondary-btn" disabled={busy} onClick={() => void refresh()}>
             Refresh
           </button>
         </div>
       ) : null}
-
-      <div className="panel">
-        <h3 className="panel-title">Cursor MCP (example)</h3>
-        <pre className="code-block">{`{
-  "mcpServers": {
-    "openfdd": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm", "--network", "host",
-        "--entrypoint", "openfdd-mcp",
-        "-e", "OPENFDD_API_BASE=http://127.0.0.1:8080",
-        "-e", "OPENFDD_MCP_TOKEN",
-        "ghcr.io/bbartling/openfdd-edge-rust:latest"
-      ],
-      "env": { "OPENFDD_MCP_TOKEN": "<integrator JWT>" }
-    }
-  }
-}`}</pre>
-        <p className="muted">Never commit tokens. MCP uses stdio — not an HTTP port.</p>
-      </div>
     </div>
   );
 }

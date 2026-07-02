@@ -8,7 +8,7 @@ import SupervisoryOverridePanel, { type OverrideStatus } from "../components/Sup
 import UnifiedDriverTreeLegend from "../components/UnifiedDriverTreeLegend";
 import PageHeader from "../components/PageHeader";
 import Spinner from "../components/Spinner";
-import { apiFetch, getBridgeBase } from "../lib/api";
+import { apiFetch, apiDownloadBlob } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import type { PrioritySlot } from "../lib/bacnetTreeMenu";
 
@@ -91,17 +91,11 @@ export default function DriversPage() {
   }, [load]);
 
   async function exportOverrideCsv() {
-    const base = getBridgeBase();
-    const token = sessionStorage.getItem("ofdd_token");
-    const res = await fetch(`${base}/api/bacnet/overrides/export`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) throw new Error(`export failed (${res.status})`);
-    const blob = await res.blob();
+    const { blob, filename } = await apiDownloadBlob("/api/bacnet/overrides/export");
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "bacnet_supervisory_override_report.csv";
+    a.download = filename || "bacnet_supervisory_override_report.csv";
     a.click();
     URL.revokeObjectURL(url);
   }
