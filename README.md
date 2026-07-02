@@ -133,7 +133,7 @@ Install and bootstrap Open-FDD Rust edge from https://github.com/bbartling/open-
 
 Important project facts:
 - Open-FDD 3.2 edge is a Rust edge runtime — use openfdd_rust_edge_bootstrap.sh, not the legacy Python bootstrap.
-- Primary GHCR image: ghcr.io/bbartling/openfdd-edge-rust:latest
+- Primary GHCR image: ghcr.io/bbartling/openfdd-edge-rust:3.2.6 (pin OPENFDD_IMAGE_TAG — avoid :latest on field benches)
 - Bootstrap script:
   https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_rust_edge_bootstrap.sh
 - ARM64: verify GHCR manifest with openfdd_rust_check_ghcr_platform.sh
@@ -303,7 +303,7 @@ export OPENFDD_MCP_TOKEN="$(
         "-e", "OPENFDD_API_BASE=http://127.0.0.1:8080",
         "-e", "OPENFDD_COMMISSION_BASE=http://127.0.0.1:9091",
         "-e", "OPENFDD_MCP_TOKEN",
-        "ghcr.io/bbartling/openfdd-edge-rust:latest"
+        "ghcr.io/bbartling/openfdd-edge-rust:3.2.6"
       ],
       "env": {
         "OPENFDD_MCP_TOKEN": "<paste JWT from step 3>"
