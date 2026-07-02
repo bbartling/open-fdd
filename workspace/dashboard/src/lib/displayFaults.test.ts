@@ -49,7 +49,7 @@ describe("buildDisplayFaults", () => {
     const families: FaultFamily[] = [
       {
         family: "oa_temp_out_of_range",
-        label: "equip:local-test-equipment",
+        label: "equip:local-default",
         worst: "warning",
         traffic: "yellow",
         count: 1,
@@ -58,7 +58,7 @@ describe("buildDisplayFaults", () => {
             id: "fault-oa-1",
             severity: "warning",
             title: "OA Temperature Out Of Range",
-            detail: "equip:local-test-equipment",
+            detail: "equip:local-default",
             source: "fdd_rule",
             analytics: {
               first_seen_at: "2026-06-21T10:00:00Z",

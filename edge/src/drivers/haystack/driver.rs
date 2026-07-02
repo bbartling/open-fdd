@@ -117,6 +117,9 @@ pub fn poll_once_json(payload: &Value) -> String {
             });
         }
         let read = client_read(cfg, payload);
+        if read.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+            return read;
+        }
         let rows = grid_rows(read.get("records").unwrap_or(&json!({})));
         let samples = poll_samples(&rows, &cfg.source_id);
         json!({
@@ -191,12 +194,33 @@ pub fn driver_tree_json() -> String {
                 "devices": []
             });
         }
+        if cfg.is_configured() && !cfg.fixture_mode() {
+            let read = client_read(cfg, &json!({"filter": "point and curVal", "limit": 500}));
+            if read.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                let rows = grid_rows(read.get("records").unwrap_or(&json!({})));
+                if !rows.is_empty() {
+                    let model = rows_to_model_grid(&rows, &cfg.source_id, &cfg.site_id);
+                    if let Ok(mut guard) = MODEL.lock() {
+                        *guard = model;
+                    }
+                }
+            }
+        }
         let model = model_value();
         let rows = grid_rows(&model);
         let mut tree = build_driver_tree(&rows, &cfg.source_id, &cfg.base_url);
         if let Some(obj) = tree.as_object_mut() {
             obj.insert("enabled".to_string(), json!(true));
-            obj.insert("status".to_string(), json!("ready"));
+            obj.insert(
+                "status".to_string(),
+                json!(if cfg.fixture_mode() {
+                    "fixture"
+                } else if cfg.is_configured() {
+                    "live"
+                } else {
+                    "not_configured"
+                }),
+            );
         }
         tree
     })

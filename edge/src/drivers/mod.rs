@@ -1,14 +1,15 @@
 //! Driver layer for the Rust-only Open-FDD edge.
 //!
-//! Live field-bus paths use real protocol stacks:
+//! Live field-bus paths use real protocol stacks only (no simulated OT data):
 //!
-//! - `bacnet` + `bacnet_live` => [rusty-bacnet](https://github.com/jscott3201/rusty-bacnet)
-//! - `modbus` + `modbus_live` => [rusty-modbus](https://github.com/jscott3201/rusty-modbus)
+//! - `bacnet` (facade) + `bacnet_live` (rusty-bacnet wire I/O)
+//! - `modbus` (facade) + `modbus_live` (rusty-modbus wire I/O)
 //! - `haystack` => [rusty-haystack-client](https://github.com/jscott3201/rusty-haystack)
 //! - `json_api` => reqwest HTTP with JSON body parsing
 //!
-//! Explicit `OPENFDD_*_MODE=live` (default) for BACnet/Modbus field-bus I/O.
-//! Haystack fixture mode (`OPENFDD_HAYSTACK_FIXTURE=1`) is CI-only for Haystack.
+//! BACnet/Modbus default to live wire I/O (`OPENFDD_*_MODE=live`). Non-live mode blocks
+//! operations with API errors — it does not synthesize field values.
+//! Haystack fixture mode (`OPENFDD_HAYSTACK_FIXTURE=1`) is CI-only and explicitly labeled.
 
 pub mod bacnet;
 pub mod bacnet_live;

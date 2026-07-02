@@ -17,8 +17,8 @@
       "site": "M"
     },
     {
-      "id": "equip:local-test-equipment",
-      "dis": "Local test equipment",
+      "id": "equip:local-default",
+      "dis": "Local default equipment",
       "equip": "M",
       "siteRef": "site:local"
     }

@@ -264,13 +264,19 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            agent_bootstrap(),
+            agent_bootstrap(&parse_json_body_or_empty(&body)),
         ),
         ("POST", "/api/agent/update") => require_role(
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            agent_update(),
+            agent_update(&parse_json_body_or_empty(&body)),
+        ),
+        ("GET", "/api/agent/validate") => require_role_lazy(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            agent_validate,
         ),
         ("GET", "/api/historian/query") => {
             raw_json(&mut stream, &historian::arrow_table::query_json())
@@ -533,7 +539,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent"],
-            agent_update(),
+            agent_update(&parse_json_body_or_empty(&body)),
         ),
         ("GET", "/api/building/checkin") => json_response(&mut stream, building_checkin()),
         ("GET", "/api/algorithms") => json_response(&mut stream, algorithms()),
@@ -2090,10 +2096,16 @@ fn agent_tools() -> Value {
     })
 }
 
-fn agent_bootstrap() -> Value {
+fn agent_bootstrap(body: &Value) -> Value {
+    let dry_run = body
+        .get("dry_run")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
     json!({
         "ok": true,
-        "dry_run": true,
+        "dry_run": dry_run,
+        "executable": false,
+        "message": "Bootstrap runs on the edge host via lifecycle scripts — not in-process inside the bridge.",
         "plan": [
             "create workspace/ without deleting existing data",
             "write docker-compose.yml",
@@ -2102,14 +2114,31 @@ fn agent_bootstrap() -> Value {
             "validate GET /api/health",
             "validate JWT login",
             "validate agent manifest"
-        ]
+        ],
+        "scripts": {
+            "bootstrap": "scripts/openfdd_rust_edge_bootstrap.sh --start",
+            "validate": "scripts/openfdd_rust_edge_validate.sh",
+            "mcp_smoke": "scripts/openfdd_mcp_agent_prompt.sh --smoke"
+        },
+        "dashboard": "/agent"
     })
 }
 
-fn agent_update() -> Value {
+fn agent_update(body: &Value) -> Value {
+    let dry_run = body
+        .get("dry_run")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    let tag = body
+        .get("image_tag")
+        .and_then(|v| v.as_str())
+        .unwrap_or("3.2.7");
     json!({
         "ok": true,
-        "dry_run": true,
+        "dry_run": dry_run,
+        "executable": false,
+        "message": "Site update runs on the edge host via lifecycle scripts — not in-process inside the bridge.",
+        "image_tag": tag,
         "steps": [
             "backup workspace/",
             "pull container images",
@@ -2117,7 +2146,30 @@ fn agent_update() -> Value {
             "validate health",
             "keep backup if validation fails"
         ],
-        "forbidden": ["docker compose down -v", "docker volume prune", "delete workspace/"]
+        "forbidden": ["docker compose down -v", "docker volume prune", "delete workspace/"],
+        "scripts": {
+            "backup": "scripts/openfdd_rust_site_backup.sh",
+            "update": format!("NEW_TAG={tag} OPENFDD_RESTORE_HISTORIAN_AFTER_UPDATE=1 ./scripts/openfdd_rust_site_update.sh"),
+            "recovery": "scripts/openfdd_post_update_data_recovery.sh"
+        }
+    })
+}
+
+fn agent_validate() -> Value {
+    let smoke = bench::smoke::status_json();
+    json!({
+        "ok": true,
+        "report": "agent_validation_snapshot",
+        "validation": smoke,
+        "scripts": {
+            "rigorous_bench": "scripts/openfdd_rev326_rigorous_report.sh",
+            "drivers": "scripts/openfdd_drivers_validate.sh",
+            "mcp_smoke": "scripts/openfdd_mcp_agent_prompt.sh --smoke"
+        },
+        "api": {
+            "validation_status": "/api/validation-runs/current/status",
+            "health_stack": "/api/health/stack"
+        }
     })
 }
 

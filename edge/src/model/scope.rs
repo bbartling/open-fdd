@@ -181,7 +181,7 @@ mod tests {
             );
             assert_eq!(
                 rows[1].get("id").and_then(|v| v.as_str()),
-                Some("equip:local-test-equipment")
+                Some("equip:local-default")
             );
         });
     }
