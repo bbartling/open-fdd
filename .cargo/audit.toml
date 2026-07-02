@@ -1,0 +1,3 @@
+# Transitive quick-xml 0.37.x via oxigraph 0.5.9 — no compatible 0.41+ until oxigraph bump (3.2.8).
+[advisories]
+ignore = ["RUSTSEC-2026-0195"]
