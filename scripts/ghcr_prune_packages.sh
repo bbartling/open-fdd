@@ -130,7 +130,7 @@ decide_action() {
     if [[ "$tag" == sha-* && "$age" -ge "$DELETE_SHA_DAYS" ]]; then
       has_sha_old=1
     fi
-    local key="${semver_key "$tag" || true}"
+    local key="$(semver_key "$tag" || true)"
     if [[ -n "$key" ]]; then
       local norm="${key#*|}"
       if [[ " ${SEMVER_KEEP[*]} " == *" $norm "* || " ${SEMVER_KEEP[*]} " == *" v$norm "* ]]; then
