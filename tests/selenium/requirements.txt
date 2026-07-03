@@ -1,0 +1,4 @@
+selenium>=4.21.0
+webdriver-manager>=4.0.1
+requests>=2.31.0
+tomli>=2.0.1; python_version < "3.11"

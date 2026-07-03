@@ -1,0 +1,86 @@
+# Copy to workspace/bench/bench_profile.toml — edge agent maintains; discovery stays API-driven.
+
+[site]
+name = "local-bench"
+bench_ip = "192.168.204.55"
+edge_nic = "enp3s0"
+
+[api]
+bridge = "http://127.0.0.1:8080"
+commission = "http://127.0.0.1:9091"
+
+[github]
+repo = "bbartling/open-fdd"
+results_issue = 429
+readme_raw = "https://raw.githubusercontent.com/bbartling/open-fdd/refs/heads/master/README.md"
+mcp_readme_raw = "https://raw.githubusercontent.com/bbartling/open-fdd/refs/heads/master/mcp/README.md"
+
+[expect]
+version = "3.3.0-beta.1"
+require_haystack = true
+
+[images]
+edge = "ghcr.io/bbartling/openfdd-edge-rust"
+mcp = "ghcr.io/bbartling/openfdd-mcp"
+edge_tag = "nightly"
+mcp_tag = "nightly"
+
+[run]
+driver_poll_interval_sec = 60
+hour_test_minutes = 60
+fault_rule_change_minute = 30
+fault_rule_id = "oa_temp_out_of_range"
+json_api_validate_once = true
+restart_on_fail = true
+max_restarts = 2
+wait_for_ghcr = false
+zap_caddy_matrix = true
+caddy_restore_direct_after_zap = true
+always_poll = true
+restore_historian_after_update = true
+run_preflight = true
+# Poll daemon: unlimited cycles (production-like). Use OPENFDD_BACNET_DAEMON_MAX_CYCLES only for bounded phases.
+
+[caddy]
+http_base = "http://127.0.0.1:80"
+tls_base = "https://127.0.0.1:443"
+cert_dir = "workspace/deploy/caddy/certs"
+
+[discovery]
+bacnet_whois_low = 0
+bacnet_whois_high = 4194303
+bacnet_exclude_local_instances = [599999]
+bacnet_min_field_devices = 1
+bacnet_min_read_points = 2
+modbus_min_read_points = 2
+haystack_min_cur_points = 3
+model_min_rows = 1
+json_api_min_ok_sources = 1
+pcap_ot_hosts = []
+pcap_bench_ip = "192.168.204.55"
+
+[mcp]
+read_only_default = true
+transports = ["stdio"]
+
+[semantic]
+rdf_probe_paths = [
+  "/api/rdf",
+  "/api/sparql",
+  "/api/query/sparql",
+  "/api/semantic/graph",
+  "/api/model/rdf",
+  "/api/model/ttl",
+  "/api/haystack/rdf",
+]
+
+[wonky]
+log_error_patterns = [
+  "panic",
+  "fatal error",
+  "FATAL",
+  "thread .* panicked",
+  "segfault",
+  "OOM",
+  "error: ",
+]
