@@ -192,6 +192,102 @@ fn registry_path() -> PathBuf {
         .join("driver_tree.json")
 }
 
+fn whois_cache_path() -> PathBuf {
+    workspace_dir()
+        .join("data")
+        .join("drivers")
+        .join("bacnet")
+        .join("whois_discovered.json")
+}
+
+fn instances_from_whois_devices(devices: &[Value]) -> Vec<u32> {
+    let local = bacnet_server::device_instance();
+    let mut out = Vec::new();
+    for dev in devices {
+        let Some(inst) = dev
+            .get("object_identifier")
+            .and_then(|o| o.get("instance"))
+            .and_then(|v| v.as_u64())
+            .map(|n| n as u32)
+            .or_else(|| {
+                dev.get("device_instance")
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n as u32)
+            })
+        else {
+            continue;
+        };
+        if inst != local && inst > 0 {
+            out.push(inst);
+        }
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+fn persist_whois_discoveries(devices: &[Value]) {
+    let instances = instances_from_whois_devices(devices);
+    if instances.is_empty() {
+        return;
+    }
+    let path = whois_cache_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let payload = json!({
+        "updated_at": now_rfc3339(),
+        "instances": instances,
+        "devices": devices
+    });
+    let _ = fs::write(
+        path,
+        serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".to_string()),
+    );
+}
+
+fn cached_whois_instances() -> Vec<u32> {
+    let path = whois_cache_path();
+    if !path.exists() {
+        return Vec::new();
+    }
+    let Ok(text) = fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    let Ok(v) = serde_json::from_str::<Value>(&text) else {
+        return Vec::new();
+    };
+    v.get("instances")
+        .and_then(|a| a.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|x| x.as_u64().map(|n| n as u32))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn merge_missing_field_devices() {
+    let existing = field_device_instances(&read_registry());
+    let existing: std::collections::HashSet<u32> = existing.into_iter().collect();
+    let mut candidates = cached_whois_instances();
+    candidates.extend(whois_discovered_instances());
+    if let Ok(v) = env::var("OPENFDD_BACNET_DISCOVER_LOW") {
+        if let Ok(inst) = v.parse::<u32>() {
+            if inst > 0 {
+                candidates.push(inst);
+            }
+        }
+    }
+    candidates.sort_unstable();
+    candidates.dedup();
+    for inst in candidates {
+        if !existing.contains(&inst) {
+            merge_live_discovery_into_registry(inst);
+        }
+    }
+}
+
 fn merge_missing_drivers(mut registry: Value) -> Value {
     let default = default_registry();
     let default_drivers = default
@@ -849,15 +945,9 @@ fn whois_discovered_instances() -> Vec<u32> {
     out
 }
 
-/// When the persisted registry lacks field devices, merge Who-Is discoveries.
+/// Merge Who-Is discoveries (live + cached commission results) into driver tree.
 fn ensure_field_devices_from_whois() {
-    let existing = field_device_instances(&read_registry());
-    let existing: std::collections::HashSet<u32> = existing.into_iter().collect();
-    for inst in whois_discovered_instances() {
-        if !existing.contains(&inst) {
-            merge_live_discovery_into_registry(inst);
-        }
-    }
+    merge_missing_field_devices();
 }
 
 fn field_device_instances(registry: &Value) -> Vec<u32> {
@@ -1061,6 +1151,16 @@ pub fn poll_interval_s() -> u64 {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(60)
+}
+
+pub fn start_field_device_sync_loop(service_mode: String) {
+    if service_mode != "bridge" && service_mode != "commission" {
+        return;
+    }
+    thread::spawn(|| loop {
+        ensure_field_devices_from_whois();
+        thread::sleep(Duration::from_secs(30));
+    });
 }
 
 pub fn start_bacnet_poll_loop(service_mode: String) {
@@ -1445,7 +1545,11 @@ pub fn whois_json(body: &Value) -> String {
         None => None,
     };
     match bacnet_live::block_on(bacnet_live::whois_devices_with_range(low, high)) {
-        Ok(devices) => serde_json::to_string(&devices).unwrap_or_else(|_| "[]".to_string()),
+        Ok(devices) => {
+            persist_whois_discoveries(&devices);
+            merge_missing_field_devices();
+            serde_json::to_string(&devices).unwrap_or_else(|_| "[]".to_string())
+        }
         Err(err) => serde_json::to_string(&json!({"ok": false, "error": err}))
             .unwrap_or_else(|_| r#"{"ok":false}"#.to_string()),
     }
@@ -1610,11 +1714,32 @@ pub fn poll_metrics() -> Value {
 }
 
 fn persist_bacnet_reads_to_historian(reads: &[Value]) {
+    use crate::historian::feather_store;
     use crate::historian::store;
     use crate::model::scope;
-    let oa_t = reads
-        .iter()
-        .find_map(|r| r.get("present_value").and_then(|v| v.as_f64()));
+    use std::collections::BTreeMap;
+
+    let mut wide_cols: BTreeMap<String, f64> = BTreeMap::new();
+    let mut oa_t = None::<f64>;
+    for read in reads {
+        let val = read.get("present_value").and_then(|v| v.as_f64());
+        if val.is_none() {
+            continue;
+        }
+        let val = val.unwrap();
+        oa_t = Some(val).or(oa_t);
+        let col = read
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(feather_store::column_slug)
+            .or_else(|| {
+                read.get("id")
+                    .and_then(|v| v.as_str())
+                    .map(feather_store::column_slug)
+            })
+            .unwrap_or_else(|| "present-value".into());
+        wide_cols.insert(col, val);
+    }
     let Some(oa_t) = oa_t else {
         return;
     };
@@ -1625,6 +1750,10 @@ fn persist_bacnet_reads_to_historian(reads: &[Value]) {
         return;
     }
     let ts = Utc::now().to_rfc3339();
+    if !wide_cols.is_empty() {
+        let site_id = scope::resolve_site_id(None).unwrap_or_else(|| "site:local".to_string());
+        let _ = feather_store::write_wide_shard("bacnet", &site_id, &ts, &wide_cols);
+    }
     let row = store::make_pivot_row(store::PivotSample {
         timestamp: &ts,
         equipment_id: &equipment_id,

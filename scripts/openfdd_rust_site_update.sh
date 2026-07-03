@@ -59,6 +59,10 @@ AUTH="$ROOT/workspace/auth.env.local"
 openfdd_rust_login_smoke "http://127.0.0.1:8080" "$AUTH"
 openfdd_rust_warn_root_owned_workspace "$ROOT/workspace"
 
+if [[ -x "$ROOT/scripts/openfdd_post_update_data_recovery.sh" ]]; then
+  "$ROOT/scripts/openfdd_post_update_data_recovery.sh" || echo "WARN: post-update data recovery failed"
+fi
+
 if [[ "$SKIP_MAINT" != "1" ]]; then
   openfdd_rust_safe_docker_maintenance
 fi

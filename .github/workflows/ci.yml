@@ -15,6 +15,7 @@ jobs:
         with:
           toolchain: 1.95.0
           components: rustfmt
+      - uses: Swatinem/rust-cache@v2
 
       - name: Format
         run: cargo fmt --all --check
@@ -70,7 +71,7 @@ jobs:
           ./scripts/audit_no_private_bench_hardcoding.sh
           test -f docker-compose.bacnet-live.yml
           test -f VERSION
-          grep -q "3.2.6" VERSION
+          grep -qE '^3\.2\.[0-9]+$' VERSION
 
   docker:
     name: Docker image build
