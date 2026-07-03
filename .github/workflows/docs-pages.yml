@@ -1,9 +1,15 @@
 # Build and deploy Open-FDD docs to GitHub Pages (Just the Docs / Jekyll).
+# Pages source must be "GitHub Actions" (not legacy /docs branch Jekyll).
 
 name: Docs (GitHub Pages)
 
 on:
   push:
+    branches: [master, main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs-pages.yml"
+  pull_request:
     branches: [master, main]
     paths:
       - "docs/**"
@@ -24,6 +30,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: ruby/setup-ruby@v1
         with:
@@ -31,11 +39,19 @@ jobs:
           bundler-cache: true
           working-directory: docs
 
+      - name: Lock Ruby dependencies
+        run: bundle lock
+        working-directory: docs
+
       - name: Jekyll build
-        run: bundle exec jekyll build --trace
+        run: bundle exec jekyll build --trace --strict_front_matter
         working-directory: docs
         env:
           JEKYLL_ENV: production
+
+      - name: Verify site output
+        run: test -f _site/index.html && test -d _site/quick-start
+        working-directory: docs
 
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -43,6 +59,7 @@ jobs:
 
   deploy:
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

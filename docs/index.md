@@ -49,6 +49,7 @@ Open-FDD is intended for **LAN, VPN, or OT-network deployment**. Do not expose t
 4. [MCP & Agents]({{ site.baseurl }}/mcp-agents/) — Cursor / OpenClaw integration
 5. [Operations]({{ site.baseurl }}/operations/) — backup, update, GHCR images
 6. [Security]({{ site.baseurl }}/operations/security.html) — auth, secrets, BACnet write safety
+7. [Documentation site]({{ site.baseurl }}/operations/github-pages.html) — GitHub Pages build (Actions-only)
 
 ## Primary image
 

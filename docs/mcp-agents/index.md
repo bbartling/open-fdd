@@ -15,5 +15,6 @@ Open-FDD supports **MCP (Model Context Protocol)** for AI-assisted commissioning
 | [MCP setup](mcp.html) | Images, entrypoints, tools |
 | [Agent safety](agent-safety.html) | Hard boundaries for automation |
 | [Cursor & OpenClaw](cursor-openclaw.html) | IDE and edge agent wiring |
+| [External agent workflow](../examples/external-agents.html) | Codex, Cursor, MCP patterns |
 
 Repository reference: [mcp/README.md](https://github.com/bbartling/open-fdd/blob/master/mcp/README.md)

@@ -16,3 +16,4 @@ Production edge operations: backup, GHCR updates, security, and troubleshooting.
 | [GHCR images](ghcr-images.html) | Tags, platforms, release |
 | [Security](security.html) | Auth, TLS, secrets, BACnet |
 | [Troubleshooting](troubleshooting.html) | Common issues |
+| [Documentation site](github-pages.html) | GitHub Pages build & local preview |
