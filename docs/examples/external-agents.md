@@ -1,3 +1,9 @@
+---
+title: External agent workflow
+parent: MCP & Agents
+nav_order: 4
+---
+
 # External AI agent workflow
 
 Open-FDD does **not** include an embedded AI chatbot. Operators may use **external** agents — Codex CLI, Cursor, Rig (if MCP-capable), Claude Desktop, OpenClaw, or any MCP-compatible host. Those tools connect through the optional `openfdd-mcp` stdio server or the documented JWT REST API.

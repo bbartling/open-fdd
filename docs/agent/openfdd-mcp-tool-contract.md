@@ -1,3 +1,9 @@
+---
+title: MCP tool contract
+parent: External agents
+nav_order: 5
+---
+
 # MCP tool contract
 
 **Server:** `openfdd-mcp` · **Image:** `ghcr.io/bbartling/openfdd-mcp` · **Setup:** [mcp/README.md](../../mcp/README.md)

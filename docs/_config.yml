@@ -5,14 +5,22 @@ theme: just-the-docs
 url: https://bbartling.github.io
 baseurl: /open-fdd
 
+logo: "/assets/open-fdd-logo.png"
+
+color_scheme: light
+
 search_enabled: true
 heading_announcement: false
+back_to_top: true
+back_to_top_text: "Back to top"
 
 aux_links:
   GitHub:
     - //github.com/bbartling/open-fdd
   GHCR:
     - //github.com/bbartling/open-fdd/pkgs/container/openfdd-edge-rust
+  Releases:
+    - //github.com/bbartling/open-fdd/releases
 
 callouts:
   warning:
@@ -22,8 +30,21 @@ callouts:
     title: Important
     color: blue
 
+gh_edit_link: true
+gh_edit_link_text: "Edit this page on GitHub"
+gh_edit_repository: "https://github.com/bbartling/open-fdd"
+gh_edit_branch: "master"
+gh_edit_source: docs
+gh_edit_view_mode: "tree"
+
 exclude:
   - archive
+  - verification
+  - ai-agent-context.md
+  - agent/bench-327-closeout-agent-prompt.md
+  - agent/bench-328-closeout-agent-prompt.md
+  - agent/bench-329-closeout-agent-prompt.md
+  - agent/bench-driver-setup-wsl-agent.md
   - Gemfile
   - Gemfile.lock
   - openapi.yaml
