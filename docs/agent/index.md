@@ -40,8 +40,8 @@ See [examples/external-agents.md](../examples/external-agents.md).
 | [openfdd-agent-current-standing.md](openfdd-agent-current-standing.md) | What ships in 3.2.x |
 | [model-routing.md](model-routing.md) | Codex/Cursor agent routing |
 | [openfdd-mcp-tool-contract.md](openfdd-mcp-tool-contract.md) | MCP tool surface |
-| [bench-vs-source.md](bench-vs-source.md) | Bench vs WSL source trees |
-| [bench-330-beta-cycle-agent-prompt.md](bench-330-beta-cycle-agent-prompt.md) | **Linux edge tester — 3.3.0-beta cycle** |
+| [bench-vs-source.md](bench-vs-source.md) | Bench vs WSL source trees *(paste-only — not on Pages)* |
+| [bench-330-beta-cycle-agent-prompt.md](bench-330-beta-cycle-agent-prompt.md) | Linux edge tester — 3.3.0-beta cycle *(paste-only — not on Pages)* |
 | [bench-driver-setup-wsl-agent.md](bench-driver-setup-wsl-agent.md) | WSL builder agent setup |
 
 ## Repo-side config (allowed)

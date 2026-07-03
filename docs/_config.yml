@@ -39,10 +39,13 @@ gh_edit_view_mode: "tree"
 
 exclude:
   - archive
+  - verification
   - ai-agent-context.md
   - agent/bench-327-closeout-agent-prompt.md
   - agent/bench-328-closeout-agent-prompt.md
   - agent/bench-329-closeout-agent-prompt.md
+  - agent/bench-330-beta-cycle-agent-prompt.md
+  - agent/bench-vs-source.md
   - agent/bench-driver-setup-wsl-agent.md
   - Gemfile
   - Gemfile.lock

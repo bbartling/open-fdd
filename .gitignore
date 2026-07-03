@@ -14,7 +14,7 @@ workspace/logs/
 workspace/smoke-profiles/local/*.local.toml
 workspace/bootstrap_credentials*
 workspace/bench.env.local
-workspace/cursor.env.local
+workspace/bench/
 workspace/ollama.env.local
 workspace/codex.env.local
 workspace/agent-chat/
@@ -31,8 +31,6 @@ workspace/overrides/
 workspace/bacnet/
 workspace/fixtures/ahu_data/*.csv
 workspace/dashboard/node_modules/
-tools/cursor-chat-relay/
-tools/codex-chat-relay/
 frontend/assets/
 frontend/index.html
 **/*.db
