@@ -7,7 +7,7 @@ set -euo pipefail
 
 OPENFDD_ROOT="${OPENFDD_ROOT:-$HOME/open-fdd}"
 OPENFDD_REPO_REF="${OPENFDD_REPO_REF:-master}"
-OPENFDD_IMAGE_TAG="${OPENFDD_IMAGE_TAG:-latest}"
+OPENFDD_IMAGE_TAG="${OPENFDD_IMAGE_TAG:-nightly}"
 GITHUB_REPO="bbartling/open-fdd"
 DO_START=false
 FORCE_AUTH=false

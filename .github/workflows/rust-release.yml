@@ -1,19 +1,22 @@
-# Manual Rust 3.2.x release: CI → GHCR (edge + MCP) → git tag → GitHub Release.
-# Python-era GHCR/PyPI workflows are archived — Rust only.
+# Promote a Rust edge release: CI → GHCR (edge + MCP) → git tag → GitHub Release.
+# Nightly builds on master use rust-ghcr.yml (:nightly + :sha-*).
 name: Rust Release (GHCR + GitHub Release)
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "SemVer release version (e.g. 3.2.4)"
+        description: "SemVer (e.g. 3.3.0-beta.1 for beta, 3.3.0 for stable)"
         required: true
-        default: "3.2.6"
-      prerelease:
-        description: "Mark GitHub Release as pre-release (skips :latest on GHCR)"
-        required: false
-        default: false
-        type: boolean
+        default: "3.3.0-beta.1"
+      channel:
+        description: "Release channel"
+        required: true
+        default: beta
+        type: choice
+        options:
+          - beta
+          - stable
 
 permissions:
   contents: write
@@ -28,12 +31,14 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.ver.outputs.version }}
+      channel: ${{ steps.ver.outputs.channel }}
     steps:
       - uses: actions/checkout@v4
       - id: ver
         run: |
           v="${{ inputs.version }}"
           v="${v#v}"
+          channel="${{ inputs.channel }}"
           if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.+-]+)?$ ]]; then
             echo "Invalid SemVer: $v" >&2
             exit 1
@@ -43,7 +48,16 @@ jobs:
             echo "VERSION file ($file_ver) does not match input ($v)" >&2
             exit 1
           fi
+          if [[ "$channel" == "beta" && "$v" != *"-beta"* ]]; then
+            echo "Beta channel requires a -beta.N suffix (e.g. 3.3.0-beta.1)" >&2
+            exit 1
+          fi
+          if [[ "$channel" == "stable" && "$v" == *"-"* ]]; then
+            echo "Stable channel requires a plain semver (e.g. 3.3.0)" >&2
+            exit 1
+          fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
 
   test:
     needs: validate
@@ -99,7 +113,8 @@ jobs:
           tags: |
             type=raw,value=${{ needs.validate.outputs.version }}
             type=raw,value=v${{ needs.validate.outputs.version }}
-            type=raw,value=latest,enable=${{ inputs.prerelease == false }}
+            type=raw,value=beta,enable=${{ needs.validate.outputs.channel == 'beta' }}
+            type=raw,value=latest,enable=${{ needs.validate.outputs.channel == 'stable' }}
             type=sha,prefix=sha-,format=short
           labels: |
             org.opencontainers.image.title=Open-FDD Rust Edge
@@ -120,15 +135,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Verify published semver tags
+      - name: Verify published tags
         env:
           VER: ${{ needs.validate.outputs.version }}
+          CHANNEL: ${{ needs.validate.outputs.channel }}
         run: |
           for tag in "${VER}" "v${VER}"; do
-            echo "Inspecting ${{ env.EDGE_IMAGE }}:${tag}"
             docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:${tag}"
           done
-          if [[ "${{ inputs.prerelease }}" == "false" ]]; then
+          if [[ "$CHANNEL" == "beta" ]]; then
+            docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:beta"
+          else
             docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:latest"
           fi
 
@@ -152,12 +169,12 @@ jobs:
           tags: |
             type=raw,value=${{ needs.validate.outputs.version }}
             type=raw,value=v${{ needs.validate.outputs.version }}
-            type=raw,value=latest,enable=${{ inputs.prerelease == false }}
+            type=raw,value=beta,enable=${{ needs.validate.outputs.channel == 'beta' }}
+            type=raw,value=latest,enable=${{ needs.validate.outputs.channel == 'stable' }}
             type=sha,prefix=sha-,format=short
           labels: |
-            org.opencontainers.image.title=Open-FDD MCP (transitional slim image)
+            org.opencontainers.image.title=Open-FDD MCP
             org.opencontainers.image.source=https://github.com/bbartling/open-fdd
-            org.opencontainers.image.description=MCP stdio sidecar — also bundled in openfdd-edge-rust as /usr/local/bin/openfdd-mcp
             org.opencontainers.image.version=${{ needs.validate.outputs.version }}
 
       - uses: docker/build-push-action@v6
@@ -171,15 +188,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Verify published semver tags
+      - name: Verify published tags
         env:
           VER: ${{ needs.validate.outputs.version }}
+          CHANNEL: ${{ needs.validate.outputs.channel }}
         run: |
           for tag in "${VER}" "v${VER}"; do
-            echo "Inspecting ${{ env.MCP_IMAGE }}:${tag}"
             docker buildx imagetools inspect "${{ env.MCP_IMAGE }}:${tag}"
           done
-          if [[ "${{ inputs.prerelease }}" == "false" ]]; then
+          if [[ "$CHANNEL" == "beta" ]]; then
+            docker buildx imagetools inspect "${{ env.MCP_IMAGE }}:beta"
+          else
             docker buildx imagetools inspect "${{ env.MCP_IMAGE }}:latest"
           fi
 
@@ -198,7 +217,7 @@ jobs:
           if git ls-remote --exit-code origin "refs/tags/${TAG}" >/dev/null 2>&1; then
             echo "Tag ${TAG} already exists on origin — skipping create/push (republish)"
           else
-            git tag -a "${TAG}" -m "Open-FDD ${TAG} — Rust Edge"
+            git tag -a "${TAG}" -m "Open-FDD ${TAG} — Rust Edge (${{ needs.validate.outputs.channel }})"
             git push origin "${TAG}"
           fi
 
@@ -206,34 +225,30 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.validate.outputs.version }}
-          name: Open-FDD v${{ needs.validate.outputs.version }} — Rust Edge
-          prerelease: ${{ inputs.prerelease }}
-          make_latest: ${{ inputs.prerelease == false }}
+          name: Open-FDD v${{ needs.validate.outputs.version }} — Rust Edge (${{ needs.validate.outputs.channel }})
+          prerelease: ${{ needs.validate.outputs.channel == 'beta' }}
+          make_latest: ${{ needs.validate.outputs.channel == 'stable' }}
           body: |
-            ## Open-FDD Rust Edge v${{ needs.validate.outputs.version }}
+            ## Open-FDD Rust Edge v${{ needs.validate.outputs.version }} (${{ needs.validate.outputs.channel }})
 
             **Primary runtime image (LAN/VPN/OT — not public internet):**
             ```bash
-            ghcr.io/bbartling/openfdd-edge-rust:latest
             ghcr.io/bbartling/openfdd-edge-rust:${{ needs.validate.outputs.version }}
+            # Floating channel: beta or latest (see Release channels doc)
             ```
 
-            **MCP sidecar** (transitional — also included in edge image as `openfdd-mcp`):
+            **MCP sidecar** (also bundled in edge image as `openfdd-mcp`):
             ```bash
-            ghcr.io/bbartling/openfdd-mcp:latest
             ghcr.io/bbartling/openfdd-mcp:${{ needs.validate.outputs.version }}
             ```
-
-            ### Rust 3.2.x line
-            - Single `openfdd-edge-rust` image: bridge, dashboard, historian, commission, Haystack modes
-            - MCP binary bundled at `/usr/local/bin/openfdd-mcp`
-            - Python-era 3.1.x GHCR packages (`openfdd-bridge`, `openfdd-commission`, etc.) are **archived** and no longer published
 
             ### Deploy
             ```bash
             export OPENFDD_IMAGE_TAG=${{ needs.validate.outputs.version }}
             ./scripts/openfdd_rust_edge_bootstrap.sh --start
             ```
+
+            See [Release channels](https://bbartling.github.io/open-fdd/operations/release-channels.html) for nightly / beta / stable policy.
 
   prune-ghcr:
     needs: [validate, publish-edge, publish-mcp]
@@ -243,17 +258,20 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
-      - name: Prune stale GHCR versions (beta retention)
+      - name: Prune stale GHCR versions
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           chmod +x scripts/ghcr_prune_packages.sh
           ./scripts/ghcr_prune_packages.sh \
             --all-images \
-            --keep-releases 2 \
+            --keep-releases 3 \
             --delete-untagged-older-than-days 7 \
             --delete-sha-older-than-days 7 \
             --protect-tag "${{ needs.validate.outputs.version }}" \
             --protect-tag "v${{ needs.validate.outputs.version }}" \
+            --protect-tag nightly \
+            --protect-tag beta \
+            --protect-tag latest \
             --protected-tags-file scripts/ghcr-retention-protected-tags.txt \
             --confirm-delete

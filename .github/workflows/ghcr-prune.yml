@@ -1,4 +1,4 @@
-# GHCR retention — beta: keep 2 semver releases; prune after publish + weekly schedule.
+# GHCR retention — protect nightly/beta/latest; prune old sha-* and semver lines.
 
 name: Prune old GHCR images
 

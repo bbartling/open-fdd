@@ -5,7 +5,7 @@
   <a href="https://github.com/bbartling/open-fdd/actions/workflows/ci.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
   <a href="https://github.com/bbartling/open-fdd/actions/workflows/docs-pages.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/docs-pages.yml/badge.svg?branch=master" alt="Docs"></a>
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT">
-  <img src="https://img.shields.io/badge/status-Beta-blue" alt="Beta">
+  <img src="https://img.shields.io/badge/status-Alpha-orange" alt="Alpha">
   <img src="https://img.shields.io/badge/Rust-1.93-orange?logo=rust&logoColor=white" alt="Rust 1.93">
   <img src="https://img.shields.io/badge/Apache%20Arrow-53-blue" alt="Arrow">
   <img src="https://img.shields.io/badge/DataFusion-SQL-purple" alt="DataFusion">
@@ -134,7 +134,7 @@ Install and bootstrap Open-FDD Rust edge from https://github.com/bbartling/open-
 
 Important project facts:
 - Open-FDD 3.2 edge is a Rust edge runtime — use openfdd_rust_edge_bootstrap.sh, not the legacy Python bootstrap.
-- Primary GHCR image: ghcr.io/bbartling/openfdd-edge-rust:3.2.8 (pin `OPENFDD_IMAGE_TAG` — avoid `:latest` on field benches)
+- Primary GHCR image: `ghcr.io/bbartling/openfdd-edge-rust:nightly` (pin semver after a beta promotion)
 - Bootstrap script:
   https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_rust_edge_bootstrap.sh
 - ARM64: verify GHCR manifest with openfdd_rust_check_ghcr_platform.sh
@@ -224,7 +224,7 @@ Standard upgrade:
   ./scripts/openfdd_rust_edge_validate.sh
 
 Useful env vars:
-  NEW_TAG=latest                    GHCR tag (OPENFDD_IMAGE_TAG)
+  NEW_TAG=beta                      GHCR channel or semver pin (OPENFDD_IMAGE_TAG)
   OPENFDD_DOCKER_PLATFORM=auto      linux/arm64 | linux/amd64
 
 If validation fails:
@@ -273,7 +273,7 @@ The **`openfdd-mcp` binary ships inside `openfdd-edge-rust`** (same Cargo worksp
 ```bash
 cd ~/open-fdd
 export OPENFDD_COMPOSE_ROOT="$PWD"
-export OPENFDD_IMAGE_TAG=latest
+export OPENFDD_IMAGE_TAG=nightly
 
 docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar pull openfdd-mcp
 ```
@@ -304,7 +304,7 @@ export OPENFDD_MCP_TOKEN="$(
         "-e", "OPENFDD_API_BASE=http://127.0.0.1:8080",
         "-e", "OPENFDD_COMMISSION_BASE=http://127.0.0.1:9091",
         "-e", "OPENFDD_MCP_TOKEN",
-        "ghcr.io/bbartling/openfdd-edge-rust:3.2.6"
+        "ghcr.io/bbartling/openfdd-edge-rust:nightly"
       ],
       "env": {
         "OPENFDD_MCP_TOKEN": "<paste JWT from step 3>"
@@ -320,7 +320,7 @@ export OPENFDD_MCP_TOKEN="$(
 docker run -i --rm --network host --entrypoint openfdd-mcp \
   -e OPENFDD_API_BASE=http://127.0.0.1:8080 \
   -e OPENFDD_MCP_TOKEN="$OPENFDD_MCP_TOKEN" \
-  ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-latest}
+  ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-nightly}
 ```
 
 MCP uses **stdio JSON-RPC** — it is not an HTTP service on a port. Full tool list and bench topology: [mcp/README.md](mcp/README.md).
@@ -329,45 +329,31 @@ MCP uses **stdio JSON-RPC** — it is not an HTTP service on a port. Full tool l
 
 ---
 
-## Develop (Rust)
+## Develop
 
-Tested on Windows Subsystem for Linux (WSL)
+WSL or Linux. Prefer GHCR over local Docker builds (avoids OOM on small hosts).
 
 ```bash
 git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
 cp .env.example .env
-
-# GHCR bridge (recommended — no local Rust/npm in Docker):
+export OPENFDD_IMAGE_TAG=nightly
 ./scripts/openfdd_local_up.sh
-./scripts/openfdd_ui_dev.sh              # Vite :5173, API proxied to :8080
-
-# Native edge (WSL / Linux):
-cargo test --workspace
-cargo build --release -p open_fdd_edge_prototype
-OPENFDD_WORKSPACE=$PWD/workspace ./target/release/open_fdd_edge_prototype
+./scripts/openfdd_ui_dev.sh    # Vite :5173 → API :8080
 ```
 
-Avoid `docker compose up --build` on small hosts — it compiles Rust + npm in Docker and can OOM. Use `openfdd_local_up.sh` or GHCR images instead.
+Native Rust (optional): `cargo test --workspace && cargo build --release -p open_fdd_edge_prototype`
 
-Production-style local stack with Caddy TLS:
+## Releases
 
-```bash
-docker compose -f docker-compose.prod.yml up -d
-./scripts/openfdd_prod_validate.sh
-```
+| Channel | Tag | When to use |
+|---------|-----|-------------|
+| **Nightly** | `:nightly` / `:sha-*` | Dev, bench, agents (default) |
+| **Beta** | `:beta` / `3.3.0-beta.N` | Pilot sites after bench sign-off |
+| **Stable** | `:latest` / `3.3.0` | Production edge (not published yet) |
 
+**Maintainers:** Actions → **Rust Release** → set `VERSION` match + channel `beta` or `stable`.
 
-## Releases (Rust 3.2.x)
-
-| Channel | Image |
-|---------|--------|
-| **Default (early dev)** | Pin `OPENFDD_IMAGE_TAG=3.2.8` (avoid `:latest` on benches) |
-| **Pinned version** | `ghcr.io/bbartling/openfdd-edge-rust:3.2.4` or `:v3.2.4` |
-| **Short SHA** | `ghcr.io/bbartling/openfdd-edge-rust:sha-abc1234` |
-
-**Publish a release** (maintainers): GitHub Actions → **Rust Release (GHCR + GitHub Release)** → version `3.2.4`. Runs CI, pushes edge + MCP images, creates tag `v3.2.4`, and opens a GitHub Release.
-
-Python-era 3.1.x GHCR packages (`openfdd-bridge`, `openfdd-commission`, `openfdd-mcp-rag`, `openfdd-cloud-exporter`) are **archived** and no longer updated. Primary runtime: **`openfdd-edge-rust`** (includes `openfdd-mcp` binary). Slim `openfdd-mcp` image is transitional.
+Full policy: [Release channels](https://bbartling.github.io/open-fdd/operations/release-channels.html) · [GHCR images](https://bbartling.github.io/open-fdd/operations/ghcr-images.html)
 
 Open-FDD is for **LAN / VPN / OT networks**, not public internet hosting.
 
@@ -376,4 +362,4 @@ Open-FDD is for **LAN / VPN / OT networks**, not public internet hosting.
 
 MIT — see [LICENSE](LICENSE).
 
-Version: **3.2.8**
+Version: **3.3.0-beta.1** (next release candidate — see [release channels](https://bbartling.github.io/open-fdd/operations/release-channels.html))

@@ -46,7 +46,7 @@ while true; do
   fi
 
   echo "re-dispatching rust-release ${VERSION} (attempt ${retries}/${MAX_RETRIES})"
-  gh workflow run rust-release.yml -f "version=${VERSION}" -f prerelease=false
+  gh workflow run rust-release.yml -f "version=${VERSION}" -f channel=beta
   sleep 90
   RUN_ID="$(gh run list --workflow=rust-release.yml --limit 1 --json databaseId -q '.[0].databaseId')"
   echo "watching new run ${RUN_ID}"
