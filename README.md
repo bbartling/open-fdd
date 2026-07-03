@@ -240,7 +240,7 @@ Report: backup size, image tag, health pass/fail, whether backup was purged.
 <details>
 <summary><strong>Field bench: required workspace/data.env.local keys</strong></summary>
 
-Copy `workspace/bench/data.env.local.example` → `workspace/data.env.local` on OT benches. Never commit filled secrets.
+Create `workspace/data.env.local` on OT benches from your local runbook. Never commit filled secrets or LAN IPs to upstream.
 
 | Key | Required for | Notes |
 |-----|----------------|-------|

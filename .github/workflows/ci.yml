@@ -71,7 +71,7 @@ jobs:
           ./scripts/audit_no_private_bench_hardcoding.sh
           test -f docker-compose.bacnet-live.yml
           test -f VERSION
-          grep -qE '^3\.2\.[0-9]+$' VERSION
+          grep -qE '^3\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$' VERSION
 
   docker:
     name: Docker image build
