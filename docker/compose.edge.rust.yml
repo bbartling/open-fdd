@@ -22,7 +22,7 @@ name: openfdd-rust-edge
 services:
   openfdd-bridge:
     profiles: ["full-edge", "desktop-json-csv"]
-    image: ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-latest}
+    image: ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-nightly}
     pull_policy: always
     container_name: openfdd-bridge
     ports:
@@ -35,7 +35,7 @@ services:
       OPENFDD_BIND_HOST: "0.0.0.0"
       FRONTEND_DIR: /app/frontend
       OPENFDD_WORKSPACE: /var/openfdd/workspace
-      OPENFDD_IMAGE_TAG: ${OPENFDD_IMAGE_TAG:-latest}
+      OPENFDD_IMAGE_TAG: ${OPENFDD_IMAGE_TAG:-nightly}
       OPENFDD_BACNET_ENABLED: ${OPENFDD_BACNET_ENABLED:-1}
       OPENFDD_MODBUS_ENABLED: ${OPENFDD_MODBUS_ENABLED:-1}
       OPENFDD_HAYSTACK_ENABLED: ${OPENFDD_HAYSTACK_ENABLED:-1}
@@ -59,7 +59,7 @@ services:
 
   openfdd-commission:
     profiles: ["full-edge"]
-    image: ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-latest}
+    image: ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-nightly}
     pull_policy: always
     container_name: openfdd-commission
     network_mode: host
@@ -69,7 +69,7 @@ services:
       SERVICE_MODE: commission
       PORT: "9091"
       OPENFDD_WORKSPACE: /var/openfdd/workspace
-      OPENFDD_IMAGE_TAG: ${OPENFDD_IMAGE_TAG:-latest}
+      OPENFDD_IMAGE_TAG: ${OPENFDD_IMAGE_TAG:-nightly}
       OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-live}
       OPENFDD_BACNET_ENABLED: ${OPENFDD_BACNET_ENABLED:-1}
       OPENFDD_MODBUS_ENABLED: ${OPENFDD_MODBUS_ENABLED:-1}
@@ -120,7 +120,7 @@ services:
 
   openfdd-haystack-gateway:
     profiles: ["full-edge"]
-    image: ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-latest}
+    image: ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-nightly}
     pull_policy: always
     container_name: openfdd-haystack-gateway
     expose:
@@ -131,7 +131,7 @@ services:
       SERVICE_MODE: haystack-gateway
       PORT: "9092"
       OPENFDD_WORKSPACE: /var/openfdd/workspace
-      OPENFDD_IMAGE_TAG: ${OPENFDD_IMAGE_TAG:-latest}
+      OPENFDD_IMAGE_TAG: ${OPENFDD_IMAGE_TAG:-nightly}
       OPENFDD_HAYSTACK_ENABLED: ${OPENFDD_HAYSTACK_ENABLED:-1}
     env_file:
       - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/data.env.local
@@ -146,7 +146,7 @@ services:
 
   openfdd-mcp:
     profiles: ["mcp-sidecar"]
-    image: ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-latest}
+    image: ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-nightly}
     pull_policy: always
     container_name: openfdd-mcp
     entrypoint: ["openfdd-mcp"]
@@ -158,7 +158,7 @@ services:
       OPENFDD_COMMISSION_BASE: ${OPENFDD_COMMISSION_BASE:-http://127.0.0.1:9091}
       OPENFDD_MCP_TOKEN: ${OPENFDD_MCP_TOKEN:-}
       OPENFDD_BENCH_TOPOLOGY_FILE: ${OPENFDD_BENCH_TOPOLOGY_FILE:-}
-      OPENFDD_IMAGE_TAG: ${OPENFDD_IMAGE_TAG:-latest}
+      OPENFDD_IMAGE_TAG: ${OPENFDD_IMAGE_TAG:-nightly}
     volumes:
       - ${OPENFDD_COMPOSE_ROOT:?}/workspace:/var/openfdd/workspace:ro
     restart: "no"

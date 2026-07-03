@@ -9,7 +9,7 @@ nav_order: 1
 All production services run from one GHCR image with different `SERVICE_MODE` values:
 
 ```text
-ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-latest}
+ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-nightly}
 ```
 
 ## Service modes

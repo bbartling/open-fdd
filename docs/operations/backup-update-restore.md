@@ -1,7 +1,7 @@
 ---
 title: Backup, update, restore
 parent: Operations
-nav_order: 1
+nav_order: 2
 ---
 
 # Backup, update, restore

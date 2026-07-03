@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/openfdd_rust_site_lib.sh"
 
 IMAGE="${OPENFDD_RUST_GHCR_IMAGE:-ghcr.io/bbartling/openfdd-edge-rust}"
-TAG="${OPENFDD_IMAGE_TAG:-latest}"
+TAG="${OPENFDD_IMAGE_TAG:-nightly}"
 PLATFORM="$(openfdd_rust_export_docker_platform)"
 
 echo "Checking GHCR image: ${IMAGE}:${TAG}"

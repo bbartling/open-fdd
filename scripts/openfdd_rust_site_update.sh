@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/openfdd_rust_site_lib.sh"
 
 cd "$ROOT"
-OPENFDD_IMAGE_TAG="${NEW_TAG:-${OPENFDD_IMAGE_TAG:-latest}}"
+OPENFDD_IMAGE_TAG="${NEW_TAG:-${OPENFDD_IMAGE_TAG:-nightly}}"
 BACKUP_ROOT="${BACKUP_ROOT:-$HOME/openfdd-backups/latest}"
 REQUIRE_BACKUP="${REQUIRE_BACKUP:-1}"
 HEALTH_TIMEOUT="${OPENFDD_HEALTH_TIMEOUT_SECS:-120}"

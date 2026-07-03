@@ -1,7 +1,7 @@
 ---
 title: GHCR images
 parent: Operations
-nav_order: 2
+nav_order: 3
 ---
 
 # GHCR images
@@ -9,56 +9,50 @@ nav_order: 2
 ## Primary runtime
 
 ```text
-ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-latest}
+ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-nightly}
 ```
 
-## Tags
+Channel policy: [Release channels](release-channels.html).
 
-| Tag | Use |
-|-----|-----|
-| `latest` | Early development default |
-| `3.2.4` | Pinned semver |
-| `v3.2.4` | Release tag alias |
-| `sha-abc1234` | Short SHA traceability |
+## Tag reference
 
-## MCP (transitional)
+| Tag | Type | Description |
+|-----|------|-------------|
+| `nightly` | Floating | Latest green `master` build |
+| `beta` | Floating | Last promoted beta pre-release |
+| `latest` | Floating | Last promoted **stable** release |
+| `3.3.0-beta.1` | Immutable | Pinned beta semver |
+| `3.3.0` | Immutable | Pinned stable semver |
+| `v3.3.0` | Immutable | Release tag alias |
+| `sha-abc1234` | Immutable | Short git SHA (traceability) |
+
+## MCP sidecar
 
 ```text
-ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-latest}
+ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
 ```
 
-Same version line as edge. MCP binary is also bundled in the edge image.
-
-## Archived Python-era packages
-
-These are **no longer published** by CI:
-
-- `openfdd-bridge`
-- `openfdd-commission`
-- `openfdd-mcp-rag`
-- `openfdd-cloud-exporter`
+Same channel tags as edge. Prefer the edge image with `--entrypoint openfdd-mcp` when possible.
 
 ## Multi-arch
 
-Images publish `linux/amd64` and `linux/arm64`. Verify:
+Images publish `linux/amd64` and `linux/arm64`:
 
 ```bash
 ./scripts/openfdd_rust_check_ghcr_platform.sh
-docker manifest inspect ghcr.io/bbartling/openfdd-edge-rust:3.2.4
+docker manifest inspect ghcr.io/bbartling/openfdd-edge-rust:nightly
 ```
 
 ## OCI labels
 
 Release images include `org.opencontainers.image.version`, `revision`, `source`, and title `Open-FDD Rust Edge`.
 
-## Retention and pruning (beta)
-
-Open-FDD is in **beta** — old GHCR revisions are pruned automatically:
+## Retention
 
 | Trigger | Policy |
 |---------|--------|
-| After **master** edge publish | Keep **2** semver releases + `latest`; delete `sha-*` and untagged versions older than **7 days** |
-| After **rust-release** | Same, protecting the released version |
+| After **master** publish | Protect `nightly`, `beta`, `latest`; keep 3 semver lines; prune old `sha-*` > 7 days |
+| After **rust-release** | Same, protecting the released semver |
 | **Weekly** (Sundays 06:00 UTC) | Scheduled prune (`ghcr-prune.yml`) |
 
 Manual dry-run:
@@ -67,10 +61,11 @@ Manual dry-run:
 gh workflow run "Prune old GHCR images" -f dry_run=true
 ```
 
-Bench sites should **pin semver** (`OPENFDD_IMAGE_TAG=3.2.4`) — not `sha-*`. Diagnose pulls:
+Diagnose pulls:
 
 ```bash
-./scripts/openfdd_ghcr_diagnose.sh 3.2.4
+./scripts/openfdd_ghcr_diagnose.sh nightly
+./scripts/openfdd_ghcr_diagnose.sh 3.3.0-beta.1
 ```
 
-Do not delete package versions manually in the GitHub UI — use the prune workflow to avoid orphaned tags.
+Do not delete package versions manually in the GitHub UI — use the prune workflow.

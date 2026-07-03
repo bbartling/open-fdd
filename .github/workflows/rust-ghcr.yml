@@ -1,23 +1,12 @@
-# Publish Rust edge to GHCR on master (latest) or version tags.
-# Full release (GitHub Release + tag): use rust-release.yml workflow_dispatch.
+# Publish Rust edge to GHCR on every green master push (nightly channel only).
+# Semver / beta / stable: use rust-release.yml workflow_dispatch.
 name: Publish Rust edge to GHCR
 
 on:
   push:
-    tags:
-      - "v*.*.*"
     branches:
       - master
   workflow_dispatch:
-    inputs:
-      image_tag:
-        description: "Optional version tag override (default VERSION file)"
-        required: false
-        default: ""
-      tag_latest:
-        description: "Also tag :latest (default false — use rust-release.yml for latest)"
-        required: false
-        default: "false"
 
 permissions:
   contents: read
@@ -67,41 +56,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - id: ver
-        run: |
-          chmod +x scripts/resolve_ghcr_publish_tag.sh
-          # shellcheck source=scripts/resolve_ghcr_publish_tag.sh
-          source scripts/resolve_ghcr_publish_tag.sh
-          tag="$(resolve_ghcr_publish_tag "${GITHUB_REF_NAME}" "${{ inputs.image_tag }}")"
-          echo "version=$tag" >> "$GITHUB_OUTPUT"
-          # :latest is owned by rust-release.yml — master pushes must not move it.
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.tag_latest }}" == "true" ]]; then
-            echo "latest=1" >> "$GITHUB_OUTPUT"
-          elif [[ "${GITHUB_REF_NAME}" == v* ]]; then
-            echo "latest=1" >> "$GITHUB_OUTPUT"
-          else
-            echo "latest=0" >> "$GITHUB_OUTPUT"
-          fi
-          if [[ "${GITHUB_REF_NAME}" == v* ]]; then
-            echo "version_tag=1" >> "$GITHUB_OUTPUT"
-          else
-            echo "version_tag=0" >> "$GITHUB_OUTPUT"
-          fi
-
       - id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.EDGE_IMAGE }}
           tags: |
-            type=raw,value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch' }}
-            type=raw,value=v${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version_tag == '1' || github.ref == 'refs/heads/master' }}
-            type=raw,value=latest,enable=${{ steps.ver.outputs.latest == '1' }}
+            type=raw,value=nightly
             type=sha,prefix=sha-,format=short
           labels: |
             org.opencontainers.image.title=Open-FDD Rust Edge
             org.opencontainers.image.source=https://github.com/bbartling/open-fdd
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.ver.outputs.version }}
+            org.opencontainers.image.version=nightly
 
       - uses: docker/build-push-action@v6
         with:
@@ -112,25 +78,28 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            OPENFDD_IMAGE_TAG=${{ steps.ver.outputs.version }}
+            OPENFDD_IMAGE_TAG=nightly
             OPENFDD_BUILD_GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Published tags
-        run: docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:sha-${GITHUB_SHA::7}" || docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:${{ steps.ver.outputs.version }}"
+        run: |
+          docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:nightly"
+          docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:sha-${GITHUB_SHA::7}"
 
-      - name: Prune stale GHCR versions (beta retention)
+      - name: Prune stale GHCR versions
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           chmod +x scripts/ghcr_prune_packages.sh
           ./scripts/ghcr_prune_packages.sh \
             --all-images \
-            --keep-releases 2 \
+            --keep-releases 3 \
             --delete-untagged-older-than-days 7 \
             --delete-sha-older-than-days 7 \
-            --protect-tag "${{ steps.ver.outputs.version }}" \
-            --protect-tag "v${{ steps.ver.outputs.version }}" \
+            --protect-tag nightly \
+            --protect-tag beta \
+            --protect-tag latest \
             --protected-tags-file scripts/ghcr-retention-protected-tags.txt \
             --confirm-delete

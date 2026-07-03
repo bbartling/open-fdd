@@ -47,14 +47,14 @@ Open-FDD is intended for **LAN, VPN, or OT-network deployment**. Do not expose t
 2. [Architecture]({{ site.baseurl }}/architecture/) — services, data flow, storage
 3. [API Reference]({{ site.baseurl }}/api/) — REST route map
 4. [MCP & Agents]({{ site.baseurl }}/mcp-agents/) — Cursor / OpenClaw integration
-5. [Operations]({{ site.baseurl }}/operations/) — backup, update, GHCR images
+5. [Operations]({{ site.baseurl }}/operations/) — [release channels]({{ site.baseurl }}/operations/release-channels.html), backup, GHCR
 6. [Security]({{ site.baseurl }}/operations/security.html) — auth, secrets, BACnet write safety
 7. [Documentation site]({{ site.baseurl }}/operations/github-pages.html) — GitHub Pages build (Actions-only)
 
 ## Primary image
 
 ```text
-ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-latest}
+ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-nightly}
 ```
 
-Python-era 3.1.x GHCR packages are archived and no longer published. **Only `openfdd-edge-rust` is the primary runtime image going forward.**
+See [Release channels]({{ site.baseurl }}/operations/release-channels.html) for `:beta` and `:latest` promotion policy.
