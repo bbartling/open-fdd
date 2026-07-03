@@ -67,6 +67,7 @@ pub fn run() -> std::io::Result<()> {
     let root = env::var("FRONTEND_DIR").unwrap_or_else(|_| "/app/frontend".to_string());
     let service_mode = env::var("SERVICE_MODE").unwrap_or_else(|_| "bridge".to_string());
     drivers::bacnet::start_hourly_override_scanner(service_mode.clone());
+    drivers::bacnet::start_field_device_sync_loop(service_mode.clone());
     drivers::bacnet::start_bacnet_poll_loop(service_mode.clone());
     drivers::modbus::start_modbus_poll_loop(service_mode.clone());
     drivers::bacnet_server_runtime::start_background();
@@ -2144,7 +2145,7 @@ fn agent_update(body: &Value) -> Value {
     let tag = body
         .get("image_tag")
         .and_then(|v| v.as_str())
-        .unwrap_or("3.2.8");
+        .unwrap_or("3.2.9");
     json!({
         "ok": true,
         "dry_run": dry_run,
@@ -2179,6 +2180,8 @@ fn agent_validate() -> Value {
         "drivers": {
             "modbus_poll": modbus_poll,
             "historian_row_count": historian_rows,
+            "feather_bytes": crate::historian::feather_store::total_bytes(),
+            "feather_files": crate::historian::feather_store::feather_file_count(),
         },
         "scripts": {
             "rigorous_bench": "scripts/openfdd_rev326_rigorous_report.sh",

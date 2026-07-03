@@ -2,11 +2,13 @@
 
 use super::live_gate;
 use super::modbus_live;
+use crate::historian::feather_store;
 use crate::historian::store;
 use crate::model::scope;
 use crate::validation::profile::{active_profile, is_modbus_configured};
 use chrono::Utc;
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::env;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -277,6 +279,7 @@ fn poll_cycle_and_persist_detail() -> PollCycleDetail {
     let mut oa_h = None::<f64>;
     let mut reads_ok = 0_u64;
     let mut reads_failed = 0_u64;
+    let mut wide_cols: BTreeMap<String, f64> = BTreeMap::new();
 
     for pt in &points {
         let register = pt
@@ -297,7 +300,18 @@ fn poll_cycle_and_persist_detail() -> PollCycleDetail {
             Ok(v) => {
                 reads_ok += 1;
                 let value = v.get("value").and_then(|x| x.as_f64());
+                let name = pt.get("name").and_then(|x| x.as_str()).unwrap_or("");
                 let haystack = pt.get("haystack_id").and_then(|x| x.as_str()).unwrap_or("");
+                let col = if !name.is_empty() {
+                    feather_store::column_slug(name)
+                } else if !haystack.is_empty() {
+                    feather_store::column_slug(haystack)
+                } else {
+                    format!("reg-{reg}")
+                };
+                if let Some(val) = value {
+                    wide_cols.insert(col, val);
+                }
                 if haystack.contains("temp")
                     || haystack.contains("oa")
                     || reg == profile.modbus_register
@@ -309,6 +323,11 @@ fn poll_cycle_and_persist_detail() -> PollCycleDetail {
             }
             Err(_) => reads_failed += 1,
         }
+    }
+
+    if reads_ok > 0 && !wide_cols.is_empty() {
+        let site_id = scope::resolve_site_id(None).unwrap_or_else(|| "site:local".to_string());
+        let _ = feather_store::write_wide_shard("modbus", &site_id, &ts, &wide_cols);
     }
 
     if oa_t.is_none() && oa_h.is_none() {
@@ -392,6 +411,11 @@ pub fn poll_once_value() -> Value {
         "reads_failed": detail.reads_failed,
         "append_error": detail.append_error,
         "poll_cycles": MODBUS_POLL_CYCLES.load(Ordering::Relaxed),
+        "ingest": {
+            "feather_source": "modbus",
+            "feather_files": feather_store::feather_file_count(),
+            "feather_bytes": feather_store::total_bytes()
+        }
     })
 }
 

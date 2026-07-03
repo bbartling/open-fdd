@@ -10,7 +10,7 @@ RUN npm run build
 COPY frontend/style.css /app/frontend/
 
 FROM rust:1.95-bookworm AS builder
-ARG CARGO_BUILD_JOBS=2
+ARG CARGO_BUILD_JOBS=4
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 RUN apt-get update \
   && apt-get install -y --no-install-recommends clang libclang-dev build-essential pkg-config \

@@ -134,7 +134,7 @@ openfdd_rust_ensure_container_workspace() {
   mkdir -p "$ws/reports/generated" "$ws/logs" "$ws/data/drivers" "$ws/data/model"
   local auth="$ws/auth.env.local"
   if [[ -f "$auth" ]]; then
-    chmod 600 "$auth" 2>/dev/null || true
+    chmod 644 "$auth" 2>/dev/null || true
   fi
   if command -v chown >/dev/null 2>&1; then
     if [[ "$(id -u)" -eq 0 ]]; then

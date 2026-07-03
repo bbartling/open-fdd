@@ -92,9 +92,9 @@ fn disk_for_path(path: &Path) -> Value {
     }
     let storage_summary = data_management::storage_summary();
     let feather_bytes = storage_summary
-        .get("estimated_bytes")
+        .get("feather_bytes")
         .and_then(|v| v.as_u64())
-        .unwrap_or(used_bytes);
+        .unwrap_or_else(crate::historian::feather_store::total_bytes);
     json!({
         "available": true,
         "label": "Open-FDD workspace data",
