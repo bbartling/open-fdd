@@ -7,7 +7,7 @@ baseurl: /open-fdd
 
 logo: "/assets/open-fdd-logo.png"
 
-color_scheme: openfdd
+color_scheme: light
 
 search_enabled: true
 heading_announcement: false
