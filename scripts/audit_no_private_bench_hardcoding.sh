@@ -38,8 +38,11 @@ is_allowed() {
     workspace/smoke-profiles/local/local_5007_validation.local.toml.example) return 0 ;;
     workspace/smoke-profiles/local/local_haystack_5007_parity.local.toml.example) return 0 ;;
     tests/fixtures/*) return 0 ;;
+    edge/tests/fixtures/*) return 0 ;;
     docs/validation/*|docs/verification/*|docs/testing/*|docs/release_cleanup/*) return 0 ;;
     docs/agent/bench-driver-setup-wsl-agent.md) return 0 ;;
+    docs/agent/bench-*-closeout-agent-prompt.md) return 0 ;;
+    docs/archive/*) return 0 ;;
     docs/archive/agent/bench-driver-setup-wsl-agent.md) return 0 ;;
     docs/archive/verification/bacnet-nic-setup.md) return 0 ;;
     docs/archive/release_cleanup/current_pr_issue_ledger.md) return 0 ;;
