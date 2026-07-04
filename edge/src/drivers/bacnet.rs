@@ -338,29 +338,17 @@ fn ensure_field_device_shell(device_instance: u32, address: Option<String>) -> b
     false
 }
 
-fn merge_missing_field_devices() {
+/// Fast path for GET tree: promote Who-Is cache entries into the registry **without**
+/// live BACnet I/O (live discovery can block for many seconds and must not hang the API).
+fn merge_missing_field_devices_from_cache() {
     let existing = field_device_instances(&read_registry());
     let existing: std::collections::HashSet<u32> = existing.into_iter().collect();
     let mut candidates = cached_whois_instances();
     candidates.extend(whois_discovered_instances());
-    if let Ok(v) = env::var("OPENFDD_BACNET_DISCOVER_LOW") {
-        if let Ok(inst) = v.parse::<u32>() {
-            if inst > 0 {
-                candidates.push(inst);
-            }
-        }
-    }
     candidates.sort_unstable();
     candidates.dedup();
     for inst in candidates {
-        if existing.contains(&inst) {
-            continue;
-        }
-        let merged = merge_live_discovery_into_registry(inst);
-        let ok = merged.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
-        if !ok {
-            // Live object-list / RPM may fail (UDP bind conflict with local server, MSTP
-            // routing, etc.) but Who-Is already proved the instance exists — keep it in tree.
+        if !existing.contains(&inst) {
             let _ = ensure_field_device_shell(inst, cached_whois_address(inst));
         }
     }
@@ -1023,9 +1011,9 @@ fn whois_discovered_instances() -> Vec<u32> {
     out
 }
 
-/// Merge Who-Is discoveries (live + cached commission results) into driver tree.
+/// Merge cached Who-Is results into driver tree (no live I/O — safe for GET handlers).
 fn ensure_field_devices_from_whois() {
-    merge_missing_field_devices();
+    merge_missing_field_devices_from_cache();
 }
 
 fn field_device_instances(registry: &Value) -> Vec<u32> {
@@ -1625,7 +1613,9 @@ pub fn whois_json(body: &Value) -> String {
     match bacnet_live::block_on(bacnet_live::whois_devices_with_range(low, high)) {
         Ok(devices) => {
             persist_whois_discoveries(&devices);
-            merge_missing_field_devices();
+            // Shells only — do not run live object-list here (can hang OT). Point
+            // discovery is POST /api/bacnet/driver/sync-discovery or poll paths.
+            merge_missing_field_devices_from_cache();
             serde_json::to_string(&devices).unwrap_or_else(|_| "[]".to_string())
         }
         Err(err) => serde_json::to_string(&json!({"ok": false, "error": err}))
@@ -2354,6 +2344,9 @@ mod override_export_tests {
     #[test]
     fn whois_shell_adds_field_device_when_live_discovery_unavailable() {
         crate::test_support::with_temp_workspace(|root| {
+            // Generic instance + TEST-NET address — no site-specific OT hardcoding.
+            let inst = 424_242_u32;
+            let addr = "198.51.100.50:47808";
             let cache = root
                 .join("data")
                 .join("drivers")
@@ -2363,31 +2356,33 @@ mod override_export_tests {
             let _ = fs::write(
                 &cache,
                 serde_json::to_string_pretty(&json!({
-                    "instances": [5007],
+                    "instances": [inst],
                     "devices": [{
-                        "object_identifier": {"type": "device", "instance": 5007},
-                        "address": "192.168.204.200:47808"
+                        "object_identifier": {"type": "device", "instance": inst},
+                        "address": addr
                     }]
                 }))
                 .unwrap(),
             );
-            assert!(ensure_field_device_shell(
-                5007,
-                Some("192.168.204.200:47808".to_string())
-            ));
+            assert!(ensure_field_device_shell(inst, Some(addr.to_string())));
             let registry = read_registry();
             let devices = registry["drivers"][0]["devices"].as_array().unwrap();
-            let field = devices.iter().find(|d| {
-                d.get("device_instance").and_then(|v| v.as_u64()) == Some(5007)
-            });
-            assert!(field.is_some(), "field device 5007 must appear in tree");
-            assert_eq!(
-                field.unwrap()["address"].as_str(),
-                Some("192.168.204.200:47808")
-            );
+            let field = devices
+                .iter()
+                .find(|d| d.get("device_instance").and_then(|v| v.as_u64()) == Some(inst as u64));
+            assert!(field.is_some(), "Who-Is instance must appear in tree");
+            assert_eq!(field.unwrap()["address"].as_str(), Some(addr));
             assert_eq!(field.unwrap()["source"].as_str(), Some("whois-shell"));
             // Second call is a no-op (already present).
-            assert!(!ensure_field_device_shell(5007, None));
+            assert!(!ensure_field_device_shell(inst, None));
+            // Cache-only merge must not hang / invent devices beyond Who-Is.
+            merge_missing_field_devices_from_cache();
+            let again = read_registry();
+            let count = again["drivers"][0]["devices"]
+                .as_array()
+                .map(|a| a.len())
+                .unwrap_or(0);
+            assert!(count >= 1);
         });
     }
 }
