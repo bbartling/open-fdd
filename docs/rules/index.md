@@ -12,14 +12,11 @@ Supervisory fault detection runs as **DataFusion SQL** against Arrow historian t
 
 ## Rule Cookbook (start here)
 
-{: .important }
-**New:** Full HVAC FDD cookbooks for edge SQL and community Pandas — ported from the legacy Python rule-cookbook and expression guides.
-
 | Guide | Content |
 |-------|---------|
-| [**Rule Cookbook hub**](cookbook/) | **DataFusion SQL + Pandas** — GL36, economizer, plants, sensor validation |
-| [DataFusion SQL cookbook](cookbook/datafusion-sql-cookbook.html) | Copy-paste rules for `/sql-fdd` and API |
-| [Pandas cookbook](cookbook/pandas-cookbook.html) | Parallel patterns for notebooks & CSV (off-edge) |
+| [**Rule Cookbook hub**](cookbook/) | **DataFusion SQL + Pandas** — FC1–FC15, GL36, economizer, plants, sensors |
+| [DataFusion SQL cookbook](cookbook/datafusion-sql-cookbook.html) | Edge runtime — copy-paste rules for `/sql-fdd` and API |
+| [Pandas cookbook](cookbook/pandas-cookbook.html) | Same rules for analyst workflows **outside** Open-FDD |
 
 ## Reference
 
