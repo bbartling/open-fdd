@@ -267,23 +267,89 @@ fn cached_whois_instances() -> Vec<u32> {
         .unwrap_or_default()
 }
 
-fn merge_missing_field_devices() {
+/// Address from Who-Is cache for a field instance (if known).
+fn cached_whois_address(device_instance: u32) -> Option<String> {
+    let path = whois_cache_path();
+    let text = fs::read_to_string(path).ok()?;
+    let v: Value = serde_json::from_str(&text).ok()?;
+    let devices = v.get("devices")?.as_array()?;
+    for dev in devices {
+        let inst = dev
+            .get("object_identifier")
+            .and_then(|o| o.get("instance"))
+            .and_then(|x| x.as_u64())
+            .or_else(|| dev.get("device_instance").and_then(|x| x.as_u64()))
+            .map(|n| n as u32);
+        if inst == Some(device_instance) {
+            if let Some(addr) = dev.get("address").and_then(|a| a.as_str()) {
+                if !addr.is_empty() {
+                    return Some(addr.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Ensure a field device appears in the driver tree even when live point discovery fails.
+/// Who-Is alone must be enough for `GET /api/bacnet/driver/tree` to list the instance.
+fn ensure_field_device_shell(device_instance: u32, address: Option<String>) -> bool {
+    let local = bacnet_server::device_instance();
+    if device_instance == 0 || device_instance == local {
+        return false;
+    }
+    let mut registry = read_registry();
+    registry["bacnet_config"] = bacnet_config_value();
+    let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) else {
+        return false;
+    };
+    for driver in drivers {
+        if driver.get("id").and_then(|v| v.as_str()).unwrap_or("") != "bacnet-ip" {
+            continue;
+        }
+        let mut devices = driver
+            .get("devices")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        if devices.iter().any(|d| {
+            d.get("device_instance")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u32
+                == device_instance
+        }) {
+            return false;
+        }
+        let addr = address
+            .or_else(|| cached_whois_address(device_instance))
+            .unwrap_or_default();
+        devices.push(json!({
+            "device_instance": device_instance,
+            "name": format!("BACnet Device {device_instance}"),
+            "address": addr,
+            "polling_enabled": true,
+            "points": [],
+            "source": "whois-shell"
+        }));
+        driver["devices"] = json!(devices);
+        write_registry(&registry);
+        return true;
+    }
+    false
+}
+
+/// Fast path for GET tree: promote Who-Is cache entries into the registry **without**
+/// live BACnet I/O (live discovery can block for many seconds and must not hang the API).
+fn merge_missing_field_devices_from_cache() {
     let existing = field_device_instances(&read_registry());
     let existing: std::collections::HashSet<u32> = existing.into_iter().collect();
     let mut candidates = cached_whois_instances();
     candidates.extend(whois_discovered_instances());
-    if let Ok(v) = env::var("OPENFDD_BACNET_DISCOVER_LOW") {
-        if let Ok(inst) = v.parse::<u32>() {
-            if inst > 0 {
-                candidates.push(inst);
-            }
-        }
-    }
     candidates.sort_unstable();
     candidates.dedup();
     for inst in candidates {
         if !existing.contains(&inst) {
-            merge_live_discovery_into_registry(inst);
+            let _ = ensure_field_device_shell(inst, cached_whois_address(inst));
         }
     }
 }
@@ -945,9 +1011,9 @@ fn whois_discovered_instances() -> Vec<u32> {
     out
 }
 
-/// Merge Who-Is discoveries (live + cached commission results) into driver tree.
+/// Merge cached Who-Is results into driver tree (no live I/O — safe for GET handlers).
 fn ensure_field_devices_from_whois() {
-    merge_missing_field_devices();
+    merge_missing_field_devices_from_cache();
 }
 
 fn field_device_instances(registry: &Value) -> Vec<u32> {
@@ -1547,7 +1613,9 @@ pub fn whois_json(body: &Value) -> String {
     match bacnet_live::block_on(bacnet_live::whois_devices_with_range(low, high)) {
         Ok(devices) => {
             persist_whois_discoveries(&devices);
-            merge_missing_field_devices();
+            // Shells only — do not run live object-list here (can hang OT). Point
+            // discovery is POST /api/bacnet/driver/sync-discovery or poll paths.
+            merge_missing_field_devices_from_cache();
             serde_json::to_string(&devices).unwrap_or_else(|_| "[]".to_string())
         }
         Err(err) => serde_json::to_string(&json!({"ok": false, "error": err}))
@@ -2271,5 +2339,81 @@ mod override_export_tests {
             assert_eq!(pt["device_instance"].as_u64(), Some(5007));
             assert_eq!(pt["address"].as_str(), Some("198.51.100.50"));
         });
+    }
+
+    #[test]
+    fn whois_shell_adds_field_device_when_live_discovery_unavailable() {
+        crate::test_support::with_temp_workspace(|root| {
+            let pin_ws = || std::env::set_var("OPENFDD_WORKSPACE", root);
+            let prev_inst = std::env::var("OPENFDD_BACNET_DEVICE_INSTANCE").ok();
+            std::env::set_var("OPENFDD_BACNET_DEVICE_INSTANCE", "599999");
+            pin_ws();
+            write_registry(&default_registry());
+            // Generic instance + TEST-NET address — no site-specific OT hardcoding.
+            let inst = 987_654_u32;
+            let addr = "198.51.100.50:47808";
+            let cache = root
+                .join("data")
+                .join("drivers")
+                .join("bacnet")
+                .join("whois_discovered.json");
+            let _ = fs::create_dir_all(cache.parent().unwrap());
+            let _ = fs::write(
+                &cache,
+                serde_json::to_string_pretty(&json!({
+                    "instances": [inst],
+                    "devices": [{
+                        "object_identifier": {"type": "device", "instance": inst},
+                        "address": addr
+                    }]
+                }))
+                .unwrap(),
+            );
+            pin_ws();
+            assert!(ensure_field_device_shell(inst, Some(addr.to_string())));
+            pin_ws();
+            let registry = read_registry();
+            let devices = bacnet_devices_array(&registry);
+            let field = devices
+                .iter()
+                .find(|d| d.get("device_instance").and_then(|v| v.as_u64()) == Some(inst as u64));
+            assert!(field.is_some(), "Who-Is instance must appear in tree");
+            assert_eq!(field.unwrap()["address"].as_str(), Some(addr));
+            assert_eq!(field.unwrap()["source"].as_str(), Some("whois-shell"));
+            // Second call is a no-op (already present).
+            pin_ws();
+            assert!(!ensure_field_device_shell(inst, None));
+            // Cache-only merge must not hang / invent devices beyond Who-Is.
+            pin_ws();
+            merge_missing_field_devices_from_cache();
+            pin_ws();
+            let again = read_registry();
+            assert!(
+                bacnet_devices_array(&again)
+                    .iter()
+                    .any(|d| d.get("device_instance").and_then(|v| v.as_u64()) == Some(inst as u64)),
+                "Who-Is shell must survive cache merge"
+            );
+            if let Some(p) = prev_inst {
+                std::env::set_var("OPENFDD_BACNET_DEVICE_INSTANCE", p);
+            } else {
+                std::env::remove_var("OPENFDD_BACNET_DEVICE_INSTANCE");
+            }
+        });
+    }
+
+    fn bacnet_devices_array(registry: &Value) -> &[Value] {
+        registry
+            .get("drivers")
+            .and_then(|v| v.as_array())
+            .and_then(|drivers| {
+                drivers
+                    .iter()
+                    .find(|d| d.get("id").and_then(|v| v.as_str()) == Some("bacnet-ip"))
+            })
+            .and_then(|d| d.get("devices"))
+            .and_then(|v| v.as_array())
+            .map(|a| a.as_slice())
+            .unwrap_or(&[])
     }
 }

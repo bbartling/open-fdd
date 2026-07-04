@@ -93,7 +93,14 @@ OPENFDD_BACNET_DAEMON_MAX_CYCLES=0 ./scripts/openfdd_bacnet_poll_daemon.sh start
 | **After any test** | Verify daemon still running; restart if dead |
 | **Never** | Stop daemon at end of report "to save CPU" — charts/FDD need continuous ingest |
 
-**BACnet local server 599999:** `OPENFDD_BACNET_SERVER_ENABLED=1` in **both** `workspace/data.env.local` and `workspace/bacnet/commissioning/commission.env`.
+**BACnet local diagnostic server vs OT Who-Is (compose enforces defaults):**
+
+| Service | Default `OPENFDD_BACNET_SERVER_ENABLED` | Role |
+|---------|----------------------------------------|------|
+| `openfdd-bridge` | `1` (`OPENFDD_BRIDGE_BACNET_SERVER_ENABLED`) | Optional local diagnostic device (default instance **599999**) |
+| `openfdd-commission` | `0` (`OPENFDD_COMMISSION_BACNET_SERVER_ENABLED`) | OT Who-Is / ReadProperty on host-network UDP |
+
+Field devices are **whatever Who-Is returns** on that site — never hardcoded in product code. Verify with `docker exec … printenv OPENFDD_BACNET_SERVER_ENABLED`. After env/compose change: `openfdd_rust_dcompose up -d --force-recreate`.
 
 ---
 

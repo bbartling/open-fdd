@@ -209,21 +209,19 @@ pub fn column_slug(label: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
 
     #[test]
     fn write_shard_creates_feather_file() {
-        let ws = env::temp_dir().join(format!("ofdd-feather-{}", std::process::id()));
-        env::set_var("OPENFDD_WORKSPACE", &ws);
-        let mut cols = BTreeMap::new();
-        cols.insert("temp-deg-f".into(), 72.5);
-        cols.insert("rh".into(), 45.0);
-        let path = write_wide_shard("modbus", "site:local", "2026-07-03T12:00:00Z", &cols)
-            .expect("write shard");
-        assert!(path.exists());
-        assert!(path.extension().is_some_and(|x| x == "feather"));
-        assert!(path.metadata().map(|m| m.len()).unwrap_or(0) > 0);
-        env::remove_var("OPENFDD_WORKSPACE");
-        let _ = fs::remove_dir_all(ws);
+        crate::test_support::with_temp_workspace(|ws| {
+            let mut cols = BTreeMap::new();
+            cols.insert("temp-deg-f".into(), 72.5);
+            cols.insert("rh".into(), 45.0);
+            let path = write_wide_shard("modbus", "site:local", "2026-07-03T12:00:00Z", &cols)
+                .expect("write shard");
+            assert!(path.exists());
+            assert!(path.extension().is_some_and(|x| x == "feather"));
+            assert!(path.metadata().map(|m| m.len()).unwrap_or(0) > 0);
+            let _ = ws;
+        });
     }
 }

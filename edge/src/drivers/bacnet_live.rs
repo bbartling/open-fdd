@@ -309,16 +309,27 @@ pub async fn whois_devices_with_range(
     let (default_low, default_high) = discover_low_high();
     let low = low.unwrap_or(default_low);
     let high = high.unwrap_or(default_high);
-    let mut client = build_client().await.map_err(|e| e.to_string())?;
-    let result = async {
-        run_whois(&mut client, low, high).await?;
-        sleep(Duration::from_secs(discover_timeout_secs())).await;
-        let devices = client.discovered_devices().await;
-        Ok(devices.iter().map(device_to_json).collect())
+    // Hard ceiling so API callers never hang forever (bind / OT / router issues).
+    let budget = Duration::from_secs(discover_timeout_secs().saturating_add(5).max(10));
+    let work = async {
+        let mut client = build_client().await.map_err(|e| e.to_string())?;
+        let result = async {
+            run_whois(&mut client, low, high).await?;
+            sleep(Duration::from_secs(discover_timeout_secs())).await;
+            let devices = client.discovered_devices().await;
+            Ok(devices.iter().map(device_to_json).collect())
+        }
+        .await;
+        stop_client(client).await;
+        result
+    };
+    match tokio::time::timeout(budget, work).await {
+        Ok(inner) => inner,
+        Err(_) => Err(format!(
+            "BACnet Who-Is timed out after {}s (check bind NIC, UDP 47808 ownership, and that the local BACnet server is not enabled on the commission service)",
+            budget.as_secs()
+        )),
     }
-    .await;
-    stop_client(client).await;
-    result
 }
 
 pub async fn whois_devices() -> Result<Vec<Value>, String> {

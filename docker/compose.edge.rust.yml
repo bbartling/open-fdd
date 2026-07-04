@@ -42,12 +42,13 @@ services:
       OPENFDD_JSON_API_ENABLED: ${OPENFDD_JSON_API_ENABLED:-1}
       OPENFDD_IMPORT_ENABLED: ${OPENFDD_IMPORT_ENABLED:-1}
       OPENFDD_EXPORT_ENABLED: ${OPENFDD_EXPORT_ENABLED:-1}
+      # Bridge may run the diagnostic local device. Do not load commission.env here —
+      # that file's OPENFDD_BACNET_SERVER_ENABLED would override and steal OT Who-Is.
+      OPENFDD_BACNET_SERVER_ENABLED: ${OPENFDD_BRIDGE_BACNET_SERVER_ENABLED:-1}
     # Auth is read at runtime from OPENFDD_WORKSPACE/auth.env.local (do not use env_file —
     # Docker Compose mangles bcrypt `$` in hash values).
     env_file:
       - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/data.env.local
-        required: false
-      - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/bacnet/commissioning/commission.env
         required: false
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
@@ -73,6 +74,9 @@ services:
       OPENFDD_BACNET_MODE: ${OPENFDD_BACNET_MODE:-live}
       OPENFDD_BACNET_ENABLED: ${OPENFDD_BACNET_ENABLED:-1}
       OPENFDD_MODBUS_ENABLED: ${OPENFDD_MODBUS_ENABLED:-1}
+      # Commission owns OT Who-Is / ReadProperty on host-network UDP.
+      # Local BACnet server must stay off here (default 0) or field devices never appear.
+      OPENFDD_BACNET_SERVER_ENABLED: ${OPENFDD_COMMISSION_BACNET_SERVER_ENABLED:-0}
     env_file:
       - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/data.env.local
         required: false

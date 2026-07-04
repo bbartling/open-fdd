@@ -65,6 +65,13 @@ OPENFDD_IMAGE_TAG=nightly ./scripts/openfdd_src_sync_for_test.sh
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/health | jq '{status,image_tag,git_sha}'
 ```
 
+**BACnet env (must stay correct):**
+
+| File | Required |
+|------|----------|
+| `workspace/data.env.local` | `OPENFDD_BACNET_SERVER_ENABLED=1` (local diagnostic server on bridge) |
+| `workspace/bacnet/commissioning/commission.env` | `OPENFDD_BACNET_SERVER_ENABLED=0` (field Who-Is on commission) |
+
 ## Phase 2 — A′ BACnet (primary gate)
 
 ```bash
@@ -81,3 +88,12 @@ Post JSON snippets + verdict on **#429** and **#433**.
 ## Phase 3 — resume B–D
 
 Only after A′ **PASS**. Follow phases in [bench-330-beta-cycle-agent-prompt.md](./bench-330-beta-cycle-agent-prompt.md).
+
+Keep poll daemon running: `OPENFDD_BACNET_DAEMON_MAX_CYCLES=0 ./scripts/openfdd_bacnet_poll_daemon.sh start`
+
+## Never
+
+- `docker compose down -v` · delete `workspace/` · print tokens
+- Stop poll daemon after tests
+- Fix product code or `git push`
+- Close issues unless maintainer confirms PASS on pinned nightly

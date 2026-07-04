@@ -78,12 +78,16 @@ if [[ ! -f "$OPENFDD_ROOT/workspace/data.env.local" ]]; then
 OPENFDD_WORKSPACE=/var/openfdd/workspace
 OPENFDD_BACNET_MODE=live
 OPENFDD_MODBUS_MODE=live
+# Bridge diagnostic BACnet server (599999) — compose sets OPENFDD_BRIDGE_BACNET_SERVER_ENABLED=1
+OPENFDD_BACNET_SERVER_ENABLED=1
 EOF
 fi
 
 if [[ ! -f "$OPENFDD_ROOT/workspace/bacnet/commissioning/commission.env" ]]; then
   cat >"$OPENFDD_ROOT/workspace/bacnet/commissioning/commission.env" <<'EOF'
 # BACnet commissioning defaults — edit for live OT LAN
+# Commission container: field Who-Is only — local server MUST stay off (compose default 0).
+OPENFDD_BACNET_SERVER_ENABLED=0
 OPENFDD_BACNET_IFACE=<replace-with-iface>
 OPENFDD_BACNET_BIND=<replace-with-ip>/24:47808
 OPENFDD_BACNET_ROUTER_IP=<replace-with-router-ip>

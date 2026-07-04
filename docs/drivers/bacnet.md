@@ -10,8 +10,12 @@ BACnet/IP runs in the **commission** container (`network_mode: host`). The bridg
 
 ## Configuration
 
-- `workspace/bacnet/commissioning/commission.env` — NIC, BBMD, device filters
+- `workspace/bacnet/commissioning/commission.env` — NIC, BBMD, device filters (**`OPENFDD_BACNET_SERVER_ENABLED=0`** on commission)
+- `docker/compose.edge.rust.yml` — bridge vs commission server flags split (bridge **1**, commission **0**)
 - `OPENFDD_BACNET_MODE` — `live` for field buses
+
+{: .important }
+**Compose split:** bridge runs the local diagnostic device (599999). Commission runs field Who-Is — never enable the local BACnet server on the commission container.
 
 ## Key API routes
 
