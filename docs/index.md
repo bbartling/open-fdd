@@ -44,12 +44,13 @@ Open-FDD is intended for **LAN, VPN, or OT-network deployment**. Do not expose t
 ## Get started
 
 1. [Quick Start]({{ site.baseurl }}/quick-start/) — GHCR bootstrap, first login, health check
-2. [Architecture]({{ site.baseurl }}/architecture/) — services, data flow, storage
-3. [API Reference]({{ site.baseurl }}/api/) — REST route map
-4. [MCP & Agents]({{ site.baseurl }}/mcp-agents/) — Cursor / OpenClaw integration
-5. [Operations]({{ site.baseurl }}/operations/) — [release channels]({{ site.baseurl }}/operations/release-channels.html), backup, GHCR
-6. [Security]({{ site.baseurl }}/operations/security.html) — auth, secrets, BACnet write safety
-7. [Documentation site]({{ site.baseurl }}/operations/github-pages.html) — GitHub Pages build (Actions-only)
+2. [**FDD Rule Cookbook**]({{ site.baseurl }}/rules/cookbook/) — **DataFusion SQL + Pandas** HVAC fault patterns
+3. [Architecture]({{ site.baseurl }}/architecture/) — services, data flow, storage
+4. [API Reference]({{ site.baseurl }}/api/) — REST route map
+5. [MCP & Agents]({{ site.baseurl }}/mcp-agents/) — Cursor / OpenClaw integration
+6. [Operations]({{ site.baseurl }}/operations/) — [release channels]({{ site.baseurl }}/operations/release-channels.html), backup, GHCR
+7. [Security]({{ site.baseurl }}/operations/security.html) — auth, secrets, BACnet write safety
+8. [Documentation site]({{ site.baseurl }}/operations/github-pages.html) — GitHub Pages build (Actions-only)
 
 ## Primary image
 

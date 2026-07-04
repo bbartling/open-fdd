@@ -24,7 +24,7 @@ Query via REST:
 
 ## DataFusion SQL
 
-Fault detection rules are **DataFusion SQL** statements executed against historian tables. The **SQL FDD Rules** tab (`/sql-fdd`) provides a workbench to compile, preview, validate, and run rules.
+Fault detection rules are **DataFusion SQL** statements executed against historian tables. See the [**Rule Cookbook**]({{ site.baseurl }}/rules/cookbook/) for full HVAC patterns.
 
 API highlights:
 

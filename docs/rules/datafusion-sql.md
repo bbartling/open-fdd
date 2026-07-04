@@ -14,7 +14,7 @@ The **SQL FDD Rules** tab (`/sql-fdd`) provides:
 - Equipment-scoped SQL editor with **Format SQL**
 - Validate / Run against live historian rows
 
-See [SQL FDD Rules tab]({{ site.baseurl }}/web-app/sql-fdd-rules.html).
+See [Rule Cookbook]({{ site.baseurl }}/rules/cookbook/datafusion-sql-cookbook.html) for copy-paste HVAC patterns and [SQL FDD Rules tab]({{ site.baseurl }}/web-app/sql-fdd-rules.html).
 
 ## Rule lifecycle
 
