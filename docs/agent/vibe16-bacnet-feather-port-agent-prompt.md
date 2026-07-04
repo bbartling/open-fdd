@@ -74,7 +74,7 @@ gh issue list --state open --limit 20
 gh pr list --state open
 ```
 
-Read open PR **#445** (BACnet Who-Is shell). Rebase or fold into your branch if still open.
+Read open PRs on `master`. **#445 merged** — first edge iteration should test BACnet compose split + Who-Is shell.
 
 ### Cycle 1 — pick one vertical slice
 
@@ -129,10 +129,19 @@ Comment on **#429** and **#433**:
 
 ```markdown
 **Product:** merged PR #NNN @ `<sha>` — GHCR `:nightly` publishing.
-**Bench:** please re-run Phase A′ (Who-Is + tree) then B–D per bench-330-beta-cycle prompt.
+**Bench:** please re-run orchestration loop (linux-edge-tester-prompt) — all-drivers matrix + A→A′→B.
 ```
 
 Do **not** poll GH Actions in a tight loop. Check `rust-ghcr.yml` once per 15–30 min.
+
+### When bench posts Product handoff (FAIL block)
+
+1. Read JSON evidence on **#429** / **#433** — identify failing driver (Modbus, BACnet, Haystack, historian)
+2. Reproduce locally if possible (`cargo test`, compose smoke)
+3. Ship **one** focused PR; comment on the issue with PR link
+4. After merge, post nightly sha on issue — bench owns re-test
+
+**Do not** ask bench to patch Rust. **Do not** close issues — bench re-verifies first.
 
 ---
 
