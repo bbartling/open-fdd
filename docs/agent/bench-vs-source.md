@@ -36,7 +36,7 @@ OPENFDD_IMAGE_TAG="${OPENFDD_IMAGE_TAG:-nightly}" ./scripts/openfdd_src_sync_for
 | Poll daemon | Local `openfdd_bacnet_poll_daemon.sh` — **`OPENFDD_BACNET_DAEMON_MAX_CYCLES=0`** (unlimited) |
 | Bounded cycles | Only inside a single test phase (`run-for N`) |
 | After tests | Daemon **stays running** — do not stop overnight |
-| BACnet server 599999 | `OPENFDD_BACNET_SERVER_ENABLED=1` in `data.env.local` + `commission.env` |
+| BACnet server 599999 | Bridge compose default **SERVER_ENABLED=1**; **commission.env `=0`** |
 
 After env changes: `openfdd_rust_dcompose up -d --force-recreate`.
 

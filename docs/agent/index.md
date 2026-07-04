@@ -42,7 +42,8 @@ See [examples/external-agents.md](../examples/external-agents.md).
 | [openfdd-mcp-tool-contract.md](openfdd-mcp-tool-contract.md) | MCP tool surface |
 | [bench-vs-source.md](bench-vs-source.md) | Bench vs product source trees *(paste-only — not on Pages)* |
 | [vibe16-bacnet-feather-port-agent-prompt.md](vibe16-bacnet-feather-port-agent-prompt.md) | **Product agent** — vibe16 BACnet/Feather port cycle *(paste-only)* |
-| [bench-330-beta-cycle-agent-prompt.md](bench-330-beta-cycle-agent-prompt.md) | **Bench agent** — Linux edge tester *(paste-only)* |
+| [linux-edge-tester-prompt.md](linux-edge-tester-prompt.md) | **Linux edge tester** — turnkey copy-paste validation *(paste-only)* |
+| [bench-330-beta-cycle-agent-prompt.md](bench-330-beta-cycle-agent-prompt.md) | **Bench agent** — full 3.3.0-beta cycle *(paste-only)* |
 | [bench-330-issue-iteration-agent-prompt.md](bench-330-issue-iteration-agent-prompt.md) | Bench iteration loop after product merges *(paste-only)* |
 | [bench-driver-setup-wsl-agent.md](bench-driver-setup-wsl-agent.md) | WSL setup reference |
 
