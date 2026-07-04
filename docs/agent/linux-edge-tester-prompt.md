@@ -18,11 +18,117 @@ Will post evidence on #429, #433, and linked issues. No git push.
 
 1. Deploy latest **GHCR `:nightly`** after each product merge
 2. Run gated validation phases (A → A′ → B → C → D)
-3. Post **copy-paste evidence** on GitHub issues (JSON snippets, pass/fail)
-4. Update `workspace/reports/REV_330_RIGOROUS_TEST_REPORT.md` when running local harness
-5. Keep **poll daemon running** permanently (production-like)
+3. **Orchestrate GitHub issues** — post evidence, tag product agent on FAIL, re-test after each nightly (see loop below)
+4. Prove **all drivers poll → Feather → historian** (Modbus, BACnet, Haystack, JSON API as configured)
+5. Update `workspace/reports/REV_330_RIGOROUS_TEST_REPORT.md` when running local harness
+6. Keep **poll daemon running** permanently (production-like)
 
 **Never:** fix product code on bench · `docker compose down -v` · delete `workspace/` · print tokens
+
+---
+
+## Issue orchestration loop (run until #429 Sign-off: YES)
+
+You and the **WSL product agent** ([vibe16 prompt](https://github.com/bbartling/open-fdd/blob/master/docs/agent/vibe16-bacnet-feather-port-agent-prompt.md)) take turns until every driver polls and the app is solid.
+
+```
+┌─────────────┐     FAIL + evidence      ┌──────────────┐
+│ Edge tester │ ───────────────────────► │ Product agent│
+│  (you)      │ ◄─────────────────────── │  (WSL PR)    │
+└─────────────┘     merge + :nightly     └──────────────┘
+       │                                         │
+       └──── re-pull nightly, re-run gates ─────┘
+```
+
+### Each iteration (repeat — do not stop early)
+
+| Step | Action |
+|------|--------|
+| **1** | Session start (pull `:nightly`, recreate compose, health check) |
+| **2** | Verify BACnet env split + start poll daemon |
+| **3** | Run **All-drivers polling matrix** (below) — record PASS/FAIL per driver |
+| **4** | Run phases A → A′ → B → (C/D if unblocked) |
+| **5** | Post on **#429** (always) + every issue whose status **changed** |
+| **6** | If any FAIL → post **Product handoff** block on failing issue(s); **wait** for new nightly |
+| **7** | Poll `rust-ghcr.yml` at most every **15–30 min**; when new `git_sha` → go to step 1 |
+
+**Do not** close issues yourself. **Do not** claim Sign-off: YES until the rubric at the bottom is met.
+
+### First-time on this bench (before iteration 1)
+
+If you have **not** deployed yet:
+
+```bash
+cd /home/ben/open-fdd
+export OPENFDD_IMAGE_TAG=nightly
+export OPENFDD_COMPOSE_ROOT="$PWD"
+
+# Bootstrap if workspace/ is fresh
+./scripts/openfdd_rust_edge_bootstrap.sh --start   # or your bench bootstrap
+
+# Ensure commission.env exists with SERVER_ENABLED=0
+mkdir -p workspace/bacnet/commissioning
+grep -q BACNET_SERVER workspace/bacnet/commissioning/commission.env 2>/dev/null || \
+  echo 'OPENFDD_BACNET_SERVER_ENABLED=0' >> workspace/bacnet/commissioning/commission.env
+
+# Full-edge profile (bridge + commission + haystack)
+./scripts/openfdd_rust_dcompose up -d --force-recreate
+./scripts/openfdd_rust_edge_validate.sh
+```
+
+Then continue with **Session start** and the orchestration loop.
+
+### Post comments with `gh` (from bench — read-only on issues)
+
+```bash
+# Requires gh auth on bench (integrator token or gh login)
+REPO=bbartling/open-fdd
+BODY_FILE=/tmp/edge-iteration.md   # fill from template below
+
+gh issue comment 429 --repo "$REPO" --body-file "$BODY_FILE"
+gh issue comment 433 --repo "$REPO" --body-file /tmp/bacnet-evidence.md   # when BACnet flips
+```
+
+If `gh` is unavailable, paste the same markdown in the GitHub web UI.
+
+### Product handoff block (paste on #433 or #429 when FAIL)
+
+```markdown
+### Product handoff — edge FAIL @ `<git_sha>`
+
+**Nightly:** `image_tag` from `/api/health`
+**Blocked gate:** A′ BACnet | Modbus poll | Haystack | JSON API | (pick one)
+
+**Evidence (redact secrets):**
+\`\`\`json
+<paste jq output — whois, tree, poll/status, agent/validate>
+\`\`\`
+
+**Env checked:**
+- commission.env `OPENFDD_BACNET_SERVER_ENABLED=0` Y/N
+- compose recreated Y/N
+- poll daemon running Y/N
+
+**Request:** product agent — fix on WSL, merge PR, publish `:nightly`. Bench will re-run orchestration loop when `git_sha` advances.
+
+@vibe16 — see failing driver above. No bench code changes.
+```
+
+### When product merges (you detect new nightly)
+
+```bash
+gh run list --workflow=rust-ghcr.yml --branch master --limit 1 \
+  --json conclusion,headSha,updatedAt
+
+# Compare headSha to last tested sha in your #429 comment
+# If newer + success → session start → full matrix again
+```
+
+Comment on **#429**:
+
+```markdown
+**Re-test started** — nightly @ `<new_sha>` (was `<old_sha>`). Running orchestration loop iteration N.
+```
 
 ---
 
@@ -115,6 +221,47 @@ OPENFDD_BACNET_DAEMON_MAX_CYCLES=0 ./scripts/openfdd_bacnet_poll_daemon.sh start
 ```
 
 Do **not** stop daemon after tests. Use bounded cycles only inside a single phase script.
+
+---
+
+## All-drivers polling matrix (every iteration)
+
+Run after session start. **Pass** = poll status shows activity, feather/historian grows, no sustained errors.
+
+| Driver | Poll / status API | Refresh / live read | Pass criteria |
+|--------|-------------------|---------------------|---------------|
+| **Modbus** | `GET /api/modbus/poll/status` | `POST /api/modbus/refresh` or read | `samples` ↑; feather under `feather_store/modbus/` |
+| **BACnet** | `GET /api/bacnet/poll/status` | `POST /api/bacnet/read` | Who-Is + tree OK; `samples` ↑ or live read OK; feather under `feather_store/bacnet/` |
+| **Haystack** | `GET /api/haystack/status` | `POST /api/haystack/poll-once` | test/read returns rows when configured |
+| **JSON API** | driver tree / configured sources | `POST /api/json-api/read` | configured sources return when live |
+
+**One-shot matrix script** (paste after `$TOKEN` is set):
+
+```bash
+echo "=== Agent validate (rollup) ==="
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/agent/validate | jq .
+
+echo "=== Modbus ==="
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/modbus/poll/status | jq .
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/modbus/driver/tree | jq '.drivers[0].devices | length'
+
+echo "=== BACnet ==="
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/bacnet/poll/status | jq .
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/bacnet/commission/status | jq .
+
+echo "=== Haystack ==="
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/haystack/status | jq .
+curl -s -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/haystack/test -d '{}' | jq .
+
+echo "=== Historian / Feather ==="
+find workspace/data/feather_store -name '*.feather' 2>/dev/null | wc -l
+ls -lt workspace/data/feather_store/*/*/*.feather 2>/dev/null | head -5
+
+echo "=== Health ==="
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/health | jq '{status,image_tag,git_sha,version}'
+```
+
+Post matrix results on **#429** every iteration. Driver-specific FAILs also go on **#433** (BACnet/historian) or **#431** (agent validate).
 
 ---
 
@@ -216,11 +363,23 @@ Track **#435**.
 **Deploy:** `image_tag` / `version` from `/api/health`
 **Poll daemon:** running | stopped
 **Compose:** full-edge recreated Y/N
+**Iteration:** N (orchestration loop)
+
+### All-drivers polling matrix
+
+| Driver | Poll status | Feather/historian | Result |
+|--------|-------------|-------------------|--------|
+| Modbus | samples=… | modbus feathers=… | PASS/FAIL |
+| BACnet | samples=… / whois OK | bacnet feathers=… | PASS/FAIL |
+| Haystack | status=… | rows on test | PASS/FAIL/SKIP |
+| JSON API | configured Y/N | read OK | PASS/FAIL/SKIP |
+
+### Phases
 
 | Phase | Result | Evidence |
 |-------|--------|----------|
-| A modbus→feather | PASS/FAIL | samples=… feather_files=… |
-| A′ BACnet Who-Is | PASS/FAIL | whois returned in …s |
+| A modbus→feather | PASS/FAIL | |
+| A′ BACnet Who-Is | PASS/FAIL | whois …s |
 | A′ driver tree | PASS/FAIL | instances=[…] |
 | B FDD soak | PASS/FAIL/SKIP | |
 | C rigorous | PASS/FAIL/SKIP | |
@@ -228,10 +387,10 @@ Track **#435**.
 
 **Sign-off:** YES / NO
 
-**Waiting on product:** #445 merged / none / <issue list>
+**Waiting on product:** none | new nightly for `<issue>` | blocked on `<describe>`
 ```
 
-Also comment on **#433** when BACnet status changes.
+Also comment on **#433** when BACnet/historian status changes; **#431** when `/api/agent/validate` improves.
 
 ---
 
@@ -265,6 +424,20 @@ Local profile: `workspace/bench/bench_profile.toml` (never commit — OT IPs, `r
 
 ---
 
-## Done when
+## Done when (Sign-off rubric)
 
-**#429** comment says **Sign-off: YES** with Phase A + A′ + B green (C/D per open issues), poll daemon running, and all blocking issues PASS or explicitly deferred by maintainer.
+Post **Sign-off: YES** on **#429** only when **all** are true on a **pinned** `git_sha`:
+
+| # | Criterion |
+|---|-----------|
+| 1 | `:nightly` deployed; `/api/health` OK |
+| 2 | Poll daemon running (`MAX_CYCLES=0`) |
+| 3 | **Modbus** — poll samples increment; feather files grow |
+| 4 | **BACnet** — Who-Is JSON <30s; driver tree lists field instances; poll or read OK |
+| 5 | **Haystack** — status/test PASS (if enabled on site) |
+| 6 | **Historian** — row_count / feather shards grow over soak window |
+| 7 | Phase **B** FDD soak PASS |
+| 8 | Phase **C/D** PASS or explicitly deferred by maintainer on linked issues |
+| 9 | No open **blocker** on #433/#431 without maintainer deferral |
+
+Until then: keep the **orchestration loop** running — test → post → wait for product → re-test.
