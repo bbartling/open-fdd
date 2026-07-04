@@ -3,14 +3,14 @@
 | Path | Purpose | Git push? |
 |------|---------|-----------|
 | **`/home/ben/open-fdd`** | Field bench — GHCR containers, `workspace/`, **local** test harness, reports | **No** |
-| **`/home/ben/open-fdd-src`** | Read-only source — bug analysis, FIX prompts for WSL | **No** |
+| **`/home/ben/src/open-fdd`** | **Product source** — Rust edge, docs, PRs (also called `open-fdd-src`) | **Yes** (maintainers / product agent) |
 
-## Tester role
+## Roles
 
-- **Test, document, maintain scripts locally** on the bench tree (rigorous harness is **not** in upstream)
-- Results → `workspace/reports/REV_330_RIGOROUS_TEST_REPORT.md` + GitHub [#429](https://github.com/bbartling/open-fdd/issues/429)
-- **Do not fix product code** on bench — write WSL builder prompts with paths from `open-fdd-src`
-- **Do not open upstream PRs** for bench-only scripts — restore from Google Drive backup on the edge machine
+| Agent | Tree | Charter |
+|-------|------|---------|
+| **Bench (Linux edge)** | `/home/ben/open-fdd` | Test, document, local harness → [#429](https://github.com/bbartling/open-fdd/issues/429). **No product edits.** |
+| **Product (WSL/source)** | `/home/ben/src/open-fdd` | Implement vibe16 BACnet/Feather ports, **ship PRs**. [vibe16 prompt](./vibe16-bacnet-feather-port-agent-prompt.md) |
 
 ## GHCR channels
 
