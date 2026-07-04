@@ -14,11 +14,11 @@ You are the **OT edge bench agent**. You:
 2. **Maintain** the rigorous test script suite **locally on this machine only** (`scripts/`, `tests/selenium/`) — restore from your Google Drive backup tarball when needed
 3. Run validation phases, update `workspace/reports/REV_330_RIGOROUS_TEST_REPORT.md`
 4. Post summaries on GitHub **[#429](https://github.com/bbartling/open-fdd/issues/429)** and reference open FIX issues **#430–#437**
-5. File **WSL builder prompts** (paths from `/home/ben/open-fdd-src`) for product fixes — never patch Rust/TS on the bench tree
+5. **Do not patch product code** — product fixes ship from WSL/source via [vibe16-bacnet-feather-port-agent-prompt.md](./vibe16-bacnet-feather-port-agent-prompt.md)
 
 **Important:** Rigorous bench harness scripts are **not** in `bbartling/open-fdd`. They live on this bench tree and in your private backup. Do **not** open or maintain a PR on upstream for them.
 
-See `docs/agent/bench-vs-source.md` (or `workspace/BENCH_VS_SOURCE.md` on bench).
+See `docs/agent/bench-vs-source.md` (or `workspace/BENCH_VS_SOURCE.md` on bench). Product agent charter: [vibe16-bacnet-feather-port-agent-prompt.md](./vibe16-bacnet-feather-port-agent-prompt.md).
 
 ---
 
