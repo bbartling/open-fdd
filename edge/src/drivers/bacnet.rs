@@ -2344,8 +2344,13 @@ mod override_export_tests {
     #[test]
     fn whois_shell_adds_field_device_when_live_discovery_unavailable() {
         crate::test_support::with_temp_workspace(|root| {
+            let pin_ws = || std::env::set_var("OPENFDD_WORKSPACE", root);
+            let prev_inst = std::env::var("OPENFDD_BACNET_DEVICE_INSTANCE").ok();
+            std::env::set_var("OPENFDD_BACNET_DEVICE_INSTANCE", "599999");
+            pin_ws();
+            write_registry(&default_registry());
             // Generic instance + TEST-NET address — no site-specific OT hardcoding.
-            let inst = 424_242_u32;
+            let inst = 987_654_u32;
             let addr = "198.51.100.50:47808";
             let cache = root
                 .join("data")
@@ -2364,9 +2369,11 @@ mod override_export_tests {
                 }))
                 .unwrap(),
             );
+            pin_ws();
             assert!(ensure_field_device_shell(inst, Some(addr.to_string())));
+            pin_ws();
             let registry = read_registry();
-            let devices = registry["drivers"][0]["devices"].as_array().unwrap();
+            let devices = bacnet_devices_array(&registry);
             let field = devices
                 .iter()
                 .find(|d| d.get("device_instance").and_then(|v| v.as_u64()) == Some(inst as u64));
@@ -2374,15 +2381,39 @@ mod override_export_tests {
             assert_eq!(field.unwrap()["address"].as_str(), Some(addr));
             assert_eq!(field.unwrap()["source"].as_str(), Some("whois-shell"));
             // Second call is a no-op (already present).
+            pin_ws();
             assert!(!ensure_field_device_shell(inst, None));
             // Cache-only merge must not hang / invent devices beyond Who-Is.
+            pin_ws();
             merge_missing_field_devices_from_cache();
+            pin_ws();
             let again = read_registry();
-            let count = again["drivers"][0]["devices"]
-                .as_array()
-                .map(|a| a.len())
-                .unwrap_or(0);
-            assert!(count >= 1);
+            assert!(
+                bacnet_devices_array(&again)
+                    .iter()
+                    .any(|d| d.get("device_instance").and_then(|v| v.as_u64()) == Some(inst as u64)),
+                "Who-Is shell must survive cache merge"
+            );
+            if let Some(p) = prev_inst {
+                std::env::set_var("OPENFDD_BACNET_DEVICE_INSTANCE", p);
+            } else {
+                std::env::remove_var("OPENFDD_BACNET_DEVICE_INSTANCE");
+            }
         });
+    }
+
+    fn bacnet_devices_array(registry: &Value) -> &[Value] {
+        registry
+            .get("drivers")
+            .and_then(|v| v.as_array())
+            .and_then(|drivers| {
+                drivers
+                    .iter()
+                    .find(|d| d.get("id").and_then(|v| v.as_str()) == Some("bacnet-ip"))
+            })
+            .and_then(|d| d.get("devices"))
+            .and_then(|v| v.as_array())
+            .map(|a| a.as_slice())
+            .unwrap_or(&[])
     }
 }
