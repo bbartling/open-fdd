@@ -93,7 +93,14 @@ OPENFDD_BACNET_DAEMON_MAX_CYCLES=0 ./scripts/openfdd_bacnet_poll_daemon.sh start
 | **After any test** | Verify daemon still running; restart if dead |
 | **Never** | Stop daemon at end of report "to save CPU" — charts/FDD need continuous ingest |
 
-**BACnet local server 599999:** `OPENFDD_BACNET_SERVER_ENABLED=1` in **both** `workspace/data.env.local` and `workspace/bacnet/commissioning/commission.env`.
+**BACnet local server 599999 (critical split):**
+
+| File | Value | Why |
+|------|-------|-----|
+| `workspace/data.env.local` | `OPENFDD_BACNET_SERVER_ENABLED=1` | Bridge exposes diagnostic device **599999** |
+| `workspace/bacnet/commissioning/commission.env` | `OPENFDD_BACNET_SERVER_ENABLED=0` | Commission owns OT Who-Is on UDP 47808 — **must stay 0** or field device **5007** never appears |
+
+If commission has `=1`, Who-Is only sees 599999 and Phase A BACnet stays FAIL. After env change: `openfdd_rust_dcompose up -d --force-recreate`.
 
 ---
 
