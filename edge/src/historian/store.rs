@@ -141,7 +141,25 @@ pub fn workspace_dir() -> PathBuf {
 }
 
 fn ensure_dir() {
-    let _ = fs::create_dir_all(bench_dir());
+    let dir = bench_dir();
+    let _ = fs::create_dir_all(&dir);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = fs::metadata(&dir) {
+            let mut perms = meta.permissions();
+            perms.set_mode(0o2775);
+            let _ = fs::set_permissions(&dir, perms);
+        }
+        let pivot = pivot_jsonl_path();
+        if pivot.exists() {
+            if let Ok(meta) = fs::metadata(&pivot) {
+                let mut perms = meta.permissions();
+                perms.set_mode(0o664);
+                let _ = fs::set_permissions(&pivot, perms);
+            }
+        }
+    }
 }
 
 pub fn append_pivot_row(row: &Value) -> Result<(), String> {

@@ -146,6 +146,19 @@ async fn run_whois(
     Ok(())
 }
 
+fn bip_mac_from_address(addr: &str) -> Option<Vec<u8>> {
+    let (host, port) = if let Some((h, p)) = addr.rsplit_once(':') {
+        (h, p.parse::<u16>().unwrap_or(0xBAC0))
+    } else {
+        (addr, 0xBAC0)
+    };
+    let ip: Ipv4Addr = host.parse().ok()?;
+    let mut mac = Vec::with_capacity(6);
+    mac.extend_from_slice(&ip.octets());
+    mac.extend_from_slice(&port.to_be_bytes());
+    Some(mac)
+}
+
 async fn prepare_device_for_read(
     client: &mut BACnetClient<BipTransport>,
     device_instance: u32,
@@ -160,6 +173,16 @@ async fn prepare_device_for_read(
                 .map_err(|e| e.to_string())?;
         }
         return Ok(());
+    }
+    if client.get_device(device_instance).await.is_none() {
+        if let Some(addr) = super::bacnet::cached_field_device_address(device_instance) {
+            if let Some(mac) = bip_mac_from_address(&addr) {
+                let _ = client.add_device(device_instance, &mac).await;
+                if client.get_device(device_instance).await.is_some() {
+                    return Ok(());
+                }
+            }
+        }
     }
     let (mut low, mut high) = discover_low_high();
     if device_instance > 0 {
