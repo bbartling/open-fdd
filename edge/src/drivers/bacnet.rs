@@ -2354,6 +2354,7 @@ mod override_export_tests {
             // Generic instance + TEST-NET address — no site-specific OT hardcoding.
             let inst = 987_654_u32;
             let addr = "198.51.100.50:47808";
+            let reg_path = root.join("data").join("drivers").join("bacnet").join("driver_tree.json");
             let cache = root
                 .join("data")
                 .join("drivers")
@@ -2374,7 +2375,10 @@ mod override_export_tests {
             pin_ws();
             assert!(ensure_field_device_shell(inst, Some(addr.to_string())));
             pin_ws();
-            let registry = read_registry();
+            let registry: Value = serde_json::from_str(
+                &fs::read_to_string(&reg_path).expect("registry file after whois shell"),
+            )
+            .expect("registry json");
             let devices = bacnet_devices_array(&registry);
             let field = devices
                 .iter()
@@ -2389,7 +2393,10 @@ mod override_export_tests {
             pin_ws();
             merge_missing_field_devices_from_cache();
             pin_ws();
-            let again = read_registry();
+            let again: Value = serde_json::from_str(
+                &fs::read_to_string(&reg_path).expect("registry after cache merge"),
+            )
+            .expect("registry json");
             assert!(
                 bacnet_devices_array(&again)
                     .iter()
