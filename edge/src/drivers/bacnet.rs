@@ -1857,10 +1857,7 @@ pub fn poll_metrics() -> Value {
         .iter()
         .filter(|p| p.get("polling_enabled").and_then(|v| v.as_bool()) == Some(true))
         .count();
-    let last_poll = BACNET_LAST_POLL
-        .lock()
-        .ok()
-        .and_then(|g| g.clone());
+    let last_poll = BACNET_LAST_POLL.lock().ok().and_then(|g| g.clone());
     json!({
         "samples": BACNET_POLL_SAMPLES.load(Ordering::Relaxed),
         "enabled_points": enabled,
