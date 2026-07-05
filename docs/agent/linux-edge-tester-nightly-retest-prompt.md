@@ -25,7 +25,7 @@ No git push. No product code edits on bench.
 
 | Item | Value |
 |------|-------|
-| **Expected `git_sha` prefix** | `38df801` |
+| **Expected `git_sha` prefix** | latest green nightly (was `38df801` / **3.2.10** bench fixes) |
 | **Includes** | #451 P0 BACnet server runtime + poll historian persist; #455/#456 CI fixes |
 | **Last bench test** | `f5f66bd` (pre-#451 — FAIL server panic + historian stuck) |
 | **GHCR tag** | `ghcr.io/bbartling/openfdd-edge-rust:nightly` |

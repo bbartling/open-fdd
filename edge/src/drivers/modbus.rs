@@ -364,7 +364,11 @@ fn poll_cycle_and_persist_detail() -> PollCycleDetail {
         Err(e) => PollCycleDetail {
             reads_ok,
             reads_failed,
-            samples_written: 0,
+            samples_written: if reads_ok > 0 && !wide_cols.is_empty() {
+                1
+            } else {
+                0
+            },
             append_error: Some(e),
         },
     }

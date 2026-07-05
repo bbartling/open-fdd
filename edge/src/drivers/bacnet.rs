@@ -268,7 +268,7 @@ fn cached_whois_instances() -> Vec<u32> {
 }
 
 /// Address from Who-Is cache for a field instance (if known).
-fn cached_whois_address(device_instance: u32) -> Option<String> {
+pub fn cached_field_device_address(device_instance: u32) -> Option<String> {
     let path = whois_cache_path();
     let text = fs::read_to_string(path).ok()?;
     let v: Value = serde_json::from_str(&text).ok()?;
@@ -321,7 +321,7 @@ fn ensure_field_device_shell(device_instance: u32, address: Option<String>) -> b
             return false;
         }
         let addr = address
-            .or_else(|| cached_whois_address(device_instance))
+            .or_else(|| cached_field_device_address(device_instance))
             .unwrap_or_default();
         devices.push(json!({
             "device_instance": device_instance,
@@ -349,7 +349,7 @@ fn merge_missing_field_devices_from_cache() {
     candidates.dedup();
     for inst in candidates {
         if !existing.contains(&inst) {
-            let _ = ensure_field_device_shell(inst, cached_whois_address(inst));
+            let _ = ensure_field_device_shell(inst, cached_field_device_address(inst));
         }
     }
 }
@@ -623,19 +623,86 @@ fn registry_pollable_point_count(registry: &Value) -> usize {
             }
             if let Some(devs) = driver.get("devices").and_then(|v| v.as_array()) {
                 for device in devs {
-                    if let Some(pts) = device.get("points").and_then(|v| v.as_array()) {
-                        count += pts
-                            .iter()
-                            .filter(|p| {
-                                p.get("polling_enabled").and_then(|v| v.as_bool()) == Some(true)
-                            })
-                            .count();
-                    }
+                    count += device_pollable_point_count(device);
                 }
             }
         }
     }
     count
+}
+
+fn device_pollable_point_count(device: &Value) -> usize {
+    device
+        .get("points")
+        .and_then(|v| v.as_array())
+        .map(|pts| {
+            pts.iter()
+                .filter(|p| p.get("polling_enabled").and_then(|v| v.as_bool()) == Some(true))
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+fn device_pollable_point_count_for_instance(registry: &Value, device_instance: u32) -> usize {
+    if let Some(drivers) = registry.get("drivers").and_then(|v| v.as_array()) {
+        for driver in drivers {
+            if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
+                continue;
+            }
+            if let Some(devs) = driver.get("devices").and_then(|v| v.as_array()) {
+                for device in devs {
+                    if device
+                        .get("device_instance")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as u32
+                        == device_instance
+                    {
+                        return device_pollable_point_count(device);
+                    }
+                }
+            }
+        }
+    }
+    0
+}
+
+fn ensure_pollable_points_for_field_devices() {
+    let registry = read_registry();
+    for inst in field_device_instances(&registry) {
+        if device_pollable_point_count_for_instance(&registry, inst) == 0 {
+            let _ = merge_live_discovery_into_registry(inst);
+        }
+    }
+}
+
+fn bacnet_server_enabled() -> bool {
+    env::var("OPENFDD_BACNET_SERVER_ENABLED")
+        .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+        .unwrap_or_else(|_| {
+            env::var("OPENFDD_BACNET_ENABLED")
+                .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+                .unwrap_or(true)
+        })
+}
+
+fn whois_range_includes(local: u32, low: Option<u32>, high: Option<u32>) -> bool {
+    match (low, high) {
+        (Some(l), Some(h)) => local >= l && local <= h,
+        (Some(l), None) => local >= l,
+        (None, Some(h)) => local <= h,
+        (None, None) => true,
+    }
+}
+
+fn local_whois_device_entry() -> Value {
+    let inst = bacnet_server::device_instance();
+    json!({
+        "object_identifier": {"type": "device", "instance": inst},
+        "device_instance": inst,
+        "address": format!("local:{}", env::var("OPENFDD_BACNET_BIND").unwrap_or_else(|_| "0.0.0.0/24:47808".to_string())),
+        "name": bacnet_server::device_name(),
+        "local_server": true
+    })
 }
 
 fn merge_ui_objects_into_registry(device_instance: u32, body: &Value, objects: &[Value]) -> Value {
@@ -1249,7 +1316,8 @@ pub fn poll_cycle_value() -> Value {
     if registry_pollable_point_count(&registry) == 0 {
         ensure_field_devices_from_whois();
         registry = read_registry();
-        if registry_pollable_point_count(&registry) == 0 {
+        ensure_pollable_points_for_field_devices();
+        if registry_pollable_point_count(&read_registry()) == 0 {
             let inst = bench_device_instance();
             let local = bacnet_server::device_instance();
             if inst > 0 && inst != local {
@@ -1314,6 +1382,8 @@ pub fn poll_cycle_value() -> Value {
     if samples > 0 && !all_reads.is_empty() {
         persist_bacnet_reads_to_historian(&all_reads);
         BACNET_POLL_SAMPLES.fetch_add(samples, Ordering::Relaxed);
+    }
+    if samples > 0 || updated > 0 {
         if let Ok(mut g) = BACNET_LAST_POLL.lock() {
             *g = Some(now_rfc3339());
         }
@@ -1613,11 +1683,26 @@ pub fn whois_json(body: &Value) -> String {
         None => None,
     };
     match bacnet_live::block_on(bacnet_live::whois_devices_with_range(low, high)) {
-        Ok(devices) => {
+        Ok(mut devices) => {
             persist_whois_discoveries(&devices);
-            // Shells only — do not run live object-list here (can hang OT). Point
-            // discovery is POST /api/bacnet/driver/sync-discovery or poll paths.
             merge_missing_field_devices_from_cache();
+            let local = bacnet_server::device_instance();
+            if bacnet_server_enabled() && whois_range_includes(local, low, high) {
+                let has_local = devices.iter().any(|d| {
+                    d.get("object_identifier")
+                        .and_then(|o| o.get("instance"))
+                        .and_then(|v| v.as_u64())
+                        .map(|n| n as u32 == local)
+                        .unwrap_or(false)
+                        || d.get("device_instance")
+                            .and_then(|v| v.as_u64())
+                            .map(|n| n as u32 == local)
+                            .unwrap_or(false)
+                });
+                if !has_local {
+                    devices.push(local_whois_device_entry());
+                }
+            }
             serde_json::to_string(&devices).unwrap_or_else(|_| "[]".to_string())
         }
         Err(err) => serde_json::to_string(&json!({"ok": false, "error": err}))
@@ -1772,14 +1857,14 @@ pub fn poll_metrics() -> Value {
         .iter()
         .filter(|p| p.get("polling_enabled").and_then(|v| v.as_bool()) == Some(true))
         .count();
+    let last_poll = BACNET_LAST_POLL
+        .lock()
+        .ok()
+        .and_then(|g| g.clone());
     json!({
         "samples": BACNET_POLL_SAMPLES.load(Ordering::Relaxed),
         "enabled_points": enabled,
-        "at": BACNET_LAST_POLL
-            .lock()
-            .ok()
-            .and_then(|g| g.clone())
-            .unwrap_or_else(now_rfc3339)
+        "at": last_poll.map(Value::String).unwrap_or(Value::Null)
     })
 }
 

@@ -16,6 +16,7 @@ use std::env;
 use std::net::Ipv4Addr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
+use std::thread;
 use tokio::time::{sleep, Duration};
 
 const UNITS_NONE: u32 = 95;
@@ -239,12 +240,27 @@ pub fn start_background() {
     if !server_enabled() || !super::bacnet_live::is_live_mode() {
         return;
     }
-    // Tokio allows one Runtime per process; bacnet_live already owns it for field I/O.
-    super::bacnet_live::spawn_background(async {
-        if let Err(e) = run_server().await {
-            eprintln!("Open-FDD BACnet server error: {e}");
-        }
-    });
+    static STARTED: AtomicBool = AtomicBool::new(false);
+    if STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    // BACnetServer::build() must not run on bacnet_live's worker pool — it creates an
+    // inner tokio runtime and panics ("Cannot start a runtime from within a runtime").
+    // Isolate the server on its own OS thread with a dedicated current-thread runtime.
+    thread::Builder::new()
+        .name("openfdd-bacnet-server".into())
+        .spawn(|| {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("bacnet server tokio runtime");
+            rt.block_on(async {
+                if let Err(e) = run_server().await {
+                    eprintln!("Open-FDD BACnet server error: {e}");
+                }
+            });
+        })
+        .ok();
 }
 
 #[cfg(test)]
