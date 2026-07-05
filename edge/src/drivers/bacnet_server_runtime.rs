@@ -239,17 +239,11 @@ pub fn start_background() {
     if !server_enabled() || !super::bacnet_live::is_live_mode() {
         return;
     }
-    std::thread::spawn(|| {
-        let rt = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .thread_name("openfdd-bacnet-server")
-            .build()
-            .expect("bacnet server tokio runtime");
-        rt.block_on(async {
-            if let Err(e) = run_server().await {
-                eprintln!("Open-FDD BACnet server error: {e}");
-            }
-        });
+    // Tokio allows one Runtime per process; bacnet_live already owns it for field I/O.
+    super::bacnet_live::spawn_background(async {
+        if let Err(e) = run_server().await {
+            eprintln!("Open-FDD BACnet server error: {e}");
+        }
     });
 }
 
