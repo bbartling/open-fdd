@@ -1,0 +1,2 @@
+{"timestamp":"2026-07-01T14:00:00Z","equipment_id":"equip:test-vav","zone_flow":120.0,"damper_pct":5.0,"clg_available":true,"reheat_valve_pct":0.6,"oa_t":55.0}
+{"timestamp":"2026-07-01T14:01:00Z","equipment_id":"equip:test-vav","zone_flow":115.0,"damper_pct":4.0,"clg_available":true,"reheat_valve_pct":0.55,"oa_t":55.0}

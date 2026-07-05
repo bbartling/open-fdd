@@ -1,0 +1,2 @@
+{"timestamp":"2026-07-01T14:00:00Z","equipment_id":"equip:test-vav","zone_flow":200.0,"min_flow_sp":300.0,"damper_pct":40.0,"fan_cmd":1.0}
+{"timestamp":"2026-07-01T14:01:00Z","equipment_id":"equip:test-vav","zone_flow":180.0,"min_flow_sp":300.0,"damper_pct":38.0,"fan_cmd":1.0}

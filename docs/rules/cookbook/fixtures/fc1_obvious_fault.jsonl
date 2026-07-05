@@ -1,0 +1,2 @@
+{"timestamp":"2026-07-01T14:00:00Z","equipment_id":"equip:test-ahu","duct_static":0.5,"duct_static_sp":1.0,"fan_cmd":0.95}
+{"timestamp":"2026-07-01T14:01:00Z","equipment_id":"equip:test-ahu","duct_static":0.48,"duct_static_sp":1.0,"fan_cmd":0.96}

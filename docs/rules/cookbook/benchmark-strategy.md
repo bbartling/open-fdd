@@ -47,7 +47,15 @@ Public, reproducible validation for cookbook rules — no proprietary datasets r
 {"timestamp":"2026-07-01T12:00:00Z","equipment_id":"equip:test-ahu","oa_t":75.0,"sat":55.0,"sat_sp":55.0,"fan_cmd":1.0,"fan_status":true}
 ```
 
-Store under `docs/rules/cookbook/fixtures/` (JSONL, not rendered by Jekyll — prefix with `_` or exclude).
+Store under `docs/rules/cookbook/fixtures/` (excluded from GitHub Pages).
+
+Run offline:
+
+```bash
+python3 scripts/cookbook_parity_check.py --all
+```
+
+CI: `.github/workflows/cookbook-parity.yml`
 
 ---
 
