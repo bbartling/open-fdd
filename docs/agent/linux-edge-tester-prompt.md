@@ -52,6 +52,8 @@ You and the **WSL product agent** ([vibe16 prompt](https://github.com/bbartling/
 | **6** | If any FAIL → post **Product handoff** block on failing issue(s); **wait** for new nightly |
 | **7** | Poll `rust-ghcr.yml` at most every **15–30 min**; when new `git_sha` → go to step 1 |
 
+**GH Actions watch mode:** when product says “wait for nightly”, use the dedicated paste prompt [linux-edge-tester-gh-actions-watch-prompt.md](./linux-edge-tester-gh-actions-watch-prompt.md) — watch CI → deploy → gates → post #429.
+
 **Do not** close issues yourself. **Do not** claim Sign-off: YES until the rubric at the bottom is met.
 
 ### First-time on this bench (before iteration 1)
