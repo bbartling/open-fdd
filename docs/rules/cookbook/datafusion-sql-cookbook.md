@@ -27,8 +27,9 @@ Open-FDD edge executes fault detection as **DataFusion SQL** against Apache Arro
 11. [Weather station](#weather-station)
 12. [Trim & respond advisory (GL36)](#trim--respond-advisory-gl36)
 13. [Extended rule families (v2)](#extended-rule-families-v2)
-14. [Framework & parity docs](#framework--parity-docs)
-15. [Debugging & windowing](#debugging--windowing)
+14. [Extended rule families (P2)](#extended-rule-families-p2)
+15. [Framework & parity docs](#framework--parity-docs)
+16. [Debugging & windowing](#debugging--windowing)
 
 ---
 
@@ -243,6 +244,8 @@ Rolling flatline/spike detection is limited in edge SQL. Use **confirmation_seco
 
 Reference: Open-FDD AHU fault conditions **FC1–FC15** (GL36-inspired). Default **`confirmation_seconds: 300`** unless noted.
 
+**Full metadata** for FC1–FC15 and all P0 rules: [P0 rule catalog](p0-rule-catalog.html).
+
 Shared params (tune per site):
 
 | Param | Default | Used in |
@@ -257,7 +260,14 @@ Shared params (tune per site):
 
 ### FC1 — Duct static below SP at full fan (GL36 Rule A)
 
-**Code:** `AHU-A` · **confirmation_seconds:** 300 · **param:** `duct_static_err=0.12`, `fan_hi=0.87`
+| Field | Value |
+|-------|-------|
+| **id** | FC1 |
+| **taxonomy** | `control.loop.ahu.duct_static_low` |
+| **severity** | 3 · **confirmation_seconds** | 300 |
+| **required_points** | `duct_static`, `duct_static_sp`, `fan_cmd` |
+
+**Code:** `AHU-A` · **param:** `duct_static_err=0.12`, `fan_hi=0.87`
 
 ```sql
 SELECT timestamp, equipment_id, duct_static, duct_static_sp, fan_cmd,
@@ -1220,10 +1230,10 @@ WHERE equipment_id = 'equip:your-chiller-plant'
 
 ---
 
-### SP-HIGH / SP-LOW — Occupied zone setpoint drift
+### SP-HIGH — Occupied zone setpoint too high
 
 ```sql
--- SP-HIGH confirmation_seconds: 900
+-- SP-HIGH confirmation_seconds: 900  param: hi = 76
 SELECT timestamp, equipment_id, zone_t_sp, occ_mode,
   CASE
     WHEN zone_t_sp IS NULL OR occ_mode IS NULL THEN false
@@ -1234,11 +1244,181 @@ SELECT timestamp, equipment_id, zone_t_sp, occ_mode,
 FROM telemetry_pivot WHERE equipment_id = 'equip:your-vav';
 ```
 
+### SP-LOW — Occupied zone setpoint too low
+
+```sql
+-- SP-LOW confirmation_seconds: 900  param: lo = 68
+SELECT timestamp, equipment_id, zone_t_sp, occ_mode,
+  CASE
+    WHEN zone_t_sp IS NULL OR occ_mode IS NULL THEN false
+    WHEN occ_mode <> 'occupied' THEN false
+    WHEN zone_t_sp < 68.0 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot WHERE equipment_id = 'equip:your-vav';
+```
+
 ---
 
 ### KPI-1 — Performance score (advisory)
 
 Aggregate confirmed faults by family — see [benchmark strategy](benchmark-strategy.html).
+
+---
+
+## Extended rule families (P2)
+
+Next-priority rules from [roadmap](roadmap.html). Matching [Pandas P2](pandas-cookbook.html#extended-rule-families-p2) sections. Metadata in [P0 catalog](p0-rule-catalog.html).
+
+### VAV-6 — Reheat active when cooling available
+
+| Field | Value |
+|-------|-------|
+| **taxonomy_path** | `terminal.vav.reheat_with_cooling` |
+| **severity** | 2 · **confirmation_seconds:** 300 |
+| **required_points** | `reheat_valve_pct`, `clg_available`, `oa_t` |
+
+```sql
+-- confirmation_seconds: 300
+SELECT timestamp, equipment_id, reheat_valve_pct, clg_available, oa_t,
+  CASE
+    WHEN reheat_valve_pct IS NULL OR oa_t IS NULL THEN false
+    WHEN COALESCE(clg_available, false) = false THEN false
+    WHEN oa_t >= 65.0 THEN false
+    WHEN CASE WHEN reheat_valve_pct > 1.0 THEN reheat_valve_pct/100.0 ELSE reheat_valve_pct END > 0.25 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-vav'
+```
+
+---
+
+### VAV-7 — Minimum airflow violation
+
+| Field | Value |
+|-------|-------|
+| **taxonomy_path** | `terminal.vav.min_airflow_violation` |
+| **severity** | 2 · **confirmation_seconds:** 900 |
+| **required_points** | `zone_flow`, `min_flow_sp`, `fan_cmd` |
+
+```sql
+-- confirmation_seconds: 900
+SELECT timestamp, equipment_id, zone_flow, min_flow_sp, fan_cmd,
+  CASE
+    WHEN zone_flow IS NULL OR min_flow_sp IS NULL OR fan_cmd IS NULL THEN false
+    WHEN CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END <= 0.01 THEN false
+    WHEN zone_flow < min_flow_sp THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-vav'
+```
+
+---
+
+### TOWER-1 — Cooling tower approach too high
+
+| Field | Value |
+|-------|-------|
+| **taxonomy_path** | `plant.performance.tower.approach_high` |
+| **severity** | 2 · **confirmation_seconds:** 900 |
+| **required_points** | `tower_leaving_t`, `wb_t`, `tower_fan_cmd` |
+
+```sql
+-- confirmation_seconds: 900
+-- param: max_approach = 7.0  (°F, site-adjustable)
+SELECT timestamp, equipment_id, tower_leaving_t, wb_t, tower_fan_cmd,
+  CASE
+    WHEN tower_leaving_t IS NULL OR wb_t IS NULL OR tower_fan_cmd IS NULL THEN false
+    WHEN tower_fan_cmd <= 0.01 THEN false
+    WHEN (tower_leaving_t - wb_t) > 7.0 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-cooling-tower'
+```
+
+---
+
+### CTRL-2 — Generic control loop hunting (duct static)
+
+| Field | Value |
+|-------|-------|
+| **taxonomy_path** | `control.loop.generic.hunting` |
+| **severity** | 2 · **confirmation_seconds:** 3600 |
+| **required_points** | `duct_static`, `fan_cmd` |
+
+```sql
+-- confirmation_seconds: 3600
+-- param: hunt_reversals = 8  (sign changes per hour)
+WITH w AS (
+  SELECT timestamp, equipment_id, duct_static,
+    LAG(duct_static) OVER (ORDER BY timestamp) AS prev,
+    CASE
+      WHEN duct_static > LAG(duct_static) OVER (ORDER BY timestamp) THEN 1
+      WHEN duct_static < LAG(duct_static) OVER (ORDER BY timestamp) THEN -1
+      ELSE 0
+    END AS dir
+  FROM telemetry_pivot
+  WHERE equipment_id = 'equip:your-ahu'
+)
+SELECT timestamp, equipment_id,
+  CASE
+    WHEN COUNT(CASE WHEN dir <> LAG(dir) OVER (ORDER BY timestamp) AND dir <> 0 THEN 1 END)
+         OVER (ORDER BY timestamp ROWS BETWEEN 59 PRECEDING AND CURRENT ROW) > 8 THEN true
+    ELSE false
+  END AS fault_raw
+FROM w
+```
+
+Simplified edge variant — use [Pandas CTRL-2](pandas-cookbook.html#ctrl-2--generic-control-loop-hunting) for full hourly resample.
+
+---
+
+### SV-7 — Wrong-units heuristic (magnitude check)
+
+| Field | Value |
+|-------|-------|
+| **taxonomy_path** | `sensor.quality.generic.wrong_units` |
+| **severity** | 2 · **confirmation_seconds:** 300 |
+| **required_points** | `oa_t` (or any bounded sensor) |
+
+```sql
+-- confirmation_seconds: 300
+-- Flags values implausible for °F (e.g. 750 = 0.1°C scaling error ×10)
+SELECT timestamp, equipment_id, oa_t,
+  CASE
+    WHEN oa_t IS NULL THEN false
+    WHEN oa_t > 200.0 OR oa_t < -60.0 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-ahu'
+```
+
+---
+
+### OA-2 — DCV minimum outdoor air not met
+
+| Field | Value |
+|-------|-------|
+| **taxonomy_path** | `ventilation.ahu.dcv_minimum_oa` |
+| **severity** | 2 · **confirmation_seconds:** 900 |
+| **required_points** | `oa_flow`, `oa_flow_min_sp`, `occ_mode`, `fan_status` |
+
+```sql
+-- confirmation_seconds: 900
+SELECT timestamp, equipment_id, oa_flow, oa_flow_min_sp, occ_mode, fan_status,
+  CASE
+    WHEN oa_flow IS NULL OR oa_flow_min_sp IS NULL OR occ_mode IS NULL THEN false
+    WHEN fan_status = false OR occ_mode <> 'occupied' THEN false
+    WHEN oa_flow < oa_flow_min_sp THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-ahu'
+```
 
 ---
 

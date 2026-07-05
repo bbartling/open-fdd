@@ -1,0 +1,33 @@
+# Offline Pandas parity checks for cookbook fixtures (docs-only, no edge runtime).
+
+name: Cookbook parity
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "docs/rules/cookbook/**"
+      - "scripts/cookbook_parity_check.py"
+      - ".github/workflows/cookbook-parity.yml"
+  pull_request:
+    branches: [master, main]
+    paths:
+      - "docs/rules/cookbook/**"
+      - "scripts/cookbook_parity_check.py"
+      - ".github/workflows/cookbook-parity.yml"
+
+jobs:
+  fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pandas
+        run: pip install pandas
+
+      - name: Run cookbook fixture checks
+        run: python3 scripts/cookbook_parity_check.py --all

@@ -23,8 +23,9 @@ nav_order: 2
 9. [Weather station](#weather-station)
 10. [Trim & respond advisory](#trim--respond-advisory)
 11. [Extended rule families (v2)](#extended-rule-families-v2)
-12. [Framework docs](#framework-docs)
-13. [Export to Open-FDD SQL](#export-to-open-fdd-sql)
+12. [Extended rule families (P2)](#extended-rule-families-p2)
+13. [Framework docs](#framework-docs)
+14. [Export to Open-FDD SQL](#export-to-open-fdd-sql)
 
 ---
 
@@ -988,9 +989,34 @@ d = apply_fault(d, mask)
 d["fault_confirmed"] = confirm_fault(d["fault_raw"])
 ```
 
-### VLV-1 / DMP-1 / VAV-5 / PLANT-1 / SP-HIGH
+### VLV-1 — Cooling valve leakage
 
-See SQL cookbook for threshold tables — port boolean masks identically. Example VAV-5:
+```python
+FAULT_CONFIRM_SECONDS = 900
+clg = norm_cmd(d["clg_valve_pct"])
+mask = (
+    d["sat"].notna() & d["sat_sp"].notna()
+    & (clg <= 0.05) & (d["sat"] < d["sat_sp"] - 2.0)
+)
+d = apply_fault(d, mask)
+d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+```
+
+### DMP-1 — OA damper leakage
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+LEAK_DELTA = 2.0
+damper = norm_cmd(d["oa_damper_pct"])
+mask = (
+    d["oa_t"].notna() & d["mat"].notna()
+    & (damper <= 0.05) & (d["mat"].sub(d["oa_t"]).abs() < LEAK_DELTA)
+)
+d = apply_fault(d, mask)
+d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+```
+
+### VAV-5 — Airflow sensor bias
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -998,6 +1024,131 @@ damper = norm_cmd(v["damper_pct"])
 mask = v["zone_flow"].notna() & (v["zone_flow"] > 50.0) & (damper < 0.10)
 v = apply_fault(v, mask)
 v["fault_confirmed"] = confirm_fault(v["fault_raw"])
+```
+
+### PLANT-1 — CHW DP reset missing
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+pump = norm_cmd(p["chw_pump_cmd"])
+mask = (
+    p["chw_dp_sp"].notna() & p["chw_load_pct"].notna()
+    & (pump > 0.01) & (p["chw_load_pct"] < 0.40) & (p["chw_dp_sp"] > 18.0)
+)
+p = apply_fault(p, mask)
+p["fault_confirmed"] = confirm_fault(p["fault_raw"])
+```
+
+### SP-HIGH — Occupied setpoint too high
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+mask = (
+    v["zone_t_sp"].notna() & v["occ_mode"].eq("occupied") & (v["zone_t_sp"] > 76.0)
+)
+v = apply_fault(v, mask)
+v["fault_confirmed"] = confirm_fault(v["fault_raw"])
+```
+
+### SP-LOW — Occupied setpoint too low
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+mask = (
+    v["zone_t_sp"].notna() & v["occ_mode"].eq("occupied") & (v["zone_t_sp"] < 68.0)
+)
+v = apply_fault(v, mask)
+v["fault_confirmed"] = confirm_fault(v["fault_raw"])
+```
+
+### KPI-1 — Performance score (advisory)
+
+```python
+# Roll up confirmed fault counts by taxonomy family over 7 days — advisory only.
+# See benchmark-strategy.md for weight defaults.
+```
+
+---
+
+## Extended rule families (P2)
+
+Mirrors [SQL P2 section](datafusion-sql-cookbook.html#extended-rule-families-p2).
+
+### VAV-6 — Reheat when cooling available
+
+```python
+FAULT_CONFIRM_SECONDS = 300
+reheat = norm_cmd(v["reheat_valve_pct"])
+mask = (
+    v.get("clg_available", False).astype(bool)
+    & v["oa_t"].notna() & (v["oa_t"] < 65.0) & (reheat > 0.25)
+)
+v = apply_fault(v, mask)
+v["fault_confirmed"] = confirm_fault(v["fault_raw"])
+```
+
+### VAV-7 — Minimum airflow violation
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+fan = norm_cmd(v["fan_cmd"]) if "fan_cmd" in v else 1.0
+mask = (
+    v["zone_flow"].notna() & v["min_flow_sp"].notna()
+    & (fan > 0.01) & (v["zone_flow"] < v["min_flow_sp"])
+)
+v = apply_fault(v, mask)
+v["fault_confirmed"] = confirm_fault(v["fault_raw"])
+```
+
+### TOWER-1 — Cooling tower approach high
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+MAX_APPROACH = 7.0
+t = df[df["equipment_id"] == "equip:your-cooling-tower"].copy()
+fan = norm_cmd(t["tower_fan_cmd"])
+mask = (
+    t["tower_leaving_t"].notna() & t["wb_t"].notna()
+    & (fan > 0.01) & ((t["tower_leaving_t"] - t["wb_t"]) > MAX_APPROACH)
+)
+t = apply_fault(t, mask)
+t["fault_confirmed"] = confirm_fault(t["fault_raw"])
+```
+
+### CTRL-2 — Generic control loop hunting
+
+```python
+FAULT_CONFIRM_SECONDS = 3600
+HUNT_REVERSALS = 8
+ROLL = 60  # samples ~1 h @ 60 s poll
+
+s = d["duct_static"].diff().apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
+reversals = (s != s.shift(1)) & (s != 0)
+mask = reversals.rolling(ROLL, min_periods=ROLL).sum() > HUNT_REVERSALS
+d = apply_fault(d, mask.fillna(False))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
+```
+
+### SV-7 — Wrong-units heuristic
+
+```python
+FAULT_CONFIRM_SECONDS = 300
+mask = d["oa_t"].notna() & ((d["oa_t"] > 200.0) | (d["oa_t"] < -60.0))
+d = apply_fault(d, mask)
+d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+```
+
+### OA-2 — DCV minimum OA not met
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+mask = (
+    d["oa_flow"].notna() & d["oa_flow_min_sp"].notna()
+    & d["occ_mode"].eq("occupied") & d["fan_status"].astype(bool)
+    & (d["oa_flow"] < d["oa_flow_min_sp"])
+)
+d = apply_fault(d, mask)
+d["fault_confirmed"] = confirm_fault(d["fault_raw"])
 ```
 
 ---

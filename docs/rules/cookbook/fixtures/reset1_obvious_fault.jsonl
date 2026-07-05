@@ -1,0 +1,3 @@
+{"timestamp":"2026-07-01T14:00:00Z","equipment_id":"equip:test-ahu","sat_sp":52.0,"oat":90.0,"fan_status":true,"reset_enable":true}
+{"timestamp":"2026-07-01T14:01:00Z","equipment_id":"equip:test-ahu","sat_sp":52.0,"oat":91.0,"fan_status":true,"reset_enable":true}
+{"timestamp":"2026-07-01T14:02:00Z","equipment_id":"equip:test-ahu","sat_sp":52.0,"oat":92.0,"fan_status":true,"reset_enable":true}

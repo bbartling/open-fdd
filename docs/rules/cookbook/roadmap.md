@@ -6,48 +6,38 @@ nav_order: 7
 
 # Priority-ranked rule roadmap
 
-Implementation order for expanding the public Open-FDD cookbooks. Priorities derive from **public literature frequency** (ASHRAE GL36 AFDD, Berkeley fault taxonomy, PNNL AIRCx, NIST Cx), not private workbooks.
+Implementation order for expanding the public Open-FDD cookbooks. Priorities derive from **public literature frequency** (ASHRAE GL36 AFDD, Berkeley fault taxonomy, PNNL AIRCx, NIST Cx).
 
-## P0 — shipped (maintain parity)
+## P0 — shipped ✅
 
 - FC1–FC15 (GL36-aligned AHU supervisory)
 - SV-1–SV-6 sensor validation
 - VAV-1–4, ECON-1–5, CHW-1–4, HP-1, WX-1–2, TRIM-1–4
-- AHU auxiliary patterns (SAT deviation, duct static, heat/cool simultaneous, fan-off warm duct)
-- Prerequisite macro library (v2)
-- Framework docs: taxonomy, schema, gap/parity matrices, benchmark strategy
+- AHU auxiliary patterns
+- Framework docs + [P0 rule catalog](p0-rule-catalog.html)
 
-## P1 — v2 expansion (this release)
+## P1 — v2 expansion ✅
 
-| Rank | Rule ID | Rationale (public literature) |
-|------|---------|----------------------------|
-| 1 | RESET-1 | SAT/OAT reset missing — top RCx / AIRCx finding |
-| 2 | SCHED-1 | Unoccupied runtime — energy + schedule audit staple |
-| 3 | OVR-1 | Persistent override — PNNL re-tuning, Cx |
-| 4 | CMD-1 | Command/status mismatch — NIST Cx, Berkeley taxonomy |
-| 5 | OA-1 | Low ventilation / OA fraction — GL36 ventilation intent |
-| 6 | VLV-1 | Valve leakage when commanded closed — coil ΔT patterns extend FC14–15 |
-| 7 | DMP-1 | OA damper leakage — economizer fault family |
-| 8 | VAV-5 | Airflow sensor bias — terminal FDD literature |
-| 9 | PLANT-1 | CHW DP reset missing — plant re-tuning |
-| 10 | SP-HIGH / SP-LOW | Occupied setpoint drift |
-| 11 | KPI-1 | Performance KPI advisory scoring |
+RESET-1, SCHED-1, OVR-1, CMD-1, OA-1, VLV-1, DMP-1, VAV-5, PLANT-1, SP-HIGH/LOW, KPI-1 (advisory)
 
-## P2 — next quarter
+## P2 — shipped ✅
 
-- VAV-6 reheat with cooling available
-- VAV-7 minimum airflow violation
-- TOWER-1 cooling tower approach
-- CTRL-2 generic loop hunting (non-SAT)
-- SV-7 wrong-units heuristic
-- DCV minimum OA (OA-2)
+| Rule ID | Description |
+|---------|-------------|
+| VAV-6 | Reheat when cooling available |
+| VAV-7 | Minimum airflow violation |
+| TOWER-1 | Cooling tower approach high |
+| CTRL-2 | Generic loop hunting (duct static) |
+| SV-7 | Wrong-units heuristic |
+| OA-2 | DCV minimum OA not met |
 
-## P3 — pattern library
+## P3 — next quarter
 
 - Lead-lag staging anomalies
 - Waterside economizer
 - Heat recovery wheel effectiveness
 - Site-level demand spike vs weather
+- Full FC2–FC15 inline metadata tables (catalog complete today)
 
 ---
 
@@ -55,14 +45,15 @@ Implementation order for expanding the public Open-FDD cookbooks. Priorities der
 
 | Milestone | Status |
 |-----------|--------|
-| Canonical taxonomy | ✅ [taxonomy.md](taxonomy.html) |
-| Declarative schema | ✅ [rule-schema.md](rule-schema.html) |
+| Canonical taxonomy | ✅ |
+| Declarative schema | ✅ |
 | Gap + parity matrices | ✅ |
-| Prerequisite macros | ✅ [prerequisite-macros.md](prerequisite-macros.html) |
-| Doc template per rule | ✅ [doc-template.md](doc-template.html) |
-| Public benchmark harness | ✅ [benchmark-strategy.md](benchmark-strategy.html) |
-| Full metadata on all P0 rules | In progress |
-| CI parity regression | Planned — synthetic fixtures in repo |
+| Prerequisite macros | ✅ |
+| Doc template | ✅ |
+| P0 rule catalog (all metadata) | ✅ |
+| CI parity fixtures | ✅ `scripts/cookbook_parity_check.py` |
+| Full Pandas v2 + P2 ports | ✅ |
+| `docs/agent/` excluded from Pages | ✅ repo-only dev prompts |
 
 ---
 
