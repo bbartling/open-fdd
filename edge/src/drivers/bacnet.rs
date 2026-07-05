@@ -1310,6 +1310,8 @@ pub fn poll_cycle_value() -> Value {
     }
     if updated > 0 {
         write_registry(&working);
+    }
+    if samples > 0 && !all_reads.is_empty() {
         persist_bacnet_reads_to_historian(&all_reads);
         BACNET_POLL_SAMPLES.fetch_add(samples, Ordering::Relaxed);
         if let Ok(mut g) = BACNET_LAST_POLL.lock() {

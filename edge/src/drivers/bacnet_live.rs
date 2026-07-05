@@ -36,6 +36,14 @@ pub fn block_on<F: std::future::Future>(future: F) -> F::Output {
     runtime().block_on(future)
 }
 
+/// Spawn a long-lived task on the process-wide BACnet runtime (never create a second `Runtime`).
+pub fn spawn_background<F>(future: F)
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
+    runtime().spawn(future);
+}
+
 pub fn is_live_mode() -> bool {
     env::var("OPENFDD_BACNET_MODE")
         .map(|v| v.eq_ignore_ascii_case("live"))
