@@ -22,7 +22,9 @@ nav_order: 2
 8. [Heat pumps](#heat-pumps)
 9. [Weather station](#weather-station)
 10. [Trim & respond advisory](#trim--respond-advisory)
-11. [Export to Open-FDD SQL](#export-to-open-fdd-sql)
+11. [Extended rule families (v2)](#extended-rule-families-v2)
+12. [Framework docs](#framework-docs)
+13. [Export to Open-FDD SQL](#export-to-open-fdd-sql)
 
 ---
 
@@ -59,6 +61,27 @@ def apply_fault(d: pd.DataFrame, mask: pd.Series, col: str = "fault_raw") -> pd.
     d[col] = mask.fillna(False)
     return d
 ```
+
+### Prerequisite macros (shared with SQL cookbook)
+
+```python
+def macro_fan_proven_on(d: pd.DataFrame) -> pd.Series:
+    cmd = norm_cmd(d["fan_cmd"]) if "fan_cmd" in d else pd.Series(0.0, index=d.index)
+    on = cmd >= 0.05
+    if "fan_status" in d.columns:
+        st = d["fan_status"]
+        return on & (st.isna() | st.astype(bool))
+    return on
+
+def macro_override_suppression(d: pd.DataFrame) -> pd.Series:
+    mask = pd.Series(True, index=d.index)
+    for col in ("override_active", "hand_mode", "bypass_active"):
+        if col in d.columns:
+            mask &= ~d[col].fillna(False).astype(bool)
+    return mask
+```
+
+See [prerequisite macros](prerequisite-macros.html) for full library.
 
 ---
 
@@ -119,7 +142,40 @@ d = apply_fault(d, mask)
 d["fault_confirmed"] = confirm_fault(d["fault_raw"])
 ```
 
-### SV-4 — Flatline (stuck sensor)
+### SV-4 — Mixing envelope (MAT vs OAT/RAT)
+
+Prefer envelope checks when OAT, RAT, and MAT are present — mirrors [FC2/FC3](datafusion-sql-cookbook.html#air-handling-units) logic.
+
+```python
+FAULT_CONFIRM_SECONDS = 300
+ENV = 2.2
+
+mask = (
+    d["mat"].notna() & d["oa_t"].notna() & d["rat"].notna()
+    & (
+        (d["mat"] < d[["oa_t", "rat"]].min(axis=1) - ENV)
+        | (d["mat"] > d[["oa_t", "rat"]].max(axis=1) + ENV)
+    )
+)
+d = apply_fault(d, mask)
+d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+```
+
+### SV-5 — Stale data (no recent samples)
+
+```python
+FAULT_CONFIRM_SECONDS = 300
+STALE_MINUTES = 30
+
+last_ts = d.groupby("equipment_id")["timestamp"].transform("max")
+stale = (d["timestamp"] == last_ts) & (
+    (pd.Timestamp.utcnow() - last_ts).dt.total_seconds() > STALE_MINUTES * 60
+)
+d = apply_fault(d, stale)
+d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+```
+
+### SV-6 — Flatline (stuck sensor)
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
@@ -134,7 +190,7 @@ d = apply_fault(d, flatline_mask(d["oa_t"], tol=0.10))
 d["fault_confirmed"] = confirm_fault(d["fault_raw"])
 ```
 
-### SV-5 — Rate-of-change spike
+### SV-7 — Rate-of-change spike
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
@@ -519,6 +575,33 @@ d = apply_fault(d, mask)
 d["fault_confirmed"] = confirm_fault(d["fault_raw"])
 ```
 
+#### Duct static pressure high
+
+```python
+FAULT_CONFIRM_SECONDS = 300
+MARGIN = 0.25
+
+mask = d["duct_static"].notna() & d["duct_static_sp"].notna() & (
+    d["duct_static"] > d["duct_static_sp"] + MARGIN
+)
+d = apply_fault(d, mask)
+d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+```
+
+#### Fan off but duct still warm
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+DELTA = 15.0
+
+mask = (
+    d["fan_cmd"].notna() & d["duct_t"].notna() & d["oa_t"].notna()
+    & (d["fan_cmd"] == False) & (d["duct_t"] > d["oa_t"] + DELTA)
+)
+d = apply_fault(d, mask)
+d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+```
+
 #### Heating and cooling simultaneous
 
 ```python
@@ -647,6 +730,23 @@ d = apply_fault(d, mask)
 d["fault_confirmed"] = confirm_fault(d["fault_raw"])
 ```
 
+### ECON-5 — Preheat over-conditioning
+
+```python
+FAULT_CONFIRM_SECONDS = 300
+
+mask = (
+    d["preheat_leave_t"].notna() & d["sat_sp"].notna() & d["oa_t"].notna() & d["htg_valve_pct"].notna()
+    & (d["htg_valve_pct"] > 0.01)
+    & (
+        ((d["oa_t"] > d["sat_sp"]) & (d["preheat_leave_t"] - d["oa_t"] > 2.2))
+        | ((d["oa_t"] < d["sat_sp"]) & (d["preheat_leave_t"] - d["sat_sp"] > 2.2))
+    )
+)
+d = apply_fault(d, mask)
+d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+```
+
 ---
 
 ## Central plants
@@ -700,6 +800,19 @@ mask = (
         | (p["chw_supply_t"] > p["chw_supply_t_sp"] + SP_BAND)
     )
 )
+p = apply_fault(p, mask)
+p["fault_confirmed"] = confirm_fault(p["fault_raw"])
+```
+
+### CHW-4 — Flow high at max pump
+
+```python
+FAULT_CONFIRM_SECONDS = 300
+FLOW_HI = 1100.0
+PMP_HI = 0.87
+
+pump = norm_cmd(p["chw_pump_cmd"])
+mask = p["chw_flow"].notna() & (p["chw_flow"] > FLOW_HI) & (pump >= PMP_HI)
 p = apply_fault(p, mask)
 p["fault_confirmed"] = confirm_fault(p["fault_raw"])
 ```
@@ -783,6 +896,124 @@ mask = p["chw_valve_req_count"].notna() & (p["chw_valve_req_count"] < 2)
 p = apply_fault(p, mask)
 p["fault_confirmed"] = confirm_fault(p["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
 ```
+
+### TRIM-3 — HWST trim advisory
+
+```python
+FAULT_CONFIRM_SECONDS = 1800
+
+hw = df[df["equipment_id"] == "equip:your-hw-plant"].copy()
+mask = hw["hw_supply_t"].notna() & hw["hw_reset_req_sum"].notna() & (
+    (hw["hw_supply_t"] > 160.0) & (hw["hw_reset_req_sum"] < 1.0)
+)
+hw = apply_fault(hw, mask)
+hw["fault_confirmed"] = confirm_fault(hw["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
+```
+
+### TRIM-4 — CHW plant reset advisory
+
+```python
+FAULT_CONFIRM_SECONDS = 1800
+
+mask = p["chw_supply_t"].notna() & p["chw_reset_req_sum"].notna() & (
+    (p["chw_supply_t"] < 45.0) & (p["chw_reset_req_sum"] < 1.0)
+)
+p = apply_fault(p, mask)
+p["fault_confirmed"] = confirm_fault(p["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
+```
+
+---
+
+## Extended rule families (v2)
+
+Mirrors [DataFusion SQL v2 section](datafusion-sql-cookbook.html#extended-rule-families-v2). Import [prerequisite macros](prerequisite-macros.html) helpers as needed.
+
+### RESET-1 — SAT reset not tracking outdoor air
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+SAT_RESET_ERR = 3.0
+
+def expected_sat_sp(oat: pd.Series) -> pd.Series:
+    return 52.0 + 0.25 * (oat - 65.0)
+
+base = macro_fan_proven_on(d) if "fan_cmd" in d else pd.Series(True, index=d.index)
+mask = (
+    base & d["sat_sp"].notna() & d["oat"].notna()
+    & (d["sat_sp"].sub(expected_sat_sp(d["oat"])).abs() > SAT_RESET_ERR)
+)
+d = apply_fault(d, mask)
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
+```
+
+### SCHED-1 — Unoccupied runtime
+
+```python
+FAULT_CONFIRM_SECONDS = 1800
+mask = d["occ_mode"].eq("unoccupied") & d["fan_status"].astype(bool)
+d = apply_fault(d, mask)
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
+```
+
+### OVR-1 — Persistent override
+
+```python
+FAULT_CONFIRM_SECONDS = 3600
+mask = d["override_active"].fillna(False).astype(bool)
+d = apply_fault(d, mask)
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
+```
+
+### CMD-1 — Fan cmd/status mismatch
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+cmd_on = norm_cmd(d["fan_cmd"]) >= 0.05
+mask = d["fan_status"].notna() & (cmd_on != d["fan_status"].astype(bool))
+d = apply_fault(d, mask)
+d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+```
+
+### OA-1 — Low OA fraction
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+MIN_OA = 0.15
+oa_frac = (d["mat"] - d["rat"]) / (d["oa_t"] - d["rat"]).replace(0, np.nan)
+mask = (
+    d["fan_status"].astype(bool) & d["oa_t"].notna() & d["rat"].notna() & d["mat"].notna()
+    & ((d["rat"] - d["oa_t"]).abs() > 0.5) & (oa_frac < MIN_OA)
+)
+d = apply_fault(d, mask)
+d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+```
+
+### VLV-1 / DMP-1 / VAV-5 / PLANT-1 / SP-HIGH
+
+See SQL cookbook for threshold tables — port boolean masks identically. Example VAV-5:
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+damper = norm_cmd(v["damper_pct"])
+mask = v["zone_flow"].notna() & (v["zone_flow"] > 50.0) & (damper < 0.10)
+v = apply_fault(v, mask)
+v["fault_confirmed"] = confirm_fault(v["fault_raw"])
+```
+
+---
+
+## Framework docs
+
+| Doc | Purpose |
+|-----|---------|
+| [Taxonomy](taxonomy.html) | Public fault taxonomy |
+| [Rule schema](rule-schema.html) | Metadata source of truth |
+| [Gap matrix](gap-matrix.html) | Literature coverage |
+| [Parity matrix](parity-matrix.html) | SQL ↔ Pandas audit |
+| [Roadmap](roadmap.html) | Expansion priorities |
+| [Prerequisite macros](prerequisite-macros.html) | Shared guards |
+| [Benchmark strategy](benchmark-strategy.html) | Validation scenarios |
+| [Doc template](doc-template.html) | Per-rule standard |
 
 ---
 

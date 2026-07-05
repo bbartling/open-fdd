@@ -26,7 +26,9 @@ Open-FDD edge executes fault detection as **DataFusion SQL** against Apache Arro
 10. [Heat pumps](#heat-pumps)
 11. [Weather station](#weather-station)
 12. [Trim & respond advisory (GL36)](#trim--respond-advisory-gl36)
-13. [Debugging & windowing](#debugging--windowing)
+13. [Extended rule families (v2)](#extended-rule-families-v2)
+14. [Framework & parity docs](#framework--parity-docs)
+15. [Debugging & windowing](#debugging--windowing)
 
 ---
 
@@ -1001,6 +1003,257 @@ SELECT timestamp, equipment_id, chw_supply_t, chw_reset_req_sum,
 FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-chiller-plant'
 ```
+
+---
+
+## Extended rule families (v2)
+
+Standards-first rules from public FDD / re-tuning literature. Each has a matching [Pandas](pandas-cookbook.html#extended-rule-families-v2) section. Metadata follows the [rule schema](rule-schema.html). Use [prerequisite macros](prerequisite-macros.html) inline.
+
+### RESET-1 — SAT reset not tracking outdoor air
+
+| Field | Value |
+|-------|-------|
+| **taxonomy_path** | `reset.ahu.sat_oa_reset_missing` |
+| **severity** | 2 · **confirmation_seconds:** 900 |
+| **required_points** | `sat_sp`, `oat`, `fan_status` |
+| **prerequisites** | `macro.fan_proven_on`, `macro.reset_enabled` |
+
+**Intent:** Supply air temperature setpoint should reset with outdoor air when reset is enabled (ASHRAE GL36 / AIRCx common finding).
+
+```sql
+-- confirmation_seconds: 900
+-- param: sat_reset_err_max = 3.0  (site-adjustable °F)
+SELECT timestamp, equipment_id, sat_sp, oat, fan_status,
+  CASE
+    WHEN sat_sp IS NULL OR oat IS NULL OR fan_status IS NULL THEN false
+    WHEN fan_status = false THEN false
+    WHEN COALESCE(reset_enable, true) = false THEN false
+    WHEN ABS(sat_sp - (52.0 + 0.25 * (oat - 65.0))) > 3.0 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-ahu'
+```
+
+**Validation:** normal cooling day → false; fixed SAT SP on hot day → true; missing `sat_sp` → false.
+
+---
+
+### SCHED-1 — Equipment running while unoccupied
+
+| Field | Value |
+|-------|-------|
+| **taxonomy_path** | `schedule.ahu.unoccupied_runtime` |
+| **severity** | 2 · **confirmation_seconds:** 1800 |
+| **required_points** | `fan_status`, `occ_mode` |
+
+```sql
+-- confirmation_seconds: 1800
+SELECT timestamp, equipment_id, fan_status, occ_mode,
+  CASE
+    WHEN fan_status IS NULL OR occ_mode IS NULL THEN false
+    WHEN occ_mode = 'unoccupied' AND fan_status = true THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-ahu'
+```
+
+---
+
+### OVR-1 — Persistent manual override
+
+| Field | Value |
+|-------|-------|
+| **taxonomy_path** | `override.ahu.persistent_manual` |
+| **severity** | 2 · **confirmation_seconds:** 3600 |
+| **required_points** | `override_active` |
+
+```sql
+-- confirmation_seconds: 3600
+SELECT timestamp, equipment_id, override_active,
+  CASE
+    WHEN override_active IS NULL THEN false
+    WHEN override_active = true THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-ahu'
+```
+
+---
+
+### CMD-1 — Fan command vs status mismatch
+
+| Field | Value |
+|-------|-------|
+| **taxonomy_path** | `command.status.ahu.fan_cmd_status` |
+| **severity** | 3 · **confirmation_seconds:** 600 |
+| **required_points** | `fan_cmd`, `fan_status` |
+
+```sql
+-- confirmation_seconds: 600
+SELECT timestamp, equipment_id, fan_cmd, fan_status,
+  CASE
+    WHEN fan_cmd IS NULL OR fan_status IS NULL THEN false
+    WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END >= 0.05)
+     <> fan_status THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-ahu'
+```
+
+---
+
+### OA-1 — Low estimated outdoor air fraction
+
+| Field | Value |
+|-------|-------|
+| **taxonomy_path** | `ventilation.ahu.low_oa_fraction` |
+| **severity** | 2 · **confirmation_seconds:** 900 |
+| **required_points** | `oa_t`, `ra_t`, `mat`, `fan_status` |
+
+```sql
+-- confirmation_seconds: 900
+-- param: min_oa_frac = 0.15
+SELECT timestamp, equipment_id, oa_t, ra_t, mat, fan_status,
+  CASE
+    WHEN oa_t IS NULL OR ra_t IS NULL OR mat IS NULL OR fan_status IS NULL THEN false
+    WHEN fan_status = false THEN false
+    WHEN ABS(ra_t - oa_t) < 0.5 THEN false
+    WHEN ((mat - ra_t) / NULLIF(oa_t - ra_t, 0)) < 0.15 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-ahu'
+```
+
+---
+
+### VLV-1 — Cooling valve leakage
+
+| Field | Value |
+|-------|-------|
+| **taxonomy_path** | `actuator.leakage.ahu.clg_valve` |
+| **severity** | 2 · **confirmation_seconds:** 900 |
+
+```sql
+-- confirmation_seconds: 900
+SELECT timestamp, equipment_id, clg_valve_pct, sat, sat_sp,
+  CASE
+    WHEN clg_valve_pct IS NULL OR sat IS NULL OR sat_sp IS NULL THEN false
+    WHEN CASE WHEN clg_valve_pct > 1.0 THEN clg_valve_pct/100.0 ELSE clg_valve_pct END > 0.05 THEN false
+    WHEN sat < sat_sp - 2.0 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-ahu'
+```
+
+---
+
+### DMP-1 — OA damper leakage
+
+| Field | Value |
+|-------|-------|
+| **taxonomy_path** | `actuator.leakage.ahu.oa_damper` |
+| **severity** | 2 · **confirmation_seconds:** 900 |
+
+```sql
+-- confirmation_seconds: 900
+SELECT timestamp, equipment_id, oa_damper_pct, oa_t, mat,
+  CASE
+    WHEN oa_damper_pct IS NULL OR oa_t IS NULL OR mat IS NULL THEN false
+    WHEN CASE WHEN oa_damper_pct > 1.0 THEN oa_damper_pct/100.0 ELSE oa_damper_pct END > 0.05 THEN false
+    WHEN ABS(mat - oa_t) < 2.0 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-ahu'
+```
+
+---
+
+### VAV-5 — Airflow sensor bias
+
+| Field | Value |
+|-------|-------|
+| **taxonomy_path** | `terminal.vav.airflow_sensor_bias` |
+| **severity** | 2 · **confirmation_seconds:** 900 |
+
+```sql
+-- confirmation_seconds: 900
+SELECT timestamp, equipment_id, zone_flow, damper_pct,
+  CASE
+    WHEN zone_flow IS NULL OR damper_pct IS NULL THEN false
+    WHEN zone_flow > 50.0
+     AND CASE WHEN damper_pct > 1.0 THEN damper_pct/100.0 ELSE damper_pct END < 0.10 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-vav'
+```
+
+---
+
+### PLANT-1 — CHW DP reset missing
+
+| Field | Value |
+|-------|-------|
+| **taxonomy_path** | `reset.plant.chw.dp_reset_missing` |
+| **severity** | 2 · **confirmation_seconds:** 900 |
+
+```sql
+-- confirmation_seconds: 900
+SELECT timestamp, equipment_id, chw_dp_sp, chw_load_pct, chw_pump_cmd,
+  CASE
+    WHEN chw_dp_sp IS NULL OR chw_load_pct IS NULL OR chw_pump_cmd IS NULL THEN false
+    WHEN chw_pump_cmd <= 0.01 THEN false
+    WHEN chw_load_pct < 0.40 AND chw_dp_sp > 18.0 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-chiller-plant'
+```
+
+---
+
+### SP-HIGH / SP-LOW — Occupied zone setpoint drift
+
+```sql
+-- SP-HIGH confirmation_seconds: 900
+SELECT timestamp, equipment_id, zone_t_sp, occ_mode,
+  CASE
+    WHEN zone_t_sp IS NULL OR occ_mode IS NULL THEN false
+    WHEN occ_mode <> 'occupied' THEN false
+    WHEN zone_t_sp > 76.0 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot WHERE equipment_id = 'equip:your-vav';
+```
+
+---
+
+### KPI-1 — Performance score (advisory)
+
+Aggregate confirmed faults by family — see [benchmark strategy](benchmark-strategy.html).
+
+---
+
+## Framework & parity docs
+
+| Doc | Purpose |
+|-----|---------|
+| [Public taxonomy](taxonomy.html) | Equipment classes, rule families |
+| [Rule schema](rule-schema.html) | Declarative source-of-truth |
+| [Gap matrix](gap-matrix.html) | Coverage vs public literature |
+| [Parity matrix](parity-matrix.html) | SQL ↔ Pandas audit |
+| [Roadmap](roadmap.html) | Priority-ranked expansion |
+| [Prerequisite macros](prerequisite-macros.html) | Reusable guards |
+| [Benchmark strategy](benchmark-strategy.html) | Scenarios & regression |
+| [Doc template](doc-template.html) | Per-rule documentation |
 
 ---
 
