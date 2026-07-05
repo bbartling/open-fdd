@@ -2354,7 +2354,11 @@ mod override_export_tests {
             // Generic instance + TEST-NET address — no site-specific OT hardcoding.
             let inst = 987_654_u32;
             let addr = "198.51.100.50:47808";
-            let reg_path = root.join("data").join("drivers").join("bacnet").join("driver_tree.json");
+            let reg_path = root
+                .join("data")
+                .join("drivers")
+                .join("bacnet")
+                .join("driver_tree.json");
             let cache = root
                 .join("data")
                 .join("drivers")
