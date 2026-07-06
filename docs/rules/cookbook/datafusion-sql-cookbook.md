@@ -823,7 +823,7 @@ Open-FDD ships dry-bulb defaults; tune `oat_cutoff`, `dpr_min`, and `oa_min_pct`
 | OA-1 | Low OA fraction (extended) | [Extended v2 — OA-1](#oa-1--low-estimated-outdoor-air-fraction) |
 | OA-2 | DCV minimum OA not met | [Extended P2 — OA-2](#oa-2--dcv-minimum-outdoor-air-not-met) |
 | DMP-1 | OA damper leakage at commanded closed | [Extended v2 — DMP-1](#dmp-1--oa-damper-leakage) |
-| FC6 | OA fraction mismatch (GL36) | [FC6](#fc6--low-outside-air-fraction-gl36-rule-g) |
+| FC6 | OA fraction mismatch (GL36) | [FC6](#fc6--estimated-oa-fraction-mismatch) |
 | FC8–FC11 | SAT/MAT faults in economizer modes | [Air handling units](#air-handling-units) |
 
 ---
