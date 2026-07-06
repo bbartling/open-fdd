@@ -18,6 +18,9 @@ nav_order: 2
 4. [Air handling units (FC1–FC15)](#air-handling-units)
 5. [VAV zones](#vav-zones)
 6. [Economizer & ventilation](#economizer--ventilation)
+   - [AHU economizer diagnostics guide](#ahu-economizer-diagnostics-guide)
+   - [ECON-1–5](#econ-1--economizer-stuck-closed)
+   - [Ventilation & leakage cross-rules](#rule-map-economizer-family)
 7. [Central plants](#central-plants)
 8. [Heat pumps](#heat-pumps)
 9. [Weather station](#weather-station)
@@ -679,6 +682,81 @@ v["fault_confirmed"] = confirm_fault(v["fault_raw"])
 
 ## Economizer & ventilation
 
+Analyst mirror of the [DataFusion economizer section](datafusion-sql-cookbook.html#economizer--ventilation). Use the same semantic columns and thresholds; export CSV from Open-FDD or vendor BMS for off-box RCx.
+
+### AHU economizer diagnostics guide
+
+#### Operating modes (GL36-style)
+
+```python
+AHU_MIN_OA_DPR = 0.05  # minimum OA damper position (0–1), tune per site
+
+def operating_mode_row(row) -> str:
+    """Classify one sample into OS1–OS4 (simplified GL36 bands)."""
+    htg = norm_cmd(pd.Series([row.get("htg_valve_pct", 0)])).iloc[0]
+    clg = norm_cmd(pd.Series([row.get("clg_valve_pct", 0)])).iloc[0]
+    fan = norm_cmd(pd.Series([row.get("fan_cmd", 0)])).iloc[0]
+    econ = norm_cmd(pd.Series([row.get("oa_damper_pct", 0)])).iloc[0]
+    if fan < 0.05:
+        return "off"
+    if htg > 0 and clg == 0:
+        return "OS1_heating"
+    if htg == 0 and clg == 0 and econ > AHU_MIN_OA_DPR:
+        return "OS2_economizer"
+    if htg == 0 and clg > 0 and econ > AHU_MIN_OA_DPR:
+        return "OS3_econ_mech"
+    if htg == 0 and clg > 0 and econ <= AHU_MIN_OA_DPR + 0.02:
+        return "OS4_mech_only"
+    return "other"
+```
+
+| Mode | Typical fault rules |
+|------|---------------------|
+| OS1 | FC5, FC7, ECON-5 |
+| OS2 | ECON-1, ECON-2 |
+| OS3 | ECON-3, FC8–FC11 |
+| OS4 | ECON-3 (inverse), cooling valve faults |
+
+#### Required columns
+
+Same semantic IDs as SQL: `oa_t`, `mat`, `rat`/`ra_t`, `oa_damper_pct`, `clg_valve_pct`, `htg_valve_pct`, `fan_cmd`, `fan_status`, `sat`, `sat_sp`, optional `oa_h`/`ra_h` for enthalpy sites.
+
+#### Core formulas
+
+```python
+def estimate_oa_fraction(d: pd.DataFrame) -> pd.Series:
+    """Dry-bulb OA fraction; NaN when mixing signal too weak."""
+    denom = (d["oa_t"] - d["rat"]).replace(0, np.nan)
+    frac = (d["mat"] - d["rat"]) / denom
+    weak = (d["rat"] - d["oa_t"]).abs() < 2.2
+    return frac.where(~weak)
+
+d["oa_frac"] = estimate_oa_fraction(d)
+```
+
+**Dry-bulb favorable:** `fan_proven & (oa_t < 63.0)` — align `63` with site `oat_cutoff`.
+
+**Enthalpy (optional):** compute outdoor/return enthalpy in the notebook (psychrometric library); gate economizer rules on `h_oa < h_ra` instead of OAT-only when the controller uses enthalpy logic.
+
+#### RCx diagnostic workflow
+
+1. Filter one AHU: `d = df[df["equipment_id"] == "equip:your-ahu"].copy()`
+2. Run sensor validation masks (SV section) on `oa_t`, `mat`, `rat`.
+3. Plot `oa_t`, `mat`, `rat`, `oa_damper_pct` for a summer weekday.
+4. Apply ECON-1 → ECON-5 below; cross-check OA-1, DMP-1 in [Extended v2](#oa-1--low-oa-fraction).
+5. Export confirmed intervals to Open-FDD SQL via [Export to Open-FDD SQL](#export-to-open-fdd-sql).
+
+#### Rule map (economizer family)
+
+| Rule | Focus | Section |
+|------|-------|---------|
+| ECON-1–5 | Core economizer faults | below |
+| OA-1, OA-2 | Ventilation minimum / DCV | [Extended v2 / P2](#oa-1--low-oa-fraction) |
+| DMP-1 | OA damper leakage | [Extended v2](#dmp-1--oa-damper-leakage) |
+| FC6, FC8–FC11 | GL36 economizer-mode AHU faults | [Air handling units](#air-handling-units) |
+
+---
+
 ### ECON-1 — Economizer stuck closed
 
 ```python
@@ -740,7 +818,7 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"])
 ### ECON-5 — Preheat over-conditioning
 
 ```python
-FAULT_CONFIRM_SECONDS = 300
+FAULT_CONFIRM_SECONDS = 600
 
 mask = (
     d["preheat_leave_t"].notna() & d["sat_sp"].notna() & d["oa_t"].notna() & d["htg_valve_pct"].notna()
