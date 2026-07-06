@@ -14,5 +14,5 @@ The dashboard is a **React** SPA served by the bridge at port 8080. Most tabs re
 |-------|---------|
 | [Routes](routes.html) | Sidebar tabs and URLs |
 | [SQL FDD Rules](sql-fdd-rules.html) | Historian SQL workbench |
-| [CSV import & preview](csv-import-and-preview.html) | CSV Fusion workflow |
+| [CSV batch import](csv-batch-import.html) | Headless CSV ingest API |
 | [Plots & reports](plots-and-reports.html) | Trends and PDF builder |

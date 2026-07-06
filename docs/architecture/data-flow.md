@@ -26,11 +26,12 @@ Field buses (BACnet / Modbus / Haystack / JSON / CSV)
 
 ## CSV path
 
-Engineering workstations can skip live drivers:
+Batch CSV loads use the headless import API (no dashboard UI):
 
-1. Import CSV via **CSV Fusion** tab or `/api/csv/import/*`
-2. Preflight validation (`/api/csv/import/preflight`) gates execute
-3. Historian rows carry `source_driver: csv` for downstream SQL
+1. Host script or sidecar delivers CSV → `POST /api/csv/import/preflight` → `execute`
+2. Historian rows carry `source_driver: csv` for downstream SQL
+
+Large CSV analysis belongs in the [Pandas cookbook]({{ site.baseurl }}/rules/cookbook/pandas-cookbook.html) outside the edge.
 
 ## Reports
 

@@ -19,7 +19,7 @@ Routes are defined in `workspace/dashboard/src/App.tsx`. Sidebar sections come f
 
 | Route | Tab | Description |
 |-------|-----|-------------|
-| `/csv` | CSV Fusion | Import CSV, wiresheet merge, historian store |
+| `/csv` | — | Redirects to `/data-management` |
 | `/bacnet` | BACnet | Commissioning, device tree, poll rates |
 | `/haystack` | Haystack | Connect Haystack server, browse/import |
 | `/modbus` | Modbus | TCP register reads, tree, polling |

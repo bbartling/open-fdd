@@ -170,7 +170,6 @@ pub fn list_sessions_handler(limit: usize) -> Value {
                     .and_then(|p| p.get("row_count"))
                     .cloned()
                     .unwrap_or(json!(null)),
-                "fusion_url": format!("/csv?session={id}"),
             }));
         }
     }
@@ -185,7 +184,7 @@ pub fn list_sessions_handler(limit: usize) -> Value {
 
 pub fn latest_planned_session_handler() -> Value {
     let listed = list_sessions_handler(20);
-    let empty = json!({"ok": false, "error": "no import session found — upload CSVs and run Preview plan in UT3 panel"});
+    let empty = json!({"ok": false, "error": "no import session found — POST /api/csv/import/preview then preflight"});
     let Some(arr) = listed.get("sessions").and_then(|v| v.as_array()) else {
         return empty;
     };
@@ -196,7 +195,6 @@ pub fn latest_planned_session_handler() -> Value {
                 "ok": true,
                 "session": s.clone(),
                 "session_id": s.get("session_id").cloned().unwrap_or(json!(null)),
-                "fusion_url": s.get("fusion_url").cloned().unwrap_or(json!(null)),
             });
         }
     }

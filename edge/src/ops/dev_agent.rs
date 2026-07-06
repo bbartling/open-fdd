@@ -15,8 +15,7 @@ pub fn dev_harness_reply(body: &Value) -> Value {
         .unwrap_or("/");
 
     let hint = if path.starts_with("/csv") {
-        "CSV: drop files on the wiresheet, or use an external MCP agent with \
-         openfdd_csv_sessions / openfdd_csv_fusion_preview / openfdd_csv_import_execute."
+        "CSV batch import: MCP openfdd_csv_import_preflight / openfdd_csv_import_execute, or host scripts — see docs/drivers/csv-batch.html."
     } else if path.starts_with("/bacnet") {
         "BACnet: MCP openfdd_bacnet_whois or commission reads. Field writes need integrator + approved=true."
     } else if path.starts_with("/sql-fdd") {
@@ -31,13 +30,12 @@ pub fn dev_harness_reply(body: &Value) -> Value {
         format!("{hint} What do you want to do on {path}?")
     } else if message.contains("session") || message.contains("ut3") {
         format!(
-            "{hint} List sessions: GET /api/csv/import/sessions. Load fusion: \
-             /csv?session=<id> or MCP openfdd_csv_fusion_preview."
+            "{hint} List sessions: GET /api/csv/import/sessions. Preflight: MCP openfdd_csv_import_preflight."
         )
     } else if message.contains("save") || message.contains("arrow") || message.contains("feather") {
-        "Save merged data: MCP openfdd_csv_import_execute (after fusion preview) or Commit on CSV tab when preview looks right.".into()
+        "Persist CSV: MCP openfdd_csv_import_execute after preflight pass.".into()
     } else if message.contains("help") || message.contains("mcp") {
-        "MCP tools: openfdd_health, openfdd_stack_status, openfdd_driver_status, CSV fusion tools, Haystack/SPARQL. See mcp/README.md.".into()
+        "MCP tools: openfdd_health, openfdd_stack_status, openfdd_driver_status, openfdd_csv_*, Haystack/SPARQL. See mcp/README.md.".into()
     } else {
         format!("{hint} You asked: \"{message}\". Use MCP tools or the active tab APIs.")
     };

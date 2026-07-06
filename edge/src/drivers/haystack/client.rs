@@ -44,6 +44,21 @@ struct BasicHaystackClient {
 }
 
 impl BasicHaystackClient {
+    fn wire_format(cfg: &HaystackConfig) -> String {
+        if let Ok(v) = std::env::var("OPENFDD_HAYSTACK_FORMAT") {
+            let v = v.trim().to_string();
+            if !v.is_empty() {
+                return v;
+            }
+        }
+        // Niagara nHaystack rejects application/json on POST read/nav — use Zinc.
+        if cfg.auth_mode.eq_ignore_ascii_case("basic") {
+            "text/zinc".to_string()
+        } else {
+            "application/json".to_string()
+        }
+    }
+
     fn new(cfg: &HaystackConfig, user: &str, pass: &str) -> Result<Self, String> {
         let mut builder = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(cfg.timeout_seconds.max(1)));
@@ -58,7 +73,7 @@ impl BasicHaystackClient {
             base_url: cfg.base_url.trim_end_matches('/').to_string(),
             username: user.to_string(),
             password: pass.to_string(),
-            format: "application/json".to_string(),
+            format: Self::wire_format(cfg),
         })
     }
 

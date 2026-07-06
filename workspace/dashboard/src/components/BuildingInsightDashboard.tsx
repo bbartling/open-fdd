@@ -165,7 +165,7 @@ export default function BuildingInsightDashboard() {
           <p className="muted">
             No Haystack model loaded yet — stack health and gauges below reflect the live edge only.
             Sign in and import a model under{" "}
-            <Link to="/model">Model &amp; assignments</Link> (or CSV Fusion) to enable fault detection
+            <Link to="/model">Model &amp; assignments</Link> to enable fault detection
             and comfort analytics.
           </p>
         </div>

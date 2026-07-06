@@ -24,7 +24,6 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Integrations",
     items: [
-      { to: "/csv", icon: "📂", label: "CSV Fusion", protected: true },
       { to: "/bacnet", icon: "📡", label: "BACnet", protected: true },
       { to: "/haystack", icon: "🌿", label: "Haystack", protected: true },
       { to: "/modbus", icon: "🔌", label: "Modbus", protected: true },

@@ -71,6 +71,7 @@ pub mod tests {
 
     #[test]
     fn mock_server_about_and_read() {
+        std::env::set_var("OPENFDD_HAYSTACK_FORMAT", "application/json");
         let (base, running) = spawn_mock_server();
         let cfg = mock_config(&base);
         let test = test_connection(&cfg);
