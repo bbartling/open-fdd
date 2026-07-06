@@ -231,6 +231,8 @@ async fn run_server() -> Result<(), String> {
         bacnet_server::device_name()
     );
 
+    // Hold server for process lifetime (vibe16: single owner of :47808).
+    let _server = server;
     loop {
         sleep(Duration::from_secs(3600)).await;
     }
@@ -244,13 +246,13 @@ pub fn start_background() {
     if STARTED.swap(true, Ordering::SeqCst) {
         return;
     }
-    // BACnetServer::build() must not run on bacnet_live's worker pool — it creates an
-    // inner tokio runtime and panics ("Cannot start a runtime from within a runtime").
-    // Isolate the server on its own OS thread with a dedicated current-thread runtime.
+    // Dedicated OS thread owns the only BACnet server runtime (vibe16 bacnet_app pattern).
     thread::Builder::new()
         .name("openfdd-bacnet-server".into())
         .spawn(|| {
-            let rt = tokio::runtime::Builder::new_current_thread()
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_name("bacnet-srv")
                 .enable_all()
                 .build()
                 .expect("bacnet server tokio runtime");

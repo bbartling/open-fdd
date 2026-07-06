@@ -1874,7 +1874,10 @@ fn persist_bacnet_reads_to_historian(reads: &[Value]) {
     let mut wide_cols: BTreeMap<String, f64> = BTreeMap::new();
     let mut oa_t = None::<f64>;
     for read in reads {
-        let val = read.get("present_value").and_then(|v| v.as_f64());
+        let val = read
+            .get("present_value")
+            .and_then(|v| v.as_f64())
+            .or_else(|| read.get("value").and_then(|v| v.as_f64()));
         if val.is_none() {
             continue;
         }
@@ -1917,7 +1920,9 @@ fn persist_bacnet_reads_to_historian(reads: &[Value]) {
         source_driver: "bacnet",
         is_simulated: false,
     });
-    let _ = store::append_pivot_row(&row);
+    if let Err(e) = store::append_pivot_row(&row) {
+        eprintln!("Open-FDD BACnet poll: historian pivot append failed: {e}");
+    }
 }
 
 pub fn count_discovered_devices(registry: &Value) -> u64 {

@@ -166,10 +166,11 @@ export default function AgentPage() {
             {config.embedded_chat === false ? " · embedded chat disabled" : null}
           </p>
           <p className="muted">
-            CSV workflow: <Link to="/csv">CSV import tab</Link> · MCP tools <code>openfdd_csv_*</code> · see{" "}
-            <a href="https://github.com/bbartling/open-fdd/blob/master/mcp/README.md" target="_blank" rel="noreferrer">
-              mcp/README.md
+            CSV batch import uses MCP/API only — see{" "}
+            <a href="https://bbartling.github.io/open-fdd/drivers/csv-batch.html" target="_blank" rel="noreferrer">
+              CSV batch driver docs
             </a>
+            {" "}· MCP <code>openfdd_csv_*</code>
           </p>
           <button type="button" className="secondary-btn" disabled={busy} onClick={() => void refresh()}>
             Refresh

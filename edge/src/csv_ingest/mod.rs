@@ -192,7 +192,6 @@ pub fn plan_handler(body: &Value) -> Value {
         "plan": plan,
         "preview": preview,
         "validation_report": validation_report,
-        "fusion_url": format!("/csv?session={session_id}"),
     })
 }
 
@@ -502,7 +501,6 @@ pub fn fusion_preview_handler(session_id: &str, limit: usize) -> Value {
         "columns": columns,
         "rows": grid,
         "validation_report": validation,
-        "fusion_url_hint": format!("/csv?session={session_id}"),
     })
 }
 

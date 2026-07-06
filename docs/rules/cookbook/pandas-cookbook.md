@@ -35,15 +35,21 @@ nav_order: 2
 import pandas as pd
 import numpy as np
 
-# Wide historian export (one row per timestamp × equipment)
-df = pd.read_json("telemetry_pivot.jsonl", lines=True)
-# Or: df = pd.read_feather("telemetry_pivot.feather")
+# Generic CSV (vendor export, BMS dump, Open-FDD batch export, etc.)
+df = pd.read_csv("your_building_data.csv")
 
-df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
-df = df.sort_values(["equipment_id", "timestamp"])
+# Optional: parse timestamp column (rename "timestamp" if your file uses another name)
+ts_col = "timestamp"  # e.g. "DateTime", "time", "ts"
+if ts_col in df.columns:
+    df[ts_col] = pd.to_datetime(df[ts_col], utc=True, errors="coerce")
+    df = df.dropna(subset=[ts_col]).sort_values(ts_col)
+else:
+    df = df.sort_index()
 
-EQUIP = "equip:your-ahu"
-d = df[df["equipment_id"] == EQUIP].copy()
+# Optional: filter one equipment / site column if present
+# EQUIP = "equip:your-ahu"
+# d = df[df["equipment_id"] == EQUIP].copy() if "equipment_id" in df.columns else df.copy()
+d = df.copy()
 ```
 
 ### Normalize command 0–100 → 0–1

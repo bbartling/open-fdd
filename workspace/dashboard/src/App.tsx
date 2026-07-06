@@ -15,7 +15,6 @@ import PlotPage from "./pages/PlotPage";
 import SqlFddRulesPage from "./pages/SqlFddRulesPage";
 import LiveFddValidationPage from "./pages/LiveFddValidationPage";
 import DataManagementPage from "./pages/DataManagementPage";
-import CsvWorkbenchPage from "./pages/CsvWorkbenchPage";
 import ReportBuilderPage from "./pages/ReportBuilderPage";
 import AlgorithmsPage from "./pages/AlgorithmsPage";
 import DataExportPage from "./pages/DataExportPage";
@@ -46,8 +45,7 @@ export default function App() {
             <Route path="bacnet" element={<TabErrorBoundary tab="bacnet"><BacnetPage /></TabErrorBoundary>} />
             <Route path="modbus" element={<TabErrorBoundary tab="modbus"><ModbusPage /></TabErrorBoundary>} />
             <Route path="json-api" element={<TabErrorBoundary tab="json-api"><JsonApiPage /></TabErrorBoundary>} />
-            <Route path="haystack" element={<TabErrorBoundary tab="haystack"><HaystackPage /></TabErrorBoundary>} />
-            <Route path="csv" element={<TabErrorBoundary tab="csv"><CsvWorkbenchPage /></TabErrorBoundary>} />
+            <Route path="csv" element={<Navigate to="/data-management" replace />} />
             <Route path="wiresheet" element={<Navigate to="/model" replace />} />
             <Route path="wiresheet/haystack" element={<Navigate to="/model" replace />} />
             <Route path="wiresheet/rules" element={<Navigate to="/model" replace />} />
