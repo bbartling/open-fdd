@@ -22,6 +22,9 @@ Open-FDD edge executes fault detection as **DataFusion SQL** against Apache Arro
 6. [Air handling units (FC1–FC15 / GL36 A–M)](#air-handling-units)
 7. [VAV zones](#vav-zones)
 8. [Economizer & ventilation](#economizer--ventilation)
+   - [AHU economizer diagnostics guide](#ahu-economizer-diagnostics-guide)
+   - [ECON-1–5](#econ-1--economizer-stuck-closed)
+   - [Ventilation & leakage cross-rules](#rule-map-economizer-family)
 9. [Central plants](#central-plants)
 10. [Heat pumps](#heat-pumps)
 11. [Weather station](#weather-station)
@@ -740,6 +743,90 @@ WHERE equipment_id = 'equip:your-vav'
 ---
 
 ## Economizer & ventilation
+
+Continuous FDD and RCx checks for **air-side economizers**: use outdoor air when favorable, avoid mechanical cooling when economizing is available, and meet ventilation minimums.
+
+### AHU economizer diagnostics guide
+
+#### Operating modes (GL36-style)
+
+AHU supervisory logic cycles among heating-only, economizer, economizer + mechanical cooling, and mechanical-cooling-only bands. Mode misclassification drives false positives — normalize `fan_cmd`, `oa_damper_pct`, and valve commands to **0–1** before comparing thresholds.
+
+| Mode | Heating | Cooling | Supply fan | OA damper | Typical fault signals |
+|------|---------|---------|------------|-----------|------------------------|
+| **OS1** heating only | on | off | on | minimum | FC5, FC7, ECON-5 preheat waste |
+| **OS2** economizer (dry-bulb) | off | off | on | modulated (high) | ECON-1 stuck closed, ECON-2 unfavorable |
+| **OS3** econ + mech cool | off | on | on | modulated | ECON-3, FC8–FC11 SAT/MAT in econ |
+| **OS4** mech cool only | off | on | on | minimum | ECON-3 inverse, cooling valve faults |
+
+Mode-transition hunting is covered under [FC4 — PID / operating-mode hunting](#fc4--operating-mode-transition-hunting-gl36-rule-d).
+
+#### Required historian columns
+
+Assign Haystack (or BACnet) points to these semantic IDs before running economizer SQL:
+
+| Semantic ID | Common aliases | Used for |
+|-------------|----------------|----------|
+| `oa_t` | `oat`, outside air temp | Cutoffs, stuck-closed checks |
+| `oa_h` | outside air RH | Enthalpy economizer (optional) |
+| `mat` | mixed air temp | Blend envelope, OA fraction |
+| `rat` / `ra_t` | return air temp | OA fraction denominator |
+| `oa_damper_pct` | `econ`, OA damper | Modulation, stuck, leakage |
+| `clg_valve_pct`, `htg_valve_pct` | cooling/heating valves | Mode detection |
+| `fan_cmd`, `fan_status` | supply fan | Proving unit operation |
+| `sat`, `sat_sp` | supply air temp / setpoint | Preheat and SAT faults |
+| `preheat_leave_t` | preheat discharge temp | ECON-5 |
+
+#### Core formulas
+
+**Outdoor air fraction** (dry-bulb mass-flow proxy):
+
+```text
+oa_frac = (mat - rat) / (oa_t - rat)
+```
+
+Skip the sample when `ABS(rat - oa_t) < 2.2` °F — no usable mixing signal.
+
+**Expected mixed air at full economizer** (sanity plot): when `oa_damper_pct > 0.90` and `ABS(rat - oa_t) > 5` °F, expect `mat ≈ oa_t` (within sensor tolerance).
+
+**Dry-bulb economizer favorable** (cooling season, default cutoffs):
+
+```text
+fan_proven AND oa_t < oat_cutoff   -- default oat_cutoff = 63 °F
+```
+
+#### Dry-bulb vs enthalpy economizer
+
+Most packaged rules below use **dry-bulb** thresholds (OAT only). **Enthalpy** economizers compare outdoor vs return enthalpy and need `oa_h` plus return humidity (`ra_h` or derived). Favorable cooling when outdoor enthalpy is below return enthalpy — thresholds vary by climate and controller vendor.
+
+Open-FDD ships dry-bulb defaults; tune `oat_cutoff`, `dpr_min`, and `oa_min_pct` per site. For enthalpy parity in Pandas, compute enthalpy off-box (e.g. psychrometric library) and mirror the same boolean gate in SQL assignments.
+
+#### RCx diagnostic workflow
+
+1. **Sensor quality** — run SV-1–SV-4 on `oa_t`, `mat`, `rat` before economizer rules latch.
+2. **Trend review** — plot OAT, MAT, RAT, and OA damper % on a summer occupied day.
+3. **Mode bands** — shade OS2/OS3 from damper + valve positions; confirm transitions match expectations.
+4. **Core economizer** — ECON-1 → ECON-3 (stuck closed, unfavorable economizing, mech when econ available).
+5. **Ventilation** — ECON-4, OA-1, OA-2 for minimum OA / DCV.
+6. **Hardware** — DMP-1 damper leakage; FC14–FC15 valve/damper at minimum position.
+7. **Confirm** — default 300–600 s API confirmation; extend for advisory / trim rules.
+
+#### Rule map (economizer family)
+
+| Rule | Focus | Where |
+|------|-------|-------|
+| ECON-1 | Damper closed when OAT favorable | below |
+| ECON-2 | Damper open when OAT unfavorable (hot) | below |
+| ECON-3 | Mechanical cooling when OAT cold enough to economize | below |
+| ECON-4 | Estimated OA fraction below design | below |
+| ECON-5 | Preheat coil over-conditioning | below |
+| OA-1 | Low OA fraction (extended) | [Extended v2 — OA-1](#oa-1--low-estimated-outdoor-air-fraction) |
+| OA-2 | DCV minimum OA not met | [Extended P2 — OA-2](#oa-2--dcv-minimum-outdoor-air-not-met) |
+| DMP-1 | OA damper leakage at commanded closed | [Extended v2 — DMP-1](#dmp-1--oa-damper-leakage) |
+| FC6 | OA fraction mismatch (GL36) | [FC6](#fc6--estimated-oa-fraction-mismatch) |
+| FC8–FC11 | SAT/MAT faults in economizer modes | [Air handling units](#air-handling-units) |
+
+---
 
 ### ECON-1 — Economizer stuck closed
 

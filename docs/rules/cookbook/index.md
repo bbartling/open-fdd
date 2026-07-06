@@ -40,7 +40,7 @@ Every rule exists in **both** backends. See the [parity matrix](parity-matrix.ht
 | Sensor validation | 7 | SV-1–SV-7 |
 | AHU GL36 (FC1–FC15) | 15 | Duct static, MAT envelope, PID hunting |
 | VAV terminals | 7 | Comfort, reheat, damper, airflow bias, min flow |
-| Economizer / ventilation | 7 | ECON-1–5, OA-1–2 |
+| Economizer / ventilation | 7+ | ECON-1–5, OA-1–2, [diagnostics guide](datafusion-sql-cookbook.html#ahu-economizer-diagnostics-guide) |
 | Central plant | 6 | CHW ΔT, DP, reset, tower approach |
 | Extended v2 | 12 | Reset, schedule, override, cmd/status, leakage |
 | Extended P2 | 6 | VAV-6/7, TOWER-1, CTRL-2, SV-7, OA-2 |
