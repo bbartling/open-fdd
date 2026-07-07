@@ -2792,8 +2792,8 @@ mod override_export_tests {
                 for driver in drivers {
                     if driver.get("id").and_then(|v| v.as_str()) == Some("bacnet-ip") {
                         driver["devices"] = json!([
-                            {"device_instance": 5007, "address": "192.168.204.200:47808", "mstp_network": 2000, "mstp_mac": [7]},
-                            {"device_instance": 3456789, "host": "192.168.204.13", "port": 47808}
+                            {"device_instance": 5007, "address": "198.51.100.50:47808", "mstp_network": 2000, "mstp_mac": [7]},
+                            {"device_instance": 3456789, "host": "198.51.100.13", "port": 47808}
                         ]);
                     }
                 }
@@ -2801,11 +2801,11 @@ mod override_export_tests {
             write_registry(&registry);
             assert_eq!(
                 registry_device_address(5007).as_deref(),
-                Some("192.168.204.200:47808")
+                Some("198.51.100.50:47808")
             );
             assert_eq!(
                 registry_device_address(3456789).as_deref(),
-                Some("192.168.204.13:47808")
+                Some("198.51.100.13:47808")
             );
         });
     }
