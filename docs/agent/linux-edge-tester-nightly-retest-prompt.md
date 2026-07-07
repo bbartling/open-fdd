@@ -1,8 +1,8 @@
-# Linux edge tester — nightly retest @ `38df801` (paste prompt)
+# Linux edge tester — nightly retest @ `40fecf7` (paste prompt)
 
-**Repo-only** (not on GitHub Pages). Paste into Cursor on **`/home/ben/open-fdd`** when product confirms `:nightly` is green and bench must re-gate after P0 fixes (#451).
+**Repo-only** (not on GitHub Pages). Paste into Cursor on **`/home/ben/open-fdd`** when product confirms `:nightly` is green on **`40fecf7`** (or later master SHA that includes **3.2.12** edge).
 
-Full charter: [linux-edge-tester-prompt.md](./linux-edge-tester-prompt.md)
+Full charter: [linux-edge-tester-prompt.md](./linux-edge-tester-prompt.md) · GH Actions watch: [linux-edge-tester-gh-actions-watch-prompt.md](./linux-edge-tester-gh-actions-watch-prompt.md) · Issue index: [WSL_CURSOR_AGENT_ISSUES.md](./WSL_CURSOR_AGENT_ISSUES.md)
 
 ---
 
@@ -12,10 +12,10 @@ You are the Open-FDD Linux edge tester on /home/ben/open-fdd.
 Charter: TEST, DOCUMENT, REPORT — no Rust/TS edits, no git push, no upstream PR.
 Bench has insufficient RAM — GHCR pull only (never docker build / cargo build).
 
-Your job NOW: git pull bench scripts → deploy :nightly @ 38df801 → run gates → post GitHub evidence → report what is STILL NOT WORKING.
+Your job NOW: sync bench scripts → deploy :nightly @ 40fecf7 (3.2.12) → run gates → post GitHub evidence → report what is STILL NOT WORKING.
 
-Acknowledged. Bench /home/ben/open-fdd. Channel: nightly. Target SHA: 38df801. Gate: #429.
-Will comment #429 (always), #433 (BACnet/drivers), #452/#453 (P0 verify), #431 if agent/validate changes.
+Acknowledged. Bench /home/ben/open-fdd. Channel: nightly. Target SHA: 40fecf7 (3.2.12). Gate: #429.
+Will comment #429 (always), #464/#466 (5007 + FDD profile), #433 (drivers/Haystack), #465–#470 as applicable.
 No git push. No product code edits on bench.
 ```
 
@@ -25,34 +25,53 @@ No git push. No product code edits on bench.
 
 | Item | Value |
 |------|-------|
-| **Expected `git_sha` prefix** | latest green nightly (was `38df801` / **3.2.10** bench fixes) |
-| **Includes** | #451 P0 BACnet server runtime + poll historian persist; #455/#456 CI fixes |
-| **Last bench test** | `f5f66bd` (pre-#451 — FAIL server panic + historian stuck) |
+| **Expected `git_sha` prefix** | `40fecf7` — **3.2.12** via [#472](https://github.com/bbartling/open-fdd/pull/472) |
+| **Includes** | MSTP routing persist + `read_property_routed`; FDD `OPENFDD_VALIDATION_PROFILE`; bridge→commission BACnet proxy; persistent BACnet client; auth 644; `scripts/bench/` |
+| **Last bench test** | `802258a` @ 3.2.11 — FDD pipeline **PASS** (30m soak); **5007 MSTP FAIL** on bridge; FDD needed manual `site.local.toml` (#466) |
 | **GHCR tag** | `ghcr.io/bbartling/openfdd-edge-rust:nightly` |
-| **GHCR publish** | [run 28745276684](https://github.com/bbartling/open-fdd/actions/runs/28745276684) — success |
+| **Vibe16 lab** | Kill before BACnet tests — steals UDP :47808 |
 
-Confirm CI before deploy (optional):
+Confirm CI before deploy:
 
 ```bash
 gh run list --repo bbartling/open-fdd --workflow rust-ghcr.yml --branch master --limit 1 \
-  --json conclusion,headSha | jq '.[0] | {conclusion, sha: .headSha[0:7]}'
-# expect: success, 38df801
+  --json conclusion,headSha,status,databaseId | jq '.[0] | {conclusion, sha: .headSha[0:7], status, run: .databaseId}'
+# expect: conclusion success, sha 40fecf7
 ```
+
+**Abort** deploy if `/api/health` `git_sha` prefix is before `40fecf7` — nightly not refreshed.
+
+---
+
+## Open issues — retest focus @ 2026-07-07
+
+| Issue | Status | Retest focus |
+|-------|--------|--------------|
+| **[#429](https://github.com/bbartling/open-fdd/issues/429)** | OPEN — sign-off **NO** | Full iteration; **YES** only when 5007 + FDD profile pass |
+| **[#464](https://github.com/bbartling/open-fdd/issues/464)** | Fixed in 3.2.12 — verify | Who-Is/read/poll **device 5007** on bridge `:8080` |
+| **[#466](https://github.com/bbartling/open-fdd/issues/466)** | Fixed in 3.2.12 — verify | FDD cycle with **only** `OPENFDD_VALIDATION_PROFILE` (no `site.local.toml`) |
+| **[#465](https://github.com/bbartling/open-fdd/issues/465)** | Fixed in 3.2.12 — verify | Bridge Who-Is 5007 via commission proxy |
+| **[#467](https://github.com/bbartling/open-fdd/issues/467)** | Fixed in 3.2.12 — verify | 50× read — no EMFILE in commission logs |
+| **[#469](https://github.com/bbartling/open-fdd/issues/469)** | Fixed in 3.2.12 — verify | Auth rotate + restart without manual chmod |
+| **[#470](https://github.com/bbartling/open-fdd/issues/470)** | Fixed in 3.2.12 — verify | `scripts/bench/openfdd_bacnet_poll_daemon.sh` exists after sync |
+| **[#452](https://github.com/bbartling/open-fdd/issues/452)** | **PASS** @ 802258a | Reconfirm no panic + 599999 |
+| **[#453](https://github.com/bbartling/open-fdd/issues/453)** | **PASS** @ 802258a (BIP) | Reconfirm samples ↑ + pivot growth |
+| **[#433](https://github.com/bbartling/open-fdd/issues/433)** | OPEN — P1 | Haystack poll-once/read; driver tree UX |
+
+Do **not** close issues yourself unless maintainer confirms bench PASS.
 
 ---
 
 ## Step 0 — Sync bench tree (scripts + docs only)
 
-Pull latest **bench repo** for scripts, compose, and agent prompts. **Do not** build containers from source.
-
 ```bash
 cd /home/ben/open-fdd
-git fetch origin
-git pull --ff-only origin master   # or your bench tracking branch
-git log -1 --oneline
+# If bench tracks product scripts via rsync:
+OPENFDD_IMAGE_TAG=nightly ./scripts/openfdd_src_sync_for_test.sh 2>/dev/null || true
+git fetch origin 2>/dev/null; git pull --ff-only origin master 2>/dev/null || true
 ```
 
-If `git pull` fails (bench-only commits), note in #429 and continue with local scripts — deploy still uses **GHCR**, not local Rust.
+Deploy uses **GHCR**, not local Rust.
 
 ---
 
@@ -63,18 +82,14 @@ cd /home/ben/open-fdd
 export OPENFDD_IMAGE_TAG=nightly
 export OPENFDD_COMPOSE_ROOT="$PWD"
 
-# Kill vibe16 lab — steals UDP 47808
 pkill -f 'target/release/bacnet_app' || true
-pkill -f 'openfdd-bacnet-feather-concept.*bacnet_app' || true
+pkill -f 'openfdd-bacnet-feather-concept' || true
 pgrep -af bacnet_app || echo "OK: no stray bacnet_app"
 
-# BACnet env split
-echo "=== bridge (expect SERVER=1 via compose) ==="
-docker exec openfdd-bridge printenv OPENFDD_BACNET_SERVER_ENABLED 2>/dev/null || echo "(stack down)"
+chmod 644 workspace/auth.env.local 2>/dev/null || true
 
-echo "=== commission.env (expect 0) ==="
-grep OPENFDD_BACNET_SERVER_ENABLED workspace/bacnet/commissioning/commission.env 2>/dev/null \
-  || echo "MISSING — set OPENFDD_BACNET_SERVER_ENABLED=0"
+docker exec openfdd-bridge printenv OPENFDD_BACNET_SERVER_ENABLED 2>/dev/null || echo "(stack down)"
+grep OPENFDD_BACNET_SERVER_ENABLED workspace/bacnet/commissioning/commission.env 2>/dev/null || true
 ```
 
 ---
@@ -82,30 +97,12 @@ grep OPENFDD_BACNET_SERVER_ENABLED workspace/bacnet/commissioning/commission.env
 ## Step 2 — Deploy `:nightly` (GHCR pull only)
 
 ```bash
-cd /home/ben/open-fdd
-export OPENFDD_IMAGE_TAG=nightly
-export OPENFDD_COMPOSE_ROOT="$PWD"
-
-# Pull pre-built image + recreate stack (preserves historian per bench policy)
 REQUIRE_BACKUP=0 ./scripts/openfdd_rust_site_update.sh
-
 ./scripts/openfdd_rust_edge_validate.sh
-
-# Confirm SHA advanced past f5f66bd
 curl -s http://127.0.0.1:8080/api/health | jq '{git_sha, image_tag, status, version}'
 ```
 
-**Abort** if `git_sha` prefix is not `38df801` — nightly not refreshed; do not claim re-test.
-
-Expected:
-
-```json
-{
-  "git_sha": "38df801…",
-  "image_tag": "nightly",
-  "status": "ok"
-}
-```
+Expected: `version` **3.2.12**, `git_sha` prefix **`40fecf7`**, `image_tag` **nightly**.
 
 ---
 
@@ -118,9 +115,10 @@ TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
   -d "$(jq -nc --arg u integrator --arg p "$INTEGRATOR_PW" '{username:$u,password:$p}')" \
   | jq -r '.token // .access_token')"
 
-./scripts/openfdd_bacnet_poll_daemon.sh stop 2>/dev/null || true
-OPENFDD_BACNET_DAEMON_MAX_CYCLES=0 ./scripts/openfdd_bacnet_poll_daemon.sh start
-./scripts/openfdd_bacnet_poll_daemon.sh status
+./scripts/bench/openfdd_bacnet_poll_daemon.sh stop 2>/dev/null || \
+  ./scripts/openfdd_bacnet_poll_daemon.sh stop 2>/dev/null || true
+OPENFDD_BACNET_DAEMON_MAX_CYCLES=0 ./scripts/bench/openfdd_bacnet_poll_daemon.sh start 2>/dev/null || \
+  OPENFDD_BACNET_DAEMON_MAX_CYCLES=0 ./scripts/openfdd_bacnet_poll_daemon.sh start
 ```
 
 Never print `$TOKEN` in GitHub comments.
@@ -129,162 +127,127 @@ Never print `$TOKEN` in GitHub comments.
 
 ## Step 4 — Validate (run in order)
 
-### 4a — P0 re-checks (#452, #453)
+### 4a — P0 MSTP 5007 (#464, #465)
 
-These map directly to open P0 issues. **PASS** = close-worthy after maintainer review; **FAIL** = product handoff.
-
-| Issue | What to prove | Commands |
-|-------|---------------|----------|
-| **[#452](https://github.com/bbartling/open-fdd/issues/452)** | BACnet server starts — no tokio panic; **599999** on wire | `docker logs openfdd-bridge 2>&1 \| grep -E 'panic\|BACnet server' \| tail -10` — expect **"BACnet server on UDP"**, **no panic** |
-| **[#453](https://github.com/bbartling/open-fdd/issues/453)** | Poll reads persist to historian | `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/bacnet/poll/status \| jq '{samples,last_poll,errors}'` — expect **samples ↑** over 2–3 cycles; check pivot/feather mtime |
+Router `192.168.204.200:47808`, MSTP net **2000**, MAC **`[7]`**.
 
 ```bash
-# #452 — server + Who-Is on bridge (local 599999)
-docker logs openfdd-bridge 2>&1 | tail -80 > /tmp/bridge-tail.log
-grep -E 'panic|BACnet server' /tmp/bridge-tail.log | tail -10
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  http://127.0.0.1:8080/api/bacnet/whois \
+  -d '{"low":5007,"high":5007}' | jq .
 
-time curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  http://127.0.0.1:8080/api/bacnet/read \
+  -d '{"point_id":"bacnet:5007:analog-input:1173"}' | jq .
+
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/bacnet/poll/status | jq .
+sleep 90
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/bacnet/poll/status | jq .
+
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/bacnet/driver/tree | \
+  jq '[..|objects|select(.device_instance?==5007)]|.[0]|{device_instance,mstp_network,mstp_mac,address}'
+```
+
+**PASS:** Who-Is includes 5007 @ `.200`; OA-T ~71°F; poll samples ↑ for 5007 points; `driver_tree.json` has routing fields.
+
+### 4b — P0 FDD profile (#466)
+
+Remove workaround if present, then single FDD cycle:
+
+```bash
+mv workspace/config/site.local.toml workspace/config/site.local.toml.bak 2>/dev/null || true
+
+export OPENFDD_VALIDATION_PROFILE=workspace/smoke-profiles/local/local_validation_profile.local.toml
+export OPENFDD_INTEGRATOR_PASSWORD="$INTEGRATOR_PW"
+BENCH_SMOKE_SHORT_FDD=1 ./scripts/smoke_live_fdd_validation.sh
+```
+
+**PASS:** FDD cycle completes without `smoke profile missing device_instance`.
+
+### 4c — P0 regression (#452, #453)
+
+```bash
+docker logs openfdd-bridge 2>&1 | grep -E 'panic|BACnet server' | tail -10
+
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   http://127.0.0.1:8080/api/bacnet/whois \
   -d '{"low":599990,"high":600000}' | jq .
 
-# #453 — poll + historian
-curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/bacnet/poll/status | jq .
-sleep 30
-curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/bacnet/poll/status | jq .
-ls -lt workspace/data/feather_store/bacnet/*/*/*.feather 2>/dev/null | head -5
-find workspace/data/pivot -name '*.jsonl' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -3
+find workspace/data/pivot -name 'telemetry_pivot.jsonl' -printf '%T+ %p\n' 2>/dev/null
 ```
 
-### 4b — Phase A′ / drivers ([#433](https://github.com/bbartling/open-fdd/issues/433))
-
-| Check | Pass |
-|-------|------|
-| `POST /api/bacnet/whois` | JSON in ~30s; lists field device(s) |
-| `GET /api/bacnet/driver/tree` | JSON; field instances present (not only 599999) |
-| Commission Who-Is (if used) | Non-empty when field devices on wire |
-| Bridge vs commission env split | bridge `SERVER=1`, commission `SERVER=0` |
+### 4d — Haystack + drivers (#433)
 
 ```bash
-time curl -s -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:8080/api/bacnet/driver/tree | jq .
+curl -s -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/haystack/test | jq '{ok,message}'
+curl -s -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/haystack/poll-once | jq '{ok,records: (.records|length)?}'
 
-./scripts/openfdd_polling_feather_validate.sh
-./scripts/openfdd_drivers_validate.sh || true   # note E2BIG if tree huge
-```
-
-### 4c — All-drivers matrix → **#429**
-
-```bash
+./scripts/openfdd_drivers_validate.sh || true
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/agent/validate | jq .
-
-echo "=== Modbus ==="
-curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/modbus/poll/status | jq .
-
-echo "=== Haystack ==="
-curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/haystack/status | jq .
-
-echo "=== Health ==="
-curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/health | jq '{status,image_tag,git_sha,version}'
 ```
 
-### 4d — Phase B soak (only if A + A′ PASS)
+### 4e — Phase B soak (only if 4a–4d PASS)
 
 ```bash
-OPENFDD_SOAK_MINUTES=10 ./scripts/openfdd_stores_fdd_soak.sh
+OPENFDD_SOAK_MINUTES=10 ./scripts/bench/openfdd_stores_fdd_soak.sh 2>/dev/null || \
+  OPENFDD_SOAK_MINUTES=10 ./scripts/openfdd_stores_fdd_soak.sh
 ```
+
+For **30m rigorous FDD with device 5007** (sign-off gate): use `workspace/logs/rigorous_fdd_30m_runner.sh` after 4a+4b PASS.
 
 ---
 
 ## Step 5 — GitHub issues to respond on
 
-Post evidence on **every issue whose status changed**. Minimum set for this iteration:
+| Issue | When |
+|-------|------|
+| **#429** | **Always** — full report + sign-off NO/YES |
+| **#464, #466** | 5007 + FDD profile evidence |
+| **#465–#470** | If retest confirms fix |
+| **#433** | Haystack, drivers, historian |
+| **#452, #453** | Regression reconfirm |
 
-| Issue | When to comment | What to include |
-|-------|-----------------|-----------------|
-| **[#429](https://github.com/bbartling/open-fdd/issues/429)** | **Always** | Full iteration report + sign-off NO/YES |
-| **[#433](https://github.com/bbartling/open-fdd/issues/433)** | BACnet / drivers / historian changed | Who-Is JSON, tree snippet, poll/feather evidence |
-| **[#452](https://github.com/bbartling/open-fdd/issues/452)** | Server panic fixed or still failing | bridge log grep, Who-Is 599999 |
-| **[#453](https://github.com/bbartling/open-fdd/issues/453)** | Historian persist fixed or still failing | samples count, pivot mtime, feather paths |
-| **[#431](https://github.com/bbartling/open-fdd/issues/431)** | `/api/agent/validate` rollup changed | validate JSON |
-| **#430, #432, #434–#437** | Only if in scope / phase reached | Defer until #429 A′ green unless asked |
-
-```bash
-REPO=bbartling/open-fdd
-gh issue comment 429 --repo "$REPO" --body-file /tmp/edge-iteration-38df801.md
-gh issue comment 433 --repo "$REPO" --body-file /tmp/bacnet-evidence.md
-gh issue comment 452 --repo "$REPO" --body-file /tmp/p452-server.md
-gh issue comment 453 --repo "$REPO" --body-file /tmp/p453-historian.md
-```
-
-Do **not** close issues yourself. Do **not** claim **Sign-off: YES** on #429 unless all rubric items pass (see main prompt).
+Do **not** claim **Sign-off: YES** on #429 until **5007 on bridge** + **FDD without site.local.toml** + 30m soak with 5007.
 
 ---
 
-## Step 6 — Report template (paste on #429)
-
-Fill every section. **Required:** explicit **"Still not working"** list even if mostly PASS.
+## Step 6 — Report template (#429)
 
 ```markdown
-## Edge iteration — nightly @ `38df801`
+## Edge iteration — nightly @ `40fecf7` (3.2.12)
 
-**Deploy:** `git pull` @ `<bench_git_sha>` · GHCR `:nightly` via `openfdd_rust_site_update.sh`
-**Health:** `image_tag` / `git_sha` / `status` from `/api/health`
-**Previous test:** `f5f66bd` · **Poll daemon:** running | stopped
+**Deploy:** GHCR `:nightly` · **Health:** (git_sha / version / status)
+**Previous test:** `802258a` @ 3.2.11 · **Poll daemon:** running | stopped
 
-### P0 verification (#451)
+### P0 gates
 
 | Gate | Issue | Result | Evidence |
 |------|-------|--------|----------|
-| BACnet server — no panic, 599999 on wire | #452 | PASS / FAIL | bridge log / Who-Is |
-| Poll → historian persist | #453 | PASS / FAIL | samples, pivot mtime, feather |
-| Who-Is + driver tree (field devices) | #433 | PASS / FAIL | whois + tree JSON |
-| polling_feather_validate | #429 | pass=X fail=Y | script output |
-| openfdd_drivers_validate | #429 | PASS / FAIL / E2BIG | script output |
-| Modbus poll | #429 | PASS / FAIL | poll/status |
-| Haystack | #429 | PASS / FAIL | status/test |
-| agent/validate rollup | #431 | PASS / FAIL | validate JSON |
+| Who-Is 5007 on bridge | #464/#465 | PASS/FAIL | whois JSON |
+| Read OA-T 5007 | #464 | PASS/FAIL | read JSON ~71°F |
+| Poll samples 5007 | #464 | PASS/FAIL | poll/status ×2 |
+| FDD without site.local.toml | #466 | PASS/FAIL | smoke script |
+| Server no panic | #452 | PASS/FAIL | bridge log |
+| Pivot growth | #453 | PASS/FAIL | pivot mtime |
 
 ### Still not working
 
-List every FAIL or degraded item — be explicit:
-
 1. …
-2. …
-
-*(If all PASS: write "None observed this iteration" and list deferred P1 items separately.)*
-
-### Deferred / P1 (not blocking sign-off unless noted)
-
-- Bridge Who-Is returned `[]` on f5f66bd — retest result: …
-- vibe16 `bacnet_app` UDP contention — preflight: …
-- Weather AVs / feather retention / UX (#433) — …
 
 ### Sign-off
 
-**Sign-off: NO** / **YES** (maintainer only for YES)
+**Sign-off: NO** / **YES**
 
-**Artifacts:** `workspace/logs/` or `/tmp/bridge-tail.log` paths (no secrets)
-
-**Product handoff:** @vibe16 if any P0/P1 FAIL — WSL PR + new nightly; bench waits for GHCR green.
-```
-
-### Product handoff (if any FAIL)
-
-```markdown
-### Product handoff — edge FAIL @ `38df801`
-
-**Blocked:** #452 server | #453 historian | #433 Who-Is/tree | Modbus | Haystack
-**Evidence:** (redacted jq + log excerpts)
-**Request:** fix on WSL, merge, publish `:nightly`. Bench re-runs when `git_sha` advances.
+**Artifacts:** `workspace/logs/nightly_retest_*` (no secrets)
 ```
 
 ---
 
-## Step 7 — Save artifacts
+## Step 7 — Artifacts
 
 ```bash
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
-LOGDIR=workspace/logs/nightly_38df801_${STAMP}
+LOGDIR=workspace/logs/nightly_retest_${STAMP}
 mkdir -p "$LOGDIR"
 curl -s http://127.0.0.1:8080/api/health | jq . > "$LOGDIR/health.json"
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/bacnet/poll/status | jq . > "$LOGDIR/bacnet_poll.json"
@@ -297,7 +260,6 @@ echo "Artifacts: $LOGDIR"
 ## Rules
 
 - **GHCR pull only** — never `docker build` or `cargo build` on bench.
-- **git pull** updates scripts/docs; **image** comes from GHCR `:nightly`.
-- Preflight kill vibe16 `bacnet_app` every iteration.
+- Preflight: kill vibe16 `bacnet_app`; `chmod 644 workspace/auth.env.local`.
 - Never `docker compose down -v` · never delete `workspace/` · never print tokens.
-- Update `LAST_TESTED_SHA=38df801` in your #429 comment after this run.
+- Record `LAST_TESTED_SHA=40fecf7` in #429 comment after deploy confirms health SHA.
