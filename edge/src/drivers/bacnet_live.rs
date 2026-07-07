@@ -685,11 +685,11 @@ pub async fn discover_device_points_rpm(device_instance: u32) -> Result<Vec<Valu
             )
             .await
             {
-                    if let Ok((PropertyValue::CharacterString(s), _)) =
-                        decode_application_value(&name_ack.property_value, 0)
-                    {
-                        name = s;
-                    }
+                if let Ok((PropertyValue::CharacterString(s), _)) =
+                    decode_application_value(&name_ack.property_value, 0)
+                {
+                    name = s;
+                }
             }
             if let Ok(pv_ack) = read_property_for_device(
                 &mut client,
