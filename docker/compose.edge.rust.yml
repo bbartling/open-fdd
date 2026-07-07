@@ -45,6 +45,9 @@ services:
       # Bridge may run the diagnostic local device. Do not load commission.env here —
       # that file's OPENFDD_BACNET_SERVER_ENABLED would override and steal OT Who-Is.
       OPENFDD_BACNET_SERVER_ENABLED: ${OPENFDD_BRIDGE_BACNET_SERVER_ENABLED:-1}
+      OPENFDD_COMMISSION_BASE: ${OPENFDD_COMMISSION_BASE:-http://127.0.0.1:9091}
+      # Full-edge bench: set to 1 so commission alone runs BACnet poll (no Who-Is storm from bridge).
+      OPENFDD_BACNET_COMMISSION_OWNS_POLL: ${OPENFDD_BACNET_COMMISSION_OWNS_POLL:-0}
     # Auth is read at runtime from OPENFDD_WORKSPACE/auth.env.local (do not use env_file —
     # Docker Compose mangles bcrypt `$` in hash values).
     env_file:
@@ -77,6 +80,7 @@ services:
       # Commission owns OT Who-Is / ReadProperty on host-network UDP.
       # Local BACnet server must stay off here (default 0) or field devices never appear.
       OPENFDD_BACNET_SERVER_ENABLED: ${OPENFDD_COMMISSION_BACNET_SERVER_ENABLED:-0}
+      OPENFDD_BACNET_WHOIS_BEFORE_READ: ${OPENFDD_BACNET_WHOIS_BEFORE_READ:-0}
     env_file:
       - path: ${OPENFDD_COMPOSE_ROOT:?}/workspace/data.env.local
         required: false

@@ -106,7 +106,32 @@ fn discover_low_high() -> (u32, u32) {
     if field > 0 && field != local {
         return (field, field);
     }
-    (0, 4_194_303)
+    let mut insts = super::bacnet::field_device_instances_from_registry();
+    insts.retain(|i| *i != local && *i > 0);
+    insts.sort_unstable();
+    insts.dedup();
+    if let (Some(&low), Some(&high)) = (insts.first(), insts.last()) {
+        return (low, high);
+    }
+    // Never default to 0..4194303 on poll/read paths — that floods MSTP routers (PCAP FP-1).
+    (local, local)
+}
+
+/// Wide range only for explicit Who-Is API when env allows (commission discovery scans).
+fn discover_low_high_wide() -> (u32, u32) {
+    if env::var("OPENFDD_BACNET_DISCOVER_WIDE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+    {
+        return (0, 4_194_303);
+    }
+    discover_low_high()
+}
+
+fn whois_before_read_enabled() -> bool {
+    env::var("OPENFDD_BACNET_WHOIS_BEFORE_READ")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
 }
 
 fn server_udp_port() -> u16 {
@@ -161,7 +186,27 @@ fn bip_mac_from_address(addr: &str) -> Option<Vec<u8>> {
     Some(mac)
 }
 
-async fn prepare_device_for_read(
+async fn seed_client_device_from_registry(
+    client: &mut BACnetClient<BipTransport>,
+    device_instance: u32,
+) -> bool {
+    if client.get_device(device_instance).await.is_some() {
+        return true;
+    }
+    let addr = super::bacnet::registry_device_address(device_instance)
+        .or_else(|| super::bacnet::cached_field_device_address(device_instance));
+    let Some(addr) = addr else {
+        return false;
+    };
+    let Some(mac) = bip_mac_from_address(&addr) else {
+        return false;
+    };
+    let _ = client.add_device(device_instance, &mac).await;
+    client.get_device(device_instance).await.is_some()
+}
+
+/// Poll/read steady state — **never** broadcast Who-Is (vibe16 pattern).
+async fn prepare_device_for_poll(
     client: &mut BACnetClient<BipTransport>,
     device_instance: u32,
 ) -> Result<(), String> {
@@ -179,17 +224,50 @@ async fn prepare_device_for_read(
     if super::bacnet::field_device_routing(device_instance).is_some() {
         return Ok(());
     }
-    if client.get_device(device_instance).await.is_none() {
-        if let Some(addr) = super::bacnet::cached_field_device_address(device_instance) {
-            if let Some(mac) = bip_mac_from_address(&addr) {
-                let _ = client.add_device(device_instance, &mac).await;
-                if client.get_device(device_instance).await.is_some() {
-                    return Ok(());
-                }
-            }
-        }
+    if seed_client_device_from_registry(client, device_instance).await {
+        return Ok(());
+    }
+    Err(format!(
+        "device {device_instance} missing registry routing/address — run commission Who-Is/discovery once; poll will not broadcast Who-Is"
+    ))
+}
+
+async fn prepare_device_for_discovery(
+    client: &mut BACnetClient<BipTransport>,
+    device_instance: u32,
+) -> Result<(), String> {
+    if prepare_device_for_poll(client, device_instance)
+        .await
+        .is_ok()
+    {
+        return Ok(());
     }
     let (mut low, mut high) = discover_low_high();
+    if device_instance > 0 {
+        low = low.min(device_instance);
+        high = high.max(device_instance);
+    }
+    run_whois(client, low, high).await?;
+    sleep(Duration::from_secs(discover_timeout_secs())).await;
+    Ok(())
+}
+
+async fn prepare_device_for_read(
+    client: &mut BACnetClient<BipTransport>,
+    device_instance: u32,
+) -> Result<(), String> {
+    if prepare_device_for_poll(client, device_instance)
+        .await
+        .is_ok()
+    {
+        return Ok(());
+    }
+    if !whois_before_read_enabled() {
+        return Err(format!(
+            "device {device_instance} not configured — set routing in driver_tree or OPENFDD_BACNET_WHOIS_BEFORE_READ=1 for discovery reads"
+        ));
+    }
+    let (mut low, mut high) = discover_low_high_wide();
     if device_instance > 0 {
         low = low.min(device_instance);
         high = high.max(device_instance);
@@ -413,7 +491,7 @@ pub async fn whois_devices_with_range(
     low: Option<u32>,
     high: Option<u32>,
 ) -> Result<Vec<Value>, String> {
-    let (default_low, default_high) = discover_low_high();
+    let (default_low, default_high) = discover_low_high_wide();
     let low = low.unwrap_or(default_low);
     let high = high.unwrap_or(default_high);
     // Hard ceiling so API callers never hang forever (bind / OT / router issues).
@@ -452,16 +530,8 @@ pub async fn read_priority_array(
     object_type: ObjectType,
     instance: u32,
 ) -> Result<Vec<(u8, Value)>, String> {
-    let client = client_lock().await?;
-    let (low, high) = discover_low_high();
-    client
-        .who_is(Some(low), Some(high))
-        .await
-        .map_err(|e| e.to_string())?;
-    if let Some((_, mstp_net)) = router_network() {
-        let _ = client.who_is_network(mstp_net, Some(low), Some(high)).await;
-    }
-    sleep(Duration::from_secs(2)).await;
+    let mut client = client_lock().await?;
+    prepare_device_for_read(&mut client, device_instance).await?;
 
     let oid = ObjectIdentifier::new(object_type, instance).map_err(|e| e.to_string())?;
     let ack = client
@@ -489,19 +559,8 @@ pub async fn read_priority_array(
 }
 
 pub async fn discover_device_points(device_instance: u32) -> Result<Vec<Value>, String> {
-    let client = client_lock().await?;
-    let (low, high) = discover_low_high();
-    client
-        .who_is(Some(low), Some(high))
-        .await
-        .map_err(|e| e.to_string())?;
-    if let Some((_, mstp_net)) = router_network() {
-        client
-            .who_is_network(mstp_net, Some(low), Some(high))
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-    sleep(Duration::from_secs(discover_timeout_secs())).await;
+    let mut client = client_lock().await?;
+    prepare_device_for_discovery(&mut client, device_instance).await?;
 
     let dev = client
         .get_device(device_instance)
@@ -621,19 +680,7 @@ fn decode_prop(bytes: &[u8]) -> Option<PropertyValue> {
 
 pub async fn discover_device_points_rpm(device_instance: u32) -> Result<Vec<Value>, String> {
     let mut client = client_lock().await?;
-    if super::bacnet::field_device_routing(device_instance).is_none() {
-        let (low, high) = discover_low_high();
-        client
-            .who_is(Some(low), Some(high))
-            .await
-            .map_err(|e| e.to_string())?;
-        if let Some((_, mstp_net)) = router_network() {
-            let _ = client.who_is_network(mstp_net, Some(low), Some(high)).await;
-        }
-        sleep(Duration::from_secs(discover_timeout_secs())).await;
-    } else {
-        prepare_device_for_read(&mut client, device_instance).await?;
-    }
+    prepare_device_for_discovery(&mut client, device_instance).await?;
 
     let address = super::bacnet::field_device_routing(device_instance)
         .map(|r| r.router_address)
@@ -887,7 +934,7 @@ pub async fn poll_present_values_rpm(
     }
     let objects = objects.to_vec();
     let mut client = client_lock().await?;
-    prepare_device_for_read(&mut client, device_instance).await?;
+    prepare_device_for_poll(&mut client, device_instance).await?;
     let at = chrono::Utc::now().to_rfc3339();
     if super::bacnet::field_device_routing(device_instance).is_some() {
         let mut samples = Vec::new();
