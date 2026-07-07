@@ -2,6 +2,7 @@
 
 pub mod auth;
 pub mod bench;
+pub mod commission_proxy;
 pub mod control;
 pub mod csv_ingest;
 pub mod dashboard;

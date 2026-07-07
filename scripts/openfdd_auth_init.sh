@@ -83,21 +83,30 @@ trap 'rm -f "$AUTH_LOG"' EXIT
 write_bootstrap_handoff_from_log() {
   [[ "$SHOW_SECRETS" == "true" ]] || return 0
   local role line
-  local -a creds=()
+  declare -A merged=()
+  if [[ -f "$HANDOFF" ]]; then
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^(operator|integrator|agent|admin):[[:space:]]+(.+)$ ]]; then
+        merged["${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]}"
+      fi
+    done < <(grep -E '^(operator|integrator|agent|admin):' "$HANDOFF" 2>/dev/null || true)
+  fi
   while IFS= read -r line; do
     if [[ "$line" =~ ^[[:space:]]*(operator|integrator|agent|admin):[[:space:]]+(.+)$ ]]; then
       role="${BASH_REMATCH[1]}"
-      creds+=("${role}: ${BASH_REMATCH[2]}")
+      merged["$role"]="${BASH_REMATCH[2]}"
     fi
   done < <(grep -E '^[[:space:]]*(operator|integrator|agent|admin):' "$AUTH_LOG" 2>/dev/null || true)
-  [[ ${#creds[@]} -eq 0 ]] && return 0
+  [[ ${#merged[@]} -eq 0 ]] && return 0
   {
     echo "# Open-FDD one-time bootstrap credentials — DELETE after saving to your password manager."
     echo "# Do NOT paste bcrypt hashes from auth.env.local as login passwords."
     echo "# Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "# Rotate again: ./scripts/openfdd_auth_init.sh --rotate --all --show-secrets --restart"
     echo
-    printf '%s\n' "${creds[@]}"
+    for role in operator integrator agent admin; do
+      [[ -n "${merged[$role]:-}" ]] && echo "${role}: ${merged[$role]}"
+    done
     echo
     echo "# After saving passwords, delete this file:"
     echo "#   rm workspace/bootstrap_credentials.once.txt"
@@ -194,7 +203,7 @@ else
 fi
 write_bootstrap_handoff_from_log
 
-chmod 600 "$AUTH_PATH" 2>/dev/null || true
+chmod 644 "$AUTH_PATH" 2>/dev/null || true
 echo "==> Auth env: $AUTH_PATH"
 if [[ "$RESTART" == "true" ]]; then
   export OPENFDD_RUN_UID="${OPENFDD_RUN_UID:-$(id -u)}"

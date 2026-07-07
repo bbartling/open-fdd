@@ -7,8 +7,8 @@ use crate::auth::config::Principal;
 use crate::auth::login::{authenticate, login_response};
 use crate::auth::rbac::{can_write_field_bus, role_allowed};
 use crate::{
-    bench, control, csv_ingest, dashboard, data_management, drivers, export, faults, fdd,
-    historian, import, ingest, model, ops, reports, timeseries, validation, version,
+    bench, commission_proxy, control, csv_ingest, dashboard, data_management, drivers, export,
+    faults, fdd, historian, import, ingest, model, ops, reports, timeseries, validation, version,
 };
 
 use serde_json::{json, Value};
@@ -782,6 +782,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             ),
         ),
         ("POST", "/api/bacnet/whois") => {
+            if commission_proxy::should_proxy_bacnet() {
+                let auth = commission_proxy::proxy_auth_header(&headers);
+                if let Ok(proxy_body) =
+                    commission_proxy::proxy_post("/api/bacnet/whois", &body, auth.as_deref())
+                {
+                    return raw_json(&mut stream, &proxy_body);
+                }
+            }
             let body = drivers::bacnet::whois_json(&parse_json_body_or_empty(&body));
             raw_json(&mut stream, &body)
         }
@@ -853,6 +861,16 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         }
         ("POST", "/api/bacnet/point-discovery") => {
             let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
+            if commission_proxy::should_proxy_bacnet() {
+                let auth = commission_proxy::proxy_auth_header(&headers);
+                if let Ok(proxy_body) = commission_proxy::proxy_post(
+                    "/api/bacnet/point-discovery",
+                    &body,
+                    auth.as_deref(),
+                ) {
+                    return raw_json(&mut stream, &proxy_body);
+                }
+            }
             require_role(
                 &mut stream,
                 &principal,
@@ -861,6 +879,14 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             )
         }
         ("POST", "/api/bacnet/read") => {
+            if commission_proxy::should_proxy_bacnet() {
+                let auth = commission_proxy::proxy_auth_header(&headers);
+                if let Ok(proxy_body) =
+                    commission_proxy::proxy_post("/api/bacnet/read", &body, auth.as_deref())
+                {
+                    return raw_json(&mut stream, &proxy_body);
+                }
+            }
             let payload: Value = serde_json::from_str(&body).unwrap_or(json!({}));
             let response_body = drivers::bacnet::read_present_value_json(&payload);
             raw_json(&mut stream, &response_body)

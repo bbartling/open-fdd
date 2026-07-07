@@ -102,7 +102,7 @@ pub fn is_profile_configured(p: &SiteConfig) -> bool {
 }
 
 pub fn active_profile() -> SiteConfig {
-    load_profile_from_path(&profile_path())
+    load_profile_from_path(&validation_profile_path())
 }
 
 pub fn load_profile_from_path(path: &Path) -> SiteConfig {
@@ -214,6 +214,13 @@ fn apply_env_overrides(p: &mut SiteConfig) {
     if let Ok(v) = env::var("OPENFDD_HAYSTACK_PASS") {
         if !v.is_empty() {
             p.haystack_password = v;
+        }
+    }
+    if let Ok(v) = env::var("OPENFDD_SMOKE_DEVICE_INSTANCE") {
+        if let Ok(inst) = v.parse::<u32>() {
+            if inst > 0 {
+                p.device_instance = inst;
+            }
         }
     }
 }
@@ -558,6 +565,57 @@ point.oa_t = "OA Temp|1001|oa_t"
         let p = active_profile();
         assert!(!is_modbus_configured(&p));
         std::env::remove_var("OPENFDD_WORKSPACE");
+    }
+
+    #[test]
+    fn validation_profile_env_overrides_site_local_path() {
+        let _lock = test_lock();
+        std::env::remove_var("OPENFDD_SITE_CONFIG_PATH");
+        std::env::remove_var("OPENFDD_SMOKE_DEVICE_INSTANCE");
+        let ws = std::env::temp_dir().join(format!("ofdd-valprof-{}", std::process::id()));
+        let profile_dir = ws.join("smoke-profiles/local");
+        fs::create_dir_all(&profile_dir).unwrap();
+        let profile_path = profile_dir.join("local_validation_profile.local.toml");
+        fs::write(
+            &profile_path,
+            r#"profile_id = "bench-smoke"
+device_instance = 5007
+"#,
+        )
+        .unwrap();
+        fs::create_dir_all(ws.join("config")).unwrap();
+        fs::write(
+            ws.join("config/site.local.toml"),
+            r#"device_instance = 99
+"#,
+        )
+        .unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", &ws);
+        std::env::set_var(
+            "OPENFDD_VALIDATION_PROFILE",
+            profile_path.display().to_string(),
+        );
+        let p = active_profile();
+        assert_eq!(p.device_instance, 5007);
+        assert_eq!(p.profile_id, "bench-smoke");
+        std::env::remove_var("OPENFDD_WORKSPACE");
+        std::env::remove_var("OPENFDD_VALIDATION_PROFILE");
+        let _ = fs::remove_dir_all(ws);
+    }
+
+    #[test]
+    fn smoke_device_instance_env_override() {
+        let _lock = test_lock();
+        std::env::remove_var("OPENFDD_VALIDATION_PROFILE");
+        std::env::remove_var("OPENFDD_SITE_CONFIG_PATH");
+        let ws = std::env::temp_dir().join(format!("ofdd-smoke-inst-{}", std::process::id()));
+        std::env::set_var("OPENFDD_WORKSPACE", &ws);
+        std::env::set_var("OPENFDD_SMOKE_DEVICE_INSTANCE", "3456790");
+        let p = active_profile();
+        assert_eq!(p.device_instance, 3456790);
+        std::env::remove_var("OPENFDD_WORKSPACE");
+        std::env::remove_var("OPENFDD_SMOKE_DEVICE_INSTANCE");
+        let _ = fs::remove_dir_all(ws);
     }
 
     fn test_lock() -> std::sync::MutexGuard<'static, ()> {

@@ -46,6 +46,7 @@ jobs:
   publish:
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -70,6 +71,7 @@ jobs:
             org.opencontainers.image.version=nightly
 
       - uses: docker/build-push-action@v6
+        timeout-minutes: 240
         with:
           context: .
           file: Dockerfile

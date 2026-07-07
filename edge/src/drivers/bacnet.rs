@@ -267,6 +267,136 @@ fn cached_whois_instances() -> Vec<u32> {
         .unwrap_or_default()
 }
 
+/// Routed MSTP field device metadata (vibe16 / driver_tree parity).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FieldDeviceRouting {
+    pub router_address: String,
+    pub mstp_network: u16,
+    pub mstp_mac: Vec<u8>,
+}
+
+fn parse_mstp_mac(value: &Value) -> Option<Vec<u8>> {
+    if let Some(arr) = value.as_array() {
+        let mac: Vec<u8> = arr
+            .iter()
+            .filter_map(|x| x.as_u64().map(|n| n as u8))
+            .collect();
+        if !mac.is_empty() {
+            return Some(mac);
+        }
+    }
+    if let Some(s) = value.as_str() {
+        if let Ok(bytes) = hex::decode(s) {
+            if !bytes.is_empty() {
+                return Some(bytes);
+            }
+        }
+    }
+    None
+}
+
+fn routing_from_whois_json(dev: &Value) -> Option<FieldDeviceRouting> {
+    let addr = dev.get("address").and_then(|a| a.as_str())?;
+    if addr.is_empty() {
+        return None;
+    }
+    let mstp_network = dev
+        .get("mstp_network")
+        .or_else(|| dev.get("source_network"))
+        .and_then(|v| v.as_u64())
+        .map(|n| n as u16)?;
+    let mstp_mac = dev
+        .get("mstp_mac")
+        .or_else(|| dev.get("source_address"))
+        .and_then(parse_mstp_mac)?;
+    if mstp_mac.is_empty() {
+        return None;
+    }
+    Some(FieldDeviceRouting {
+        router_address: addr.to_string(),
+        mstp_network,
+        mstp_mac,
+    })
+}
+
+fn routing_from_registry_device(device: &Value) -> Option<FieldDeviceRouting> {
+    let addr = device.get("address").and_then(|a| a.as_str())?;
+    if addr.is_empty() {
+        return None;
+    }
+    let mstp_network = device
+        .get("mstp_network")
+        .or_else(|| device.get("source_network"))
+        .and_then(|v| v.as_u64())
+        .map(|n| n as u16)?;
+    let mstp_mac = device
+        .get("mstp_mac")
+        .or_else(|| device.get("source_address"))
+        .and_then(parse_mstp_mac)?;
+    if mstp_mac.is_empty() {
+        return None;
+    }
+    Some(FieldDeviceRouting {
+        router_address: addr.to_string(),
+        mstp_network,
+        mstp_mac,
+    })
+}
+
+fn cached_whois_device(device_instance: u32) -> Option<Value> {
+    let path = whois_cache_path();
+    let text = fs::read_to_string(path).ok()?;
+    let v: Value = serde_json::from_str(&text).ok()?;
+    let devices = v.get("devices")?.as_array()?;
+    for dev in devices {
+        let inst = dev
+            .get("object_identifier")
+            .and_then(|o| o.get("instance"))
+            .and_then(|x| x.as_u64())
+            .or_else(|| dev.get("device_instance").and_then(|x| x.as_u64()))
+            .map(|n| n as u32);
+        if inst == Some(device_instance) {
+            return Some(dev.clone());
+        }
+    }
+    None
+}
+
+/// Config-driven MSTP routing for a field device (registry first, then Who-Is cache).
+pub fn field_device_routing(device_instance: u32) -> Option<FieldDeviceRouting> {
+    let registry = read_registry();
+    if let Some(drivers) = registry.get("drivers").and_then(|v| v.as_array()) {
+        for driver in drivers {
+            if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
+                continue;
+            }
+            if let Some(devs) = driver.get("devices").and_then(|v| v.as_array()) {
+                for device in devs {
+                    if device
+                        .get("device_instance")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as u32
+                        == device_instance
+                    {
+                        if let Some(r) = routing_from_registry_device(device) {
+                            return Some(r);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    cached_whois_device(device_instance).and_then(|dev| routing_from_whois_json(&dev))
+}
+
+fn apply_routing_to_device(device: &mut Value, routing: &FieldDeviceRouting) {
+    device["address"] = json!(routing.router_address);
+    device["mstp_network"] = json!(routing.mstp_network);
+    device["source_network"] = json!(routing.mstp_network);
+    device["mstp_mac"] = json!(routing.mstp_mac);
+    device["source_address"] = json!(hex::encode(&routing.mstp_mac));
+}
+
 /// Address from Who-Is cache for a field instance (if known).
 pub fn cached_field_device_address(device_instance: u32) -> Option<String> {
     let path = whois_cache_path();
@@ -323,14 +453,20 @@ fn ensure_field_device_shell(device_instance: u32, address: Option<String>) -> b
         let addr = address
             .or_else(|| cached_field_device_address(device_instance))
             .unwrap_or_default();
-        devices.push(json!({
+        let mut shell = json!({
             "device_instance": device_instance,
             "name": format!("BACnet Device {device_instance}"),
             "address": addr,
             "polling_enabled": true,
             "points": [],
             "source": "whois-shell"
-        }));
+        });
+        if let Some(dev) = cached_whois_device(device_instance) {
+            if let Some(r) = routing_from_whois_json(&dev) {
+                apply_routing_to_device(&mut shell, &r);
+            }
+        }
+        devices.push(shell);
         driver["devices"] = json!(devices);
         write_registry(&registry);
         return true;
@@ -350,6 +486,41 @@ fn merge_missing_field_devices_from_cache() {
     for inst in candidates {
         if !existing.contains(&inst) {
             let _ = ensure_field_device_shell(inst, cached_field_device_address(inst));
+        } else {
+            refresh_field_device_routing(inst);
+        }
+    }
+}
+
+fn refresh_field_device_routing(device_instance: u32) {
+    let Some(routing) =
+        cached_whois_device(device_instance).and_then(|d| routing_from_whois_json(&d))
+    else {
+        return;
+    };
+    let mut registry = read_registry();
+    let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) else {
+        return;
+    };
+    for driver in drivers {
+        if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
+            continue;
+        }
+        let Some(devs) = driver.get_mut("devices").and_then(|v| v.as_array_mut()) else {
+            continue;
+        };
+        for device in devs.iter_mut() {
+            if device
+                .get("device_instance")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u32
+                != device_instance
+            {
+                continue;
+            }
+            apply_routing_to_device(device, &routing);
+            write_registry(&registry);
+            return;
         }
     }
 }
@@ -525,6 +696,7 @@ pub fn merge_live_discovery_into_registry(device_instance: u32) -> Value {
         .and_then(|p| p.get("address"))
         .cloned()
         .unwrap_or(json!(""));
+    let discovery_routing = discovered.first().and_then(|p| routing_from_whois_json(p));
 
     if let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) {
         for driver in drivers {
@@ -591,6 +763,9 @@ pub fn merge_live_discovery_into_registry(device_instance: u32) -> Value {
                 })
             };
             device["points"] = json!(points);
+            if let Some(r) = discovery_routing.as_ref() {
+                apply_routing_to_device(&mut device, r);
+            }
             if let Some(idx) = existing_idx {
                 devices[idx] = device;
             } else {
@@ -2458,7 +2633,9 @@ mod override_export_tests {
                     "instances": [inst],
                     "devices": [{
                         "object_identifier": {"type": "device", "instance": inst},
-                        "address": addr
+                        "address": addr,
+                        "source_network": 2000,
+                        "source_address": "07"
                     }]
                 }))
                 .unwrap(),
@@ -2477,6 +2654,16 @@ mod override_export_tests {
             assert!(field.is_some(), "Who-Is instance must appear in tree");
             assert_eq!(field.unwrap()["address"].as_str(), Some(addr));
             assert_eq!(field.unwrap()["source"].as_str(), Some("whois-shell"));
+            assert_eq!(
+                field.unwrap()["mstp_network"].as_u64(),
+                Some(2000),
+                "Who-Is MSTP network must persist in driver tree"
+            );
+            assert_eq!(
+                field.unwrap()["mstp_mac"],
+                json!([7]),
+                "Who-Is MSTP MAC must persist in driver tree"
+            );
             // Second call is a no-op (already present).
             pin_ws();
             assert!(!ensure_field_device_shell(inst, None));
