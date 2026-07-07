@@ -696,7 +696,7 @@ pub fn merge_live_discovery_into_registry(device_instance: u32) -> Value {
         .and_then(|p| p.get("address"))
         .cloned()
         .unwrap_or(json!(""));
-    let discovery_routing = discovered.first().and_then(|p| routing_from_whois_json(p));
+    let discovery_routing = discovered.first().and_then(routing_from_whois_json);
 
     if let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) {
         for driver in drivers {

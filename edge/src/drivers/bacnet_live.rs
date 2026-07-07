@@ -452,7 +452,7 @@ pub async fn read_priority_array(
     object_type: ObjectType,
     instance: u32,
 ) -> Result<Vec<(u8, Value)>, String> {
-    let mut client = client_lock().await?;
+    let client = client_lock().await?;
     let (low, high) = discover_low_high();
     client
         .who_is(Some(low), Some(high))
@@ -489,7 +489,7 @@ pub async fn read_priority_array(
 }
 
 pub async fn discover_device_points(device_instance: u32) -> Result<Vec<Value>, String> {
-    let mut client = client_lock().await?;
+    let client = client_lock().await?;
     let (low, high) = discover_low_high();
     client
         .who_is(Some(low), Some(high))
@@ -685,11 +685,11 @@ pub async fn discover_device_points_rpm(device_instance: u32) -> Result<Vec<Valu
             )
             .await
             {
-                if let Ok((val, _)) = decode_application_value(&name_ack.property_value, 0) {
-                    if let PropertyValue::CharacterString(s) = val {
+                    if let Ok((PropertyValue::CharacterString(s), _)) =
+                        decode_application_value(&name_ack.property_value, 0)
+                    {
                         name = s;
                     }
-                }
             }
             if let Ok(pv_ack) = read_property_for_device(
                 &mut client,
