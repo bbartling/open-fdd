@@ -389,6 +389,73 @@ pub fn field_device_routing(device_instance: u32) -> Option<FieldDeviceRouting> 
     cached_whois_device(device_instance).and_then(|dev| routing_from_whois_json(&dev))
 }
 
+/// BIP router address from driver tree (MSTP routing optional — BIP-direct devices use address/host only).
+pub fn registry_device_address(device_instance: u32) -> Option<String> {
+    let registry = read_registry();
+    if let Some(drivers) = registry.get("drivers").and_then(|v| v.as_array()) {
+        for driver in drivers {
+            if driver.get("id").and_then(|v| v.as_str()) != Some("bacnet-ip") {
+                continue;
+            }
+            if let Some(devs) = driver.get("devices").and_then(|v| v.as_array()) {
+                for device in devs {
+                    if device
+                        .get("device_instance")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as u32
+                        != device_instance
+                    {
+                        continue;
+                    }
+                    if let Some(addr) = device.get("address").and_then(|a| a.as_str()) {
+                        if !addr.is_empty() {
+                            return Some(addr.to_string());
+                        }
+                    }
+                    let host = device.get("host").and_then(|h| h.as_str());
+                    let port = device
+                        .get("port")
+                        .and_then(|p| p.as_u64())
+                        .map(|p| p as u16)
+                        .unwrap_or(47808);
+                    if let Some(host) = host {
+                        if !host.is_empty() {
+                            return Some(format!("{host}:{port}"));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    cached_field_device_address(device_instance)
+}
+
+/// Field device instances listed in the driver tree (excludes local server shell).
+pub fn field_device_instances_from_registry() -> Vec<u32> {
+    field_device_instances(&read_registry())
+}
+
+/// When true, bridge must not run the BACnet poll loop (commission owns OT poll on bench).
+pub fn commission_owns_bacnet_poll() -> bool {
+    if let Ok(v) = env::var("OPENFDD_BACNET_COMMISSION_OWNS_POLL") {
+        if v == "0" || v.eq_ignore_ascii_case("false") {
+            return false;
+        }
+        if v == "1" || v.eq_ignore_ascii_case("true") {
+            return true;
+        }
+    }
+    env::var("OPENFDD_COMMISSION_BASE_URL")
+        .or_else(|_| env::var("OPENFDD_COMMISSION_BASE"))
+        .is_ok()
+}
+
+fn poll_live_discovery_enabled() -> bool {
+    env::var("OPENFDD_BACNET_POLL_LIVE_DISCOVERY")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 fn apply_routing_to_device(device: &mut Value, routing: &FieldDeviceRouting) {
     device["address"] = json!(routing.router_address);
     device["mstp_network"] = json!(routing.mstp_network);
@@ -1475,6 +1542,9 @@ pub fn start_bacnet_poll_loop(service_mode: String) {
     if service_mode != "bridge" && service_mode != "commission" {
         return;
     }
+    if service_mode == "bridge" && commission_owns_bacnet_poll() {
+        return;
+    }
     thread::spawn(move || loop {
         if bacnet_live::is_live_mode() {
             let _ = poll_cycle_value();
@@ -1489,15 +1559,25 @@ pub fn poll_cycle_value() -> Value {
     }
     let mut registry = read_registry();
     if registry_pollable_point_count(&registry) == 0 {
-        ensure_field_devices_from_whois();
+        merge_missing_field_devices_from_cache();
         registry = read_registry();
-        ensure_pollable_points_for_field_devices();
-        if registry_pollable_point_count(&read_registry()) == 0 {
-            let inst = bench_device_instance();
-            let local = bacnet_server::device_instance();
-            if inst > 0 && inst != local {
-                merge_live_discovery_into_registry(inst);
-                registry = read_registry();
+        if registry_pollable_point_count(&registry) == 0 {
+            if poll_live_discovery_enabled() {
+                ensure_pollable_points_for_field_devices();
+                if registry_pollable_point_count(&read_registry()) == 0 {
+                    let inst = bench_device_instance();
+                    let local = bacnet_server::device_instance();
+                    if inst > 0 && inst != local {
+                        let _ = merge_live_discovery_into_registry(inst);
+                        registry = read_registry();
+                    }
+                }
+            } else {
+                return json!({
+                    "ok": true,
+                    "samples": 0,
+                    "skipped": "no pollable points — run commission Who-Is/point-discovery once; poll will not broadcast Who-Is"
+                });
             }
         }
     }
@@ -2702,5 +2782,55 @@ mod override_export_tests {
             .and_then(|v| v.as_array())
             .map(|a| a.as_slice())
             .unwrap_or(&[])
+    }
+
+    #[test]
+    fn registry_device_address_prefers_address_then_host_port() {
+        crate::test_support::with_temp_workspace(|_| {
+            let mut registry = default_registry();
+            if let Some(drivers) = registry.get_mut("drivers").and_then(|v| v.as_array_mut()) {
+                for driver in drivers {
+                    if driver.get("id").and_then(|v| v.as_str()) == Some("bacnet-ip") {
+                        driver["devices"] = json!([
+                            {"device_instance": 5007, "address": "198.51.100.50:47808", "mstp_network": 2000, "mstp_mac": [7]},
+                            {"device_instance": 3456789, "host": "198.51.100.13", "port": 47808}
+                        ]);
+                    }
+                }
+            }
+            write_registry(&registry);
+            assert_eq!(
+                registry_device_address(5007).as_deref(),
+                Some("198.51.100.50:47808")
+            );
+            assert_eq!(
+                registry_device_address(3456789).as_deref(),
+                Some("198.51.100.13:47808")
+            );
+        });
+    }
+
+    #[test]
+    fn commission_owns_poll_respects_env_override() {
+        std::env::set_var("OPENFDD_BACNET_COMMISSION_OWNS_POLL", "1");
+        assert!(commission_owns_bacnet_poll());
+        std::env::set_var("OPENFDD_BACNET_COMMISSION_OWNS_POLL", "0");
+        std::env::remove_var("OPENFDD_COMMISSION_BASE");
+        std::env::remove_var("OPENFDD_COMMISSION_BASE_URL");
+        assert!(!commission_owns_bacnet_poll());
+        std::env::remove_var("OPENFDD_BACNET_COMMISSION_OWNS_POLL");
+    }
+
+    #[test]
+    fn poll_cycle_skips_live_discovery_by_default() {
+        crate::test_support::with_temp_workspace(|_| {
+            std::env::set_var("OPENFDD_BACNET_MODE", "live");
+            std::env::remove_var("OPENFDD_BACNET_POLL_LIVE_DISCOVERY");
+            write_registry(&default_registry());
+            let out = poll_cycle_value();
+            assert_eq!(out["ok"], true);
+            assert_eq!(out["samples"], 0);
+            assert!(out.get("skipped").is_some());
+        });
     }
 }

@@ -1,8 +1,10 @@
 # Linux edge tester — GO NUTS when `:nightly` ready (paste prompt)
 
-**Repo-only.** Paste into Cursor on **`/home/ben/open-fdd`** when product has merged **3.2.12** ([#472](https://github.com/bbartling/open-fdd/pull/472)) and you are waiting for GHCR `:nightly` before the full bench closeout retest.
+**Repo-only.** Paste into Cursor on **`/home/ben/open-fdd`** when product has merged **3.2.13** (PCAP Who-Is storm fix) and you are waiting for GHCR `:nightly` before bench deploy.
 
-**Related:** [nightly retest gates](./linux-edge-tester-nightly-retest-prompt.md) · [GH Actions watch](./linux-edge-tester-gh-actions-watch-prompt.md) · [issue index](./WSL_CURSOR_AGENT_ISSUES.md) · umbrella [#429](https://github.com/bbartling/open-fdd/issues/429)
+**Do not deploy 802258a (3.2.11) or 40fecf7 (3.2.12) on OT bench** — PCAP proved Who-Is broadcast storms take the MSTP network down. Wait for **3.2.13+** with PCAP gate.
+
+**Related:** [nightly retest gates](./linux-edge-tester-nightly-retest-prompt.md) · [GH Actions watch](./linux-edge-tester-gh-actions-watch-prompt.md) · [issue index](./WSL_CURSOR_AGENT_ISSUES.md) · umbrella [#429](https://github.com/bbartling/open-fdd/issues/429) · [#464](https://github.com/bbartling/open-fdd/issues/464)
 
 ---
 
@@ -12,12 +14,13 @@ You are the Open-FDD Linux edge tester on /home/ben/open-fdd.
 Charter: TEST, DOCUMENT, REPORT — no Rust/TS edits, no git push, no upstream PR.
 Bench has insufficient RAM — GHCR pull only (never docker build / cargo build).
 
-PHASE 1 — Wait for :nightly (do not deploy until GHCR green on 40fecf7+).
-PHASE 2 — When ready: deploy, run EVERY gate below, 30m rigorous FDD if P0 pass, post evidence on GitHub, update #429 sign-off.
+PHASE 1 — Wait for :nightly (do not deploy until GHCR green on 3.2.13+ PCAP fix).
+PHASE 2 — When ready: deploy, PCAP gate FIRST, then EVERY gate below, 30m FDD if P0 pass, post evidence on GitHub.
 
-Acknowledged. Bench /home/ben/open-fdd. Channel: nightly. Minimum edge SHA: 40fecf7 (3.2.12).
-Blockers for sign-off YES: MSTP device 5007 on bridge + FDD without site.local.toml + 30m soak with 5007.
-Will comment #429 (always), #464 #466 #465 #467 #469 #433 #431 as applicable.
+Acknowledged. Bench /home/ben/open-fdd. Channel: nightly. Minimum: 3.2.13 PCAP no-Who-Is-storm build.
+Blockers: 0 TX to .255 in 5m PCAP, peak ≤15 pkt/s, MSTP 5007 on bridge, FDD without site.local.toml.
+Set OPENFDD_BACNET_COMMISSION_OWNS_POLL=1 on bridge (full-edge bench).
+Will comment #429, #464, #466, #465, #467, #469 as applicable.
 No git push. No product code edits on bench.
 ```
 
@@ -27,22 +30,34 @@ No git push. No product code edits on bench.
 
 | Item | Value |
 |------|-------|
-| **Minimum `git_sha`** | `40fecf7` — **3.2.12** ([#472](https://github.com/bbartling/open-fdd/pull/472)) |
-| **Version** | **3.2.12** |
+| **Minimum version** | **3.2.13** — PCAP Who-Is storm fix (skip 3.2.12 bench) |
 | **Image** | `ghcr.io/bbartling/openfdd-edge-rust:nightly` |
-| **What changed** | MSTP routing + `read_property_routed`; FDD `OPENFDD_VALIDATION_PROFILE`; bridge→commission proxy; persistent BACnet client; auth 644; `scripts/bench/` |
-| **Last bench** | `802258a` @ 3.2.11 — FDD 30m **PASS** (device 3456790 workaround); **5007 FAIL** on bridge; **#466** needed manual `site.local.toml` |
-| **OT device under test** | MSTP **5007** @ router `192.168.204.200:47808`, net **2000**, MAC **`[7]`** — OA-T **AI:1173** ~71°F |
+| **What changed** | Poll never broadcasts Who-Is; registry address seed; commission-only poll on bridge; narrow discover range; PCAP script |
+| **Last bench** | `802258a` @ 3.2.11 — **FAIL** PCAP (19 BVLC broadcast, network down); **do not retest 40fecf7** |
+| **OT device** | MSTP **5007** @ router `192.168.204.200:47808`, net **2000**, MAC **`[7]`** — OA-T **AI:1173** ~71°F |
+
+---
+
+## PHASE 0 — PCAP gate (mandatory before other gates)
+
+After deploy, with stack running 5 minutes:
+
+```bash
+OPENFDD_EDGE_SHA="$(curl -s http://127.0.0.1:8080/api/health | jq -r '.git_sha[0:7]')"
+./scripts/bench/run_bacnet_pcap_capture.sh 300
+```
+
+**PASS criteria** (vs vibe16 baseline): **0 TX to `192.168.204.255`**, peak pkt/s **≤15**, router `.200` **≤10/min** per device at 60s poll.
+
+**FAIL → stop stack immediately**, comment #429 + #464, do not run 30m soak.
 
 ---
 
 ## PHASE 1 — Wait for `:nightly` (repeat every 30 min until green)
 
-Product may post **NIGHTLY READY** on [#429](https://github.com/bbartling/open-fdd/issues/429). If not, poll yourself:
-
 ```bash
 REPO=bbartling/open-fdd
-MIN_SHA=40fecf7
+MIN_VERSION=3.2.13
 
 echo "=== master HEAD ==="
 gh api repos/$REPO/commits/master --jq '{sha: .sha[0:7], msg: .commit.message[0:80]}'
@@ -51,31 +66,21 @@ echo "=== GHCR publish (gate) ==="
 gh run list --repo "$REPO" --workflow "Publish Rust edge to GHCR" --branch master --limit 3 \
   --json databaseId,status,conclusion,headSha,createdAt \
   | jq '.[] | {run: .databaseId, status, conclusion, sha: .headSha[0:7], created: .createdAt}'
-
-# Single run deep-dive (replace RUN_ID):
-# gh run view RUN_ID --repo $REPO --json status,conclusion,jobs
 ```
 
-**Proceed to Phase 2 only when:**
-
-| Check | Required |
-|-------|----------|
-| GHCR workflow | `conclusion: success` on a commit ≥ `40fecf7` |
-| Rust Edge CI | `success` on same merge |
-| You have not already tested this SHA | Compare to `LAST_TESTED_SHA` in your last #429 comment |
-
-**While waiting (optional, every 30 min):**
-
-```bash
-# Post short status on #429 — no deploy
-gh issue comment 429 --repo bbartling/open-fdd --body "**Edge tester watch** — GHCR $(date -u +%Y-%m-%dT%H:%M:%SZ): still waiting for :nightly @ ${MIN_SHA}+. No bench deploy yet."
-```
+**Proceed to Phase 2 only when:** GHCR `success` on commit containing **3.2.13** edge version.
 
 **Do not** run `openfdd_rust_site_update.sh` until GHCR is green.
 
 ---
 
 ## PHASE 2 — Preflight + deploy (GHCR pull only)
+
+Set in bench `workspace/data.env.local` or override:
+
+```bash
+OPENFDD_BACNET_COMMISSION_OWNS_POLL=1
+```
 
 ```bash
 cd /home/ben/open-fdd
