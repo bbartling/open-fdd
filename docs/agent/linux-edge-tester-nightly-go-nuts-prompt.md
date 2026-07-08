@@ -106,7 +106,7 @@ echo "$HEALTH" | jq '{version, git_sha, image_tag: .image_tag // "nightly", ok}'
 DEPLOY_SHA=$(echo "$HEALTH" | jq -r '.git_sha // .git_sha_short // empty' | cut -c1-7)
 ```
 
-**Abort** if `DEPLOY_SHA` sorts before `40fecf7` lexically — nightly not refreshed.
+**Abort** if `DEPLOY_SHA` is not `10c5aa5` (or a later master SHA) — nightly not refreshed. `version` must be **3.2.13**.
 
 ```bash
 INTEGRATOR_PW="$(grep '^OFDD_INTEGRATOR_PASSWORD=' workspace/auth.env.local | cut -d= -f2-)"
@@ -281,7 +281,7 @@ REPORT=/tmp/edge-go-nuts-${STAMP}.md
 ### Report template (#429)
 
 ```markdown
-## GO NUTS retest — nightly @ `<DEPLOY_SHA>` (3.2.12)
+## GO NUTS retest — nightly @ `<DEPLOY_SHA>` (3.2.13)
 
 **GHCR deploy:** `openfdd_rust_site_update.sh` · **Health:** (version / git_sha)
 **LAST_TESTED_SHA:** `<DEPLOY_SHA>`
@@ -334,4 +334,4 @@ If G1 or G2 **FAIL**: post product handoff on #429 — WSL fixes + new nightly; 
 
 ---
 
-*Created 2026-07-07 for 3.2.12 @ `40fecf7` bench closeout — paste when GHCR `:nightly` is green.*
+*Created 2026-07-07 for 3.2.13 @ `10c5aa5` PCAP Who-Is storm fix — GHCR `:nightly` green 2026-07-08. Paste now.*
