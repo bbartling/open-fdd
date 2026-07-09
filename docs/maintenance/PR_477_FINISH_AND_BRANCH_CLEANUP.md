@@ -75,11 +75,7 @@
 - [x] Python oracle test-only
 - [x] Docs consistent (CodeRabbit items addressed)
 - [x] FDD crate tests pass locally
-- [ ] GitHub Actions all green on latest commit
+- [x] GitHub Actions all green on latest commit (8818c20c)
 - [x] CodeRabbit SUCCESS
 
-## After merge
-
-1. Delete `cleanup/integrate-rust-port-into-master` (superseded by master).
-2. Delete `port-vibe19-rust-datafusion-engine` after verifying engine on master.
-3. Open `fix/nightly-ghcr-and-react-cutover` for cron + frontend docs.
+**Merged:** 2026-07-09 → master @ `3a7dafb5`
