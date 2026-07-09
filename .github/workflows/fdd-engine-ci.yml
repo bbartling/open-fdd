@@ -28,6 +28,8 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Install PyYAML for registry validation
+        run: python3 -m pip install --user PyYAML
       - name: cargo fmt
         run: cargo fmt --all --check
       - name: cargo clippy (fdd crates)

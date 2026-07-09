@@ -41,9 +41,9 @@ Default Parquet output: `vibe_code_apps_19/.cache/parquet/building=<id>/equipmen
 
 ## Column naming
 
-Ingest reads `columns.csv` `point_role` and renames physical CSV headers to cookbook logical roles (`fan_cmd`, `zone_t`, `oa_t`, …) via `fdd_core::normalize_role`. SQL rules query the unified `history` table with these logical names.
+Ingest reads `columns.csv` and **projects** physical CSV headers onto cookbook **logical roles** (`fan_cmd`, `zone_t`, `oa_t`, …): each Parquet column stores the role name, not the raw header. When multiple physical columns map to one role, ingest picks the oracle-preferred column via `fdd_core::score_column_for_role`. SQL rules query the unified `history` table using these logical names.
 
-**Limitation (stage 1):** Role resolution is simpler than Python `cookbook_engine.resolve_role()` (no Haystack SPARQL, no substring heuristics). Equipment missing `columns.csv` roles will cause SQL rules to skip/fail until mapping is extended.
+**Limitation:** Role resolution is simpler than the full Python Haystack SPARQL path (no substring heuristics beyond column ranking). Equipment missing `columns.csv` roles will cause rules to **skip or fail** until mapping is extended.
 
 ## PyO3 evaluation (stage 1: defer)
 

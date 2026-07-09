@@ -32,9 +32,9 @@ Values are clamped to `min`/`max`. Unknown keys are rejected.
 Each parameter may specify:
 
 - `label`, `default`, `min`, `max`, `step`, `unit`
-- `frontend_control`: `slider` | `number` (future)
+- `control`: `slider` | `number` (canonical; registry YAML may also use legacy alias `frontend_control`)
 
-Static UI: `fdd_app/frontend/static/dashboard_sql_tuning.js`
+Static UI (legacy dashboard): `fdd_app/frontend/static/dashboard_sql_tuning.js` — React cutover uses `workspace/dashboard/`.
 
 ## Security
 

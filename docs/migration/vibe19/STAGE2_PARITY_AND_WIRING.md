@@ -1,6 +1,8 @@
 # Stage 2 — Parity and wiring
 
-> **Stage 3 update (2026-07-09):** VAV_7 `zone_t` ranked resolution + SQL tunable parameters. Latest BUILDING_100 @ 0.5: **314 pass / 54 fail** (was 228/52 @ `bdb8881`). See `benchmarks/RUST_DATAFUSION_PARITY_BENCHMARK.md` before/after table.
+> **Historical snapshots:** Numbers below are point-in-time BUILDING_100 parity runs. For the current benchmark, see [RUST_DATAFUSION_PARITY_BENCHMARK.md](../../benchmarks/RUST_DATAFUSION_PARITY_BENCHMARK.md) (commit/date labeled there).
+
+> **Stage 3 update (2026-07-09):** VAV_7 `zone_t` ranked resolution + SQL tunable parameters. Snapshot @ 0.5h: **314 pass / 54 fail** (was 228/52 @ `bdb8881`).
 
 Stage 2 adds pandas oracle export, hardened `fdd_cli compare`, role-mapping alignment, poll-interval parameterization, 11 additional P0 SQL rules, optional dashboard Rust cache warmup, and BUILDING_100 numeric parity evidence.
 

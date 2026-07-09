@@ -17,7 +17,7 @@ edition = "2021"
 license = "MIT"
 repository = "https://github.com/bbartling/open-fdd"
 version = "3.2.13"
-rust-version = "1.75"
+rust-version = "1.80"
 
 [workspace.dependencies]
 anyhow = "1"

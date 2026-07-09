@@ -29,4 +29,4 @@ Proven on BUILDING_100 @ 0.5h tolerance (see `docs/benchmarks/RUST_DATAFUSION_PA
 
 **Python oracle:** optional — `tools/python_oracle/export_pandas_oracle.py` (requires full cookbook stack; not production runtime).
 
-**Tuning:** see `docs/SQL_RULE_TUNING_CONTRACT.md`.
+**Tuning:** see [SQL rule tuning contract](../migration/vibe19/SQL_RULE_TUNING_CONTRACT.md).

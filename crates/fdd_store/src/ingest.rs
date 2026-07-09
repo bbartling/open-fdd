@@ -28,6 +28,9 @@ pub struct IngestReport {
     pub total_rows: u64,
     pub timings: Vec<IngestTiming>,
     pub total_ms: u128,
+    pub weather_ingested: bool,
+    pub weather_rows: Option<usize>,
+    pub weather_error: Option<String>,
 }
 
 pub fn ingest_building(
@@ -92,11 +95,16 @@ pub fn ingest_building(
     )?;
 
     let staged = out_dir.parent().unwrap_or(out_dir).join("weather_staging");
-    if staged.join("history_wide.csv").is_file() {
-        let _ = ingest_weather_tree(&staged, out_dir);
+    let weather_root = if staged.join("history_wide.csv").is_file() {
+        staged
     } else {
-        let _ = ingest_weather_tree(&data_root.join("weather"), out_dir);
-    }
+        data_root.join("weather")
+    };
+    let (weather_ingested, weather_rows, weather_error) =
+        match ingest_weather_tree(&weather_root, out_dir) {
+            Ok(n) => (n > 0, Some(n), None),
+            Err(e) => (false, None, Some(e.to_string())),
+        };
 
     Ok(IngestReport {
         building_id: building_id.to_string(),
@@ -105,6 +113,9 @@ pub fn ingest_building(
         total_rows,
         timings,
         total_ms: started.elapsed().as_millis(),
+        weather_ingested,
+        weather_rows,
+        weather_error,
     })
 }
 
@@ -371,5 +382,28 @@ mod tests {
         let pq = out.join("building=BUILDING_100/equipment=AHU_1/history.parquet");
         assert!(pq.is_file());
         assert!(meta_path_for(&pq).is_file());
+    }
+
+    #[test]
+    fn ingest_records_weather_error_when_path_missing() {
+        let tmp = TempDir::new().unwrap();
+        let data = tmp.path().join("BUILDING_100");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = data.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nfan_speed_pct,fan_cmd\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,fan_speed_pct").unwrap();
+        writeln!(f, "2026-01-01T00:00:00Z,1.0").unwrap();
+        let out = tmp.path().join("parquet");
+        let report = ingest_building(tmp.path(), "BUILDING_100", &out).unwrap();
+        assert!(!report.weather_ingested);
+        assert_eq!(report.weather_rows, Some(0));
+        assert!(report.weather_error.is_none());
     }
 }
