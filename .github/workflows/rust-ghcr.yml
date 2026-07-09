@@ -53,7 +53,11 @@ jobs:
       - run: docker build -t openfdd-edge-rust:ci .
       - name: Docker smoke (/api/health and /)
         run: |
-          docker run -d --name openfdd-smoke -p 8080:8080 openfdd-edge-rust:ci
+          mkdir -p workspace/data workspace/logs workspace/overrides workspace/bacnet/commissioning
+          docker run -d --name openfdd-smoke -p 8080:8080 \
+            -e OFDD_AUTH_REQUIRED=false \
+            -v "$PWD/workspace:/var/openfdd/workspace" \
+            openfdd-edge-rust:ci
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8080/api/health >/tmp/health.json; then
               cat /tmp/health.json
