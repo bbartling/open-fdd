@@ -5,6 +5,7 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY edge ./edge
 COPY mcp ./mcp
+COPY crates ./crates
 RUN cargo build --release -p openfdd-mcp
 
 FROM debian:bookworm-slim AS runtime
