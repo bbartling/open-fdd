@@ -329,9 +329,7 @@ fn ensure_store() -> Result<(), String> {
         let guard = STORE
             .read()
             .map_err(|_| "RDF store lock poisoned".to_string())?;
-        if guard.workspace_key == workspace_key
-            && guard.grid_hash == hash
-            && guard.store.is_some()
+        if guard.workspace_key == workspace_key && guard.grid_hash == hash && guard.store.is_some()
         {
             return Ok(());
         }
