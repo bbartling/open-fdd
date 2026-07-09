@@ -6,7 +6,13 @@ on:
   push:
     branches:
       - master
+  schedule:
+    - cron: "17 7 * * *"
   workflow_dispatch:
+
+concurrency:
+  group: rust-ghcr-nightly
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -27,9 +33,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --all-targets -p open_fdd_edge_prototype -p openfdd-mcp
+      - name: FDD engine tests
+        run: cargo test -p fdd_core -p fdd_csv -p fdd_store -p fdd_sql -p fdd_rules -p fdd_bench -p fdd_cli
       - run: |
           cd workspace/dashboard
           npm ci
@@ -42,6 +51,21 @@ jobs:
           export OPENFDD_COMPOSE_ROOT="$PWD"
           docker compose -f docker/compose.edge.rust.yml config
       - run: docker build -t openfdd-edge-rust:ci .
+      - name: Docker smoke (/api/health and /)
+        run: |
+          docker run -d --name openfdd-smoke -p 8080:8080 openfdd-edge-rust:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/api/health >/tmp/health.json; then
+              cat /tmp/health.json
+              curl -fsS http://127.0.0.1:8080/ | grep -q 'id="root"'
+              docker rm -f openfdd-smoke
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs openfdd-smoke || true
+          docker rm -f openfdd-smoke
+          exit 1
 
   publish:
     needs: test
@@ -64,6 +88,7 @@ jobs:
           tags: |
             type=raw,value=nightly
             type=sha,prefix=sha-,format=short
+            type=raw,value=nightly-{{date format='YYYYMMDD' timezone='UTC'}}
           labels: |
             org.opencontainers.image.title=Open-FDD Rust Edge
             org.opencontainers.image.source=https://github.com/bbartling/open-fdd
