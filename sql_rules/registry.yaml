@@ -1,0 +1,382 @@
+# SQL rule registry — source of truth for DataFusion deterministic rules.
+# Python oracle mapping: see fdd_app/export_pandas_oracle.py SQL_TO_COOKBOOK
+
+rules:
+  - rule_id: FAN-RUNTIME-HOURS
+    sql_file: fan_runtime_hours.sql
+    pandas_function: null
+    description: Fan running hours where fan_cmd > 5% (normalized 0-1)
+    required_roles: [fan_cmd]
+    output_columns: [equipment_id, fan_runtime_hours, total_hours]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+
+  - rule_id: VAV-1
+    sql_file: vav1_comfort_fault.sql
+    pandas_function: vav1
+    description: Zone comfort band violation hours with confirm window
+    required_roles: [zone_t]
+    output_columns: [equipment_id, fault_hours, fault_pct]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      zone_t_lo:
+        label: Zone comfort low
+        default: 68.0
+        min: 60.0
+        max: 72.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_LO
+      zone_t_hi:
+        label: Zone comfort high
+        default: 76.0
+        min: 72.0
+        max: 85.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_HI
+      confirm_seconds:
+        label: Confirm time
+        default: 900
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: AVG-ZONE-TEMP
+    sql_file: avg_zone_temp.sql
+    pandas_function: null
+    description: Average zone temperature per equipment
+    required_roles: [zone_t]
+    output_columns: [equipment_id, avg_zone_temp, min_zone_temp, max_zone_temp]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      zone_t_lo:
+        label: Zone comfort low (reference)
+        default: 68.0
+        min: 60.0
+        max: 72.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_LO
+      zone_t_hi:
+        label: Zone comfort high (reference)
+        default: 76.0
+        min: 72.0
+        max: 85.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_HI
+
+  - rule_id: ZONE-COMFORT-PCT
+    sql_file: zone_comfort_pct.sql
+    pandas_function: null
+    description: Percent of samples in comfort band
+    required_roles: [zone_t]
+    output_columns: [equipment_id, comfort_pct]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      zone_t_lo:
+        label: Zone comfort low
+        default: 68.0
+        min: 60.0
+        max: 72.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_LO
+      zone_t_hi:
+        label: Zone comfort high
+        default: 76.0
+        min: 72.0
+        max: 85.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_HI
+
+  - rule_id: FAULT-ELAPSED-HOURS
+    sql_file: fault_elapsed_hours.sql
+    pandas_function: null
+    description: Comfort fault sample count → hours
+    required_roles: [zone_t]
+    output_columns: [equipment_id, fault_samples, fault_hours]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      zone_t_lo:
+        label: Zone comfort low
+        default: 68.0
+        min: 60.0
+        max: 72.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_LO
+      zone_t_hi:
+        label: Zone comfort high
+        default: 76.0
+        min: 72.0
+        max: 85.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_HI
+
+  - rule_id: OAT-METEO
+    sql_file: oat_meteo_fault.sql
+    pandas_function: oat_vs_meteo
+    description: Equipment OAT vs weather-staged wx OAT
+    required_roles: [oa_t]
+    output_columns: [equipment_id, fault_hours, fault_pct]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      oat_err:
+        label: OAT vs meteo tolerance
+        default: 5.0
+        min: 1.0
+        max: 15.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: OAT_ERR
+      confirm_seconds:
+        label: Confirm time
+        default: 900
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: FC13-SAT-HIGH
+    sql_file: sat_high_fault.sql
+    pandas_function: fc13
+    description: SAT above setpoint at full cooling
+    required_roles: [sat, sat_sp, clg_valve_pct, oa_damper_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      sat_err:
+        label: SAT high error band
+        default: 1.0
+        min: 0.25
+        max: 5.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SAT_ERR
+      clg_valve_min:
+        label: Cooling valve open threshold
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_VALVE_MIN
+      oa_damper_econ_low:
+        label: OA damper economizer low
+        default: 0.05
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: OA_DAMPER_ECON_LOW
+      oa_damper_econ_high:
+        label: OA damper economizer high
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: OA_DAMPER_ECON_HIGH
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: ECON-2
+    sql_file: economizer_fault.sql
+    pandas_function: econ2
+    description: Economizing when outdoor air unfavorable
+    required_roles: [oa_t, oa_damper_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 300
+
+  - rule_id: FC1
+    sql_file: fc1_duct_static_low.sql
+    pandas_function: fc1
+    description: Duct static below SP at full fan
+    required_roles: [duct_static, duct_static_sp, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 300
+
+  - rule_id: FC2
+    sql_file: fc2_mat_low.sql
+    pandas_function: fc2
+    description: Mixed air below envelope
+    required_roles: [mat, oa_t, rat, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+
+  - rule_id: FC3
+    sql_file: fc3_mat_high.sql
+    pandas_function: fc3
+    description: Mixed air above envelope
+    required_roles: [mat, oa_t, rat, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+
+  - rule_id: FC7
+    sql_file: fc7_sat_low_heating.sql
+    pandas_function: fc7
+    description: SAT low while heating at full
+    required_roles: [sat, sat_sp, htg_valve_pct, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: skipped_missing_roles
+    dashboard_wired: true
+    delete_python_candidate: false
+    blocker: "htg_valve_pct missing on some AHUs — Python and SQL both skip"
+    confirm_seconds: 600
+
+  - rule_id: FC8
+    sql_file: fc8_sat_mat_econ.sql
+    pandas_function: fc8
+    description: SAT vs MAT while economizing
+    required_roles: [sat, mat, oa_damper_pct, clg_valve_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+
+  - rule_id: FC9
+    sql_file: fc9_oa_sat_sp_econ.sql
+    pandas_function: fc9
+    description: OAT high vs SAT SP while economizing
+    required_roles: [oa_t, sat_sp, oa_damper_pct, clg_valve_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+
+  - rule_id: FC10
+    sql_file: fc10_mat_oa_clg.sql
+    pandas_function: fc10
+    description: MAT-OAT delta while cooling and economizing
+    required_roles: [mat, oa_t, oa_damper_pct, clg_valve_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+
+  - rule_id: FC11
+    sql_file: fc11_oa_sat_sp_clg.sql
+    pandas_function: fc11
+    description: OAT low vs SAT SP while cooling and economizing
+    required_roles: [oa_t, sat_sp, oa_damper_pct, clg_valve_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+
+  - rule_id: FC12
+    sql_file: fc12_sat_mat_clg.sql
+    pandas_function: fc12
+    description: SAT above MAT while cooling
+    required_roles: [sat, mat, oa_damper_pct, clg_valve_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+
+  - rule_id: ECON-1
+    sql_file: econ1_stuck_closed.sql
+    pandas_function: econ1
+    description: Economizer stuck closed when OAT favorable
+    required_roles: [fan_cmd, oa_damper_pct, oa_t]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+
+  - rule_id: ECON-4
+    sql_file: econ4_low_oa_frac.sql
+    pandas_function: econ4
+    description: Low estimated OA fraction
+    required_roles: [mat, rat, oa_t, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: proven_building_100
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600

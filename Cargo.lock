@@ -118,6 +118,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.103"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1474,6 +1480,117 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f1f227452a390804cdb637b74a86990f2a7d7ba4b7d5693aac9b4dd6defd8d6"
 
 [[package]]
+name = "fdd_bench"
+version = "3.2.13"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "fdd_core",
+ "fdd_csv",
+ "fdd_rules",
+ "fdd_sql",
+ "fdd_store",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "fdd_cli"
+version = "3.2.13"
+dependencies = [
+ "anyhow",
+ "clap",
+ "datafusion",
+ "fdd_bench",
+ "fdd_core",
+ "fdd_csv",
+ "fdd_rules",
+ "fdd_sql",
+ "fdd_store",
+ "serde",
+ "serde_json",
+ "tokio",
+ "walkdir",
+]
+
+[[package]]
+name = "fdd_core"
+version = "3.2.13"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "csv",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "walkdir",
+]
+
+[[package]]
+name = "fdd_csv"
+version = "3.2.13"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "csv",
+ "fdd_core",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "fdd_rules"
+version = "3.2.13"
+dependencies = [
+ "anyhow",
+ "datafusion",
+ "fdd_core",
+ "fdd_sql",
+ "fdd_store",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "tokio",
+ "walkdir",
+]
+
+[[package]]
+name = "fdd_sql"
+version = "3.2.13"
+dependencies = [
+ "anyhow",
+ "datafusion",
+ "fdd_core",
+ "fdd_store",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "walkdir",
+]
+
+[[package]]
+name = "fdd_store"
+version = "3.2.13"
+dependencies = [
+ "anyhow",
+ "arrow",
+ "arrow-schema",
+ "chrono",
+ "csv",
+ "fdd_core",
+ "parquet",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2467,7 +2584,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-mcp"
-version = "3.2.9"
+version = "3.2.13"
 dependencies = [
  "base64",
  "reqwest 0.12.28",
@@ -3503,6 +3620,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_yaml"
+version = "0.9.34+deprecated"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
+dependencies = [
+ "indexmap",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml",
+]
+
+[[package]]
 name = "sha1"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4130,6 +4260,12 @@ name = "unicode-width"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
+
+[[package]]
+name = "unsafe-libyaml"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "untrusted"

@@ -1,0 +1,18 @@
+[package]
+name = "fdd_sql"
+description = "DataFusion SQL session and query helpers"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+datafusion.workspace = true
+fdd_core = { path = "../fdd_core" }
+serde.workspace = true
+serde_json.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+fdd_store = { path = "../fdd_store" }
+tempfile = "3"
+tokio = { version = "1", features = ["rt", "macros"] }

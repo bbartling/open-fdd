@@ -1,9 +1,36 @@
 [workspace]
 resolver = "2"
-members = ["edge", "mcp"]
+members = [
+    "edge",
+    "mcp",
+    "crates/fdd_core",
+    "crates/fdd_csv",
+    "crates/fdd_store",
+    "crates/fdd_sql",
+    "crates/fdd_rules",
+    "crates/fdd_bench",
+    "crates/fdd_cli",
+]
 
 [workspace.package]
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/bbartling/open-fdd"
-version = "3.2.9"
+version = "3.2.13"
+rust-version = "1.75"
+
+[workspace.dependencies]
+anyhow = "1"
+arrow = "53"
+arrow-schema = "53"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+csv = "1"
+datafusion = "43"
+parquet = "53"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+sha2 = "0.10"
+thiserror = "2"
+walkdir = "2"

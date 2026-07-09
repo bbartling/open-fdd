@@ -1,0 +1,20 @@
+[package]
+name = "fdd_store"
+description = "CSV to Arrow/Parquet sidecar generation"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+arrow.workspace = true
+arrow-schema.workspace = true
+chrono.workspace = true
+csv.workspace = true
+fdd_core = { path = "../fdd_core" }
+parquet = { workspace = true, features = ["arrow"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

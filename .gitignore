@@ -1,5 +1,8 @@
 /target
 /edge/target
+/.cache/
+__pycache__/
+.pytest_cache/
 /.env
 edge/workspace/
 auth.env.local

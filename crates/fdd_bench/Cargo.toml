@@ -1,0 +1,19 @@
+[package]
+name = "fdd_bench"
+description = "Benchmark and parity comparison helpers"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+fdd_core = { path = "../fdd_core" }
+fdd_csv = { path = "../fdd_csv" }
+fdd_rules = { path = "../fdd_rules" }
+fdd_sql = { path = "../fdd_sql" }
+fdd_store = { path = "../fdd_store" }
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,24 @@
+[package]
+name = "fdd_cli"
+description = "Open-FDD CLI — validate, ingest, run-rules, compare, benchmark"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "openfdd_cli"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+datafusion.workspace = true
+fdd_bench = { path = "../fdd_bench" }
+fdd_core = { path = "../fdd_core" }
+fdd_csv = { path = "../fdd_csv" }
+fdd_rules = { path = "../fdd_rules" }
+fdd_sql = { path = "../fdd_sql" }
+fdd_store = { path = "../fdd_store" }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+walkdir.workspace = true
