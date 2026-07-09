@@ -1,0 +1,60 @@
+name: FDD DataFusion Engine CI
+
+on:
+  push:
+    branches: [master, main, cleanup/integrate-rust-port-into-master]
+    paths:
+      - "crates/**"
+      - "sql_rules/**"
+      - "rule_tuning/**"
+      - "examples/sample_data/**"
+      - ".github/workflows/fdd-engine-ci.yml"
+  pull_request:
+    paths:
+      - "crates/**"
+      - "sql_rules/**"
+      - "rule_tuning/**"
+      - "examples/sample_data/**"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fdd-engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install PyYAML for registry validation
+        run: python3 -m pip install --user PyYAML
+      - name: cargo fmt
+        run: cargo fmt --all --check
+      - name: cargo clippy (fdd crates)
+        run: cargo clippy -p fdd_core -p fdd_csv -p fdd_store -p fdd_sql -p fdd_rules -p fdd_bench -p fdd_cli --all-targets -- -D warnings
+      - name: cargo test (fdd crates)
+        run: cargo test -p fdd_core -p fdd_csv -p fdd_store -p fdd_sql -p fdd_rules -p fdd_bench -p fdd_cli
+      - name: SQL registry files exist
+        run: |
+          python3 - <<'PY'
+          import yaml, pathlib, sys
+          root = pathlib.Path("sql_rules")
+          reg = yaml.safe_load((root / "registry.yaml").read_text())
+          missing = []
+          for rule in reg.get("rules", []):
+              p = root / rule["sql_file"]
+              if not p.is_file():
+                  missing.append(str(p))
+          if missing:
+              print("Missing SQL files:", missing)
+              sys.exit(1)
+          print(f"OK: {len(reg['rules'])} rules")
+          PY
+      - name: fixture validate
+        run: cargo run -p fdd_cli --release -- validate --data-root examples/sample_data --building BUILDING_FIXTURE
+      - name: fixture ingest + run-rules
+        run: |
+          cargo run -p fdd_cli --release -- ingest --data-root examples/sample_data --building BUILDING_FIXTURE --out .cache/parquet
+          cargo run -p fdd_cli --release -- run-rules --parquet .cache/parquet --rules-dir sql_rules --out .cache/rule_results

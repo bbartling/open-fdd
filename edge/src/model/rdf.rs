@@ -1,6 +1,7 @@
 //! Haystack grid → RDF (Turtle) and in-memory Oxigraph store for SPARQL.
 
 use crate::model::query;
+use crate::validation::profile::workspace_dir;
 use once_cell::sync::Lazy;
 use oxigraph::io::RdfFormat;
 use oxigraph::model::Term;
@@ -17,6 +18,7 @@ pub const OFDD_PREFIX: &str = "https://open-fdd.dev/model#";
 static STORE: Lazy<RwLock<StoreState>> = Lazy::new(|| RwLock::new(StoreState::empty()));
 
 struct StoreState {
+    workspace_key: String,
     grid_hash: u64,
     store: Option<Store>,
 }
@@ -24,6 +26,7 @@ struct StoreState {
 impl StoreState {
     fn empty() -> Self {
         Self {
+            workspace_key: String::new(),
             grid_hash: 0,
             store: None,
         }
@@ -319,13 +322,15 @@ pub fn haystack_to_turtle() -> String {
 }
 
 fn ensure_store() -> Result<(), String> {
+    let workspace_key = workspace_dir().display().to_string();
     let rows = query::haystack_rows();
     let hash = grid_fingerprint(&rows);
     {
         let guard = STORE
             .read()
             .map_err(|_| "RDF store lock poisoned".to_string())?;
-        if guard.grid_hash == hash && guard.store.is_some() {
+        if guard.workspace_key == workspace_key && guard.grid_hash == hash && guard.store.is_some()
+        {
             return Ok(());
         }
     }
@@ -339,6 +344,7 @@ fn ensure_store() -> Result<(), String> {
     let mut guard = STORE
         .write()
         .map_err(|_| "RDF store lock poisoned".to_string())?;
+    guard.workspace_key = workspace_key;
     guard.grid_hash = hash;
     guard.store = Some(store);
     Ok(())

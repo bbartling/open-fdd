@@ -1,0 +1,20 @@
+[package]
+name = "fdd_rules"
+description = "SQL rule registry and batch execution"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+datafusion.workspace = true
+fdd_core = { path = "../fdd_core" }
+fdd_sql = { path = "../fdd_sql" }
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+fdd_store = { path = "../fdd_store" }
+tempfile = "3"
+tokio = { version = "1", features = ["rt", "macros"] }
