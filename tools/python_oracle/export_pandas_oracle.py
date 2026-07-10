@@ -57,6 +57,7 @@ SQL_TO_COOKBOOK: dict[str, str | None] = {
     "ECON-1": "ECON-1",
     "ECON-4": "ECON-4",
     "ECON-5": "ECON-5",
+    "PID-HUNT-1": "PID-HUNT-1",
 }
 
 # Which equipment kinds each SQL rule applies to
@@ -82,6 +83,7 @@ RULE_KINDS: dict[str, list[str]] = {
     "ECON-1": ["ahu"],
     "ECON-4": ["ahu"],
     "ECON-5": ["ahu"],
+    "PID-HUNT-1": ["ahu", "vav", "chiller", "boiler", "heatpump", "equip"],
 }
 
 

@@ -28,6 +28,8 @@ Every rule exists in **both** backends. See the [parity matrix](parity-matrix.ht
 | [Rule schema](rule-schema.html) | Declarative metadata — compiles to SQL + Pandas |
 | [Gap matrix](gap-matrix.html) | Coverage vs ASHRAE GL36, Berkeley, PNNL, NIST |
 | [Parity matrix](parity-matrix.html) | SQL ↔ Pandas audit |
+| [**Operational gates**](operational-gates.html) | RUN / CONDITIONAL / ALWAYS · `SKIPPED_EQUIPMENT_OFF` |
+| [**PID-HUNT-1**](pid-hunt-1.html) | Generic control-output total-variation hunting (51st rule) |
 | [Roadmap](roadmap.html) | Priority-ranked expansion |
 | [Prerequisite macros](prerequisite-macros.html) | Occupancy, fan proven, reset, override guards |
 | [Benchmark strategy](benchmark-strategy.html) | Fixtures + regression (`scripts/cookbook_parity_check.py`) |
@@ -38,7 +40,7 @@ Every rule exists in **both** backends. See the [parity matrix](parity-matrix.ht
 | Family | Count | Examples |
 |--------|------:|----------|
 | Sensor validation | 7 | SV-1–SV-7 |
-| AHU GL36 (FC1–FC15) | 15 | Duct static, MAT envelope, PID hunting |
+| AHU GL36 (FC1–FC15) | 15 | Duct static, MAT envelope, PID hunting (FC4 mode transitions) |
 | VAV terminals | 7 | Comfort, reheat, damper, airflow bias, min flow |
 | Economizer / ventilation | 7+ | ECON-1–5, OA-1–2, [diagnostics guide](datafusion-sql-cookbook.html#ahu-economizer-diagnostics-guide) |
 | Central plant | 6 | CHW ΔT, DP, reset, tower approach |
@@ -46,8 +48,11 @@ Every rule exists in **both** backends. See the [parity matrix](parity-matrix.ht
 | Extended P2 | 6 | VAV-6/7, TOWER-1, CTRL-2, SV-7, OA-2 |
 | Trim & respond | 4 | GL36 advisory |
 | Heat pump / weather | 3 | HP-1, WX-1–2 |
+| Generic control output | 1 | **PID-HUNT-1** total-variation hunting (51st) |
 
-**Total:** 60+ rules with catalog metadata. **Default confirmation:** 300 s (5 min).
+**Total:** 60+ rules with catalog metadata, plus **PID-HUNT-1** as the independently useful 51st FD rule. **Default confirmation:** 300 s (5 min).
+
+**Maintainer rule:** expression cookbooks are **never reduced** — add rules and gates; do not delete FC4, CTRL-2, or other sections.
 
 ## Quick start
 

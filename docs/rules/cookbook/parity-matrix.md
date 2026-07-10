@@ -36,6 +36,7 @@ nav_order: 6
 | Window functions | `LAG()`, `OVER` | `.shift()`, `.rolling()` |
 | Confirmation | API `confirmation_seconds` | `confirm_fault()` |
 | CTRL-2 hunting | Simplified SQL variant | Full rolling reversal count |
+| PID-HUNT-1 output hunting | `sql_rules/pid_hunt_1.sql` + cookbook SQL | `calculate_pid_hunting()` full resample |
 
 ---
 

@@ -1463,6 +1463,80 @@ Simplified edge variant — use [Pandas CTRL-2](pandas-cookbook.html#ctrl-2--gen
 
 ---
 
+### PID-HUNT-1 — Suspected control-output hunting
+
+| Field | Value |
+|-------|-------|
+| **id** | `PID-HUNT-1` |
+| **taxonomy_path** | `control.loop.generic.output_hunting` |
+| **equipment_class** | `ANY` (valve, damper, VFD, pressure/temp loop output) |
+| **severity** | 2 · **confirmation_seconds:** 0 (metrics are already 1h windows) |
+| **required_points** | `control_output_pct` |
+| **optional_points** | `loop_enabled`, `process_value`, `setpoint`, `control_error` |
+| **operational_gate** | CONDITIONAL — prefer `loop_enabled` ([gates](operational-gates.html)) |
+
+**Distinct from FC4** (operating-*mode* transitions) and **CTRL-2** (process-variable reversals). This rule measures **total variation** of a 0–100% command:
+
+\[
+TV_{1h}=\sum|u_t-u_{t-1}|,\quad
+Cycles=\frac{TV_{1h}}{2\cdot Span_{1h}}
+\]
+
+**UI copy:** “Suspected control-loop hunting” — output travel ≠ proven bad PID.
+
+**Defaults:** `change_deadband_pct=1`, `minimum_span_pct=20`, `total_variation_fault_pct=500`, `minimum_equivalent_cycles=2.5`, `minimum_reversals=4`, `minimum_coverage_pct=80`.
+
+Deep dive: [PID-HUNT-1](pid-hunt-1.html). Shipped SQL: `sql_rules/pid_hunt_1.sql`.
+
+```sql
+-- confirmation_seconds: 0
+-- WINDOW_ROWS = 3600 / POLL_SECONDS ; WINDOW_ROWS_MINUS_ONE = WINDOW_ROWS - 1
+-- See sql_rules/pid_hunt_1.sql for full CTE (params, deltas, rolling metrics, confirm).
+-- Sketch of the fault predicate after rolling metrics:
+--
+-- FAULT when:
+--   loop_enabled
+--   AND coverage_pct_1h >= {{MINIMUM_COVERAGE_PCT}}
+--   AND output_span_1h >= {{MINIMUM_SPAN_PCT}}
+--   AND total_variation_1h >= {{TOTAL_VARIATION_FAULT_PCT}}
+--   AND equivalent_cycles_1h >= {{MINIMUM_EQUIVALENT_CYCLES}}
+--   AND reversals_1h >= {{MINIMUM_REVERSALS}}
+--
+-- Status mapping (per sample, before hour aggregation):
+--   sample_count < minimum_samples OR coverage low → SKIPPED_INSUFFICIENT_DATA
+--   NOT loop_enabled → SKIPPED_EQUIPMENT_OFF (prefer over NOT_APPLICABLE)
+--   fault criteria → FAULT else PASS
+
+WITH params AS (
+  SELECT
+    CAST({{CHANGE_DEADBAND_PCT}} AS DOUBLE) AS change_deadband_pct,
+    CAST({{MINIMUM_SPAN_PCT}} AS DOUBLE) AS minimum_span_pct,
+    CAST({{TOTAL_VARIATION_FAULT_PCT}} AS DOUBLE) AS total_variation_fault_pct,
+    CAST({{MINIMUM_EQUIVALENT_CYCLES}} AS DOUBLE) AS minimum_equivalent_cycles,
+    CAST({{MINIMUM_REVERSALS}} AS BIGINT) AS minimum_reversals,
+    CAST({{MINIMUM_COVERAGE_PCT}} AS DOUBLE) AS minimum_coverage_pct
+),
+ordered AS (
+  SELECT
+    timestamp,
+    equipment_id,
+    point_id,
+    control_output_pct,
+    COALESCE(loop_enabled, TRUE) AS loop_enabled,
+    LAG(control_output_pct, 1, control_output_pct) OVER (
+      PARTITION BY equipment_id, point_id ORDER BY timestamp
+    ) AS previous_output_pct
+  FROM control_output_resampled
+)
+-- Continue with significant_delta, direction, ROWS window aggregates —
+-- full production query: sql_rules/pid_hunt_1.sql (registry rule_id PID-HUNT-1).
+SELECT 1 WHERE FALSE; -- placeholder; use shipped sql_rules/pid_hunt_1.sql
+```
+
+Parity: [Pandas PID-HUNT-1](pandas-cookbook.html#pid-hunt-1--suspected-control-output-hunting).
+
+---
+
 ### SV-7 — Wrong-units heuristic (magnitude check)
 
 | Field | Value |

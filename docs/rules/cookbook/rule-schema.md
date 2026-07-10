@@ -19,6 +19,7 @@ Every cookbook rule can be described in this schema. Implementations compile to 
 | `required_points` | string[] | FDD inputs that must be assigned |
 | `optional_points` | string[] | Improve accuracy when present |
 | `prerequisites` | string[] | Macro IDs — occupancy, fan proven, etc. |
+| `operational_gate` | object | RUN / CONDITIONAL / ALWAYS — see [operational gates](operational-gates.html) |
 | `suppression_logic` | expr | When rule must not run (override, startup, bad sensor) |
 | `detect_expr` | expr | Boolean fault condition → `fault_raw` |
 | `confirmation_strategy` | object | `seconds`, optional `min_consecutive_samples` |
@@ -85,6 +86,20 @@ validation_tests:
 | `detect_expr` | `CASE … END AS fault_raw` | `mask = …` → `fault_raw` |
 | `confirmation_strategy` | API `confirmation_seconds` + comment | `confirm_fault()` helper |
 | `suppression_logic` | `AND NOT (…)` in `CASE` | `mask &= ~suppress` |
+| `operational_gate` | CTE / CASE → `SKIPPED_EQUIPMENT_OFF` | Gate helpers → status column |
+
+---
+
+## Result statuses (engine contract)
+
+| Status | When |
+|--------|------|
+| `PASS` | Gate OK, enough data, no fault |
+| `FAULT` | Gate OK, fault criteria met |
+| `SKIPPED_MISSING_ROLES` | Required roles absent |
+| `SKIPPED_EQUIPMENT_OFF` | Operational gate failed |
+| `NOT_APPLICABLE_EQUIPMENT_TYPE` | Wrong equipment class |
+| `ERROR` | Runtime failure |
 
 ---
 

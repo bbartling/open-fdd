@@ -1213,6 +1213,160 @@ d = apply_fault(d, mask.fillna(False))
 d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
 ```
 
+### PID-HUNT-1 — Suspected control-output hunting
+
+**Distinct from FC4** (mode transitions) and **CTRL-2** (process-variable reversals). Measures rolling 1h **total variation** of a 0–100% control output. UI: “Suspected control-loop hunting.”
+
+Deep dive + defaults: [PID-HUNT-1](pid-hunt-1.html) · gates: [operational-gates](operational-gates.html).
+
+```python
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+import pandas as pd
+
+
+@dataclass(frozen=True)
+class PidHuntingParams:
+    window: str = "1h"
+    resample_interval: str = "1min"
+    max_fill_intervals: int = 10
+    change_deadband_pct: float = 1.0
+    minimum_span_pct: float = 20.0
+    total_variation_fault_pct: float = 500.0
+    minimum_equivalent_cycles: float = 2.5
+    minimum_reversals: int = 4
+    minimum_coverage_pct: float = 80.0
+    low_extreme_pct: float = 10.0
+    high_extreme_pct: float = 90.0
+
+
+def calculate_pid_hunting(
+    df: pd.DataFrame,
+    *,
+    timestamp_col: str = "timestamp",
+    value_col: str = "control_output_pct",
+    group_cols: tuple[str, ...] = ("equipment_id", "point_id"),
+    enable_col: str | None = None,
+    params: PidHuntingParams = PidHuntingParams(),
+) -> pd.DataFrame:
+    """Rolling one-hour control-output hunting metrics (oracle / parity)."""
+    required = {timestamp_col, value_col, *group_cols}
+    missing = required.difference(df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns: {sorted(missing)}")
+
+    work = df.copy()
+    work[timestamp_col] = pd.to_datetime(work[timestamp_col], utc=True, errors="coerce")
+    work[value_col] = pd.to_numeric(work[value_col], errors="coerce")
+    work = work.dropna(subset=[timestamp_col, value_col])
+    work[value_col] = work[value_col].clip(lower=0.0, upper=100.0)
+
+    interval = pd.Timedelta(params.resample_interval)
+    window = pd.Timedelta(params.window)
+    expected_samples = max(2, int(window / interval))
+    minimum_samples = max(
+        2, int(np.ceil(expected_samples * params.minimum_coverage_pct / 100.0))
+    )
+
+    def evaluate_group(group: pd.DataFrame) -> pd.DataFrame:
+        group = group.sort_values(timestamp_col).set_index(timestamp_col)
+        output = group[value_col].resample(params.resample_interval).mean()
+        output = output.ffill(limit=params.max_fill_intervals)
+        valid = output.notna()
+        raw_delta = output.diff()
+        significant_delta = raw_delta.where(
+            raw_delta.abs() >= params.change_deadband_pct, 0.0
+        )
+        total_variation = significant_delta.abs().rolling(
+            params.window, min_periods=minimum_samples
+        ).sum()
+        rolling_min = output.rolling(params.window, min_periods=minimum_samples).min()
+        rolling_max = output.rolling(params.window, min_periods=minimum_samples).max()
+        output_span = rolling_max - rolling_min
+        direction = pd.Series(
+            np.sign(significant_delta), index=significant_delta.index, dtype="float64"
+        ).replace(0.0, np.nan)
+        previous_direction = direction.ffill().shift(1)
+        reversal_event = (
+            direction.notna()
+            & previous_direction.notna()
+            & direction.ne(previous_direction)
+        ).astype("int64")
+        reversals = reversal_event.rolling(
+            params.window, min_periods=minimum_samples
+        ).sum()
+        valid_samples = valid.astype("int64").rolling(params.window, min_periods=1).sum()
+        coverage_pct = (100.0 * valid_samples / float(expected_samples)).clip(upper=100.0)
+        equivalent_cycles = total_variation / (2.0 * output_span.replace(0.0, np.nan))
+        enabled = pd.Series(True, index=output.index)
+        if enable_col and enable_col in group.columns:
+            enabled = (
+                pd.to_numeric(group[enable_col], errors="coerce")
+                .resample(params.resample_interval)
+                .max()
+                .ffill(limit=params.max_fill_intervals)
+                .fillna(0)
+                .gt(0)
+            )
+        fault = (
+            enabled
+            & coverage_pct.ge(params.minimum_coverage_pct)
+            & output_span.ge(params.minimum_span_pct)
+            & total_variation.ge(params.total_variation_fault_pct)
+            & equivalent_cycles.ge(params.minimum_equivalent_cycles)
+            & reversals.ge(params.minimum_reversals)
+        )
+        result = pd.DataFrame(
+            {
+                "control_output_pct": output,
+                "total_variation_1h": total_variation,
+                "output_span_1h": output_span,
+                "equivalent_cycles_1h": equivalent_cycles,
+                "reversals_1h": reversals,
+                "coverage_pct_1h": coverage_pct,
+                "loop_enabled": enabled,
+                "fault": fault.fillna(False),
+            }
+        )
+        result["status"] = np.select(
+            [
+                result["coverage_pct_1h"].lt(params.minimum_coverage_pct),
+                ~result["loop_enabled"],
+                result["fault"],
+            ],
+            ["SKIPPED_INSUFFICIENT_DATA", "SKIPPED_EQUIPMENT_OFF", "FAULT"],
+            default="PASS",
+        )
+        return result.reset_index()
+
+    results: list[pd.DataFrame] = []
+    group_key = list(group_cols) if len(group_cols) > 1 else group_cols[0]
+    for key, group in work.groupby(group_key, dropna=False, sort=False):
+        evaluated = evaluate_group(group)
+        key_values = key if isinstance(key, tuple) else (key,)
+        for column, value in zip(group_cols, key_values, strict=True):
+            evaluated[column] = value
+        results.append(evaluated)
+    if not results:
+        return pd.DataFrame()
+    return pd.concat(results, ignore_index=True)
+
+
+# Example (expect last row ~ TV=500, span=100, cycles=2.5, FAULT):
+# example = pd.DataFrame({
+#     "timestamp": pd.date_range("2026-07-10 08:00", periods=6, freq="12min", tz="UTC"),
+#     "equipment_id": "AHU_1",
+#     "point_id": "duct_static_pid_output",
+#     "control_output_pct": [0, 100, 0, 100, 0, 100],
+# })
+# calculate_pid_hunting(example, params=PidHuntingParams(resample_interval="12min", max_fill_intervals=1))
+```
+
+SQL parity: [DataFusion PID-HUNT-1](datafusion-sql-cookbook.html#pid-hunt-1--suspected-control-output-hunting) · `sql_rules/pid_hunt_1.sql`.
+
 ### SV-7 — Wrong-units heuristic
 
 ```python
@@ -1247,6 +1401,8 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"])
 | [Parity matrix](parity-matrix.html) | SQL ↔ Pandas audit |
 | [Roadmap](roadmap.html) | Expansion priorities |
 | [Prerequisite macros](prerequisite-macros.html) | Shared guards |
+| [Operational gates](operational-gates.html) | RUN / CONDITIONAL / ALWAYS |
+| [PID-HUNT-1](pid-hunt-1.html) | Control-output total-variation hunting |
 | [Benchmark strategy](benchmark-strategy.html) | Validation scenarios |
 | [Doc template](doc-template.html) | Per-rule standard |
 

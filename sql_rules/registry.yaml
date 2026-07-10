@@ -380,3 +380,88 @@ rules:
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
+
+  # PID-HUNT-1 — 51st independently useful rule (keep FC4 mode-transition hunting separate).
+  # UI: "Suspected control-loop hunting" — total variation of 0–100% control output.
+  - rule_id: PID-HUNT-1
+    sql_file: pid_hunt_1.sql
+    pandas_function: pid_hunt_1
+    description: >
+      Suspected control-output hunting via rolling 1h total variation, span,
+      equivalent cycles, and direction reversals on control_output_pct.
+    required_roles: [control_output_pct]
+    optional_roles: [loop_enabled, process_value, setpoint, control_error]
+    equipment_types: [ANY]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: cookbook_defined
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    operational_gate:
+      type: conditional
+      preferred_roles: [loop_enabled]
+    parameters:
+      change_deadband_pct:
+        label: Ignore changes below
+        default: 1.0
+        min: 0.0
+        max: 10.0
+        step: 0.5
+        unit: "% output"
+        frontend_control: slider
+        sql_placeholder: CHANGE_DEADBAND_PCT
+      minimum_span_pct:
+        label: Minimum observed span
+        default: 20.0
+        min: 5.0
+        max: 100.0
+        step: 5.0
+        unit: "% output"
+        frontend_control: slider
+        sql_placeholder: MINIMUM_SPAN_PCT
+      total_variation_fault_pct:
+        label: Total output travel threshold
+        default: 500.0
+        min: 50.0
+        max: 2000.0
+        step: 50.0
+        unit: "% output/hour"
+        frontend_control: slider
+        sql_placeholder: TOTAL_VARIATION_FAULT_PCT
+      minimum_equivalent_cycles:
+        label: Minimum equivalent cycles
+        default: 2.5
+        min: 0.5
+        max: 20.0
+        step: 0.5
+        unit: cycles/hour
+        frontend_control: slider
+        sql_placeholder: MINIMUM_EQUIVALENT_CYCLES
+      minimum_reversals:
+        label: Minimum direction reversals
+        default: 4
+        min: 1
+        max: 40
+        step: 1
+        unit: reversals/hour
+        frontend_control: slider
+        sql_placeholder: MINIMUM_REVERSALS
+      minimum_coverage_pct:
+        label: Minimum data coverage
+        default: 80.0
+        min: 25.0
+        max: 100.0
+        step: 5.0
+        unit: "%"
+        frontend_control: slider
+        sql_placeholder: MINIMUM_COVERAGE_PCT
+      window_minutes:
+        label: Analysis window
+        default: 60
+        min: 15
+        max: 240
+        step: 15
+        unit: min
+        frontend_control: slider
+        sql_placeholder: WINDOW_MINUTES

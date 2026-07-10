@@ -26,7 +26,12 @@ Proven on BUILDING_100 @ 0.5h tolerance (see `docs/benchmarks/RUST_DATAFUSION_PA
 | Avg zone temp | AVG-ZONE-TEMP | avg_zone_temp.sql | zone_t | 0 | proven | |
 | Zone comfort % | ZONE-COMFORT-PCT | zone_comfort_pct.sql | zone_t | 0 | proven | |
 | Fault elapsed | FAULT-ELAPSED-HOURS | fault_elapsed_hours.sql | zone_t | 0 | proven | |
+| **PID-HUNT-1** (output TV hunting) | **PID-HUNT-1** | **pid_hunt_1.sql** | control_output_pct | 0 | cookbook | 51st rule; distinct from FC4/CTRL-2 |
 
 **Python oracle:** optional — `tools/python_oracle/export_pandas_oracle.py` (requires full cookbook stack; not production runtime).
 
+**Operational gates / statuses:** [docs/rules/cookbook/operational-gates.md](../rules/cookbook/operational-gates.md) — RUN/CONDITIONAL/ALWAYS, `SKIPPED_EQUIPMENT_OFF`.
+
 **Tuning:** see [SQL rule tuning contract](../migration/vibe19/SQL_RULE_TUNING_CONTRACT.md).
+
+**Maintainer rule:** expression cookbooks under `docs/rules/cookbook/` are **never reduced**. Add PID-HUNT-1, gates, and SQL mappings; do not delete FC4, CTRL-2, or other existing sections.

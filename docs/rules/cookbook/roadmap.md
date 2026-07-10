@@ -30,6 +30,7 @@ RESET-1, SCHED-1, OVR-1, CMD-1, OA-1, VLV-1, DMP-1, VAV-5, PLANT-1, SP-HIGH/LOW,
 | CTRL-2 | Generic loop hunting (duct static) |
 | SV-7 | Wrong-units heuristic |
 | OA-2 | DCV minimum OA not met |
+| **PID-HUNT-1** | Suspected control-**output** hunting (total variation) — 51st FD rule |
 
 ## P3 — next quarter
 
@@ -38,6 +39,7 @@ RESET-1, SCHED-1, OVR-1, CMD-1, OA-1, VLV-1, DMP-1, VAV-5, PLANT-1, SP-HIGH/LOW,
 - Heat recovery wheel effectiveness
 - Site-level demand spike vs weather
 - Full FC2–FC15 inline metadata tables (catalog complete today)
+- Align `sql_rules/registry.yaml` operational gates (FC8–FC13 fan_running; FC1 full-fan vs running) — see [operational gates](operational-gates.html)
 
 ---
 

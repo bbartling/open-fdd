@@ -196,6 +196,136 @@ def macro_sensor_quality_gate(d: pd.DataFrame, col: str, lo: float, hi: float) -
 
 ---
 
+## macro.fan_running
+
+**Intent:** Proven fan operation — **not** near-full speed. Prefer status/speed/current/airflow; use `fan_cmd` only as fallback. See [operational gates](operational-gates.html).
+
+Distinct from **`fan_at_full_speed`** (FC1 uses both).
+
+### DataFusion SQL
+
+```sql
+(
+  (fan_status IS NOT NULL AND fan_status = true)
+  OR (fan_speed_feedback IS NOT NULL
+      AND CASE WHEN fan_speed_feedback > 1.0 THEN fan_speed_feedback/100.0 ELSE fan_speed_feedback END > 0.05)
+  OR (fan_current IS NOT NULL AND fan_current > {{FAN_CURRENT_MIN}})
+  OR (airflow_proof IS NOT NULL AND airflow_proof = true)
+  OR (
+    {{COMMAND_FALLBACK_ALLOWED}} = true
+    AND CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END >= 0.05
+  )
+)
+```
+
+### Pandas
+
+```python
+def macro_fan_running(
+    d: pd.DataFrame, *, command_fallback: bool = True, current_min: float = 0.5
+) -> pd.Series:
+    on = pd.Series(False, index=d.index)
+    if "fan_status" in d:
+        on |= d["fan_status"].fillna(False).astype(bool)
+    if "fan_speed_feedback" in d:
+        spd = d["fan_speed_feedback"].apply(lambda x: x / 100.0 if pd.notna(x) and x > 1.0 else x)
+        on |= spd.fillna(0) > 0.05
+    if "fan_current" in d:
+        on |= d["fan_current"].fillna(0) > current_min
+    if "airflow_proof" in d:
+        on |= d["airflow_proof"].fillna(False).astype(bool)
+    if command_fallback and "fan_cmd" in d:
+        cmd = d["fan_cmd"].apply(lambda x: x / 100.0 if pd.notna(x) and x > 1.0 else x)
+        on |= cmd.fillna(0) >= 0.05
+    return on
+```
+
+---
+
+## macro.fan_at_full_speed
+
+**Intent:** Near-full fan output (FC1 duct-static context). **Do not** substitute for `macro.fan_running`.
+
+### DataFusion SQL
+
+```sql
+CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END >= {{FULL_FAN_THRESHOLD}}
+-- default FULL_FAN_THRESHOLD = 0.87
+```
+
+### Pandas
+
+```python
+def macro_fan_at_full_speed(d: pd.DataFrame, threshold: float = 0.87) -> pd.Series:
+    cmd = d["fan_cmd"].apply(lambda x: x / 100.0 if pd.notna(x) and x > 1.0 else x)
+    return cmd.fillna(0) >= threshold
+```
+
+---
+
+## macro.hydronic_flow_proven
+
+**Intent:** CHW/HW plant flow or pump proof before plant performance rules.
+
+### DataFusion SQL
+
+```sql
+(
+  (chw_flow IS NOT NULL AND chw_flow > {{MIN_FLOW}})
+  OR (pump_status IS NOT NULL AND pump_status = true)
+  OR (pump_speed_feedback IS NOT NULL
+      AND CASE WHEN pump_speed_feedback > 1.0 THEN pump_speed_feedback/100.0 ELSE pump_speed_feedback END > 0.05)
+  OR (pump_current IS NOT NULL AND pump_current > {{PUMP_CURRENT_MIN}})
+  OR (
+    {{COMMAND_FALLBACK_ALLOWED}} = true
+    AND CASE WHEN pump_cmd > 1.0 THEN pump_cmd/100.0 ELSE pump_cmd END >= 0.05
+  )
+)
+```
+
+### Pandas
+
+```python
+def macro_hydronic_flow_proven(d: pd.DataFrame, *, command_fallback: bool = True) -> pd.Series:
+    on = pd.Series(False, index=d.index)
+    if "chw_flow" in d:
+        on |= d["chw_flow"].fillna(0) > 0
+    if "pump_status" in d:
+        on |= d["pump_status"].fillna(False).astype(bool)
+    if "pump_speed_feedback" in d:
+        spd = d["pump_speed_feedback"].apply(lambda x: x / 100.0 if pd.notna(x) and x > 1.0 else x)
+        on |= spd.fillna(0) > 0.05
+    if command_fallback and "pump_cmd" in d:
+        cmd = d["pump_cmd"].apply(lambda x: x / 100.0 if pd.notna(x) and x > 1.0 else x)
+        on |= cmd.fillna(0) >= 0.05
+    return on
+```
+
+---
+
+## macro.loop_enabled
+
+**Intent:** Control loop / equipment enable for CONDITIONAL rules such as **PID-HUNT-1**. Missing column → treat as enabled (do not silently drop the rule).
+
+### DataFusion SQL
+
+```sql
+COALESCE(loop_enabled, TRUE) = TRUE
+```
+
+### Pandas
+
+```python
+def macro_loop_enabled(d: pd.DataFrame, col: str = "loop_enabled") -> pd.Series:
+    if col not in d.columns:
+        return pd.Series(True, index=d.index)
+    return d[col].fillna(True).astype(bool)
+```
+
+When the gate fails, emit **`SKIPPED_EQUIPMENT_OFF`** (not `PASS`). See [operational gates](operational-gates.html).
+
+---
+
 ## Composing macros in a rule
 
 ### SQL pattern
@@ -220,3 +350,5 @@ base = macro_fan_proven_on(d) & macro_override_suppression(d) & macro_sensor_qua
 mask = base & detect_condition
 d = apply_fault(d, mask)
 ```
+
+**Gate failure vs fault_raw:** production result rows should use `SKIPPED_EQUIPMENT_OFF` when the operational gate fails, rather than forcing `fault_raw = false` into `PASS` hour totals. Cookbook `fault_raw` examples remain valid for edge test-sql; registry/engine status mapping is documented under [operational gates](operational-gates.html).

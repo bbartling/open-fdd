@@ -8,6 +8,8 @@ nav_order: 10
 
 Copy this structure for every new rule in **both** [DataFusion SQL](datafusion-sql-cookbook.html) and [Pandas](pandas-cookbook.html) cookbooks.
 
+**Maintainer hard rule:** Never delete or shorten existing cookbook rule sections to “make room.” Expression cookbooks only grow. When adding rules (e.g. PID-HUNT-1), keep FC4, CTRL-2, and all prior content intact.
+
 ---
 
 ## `{RULE_ID}` — {Title}

@@ -68,6 +68,7 @@ Examples:
 
 - `sensor.quality.ahu.sv_oa_range`
 - `control.loop.ahu.fc4_pid_hunting`
+- `control.loop.generic.output_hunting` (**PID-HUNT-1**)
 - `reset.plant.chw.dp_reset_missing`
 - `schedule.vav.unoccupied_runtime`
 - `override.ahu.persistent_manual`

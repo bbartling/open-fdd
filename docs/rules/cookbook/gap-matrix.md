@@ -29,7 +29,7 @@ Comparison of **Open-FDD cookbook coverage** against public FDD, re-tuning, and 
 | Command vs status | ✅ CMD-1 |
 | Valve / damper leakage | ✅ VLV-1, DMP-1, FC14–15 |
 | Plant performance | ✅ CHW-1–4, TOWER-1, PLANT-1 |
-| Control hunting | ✅ FC4, CTRL-2 |
+| Control hunting | ✅ FC4 (mode transitions), CTRL-2 (process PV), **PID-HUNT-1** (output total variation) |
 | Trim & respond advisory | ✅ TRIM-1–4, KPI-1 |
 | CI parity fixtures | ✅ |
 

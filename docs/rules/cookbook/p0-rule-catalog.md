@@ -81,6 +81,7 @@ All **thresholds are defaults** — site-adjustable. **confirmation_seconds** de
 | DMP-1 | actuator.leakage.ahu.oa_damper | ahu | 2 | 900 |
 | SP-HIGH / SP-LOW | reset.vav.occupied_sp_drift | vav | 2 | 900 |
 | CTRL-2 | control.loop.generic.hunting | ahu | 2 | 3600 |
+| PID-HUNT-1 | control.loop.generic.output_hunting | ANY | 2 | 0 (1h metrics) |
 | KPI-1 | kpi.advisory.site.performance_score | site | 1 | 86400 |
 
 ---
