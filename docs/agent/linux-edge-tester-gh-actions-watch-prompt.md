@@ -12,10 +12,27 @@ You are the Open-FDD Linux edge tester on /home/ben/open-fdd.
 Charter: TEST, DOCUMENT, REPORT — no Rust/TS edits, no git push, no upstream PR.
 Your job NOW: watch GitHub Actions until :nightly is green, then deploy and re-run gates.
 
+Bench has insufficient RAM for Rust/Docker builds — **GHCR pull only** (`docker pull` / site update).
+Never run `docker build`, `cargo build`, or compile the edge image locally. Product fixes ship via CI → GHCR.
+
 Acknowledged. Bench /home/ben/open-fdd. Channel: nightly. Gate: #429.
 Will watch GH Actions, post on #429/#433, proceed only when nightly is published.
-No git push. No product code edits on bench.
+No git push. No product code edits on bench. No local image builds.
 ```
+
+---
+
+## Bench constraint — GHCR only (not enough RAM to build)
+
+This host **cannot** build the edge stack locally. Do not attempt `docker compose build`, `docker build`, or `cargo build` for Open-FDD edge/MCP images — OOM or multi-hour hangs are expected.
+
+| Allowed | Forbidden |
+|---------|-----------|
+| `docker pull ghcr.io/bbartling/openfdd-edge-rust:nightly` | `docker build` / `compose build` |
+| `./scripts/openfdd_rust_site_update.sh` (pull + recreate) | `cargo build --release` in `edge/` |
+| `./scripts/openfdd_bench_pull_ghcr.sh` | Rebuilding to “pick up” a WSL patch without GHCR |
+
+If a fix is not in GHCR yet, **wait** for product merge + green **`Publish Rust edge to GHCR`**, then pull. See [bench-vs-source.md](./bench-vs-source.md).
 
 ---
 
@@ -103,6 +120,8 @@ docker pull "$IMAGE" 2>&1 | tail -3
 ---
 
 ## Step 3 — Preflight + deploy (mandatory every iteration)
+
+**Pull-only deploy** — scripts below fetch from GHCR; they do not build images on bench.
 
 ```bash
 cd /home/ben/open-fdd
@@ -259,8 +278,9 @@ NEW_TAG=nightly \
 
 ## Rules
 
-- **You** watch Actions and test; **WSL product** merges fixes.
-- Never deploy a failed CI build.
+- **You** watch Actions and test; **WSL product** merges fixes and CI publishes GHCR.
+- **GHCR pull only** — bench RAM is too small to build containers; never local-build the edge image.
+- Never deploy a failed CI build or an image that was not published by GH Actions.
 - Never skip vibe16 `bacnet_app` preflight.
 - Never close #429 yourself.
 - Update `LAST_TESTED_SHA` after every full gate run.
