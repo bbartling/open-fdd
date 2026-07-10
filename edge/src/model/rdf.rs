@@ -353,26 +353,6 @@ fn rebuild_store_locked(guard: &mut StoreState, workspace_key: String) -> Result
     Ok(())
 }
 
-fn ensure_store() -> Result<(), String> {
-    let workspace_key = workspace_cache_key();
-    let rows = query::haystack_rows();
-    let hash = grid_fingerprint(&rows);
-    {
-        let guard = STORE
-            .read()
-            .map_err(|_| "RDF store lock poisoned".to_string())?;
-        if store_matches(&guard, &workspace_key, hash) {
-            return Ok(());
-        }
-    }
-
-    let mut guard = STORE
-        .write()
-        .map_err(|_| "RDF store lock poisoned".to_string())?;
-    // Double-check after acquiring the write lock (another thread may have rebuilt).
-    rebuild_store_locked(&mut guard, workspace_key)
-}
-
 fn with_store<F, T>(f: F) -> Result<T, String>
 where
     F: FnOnce(&Store) -> Result<T, String>,
