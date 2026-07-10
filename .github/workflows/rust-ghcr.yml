@@ -24,6 +24,7 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -53,10 +54,13 @@ jobs:
       - run: docker build -t openfdd-edge-rust:ci .
       - name: Docker smoke (/api/health and /)
         run: |
-          mkdir -p workspace/data workspace/logs workspace/overrides workspace/bacnet/commissioning
+          SMOKE_WORKSPACE="${RUNNER_TEMP}/openfdd-smoke-workspace"
+          rm -rf "$SMOKE_WORKSPACE"
+          mkdir -p "$SMOKE_WORKSPACE"/{data,logs,overrides,bacnet/commissioning}
+          docker rm -f openfdd-smoke 2>/dev/null || true
           docker run -d --name openfdd-smoke -p 8080:8080 \
             -e OFDD_AUTH_REQUIRED=false \
-            -v "$PWD/workspace:/var/openfdd/workspace" \
+            -v "$SMOKE_WORKSPACE:/var/openfdd/workspace" \
             openfdd-edge-rust:ci
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8080/api/health >/tmp/health.json; then
