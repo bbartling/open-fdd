@@ -22,7 +22,10 @@ pub fn with_temp_workspace<F: FnOnce(&Path)>(f: F) {
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     std::env::set_var("OPENFDD_WORKSPACE", &dir);
+    // Drop any RDF store cached for a previous workspace before the test body runs.
+    crate::model::rdf::invalidate_store();
     f(&dir);
+    crate::model::rdf::invalidate_store();
     if let Some(p) = prev {
         std::env::set_var("OPENFDD_WORKSPACE", p);
     } else {

@@ -321,43 +321,86 @@ pub fn haystack_to_turtle() -> String {
     haystack_rows_to_turtle(&query::haystack_rows())
 }
 
-fn ensure_store() -> Result<(), String> {
-    let workspace_key = workspace_dir().display().to_string();
+/// Stable cache key for the process-wide RDF store.
+/// Prefer canonical paths so Windows short/long and relative forms do not split the cache.
+fn workspace_cache_key() -> String {
+    let dir = workspace_dir();
+    match std::fs::canonicalize(&dir) {
+        Ok(canon) => canon.display().to_string(),
+        Err(_) => dir.display().to_string(),
+    }
+}
+
+fn store_matches(guard: &StoreState, workspace_key: &str, hash: u64) -> bool {
+    guard.workspace_key == workspace_key && guard.grid_hash == hash && guard.store.is_some()
+}
+
+fn rebuild_store_locked(guard: &mut StoreState, workspace_key: String) -> Result<(), String> {
+    // Re-read grid under the write lock so the cache matches the workspace visible now.
     let rows = query::haystack_rows();
     let hash = grid_fingerprint(&rows);
-    {
-        let guard = STORE
-            .read()
-            .map_err(|_| "RDF store lock poisoned".to_string())?;
-        if guard.workspace_key == workspace_key && guard.grid_hash == hash && guard.store.is_some()
-        {
-            return Ok(());
-        }
+    if store_matches(guard, &workspace_key, hash) {
+        return Ok(());
     }
-
     let turtle = haystack_rows_to_turtle(&rows);
     let store = Store::new().map_err(|e| format!("RDF store init failed: {e}"))?;
     store
         .load_from_reader(RdfFormat::Turtle, turtle.as_bytes())
         .map_err(|e| format!("Turtle load failed: {e}"))?;
-
-    let mut guard = STORE
-        .write()
-        .map_err(|_| "RDF store lock poisoned".to_string())?;
     guard.workspace_key = workspace_key;
     guard.grid_hash = hash;
     guard.store = Some(store);
     Ok(())
 }
 
+fn ensure_store() -> Result<(), String> {
+    let workspace_key = workspace_cache_key();
+    let rows = query::haystack_rows();
+    let hash = grid_fingerprint(&rows);
+    {
+        let guard = STORE
+            .read()
+            .map_err(|_| "RDF store lock poisoned".to_string())?;
+        if store_matches(&guard, &workspace_key, hash) {
+            return Ok(());
+        }
+    }
+
+    let mut guard = STORE
+        .write()
+        .map_err(|_| "RDF store lock poisoned".to_string())?;
+    // Double-check after acquiring the write lock (another thread may have rebuilt).
+    rebuild_store_locked(&mut guard, workspace_key)
+}
+
 fn with_store<F, T>(f: F) -> Result<T, String>
 where
     F: FnOnce(&Store) -> Result<T, String>,
 {
-    ensure_store()?;
-    let guard = STORE
-        .read()
+    let workspace_key = workspace_cache_key();
+    let rows = query::haystack_rows();
+    let hash = grid_fingerprint(&rows);
+
+    // Fast path: serve under a read lock when cache already matches this workspace+grid.
+    {
+        let guard = STORE
+            .read()
+            .map_err(|_| "RDF store lock poisoned".to_string())?;
+        if store_matches(&guard, &workspace_key, hash) {
+            let store = guard
+                .store
+                .as_ref()
+                .ok_or_else(|| "RDF store unavailable".to_string())?;
+            return f(store);
+        }
+    }
+
+    // Slow path: rebuild under write lock, then run the query before releasing so another
+    // workspace cannot swap the store between ensure and use (parallel test race).
+    let mut guard = STORE
+        .write()
         .map_err(|_| "RDF store lock poisoned".to_string())?;
+    rebuild_store_locked(&mut guard, workspace_key)?;
     let store = guard
         .store
         .as_ref()
