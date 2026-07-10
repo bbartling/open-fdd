@@ -460,6 +460,37 @@ mod tests {
         });
     }
 
+    /// Regression for #488: isolated site queries must not leak across temp workspaces
+    /// when the global RDF store is exercised repeatedly under the workspace env lock.
+    #[test]
+    fn list_points_isolated_site_queries_repeat() {
+        for i in 0..8 {
+            with_temp_workspace(|_| {
+                let filename = format!("Plant-Iso-{i}.csv");
+                let model = csv_import::import_from_csv_commit(
+                    &["Date".to_string(), "Outdoor Air Temp".to_string()],
+                    &filename,
+                    &format!("job-iso-{i}"),
+                    None,
+                );
+                assert_eq!(model.get("ok").and_then(|v| v.as_bool()), Some(true));
+                let (site, _, _, _) = csv_import::ids_from_filename(&filename);
+                let pts = list_points(Some(&site));
+                assert!(
+                    pts.get("count").and_then(|v| v.as_u64()).unwrap_or(0) >= 1,
+                    "iteration {i}: expected points for {site}: {pts}"
+                );
+                // A different site id must not inherit this workspace's points.
+                let other = list_points(Some("site:does-not-exist"));
+                assert_eq!(
+                    other.get("count").and_then(|v| v.as_u64()).unwrap_or(0),
+                    0,
+                    "iteration {i}: leaked points into empty site filter: {other}"
+                );
+            });
+        }
+    }
+
     #[test]
     fn groups_equips_and_counts_unmapped() {
         let coverage = model_coverage();

@@ -2,7 +2,7 @@ name: FDD DataFusion Engine CI
 
 on:
   push:
-    branches: [master, main, cleanup/integrate-rust-port-into-master]
+    branches: [master, main]
     paths:
       - "crates/**"
       - "sql_rules/**"
@@ -15,6 +15,7 @@ on:
       - "sql_rules/**"
       - "rule_tuning/**"
       - "examples/sample_data/**"
+      - ".github/workflows/fdd-engine-ci.yml"
 
 env:
   CARGO_TERM_COLOR: always
