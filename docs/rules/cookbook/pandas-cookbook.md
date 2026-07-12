@@ -1239,8 +1239,6 @@ class PidHuntingParams:
     minimum_equivalent_cycles: float = 2.5
     minimum_reversals: int = 4
     minimum_coverage_pct: float = 80.0
-    low_extreme_pct: float = 10.0
-    high_extreme_pct: float = 90.0
 
 
 def calculate_pid_hunting(
@@ -1262,6 +1260,9 @@ def calculate_pid_hunting(
     work[timestamp_col] = pd.to_datetime(work[timestamp_col], utc=True, errors="coerce")
     work[value_col] = pd.to_numeric(work[value_col], errors="coerce")
     work = work.dropna(subset=[timestamp_col, value_col])
+    finite = work[value_col]
+    if not finite.empty and float(finite.quantile(0.95)) <= 1.5:
+        work[value_col] = work[value_col] * 100.0
     work[value_col] = work[value_col].clip(lower=0.0, upper=100.0)
 
     interval = pd.Timedelta(params.resample_interval)

@@ -121,6 +121,9 @@ pub fn assert_sql_placeholders(sql: &str, rule: &RuleSpec) -> Result<()> {
             "POLL_SECONDS".into(),
             "CONFIRM_ROWS".into(),
             "CONFIRM_SECONDS".into(),
+            // Derived at runtime from WINDOW_MINUTES + POLL_SECONDS in runner.
+            "WINDOW_ROWS".into(),
+            "WINDOW_ROWS_MINUS_ONE".into(),
         ])
         .collect();
     let mut i = 0;
@@ -176,6 +179,7 @@ mod tests {
                     sql_placeholder: "ZONE_T_LO".into(),
                 },
             )]),
+            optional_roles: vec![],
         }
     }
 

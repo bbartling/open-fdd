@@ -19,7 +19,7 @@ Every cookbook rule can be described in this schema. Implementations compile to 
 | `required_points` | string[] | FDD inputs that must be assigned |
 | `optional_points` | string[] | Improve accuracy when present |
 | `prerequisites` | string[] | Macro IDs — occupancy, fan proven, etc. |
-| `operational_gate` | object | RUN / CONDITIONAL / ALWAYS — see [operational gates](operational-gates.html) |
+| `operational_gate` | object | `mode` (`RUN` / `CONDITIONAL` / `ALWAYS`) + `predicate` (e.g. `fan_running`) — see [operational gates](operational-gates.html) |
 | `suppression_logic` | expr | When rule must not run (override, startup, bad sensor) |
 | `detect_expr` | expr | Boolean fault condition → `fault_raw` |
 | `confirmation_strategy` | object | `seconds`, optional `min_consecutive_samples` |

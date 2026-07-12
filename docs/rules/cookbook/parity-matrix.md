@@ -31,12 +31,16 @@ nav_order: 6
 
 ## Backend-specific caveats
 
-| Topic | DataFusion SQL | Pandas |
-|-------|----------------|--------|
-| Window functions | `LAG()`, `OVER` | `.shift()`, `.rolling()` |
-| Confirmation | API `confirmation_seconds` | `confirm_fault()` |
-| CTRL-2 hunting | Simplified SQL variant | Full rolling reversal count |
-| PID-HUNT-1 output hunting | `sql_rules/pid_hunt_1.sql` + cookbook SQL | `calculate_pid_hunting()` full resample |
+| Topic | DataFusion SQL | Pandas | Parity status |
+|-------|----------------|--------|---------------|
+| Window functions | `LAG()`, `OVER` | `.shift()`, `.rolling()` | aligned pattern |
+| Confirmation | `{{CONFIRM_ROWS}}` streak | `confirm_fault()` | aligned |
+| CTRL-2 hunting | Simplified SQL variant | Full rolling reversal count | **known gap** |
+| PID-HUNT-1 output hunting | Row-window TV/reversals; `LAST_VALUE IGNORE NULLS` ffill; clip `[0,100]`; enable null→disabled | Resample + rolling; ffill reversals; clip; enable null→disabled | **aligned intent**; residual risk: resample vs row window |
+| Sensor sweeps (SV-*) | Multi-column OR/AND over fixed roles | Per-sensor iterative sweep | **known approximation** |
+| Operational gates in SQL | Often metadata-only until runner applies gate | Gate helpers in runner | **partial** — mode/predicate schema split documented |
+
+Do **not** claim full numerical parity while residual windowing/resample differences remain.
 
 ---
 

@@ -1488,9 +1488,14 @@ Cycles=\frac{TV_{1h}}{2\cdot Span_{1h}}
 
 Deep dive: [PID-HUNT-1](pid-hunt-1.html). Shipped SQL: `sql_rules/pid_hunt_1.sql`.
 
+**SQL output contract:** `pid_hunt_1.sql` returns aggregated `equipment_id` + `fault_hours` only.
+Per-sample statuses (`PASS` / `FAULT` / `SKIPPED_*`) are applied by the rule runner / API
+layer, not by the SQL file. Cookbook sketches below describe the **fault predicate**,
+not columns emitted by the shipped query.
+
 ```sql
 -- confirmation_seconds: 0
--- WINDOW_ROWS = 3600 / POLL_SECONDS ; WINDOW_ROWS_MINUS_ONE = WINDOW_ROWS - 1
+-- WINDOW_ROWS derived from WINDOW_MINUTES + POLL_SECONDS at runtime
 -- See sql_rules/pid_hunt_1.sql for full CTE (params, deltas, rolling metrics, confirm).
 -- Sketch of the fault predicate after rolling metrics:
 --
@@ -1502,10 +1507,10 @@ Deep dive: [PID-HUNT-1](pid-hunt-1.html). Shipped SQL: `sql_rules/pid_hunt_1.sql
 --   AND equivalent_cycles_1h >= {{MINIMUM_EQUIVALENT_CYCLES}}
 --   AND reversals_1h >= {{MINIMUM_REVERSALS}}
 --
--- Status mapping (per sample, before hour aggregation):
---   sample_count < minimum_samples OR coverage low → SKIPPED_INSUFFICIENT_DATA
---   NOT loop_enabled → SKIPPED_EQUIPMENT_OFF (prefer over NOT_APPLICABLE)
---   fault criteria → FAULT else PASS
+-- Runner/API status mapping (not SQL columns):
+--   missing required roles → SKIPPED_MISSING_ROLES
+--   gate failed / not enabled → SKIPPED_EQUIPMENT_OFF
+--   confirmed fault_hours > 0 → FAULT else PASS
 
 WITH params AS (
   SELECT

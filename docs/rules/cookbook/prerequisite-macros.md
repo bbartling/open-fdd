@@ -286,31 +286,49 @@ def macro_fan_at_full_speed(d: pd.DataFrame, threshold: float = 0.87) -> pd.Seri
 ### Pandas
 
 ```python
-def macro_hydronic_flow_proven(d: pd.DataFrame, *, command_fallback: bool = True) -> pd.Series:
+def macro_hydronic_flow_proven(
+    d: pd.DataFrame,
+    *,
+    min_flow: float = 0.0,
+    pump_current_min: float = 0.0,
+    speed_threshold: float = 0.05,
+    command_fallback: bool = True,
+) -> pd.Series:
     on = pd.Series(False, index=d.index)
     if "chw_flow" in d:
-        on |= d["chw_flow"].fillna(0) > 0
+        on |= d["chw_flow"].fillna(0) > min_flow
     if "pump_status" in d:
         on |= d["pump_status"].fillna(False).astype(bool)
     if "pump_speed_feedback" in d:
         spd = d["pump_speed_feedback"].apply(lambda x: x / 100.0 if pd.notna(x) and x > 1.0 else x)
-        on |= spd.fillna(0) > 0.05
+        on |= spd.fillna(0) > speed_threshold
+    if "pump_current" in d:
+        on |= d["pump_current"].fillna(0) > pump_current_min
     if command_fallback and "pump_cmd" in d:
         cmd = d["pump_cmd"].apply(lambda x: x / 100.0 if pd.notna(x) and x > 1.0 else x)
-        on |= cmd.fillna(0) >= 0.05
+        on |= cmd.fillna(0) >= speed_threshold
     return on
 ```
 
+Defaults must match SQL placeholders `{{MIN_FLOW}}`, `{{PUMP_CURRENT_MIN}}`, and the
+0.05 speed/command threshold. Do not hardcode `flow > 0` in one backend while the
+registry exposes a different minimum.
 ---
 
 ## macro.loop_enabled
 
-**Intent:** Control loop / equipment enable for CONDITIONAL rules such as **PID-HUNT-1**. Missing column → treat as enabled (do not silently drop the rule).
+**Intent:** Control loop / equipment enable for CONDITIONAL rules such as **PID-HUNT-1**.
 
-### DataFusion SQL
+| Case | Behavior |
+|------|----------|
+| Column / role absent | Treat as enabled (do not drop the rule); runner may inject `TRUE` |
+| Column present, NULL cell | **Disabled** for PID-HUNT-1 fault math (`fillna(0)` / SQL `COALESCE(>0, FALSE)`) |
+| Column present, truthy | Enabled |
+
+### DataFusion SQL (PID-HUNT-1 fault path)
 
 ```sql
-COALESCE(loop_enabled, TRUE) = TRUE
+COALESCE(CAST(loop_enabled AS DOUBLE) > 0.0, FALSE)
 ```
 
 ### Pandas
@@ -319,10 +337,11 @@ COALESCE(loop_enabled, TRUE) = TRUE
 def macro_loop_enabled(d: pd.DataFrame, col: str = "loop_enabled") -> pd.Series:
     if col not in d.columns:
         return pd.Series(True, index=d.index)
-    return d[col].fillna(True).astype(bool)
+    return pd.to_numeric(d[col], errors="coerce").fillna(0).gt(0)
 ```
 
-When the gate fails, emit **`SKIPPED_EQUIPMENT_OFF`** (not `PASS`). See [operational gates](operational-gates.html).
+When the operational gate fails for the analysis window, emit **`SKIPPED_EQUIPMENT_OFF`**
+(not `PASS`). See [operational gates](operational-gates.html).
 
 ---
 

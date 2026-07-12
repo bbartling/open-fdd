@@ -1,9 +1,19 @@
--- pid_hunt_1.sql — PID-HUNT-1 suspected control-output hunting (rolling 1h)
+-- pid_hunt_1.sql — PID-HUNT-1 suspected control-output hunting (rolling window)
 -- Placeholders: POLL_SECONDS, WINDOW_ROWS, WINDOW_ROWS_MINUS_ONE, CONFIRM_ROWS,
 -- CHANGE_DEADBAND_PCT, MINIMUM_SPAN_PCT, TOTAL_VARIATION_FAULT_PCT,
--- MINIMUM_EQUIVALENT_CYCLES, MINIMUM_REVERSALS, MINIMUM_COVERAGE_PCT, MINIMUM_SAMPLES
+-- MINIMUM_EQUIVALENT_CYCLES, MINIMUM_REVERSALS, MINIMUM_COVERAGE_PCT,
+-- MINIMUM_SAMPLES, WINDOW_MINUTES
+--
+-- WINDOW_ROWS is derived at runtime from WINDOW_MINUTES and POLL_SECONDS
+-- (ceil(window_minutes * 60 / poll_seconds), minimum 2).
 --
 -- Input roles: control_output_pct (required), loop_enabled (optional).
+-- Optional-role policy: when loop_enabled is projected as a column, NULL cells
+-- count as disabled (fillna(0) parity with Pandas/Vibe19). When the role is
+-- absent, the projection layer should inject TRUE (no enable restriction).
+--
+-- Output: equipment-level fault_hours only. Status mapping (PASS/FAULT/
+-- SKIPPED_*) is applied by the rule runner / API layer, not this SQL file.
 -- UI wording: "Suspected control-loop hunting" — output travel ≠ bad PID alone.
 WITH params AS (
   SELECT
@@ -21,16 +31,27 @@ norm AS (
     timestamp_utc,
     CASE
       WHEN control_output_pct IS NULL THEN NULL
-      WHEN control_output_pct > 1.0 THEN control_output_pct
-      ELSE control_output_pct * 100.0
+      WHEN control_output_pct > 1.5 THEN
+        CASE
+          WHEN control_output_pct < 0.0 THEN 0.0
+          WHEN control_output_pct > 100.0 THEN 100.0
+          ELSE control_output_pct
+        END
+      ELSE
+        CASE
+          WHEN control_output_pct * 100.0 < 0.0 THEN 0.0
+          WHEN control_output_pct * 100.0 > 100.0 THEN 100.0
+          ELSE control_output_pct * 100.0
+        END
     END AS control_output_pct,
-    COALESCE(loop_enabled, TRUE) AS loop_enabled
+    -- Present-but-null → disabled (Pandas fillna(0).gt(0) / Vibe19).
+    COALESCE(CAST(loop_enabled AS DOUBLE) > 0.0, FALSE) AS loop_enabled
   FROM history
 ),
 ordered AS (
   SELECT
     n.*,
-    LAG(control_output_pct, 1, control_output_pct) OVER (
+    LAG(control_output_pct, 1) OVER (
       PARTITION BY equipment_id ORDER BY timestamp_utc
     ) AS previous_output_pct
   FROM norm n
@@ -40,10 +61,12 @@ deltas AS (
   SELECT
     o.*,
     CASE
+      WHEN previous_output_pct IS NULL THEN 0.0
       WHEN ABS(control_output_pct - previous_output_pct) < p.change_deadband_pct THEN 0.0
       ELSE control_output_pct - previous_output_pct
     END AS significant_delta,
     CASE
+      WHEN previous_output_pct IS NULL THEN 0
       WHEN control_output_pct - previous_output_pct >= p.change_deadband_pct THEN 1
       WHEN control_output_pct - previous_output_pct <= -p.change_deadband_pct THEN -1
       ELSE 0
@@ -51,13 +74,27 @@ deltas AS (
   FROM ordered o
   CROSS JOIN params p
 ),
+-- Carry forward last significant direction (+1/-1) across deadband/flat rows
+-- so sequences like +1, 0, -1 count as one reversal (Pandas ffill semantics).
 directions AS (
   SELECT
     d.*,
-    LAG(direction, 1, 0) OVER (
-      PARTITION BY equipment_id ORDER BY timestamp_utc
-    ) AS previous_direction
+    LAST_VALUE(
+      CASE WHEN direction <> 0 THEN direction END
+    ) IGNORE NULLS OVER (
+      PARTITION BY equipment_id
+      ORDER BY timestamp_utc
+      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS significant_direction
   FROM deltas d
+),
+with_prev AS (
+  SELECT
+    d.*,
+    LAG(significant_direction, 1) OVER (
+      PARTITION BY equipment_id ORDER BY timestamp_utc
+    ) AS previous_significant_direction
+  FROM directions d
 ),
 rolling_metrics AS (
   SELECT
@@ -71,13 +108,13 @@ rolling_metrics AS (
     MAX(control_output_pct) OVER output_window AS output_max_1h,
     SUM(
       CASE
-        WHEN direction <> 0
-         AND previous_direction <> 0
-         AND direction <> previous_direction
+        WHEN significant_direction IS NOT NULL
+         AND previous_significant_direction IS NOT NULL
+         AND significant_direction <> previous_significant_direction
         THEN 1 ELSE 0
       END
     ) OVER output_window AS reversals_1h
-  FROM directions
+  FROM with_prev
   WINDOW output_window AS (
     PARTITION BY equipment_id
     ORDER BY timestamp_utc

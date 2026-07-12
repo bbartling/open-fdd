@@ -77,11 +77,14 @@ total_variation_fault_pct: 500.0
 minimum_equivalent_cycles: 2.5
 minimum_reversals: 4
 minimum_coverage_pct: 80.0
-low_extreme_pct: 10.0
-high_extreme_pct: 90.0
+minimum_samples: 48   # also derived from coverage × window/poll when not overridden
 ```
 
+Extreme-crossing diagnostics (`low_extreme_pct` / `high_extreme_pct`) were removed — they were never part of the fault predicate.
+
 The 500 threshold is a **severe-hunting starting point** and must remain tunable (hydronic valves may hunt 35–65% without hitting endpoints).
+
+`window_minutes` is wired: runtime derives `WINDOW_ROWS = ceil(window_minutes * 60 / POLL_SECONDS)`.
 
 ## Roles
 
@@ -96,9 +99,26 @@ optional_roles:
 equipment_types:
   - ANY
 operational_gate:
-  type: conditional
+  mode: CONDITIONAL
+  predicate: loop_enabled
   preferred: loop_enabled
 ```
+
+### Enable / null policy
+
+| Case | Behavior |
+|------|----------|
+| `loop_enabled` role absent | Treat as enabled (no restriction); runner injects `TRUE` |
+| Column present, cell NULL | Disabled (`fillna(0)` / SQL `COALESCE(>0, FALSE)`) |
+| Column present, value &gt; 0 | Enabled |
+
+### Normalization
+
+Analog outputs: if value ≤ 1.5 treat as 0–1 fraction and scale ×100; clip to inclusive `[0, 100]`; preserve nulls.
+
+### Reversals
+
+Direction uses significant deltas only. Zero/deadband rows carry forward the last significant direction (Pandas `ffill` / SQL `LAST_VALUE … IGNORE NULLS`) so `+1, 0, -1` counts as one reversal.
 
 ## Shipped SQL registry
 
@@ -106,6 +126,8 @@ operational_gate:
 |-------|-------|
 | `rule_id` | `PID-HUNT-1` |
 | `sql_file` | `pid_hunt_1.sql` |
+| SQL output | `equipment_id`, `fault_hours` (aggregate only) |
+| Status mapping | Runner / API layer (`PASS` / `FAULT` / `SKIPPED_*`) — **not** emitted by the SQL file |
 | Cookbook mapping | this page + both expression cookbooks |
 
 See [COOKBOOK_TO_SQL_RULES](../../cookbook/COOKBOOK_TO_SQL_RULES.md) and [operational gates](operational-gates.html).

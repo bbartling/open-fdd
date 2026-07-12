@@ -193,11 +193,19 @@ Examples: duct static 2–5 min after fan start; mixed-air 5–10 min; SAT/coil 
 
 ## Registry-level `operational_gate` (target schema)
 
+**Do not conflate gate mode with proof predicate.**
+
+| Field | Allowed values | Meaning |
+|-------|----------------|---------|
+| `mode` | `RUN`, `CONDITIONAL`, `ALWAYS` | When evaluation is allowed |
+| `predicate` | `fan_running`, `fan_at_full_speed`, `hydronic_flow_proven`, `loop_enabled`, `occupied`, `compressor_running`, `pump_running`, `plant_enabled`, `equipment_energized`, … | How “active” is proven |
+
 Both Pandas and DataFusion must apply the same gate **before** the rule condition and denominator:
 
 ```yaml
 operational_gate:
-  type: fan_running
+  mode: RUN
+  predicate: fan_running
   required: true
   accepted_roles:
     - fan_status
@@ -214,7 +222,8 @@ Plant example:
 
 ```yaml
 operational_gate:
-  type: hydronic_flow
+  mode: RUN
+  predicate: hydronic_flow_proven
   required: true
   accepted_roles:
     - chw_flow
@@ -224,6 +233,8 @@ operational_gate:
     - pump_cmd
   startup_delay_seconds: 900
 ```
+
+Legacy docs that used `operational_gate.type: fan_running` are obsolete — split into `mode` + `predicate`.
 
 See also [prerequisite macros](prerequisite-macros.html) (`macro.fan_proven_on`, `macro.fan_running`, `macro.hydronic_flow_proven`).
 

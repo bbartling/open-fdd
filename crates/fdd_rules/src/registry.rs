@@ -31,6 +31,8 @@ pub struct RuleSpec {
     #[serde(default)]
     pub required_roles: Vec<String>,
     #[serde(default)]
+    pub optional_roles: Vec<String>,
+    #[serde(default)]
     pub output_columns: Vec<String>,
     #[serde(default = "default_confirm")]
     pub confirm_seconds: u32,

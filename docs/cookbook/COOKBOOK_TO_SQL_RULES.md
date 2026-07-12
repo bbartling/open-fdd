@@ -2,36 +2,43 @@
 
 Cross-reference between Open-FDD **online expression cookbook** (`docs/rules/cookbook/`) and the **shipped DataFusion SQL registry** (`sql_rules/registry.yaml`).
 
-Proven on BUILDING_100 @ 0.5h tolerance (see `docs/benchmarks/RUST_DATAFUSION_PARITY_BENCHMARK.md`).
+**Counts (file-backed, 2026-07-12):**
 
-| Cookbook / rule ID | SQL rule_id | SQL file | Required roles | Confirm (s) | Parity | Notes |
-| --- | --- | --- | --- | ---: | --- | --- |
-| VAV-1 / zone comfort | VAV-1 | vav1_comfort_fault.sql | zone_t | 900 | proven | Tunable ZONE_T_LO/HI |
-| OAT-METEO | OAT-METEO | oat_meteo_fault.sql | oa_t | 900 | proven | Weather-staged wx join |
-| FC13 SAT high | FC13-SAT-HIGH | sat_high_fault.sql | sat, sat_sp, clg_valve_pct, oa_damper_pct | 600 | proven | |
-| ECON-2 unfavorable OA | ECON-2 | economizer_fault.sql | oa_t, oa_damper_pct | 300 | proven | Registry confirm aligned to cookbook |
-| FC1 duct static | FC1 | fc1_duct_static_low.sql | duct_static, duct_static_sp, fan_cmd | 300 | proven | |
-| FC2 MAT low | FC2 | fc2_mat_low.sql | mat, oa_t, rat, fan_cmd | 600 | proven | |
-| FC3 MAT high | FC3 | fc3_mat_high.sql | mat, oa_t, rat, fan_cmd | 600 | proven | |
-| FC7 SAT low heat | FC7 | fc7_sat_low_heating.sql | sat, sat_sp, htg_valve_pct, fan_cmd | 600 | skip | Missing htg_valve_pct on some AHUs |
-| FC8 SAT/MAT econ | FC8 | fc8_sat_mat_econ.sql | sat, mat, oa_damper_pct, clg_valve_pct | 600 | proven | |
-| FC9 OAT vs SAT SP | FC9 | fc9_oa_sat_sp_econ.sql | oa_t, sat_sp, oa_damper_pct, clg_valve_pct | 600 | proven | |
-| FC10 MAT-OAT | FC10 | fc10_mat_oa_clg.sql | mat, oa_t, oa_damper_pct, clg_valve_pct | 600 | proven | |
-| FC11 OAT low / SAT SP | FC11 | fc11_oa_sat_sp_clg.sql | oa_t, sat_sp, oa_damper_pct, clg_valve_pct | 600 | proven | |
-| FC12 SAT vs MAT | FC12 | fc12_sat_mat_clg.sql | sat, mat, oa_damper_pct, clg_valve_pct | 600 | proven | |
-| ECON-1 stuck closed | ECON-1 | econ1_stuck_closed.sql | fan_cmd, oa_damper_pct, oa_t | 600 | proven | |
-| ECON-4 low OA frac | ECON-4 | econ4_low_oa_frac.sql | mat, rat, oa_t, fan_cmd | 600 | proven | |
-| ECON-5 preheat | ECON-5 | — | preheat_leave_t, htg_valve_pct | — | skip | No SQL file yet; missing columns |
-| FAN runtime | FAN-RUNTIME-HOURS | fan_runtime_hours.sql | fan_cmd | 0 | proven | Analytics rollup |
-| Avg zone temp | AVG-ZONE-TEMP | avg_zone_temp.sql | zone_t | 0 | proven | |
-| Zone comfort % | ZONE-COMFORT-PCT | zone_comfort_pct.sql | zone_t | 0 | proven | |
-| Fault elapsed | FAULT-ELAPSED-HOURS | fault_elapsed_hours.sql | zone_t | 0 | proven | |
-| **PID-HUNT-1** (output TV hunting) | **PID-HUNT-1** | **pid_hunt_1.sql** | control_output_pct | 0 | cookbook | 51st rule; distinct from FC4/CTRL-2 |
+| Slice | Count |
+|-------|------:|
+| Canonical OG50 (issue #482) | 50 |
+| PID-HUNT-1 (additive #51) | 1 |
+| Analytics rollups (not OG50) | 4 |
+| **Registry total** | **55** |
 
-**Python oracle:** optional — `tools/python_oracle/export_pandas_oracle.py` (requires full cookbook stack; not production runtime).
+Proven on BUILDING_100 @ 0.5h tolerance where noted (see `docs/benchmarks/RUST_DATAFUSION_PARITY_BENCHMARK.md`).
+Newer OG50 ports are `parity_status: cookbook_defined` until BUILDING_100 / synthetic fixtures prove them.
 
-**Operational gates / statuses:** [docs/rules/cookbook/operational-gates.md](../rules/cookbook/operational-gates.md) — RUN/CONDITIONAL/ALWAYS, `SKIPPED_EQUIPMENT_OFF`.
+| Cookbook / rule ID | SQL rule_id | SQL file | Confirm (s) | Parity | Notes |
+| --- | --- | --- | ---: | --- | --- |
+| VAV-1 | VAV-1 | vav1_comfort_fault.sql | 900 | proven | |
+| OAT-METEO | OAT-METEO | oat_meteo_fault.sql | 900 | proven | |
+| FC13 SAT high | FC13-SAT-HIGH | sat_high_fault.sql | 600 | proven | |
+| ECON-2 | ECON-2 | economizer_fault.sql | 300 | proven | |
+| FC1–FC3, FC7–FC12 | FC1… | fc*.sql | 300–600 | proven / skip | FC7 may skip missing htg_valve |
+| ECON-1 / ECON-4 | ECON-1 / ECON-4 | econ*.sql | 600 | proven | |
+| ECON-3 / ECON-5 | ECON-3 / ECON-5 | econ3_*.sql / econ5_*.sql | 600 | cookbook | Newly ported |
+| SV-RANGE…SV-4 | SV-* | sv_*.sql | 300 | cookbook | Sweep approximations |
+| FC4–FC6, FC14–FC15 | FC* | fc*.sql | 600–3600 | cookbook | |
+| AHU-SATDEV / DUCTHI / SIMUL | AHU-* | ahu_*.sql | 300–600 | cookbook | |
+| OA-1 / DMP-1 / VLV-1 | OA-1 / DMP-1 / VLV-1 | *.sql | 300–600 | cookbook | |
+| VAV-3/4/5/7 / REHEAT-STUCK | VAV-* | vav*.sql | 300–600 | cookbook | |
+| CHW-1…4 / HP-1 | CHW-* / HP-1 | *.sql | 300–900 | cookbook | Synthetic fixtures preferred |
+| WX-1 / WX-2 | WX-* | wx*.sql | 300 | cookbook | |
+| TRIM-1/3/4 | TRIM-* | trim*.sql | 1800 | cookbook | Advisories |
+| SCHED-1 / CMD-1 | SCHED-1 / CMD-1 | *.sql | 300–1800 | cookbook | ALWAYS gates |
+| FAN / zone analytics | FAN-RUNTIME-HOURS… | *.sql | 0 | proven | Not counted in OG50 |
+| **PID-HUNT-1** | **PID-HUNT-1** | **pid_hunt_1.sql** | 0 | cookbook | **51st**; distinct from FC4/CTRL-2 |
 
-**Tuning:** see [SQL rule tuning contract](../migration/vibe19/SQL_RULE_TUNING_CONTRACT.md).
+Full inventory: [ISSUE_482_RULE_INVENTORY.md](../migration/vibe19/ISSUE_482_RULE_INVENTORY.md).
 
-**Maintainer rule:** expression cookbooks under `docs/rules/cookbook/` are **never reduced**. Add PID-HUNT-1, gates, and SQL mappings; do not delete FC4, CTRL-2, or other existing sections.
+**Python oracle:** `tools/python_oracle/export_pandas_oracle.py` (optional; not a production runtime dependency on Vibe19).
+
+**Operational gates / statuses:** [operational-gates.md](../rules/cookbook/operational-gates.md) — `mode` + `predicate` (not conflated `type`), six-status contract.
+
+**Maintainer rule:** expression cookbooks under `docs/rules/cookbook/` are **never reduced**. Add rules/gates/SQL mappings; do not delete FC4, CTRL-2, or other existing sections.
