@@ -124,14 +124,13 @@ pub async fn run_all_rules(
                 .get("WINDOW_MINUTES")
                 .and_then(|s| s.parse::<f64>().ok())
                 .or_else(|| rule.parameters.get("window_minutes").map(|p| p.default))
-                .unwrap_or(60.0)
-                .max(1.0);
-            let window_rows =
-                ((window_minutes * 60.0 / poll_seconds.max(1.0)).ceil() as u32).max(2);
+                .unwrap_or(60.0);
+            let (window_rows, window_rows_minus_one) =
+                derive_window_rows(window_minutes, poll_seconds);
             params.insert("WINDOW_ROWS".into(), window_rows.to_string());
             params.insert(
                 "WINDOW_ROWS_MINUS_ONE".into(),
-                (window_rows.saturating_sub(1)).to_string(),
+                window_rows_minus_one.to_string(),
             );
         }
         let projected = project_optional_roles(&raw_sql, rule, &history_columns);
@@ -184,6 +183,13 @@ async fn history_column_names(ctx: &SessionContext) -> Result<HashSet<String>> {
         .iter()
         .map(|f| f.name().clone())
         .collect())
+}
+
+/// Map registry `window_minutes` + poll interval to SQL row-window placeholders.
+pub fn derive_window_rows(window_minutes: f64, poll_seconds: f64) -> (u32, u32) {
+    let window_minutes = window_minutes.max(1.0);
+    let window_rows = ((window_minutes * 60.0 / poll_seconds.max(1.0)).ceil() as u32).max(2);
+    (window_rows, window_rows.saturating_sub(1))
 }
 
 /// Inject missing optional roles as literals so DataFusion planning succeeds.
@@ -247,5 +253,15 @@ mod tests {
             out.contains("FROM (SELECT history.*, TRUE AS loop_enabled FROM history) AS history"),
             "{out}"
         );
+    }
+
+    #[test]
+    fn window_minutes_changes_derived_row_count() {
+        // 60 min @ 60s poll → 60 rows; 15 min → 15 rows; 120 min → 120 rows.
+        assert_eq!(derive_window_rows(60.0, 60.0), (60, 59));
+        assert_eq!(derive_window_rows(15.0, 60.0), (15, 14));
+        assert_eq!(derive_window_rows(120.0, 60.0), (120, 119));
+        // 60 min @ 300s poll → 12 rows.
+        assert_eq!(derive_window_rows(60.0, 300.0), (12, 11));
     }
 }
