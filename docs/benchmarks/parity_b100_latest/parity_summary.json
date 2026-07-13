@@ -1,14 +1,14 @@
 {
-  "openfdd_git_sha": "885b789e",
+  "openfdd_git_sha": "cb2827b9",
   "vibe19_git_sha": "5006a16f",
   "oracle_dir": ".cache/oracle_b100",
-  "sql_results_dir": ".cache/rule_results_b100_status",
+  "sql_results_dir": ".cache/rule_results_b100_gated",
   "tolerance_hours": 0.5,
   "compared_cells": 1488,
-  "exact_status_matches": 1209,
-  "status_mismatches": 279,
-  "numeric_within_tolerance": 259,
-  "numeric_mismatches": 164,
+  "exact_status_matches": 1211,
+  "status_mismatches": 277,
+  "numeric_within_tolerance": 266,
+  "numeric_mismatches": 157,
   "openfdd_only_rules": [
     "AVG-ZONE-TEMP",
     "FAN-RUNTIME-HOURS",
@@ -73,6 +73,6 @@
     "VLV-1",
     "WX-1"
   ],
-  "max_abs_delta": 2625.5,
+  "max_abs_delta": 2623.5833333333335,
   "pass": false
 }

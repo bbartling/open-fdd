@@ -136,3 +136,14 @@ Unresolved at start:
 | Oracle bridge | `fdd_cli parity` + `tests/fixtures/vibe19_analytics_golden` + overlap matrix |
 | B100 numeric parity | **not passing** — see `docs/benchmarks/parity_b100_latest/` (max Δ 2625h on SV-STALE; mapping/date-range investigation next) |
 | ZIP / Plotly loop / rollups / #483 / GHCR | remaining |
+
+## Checkpoint 2026-07-13 (gate injection)
+
+| Item | State |
+| --- | --- |
+| RUN operational gate in SQL | **implemented+tested** — `gate_sql.rs` injects proof + startup before confirm (`fc8_gate_test`) |
+| FC8 AHU_1 hours | was ~1463h → **~362.5h** vs oracle **381.67h** (Δ≈19h; still >0.5h) |
+| FC family | **565/576** fault_hours cells within 0.5h |
+| SV-STALE presence logic | **implemented+tested** — AHU_1 exact match; plant false positives remain where enable setpoints map to `oa_t` |
+| Parity summary | status mismatches 277, numeric mismatches 157, max Δ ~2624h (SV-STALE/CHILLER mapping) |
+| Remaining blockers | Plotly loop, rollups, #483, GHCR smoke, merge gate |

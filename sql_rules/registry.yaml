@@ -288,6 +288,7 @@ rules:
     mode: RUN
     predicate: fan_or_flow_proof
     required: true
+    startup_delay_seconds: 600
 - rule_id: ECON-2
   sql_file: economizer_fault.sql
   pandas_function: econ2
@@ -307,6 +308,7 @@ rules:
     mode: RUN
     predicate: fan_or_flow_proof
     required: true
+    startup_delay_seconds: 300
 - rule_id: FC1
   sql_file: fc1_duct_static_low.sql
   pandas_function: fc1
@@ -327,6 +329,7 @@ rules:
     mode: RUN
     predicate: fan_or_flow_proof
     required: true
+    startup_delay_seconds: 300
 - rule_id: FC2
   sql_file: fc2_mat_low.sql
   pandas_function: fc2
@@ -348,6 +351,7 @@ rules:
     mode: RUN
     predicate: fan_or_flow_proof
     required: true
+    startup_delay_seconds: 600
 - rule_id: FC3
   sql_file: fc3_mat_high.sql
   pandas_function: fc3
@@ -369,6 +373,7 @@ rules:
     mode: RUN
     predicate: fan_or_flow_proof
     required: true
+    startup_delay_seconds: 600
 - rule_id: FC7
   sql_file: fc7_sat_low_heating.sql
   pandas_function: fc7
@@ -391,6 +396,7 @@ rules:
     mode: RUN
     predicate: fan_or_flow_proof
     required: true
+    startup_delay_seconds: 600
 - rule_id: FC8
   sql_file: fc8_sat_mat_econ.sql
   pandas_function: fc8
@@ -412,6 +418,7 @@ rules:
     mode: RUN
     predicate: fan_or_flow_proof
     required: true
+    startup_delay_seconds: 600
 - rule_id: FC9
   sql_file: fc9_oa_sat_sp_econ.sql
   pandas_function: fc9
@@ -433,6 +440,7 @@ rules:
     mode: RUN
     predicate: fan_or_flow_proof
     required: true
+    startup_delay_seconds: 600
 - rule_id: FC10
   sql_file: fc10_mat_oa_clg.sql
   pandas_function: fc10
@@ -454,6 +462,7 @@ rules:
     mode: RUN
     predicate: fan_or_flow_proof
     required: true
+    startup_delay_seconds: 600
 - rule_id: FC11
   sql_file: fc11_oa_sat_sp_clg.sql
   pandas_function: fc11
@@ -475,6 +484,7 @@ rules:
     mode: RUN
     predicate: fan_or_flow_proof
     required: true
+    startup_delay_seconds: 600
 - rule_id: FC12
   sql_file: fc12_sat_mat_clg.sql
   pandas_function: fc12
@@ -496,6 +506,7 @@ rules:
     mode: RUN
     predicate: fan_or_flow_proof
     required: true
+    startup_delay_seconds: 600
 - rule_id: ECON-1
   sql_file: econ1_stuck_closed.sql
   pandas_function: econ1
@@ -516,6 +527,7 @@ rules:
     mode: RUN
     predicate: fan_or_flow_proof
     required: true
+    startup_delay_seconds: 600
 - rule_id: ECON-4
   sql_file: econ4_low_oa_frac.sql
   pandas_function: econ4
@@ -537,6 +549,7 @@ rules:
     mode: RUN
     predicate: fan_or_flow_proof
     required: true
+    startup_delay_seconds: 600
 - rule_id: PID-HUNT-1
   sql_file: pid_hunt_1.sql
   pandas_function: pid_hunt_1

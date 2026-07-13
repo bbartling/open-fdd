@@ -7,6 +7,10 @@ use fdd_sql::{register_parquet_tree, register_weather_if_present, run_sql};
 use serde::Serialize;
 use serde_json::{json, Value};
 
+use crate::gate_sql::{
+    inject_raw_fault_operational_gate, operational_proof_expr, should_inject_operational_gate,
+    startup_delay_rows,
+};
 use crate::params::{read_poll_from_cache, rule_params, substitute_sql};
 use crate::registry::{RuleRegistry, RuleSpec};
 use crate::status::{equipment_is_applicable, infer_equipment_type, RuleStatus};
@@ -205,7 +209,19 @@ pub async fn run_all_rules(
             );
         }
         let projected = project_optional_roles(&raw_sql, rule, &history_columns);
-        let sql = substitute_sql(&projected, &params);
+        let mut sql = substitute_sql(&projected, &params);
+        // 5–7. Operational gate + startup delay on raw_fault (Vibe19 active_mask parity).
+        if should_inject_operational_gate(rule) {
+            let predicate = rule
+                .operational_gate
+                .as_ref()
+                .map(|g| g.predicate.as_str())
+                .unwrap_or("fan_running");
+            if let Some(proof) = operational_proof_expr(&history_columns, predicate) {
+                let rows = startup_delay_rows(rule, poll_seconds);
+                sql = inject_raw_fault_operational_gate(&sql, &proof, rows);
+            }
+        }
         match run_sql(&ctx, &sql).await {
             Ok(result) => {
                 let annotated = annotate_result_rows(
@@ -488,7 +504,7 @@ pub fn derive_window_rows(window_minutes: f64, poll_seconds: f64) -> (u32, u32) 
 /// Other optional roles default to typed `CAST(NULL AS DOUBLE)` so window
 /// arithmetic (`max - min`) type-checks when the physical column is absent.
 /// Present-but-null cell semantics remain in the rule SQL.
-fn project_optional_roles(sql: &str, rule: &RuleSpec, available: &HashSet<String>) -> String {
+pub(crate) fn project_optional_roles(sql: &str, rule: &RuleSpec, available: &HashSet<String>) -> String {
     let missing: Vec<(&str, &str)> = rule
         .optional_roles
         .iter()

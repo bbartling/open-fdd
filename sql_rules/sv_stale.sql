@@ -1,4 +1,7 @@
 -- sv_stale.sql — SV-STALE all-modeled-sensors unchanged + confirm
+-- Match Vibe19 `_sweep_stale`: only columns that ever have data for the
+-- equipment participate; null rows are not "unchanged"; require a full window
+-- (`min_periods=window`). Projected all-null optional roles must not force FAULT.
 WITH h AS (
   SELECT * FROM history
 ),
@@ -16,6 +19,26 @@ w AS (
     hw_supply_t,
     hw_return_t,
     oa_h,
+    MAX(CASE WHEN oa_t IS NOT NULL THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id) AS oa_t_present,
+    MAX(CASE WHEN rat IS NOT NULL THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id) AS rat_present,
+    MAX(CASE WHEN mat IS NOT NULL THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id) AS mat_present,
+    MAX(CASE WHEN sat IS NOT NULL THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id) AS sat_present,
+    MAX(CASE WHEN zone_t IS NOT NULL THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id) AS zone_t_present,
+    MAX(CASE WHEN chw_supply_t IS NOT NULL THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id) AS chw_supply_t_present,
+    MAX(CASE WHEN chw_return_t IS NOT NULL THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id) AS chw_return_t_present,
+    MAX(CASE WHEN hw_supply_t IS NOT NULL THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id) AS hw_supply_t_present,
+    MAX(CASE WHEN hw_return_t IS NOT NULL THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id) AS hw_return_t_present,
+    MAX(CASE WHEN oa_h IS NOT NULL THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id) AS oa_h_present,
     MAX(oa_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{WINDOW_ROWS_MINUS_ONE}} PRECEDING AND CURRENT ROW) AS oa_t_max,
     MIN(oa_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{WINDOW_ROWS_MINUS_ONE}} PRECEDING AND CURRENT ROW) AS oa_t_min,
     MAX(rat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{WINDOW_ROWS_MINUS_ONE}} PRECEDING AND CURRENT ROW) AS rat_max,
@@ -35,7 +58,8 @@ w AS (
     MAX(hw_return_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{WINDOW_ROWS_MINUS_ONE}} PRECEDING AND CURRENT ROW) AS hw_return_t_max,
     MIN(hw_return_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{WINDOW_ROWS_MINUS_ONE}} PRECEDING AND CURRENT ROW) AS hw_return_t_min,
     MAX(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{WINDOW_ROWS_MINUS_ONE}} PRECEDING AND CURRENT ROW) AS oa_h_max,
-    MIN(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{WINDOW_ROWS_MINUS_ONE}} PRECEDING AND CURRENT ROW) AS oa_h_min
+    MIN(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{WINDOW_ROWS_MINUS_ONE}} PRECEDING AND CURRENT ROW) AS oa_h_min,
+    COUNT(*) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{WINDOW_ROWS_MINUS_ONE}} PRECEDING AND CURRENT ROW) AS window_samples
   FROM h
 ),
 base AS (
@@ -43,26 +67,25 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN
-        (oa_t IS NULL OR (oa_t_max - oa_t_min) <= 0.000001)
-        AND (rat IS NULL OR (rat_max - rat_min) <= 0.000001)
-        AND (mat IS NULL OR (mat_max - mat_min) <= 0.000001)
-        AND (sat IS NULL OR (sat_max - sat_min) <= 0.000001)
-        AND (zone_t IS NULL OR (zone_t_max - zone_t_min) <= 0.000001)
-        AND (chw_supply_t IS NULL OR (chw_supply_t_max - chw_supply_t_min) <= 0.000001)
-        AND (chw_return_t IS NULL OR (chw_return_t_max - chw_return_t_min) <= 0.000001)
-        AND (hw_supply_t IS NULL OR (hw_supply_t_max - hw_supply_t_min) <= 0.000001)
-        AND (hw_return_t IS NULL OR (hw_return_t_max - hw_return_t_min) <= 0.000001)
-        AND (oa_h IS NULL OR (oa_h_max - oa_h_min) <= 0.000001)
-        AND (
-          oa_t IS NOT NULL OR rat IS NOT NULL OR mat IS NOT NULL OR sat IS NOT NULL
-          OR zone_t IS NOT NULL OR chw_supply_t IS NOT NULL OR chw_return_t IS NOT NULL
-          OR hw_supply_t IS NOT NULL OR hw_return_t IS NOT NULL OR oa_h IS NOT NULL
-        )
+      WHEN window_samples >= {{WINDOW_ROWS}}
+       AND (
+         oa_t_present + rat_present + mat_present + sat_present + zone_t_present
+         + chw_supply_t_present + chw_return_t_present + hw_supply_t_present
+         + hw_return_t_present + oa_h_present
+       ) > 0
+       AND (oa_t_present = 0 OR (oa_t IS NOT NULL AND (oa_t_max - oa_t_min) <= 0.000001))
+       AND (rat_present = 0 OR (rat IS NOT NULL AND (rat_max - rat_min) <= 0.000001))
+       AND (mat_present = 0 OR (mat IS NOT NULL AND (mat_max - mat_min) <= 0.000001))
+       AND (sat_present = 0 OR (sat IS NOT NULL AND (sat_max - sat_min) <= 0.000001))
+       AND (zone_t_present = 0 OR (zone_t IS NOT NULL AND (zone_t_max - zone_t_min) <= 0.000001))
+       AND (chw_supply_t_present = 0 OR (chw_supply_t IS NOT NULL AND (chw_supply_t_max - chw_supply_t_min) <= 0.000001))
+       AND (chw_return_t_present = 0 OR (chw_return_t IS NOT NULL AND (chw_return_t_max - chw_return_t_min) <= 0.000001))
+       AND (hw_supply_t_present = 0 OR (hw_supply_t IS NOT NULL AND (hw_supply_t_max - hw_supply_t_min) <= 0.000001))
+       AND (hw_return_t_present = 0 OR (hw_return_t IS NOT NULL AND (hw_return_t_max - hw_return_t_min) <= 0.000001))
+       AND (oa_h_present = 0 OR (oa_h IS NOT NULL AND (oa_h_max - oa_h_min) <= 0.000001))
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM w
 ),
-
 lagged AS (
   SELECT
     *,

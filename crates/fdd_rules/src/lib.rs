@@ -1,5 +1,6 @@
 //! Rule registry and DataFusion SQL batch runner.
 
+pub mod gate_sql;
 pub mod params;
 pub mod registry;
 pub mod runner;
@@ -17,8 +18,12 @@ pub use tuning::{effective_param_strings, load_tuning_profiles, TuningLayers};
 #[cfg(test)]
 mod econ4_confirm_test;
 #[cfg(test)]
+mod fc8_gate_test;
+#[cfg(test)]
 mod pid_hunt_test;
 #[cfg(test)]
 mod poll_test;
 #[cfg(test)]
 mod registry_integrity_test;
+#[cfg(test)]
+mod sv_stale_test;

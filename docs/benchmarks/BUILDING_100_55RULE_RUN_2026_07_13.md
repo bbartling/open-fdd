@@ -1,21 +1,50 @@
 # BUILDING_100 55-rule DataFusion run
 
-Generated: 2026-07-13 13:15 UTC
+Generated: 2026-07-13 14:10 UTC (gate-injection re-run)
 
 - building: `BUILDING_100`
 - source: local private tree (not committed)
 - registry: 55 rules
 - rules_run: 55
-- rules_succeeded (PASS+FAULT): 36
+- rules_succeeded (PASS+FAULT row aggregates): 35
 - rules_failed (ERROR): 0
 - rules_skipped (SKIPPED_MISSING_ROLES): 19
-- total_ms: 13567
+- NOT_APPLICABLE (rule-level): 1 (HP-1)
+- total_ms: 35530
 - poll_seconds: 300.0
 
-## Status counts
-- `FAULT`: 25
-- `PASS`: 11
-- `SKIPPED_MISSING_ROLES`: 19
+## Six-status distribution (row-level)
+
+- `PASS`: 437
+- `FAULT`: 180
+- `NOT_APPLICABLE_EQUIPMENT_TYPE`: 1111
+- `SKIPPED_MISSING_ROLES`: 19 (rule-level; no per-equipment rows)
+- `SKIPPED_EQUIPMENT_OFF`: 0 in this run (active proof present on evaluated AHUs)
+- `ERROR`: 0
+
+## Vibe19 numeric parity (proven overlap)
+
+Source: `docs/benchmarks/parity_b100_latest/`
+
+| Metric | Value |
+| --- | ---: |
+| compared_cells | 1488 |
+| exact_status_matches | 1211 |
+| status_mismatches | 277 |
+| numeric_within_tolerance (0.5h) | 266 |
+| numeric_mismatches | 157 |
+| max_abs_delta_h | ~2624 (SV-STALE / CHILLER — mapping: enable setpoint as `oa_t`) |
+| FC fault_hours within 0.5h | 565 / 576 |
+| FC8 AHU_1 | oracle 381.67h / Open-FDD 362.5h (Δ≈19h) |
+| SV-STALE AHU_1 | **exact** (180.67h) |
+| pass | **false** |
+
+Root causes still open for remaining mismatches:
+
+1. Plant `SV-STALE` false positives when non-sensor setpoints are mapped into sweep roles.
+2. `SV-FLATLINE` under-detect vs oracle on some VAVs/plants.
+3. Status vocabulary differences (`NOT_APPLICABLE` vs `PASS` on non-applicable equipment rows).
+4. Residual FC hour deltas (~0.5–20h) after RUN gate + startup injection.
 
 ## Per-rule status
 
