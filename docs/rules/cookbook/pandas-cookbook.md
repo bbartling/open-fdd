@@ -200,15 +200,28 @@ d = apply_fault(d, flatline_mask(d["oa_t"], tol=0.10))
 d["fault_confirmed"] = confirm_fault(d["fault_raw"])
 ```
 
-### SV-7 — Rate-of-change spike
+### SV-7 — Rate-of-change spike (maps to `SV-SPIKE`)
+
+Abrupt **per-sample** discontinuity — not the sustained slew rule. Production IDs:
+
+* `SV-SPIKE` — sample jump (this section)  
+* `SV-SLEW` — time-normalized rate with OFF / STARTUP_TRANSIENT / RUNNING_STEADY thresholds — see [sensor rate profiles](sensor-rate-profiles.html)
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
-SPIKE_LIMIT = 16.0  # °F per sample
+SPIKE_LIMIT = 16.0  # °F per sample (OA example; prefer profile limits)
 
 mask = d["oa_t"].notna() & (d["oa_t"].diff().abs() > SPIKE_LIMIT)
 d = apply_fault(d, mask)
 d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+```
+
+Sustained slew (illustrative — prefer profile registry):
+
+```python
+dt_h = d["timestamp"].diff().dt.total_seconds() / 3600.0
+rate = d["zone_t"].diff().abs() / dt_h
+# use steady vs transient fault from sensor_rate_profiles.yaml
 ```
 
 ---

@@ -753,7 +753,7 @@ rules:
 - rule_id: SV-SPIKE
   sql_file: sv_spike.sql
   pandas_function: null
-  description: Sensor rate-of-change spike sweep
+  description: Abrupt sample-to-sample sensor discontinuity (not sustained slew; see SV-SLEW)
   required_roles: []
   output_columns:
   - equipment_id
@@ -788,6 +788,289 @@ rules:
     confirm_seconds:
       label: Confirm time
       default: 300
+      min: 0
+      max: 3600
+      step: 300
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+  operational_gate:
+    mode: ALWAYS
+    predicate: equipment_energized
+    required: false
+- rule_id: SV-SLEW
+  sql_file: sv_slew.sql
+  pandas_function: null
+  description: Context-sensitive sustained sensor slew (time-normalized rate; steady vs transient)
+  required_roles: []
+  output_columns:
+  - equipment_id
+  - fault_hours
+  priority: P0
+  parity_status: cookbook_defined
+  dashboard_wired: false
+  delete_python_candidate: false
+  confirm_seconds: 600
+  optional_roles:
+  - oa_t
+  - rat
+  - mat
+  - sat
+  - zone_t
+  - chw_supply_t
+  - chw_return_t
+  - hw_supply_t
+  - hw_return_t
+  - oa_h
+  - duct_static
+  - fan_status
+  parameters:
+    slew_scale:
+      label: Slew scale
+      default: 1
+      min: 0.5
+      max: 3
+      step: 0.1
+      unit: x
+      frontend_control: slider
+      sql_placeholder: SLEW_SCALE
+    max_gap_factor:
+      label: Max gap factor
+      default: 3
+      min: 1.5
+      max: 6
+      step: 0.5
+      unit: x
+      frontend_control: slider
+      sql_placeholder: MAX_GAP_FACTOR
+    fan_transient_minutes:
+      label: Fan transient window
+      default: 20
+      min: 5
+      max: 60
+      step: 5
+      unit: min
+      frontend_control: slider
+      sql_placeholder: FAN_TRANSIENT_MINUTES
+    zone_t_steady_fault:
+      label: Zone temp steady fault
+      default: 6
+      min: 2
+      max: 20
+      step: 0.5
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: ZONE_T_STEADY_FAULT
+    zone_t_transient_fault:
+      label: Zone temp transient fault
+      default: 8
+      min: 4
+      max: 40
+      step: 0.5
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: ZONE_T_TRANSIENT_FAULT
+    zone_extreme_jump:
+      label: Zone extreme jump
+      default: 15
+      min: 5
+      max: 40
+      step: 1
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ZONE_EXTREME_JUMP
+    zone_extreme_minutes:
+      label: Zone extreme window
+      default: 5
+      min: 1
+      max: 15
+      step: 1
+      unit: min
+      frontend_control: slider
+      sql_placeholder: ZONE_EXTREME_MINUTES
+    oa_t_steady_fault:
+      label: OA temp steady fault
+      default: 12
+      min: 4
+      max: 40
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: OA_T_STEADY_FAULT
+    oa_t_transient_fault:
+      label: OA temp transient fault
+      default: 20
+      min: 8
+      max: 60
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: OA_T_TRANSIENT_FAULT
+    rat_steady_fault:
+      label: RAT steady fault
+      default: 6
+      min: 2
+      max: 30
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: RAT_STEADY_FAULT
+    rat_transient_fault:
+      label: RAT transient fault
+      default: 12
+      min: 4
+      max: 40
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: RAT_TRANSIENT_FAULT
+    mat_steady_fault:
+      label: MAT steady fault
+      default: 12
+      min: 4
+      max: 40
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: MAT_STEADY_FAULT
+    mat_transient_fault:
+      label: MAT transient fault
+      default: 30
+      min: 10
+      max: 80
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: MAT_TRANSIENT_FAULT
+    sat_steady_fault:
+      label: SAT steady fault
+      default: 10
+      min: 4
+      max: 40
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: SAT_STEADY_FAULT
+    sat_transient_fault:
+      label: SAT transient fault
+      default: 35
+      min: 10
+      max: 80
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: SAT_TRANSIENT_FAULT
+    chw_supply_steady_fault:
+      label: CHW supply steady fault
+      default: 6
+      min: 2
+      max: 30
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: CHW_SUPPLY_STEADY_FAULT
+    chw_supply_transient_fault:
+      label: CHW supply transient fault
+      default: 15
+      min: 4
+      max: 40
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: CHW_SUPPLY_TRANSIENT_FAULT
+    chw_return_steady_fault:
+      label: CHW return steady fault
+      default: 8
+      min: 2
+      max: 30
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: CHW_RETURN_STEADY_FAULT
+    chw_return_transient_fault:
+      label: CHW return transient fault
+      default: 15
+      min: 4
+      max: 40
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: CHW_RETURN_TRANSIENT_FAULT
+    hw_supply_steady_fault:
+      label: HW supply steady fault
+      default: 15
+      min: 4
+      max: 60
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: HW_SUPPLY_STEADY_FAULT
+    hw_supply_transient_fault:
+      label: HW supply transient fault
+      default: 50
+      min: 10
+      max: 120
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: HW_SUPPLY_TRANSIENT_FAULT
+    hw_return_steady_fault:
+      label: HW return steady fault
+      default: 12
+      min: 4
+      max: 60
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: HW_RETURN_STEADY_FAULT
+    hw_return_transient_fault:
+      label: HW return transient fault
+      default: 30
+      min: 10
+      max: 80
+      step: 1
+      unit: degF/h
+      frontend_control: slider
+      sql_placeholder: HW_RETURN_TRANSIENT_FAULT
+    oa_h_steady_fault:
+      label: OA RH steady fault
+      default: 25
+      min: 5
+      max: 60
+      step: 1
+      unit: pp/h
+      frontend_control: slider
+      sql_placeholder: OA_H_STEADY_FAULT
+    oa_h_transient_fault:
+      label: OA RH transient fault
+      default: 40
+      min: 10
+      max: 80
+      step: 1
+      unit: pp/h
+      frontend_control: slider
+      sql_placeholder: OA_H_TRANSIENT_FAULT
+    duct_static_steady_fault:
+      label: Duct static steady fault
+      default: 0.75
+      min: 0.1
+      max: 3
+      step: 0.05
+      unit: inWG/h
+      frontend_control: slider
+      sql_placeholder: DUCT_STATIC_STEADY_FAULT
+    duct_static_transient_fault:
+      label: Duct static transient fault
+      default: 3
+      min: 0.5
+      max: 10
+      step: 0.25
+      unit: inWG/h
+      frontend_control: slider
+      sql_placeholder: DUCT_STATIC_TRANSIENT_FAULT
+    confirm_seconds:
+      label: Confirm time
+      default: 600
       min: 0
       max: 3600
       step: 300

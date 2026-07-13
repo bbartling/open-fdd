@@ -22,7 +22,7 @@ Comparison of **Open-FDD cookbook coverage** against public FDD, re-tuning, and 
 | Literature theme | Status |
 |------------------|--------|
 | GL36 AFDD FC1–FC15 | ✅ |
-| Sensor validation (bounds, flatline, ROC, mixing, stale, wrong-units) | ✅ SV-1–SV-7 |
+| Sensor validation (bounds, flatline, spike, slew, mixing, stale, wrong-units) | ✅ SV-1–SV-7 + registry `SV-SPIKE` / `SV-SLEW` |
 | Economizer & ventilation | ✅ ECON-1–5, OA-1–2 |
 | VAV terminals | ✅ VAV-1–7 |
 | Reset / schedule / override | ✅ RESET-1, SCHED-1, OVR-1, SP-HIGH/LOW, PLANT-1 |

@@ -1,0 +1,247 @@
+# Open-FDD sensor rate profiles for SV-SLEW.
+# Engineering screening defaults — site-tunable; not ASHRAE code limits.
+# Consume haystack_roles when present on the historian pivot.
+#
+# See docs/rules/cookbook/sensor-rate-profiles.md
+
+schema_version: 1
+rule_id: SV-SLEW
+notes: >
+  No universal Δ/h limit. Select steady vs transient thresholds from operating
+  state (OFF_OR_STABLE / STARTUP_TRANSIENT / RUNNING_STEADY). Persist violations;
+  allow immediate extreme short-window faults.
+
+defaults:
+  max_gap_factor: 3.0
+  minimum_persistence_minutes: 10
+  minimum_data_coverage: 0.80
+  fan_transition_window_minutes: 20
+
+profiles:
+  - profile_id: zone_air_temperature
+    quantity: temperature
+    location: zone
+    canonical_unit: degF
+    haystack_roles: [zone_t]
+    steady_warning_per_hour: 4.0
+    steady_fault_per_hour: 6.0
+    transient_warning_per_hour: 8.0
+    transient_fault_per_hour: 8.0
+    extreme_interval_change: 15.0
+    extreme_interval_minutes: 5
+    persistence_minutes: 15
+    transition_window_minutes: 30
+
+  - profile_id: return_air_temperature
+    quantity: temperature
+    location: return
+    canonical_unit: degF
+    haystack_roles: [rat]
+    steady_warning_per_hour: 6.0
+    steady_fault_per_hour: 6.0
+    transient_warning_per_hour: 12.0
+    transient_fault_per_hour: 12.0
+    extreme_interval_change: 20.0
+    extreme_interval_minutes: 5
+    persistence_minutes: 10
+    transition_window_minutes: 20
+
+  - profile_id: outside_air_temperature
+    quantity: temperature
+    location: outside
+    canonical_unit: degF
+    haystack_roles: [oa_t]
+    steady_warning_per_hour: 12.0
+    steady_fault_per_hour: 12.0
+    transient_warning_per_hour: 20.0
+    transient_fault_per_hour: 20.0
+    extreme_interval_change: 36.0
+    extreme_interval_minutes: 5
+    persistence_minutes: 10
+    transition_window_minutes: 15
+
+  - profile_id: mixed_air_temperature
+    quantity: temperature
+    location: mixed
+    canonical_unit: degF
+    haystack_roles: [mat]
+    steady_warning_per_hour: 12.0
+    steady_fault_per_hour: 12.0
+    transient_warning_per_hour: 30.0
+    transient_fault_per_hour: 30.0
+    extreme_interval_change: 30.0
+    extreme_interval_minutes: 5
+    persistence_minutes: 10
+    transition_window_minutes: 15
+
+  - profile_id: supply_air_temperature
+    quantity: temperature
+    location: supply
+    canonical_unit: degF
+    haystack_roles: [sat]
+    steady_warning_per_hour: 10.0
+    steady_fault_per_hour: 10.0
+    transient_warning_per_hour: 35.0
+    transient_fault_per_hour: 35.0
+    extreme_interval_change: 40.0
+    extreme_interval_minutes: 5
+    persistence_minutes: 10
+    transition_window_minutes: 20
+
+  - profile_id: chw_supply_temperature
+    quantity: temperature
+    location: chilled_water_supply
+    canonical_unit: degF
+    haystack_roles: [chw_supply_t]
+    steady_warning_per_hour: 6.0
+    steady_fault_per_hour: 6.0
+    transient_warning_per_hour: 15.0
+    transient_fault_per_hour: 15.0
+    extreme_interval_change: 20.0
+    extreme_interval_minutes: 5
+    persistence_minutes: 10
+    transition_window_minutes: 30
+
+  - profile_id: chw_return_temperature
+    quantity: temperature
+    location: chilled_water_return
+    canonical_unit: degF
+    haystack_roles: [chw_return_t]
+    steady_warning_per_hour: 8.0
+    steady_fault_per_hour: 8.0
+    transient_warning_per_hour: 15.0
+    transient_fault_per_hour: 15.0
+    extreme_interval_change: 20.0
+    extreme_interval_minutes: 5
+    persistence_minutes: 10
+    transition_window_minutes: 30
+
+  - profile_id: hw_supply_temperature
+    quantity: temperature
+    location: hot_water_supply
+    canonical_unit: degF
+    haystack_roles: [hw_supply_t]
+    steady_warning_per_hour: 15.0
+    steady_fault_per_hour: 15.0
+    transient_warning_per_hour: 50.0
+    transient_fault_per_hour: 50.0
+    extreme_interval_change: 40.0
+    extreme_interval_minutes: 5
+    persistence_minutes: 10
+    transition_window_minutes: 30
+
+  - profile_id: hw_return_temperature
+    quantity: temperature
+    location: hot_water_return
+    canonical_unit: degF
+    haystack_roles: [hw_return_t]
+    steady_warning_per_hour: 12.0
+    steady_fault_per_hour: 12.0
+    transient_warning_per_hour: 30.0
+    transient_fault_per_hour: 30.0
+    extreme_interval_change: 30.0
+    extreme_interval_minutes: 5
+    persistence_minutes: 10
+    transition_window_minutes: 30
+
+  - profile_id: outside_air_relative_humidity
+    quantity: relative_humidity
+    location: outside
+    canonical_unit: percent_points
+    haystack_roles: [oa_h]
+    steady_warning_per_hour: 25.0
+    steady_fault_per_hour: 25.0
+    transient_warning_per_hour: 40.0
+    transient_fault_per_hour: 40.0
+    extreme_interval_change: 40.0
+    extreme_interval_minutes: 5
+    persistence_minutes: 10
+    transition_window_minutes: 20
+
+  - profile_id: zone_relative_humidity
+    quantity: relative_humidity
+    location: zone
+    canonical_unit: percent_points
+    haystack_roles: [zone_h]
+    steady_warning_per_hour: 10.0
+    steady_fault_per_hour: 10.0
+    transient_warning_per_hour: 15.0
+    transient_fault_per_hour: 15.0
+    extreme_interval_change: 40.0
+    extreme_interval_minutes: 5
+    persistence_minutes: 15
+    transition_window_minutes: 20
+    sql_ready: false
+
+  - profile_id: duct_static_pressure
+    quantity: pressure
+    location: duct_static
+    canonical_unit: in_wc
+    haystack_roles: [duct_static]
+    steady_warning_per_hour: 0.75
+    steady_fault_per_hour: 0.75
+    transient_warning_per_hour: 3.0
+    transient_fault_per_hour: 3.0
+    extreme_interval_change: 2.0
+    extreme_interval_minutes: 5
+    persistence_minutes: 10
+    transition_window_minutes: 20
+
+  - profile_id: building_static_pressure
+    quantity: pressure
+    location: building
+    canonical_unit: in_wc
+    haystack_roles: [building_static]
+    steady_warning_per_hour: 0.10
+    steady_fault_per_hour: 0.10
+    transient_warning_per_hour: 0.30
+    transient_fault_per_hour: 0.30
+    extreme_interval_change: 0.50
+    extreme_interval_minutes: 5
+    persistence_minutes: 10
+    transition_window_minutes: 20
+    sql_ready: false
+
+  - profile_id: zone_co2
+    quantity: co2
+    location: zone
+    canonical_unit: ppm
+    haystack_roles: [zone_co2]
+    steady_warning_per_hour: 500.0
+    steady_fault_per_hour: 1200.0
+    transient_warning_per_hour: 1200.0
+    transient_fault_per_hour: 2500.0
+    extreme_interval_change: 3000.0
+    extreme_interval_minutes: 5
+    persistence_minutes: 15
+    transition_window_minutes: 30
+    noise_deadband: 100.0
+    sql_ready: false
+
+  - profile_id: vav_airflow
+    quantity: airflow
+    location: vav
+    canonical_unit: fraction_of_design_per_hour
+    haystack_roles: [vav_flow]
+    steady_warning_per_hour: 1.0
+    steady_fault_per_hour: 1.0
+    transient_warning_per_hour: 4.0
+    transient_fault_per_hour: 4.0
+    normalize_by: design_flow
+    persistence_minutes: 10
+    transition_window_minutes: 15
+    sql_ready: false
+
+  - profile_id: valve_position
+    quantity: actuator
+    location: valve
+    canonical_unit: percent_per_hour
+    haystack_roles: [clg_valve, htg_valve]
+    steady_warning_per_hour: 100.0
+    steady_fault_per_hour: 100.0
+    transient_warning_per_hour: 600.0
+    transient_fault_per_hour: 600.0
+    persistence_minutes: 10
+    transition_window_minutes: 10
+    sql_ready: false
+    note: Prefer PID-HUNT-1 for hunting / total variation.

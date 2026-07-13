@@ -153,24 +153,43 @@ curl -s -X POST http://127.0.0.1:8080/api/fdd-rules/builder-sql \
 
 ## Sensor validation
 
-Data-quality faults (bounds, flatline, rate-of-change, mixing envelope). Gate with equipment state (fan on, occupied) where appropriate.
+Data-quality faults (bounds, flatline, spike, sustained slew, mixing envelope).
+
+### Research conclusion — rate of change
+
+There is **no universal ASHRAE table** for one allowable “change per hour” across every HVAC sensor. Limits depend on sensor type/location, equipment state, time since transition, sampling quality, and inertia. Separate **off / startup-transient / steady** operation — do **not** use:
+
+```text
+abs(value_now - value_one_hour_ago) > universal_limit
+```
+
+Keep these rules distinct:
+
+| Rule | Meaning |
+|------|---------|
+| `SV-RANGE` | Implausible value |
+| `SV-FLATLINE` | Stuck / insufficient change |
+| `SV-SPIKE` | Abrupt sample-to-sample discontinuity |
+| `SV-SLEW` | Sustained rate too fast for sensor + operating state |
+
+Full profile tables, persistence, transition windows, and CO₂/RH/pressure/flow defaults: **[Sensor rate profiles](sensor-rate-profiles.html)** (`sql_rules/profiles/sensor_rate_profiles.yaml`).
 
 ### Default bounds
 
-Tune per site in SQL literals or assignment transforms.
+Tune per site in SQL literals or assignment transforms. **Max Δ/hr** below is the **steady warning** screening default (see SV-SLEW profiles for transient / fault tiers).
 
-| Sensor kind | Min | Max | Flatline tol | Max Δ/hr | Code |
-|-------------|-----|-----|--------------|----------|------|
+| Sensor kind | Min | Max | Flatline tol | Steady warning Δ/hr | Code |
+|-------------|-----|-----|--------------|--------------------:|------|
 | Zone temp (°F) | 55 | 90 | 0.10 | 4.0 | VAV-C |
-| Supply air temp | 50 | 110 | 0.15 | 8.0 | AHU-C |
-| Return air temp | 55 | 95 | 0.10 | 3.0 | AHU-D |
-| Mixed air temp | 40 | 110 | 0.15 | 6.0 | AHU-D |
+| Supply air temp | 50 | 110 | 0.15 | 10.0 | AHU-C |
+| Return air temp | 55 | 95 | 0.10 | 6.0 | AHU-D |
+| Mixed air temp | 40 | 110 | 0.15 | 12.0 | AHU-D |
 | Outdoor air temp | −40 | 130 | 0.10 | 12.0 | BLD-B |
-| Duct static (inH₂O) | −0.5 | 3.0 | 0.02 | 0.5 | AHU-A |
-| Relative humidity (%) | 0 | 100 | 1.0 | 15.0 | DC-C |
-| CHW temp | 40 | 90 | 0.10 | 4.0 | CH-D |
-| Hot water temp | 70 | 200 | 0.15 | 6.0 | CH-D |
-| CO₂ (ppm, occupied) | 400 | 1000 | 5.0 | 200 | VAV-B |
+| Duct static (inH₂O) | −0.5 | 3.0 | 0.02 | 0.75 | AHU-A |
+| Relative humidity (%) | 0 | 100 | 1.0 | 10–25 pp | DC-C |
+| CHW temp | 40 | 90 | 0.10 | 6–8 | CH-D |
+| Hot water temp | 70 | 200 | 0.15 | 12–15 | CH-D |
+| CO₂ (ppm, occupied) | 400 | 1000 | 5.0 | 500 (warn) | VAV-B |
 
 ### SV-1 — Zone temperature out of range
 
@@ -237,9 +256,13 @@ HAVING MAX(timestamp) < NOW() - INTERVAL '30' MINUTE
 
 Adapt interval syntax to your DataFusion version; test in `/sql-fdd` before activate.
 
-### SV-6 — Flatline & rate-of-change
+### SV-6 — Flatline & rate-of-change (split in production)
 
-Rolling flatline/spike detection is limited in edge SQL. Use **confirmation_seconds** with bounds rules, or run full rolling logic in the [Pandas cookbook](pandas-cookbook.html#sensor-validation).
+* **Flatline** → registry `SV-FLATLINE`  
+* **Abrupt jump** → registry `SV-SPIKE` (ALWAYS; sample discontinuity)  
+* **Sustained / context-sensitive rate** → registry **`SV-SLEW`** (time-normalized °F/h or pp/h; steady vs transient thresholds; gap reject)
+
+Rolling robust slopes (Theil–Sen) remain optional offline/pandas enrichment — see [sensor rate profiles](sensor-rate-profiles.html).
 
 ---
 

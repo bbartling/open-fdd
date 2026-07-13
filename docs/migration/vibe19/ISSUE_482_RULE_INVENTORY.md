@@ -21,6 +21,7 @@ Generated from repository files + Vibe19 local checkout
 ### Canonical OG50 (+51)
 
 1–4 `SV-RANGE`, `SV-FLATLINE`, `SV-SPIKE`, `SV-STALE`  
+`SV-SLEW` (additive — sustained context-sensitive rate; not OG50 rename of SPIKE)  
 5 `SV-4`  
 6–20 `FC1`–`FC15`  
 21–23 `AHU-SATDEV`, `AHU-DUCTHI`, `AHU-SIMUL-HEAT-COOL`  
@@ -40,7 +41,8 @@ Generated from repository files + Vibe19 local checkout
 |---------------|------------------------|
 | `SV-RANGE` | Vibe19 same; cookbook may use `SV-1`/`SV-2`/`SV-3` |
 | `SV-FLATLINE` | cookbook `SV-6` |
-| `SV-SPIKE` | cookbook `SV-7` |
+| `SV-SPIKE` | cookbook `SV-7` (spike) |
+| `SV-SLEW` | sensor-rate-profiles / sustained ROC |
 | `SV-STALE` | cookbook `SV-5` |
 | `AHU-SATDEV` | aux `SAT_DEVIATION*` |
 | `AHU-DUCTHI` | aux `DUCT_STATIC_HIGH` |
@@ -67,7 +69,7 @@ Generated from repository files + Vibe19 local checkout
 
 ### Missing OG50 production SQL (35)
 
-`SV-RANGE`, `SV-FLATLINE`, `SV-SPIKE`, `SV-STALE`, `SV-4`,
+`SV-RANGE`, `SV-FLATLINE`, `SV-SPIKE`, `SV-SLEW`, `SV-STALE`, `SV-4`,
 `FC4`, `FC5`, `FC6`, `FC14`, `FC15`,
 `AHU-SATDEV`, `AHU-DUCTHI`, `AHU-SIMUL-HEAT-COOL`,
 `ECON-3`, `ECON-5`,
@@ -125,5 +127,6 @@ Generated from repository files + Vibe19 local checkout
 | OG50 in registry + SQL | **50** |
 | PID-HUNT-1 (#51) | **1** |
 | Analytics rollups | **4** |
-| Registry total | **55** |
+| SV-SLEW (additive) | **1** |
+| Registry total | **56** |
 | #482 OG50 denominator | **met** (analytics + PID remain additive) |

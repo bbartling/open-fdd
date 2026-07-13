@@ -29,6 +29,7 @@ Every rule exists in **both** backends. See the [parity matrix](parity-matrix.ht
 | [Gap matrix](gap-matrix.html) | Coverage vs ASHRAE GL36, Berkeley, PNNL, NIST |
 | [Parity matrix](parity-matrix.html) | SQL ↔ Pandas audit |
 | [**Operational gates**](operational-gates.html) | RUN / CONDITIONAL / ALWAYS · `SKIPPED_EQUIPMENT_OFF` |
+| [**Sensor rate profiles**](sensor-rate-profiles.html) | SV-SLEW research · OFF/STARTUP/STEADY · profile defaults |
 | [**PID-HUNT-1**](pid-hunt-1.html) | Generic control-output total-variation hunting (51st rule) |
 | [Roadmap](roadmap.html) | Priority-ranked expansion |
 | [Prerequisite macros](prerequisite-macros.html) | Occupancy, fan proven, reset, override guards |
@@ -39,7 +40,7 @@ Every rule exists in **both** backends. See the [parity matrix](parity-matrix.ht
 
 | Family | Count | Examples |
 |--------|------:|----------|
-| Sensor validation | 7 | SV-1–SV-7 |
+| Sensor validation | 8+ | SV-1–SV-7 cookbook + `SV-SLEW` / `SV-SPIKE` registry |
 | AHU GL36 (FC1–FC15) | 15 | Duct static, MAT envelope, PID hunting (FC4 mode transitions) |
 | VAV terminals | 7 | Comfort, reheat, damper, airflow bias, min flow |
 | Economizer / ventilation | 7+ | ECON-1–5, OA-1–2, [diagnostics guide](datafusion-sql-cookbook.html#ahu-economizer-diagnostics-guide) |

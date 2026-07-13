@@ -68,7 +68,8 @@ An AHU off all night must **not** accumulate hours of `PASS`. Prefer:
 |--:|------|------|--------------------------------|
 | 1 | `SV-RANGE` | ALWAYS | Sensor range validation continuous |
 | 2 | `SV-FLATLINE` | CONDITIONAL | Process sensors active-only; OAT continuous |
-| 3 | `SV-SPIKE` | ALWAYS | Spike detection continuous |
+| 3 | `SV-SPIKE` | ALWAYS | Abrupt sample discontinuity continuous |
+| 3b | `SV-SLEW` | ALWAYS | Sustained rate continuous; widen thresholds in STARTUP_TRANSIENT when fan/state known |
 | 4 | `SV-STALE` | ALWAYS | Stale data continuous |
 | 5 | `SV-4` | RUN | AHU fan or airflow proven before MAT/OAT/RAT envelope |
 | 6 | `FC1` | RUN | Supply fan running **and** full-fan threshold |
@@ -130,11 +131,13 @@ Total:                              50
 
 `PID-HUNT-1` is the **51st** independently useful rule (see [PID-HUNT-1](pid-hunt-1.html)). Keep FC4 as the equipment-specific mode-transition diagnostic; both may share hunting mathematics where appropriate.
 
-### Eight rules that must not use a motor-running filter
+### Rules that must not use a motor-running filter
 
 ```text
-SV-RANGE, SV-SPIKE, SV-STALE, WX-1, WX-2, OAT-METEO, SCHED-1, CMD-1
+SV-RANGE, SV-SPIKE, SV-SLEW, SV-STALE, WX-1, WX-2, OAT-METEO, SCHED-1, CMD-1
 ```
+
+Sensor rate taxonomy: `SV-SPIKE` = abrupt jump; `SV-SLEW` = time-normalized sustained rate with steady/transient profile limits ([sensor-rate-profiles](sensor-rate-profiles.html)).
 
 ## Evidence order (do not rely only on `fan_cmd`)
 

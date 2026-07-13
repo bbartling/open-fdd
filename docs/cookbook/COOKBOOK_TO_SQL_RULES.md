@@ -9,7 +9,8 @@ Cross-reference between Open-FDD **online expression cookbook** (`docs/rules/coo
 | Canonical OG50 (issue #482) | 50 |
 | PID-HUNT-1 (additive #51) | 1 |
 | Analytics rollups (not OG50) | 4 |
-| **Registry total** | **55** |
+| **SV-SLEW** (sensor sustained rate) | 1 |
+| **Registry total** | **56** |
 
 Proven on BUILDING_100 @ 0.5h tolerance where noted (see `docs/benchmarks/RUST_DATAFUSION_PARITY_BENCHMARK.md`).
 Newer OG50 ports are `parity_status: cookbook_defined` until BUILDING_100 / synthetic fixtures prove them.
@@ -23,7 +24,8 @@ Newer OG50 ports are `parity_status: cookbook_defined` until BUILDING_100 / synt
 | FC1–FC3, FC7–FC12 | FC1… | fc*.sql | 300–600 | proven / skip | FC7 may skip missing htg_valve |
 | ECON-1 / ECON-4 | ECON-1 / ECON-4 | econ*.sql | 600 | proven | |
 | ECON-3 / ECON-5 | ECON-3 / ECON-5 | econ3_*.sql / econ5_*.sql | 600 | cookbook | Newly ported |
-| SV-RANGE…SV-4 | SV-* | sv_*.sql | 300 | cookbook | Sweep approximations |
+| SV-RANGE…SV-4 / SV-SPIKE | SV-* | sv_*.sql | 300 | cookbook | Spike = discontinuity |
+| **SV-SLEW** | **SV-SLEW** | **sv_slew.sql** | 600 | cookbook | Time-normalized rate; steady/transient profiles |
 | FC4–FC6, FC14–FC15 | FC* | fc*.sql | 600–3600 | cookbook | |
 | AHU-SATDEV / DUCTHI / SIMUL | AHU-* | ahu_*.sql | 300–600 | cookbook | |
 | OA-1 / DMP-1 / VLV-1 | OA-1 / DMP-1 / VLV-1 | *.sql | 300–600 | cookbook | |

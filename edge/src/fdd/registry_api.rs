@@ -365,7 +365,7 @@ mod tests {
         let count = resp.get("rule_count").and_then(|v| v.as_u64()).unwrap_or(0);
         assert!(
             count >= 55,
-            "expected full registry (55 rules), got {count}"
+            "expected full registry (>=55 rules), got {count}"
         );
     }
 }

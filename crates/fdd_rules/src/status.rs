@@ -129,6 +129,7 @@ pub fn default_equipment_types_for_rule(rule_id: &str) -> Vec<String> {
             | "SV-RANGE"
             | "SV-FLATLINE"
             | "SV-SPIKE"
+            | "SV-SLEW"
             | "SV-STALE"
             | "PID-HUNT-1"
             | "SCHED-1"
