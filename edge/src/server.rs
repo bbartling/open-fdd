@@ -97,7 +97,9 @@ pub fn run() -> std::io::Result<()> {
 
 fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
     let req = read_http_request(&mut stream)?;
-    let (method, path, headers, body) = parse_request(&req);
+    let (method, path, headers, body_bytes) = parse_request_bytes(&req);
+    // JSON/text routes use lossy UTF-8; binary uploads (ZIP/CSV multipart) must use body_bytes.
+    let body = String::from_utf8_lossy(&body_bytes).into_owned();
     let route_path = path.split('?').next().unwrap_or(path.as_str()).to_string();
 
     if method == "OPTIONS" {
@@ -505,7 +507,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let out = if ct.contains("application/json") {
                 csv_ingest::preview_json_handler(&parse_json_body_or_empty(&body))
             } else {
-                csv_ingest::preview_handler(&ct, body.as_bytes(), None)
+                csv_ingest::preview_handler(&ct, &body_bytes, None)
             };
             require_role(
                 &mut stream,
@@ -537,7 +539,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             let out = if ct.contains("application/json") {
                 csv_ingest::zip_package::upload_json_handler(&parse_json_body_or_empty(&body))
             } else {
-                csv_ingest::zip_package::upload_handler(&ct, body.as_bytes())
+                csv_ingest::zip_package::upload_handler(&ct, &body_bytes)
             };
             require_role(
                 &mut stream,
@@ -548,7 +550,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         }
         ("POST", "/api/csv/import/zip/inspect") => {
             let ct = header_value(&headers, "content-type");
-            let out = csv_ingest::zip_package::inspect_handler(&ct, body.as_bytes());
+            let out = csv_ingest::zip_package::inspect_handler(&ct, &body_bytes);
             require_role(
                 &mut stream,
                 &principal,
@@ -2071,7 +2073,7 @@ fn request_path_from_buf(buf: &[u8]) -> String {
         .to_string()
 }
 
-fn read_http_request(stream: &mut TcpStream) -> std::io::Result<String> {
+fn read_http_request(stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
     let mut buf = Vec::with_capacity(4096);
     let mut chunk = [0_u8; 4096];
     loop {
@@ -2088,7 +2090,7 @@ fn read_http_request(stream: &mut TcpStream) -> std::io::Result<String> {
         }
     }
     if buf.is_empty() {
-        return Ok(String::new());
+        return Ok(Vec::new());
     }
     let header_end = buf
         .windows(4)
@@ -2133,32 +2135,44 @@ fn read_http_request(stream: &mut TcpStream) -> std::io::Result<String> {
         }
         buf.extend_from_slice(&chunk[..n]);
     }
-    Ok(String::from_utf8_lossy(&buf).into_owned())
+    Ok(buf)
 }
 
-fn parse_request(req: &str) -> (String, String, Vec<(String, String)>, String) {
-    let mut lines = req.split("\r\n");
+/// Split raw HTTP request bytes into method/path/headers and an intact binary body.
+fn parse_request_bytes(req: &[u8]) -> (String, String, Vec<(String, String)>, Vec<u8>) {
+    let header_end = req
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .map(|i| i + 4)
+        .unwrap_or(req.len());
+    let header_text = String::from_utf8_lossy(&req[..header_end]);
+    let mut lines = header_text.split("\r\n");
     let first = lines.next().unwrap_or("");
     let mut parts = first.split_whitespace();
     let method = parts.next().unwrap_or("").to_string();
     let path = parts.next().unwrap_or("/").to_string();
     let mut headers = Vec::new();
-    let mut body_started = false;
-    let mut body_lines = Vec::new();
     for line in lines {
-        if body_started {
-            body_lines.push(line);
-            continue;
-        }
         if line.is_empty() {
-            body_started = true;
-            continue;
+            break;
         }
         if let Some((k, v)) = line.split_once(':') {
             headers.push((k.trim().to_ascii_lowercase(), v.trim().to_string()));
         }
     }
-    (method, path, headers, body_lines.join("\r\n"))
+    let body = req.get(header_end..).unwrap_or(&[]).to_vec();
+    (method, path, headers, body)
+}
+
+#[allow(dead_code)] // retained for string-oriented unit helpers / callers
+fn parse_request(req: &str) -> (String, String, Vec<(String, String)>, String) {
+    let (method, path, headers, body) = parse_request_bytes(req.as_bytes());
+    (
+        method,
+        path,
+        headers,
+        String::from_utf8_lossy(&body).into_owned(),
+    )
 }
 
 fn login_handler(stream: &mut TcpStream, body: &str) -> std::io::Result<()> {

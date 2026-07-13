@@ -44,45 +44,8 @@ fn parse_multipart(content_type: &str, body: &[u8]) -> UploadParseResult {
         .nth(1)
         .map(|b| b.trim().trim_matches('"').to_string())
         .ok_or("missing multipart boundary")?;
-    let delim = format!("--{boundary}");
-    let text = String::from_utf8_lossy(body);
-    let mut files = Vec::new();
-    let mut session_id = None;
-    for part in text.split(&delim) {
-        if part.trim().is_empty() || part.trim() == "--" {
-            continue;
-        }
-        let (headers, content) = part
-            .split_once("\r\n\r\n")
-            .or_else(|| part.split_once("\n\n"))
-            .ok_or("invalid multipart part")?;
-        let mut filename = None;
-        let mut field_name = None;
-        for line in headers.lines() {
-            let lower = line.to_ascii_lowercase();
-            if lower.contains("content-disposition") {
-                if let Some(n) = extract_form_name(line, "name") {
-                    field_name = Some(n);
-                }
-                if let Some(f) = extract_form_name(line, "filename") {
-                    filename = Some(f);
-                }
-            }
-        }
-        let raw = content.trim_end_matches("\r\n").as_bytes().to_vec();
-        if raw.is_empty() {
-            continue;
-        }
-        if filename.is_some() {
-            files.push((filename.unwrap_or_else(|| "upload.csv".to_string()), raw));
-        } else if field_name.as_deref() == Some("session_id") {
-            session_id = Some(String::from_utf8_lossy(&raw).trim().to_string());
-        }
-    }
-    if files.is_empty() {
-        return parse_multipart_binary(&boundary, body);
-    }
-    Ok((files, session_id))
+    // Always parse on bytes — UTF-8 lossy conversion corrupts ZIP/binary CSV parts.
+    parse_multipart_binary(&boundary, body)
 }
 
 fn extract_form_name(line: &str, key: &str) -> Option<String> {
