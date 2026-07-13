@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import CsvMappingPanel from "../components/CsvMappingPanel";
 import CsvSessionSidecart from "../components/CsvSessionSidecart";
@@ -193,7 +194,9 @@ export default function CsvWorkbenchPage() {
     try {
       const out = await saveAgentSessionToArrow(sessionId);
       if (!out.ok) throw new Error(out.error ?? "save failed");
-      setStatus(`Saved to Arrow (${out.dataset?.id ?? sessionId}). Open Plots to chart.`);
+      setStatus(
+        `Saved to Arrow (${out.dataset?.id ?? sessionId}). Next: Analytics & rules → run batch, or Charts for trends.`,
+      );
     } catch (e) {
       setError(formatApiError(e));
     } finally {
@@ -375,9 +378,12 @@ export default function CsvWorkbenchPage() {
           ) : (
             <span className="muted">Sessions appear below after upload.</span>
           )}
-          <a className="secondary-btn" href="/plot">
-            Open Plots
-          </a>
+          <Link className="secondary-btn" to="/sql-fdd">
+            Run analytics
+          </Link>
+          <Link className="secondary-btn" to="/plot">
+            Open Charts
+          </Link>
         </div>
         <CsvSessionSidecart activeSessionId={sessionId} onOpenSession={(id) => void openSession(id)} />
       </section>

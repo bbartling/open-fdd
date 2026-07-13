@@ -161,13 +161,27 @@ export default function BuildingInsightDashboard() {
     <div className="bis-dashboard">
       {needsModelSetup ? (
         <div className="bis-card bis-setup-banner">
-          <h3>Get started</h3>
+          <h3>Get started — fresh workspace</h3>
           <p className="muted">
-            No Haystack model loaded yet — stack health and gauges below reflect the live edge only.
-            Sign in and import a model under{" "}
-            <Link to="/model">Model &amp; assignments</Link> to enable fault detection
-            and comfort analytics.
+            Open-FDD {edgeVersion ? `v${edgeVersion}` : "edge"} is healthy
+            {live ? " (live)" : ""}. No imported building model or fault context yet — gauges below
+            reflect the edge process only.
           </p>
+          <ol className="bis-setup-steps">
+            <li>
+              <Link to="/csv-workbench">Data Workbench</Link> — upload CSV or ZIP, preview, map
+              points, import to Arrow
+            </li>
+            <li>
+              <Link to="/model">Point Mapping</Link> — review equipment roles and assignments
+            </li>
+            <li>
+              <Link to="/sql-fdd">Analytics</Link> — run the rule catalog and open Plotly timelines
+            </li>
+            <li>
+              <Link to="/plot">Charts</Link> — historian trends after import
+            </li>
+          </ol>
         </div>
       ) : null}
 

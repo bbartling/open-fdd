@@ -23,8 +23,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: "/", end: true, icon: "🏠", label: "Overview" },
       { to: "/csv-workbench", icon: "📤", label: "Data Workbench", protected: true },
       { to: "/model", icon: "🗺️", label: "Point Mapping", protected: true },
-      { to: "/live-fdd-validation", icon: "▶️", label: "Analytics", protected: true },
-      { to: "/sql-fdd", icon: "⚡", label: "Rule Catalog", protected: true },
+      { to: "/sql-fdd", icon: "▶️", label: "Analytics & rules", protected: true },
       { to: "/plot", icon: "📈", label: "Charts", protected: true },
       { to: "/reports", icon: "📄", label: "Reports", protected: true },
     ],
@@ -41,6 +40,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "System",
     items: [
+      { to: "/live-fdd-validation", icon: "🧪", label: "Live validation", protected: true },
       { to: "/host", icon: "📊", label: "Host stats", protected: true },
       { to: "/data-management", icon: "🗄️", label: "Storage", protected: true },
       { to: "/exports", icon: "⬇️", label: "Data export", protected: true },

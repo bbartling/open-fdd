@@ -131,8 +131,18 @@ jobs:
           OFDD_INTEGRATOR_PASSWORD=ci-integrator-pass
           OFDD_AGENT_USER=agent
           OFDD_AGENT_PASSWORD=ci-agent-pass
+          OFDD_ADMIN_USER=admin
+          OFDD_ADMIN_PASSWORD=ci-admin-pass
           EOF
           chmod 600 workspace/auth.env.local
+          # One-time handoff so openfdd_login_ui_smoke.sh resolves passwords
+          cat > workspace/bootstrap_credentials.once.txt <<'EOF'
+          operator: ci-operator-pass
+          integrator: ci-integrator-pass
+          agent: ci-agent-pass
+          admin: ci-admin-pass
+          EOF
+          chmod 600 workspace/bootstrap_credentials.once.txt
           sudo chown -R 10001:10001 workspace/overrides workspace/bacnet workspace/data workspace/logs workspace/reports
 
       - name: Compose build
@@ -157,6 +167,10 @@ jobs:
         run: |
           curl -fsS http://127.0.0.1:8080/ | grep -q 'id="root"'
           curl -fsS http://127.0.0.1:8080/ | grep -q '/assets/index-'
+          curl -fsS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/login | grep -q '200'
+
+      - name: Login product gate (all roles + dashboard)
+        run: ./scripts/openfdd_login_ui_smoke.sh
 
       - name: BACnet override scanner smoke
         run: |
@@ -288,3 +302,7 @@ jobs:
           bash -n scripts/openfdd_rust_edge_validate.sh
           bash -n scripts/openfdd_csv_import_sidecar.sh
           bash -n scripts/openfdd_csv_export_sidecar.sh
+          bash -n scripts/openfdd_cargo_up.sh
+          bash -n scripts/openfdd_local_up.sh
+          bash -n scripts/openfdd_login_ui_smoke.sh
+          bash -n scripts/openfdd_auth_init.sh

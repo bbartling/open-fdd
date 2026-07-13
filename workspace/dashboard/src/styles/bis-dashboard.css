@@ -29,7 +29,18 @@
 }
 
 .bis-setup-banner p {
+  margin: 0 0 0.75rem;
+}
+
+.bis-setup-steps {
   margin: 0;
+  padding-left: 1.25rem;
+  color: var(--muted, #6b7280);
+  line-height: 1.55;
+}
+
+.bis-setup-steps a {
+  font-weight: 600;
 }
 
 /* Top summary strip */
