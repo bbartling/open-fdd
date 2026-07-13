@@ -29,10 +29,11 @@ Parity artifact: `docs/benchmarks/parity_b100_latest/parity_details.csv`
 | Equipment class | Typical Δ fault_hours | Classification | Notes |
 | --- | --- | --- | --- |
 | AHU_1 / AHU_2 | ~0.003 h | **exact equivalent** | Presence fix + same sensors |
-| CHILLER_*, BOILERS_PUMPS | ~2400–2624 h | **mapping mismatch / not comparable** | Open-FDD history maps enable/setpoint-like points into modeled sensor roles (`oa_t`, `chw_supply_t`, …) that stay flat → FAULT. Vibe19 PASS uses a different modeled-sensor set for those units. |
-| Many VAV_* | ~185–2045 h | **mapping mismatch / not comparable** until role hygiene | Same class of false sensor membership / wrong physical column → role |
+| CHILLER_*, BOILERS_PUMPS | ~2400–2624 h (pre-fix) | **mapping defect (fixed in role map)** | Root cause: `columns.csv` tagged `chws_t_f`/`chwr_t_f` as `other` (dropped) while `oat_chiller_enable_setpoint_f` was tagged `outside_air_temp` → false `oa_t`. Fix: infer CHW temps from `other`, never map enable/reset setpoints to modeled sensors. |
+| Many VAV_* | large Δ (pre-fix) | **re-check after re-ingest** | Same class of role hygiene; re-run parity after mapping fix |
 
-**Do not enlarge hour tolerance to hide these.** Fix mapping (column_map / role inference) or exclude from comparable set with an explicit `not_comparable` class in the overlap matrix.
+**Do not enlarge hour tolerance to hide these.** Re-ingest BUILDING_100 after the role-map fix and re-run `openfdd_cli parity`.
+
 
 ## Overlap matrix (Phase 1)
 

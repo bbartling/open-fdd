@@ -24,7 +24,10 @@ pub fn load_column_role_map(path: &Path) -> Result<HashMap<String, String>> {
         }
         let raw_role = role_idx.and_then(|i| rec.get(i)).unwrap_or("").trim();
         let inferred = infer_role_from_column_name(&column);
-        let role = if raw_role.is_empty() || raw_role == "ahu_point" {
+        let role = if raw_role.is_empty()
+            || raw_role.eq_ignore_ascii_case("ahu_point")
+            || raw_role.eq_ignore_ascii_case("other")
+        {
             inferred
         } else {
             let normalized = normalize_role(raw_role);
@@ -48,7 +51,25 @@ pub fn load_column_role_map(path: &Path) -> Result<HashMap<String, String>> {
         if role == "zone_t" && is_zone_t_limit_or_alarm_column(&column) {
             continue;
         }
-        if role == "ahu_point" || role == "ignore" {
+        // Enable/reset setpoints must never become modeled sensors for SV sweeps.
+        if is_setpoint_or_enable_column(&column)
+            && matches!(
+                role.as_str(),
+                "oa_t"
+                    | "sat"
+                    | "mat"
+                    | "rat"
+                    | "zone_t"
+                    | "chw_supply_t"
+                    | "chw_return_t"
+                    | "hw_supply_t"
+                    | "hw_return_t"
+                    | "oa_h"
+            )
+        {
+            continue;
+        }
+        if role == "ahu_point" || role == "ignore" || role == "other" {
             continue;
         }
         // Prefer first mapping per role (supply fan before return fan, etc.)
@@ -113,6 +134,13 @@ pub fn normalize_role(role: &str) -> String {
 
 fn infer_role_from_column_name(column: &str) -> Option<String> {
     let c = column.to_lowercase();
+    if is_setpoint_or_enable_column(column) {
+        // Setpoints are not modeled sensors for SV-* sweeps / FDD roles.
+        if c.contains("sat") || c.contains("dat") || c.contains("discharge") {
+            return Some("sat_sp".into());
+        }
+        return None;
+    }
     if c.contains("supply_fan_speed")
         || c.contains("supply_fan_status")
         || c == "supplyfan"
@@ -193,6 +221,20 @@ fn infer_role_from_column_name(column: &str) -> Option<String> {
     None
 }
 
+fn is_setpoint_or_enable_column(column: &str) -> bool {
+    let c = column.to_lowercase();
+    c.contains("setpoint")
+        || c.contains("set_point")
+        || c.contains("enable_setpoint")
+        || c.contains("eff_setpt")
+        || c.contains("reset_high")
+        || c.contains("reset_low")
+        || c.contains("reset_max")
+        || c.contains("reset_min")
+        || c.contains("reset_eff")
+        || (c.contains("reset") && c.contains("water"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -249,21 +291,29 @@ mod tests {
     }
 
     #[test]
-    fn vav_space_temp_f_maps_zone_t_from_vav_point() {
+    fn other_role_infers_chw_temps_and_skips_enable_setpoint_as_oa_t() {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("columns.csv");
         let mut f = std::fs::File::create(&path).unwrap();
         writeln!(
             f,
-            "col,point_name,unit,point_role,vav_id\n\
-             space_temp_f_58,Alarm High,78,zone_temp,VAV_7\n\
-             space_temp_f_77,SpaceTemp,°F,zone_temp,VAV_7\n\
-             vav_7_space_temp_f,space temp,°F,vav_point,VAV_7"
+            "col,point_name,unit,point_role\n\
+             chws_t_f,CHWS-T,°F,other\n\
+             chwr_t_f,CHWR-T,°F,other\n\
+             oat_chiller_enable_setpoint_f,OAT Enable SP,°F,outside_air_temp\n\
+             chill_water_reset_high_t_oa_f,Reset High T_OA,°F,other"
         )
         .unwrap();
         let map = load_column_role_map(&path).unwrap();
-        assert_eq!(map.get("vav_7_space_temp_f"), Some(&"zone_t".to_string()));
-        assert!(!map.contains_key("space_temp_f_58"));
-        assert_eq!(map.get("space_temp_f_77"), Some(&"zone_t".to_string()));
+        assert_eq!(map.get("chws_t_f"), Some(&"chw_supply_t".to_string()));
+        assert_eq!(map.get("chwr_t_f"), Some(&"chw_return_t".to_string()));
+        assert!(
+            !map.contains_key("oat_chiller_enable_setpoint_f"),
+            "enable setpoint must not map to oa_t"
+        );
+        assert!(
+            !map.contains_key("chill_water_reset_high_t_oa_f"),
+            "reset curve must not map to a sensor role"
+        );
     }
 }
