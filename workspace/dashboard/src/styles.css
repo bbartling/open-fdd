@@ -4214,9 +4214,132 @@ button.linkish {
   }
 }
 
-.rule-registry-panel {
-  max-height: calc(100vh - 12rem);
+.sql-fdd-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-height: calc(100vh - 10rem);
   overflow: auto;
+}
+
+.rule-registry-panel {
+  flex: 1 1 auto;
+  min-height: 12rem;
+}
+
+.rule-tuning-panel {
+  flex: 0 0 auto;
+}
+
+.rule-tuning-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.rule-tuning-rule-id {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.rule-tuning-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rule-tuning-error {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--danger, #b33);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--danger, #b33) 12%, transparent);
+  font-size: 0.82rem;
+}
+
+.rule-tuning-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rule-tuning-row {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-bg);
+}
+
+.rule-tuning-row__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin-bottom: 0.35rem;
+}
+
+.rule-tuning-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.rule-tuning-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-bottom: 0.45rem;
+}
+
+.rule-tuning-stats code {
+  font-size: 0.72rem;
+}
+
+.rule-tuning-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.rule-tuning-control input[type="range"] {
+  width: 100%;
+}
+
+.rule-tuning-control input[type="number"] {
+  width: 100%;
+  max-width: 7rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--input-text);
+}
+
+.rule-tuning-value {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.rule-tuning-actions {
+  margin-top: 0.75rem;
+}
+
+.error-text {
+  color: var(--danger, #b33);
+  font-size: 0.85rem;
+  margin: 0.35rem 0;
 }
 
 .rule-registry-filter {

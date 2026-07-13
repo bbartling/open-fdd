@@ -17,6 +17,8 @@ type RegistryResponse = {
   rules_dir?: string;
   rules?: RegistryRule[];
   error?: string;
+  tuning_ok?: boolean;
+  tuning_error?: string;
 };
 
 type Props = {
@@ -72,9 +74,14 @@ export default function RuleRegistryPanel({ selectedRuleId, onSelectRuleId }: Pr
         <span className="gf-pill gf-pill--muted">{data.rule_count ?? rules.length} rules</span>
       </div>
       <p className="muted small">
-        Production cookbook rules from <code>{data.rules_dir ?? "sql_rules"}</code>. Tune parameters via{" "}
-        <code>/api/fdd/rules/&#123;id&#125;/params</code>.
+        Production cookbook rules from <code>{data.rules_dir ?? "sql_rules"}</code>. Select a rule to open
+        the tuning panel (<code>GET /api/fdd/rules/&#123;id&#125;/params</code>).
       </p>
+      {data.tuning_ok === false ? (
+        <p className="error-text" role="alert">
+          Registry tuning unavailable: {data.tuning_error ?? "could not load rule_tuning profiles."}
+        </p>
+      ) : null}
       <input
         type="search"
         className="rule-registry-filter"

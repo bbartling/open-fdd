@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import RuleRegistryPanel from "../components/sqlFdd/RuleRegistryPanel";
+import RuleTuningPanel from "../components/sqlFdd/RuleTuningPanel";
 import SqlFddQueryEditor from "../components/sqlFdd/SqlFddQueryEditor";
 import SqlFddResultsPanel from "../components/sqlFdd/SqlFddResultsPanel";
 import {
@@ -226,13 +227,16 @@ export default function SqlFddRulesPage() {
       </div>
 
       <div className="sql-fdd-layout">
-        <RuleRegistryPanel
-          selectedRuleId={ruleId}
-          onSelectRuleId={(id) => {
-            setCanonicalRuleId(id);
-            setBuilder((b) => ({ ...b, name: id, fault_code: id }));
-          }}
-        />
+        <aside className="sql-fdd-sidebar">
+          <RuleRegistryPanel
+            selectedRuleId={canonicalRuleId ?? undefined}
+            onSelectRuleId={(id) => {
+              setCanonicalRuleId(id);
+              setBuilder((b) => ({ ...b, name: id, fault_code: id }));
+            }}
+          />
+          <RuleTuningPanel ruleId={canonicalRuleId} />
+        </aside>
 
       <div className="gf-query-main">
         <div className="gf-query-toolbar">
