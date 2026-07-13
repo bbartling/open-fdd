@@ -43,3 +43,4 @@ workspace/frontend/
 scripts/tadco_hvac_prepare.py
 scripts/openfdd_tadco_hvac_integration.sh
 docs/benchmarks/parity_b100_latest/openfdd_results/
+.openfdd_synth_columns.csv
