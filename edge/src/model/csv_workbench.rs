@@ -118,10 +118,7 @@ pub fn get_versioned_mapping(dataset_id: Option<&str>) -> Value {
         .and_then(|t| serde_json::from_str::<Value>(&t).ok());
     match (stored, dataset_id) {
         (Some(doc), Some(want)) => {
-            let sid = doc
-                .get("dataset_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let sid = doc.get("dataset_id").and_then(|v| v.as_str()).unwrap_or("");
             if sid == want {
                 json!({"ok": true, "mapping": normalize_column_map_document(&doc)})
             } else {
@@ -672,7 +669,10 @@ mod tests {
         with_temp_workspace(|_| {
             let empty = get_versioned_mapping(Some("new-ds"));
             let map = empty.get("mapping").unwrap();
-            assert_eq!(map.get("dataset_id").and_then(|v| v.as_str()), Some("new-ds"));
+            assert_eq!(
+                map.get("dataset_id").and_then(|v| v.as_str()),
+                Some("new-ds")
+            );
             assert!(map
                 .get("column_map")
                 .and_then(|v| v.as_object())

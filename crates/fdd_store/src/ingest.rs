@@ -266,8 +266,15 @@ fn synthesize_columns_csv(history: &Path, weather_root: &Path) -> Result<PathBuf
         .next()
         .unwrap_or("")
         .to_string();
-    let cols: Vec<&str> = header.split(',').map(|c| c.trim()).filter(|c| !c.is_empty()).collect();
-    anyhow::ensure!(!cols.is_empty(), "weather history_wide.csv has empty header");
+    let cols: Vec<&str> = header
+        .split(',')
+        .map(|c| c.trim())
+        .filter(|c| !c.is_empty())
+        .collect();
+    anyhow::ensure!(
+        !cols.is_empty(),
+        "weather history_wide.csv has empty header"
+    );
     let dest = weather_root.join(".openfdd_synth_columns.csv");
     let mut body = String::from("column,role\n");
     for c in cols {

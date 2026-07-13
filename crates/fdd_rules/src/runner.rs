@@ -294,7 +294,10 @@ mod tests {
         let available = HashSet::from(["equipment_id".into(), "timestamp_utc".into()]);
         let sql = "SELECT chw_supply_t FROM history";
         let out = project_optional_roles(sql, &rule, &available);
-        assert!(out.contains("CAST(NULL AS DOUBLE) AS chw_supply_t"), "{out}");
+        assert!(
+            out.contains("CAST(NULL AS DOUBLE) AS chw_supply_t"),
+            "{out}"
+        );
         assert!(out.contains("TRUE AS loop_enabled"), "{out}");
     }
 
