@@ -188,7 +188,11 @@ mod tests {
             assert_eq!(g.equipment_id, e.equipment_id);
             assert_eq!(g.signal, e.signal);
             assert_eq!(g.motor_kind, e.motor_kind);
-            assert_eq!(g.on_samples, e.on_samples, "{} {}", g.equipment_id, g.signal);
+            assert_eq!(
+                g.on_samples, e.on_samples,
+                "{} {}",
+                g.equipment_id, g.signal
+            );
             assert_eq!(g.samples, e.samples);
             assert!(
                 (g.run_hours - e.run_hours).abs() < 0.01,

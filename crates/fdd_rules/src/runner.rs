@@ -8,8 +8,8 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::gate_sql::{
-    inject_raw_fault_operational_gate, operational_proof_expr, should_inject_operational_gate,
-    startup_delay_rows,
+    gate_injection_required, inject_raw_fault_operational_gate, operational_proof_expr,
+    should_inject_operational_gate, startup_delay_rows,
 };
 use crate::params::{read_poll_from_cache, rule_params, substitute_sql};
 use crate::registry::{RuleRegistry, RuleSpec};
@@ -217,9 +217,40 @@ pub async fn run_all_rules(
                 .as_ref()
                 .map(|g| g.predicate.as_str())
                 .unwrap_or("fan_running");
-            if let Some(proof) = operational_proof_expr(&history_columns, predicate) {
-                let rows = startup_delay_rows(rule, poll_seconds);
-                sql = inject_raw_fault_operational_gate(&sql, &proof, rows);
+            let required = gate_injection_required(rule);
+            match operational_proof_expr(&history_columns, predicate) {
+                Some(proof) => {
+                    let rows = startup_delay_rows(rule, poll_seconds);
+                    match inject_raw_fault_operational_gate(&sql, &proof, rows, required) {
+                        Ok(gated) => sql = gated,
+                        Err(e) => {
+                            let _ = std::fs::write(
+                                &out_path,
+                                serde_json::to_string_pretty(&json!({
+                                    "rows": [],
+                                    "status": RuleStatus::Error.as_str(),
+                                    "error": e,
+                                }))
+                                .unwrap_or_else(|_| "{}".into()),
+                            );
+                            push_timing(
+                                &mut timings,
+                                &mut rules_failed,
+                                rule,
+                                &out_path,
+                                t0,
+                                RuleStatus::Error,
+                                0,
+                                Some(e),
+                            );
+                            continue;
+                        }
+                    }
+                }
+                None if required => {
+                    // No proof columns — Vibe19 leaves ungated; keep ungated here too.
+                }
+                None => {}
             }
         }
         match run_sql(&ctx, &sql).await {
@@ -298,6 +329,7 @@ pub async fn run_all_rules(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn push_timing(
     timings: &mut Vec<RuleTiming>,
     counter: &mut usize,
@@ -504,7 +536,11 @@ pub fn derive_window_rows(window_minutes: f64, poll_seconds: f64) -> (u32, u32) 
 /// Other optional roles default to typed `CAST(NULL AS DOUBLE)` so window
 /// arithmetic (`max - min`) type-checks when the physical column is absent.
 /// Present-but-null cell semantics remain in the rule SQL.
-pub(crate) fn project_optional_roles(sql: &str, rule: &RuleSpec, available: &HashSet<String>) -> String {
+pub(crate) fn project_optional_roles(
+    sql: &str,
+    rule: &RuleSpec,
+    available: &HashSet<String>,
+) -> String {
     let missing: Vec<(&str, &str)> = rule
         .optional_roles
         .iter()

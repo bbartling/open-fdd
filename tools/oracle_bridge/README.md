@@ -26,7 +26,7 @@ Do not regenerate goldens to hide drift.
 # After Open-FDD rule results exist under .cache/rule_results_*
 cargo run -p fdd_cli --release -- parity \
   --oracle-dir tests/fixtures/vibe19_analytics_golden \
-  --sql-results .cache/rule_results_b100_status \
+  --sql-results .cache/rule_results_b100_gated \
   --output .cache/parity/b100 \
   --tolerance 0.5 \
   --openfdd-sha "$(git rev-parse --short HEAD)" \

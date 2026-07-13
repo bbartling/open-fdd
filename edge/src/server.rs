@@ -768,6 +768,11 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
                         .get("out_dir")
                         .and_then(|v| v.as_str())
                         .map(std::path::PathBuf::from)
+                        .or_else(|| {
+                            std::env::var("OPENFDD_RULE_RESULTS_DIR")
+                                .ok()
+                                .map(std::path::PathBuf::from)
+                        })
                         .unwrap_or_else(|| {
                             crate::historian::store::workspace_dir().join(".cache/rule_results")
                         });
@@ -1282,7 +1287,7 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
                 return json_response(&mut stream, drivers::bacnet::job_status_json(job_id));
             }
             if let Some(resp) =
-                handle_fdd_registry_dynamic(&mut stream, method.as_str(), &route_path)
+                handle_fdd_registry_dynamic(&mut stream, &principal, method.as_str(), &route_path)
             {
                 return resp;
             }
@@ -1407,6 +1412,7 @@ fn handle_json_api_dynamic(
 
 fn handle_fdd_registry_dynamic(
     stream: &mut TcpStream,
+    principal: &Principal,
     method: &str,
     path: &str,
 ) -> Option<std::io::Result<()>> {
@@ -1422,8 +1428,10 @@ fn handle_fdd_registry_dynamic(
                 .unwrap_or_else(|_| {
                     crate::historian::store::workspace_dir().join(".cache/rule_results")
                 });
-            Some(json_response(
+            Some(require_role(
                 stream,
+                principal,
+                &["integrator", "agent", "operator"],
                 fdd::registry_api::rule_result_response(&out_dir, rule_id),
             ))
         }
@@ -1451,11 +1459,15 @@ fn handle_fdd_registry_dynamic(
                 .split('&')
                 .find_map(|pair| {
                     let (k, v) = pair.split_once('=')?;
-                    (k == "max_points").then(|| v.parse::<usize>().ok()).flatten()
+                    (k == "max_points")
+                        .then(|| v.parse::<usize>().ok())
+                        .flatten()
                 })
                 .unwrap_or(4000);
-            Some(json_response(
+            Some(require_role(
                 stream,
+                principal,
+                &["integrator", "agent", "operator"],
                 fdd::registry_api::rule_series_response(
                     &parquet_root,
                     rule_id,

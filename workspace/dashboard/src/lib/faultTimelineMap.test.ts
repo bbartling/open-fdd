@@ -15,5 +15,6 @@ describe("mapSeriesToFaultTimelinePoints", () => {
       confirmed: 0,
       operational: 1,
     });
+    expect(out[1].operational).toBeNull();
   });
 });

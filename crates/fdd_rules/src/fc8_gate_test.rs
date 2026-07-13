@@ -38,20 +38,12 @@ mod tests {
         // Indices 0-4: fan OFF → must not confirm.
         // Indices 5-9: fan ON  → confirm after CONFIRM_ROWS=2.
         let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
-        writeln!(
-            f,
-            "timestamp_utc,sat_col,mat_col,oa_dpr,clg,fan_col"
-        )
-        .unwrap();
+        writeln!(f, "timestamp_utc,sat_col,mat_col,oa_dpr,clg,fan_col").unwrap();
         for i in 0..10 {
             let minute = i * 5;
             let fan = if i < 5 { 0.0 } else { 50.0 };
             // sat=60, mat=50, delta_sf=0.55 → |60-0.55-50|=9.45 > 1.626 → raw fault
-            writeln!(
-                f,
-                "2026-01-01T00:{minute:02}:00Z,60.0,50.0,50.0,0.0,{fan}"
-            )
-            .unwrap();
+            writeln!(f, "2026-01-01T00:{minute:02}:00Z,60.0,50.0,50.0,0.0,{fan}").unwrap();
         }
     }
 
@@ -105,7 +97,7 @@ mod tests {
         };
         let startup = startup_delay_rows(&rule, 300.0);
         assert_eq!(startup, 2);
-        let sql = inject_raw_fault_operational_gate(&substituted, &proof, startup);
+        let sql = inject_raw_fault_operational_gate(&substituted, &proof, startup, true).unwrap();
 
         let ungated = run_sql(&ctx, &substituted).await.unwrap();
         let gated = run_sql(&ctx, &sql).await.unwrap();

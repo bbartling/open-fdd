@@ -9,8 +9,8 @@ use fdd_sql::{register_parquet_tree, register_weather_if_present, run_sql};
 use serde_json::{json, Value};
 
 use crate::gate_sql::{
-    inject_raw_fault_operational_gate, operational_proof_expr, should_inject_operational_gate,
-    startup_delay_rows,
+    gate_injection_required, inject_raw_fault_operational_gate, operational_proof_expr,
+    should_inject_operational_gate, startup_delay_rows,
 };
 use crate::params::{read_poll_from_cache, rule_params, substitute_sql};
 use crate::registry::RuleRegistry;
@@ -18,7 +18,11 @@ use crate::runner::{derive_window_rows, project_optional_roles};
 use crate::tuning::{assert_sql_placeholders, effective_param_strings, load_tuning_profiles};
 
 /// Rewrite aggregate rule SQL into a bounded per-sample series for one equipment.
-pub fn rewrite_sql_for_equipment_series(sql: &str, equipment_id: &str, max_points: usize) -> Result<String> {
+pub fn rewrite_sql_for_equipment_series(
+    sql: &str,
+    equipment_id: &str,
+    max_points: usize,
+) -> Result<String> {
     if !equipment_id
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
@@ -99,8 +103,7 @@ pub async fn run_rule_equipment_series(
             .and_then(|s| s.parse::<f64>().ok())
             .or_else(|| rule.parameters.get("window_minutes").map(|p| p.default))
             .unwrap_or(60.0);
-        let (window_rows, window_rows_minus_one) =
-            derive_window_rows(window_minutes, poll_seconds);
+        let (window_rows, window_rows_minus_one) = derive_window_rows(window_minutes, poll_seconds);
         params.insert("WINDOW_ROWS".into(), window_rows.to_string());
         params.insert(
             "WINDOW_ROWS_MINUS_ONE".into(),
@@ -118,7 +121,9 @@ pub async fn run_rule_equipment_series(
             .unwrap_or("fan_running");
         if let Some(proof) = operational_proof_expr(&history_columns, predicate) {
             let rows = startup_delay_rows(rule, poll_seconds);
-            sql = inject_raw_fault_operational_gate(&sql, &proof, rows);
+            let required = gate_injection_required(rule);
+            sql = inject_raw_fault_operational_gate(&sql, &proof, rows, required)
+                .map_err(anyhow::Error::msg)?;
         }
     }
 
@@ -149,7 +154,10 @@ pub async fn run_rule_equipment_series(
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
-        let raw = row.get("raw_fault").and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))).unwrap_or(0);
+        let raw = row
+            .get("raw_fault")
+            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
+            .unwrap_or(0);
         let confirmed = row
             .get("confirmed")
             .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))

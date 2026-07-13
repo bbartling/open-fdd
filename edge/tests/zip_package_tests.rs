@@ -16,7 +16,7 @@ fn tight_caps() -> PackageCaps {
         max_uncompressed_bytes: 2 * 1024 * 1024,
         max_entries: 50,
         max_ratio: 100.0,
-        max_single_entry_bytes: 1 * 1024 * 1024,
+        max_single_entry_bytes: 1024 * 1024,
     }
 }
 

@@ -94,6 +94,7 @@ export default function RegistryBatchRunPanel() {
     setSelectedEquipmentId(null);
     setSeries(null);
     setSeriesError("");
+    setError("");
     setEquipBusy(true);
     try {
       const out = await apiFetch<{
@@ -197,7 +198,16 @@ export default function RegistryBatchRunPanel() {
                     key={t.rule_id}
                     className={selectedRuleId === t.rule_id ? "is-selected" : undefined}
                     style={{ cursor: "pointer" }}
+                    tabIndex={0}
+                    role="button"
+                    aria-pressed={selectedRuleId === t.rule_id}
                     onClick={() => void selectRule(t.rule_id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        void selectRule(t.rule_id);
+                      }
+                    }}
                   >
                     <td>
                       <code>{t.rule_id}</code>
@@ -240,7 +250,16 @@ export default function RegistryBatchRunPanel() {
                       key={r.equipment_id}
                       className={selectedEquipmentId === r.equipment_id ? "is-selected" : undefined}
                       style={{ cursor: "pointer" }}
+                      tabIndex={0}
+                      role="button"
+                      aria-pressed={selectedEquipmentId === r.equipment_id}
                       onClick={() => setSelectedEquipmentId(r.equipment_id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedEquipmentId(r.equipment_id);
+                        }
+                      }}
                     >
                       <td>
                         <code>{r.equipment_id}</code>

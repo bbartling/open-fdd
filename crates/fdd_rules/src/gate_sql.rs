@@ -11,6 +11,10 @@ use crate::registry::RuleSpec;
 /// SQL boolean/numeric expression that is > 0 when equipment is proven on.
 /// Uses only columns present in `history`. Returns `None` when no proof roles
 /// exist (Vibe19 ungated behavior).
+///
+/// For combined predicates (`fan_or_flow`, `equipment_energized`, `flow_proof`),
+/// fan + hydronic + zone-flow alternatives are OR'd (summed) so a valid pump
+/// proof is not dropped when a fan column exists but is null for that row.
 pub fn operational_proof_expr(columns: &HashSet<String>, predicate: &str) -> Option<String> {
     let pred = predicate.to_ascii_lowercase();
     let mut parts: Vec<String> = Vec::new();
@@ -27,10 +31,16 @@ pub fn operational_proof_expr(columns: &HashSet<String>, predicate: &str) -> Opt
         || pred.contains("flow_proof")
         || pred.contains("fan_or_flow")
         || pred.contains("equipment_energized");
-    let want_zone_flow = pred.contains("fan") || pred.contains("conditional") || pred.is_empty();
+    let want_zone_flow = pred.contains("fan")
+        || pred.contains("conditional")
+        || pred.contains("fan_or_flow")
+        || pred.contains("equipment_energized")
+        || pred.is_empty();
+    let combine_alternatives = pred.contains("fan_or_flow")
+        || pred.contains("equipment_energized")
+        || pred.contains("flow_proof");
 
     if want_fan {
-        // Prefer proof/status over command (Vibe19 resolve_fan_running order).
         if columns.contains("fan_status") {
             parts.push(
                 "(CASE WHEN history.fan_status IS NULL THEN 0 \
@@ -42,7 +52,7 @@ pub fn operational_proof_expr(columns: &HashSet<String>, predicate: &str) -> Opt
             parts.push(norm_cmd_on("history.fan_cmd"));
         }
     }
-    if parts.is_empty() && want_hydronic {
+    if want_hydronic && (combine_alternatives || parts.is_empty()) {
         let hydronic_order = [
             "pump_status",
             "chw_pump_status",
@@ -72,10 +82,14 @@ pub fn operational_proof_expr(columns: &HashSet<String>, predicate: &str) -> Opt
             } else {
                 parts.push(norm_cmd_on(&format!("history.{role}")));
             }
-            break; // first present role only
+            // Combined predicates OR every available proof; single-predicate picks first hit.
+            if !combine_alternatives {
+                break;
+            }
         }
     }
-    if parts.is_empty() && want_zone_flow && columns.contains("zone_flow") {
+    if want_zone_flow && columns.contains("zone_flow") && (combine_alternatives || parts.is_empty())
+    {
         parts.push(
             "(CASE WHEN history.zone_flow IS NULL THEN 0 WHEN history.zone_flow > 50.0 THEN 1 ELSE 0 END)"
                 .into(),
@@ -106,6 +120,15 @@ pub fn should_inject_operational_gate(rule: &RuleSpec) -> bool {
     mode == "RUN"
 }
 
+pub fn gate_injection_required(rule: &RuleSpec) -> bool {
+    should_inject_operational_gate(rule)
+        && rule
+            .operational_gate
+            .as_ref()
+            .map(|g| g.required)
+            .unwrap_or(true)
+}
+
 pub fn startup_delay_rows(rule: &RuleSpec, poll_seconds: f64) -> u32 {
     let delay = rule
         .operational_gate
@@ -119,20 +142,34 @@ pub fn startup_delay_rows(rule: &RuleSpec, poll_seconds: f64) -> u32 {
 }
 
 /// Insert `gated_operational` CTE and retarget the confirm streak from `base`.
+///
+/// Returns `Err` when injection is required but the SQL shape cannot be gated
+/// (missing `raw_fault` / `lagged` CTE), so callers do not silently run ungated.
 pub fn inject_raw_fault_operational_gate(
     sql: &str,
     proof_sum_expr: &str,
     startup_rows: u32,
-) -> String {
+    required: bool,
+) -> Result<String, String> {
     if sql.contains("gated_operational AS") {
-        return sql.to_string();
+        return Ok(sql.to_string());
     }
     if !sql.contains("raw_fault") {
-        return sql.to_string();
+        if required {
+            return Err(
+                "required RUN operational gate: rule SQL has no raw_fault column to gate".into(),
+            );
+        }
+        return Ok(sql.to_string());
     }
     let marker = "lagged AS (";
     let Some(pos) = sql.find(marker) else {
-        return sql.to_string();
+        if required {
+            return Err(
+                "required RUN operational gate: rule SQL missing `lagged AS (` confirm CTE".into(),
+            );
+        }
+        return Ok(sql.to_string());
     };
 
     let startup = startup_rows.max(1);
@@ -207,13 +244,12 @@ pub fn inject_raw_fault_operational_gate(
     out.push_str(&cte);
     out.push_str(&sql[pos..]);
 
-    // Retarget confirm streak input (first FROM base inside lagged CTE).
     let search_from = out.find(marker).map(|i| i + marker.len()).unwrap_or(0);
     if let Some(rel) = out[search_from..].find("FROM base") {
         let abs = search_from + rel;
         out.replace_range(abs..abs + "FROM base".len(), "FROM gated_operational");
     }
-    out
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -224,10 +260,27 @@ mod tests {
     #[test]
     fn injects_gate_before_lagged() {
         let sql = "WITH base AS (\n  SELECT equipment_id, timestamp_utc, 1 AS raw_fault FROM history\n),\nlagged AS (\n  SELECT * FROM base\n)\nSELECT 1;";
-        let out = inject_raw_fault_operational_gate(sql, "history.fan_cmd", 2);
+        let out = inject_raw_fault_operational_gate(sql, "history.fan_cmd", 2, true).unwrap();
         assert!(out.contains("gated_operational AS"));
         assert!(out.contains("FROM gated_operational"));
         assert!(out.contains("proof_streak >= 2"));
+    }
+
+    #[test]
+    fn required_inject_fails_without_lagged() {
+        let sql = "SELECT equipment_id, 1 AS raw_fault FROM history";
+        let err = inject_raw_fault_operational_gate(sql, "history.fan_cmd", 1, true).unwrap_err();
+        assert!(err.contains("lagged"));
+    }
+
+    #[test]
+    fn fan_or_flow_ors_hydronic_when_fan_present() {
+        let mut cols = HashSet::new();
+        cols.insert("fan_cmd".into());
+        cols.insert("pump_cmd".into());
+        let expr = operational_proof_expr(&cols, "fan_or_flow_proof").unwrap();
+        assert!(expr.contains("fan_cmd"));
+        assert!(expr.contains("pump_cmd"));
     }
 
     #[test]

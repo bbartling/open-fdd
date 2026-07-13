@@ -228,8 +228,16 @@ pub fn ingest_weather_tree(weather_root: &Path, out_dir: &Path) -> Result<usize>
     if root_hist.is_file() {
         if root_cols.is_file() {
             bundles.push((root_hist.clone(), root_cols));
-        } else if let Ok(synth) = synthesize_columns_csv(&root_hist, weather_root) {
-            bundles.push((root_hist, synth));
+        } else {
+            match synthesize_columns_csv(&root_hist, weather_root) {
+                Ok(synth) => bundles.push((root_hist, synth)),
+                Err(e) => {
+                    eprintln!(
+                        "warning: weather columns.csv synthesis failed for {}: {e:#}",
+                        root_hist.display()
+                    );
+                }
+            }
         }
     }
     for entry in std::fs::read_dir(weather_root)? {

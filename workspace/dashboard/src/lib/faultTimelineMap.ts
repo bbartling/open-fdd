@@ -10,6 +10,6 @@ export function mapSeriesToFaultTimelinePoints(
       timestamp: p.timestamp as string,
       raw: p.raw ?? null,
       confirmed: p.confirmed ?? null,
-      operational: p.operational,
+      operational: p.operational ?? null,
     }));
 }

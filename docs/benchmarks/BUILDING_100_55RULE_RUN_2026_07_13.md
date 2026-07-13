@@ -9,7 +9,7 @@ Generated: 2026-07-13 14:10 UTC (gate-injection re-run)
 - rules_succeeded (PASS+FAULT row aggregates): 35
 - rules_failed (ERROR): 0
 - rules_skipped (SKIPPED_MISSING_ROLES): 19
-- NOT_APPLICABLE (rule-level): 1 (HP-1)
+- NOT_APPLICABLE_EQUIPMENT_TYPE (rule-level aggregate): 1 (HP-1)
 - total_ms: 35530
 - poll_seconds: 300.0
 
@@ -96,7 +96,7 @@ Root causes still open for remaining mismatches:
 | CHW-2 | SKIPPED_MISSING_ROLES | 0 | 0 |
 | CHW-3 | SKIPPED_MISSING_ROLES | 0 | 0 |
 | CHW-4 | SKIPPED_MISSING_ROLES | 0 | 0 |
-| HP-1 | FAULT | 48 | 283 |
+| HP-1 | NOT_APPLICABLE_EQUIPMENT_TYPE | 48 | 283 |
 | WX-1 | FAULT | 48 | 296 |
 | WX-2 | SKIPPED_MISSING_ROLES | 0 | 0 |
 | TRIM-1 | SKIPPED_MISSING_ROLES | 0 | 0 |

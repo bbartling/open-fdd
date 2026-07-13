@@ -51,9 +51,24 @@ struct DigestRow {
 pub fn overlap_class(rule_id: &str) -> &'static str {
     match rule_id {
         // Proven historical BUILDING_100 SQL parity set
-        "FC1" | "FC2" | "FC3" | "FC8" | "FC9" | "FC10" | "FC11" | "FC12" | "FC13-SAT-HIGH"
-        | "ECON-1" | "ECON-2" | "ECON-4" | "VAV-1" | "OAT-METEO" | "FAN-RUNTIME-HOURS"
-        | "ZONE-COMFORT-PCT" | "AVG-ZONE-TEMP" | "FAULT-ELAPSED-HOURS" => "exact_direct_equivalent",
+        "FC1"
+        | "FC2"
+        | "FC3"
+        | "FC8"
+        | "FC9"
+        | "FC10"
+        | "FC11"
+        | "FC12"
+        | "FC13-SAT-HIGH"
+        | "ECON-1"
+        | "ECON-2"
+        | "ECON-4"
+        | "VAV-1"
+        | "OAT-METEO"
+        | "FAN-RUNTIME-HOURS"
+        | "ZONE-COMFORT-PCT"
+        | "AVG-ZONE-TEMP"
+        | "FAULT-ELAPSED-HOURS" => "exact_direct_equivalent",
         "PID-HUNT-1" => "openfdd_only",
         _ if rule_id.starts_with("SV-")
             || rule_id.starts_with("CHW-")
@@ -113,7 +128,11 @@ fn load_openfdd_results(dir: &Path) -> Result<Vec<DigestRow>> {
             .to_string();
         let text = std::fs::read_to_string(&path)?;
         let v: serde_json::Value = serde_json::from_str(&text)?;
-        let rows = v.get("rows").and_then(|r| r.as_array()).cloned().unwrap_or_default();
+        let rows = v
+            .get("rows")
+            .and_then(|r| r.as_array())
+            .cloned()
+            .unwrap_or_default();
         for row in rows {
             let status = row
                 .get("status")
@@ -207,7 +226,9 @@ pub fn run_parity(
             let sh = s.and_then(|r| {
                 // Do not compare fault hours for skips / N/A
                 let st = normalize_status(&r.status);
-                if st.starts_with("SKIPPED") || st == "NOT_APPLICABLE_EQUIPMENT_TYPE" || st == "ERROR"
+                if st.starts_with("SKIPPED")
+                    || st == "NOT_APPLICABLE_EQUIPMENT_TYPE"
+                    || st == "ERROR"
                 {
                     None
                 } else {
@@ -342,16 +363,16 @@ fn write_report_md(path: &Path, summary: &ParitySummary, cells: &[ParityCell]) -
         "- numeric within/mismatch: {} / {}\n",
         summary.numeric_within_tolerance, summary.numeric_mismatches
     ));
-    md.push_str(&format!("- max_abs_delta: {:.4}\n\n", summary.max_abs_delta));
+    md.push_str(&format!(
+        "- max_abs_delta: {:.4}\n\n",
+        summary.max_abs_delta
+    ));
     md.push_str("## Comparable rules\n\n");
     for r in &summary.comparable_rules {
         md.push_str(&format!("- `{}` ({})\n", r, overlap_class(r)));
     }
     md.push_str("\n## Worst deltas\n\n");
-    let mut worst: Vec<_> = cells
-        .iter()
-        .filter(|c| c.delta.is_some())
-        .collect();
+    let mut worst: Vec<_> = cells.iter().filter(|c| c.delta.is_some()).collect();
     worst.sort_by(|a, b| {
         b.delta
             .unwrap_or(0.0)
@@ -407,16 +428,8 @@ mod tests {
             "equipment_id,equipment_type,fault_hours,fault_pct,fault_sample_count,gate_applied,gate_kind,gate_source,rule_id,sample_count,status"
         )
         .unwrap();
-        writeln!(
-            f,
-            "AHU_1,AHU,1.0,0,0,False,always,disabled,FC8,10,FAULT"
-        )
-        .unwrap();
-        writeln!(
-            f,
-            "AHU_1,AHU,0.0,0,0,False,always,disabled,FC3,10,PASS"
-        )
-        .unwrap();
+        writeln!(f, "AHU_1,AHU,1.0,0,0,False,always,disabled,FC8,10,FAULT").unwrap();
+        writeln!(f, "AHU_1,AHU,0.0,0,0,False,always,disabled,FC3,10,PASS").unwrap();
         std::fs::write(
             results.join("FC8.json"),
             r#"{"status":"FAULT","rows":[{"equipment_id":"AHU_1","status":"FAULT","fault_hours":1.2}]}"#,

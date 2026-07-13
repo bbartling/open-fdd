@@ -44,19 +44,19 @@ impl RuleStatus {
         if statuses.is_empty() {
             return Self::NotApplicableEquipmentType;
         }
-        if statuses.iter().any(|s| *s == Self::Error) {
+        if statuses.contains(&Self::Error) {
             return Self::Error;
         }
-        if statuses.iter().any(|s| *s == Self::Fault) {
+        if statuses.contains(&Self::Fault) {
             return Self::Fault;
         }
-        if statuses.iter().any(|s| *s == Self::Pass) {
+        if statuses.contains(&Self::Pass) {
             return Self::Pass;
         }
-        if statuses.iter().any(|s| *s == Self::SkippedEquipmentOff) {
+        if statuses.contains(&Self::SkippedEquipmentOff) {
             return Self::SkippedEquipmentOff;
         }
-        if statuses.iter().any(|s| *s == Self::SkippedMissingRoles) {
+        if statuses.contains(&Self::SkippedMissingRoles) {
             return Self::SkippedMissingRoles;
         }
         Self::NotApplicableEquipmentType

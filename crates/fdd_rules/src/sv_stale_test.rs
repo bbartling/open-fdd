@@ -14,7 +14,11 @@ mod tests {
     use crate::runner::{derive_window_rows, project_optional_roles};
 
     fn write_fixture(building_root: &Path) {
-        std::fs::write(building_root.join("manifest.json"), r#"{"grid_minutes": 5}"#).unwrap();
+        std::fs::write(
+            building_root.join("manifest.json"),
+            r#"{"grid_minutes": 5}"#,
+        )
+        .unwrap();
         let eq = building_root.join("CHILLER_1");
         std::fs::create_dir_all(&eq).unwrap();
         std::fs::write(

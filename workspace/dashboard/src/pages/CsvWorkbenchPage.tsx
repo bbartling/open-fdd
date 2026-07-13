@@ -234,6 +234,7 @@ export default function CsvWorkbenchPage() {
         onDrop={(e) => {
           e.preventDefault();
           setDragOver(false);
+          if (busy) return;
           void ingestFiles(e.dataTransfer.files);
         }}
       >
@@ -254,7 +255,7 @@ export default function CsvWorkbenchPage() {
             accept=".csv,.zip,text/csv,application/zip"
             multiple
             hidden
-            disabled={busy === "upload" || busy === "zip"}
+            disabled={!!busy}
             onChange={(e) => {
               if (e.target.files?.length) void ingestFiles(e.target.files);
               e.target.value = "";
