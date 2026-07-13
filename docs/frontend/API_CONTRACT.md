@@ -26,7 +26,7 @@ Full edge API surface is defined in edge route modules; extend this doc as FDD e
 | --- | --- | --- |
 | GET | `/api/fdd/rules` | Registry from `sql_rules/registry.yaml` |
 | GET | `/api/fdd/rules/{id}/params` | Tuning schema (`control` field per parameter) |
-| POST | `/api/fdd/run` | Execute rules against Parquet cache |
+| POST | `/api/fdd/run` | Ad-hoc SQL (`mode` omitted/`sql`) or registry batch (`{"mode":"registry"}`) against Parquet cache |
 | GET | `/api/fdd/cache/status` | Ingest / Parquet sidecar status |
 | GET | `/api/fdd/roles` | Column role mappings (legacy planned; prefer `/api/fdd/mapping`) |
 

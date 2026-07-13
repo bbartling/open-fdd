@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import RuleRegistryPanel from "../components/sqlFdd/RuleRegistryPanel";
 import RuleTuningPanel from "../components/sqlFdd/RuleTuningPanel";
+import RegistryBatchRunPanel from "../components/sqlFdd/RegistryBatchRunPanel";
 import SqlFddQueryEditor from "../components/sqlFdd/SqlFddQueryEditor";
 import SqlFddResultsPanel from "../components/sqlFdd/SqlFddResultsPanel";
 import {
@@ -276,6 +277,7 @@ export default function SqlFddRulesPage() {
           onExportPdf={() => setActionStatus("PDF export — use Reports tab after saving a rule.")}
           actionStatus={actionStatus}
         />
+        <RegistryBatchRunPanel />
       </div>
       </div>
     </div>

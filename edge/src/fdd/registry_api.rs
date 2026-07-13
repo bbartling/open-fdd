@@ -187,6 +187,51 @@ pub fn cache_status_response(parquet_root: &Path) -> Value {
     out
 }
 
+/// Batch-execute every production registry rule against a Parquet cache.
+///
+/// Per-rule failures are isolated (`ERROR` / `SKIPPED_*` statuses). Callers must
+/// supply a readable parquet root (typically `OPENFDD_PARQUET_CACHE`).
+pub fn run_registry_batch_response(parquet_root: &Path, out_dir: &Path) -> Value {
+    let rules_dir = sql_rules_dir();
+    let registry = match load_registry(&rules_dir) {
+        Ok(r) => r,
+        Err(e) => {
+            return json!({
+                "ok": false,
+                "error": format!("load registry from {}: {e}", rules_dir.display()),
+            });
+        }
+    };
+    if !parquet_root.exists() {
+        return json!({
+            "ok": false,
+            "error": format!("parquet root missing: {}", parquet_root.display()),
+            "hint": "Ingest a dataset first or set OPENFDD_PARQUET_CACHE",
+        });
+    }
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => return json!({"ok": false, "error": format!("tokio runtime: {e}")}),
+    };
+    match rt.block_on(fdd_rules::run_all_rules(parquet_root, &registry, out_dir)) {
+        Ok(report) => json!({
+            "ok": true,
+            "engine": "sql_datafusion",
+            "rules_dir": rules_dir.display().to_string(),
+            "parquet_root": parquet_root.display().to_string(),
+            "out_dir": out_dir.display().to_string(),
+            "rules_run": report.rules_run,
+            "rules_succeeded": report.rules_succeeded,
+            "rules_failed": report.rules_failed,
+            "rules_skipped": report.rules_skipped,
+            "poll_seconds": report.poll_seconds,
+            "total_ms": report.total_ms,
+            "timings": report.timings,
+        }),
+        Err(e) => json!({"ok": false, "error": e.to_string()}),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -452,7 +452,9 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             &principal,
             &["integrator", "agent", "operator"],
-            model::csv_workbench::get_versioned_mapping(query_param(&path, "dataset_id").as_deref()),
+            model::csv_workbench::get_versioned_mapping(
+                query_param(&path, "dataset_id").as_deref(),
+            ),
         ),
         ("PUT", "/api/fdd/mapping") => require_role(
             &mut stream,
@@ -718,12 +720,39 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             model::sparql::execute(&parse_json_body_or_empty(&body)),
         ),
         ("POST", "/api/fdd/run") => match parse_json_body(&body) {
-            Ok(payload) => require_role(
-                &mut stream,
-                &principal,
-                &["integrator", "agent"],
-                fdd::datafusion_sql::run_fdd_response(&payload),
-            ),
+            Ok(payload) => {
+                let mode = payload
+                    .get("mode")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("sql");
+                if mode == "registry" {
+                    let parquet_root = std::env::var("OPENFDD_PARQUET_CACHE")
+                        .map(std::path::PathBuf::from)
+                        .unwrap_or_else(|_| {
+                            crate::historian::store::workspace_dir().join(".cache/parquet")
+                        });
+                    let out_dir = payload
+                        .get("out_dir")
+                        .and_then(|v| v.as_str())
+                        .map(std::path::PathBuf::from)
+                        .unwrap_or_else(|| {
+                            crate::historian::store::workspace_dir().join(".cache/rule_results")
+                        });
+                    require_role(
+                        &mut stream,
+                        &principal,
+                        &["integrator", "agent"],
+                        fdd::registry_api::run_registry_batch_response(&parquet_root, &out_dir),
+                    )
+                } else {
+                    require_role(
+                        &mut stream,
+                        &principal,
+                        &["integrator", "agent"],
+                        fdd::datafusion_sql::run_fdd_response(&payload),
+                    )
+                }
+            }
             Err(err) => json_response(&mut stream, json!({"ok": false, "error": err})),
         },
         ("GET", "/api/fdd/rules") => {
