@@ -1592,7 +1592,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
- "walkdir",
 ]
 
 [[package]]
