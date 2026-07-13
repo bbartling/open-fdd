@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "dataset_id": "tiny-fixture",
+  "timezone": "UTC",
+  "timestamp_column": "timestamp",
+  "equipment": "equip:ahu-1",
+  "column_map": {
+    "oa_t": "oa_t",
+    "sat": "sat"
+  }
+}

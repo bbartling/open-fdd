@@ -14,6 +14,12 @@ import {
   fetchAgentSessionFusionPreview,
   saveAgentSessionToArrow,
 } from "../lib/csvAgentSession";
+import {
+  inspectZipPackage,
+  planZipPackage,
+  summarizeZipManifest,
+  type ZipPackageManifest,
+} from "../lib/csvZipPackage";
 
 type UploadCard = CsvPreviewFileProfile & { sessionId?: string };
 
@@ -25,6 +31,7 @@ export default function CsvWorkbenchPage() {
   const [sessionId, setSessionId] = useState("");
   const [uploadCards, setUploadCards] = useState<UploadCard[]>([]);
   const [showMapping, setShowMapping] = useState(false);
+  const [zipManifest, setZipManifest] = useState<ZipPackageManifest | null>(null);
 
   const availableColumns = useMemo(() => {
     const cols = new Set<string>();
@@ -36,7 +43,7 @@ export default function CsvWorkbenchPage() {
     return Array.from(cols);
   }, [uploadCards]);
 
-  const ingestFiles = useCallback(
+  const ingestCsvFiles = useCallback(
     async (files: FileList | File[]) => {
       if (!hasToken()) {
         setError("Sign in to upload CSV files.");
@@ -44,7 +51,7 @@ export default function CsvWorkbenchPage() {
       }
       const list = Array.from(files).filter((f) => f.name.toLowerCase().endsWith(".csv"));
       if (!list.length) {
-        setError("Choose one or more .csv files.");
+        setError("Choose one or more .csv files (or a .zip package).");
         return;
       }
       setError("");
@@ -69,6 +76,91 @@ export default function CsvWorkbenchPage() {
     },
     [sessionId],
   );
+
+  const ingestZipFile = useCallback(async (file: File) => {
+    if (!hasToken()) {
+      setError("Sign in to upload ZIP packages.");
+      return;
+    }
+    setError("");
+    setBusy("zip");
+    try {
+      const manifest = await inspectZipPackage(file);
+      if (!manifest.ok && manifest.error) throw new Error(manifest.error);
+      setZipManifest(manifest);
+      setStatus(
+        `ZIP inspected · ${summarizeZipManifest(manifest)}${
+          manifest.package_id ? ` · package ${manifest.package_id}` : ""
+        }`,
+      );
+    } catch (e) {
+      setError(formatApiError(e));
+      setZipManifest(null);
+    } finally {
+      setBusy("");
+    }
+  }, []);
+
+  const ingestFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const list = Array.from(files);
+      const zips = list.filter((f) => f.name.toLowerCase().endsWith(".zip"));
+      const csvs = list.filter((f) => f.name.toLowerCase().endsWith(".csv"));
+      if (zips.length > 1) {
+        setError("Upload one ZIP package at a time.");
+        return;
+      }
+      if (zips.length === 1) {
+        if (csvs.length) {
+          setError("Upload either a ZIP package or CSV files, not both at once.");
+          return;
+        }
+        await ingestZipFile(zips[0]!);
+        return;
+      }
+      await ingestCsvFiles(list);
+    },
+    [ingestCsvFiles, ingestZipFile],
+  );
+
+  async function proceedZipToMapping() {
+    if (!zipManifest?.package_id) {
+      setError("Inspect a ZIP package first.");
+      return;
+    }
+    if (!hasToken()) {
+      setError("Sign in to plan a ZIP package.");
+      return;
+    }
+    setBusy("plan");
+    setError("");
+    try {
+      const planned = await planZipPackage(zipManifest.package_id);
+      if (!planned.ok && planned.error) throw new Error(planned.error);
+      const sid = planned.session_id ?? "";
+      if (sid) setSessionId(sid);
+      const cards: UploadCard[] = (planned.files ?? []).map((f) => ({
+        filename: f.filename ?? f.package_path ?? "file.csv",
+        profile: f.profile,
+        error: f.error,
+        sessionId: sid,
+      }));
+      setUploadCards(cards);
+      setShowMapping(true);
+      const mapNote = planned.mapping_applied
+        ? "package mapping applied"
+        : planned.mapping_errors?.length
+          ? `mapping: ${planned.mapping_errors[0]}`
+          : "assign roles in Mapping";
+      setStatus(
+        `Package staged · ${cards.length} CSV(s) · ${mapNote}${sid ? ` · session ${sid}` : ""}`,
+      );
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setBusy("");
+    }
+  }
 
   const openSession = useCallback(async (id: string) => {
     if (!hasToken()) {
@@ -109,11 +201,13 @@ export default function CsvWorkbenchPage() {
     }
   }
 
+  const equipKeys = zipManifest?.equipment ? Object.keys(zipManifest.equipment) : [];
+
   return (
     <div className="page page-wide csv-workbench-page">
       <PageHeader
         title="CSV import"
-        subtitle="Drop building CSVs for server-side preview, preflight, and historian import — same pipeline as MCP agents."
+        subtitle="Drop building CSVs or an openfdd_package_v1 ZIP for safe inspect, mapping, and historian import."
       />
 
       <div className="toolbar toolbar-spaced csv-workbench-steps">
@@ -143,10 +237,12 @@ export default function CsvWorkbenchPage() {
           void ingestFiles(e.dataTransfer.files);
         }}
       >
-        <p className="csv-drop-title">Drop CSV files here</p>
-        <p className="muted">Multiple files append to one import session · long Niagara exports may need agent pivot before preflight pass</p>
+        <p className="csv-drop-title">Drop CSV or ZIP package here</p>
+        <p className="muted">
+          Multiple CSVs append to one session · ZIP is inspected safely (no traversal / bomb extracts)
+        </p>
         <label className="primary-btn csv-drop-btn">
-          {busy === "upload" ? (
+          {busy === "upload" || busy === "zip" ? (
             <>
               <Spinner inline /> Uploading…
             </>
@@ -155,10 +251,10 @@ export default function CsvWorkbenchPage() {
           )}
           <input
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.zip,text/csv,application/zip"
             multiple
             hidden
-            disabled={busy === "upload"}
+            disabled={busy === "upload" || busy === "zip"}
             onChange={(e) => {
               if (e.target.files?.length) void ingestFiles(e.target.files);
               e.target.value = "";
@@ -167,20 +263,84 @@ export default function CsvWorkbenchPage() {
         </label>
       </div>
 
+      {zipManifest ? (
+        <section className="panel csv-zip-manifest">
+          <h3 className="panel-title">Package manifest</h3>
+          <p className="muted">
+            {zipManifest.package_id ? (
+              <>
+                Package <code>{zipManifest.package_id}</code>
+                {zipManifest.filename ? ` · ${zipManifest.filename}` : ""}
+                {typeof zipManifest.zip_bytes === "number"
+                  ? ` · ${(zipManifest.zip_bytes / 1024).toFixed(1)} KB`
+                  : ""}
+              </>
+            ) : (
+              "Inspected package"
+            )}
+          </p>
+          <ul className="csv-zip-manifest-list">
+            <li>
+              <strong>{zipManifest.csv_files?.length ?? 0}</strong> CSV file(s)
+              {zipManifest.weather_csvs?.length
+                ? ` · ${zipManifest.weather_csvs.length} weather`
+                : ""}
+            </li>
+            <li>
+              <strong>{equipKeys.length}</strong> equipment folder(s)
+              {equipKeys.length ? `: ${equipKeys.slice(0, 8).join(", ")}${equipKeys.length > 8 ? "…" : ""}` : ""}
+            </li>
+            <li>
+              Mapping:{" "}
+              {zipManifest.mapping_status?.valid
+                ? "valid Phase-1 column_map.json"
+                : zipManifest.mapping_status?.present
+                  ? (zipManifest.mapping_status.errors?.[0] ?? "present — needs review")
+                  : "missing — assign roles after staging"}
+            </li>
+          </ul>
+          {zipManifest.csv_files && zipManifest.csv_files.length > 0 ? (
+            <details className="csv-zip-file-details">
+              <summary>CSV paths ({zipManifest.csv_files.length})</summary>
+              <ul className="csv-upload-results">
+                {zipManifest.csv_files.map((p) => (
+                  <li key={p} className="csv-upload-ok">
+                    <code>{p}</code>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+          <div className="toolbar toolbar-spaced" style={{ marginTop: "0.75rem" }}>
+            <button
+              type="button"
+              className="primary-btn"
+              disabled={!!busy || !zipManifest.package_id}
+              onClick={() => void proceedZipToMapping()}
+            >
+              {busy === "plan" ? "Staging…" : "Proceed to mapping"}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       {uploadCards.length > 0 ? (
         <section className="panel">
           <h3 className="panel-title">Parse results</h3>
           <ul className="csv-upload-results">
             {uploadCards.map((card, i) => (
               <li key={`${card.filename}-${i}`} className={card.error ? "csv-upload-reject" : "csv-upload-ok"}>
-                <strong>{card.error ? "✗" : "✓"} {card.filename}</strong>
+                <strong>
+                  {card.error ? "✗" : "✓"} {card.filename}
+                </strong>
                 {card.error ? (
                   <span className="muted"> — {card.error}</span>
                 ) : (
                   <span className="muted">
                     {" "}
                     — {card.profile?.row_count?.toLocaleString() ?? "?"} rows
-                    {card.profile?.headers?.includes("ts") || card.profile?.headers?.includes("timestamp")
+                    {card.profile?.headers?.includes("ts") ||
+                    card.profile?.headers?.includes("timestamp")
                       ? " · timestamp detected"
                       : " · no timestamp column"}
                   </span>
@@ -199,8 +359,15 @@ export default function CsvWorkbenchPage() {
         <div className="toolbar toolbar-spaced">
           {sessionId ? (
             <>
-              <span className="muted">Active session: <code>{sessionId}</code></span>
-              <button type="button" className="secondary-btn" disabled={!!busy} onClick={() => void saveToArrow()}>
+              <span className="muted">
+                Active session: <code>{sessionId}</code>
+              </span>
+              <button
+                type="button"
+                className="secondary-btn"
+                disabled={!!busy}
+                onClick={() => void saveToArrow()}
+              >
                 {busy === "arrow" ? "Saving…" : "Save session to Arrow"}
               </button>
             </>

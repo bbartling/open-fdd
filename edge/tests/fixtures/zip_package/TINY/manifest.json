@@ -1,0 +1,7 @@
+{
+  "schema_version": "openfdd_package_v1",
+  "building_id": "TINY",
+  "grid_minutes": 5,
+  "timezone": "UTC",
+  "notes": "Committed fixture for ZIP package parity tests — not Building 100 data"
+}

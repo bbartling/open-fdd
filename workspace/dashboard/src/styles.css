@@ -3698,6 +3698,20 @@ button.linkish {
   cursor: pointer;
 }
 
+.csv-zip-manifest-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.csv-zip-file-details {
+  margin-top: 0.75rem;
+}
+
+.csv-zip-file-details summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
 .csv-workbench-steps {
   margin-bottom: 1rem;
 }

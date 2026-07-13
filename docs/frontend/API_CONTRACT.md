@@ -54,6 +54,20 @@ Document shape:
 
 Validation: required meta fields; non-empty roles; **no duplicate roles**. UI: `/csv-workbench` → Open mapping.
 
+## ZIP package import (Phase 1 / #481)
+
+Safe `openfdd_package_v1` ZIP inspect/extract under `{workspace}/data/csv_workbench/packages/{package_id}/`. Rejects traversal, absolute paths, symlinks, unsupported types, duplicate/case-colliding paths, excessive entry count, compressed/uncompressed size, and compression-ratio bombs. Caps: `OPENFDD_MAX_ZIP_MB`, `OPENFDD_MAX_UNCOMPRESSED_MB`, `OPENFDD_MAX_ENTRIES` (defaults 500 / 500 / 2000).
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/api/csv/import/zip/upload` | Store ZIP (`multipart` or JSON `{ filename, content_base64 }`) → `{ package_id }` |
+| POST | `/api/csv/import/zip/inspect` | Upload+inspect **or** `{ package_id }` → package manifest (CSV list, equipment folders, weather, mapping status) |
+| POST | `/api/csv/import/zip/plan` | `{ package_id }` → stage CSVs into a CSV import session, apply Phase-1 `column_map.json` when valid, draft UT3 plan |
+
+Workflow: ZIP upload → inspect (manifest) → plan (session) → `/api/fdd/mapping` → preflight/execute.
+
+Fixture (tests only): `edge/tests/fixtures/zip_package/tiny_package.zip` — do **not** commit Building 100 data.
+
 See `docs/migration/vibe19/API_CONTRACT.md` for parameter schema (`control`, not `frontend_control`).
 
 ## Rules for UI

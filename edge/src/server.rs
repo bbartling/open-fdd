@@ -27,7 +27,10 @@ const CSV_READ_TIMEOUT_SECS: u64 = 600;
 
 fn max_body_bytes_for_path(path: &str) -> usize {
     let route = path.split('?').next().unwrap_or(path);
-    if route == "/api/csv/import/preview" {
+    if route == "/api/csv/import/preview"
+        || route == "/api/csv/import/zip/upload"
+        || route == "/api/csv/import/zip/inspect"
+    {
         env::var("OPENFDD_MAX_CSV_UPLOAD_BYTES")
             .ok()
             .and_then(|s| s.parse().ok())
@@ -528,6 +531,36 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &principal,
             &["integrator", "agent"],
             csv_ingest::execute_handler(&parse_json_body_or_empty(&body)),
+        ),
+        ("POST", "/api/csv/import/zip/upload") => {
+            let ct = header_value(&headers, "content-type");
+            let out = if ct.contains("application/json") {
+                csv_ingest::zip_package::upload_json_handler(&parse_json_body_or_empty(&body))
+            } else {
+                csv_ingest::zip_package::upload_handler(&ct, body.as_bytes())
+            };
+            require_role(
+                &mut stream,
+                &principal,
+                &["integrator", "agent", "operator"],
+                out,
+            )
+        }
+        ("POST", "/api/csv/import/zip/inspect") => {
+            let ct = header_value(&headers, "content-type");
+            let out = csv_ingest::zip_package::inspect_handler(&ct, body.as_bytes());
+            require_role(
+                &mut stream,
+                &principal,
+                &["integrator", "agent", "operator"],
+                out,
+            )
+        }
+        ("POST", "/api/csv/import/zip/plan") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            csv_ingest::zip_package::plan_handler(&parse_json_body_or_empty(&body)),
         ),
         ("GET", "/api/datasets") => require_role(
             &mut stream,
@@ -2188,6 +2221,9 @@ fn agent_tools() -> Value {
             {"name":"csv.import.plan","method":"POST","path":"/api/csv/import/plan","requires":"integrator|agent"},
             {"name":"csv.import.preflight","method":"POST","path":"/api/csv/import/preflight","requires":"integrator|agent"},
             {"name":"csv.import.execute","method":"POST","path":"/api/csv/import/execute","requires":"integrator|agent"},
+            {"name":"csv.import.zip.upload","method":"POST","path":"/api/csv/import/zip/upload","requires":"integrator|agent"},
+            {"name":"csv.import.zip.inspect","method":"POST","path":"/api/csv/import/zip/inspect","requires":"integrator|agent"},
+            {"name":"csv.import.zip.plan","method":"POST","path":"/api/csv/import/zip/plan","requires":"integrator|agent"},
             {"name":"ingest.contract","method":"GET","path":"/api/ingest/contract","public":true},
             {"name":"csv.workbench.quality","method":"POST","path":"/api/csv-workbench/quality","requires":"integrator|agent"},
             {"name":"fdd.mapping.get","method":"GET","path":"/api/fdd/mapping","requires":"JWT"},

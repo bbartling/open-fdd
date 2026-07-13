@@ -5,7 +5,8 @@ pub mod parse;
 pub mod plan;
 pub mod session;
 pub mod timestamp;
-mod upload;
+pub mod upload;
+pub mod zip_package;
 
 pub use dataset::{delete_dataset, list_datasets, preview_dataset, save_dataset};
 
