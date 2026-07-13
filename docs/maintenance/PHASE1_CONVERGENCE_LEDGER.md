@@ -9,7 +9,7 @@
 | Item | Value |
 | --- | --- |
 | `origin/master` SHA | `defba063` (Merge PR #491) |
-| PR #493 head SHA | `4b203036`+ (mapping + pending B100 SQL fixes) |
+| PR #493 head SHA | `66419e26`+ (batch run + FaultTimeline; rustfmt follow-up) |
 | Open PRs | **#493** only |
 | Open issues | **#481**, **#482**, **#483** |
 | Remote branches | `master`, `docs/pid-hunt-1-and-operational-gates` |
