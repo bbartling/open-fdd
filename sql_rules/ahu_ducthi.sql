@@ -1,4 +1,5 @@
 -- ahu_ducthi.sql — AHU-DUCTHI duct static high + confirm
+-- Runtime placeholders POLL_SECONDS / CONFIRM_ROWS are injected by fdd_rules runner (not registry params).
 WITH h AS (
   SELECT * FROM history
 ),

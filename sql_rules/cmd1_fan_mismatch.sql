@@ -1,18 +1,30 @@
 -- cmd1_fan_mismatch.sql — CMD-1 fan command vs status mismatch + confirm
 WITH h AS (
-  SELECT * FROM history
+  SELECT
+    *,
+    CASE
+      WHEN fan_cmd IS NULL THEN NULL
+      WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0
+      ELSE fan_cmd
+    END AS fan_cmd_norm,
+    CASE
+      WHEN fan_status IS NULL THEN NULL
+      WHEN fan_status = TRUE OR fan_status = 1 OR fan_status = 1.0 THEN TRUE
+      WHEN TRIM(CAST(fan_status AS VARCHAR)) IN ('1', 'true', 'TRUE', 'on', 'ON', 'yes', 'YES') THEN TRUE
+      ELSE FALSE
+    END AS fan_status_on
+  FROM history
 ),
 base AS (
   SELECT
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN fan_cmd IS NOT NULL AND CASE WHEN fan_status IS NULL THEN NULL WHEN fan_status IN (1, TRUE, 'true', 'TRUE', 'on', 'ON') THEN TRUE ELSE FALSE END IS NOT NULL
-        AND ((COALESCE(CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END, 0.0) >= 0.05) <> (CASE WHEN fan_status IS NULL THEN NULL WHEN fan_status IN (1, TRUE, 'true', 'TRUE', 'on', 'ON') THEN TRUE ELSE FALSE END = TRUE))
+      WHEN fan_cmd_norm IS NOT NULL AND fan_status_on IS NOT NULL
+        AND ((fan_cmd_norm >= 0.05) <> fan_status_on)
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),
-
 lagged AS (
   SELECT
     *,

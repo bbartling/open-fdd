@@ -35,7 +35,8 @@ w AS (
     MAX(hw_return_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{WINDOW_ROWS_MINUS_ONE}} PRECEDING AND CURRENT ROW) AS hw_return_t_max,
     MIN(hw_return_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{WINDOW_ROWS_MINUS_ONE}} PRECEDING AND CURRENT ROW) AS hw_return_t_min,
     MAX(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{WINDOW_ROWS_MINUS_ONE}} PRECEDING AND CURRENT ROW) AS oa_h_max,
-    MIN(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{WINDOW_ROWS_MINUS_ONE}} PRECEDING AND CURRENT ROW) AS oa_h_min
+    MIN(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{WINDOW_ROWS_MINUS_ONE}} PRECEDING AND CURRENT ROW) AS oa_h_min,
+    COUNT(*) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{WINDOW_ROWS_MINUS_ONE}} PRECEDING AND CURRENT ROW) AS window_samples
   FROM h
 ),
 base AS (
@@ -43,7 +44,7 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN
+      WHEN window_samples >= {{MINIMUM_SAMPLES}} AND (
         (oa_t IS NOT NULL AND (oa_t_max - oa_t_min) <= {{FLATLINE_TOL}})
         OR (rat IS NOT NULL AND (rat_max - rat_min) <= {{FLATLINE_TOL}})
         OR (mat IS NOT NULL AND (mat_max - mat_min) <= {{FLATLINE_TOL}})
@@ -54,7 +55,7 @@ base AS (
         OR (hw_supply_t IS NOT NULL AND (hw_supply_t_max - hw_supply_t_min) <= {{FLATLINE_TOL}})
         OR (hw_return_t IS NOT NULL AND (hw_return_t_max - hw_return_t_min) <= {{FLATLINE_TOL}})
         OR (oa_h IS NOT NULL AND (oa_h_max - oa_h_min) <= {{FLATLINE_TOL}})
-      THEN 1 ELSE 0 END AS INT) AS raw_fault
+      ) THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM w
 ),
 

@@ -1,6 +1,14 @@
 -- oa1_low_oa_frac.sql — OA-1 low estimated outdoor air fraction + confirm
 WITH h AS (
-  SELECT * FROM history
+  SELECT
+    *,
+    CASE
+      WHEN fan_status IS NULL THEN NULL
+      WHEN fan_status = TRUE OR fan_status = 1 OR fan_status = 1.0 THEN TRUE
+      WHEN TRIM(CAST(fan_status AS VARCHAR)) IN ('1', 'true', 'TRUE', 'on', 'ON', 'yes', 'YES') THEN TRUE
+      ELSE FALSE
+    END AS fan_status_on
+  FROM history
 ),
 base AS (
   SELECT
@@ -8,13 +16,12 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN oa_t IS NOT NULL AND rat IS NOT NULL AND mat IS NOT NULL
-        AND CASE WHEN fan_status IS NULL THEN NULL WHEN fan_status IN (1, TRUE, 'true', 'TRUE', 'on', 'ON') THEN TRUE ELSE FALSE END = TRUE
+        AND fan_status_on = TRUE
         AND ABS(rat - oa_t) >= 0.5
         AND ((mat - rat) / NULLIF(oa_t - rat, 0)) < {{MIN_OA_FRAC}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),
-
 lagged AS (
   SELECT
     *,

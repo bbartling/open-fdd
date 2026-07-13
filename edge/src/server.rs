@@ -714,6 +714,20 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             ),
             Err(err) => json_response(&mut stream, json!({"ok": false, "error": err})),
         },
+        ("GET", "/api/fdd/rules") => {
+            json_response(&mut stream, fdd::registry_api::list_rules_response())
+        }
+        ("GET", "/api/fdd/cache/status") => {
+            let parquet_root = std::env::var("OPENFDD_PARQUET_CACHE")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| {
+                    crate::historian::store::workspace_dir().join(".cache/parquet")
+                });
+            json_response(
+                &mut stream,
+                fdd::registry_api::cache_status_response(&parquet_root),
+            )
+        }
         ("GET", "/api/rules") => {
             json_response(&mut stream, fdd::datafusion_sql::list_rules_response())
         }
@@ -1182,6 +1196,11 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
                 let job_id = route_path.trim_start_matches("/api/bacnet/jobs/");
                 return json_response(&mut stream, drivers::bacnet::job_status_json(job_id));
             }
+            if let Some(resp) =
+                handle_fdd_registry_dynamic(&mut stream, method.as_str(), &route_path)
+            {
+                return resp;
+            }
             if let Some(resp) = handle_fdd_wires_dynamic(
                 &mut stream,
                 &principal,
@@ -1296,6 +1315,21 @@ fn handle_json_api_dynamic(
             principal,
             &["integrator", "agent"],
             drivers::json_api::delete_endpoint(point_id),
+        )),
+        _ => None,
+    }
+}
+
+fn handle_fdd_registry_dynamic(
+    stream: &mut TcpStream,
+    method: &str,
+    path: &str,
+) -> Option<std::io::Result<()>> {
+    let parts = path_parts(path);
+    match (method, parts.as_slice()) {
+        ("GET", ["api", "fdd", "rules", rule_id, "params"]) => Some(json_response(
+            stream,
+            fdd::registry_api::rule_params_response(rule_id),
         )),
         _ => None,
     }

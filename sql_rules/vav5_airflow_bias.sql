@@ -7,8 +7,9 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN zone_flow IS NOT NULL AND COALESCE(CASE WHEN damper_pct IS NULL THEN NULL WHEN damper_pct > 1.0 THEN damper_pct / 100.0 ELSE damper_pct END, 0.0) IS NOT NULL AND zone_flow > {{FLOW_HI}}
-        AND zone_flow > {{FLOW_ON_MIN}} AND COALESCE(CASE WHEN damper_pct IS NULL THEN NULL WHEN damper_pct > 1.0 THEN damper_pct / 100.0 ELSE damper_pct END, 0.0) < {{DAMPER_LOW}}
+      WHEN zone_flow IS NOT NULL AND damper_pct IS NOT NULL AND zone_flow > {{FLOW_HI}}
+        AND zone_flow > {{FLOW_ON_MIN}}
+        AND COALESCE(CASE WHEN damper_pct > 1.0 THEN damper_pct / 100.0 ELSE damper_pct END, 0.0) < {{DAMPER_LOW}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),

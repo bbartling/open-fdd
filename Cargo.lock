@@ -2563,6 +2563,7 @@ dependencies = [
  "csv",
  "datafusion",
  "encoding_rs",
+ "fdd_rules",
  "hex",
  "hmac",
  "once_cell",

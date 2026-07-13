@@ -553,6 +553,15 @@ rules:
         unit: min
         frontend_control: slider
         sql_placeholder: WINDOW_MINUTES
+      minimum_samples:
+        label: Minimum samples in window
+        default: 48
+        min: 2
+        max: 500
+        step: 1
+        unit: samples
+        frontend_control: slider
+        sql_placeholder: MINIMUM_SAMPLES
       confirm_seconds:
         label: Confirm time
         default: 300

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
+import RuleRegistryPanel from "../components/sqlFdd/RuleRegistryPanel";
 import SqlFddQueryEditor from "../components/sqlFdd/SqlFddQueryEditor";
 import SqlFddResultsPanel from "../components/sqlFdd/SqlFddResultsPanel";
 import {
@@ -222,6 +223,12 @@ export default function SqlFddRulesPage() {
         </div>
       </div>
 
+      <div className="sql-fdd-layout">
+        <RuleRegistryPanel
+          selectedRuleId={ruleId}
+          onSelectRuleId={(id) => setBuilder((b) => ({ ...b, name: id, fault_code: id }))}
+        />
+
       <div className="gf-query-main">
         <div className="gf-query-toolbar">
           <div className="gf-query-toolbar__actions">
@@ -260,6 +267,7 @@ export default function SqlFddRulesPage() {
           onExportPdf={() => setActionStatus("PDF export — use Reports tab after saving a rule.")}
           actionStatus={actionStatus}
         />
+      </div>
       </div>
     </div>
   );

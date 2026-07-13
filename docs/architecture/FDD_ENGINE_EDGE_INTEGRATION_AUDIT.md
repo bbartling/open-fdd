@@ -61,8 +61,9 @@ This confirms the expected Phase 6 gap and is the prerequisite map for Phase 7 (
 
 | Planned (`docs/frontend/API_CONTRACT.md`) | Status |
 | --- | --- |
-| `GET /api/fdd/rules` | Not implemented |
-| `GET /api/fdd/rules/{id}/params` | Not implemented |
+| `GET /api/fdd/rules` | Implemented (`edge/src/fdd/registry_api.rs`) |
+| `GET /api/fdd/rules/{id}/params` | Implemented (dynamic route in `server.rs`) |
+| `GET /api/fdd/cache/status` | Implemented |
 | `POST /api/fdd/run` | Exists with **different** semantics (ad-hoc historian SQL) |
 | `GET /api/fdd/cache/status` | Not implemented |
 | `GET /api/fdd/roles` | Not implemented |

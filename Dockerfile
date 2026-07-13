@@ -20,6 +20,8 @@ COPY Cargo.toml Cargo.lock ./
 COPY edge ./edge
 COPY mcp ./mcp
 COPY crates ./crates
+COPY sql_rules ./sql_rules
+COPY rule_tuning ./rule_tuning
 RUN echo "==> release build jobs=${CARGO_BUILD_JOBS}" \
     && cargo build --release -p open_fdd_edge_prototype -p openfdd-mcp -j "${CARGO_BUILD_JOBS}"
 
@@ -36,10 +38,13 @@ COPY --from=builder /app/target/release/open_fdd_edge_prototype /usr/local/bin/o
 COPY --from=builder /app/target/release/openfdd-edge /usr/local/bin/openfdd-edge
 COPY --from=builder /app/target/release/openfdd-mcp /usr/local/bin/openfdd-mcp
 COPY --from=dashboard /app/frontend ./frontend
+COPY --from=builder /app/sql_rules ./sql_rules
+COPY --from=builder /app/rule_tuning ./rule_tuning
 
 ENV FRONTEND_DIR=/app/frontend \
     PORT=8080 \
     OPENFDD_WORKSPACE=/var/openfdd/workspace \
+    OPENFDD_SQL_RULES_DIR=/app/sql_rules \
     SERVICE_MODE=bridge \
     OPENFDD_IMAGE_TAG=${OPENFDD_IMAGE_TAG} \
     OPENFDD_GIT_SHA=${OPENFDD_BUILD_GIT_SHA}

@@ -42,6 +42,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Data & ops",
     items: [
+      { to: "/csv-workbench", icon: "📤", label: "CSV upload", protected: true },
       { to: "/exports", icon: "⬇️", label: "Data export", protected: true },
       { to: "/data-management", icon: "🗄️", label: "Historian storage", protected: true },
       { to: "/host", icon: "📊", label: "Host stats", protected: true },

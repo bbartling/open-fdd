@@ -7,9 +7,10 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN oa_t IS NOT NULL AND zone_flow IS NOT NULL AND COALESCE(CASE WHEN reheat_valve_pct IS NULL THEN NULL WHEN reheat_valve_pct > 1.0 THEN reheat_valve_pct / 100.0 ELSE reheat_valve_pct END, 0.0) IS NOT NULL
+      WHEN oa_t IS NOT NULL AND zone_flow IS NOT NULL AND reheat_valve_pct IS NOT NULL
         AND zone_flow > {{FLOW_ON_MIN}}
-        AND oa_t > {{OAT_CUTOFF}} AND COALESCE(CASE WHEN reheat_valve_pct IS NULL THEN NULL WHEN reheat_valve_pct > 1.0 THEN reheat_valve_pct / 100.0 ELSE reheat_valve_pct END, 0.0) > {{REHEAT_MIN}}
+        AND oa_t > {{OAT_CUTOFF}}
+        AND COALESCE(CASE WHEN reheat_valve_pct > 1.0 THEN reheat_valve_pct / 100.0 ELSE reheat_valve_pct END, 0.0) > {{REHEAT_MIN}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),
