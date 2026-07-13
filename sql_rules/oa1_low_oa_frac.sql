@@ -4,8 +4,7 @@ WITH h AS (
     *,
     CASE
       WHEN fan_status IS NULL THEN NULL
-      WHEN fan_status = TRUE OR fan_status = 1 OR fan_status = 1.0 THEN TRUE
-      WHEN TRIM(CAST(fan_status AS VARCHAR)) IN ('1', 'true', 'TRUE', 'on', 'ON', 'yes', 'YES') THEN TRUE
+      WHEN TRIM(CAST(fan_status AS VARCHAR)) IN ('1', '1.0', 'true', 'TRUE', 'on', 'ON', 'yes', 'YES') THEN TRUE
       ELSE FALSE
     END AS fan_status_on
   FROM history

@@ -225,8 +225,12 @@ pub fn ingest_weather_tree(weather_root: &Path, out_dir: &Path) -> Result<usize>
     let mut bundles: Vec<(PathBuf, PathBuf)> = Vec::new();
     let root_cols = weather_root.join("columns.csv");
     let root_hist = weather_root.join("history_wide.csv");
-    if root_cols.is_file() && root_hist.is_file() {
-        bundles.push((root_hist, root_cols));
+    if root_hist.is_file() {
+        if root_cols.is_file() {
+            bundles.push((root_hist.clone(), root_cols));
+        } else if let Ok(synth) = synthesize_columns_csv(&root_hist, weather_root) {
+            bundles.push((root_hist, synth));
+        }
     }
     for entry in std::fs::read_dir(weather_root)? {
         let entry = entry?;
@@ -252,6 +256,30 @@ pub fn ingest_weather_tree(weather_root: &Path, out_dir: &Path) -> Result<usize>
         written += 1;
     }
     Ok(written)
+}
+
+/// When weather exports omit `columns.csv`, synthesize one from the CSV header.
+fn synthesize_columns_csv(history: &Path, weather_root: &Path) -> Result<PathBuf> {
+    let header = std::fs::read_to_string(history)
+        .with_context(|| format!("read weather header {}", history.display()))?
+        .lines()
+        .next()
+        .unwrap_or("")
+        .to_string();
+    let cols: Vec<&str> = header.split(',').map(|c| c.trim()).filter(|c| !c.is_empty()).collect();
+    anyhow::ensure!(!cols.is_empty(), "weather history_wide.csv has empty header");
+    let dest = weather_root.join(".openfdd_synth_columns.csv");
+    let mut body = String::from("column,role\n");
+    for c in cols {
+        let role = match c {
+            "timestamp_utc" | "timestamp" | "time" | "datetime" => "timestamp_utc",
+            "dry_bulb_f" | "temp_f" | "oa_t" | "outdoor_air_temp" => "oa_t",
+            other => other,
+        };
+        body.push_str(&format!("{c},{role}\n"));
+    }
+    std::fs::write(&dest, body).with_context(|| format!("write {}", dest.display()))?;
+    Ok(dest)
 }
 
 #[cfg(test)]

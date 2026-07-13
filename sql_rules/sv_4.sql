@@ -10,8 +10,8 @@ base AS (
       WHEN COALESCE(CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END, 0.0) > 0.01
         AND mat IS NOT NULL AND oa_t IS NOT NULL AND rat IS NOT NULL
         AND (
-          mat < LEAST(oa_t, rat) - {{MIX_ENV_TOL}}
-          OR mat > GREATEST(oa_t, rat) + {{MIX_ENV_TOL}}
+          mat < (CASE WHEN oa_t <= rat THEN oa_t ELSE rat END) - {{MIX_ENV_TOL}}
+          OR mat > (CASE WHEN oa_t >= rat THEN oa_t ELSE rat END) + {{MIX_ENV_TOL}}
         )
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h

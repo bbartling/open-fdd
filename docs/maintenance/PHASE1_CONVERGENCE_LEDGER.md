@@ -9,7 +9,7 @@
 | Item | Value |
 | --- | --- |
 | `origin/master` SHA | `defba063` (Merge PR #491) |
-| PR #493 head SHA | `c68210bd` (pre-this-iteration; update on push) |
+| PR #493 head SHA | `4b203036`+ (mapping + pending B100 SQL fixes) |
 | Open PRs | **#493** only |
 | Open issues | **#481**, **#482**, **#483** |
 | Remote branches | `master`, `docs/pid-hunt-1-and-operational-gates` |
@@ -56,7 +56,7 @@ Nightly GHCR publish on `master`: run `29243276953` **success** (2026-07-13).
 | --- | --- |
 | Path | `/mnt/c/Users/ben/Documents/py-bacnet-stacks-playground/vibe_code_apps_19` |
 | SHA | `5006a16f2c7729145e9765e719f72d816489f5ee` |
-| Small golden | **pending** (system Python lacks pandas; venv install in progress) |
+| Small golden | **PASS** — 2 passed, 1 skipped (B100 fingerprints not seeded); Vibe19 SHA `5006a16f`; total ~1.5s |
 | Golden CSVs | `motor_hours`, `motor_weekly`, `mech_cooling_oat_bins`, `rcx_preset_coverage`, `rcx_preset_digests`, `rule_digest`, `fingerprints.json` |
 
 ## Building 100
@@ -65,8 +65,11 @@ Nightly GHCR publish on `master`: run `29243276953` **success** (2026-07-13).
 | --- | --- |
 | Path | `/mnt/c/Users/ben/OneDrive/Desktop/testing/tadco_openfdd_sidecar/workspace/imports/hvac_systems_CLEANED` |
 | Shape | `BUILDING_100/` tree + `BUILDING_100.zip` + weather |
-| Open-FDD validate | **PASS** (prior session) |
-| Full 55-rule parity | **NOT RUN** this session |
+| Open-FDD validate | **PASS** |
+| Open-FDD ingest | **PASS** (48 equipment, weather synthesized columns) |
+| Open-FDD 55-rule run | **PASS** — 36 executed / 19 skipped / **0 ERROR** (see `docs/benchmarks/BUILDING_100_55RULE_RUN_2026_07_13.md`) |
+| Pandas oracle numeric compare | **NOT RUN** |
+| Vibe19 optional B100 golden | skipped — `building100_fingerprints.json` not seeded (do not auto-regen) |
 | Private data committed? | **No** |
 
 ## Dependabot / #483
@@ -82,7 +85,7 @@ Reachability: transitive (Parquet/Arrow stack). Cannot close #483 until a patche
 | State | Count |
 | --- | ---: |
 | Total threads | 21 |
-| Unresolved (start of this iteration) | **2** |
+| Unresolved | **0** (after 96700457) |
 | Prior SQL threads | resolved in `c68210bd` |
 
 Unresolved at start:

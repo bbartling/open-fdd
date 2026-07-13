@@ -11,7 +11,11 @@ base AS (
         AND ABS(rat - oa_t) >= 5.0
         AND ABS(oa_t - rat) >= 0.01
         AND ABS(
-          GREATEST((mat - rat) / NULLIF(oa_t - rat, 0), 0)
+          CASE
+            WHEN (mat - rat) / NULLIF(oa_t - rat, 0) > 0
+            THEN (mat - rat) / NULLIF(oa_t - rat, 0)
+            ELSE 0
+          END
           - ({{MIN_CFM_DESIGN}} / NULLIF(vav_total_flow, 0))
         ) > {{AIRFLOW_ERR}}
         AND (

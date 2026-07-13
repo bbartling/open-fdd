@@ -1,0 +1,36 @@
+{
+  "building_id": "BUILDING_100",
+  "fingerprints": {
+    "mech_cooling_oat_bins": "aed93c1bafa6dbd7009a397339c5eca396c93204c77f24187449f85bcc4538ea",
+    "motor_hours": "4b17beaf110aa6b6b9fe8e2fd91bc4c1acb07a39516a5f6fbd21057a422d72d8",
+    "motor_weekly": "20067b84dcc65a3c7ef1bd0a0969485cdcd5e6f08fdbe6bafb9c0cccd740000d",
+    "rcx_preset_coverage": "dfd1be4b52ecedbfe6c8c281c2df4a510bec9f517c546020655c71920f8474b3",
+    "rcx_preset_digests": "a0f0b7f2e27d2f2b69ffc6e21fab03f47b70843fd5a7cc241bd07c360e944cab",
+    "rule_digest": "3a9c56bb0839ac36915454acc0969b01426ec12fc14b09b4f026cc53147900f8"
+  },
+  "frames": 48,
+  "has_web_weather": true,
+  "load_s": 8.096,
+  "table_names": [
+    "mech_cooling_oat_bins",
+    "motor_hours",
+    "motor_weekly",
+    "rcx_preset_coverage",
+    "rcx_preset_digests",
+    "rule_digest"
+  ],
+  "table_rows": {
+    "mech_cooling_oat_bins": 12,
+    "motor_hours": 6,
+    "motor_weekly": 64,
+    "rcx_preset_coverage": 15,
+    "rcx_preset_digests": 161,
+    "rule_digest": 2544
+  },
+  "timings_s": {
+    "analytics_s": 1.8055,
+    "rcx_s": 10.2088,
+    "rules_s": 21.4585
+  },
+  "vibe19_note": "local digest only \u2014 building100_fingerprints.json not seeded in Vibe19; not writing goldens"
+}

@@ -216,8 +216,9 @@ pub fn derive_window_rows(window_minutes: f64, poll_seconds: f64) -> (u32, u32) 
 /// Inject missing optional roles as literals so DataFusion planning succeeds.
 ///
 /// Policy for `loop_enabled`: missing column → `TRUE` (no enable restriction).
-/// Other optional roles default to `NULL`. Present-but-null cell semantics remain
-/// in the rule SQL (PID-HUNT-1 treats null enable as disabled).
+/// Other optional roles default to typed `CAST(NULL AS DOUBLE)` so window
+/// arithmetic (`max - min`) type-checks when the physical column is absent.
+/// Present-but-null cell semantics remain in the rule SQL.
 fn project_optional_roles(sql: &str, rule: &RuleSpec, available: &HashSet<String>) -> String {
     let missing: Vec<(&str, &str)> = rule
         .optional_roles
@@ -227,7 +228,7 @@ fn project_optional_roles(sql: &str, rule: &RuleSpec, available: &HashSet<String
             let expr = if role == "loop_enabled" {
                 "TRUE"
             } else {
-                "NULL"
+                "CAST(NULL AS DOUBLE)"
             };
             (role.as_str(), expr)
         })
@@ -274,6 +275,27 @@ mod tests {
             out.contains("FROM (SELECT history.*, TRUE AS loop_enabled FROM history) AS history"),
             "{out}"
         );
+    }
+
+    #[test]
+    fn injects_typed_null_for_missing_numeric_optional_roles() {
+        let rule = RuleSpec {
+            rule_id: "SV-FLATLINE".into(),
+            sql_file: "sv_flatline.sql".into(),
+            description: "t".into(),
+            required_roles: vec![],
+            optional_roles: vec!["chw_supply_t".into(), "loop_enabled".into()],
+            output_columns: vec![],
+            confirm_seconds: 0,
+            parameters: HashMap::new(),
+            parity_status: String::new(),
+            dashboard_wired: false,
+        };
+        let available = HashSet::from(["equipment_id".into(), "timestamp_utc".into()]);
+        let sql = "SELECT chw_supply_t FROM history";
+        let out = project_optional_roles(sql, &rule, &available);
+        assert!(out.contains("CAST(NULL AS DOUBLE) AS chw_supply_t"), "{out}");
+        assert!(out.contains("TRUE AS loop_enabled"), "{out}");
     }
 
     #[test]
