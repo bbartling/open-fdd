@@ -251,6 +251,12 @@ pub async fn compute_motor_weekly(parquet_root: &Path) -> Result<Vec<MotorWeekly
     let ctx = SessionContext::new();
     register_parquet_tree(&ctx, parquet_root).await?;
     let has_weather = register_weather_if_present(&ctx, parquet_root).await?;
+    let weather_has_oa = if has_weather {
+        let df = ctx.sql("SELECT * FROM weather LIMIT 0").await?;
+        df.schema().fields().iter().any(|f| f.name() == "oa_t")
+    } else {
+        false
+    };
     let cols = {
         let df = ctx.sql("SELECT * FROM history LIMIT 0").await?;
         df.schema()
@@ -301,16 +307,17 @@ pub async fn compute_motor_weekly(parquet_root: &Path) -> Result<Vec<MotorWeekly
             continue;
         };
         let on = norm_on_expr(&format!("h.{role}"));
-        let oat_expr = if has_weather && has_oa {
+        let join_weather = has_weather && weather_has_oa;
+        let oat_expr = if join_weather && has_oa {
             "COALESCE(h.oa_t, w.oa_t)".to_string()
-        } else if has_weather {
+        } else if join_weather {
             "w.oa_t".to_string()
         } else if has_oa {
             "h.oa_t".to_string()
         } else {
             "CAST(NULL AS DOUBLE)".to_string()
         };
-        let sql = if has_weather {
+        let sql = if join_weather {
             format!(
                 "SELECT CAST(h.timestamp_utc AS VARCHAR) AS ts, \
                         CASE WHEN {on} > 0 THEN 1 ELSE 0 END AS is_on, \
@@ -427,6 +434,12 @@ pub async fn compute_mech_cooling_oat_bins(
     let ctx = SessionContext::new();
     register_parquet_tree(&ctx, parquet_root).await?;
     let has_weather = register_weather_if_present(&ctx, parquet_root).await?;
+    let weather_has_oa = if has_weather {
+        let df = ctx.sql("SELECT * FROM weather LIMIT 0").await?;
+        df.schema().fields().iter().any(|f| f.name() == "oa_t")
+    } else {
+        false
+    };
     let cols = {
         let df = ctx.sql("SELECT * FROM history LIMIT 0").await?;
         df.schema()
@@ -454,15 +467,16 @@ pub async fn compute_mech_cooling_oat_bins(
     } else {
         "chw_pump"
     };
+    let join_weather = has_weather && weather_has_oa;
     let on = norm_on_expr(&format!("h.{role}"));
-    let oat_expr = if has_weather {
+    let oat_expr = if join_weather {
         "COALESCE(h.oa_t, w.oa_t)".to_string()
     } else if cols.contains("oa_t") {
         "h.oa_t".to_string()
     } else {
         return Ok(Vec::new());
     };
-    let sql = if has_weather {
+    let sql = if join_weather {
         format!(
             "SELECT h.equipment_id, {oat_expr} AS oat \
              FROM history h \

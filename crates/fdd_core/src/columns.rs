@@ -48,6 +48,9 @@ pub fn load_column_role_map(path: &Path) -> Result<HashMap<String, String>> {
             }
         };
         let Some(role) = role else { continue };
+        if role == "timestamp_utc" || role == "timestamp" || role == "time" {
+            continue;
+        }
         if role == "zone_t" && is_zone_t_limit_or_alarm_column(&column) {
             continue;
         }

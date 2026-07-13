@@ -1,14 +1,14 @@
 {
-  "openfdd_git_sha": "cb2827b9",
+  "openfdd_git_sha": "91db71be",
   "vibe19_git_sha": "5006a16f",
   "oracle_dir": ".cache/oracle_b100",
-  "sql_results_dir": ".cache/rule_results_b100_gated",
+  "sql_results_dir": ".cache/rule_results_b100_remap",
   "tolerance_hours": 0.5,
-  "compared_cells": 1488,
-  "exact_status_matches": 1211,
-  "status_mismatches": 277,
-  "numeric_within_tolerance": 266,
-  "numeric_mismatches": 157,
+  "compared_cells": 1296,
+  "exact_status_matches": 1041,
+  "status_mismatches": 222,
+  "numeric_within_tolerance": 179,
+  "numeric_mismatches": 127,
   "openfdd_only_rules": [
     "AVG-ZONE-TEMP",
     "FAN-RUNTIME-HOURS",
@@ -17,6 +17,7 @@
     "ZONE-COMFORT-PCT"
   ],
   "vibe19_only_rules": [
+    "AHU-DUCTHI",
     "CHW-1",
     "CHW-2",
     "CHW-3",
@@ -24,10 +25,13 @@
     "CW-APR-1",
     "CW-FAN-1",
     "CW-OPT-1",
+    "ECON-1",
     "ECON-5",
+    "FC1",
     "FC14",
     "FC15",
     "FC6",
+    "OAT-METEO",
     "PID-HUNT-1",
     "SCHED-1",
     "TRIM-1",
@@ -41,16 +45,13 @@
     "VAV-REHEAT-STUCK"
   ],
   "comparable_rules": [
-    "AHU-DUCTHI",
     "AHU-SATDEV",
     "AHU-SIMUL-HEAT-COOL",
     "CMD-1",
     "DMP-1",
-    "ECON-1",
     "ECON-2",
     "ECON-3",
     "ECON-4",
-    "FC1",
     "FC10",
     "FC11",
     "FC12",
@@ -64,7 +65,6 @@
     "FC9",
     "HP-1",
     "OA-1",
-    "OAT-METEO",
     "SV-FLATLINE",
     "SV-RANGE",
     "SV-SPIKE",
@@ -73,6 +73,6 @@
     "VLV-1",
     "WX-1"
   ],
-  "max_abs_delta": 2623.5833333333335,
+  "max_abs_delta": 2437.0033333333336,
   "pass": false
 }

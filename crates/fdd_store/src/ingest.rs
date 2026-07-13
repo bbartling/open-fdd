@@ -241,7 +241,7 @@ pub fn ingest_weather_tree(weather_root: &Path, out_dir: &Path) -> Result<usize>
         if root_cols.is_file() {
             bundles.push((root_hist.clone(), root_cols));
         } else {
-            match synthesize_columns_csv(&root_hist, weather_root) {
+            match synthesize_columns_csv(&root_hist, out_dir) {
                 Ok(synth) => bundles.push((root_hist, synth)),
                 Err(e) => {
                     eprintln!(
@@ -279,7 +279,8 @@ pub fn ingest_weather_tree(weather_root: &Path, out_dir: &Path) -> Result<usize>
 }
 
 /// When weather exports omit `columns.csv`, synthesize one from the CSV header.
-fn synthesize_columns_csv(history: &Path, weather_root: &Path) -> Result<PathBuf> {
+/// Writes under `out_dir` (not the source fixture tree) so CI read-only checkouts work.
+fn synthesize_columns_csv(history: &Path, out_dir: &Path) -> Result<PathBuf> {
     let header = std::fs::read_to_string(history)
         .with_context(|| format!("read weather header {}", history.display()))?
         .lines()
@@ -295,7 +296,8 @@ fn synthesize_columns_csv(history: &Path, weather_root: &Path) -> Result<PathBuf
         !cols.is_empty(),
         "weather history_wide.csv has empty header"
     );
-    let dest = weather_root.join(".openfdd_synth_columns.csv");
+    std::fs::create_dir_all(out_dir)?;
+    let dest = out_dir.join(".openfdd_synth_columns.csv");
     let mut body = String::from("column,role\n");
     for c in cols {
         let role = match c {
