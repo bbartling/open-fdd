@@ -221,6 +221,12 @@ fn infer_role_from_column_name(column: &str) -> Option<String> {
     if c.contains("chwr") || c.contains("chw_return") {
         return Some("chw_return_t".into());
     }
+    if c.contains("hws") || c.contains("hw_supply") {
+        return Some("hw_supply_t".into());
+    }
+    if c.contains("hwr") || c.contains("hw_return") {
+        return Some("hw_return_t".into());
+    }
     None
 }
 
@@ -318,5 +324,22 @@ mod tests {
             !map.contains_key("chill_water_reset_high_t_oa_f"),
             "reset curve must not map to a sensor role"
         );
+    }
+
+    #[test]
+    fn other_role_infers_hw_temps() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("columns.csv");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(
+            f,
+            "col,point_name,unit,point_role\n\
+             hws_t_f,HWS-T,°F,other\n\
+             hwr_t_f,HWR-T,°F,other"
+        )
+        .unwrap();
+        let map = load_column_role_map(&path).unwrap();
+        assert_eq!(map.get("hws_t_f"), Some(&"hw_supply_t".to_string()));
+        assert_eq!(map.get("hwr_t_f"), Some(&"hw_return_t".to_string()));
     }
 }
