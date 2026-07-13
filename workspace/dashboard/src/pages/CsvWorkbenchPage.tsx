@@ -101,7 +101,7 @@ export default function CsvWorkbenchPage() {
     try {
       const out = await saveAgentSessionToArrow(sessionId);
       if (!out.ok) throw new Error(out.error ?? "save failed");
-      setStatus(`Saved to Arrow (${out.dataset_id ?? sessionId}). Open Plots to chart.`);
+      setStatus(`Saved to Arrow (${out.dataset?.id ?? sessionId}). Open Plots to chart.`);
     } catch (e) {
       setError(formatApiError(e));
     } finally {
