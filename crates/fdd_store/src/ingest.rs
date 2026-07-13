@@ -95,16 +95,28 @@ pub fn ingest_building(
     )?;
 
     let staged = out_dir.parent().unwrap_or(out_dir).join("weather_staging");
+    let building_weather = data_root.join(building_id).join("weather");
     let weather_root = if staged.join("history_wide.csv").is_file() {
         staged
+    } else if building_weather.join("history_wide.csv").is_file() {
+        building_weather
     } else {
         data_root.join("weather")
     };
-    let (weather_ingested, weather_rows, weather_error) =
-        match ingest_weather_tree(&weather_root, out_dir) {
+    let (weather_ingested, weather_rows, weather_error) = {
+        let weather_out = out_dir.parent().map(|p| {
+            let name = out_dir
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("parquet");
+            p.join(format!("{name}_weather"))
+        });
+        let dest = weather_out.unwrap_or_else(|| out_dir.join("weather"));
+        match ingest_weather_tree(&weather_root, &dest) {
             Ok(n) => (n > 0, Some(n), None),
             Err(e) => (false, None, Some(e.to_string())),
-        };
+        }
+    };
 
     Ok(IngestReport {
         building_id: building_id.to_string(),
@@ -288,7 +300,9 @@ fn synthesize_columns_csv(history: &Path, weather_root: &Path) -> Result<PathBuf
     for c in cols {
         let role = match c {
             "timestamp_utc" | "timestamp" | "time" | "datetime" => "timestamp_utc",
-            "dry_bulb_f" | "temp_f" | "oa_t" | "outdoor_air_temp" => "oa_t",
+            "dry_bulb_f" | "temp_f" | "oa_t" | "outdoor_air_temp" | "outside_air_temp"
+            | "outside_air_temp_f" | "wx_oa_t" | "web_oa_t" | "oat" => "oa_t",
+            "relative_humidity_pct" | "oa_rh" | "wx_oa_rh" | "rh" => "oa_rh",
             other => other,
         };
         body.push_str(&format!("{c},{role}\n"));
@@ -448,5 +462,51 @@ mod tests {
         assert!(!report.weather_ingested);
         assert_eq!(report.weather_rows, Some(0));
         assert!(report.weather_error.is_none());
+    }
+}
+
+#[cfg(test)]
+mod weather_building_path_tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn golden_building_weather_ingests_oa_t() {
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/analytics_golden_building");
+        if !fixture.join("ANALYTICS_GOLDEN_B1/manifest.json").is_file() {
+            return;
+        }
+        let tmp = tempfile::TempDir::new().unwrap();
+        let out = tmp.path().join("parquet");
+        let report = ingest_building(&fixture, "ANALYTICS_GOLDEN_B1", &out).unwrap();
+        assert!(
+            report.weather_ingested,
+            "weather_error={:?}",
+            report.weather_error
+        );
+        let sibling = tmp.path().join("parquet_weather");
+        let pq = sibling.join("weather/history.parquet");
+        assert!(pq.is_file(), "missing {}", pq.display());
+        let (batch, _) = {
+            // reopen via arrow
+            use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+            let file = std::fs::File::open(&pq).unwrap();
+            let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+            let mut reader = builder.build().unwrap();
+            let batch = reader.next().unwrap().unwrap();
+            (batch, ())
+        };
+        let names: Vec<_> = batch
+            .schema()
+            .fields()
+            .iter()
+            .map(|f| f.name().clone())
+            .collect();
+        assert!(
+            names.iter().any(|n| n == "timestamp_utc"),
+            "fields={names:?}"
+        );
+        assert!(names.iter().any(|n| n == "oa_t"), "fields={names:?}");
     }
 }

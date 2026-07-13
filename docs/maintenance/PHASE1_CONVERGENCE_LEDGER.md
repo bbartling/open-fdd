@@ -1,6 +1,6 @@
 # Phase 1 Convergence Ledger
 
-**Audit timestamp:** 2026-07-13T13:00:00Z (WSL)
+**Audit timestamp:** 2026-07-13T15:20:00Z (WSL)
 **Repo:** `bbartling/open-fdd`
 **Local path:** `/home/ben/open-fdd`
 
@@ -8,161 +8,56 @@
 
 | Item | Value |
 | --- | --- |
-| `origin/master` SHA | `defba063` (Merge PR #491) |
-| PR #493 head SHA | `66419e26`+ (batch run + FaultTimeline; rustfmt follow-up) |
+| `origin/master` SHA | `defba063` |
+| PR #493 head SHA | `78c5c590`+ (analytics rollups commit pending) |
 | Open PRs | **#493** only |
 | Open issues | **#481**, **#482**, **#483** |
 | Remote branches | `master`, `docs/pid-hunt-1-and-operational-gates` |
-| Local-only branches | none |
 | Worktrees | single (`/home/ben/open-fdd`) |
 | Stashes | empty |
 | VERSION file | `3.3.0-beta.1` |
-| edge Cargo version | `3.2.13` (drift — release decision pending) |
 | Latest release | `v3.2.8` |
-| PR ↔ master | 6 commits ahead, 0 behind |
+| PR ↔ master | ~22 commits ahead, 0 behind |
+| Unresolved CodeRabbit threads | **0** (after `78c5c590` replies) |
 
-## Registry inventory (source-derived)
+## Registry inventory
 
 | Slice | Count |
 | --- | ---: |
-| Registry rules (`sql_rules/registry.yaml`) | **55** |
-| SQL files on disk | **55** |
-| Unique `rule_id` | **55** |
-| Orphan SQL files | **0** |
-| PID-HUNT-1 | 1 (additive) |
-| Analytics rollups (FAN-RUNTIME-HOURS, ZONE-COMFORT-PCT, AVG-ZONE-TEMP, FAULT-ELAPSED-HOURS) | 4 |
-| Canonical OG50 FDD rules | 50 |
-| `parity_status: proven_building_100` | ~18 (historical 19-rule benchmark era) |
-| `parity_status: cookbook_defined` | remainder |
+| Registry rules | **55** |
+| OG50 | **50** |
+| PID-HUNT-1 | 1 |
+| Analytics rollups (registry slots) | 4 |
 
-## Workflows (PR #493 head `c68210bd`)
+## Proven this cycle
 
-All required PR checks **SUCCESS** on latest push:
-
-- Rust Edge CI (fmt/clippy/tests, TS build, Docker, Compose API smoke)
-- FDD DataFusion Engine CI
-- Cookbook parity
-- AppSec (audit, Gitleaks, Trivy, Hadolint, npm audit)
-- Rust Edge Security Guards
-- Docs (GitHub Pages)
-
-Nightly GHCR publish on `master`: run `29243276953` **success** (2026-07-13).
-
-**Docker CLI unavailable in this WSL environment** — GHCR digests must be verified via `gh` API / host Docker Desktop.
-
-## Vibe19 oracle
-
-| Item | Value |
-| --- | --- |
-| Path | `/mnt/c/Users/ben/Documents/py-bacnet-stacks-playground/vibe_code_apps_19` |
-| SHA | `5006a16f2c7729145e9765e719f72d816489f5ee` |
-| Small golden | **PASS** — 2 passed, 1 skipped (B100 fingerprints not seeded); Vibe19 SHA `5006a16f`; total ~1.5s |
-| Golden CSVs | `motor_hours`, `motor_weekly`, `mech_cooling_oat_bins`, `rcx_preset_coverage`, `rcx_preset_digests`, `rule_digest`, `fingerprints.json` |
+- Six-status contract + RUN gate SQL injection + review hardening (`78c5c590`)
+- PR description rewritten (Proven / Remaining) via REST; issue comments on #481/#482/#483
+- `motor_hours` / `motor_weekly` / `mech_cooling_oat_bins` Rust rollups match Vibe19 small golden
+- Weather ingest: building-local weather path + `wx_oa_t` → `oa_t`; sibling `*_weather` parquet keeps history schema clean
+- Mapping equivalence doc: `docs/benchmarks/BUILDING_100_MAPPING_EQUIVALENCE.md`
+- ZIP package tests (10); dashboard vitest (73); `fdd_rules` lib (33)
 
 ## Building 100
 
 | Item | Value |
 | --- | --- |
-| Path | `/mnt/c/Users/ben/OneDrive/Desktop/testing/tadco_openfdd_sidecar/workspace/imports/hvac_systems_CLEANED` |
-| Shape | `BUILDING_100/` tree + `BUILDING_100.zip` + weather |
-| Open-FDD validate | **PASS** |
-| Open-FDD ingest | **PASS** (48 equipment, weather synthesized columns) |
-| Open-FDD 55-rule run | **PASS** — 36 executed / 19 skipped / **0 ERROR** (see `docs/benchmarks/BUILDING_100_55RULE_RUN_2026_07_13.md`) |
-| Pandas oracle numeric compare | **NOT RUN** |
-| Vibe19 optional B100 golden | skipped — `building100_fingerprints.json` not seeded (do not auto-regen) |
+| Open-FDD 55-rule run | PASS (0 ERROR) — `BUILDING_100_55RULE_RUN_2026_07_13.md` |
+| Parity summary | `pass: false` — SV-STALE plant/VAV classified as mapping mismatch; FC residual within investigation |
 | Private data committed? | **No** |
 
-## Dependabot / #483
+## Remaining merge gate
 
-| Alert | Package | Severity | Fixed version |
-| --- | --- | --- | --- |
-| #32 / #29 | `thrift` `<= 0.22.0` | moderate | **null** (no upstream patch published in alert) |
+1. B100 comparable numeric parity after mapping hygiene (no unexplained mismatches)
+2. RCx / rule_digest rollup golden wiring
+3. Workbench run-manifest/export polish + Plotly portfolio heatmap if still open
+4. #483 Dependabot disposition against thrift waiver
+5. Green current HEAD after this push; then merge → `3.3.0-beta.2` → GHCR verify → prune branch
 
-Reachability: transitive (Parquet/Arrow stack). Cannot close #483 until a patched transitive graph exists or risk is formally accepted with evidence.
+## Vibe19
 
-## Review threads (PR #493)
-
-| State | Count |
-| --- | ---: |
-| Total threads | 21 |
-| Unresolved | **0** (after 96700457) |
-| Prior SQL threads | resolved in `c68210bd` |
-
-Unresolved at start:
-
-1. `registry_api.rs` — do not publish defaults as `effective` when tuning load fails
-2. `SqlFddRulesPage.tsx` — preserve canonical `rule_id` (no slugify)
-
-## Capability matrix
-
-| Capability | Vibe19 behavior | Open-FDD current state | Test evidence | Gap | Task |
-| --- | --- | --- | --- | --- | --- |
-| CSV upload | Sidebar folder/zip | `/csv-workbench` routed | page + API exist | ZIP package incomplete | #481 |
-| Multiple CSV | supported | preview API multi-file | unit/integration partial | UX polish | #481 |
-| ZIP import | package_io | partial CSV ingest | — | full package parity | #481 |
-| Preview | package health | CSV preview cards | — | schema warnings | #481 |
-| JSON mapping | column_map.json | multiple stores | — | versioned unified store | #481 |
-| Arrow persistence | pandas/feather | Feather/Parquet ingest | fdd_store | — | keep |
-| Rule registry | cookbook 53 | **55** SQL registry + `/api/fdd/rules` | edge unit test | — | done API |
-| Operational gating | runtime | SQL + runner roles | docs + partial runtime | OFF/N/A statuses incomplete | engine |
-| Six-status result model | PASS/FAULT/skips | improving in runner | unit tests | full six-status | engine |
-| Golden analytics | pytest goldens | no Open-FDD harness yet | Vibe19 pending | parity CLI | harness |
-| Building 100 parity | optional digest | validate only; doc @ 19 rules | historical MD | 55-rule re-run | #482 |
-| Plotly charts | FDD/RCx plots | PlotPage exists | — | fault timelines etc. | #481 |
-| Reports | DOCX/CSV | ReportBuilder | — | run manifests | #481 |
-| GHCR release | n/a | nightly on master | Actions success | WSL can't smoke-pull | post-merge |
-
-## Next highest-risk task
-
-1. Fix remaining CodeRabbit findings + registry render integrity tests.
-2. Run Vibe19 small golden (venv).
-3. BUILDING_100 `fdd_cli` 55-rule run + honest #482 status.
-4. Do **not** close #481/#482/#483 until acceptance evidence exists.
-
-## Issue closure policy (this PR)
-
-| Issue | Keyword | Gate |
-| --- | --- | --- |
-| #482 | `Refs #482` until B100+executable proof | SQL files alone insufficient |
-| #481 | `Refs #481` until full workbench | route ≠ done |
-| #483 | open until thrift patched or accepted | no fake close |
-
-## Checkpoint 2026-07-13 (continuation)
-
-| Item | State |
+| Item | Value |
 | --- | --- |
-| Six-status runtime | **implemented+tested** (PASS/FAULT/SKIPPED_MISSING_ROLES/SKIPPED_EQUIPMENT_OFF/NOT_APPLICABLE/ERROR) |
-| B100 status mix | FAULT 24, PASS 11, SKIPPED_MISSING_ROLES 19, NOT_APPLICABLE 1 (HP-1), ERROR 0 |
-| Oracle bridge | `fdd_cli parity` + `tests/fixtures/vibe19_analytics_golden` + overlap matrix |
-| B100 numeric parity | **not passing** — see `docs/benchmarks/parity_b100_latest/` (max Δ 2625h on SV-STALE; mapping/date-range investigation next) |
-| ZIP / Plotly loop / rollups / #483 / GHCR | remaining |
-
-## Checkpoint 2026-07-13 (gate injection)
-
-| Item | State |
-| --- | --- |
-| RUN operational gate in SQL | **implemented+tested** — `gate_sql.rs` injects proof + startup before confirm (`fc8_gate_test`) |
-| FC8 AHU_1 hours | was ~1463h → **~362.5h** vs oracle **381.67h** (Δ≈19h; still >0.5h) |
-| FC family | **565/576** fault_hours cells within 0.5h |
-| SV-STALE presence logic | **implemented+tested** — AHU_1 exact match; plant false positives remain where enable setpoints map to `oa_t` |
-| Parity summary | status mismatches 277, numeric mismatches 157, max Δ ~2624h (SV-STALE/CHILLER mapping) |
-| Remaining blockers | Plotly loop, rollups, #483, GHCR smoke, merge gate |
-
-## Checkpoint 2026-07-13 (plotly + security + smoke)
-
-| Item | State |
-| --- | --- |
-| Plotly result loop | **implemented+tested** — batch row → equipment → `GET /api/fdd/results/{id}/series` → `RuleResultChart`/`FaultTimeline` |
-| Chart set | FaultTimeline, RuleResultChart, EquipmentTrendChart, RuntimeTimeline, PortfolioRuleHeatmap |
-| #483 thrift | **risk-accepted (time-bounded)** — `docs/security/thrift-advisory.md` expiry 2026-10-13; issue comment posted |
-| GHCR smoke | **strengthened** in `rust-ghcr.yml` — `/api/fdd/rules` ≥55 + sql_rules asset check |
-| B100 parity | still **not** merge-gate green (mapping/SV residuals) |
-| Analytics rollups | still pending vs Vibe19 goldens |
-
-## Checkpoint 2026-07-13 (motor_hours rollup)
-
-| Item | State |
-| --- | --- |
-| motor_hours Rust analytics | **implemented+golden-tested** |
-| API | `GET /api/fdd/analytics/motor-hours` |
-| Remaining rollups | motor_weekly, rcx_*, mech_cooling_oat_bins pending |
+| Path | `/mnt/c/Users/ben/Documents/py-bacnet-stacks-playground/vibe_code_apps_19` |
+| SHA | `5006a16f` |
+| Small golden | PASS |

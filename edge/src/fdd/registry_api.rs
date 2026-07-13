@@ -318,6 +318,42 @@ pub fn motor_hours_response(parquet_root: &Path) -> Value {
     }
 }
 
+/// Weekly motor hours rollup (Vibe19 `motor_run_hours_weekly` overlap).
+pub fn motor_weekly_response(parquet_root: &Path) -> Value {
+    if !parquet_root.exists() {
+        return json!({
+            "ok": false,
+            "error": format!("parquet root missing: {}", parquet_root.display()),
+        });
+    }
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => return json!({"ok": false, "error": format!("tokio runtime: {e}")}),
+    };
+    match rt.block_on(fdd_rules::compute_motor_weekly(parquet_root)) {
+        Ok(rows) => fdd_rules::motor_weekly_to_json(&rows),
+        Err(e) => json!({"ok": false, "error": e.to_string()}),
+    }
+}
+
+/// Mechanical cooling OAT bins (Vibe19 `mech_cooling_oat_bins` overlap).
+pub fn mech_cooling_oat_bins_response(parquet_root: &Path) -> Value {
+    if !parquet_root.exists() {
+        return json!({
+            "ok": false,
+            "error": format!("parquet root missing: {}", parquet_root.display()),
+        });
+    }
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => return json!({"ok": false, "error": format!("tokio runtime: {e}")}),
+    };
+    match rt.block_on(fdd_rules::compute_mech_cooling_oat_bins(parquet_root)) {
+        Ok(rows) => fdd_rules::mech_cooling_oat_bins_to_json(&rows),
+        Err(e) => json!({"ok": false, "error": e.to_string()}),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

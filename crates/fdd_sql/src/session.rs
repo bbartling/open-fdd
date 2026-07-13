@@ -12,6 +12,26 @@ pub struct QueryResult {
     pub elapsed_ms: u128,
 }
 
+fn dir_has_parquet(root: &Path) -> bool {
+    let Ok(walker) = std::fs::read_dir(root) else {
+        return false;
+    };
+    for entry in walker.flatten() {
+        let p = entry.path();
+        if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("parquet") {
+            return true;
+        }
+        if p.is_dir() && dir_has_parquet(&p) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Register equipment history Parquet under `parquet_root`.
+///
+/// Weather sidecars must live outside this tree (sibling `*_weather/`) so their
+/// narrower schema is not mixed into history.
 pub async fn register_parquet_tree(ctx: &SessionContext, parquet_root: &Path) -> Result<usize> {
     let glob = parquet_root.join("**/*.parquet");
     let glob_str = glob.to_string_lossy().to_string();
@@ -21,19 +41,55 @@ pub async fn register_parquet_tree(ctx: &SessionContext, parquet_root: &Path) ->
     Ok(1)
 }
 
-/// Register weather sidecar Parquet (`parquet_root/weather/**/*.parquet`) when present.
+/// Register weather sidecar Parquet when present.
+///
+/// Looks for sibling `{parquet_root}_weather/**/*.parquet` (preferred) or
+/// legacy `parquet_root/weather/**/*.parquet`.
 pub async fn register_weather_if_present(
     ctx: &SessionContext,
     parquet_root: &Path,
 ) -> Result<bool> {
-    let weather_dir = parquet_root.join("weather");
-    if !weather_dir.is_dir() {
+    let legacy = parquet_root.join("weather");
+    let sibling = parquet_root.parent().map(|p| {
+        let name = parquet_root
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("parquet");
+        p.join(format!("{name}_weather"))
+    });
+    let weather_dir = if let Some(s) = sibling.filter(|p| dir_has_parquet(p)) {
+        s
+    } else if dir_has_parquet(&legacy) {
+        legacy
+    } else {
         return Ok(false);
+    };
+    let mut parquet_file: Option<std::path::PathBuf> = None;
+    fn find_parquet(dir: &Path, out: &mut Option<std::path::PathBuf>) {
+        if out.is_some() {
+            return;
+        }
+        let Ok(walker) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in walker.flatten() {
+            let p = entry.path();
+            if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("parquet") {
+                *out = Some(p);
+                return;
+            }
+            if p.is_dir() {
+                find_parquet(&p, out);
+            }
+        }
     }
-    let glob = weather_dir.join("**/*.parquet");
-    let glob_str = glob.to_string_lossy().to_string();
+    find_parquet(&weather_dir, &mut parquet_file);
+    let Some(pq) = parquet_file else {
+        return Ok(false);
+    };
+    let path_str = pq.to_string_lossy().to_string();
     match ctx
-        .register_parquet("weather", glob_str.as_str(), ParquetReadOptions::default())
+        .register_parquet("weather", path_str.as_str(), ParquetReadOptions::default())
         .await
     {
         Ok(_) => Ok(true),
@@ -97,13 +153,30 @@ fn format_cell(col: &datafusion::arrow::array::ArrayRef, idx: usize) -> serde_js
             let a = col.as_any().downcast_ref::<Float64Array>().unwrap();
             serde_json::json!(a.value(idx))
         }
+        datafusion::arrow::datatypes::DataType::Float32 => {
+            let a = col.as_any().downcast_ref::<Float32Array>().unwrap();
+            serde_json::json!(a.value(idx) as f64)
+        }
         datafusion::arrow::datatypes::DataType::Int64 => {
             let a = col.as_any().downcast_ref::<Int64Array>().unwrap();
+            serde_json::json!(a.value(idx))
+        }
+        datafusion::arrow::datatypes::DataType::Int32 => {
+            let a = col.as_any().downcast_ref::<Int32Array>().unwrap();
+            serde_json::json!(a.value(idx))
+        }
+        datafusion::arrow::datatypes::DataType::UInt64 => {
+            let a = col.as_any().downcast_ref::<UInt64Array>().unwrap();
             serde_json::json!(a.value(idx))
         }
         datafusion::arrow::datatypes::DataType::Boolean => {
             let a = col.as_any().downcast_ref::<BooleanArray>().unwrap();
             serde_json::json!(a.value(idx))
+        }
+        datafusion::arrow::datatypes::DataType::Timestamp(_, _) => {
+            let s = datafusion::arrow::util::display::array_value_to_string(col, idx)
+                .unwrap_or_else(|_| format!("{:?}", col.slice(idx, 1)));
+            serde_json::Value::String(s)
         }
         _ => serde_json::Value::String(format!("{:?}", col.slice(idx, 1))),
     }

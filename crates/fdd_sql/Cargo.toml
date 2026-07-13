@@ -10,7 +10,6 @@ datafusion.workspace = true
 fdd_core = { path = "../fdd_core" }
 serde.workspace = true
 serde_json.workspace = true
-walkdir.workspace = true
 
 [dev-dependencies]
 fdd_store = { path = "../fdd_store" }

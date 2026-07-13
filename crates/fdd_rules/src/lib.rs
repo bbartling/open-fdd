@@ -9,7 +9,11 @@ pub mod series;
 pub mod status;
 pub mod tuning;
 
-pub use analytics::{compute_motor_hours, motor_hours_to_json, MotorHoursRow};
+pub use analytics::{
+    compute_mech_cooling_oat_bins, compute_motor_hours, compute_motor_weekly,
+    mech_cooling_oat_bins_to_json, motor_hours_to_json, motor_weekly_to_json, MechCoolingOatBinRow,
+    MotorHoursRow, MotorWeeklyRow,
+};
 pub use params::{poll_params, read_poll_from_cache, rule_params, substitute_sql};
 pub use registry::{load_registry, OperationalGate, RuleParameterDef, RuleRegistry, RuleSpec};
 pub use runner::{run_all_rules, RuleRunReport, RuleTiming};
