@@ -66,17 +66,37 @@ mod tests {
             ("sat_steady_fault", "SAT_STEADY_FAULT", 10.0),
             ("sat_transient_fault", "SAT_TRANSIENT_FAULT", 35.0),
             ("chw_supply_steady_fault", "CHW_SUPPLY_STEADY_FAULT", 6.0),
-            ("chw_supply_transient_fault", "CHW_SUPPLY_TRANSIENT_FAULT", 15.0),
+            (
+                "chw_supply_transient_fault",
+                "CHW_SUPPLY_TRANSIENT_FAULT",
+                15.0,
+            ),
             ("chw_return_steady_fault", "CHW_RETURN_STEADY_FAULT", 8.0),
-            ("chw_return_transient_fault", "CHW_RETURN_TRANSIENT_FAULT", 15.0),
+            (
+                "chw_return_transient_fault",
+                "CHW_RETURN_TRANSIENT_FAULT",
+                15.0,
+            ),
             ("hw_supply_steady_fault", "HW_SUPPLY_STEADY_FAULT", 15.0),
-            ("hw_supply_transient_fault", "HW_SUPPLY_TRANSIENT_FAULT", 50.0),
+            (
+                "hw_supply_transient_fault",
+                "HW_SUPPLY_TRANSIENT_FAULT",
+                50.0,
+            ),
             ("hw_return_steady_fault", "HW_RETURN_STEADY_FAULT", 12.0),
-            ("hw_return_transient_fault", "HW_RETURN_TRANSIENT_FAULT", 30.0),
+            (
+                "hw_return_transient_fault",
+                "HW_RETURN_TRANSIENT_FAULT",
+                30.0,
+            ),
             ("oa_h_steady_fault", "OA_H_STEADY_FAULT", 25.0),
             ("oa_h_transient_fault", "OA_H_TRANSIENT_FAULT", 40.0),
             ("duct_static_steady_fault", "DUCT_STATIC_STEADY_FAULT", 0.75),
-            ("duct_static_transient_fault", "DUCT_STATIC_TRANSIENT_FAULT", 3.0),
+            (
+                "duct_static_transient_fault",
+                "DUCT_STATIC_TRANSIENT_FAULT",
+                3.0,
+            ),
             ("confirm_seconds", "CONFIRM_SECONDS", 600.0),
         ] {
             parameters.insert(
@@ -148,7 +168,10 @@ mod tests {
         available.insert("equipment_id".into());
         available.insert("timestamp_utc".into());
 
-        let sql = substitute_sql(&project_optional_roles(&raw, &rule, &available), &base_params());
+        let sql = substitute_sql(
+            &project_optional_roles(&raw, &rule, &available),
+            &base_params(),
+        );
         let result = run_sql(&ctx, &sql).await.unwrap();
         result.rows[0]
             .get("fault_hours")
@@ -163,8 +186,11 @@ mod tests {
             std::fs::write(root.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
             let eq = root.join("ZONE_1");
             std::fs::create_dir_all(&eq).unwrap();
-            std::fs::write(eq.join("columns.csv"), "col,point_role\nzn,zone_t\nfan,fan_status\n")
-                .unwrap();
+            std::fs::write(
+                eq.join("columns.csv"),
+                "col,point_role\nzn,zone_t\nfan,fan_status\n",
+            )
+            .unwrap();
             let mut f = std::fs::File::create(eq.join("history_wide.csv")).unwrap();
             writeln!(f, "timestamp_utc,zn,fan").unwrap();
             for i in 0..24 {
@@ -189,8 +215,11 @@ mod tests {
             std::fs::write(root.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
             let eq = root.join("ZONE_1");
             std::fs::create_dir_all(&eq).unwrap();
-            std::fs::write(eq.join("columns.csv"), "col,point_role\nzn,zone_t\nfan,fan_status\n")
-                .unwrap();
+            std::fs::write(
+                eq.join("columns.csv"),
+                "col,point_role\nzn,zone_t\nfan,fan_status\n",
+            )
+            .unwrap();
             let mut f = std::fs::File::create(eq.join("history_wide.csv")).unwrap();
             writeln!(f, "timestamp_utc,zn,fan").unwrap();
             writeln!(f, "2026-01-01T00:00:00Z,70.0,0").unwrap();
@@ -213,8 +242,11 @@ mod tests {
             std::fs::write(root.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
             let eq = root.join("ZONE_1");
             std::fs::create_dir_all(&eq).unwrap();
-            std::fs::write(eq.join("columns.csv"), "col,point_role\nzn,zone_t\nfan,fan_status\n")
-                .unwrap();
+            std::fs::write(
+                eq.join("columns.csv"),
+                "col,point_role\nzn,zone_t\nfan,fan_status\n",
+            )
+            .unwrap();
             let mut f = std::fs::File::create(eq.join("history_wide.csv")).unwrap();
             writeln!(f, "timestamp_utc,zn,fan").unwrap();
             writeln!(f, "2026-01-01T00:00:00Z,70.0,0").unwrap();

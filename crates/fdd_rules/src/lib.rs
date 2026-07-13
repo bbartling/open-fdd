@@ -34,6 +34,6 @@ mod poll_test;
 #[cfg(test)]
 mod registry_integrity_test;
 #[cfg(test)]
-mod sv_stale_test;
-#[cfg(test)]
 mod sv_slew_test;
+#[cfg(test)]
+mod sv_stale_test;
