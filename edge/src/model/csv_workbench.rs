@@ -21,8 +21,155 @@ fn column_mappings_path() -> PathBuf {
     workbench_dir().join("column_mappings.json")
 }
 
+/// Versioned unified column→role mapping (Phase 1 / #481 target: `column_map.json`).
+fn column_map_path() -> PathBuf {
+    workbench_dir().join("column_map.json")
+}
+
 pub fn known_fdd_inputs() -> Value {
     execution::fdd_inputs_json()
+}
+
+/// Empty scaffold — meta fields blank, `column_map` empty (never invents roles).
+pub fn empty_column_map_document(dataset_id: &str) -> Value {
+    json!({
+        "version": 1,
+        "dataset_id": dataset_id,
+        "timezone": "",
+        "timestamp_column": "",
+        "equipment": "",
+        "column_map": {}
+    })
+}
+
+/// Validate a versioned mapping document. Does not invent or backfill mappings.
+pub fn validate_column_map_document(doc: &Value) -> Result<(), String> {
+    let version = doc
+        .get("version")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| "version (positive integer) is required".to_string())?;
+    if version == 0 {
+        return Err("version must be >= 1".into());
+    }
+    for key in ["dataset_id", "timezone", "timestamp_column", "equipment"] {
+        let val = doc
+            .get(key)
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .unwrap_or("");
+        if val.is_empty() {
+            return Err(format!("{key} is required"));
+        }
+    }
+    let map = doc
+        .get("column_map")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| "column_map object is required".to_string())?;
+    let mut seen_roles: HashMap<String, String> = HashMap::new();
+    for (col, role_val) in map {
+        let col = col.trim();
+        if col.is_empty() {
+            return Err("column_map keys must be non-empty column names".into());
+        }
+        let role = role_val
+            .as_str()
+            .map(str::trim)
+            .ok_or_else(|| format!("column_map[{col}] must be a string role"))?;
+        if role.is_empty() {
+            return Err(format!("column_map[{col}] role must be non-empty"));
+        }
+        if let Some(other) = seen_roles.get(role) {
+            return Err(format!(
+                "duplicate role '{role}' mapped from columns '{other}' and '{col}'"
+            ));
+        }
+        seen_roles.insert(role.to_string(), col.to_string());
+    }
+    Ok(())
+}
+
+fn normalize_column_map_document(doc: &Value) -> Value {
+    let mut column_map = serde_json::Map::new();
+    if let Some(obj) = doc.get("column_map").and_then(|v| v.as_object()) {
+        for (k, v) in obj {
+            let col = k.trim();
+            if col.is_empty() {
+                continue;
+            }
+            if let Some(role) = v.as_str().map(str::trim).filter(|s| !s.is_empty()) {
+                column_map.insert(col.to_string(), json!(role));
+            }
+        }
+    }
+    json!({
+        "version": doc.get("version").and_then(|v| v.as_u64()).unwrap_or(1),
+        "dataset_id": doc.get("dataset_id").and_then(|v| v.as_str()).unwrap_or("").trim(),
+        "timezone": doc.get("timezone").and_then(|v| v.as_str()).unwrap_or("").trim(),
+        "timestamp_column": doc.get("timestamp_column").and_then(|v| v.as_str()).unwrap_or("").trim(),
+        "equipment": doc.get("equipment").and_then(|v| v.as_str()).unwrap_or("").trim(),
+        "column_map": column_map
+    })
+}
+
+pub fn get_versioned_mapping(dataset_id: Option<&str>) -> Value {
+    let path = column_map_path();
+    let stored = fs::read_to_string(&path)
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok());
+    match (stored, dataset_id) {
+        (Some(doc), Some(want)) => {
+            let sid = doc
+                .get("dataset_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if sid == want {
+                json!({"ok": true, "mapping": normalize_column_map_document(&doc)})
+            } else {
+                // No silent invention — empty scaffold for the requested dataset.
+                json!({"ok": true, "mapping": empty_column_map_document(want)})
+            }
+        }
+        (Some(doc), None) => json!({"ok": true, "mapping": normalize_column_map_document(&doc)}),
+        (None, Some(want)) => json!({"ok": true, "mapping": empty_column_map_document(want)}),
+        (None, None) => json!({"ok": true, "mapping": empty_column_map_document("")}),
+    }
+}
+
+pub fn save_versioned_mapping(body: &Value) -> Value {
+    let doc = body.get("mapping").unwrap_or(body);
+    let normalized = normalize_column_map_document(doc);
+    if let Err(e) = validate_column_map_document(&normalized) {
+        return json!({"ok": false, "error": e});
+    }
+    if let Some(parent) = column_map_path().parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    match fs::write(
+        column_map_path(),
+        serde_json::to_string_pretty(&normalized).unwrap_or_else(|_| "{}".into()),
+    ) {
+        Ok(()) => {
+            // Mirror column→role into legacy header map so CSV commit paths keep working.
+            let dataset_id = normalized
+                .get("dataset_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("_global");
+            let mappings = normalized
+                .get("column_map")
+                .cloned()
+                .unwrap_or_else(|| json!({}));
+            let _ = save_column_mappings(&json!({
+                "source_id": dataset_id,
+                "mappings": mappings
+            }));
+            json!({
+                "ok": true,
+                "mapping": normalized,
+                "path": "data/csv_workbench/column_map.json"
+            })
+        }
+        Err(e) => json!({"ok": false, "error": e.to_string()}),
+    }
 }
 
 pub fn load_column_mappings() -> HashMap<String, HashMap<String, String>> {
@@ -505,5 +652,56 @@ mod tests {
                 .unwrap_or(0)
                 >= 1
         );
+    }
+
+    #[test]
+    fn versioned_mapping_rejects_duplicate_roles() {
+        let err = validate_column_map_document(&json!({
+            "version": 1,
+            "dataset_id": "ds1",
+            "timezone": "UTC",
+            "timestamp_column": "ts",
+            "equipment": "equip:ahu-1",
+            "column_map": {"OA": "oa_t", "Outside": "oa_t"}
+        }));
+        assert!(err.unwrap_err().contains("duplicate role"));
+    }
+
+    #[test]
+    fn versioned_mapping_round_trip_no_invention() {
+        with_temp_workspace(|_| {
+            let empty = get_versioned_mapping(Some("new-ds"));
+            let map = empty.get("mapping").unwrap();
+            assert_eq!(map.get("dataset_id").and_then(|v| v.as_str()), Some("new-ds"));
+            assert!(map
+                .get("column_map")
+                .and_then(|v| v.as_object())
+                .map(|o| o.is_empty())
+                .unwrap_or(false));
+
+            let saved = save_versioned_mapping(&json!({
+                "version": 1,
+                "dataset_id": "new-ds",
+                "timezone": "America/Chicago",
+                "timestamp_column": "Date",
+                "equipment": "equip:ahu-1",
+                "column_map": {"OA Temp": "oa_t"}
+            }));
+            assert_eq!(saved.get("ok").and_then(|v| v.as_bool()), Some(true));
+
+            let loaded = get_versioned_mapping(Some("new-ds"));
+            assert_eq!(
+                loaded
+                    .pointer("/mapping/column_map/OA Temp")
+                    .and_then(|v| v.as_str()),
+                Some("oa_t")
+            );
+            // Legacy mirror for CSV commit path
+            let legacy = get_column_mappings(Some("new-ds"));
+            assert_eq!(
+                legacy.pointer("/mappings/OA Temp").and_then(|v| v.as_str()),
+                Some("oa_t")
+            );
+        });
     }
 }

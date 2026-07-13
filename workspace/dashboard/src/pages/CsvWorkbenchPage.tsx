@@ -1,5 +1,6 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import PageHeader from "../components/PageHeader";
+import CsvMappingPanel from "../components/CsvMappingPanel";
 import CsvSessionSidecart from "../components/CsvSessionSidecart";
 import Spinner from "../components/Spinner";
 import { hasToken } from "../lib/api";
@@ -23,6 +24,17 @@ export default function CsvWorkbenchPage() {
   const [status, setStatus] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [uploadCards, setUploadCards] = useState<UploadCard[]>([]);
+  const [showMapping, setShowMapping] = useState(false);
+
+  const availableColumns = useMemo(() => {
+    const cols = new Set<string>();
+    for (const card of uploadCards) {
+      for (const h of card.profile?.headers ?? []) {
+        if (h.trim()) cols.add(h.trim());
+      }
+    }
+    return Array.from(cols);
+  }, [uploadCards]);
 
   const ingestFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -104,6 +116,17 @@ export default function CsvWorkbenchPage() {
         subtitle="Drop building CSVs for server-side preview, preflight, and historian import — same pipeline as MCP agents."
       />
 
+      <div className="toolbar toolbar-spaced csv-workbench-steps">
+        <span className="muted">Steps: Upload → Mapping → Arrow / Plots</span>
+        <button
+          type="button"
+          className={showMapping ? "primary-btn" : "secondary-btn"}
+          onClick={() => setShowMapping((v) => !v)}
+        >
+          {showMapping ? "Hide mapping" : "Open mapping"}
+        </button>
+      </div>
+
       {error ? <p className="error">{error}</p> : null}
       {status ? <p className="ok">{status}</p> : null}
 
@@ -166,6 +189,10 @@ export default function CsvWorkbenchPage() {
             ))}
           </ul>
         </section>
+      ) : null}
+
+      {showMapping ? (
+        <CsvMappingPanel defaultDatasetId={sessionId} availableColumns={availableColumns} />
       ) : null}
 
       <section className="panel">

@@ -3698,6 +3698,84 @@ button.linkish {
   cursor: pointer;
 }
 
+.csv-workbench-steps {
+  margin-bottom: 1rem;
+}
+
+.csv-mapping-panel {
+  margin-bottom: 1.25rem;
+}
+
+.csv-mapping-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem 1rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.csv-mapping-span {
+  grid-column: 1 / -1;
+}
+
+.csv-mapping-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.csv-mapping-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.csv-mapping-roles-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: baseline;
+  margin-bottom: 0.5rem;
+}
+
+.csv-mapping-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.75rem;
+}
+
+.csv-mapping-table th,
+.csv-mapping-table td {
+  text-align: left;
+  padding: 0.35rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.csv-mapping-errors {
+  color: var(--danger, #b33);
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+.csv-mapping-actions {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.csv-mapping-actions-left,
+.csv-mapping-actions-right {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.csv-mapping-file-btn {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
 .csv-dataset-list {
   list-style: none;
   padding: 0;

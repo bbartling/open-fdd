@@ -448,6 +448,18 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &["integrator", "agent"],
             model::csv_workbench::save_column_mappings(&parse_json_body_or_empty(&body)),
         ),
+        ("GET", "/api/fdd/mapping") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent", "operator"],
+            model::csv_workbench::get_versioned_mapping(query_param(&path, "dataset_id").as_deref()),
+        ),
+        ("PUT", "/api/fdd/mapping") => require_role(
+            &mut stream,
+            &principal,
+            &["integrator", "agent"],
+            model::csv_workbench::save_versioned_mapping(&parse_json_body_or_empty(&body)),
+        ),
         ("POST", "/api/csv-workbench/draft-rule") => require_role(
             &mut stream,
             &principal,
@@ -2149,6 +2161,8 @@ fn agent_tools() -> Value {
             {"name":"csv.import.execute","method":"POST","path":"/api/csv/import/execute","requires":"integrator|agent"},
             {"name":"ingest.contract","method":"GET","path":"/api/ingest/contract","public":true},
             {"name":"csv.workbench.quality","method":"POST","path":"/api/csv-workbench/quality","requires":"integrator|agent"},
+            {"name":"fdd.mapping.get","method":"GET","path":"/api/fdd/mapping","requires":"JWT"},
+            {"name":"fdd.mapping.put","method":"PUT","path":"/api/fdd/mapping","requires":"integrator|agent"},
             {"name":"model.commissioning_export","method":"GET","path":"/api/model/commissioning-export","requires":"JWT"},
             {"name":"model.commissioning_import","method":"POST","path":"/api/model/commissioning-import","requires":"integrator|agent"},
             {"name":"reports.from_fdd_sql_run","method":"POST","path":"/api/reports/from-fdd-sql-run","requires":"integrator|agent"},
