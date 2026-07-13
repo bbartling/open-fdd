@@ -18,8 +18,22 @@ Canonical path to a **login-ready** Open-FDD React application (Rust edge + JWT 
 | Stop (Docker) | `docker compose -f docker-compose.local.yml stop openfdd-bridge` |
 | Stop (cargo) | `kill "$(cat workspace/logs/edge-dev.pid)"` or `pkill -f open_fdd_edge_prototype` |
 | Reset import data | `./scripts/openfdd_workspace_reset_default.sh` |
+| **API + UI checks** | `./scripts/openfdd_webapp_check.sh` |
 
 Do **not** use the root `docker compose up --build` path on RAM-constrained hosts — it compiles npm + Rust inside Docker and can OOM. Prefer `docker-compose.local.yml` via `openfdd_local_up.sh`.
+
+### Smoke / error checks
+
+With the edge running on http://127.0.0.1:8080:
+
+```bash
+./scripts/openfdd_webapp_check.sh              # login + API + SPA (+ vitest if installed)
+./scripts/openfdd_api_check.sh                 # backend only (auth, routes, ZIP)
+./scripts/openfdd_frontend_check.sh            # SPA shell + assets (+ vitest)
+./scripts/openfdd_login_ui_smoke.sh            # all roles login
+```
+
+Failed responses are saved under `workspace/logs/api_check_*` and `workspace/logs/frontend_check_*`.
 
 ---
 
