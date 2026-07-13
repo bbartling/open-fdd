@@ -89,9 +89,9 @@ fn sanitize_package_id(id: &str) -> String {
 
 fn new_package_id() -> String {
     // Prefer uniqueness under parallel tests (millis alone can collide).
-    let nanos = Utc::now().timestamp_nanos_opt().unwrap_or_else(|| {
-        Utc::now().timestamp_millis().saturating_mul(1_000_000)
-    });
+    let nanos = Utc::now()
+        .timestamp_nanos_opt()
+        .unwrap_or_else(|| Utc::now().timestamp_millis().saturating_mul(1_000_000));
     format!("pkg-{nanos}")
 }
 
