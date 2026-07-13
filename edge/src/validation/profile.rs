@@ -553,6 +553,7 @@ point.oa_t = "OA Temp|1001|oa_t"
         let p = active_profile();
         assert_eq!(p.device_instance, 99);
         assert_eq!(p.bacnet_points.len(), 1);
+        std::env::remove_var("OPENFDD_WORKSPACE");
         let _ = fs::remove_dir_all(ws);
     }
 

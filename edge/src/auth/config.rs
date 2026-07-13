@@ -111,6 +111,8 @@ mod tests {
 
     #[test]
     fn loads_users_from_generated_env_file() {
+        let _lock = crate::test_support::workspace_env_lock();
+        let prev = std::env::var("OPENFDD_WORKSPACE").ok();
         let dir = std::env::temp_dir().join(format!(
             "openfdd-auth-load-{}",
             SystemTime::now()
@@ -132,6 +134,11 @@ mod tests {
         assert!(cfg.users.contains_key("integrator"));
         assert!(cfg.users.contains_key("agent"));
         assert!(cfg.users.contains_key("admin"));
+        if let Some(p) = prev {
+            std::env::set_var("OPENFDD_WORKSPACE", p);
+        } else {
+            std::env::remove_var("OPENFDD_WORKSPACE");
+        }
         let _ = std::fs::remove_dir_all(dir);
     }
 }
