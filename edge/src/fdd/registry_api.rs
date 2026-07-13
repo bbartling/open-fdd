@@ -34,14 +34,11 @@ fn load_rules() -> Result<fdd_rules::RuleRegistry, String> {
 fn rule_to_json(
     rule: &RuleSpec,
     effective: Option<&std::collections::HashMap<String, String>>,
+    include_effective: bool,
 ) -> Value {
     let mut params = Vec::new();
     for (key, def) in &rule.parameters {
-        let effective_val = effective
-            .and_then(|m| m.get(&def.sql_placeholder))
-            .and_then(|s| s.parse::<f64>().ok())
-            .unwrap_or(def.default);
-        params.push(json!({
+        let mut param = json!({
             "key": key,
             "label": def.label,
             "default": def.default,
@@ -51,8 +48,15 @@ fn rule_to_json(
             "unit": def.unit,
             "control": def.frontend_control,
             "sql_placeholder": def.sql_placeholder,
-            "effective": effective_val,
-        }));
+        });
+        if include_effective {
+            let effective_val = effective
+                .and_then(|m| m.get(&def.sql_placeholder))
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(def.default);
+            param["effective"] = json!(effective_val);
+        }
+        params.push(param);
     }
     json!({
         "rule_id": rule.rule_id,
@@ -69,26 +73,52 @@ fn rule_to_json(
     })
 }
 
+fn tuning_or_error(rules_dir: &Path) -> Result<fdd_rules::TuningLayers, String> {
+    load_tuning_profiles(rules_dir)
+        .map_err(|e| format!("load tuning from {}: {e}", rules_dir.display()))
+}
+
 pub fn list_rules_response() -> Value {
     match load_rules() {
         Ok(reg) => {
             let rules_dir = sql_rules_dir();
-            let tuning = load_tuning_profiles(&rules_dir).unwrap_or_default();
-            let rules: Vec<Value> = reg
-                .rules
-                .iter()
-                .map(|rule| {
-                    let effective = effective_param_strings(rule, &tuning, None, None, None).ok();
-                    rule_to_json(rule, effective.as_ref())
-                })
-                .collect();
-            json!({
-                "ok": true,
-                "rules_dir": rules_dir.display().to_string(),
-                "rule_count": rules.len(),
-                "rules": rules,
-                "engine": "sql_datafusion",
-            })
+            match tuning_or_error(&rules_dir) {
+                Ok(tuning) => {
+                    let rules: Vec<Value> = reg
+                        .rules
+                        .iter()
+                        .map(|rule| {
+                            let effective =
+                                effective_param_strings(rule, &tuning, None, None, None).ok();
+                            rule_to_json(rule, effective.as_ref(), true)
+                        })
+                        .collect();
+                    json!({
+                        "ok": true,
+                        "rules_dir": rules_dir.display().to_string(),
+                        "rule_count": rules.len(),
+                        "rules": rules,
+                        "engine": "sql_datafusion",
+                        "tuning_ok": true,
+                    })
+                }
+                Err(err) => {
+                    let rules: Vec<Value> = reg
+                        .rules
+                        .iter()
+                        .map(|rule| rule_to_json(rule, None, false))
+                        .collect();
+                    json!({
+                        "ok": true,
+                        "rules_dir": rules_dir.display().to_string(),
+                        "rule_count": rules.len(),
+                        "rules": rules,
+                        "engine": "sql_datafusion",
+                        "tuning_ok": false,
+                        "tuning_error": err,
+                    })
+                }
+            }
         }
         Err(err) => json!({"ok": false, "error": err}),
     }
@@ -101,12 +131,22 @@ pub fn rule_params_response(rule_id: &str) -> Value {
                 return json!({"ok": false, "error": format!("unknown rule_id `{rule_id}`")});
             };
             let rules_dir = sql_rules_dir();
-            let tuning = load_tuning_profiles(&rules_dir).unwrap_or_default();
-            let effective = effective_param_strings(rule, &tuning, None, None, None).ok();
-            json!({
-                "ok": true,
-                "rule": rule_to_json(rule, effective.as_ref()),
-            })
+            match tuning_or_error(&rules_dir) {
+                Ok(tuning) => {
+                    let effective = effective_param_strings(rule, &tuning, None, None, None).ok();
+                    json!({
+                        "ok": true,
+                        "tuning_ok": true,
+                        "rule": rule_to_json(rule, effective.as_ref(), true),
+                    })
+                }
+                Err(err) => json!({
+                    "ok": true,
+                    "tuning_ok": false,
+                    "tuning_error": err,
+                    "rule": rule_to_json(rule, None, false),
+                }),
+            }
         }
         Err(err) => json!({"ok": false, "error": err}),
     }

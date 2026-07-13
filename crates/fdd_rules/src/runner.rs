@@ -16,6 +16,8 @@ pub struct RuleTiming {
     pub row_count: usize,
     pub elapsed_ms: u128,
     pub output_path: String,
+    /// Canonical result status for this rule attempt.
+    pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -25,6 +27,7 @@ pub struct RuleRunReport {
     pub rules_run: usize,
     pub rules_succeeded: usize,
     pub rules_failed: usize,
+    pub rules_skipped: usize,
     pub poll_seconds: f64,
     pub timings: Vec<RuleTiming>,
     pub total_ms: u128,
@@ -49,6 +52,7 @@ pub async fn run_all_rules(
     let mut timings = Vec::new();
     let mut rules_succeeded = 0usize;
     let mut rules_failed = 0usize;
+    let mut rules_skipped = 0usize;
     for rule in &registry.rules {
         let sql_path = rules_dir.join(&rule.sql_file);
         let t0 = std::time::Instant::now();
@@ -61,6 +65,7 @@ pub async fn run_all_rules(
                     row_count: 0,
                     elapsed_ms: t0.elapsed().as_millis(),
                     output_path: out_path.display().to_string(),
+                    status: "ERROR".into(),
                     error: Some(e.to_string()),
                 });
                 rules_failed += 1;
@@ -73,6 +78,7 @@ pub async fn run_all_rules(
                 row_count: 0,
                 elapsed_ms: t0.elapsed().as_millis(),
                 output_path: out_path.display().to_string(),
+                status: "ERROR".into(),
                 error: Some(e.to_string()),
             });
             rules_failed += 1;
@@ -96,12 +102,10 @@ pub async fn run_all_rules(
                 row_count: 0,
                 elapsed_ms: t0.elapsed().as_millis(),
                 output_path: out_path.display().to_string(),
-                error: Some(format!(
-                    "SKIPPED_MISSING_ROLES: {}",
-                    missing_required.join(", ")
-                )),
+                status: "SKIPPED_MISSING_ROLES".into(),
+                error: None,
             });
-            rules_failed += 1;
+            rules_skipped += 1;
             continue;
         }
         let confirm_secs = rule.confirm_seconds;
@@ -137,27 +141,43 @@ pub async fn run_all_rules(
         let sql = substitute_sql(&projected, &params);
         match run_sql(&ctx, &sql).await {
             Ok(result) => {
+                let has_fault = result.rows.iter().any(|row| {
+                    row.get("fault_hours")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0)
+                        > 0.0
+                });
+                let status = if has_fault { "FAULT" } else { "PASS" };
                 std::fs::write(
                     &out_path,
-                    serde_json::to_string_pretty(&serde_json::json!({"rows": result.rows}))?,
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "rows": result.rows,
+                        "status": status,
+                    }))?,
                 )?;
                 timings.push(RuleTiming {
                     rule_id: rule.rule_id.clone(),
                     row_count: result.row_count,
                     elapsed_ms: t0.elapsed().as_millis(),
                     output_path: out_path.display().to_string(),
+                    status: status.into(),
                     error: None,
                 });
                 rules_succeeded += 1;
             }
             Err(e) => {
-                let err_body = serde_json::json!({"rows": [], "error": e.to_string()});
+                let err_body = serde_json::json!({
+                    "rows": [],
+                    "status": "ERROR",
+                    "error": e.to_string(),
+                });
                 let _ = std::fs::write(&out_path, serde_json::to_string_pretty(&err_body)?);
                 timings.push(RuleTiming {
                     rule_id: rule.rule_id.clone(),
                     row_count: 0,
                     elapsed_ms: t0.elapsed().as_millis(),
                     output_path: out_path.display().to_string(),
+                    status: "ERROR".into(),
                     error: Some(e.to_string()),
                 });
                 rules_failed += 1;
@@ -169,6 +189,7 @@ pub async fn run_all_rules(
         rules_run: timings.len(),
         rules_succeeded,
         rules_failed,
+        rules_skipped,
         poll_seconds,
         timings,
         total_ms: started.elapsed().as_millis(),

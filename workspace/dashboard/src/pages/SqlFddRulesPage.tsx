@@ -23,6 +23,7 @@ export default function SqlFddRulesPage() {
   const siteId = useActiveSiteId();
   const navigate = useNavigate();
   const [builder, setBuilder] = useState<BuilderState>(DEFAULT_BUILDER);
+  const [canonicalRuleId, setCanonicalRuleId] = useState<string | null>(null);
   const [table, setTable] = useState<(typeof HISTORIAN_TABLES)[number]>("telemetry_pivot");
   const [sql, setSql] = useState(DEFAULT_TELEMETRY_PIVOT_SQL);
   const [schemaTables, setSchemaTables] = useState<SchemaTable[]>([]);
@@ -34,7 +35,8 @@ export default function SqlFddRulesPage() {
   const [actionStatus, setActionStatus] = useState("");
   const [error, setError] = useState("");
 
-  const ruleId = useMemo(() => ruleIdFromBuilder(builder), [builder]);
+  const derivedRuleId = useMemo(() => ruleIdFromBuilder(builder), [builder]);
+  const ruleId = canonicalRuleId ?? derivedRuleId;
   const equipmentMissing = !builder.equipment_id.trim();
 
   useEffect(() => {
@@ -226,7 +228,10 @@ export default function SqlFddRulesPage() {
       <div className="sql-fdd-layout">
         <RuleRegistryPanel
           selectedRuleId={ruleId}
-          onSelectRuleId={(id) => setBuilder((b) => ({ ...b, name: id, fault_code: id }))}
+          onSelectRuleId={(id) => {
+            setCanonicalRuleId(id);
+            setBuilder((b) => ({ ...b, name: id, fault_code: id }));
+          }}
         />
 
       <div className="gf-query-main">
