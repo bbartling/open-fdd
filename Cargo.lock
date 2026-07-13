@@ -1567,6 +1567,7 @@ name = "fdd_rules"
 version = "3.2.13"
 dependencies = [
  "anyhow",
+ "csv",
  "datafusion",
  "fdd_core",
  "fdd_sql",
