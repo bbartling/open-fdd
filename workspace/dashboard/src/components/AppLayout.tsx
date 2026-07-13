@@ -18,11 +18,19 @@ type NavItem = {
 
 const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
-    title: "Overview",
-    items: [{ to: "/", end: true, icon: "🏠", label: "Dashboard" }],
+    title: "Application",
+    items: [
+      { to: "/", end: true, icon: "🏠", label: "Overview" },
+      { to: "/csv-workbench", icon: "📤", label: "Data Workbench", protected: true },
+      { to: "/model", icon: "🗺️", label: "Point Mapping", protected: true },
+      { to: "/live-fdd-validation", icon: "▶️", label: "Analytics", protected: true },
+      { to: "/sql-fdd", icon: "⚡", label: "Rule Catalog", protected: true },
+      { to: "/plot", icon: "📈", label: "Charts", protected: true },
+      { to: "/reports", icon: "📄", label: "Reports", protected: true },
+    ],
   },
   {
-    title: "Integrations",
+    title: "Drivers",
     items: [
       { to: "/bacnet", icon: "📡", label: "BACnet", protected: true },
       { to: "/haystack", icon: "🌿", label: "Haystack", protected: true },
@@ -31,27 +39,12 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
-    title: "Model & rules",
+    title: "System",
     items: [
-      { to: "/model", icon: "📐", label: "Model & FDD assignments", protected: true },
-      { to: "/sql-fdd", icon: "⚡", label: "SQL FDD Rules", protected: true },
-      { to: "/plot", icon: "📈", label: "Plots", protected: true },
-      { to: "/reports", icon: "📄", label: "Reports", protected: true },
-    ],
-  },
-  {
-    title: "Data & ops",
-    items: [
-      { to: "/csv-workbench", icon: "📤", label: "CSV upload", protected: true },
-      { to: "/exports", icon: "⬇️", label: "Data export", protected: true },
-      { to: "/data-management", icon: "🗄️", label: "Historian storage", protected: true },
       { to: "/host", icon: "📊", label: "Host stats", protected: true },
+      { to: "/data-management", icon: "🗄️", label: "Storage", protected: true },
+      { to: "/exports", icon: "⬇️", label: "Data export", protected: true },
       { to: "/algorithms", icon: "⚙️", label: "Algorithms", protected: true },
-    ],
-  },
-  {
-    title: "Settings",
-    items: [
       { to: "/agent", icon: "🔌", label: "External agents", protected: true },
     ],
   },
@@ -133,7 +126,7 @@ export default function AppLayout() {
             </div>
           </div>
         </div>
-        <p className="sidebar-hint">Building summary is public; sign in to browse all tabs (operator read-only).</p>
+        <p className="sidebar-hint">Sign in for Data Workbench, analytics, and drivers. Overview health is public.</p>
         <StackStatusStrip />
         <nav className="sidebar-nav">
           {NAV_SECTIONS.map((section) => (

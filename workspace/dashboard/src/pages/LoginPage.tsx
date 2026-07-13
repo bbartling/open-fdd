@@ -101,6 +101,14 @@ export default function LoginPage() {
       <form className="panel login-card" onSubmit={onSubmit}>
         <h2>Open-FDD sign-in</h2>
         <p className="muted">{authRequired ? "Sign in to continue." : "Auth disabled on bridge (dev only)."}</p>
+        {authRequired ? (
+          <p className="muted">
+            First run: use a password from{" "}
+            <code>workspace/bootstrap_credentials.once.txt</code> (created by{" "}
+            <code>./scripts/openfdd_auth_init.sh --show-secrets</code>). Do not paste bcrypt hashes
+            from <code>auth.env.local</code>.
+          </p>
+        ) : null}
         {hint ? <p className="muted">{hint}</p> : null}
         <div className="field">
           <label className="field-label" htmlFor="login-username">

@@ -23,6 +23,7 @@ struct Server {
     port: u16,
     integrator_password: String,
     operator_password: String,
+    auth_secret: String,
 }
 
 impl Server {
@@ -74,11 +75,16 @@ impl Server {
                 None,
             );
             if status == 200 && body.contains("\"ok\"") {
+                let auth_secret = auth_map
+                    .get("OFDD_AUTH_SECRET")
+                    .cloned()
+                    .expect("OFDD_AUTH_SECRET in generated auth.env.local");
                 return Self {
                     child,
                     port,
                     integrator_password,
                     operator_password,
+                    auth_secret,
                 };
             }
             thread::sleep(Duration::from_millis(250));
@@ -238,6 +244,72 @@ fn wrong_password_fails() {
     );
     assert_eq!(status, 401);
     assert!(body.contains("invalid credentials"));
+}
+
+#[test]
+fn unknown_user_fails() {
+    let srv = Server::start();
+    let (status, body) = http_post_json(
+        &srv.url("/api/auth/login"),
+        r#"{"username":"nosuchuser","password":"anything"}"#,
+        None,
+    );
+    assert_eq!(status, 401);
+    assert!(body.contains("invalid credentials"));
+}
+
+#[test]
+fn missing_login_body_fails() {
+    let srv = Server::start();
+    let (status, _) = http_post_json(&srv.url("/api/auth/login"), "", None);
+    assert!(status == 400 || status == 401);
+}
+
+#[test]
+fn malformed_jwt_rejected_on_protected_route() {
+    let srv = Server::start();
+    let (status, _) = http_raw(
+        "GET",
+        &srv.url("/api/health/stack"),
+        None,
+        Some("not-a.jwt"),
+    );
+    assert_eq!(status, 401);
+}
+
+#[test]
+fn expired_jwt_rejected_on_protected_route() {
+    use open_fdd_edge_prototype::auth::config::AuthConfig;
+    use open_fdd_edge_prototype::auth::jwt::create_token;
+    use std::collections::HashMap;
+
+    let srv = Server::start();
+    let cfg = AuthConfig {
+        required: true,
+        secret: srv.auth_secret.clone(),
+        ttl_seconds: -30,
+        cookie_secure: false,
+        users: HashMap::new(),
+    };
+    let (token, _) = create_token(&cfg, "integrator", "integrator");
+    let (status, _) = http_raw("GET", &srv.url("/api/health/stack"), None, Some(&token));
+    assert_eq!(status, 401);
+}
+
+#[test]
+fn logout_endpoint_accepts_post() {
+    let srv = Server::start();
+    let pw = srv.integrator_password();
+    let login_body = login_json("integrator", pw);
+    let (_, body) = http_post_json(&srv.url("/api/auth/login"), &login_body, None);
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let token = json["token"]
+        .as_str()
+        .or(json["access_token"].as_str())
+        .unwrap();
+    let (status, logout_body) = http_post_json(&srv.url("/api/auth/logout"), "{}", Some(token));
+    assert_eq!(status, 200);
+    assert!(logout_body.contains("\"ok\":true") || logout_body.contains("ok"));
 }
 
 #[test]

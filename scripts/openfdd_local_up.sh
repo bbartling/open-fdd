@@ -54,8 +54,17 @@ fi
 
 if [[ ! -f "$ROOT/workspace/auth.env.local" ]]; then
   echo "ERROR: missing workspace/auth.env.local"
-  echo "Create one or copy from workspace/auth.env.example"
+  echo "Create one: ./scripts/openfdd_auth_init.sh --show-secrets"
   exit 1
+fi
+
+# Docker Desktop / engine missing in WSL → cargo edge (same URL :8080).
+if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+  echo "==> Docker unavailable — falling back to ./scripts/openfdd_cargo_up.sh"
+  if [[ "$BUILD" -eq 1 ]]; then
+    exec "$ROOT/scripts/openfdd_cargo_up.sh" --build
+  fi
+  exec "$ROOT/scripts/openfdd_cargo_up.sh"
 fi
 
 need_frontend_build=0
