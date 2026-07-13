@@ -1,0 +1,5 @@
+equipment_id,motor_kind,on_samples,run_hours,samples,signal
+AHU_1,fan,270.000000,1620.000000,360.000000,fan_cmd
+AHU_1,fan,270.000000,1620.000000,360.000000,fan_status
+CHILLER_1,pump,299.000000,1794.000000,360.000000,chw_pump_status
+VAV_1,fan,270.000000,1620.000000,360.000000,fan_status

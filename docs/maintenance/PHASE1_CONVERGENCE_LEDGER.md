@@ -126,3 +126,13 @@ Unresolved at start:
 | #482 | `Refs #482` until B100+executable proof | SQL files alone insufficient |
 | #481 | `Refs #481` until full workbench | route ≠ done |
 | #483 | open until thrift patched or accepted | no fake close |
+
+## Checkpoint 2026-07-13 (continuation)
+
+| Item | State |
+| --- | --- |
+| Six-status runtime | **implemented+tested** (PASS/FAULT/SKIPPED_MISSING_ROLES/SKIPPED_EQUIPMENT_OFF/NOT_APPLICABLE/ERROR) |
+| B100 status mix | FAULT 24, PASS 11, SKIPPED_MISSING_ROLES 19, NOT_APPLICABLE 1 (HP-1), ERROR 0 |
+| Oracle bridge | `fdd_cli parity` + `tests/fixtures/vibe19_analytics_golden` + overlap matrix |
+| B100 numeric parity | **not passing** — see `docs/benchmarks/parity_b100_latest/` (max Δ 2625h on SV-STALE; mapping/date-range investigation next) |
+| ZIP / Plotly loop / rollups / #483 / GHCR | remaining |

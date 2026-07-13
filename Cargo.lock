@@ -1485,6 +1485,7 @@ version = "3.2.13"
 dependencies = [
  "anyhow",
  "chrono",
+ "csv",
  "fdd_core",
  "fdd_csv",
  "fdd_rules",
