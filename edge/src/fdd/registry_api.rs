@@ -300,6 +300,24 @@ pub fn rule_series_response(
     }
 }
 
+/// Motor runtime hours analytics rollup (Vibe19 Overview motor_hours overlap).
+pub fn motor_hours_response(parquet_root: &Path) -> Value {
+    if !parquet_root.exists() {
+        return json!({
+            "ok": false,
+            "error": format!("parquet root missing: {}", parquet_root.display()),
+        });
+    }
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => return json!({"ok": false, "error": format!("tokio runtime: {e}")}),
+    };
+    match rt.block_on(fdd_rules::compute_motor_hours(parquet_root)) {
+        Ok(rows) => fdd_rules::motor_hours_to_json(&rows),
+        Err(e) => json!({"ok": false, "error": e.to_string()}),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

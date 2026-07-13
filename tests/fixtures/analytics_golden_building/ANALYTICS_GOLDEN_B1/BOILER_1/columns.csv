@@ -1,0 +1,4 @@
+col,point_role
+hw_supply_temp_f,hw_supply_t
+hw_pump_status,hw_pump_status
+boiler_run_status,boiler_status

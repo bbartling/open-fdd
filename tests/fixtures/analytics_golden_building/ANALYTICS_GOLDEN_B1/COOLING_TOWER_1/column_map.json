@@ -1,0 +1,7 @@
+{
+  "equipType": "coolingTower",
+  "points": {
+    "cw-supply-temp": "tower_leaving_temp_f",
+    "pump-status": "tower_pump_status"
+  }
+}

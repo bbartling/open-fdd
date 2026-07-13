@@ -1,0 +1,8 @@
+{
+  "equipType": "vav",
+  "points": {
+    "zone-air-temp": "zone_temp_f",
+    "zone-airflow": "zone_airflow_cfm",
+    "fan-status": "box_fan_status"
+  }
+}

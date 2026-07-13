@@ -1,0 +1,7 @@
+{
+  "equipType": "meter",
+  "points": {
+    "elec-power": "building_kw",
+    "gas-flow": "gas_therms_per_hr"
+  }
+}

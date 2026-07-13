@@ -1,0 +1,4 @@
+col,point_role
+zone_temp_f,zone_t
+zone_airflow_cfm,zone_flow
+box_fan_status,fan_status

@@ -158,3 +158,11 @@ Unresolved at start:
 | GHCR smoke | **strengthened** in `rust-ghcr.yml` — `/api/fdd/rules` ≥55 + sql_rules asset check |
 | B100 parity | still **not** merge-gate green (mapping/SV residuals) |
 | Analytics rollups | still pending vs Vibe19 goldens |
+
+## Checkpoint 2026-07-13 (motor_hours rollup)
+
+| Item | State |
+| --- | --- |
+| motor_hours Rust analytics | **implemented+golden-tested** |
+| API | `GET /api/fdd/analytics/motor-hours` |
+| Remaining rollups | motor_weekly, rcx_*, mech_cooling_oat_bins pending |

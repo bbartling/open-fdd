@@ -1,5 +1,6 @@
 //! Rule registry and DataFusion SQL batch runner.
 
+pub mod analytics;
 pub mod gate_sql;
 pub mod params;
 pub mod registry;
@@ -8,6 +9,7 @@ pub mod series;
 pub mod status;
 pub mod tuning;
 
+pub use analytics::{compute_motor_hours, motor_hours_to_json, MotorHoursRow};
 pub use params::{poll_params, read_poll_from_cache, rule_params, substitute_sql};
 pub use registry::{load_registry, OperationalGate, RuleParameterDef, RuleRegistry, RuleSpec};
 pub use runner::{run_all_rules, RuleRunReport, RuleTiming};

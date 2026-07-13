@@ -1,0 +1,10 @@
+col,point_role
+discharge_air_temp_f,sat
+mixed_air_temp_f,mat
+return_air_temp_f,rat
+outside_air_temp_f,oa_t
+supply_fan_status,fan_status
+fan_speed_pct,fan_cmd
+oa_damper_cmd,oa_damper_pct
+duct_static_inwc,duct_static
+cooling_valve,clg_valve_pct

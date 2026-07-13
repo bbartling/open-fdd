@@ -8,7 +8,7 @@ Oracle artifacts: `tests/fixtures/vibe19_analytics_golden/` (small fixture) and 
 | Rule result `fault_hours` / `status` (FC1–3,8–13, ECON-1/2/4, VAV-1, OAT-METEO, rollups) | `rule_digest.csv` | exact_direct_equivalent | parity CLI compares |
 | Other registry FDD rules | `rule_digest.csv` rows when present | equivalent_after_normalization | compared when both emit |
 | `PID-HUNT-1` | — | openfdd_only | excluded from gate |
-| `motor_hours` analytics | `motor_hours.csv` | analytics_rollup | pending Rust rollup (#481) |
+| `motor_hours` analytics | `motor_hours.csv` | analytics_rollup | **parity-proven** vs small golden (`analytics::motor_hours_matches_vibe19_small_golden`) |
 | `motor_weekly` | `motor_weekly.csv` | analytics_rollup | pending |
 | `mech_cooling_oat_bins` | `mech_cooling_oat_bins.csv` | analytics_rollup | pending |
 | `rcx_preset_coverage` | `rcx_preset_coverage.csv` | analytics_rollup | pending |

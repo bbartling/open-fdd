@@ -1,0 +1,9 @@
+{
+  "equipType": "chiller",
+  "points": {
+    "chw-supply-temp": "chw_supply_temp_f",
+    "cw-supply-temp": "cw_supply_temp_f",
+    "chiller-status": "chiller_run_status",
+    "pump-status": "chw_pump_status"
+  }
+}

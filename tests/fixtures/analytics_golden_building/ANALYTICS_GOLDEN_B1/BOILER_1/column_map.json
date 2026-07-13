@@ -1,0 +1,8 @@
+{
+  "equipType": "boiler",
+  "points": {
+    "hw-supply-temp": "hw_supply_temp_f",
+    "boiler-status": "boiler_run_status",
+    "pump-status": "hw_pump_status"
+  }
+}

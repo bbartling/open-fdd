@@ -802,6 +802,17 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
                 fdd::registry_api::cache_status_response(&parquet_root),
             )
         }
+        ("GET", "/api/fdd/analytics/motor-hours") => {
+            let parquet_root = std::env::var("OPENFDD_PARQUET_CACHE")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| {
+                    crate::historian::store::workspace_dir().join(".cache/parquet")
+                });
+            json_response(
+                &mut stream,
+                fdd::registry_api::motor_hours_response(&parquet_root),
+            )
+        }
         ("GET", "/api/rules") => {
             json_response(&mut stream, fdd::datafusion_sql::list_rules_response())
         }

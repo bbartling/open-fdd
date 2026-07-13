@@ -1,0 +1,5 @@
+col,point_role
+chw_supply_temp_f,chw_supply_t
+cw_supply_temp_f,cw_supply_t
+chiller_run_status,chiller_status
+chw_pump_status,chw_pump_status

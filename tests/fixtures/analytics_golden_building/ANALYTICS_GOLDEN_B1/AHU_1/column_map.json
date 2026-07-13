@@ -1,0 +1,13 @@
+{
+  "equipType": "ahu",
+  "points": {
+    "discharge-air-temp": "discharge_air_temp_f",
+    "mixed-air-temp": "mixed_air_temp_f",
+    "return-air-temp": "return_air_temp_f",
+    "outside-air-temp": "outside_air_temp_f",
+    "fan-status": "supply_fan_status",
+    "fan-cmd": "fan_speed_pct",
+    "oa-damper": "oa_damper_cmd",
+    "duct-static": "duct_static_inwc"
+  }
+}
