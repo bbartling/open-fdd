@@ -147,3 +147,14 @@ Unresolved at start:
 | SV-STALE presence logic | **implemented+tested** — AHU_1 exact match; plant false positives remain where enable setpoints map to `oa_t` |
 | Parity summary | status mismatches 277, numeric mismatches 157, max Δ ~2624h (SV-STALE/CHILLER mapping) |
 | Remaining blockers | Plotly loop, rollups, #483, GHCR smoke, merge gate |
+
+## Checkpoint 2026-07-13 (plotly + security + smoke)
+
+| Item | State |
+| --- | --- |
+| Plotly result loop | **implemented+tested** — batch row → equipment → `GET /api/fdd/results/{id}/series` → `RuleResultChart`/`FaultTimeline` |
+| Chart set | FaultTimeline, RuleResultChart, EquipmentTrendChart, RuntimeTimeline, PortfolioRuleHeatmap |
+| #483 thrift | **risk-accepted (time-bounded)** — `docs/security/thrift-advisory.md` expiry 2026-10-13; issue comment posted |
+| GHCR smoke | **strengthened** in `rust-ghcr.yml` — `/api/fdd/rules` ≥55 + sql_rules asset check |
+| B100 parity | still **not** merge-gate green (mapping/SV residuals) |
+| Analytics rollups | still pending vs Vibe19 goldens |

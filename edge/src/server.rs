@@ -1405,6 +1405,54 @@ fn handle_fdd_registry_dynamic(
             stream,
             fdd::registry_api::rule_params_response(rule_id),
         )),
+        ("GET", ["api", "fdd", "results", rule_id]) => {
+            let out_dir = std::env::var("OPENFDD_RULE_RESULTS_DIR")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| {
+                    crate::historian::store::workspace_dir().join(".cache/rule_results")
+                });
+            Some(json_response(
+                stream,
+                fdd::registry_api::rule_result_response(&out_dir, rule_id),
+            ))
+        }
+        ("GET", ["api", "fdd", "results", rule_id, "series"]) => {
+            let parquet_root = std::env::var("OPENFDD_PARQUET_CACHE")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| {
+                    crate::historian::store::workspace_dir().join(".cache/parquet")
+                });
+            let qs = query_string(path);
+            let equipment_id = qs
+                .split('&')
+                .find_map(|pair| {
+                    let (k, v) = pair.split_once('=')?;
+                    (k == "equipment_id").then(|| v.replace('+', " ").replace("%20", " "))
+                })
+                .unwrap_or_default();
+            if equipment_id.is_empty() {
+                return Some(json_response(
+                    stream,
+                    json!({"ok": false, "error": "equipment_id query param required"}),
+                ));
+            }
+            let max_points = qs
+                .split('&')
+                .find_map(|pair| {
+                    let (k, v) = pair.split_once('=')?;
+                    (k == "max_points").then(|| v.parse::<usize>().ok()).flatten()
+                })
+                .unwrap_or(4000);
+            Some(json_response(
+                stream,
+                fdd::registry_api::rule_series_response(
+                    &parquet_root,
+                    rule_id,
+                    &equipment_id,
+                    max_points,
+                ),
+            ))
+        }
         _ => None,
     }
 }

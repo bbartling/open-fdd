@@ -102,6 +102,17 @@ jobs:
               ASSET="$(curl -fsS http://127.0.0.1:8080/ | sed -n 's/.*src="\(\/assets\/[^"]*\)".*/\1/p' | head -n1)"
               test -n "$ASSET"
               curl -fsS -o /dev/null -w "%{http_code}" "http://127.0.0.1:8080${ASSET}" | grep -Eq '200'
+              # Registry + workbench assets present in image.
+              curl -fsS http://127.0.0.1:8080/api/fdd/rules | tee /tmp/fdd_rules.json
+              python3 - <<'PY'
+import json
+d=json.load(open("/tmp/fdd_rules.json"))
+assert d.get("ok") is True, d
+assert int(d.get("rule_count") or 0) >= 55, d.get("rule_count")
+print("registry_ok", d.get("rule_count"))
+PY
+              docker exec openfdd-smoke test -f /app/sql_rules/registry.yaml
+              docker exec openfdd-smoke test -d /app/rule_tuning || docker exec openfdd-smoke test -d /app/sql_rules/rule_tuning || true
               # Smoke must not mount repo auth.env.local (isolated temp workspace only).
               test ! -f "$SMOKE_WORKSPACE/auth.env.local"
               exit 0

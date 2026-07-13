@@ -234,6 +234,72 @@ pub fn run_registry_batch_response(parquet_root: &Path, out_dir: &Path) -> Value
     }
 }
 
+/// Load cached per-equipment rollup JSON for one rule (`{out_dir}/{rule_id}.json`).
+pub fn rule_result_response(out_dir: &Path, rule_id: &str) -> Value {
+    if !rule_id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return json!({"ok": false, "error": "invalid rule_id"});
+    }
+    let path = out_dir.join(format!("{rule_id}.json"));
+    match std::fs::read_to_string(&path) {
+        Ok(text) => match serde_json::from_str::<Value>(&text) {
+            Ok(body) => json!({
+                "ok": true,
+                "rule_id": rule_id,
+                "path": path.display().to_string(),
+                "result": body,
+            }),
+            Err(e) => json!({"ok": false, "error": format!("parse {}: {e}", path.display())}),
+        },
+        Err(e) => json!({
+            "ok": false,
+            "error": format!("read {}: {e}", path.display()),
+            "hint": "Run batch analytics first (POST /api/fdd/run mode=registry)",
+        }),
+    }
+}
+
+/// Sample-level gate/raw/confirmed series for Plotly FaultTimeline.
+pub fn rule_series_response(
+    parquet_root: &Path,
+    rule_id: &str,
+    equipment_id: &str,
+    max_points: usize,
+) -> Value {
+    let rules_dir = sql_rules_dir();
+    let registry = match load_registry(&rules_dir) {
+        Ok(r) => r,
+        Err(e) => {
+            return json!({
+                "ok": false,
+                "error": format!("load registry from {}: {e}", rules_dir.display()),
+            });
+        }
+    };
+    if !parquet_root.exists() {
+        return json!({
+            "ok": false,
+            "error": format!("parquet root missing: {}", parquet_root.display()),
+        });
+    }
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => return json!({"ok": false, "error": format!("tokio runtime: {e}")}),
+    };
+    match rt.block_on(fdd_rules::run_rule_equipment_series(
+        parquet_root,
+        &registry,
+        rule_id,
+        equipment_id,
+        max_points,
+    )) {
+        Ok(v) => v,
+        Err(e) => json!({"ok": false, "error": e.to_string()}),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
