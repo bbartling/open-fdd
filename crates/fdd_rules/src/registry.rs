@@ -23,6 +23,24 @@ fn default_control() -> String {
     "slider".into()
 }
 
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct OperationalGate {
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub predicate: String,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default)]
+    pub preferred_roles: Vec<String>,
+    #[serde(default)]
+    pub command_fallback_allowed: bool,
+    #[serde(default)]
+    pub startup_delay_seconds: u32,
+    #[serde(default)]
+    pub minimum_active_coverage_pct: f64,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct RuleSpec {
     pub rule_id: String,
@@ -32,6 +50,9 @@ pub struct RuleSpec {
     pub required_roles: Vec<String>,
     #[serde(default)]
     pub optional_roles: Vec<String>,
+    /// Equipment classes this rule applies to (`ANY` = all). Empty → inferred from rule_id.
+    #[serde(default)]
+    pub equipment_types: Vec<String>,
     #[serde(default)]
     pub output_columns: Vec<String>,
     #[serde(default = "default_confirm")]
@@ -42,6 +63,25 @@ pub struct RuleSpec {
     pub parity_status: String,
     #[serde(default)]
     pub dashboard_wired: bool,
+    #[serde(default)]
+    pub operational_gate: Option<OperationalGate>,
+}
+
+impl RuleSpec {
+    pub fn effective_equipment_types(&self) -> Vec<String> {
+        if self.equipment_types.is_empty() {
+            crate::status::default_equipment_types_for_rule(&self.rule_id)
+        } else {
+            self.equipment_types.clone()
+        }
+    }
+
+    pub fn gate_mode(&self) -> &str {
+        self.operational_gate
+            .as_ref()
+            .map(|g| g.mode.as_str())
+            .unwrap_or("ALWAYS")
+    }
 }
 
 fn default_confirm() -> u32 {

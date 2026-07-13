@@ -3,11 +3,15 @@
 pub mod params;
 pub mod registry;
 pub mod runner;
+pub mod status;
 pub mod tuning;
 
 pub use params::{poll_params, read_poll_from_cache, rule_params, substitute_sql};
-pub use registry::{load_registry, RuleParameterDef, RuleRegistry, RuleSpec};
-pub use runner::{run_all_rules, RuleRunReport};
+pub use registry::{load_registry, OperationalGate, RuleParameterDef, RuleRegistry, RuleSpec};
+pub use runner::{run_all_rules, RuleRunReport, RuleTiming};
+pub use status::{
+    default_equipment_types_for_rule, equipment_is_applicable, infer_equipment_type, RuleStatus,
+};
 pub use tuning::{effective_param_strings, load_tuning_profiles, TuningLayers};
 
 #[cfg(test)]

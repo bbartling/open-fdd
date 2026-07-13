@@ -180,6 +180,8 @@ mod tests {
                 },
             )]),
             optional_roles: vec![],
+            equipment_types: vec![],
+            operational_gate: None,
         }
     }
 

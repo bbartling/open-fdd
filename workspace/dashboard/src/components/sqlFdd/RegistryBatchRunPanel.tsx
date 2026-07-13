@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { RULE_STATUSES } from "../../lib/ruleStatus";
 import { apiFetch } from "../../lib/api";
 import { formatApiError } from "../../lib/formatApiError";
 
@@ -76,10 +77,11 @@ export default function RegistryBatchRunPanel() {
               <span className="gf-field__label">Status</span>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                 <option value="ALL">All</option>
-                <option value="PASS">PASS</option>
-                <option value="FAULT">FAULT</option>
-                <option value="SKIPPED_MISSING_ROLES">SKIPPED_MISSING_ROLES</option>
-                <option value="ERROR">ERROR</option>
+                {RULE_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
               </select>
             </label>
           </div>

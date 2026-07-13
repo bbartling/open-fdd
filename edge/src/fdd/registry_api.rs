@@ -64,6 +64,8 @@ fn rule_to_json(
         "description": rule.description,
         "required_roles": rule.required_roles,
         "optional_roles": rule.optional_roles,
+        "equipment_types": rule.effective_equipment_types(),
+        "gate_mode": rule.gate_mode(),
         "output_columns": rule.output_columns,
         "confirm_seconds": rule.confirm_seconds,
         "parity_status": rule.parity_status,
