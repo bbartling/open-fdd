@@ -103,11 +103,12 @@ jobs:
 
       - name: Build and push openfdd-central
         uses: docker/build-push-action@v6
-        timeout-minutes: 120
+        # RocksDB via oxrocksdb + QEMU arm64 exceeds 2h; ship amd64 nightly first for local MQTTS tests.
+        timeout-minutes: 240
         with:
           context: .
           file: services/central/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.CENTRAL_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
@@ -130,7 +131,7 @@ jobs:
         with:
           context: .
           file: workspace/dashboard/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.UI_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
@@ -152,11 +153,11 @@ jobs:
 
       - name: Build and push openfdd-fieldbus
         uses: docker/build-push-action@v6
-        timeout-minutes: 180
+        timeout-minutes: 240
         with:
           context: .
           file: services/fieldbus/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.FIELDBUS_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
@@ -179,7 +180,7 @@ jobs:
         with:
           context: services/mqtt
           file: services/mqtt/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.MQTT_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
