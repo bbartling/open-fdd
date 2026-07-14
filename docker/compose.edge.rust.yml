@@ -1,3 +1,6 @@
+# DEPRECATED — superseded by docker/compose.{standalone,central,edge}.yml (MQTT multi-image stack).
+# Use compose.standalone.yml for local all-in-one, compose.central.yml for datacenter, compose.edge.yml for remote fieldbus.
+#
 # Rust Open-FDD edge stack — pull from GHCR, bind-mount workspace/ for site state.
 #
 # Profiles:

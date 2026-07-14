@@ -1,0 +1,33 @@
+# Field BACnet devices polled by the client
+
+[[devices]]
+name = "BENS-BENCHTEST-BOX"
+enabled = true
+device_instance = 5007
+host = "192.168.204.200"
+port = 47808
+mstp_network = 2000
+mstp_mac = [7]
+points = [
+  { object_type = "analog-input", object_instance = 1173, point_name = "OA-T", units = "°F" },
+]
+
+[[devices]]
+name = "BensFakeAhu"
+enabled = true
+device_instance = 3456789
+host = "192.168.204.13"
+port = 47808
+points = [
+  { object_type = "analog-input", object_instance = 2, point_name = "SA-T", units = "°F" },
+]
+
+[[devices]]
+name = "Zone1VAV"
+enabled = true
+device_instance = 3456790
+host = "192.168.204.14"
+port = 47808
+points = [
+  { object_type = "analog-input", object_instance = 1, point_name = "ZoneTemp", units = "°F" },
+]

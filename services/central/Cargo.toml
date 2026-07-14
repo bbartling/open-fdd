@@ -1,0 +1,37 @@
+[package]
+name = "openfdd-central"
+version = "3.3.0"
+edition = "2021"
+license = "MIT"
+description = "Open-FDD Central — MQTTS ingest, Feather historian, FDD, JWT REST + OpenAPI"
+
+[[bin]]
+name = "openfdd-central"
+path = "src/main.rs"
+
+[dependencies]
+openfdd_contracts = { path = "../../crates/openfdd_contracts", features = ["openapi"] }
+openfdd_mqtt = { path = "../../crates/openfdd_mqtt" }
+open_fdd_edge_prototype = { path = "../../edge" }
+fdd_rules = { path = "../../crates/fdd_rules" }
+
+axum = { version = "0.8", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
+anyhow = "1"
+dashmap = "6"
+jsonwebtoken = "9"
+rumqttc = { version = "0.24", default-features = false, features = ["use-native-tls"] }
+
+[dev-dependencies]
+jsonwebtoken = "9"

@@ -1,6 +1,7 @@
 //! Haystack HTTP client using `rusty-haystack-client` (SCRAM) and Basic auth for nHaystack/Niagara.
 
 use crate::drivers::haystack::config::HaystackConfig;
+use crate::drivers::live_gate;
 use haystack_client::HaystackClient;
 use haystack_core::codecs::codec_for;
 use haystack_core::data::{HCol, HDict, HGrid};
@@ -15,6 +16,10 @@ static RT: Lazy<Runtime> = Lazy::new(|| Runtime::new().expect("haystack tokio ru
 
 pub fn block_on<F: std::future::Future>(f: F) -> F::Output {
     RT.block_on(f)
+}
+
+fn live_wire_blocked(operation: &str) -> Option<Value> {
+    live_gate::field_wire_blocked(operation, "haystack")
 }
 
 pub fn grid_to_json(grid: &HGrid) -> Value {
@@ -300,6 +305,9 @@ pub fn test_connection(cfg: &HaystackConfig) -> Value {
             "message": "Haystack is disabled or not configured"
         });
     }
+    if let Some(err) = live_wire_blocked("test") {
+        return err;
+    }
     match LiveClient::connect(cfg) {
         Ok(client) => match client.about() {
             Ok(grid) => {
@@ -363,6 +371,9 @@ pub fn about(cfg: &HaystackConfig) -> Value {
     if !cfg.is_configured() {
         return not_configured_response(cfg, "about");
     }
+    if let Some(err) = live_wire_blocked("about") {
+        return err;
+    }
     match LiveClient::connect(cfg) {
         Ok(client) => match client.about() {
             Ok(grid) => json!({
@@ -393,6 +404,9 @@ pub fn ops(cfg: &HaystackConfig) -> Value {
     }
     if !cfg.is_configured() {
         return not_configured_response(cfg, "ops");
+    }
+    if let Some(err) = live_wire_blocked("ops") {
+        return err;
     }
     match LiveClient::connect(cfg) {
         Ok(client) => match client.ops() {
@@ -430,6 +444,9 @@ pub fn nav(cfg: &HaystackConfig, payload: &Value) -> Value {
     if !cfg.is_configured() {
         return not_configured_response(cfg, "nav");
     }
+    if let Some(err) = live_wire_blocked("nav") {
+        return err;
+    }
     match LiveClient::connect(cfg) {
         Ok(client) => match client.nav(nav_id) {
             Ok(grid) => json!({
@@ -461,6 +478,9 @@ pub fn read(cfg: &HaystackConfig, payload: &Value) -> Value {
     }
     if !cfg.is_configured() {
         return not_configured_response(cfg, "read");
+    }
+    if let Some(err) = live_wire_blocked("read") {
+        return err;
     }
     let ids: Vec<String> = payload
         .get("ids")
@@ -517,6 +537,9 @@ pub fn write(cfg: &HaystackConfig, payload: &Value) -> Value {
     }
     if !cfg.is_configured() {
         return not_configured_response(cfg, "pointWrite");
+    }
+    if let Some(err) = live_wire_blocked("write") {
+        return err;
     }
     let point_id = payload
         .get("id")

@@ -1,10 +1,9 @@
-//! Live FDD validation smoke: BACnet poll → historian → DataFusion proof.
+//! Live FDD validation smoke helpers (BACnet wire capture retired → fieldbus MQTTS).
 
-use crate::drivers::{bacnet_live, json_api, modbus};
+use crate::drivers::{json_api, modbus};
 use crate::fdd::execution;
 use crate::historian::store;
 use crate::validation::profile::{self, SiteConfig};
-use bacnet_types::enums::ObjectType;
 use chrono::Utc;
 use serde_json::{json, Value};
 
@@ -159,98 +158,12 @@ fn haystack_fixture_status(p: &SiteConfig) -> Value {
 }
 
 pub fn capture_sample(_body: &Value) -> Value {
-    let p = profile::active_profile();
-    let ts = Utc::now().to_rfc3339();
-    if !bacnet_live::is_live_mode() {
-        return json!({
-            "ok": false,
-            "error": "BACnet live mode required for validation capture (set OPENFDD_BACNET_MODE=live and configure bind/network)",
-            "demo_only": true
-        });
-    }
-    let (values, source, source_driver) = match poll_live_bacnet(&p) {
-        Ok(v) => (v, "bacnet:live".to_string(), "bacnet".to_string()),
-        Err(err) => {
-            return json!({"ok": false, "error": err, "demo_only": true});
-        }
-    };
-
-    let row = store::make_pivot_row(store::PivotSample {
-        timestamp: &ts,
-        equipment_id: &p.equipment_id,
-        oa_t: values.0,
-        oa_h: values.1,
-        duct_t: values.2,
-        zn_t: values.3,
-        source: &source,
-        source_driver: &source_driver,
-        is_simulated: false,
-    });
-
-    if let Err(err) = store::append_pivot_row(&row) {
-        return json!({"ok": false, "error": err});
-    }
-
-    let prefix = artifact_dir(&p);
-    let _ = std::fs::create_dir_all(&prefix);
-    let safe_ts = ts.replace(':', "-");
-    let capture_path = prefix.join(format!("capture_{safe_ts}.json"));
-    let capture = json!({
-        "timestamp": ts,
-        "row": row,
-        "bacnet_points": values,
-        "source": source,
-        "source_driver": source_driver,
-        "is_simulated": false
-    });
-    let _ = std::fs::write(
-        &capture_path,
-        serde_json::to_string_pretty(&capture).unwrap_or_default(),
-    );
-
     json!({
-        "ok": true,
-        "capture_path": capture_path.display().to_string(),
-        "row": row,
-        "historian_rows_written": 1,
-        "historian_row_count": store::row_count(),
-        "data_source": source,
-        "demo_only": source.starts_with("demo")
+        "ok": false,
+        "error": "BACnet capture moved to openfdd-fieldbus MQTTS ingest",
+        "demo_only": true,
+        "hint": "Publish telemetry via fieldbus; central persists Feather/historian rows"
     })
-}
-
-fn poll_live_bacnet(p: &SiteConfig) -> Result<(f64, f64, f64, f64), String> {
-    if p.device_instance == 0 {
-        return Err("smoke profile missing device_instance — set OPENFDD_SMOKE_DEVICE_INSTANCE or local profile".into());
-    }
-    let points = effective_points(p);
-    if points.is_empty() {
-        return Err("smoke profile has no bacnet point_roles configured".into());
-    }
-    let mut oa_t = 62.0;
-    let mut oa_h = 45.0;
-    let mut duct_t = 55.0;
-    let mut zn_t = 72.0;
-    for pt in &points {
-        let resp = bacnet_live::block_on(bacnet_live::read_present_value(
-            p.device_instance,
-            ObjectType::ANALOG_INPUT,
-            pt.object_instance,
-        ))?;
-        let f = resp
-            .get("value")
-            .and_then(|v| v.as_f64())
-            .or_else(|| resp.get("value").and_then(|v| v.as_i64()).map(|n| n as f64))
-            .unwrap_or(0.0);
-        match pt.fdd_input.as_str() {
-            "oa_t" => oa_t = f,
-            "oa_h" => oa_h = f,
-            "duct_t" => duct_t = f,
-            "zn_t" => zn_t = f,
-            _ => {}
-        }
-    }
-    Ok((oa_t, oa_h, duct_t, zn_t))
 }
 
 pub fn evaluate_historian_fdd() -> Value {

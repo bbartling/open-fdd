@@ -1,0 +1,39 @@
+[bacnet_server]
+device_instance = 599999
+device_name = "OpenFDD"
+# Bind on all interfaces so broadcast Who-Is from remote BMS discovery
+# (Workbench/Tridium) reaches the socket. A specific unicast bind only
+# receives directed unicast, so remote discover would never see the I-Am.
+interface = "0.0.0.0"
+port = 47808
+broadcast = "192.168.204.255"
+
+[bacnet_client]
+interface = "192.168.204.55"
+broadcast = "192.168.204.255"
+# Ephemeral client bind — never share UDP :47808 with the hosted server socket.
+whois_bind_port = 0
+read_bind_port = 0
+apdu_timeout_ms = 6000
+whois_timeout_secs = 8
+
+[weather]
+city = "Madison Wisconsin"
+interval_secs = 1200
+http_timeout_secs = 20
+fallback_temp_f = 70.0
+fallback_humidity = 50.0
+fallback_wind_mph = 0.0
+mirror_interval_secs = 2
+
+[modbus]
+default_host = "127.0.0.1"
+default_port = 5502
+default_unit_id = 1
+default_timeout_secs = 5.0
+
+[haystack]
+base_url = "http://127.0.0.1:8081"
+username = "admin"
+# Local demo credentials only — override via env in real deployments (never use defaults OT-side).
+password = "changeme"

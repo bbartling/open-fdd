@@ -1,0 +1,3 @@
+[users.admin]
+password_hash = "g4jZqiZjg+GvonO8pbBedw==:100000:KI+14J0dKlktPn261PD8pTsyj0rUAVV9jxOzHdkyJrw=:hZdpZyBvFB/2lorWYoE0Xp9SJTWId/vBP9m1kq18bLg="
+permissions = ["read", "write", "admin"]

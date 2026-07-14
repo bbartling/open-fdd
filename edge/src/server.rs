@@ -64,13 +64,26 @@ pub fn run() -> std::io::Result<()> {
         eprintln!("auth configuration warning: {err}");
     }
     let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
-    let root = env::var("FRONTEND_DIR").unwrap_or_else(|_| "/app/frontend".to_string());
+    // UI is published as openfdd-ui; embedded SPA is off unless explicitly re-enabled.
+    let root = if embedded_ui_enabled() {
+        env::var("FRONTEND_DIR").unwrap_or_else(|_| "/app/frontend".to_string())
+    } else {
+        String::new()
+    };
     let service_mode = env::var("SERVICE_MODE").unwrap_or_else(|_| "bridge".to_string());
-    drivers::bacnet::start_hourly_override_scanner(service_mode.clone());
-    drivers::bacnet::start_field_device_sync_loop(service_mode.clone());
-    drivers::bacnet::start_bacnet_poll_loop(service_mode.clone());
-    drivers::modbus::start_modbus_poll_loop(service_mode.clone());
-    drivers::bacnet_server_runtime::start_background();
+    // Field-bus poll loops are owned by openfdd-fieldbus; edge stubs remain callable but no-op.
+    if drivers::live_gate::should_start_field_poll_loops(&service_mode) {
+        drivers::bacnet::start_hourly_override_scanner(service_mode.clone());
+        drivers::bacnet::start_field_device_sync_loop(service_mode.clone());
+        drivers::bacnet::start_bacnet_poll_loop(service_mode.clone());
+        drivers::modbus::start_modbus_poll_loop(service_mode.clone());
+        drivers::bacnet_server_runtime::start_background();
+    } else {
+        eprintln!(
+            "open-fdd-edge: field poll loops not started (role={:?}, service_mode={service_mode}) — use openfdd-fieldbus",
+            env::var("OPENFDD_SERVICE_ROLE").ok()
+        );
+    }
     if service_mode == "bridge" {
         drivers::json_api::seed_from_env_if_needed();
     }
@@ -147,6 +160,16 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         && !route_path.starts_with("/api/")
         && !route_path.starts_with("/openfdd-agent/")
     {
+        if frontend.as_os_str().is_empty() {
+            return status_json(
+                &mut stream,
+                "404 Not Found",
+                json!({
+                    "ok": false,
+                    "error": "embedded UI disabled; use openfdd-ui (set OPENFDD_EMBEDDED_UI=1 only for legacy single-image)",
+                }),
+            );
+        }
         return static_file(&mut stream, frontend, &route_path);
     }
 
@@ -2286,6 +2309,16 @@ fn security_headers(content_type: &str, is_auth: bool) -> String {
         );
     }
     h
+}
+
+fn embedded_ui_enabled() -> bool {
+    matches!(
+        env::var("OPENFDD_EMBEDDED_UI")
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str(),
+        "1" | "true" | "yes" | "on"
+    )
 }
 
 fn static_file(stream: &mut TcpStream, frontend: &Path, path: &str) -> std::io::Result<()> {

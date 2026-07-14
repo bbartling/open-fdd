@@ -1,0 +1,10 @@
+# CA private material and issued secrets
+ca/
+certs/
+kits/
+
+# Private keys anywhere under this tree
+*.key.pem
+
+# Keep documentation
+!README.md

@@ -34,6 +34,13 @@ jobs:
       - name: Edge and MCP tests
         run: cargo test --workspace --all-targets -p open_fdd_edge_prototype -p openfdd-mcp
 
+      - name: Central / fieldbus / MQTT contract tests
+        run: |
+          cargo test -p openfdd_contracts -p openfdd_mqtt -p openfdd-central -p openfdd-fieldbus
+
+      - name: Architecture / MQTT cutover gates
+        run: bash scripts/gates/run_all_gates.sh --quick
+
       - name: Anti-hardcoding audit
         run: bash -n scripts/audit_no_private_bench_hardcoding.sh && ./scripts/audit_no_private_bench_hardcoding.sh
 

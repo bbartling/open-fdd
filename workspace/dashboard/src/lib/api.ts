@@ -39,9 +39,13 @@ export function getBridgeBase(): string {
   if (override?.trim()) {
     return resolveBase(override, pageHost);
   }
-  const env = import.meta.env.VITE_DESKTOP_BRIDGE_BASE as string | undefined;
-  if (env?.trim()) {
-    return resolveBase(env, pageHost);
+  const apiBase = import.meta.env.VITE_API_BASE as string | undefined;
+  if (apiBase?.trim()) {
+    return resolveBase(apiBase, pageHost);
+  }
+  const legacy = import.meta.env.VITE_DESKTOP_BRIDGE_BASE as string | undefined;
+  if (legacy?.trim()) {
+    return resolveBase(legacy, pageHost);
   }
   return "";
 }
