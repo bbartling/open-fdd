@@ -44,6 +44,7 @@ workspace/overrides/
 workspace/bacnet/
 workspace/fixtures/ahu_data/*.csv
 workspace/dashboard/node_modules/
+workspace/dashboard/dist/
 frontend/assets/
 frontend/index.html
 **/*.db

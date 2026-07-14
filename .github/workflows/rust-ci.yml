@@ -77,6 +77,14 @@ jobs:
           VITE_OUT_DIR: ../../frontend
         run: npm run build
 
+      - name: Split UI image artifact (dist)
+        working-directory: workspace/dashboard
+        env:
+          VITE_OUT_DIR: dist
+        run: |
+          npm run build
+          test -f dist/index.html
+
       - name: Built UI guards
         run: |
           test -f frontend/index.html

@@ -57,6 +57,8 @@ jobs:
         run: cargo test -p openfdd-central -p openfdd-fieldbus -p openfdd_mqtt
 
       - name: Dashboard production build
+        env:
+          VITE_OUT_DIR: dist
         run: |
           cd workspace/dashboard
           npm ci
@@ -134,6 +136,7 @@ jobs:
             ${{ env.UI_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
             ${{ env.UI_IMAGE }}:${{ steps.vars.outputs.version }}
           build-args: |
+            VITE_OUT_DIR=dist
             VITE_API_BASE=
           labels: |
             org.opencontainers.image.title=Open-FDD UI
