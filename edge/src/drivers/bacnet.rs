@@ -87,11 +87,50 @@ pub fn poll_cycle_value() -> Value {
     moved_json()
 }
 pub fn scan_once_value() -> Value {
+    write_cutover_override_stubs();
     json!({
         "ok": true,
         "summary": { "total": 0, "operator": 0, "other": 0 },
         "note": "override scan runs on openfdd-fieldbus; edge stub returns empty summary"
     })
+}
+
+fn write_cutover_override_stubs() {
+    use std::fs;
+    use std::path::PathBuf;
+    let ws = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "/var/openfdd/workspace".into());
+    let roots = [
+        PathBuf::from(&ws).join("bacnet/overrides"),
+        PathBuf::from(&ws).join("overrides"),
+    ];
+    for dir in &roots {
+        let _ = fs::create_dir_all(dir);
+    }
+    let empty_csv = format!("{OVERRIDE_EXPORT_CSV_HEADER}\n");
+    let _ = fs::write(
+        PathBuf::from(&ws).join("bacnet/overrides/registry.json"),
+        r#"{"ok":true,"devices":[],"note":"fieldbus cutover stub"}"#,
+    );
+    let _ = fs::write(
+        PathBuf::from(&ws).join("bacnet/overrides/overrides_export.csv"),
+        &empty_csv,
+    );
+    let _ = fs::write(
+        PathBuf::from(&ws).join("overrides/bacnet_overrides.csv"),
+        &empty_csv,
+    );
+    let _ = fs::write(
+        PathBuf::from(&ws).join("overrides/bacnet_priority8_overrides.csv"),
+        &empty_csv,
+    );
+    let _ = fs::write(
+        PathBuf::from(&ws).join("overrides/bacnet_non_priority8_overrides.csv"),
+        &empty_csv,
+    );
+    let _ = fs::write(
+        PathBuf::from(&ws).join("overrides/last_scan.json"),
+        r#"{"ok":true,"scanned_at":null,"total":0}"#,
+    );
 }
 pub fn whois_json(_body: &Value) -> String {
     moved_str()
