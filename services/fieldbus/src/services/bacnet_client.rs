@@ -99,19 +99,15 @@ impl BacnetClientService {
             .map_err(|e| e.to_string())
     }
 
-    /// Always `stop()` the client, preserving the primary operation error when both fail.
+    /// Always `stop()` the client; preserve the primary operation result and log stop failures.
     async fn finish_client<T>(
         mut client: BACnetClient<bacnet_transport::bip::BipTransport>,
         result: Result<T, String>,
     ) -> Result<T, String> {
-        let stop = client.stop().await.map_err(|e| e.to_string());
-        match result {
-            Ok(v) => stop.map(|()| v),
-            Err(e) => {
-                let _ = stop;
-                Err(e)
-            }
+        if let Err(e) = client.stop().await {
+            warn!("failed to stop BACnet client: {e}");
         }
+        result
     }
 
     async fn seed_field_device(
