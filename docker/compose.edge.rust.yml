@@ -37,6 +37,8 @@ services:
       PORT: "8080"
       OPENFDD_BIND_HOST: "0.0.0.0"
       FRONTEND_DIR: /app/frontend
+      # Legacy single-image smoke still serves the dashboard from the edge binary.
+      OPENFDD_EMBEDDED_UI: "1"
       OPENFDD_WORKSPACE: /var/openfdd/workspace
       OPENFDD_IMAGE_TAG: ${OPENFDD_IMAGE_TAG:-nightly}
       OPENFDD_BACNET_ENABLED: ${OPENFDD_BACNET_ENABLED:-1}

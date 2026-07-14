@@ -25,7 +25,7 @@ for f in "${CENTRAL_COMPOSE[@]}"; do
     failed=1
     continue
   fi
-  if rg -n '47808' "$f" >/dev/null 2>&1; then
+  if grep -nE '47808' "$f" >/dev/null 2>&1; then
     echo "FAIL: $f must not reference UDP 47808 (fieldbus owns BACnet/IP via host network)" >&2
     failed=1
   else
@@ -40,7 +40,7 @@ for f in "${FIELDBUS_COMPOSE[@]}"; do
     failed=1
     continue
   fi
-  if rg -n 'fieldbus:' "$f" >/dev/null && rg -n 'network_mode:[[:space:]]*host' "$f" >/dev/null; then
+  if grep -nE 'fieldbus:' "$f" >/dev/null && grep -nE 'network_mode:[[:space:]]*host' "$f" >/dev/null; then
     echo "OK fieldbus host-net: $f"
     fieldbus_hits=$((fieldbus_hits + 1))
   fi
@@ -58,7 +58,7 @@ LEGACY=(
 )
 for f in "${LEGACY[@]}"; do
   [[ -f "$f" ]] || continue
-  if rg -n '47808' "$f" >/dev/null 2>&1; then
+  if grep -nE '47808' "$f" >/dev/null 2>&1; then
     echo "WARN: legacy $f still references 47808 — retire before cutover" >&2
   fi
 done

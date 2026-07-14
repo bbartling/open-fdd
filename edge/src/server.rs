@@ -64,7 +64,8 @@ pub fn run() -> std::io::Result<()> {
         eprintln!("auth configuration warning: {err}");
     }
     let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
-    // UI is published as openfdd-ui; embedded SPA is off unless explicitly re-enabled.
+    // Default keeps legacy single-image SPA serving. Set OPENFDD_EMBEDDED_UI=0 when
+    // serving the dashboard from openfdd-ui only.
     let root = if embedded_ui_enabled() {
         env::var("FRONTEND_DIR").unwrap_or_else(|_| "/app/frontend".to_string())
     } else {
@@ -2312,13 +2313,15 @@ fn security_headers(content_type: &str, is_auth: bool) -> String {
 }
 
 fn embedded_ui_enabled() -> bool {
-    matches!(
-        env::var("OPENFDD_EMBEDDED_UI")
-            .unwrap_or_default()
-            .to_ascii_lowercase()
-            .as_str(),
-        "1" | "true" | "yes" | "on"
-    )
+    match env::var("OPENFDD_EMBEDDED_UI") {
+        Ok(v) => match v.to_ascii_lowercase().as_str() {
+            "0" | "false" | "no" | "off" => false,
+            "1" | "true" | "yes" | "on" => true,
+            _ => true,
+        },
+        // Legacy single-image default: serve the built dashboard from FRONTEND_DIR.
+        Err(_) => true,
+    }
 }
 
 fn static_file(stream: &mut TcpStream, frontend: &Path, path: &str) -> std::io::Result<()> {

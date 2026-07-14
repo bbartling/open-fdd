@@ -13,7 +13,7 @@ check_no_bacnet_deps() {
     echo "architecture gate: missing $cargo_toml" >&2
     return 1
   fi
-  if rg -n '^[[:space:]]*bacnet-[A-Za-z0-9_-]+[[:space:]]*=' "$cargo_toml" >/tmp/openfdd_bacnet_dep_hits.txt 2>/dev/null; then
+  if grep -nE '^[[:space:]]*bacnet-[A-Za-z0-9_-]+[[:space:]]*=' "$cargo_toml" >/tmp/openfdd_bacnet_dep_hits.txt 2>/dev/null; then
     echo "architecture gate FAILED: $label must not depend on bacnet-* crates" >&2
     echo "  file: $cargo_toml" >&2
     cat /tmp/openfdd_bacnet_dep_hits.txt >&2

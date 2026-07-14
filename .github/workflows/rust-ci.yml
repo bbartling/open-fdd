@@ -150,11 +150,14 @@ jobs:
 
       - name: Wait for bridge
         run: |
-          for i in $(seq 1 40); do
-            if curl -fsS http://127.0.0.1:8080/api/health >/tmp/health.json; then
+          sleep 5
+          for i in $(seq 1 60); do
+            code="$(curl -sS -o /tmp/health.json -w '%{http_code}' http://127.0.0.1:8080/api/health || echo 000)"
+            if [[ "$code" == "200" ]]; then
               cat /tmp/health.json
               exit 0
             fi
+            echo "wait $i: HTTP $code"
             sleep 2
           done
           docker compose logs
