@@ -15,9 +15,10 @@
 #   HAYSTACK_USER=open_fdd HAYSTACK_PASS=... HAYSTACK_AUTH_MODE=basic
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=scripts/bench_lib.sh
-source "$ROOT/scripts/bench_lib.sh"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/fieldbus/bench_lib.sh
+source "$SCRIPT_DIR/bench_lib.sh"
 
 bench_load_env "$ROOT"
 bench_require_tools
@@ -220,7 +221,7 @@ validate_cycle_pcap() {
     PCAP_MIN_READ="${PCAP_MIN_READ:-2}" \
     PCAP_MIN_RPM="${PCAP_MIN_RPM:-1}" \
     PCAP_MIN_WRITE="${PCAP_MIN_WRITE:-2}" \
-    "$ROOT/scripts/pcap_validate_docker.sh"; then
+    "$SCRIPT_DIR/pcap_validate_docker.sh"; then
     PCAP_FAIL=$((PCAP_FAIL+1))
     bad "pcap cycle $cycle APDU validation failed"
   else
@@ -245,7 +246,7 @@ validate_key_pcaps() {
       PCAP_MIN_READ=1 \
       PCAP_MIN_RPM=1 \
       PCAP_MIN_WRITE=0 \
-      "$ROOT/scripts/pcap_validate_docker.sh"; then
+      "$SCRIPT_DIR/pcap_validate_docker.sh"; then
       ok "pcap validate:$phase APDU gate passed"
     else
       PCAP_FAIL=$((PCAP_FAIL+1))

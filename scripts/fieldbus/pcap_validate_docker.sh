@@ -6,7 +6,8 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PCAP="${1:-${PCAP_FILE:-${ROOT}/artifacts/bacnet_capture.pcap}}"
 IMAGE="${PCAP_VALIDATE_IMAGE:-diy-bacnet-server:rust}"
 
@@ -21,7 +22,7 @@ PCAP_BASE="$(basename "$PCAP_ABS")"
 
 docker run --rm \
   -v "${PCAP_DIR}:/pcap:ro" \
-  -v "${ROOT}/scripts/pcap_validate.sh:/app/scripts/pcap_validate.sh:ro" \
+  -v "${SCRIPT_DIR}/pcap_validate.sh:/app/scripts/pcap_validate.sh:ro" \
   -e PCAP_MIN_IAM="${PCAP_MIN_IAM:-0}" \
   -e PCAP_MIN_WHOIS="${PCAP_MIN_WHOIS:-0}" \
   -e PCAP_MIN_READ="${PCAP_MIN_READ:-0}" \

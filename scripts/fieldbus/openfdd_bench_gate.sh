@@ -10,9 +10,10 @@
 #   BENCH_MINUTES=30 scripts/openfdd_bench_gate.sh   # half-hour soak inside bench_test
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=scripts/bench_lib.sh
-source "$ROOT/scripts/bench_lib.sh"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/fieldbus/bench_lib.sh
+source "$SCRIPT_DIR/bench_lib.sh"
 
 bench_load_env "$ROOT"
 bench_require_tools
@@ -22,13 +23,13 @@ echo "base=$BENCH_BASE artifacts=${BENCH_ARTIFACTS:-$ROOT/artifacts}"
 
 echo
 echo "== Phase 1: smoke_test.sh =="
-"$ROOT/scripts/smoke_test.sh"
+"$SCRIPT_DIR/smoke_test.sh"
 
 echo
 echo "== Phase 2: bench_test.sh (BACnet PCAP + Modbus + Haystack) =="
 export BENCH_PCAP="${BENCH_PCAP:-1}"
 export BENCH_MINUTES="${BENCH_MINUTES:-0}"
-"$ROOT/scripts/bench_test.sh"
+"$SCRIPT_DIR/bench_test.sh"
 
 echo
 echo "== BENCH GATE PASSED =="

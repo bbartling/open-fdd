@@ -99,6 +99,21 @@ impl BacnetClientService {
             .map_err(|e| e.to_string())
     }
 
+    /// Always `stop()` the client, preserving the primary operation error when both fail.
+    async fn finish_client<T>(
+        mut client: BACnetClient<bacnet_transport::bip::BipTransport>,
+        result: Result<T, String>,
+    ) -> Result<T, String> {
+        let stop = client.stop().await.map_err(|e| e.to_string());
+        match result {
+            Ok(v) => stop.map(|()| v),
+            Err(e) => {
+                let _ = stop;
+                Err(e)
+            }
+        }
+    }
+
     async fn seed_field_device(
         &self,
         client: &BACnetClient<bacnet_transport::bip::BipTransport>,
@@ -191,38 +206,41 @@ impl BacnetClientService {
         let pid = parse_property_id(property_id);
         let bind_port = self.bind_port(device);
 
-        let mut client = self.new_client(device).await?;
-        self.prepare(&client, device, device_instance).await?;
+        let client = self.new_client(device).await?;
+        let result = async {
+            self.prepare(&client, device, device_instance).await?;
 
-        let ack = match client
-            .read_property_from_device(device_instance, oid, pid, None)
-            .await
-        {
-            Ok(a) => a,
-            Err(_) if device.is_some() => {
-                let d = device.unwrap();
-                let ip: Ipv4Addr = d.host.parse().map_err(|e| format!("bad host: {e}"))?;
-                let mac = encode_bip_mac(ip.octets(), d.port);
-                client
-                    .read_property(&mac, oid, pid, None)
-                    .await
-                    .map_err(|e| e.to_string())?
-            }
-            Err(e) => return Err(e.to_string()),
-        };
-        client.stop().await.map_err(|e| e.to_string())?;
+            let ack = match client
+                .read_property_from_device(device_instance, oid, pid, None)
+                .await
+            {
+                Ok(a) => a,
+                Err(_) if device.is_some() => {
+                    let d = device.unwrap();
+                    let ip: Ipv4Addr = d.host.parse().map_err(|e| format!("bad host: {e}"))?;
+                    let mac = encode_bip_mac(ip.octets(), d.port);
+                    client
+                        .read_property(&mac, oid, pid, None)
+                        .await
+                        .map_err(|e| e.to_string())?
+                }
+                Err(e) => return Err(e.to_string()),
+            };
 
-        let (pv, _) =
-            decode_application_value(&ack.property_value, 0).map_err(|e| e.to_string())?;
-        Ok(json!({
-            "device_instance": device_instance,
-            "object_type": object_type,
-            "object_instance": object_instance,
-            "property_id": property_id,
-            "tag": property_value_tag(&pv),
-            "value": property_value_to_json(&pv),
-            "client_bind_port": bind_port,
-        }))
+            let (pv, _) =
+                decode_application_value(&ack.property_value, 0).map_err(|e| e.to_string())?;
+            Ok(json!({
+                "device_instance": device_instance,
+                "object_type": object_type,
+                "object_instance": object_instance,
+                "property_id": property_id,
+                "tag": property_value_tag(&pv),
+                "value": property_value_to_json(&pv),
+                "client_bind_port": bind_port,
+            }))
+        }
+        .await;
+        Self::finish_client(client, result).await
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -287,42 +305,45 @@ impl BacnetClientService {
         let mut buf = BytesMut::new();
         encode_property_value(&mut buf, &pv).map_err(|e| e.to_string())?;
 
-        let mut client = self.new_client(device).await?;
-        self.prepare(&client, device, device_instance).await?;
+        let client = self.new_client(device).await?;
+        let result = async {
+            self.prepare(&client, device, device_instance).await?;
 
-        if let Err(_e) = client
-            .write_property_to_device(
-                device_instance,
-                oid,
-                pid,
-                None,
-                buf.to_vec(),
-                write_priority,
-            )
-            .await
-        {
-            if let Some(d) = device {
-                let ip: Ipv4Addr = d.host.parse().map_err(|e| format!("bad host: {e}"))?;
-                let mac = encode_bip_mac(ip.octets(), d.port);
-                client
-                    .write_property(&mac, oid, pid, None, buf.to_vec(), write_priority)
-                    .await
-                    .map_err(|e| e.to_string())?;
-            } else {
-                return Err("write failed".into());
+            if let Err(_e) = client
+                .write_property_to_device(
+                    device_instance,
+                    oid,
+                    pid,
+                    None,
+                    buf.to_vec(),
+                    write_priority,
+                )
+                .await
+            {
+                if let Some(d) = device {
+                    let ip: Ipv4Addr = d.host.parse().map_err(|e| format!("bad host: {e}"))?;
+                    let mac = encode_bip_mac(ip.octets(), d.port);
+                    client
+                        .write_property(&mac, oid, pid, None, buf.to_vec(), write_priority)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                } else {
+                    return Err("write failed".into());
+                }
             }
-        }
-        client.stop().await.map_err(|e| e.to_string())?;
 
-        Ok(json!({
-            "status": "success",
-            "device_instance": device_instance,
-            "object_type": object_type,
-            "object_instance": object_instance,
-            "property_id": property_id,
-            "released": is_release,
-            "priority": write_priority,
-        }))
+            Ok(json!({
+                "status": "success",
+                "device_instance": device_instance,
+                "object_type": object_type,
+                "object_instance": object_instance,
+                "property_id": property_id,
+                "released": is_release,
+                "priority": write_priority,
+            }))
+        }
+        .await;
+        Self::finish_client(client, result).await
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -403,19 +424,21 @@ impl BacnetClientService {
             });
         }
         let bind_port = self.bind_port(device);
-        let mut client = self.new_client(device).await?;
-        self.prepare(&client, device, device_instance).await?;
-        let rpm = client
-            .read_property_multiple_from_device(device_instance, specs)
-            .await
-            .map_err(|e| e.to_string())?;
-        client.stop().await.map_err(|e| e.to_string())?;
-
-        Ok(json!({
-            "device_instance": device_instance,
-            "results": serialize_rpm(&rpm),
-            "client_bind_port": bind_port,
-        }))
+        let client = self.new_client(device).await?;
+        let result = async {
+            self.prepare(&client, device, device_instance).await?;
+            let rpm = client
+                .read_property_multiple_from_device(device_instance, specs)
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(json!({
+                "device_instance": device_instance,
+                "results": serialize_rpm(&rpm),
+                "client_bind_port": bind_port,
+            }))
+        }
+        .await;
+        Self::finish_client(client, result).await
     }
 
     pub async fn poll_points(&self) -> Result<Vec<Value>, String> {
@@ -495,46 +518,53 @@ impl BacnetClientService {
         device: &FieldDevice,
         specs: &[ReadAccessSpecification],
     ) -> Result<HashMap<String, (Option<Value>, Option<String>)>, String> {
-        let mut client = self.new_client(Some(device)).await?;
-        self.prepare(&client, Some(device), device.device_instance)
-            .await?;
-        let rpm = client
-            .read_property_multiple_from_device(device.device_instance, specs.to_vec())
-            .await
-            .map_err(|e| e.to_string())?;
-        client.stop().await.map_err(|e| e.to_string())?;
+        let client = self.new_client(Some(device)).await?;
+        let result = async {
+            self.prepare(&client, Some(device), device.device_instance)
+                .await?;
+            let rpm = client
+                .read_property_multiple_from_device(device.device_instance, specs.to_vec())
+                .await
+                .map_err(|e| e.to_string())?;
 
-        let mut map = HashMap::new();
-        for obj in rpm.list_of_read_access_results {
-            let oid_str = normalize_oid(&obj.object_identifier);
-            for r in obj.list_of_results {
-                if let Some((class, code)) = r.error {
-                    map.insert(
-                        oid_str.clone(),
-                        (None, Some(format!("Error: class={class:?} code={code:?}"))),
-                    );
-                } else if let Some(bytes) = r.property_value {
-                    let (pv, _) = decode_application_value(&bytes, 0).map_err(|e| e.to_string())?;
-                    map.insert(oid_str.clone(), (Some(property_value_to_json(&pv)), None));
+            let mut map = HashMap::new();
+            for obj in rpm.list_of_read_access_results {
+                let oid_str = normalize_oid(&obj.object_identifier);
+                for r in obj.list_of_results {
+                    if let Some((class, code)) = r.error {
+                        map.insert(
+                            oid_str.clone(),
+                            (None, Some(format!("Error: class={class:?} code={code:?}"))),
+                        );
+                    } else if let Some(bytes) = r.property_value {
+                        let (pv, _) =
+                            decode_application_value(&bytes, 0).map_err(|e| e.to_string())?;
+                        map.insert(oid_str.clone(), (Some(property_value_to_json(&pv)), None));
+                    }
                 }
             }
+            Ok(map)
         }
-        Ok(map)
+        .await;
+        Self::finish_client(client, result).await
     }
 
     pub async fn who_is(&self, low: Option<u32>, high: Option<u32>) -> Result<Vec<Value>, String> {
         let _guard = self.bus_lock.lock().await;
         let cfg = &self.settings.bacnet_client;
-        let mut client = self.new_client(None).await?;
-        self.seed_configured_field_devices(&client).await?;
-        client.who_is(low, high).await.map_err(|e| e.to_string())?;
-        tokio::time::sleep(Duration::from_secs_f64(cfg.whois_timeout_secs)).await;
-        // Re-seed so configured bench devices appear even when broadcast I-Am is not
-        // received on the client's ephemeral UDP port (hosted server owns :47808).
-        self.seed_configured_field_devices(&client).await?;
-        let devices = client.discovered_devices().await;
-        client.stop().await.map_err(|e| e.to_string())?;
-        Ok(devices.iter().map(device_summary).collect())
+        let client = self.new_client(None).await?;
+        let result = async {
+            self.seed_configured_field_devices(&client).await?;
+            client.who_is(low, high).await.map_err(|e| e.to_string())?;
+            tokio::time::sleep(Duration::from_secs_f64(cfg.whois_timeout_secs)).await;
+            // Re-seed so configured bench devices appear even when broadcast I-Am is not
+            // received on the client's ephemeral UDP port (hosted server owns :47808).
+            self.seed_configured_field_devices(&client).await?;
+            let devices = client.discovered_devices().await;
+            Ok(devices.iter().map(device_summary).collect())
+        }
+        .await;
+        Self::finish_client(client, result).await
     }
 
     pub async fn who_is_router_to_network(&self) -> Result<Vec<Value>, String> {
@@ -566,70 +596,73 @@ impl BacnetClientService {
 
     async fn point_discovery_impl(&self, device_instance: u32) -> Result<Value, String> {
         let device = self.find_device(device_instance);
-        let mut client = self.new_client(device).await?;
-        self.prepare(&client, device, device_instance).await?;
-        let addr = self.resolve_address(&client, device, device_instance).await;
+        let client = self.new_client(device).await?;
+        let result = async {
+            self.prepare(&client, device, device_instance).await?;
+            let addr = self.resolve_address(&client, device, device_instance).await;
 
-        let raw_oids = self.read_object_list(&client, device_instance).await?;
-        let oids: Vec<_> = raw_oids
-            .into_iter()
-            .filter(|o| object_type_name(o.object_type()) != "device")
-            .collect();
-
-        let name_map = self
-            .read_object_names(&client, device_instance, &oids)
-            .await?;
-
-        let mut commandable = HashSet::new();
-        let candidates: Vec<_> = oids
-            .iter()
-            .filter(|o| COMMANDABLE_TYPES.contains(&object_type_name(o.object_type()).as_str()))
-            .copied()
-            .collect();
-        for chunk in candidates.chunks(15) {
-            let specs: Vec<_> = chunk
-                .iter()
-                .map(|o| ReadAccessSpecification {
-                    object_identifier: *o,
-                    list_of_property_references: vec![PropertyReference {
-                        property_identifier: PropertyIdentifier::PRIORITY_ARRAY,
-                        property_array_index: Some(0),
-                    }],
-                })
+            let raw_oids = self.read_object_list(&client, device_instance).await?;
+            let oids: Vec<_> = raw_oids
+                .into_iter()
+                .filter(|o| object_type_name(o.object_type()) != "device")
                 .collect();
-            if let Ok(res) = client
-                .read_property_multiple_from_device(device_instance, specs)
-                .await
-            {
-                for obj in res.list_of_read_access_results {
-                    let oid_str = normalize_oid(&obj.object_identifier);
-                    for r in obj.list_of_results {
-                        if r.error.is_none() && r.property_value.is_some() {
-                            commandable.insert(oid_str.clone());
+
+            let name_map = self
+                .read_object_names(&client, device_instance, &oids)
+                .await?;
+
+            let mut commandable = HashSet::new();
+            let candidates: Vec<_> = oids
+                .iter()
+                .filter(|o| COMMANDABLE_TYPES.contains(&object_type_name(o.object_type()).as_str()))
+                .copied()
+                .collect();
+            for chunk in candidates.chunks(15) {
+                let specs: Vec<_> = chunk
+                    .iter()
+                    .map(|o| ReadAccessSpecification {
+                        object_identifier: *o,
+                        list_of_property_references: vec![PropertyReference {
+                            property_identifier: PropertyIdentifier::PRIORITY_ARRAY,
+                            property_array_index: Some(0),
+                        }],
+                    })
+                    .collect();
+                if let Ok(res) = client
+                    .read_property_multiple_from_device(device_instance, specs)
+                    .await
+                {
+                    for obj in res.list_of_read_access_results {
+                        let oid_str = normalize_oid(&obj.object_identifier);
+                        for r in obj.list_of_results {
+                            if r.error.is_none() && r.property_value.is_some() {
+                                commandable.insert(oid_str.clone());
+                            }
                         }
                     }
                 }
             }
-        }
-        client.stop().await.map_err(|e| e.to_string())?;
 
-        let objects: Vec<_> = oids
-            .iter()
-            .map(|o| {
-                let oid_str = normalize_oid(o);
-                json!({
-                    "object_identifier": oid_str,
-                    "name": name_map.get(&oid_str).cloned().unwrap_or_else(|| json!("?")),
-                    "commandable": commandable.contains(&oid_str),
+            let objects: Vec<_> = oids
+                .iter()
+                .map(|o| {
+                    let oid_str = normalize_oid(o);
+                    json!({
+                        "object_identifier": oid_str,
+                        "name": name_map.get(&oid_str).cloned().unwrap_or_else(|| json!("?")),
+                        "commandable": commandable.contains(&oid_str),
+                    })
                 })
-            })
-            .collect();
+                .collect();
 
-        Ok(json!({
-            "device_address": addr,
-            "device_instance": device_instance,
-            "objects": objects,
-        }))
+            Ok(json!({
+                "device_address": addr,
+                "device_instance": device_instance,
+                "objects": objects,
+            }))
+        }
+        .await;
+        Self::finish_client(client, result).await
     }
 
     async fn read_object_list(
@@ -720,17 +753,20 @@ impl BacnetClientService {
         let device = self.find_device(device_instance);
         let ot = parse_object_type(object_type)?;
         let oid = ObjectIdentifier::new(ot, object_instance).map_err(|e| e.to_string())?;
-        let mut client = self.new_client(device).await?;
-        self.prepare(&client, device, device_instance).await?;
-        let slots = self
-            .read_priority_slots(&client, device_instance, oid)
-            .await?;
-        client.stop().await.map_err(|e| e.to_string())?;
-        Ok(json!({
-            "device_instance": device_instance,
-            "object_identifier": normalize_oid(&oid),
-            "priority_array": slots,
-        }))
+        let client = self.new_client(device).await?;
+        let result = async {
+            self.prepare(&client, device, device_instance).await?;
+            let slots = self
+                .read_priority_slots(&client, device_instance, oid)
+                .await?;
+            Ok(json!({
+                "device_instance": device_instance,
+                "object_identifier": normalize_oid(&oid),
+                "priority_array": slots,
+            }))
+        }
+        .await;
+        Self::finish_client(client, result).await
     }
 
     async fn read_priority_slots(
@@ -931,86 +967,89 @@ impl BacnetClientService {
             .collect();
 
         let device = self.find_device(device_instance);
-        let mut client = self.new_client(device).await?;
-        self.prepare(&client, device, device_instance).await?;
+        let client = self.new_client(device).await?;
+        let result = async {
+            self.prepare(&client, device, device_instance).await?;
 
-        let mut points = Vec::new();
-        let mut overrides_by_oid: HashMap<String, Vec<Value>> = HashMap::new();
-        let mut with_pa = 0usize;
+            let mut points = Vec::new();
+            let mut overrides_by_oid: HashMap<String, Vec<Value>> = HashMap::new();
+            let mut with_pa = 0usize;
 
-        for o in &commandable {
-            let oid_str = o["object_identifier"].as_str().unwrap_or("");
-            let mut parts = oid_str.split(',');
-            let type_name = parts.next().unwrap_or("");
-            let inst: u32 = parts.next().unwrap_or("0").parse().unwrap_or(0);
-            let ot = parse_object_type(type_name)?;
-            let oid = ObjectIdentifier::new(ot, inst).map_err(|e| e.to_string())?;
-            let slots = self
-                .read_priority_slots(&client, device_instance, oid)
-                .await?;
-            let active: Vec<_> = slots
-                .iter()
-                .filter(|s| {
-                    s["type"]
-                        .as_str()
-                        .map(|t| t != "null" && t != "error")
-                        .unwrap_or(false)
-                })
-                .cloned()
-                .collect();
-            if !slots.is_empty() {
-                with_pa += 1;
-            }
-            for s in active {
-                let rec = json!({
-                    "priority_level": s["priority_level"],
-                    "object_identifier": oid_str,
-                    "object_name": o["name"],
-                    "type": s["type"],
-                    "value": s["value"],
-                });
-                points.push(rec.clone());
-                overrides_by_oid
-                    .entry(oid_str.to_string())
-                    .or_default()
-                    .push(json!({
+            for o in &commandable {
+                let oid_str = o["object_identifier"].as_str().unwrap_or("");
+                let mut parts = oid_str.split(',');
+                let type_name = parts.next().unwrap_or("");
+                let inst: u32 = parts.next().unwrap_or("0").parse().unwrap_or(0);
+                let ot = parse_object_type(type_name)?;
+                let oid = ObjectIdentifier::new(ot, inst).map_err(|e| e.to_string())?;
+                let slots = self
+                    .read_priority_slots(&client, device_instance, oid)
+                    .await?;
+                let active: Vec<_> = slots
+                    .iter()
+                    .filter(|s| {
+                        s["type"]
+                            .as_str()
+                            .map(|t| t != "null" && t != "error")
+                            .unwrap_or(false)
+                    })
+                    .cloned()
+                    .collect();
+                if !slots.is_empty() {
+                    with_pa += 1;
+                }
+                for s in active {
+                    let rec = json!({
                         "priority_level": s["priority_level"],
+                        "object_identifier": oid_str,
+                        "object_name": o["name"],
                         "type": s["type"],
                         "value": s["value"],
-                    }));
+                    });
+                    points.push(rec.clone());
+                    overrides_by_oid
+                        .entry(oid_str.to_string())
+                        .or_default()
+                        .push(json!({
+                            "priority_level": s["priority_level"],
+                            "type": s["type"],
+                            "value": s["value"],
+                        }));
+                }
             }
-        }
-        client.stop().await.map_err(|e| e.to_string())?;
 
-        let points_with_overrides: Vec<_> = overrides_by_oid
-            .into_iter()
-            .map(|(oid_str, slots)| {
-                let levels: Vec<_> = slots
-                    .iter()
-                    .filter_map(|s| s["priority_level"].as_u64())
-                    .collect();
-                json!({
-                    "object_identifier": oid_str,
-                    "object_name": name_by_oid.get(&oid_str).cloned().unwrap_or(json!("")),
-                    "override_priority_levels": levels,
-                    "has_multiple_overrides": levels.len() > 1,
-                    "overrides": slots,
+            let points_with_overrides: Vec<_> = overrides_by_oid
+                .into_iter()
+                .map(|(oid_str, slots)| {
+                    let levels: Vec<_> = slots
+                        .iter()
+                        .filter_map(|s| s["priority_level"].as_u64())
+                        .collect();
+                    json!({
+                        "object_identifier": oid_str,
+                        "object_name": name_by_oid.get(&oid_str).cloned().unwrap_or(json!("")),
+                        "override_priority_levels": levels,
+                        "has_multiple_overrides": levels.len() > 1,
+                        "overrides": slots,
+                    })
                 })
-            })
-            .collect();
+                .collect();
 
-        Ok(json!({
-            "device_id": device_instance,
-            "address": device_address,
-            "points": points,
-            "points_with_overrides": points_with_overrides,
-            "summary": {
-                "total_points": objects.len(),
-                "with_priority_array": with_pa,
-                "without_priority_array": objects.len().saturating_sub(with_pa),
-                "points_with_override_count": points_with_overrides.len(),
-            }
-        }))
+            Ok(json!({
+                "device_id": device_instance,
+                "address": device_address,
+                "points": points,
+                "points_with_overrides": points_with_overrides,
+                "summary": {
+                    "total_points": objects.len(),
+                    "with_priority_array": with_pa,
+                    "without_priority_array": objects.len().saturating_sub(with_pa),
+                    "points_with_override_count": points_with_overrides.len(),
+                }
+            }))
+        }
+        .await;
+        Self::finish_client(client, result).await
     }
 
     async fn resolve_address(
