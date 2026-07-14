@@ -132,7 +132,8 @@ PY
   publish:
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    # arm64-via-QEMU cold builds can take >4h; keep step under job budget.
+    timeout-minutes: 420
     steps:
       - uses: actions/checkout@v5
 
@@ -159,7 +160,7 @@ PY
 
       - name: Build and push multi-arch image
         uses: docker/build-push-action@v6
-        timeout-minutes: 240
+        timeout-minutes: 390
         with:
           context: .
           file: Dockerfile
