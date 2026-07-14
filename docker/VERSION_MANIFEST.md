@@ -19,6 +19,8 @@ All four container images in the MQTT stack share a **coordinated release** tied
 | `<workspace.version>` | Every publish | Semver from `Cargo.toml` (e.g. `3.3.0`) |
 | `nightly` | `master` branch only | Floating integration channel |
 
+Current stack publish builds **linux/amd64** only so RocksDB-heavy central/fieldbus images finish within GH Actions time budgets (QEMU arm64 previously timed out at 2h). Re-enable multi-arch when a native arm64 runner or longer budget is available.
+
 Only advance `nightly` after `scripts/release/smoke_standalone_mqtts.sh` passes on the candidate SHA.
 
 ## Compose alignment
