@@ -1,5 +1,8 @@
 # syntax=docker/dockerfile:1
 FROM rust:1.95-bookworm AS builder
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends clang libclang-dev build-essential pkg-config libssl-dev \
+  && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
