@@ -299,6 +299,9 @@ mod tests {
     use utoipa::OpenApi;
 
     fn with_env(key: &str, value: Option<&str>, f: impl FnOnce()) {
+        use std::sync::Mutex;
+        static ENV_LOCK: Mutex<()> = Mutex::new(());
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let prev = std::env::var(key).ok();
         match value {
             Some(v) => std::env::set_var(key, v),

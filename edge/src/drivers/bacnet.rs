@@ -70,7 +70,12 @@ pub fn merge_live_discovery_into_registry(_device_instance: u32) -> Value {
     moved_json()
 }
 pub fn overrides_summary_json() -> Value {
-    json!({ "ok": true, "overrides": [], "note": "edge overrides now live on fieldbus" })
+    json!({
+        "ok": true,
+        "overrides": [],
+        "operator_priority": operator_override_priority(),
+        "note": "edge overrides now live on fieldbus"
+    })
 }
 pub fn start_hourly_override_scanner(_service_mode: String) {}
 pub fn poll_interval_s() -> u64 {
@@ -82,7 +87,11 @@ pub fn poll_cycle_value() -> Value {
     moved_json()
 }
 pub fn scan_once_value() -> Value {
-    moved_json()
+    json!({
+        "ok": true,
+        "summary": { "total": 0, "operator": 0, "other": 0 },
+        "note": "override scan runs on openfdd-fieldbus; edge stub returns empty summary"
+    })
 }
 pub fn whois_json(_body: &Value) -> String {
     moved_str()
@@ -105,7 +114,15 @@ pub fn read_present_value_json(_body: &Value) -> String {
 pub fn driver_tree_json() -> String {
     json!({
         "ok": true,
-        "drivers": [],
+        "drivers": [{
+            "id": "bacnet-ip",
+            "devices": [{
+                "device_instance": 599999,
+                "device_name": "OpenFDD",
+                "local_server": true,
+                "note": "hosted by openfdd-fieldbus"
+            }]
+        }],
         "hint": "migrate registry with scripts/migrate_driver_tree_to_fieldbus.py"
     })
     .to_string()
@@ -153,10 +170,16 @@ pub fn write_property_value(_body: &Value) -> Value {
     moved_json()
 }
 pub fn commission_status_json() -> String {
+    let mode = std::env::var("OPENFDD_BACNET_MODE").unwrap_or_else(|_| "fieldbus".into());
     json!({
         "ok": true,
         "role": "retired",
-        "fieldbus": "openfdd-fieldbus"
+        "fieldbus": "openfdd-fieldbus",
+        "config": {
+            "mode": mode,
+            "wire": "mqtts",
+            "note": "UDP BACnet is owned by openfdd-fieldbus"
+        }
     })
     .to_string()
 }

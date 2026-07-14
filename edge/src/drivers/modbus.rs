@@ -110,8 +110,9 @@ pub fn modbus_config_value() -> Value {
 }
 
 pub fn points_json() -> String {
-    if let Some(err) = live_gate::field_wire_blocked("points", "modbus") {
-        return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
+    if live_gate::field_wire_blocked("points", "modbus").is_some() {
+        // Keep array shape for API/UI consumers during cutover.
+        return "[]".to_string();
     }
     if let Some(err) = live_gate::modbus_live_required("points") {
         return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
