@@ -4,13 +4,14 @@
 # Sidecar startup (docker/.env): OPENFDD_FIELDBUS_BIND, API key, HAYSTACK_* for Niagara.
 # Per-request targets (Modbus host/port, BACnet device/point): exported here and passed in JSON bodies.
 #
-# Override via environment or copy scripts/bench.env.example → scripts/bench.env.local
+# Override via environment or copy scripts/fieldbus/bench.env.example → scripts/fieldbus/bench.env.local
 bench_load_env() {
-  local root="${1:?root}"
-  if [[ -f "$root/scripts/bench.env.local" ]]; then
+  local root="${1:?repo root}"
+  local env_file="$root/scripts/fieldbus/bench.env.local"
+  if [[ -f "$env_file" ]]; then
     set -a
     # shellcheck source=/dev/null
-    source "$root/scripts/bench.env.local"
+    source "$env_file"
     set +a
   fi
 }

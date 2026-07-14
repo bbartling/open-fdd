@@ -11,7 +11,7 @@ use crate::models::*;
     tag = "Root",
     responses((status = 200, description = "Service metadata"))
 )]
-fn doc_root() {}
+pub(crate) fn doc_root() {}
 
 /// Liveness probe.
 #[utoipa::path(
@@ -20,7 +20,7 @@ fn doc_root() {}
     tag = "Root",
     responses((status = 200, description = "OK"))
 )]
-fn doc_health() {}
+pub(crate) fn doc_health() {}
 
 /// Open-FDD health shape (`service`, `version`, `git_sha`, `poll_running`).
 #[utoipa::path(
@@ -29,7 +29,7 @@ fn doc_health() {}
     tag = "Open-FDD",
     responses((status = 200, description = "Sidecar health"))
 )]
-fn doc_api_health() {}
+pub(crate) fn doc_api_health() {}
 
 /// ReadProperty on a field device (bench/low-level).
 #[utoipa::path(
@@ -43,7 +43,7 @@ fn doc_api_health() {}
         (status = 502, description = "BACnet error")
     )
 )]
-fn doc_bacnet_read() {}
+pub(crate) fn doc_bacnet_read() {}
 
 /// WriteProperty with optional dry-run when `approved` is false.
 #[utoipa::path(
@@ -58,7 +58,7 @@ fn doc_bacnet_read() {}
         (status = 502, description = "BACnet error")
     )
 )]
-fn doc_bacnet_write() {}
+pub(crate) fn doc_bacnet_write() {}
 
 /// Validate and encode a write without touching the BACnet bus.
 #[utoipa::path(
@@ -69,7 +69,7 @@ fn doc_bacnet_write() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Dry-run result"))
 )]
-fn doc_bacnet_write_dry_run() {}
+pub(crate) fn doc_bacnet_write_dry_run() {}
 
 /// ReadPropertyMultiple batch read.
 #[utoipa::path(
@@ -80,7 +80,7 @@ fn doc_bacnet_write_dry_run() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "RPM results"))
 )]
-fn doc_bacnet_rpm() {}
+pub(crate) fn doc_bacnet_rpm() {}
 
 /// Who-Is device discovery — send `{}` to scan all instances (0–4194303); set `low`/`high` to narrow.
 #[utoipa::path(
@@ -91,7 +91,7 @@ fn doc_bacnet_rpm() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Discovered devices"))
 )]
-fn doc_bacnet_whois() {}
+pub(crate) fn doc_bacnet_whois() {}
 
 /// Who-Is router-to-network — discovers MS/TP routers on the BACnet/IP segment (no request body).
 #[utoipa::path(
@@ -101,7 +101,7 @@ fn doc_bacnet_whois() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Router list"))
 )]
-fn doc_bacnet_whois_router() {}
+pub(crate) fn doc_bacnet_whois_router() {}
 
 /// Point discovery — walks object-list, reads object names, flags commandable points.
 #[utoipa::path(
@@ -112,7 +112,7 @@ fn doc_bacnet_whois_router() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Discovered objects with names"))
 )]
-fn doc_api_point_discovery() {}
+pub(crate) fn doc_api_point_discovery() {}
 
 /// Read all 16 priority-array slots for one object.
 #[utoipa::path(
@@ -123,7 +123,7 @@ fn doc_api_point_discovery() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Priority array slots"))
 )]
-fn doc_bacnet_priority_array() {}
+pub(crate) fn doc_bacnet_priority_array() {}
 
 /// Supervisory override audit — scans commandable points and reports active priority overrides.
 #[utoipa::path(
@@ -134,7 +134,7 @@ fn doc_bacnet_priority_array() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Override audit with points_with_overrides"))
 )]
-fn doc_bacnet_supervisory() {}
+pub(crate) fn doc_bacnet_supervisory() {}
 
 /// Open-FDD supervisory override audit (preferred path) — same as `/bacnet/supervisory`.
 #[utoipa::path(
@@ -145,7 +145,7 @@ fn doc_bacnet_supervisory() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Override audit with points_with_overrides"))
 )]
-fn doc_api_supervisory() {}
+pub(crate) fn doc_api_supervisory() {}
 
 /// Background poll engine status and last values.
 #[utoipa::path(
@@ -155,7 +155,7 @@ fn doc_api_supervisory() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Poll status"))
 )]
-fn doc_bacnet_poll_status() {}
+pub(crate) fn doc_bacnet_poll_status() {}
 
 /// Run one poll cycle immediately.
 #[utoipa::path(
@@ -165,7 +165,7 @@ fn doc_bacnet_poll_status() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Poll cycle result"))
 )]
-fn doc_bacnet_poll_once() {}
+pub(crate) fn doc_bacnet_poll_once() {}
 
 /// List all hosted server objects (device 599999).
 #[utoipa::path(
@@ -175,7 +175,7 @@ fn doc_bacnet_poll_once() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Server object list"))
 )]
-fn doc_bacnet_server_objects() {}
+pub(crate) fn doc_bacnet_server_objects() {}
 
 /// Open-FDD alias for `/bacnet/server/objects`.
 #[utoipa::path(
@@ -185,7 +185,7 @@ fn doc_bacnet_server_objects() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Server object list"))
 )]
-fn doc_api_server_points() {}
+pub(crate) fn doc_api_server_points() {}
 
 /// Commandable points on the hosted server (BACnet-writable, REST read-only).
 #[utoipa::path(
@@ -195,7 +195,7 @@ fn doc_api_server_points() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Commandable server points"))
 )]
-fn doc_bacnet_server_commandable() {}
+pub(crate) fn doc_bacnet_server_commandable() {}
 
 /// Update server-owned points via REST (rejects commandable points).
 #[utoipa::path(
@@ -206,7 +206,7 @@ fn doc_bacnet_server_commandable() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Update result"))
 )]
-fn doc_bacnet_server_update() {}
+pub(crate) fn doc_bacnet_server_update() {}
 
 /// Cached Open-Meteo weather for the hosted server.
 #[utoipa::path(
@@ -216,7 +216,7 @@ fn doc_bacnet_server_update() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Weather cache", body = WeatherResponse))
 )]
-fn doc_weather() {}
+pub(crate) fn doc_weather() {}
 
 /// Force refresh weather from Open-Meteo.
 #[utoipa::path(
@@ -226,7 +226,7 @@ fn doc_weather() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Refreshed weather"))
 )]
-fn doc_weather_refresh() {}
+pub(crate) fn doc_weather_refresh() {}
 
 /// Modbus TCP read (registers specified in body).
 #[utoipa::path(
@@ -237,7 +237,7 @@ fn doc_weather_refresh() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Register values"))
 )]
-fn doc_modbus_read() {}
+pub(crate) fn doc_modbus_read() {}
 
 /// Haystack server metadata.
 #[utoipa::path(
@@ -247,7 +247,7 @@ fn doc_modbus_read() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Haystack about"))
 )]
-fn doc_haystack_about() {}
+pub(crate) fn doc_haystack_about() {}
 
 /// Haystack read by filter.
 #[utoipa::path(
@@ -258,7 +258,7 @@ fn doc_haystack_about() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Haystack grid"))
 )]
-fn doc_haystack_read() {}
+pub(crate) fn doc_haystack_read() {}
 
 /// Haystack nav tree.
 #[utoipa::path(
@@ -269,7 +269,7 @@ fn doc_haystack_read() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "Nav nodes"))
 )]
-fn doc_haystack_nav() {}
+pub(crate) fn doc_haystack_nav() {}
 
 /// Haystack history read.
 #[utoipa::path(
@@ -280,4 +280,4 @@ fn doc_haystack_nav() {}
     security(("BearerAuth" = [])),
     responses((status = 200, description = "History grid"))
 )]
-fn doc_haystack_his_read() {}
+pub(crate) fn doc_haystack_his_read() {}

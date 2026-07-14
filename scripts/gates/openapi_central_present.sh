@@ -14,7 +14,7 @@ fi
 
 cargo check -p openfdd-central
 
-if ! grep -nE '"/openapi\.json"|/openapi\.json' services/central/src >/dev/null; then
+if ! grep -rnE '"/openapi\.json"|/openapi\.json' services/central/src >/dev/null; then
   echo "FAIL: /openapi.json route not found under services/central/src" >&2
   exit 1
 fi

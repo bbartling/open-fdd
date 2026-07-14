@@ -21,9 +21,10 @@
 #   SOAK_MINUTES=30 scripts/fieldbus/soak_test.sh
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=scripts/bench_lib.sh
-source "$ROOT/scripts/bench_lib.sh"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/fieldbus/bench_lib.sh
+source "$SCRIPT_DIR/bench_lib.sh"
 bench_load_env "$ROOT"
 
 BASE="${SMOKE_BASE:-$BENCH_BASE}"

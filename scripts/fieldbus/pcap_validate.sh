@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PCAP="${1:-${PCAP_FILE:-${ROOT}/artifacts/bacnet_capture.pcap}}"
 
 if [[ ! -f "$PCAP" ]]; then
