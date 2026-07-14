@@ -33,14 +33,15 @@ export BENCH_BACNET_UDP_PORT="${BENCH_BACNET_UDP_PORT:-47808}"
 export BENCH_PCAP_FILTER="${BENCH_PCAP_FILTER:-udp port ${BENCH_BACNET_UDP_PORT}}"
 
 # ---- Modbus (POST /modbus/read body — not sidecar .env) ----
-export BENCH_MODBUS_HOST="${BENCH_MODBUS_HOST:-192.168.204.14}"
+# Private lab hosts belong in bench.env.local, not repo defaults.
+export BENCH_MODBUS_HOST="${BENCH_MODBUS_HOST:-127.0.0.1}"
 export BENCH_MODBUS_PORT="${BENCH_MODBUS_PORT:-1502}"
 export BENCH_MODBUS_UNIT="${BENCH_MODBUS_UNIT:-1}"
 export BENCH_MODBUS_REG="${BENCH_MODBUS_REG:-0}"
 export BENCH_MODBUS_FN="${BENCH_MODBUS_FN:-input}"
 
 # ---- Haystack (gateway startup env — sidecar must be started with HAYSTACK_*) ----
-export BENCH_HAYSTACK_URL="${BENCH_HAYSTACK_URL:-https://192.168.204.11/haystack}"
+export BENCH_HAYSTACK_URL="${BENCH_HAYSTACK_URL:-http://127.0.0.1:8081}"
 export BENCH_HAYSTACK_USER="${BENCH_HAYSTACK_USER:-open_fdd}"
 export BENCH_HAYSTACK_FILTER="${BENCH_HAYSTACK_FILTER:-point and temp}"
 export BENCH_HAYSTACK_HIS_ID="${BENCH_HAYSTACK_HIS_ID:-}"

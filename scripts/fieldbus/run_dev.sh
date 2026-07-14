@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Local dev launcher — pure Rust axum sidecar.
+# Localdev launcher — pure Rust axum fieldbus.
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
-"${ROOT}/scripts/preflight_free_47808.sh"
+"${ROOT}/scripts/fieldbus/preflight_free_47808.sh"
 
-export OPENFDD_FIELDBUS_CONFIG_DIR="${OPENFDD_FIELDBUS_CONFIG_DIR:-$ROOT/config}"
-export OPENFDD_FIELDBUS_BIND="${OPENFDD_FIELDBUS_BIND:-${RUSTY_GATEWAY_BIND:-192.168.204.55}}"
+export OPENFDD_FIELDBUS_CONFIG_DIR="${OPENFDD_FIELDBUS_CONFIG_DIR:-$ROOT/config/fieldbus}"
+# Bind IP for BACnet; loopback-friendly default for CI / laptop. Override for OT LAN.
+export OPENFDD_FIELDBUS_BIND="${OPENFDD_FIELDBUS_BIND:-${RUSTY_GATEWAY_BIND:-127.0.0.1}}"
 export OPENFDD_FIELDBUS_OPENAPI="${OPENFDD_FIELDBUS_OPENAPI:-1}"
 
 if [ -z "${OPENFDD_FIELDBUS_API_KEY:-${RUSTY_GATEWAY_API_KEY:-}}" ]; then
@@ -15,6 +16,6 @@ if [ -z "${OPENFDD_FIELDBUS_API_KEY:-${RUSTY_GATEWAY_API_KEY:-}}" ]; then
   echo "OPENFDD_FIELDBUS_API_KEY generated (save for Swagger Authorize)"
 fi
 
-echo "Starting Rust gateway on http://0.0.0.0:8080 (Swagger /docs)"
-cd rust-api
-exec cargo run --release
+echo "Starting openfdd-fieldbus (Swagger /docs) — config ${OPENFDD_FIELDBUS_CONFIG_DIR}"
+cd "$ROOT"
+exec cargo run --release -p openfdd-fieldbus

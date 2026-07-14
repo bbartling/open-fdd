@@ -2,15 +2,14 @@
 device_instance = 599999
 device_name = "OpenFDD"
 # Bind on all interfaces so broadcast Who-Is from remote BMS discovery
-# (Workbench/Tridium) reaches the socket. A specific unicast bind only
-# receives directed unicast, so remote discover would never see the I-Am.
+# reaches the socket. Override in local config for OT LAN.
 interface = "0.0.0.0"
 port = 47808
-broadcast = "192.168.204.255"
+broadcast = "255.255.255.255"
 
 [bacnet_client]
-interface = "192.168.204.55"
-broadcast = "192.168.204.255"
+interface = "0.0.0.0"
+broadcast = "255.255.255.255"
 # Ephemeral client bind — never share UDP :47808 with the hosted server socket.
 whois_bind_port = 0
 read_bind_port = 0
