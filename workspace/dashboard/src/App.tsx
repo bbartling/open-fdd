@@ -18,6 +18,7 @@ import DataManagementPage from "./pages/DataManagementPage";
 import ReportBuilderPage from "./pages/ReportBuilderPage";
 import AlgorithmsPage from "./pages/AlgorithmsPage";
 import DataExportPage from "./pages/DataExportPage";
+import EdgeFleetPage from "./pages/EdgeFleet";
 import { TabErrorBoundary } from "./components/TabDebugPanel";
 
 export default function App() {
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="plot" element={<TabErrorBoundary tab="plot"><PlotPage /></TabErrorBoundary>} />
             <Route path="drivers" element={<Navigate to="/bacnet" replace />} />
             <Route path="exports" element={<TabErrorBoundary tab="exports"><DataExportPage /></TabErrorBoundary>} />
+            <Route path="edge-fleet" element={<TabErrorBoundary tab="edge-fleet"><EdgeFleetPage /></TabErrorBoundary>} />
             <Route path="haystack" element={<TabErrorBoundary tab="haystack"><HaystackPage /></TabErrorBoundary>} />
             <Route path="bacnet" element={<TabErrorBoundary tab="bacnet"><BacnetPage /></TabErrorBoundary>} />
             <Route path="modbus" element={<TabErrorBoundary tab="modbus"><ModbusPage /></TabErrorBoundary>} />

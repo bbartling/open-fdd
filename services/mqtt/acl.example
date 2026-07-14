@@ -1,0 +1,8 @@
+# Example ACL — replace with generated mosquitto.acl from openfdd-provision.
+# user edge:local:fieldbus-1
+# topic write openfdd/v1/sites/local/edges/fieldbus-1/#
+# topic read openfdd/v1/sites/local/edges/fieldbus-1/commands/#
+#
+# user central:local
+# topic read openfdd/v1/sites/local/#
+# topic write openfdd/v1/sites/local/edges/+/commands/#

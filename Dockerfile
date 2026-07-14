@@ -20,6 +20,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY edge ./edge
 COPY mcp ./mcp
 COPY crates ./crates
+COPY services ./services
 RUN echo "==> release build jobs=${CARGO_BUILD_JOBS}" \
     && cargo build --release -p open_fdd_edge_prototype -p openfdd-mcp -j "${CARGO_BUILD_JOBS}"
 

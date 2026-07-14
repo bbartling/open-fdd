@@ -1,6 +1,16 @@
 /target
 /edge/target
 /.cache/
+
+# Local cutover / MQTT provision artifacts (never commit CA or kits)
+/backups/
+/reports/
+/docs/benchmarks/parity_b100_latest/
+/deploy/mqtt/ca/
+/deploy/mqtt/certs/
+/deploy/mqtt/kits/
+/deploy/mqtt/acl/
+*.key.pem
 __pycache__/
 .pytest_cache/
 /.env

@@ -1,0 +1,81 @@
+# Open-FDD standalone: central + UI + MQTT + fieldbus (MQTTS locally).
+# remote edge: omit fieldbus here and run compose.edge.yml on the OT host.
+
+name: openfdd-standalone
+
+services:
+  mqtt:
+    image: ${OPENFDD_MQTT_IMAGE:-ghcr.io/bbartling/openfdd-mqtt:nightly}
+    build:
+      context: ../services/mqtt
+    ports:
+      - "8883:8883"
+    volumes:
+      - ../deploy/mqtt/certs:/mosquitto/certs:ro
+      - ../deploy/mqtt/acl:/mosquitto/config/acl:ro
+      - mqtt-data:/mosquitto/data
+    restart: unless-stopped
+
+  central:
+    image: ${OPENFDD_CENTRAL_IMAGE:-ghcr.io/bbartling/openfdd-central:nightly}
+    build:
+      context: ..
+      dockerfile: services/central/Dockerfile
+    environment:
+      OPENFDD_MQTT_ENABLED: "1"
+      OPENFDD_MQTT_HOST: mqtt
+      OPENFDD_MQTT_PORT: "8883"
+      OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:-local}
+      OPENFDD_EDGE_ID: "+"
+      OPENFDD_MQTT_CA_PEM: /mqtt/ca.pem
+      OPENFDD_MQTT_CERT_PEM: /mqtt/central.cert.pem
+      OPENFDD_MQTT_KEY_PEM: /mqtt/central.key.pem
+      OPENFDD_WORKSPACE: /workspace
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../workspace:/workspace
+      - ../deploy/mqtt/kits/${OPENFDD_SITE_ID:-local}__central:/mqtt:ro
+    depends_on:
+      - mqtt
+    restart: unless-stopped
+
+  ui:
+    image: ${OPENFDD_UI_IMAGE:-ghcr.io/bbartling/openfdd-ui:nightly}
+    build:
+      context: ..
+      dockerfile: workspace/dashboard/Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - central
+    restart: unless-stopped
+
+  fieldbus:
+    image: ${OPENFDD_FIELDBUS_IMAGE:-ghcr.io/bbartling/openfdd-fieldbus:nightly}
+    build:
+      context: ..
+      dockerfile: services/fieldbus/Dockerfile
+    network_mode: host
+    environment:
+      OPENFDD_FIELDBUS_CONFIG_DIR: /app/config
+      OPENFDD_FIELDBUS_HTTP_HOST: 127.0.0.1
+      OPENFDD_FIELDBUS_HTTP_PORT: "8081"
+      OPENFDD_MQTT_ENABLED: "1"
+      OPENFDD_MQTT_HOST: 127.0.0.1
+      OPENFDD_MQTT_PORT: "8883"
+      OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:-local}
+      OPENFDD_EDGE_ID: ${OPENFDD_EDGE_ID:-fieldbus-1}
+      OPENFDD_MQTT_CA_PEM: /mqtt/ca.pem
+      OPENFDD_MQTT_CERT_PEM: /mqtt/edge.cert.pem
+      OPENFDD_MQTT_KEY_PEM: /mqtt/edge.key.pem
+      OPENFDD_MQTT_SPOOL_DIR: /spool
+    volumes:
+      - ../config/fieldbus:/app/config:ro
+      - ../deploy/mqtt/kits/${OPENFDD_SITE_ID:-local}__${OPENFDD_EDGE_ID:-fieldbus-1}:/mqtt:ro
+      - fieldbus-spool:/spool
+    restart: unless-stopped
+
+volumes:
+  mqtt-data:
+  fieldbus-spool:

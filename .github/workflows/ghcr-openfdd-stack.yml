@@ -1,0 +1,211 @@
+# Publish Open-FDD MQTT stack images to GHCR (central, ui, fieldbus, mqtt).
+# Nightly on master; semver + sha tags on every push to master or version tags.
+#
+# Legacy monolithic edge: rust-ghcr.yml → openfdd-edge-rust (separate lineage).
+name: Publish Open-FDD stack to GHCR
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: ghcr-openfdd-stack
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io/bbartling
+  CENTRAL_IMAGE: ghcr.io/bbartling/openfdd-central
+  UI_IMAGE: ghcr.io/bbartling/openfdd-ui
+  FIELDBUS_IMAGE: ghcr.io/bbartling/openfdd-fieldbus
+  MQTT_IMAGE: ghcr.io/bbartling/openfdd-mqtt
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          components: rustfmt, clippy
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: workspace/dashboard/package-lock.json
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --all --check
+
+      - name: Clippy (stack crates)
+        run: cargo clippy -p openfdd-central -p openfdd-fieldbus -p openfdd_mqtt -- -D warnings
+
+      - name: Stack crate tests
+        run: cargo test -p openfdd-central -p openfdd-fieldbus -p openfdd_mqtt
+
+      - name: Dashboard production build
+        run: |
+          cd workspace/dashboard
+          npm ci
+          npm run build
+          test -f dist/index.html
+
+      - name: Compose config check
+        run: |
+          chmod +x scripts/release/smoke_standalone_mqtts.sh
+          ./scripts/release/smoke_standalone_mqtts.sh
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 420
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: vars
+        shell: bash
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          version="$(grep -E '^version = ' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF}" == "refs/heads/master" ]]; then
+            echo "nightly=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "nightly=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push openfdd-central
+        uses: docker/build-push-action@v6
+        timeout-minutes: 120
+        with:
+          context: .
+          file: services/central/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.CENTRAL_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
+            ${{ env.CENTRAL_IMAGE }}:${{ steps.vars.outputs.version }}
+          labels: |
+            org.opencontainers.image.title=Open-FDD Central
+            org.opencontainers.image.source=https://github.com/bbartling/open-fdd
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.vars.outputs.version }}
+          cache-from: type=gha,scope=openfdd-central
+          cache-to: type=gha,mode=max,scope=openfdd-central
+
+      - name: Tag openfdd-central nightly
+        if: steps.vars.outputs.nightly == 'true'
+        run: docker buildx imagetools create -t "${{ env.CENTRAL_IMAGE }}:nightly" "${{ env.CENTRAL_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}"
+
+      - name: Build and push openfdd-ui
+        uses: docker/build-push-action@v6
+        timeout-minutes: 30
+        with:
+          context: .
+          file: workspace/dashboard/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.UI_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
+            ${{ env.UI_IMAGE }}:${{ steps.vars.outputs.version }}
+          build-args: |
+            VITE_API_BASE=
+          labels: |
+            org.opencontainers.image.title=Open-FDD UI
+            org.opencontainers.image.source=https://github.com/bbartling/open-fdd
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.vars.outputs.version }}
+          cache-from: type=gha,scope=openfdd-ui
+          cache-to: type=gha,mode=max,scope=openfdd-ui
+
+      - name: Tag openfdd-ui nightly
+        if: steps.vars.outputs.nightly == 'true'
+        run: docker buildx imagetools create -t "${{ env.UI_IMAGE }}:nightly" "${{ env.UI_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}"
+
+      - name: Build and push openfdd-fieldbus
+        uses: docker/build-push-action@v6
+        timeout-minutes: 180
+        with:
+          context: .
+          file: services/fieldbus/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.FIELDBUS_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
+            ${{ env.FIELDBUS_IMAGE }}:${{ steps.vars.outputs.version }}
+          labels: |
+            org.opencontainers.image.title=Open-FDD Fieldbus
+            org.opencontainers.image.source=https://github.com/bbartling/open-fdd
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.vars.outputs.version }}
+          cache-from: type=gha,scope=openfdd-fieldbus
+          cache-to: type=gha,mode=max,scope=openfdd-fieldbus
+
+      - name: Tag openfdd-fieldbus nightly
+        if: steps.vars.outputs.nightly == 'true'
+        run: docker buildx imagetools create -t "${{ env.FIELDBUS_IMAGE }}:nightly" "${{ env.FIELDBUS_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}"
+
+      - name: Build and push openfdd-mqtt
+        uses: docker/build-push-action@v6
+        timeout-minutes: 15
+        with:
+          context: services/mqtt
+          file: services/mqtt/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.MQTT_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
+            ${{ env.MQTT_IMAGE }}:${{ steps.vars.outputs.version }}
+          labels: |
+            org.opencontainers.image.title=Open-FDD MQTT Broker
+            org.opencontainers.image.source=https://github.com/bbartling/open-fdd
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.vars.outputs.version }}
+          cache-from: type=gha,scope=openfdd-mqtt
+          cache-to: type=gha,mode=max,scope=openfdd-mqtt
+
+      - name: Tag openfdd-mqtt nightly
+        if: steps.vars.outputs.nightly == 'true'
+        run: docker buildx imagetools create -t "${{ env.MQTT_IMAGE }}:nightly" "${{ env.MQTT_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}"
+
+      - name: Published tags
+        run: |
+          set -euo pipefail
+          for img in central ui fieldbus mqtt; do
+            case "$img" in
+              central) ref="${{ env.CENTRAL_IMAGE }}" ;;
+              ui) ref="${{ env.UI_IMAGE }}" ;;
+              fieldbus) ref="${{ env.FIELDBUS_IMAGE }}" ;;
+              mqtt) ref="${{ env.MQTT_IMAGE }}" ;;
+            esac
+            docker buildx imagetools inspect "${ref}:sha-${{ steps.vars.outputs.short_sha }}"
+            docker buildx imagetools inspect "${ref}:${{ steps.vars.outputs.version }}"
+            if [[ "${{ steps.vars.outputs.nightly }}" == "true" ]]; then
+              docker buildx imagetools inspect "${ref}:nightly"
+            fi
+          done

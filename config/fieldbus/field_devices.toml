@@ -1,0 +1,12 @@
+# Example field BACnet devices for openfdd-fieldbus.
+# Replace hosts/networks with your site values (do not commit private OT LAN addresses).
+
+[[devices]]
+name = "hosted-points-mirror"
+enabled = false
+device_instance = 1001
+host = "127.0.0.1"
+port = 47808
+points = [
+  { object_type = "analog-input", object_instance = 1, point_name = "example-temp", units = "°F" },
+]

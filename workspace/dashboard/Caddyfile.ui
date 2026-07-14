@@ -1,0 +1,10 @@
+:80 {
+  root * /srv
+  encode gzip
+  try_files {path} /index.html
+  file_server
+  header {
+    X-Content-Type-Options nosniff
+    Referrer-Policy no-referrer
+  }
+}

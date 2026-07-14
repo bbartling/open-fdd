@@ -34,6 +34,13 @@ jobs:
       - name: Edge and MCP tests
         run: cargo test --workspace --all-targets -p open_fdd_edge_prototype -p openfdd-mcp
 
+      - name: Central / fieldbus / MQTT contract tests
+        run: |
+          cargo test -p openfdd_contracts -p openfdd_mqtt -p openfdd-central -p openfdd-fieldbus
+
+      - name: Architecture / MQTT cutover gates
+        run: bash scripts/gates/run_all_gates.sh --quick
+
       - name: Anti-hardcoding audit
         run: bash -n scripts/audit_no_private_bench_hardcoding.sh && ./scripts/audit_no_private_bench_hardcoding.sh
 
@@ -143,11 +150,14 @@ jobs:
 
       - name: Wait for bridge
         run: |
-          for i in $(seq 1 40); do
-            if curl -fsS http://127.0.0.1:8080/api/health >/tmp/health.json; then
+          sleep 5
+          for i in $(seq 1 60); do
+            code="$(curl -sS -o /tmp/health.json -w '%{http_code}' http://127.0.0.1:8080/api/health || echo 000)"
+            if [[ "$code" == "200" ]]; then
               cat /tmp/health.json
               exit 0
             fi
+            echo "wait $i: HTTP $code"
             sleep 2
           done
           docker compose logs

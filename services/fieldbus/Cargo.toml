@@ -1,0 +1,59 @@
+[package]
+name = "openfdd-fieldbus"
+version = "3.3.0"
+edition = "2021"
+rust-version = "1.93"
+description = "Open-FDD fieldbus edge — BACnet/Modbus/Haystack poll + local Swagger + MQTTS publish"
+license = "MIT"
+
+[[bin]]
+name = "openfdd-fieldbus"
+path = "src/main.rs"
+
+[dependencies]
+openfdd_contracts = { path = "../../crates/openfdd_contracts" }
+openfdd_mqtt = { path = "../../crates/openfdd_mqtt" }
+
+axum = { version = "0.8", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+validator = { version = "0.20", features = ["derive"] }
+utoipa = { version = "5", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
+thiserror = "2"
+subtle = "2"
+
+dotenvy = "0.15"
+toml = "0.8"
+csv = "1"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+
+bacnet-types = "0.9"
+bacnet-encoding = "0.9"
+bacnet-services = "0.9"
+bacnet-transport = "0.9"
+bacnet-client = "0.9"
+bacnet-objects = "0.9"
+bacnet-server = "0.9"
+bytes = "1"
+chrono = { version = "0.4", features = ["serde"] }
+
+haystack_client = { package = "rusty-haystack-client", git = "https://github.com/jscott3201/rusty-haystack", rev = "d85e72271e789d3dcf4a90f79adb7d1556faae80", version = "0.8.1" }
+haystack_core = { package = "rusty-haystack-core", git = "https://github.com/jscott3201/rusty-haystack", rev = "d85e72271e789d3dcf4a90f79adb7d1556faae80", version = "0.8.1" }
+
+rusty-modbus-client = { git = "https://github.com/jscott3201/rusty-modbus", version = "0.1.0" }
+rusty-modbus-types = { git = "https://github.com/jscott3201/rusty-modbus", version = "0.1.0" }
+
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+http-body-util = "0.1"
+# Keep chrono 0.4.39 for arrow-arith/datafusion compatibility (do not pull axum-test 18).
+tower = "0.5"

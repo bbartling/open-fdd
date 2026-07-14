@@ -11,9 +11,9 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::env;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
-use std::thread;
-use std::time::Duration;
+use std::sync::{Mutex, Once};
+
+static MODBUS_POLL_RELOCATED_LOG: Once = Once::new();
 
 static MODBUS_SAMPLES: AtomicU64 = AtomicU64::new(0);
 static MODBUS_POLL_CYCLES: AtomicU64 = AtomicU64::new(0);
@@ -110,6 +110,10 @@ pub fn modbus_config_value() -> Value {
 }
 
 pub fn points_json() -> String {
+    if live_gate::field_wire_blocked("points", "modbus").is_some() {
+        // Keep array shape for API/UI consumers during cutover.
+        return "[]".to_string();
+    }
     if let Some(err) = live_gate::modbus_live_required("points") {
         return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
     }
@@ -117,6 +121,9 @@ pub fn points_json() -> String {
 }
 
 pub fn scan_value() -> Value {
+    if let Some(err) = live_gate::field_wire_blocked("scan", "modbus") {
+        return err;
+    }
     if let Some(err) = live_gate::modbus_live_required("scan") {
         return err;
     }
@@ -127,6 +134,9 @@ pub fn scan_value() -> Value {
 }
 
 pub fn read_value(body: &Value) -> String {
+    if let Some(err) = live_gate::field_wire_blocked("read", "modbus") {
+        return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
+    }
     if let Some(err) = live_gate::modbus_live_required("read") {
         return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
     }
@@ -203,6 +213,9 @@ pub fn poll_status_json() -> String {
             "message": "Modbus is disabled or not configured"
         })
         .to_string();
+    }
+    if let Some(err) = live_gate::field_wire_blocked("poll", "modbus") {
+        return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
     }
     if let Some(err) = live_gate::modbus_live_required("poll") {
         return serde_json::to_string(&err).unwrap_or_else(|_| r#"{"ok":false}"#.to_string());
@@ -392,6 +405,9 @@ fn record_poll_cycle(detail: &PollCycleDetail) {
 }
 
 pub fn poll_once_value() -> Value {
+    if let Some(err) = live_gate::field_wire_blocked("poll-once", "modbus") {
+        return err;
+    }
     if let Some(err) = live_gate::modbus_live_required("poll-once") {
         return err;
     }
@@ -423,19 +439,11 @@ pub fn poll_once_value() -> Value {
     })
 }
 
-pub fn start_modbus_poll_loop(service_mode: String) {
-    if service_mode != "bridge" && service_mode != "commission" {
-        return;
-    }
-    thread::spawn(|| loop {
-        if modbus_live::is_live_mode() && protocol_enabled("OPENFDD_MODBUS_ENABLED") {
-            let cfg = modbus_config_value();
-            if cfg.get("status").and_then(|v| v.as_str()) != Some("not_configured") {
-                let detail = poll_cycle_and_persist_detail();
-                record_poll_cycle(&detail);
-            }
-        }
-        thread::sleep(Duration::from_secs(poll_interval_s()));
+pub fn start_modbus_poll_loop(_service_mode: String) {
+    MODBUS_POLL_RELOCATED_LOG.call_once(|| {
+        eprintln!(
+            "open-fdd-edge: Modbus poll loop retired — wire I/O owned by openfdd-fieldbus (MQTTS ingest)"
+        );
     });
 }
 

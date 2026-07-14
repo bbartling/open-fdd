@@ -10,20 +10,24 @@ members = [
     "crates/fdd_rules",
     "crates/fdd_bench",
     "crates/fdd_cli",
+    "crates/openfdd_contracts",
+    "crates/openfdd_mqtt",
+    "services/fieldbus",
+    "services/central",
 ]
 
 [workspace.package]
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/bbartling/open-fdd"
-version = "3.2.13"
+version = "3.3.0"
 rust-version = "1.80"
 
 [workspace.dependencies]
 anyhow = "1"
 arrow = "53"
 arrow-schema = "53"
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "=0.4.39", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 csv = "1"
 datafusion = "43"
