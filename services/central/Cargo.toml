@@ -30,8 +30,8 @@ utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
 anyhow = "1"
 dashmap = "6"
-jsonwebtoken = "9"
+jsonwebtoken = "10"
 rumqttc = { version = "0.24", default-features = false, features = ["use-native-tls"] }
 
 [dev-dependencies]
-jsonwebtoken = "9"
+jsonwebtoken = "10"
