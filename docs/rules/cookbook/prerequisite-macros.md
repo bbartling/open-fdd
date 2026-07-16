@@ -220,3 +220,12 @@ base = macro_fan_proven_on(d) & macro_override_suppression(d) & macro_sensor_qua
 mask = base & detect_condition
 d = apply_fault(d, mask)
 ```
+
+
+---
+
+## Validated catalog gates (vibe19)
+
+The Streamlit-tested catalog wraps many rules with **operational gates** (fan proven-on, occupancy, override suppression, pressure-on proxies). Gates live alongside rule computes in the vibe19 `operational_gate` module — SQL recipes should replicate the same predicates before latching `fault_raw`.
+
+See [Pandas cookbook](pandas-cookbook.html#setup--shared-helpers) and [parity matrix](parity-matrix.html).

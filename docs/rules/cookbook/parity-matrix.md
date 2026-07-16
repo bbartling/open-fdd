@@ -6,26 +6,35 @@ nav_order: 6
 
 # SQL ↔ Pandas parity matrix
 
-**Audit date:** 2026-07-05 (Phase 2a/2b) · **Target:** zero manual drift
+**Audit date:** 2026-07-16 · **Validated catalog:** 59 vibe19 rules · **Target:** zero silent drift
 
 ## Summary
 
 | Status | Count |
 |--------|------:|
-| ✅ Full parity (SQL + Pandas + catalog metadata) | 60+ |
-| SQL only | 0 |
-| Pandas only | 0 |
+| Full parity (SQL + Pandas, same ID) | 54 |
+| Pandas-complete / SQL simplified | 5 |
+| Documented but not in validated catalog | 13 |
+
+**SQL-simplified (intentional):** `SV-RATE`, `PID-HUNT-1`, `FC4`, `SV-SPIKE`, `SV-FLATLINE` — rolling / multi-sensor logic is fully validated in Pandas; SQL ships a screening variant with an explicit caveat in the SQL cookbook.
 
 ---
 
-## Phase 2 completions
+## Family coverage
 
-| Item | Status |
-|------|--------|
-| P0 rule catalog metadata | ✅ [p0-rule-catalog.html](p0-rule-catalog.html) |
-| Full Pandas v2 (VLV-1, DMP-1, PLANT-1, SP-HIGH/LOW) | ✅ |
-| P2 rules (VAV-6/7, TOWER-1, CTRL-2, SV-7, OA-2) | ✅ both backends |
-| Offline fixture regression | ✅ `python3 scripts/cookbook_parity_check.py --all` |
+| Family | Validated IDs | SQL | Pandas |
+|--------|---------------|:---:|:------:|
+| sensor | SV-RANGE, SV-FLATLINE, SV-SPIKE, SV-STALE, SV-RATE | ✅* | ✅ |
+| control | PID-HUNT-1 | ✅* | ✅ |
+| ahu | FC1–FC15, AHU-*, ECON-1–7, OAT-METEO, MECH-OAT-1, CMD-1, OA-1, VLV-1, DMP-1 | ✅ | ✅ |
+| vav | VAV-1, VAV-3–5, VAV-7, VAV-REHEAT, VAV-AHU-LEAVE | ✅ | ✅ |
+| plant | CHW-1–4, CHW-NOLOAD-1, CW-APR-1, CW-FAN-1, CW-OPT-1 | ✅ | ✅ |
+| heatpump | HP-1 | ✅ | ✅ |
+| weather | WX-1 | ✅ | ✅ |
+| trim | TRIM-1, TRIM-3, TRIM-4 | ✅ | ✅ |
+| schedule | SCHED-1, SCHED-247 | ✅ | ✅ |
+
+\* simplified SQL variant
 
 ---
 
@@ -33,9 +42,10 @@ nav_order: 6
 
 | Topic | DataFusion SQL | Pandas |
 |-------|----------------|--------|
-| Window functions | `LAG()`, `OVER` | `.shift()`, `.rolling()` |
+| Window / rolling | `LAG()`, limited `OVER` | `.shift()`, `.rolling()`, multi-sensor sweeps |
 | Confirmation | API `confirmation_seconds` | `confirm_fault()` |
-| CTRL-2 hunting | Simplified SQL variant | Full rolling reversal count |
+| Sensor sweeps | Per-column CASE examples | Catalog `sensor_sweep=True` across all roles |
+| Control hunting | Screening thresholds | Full TV / reversal / cycle metrics (`PID-HUNT-1`) |
 
 ---
 
@@ -43,7 +53,7 @@ nav_order: 6
 
 1. Export `telemetry_pivot` window from edge historian
 2. Run SQL via `POST /api/fdd-rules/{id}/test-sql`
-3. Run matching Pandas mask offline
+3. Run matching Pandas mask offline (vibe19 catalog compute)
 4. Run fixture suite: `scripts/cookbook_parity_check.py --all`
 
 See [benchmark strategy](benchmark-strategy.html).
