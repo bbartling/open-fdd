@@ -2820,6 +2820,8 @@ dependencies = [
  "csv",
  "datafusion",
  "encoding_rs",
+ "fdd_rules",
+ "fdd_sql",
  "hex",
  "hmac",
  "once_cell",
@@ -2837,6 +2839,7 @@ dependencies = [
  "subtle",
  "tokio",
  "toml 1.1.2+spec-1.1.0",
+ "walkdir",
 ]
 
 [[package]]
