@@ -380,3 +380,1549 @@ rules:
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
+
+# --- Ported from datafusion-sql-cookbook (feat/sql-rules-59) ---
+
+  - rule_id: SV-RANGE
+    sql_file: sv_range.sql
+    pandas_function: null
+    description: Sensor out of hard range
+    required_roles: [oa_t]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      range_scale_temperature:
+        label: Temp range scale
+        default: 1.0
+        min: 0.5
+        max: 2.0
+        step: 0.25
+        unit: x
+        frontend_control: slider
+        sql_placeholder: RANGE_SCALE_TEMPERATURE
+
+  - rule_id: SV-FLATLINE
+    sql_file: sv_flatline.sql
+    pandas_function: null
+    description: Sensor flatline (stuck)
+    required_roles: [oa_t]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      flatline_tol:
+        label: Flatline tolerance
+        default: 0.1
+        min: 0.02
+        max: 1.0
+        step: 0.01
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: FLATLINE_TOL
+
+  - rule_id: SV-SPIKE
+    sql_file: sv_spike.sql
+    pandas_function: null
+    description: Sensor rate-of-change spike
+    required_roles: [oa_t]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      spike_scale:
+        label: Spike limit scale (global)
+        default: 1.0
+        min: 0.25
+        max: 3.0
+        step: 0.25
+        unit: x
+        frontend_control: slider
+        sql_placeholder: SPIKE_SCALE
+
+  - rule_id: SV-STALE
+    sql_file: sv_stale.sql
+    pandas_function: null
+    description: Stale data (no fresh samples)
+    required_roles: []
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      stale_hours:
+        label: Stale window
+        default: 2.0
+        min: 0.5
+        max: 12.0
+        step: 0.5
+        unit: h
+        frontend_control: slider
+        sql_placeholder: STALE_HOURS
+
+  - rule_id: SV-RATE
+    sql_file: sv_rate.sql
+    pandas_function: null
+    description: Context-aware sensor rate of change
+    required_roles: [oa_t]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      persistence_min:
+        label: Fault persistence
+        default: 10.0
+        min: 5.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: PERSISTENCE_MIN
+
+  - rule_id: PID-HUNT-1
+    sql_file: pid_hunt_1.sql
+    pandas_function: null
+    description: Suspected control-output hunting
+    required_roles: [clg_valve_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      change_deadband_pct:
+        label: Ignore changes below
+        default: 1.0
+        min: 0.0
+        max: 10.0
+        step: 0.5
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: CHANGE_DEADBAND_PCT
+      minimum_span_pct:
+        label: Minimum observed span
+        default: 20.0
+        min: 5.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_SPAN_PCT
+
+  - rule_id: FC4
+    sql_file: fc4_os_hunting.sql
+    pandas_function: null
+    description: PID hunting (operating-state oscillation)
+    required_roles: [oa_damper_pct, clg_valve_pct, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 3600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 3600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: FC5
+    sql_file: fc5_sat_cold_heating.sql
+    pandas_function: null
+    description: SAT cold when heating commanded (GL36 D)
+    required_roles: [sat, mat, htg_valve_pct, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      mix_tol:
+        label: Mixing tolerance
+        default: 1.15
+        min: 0.5
+        max: 3.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+
+  - rule_id: FC6
+    sql_file: fc6_oa_frac_mismatch.sql
+    pandas_function: null
+    description: Estimated OA fraction mismatch
+    required_roles: [mat, rat, oa_t, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      airflow_err:
+        label: OA fraction error
+        default: 0.15
+        min: 0.05
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: AIRFLOW_ERR
+
+  - rule_id: FC14
+    sql_file: fc14_chw_coil_dt_inactive.sql
+    pandas_function: null
+    description: CHW coil ΔT when inactive (GL36 L)
+    required_roles: [mat, sat, clg_valve_pct, oa_damper_pct, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      mix_tol:
+        label: Mixing tolerance
+        default: 1.15
+        min: 0.25
+        max: 3.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+
+  - rule_id: FC15
+    sql_file: fc15_hw_coil_dt_inactive.sql
+    pandas_function: null
+    description: HW coil ΔT when inactive (GL36 M)
+    required_roles: [mat, sat, htg_valve_pct, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      mix_tol:
+        label: Mixing tolerance
+        default: 1.15
+        min: 0.25
+        max: 3.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+
+  - rule_id: AHU-SATDEV
+    sql_file: ahu_satdev.sql
+    pandas_function: null
+    description: SAT deviation from setpoint
+    required_roles: [sat, sat_sp]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      sat_dev_err:
+        label: SAT deviation
+        default: 5.0
+        min: 1.0
+        max: 15.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SAT_DEV_ERR
+
+  - rule_id: AHU-DUCTHI
+    sql_file: ahu_ducthi.sql
+    pandas_function: null
+    description: Duct static pressure high
+    required_roles: [duct_static, duct_static_sp, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      duct_high_margin:
+        label: High margin
+        default: 0.25
+        min: 0.05
+        max: 1.0
+        step: 0.01
+        unit: in_wc
+        frontend_control: slider
+        sql_placeholder: DUCT_HIGH_MARGIN
+      pressure_on_min:
+        label: Pressure-on evidence
+        default: 0.2
+        min: 0.05
+        max: 1.0
+        step: 0.01
+        unit: in_wc
+        frontend_control: slider
+        sql_placeholder: PRESSURE_ON_MIN
+
+  - rule_id: AHU-SIMUL
+    sql_file: ahu_simul.sql
+    pandas_function: null
+    description: Heating and cooling simultaneous
+    required_roles: [htg_valve_pct, clg_valve_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      valve_open_pct:
+        label: Valve open threshold
+        default: 0.1
+        min: 0.05
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: VALVE_OPEN_PCT
+
+  - rule_id: ECON-3
+    sql_file: econ3_mech_without_econ.sql
+    pandas_function: null
+    description: Mech cooling without integrated economizer
+    required_roles: [web_oa_t, web_oa_dp, oa_damper_pct, clg_valve_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      econ3_db_min:
+        label: Free-cool OA dry-bulb min
+        default: 60.0
+        min: 50.0
+        max: 68.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON3_DB_MIN
+      econ3_db_max:
+        label: Free-cool OA dry-bulb max
+        default: 72.0
+        min: 65.0
+        max: 80.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON3_DB_MAX
+      econ3_dp_max:
+        label: Free-cool OA dew point max
+        default: 60.0
+        min: 45.0
+        max: 68.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON3_DP_MAX
+      econ3_damper_hi:
+        label: Integrated economizer damper
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON3_DAMPER_HI
+
+  - rule_id: ECON-5
+    sql_file: econ5_preheat_over.sql
+    pandas_function: null
+    description: Preheat over-conditioning
+    required_roles: [preheat_leave_t, sat_sp, htg_valve_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      preheat_over_f:
+        label: Preheat over ΔT
+        default: 2.2
+        min: 0.5
+        max: 8.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: PREHEAT_OVER_F
+
+  - rule_id: ECON-6
+    sql_file: econ6_econ_freezing.sql
+    pandas_function: null
+    description: Economizing in freezing weather
+    required_roles: [web_oa_t, oa_damper_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      econ6_oat_max_f:
+        label: Winter OAT ceiling
+        default: 25.0
+        min: 15.0
+        max: 40.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON6_OAT_MAX_F
+      econ6_damper_max:
+        label: Winter min-OA damper
+        default: 0.25
+        min: 0.05
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON6_DAMPER_MAX
+
+  - rule_id: ECON-7
+    sql_file: econ7_ok_not_economizing.sql
+    pandas_function: null
+    description: Economizer OK but not economizing
+    required_roles: [web_oa_t, web_oa_dp, oa_damper_pct, clg_valve_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      econ7_db_min:
+        label: Econ-OK dry-bulb floor (freeze guard)
+        default: 35.0
+        min: 20.0
+        max: 50.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON7_DB_MIN
+      econ7_db_max:
+        label: Econ-OK dry-bulb max
+        default: 72.0
+        min: 65.0
+        max: 80.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON7_DB_MAX
+      econ7_dp_max:
+        label: Econ-OK dew point max
+        default: 60.0
+        min: 45.0
+        max: 68.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON7_DP_MAX
+      econ7_damper_min:
+        label: Economizing damper threshold
+        default: 0.5
+        min: 0.2
+        max: 0.9
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON7_DAMPER_MIN
+
+  - rule_id: MECH-OAT-1
+    sql_file: mech_oat_1.sql
+    pandas_function: null
+    description: Mechanical cooling below 60°F web OAT
+    required_roles: [web_oa_t, clg_valve_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      mech_oat_max_f:
+        label: Mech-cool OAT ceiling
+        default: 60.0
+        min: 45.0
+        max: 65.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MECH_OAT_MAX_F
+
+  - rule_id: CMD-1
+    sql_file: cmd1_fan_mismatch.sql
+    pandas_function: null
+    description: Fan cmd/status mismatch
+    required_roles: [fan_cmd, fan_status]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: OA-1
+    sql_file: oa1_low_oa_frac.sql
+    pandas_function: null
+    description: Low OA fraction
+    required_roles: [mat, rat, oa_t, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      min_oa_frac:
+        label: Min OA fraction
+        default: 0.15
+        min: 0.05
+        max: 0.4
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: MIN_OA_FRAC
+      oat_rat_guard:
+        label: Oat Rat Guard
+        default: 1.0
+        min: 0.0
+        max: 100.0
+        step: 0.5
+        unit: eng
+        frontend_control: slider
+        sql_placeholder: OAT_RAT_GUARD
+
+  - rule_id: DMP-1
+    sql_file: dmp1_oa_damper_leak.sql
+    pandas_function: null
+    description: OA damper leakage
+    required_roles: [oa_damper_pct, oa_t, mat]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      leak_delta:
+        label: Leak ΔT
+        default: 2.0
+        min: 0.5
+        max: 6.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: LEAK_DELTA
+
+  - rule_id: VLV-1
+    sql_file: vlv1_clg_valve_leak.sql
+    pandas_function: null
+    description: Cooling valve leakage
+    required_roles: [clg_valve_pct, sat, sat_sp, mat]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      sat_err:
+        label: SAT vs SP leak ΔT
+        default: 2.0
+        min: 0.5
+        max: 8.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SAT_ERR
+      mat_leak_delta:
+        label: SAT vs MAT leak ΔT
+        default: 2.0
+        min: 0.5
+        max: 12.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MAT_LEAK_DELTA
+
+  - rule_id: VAV-3
+    sql_file: vav3_excessive_reheat.sql
+    pandas_function: null
+    description: Excessive reheat during warm weather
+    required_roles: [oa_t, reheat_valve_pct, zone_flow]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      reheat_oat:
+        label: Warm OAT
+        default: 78.0
+        min: 65.0
+        max: 90.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: REHEAT_OAT
+      reheat_pct:
+        label: Reheat frac
+        default: 0.52
+        min: 0.1
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: REHEAT_PCT
+      flow_on_min:
+        label: Airflow-on min
+        default: 25.0
+        min: 0.0
+        max: 200.0
+        step: 10.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: FLOW_ON_MIN
+
+  - rule_id: VAV-4
+    sql_file: vav4_damper_full_open.sql
+    pandas_function: null
+    description: Damper stuck at full open
+    required_roles: [damper_pct, zone_flow]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      full_open_pct:
+        label: Full open frac
+        default: 0.975
+        min: 0.8
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FULL_OPEN_PCT
+      flow_on_min:
+        label: Airflow-on min
+        default: 25.0
+        min: 0.0
+        max: 200.0
+        step: 10.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: FLOW_ON_MIN
+
+  - rule_id: VAV-5
+    sql_file: vav5_airflow_bias.sql
+    pandas_function: null
+    description: Airflow sensor bias
+    required_roles: [zone_flow, damper_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: VAV-REHEAT
+    sql_file: vav_reheat.sql
+    pandas_function: null
+    description: Reheat valve stuck / no temp rise
+    required_roles: [reheat_valve_pct, vav_discharge_t, vav_inlet_t, zone_flow]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      reheat_cmd:
+        label: Reheat open frac
+        default: 0.3
+        min: 0.1
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: REHEAT_CMD
+      min_rise:
+        label: Min temp rise
+        default: 3.0
+        min: 0.5
+        max: 15.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIN_RISE
+      flow_on_min:
+        label: Airflow-on min
+        default: 25.0
+        min: 0.0
+        max: 200.0
+        step: 10.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: FLOW_ON_MIN
+
+  - rule_id: VAV-AHU-LEAVE
+    sql_file: vav_ahu_leave.sql
+    pandas_function: null
+    description: VAV leave vs parent AHU SAT (fedBy)
+    required_roles: [vav_discharge_t, ahu_sat, zone_flow]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      delta_f:
+        label: Leave Δ vs AHU SAT
+        default: 8.0
+        min: 2.0
+        max: 25.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_F
+      flow_on_min:
+        label: Airflow-on min
+        default: 25.0
+        min: 0.0
+        max: 200.0
+        step: 10.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: FLOW_ON_MIN
+
+  - rule_id: VAV-7
+    sql_file: vav7_min_airflow.sql
+    pandas_function: null
+    description: Min airflow / fixed high flow
+    required_roles: [zone_flow, min_flow_sp]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      high_min_flow_sp:
+        label: High min-flow SP
+        default: 250.0
+        min: 50.0
+        max: 2000.0
+        step: 50.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: HIGH_MIN_FLOW_SP
+
+  - rule_id: CHW-NOLOAD-1
+    sql_file: chw_noload_1.sql
+    pandas_function: null
+    description: Chiller running with no building load
+    required_roles: [chw_supply_t, chw_supply_sp, chw_pump_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 1800
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 1800.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      sat_band_f:
+        label: AHU SAT≈SP band
+        default: 2.0
+        min: 0.5
+        max: 6.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SAT_BAND_F
+
+  - rule_id: CHW-1
+    sql_file: chw1_low_dt.sql
+    pandas_function: null
+    description: Low chilled-water ΔT
+    required_roles: [chw_supply_t, chw_return_t, chw_pump_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      min_dt:
+        label: Minimum delta-T
+        default: 4.0
+        min: 2.0
+        max: 12.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIN_DT
+
+  - rule_id: CHW-2
+    sql_file: chw2_dp_low.sql
+    pandas_function: null
+    description: DP below SP at max pump speed
+    required_roles: [chw_dp, chw_dp_sp, chw_pump_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      dp_margin:
+        label: DP margin
+        default: 2.2
+        min: 0.5
+        max: 6.0
+        step: 0.5
+        unit: psi
+        frontend_control: slider
+        sql_placeholder: DP_MARGIN
+
+  - rule_id: CHW-3
+    sql_file: chw3_supply_band.sql
+    pandas_function: null
+    description: Plant supply temp outside deadband
+    required_roles: [chw_supply_t, chw_supply_sp, chw_pump_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      sp_band:
+        label: SP band
+        default: 2.2
+        min: 0.5
+        max: 6.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SP_BAND
+
+  - rule_id: CHW-4
+    sql_file: chw4_flow_high.sql
+    pandas_function: null
+    description: Flow high at max pump
+    required_roles: [chw_flow, chw_pump_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      flow_hi:
+        label: Flow high
+        default: 1100.0
+        min: 200.0
+        max: 3000.0
+        step: 50.0
+        unit: gpm
+        frontend_control: slider
+        sql_placeholder: FLOW_HI
+
+  - rule_id: CW-OPT-1
+    sql_file: cw_opt_1.sql
+    pandas_function: null
+    description: Condenser water not optimized vs wet-bulb
+    required_roles: [cw_supply_t, web_wb_t]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      cw_approach:
+        label: Design approach
+        default: 7.0
+        min: 3.0
+        max: 15.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: CW_APPROACH
+      cw_slack:
+        label: Slack below target
+        default: 2.0
+        min: 0.5
+        max: 6.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: CW_SLACK
+
+  - rule_id: CW-APR-1
+    sql_file: cw_apr_1.sql
+    pandas_function: null
+    description: High CW approach at full tower fan
+    required_roles: [cw_supply_t, web_wb_t, tower_fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      approach_max_f:
+        label: Max approach at full fan
+        default: 8.0
+        min: 5.0
+        max: 15.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: APPROACH_MAX_F
+      tower_fan_hi:
+        label: Tower fan full-speed threshold
+        default: 0.95
+        min: 0.8
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: TOWER_FAN_HI
+
+  - rule_id: CW-FAN-1
+    sql_file: cw_fan_1.sql
+    pandas_function: null
+    description: Excess tower fan energy vs wet-bulb limit
+    required_roles: [cw_supply_t, web_wb_t, tower_fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      cw_approach:
+        label: Design approach
+        default: 7.0
+        min: 3.0
+        max: 15.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: CW_APPROACH
+      excess_beyond_approach_f:
+        label: Excess beyond approach
+        default: 5.0
+        min: 2.0
+        max: 20.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EXCESS_BEYOND_APPROACH_F
+      tower_fan_hi:
+        label: Tower fan full-speed threshold
+        default: 0.95
+        min: 0.8
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: TOWER_FAN_HI
+
+  - rule_id: HP-1
+    sql_file: hp1_discharge_cold.sql
+    pandas_function: null
+    description: Discharge cold when heating
+    required_roles: [sat, zone_t, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      min_sat:
+        label: Min discharge SAT
+        default: 85.0
+        min: 70.0
+        max: 110.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIN_SAT
+      zone_cold:
+        label: Zone cold threshold
+        default: 69.0
+        min: 60.0
+        max: 75.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_COLD
+
+  - rule_id: WX-1
+    sql_file: wx1_oa_spike.sql
+    pandas_function: null
+    description: OA temperature spike
+    required_roles: [oa_t]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      spike_limit:
+        label: Spike limit
+        default: 16.0
+        min: 5.0
+        max: 30.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SPIKE_LIMIT
+
+  - rule_id: TRIM-1
+    sql_file: trim1_duct_static.sql
+    pandas_function: null
+    description: Duct static trim advisory
+    required_roles: [duct_static_sp]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 1800
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 1800.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      duct_hi:
+        label: Duct static high
+        default: 1.35
+        min: 0.5
+        max: 3.0
+        step: 0.25
+        unit: in_wc
+        frontend_control: slider
+        sql_placeholder: DUCT_HI
+      request_lo:
+        label: Request sum low
+        default: 1.0
+        min: 0.0
+        max: 10.0
+        step: 0.5
+        unit: count
+        frontend_control: slider
+        sql_placeholder: REQUEST_LO
+
+  - rule_id: TRIM-3
+    sql_file: trim3_hwst.sql
+    pandas_function: null
+    description: HWST trim advisory
+    required_roles: [hw_supply_t]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 1800
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 1800.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      hwst_hi:
+        label: HWST high
+        default: 160.0
+        min: 120.0
+        max: 200.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: HWST_HI
+      request_lo:
+        label: Request sum low
+        default: 1.0
+        min: 0.0
+        max: 10.0
+        step: 0.5
+        unit: count
+        frontend_control: slider
+        sql_placeholder: REQUEST_LO
+
+  - rule_id: TRIM-4
+    sql_file: trim4_chw_reset.sql
+    pandas_function: null
+    description: CHW plant reset advisory
+    required_roles: [chw_supply_t]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 1800
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 1800.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      chw_lo:
+        label: CHWS low
+        default: 45.0
+        min: 35.0
+        max: 55.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: CHW_LO
+      request_lo:
+        label: Request sum low
+        default: 1.0
+        min: 0.0
+        max: 10.0
+        step: 0.5
+        unit: count
+        frontend_control: slider
+        sql_placeholder: REQUEST_LO
+
+  - rule_id: SCHED-1
+    sql_file: sched1_unoccupied_runtime.sql
+    pandas_function: null
+    description: Unoccupied runtime
+    required_roles: [occ_mode, fan_status]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 1800
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 1800.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: SCHED-247
+    sql_file: sched247_always_on.sql
+    pandas_function: null
+    description: Always-on fan or pump runtime
+    required_roles: [fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: ported_from_cookbook
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 3600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 3600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
