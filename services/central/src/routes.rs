@@ -37,6 +37,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/commands", post(issue_command))
         .route("/api/commands/{command_id}/ack", get(get_ack))
         .route("/api/agent/tools", get(agent_tools))
+        .route("/api/fdd/rules", get(fdd_registry_rules))
+        .route("/api/fdd/rules/{rule_id}/params", get(fdd_rule_params))
+        .route("/api/fdd/cache/status", get(fdd_cache_status))
+        .route("/api/fdd/roles", get(fdd_roles))
         .route("/api/fdd/run", post(fdd_run))
         .route("/api/fdd/status", get(fdd_status))
         .layer(middleware::from_fn_with_state(
@@ -544,20 +548,39 @@ pub async fn agent_tools() -> Json<AgentToolsResponse> {
     tag = "central",
     security(("bearerAuth" = [])),
     request_body = FddRunRequest,
-    responses((status = 200, description = "FDD batch or ad-hoc SQL run result", body = Object))
+    responses((status = 200, description = "FDD registry or ad-hoc SQL run result", body = Object))
 )]
 pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
     let payload = json!({
         "sql": body.sql,
         "confirmation_seconds": body.confirmation_seconds,
         "params": body.params,
+        "mode": body.params.get("mode").cloned().unwrap_or(json!("registry")),
+        "rule_ids": body.params.get("rule_ids").cloned(),
     });
-    let result = if body.sql.as_ref().is_some_and(|s| !s.trim().is_empty()) {
+    let has_sql = body.sql.as_ref().is_some_and(|s| !s.trim().is_empty());
+    let result = if has_sql {
         open_fdd_edge_prototype::fdd::datafusion_sql::run_fdd_response(&payload)
     } else {
-        open_fdd_edge_prototype::fdd::datafusion_sql::batch_run_response()
+        open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload)
     };
     Json(result)
+}
+
+pub async fn fdd_registry_rules() -> Json<Value> {
+    Json(open_fdd_edge_prototype::fdd::registry_api::list_registry_rules())
+}
+
+pub async fn fdd_rule_params(Path(rule_id): Path<String>) -> Json<Value> {
+    Json(open_fdd_edge_prototype::fdd::registry_api::rule_params_response(&rule_id))
+}
+
+pub async fn fdd_cache_status() -> Json<Value> {
+    Json(open_fdd_edge_prototype::fdd::registry_api::cache_status())
+}
+
+pub async fn fdd_roles() -> Json<Value> {
+    Json(open_fdd_edge_prototype::fdd::registry_api::roles_response())
 }
 
 #[utoipa::path(
@@ -568,26 +591,25 @@ pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
     responses((status = 200, description = "FDD rules workspace status", body = FddStatusResponse))
 )]
 pub async fn fdd_status() -> Json<FddStatusResponse> {
-    let rules_body = open_fdd_edge_prototype::fdd::rules::list_rules();
-    let count = rules_body
-        .get("count")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
-    let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
-    let rules_dir = format!("{workspace}/data/fdd_wires/rules");
-    let rules_dir_exists = std::path::Path::new(&rules_dir).exists();
+    let reg = open_fdd_edge_prototype::fdd::registry_api::list_registry_rules();
+    let count = reg.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
+    let rules_dir = reg
+        .get("rules_dir")
+        .and_then(|v| v.as_str())
+        .unwrap_or("sql_rules")
+        .to_string();
+    let rules_dir_exists = std::path::Path::new(&rules_dir)
+        .join("registry.yaml")
+        .exists();
     Json(FddStatusResponse {
         ok: true,
-        rules_dir,
+        rules_dir: rules_dir.clone(),
         rules_dir_exists,
         rule_count: count,
         hint: if count == 0 {
-            Some(
-                "activate rules in workspace/data/fdd_wires/rules or POST /api/fdd/run with sql"
-                    .into(),
-            )
+            Some("set OPENFDD_SQL_RULES_DIR or ship sql_rules/ in the image".into())
         } else {
-            None
+            Some("POST /api/fdd/run with mode=registry (typed params; no raw SQL)".into())
         },
     })
 }

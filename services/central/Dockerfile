@@ -23,6 +23,7 @@ COPY --from=builder /src/target/release/openfdd-provision /usr/local/bin/openfdd
 COPY sql_rules /app/sql_rules
 COPY rule_tuning /app/rule_tuning
 ENV OPENFDD_CENTRAL_HOST=0.0.0.0
+ENV OPENFDD_SQL_RULES_DIR=/app/sql_rules
 ENV OPENFDD_CENTRAL_PORT=8080
 EXPOSE 8080
 HEALTHCHECK CMD curl -fsS http://127.0.0.1:8080/api/health || exit 1

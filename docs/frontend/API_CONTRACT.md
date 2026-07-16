@@ -1,6 +1,6 @@
 # Frontend API contract
 
-Dashboard calls the Rust edge HTTP API on the same origin in production (`/` + `/api/*`).
+Dashboard calls the Rust edge/central HTTP API on the same origin in production (`/` + `/api/*`).
 
 ## Dev proxy
 
@@ -10,30 +10,38 @@ Vite (`workspace/dashboard/vite.config.ts`) proxies:
 - `/health` → edge
 - `/openfdd-agent` → edge
 
-## Core endpoints (existing edge)
+Standalone stack UI (Caddy) reverse-proxies `/api*` → `central:8080`.
+
+## Core endpoints (existing)
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/health` | Liveness JSON |
 | POST | `/api/auth/login` | Operator session |
+| GET | `/api/auth/status` | Whether auth is required |
 | GET | `/api/bacnet/driver/tree` | Driver tree (auth) |
 
-Full edge API surface is defined in edge route modules; extend this doc as FDD endpoints are added.
-
-## Planned FDD endpoints (Rust engine integration)
+## FDD registry endpoints (Rust engine)
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/fdd/rules` | Registry from `sql_rules/registry.yaml` |
 | GET | `/api/fdd/rules/{id}/params` | Tuning schema (`control` field per parameter) |
-| POST | `/api/fdd/run` | Execute rules against Parquet cache |
-| GET | `/api/fdd/cache/status` | Ingest / Parquet sidecar status |
+| POST | `/api/fdd/run` | Execute rules — prefer `{ "mode": "registry", "rule_ids": [...] }` (typed params). Raw SQL only for integrator lab. |
+| GET | `/api/fdd/cache/status` | Parquet ingest / results status |
 | GET | `/api/fdd/roles` | Column role mappings |
+| GET | `/api/fdd/status` | Registry count + rules dir |
 
-See `docs/migration/vibe19/API_CONTRACT.md` for parameter schema (`control`, not `frontend_control`).
+Env:
+
+- `OPENFDD_SQL_RULES_DIR` (default `/app/sql_rules` in images)
+- `OPENFDD_PARQUET_ROOT` (default `.cache/parquet`)
+- `OPENFDD_RULE_RESULTS_DIR` (default `.cache/rule_results`)
+
+See `docs/migration/vibe19/SQL_RULE_TUNING_CONTRACT.md` for parameter schema (`control`, not only `frontend_control`).
 
 ## Rules for UI
 
 - No raw SQL editing in operator dashboard.
 - Parameter types come from registry + tuning contract.
-- Auth required when `OFDD_AUTH_REQUIRED=true`.
+- Auth required when JWT secret / `OFDD_AUTH_REQUIRED` is set.
