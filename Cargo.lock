@@ -500,8 +500,6 @@ dependencies = [
 [[package]]
 name = "bacnet-client"
 version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2a6c61c544ffa6e327f4319511ecf61608bc9033cd91fdaf2cc67f192ee26c4"
 dependencies = [
  "bacnet-encoding",
  "bacnet-network",

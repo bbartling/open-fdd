@@ -1,10 +1,22 @@
 :80 {
-  root * /srv
-  encode gzip
-  try_files {path} /index.html
-  file_server
-  header {
-    X-Content-Type-Options nosniff
-    Referrer-Policy no-referrer
-  }
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+	# Same-origin API for remote LAN browsers (UI on :3000 → central :8080).
+	handle /api* {
+		reverse_proxy central:8080
+	}
+	handle /docs* {
+		reverse_proxy central:8080
+	}
+	handle /openapi.json {
+		reverse_proxy central:8080
+	}
+	handle {
+		root * /srv
+		encode gzip
+		try_files {path} /index.html
+		file_server
+	}
 }

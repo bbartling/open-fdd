@@ -1,7 +1,6 @@
 //! Swagger UI + OpenAPI JSON for central.
 
-use axum::routing::get;
-use axum::{Json, Router};
+use axum::Router;
 use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
 use utoipa::Modify;
 use utoipa::OpenApi;
@@ -24,6 +23,9 @@ use openfdd_contracts::{CommandAck, CommandEnvelope, TelemetryEnvelope};
         crate::routes::agent_tools,
         crate::routes::fdd_run,
         crate::routes::fdd_status,
+        crate::routes::auth_status,
+        crate::routes::auth_me,
+        crate::routes::auth_login,
     ),
     components(schemas(
         OkHealthResponse,
@@ -45,6 +47,10 @@ use openfdd_contracts::{CommandAck, CommandEnvelope, TelemetryEnvelope};
         CommandEnvelope,
         CommandAck,
         TelemetryEnvelope,
+        AuthStatusResponse,
+        AuthMeResponse,
+        AuthLoginRequest,
+        AuthLoginResponse,
     )),
     modifiers(&SecurityAddon),
     info(
@@ -52,7 +58,7 @@ use openfdd_contracts::{CommandAck, CommandEnvelope, TelemetryEnvelope};
         version = "3.3.0",
         description = "Open-FDD Central control plane — MQTTS ingest, edge shadow, commands, and FDD.\n\n\
             **Auth:** set `OPENFDD_JWT_SECRET` to require `Authorization: Bearer <JWT>` on all `/api/*` routes \
-            except `/api/health`. When unset, the API is open for local/dev with a startup warning.\n\n\
+            except `/api/health` and `/api/auth/*`. When unset, the API is open for local/dev with a startup warning.\n\n\
             **Claims:** `sub` (subject), `role` one of `viewer`, `operator`, `admin`. \
             `POST /api/commands` requires `operator` or `admin` when auth is enabled."
     ),
@@ -73,12 +79,19 @@ impl Modify for SecurityAddon {
     }
 }
 
+/// Swagger UI at `/docs`; OpenAPI JSON at `/openapi.json` (mounted once by SwaggerUi).
 pub fn router() -> Router {
     Router::new()
-        .route("/openapi.json", get(openapi_json))
         .merge(utoipa_swagger_ui::SwaggerUi::new("/docs").url("/openapi.json", ApiDoc::openapi()))
 }
 
-async fn openapi_json() -> Json<utoipa::openapi::OpenApi> {
-    Json(ApiDoc::openapi())
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn openapi_router_builds_without_overlapping_routes() {
+        // Axum panics on duplicate path+method; this was the nightly central crash (#502).
+        let _ = router();
+    }
 }

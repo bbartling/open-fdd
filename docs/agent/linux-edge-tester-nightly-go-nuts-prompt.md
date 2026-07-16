@@ -24,6 +24,12 @@ Will comment #429, #464, #466, #465, #467, #469 as applicable.
 No git push. No product code edits on bench.
 ```
 
+**Human BACnet Workbench gate (every run):** ask the human to confirm from another machine that hosted device **599999** (UDP 47808 on OT NIC) is discoverable and points look good in YABE/Workbench. Agent records `Workbench: PASS (human)` — do not invent this from curl.
+
+**Remote UI:** `http://<bench-lan-ip>:3000/login` (Caddy proxies `/api` → central). With `OPENFDD_JWT_SECRET` + `OPENFDD_ADMIN_PASSWORD` in `.env`, login as `admin` with that password.
+
+**Also retest after stack P0s (#502):** central no longer crash-loops on `/openapi.json`; MQTT telemetry `value` non-null; MS/TP **5007** uses `add_routed_device`.
+
 ---
 
 ## Target build

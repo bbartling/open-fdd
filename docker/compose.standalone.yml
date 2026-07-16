@@ -31,6 +31,10 @@ services:
       OPENFDD_MQTT_CERT_PEM: /mqtt/central.cert.pem
       OPENFDD_MQTT_KEY_PEM: /mqtt/central.key.pem
       OPENFDD_WORKSPACE: /workspace
+      # Remote UI login (optional). When JWT secret is set, also set OPENFDD_ADMIN_PASSWORD
+      # and sign in as admin/operator/viewer with that password from http://<host>:3000/login
+      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}
+      OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
     ports:
       - "8080:8080"
     volumes:
@@ -46,7 +50,8 @@ services:
       context: ..
       dockerfile: workspace/dashboard/Dockerfile
     ports:
-      - "3000:80"
+      # Bind all interfaces so LAN clients can reach http://<bench-ip>:3000
+      - "${OPENFDD_UI_BIND:-0.0.0.0}:3000:80"
     depends_on:
       - central
     restart: unless-stopped

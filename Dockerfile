@@ -17,6 +17,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
+COPY vendor ./vendor
 COPY edge ./edge
 COPY mcp ./mcp
 COPY crates ./crates

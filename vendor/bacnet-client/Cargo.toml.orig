@@ -1,0 +1,33 @@
+[package]
+name = "bacnet-client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "BACnet async client: TSM, segmentation, discovery, and service APIs"
+keywords = ["bacnet", "building-automation", "client", "async"]
+categories = ["network-programming"]
+
+[dependencies]
+bacnet-types.workspace = true
+bacnet-encoding.workspace = true
+bacnet-services.workspace = true
+bacnet-transport.workspace = true
+bacnet-network.workspace = true
+bytes.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["net", "rt", "sync", "macros", "time"] }
+tokio-rustls = { workspace = true, optional = true }
+futures-util = { workspace = true }
+
+[features]
+ipv6 = ["bacnet-transport/ipv6"]
+sc-tls = ["bacnet-transport/sc-tls", "tokio-rustls"]
+
+[dev-dependencies]
+bacnet-objects.workspace = true
+tokio = { workspace = true, features = ["net", "rt-multi-thread", "sync", "macros", "time"] }
+
+[lints]
+workspace = true
