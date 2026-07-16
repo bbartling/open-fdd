@@ -551,20 +551,22 @@ pub async fn agent_tools() -> Json<AgentToolsResponse> {
     responses((status = 200, description = "FDD registry or ad-hoc SQL run result", body = Object))
 )]
 pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
+    let has_sql = body.sql.as_ref().is_some_and(|s| !s.trim().is_empty());
+    if has_sql {
+        return Json(json!({
+            "ok": false,
+            "error": "raw SQL rejected on /api/fdd/run; use mode=registry with typed params"
+        }));
+    }
     let payload = json!({
-        "sql": body.sql,
         "confirmation_seconds": body.confirmation_seconds,
         "params": body.params,
         "mode": body.params.get("mode").cloned().unwrap_or(json!("registry")),
         "rule_ids": body.params.get("rule_ids").cloned(),
     });
-    let has_sql = body.sql.as_ref().is_some_and(|s| !s.trim().is_empty());
-    let result = if has_sql {
-        open_fdd_edge_prototype::fdd::datafusion_sql::run_fdd_response(&payload)
-    } else {
-        open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload)
-    };
-    Json(result)
+    Json(open_fdd_edge_prototype::fdd::registry_api::run_registry(
+        &payload,
+    ))
 }
 
 pub async fn fdd_registry_rules() -> Json<Value> {

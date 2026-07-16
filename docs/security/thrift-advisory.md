@@ -17,4 +17,6 @@ permalink: /operations/thrift-advisory.html
 
 **Risk posture (beta):** Parquet footer parsing only; edge does not expose a Thrift RPC server. Monitor via Dependabot + `cargo audit` in CI.
 
+**2026-07-16 reaffirmation (PR-5 / #483):** Still not feasible to bump thrift without a DataFusion/Arrow stack upgrade. Documented dismiss / track-until-DF54+ remains the correct response for Dependabot thrift alerts. jsonwebtoken 9→10 is the actionable AppSec bump in this cycle.
+
 **Do not** `[patch]` thrift to 0.23 without a full Arrow upgrade — build will break.
