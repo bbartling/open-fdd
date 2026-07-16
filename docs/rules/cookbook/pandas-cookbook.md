@@ -502,7 +502,7 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 
 ### FC6 — Estimated OA fraction mismatch
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** |RAT−OAT| ≥ 5°F AND |estimated OA% − design min OA%| > 15% in heating/mech-only modes.  
+**Equation:** abs(RAT−OAT) ≥ 5°F AND abs(estimated OA% − design min OA%) > 15% in heating/mech-only modes.  
 **Default confirmation:** 600 s
 
 **Required roles:** `mixed-air-temp`, `outside-air-temp`, `return-air-temp`, `vav-total-airflow`
@@ -814,7 +814,7 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 
 ### AHU-SATDEV — SAT deviation from setpoint
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** |SAT − SAT SP| > 5°F.  
+**Equation:** abs(SAT − SAT SP) > 5°F.  
 **Default confirmation:** 600 s
 
 **Required roles:** `discharge-air-temp`, `discharge-air-temp-sp`
@@ -977,9 +977,7 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 **Equation:** Web free-cooling opportunity: 60°F ≤ dry-bulb < 72°F AND dewpoint < 60°F (dewpoint from web sensor or calculated from web DB+RH). Fault when cooling valve is open while OA damper is below the integrated-economizer threshold (default 90%). No BAS OAT fallback. Screenable engineering defaults — not code limits.  
 **Default confirmation:** 300 s
 
-**Required roles:** `outside-air-damper`, `cooling-valve`
-
-**Optional roles:** `web-outside-air-temp`, `web-outside-air-dewpoint`, `web-outside-air-humidity`
+**Required roles:** `outside-air-damper`, `cooling-valve` (plus web OAT/RH or dewpoint columns)
 
 **Tunable params**
 
@@ -993,19 +991,44 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```python
 FAULT_CONFIRM_SECONDS = 300
 
-def econ2(d, p, poll):
-    oat_hi = _f(p, "econ2_oat_hi", 63.0)
-    dmpr = _f(p, "econ2_damper", 0.42)
-    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
-    return d["outside-air-temp"].notna() & d["outside-air-damper"].notna() & (d["outside-air-temp"] > oat_hi) & (econ > dmpr)
+# Validated compute lives in economizer_weather.econ3_compute
+# (catalog entry uses a placeholder; the Streamlit engine substitutes this function).
+def econ3_compute(d: pd.DataFrame, p: dict, poll: float, wx_ok: bool = True) -> pd.Series:
+    """Fault: mech cooling while free cooling available but OA damper not integrated-open.
 
-d = apply_fault(d, econ2(d, params, POLL_SECONDS))
+    Weather: strict web dry-bulb + dewpoint (calculated from web RH if needed).
+    Band: 60 ≤ DB < 72°F and DP < 60°F. Damper must be ≥ integrated threshold (default 90%).
+    """
+    del wx_ok  # web presence is resolved explicitly below
+    if not {"outside-air-damper", "cooling-valve"}.issubset(d.columns):
+        return _false(d.index)
+    db, dp, src = resolve_web_drybulb_dewpoint(d)
+    if db is None or dp is None:
+        d.attrs["econ3_weather_source"] = src
+        return _false(d.index)
+
+    db_min = _f(p, "econ3_db_min", 60.0)
+    db_max = _f(p, "econ3_db_max", 72.0)
+    dp_max = _f(p, "econ3_dp_max", 60.0)
+    damper_hi = _f(p, "econ3_damper_hi", 0.90)
+
+    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    clg = norm_cmd(d["cooling-valve"]).fillna(0)
+    opportunity = free_cool_opportunity_mask(db, dp, db_min=db_min, db_max=db_max, dp_max=dp_max)
+    mech = clg > 0.01
+    not_integrated = econ < damper_hi
+    raw = opportunity & mech & not_integrated
+    d.attrs["econ3_weather_source"] = src
+    return raw.fillna(False)
+
+d = apply_fault(d, econ3_compute(d, params, POLL_SECONDS))
 d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
+
 ### ECON-4 — Low estimated OA fraction
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan on, |RAT−OAT| > 2.2°F, estimated OA fraction < 21%.  
+**Equation:** Fan on, abs(RAT−OAT) > 2.2°F, estimated OA fraction < 21%.  
 **Default confirmation:** 600 s
 
 **Required roles:** `mixed-air-temp`, `return-air-temp`, `outside-air-temp`, `fan-cmd`
@@ -1234,7 +1257,7 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
 | `min_oa_frac` | Min OA fraction | frac | 0.15 | 0.05–0.4 |
-| `oat_rat_guard` | Min |RAT−OAT| guard | °F | 2.2 | 0.5–6.0 |
+| `oat_rat_guard` | Min abs(RAT−OAT) guard | °F | 2.2 | 0.5–6.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 900

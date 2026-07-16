@@ -156,7 +156,7 @@ SELECT
   CASE
     -- Implement SV-FLATLINE against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -189,7 +189,7 @@ SELECT
   CASE
     -- Implement SV-SPIKE against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -244,7 +244,7 @@ SELECT
   CASE
     -- Implement SV-RATE against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -281,7 +281,7 @@ SELECT
   CASE
     -- Implement PID-HUNT-1 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -319,50 +319,52 @@ WHERE equipment_id = 'equip:your-ahu'
 
 ### FC2 — MAT below OAT/RAT envelope (GL36 B)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan on AND MAT + mix_tol < min(RAT − mix_tol, OAT − mix_tol) (≡ MAT < min(RAT, OAT) − 2·mix_tol; default mix_tol = 1.15°F).  
+**Equation:** Fan on AND MAT below min(OAT, RAT) envelope (default mix_tol = 1.15°F ⇒ 2.3°F).  
 **Default confirmation:** 600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.5–3.0 |
 
 ```sql
 -- confirmation_seconds: 600
--- param: mat_env = 2.2
+-- param: mix_tol = 1.15  (envelope = 2 * mix_tol = 2.3)
 SELECT
   timestamp, equipment_id, mat, oa_t, rat, fan_cmd,
   CASE
-    WHEN mat IS NULL OR oa_t IS NULL OR rat IS NULL THEN false
-    WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE COALESCE(fan_cmd, 1.0) END) >= 0.05
-     AND mat < LEAST(oa_t, rat) - 2.2 THEN true
+    WHEN mat IS NULL OR oa_t IS NULL OR rat IS NULL OR fan_cmd IS NULL THEN false
+    WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) >= 0.05
+     AND mat < LEAST(oa_t, rat) - 2.3 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-ahu'
 ```
+
 
 ### FC3 — MAT above OAT/RAT envelope (GL36 C)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan on AND MAT − mix_tol > max(RAT + mix_tol, OAT + mix_tol) (≡ MAT > max(RAT, OAT) + 2·mix_tol; default mix_tol = 1.15°F).  
+**Equation:** Fan on AND MAT above max(OAT, RAT) envelope (default mix_tol = 1.15°F ⇒ 2.3°F).  
 **Default confirmation:** 600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.5–3.0 |
 
 ```sql
 -- confirmation_seconds: 600
 SELECT
   timestamp, equipment_id, mat, oa_t, rat, fan_cmd,
   CASE
-    WHEN mat IS NULL OR oa_t IS NULL OR rat IS NULL THEN false
-    WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE COALESCE(fan_cmd, 1.0) END) >= 0.05
-     AND mat > GREATEST(oa_t, rat) + 2.2 THEN true
+    WHEN mat IS NULL OR oa_t IS NULL OR rat IS NULL OR fan_cmd IS NULL THEN false
+    WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) >= 0.05
+     AND mat > GREATEST(oa_t, rat) + 2.3 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-ahu'
 ```
+
 
 ### FC4 — PID hunting (operating-state oscillation)
 **Family:** `ahu` · **Equipment:** `ahu`  
@@ -390,7 +392,7 @@ SELECT
   CASE
     -- Implement FC4 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -404,29 +406,24 @@ WHERE equipment_id = 'equip:your-id'
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.5–3.0 |
 
 ```sql
 -- confirmation_seconds: 600
--- rule: FC5 — SAT cold when heating commanded (GL36 D)
--- equation: Fan on AND heating > 1% AND SAT + mix_tol ≤ MAT − mix_tol + 0.55°F (default mix_tol = 1.15°F).
-
+-- param: mix_tol = 1.15 ; delta_supply_fan = 0.55
 SELECT
-  timestamp,
-  equipment_id,
-  discharge_air_temp,
-  mixed_air_temp,
-  fan_cmd,
-  heating_valve,
+  timestamp, equipment_id, sat, mat, htg_valve_pct, fan_cmd,
   CASE
-    -- Implement FC5 against assigned Haystack → FDD columns
-    -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN sat IS NULL OR mat IS NULL OR htg_valve_pct IS NULL OR fan_cmd IS NULL THEN false
+    WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) >= 0.05
+     AND (CASE WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END) > 0.01
+     AND (sat + 1.15) <= (mat - 1.15 + 0.55) THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-id'
+WHERE equipment_id = 'equip:your-ahu'
 ```
+
 
 ### FC6 — Estimated OA fraction mismatch
 **Family:** `ahu` · **Equipment:** `ahu`  
@@ -453,7 +450,7 @@ SELECT
   CASE
     -- Implement FC6 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -484,7 +481,7 @@ SELECT
   CASE
     -- Implement FC7 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -516,7 +513,7 @@ SELECT
   CASE
     -- Implement FC8 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -547,7 +544,7 @@ SELECT
   CASE
     -- Implement FC9 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -578,7 +575,7 @@ SELECT
   CASE
     -- Implement FC10 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -609,7 +606,7 @@ SELECT
   CASE
     -- Implement FC11 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -641,7 +638,7 @@ SELECT
   CASE
     -- Implement FC12 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -672,7 +669,7 @@ SELECT
   CASE
     -- Implement FC13 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -703,7 +700,7 @@ SELECT
   CASE
     -- Implement FC14 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -734,7 +731,7 @@ SELECT
   CASE
     -- Implement FC15 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -763,7 +760,7 @@ SELECT
   CASE
     -- Implement AHU-SATDEV against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -793,7 +790,7 @@ SELECT
   CASE
     -- Implement AHU-DUCTHI against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -822,7 +819,7 @@ SELECT
   CASE
     -- Implement AHU-SIMUL against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -836,22 +833,22 @@ WHERE equipment_id = 'equip:your-id'
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `oat_err` | Max OAT disagreement | °F | 5.0 | 2.0–20.0 |
+| `oat_err` | OAT vs meteo error | °F | 5.0 | 2.0–15.0 |
 
 ```sql
--- confirmation_seconds: 300
--- param: oat_meteo_err = 8.0
--- Requires Open-Meteo (or equivalent) outdoor temp column `oat_meteo`
+-- confirmation_seconds: 900
+-- param: oat_err = 5.0
 SELECT
   timestamp, equipment_id, oa_t, oat_meteo,
   CASE
     WHEN oa_t IS NULL OR oat_meteo IS NULL THEN false
-    WHEN abs(oa_t - oat_meteo) > 8.0 THEN true
+    WHEN abs(oa_t - oat_meteo) > 5.0 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-ahu'
 ```
+
 
 ### ECON-1 — Economizer stuck closed
 **Family:** `ahu` · **Equipment:** `ahu`  
@@ -870,7 +867,7 @@ SELECT
     WHEN oa_damper_pct IS NULL OR mat IS NULL OR oa_t IS NULL THEN false
     WHEN (CASE WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END) <= 0.05
      AND abs(mat - oa_t) > 5.0
-     AND (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE COALESCE(fan_cmd, 1.0) END) >= 0.05 THEN true
+     AND (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) >= 0.05 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -900,7 +897,7 @@ SELECT
   CASE
     -- Implement ECON-2 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -909,7 +906,7 @@ WHERE equipment_id = 'equip:your-id'
 
 ### ECON-3 — Mech cooling without integrated economizer
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Web free-cooling opportunity: 60°F ≤ dry-bulb < 72°F AND dewpoint < 60°F (dewpoint from web sensor or calculated from web DB+RH). Fault when cooling valve is open while OA damper is below the integrated-economizer threshold (default 90%). No BAS OAT fallback. Screenable engineering defaults — not code limits.  
+**Equation:** Web free-cooling opportunity (60°F ≤ DB < 72°F AND dewpoint < 60°F) while cooling valve open and OA damper below integrated threshold (default 90%).  
 **Default confirmation:** 300 s
 
 | Param | Label | Unit | Default | Range |
@@ -921,23 +918,19 @@ WHERE equipment_id = 'equip:your-id'
 
 ```sql
 -- confirmation_seconds: 300
--- rule: ECON-3 — Mech cooling without integrated economizer
--- equation: Web free-cooling opportunity: 60°F ≤ dry-bulb < 72°F AND dewpoint < 60°F (dewpoint from web sensor or calculated from web DB+RH). Fault when cooling valve is open while OA damper is below the integrated-economizer threshold (default 90%). No BAS OAT fallback. Screenable engineering defaults — not code limits.
-
 SELECT
-  timestamp,
-  equipment_id,
-  outside_air_damper,
-  cooling_valve,
+  timestamp, equipment_id, web_oa_t, web_oa_dp, oa_damper_pct, clg_valve_pct,
   CASE
-    -- Implement ECON-3 against assigned Haystack → FDD columns
-    -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN web_oa_t IS NULL OR web_oa_dp IS NULL OR oa_damper_pct IS NULL OR clg_valve_pct IS NULL THEN false
+    WHEN web_oa_t >= 60.0 AND web_oa_t < 72.0 AND web_oa_dp < 60.0
+     AND (CASE WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END) > 0.01
+     AND (CASE WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END) < 0.90 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-id'
+WHERE equipment_id = 'equip:your-ahu'
 ```
+
 
 ### ECON-4 — Low estimated OA fraction
 **Family:** `ahu` · **Equipment:** `ahu`  
@@ -963,7 +956,7 @@ SELECT
   CASE
     -- Implement ECON-4 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -994,7 +987,7 @@ SELECT
   CASE
     -- Implement ECON-5 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1023,7 +1016,7 @@ SELECT
   CASE
     -- Implement ECON-6 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1054,7 +1047,7 @@ SELECT
   CASE
     -- Implement ECON-7 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1081,7 +1074,7 @@ SELECT
   CASE
     -- Implement MECH-OAT-1 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1127,7 +1120,7 @@ SELECT
     WHEN mat IS NULL OR rat IS NULL OR oa_t IS NULL THEN false
     WHEN abs(rat - oa_t) <= 2.2 THEN false
     WHEN (mat - rat) / NULLIF(oa_t - rat, 0) < 0.15
-     AND (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE COALESCE(fan_cmd, 1.0) END) >= 0.05 THEN true
+     AND (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) >= 0.05 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1235,7 +1228,7 @@ SELECT
   CASE
     -- Implement VAV-3 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1265,7 +1258,7 @@ SELECT
   CASE
     -- Implement VAV-4 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1292,7 +1285,7 @@ SELECT
   CASE
     -- Implement VAV-5 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1324,7 +1317,7 @@ SELECT
   CASE
     -- Implement VAV-REHEAT against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1354,7 +1347,7 @@ SELECT
   CASE
     -- Implement VAV-AHU-LEAVE against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1411,7 +1404,7 @@ SELECT
   CASE
     -- Implement CHW-NOLOAD-1 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1425,21 +1418,24 @@ WHERE equipment_id = 'equip:your-id'
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `min_dt` | Min ΔT | °F | 4.0 | 1.0–12.0 |
+| `min_dt` | Minimum delta-T | °F | 4.0 | 2.0–12.0 |
 
 ```sql
 -- confirmation_seconds: 900
--- param: min_delta_t = 6.0
+-- param: min_dt = 4.0
 SELECT
-  timestamp, equipment_id, chw_supply_t, chw_return_t,
+  timestamp, equipment_id, chw_supply_t, chw_return_t, chw_pump_cmd,
   CASE
     WHEN chw_supply_t IS NULL OR chw_return_t IS NULL THEN false
-    WHEN (chw_return_t - chw_supply_t) < 6.0 THEN true
+    WHEN chw_pump_cmd IS NOT NULL
+     AND (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) <= 0.05 THEN false
+    WHEN (chw_return_t - chw_supply_t) < 4.0 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-chw-plant'
 ```
+
 
 ### CHW-2 — DP below SP at max pump speed
 **Family:** `plant` · **Equipment:** `chiller`  
@@ -1464,7 +1460,7 @@ SELECT
   CASE
     -- Implement CHW-2 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1494,7 +1490,7 @@ SELECT
   CASE
     -- Implement CHW-3 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1523,7 +1519,7 @@ SELECT
   CASE
     -- Implement CHW-4 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1552,7 +1548,7 @@ SELECT
   CASE
     -- Implement CW-OPT-1 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1581,7 +1577,7 @@ SELECT
   CASE
     -- Implement CW-APR-1 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1611,7 +1607,7 @@ SELECT
   CASE
     -- Implement CW-FAN-1 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1627,22 +1623,23 @@ WHERE equipment_id = 'equip:your-id'
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `min_sat` | Min heating SAT | °F | 85.0 | 70.0–110.0 |
-| `zone_cold` | Zone cold | °F | 69.0 | 60.0–72.0 |
+| `min_sat` | Min discharge SAT | °F | 85.0 | 70.0–110.0 |
+| `zone_cold` | Zone cold threshold | °F | 69.0 | 60.0–75.0 |
 
 ```sql
 -- confirmation_seconds: 600
 SELECT
-  timestamp, equipment_id, discharge_t, heat_cmd,
+  timestamp, equipment_id, sat, zone_t, fan_cmd,
   CASE
-    WHEN discharge_t IS NULL OR heat_cmd IS NULL THEN false
-    WHEN (CASE WHEN heat_cmd > 1.0 THEN heat_cmd / 100.0 ELSE heat_cmd END) >= 0.5
-     AND discharge_t < 90.0 THEN true
+    WHEN sat IS NULL OR zone_t IS NULL OR fan_cmd IS NULL THEN false
+    WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) >= 0.05
+     AND zone_t < 69.0 AND sat < 85.0 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-heatpump'
 ```
+
 
 ## Weather station
 
@@ -1653,7 +1650,7 @@ WHERE equipment_id = 'equip:your-heatpump'
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `spike_limit` | Spike limit | °F | 16.0 | 4.0–40.0 |
+| `spike_limit` | Spike limit | °F | 16.0 | 5.0–30.0 |
 
 ```sql
 -- confirmation_seconds: 300
@@ -1661,12 +1658,13 @@ SELECT
   timestamp, equipment_id, oa_t,
   CASE
     WHEN oa_t IS NULL THEN false
-    WHEN abs(oa_t - lag(oa_t) OVER (ORDER BY timestamp)) > 15.0 THEN true
+    WHEN abs(oa_t - lag(oa_t) OVER (ORDER BY timestamp)) > 16.0 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
 WHERE equipment_id = 'equip:weather'
 ```
+
 
 ## Trim & respond advisory
 
@@ -1717,7 +1715,7 @@ SELECT
   CASE
     -- Implement TRIM-3 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -1747,7 +1745,7 @@ SELECT
   CASE
     -- Implement TRIM-4 against assigned Haystack → FDD columns
     -- NULL samples must not latch faults
-    WHEN false THEN true
+    WHEN false THEN false  -- stub: never latch until equation is coded
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
