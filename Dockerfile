@@ -22,6 +22,8 @@ COPY edge ./edge
 COPY mcp ./mcp
 COPY crates ./crates
 COPY services ./services
+COPY sql_rules ./sql_rules
+COPY rule_tuning ./rule_tuning
 RUN echo "==> release build jobs=${CARGO_BUILD_JOBS}" \
     && cargo build --release -p open_fdd_edge_prototype -p openfdd-mcp -j "${CARGO_BUILD_JOBS}"
 
@@ -38,6 +40,9 @@ COPY --from=builder /app/target/release/open_fdd_edge_prototype /usr/local/bin/o
 COPY --from=builder /app/target/release/openfdd-edge /usr/local/bin/openfdd-edge
 COPY --from=builder /app/target/release/openfdd-mcp /usr/local/bin/openfdd-mcp
 COPY --from=dashboard /app/frontend ./frontend
+COPY sql_rules /app/sql_rules
+COPY rule_tuning /app/rule_tuning
+ENV OPENFDD_SQL_RULES_DIR=/app/sql_rules
 
 ENV FRONTEND_DIR=/app/frontend \
     PORT=8080 \

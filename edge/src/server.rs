@@ -729,13 +729,41 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             &mut stream,
             model::sparql::execute(&parse_json_body_or_empty(&body)),
         ),
+        ("GET", "/api/fdd/rules") => {
+            json_response(&mut stream, fdd::registry_api::list_registry_rules())
+        }
+        ("GET", "/api/fdd/cache/status") => {
+            json_response(&mut stream, fdd::registry_api::cache_status())
+        }
+        ("GET", "/api/fdd/roles") => {
+            json_response(&mut stream, fdd::registry_api::roles_response())
+        }
         ("POST", "/api/fdd/run") => match parse_json_body(&body) {
-            Ok(payload) => require_role(
-                &mut stream,
-                &principal,
-                &["integrator", "agent"],
-                fdd::datafusion_sql::run_fdd_response(&payload),
-            ),
+            Ok(payload) => {
+                let mode = payload.get("mode").and_then(|v| v.as_str()).unwrap_or("");
+                let resp = if mode == "registry"
+                    || payload.get("rule_ids").is_some()
+                    || payload
+                        .get("sql")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .is_empty()
+                        && payload.get("mode").is_some()
+                {
+                    fdd::registry_api::run_registry(&payload)
+                } else if payload
+                    .get("sql")
+                    .and_then(|v| v.as_str())
+                    .map(|s| !s.trim().is_empty())
+                    .unwrap_or(false)
+                {
+                    fdd::datafusion_sql::run_fdd_response(&payload)
+                } else {
+                    // Default: registry batch when no raw SQL
+                    fdd::registry_api::run_registry(&payload)
+                };
+                require_role(&mut stream, &principal, &["integrator", "agent"], resp)
+            }
             Err(err) => json_response(&mut stream, json!({"ok": false, "error": err})),
         },
         ("GET", "/api/rules") => {
@@ -1205,6 +1233,19 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
             if method == "GET" && route_path.starts_with("/api/bacnet/jobs/") {
                 let job_id = route_path.trim_start_matches("/api/bacnet/jobs/");
                 return json_response(&mut stream, drivers::bacnet::job_status_json(job_id));
+            }
+            if method == "GET" {
+                if let Some(rule_id) = route_path
+                    .strip_prefix("/api/fdd/rules/")
+                    .and_then(|rest| rest.strip_suffix("/params"))
+                {
+                    if !rule_id.is_empty() && !rule_id.contains('/') {
+                        return json_response(
+                            &mut stream,
+                            fdd::registry_api::rule_params_response(rule_id),
+                        );
+                    }
+                }
             }
             if let Some(resp) = handle_fdd_wires_dynamic(
                 &mut stream,
