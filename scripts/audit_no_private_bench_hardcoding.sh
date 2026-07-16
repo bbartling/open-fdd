@@ -43,6 +43,7 @@ is_allowed() {
     docs/agent/bench-driver-setup-wsl-agent.md) return 0 ;;
     docs/agent/bench-*-closeout-agent-prompt.md) return 0 ;;
     docs/agent/linux-edge-tester-*.md) return 0 ;;
+    docs/agent/vibe19-parity-nightly-monster-prompt.md) return 0 ;;
     docs/archive/*) return 0 ;;
     docs/archive/agent/bench-driver-setup-wsl-agent.md) return 0 ;;
     docs/archive/verification/bacnet-nic-setup.md) return 0 ;;

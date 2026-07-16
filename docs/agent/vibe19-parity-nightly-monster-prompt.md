@@ -441,7 +441,7 @@ http://<bench-lan-ip>:3000/login
 - Password: value of `OPENFDD_ADMIN_PASSWORD`
 - Caddy in UI container proxies `/api/*` → central `:8080`
 
-Example bench IP: `192.168.204.55` (adjust to your OT network).
+Example bench UI URL: `http://<OT_LAN_HOST>:3000/login` (set host from your OT network).
 
 ---
 
