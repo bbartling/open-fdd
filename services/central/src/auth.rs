@@ -143,8 +143,9 @@ impl AuthConfig {
         .map_err(|e| format!("token encode failed: {e}"))
     }
 
-    /// Validate username/password for UI login. Accepts `admin` (or `operator`) when
-    /// `OPENFDD_ADMIN_PASSWORD` matches.
+    /// Validate username/password for UI login.
+    /// Only `admin` is accepted with `OPENFDD_ADMIN_PASSWORD` (do not mint other roles
+    /// from a shared password).
     pub fn authenticate_password(
         &self,
         username: &str,
@@ -157,13 +158,10 @@ impl AuthConfig {
         if !constant_time_eq(expected.as_bytes(), password.as_bytes()) {
             return Err("invalid credentials".into());
         }
-        let role = match username.trim() {
-            "admin" => Role::Admin,
-            "operator" => Role::Operator,
-            "viewer" => Role::Viewer,
-            _ => return Err("invalid credentials".into()),
-        };
-        Ok((username.trim().to_string(), role))
+        if username.trim() != "admin" {
+            return Err("invalid credentials".into());
+        }
+        Ok(("admin".into(), Role::Admin))
     }
 
     pub fn verify_bearer(&self, token: &str) -> Result<AuthUser, String> {
