@@ -740,26 +740,19 @@ fn handle(mut stream: TcpStream, frontend: &Path) -> std::io::Result<()> {
         }
         ("POST", "/api/fdd/run") => match parse_json_body(&body) {
             Ok(payload) => {
-                let mode = payload.get("mode").and_then(|v| v.as_str()).unwrap_or("");
-                let resp = if mode == "registry"
-                    || payload.get("rule_ids").is_some()
-                    || payload
-                        .get("sql")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .is_empty()
-                        && payload.get("mode").is_some()
-                {
-                    fdd::registry_api::run_registry(&payload)
-                } else if payload
+                let has_sql = payload
                     .get("sql")
                     .and_then(|v| v.as_str())
                     .map(|s| !s.trim().is_empty())
-                    .unwrap_or(false)
-                {
-                    fdd::datafusion_sql::run_fdd_response(&payload)
+                    .unwrap_or(false);
+                // Operator/browser surface: typed registry params only (tuning contract).
+                // Integrator ad-hoc SQL remains on /api/rules and wires lab routes.
+                let resp = if has_sql {
+                    json!({
+                        "ok": false,
+                        "error": "raw SQL rejected on /api/fdd/run; use mode=registry with typed params (integrator SQL lab: /api/rules)"
+                    })
                 } else {
-                    // Default: registry batch when no raw SQL
                     fdd::registry_api::run_registry(&payload)
                 };
                 require_role(&mut stream, &principal, &["integrator", "agent"], resp)
