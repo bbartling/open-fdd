@@ -13,6 +13,7 @@ import HostStatsPage from "./pages/HostStatsPage";
 import LoginPage from "./pages/LoginPage";
 import PlotPage from "./pages/PlotPage";
 import SqlFddRulesPage from "./pages/SqlFddRulesPage";
+import Vibe19LabPage from "./pages/Vibe19LabPage";
 import LiveFddValidationPage from "./pages/LiveFddValidationPage";
 import DataManagementPage from "./pages/DataManagementPage";
 import ReportBuilderPage from "./pages/ReportBuilderPage";
@@ -31,10 +32,11 @@ export default function App() {
           <Route index element={<HomePage />} />
           <Route path="faults" element={<Navigate to="/" replace />} />
           <Route element={<RequireAuth />}>
+            <Route path="lab" element={<TabErrorBoundary tab="lab"><Vibe19LabPage /></TabErrorBoundary>} />
             <Route path="live-fdd-validation" element={<TabErrorBoundary tab="live-fdd-validation"><LiveFddValidationPage /></TabErrorBoundary>} />
             <Route path="bench-5007" element={<Navigate to="/live-fdd-validation" replace />} />
             <Route path="sql-fdd" element={<TabErrorBoundary tab="sql-fdd"><SqlFddRulesPage /></TabErrorBoundary>} />
-            <Route path="rule-lab" element={<Navigate to="/sql-fdd" replace />} />
+            <Route path="rule-lab" element={<Navigate to="/lab" replace />} />
             <Route path="model" element={<TabErrorBoundary tab="model"><DataModelPage /></TabErrorBoundary>} />
             <Route path="algorithms" element={<TabErrorBoundary tab="algorithms"><AlgorithmsPage /></TabErrorBoundary>} />
             <Route path="data-model" element={<Navigate to="/model" replace />} />
@@ -55,7 +57,7 @@ export default function App() {
             <Route path="reports" element={<TabErrorBoundary tab="reports"><ReportBuilderPage /></TabErrorBoundary>} />
             <Route path="agent" element={<TabErrorBoundary tab="agent"><AgentPage /></TabErrorBoundary>} />
             <Route path="host" element={<TabErrorBoundary tab="host"><HostStatsPage /></TabErrorBoundary>} />
-            <Route path="fdd" element={<Navigate to="/sql-fdd" replace />} />
+            <Route path="fdd" element={<Navigate to="/lab" replace />} />
             <Route path="fdd-wires" element={<Navigate to="/model" replace />} />
             <Route path="rules" element={<Navigate to="/model" replace />} />
           </Route>
