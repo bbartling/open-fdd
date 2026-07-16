@@ -27,6 +27,25 @@ Will post evidence on #429, #433, and linked issues. No git push.
 
 ---
 
+## Human gate — BACnet Workbench (mandatory every nightly)
+
+The **human tester** (not the Cursor agent) validates BACnet OT with YABE / BACnet Workbench from a **different machine** on the OT LAN:
+
+| Check | Expect |
+|-------|--------|
+| Who-Is sees hosted Open-FDD device **599999** (or configured instance) | Discoverable |
+| Hosted points readable | Live present-value |
+| Seeded BIP bench devices (e.g. `.13` / `.14`) | Optional confirm |
+
+**Agent:** do **not** claim BACnet OT PASS from curl alone. Record in the report: `Workbench: PASS (human) | FAIL (human) | NOT RUN`. Ask the human to confirm before Sign-off: YES on BACnet.
+
+**Remote UI login (LAN):** after stack is up, browse `http://<bench-lan-ip>:3000/login`.
+
+- If `OPENFDD_JWT_SECRET` is unset → auth open (dev); UI auto-passes without password.
+- If set → also set `OPENFDD_ADMIN_PASSWORD` in `.env`; sign in as `admin` / `operator` / `viewer` with that password. UI Caddy proxies `/api/*` to central.
+
+---
+
 ## Issue orchestration loop (run until #429 Sign-off: YES)
 
 You and the **WSL product agent** ([vibe16 prompt](https://github.com/bbartling/open-fdd/blob/master/docs/agent/vibe16-bacnet-feather-port-agent-prompt.md)) take turns until every driver polls and the app is solid.

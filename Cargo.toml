@@ -38,3 +38,8 @@ serde_yaml = "0.9"
 sha2 = "0.10"
 thiserror = "2"
 walkdir = "2"
+
+# Patch crates.io bacnet-client 0.9 with add_routed_device (MS/TP seed). Drop when
+# upstream publishes the helper; keep version aligned with services/fieldbus.
+[patch.crates-io]
+bacnet-client = { path = "vendor/bacnet-client" }

@@ -219,6 +219,14 @@ fn parse_bacnet_target(target_id: &str) -> Result<(u32, String, u32), String> {
     Ok((device, object_type, instance))
 }
 
+/// Map a poll `last_values` row into a telemetry JSON value.
+fn telemetry_point_value(row: &serde_json::Value) -> serde_json::Value {
+    row.get("value")
+        .or_else(|| row.get("present_value"))
+        .cloned()
+        .unwrap_or(serde_json::Value::Null)
+}
+
 async fn execute_bacnet_command(
     bacnet: &BacnetClientService,
     cmd: &CommandEnvelope,
@@ -375,10 +383,8 @@ pub async fn spawn_if_configured(
                     let object_type = v.get("object_type")?.as_str()?.replace('_', "-");
                     let object_instance = v.get("object_instance")?.as_u64()? as u32;
                     let id = format!("bacnet:{device}:{object_type}:{object_instance}");
-                    let value = v
-                        .get("present_value")
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Null);
+                    // Poll status emits `value`; tolerate legacy `present_value`.
+                    let value = telemetry_point_value(&v);
                     Some(TelemetryPoint {
                         id,
                         display_name: v
@@ -460,6 +466,19 @@ mod tests {
     #[test]
     fn reject_invalid_target_id() {
         assert!(parse_bacnet_target("point-1").is_err());
+    }
+
+    #[test]
+    fn telemetry_prefers_value_over_present_value() {
+        let row = serde_json::json!({
+            "value": 57.8,
+            "present_value": 1.0
+        });
+        assert_eq!(telemetry_point_value(&row), serde_json::json!(57.8));
+        let legacy = serde_json::json!({"present_value": 70.25});
+        assert_eq!(telemetry_point_value(&legacy), serde_json::json!(70.25));
+        let missing = serde_json::json!({"point_name": "OA-T"});
+        assert_eq!(telemetry_point_value(&missing), serde_json::Value::Null);
     }
 
     #[test]

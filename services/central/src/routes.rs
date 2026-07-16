@@ -13,7 +13,8 @@ use serde_json::{json, Value};
 
 use crate::auth;
 use crate::models::{
-    AgentTool, AgentToolsResponse, CommandAckResponse, EdgeDetailResponse, EdgePayloadResponse,
+    AgentTool, AgentToolsResponse, AuthLoginRequest, AuthLoginResponse, AuthMeResponse,
+    AuthStatusResponse, CommandAckResponse, EdgeDetailResponse, EdgePayloadResponse,
     EdgesListResponse, FddRunRequest, FddStatusResponse, IngestStatsResponse, IssueCommandRequest,
     IssueCommandResponse, OkHealthResponse,
 };
@@ -22,7 +23,10 @@ use crate::state::{AppState, PendingCommand};
 pub fn router(state: Arc<AppState>) -> Router {
     let public = Router::new()
         .route("/api/health", get(health))
-        .route("/health", get(health));
+        .route("/health", get(health))
+        .route("/api/auth/status", get(auth_status))
+        .route("/api/auth/me", get(auth_me))
+        .route("/api/auth/login", post(auth_login));
 
     let protected = Router::new()
         .route("/api/edges", get(list_edges))
@@ -62,6 +66,95 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
         ingest_dup: *state.ingest_dup.lock().unwrap(),
         ingest_reject: *state.ingest_reject.lock().unwrap(),
     })
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/auth/status",
+    tag = "central",
+    responses((status = 200, description = "Whether UI login is required", body = AuthStatusResponse))
+)]
+pub async fn auth_status(State(state): State<Arc<AppState>>) -> Json<AuthStatusResponse> {
+    Json(AuthStatusResponse {
+        ok: true,
+        auth_required: state.auth.required(),
+    })
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/auth/me",
+    tag = "central",
+    responses((status = 200, description = "Current session subject", body = AuthMeResponse))
+)]
+pub async fn auth_me(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<AuthMeResponse>, (axum::http::StatusCode, Json<Value>)> {
+    match state.auth.user_from_headers(&headers) {
+        Ok(user) => Ok(Json(AuthMeResponse {
+            ok: true,
+            username: user.sub,
+            role: user.role.as_str().into(),
+            auth_required: state.auth.required(),
+        })),
+        Err(detail) => Err((
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": detail})),
+        )),
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/auth/login",
+    tag = "central",
+    request_body = AuthLoginRequest,
+    responses(
+        (status = 200, description = "JWT for dashboard", body = AuthLoginResponse),
+        (status = 401, description = "Invalid credentials")
+    )
+)]
+pub async fn auth_login(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<AuthLoginRequest>,
+) -> Result<Json<AuthLoginResponse>, (axum::http::StatusCode, Json<Value>)> {
+    if !state.auth.required() {
+        // Dev open mode — mint a placeholder so the UI can store a session token.
+        return Ok(Json(AuthLoginResponse {
+            ok: true,
+            token: "open".into(),
+            access_token: "open".into(),
+            token_type: "Bearer".into(),
+            role: "admin".into(),
+            subject: "dev".into(),
+            error: None,
+        }));
+    }
+    let (sub, role) = state
+        .auth
+        .authenticate_password(&body.username, &body.password)
+        .map_err(|e| {
+            (
+                axum::http::StatusCode::UNAUTHORIZED,
+                Json(json!({"ok": false, "error": e})),
+            )
+        })?;
+    let token = state.auth.issue_token(&sub, role, 8 * 3600).map_err(|e| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    Ok(Json(AuthLoginResponse {
+        ok: true,
+        token: token.clone(),
+        access_token: token,
+        token_type: "Bearer".into(),
+        role: role.as_str().into(),
+        subject: sub,
+        error: None,
+    }))
 }
 
 #[utoipa::path(

@@ -121,8 +121,18 @@ impl BacnetClientService {
             let net = d
                 .mstp_network
                 .ok_or_else(|| format!("routed device {} missing mstp_network", d.name))?;
+            let dest_mac = d
+                .mstp_mac
+                .first()
+                .copied()
+                .ok_or_else(|| format!("routed device {} missing mstp_mac", d.name))?;
             client
-                .add_device(d.device_instance, &router_mac)
+                .add_routed_device(
+                    d.device_instance,
+                    &router_mac,
+                    net,
+                    std::slice::from_ref(&dest_mac),
+                )
                 .await
                 .map_err(|e| e.to_string())?;
             // Best-effort: probe the remote MSTP network via the router.

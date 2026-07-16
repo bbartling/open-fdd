@@ -15,6 +15,17 @@ use crate::state::AppState;
 
 const VALID_ROLES: &[&str] = &["viewer", "operator", "admin"];
 
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
@@ -79,6 +90,8 @@ impl AuthUser {
 #[derive(Debug, Clone)]
 pub struct AuthConfig {
     pub secret: Option<String>,
+    /// Optional plaintext admin password for `POST /api/auth/login` (bench / remote UI).
+    pub admin_password: Option<String>,
 }
 
 impl AuthConfig {
@@ -86,16 +99,67 @@ impl AuthConfig {
         let secret = std::env::var("OPENFDD_JWT_SECRET")
             .ok()
             .filter(|s| !s.trim().is_empty());
+        let admin_password = std::env::var("OPENFDD_ADMIN_PASSWORD")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
         if secret.is_none() {
             warn!(
                 "OPENFDD_JWT_SECRET unset — central API is open for local/dev (no Bearer required)"
             );
+        } else if admin_password.is_none() {
+            warn!(
+                "OPENFDD_JWT_SECRET set but OPENFDD_ADMIN_PASSWORD unset — UI login will fail until password is configured"
+            );
         }
-        Self { secret }
+        Self {
+            secret,
+            admin_password,
+        }
     }
 
     pub fn required(&self) -> bool {
         self.secret.is_some()
+    }
+
+    /// Mint a JWT for username/role. Requires `OPENFDD_JWT_SECRET`.
+    pub fn issue_token(&self, sub: &str, role: Role, ttl_secs: i64) -> Result<String, String> {
+        use jsonwebtoken::{encode, EncodingKey, Header};
+        let secret = self
+            .secret
+            .as_ref()
+            .ok_or_else(|| "auth not configured".to_string())?;
+        let now = chrono::Utc::now().timestamp();
+        let claims = JwtClaims {
+            sub: sub.to_string(),
+            role: role.as_str().to_string(),
+            exp: now + ttl_secs,
+            iat: now,
+        };
+        encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(secret.as_bytes()),
+        )
+        .map_err(|e| format!("token encode failed: {e}"))
+    }
+
+    /// Validate username/password for UI login. Accepts `admin` (or `operator`) when
+    /// `OPENFDD_ADMIN_PASSWORD` matches.
+    pub fn authenticate_password(&self, username: &str, password: &str) -> Result<(String, Role), String> {
+        let expected = self
+            .admin_password
+            .as_ref()
+            .ok_or_else(|| "login not configured (set OPENFDD_ADMIN_PASSWORD)".to_string())?;
+        if !constant_time_eq(expected.as_bytes(), password.as_bytes()) {
+            return Err("invalid credentials".into());
+        }
+        let role = match username.trim() {
+            "admin" => Role::Admin,
+            "operator" => Role::Operator,
+            "viewer" => Role::Viewer,
+            _ => return Err("invalid credentials".into()),
+        };
+        Ok((username.trim().to_string(), role))
     }
 
     pub fn verify_bearer(&self, token: &str) -> Result<AuthUser, String> {
@@ -167,6 +231,7 @@ mod tests {
     fn roundtrip_jwt() {
         let cfg = AuthConfig {
             secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
+            admin_password: None,
         };
         let claims = JwtClaims {
             sub: "operator".into(),
@@ -189,6 +254,7 @@ mod tests {
     fn rejects_unknown_role() {
         let cfg = AuthConfig {
             secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
+            admin_password: None,
         };
         let claims = JwtClaims {
             sub: "x".into(),

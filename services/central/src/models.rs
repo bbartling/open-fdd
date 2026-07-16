@@ -150,3 +150,35 @@ pub struct ErrorResponse {
     pub ok: bool,
     pub error: String,
 }
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuthStatusResponse {
+    pub ok: bool,
+    pub auth_required: bool,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuthMeResponse {
+    pub ok: bool,
+    pub username: String,
+    pub role: String,
+    pub auth_required: bool,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct AuthLoginRequest {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuthLoginResponse {
+    pub ok: bool,
+    pub token: String,
+    pub access_token: String,
+    pub token_type: String,
+    pub role: String,
+    pub subject: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}

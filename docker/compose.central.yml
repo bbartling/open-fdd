@@ -30,6 +30,8 @@ services:
       OPENFDD_MQTT_CERT_PEM: /mqtt/central.cert.pem
       OPENFDD_MQTT_KEY_PEM: /mqtt/central.key.pem
       OPENFDD_WORKSPACE: /workspace
+      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}
+      OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
     ports:
       - "8080:8080"
     volumes:
@@ -45,7 +47,7 @@ services:
       context: ..
       dockerfile: workspace/dashboard/Dockerfile
     ports:
-      - "3000:80"
+      - "${OPENFDD_UI_BIND:-0.0.0.0}:3000:80"
     depends_on:
       - central
     restart: unless-stopped
