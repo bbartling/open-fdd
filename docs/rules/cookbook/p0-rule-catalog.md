@@ -6,86 +6,93 @@ nav_order: 11
 
 # P0 rule catalog — full metadata
 
-Standards-first metadata for every shipped cookbook rule. Detection SQL/Pandas live in the [SQL](datafusion-sql-cookbook.html) and [Pandas](pandas-cookbook.html) cookbooks. P2 rules: [extended P2 section](datafusion-sql-cookbook.html#extended-rule-families-p2).
+Standards-first metadata for every **validated** cookbook rule (vibe19 catalog). Detection SQL/Pandas live in the [SQL](datafusion-sql-cookbook.html) and [Pandas](pandas-cookbook.html) cookbooks.
 
 {: .important }
 All **thresholds are defaults** — site-adjustable. **confirmation_seconds** default **300** unless noted.
 
 ---
 
-## Sensor validation
+## Validated rules
 
-| id | taxonomy_path | equipment | severity | required_points | confirmation_s | root_cause_candidates |
-|----|---------------|-----------|----------|-----------------|----------------|----------------------|
-| SV-1 | sensor.quality.vav.zone_range | vav | 2 | zone_t, occ_mode | 300 | Bad sensor, miscalibrated zone T |
-| SV-2 | sensor.quality.site.oa_range | ahu | 2 | oa_t | 300 | OA sensor fault, exposure issue |
-| SV-3 | sensor.quality.site.oa_humidity | ahu | 2 | oa_h | 300 | Humidity sensor drift |
-| SV-4 | sensor.quality.ahu.mixing_envelope | ahu | 2 | mat, oat, rat | 300 | MAT sensor, mixed damper fault |
-| SV-5 | sensor.quality.site.stale_data | site | 3 | timestamp | 300 | Poll failure, historian gap |
-| SV-6 | sensor.quality.generic.flatline_roc | site | 2 | (per rule) | 300 | Stuck sensor, comm loss |
-| SV-7 | sensor.quality.generic.wrong_units | site | 2 | (per rule) | 300 | Scaling error in BAS export |
-
----
-
-## AHU FC1–FC15 (GL36-aligned)
-
-| id | taxonomy_path | severity | required_points | confirmation_s | recommended_action |
-|----|---------------|----------|-----------------|----------------|-------------------|
-| FC1 | control.loop.ahu.duct_static_low | 3 | duct_static, duct_static_sp, fan_cmd | 300 | Check fan VFD, duct leaks, SP sensor |
-| FC2 | safety.envelope.ahu.mat_below_mix | 2 | mat, oat, rat, fan_cmd | 600 | Verify MAT/OAT/RAT sensors, damper |
-| FC3 | safety.envelope.ahu.mat_above_mix | 2 | mat, oat, rat, fan_cmd | 600 | Same as FC2 |
-| FC4 | control.loop.ahu.pid_hunting | 2 | htg_valve_pct, clg_valve_pct, fan_cmd, oa_damper_pct | 3600 | Tune PID, check hunting loops |
-| FC5 | control.loop.ahu.sat_cold_heating | 3 | sat, htg_valve_pct, fan_cmd | 300 | Heating valve, SAT sensor |
-| FC6 | ventilation.ahu.oa_fraction_mismatch | 2 | mat, rat, oat, fan_cmd | 300 | Economizer, OA damper |
-| FC7 | control.loop.ahu.sat_low_full_heat | 3 | sat, htg_valve_pct, fan_cmd | 300 | Heating capacity, valve |
-| FC8 | economizer.ahu.sat_above_blend_econ | 2 | sat, oat, rat, mat, fan_cmd | 300 | Economizer control |
-| FC9 | economizer.ahu.oat_too_warm_free_cool | 2 | oat, clg_valve_pct, oa_damper_pct | 300 | Economizer lockout setpoints |
-| FC10 | economizer.ahu.oat_mat_mismatch_mech | 2 | oat, mat, clg_valve_pct | 300 | MAT sensor, economizer |
-| FC11 | economizer.ahu.oat_mat_mismatch_econ | 2 | oat, mat, oa_damper_pct | 300 | Same as FC10 |
-| FC12 | control.loop.ahu.sat_above_blend_cool | 2 | sat, oat, rat, clg_valve_pct | 300 | Cooling/economizer sequencing |
-| FC13 | control.loop.ahu.sat_above_sp_full_cool | 3 | sat, sat_sp, clg_valve_pct, fan_cmd | 300 | Cooling capacity, SAT SP |
-| FC14 | actuator.leakage.ahu.chw_coil_inactive | 2 | chw_valve_pct, sat, sat_sp | 300 | CHW valve leakage |
-| FC15 | actuator.leakage.ahu.hw_coil_inactive | 2 | htg_valve_pct, sat, sat_sp | 300 | HW valve leakage |
-
----
-
-## AHU auxiliary · VAV · economizer · plant · HP · WX · TRIM · v2
-
-| id | taxonomy_path | equipment | severity | confirmation_s |
-|----|---------------|-----------|----------|----------------|
-| SAT_DEVIATION | control.loop.ahu.sat_tracking | ahu | 2 | 600 |
-| DUCT_STATIC_HIGH | control.loop.ahu.duct_static_high | ahu | 2 | 300 |
-| HEAT_COOL_SIMULT | control.loop.ahu.simultaneous_heat_cool | ahu | 3 | 300 |
-| FAN_OFF_DUCT_WARM | schedule.ahu.fan_off_warm_duct | ahu | 2 | 600 |
-| VAV-1 | terminal.vav.comfort_band | vav | 2 | 900 |
-| VAV-2 | schedule.vav.night_setback_miss | vav | 2 | 1800 |
-| VAV-3 | terminal.vav.excessive_reheat | vav | 2 | 300 |
-| VAV-4 | actuator.leakage.vav.damper_stuck_open | vav | 2 | 900 |
-| VAV-5 | terminal.vav.airflow_sensor_bias | vav | 2 | 900 |
-| VAV-6 | terminal.vav.reheat_with_cooling | vav | 2 | 300 |
-| VAV-7 | terminal.vav.min_airflow_violation | vav | 2 | 900 |
-| ECON-1–5 | economizer.ahu.* | ahu | 2 | 300–600 |
-| OA-1 | ventilation.ahu.low_oa_fraction | ahu | 2 | 900 |
-| OA-2 | ventilation.ahu.dcv_minimum_oa | ahu | 2 | 900 |
-| CHW-1–4 | plant.performance.chw.* | plant.chw | 2–3 | 300–900 |
-| PLANT-1 | reset.plant.chw.dp_reset_missing | plant.chw | 2 | 900 |
-| TOWER-1 | plant.performance.tower.approach_high | plant.tower | 2 | 900 |
-| HP-1 | control.loop.hp.discharge_cold | hp | 2 | 600 |
-| WX-1–2 | sensor.quality.weather.* | sensor.weather | 2 | 300 |
-| TRIM-1–4 | kpi.advisory.* | site | 1 | 1800 |
-| RESET-1 | reset.ahu.sat_oa_reset_missing | ahu | 2 | 900 |
-| SCHED-1 | schedule.ahu.unoccupied_runtime | ahu | 2 | 1800 |
-| OVR-1 | override.ahu.persistent_manual | ahu | 2 | 3600 |
-| CMD-1 | command.status.ahu.fan_cmd_status | ahu | 3 | 600 |
-| VLV-1 | actuator.leakage.ahu.clg_valve | ahu | 2 | 900 |
-| DMP-1 | actuator.leakage.ahu.oa_damper | ahu | 2 | 900 |
-| SP-HIGH / SP-LOW | reset.vav.occupied_sp_drift | vav | 2 | 900 |
-| CTRL-2 | control.loop.generic.hunting | ahu | 2 | 3600 |
-| KPI-1 | kpi.advisory.site.performance_score | site | 1 | 86400 |
+| id | family | equipment | roles | confirmation_s | equation |
+|----|--------|-----------|-------|----------------:|----------|
+| `SV-RANGE` | `sensor` | ahu, vav, chiller, boiler, weather, zone, heatpump |  | 300 | Any modeled sensor reads outside its physical hard range (e.g. OAT −60–130°F, SAT 30–150°F, CHWS 30–80°F). |
+| `SV-FLATLINE` | `sensor` | ahu, vav, chiller, boiler, weather, zone, heatpump |  | 300 | Sensor value unchanged (Δ ≤ tolerance) across the flatline window — stuck / frozen sensor. |
+| `SV-SPIKE` | `sensor` | ahu, vav, chiller, boiler, weather, zone, heatpump |  | 300 | Sample-to-sample jump exceeds the physical spike limit for the sensor type. |
+| `SV-STALE` | `sensor` | ahu, vav, chiller, boiler, weather, zone, heatpump |  | 300 | All modeled sensors unchanged over the stale window — data feed likely dropped. |
+| `SV-RATE` | `sensor` | ahu, vav, chiller, boiler, weather, zone, heatpump |  | 600 | Implausible sustained rate-of-change for mapped sensors. Thresholds depend on quantity, location, and operating state… |
+| `PID-HUNT-1` | `control` | ahu, vav, chiller, boiler, heatpump |  | 300 | Rolling 1h total variation of any 0–100% control output (dampers, valves, fan speeds, heat/cool cmds) with span ≥20%,… |
+| `FC1` | `ahu` | ahu | duct-static-pressure, duct-static-pressure-sp, fan-cmd | 300 | Fan ≥ 87% AND duct static < static SP − 0.12 in.w.c. |
+| `FC2` | `ahu` | ahu | mixed-air-temp, outside-air-temp, return-air-temp, fan-cmd | 600 | Fan on AND MAT + mix_tol < min(RAT − mix_tol, OAT − mix_tol) (≡ MAT < min(RAT, OAT) − 2·mix_tol; default mix_tol = 1.… |
+| `FC3` | `ahu` | ahu | mixed-air-temp, outside-air-temp, return-air-temp, fan-cmd | 600 | Fan on AND MAT − mix_tol > max(RAT + mix_tol, OAT + mix_tol) (≡ MAT > max(RAT, OAT) + 2·mix_tol; default mix_tol = 1.… |
+| `FC4` | `ahu` | ahu | outside-air-damper, cooling-valve, fan-cmd | 3600 | More than 5 operating-mode entry transitions in any hour (heating/econ/mech modes). |
+| `FC5` | `ahu` | ahu | discharge-air-temp, mixed-air-temp, fan-cmd, heating-valve | 600 | Fan on AND heating > 1% AND SAT + mix_tol ≤ MAT − mix_tol + 0.55°F (default mix_tol = 1.15°F). |
+| `FC6` | `ahu` | ahu | mixed-air-temp, outside-air-temp, return-air-temp, vav-total-airflow | 600 | \\|RAT−OAT\\| ≥ 5°F AND \\|estimated OA% − design min OA%\\| > 15% in heating/mech-only modes. |
+| `FC7` | `ahu` | ahu | discharge-air-temp, discharge-air-temp-sp, fan-cmd, heating-valve | 600 | Fan on AND heating > 90% AND SAT < SAT SP − 1.0°F. |
+| `FC8` | `ahu` | ahu | discharge-air-temp, mixed-air-temp, outside-air-damper, cooling-valve | 600 | Economizer open, CHW < 10%, \\|SAT − 0.55°F − MAT\\| > √(supply_tol²+mix_tol²). |
+| `FC9` | `ahu` | ahu | outside-air-temp, discharge-air-temp-sp, outside-air-damper, cooling-valve | 600 | Economizer open, CHW < 10%, OAT − mix_tol > SAT SP − 0.55°F + mix_tol. |
+| `FC10` | `ahu` | ahu | mixed-air-temp, outside-air-temp, outside-air-damper, cooling-valve | 600 | CHW > 1%, economizer > 90%, \\|MAT − OAT\\| > √(mix_tol²+mix_tol²). |
+| `FC11` | `ahu` | ahu | outside-air-temp, discharge-air-temp-sp, outside-air-damper, cooling-valve | 600 | CHW > 1%, economizer > 90%, OAT + mix_tol < SAT SP − 0.55°F − mix_tol. |
+| `FC12` | `ahu` | ahu | discharge-air-temp, mixed-air-temp, outside-air-damper, cooling-valve | 600 | CHW > 1%, SAT − supply_tol − 0.55°F > MAT + mix_tol at min or full economizer. |
+| `FC13` | `ahu` | ahu | discharge-air-temp, discharge-air-temp-sp, outside-air-damper, cooling-valve | 600 | CHW > 1%, SAT > SAT SP + 1.0°F at min or full economizer. |
+| `FC14` | `ahu` | ahu | cooling-coil-entering-temp, cooling-coil-leaving-temp, outside-air-damper, cooling-valve | 600 | Cooling coil ΔT ≥ √(mix_tol²+mix_tol²)+0.55°F while coil should be inactive. |
+| `FC15` | `ahu` | ahu | heating-coil-entering-temp, heating-coil-leaving-temp, outside-air-damper, cooling-valve | 600 | Heating coil ΔT ≥ √(mix_tol²+mix_tol²)+0.55°F while coil should be inactive. |
+| `AHU-SATDEV` | `ahu` | ahu | discharge-air-temp, discharge-air-temp-sp | 600 | \\|SAT − SAT SP\\| > 5°F. |
+| `AHU-DUCTHI` | `ahu` | ahu | duct-static-pressure, duct-static-pressure-sp | 300 | Duct static > static SP + margin. Evaluates when fan is proven on OR duct static itself exceeds pressure_on_min (catc… |
+| `AHU-SIMUL` | `ahu` | ahu | heating-valve, cooling-valve | 300 | Heating valve > 10% AND cooling valve > 10% at once. |
+| `OAT-METEO` | `ahu` | ahu | outside-air-temp, web-outside-air-temp | 900 | BAS OAT sensor differs from Open-Meteo dry bulb by more than 5°F. |
+| `ECON-1` | `ahu` | ahu | fan-cmd, outside-air-damper, outside-air-temp | 600 | Fan on, OA damper < 5%, OAT > 55°F (should be economizing). |
+| `ECON-2` | `ahu` | ahu | outside-air-temp, outside-air-damper | 300 | OAT > 63°F AND OA damper > 42% (should be at minimum). |
+| `ECON-3` | `ahu` | ahu | outside-air-damper, cooling-valve | 300 | Web free-cooling opportunity: 60°F ≤ dry-bulb < 72°F AND dewpoint < 60°F (dewpoint from web sensor or calculated from… |
+| `ECON-4` | `ahu` | ahu | mixed-air-temp, return-air-temp, outside-air-temp, fan-cmd | 600 | Fan on, \\|RAT−OAT\\| > 2.2°F, estimated OA fraction < 21%. |
+| `ECON-5` | `ahu` | ahu | preheat-leaving-temp, discharge-air-temp-sp, outside-air-temp, heating-valve | 600 | Preheat leaving air > 2.2°F above target while preheat active. |
+| `ECON-6` | `ahu` | ahu | outside-air-damper | 600 | Web dry-bulb < 25°F AND OA damper above winter min-OA ceiling (default 25%). AHU should be at minimum OA in cold weat… |
+| `ECON-7` | `ahu` | ahu | outside-air-damper | 600 | Economizer-OK web weather: dew point < 60°F AND dry-bulb < 72°F (above a 35°F freeze-guard floor; dewpoint from web s… |
+| `MECH-OAT-1` | `ahu` | ahu, chiller, heatpump |  | 600 | Proven DX/chiller mechanical cooling while web dry-bulb < 60°F. Uses compressor/chiller/pump/amps/power proof — not A… |
+| `CHW-NOLOAD-1` | `plant` | chiller |  | 1800 | Chiller/plant proven running while building load is satisfied: all mapped zones inside comfort band OR all mapped AHU… |
+| `VAV-1` | `vav` | vav, zone | zone-air-temp | 900 | Zone temp < 70°F or > 75°F. |
+| `VAV-3` | `vav` | vav | outside-air-temp, reheat-valve | 300 | Air flowing AND OAT > 78°F AND reheat valve > 52%. |
+| `VAV-4` | `vav` | vav | damper | 900 | Air flowing AND damper > 97.5% sustained across the window. |
+| `VAV-5` | `vav` | vav | zone-airflow, damper | 900 | Airflow > 50 cfm while damper < 10% (implausible flow). |
+| `VAV-REHEAT` | `vav` | vav | reheat-valve, vav-discharge-air-temp, vav-inlet-air-temp | 900 | Air flowing AND reheat valve > 30% AND box discharge temp rises < 3°F above duct inlet (air from AHU) — stuck or fail… |
+| `VAV-AHU-LEAVE` | `vav` | vav | vav-discharge-air-temp, ahu-discharge-air-temp | 900 | Air flowing AND \\|VAV discharge − parent AHU SAT\\| > band. Needs package topology (vav_to_ahu) so ahu_sat is enrich… |
+| `VAV-7` | `vav` | vav | zone-airflow | 900 | Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too hig… |
+| `CHW-1` | `plant` | chiller | chilled-water-supply-temp, chilled-water-return-temp | 900 | Pump on AND (CHWR − CHWS) < 4°F. |
+| `CHW-2` | `plant` | chiller | chw-diff-pressure, chw-diff-pressure-sp, chw-pump-cmd | 300 | Pump ≥ 87% AND CHW DP < DP SP − 2.2. |
+| `CHW-3` | `plant` | chiller | chilled-water-supply-temp, chilled-water-supply-temp-sp, chw-pump-cmd | 300 | Pump on AND \\|CHWS − CHWS SP\\| > 2.2°F. |
+| `CHW-4` | `plant` | chiller | chw-flow, chw-pump-cmd | 300 | Pump ≥ 87% AND CHW flow > 1100 gpm. |
+| `HP-1` | `heatpump` | heatpump | discharge-air-temp, zone-air-temp, fan-cmd | 600 | Fan on, zone < 69°F, discharge SAT < 85°F. |
+| `WX-1` | `weather` | weather | outside-air-temp | 300 | OAT sample-to-sample jump > 16°F. |
+| `CW-OPT-1` | `plant` | chiller, cooling_tower | condenser-water-supply-temp | 900 | CW supply significantly colder than web wet-bulb + design approach (Stull WB) — tower over-cooling / not optimized. |
+| `CW-APR-1` | `plant` | chiller, cooling_tower | condenser-water-supply-temp | 900 | At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 8°F, typically 5–10°F). Suspect OA→w… |
+| `CW-FAN-1` | `plant` | chiller, cooling_tower | condenser-water-supply-temp | 900 | Tower fans at full speed while leaving CW is well above web wet-bulb + design approach (approach + excess_beyond). Fa… |
+| `TRIM-1` | `trim` | ahu | duct-static-pressure, vav-pressure-request-sum | 1800 | Duct static high (> 1.35 in.w.c.) while VAV pressure requests are low. |
+| `TRIM-3` | `trim` | boiler | hot-water-supply-temp, hw-reset-request-sum | 1800 | HW supply > 160°F while reset requests are low. |
+| `TRIM-4` | `trim` | chiller | chilled-water-supply-temp, chw-reset-request-sum | 1800 | CHW supply < 45°F while reset requests are low. |
+| `SCHED-1` | `schedule` | ahu | occupied, fan-status | 1800 | Fan running while occupancy is unoccupied (Overview calendar → occ_mode). When zone_t is mapped, also require zone in… |
+| `SCHED-247` | `schedule` | ahu, vav, chiller, boiler, heatpump |  | 3600 | Fan or pump (or similar motor proof/command) is on for ≥ always_on_pct of the analysis window — highlights equipment … |
+| `CMD-1` | `ahu` | ahu | fan-cmd, fan-status | 600 | Fan command and proven status disagree. |
+| `OA-1` | `ahu` | ahu | mixed-air-temp, return-air-temp, outside-air-temp, fan-status | 900 | Estimated OA fraction < 15% with adequate OAT/RAT split. |
+| `DMP-1` | `ahu` | ahu | outside-air-temp, mixed-air-temp, outside-air-damper | 900 | Damper ≤ 5% but MAT tracks OAT within 2°F — leaking OA damper. |
+| `VLV-1` | `ahu` | ahu | discharge-air-temp, discharge-air-temp-sp, cooling-valve | 900 | Cooling valve ≤ 5% AND (SAT < sat_sp − sat_err OR SAT < MAT − mat_leak_delta). Fan proven on when fan_status/fan_cmd … |
 
 ---
 
-## Validation scenarios (all nontrivial rules)
+## Tunable params (summary)
+
+Per-rule slider params are listed under each section in the Pandas/SQL cookbooks. Common patterns:
+
+| Pattern | Examples |
+|---------|----------|
+| Error / deadband | `duct_static_err`, `sat_err`, `mat_env` |
+| Command high/low | `fan_hi`, valve closed ≤ 0.05 |
+| Confirm delay | `confirm_seconds` (via `CONFIRM_PARAM`) |
+| Sweep scales | `range_scale_*`, `spike_scale_*`, `flatline_tol` |
+
+---
+
+## Validation scenarios
 
 | scenario | expected fault_raw |
 |----------|-------------------|
@@ -94,6 +101,5 @@ All **thresholds are defaults** — site-adjustable. **confirmation_seconds** de
 | borderline | document sensitivity |
 | missing_point | false |
 | bad_sensor | false (gated) |
-| wrong_units | false or true (SV-7) |
 
 Fixtures: [benchmark strategy](benchmark-strategy.html) · `docs/rules/cookbook/fixtures/`

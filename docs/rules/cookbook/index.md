@@ -8,46 +8,50 @@ permalink: /rules/cookbook/
 
 # HVAC FDD Rule Cookbook
 
-Open-source, **standards-first** fault detection for commercial HVAC. Rules use generic semantic variables (`sat`, `oat`, `fan_cmd`, …) — portable across Haystack-modeled sites and generic BAS telemetry.
+Open-source, **standards-first** fault detection for commercial HVAC. Rules use generic semantic variables / Haystack roles (`discharge-air-temp`, `outside-air-temp`, `fan-cmd`, …) — portable across modeled sites and generic BAS telemetry.
 
-## Two cookbooks — exact parity target
+**Validated catalog:** **59 rules** from the vibe19 Streamlit-tested pandas catalog. IDs below are canonical.
+
+## Two cookbooks — parity target
 
 | Cookbook | Runtime | Use when |
 |----------|---------|----------|
 | [**DataFusion SQL**](datafusion-sql-cookbook.html) | **Open-FDD edge** | Live historian, `/sql-fdd`, API `test-sql`, confirmation engine |
 | [**Pandas**](pandas-cookbook.html) | **Outside Open-FDD** | CSV exports, notebooks, RCx, parity checks, public benchmarks |
 
-Every rule exists in **both** backends. See the [parity matrix](parity-matrix.html).
+Every **validated** rule exists in **both** cookbooks. Rolling / multi-sensor screens (e.g. `SV-RATE`, `PID-HUNT-1`) ship a **simplified SQL** variant with an explicit caveat — full logic is Pandas-validated. See the [parity matrix](parity-matrix.html).
 
 ## Framework
 
 | Doc | Description |
 |-----|-------------|
-| [**P0 rule catalog**](p0-rule-catalog.html) | Full metadata for every shipped rule |
+| [**P0 rule catalog**](p0-rule-catalog.html) | Full metadata for every validated rule |
 | [Public taxonomy](taxonomy.html) | Equipment classes, rule families, severity |
 | [Rule schema](rule-schema.html) | Declarative metadata — compiles to SQL + Pandas |
 | [Gap matrix](gap-matrix.html) | Coverage vs ASHRAE GL36, Berkeley, PNNL, NIST |
 | [Parity matrix](parity-matrix.html) | SQL ↔ Pandas audit |
 | [Roadmap](roadmap.html) | Priority-ranked expansion |
-| [Prerequisite macros](prerequisite-macros.html) | Occupancy, fan proven, reset, override guards |
+| [Prerequisite macros](prerequisite-macros.html) | Occupancy, fan proven, override / operational gates |
 | [Benchmark strategy](benchmark-strategy.html) | Fixtures + regression (`scripts/cookbook_parity_check.py`) |
 | [Doc template](doc-template.html) | Standard per-rule documentation |
 
-## Rule inventory (summary)
+## Rule inventory (validated)
 
 | Family | Count | Examples |
 |--------|------:|----------|
-| Sensor validation | 7 | SV-1–SV-7 |
-| AHU GL36 (FC1–FC15) | 15 | Duct static, MAT envelope, PID hunting |
-| VAV terminals | 7 | Comfort, reheat, damper, airflow bias, min flow |
-| Economizer / ventilation | 7+ | ECON-1–5, OA-1–2, [diagnostics guide](datafusion-sql-cookbook.html#ahu-economizer-diagnostics-guide) |
-| Central plant | 6 | CHW ΔT, DP, reset, tower approach |
-| Extended v2 | 12 | Reset, schedule, override, cmd/status, leakage |
-| Extended P2 | 6 | VAV-6/7, TOWER-1, CTRL-2, SV-7, OA-2 |
-| Trim & respond | 4 | GL36 advisory |
-| Heat pump / weather | 3 | HP-1, WX-1–2 |
+| Sensor validation (sweep) | 5 | SV-RANGE, SV-FLATLINE, SV-SPIKE, SV-STALE, SV-RATE |
+| Control hunting | 1 | PID-HUNT-1 |
+| Air handling / economizer | 31 | FC1–FC15, ECON-1–7, OAT-METEO, VLV-1, DMP-1, CMD-1 |
+| VAV terminals | 7 | VAV-1, VAV-3–5, VAV-7, VAV-REHEAT, VAV-AHU-LEAVE |
+| Central plant / CW | 8 | CHW-1–4, CHW-NOLOAD-1, CW-APR-1, CW-FAN-1, CW-OPT-1 |
+| Heat pump | 1 | HP-1 |
+| Weather | 1 | WX-1 |
+| Trim & respond | 3 | TRIM-1, TRIM-3, TRIM-4 |
+| Schedule | 2 | SCHED-1, SCHED-247 |
 
-**Total:** 60+ rules with catalog metadata. **Default confirmation:** 300 s (5 min).
+**Total validated:** 59. **Default confirmation:** 300 s (5 min) unless noted per rule.
+
+Additional rules documented under **Not yet in validated catalog** remain in the cookbooks for continuity (flagged, not Streamlit-parity-tested).
 
 ## Quick start
 

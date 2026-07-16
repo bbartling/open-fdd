@@ -6,7 +6,9 @@ nav_order: 2
 
 # Pandas FDD Cookbook
 
-**For analyst workflows outside Open-FDD.** Open-FDD edge runs **Rust + Apache Arrow + DataFusion SQL** only. This cookbook mirrors every rule in the [DataFusion SQL cookbook](datafusion-sql-cookbook.html) for notebooks, CSV exports, RCx studies, and parity testing.
+**Validated source of truth:** the Streamlit-tested vibe19 catalog (`app/rules/cookbook_catalog.py`) — **59 rules**. Open-FDD edge runs **Rust + Apache Arrow + DataFusion SQL**; this cookbook mirrors every validated rule for notebooks, CSV exports, RCx studies, and parity testing.
+
+See also the [DataFusion SQL cookbook](datafusion-sql-cookbook.html) and [P0 rule catalog](p0-rule-catalog.html).
 
 ---
 
@@ -14,21 +16,17 @@ nav_order: 2
 
 1. [Setup & shared helpers](#setup--shared-helpers)
 2. [Fault confirmation delay (default 5 minutes)](#fault-confirmation-delay-default-5-minutes)
-3. [Sensor validation](#sensor-validation)
-4. [Air handling units (FC1–FC15)](#air-handling-units)
-5. [VAV zones](#vav-zones)
-6. [Economizer & ventilation](#economizer--ventilation)
-   - [AHU economizer diagnostics guide](#ahu-economizer-diagnostics-guide)
-   - [ECON-1–5](#econ-1--economizer-stuck-closed)
-   - [Ventilation & leakage cross-rules](#rule-map-economizer-family)
-7. [Central plants](#central-plants)
+3. [Sensor validation (sweep)](#sensor-validation-sweep)
+4. [Control-loop hunting](#control-loop-hunting)
+5. [Air handling units](#air-handling-units)
+6. [VAV terminals](#vav-terminals)
+7. [Central plant / condenser water](#central-plant--condenser-water)
 8. [Heat pumps](#heat-pumps)
 9. [Weather station](#weather-station)
 10. [Trim & respond advisory](#trim--respond-advisory)
-11. [Extended rule families (v2)](#extended-rule-families-v2)
-12. [Extended rule families (P2)](#extended-rule-families-p2)
+11. [Schedule & occupancy](#schedule--occupancy)
+12. [Not yet in validated catalog](#not-yet-in-validated-catalog)
 13. [Framework docs](#framework-docs)
-14. [Export to Open-FDD SQL](#export-to-open-fdd-sql)
 
 ---
 
@@ -38,29 +36,23 @@ nav_order: 2
 import pandas as pd
 import numpy as np
 
-# Generic CSV (vendor export, BMS dump, Open-FDD batch export, etc.)
 df = pd.read_csv("your_building_data.csv")
-
-# Optional: parse timestamp column (rename "timestamp" if your file uses another name)
-ts_col = "timestamp"  # e.g. "DateTime", "time", "ts"
+ts_col = "timestamp"
 if ts_col in df.columns:
     df[ts_col] = pd.to_datetime(df[ts_col], utc=True, errors="coerce")
     df = df.dropna(subset=[ts_col]).sort_values(ts_col)
-else:
-    df = df.sort_index()
-
-# Optional: filter one equipment / site column if present
-# EQUIP = "equip:your-ahu"
-# d = df[df["equipment_id"] == EQUIP].copy() if "equipment_id" in df.columns else df.copy()
 d = df.copy()
+POLL_SECONDS = 60
 ```
 
 ### Normalize command 0–100 → 0–1
 
 ```python
-def norm_cmd(s: pd.Series) -> pd.Series:
+def norm_cmd(s: pd.Series | None) -> pd.Series:
+    if s is None:
+        return pd.Series(dtype=float)
     s = pd.to_numeric(s, errors="coerce")
-    return np.where(s > 1.0, s / 100.0, s)
+    return s.where(s <= 1.0, s / 100.0)
 ```
 
 ### Apply fault mask helper
@@ -72,1203 +64,2071 @@ def apply_fault(d: pd.DataFrame, mask: pd.Series, col: str = "fault_raw") -> pd.
     return d
 ```
 
-### Prerequisite macros (shared with SQL cookbook)
+### Prerequisite macros
+
+Operational gates (fan proven-on, occupancy, override suppression) wrap many rules in the validated catalog. See [prerequisite macros](prerequisite-macros.html).
 
 ```python
-def macro_fan_proven_on(d: pd.DataFrame) -> pd.Series:
-    cmd = norm_cmd(d["fan_cmd"]) if "fan_cmd" in d else pd.Series(0.0, index=d.index)
-    on = cmd >= 0.05
-    if "fan_status" in d.columns:
-        st = d["fan_status"]
-        return on & (st.isna() | st.astype(bool))
-    return on
-
-def macro_override_suppression(d: pd.DataFrame) -> pd.Series:
-    mask = pd.Series(True, index=d.index)
-    for col in ("override_active", "hand_mode", "bypass_active"):
-        if col in d.columns:
-            mask &= ~d[col].fillna(False).astype(bool)
-    return mask
+def confirm_fault(raw: pd.Series, min_rows: int) -> pd.Series:
+    groups = (raw != raw.shift()).cumsum()
+    streak = raw.groupby(groups).cumcount() + 1
+    return raw & (streak >= min_rows)
 ```
-
-See [prerequisite macros](prerequisite-macros.html) for full library.
 
 ---
 
 ## Fault confirmation delay (default 5 minutes)
 
-Every rule below uses an adjustable delay before a fault is considered **confirmed**. Default matches Open-FDD edge: **5 minutes**.
-
-```python
-# --- ADJUSTABLE: default 5 min fault delay ---
-POLL_SECONDS = 60                    # historian poll interval
-FAULT_CONFIRM_SECONDS = 300          # default 5 minutes — change per rule
-FAULT_CONFIRM_ROWS = max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS)
-
-def confirm_fault(raw: pd.Series, min_rows: int = FAULT_CONFIRM_ROWS) -> pd.Series:
-    """True only after `min_rows` consecutive True samples."""
-    groups = (raw != raw.shift()).cumsum()
-    streak = raw.groupby(groups).cumcount() + 1
-    return raw & (streak >= min_rows)
-
-# Example: FC4 PID hunting often needs longer delay
-FC4_CONFIRM_SECONDS = 3600
-FC4_CONFIRM_ROWS = FC4_CONFIRM_SECONDS // POLL_SECONDS
-```
-
-At 60 s poll, `FAULT_CONFIRM_ROWS=5` ≈ 300 s — same as SQL `confirmation_seconds: 300`.
+Every validated rule carries a default `confirm_seconds` (usually **300**). At 60 s poll, that is ~5 consecutive True samples — matching SQL `confirmation_seconds: 300`.
 
 ---
+## Sensor validation (sweep)
 
-## Sensor validation
+Sensor-sweep rules apply to **every modeled sensor** present on the equipment (not a single fixed point).
 
-### SV-1 — Zone temperature out of range
+### SV-RANGE — Sensor out of hard range
+**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
+**Mode:** sensor sweep (applies to every modeled sensor present)  
+**Equation:** Any modeled sensor reads outside its physical hard range (e.g. OAT −60–130°F, SAT 30–150°F, CHWS 30–80°F).  
+**Default confirmation:** 300 s
 
-```python
-FAULT_CONFIRM_SECONDS = 300  # adjustable
+**Tunable params**
 
-mask = d["zone_t"].notna() & ((d["zone_t"] < 55.0) | (d["zone_t"] > 90.0))
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
-### SV-2 — OA temperature out of range
-
-```python
-FAULT_CONFIRM_SECONDS = 300
-
-mask = d["oa_t"].notna() & ((d["oa_t"] < 40.0) | (d["oa_t"] > 110.0))
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
-### SV-3 — OA humidity out of range
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `range_scale_temperature` | Temp range scale | x | 1.0 | 0.5–2.0 |
+| `range_scale_humidity` | Humidity range scale | x | 1.0 | 0.5–2.0 |
+| `range_scale_pressure` | Pressure range scale | x | 1.0 | 0.5–2.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
 
-mask = d["oa_h"].notna() & ((d["oa_h"] < 10.0) | (d["oa_h"] > 95.0))
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    idx = d.index
+    mask = _false(idx)
+    per_role: dict[str, pd.Series] = {}
+    for role in SWEEP_SENSOR_ROLES:
+        if role not in d.columns:
+            continue
+        s = pd.to_numeric(d[role], errors="coerce")
+        lim = SENSOR_LIMITS[role]
+        type_scale = _role_type_scale(p, role, kind="range")
+        # Widen limits when scale > 1 (more forgiving); shrink when scale < 1.
+        mid = (lim["lo"] + lim["hi"]) / 2.0
+        half = (lim["hi"] - lim["lo"]) / 2.0 * max(type_scale, 1e-6)
+        lo, hi = mid - half, mid + half
+        role_mask = s.notna() & ((s < lo) | (s > hi))
+        per_role[role] = role_mask
+        mask = mask | role_mask
+    _stash_sweep_evidence(d, per_role, poll=poll, rule_tag="SV-RANGE")
+    return mask
+
+d = apply_fault(d, _sweep_range(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
-### SV-4 — Mixing envelope (MAT vs OAT/RAT)
+### SV-FLATLINE — Sensor flatline (stuck)
+**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
+**Mode:** sensor sweep (applies to every modeled sensor present)  
+**Equation:** Sensor value unchanged (Δ ≤ tolerance) across the flatline window — stuck / frozen sensor.  
+**Default confirmation:** 300 s
 
-Prefer envelope checks when OAT, RAT, and MAT are present — mirrors [FC2/FC3](datafusion-sql-cookbook.html#air-handling-units) logic.
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `flatline_tol` | Flatline tolerance | °F | 0.1 | 0.02–1.0 |
+| `flatline_hours` | Flatline window | h | 1.0 | 0.5–8.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
-ENV = 2.2
 
-mask = (
-    d["mat"].notna() & d["oa_t"].notna() & d["rat"].notna()
-    & (
-        (d["mat"] < d[["oa_t", "rat"]].min(axis=1) - ENV)
-        | (d["mat"] > d[["oa_t", "rat"]].max(axis=1) + ENV)
+def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    idx = d.index
+    tol = _f(p, "flatline_tol", 0.10)
+    hours = _f(p, "flatline_hours", 1.0)
+    window = max(2, int(round(hours * 3600 / max(poll, 1))))
+    mask = _false(idx)
+    per_role: dict[str, pd.Series] = {}
+    for role in FLATLINE_SENSOR_ROLES:
+        if role not in d.columns:
+            continue
+        s = pd.to_numeric(d[role], errors="coerce")
+        role_mask = flatline_mask(s, tol=tol, window=window)
+        per_role[role] = role_mask
+        mask = mask | role_mask
+    _stash_sweep_evidence(d, per_role, poll=poll, rule_tag="SV-FLATLINE")
+    return mask
+
+d = apply_fault(d, _sweep_flatline(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### SV-SPIKE — Sensor rate-of-change spike
+**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
+**Mode:** sensor sweep (applies to every modeled sensor present)  
+**Equation:** Sample-to-sample jump exceeds the physical spike limit for the sensor type.  
+**Default confirmation:** 300 s
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `spike_scale` | Spike limit scale (global) | x | 1.0 | 0.25–3.0 |
+| `spike_scale_temperature` | Temp spike scale | x | 1.0 | 0.25–3.0 |
+| `spike_scale_humidity` | Humidity spike scale | x | 1.0 | 0.25–3.0 |
+| `spike_scale_pressure` | Pressure spike scale | x | 1.0 | 0.25–3.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 300
+
+def _sweep_spike(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    idx = d.index
+    scale = _f(p, "spike_scale", 1.0)
+    mask = _false(idx)
+    per_role: dict[str, pd.Series] = {}
+    for role in SWEEP_SENSOR_ROLES:
+        if role not in d.columns:
+            continue
+        s = pd.to_numeric(d[role], errors="coerce")
+        type_scale = _role_type_scale(p, role, kind="spike")
+        limit = SENSOR_LIMITS[role]["spike"] * scale * type_scale
+        role_mask = s.notna() & (s.diff().abs() > limit)
+        per_role[role] = role_mask
+        mask = mask | role_mask
+    _stash_sweep_evidence(d, per_role, poll=poll, rule_tag="SV-SPIKE")
+    return mask
+
+d = apply_fault(d, _sweep_spike(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### SV-STALE — Stale data (no fresh samples)
+**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
+**Mode:** sensor sweep (applies to every modeled sensor present)  
+**Equation:** All modeled sensors unchanged over the stale window — data feed likely dropped.  
+**Default confirmation:** 300 s
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `stale_hours` | Stale window | h | 2.0 | 0.5–12.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 300
+
+def _sweep_stale(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    """Flag runs where all sweep sensors are unchanged (no fresh data)."""
+    idx = d.index
+    hours = _f(p, "stale_hours", 2.0)
+    window = max(2, int(round(hours * 3600 / max(poll, 1))))
+    present = [r for r in FLATLINE_SENSOR_ROLES if r in d.columns]
+    if not present:
+        _stash_sweep_evidence(d, {}, poll=poll, rule_tag="SV-STALE")
+        return _false(idx)
+    stale = pd.Series(True, index=idx)
+    per_role: dict[str, pd.Series] = {}
+    for role in present:
+        s = pd.to_numeric(d[role], errors="coerce")
+        role_flat = flatline_mask(s, tol=1e-9, window=window)
+        per_role[role] = role_flat  # each role's stuck mask; equipment fault is AND
+        stale = stale & role_flat
+    # For stale, the firing evidence is the AND mask applied to each present role
+    and_masks = {role: stale.copy() for role in present}
+    _stash_sweep_evidence(d, and_masks, poll=poll, rule_tag="SV-STALE")
+    return stale
+
+d = apply_fault(d, _sweep_stale(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### SV-RATE — Context-aware sensor rate of change
+**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
+**Mode:** sensor sweep (applies to every modeled sensor present)  
+**Equation:** Implausible sustained rate-of-change for mapped sensors. Thresholds depend on quantity, location, and operating state (steady vs startup/shutdown transient). Engineering screening defaults — tune per site. Alias: SV-SLEW. Distinct from SV-SPIKE (one-sample jump), SV-RANGE, SV-FLATLINE, and PID-HUNT-1.  
+**Default confirmation:** 600 s
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `persistence_min` | Fault persistence | min | 10.0 | 5.0–60.0 |
+| `transition_window_min` | Transition window | min | 20.0 | 5.0–60.0 |
+| `max_gap_hours` | Max sample gap | h | 2.0 | 0.25–6.0 |
+| `design_flow` | Design flow (flow profiles) | cfm | 0.0 | 0.0–100000.0 |
+| `sensor_span` | Sensor span (flow/pressure) | eng | 0.0 | 0.0–100000.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def _sv_rate_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    from app.rules.sensor_rate import sv_rate_compute
+
+    return sv_rate_compute(d, p, poll)
+
+d = apply_fault(d, _sv_rate_compute(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+## Control-loop hunting
+
+### PID-HUNT-1 — Suspected control-output hunting
+**Family:** `control` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `heatpump`  
+**Mode:** control-output sweep (dampers, valves, speeds, heat/cool cmds)  
+**Equation:** Rolling 1h total variation of any 0–100% control output (dampers, valves, fan speeds, heat/cool cmds) with span ≥20%, TV ≥500 %·pts, ≥2.5 equivalent cycles, ≥4 reversals — suspected loop hunting (not proof of bad PID alone).  
+**Default confirmation:** 300 s
+
+**Optional roles:** `loop-enabled`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `change_deadband_pct` | Ignore changes below | % out | 1.0 | 0.0–10.0 |
+| `minimum_span_pct` | Minimum observed span | % out | 20.0 | 5.0–100.0 |
+| `total_variation_fault_pct` | Total travel threshold | %/h | 500.0 | 50.0–2000.0 |
+| `minimum_equivalent_cycles` | Min equivalent cycles | cyc/h | 2.5 | 0.5–20.0 |
+| `minimum_reversals` | Min direction reversals | count | 4 | 1–40 |
+| `minimum_coverage_pct` | Minimum data coverage | % | 80.0 | 25.0–100.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 300
+
+def _pid_hunt_1(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    """Suspected control-output hunting across any present 0–100% analog roles."""
+    from app.rules.pid_hunting import PidHuntingParams, hunting_fault_mask, iter_control_output_series
+
+    params = PidHuntingParams(
+        change_deadband_pct=_f(p, "change_deadband_pct", 1.0),
+        minimum_span_pct=_f(p, "minimum_span_pct", 20.0),
+        total_variation_fault_pct=_f(p, "total_variation_fault_pct", 500.0),
+        minimum_equivalent_cycles=_f(p, "minimum_equivalent_cycles", 2.5),
+        minimum_reversals=int(_f(p, "minimum_reversals", 4)),
+        minimum_coverage_pct=_f(p, "minimum_coverage_pct", 80.0),
     )
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+    mask = _false(d.index)
+    enable_col = "loop-enabled" if "loop-enabled" in d.columns else None
+    for _label, series in iter_control_output_series(d):
+        enabled = d[enable_col] if enable_col else None
+        fault, _ = hunting_fault_mask(
+            series,
+            params=params,
+            poll_seconds=poll,
+            enabled=enabled,
+        )
+        mask = mask | fault.reindex(d.index).fillna(False)
+    return mask
+
+d = apply_fault(d, _pid_hunt_1(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
-
-### SV-5 — Stale data (no recent samples)
-
-```python
-FAULT_CONFIRM_SECONDS = 300
-STALE_MINUTES = 30
-
-last_ts = d.groupby("equipment_id")["timestamp"].transform("max")
-stale = (d["timestamp"] == last_ts) & (
-    (pd.Timestamp.utcnow() - last_ts).dt.total_seconds() > STALE_MINUTES * 60
-)
-d = apply_fault(d, stale)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
-### SV-6 — Flatline (stuck sensor)
-
-```python
-FAULT_CONFIRM_SECONDS = 300
-FLATLINE_SAMPLES = 12  # ~1 h @ 5-min poll
-
-def flatline_mask(series: pd.Series, tol: float = 0.10, window: int = FLATLINE_SAMPLES) -> pd.Series:
-    roll_min = series.rolling(window, min_periods=window).min()
-    roll_max = series.rolling(window, min_periods=window).max()
-    return series.notna() & ((roll_max - roll_min) <= tol)
-
-d = apply_fault(d, flatline_mask(d["oa_t"], tol=0.10))
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
-### SV-7 — Rate-of-change spike
-
-```python
-FAULT_CONFIRM_SECONDS = 300
-SPIKE_LIMIT = 16.0  # °F per sample
-
-mask = d["oa_t"].notna() & (d["oa_t"].diff().abs() > SPIKE_LIMIT)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
----
 
 ## Air handling units
 
-Shared tunables (match SQL cookbook):
+Includes GL36 FC1–FC15, AHU auxiliaries, economizer/ventilation, leakage, and outdoor-air screens.
 
-```python
-MIX_TOL = 1.15
-SUPPLY_TOL = 1.15
-AHU_MIN_OA_DPR = 0.05
-DELTA_SUPPLY_FAN = 0.55
-FAN_ON_MIN = 0.01
-```
+### FC1 — Duct static below SP at full fan (GL36 A)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan ≥ 87% AND duct static < static SP − 0.12 in.w.c.  
+**Default confirmation:** 300 s
 
----
+**Required roles:** `duct-static-pressure`, `duct-static-pressure-sp`, `fan-cmd`
 
-### FC1 — Duct static below SP at full fan (GL36 Rule A)
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `duct_static_err` | Duct static error | in. w.c. | 0.12 | 0.02–0.5 |
+| `fan_hi` | Fan high threshold | frac | 0.87 | 0.5–1.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
-DUCT_STATIC_ERR = 0.12
-FAN_HI = 0.87
 
-fan = norm_cmd(d["fan_cmd"])
-mask = (
-    d["duct_static"].notna() & d["duct_static_sp"].notna()
-    & (d["duct_static"] < d["duct_static_sp"] - DUCT_STATIC_ERR)
-    & (fan >= FAN_HI)
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+def fc1(d, p, poll):
+    err = _f(p, "duct_static_err", 0.12)
+    fan_hi = _f(p, "fan_hi", 0.87)
+    fan = _fan(d)
+    return (
+        d["duct-static-pressure"].notna() & d["duct-static-pressure-sp"].notna()
+        & (d["duct-static-pressure"] < d["duct-static-pressure-sp"] - err)
+        & (fan >= fan_hi)
+    )
+
+d = apply_fault(d, fc1(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
----
+### FC2 — MAT below OAT/RAT envelope (GL36 B)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan on AND MAT + mix_tol < min(RAT − mix_tol, OAT − mix_tol) (≡ MAT < min(RAT, OAT) − 2·mix_tol; default mix_tol = 1.15°F).  
+**Default confirmation:** 600 s
 
-### FC2 — MAT below OAT/RAT envelope (GL36 Rule B)
+**Required roles:** `mixed-air-temp`, `outside-air-temp`, `return-air-temp`, `fan-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
 
-fan = norm_cmd(d["fan_cmd"])
-mask = (
-    fan > FAN_ON_MIN
-    & d["mat"].notna() & d["oat"].notna() & d["rat"].notna()
-    & ((d["mat"] - MIX_TOL) < np.minimum(d["rat"] - MIX_TOL, d["oat"] - MIX_TOL))
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+def fc2(d, p, poll):
+    """MAT below OAT/RAT mixing envelope (GL36 B).
+
+    ``mix_tol`` widens the envelope on both sides:
+    ``mat + tol < min(rat - tol, oat - tol)`` ≡ ``mat < min(rat, oat) - 2·tol``.
+    Never subtract the same tol from both sides of the inequality (that cancels).
+    """
+    tol = _f(p, "mix_tol", MIX_TOL)
+    fan = _fan(d)
+    return (
+        (fan > FAN_ON_MIN)
+        & d["mixed-air-temp"].notna() & d["outside-air-temp"].notna() & d["return-air-temp"].notna()
+        & ((d["mixed-air-temp"] + tol) < np.minimum(d["return-air-temp"] - tol, d["outside-air-temp"] - tol))
+    )
+
+d = apply_fault(d, fc2(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
----
+### FC3 — MAT above OAT/RAT envelope (GL36 C)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan on AND MAT − mix_tol > max(RAT + mix_tol, OAT + mix_tol) (≡ MAT > max(RAT, OAT) + 2·mix_tol; default mix_tol = 1.15°F).  
+**Default confirmation:** 600 s
 
-### FC3 — MAT above OAT/RAT envelope (GL36 Rule C)
+**Required roles:** `mixed-air-temp`, `outside-air-temp`, `return-air-temp`, `fan-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
 
-fan = norm_cmd(d["fan_cmd"])
-mask = (
-    fan > FAN_ON_MIN
-    & d["mat"].notna() & d["oat"].notna() & d["rat"].notna()
-    & ((d["mat"] - MIX_TOL) > np.maximum(d["rat"] + MIX_TOL, d["oat"] + MIX_TOL))
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
+def fc3(d, p, poll):
+    tol = _f(p, "mix_tol", MIX_TOL)
+    fan = _fan(d)
+    return (
+        (fan > FAN_ON_MIN)
+        & d["mixed-air-temp"].notna() & d["outside-air-temp"].notna() & d["return-air-temp"].notna()
+        & ((d["mixed-air-temp"] - tol) > np.maximum(d["return-air-temp"] + tol, d["outside-air-temp"] + tol))
+    )
 
----
+d = apply_fault(d, fc3(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
 
 ### FC4 — PID hunting (operating-state oscillation)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** More than 5 operating-mode entry transitions in any hour (heating/econ/mech modes).  
+**Default confirmation:** 3600 s
 
-Reference implementation matching Open-FDD AHU `FaultConditionFour`. Counts operating-mode **entry transitions per hour**; flags when any hour exceeds `DELTA_OS_MAX`.
+**Required roles:** `outside-air-damper`, `cooling-valve`, `fan-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `delta_os_max` | Max mode changes/hr | count | 5 | 2–20 |
 
 ```python
-FAULT_CONFIRM_SECONDS = 3600  # PID hunting: use 1 h+ confirmation
-DELTA_OS_MAX = 5
-AHU_MIN_OA_DPR = 0.05
+FAULT_CONFIRM_SECONDS = 3600
 
-htg = norm_cmd(d["htg_valve_pct"])
-clg = norm_cmd(d["clg_valve_pct"])
-fan = norm_cmd(d["fan_cmd"])
-econ = norm_cmd(d["oa_damper_pct"])
+def fc4(d, p, poll):
+    """PID hunting — operating-state entry transitions per hour."""
+    delta_os_max = _f(p, "delta_os_max", 5.0)
+    htg = norm_cmd(d["heating-valve"]).fillna(0) if "heating-valve" in d else pd.Series(0.0, index=d.index)
+    clg = norm_cmd(d["cooling-valve"]).fillna(0) if "cooling-valve" in d else pd.Series(0.0, index=d.index)
+    fan = _fan(d)
+    econ = norm_cmd(d["outside-air-damper"]).fillna(0) if "outside-air-damper" in d else pd.Series(0.0, index=d.index)
+    modes = pd.DataFrame(index=d.index)
+    modes["heating"] = ((htg > 0) & (clg == 0) & (fan > 0) & (econ <= AHU_MIN_OA_DPR)).astype(int)
+    modes["econ_only"] = ((htg == 0) & (clg == 0) & (fan > 0) & (econ > AHU_MIN_OA_DPR)).astype(int)
+    modes["econ_mech"] = ((htg == 0) & (clg > 0) & (fan > 0) & (econ > AHU_MIN_OA_DPR)).astype(int)
+    modes["mech_only"] = ((htg == 0) & (clg > 0) & (fan > 0) & (econ <= AHU_MIN_OA_DPR)).astype(int)
+    # Loader moves timestamp into the DatetimeIndex — prefer index over a column.
+    if isinstance(d.index, pd.DatetimeIndex):
+        ts = pd.DatetimeIndex(d.index)
+    elif "timestamp" in d.columns:
+        ts = pd.DatetimeIndex(pd.to_datetime(d["timestamp"], utc=True, errors="coerce"))
+    else:
+        return _false(d.index)
+    entries = (modes.eq(1) & modes.shift().ne(1))
+    entries.index = ts
+    hourly = entries.resample("1h").sum()
+    flagged_hours = hourly[(hourly > delta_os_max).any(axis=1)].index
+    floor = ts.floor("1h")
+    return pd.Series(floor.isin(flagged_hours), index=d.index)
 
-d["heating_mode"] = (
-    (htg > 0) & (clg == 0) & (fan > 0) & (econ == AHU_MIN_OA_DPR)
-).astype(int)
-d["econ_only_cooling_mode"] = (
-    (htg == 0) & (clg == 0) & (fan > 0) & (econ > AHU_MIN_OA_DPR)
-).astype(int)
-d["econ_plus_mech_cooling_mode"] = (
-    (htg == 0) & (clg > 0) & (fan > 0) & (econ > AHU_MIN_OA_DPR)
-).astype(int)
-d["mech_cooling_only_mode"] = (
-    (htg == 0) & (clg > 0) & (fan > 0) & (econ == AHU_MIN_OA_DPR)
-).astype(int)
-
-mode_cols = [
-    "heating_mode", "econ_only_cooling_mode",
-    "econ_plus_mech_cooling_mode", "mech_cooling_only_mode",
-]
-hourly = d.set_index("timestamp")[mode_cols].resample("H").apply(
-    lambda x: (x.eq(1) & x.shift().ne(1)).sum()
-)
-raw_hourly = hourly[hourly.columns].gt(DELTA_OS_MAX).any(axis=1).astype(int)
-# Broadcast hourly flag back to sample index (forward-fill within hour)
-d["fault_raw"] = False
-for ts, flag in raw_hourly.items():
-    if flag:
-        d.loc[d["timestamp"].dt.floor("H") == ts.floor("H"), "fault_raw"] = True
-
-d["fault_confirmed"] = confirm_fault(
-    d["fault_raw"], min_rows=FC4_CONFIRM_ROWS
-)
+d = apply_fault(d, fc4(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
----
+### FC5 — SAT cold when heating commanded (GL36 D)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan on AND heating > 1% AND SAT + mix_tol ≤ MAT − mix_tol + 0.55°F (default mix_tol = 1.15°F).  
+**Default confirmation:** 600 s
 
-### FC5 — SAT cold when heating commanded (GL36 Rule D)
+**Required roles:** `discharge-air-temp`, `mixed-air-temp`, `fan-cmd`, `heating-valve`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
 
-fan = norm_cmd(d["fan_cmd"])
-htg = norm_cmd(d["htg_valve_pct"])
-mask = (
-    d["sat"].notna() & d["mat"].notna()
-    & (fan > FAN_ON_MIN) & (htg > 0.01)
-    & ((d["sat"] + SUPPLY_TOL) <= (d["mat"] - MIX_TOL + DELTA_SUPPLY_FAN))
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
+def fc5(d, p, poll):
+    """SAT cold when heating commanded (GL36 D). ``mix_tol`` applies to both SAT and MAT."""
+    tol = _f(p, "mix_tol", MIX_TOL)
+    fan = _fan(d)
+    htg = norm_cmd(d["heating-valve"]).fillna(0)
+    return (
+        d["discharge-air-temp"].notna() & d["mixed-air-temp"].notna()
+        & (fan > FAN_ON_MIN) & (htg > 0.01)
+        & ((d["discharge-air-temp"] + tol) <= (d["mixed-air-temp"] - tol + DELTA_SUPPLY_FAN))
+    )
 
----
+d = apply_fault(d, fc5(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
 
 ### FC6 — Estimated OA fraction mismatch
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** |RAT−OAT| ≥ 5°F AND |estimated OA% − design min OA%| > 15% in heating/mech-only modes.  
+**Default confirmation:** 600 s
 
-```python
-FAULT_CONFIRM_SECONDS = 600
-AIRFLOW_ERR = 0.15
-OAT_RAT_DELTA_MIN = 5.0
-AHU_MIN_CFM_DESIGN = 5000.0  # tune per site
+**Required roles:** `mixed-air-temp`, `outside-air-temp`, `return-air-temp`, `vav-total-airflow`
 
-fan = norm_cmd(d["fan_cmd"])
-htg = norm_cmd(d["htg_valve_pct"])
-clg = norm_cmd(d["clg_valve_pct"])
-econ = norm_cmd(d["oa_damper_pct"])
+**Tunable params**
 
-d["rat_minus_oat"] = (d["rat"] - d["oat"]).abs()
-d["percent_oa_calc"] = ((d["mat"] - d["rat"]) / (d["oat"] - d["rat"]).replace(0, np.nan)).clip(lower=0)
-d["perc_OAmin"] = AHU_MIN_CFM_DESIGN / d["vav_total_flow"].replace(0, np.nan)
-d["oa_err"] = (d["percent_oa_calc"] - d["perc_OAmin"]).abs()
-
-os1 = (htg > 0) & (fan > 0)
-os4 = (htg == 0) & (clg > 0) & (fan > 0) & (econ == AHU_MIN_OA_DPR)
-
-mask = (
-    d["mat"].notna() & d["oat"].notna() & d["rat"].notna() & d["vav_total_flow"].notna()
-    & (d["rat_minus_oat"] >= OAT_RAT_DELTA_MIN)
-    & (d["oa_err"] > AIRFLOW_ERR)
-    & (os1 | os4)
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
----
-
-### FC7 — SAT low with full heating (GL36 Rule E)
-
-```python
-FAULT_CONFIRM_SECONDS = 600
-SAT_ERR = 1.0
-
-fan = norm_cmd(d["fan_cmd"])
-htg = norm_cmd(d["htg_valve_pct"])
-mask = (
-    d["sat"].notna() & d["sat_sp"].notna()
-    & (fan > FAN_ON_MIN)
-    & (d["sat"] < d["sat_sp"] - SAT_ERR)
-    & (htg > 0.9)
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
----
-
-### FC8 — SAT above blend in economizer mode (GL36 Rule F)
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `airflow_err` | OA fraction error | frac | 0.15 | 0.05–0.5 |
+| `min_cfm_design` | Design min OA CFM | cfm | 5000 | 500–20000 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
 
-econ = norm_cmd(d["oa_damper_pct"])
-clg = norm_cmd(d["clg_valve_pct"])
-d["sat_mat_err"] = (d["sat"] - DELTA_SUPPLY_FAN - d["mat"]).abs()
-d["sqrt_tol"] = np.sqrt(SUPPLY_TOL**2 + MIX_TOL**2)
-
-mask = (
-    d["sat"].notna() & d["mat"].notna()
-    & (econ > AHU_MIN_OA_DPR) & (clg < 0.1)
-    & (d["sat_mat_err"] > d["sqrt_tol"])
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
----
-
-### FC9 — OAT too warm for free cooling (GL36 Rule G)
-
-```python
-FAULT_CONFIRM_SECONDS = 600
-
-econ = norm_cmd(d["oa_damper_pct"])
-clg = norm_cmd(d["clg_valve_pct"])
-
-mask = (
-    d["oat"].notna() & d["sat_sp"].notna()
-    & (econ > AHU_MIN_OA_DPR) & (clg < 0.1)
-    & ((d["oat"] - MIX_TOL) > (d["sat_sp"] - DELTA_SUPPLY_FAN + MIX_TOL))
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
----
-
-### FC10 — OAT/MAT mismatch + mech cooling (GL36 Rule H)
-
-```python
-FAULT_CONFIRM_SECONDS = 600
-
-econ = norm_cmd(d["oa_damper_pct"])
-clg = norm_cmd(d["clg_valve_pct"])
-d["abs_mat_oat"] = (d["mat"] - d["oat"]).abs()
-d["sqrt_tol"] = np.sqrt(MIX_TOL**2 + MIX_TOL**2)
-
-mask = (
-    d["mat"].notna() & d["oat"].notna()
-    & (clg > 0.01) & (econ > 0.9)
-    & (d["abs_mat_oat"] > d["sqrt_tol"])
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
----
-
-### FC11 — OAT/MAT mismatch economizer-only (GL36 Rule I)
-
-```python
-FAULT_CONFIRM_SECONDS = 600
-
-econ = norm_cmd(d["oa_damper_pct"])
-clg = norm_cmd(d["clg_valve_pct"])
-
-mask = (
-    d["oat"].notna() & d["sat_sp"].notna()
-    & (clg > 0.01) & (econ > 0.9)
-    & ((d["oat"] + MIX_TOL) < (d["sat_sp"] - DELTA_SUPPLY_FAN - MIX_TOL))
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
----
-
-### FC12 — SAT above blend in cooling (GL36 Rule J)
-
-```python
-FAULT_CONFIRM_SECONDS = 600
-
-econ = norm_cmd(d["oa_damper_pct"])
-clg = norm_cmd(d["clg_valve_pct"])
-sat_check = d["sat"] - SUPPLY_TOL - DELTA_SUPPLY_FAN
-mat_check = d["mat"] + MIX_TOL
-
-mask = (
-    d["sat"].notna() & d["mat"].notna() & (clg > 0.01)
-    & (sat_check > mat_check)
-    & ((econ == AHU_MIN_OA_DPR) | (econ > 0.9))
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
----
-
-### FC13 — SAT above SP at full cooling (GL36 Rule K)
-
-```python
-FAULT_CONFIRM_SECONDS = 600
-SAT_ERR = 1.0
-
-econ = norm_cmd(d["oa_damper_pct"])
-clg = norm_cmd(d["clg_valve_pct"])
-
-mask = (
-    d["sat"].notna() & d["sat_sp"].notna() & (clg > 0.01)
-    & (d["sat"] > d["sat_sp"] + SAT_ERR)
-    & ((econ == AHU_MIN_OA_DPR) | (econ > 0.9))
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
----
-
-### FC14 — CHW coil ΔT when inactive (GL36 Rule L)
-
-```python
-FAULT_CONFIRM_SECONDS = 600
-COIL_TOL = 1.15
-
-econ = norm_cmd(d["oa_damper_pct"])
-clg = norm_cmd(d["clg_valve_pct"])
-htg = norm_cmd(d["htg_valve_pct"])
-fan = norm_cmd(d["fan_cmd"])
-
-d["clg_delta"] = d["clg_coil_enter_t"] - d["clg_coil_leave_t"]
-d["clg_sqrt"] = np.sqrt(COIL_TOL**2 + COIL_TOL**2) + DELTA_SUPPLY_FAN
-
-mask = (
-    d["clg_coil_enter_t"].notna() & d["clg_coil_leave_t"].notna()
-    & (d["clg_delta"] >= d["clg_sqrt"])
-    & (((econ > AHU_MIN_OA_DPR) & (clg < 0.1)) | ((htg > 0) & (fan > 0)))
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
----
-
-### FC15 — HW coil ΔT when inactive (GL36 Rule M)
-
-```python
-FAULT_CONFIRM_SECONDS = 600
-COIL_TOL = 1.15
-
-econ = norm_cmd(d["oa_damper_pct"])
-clg = norm_cmd(d["clg_valve_pct"])
-
-d["htg_delta"] = d["htg_coil_enter_t"] - d["htg_coil_leave_t"]
-d["htg_sqrt"] = np.sqrt(COIL_TOL**2 + COIL_TOL**2) + DELTA_SUPPLY_FAN
-
-mask = (
-    d["htg_coil_enter_t"].notna() & d["htg_coil_leave_t"].notna()
-    & (d["htg_delta"] >= d["htg_sqrt"])
-    & (
-        ((econ > AHU_MIN_OA_DPR) & (clg < 0.1))
-        | ((clg > 0.01) & (econ == AHU_MIN_OA_DPR))
-        | ((clg > 0.01) & (econ > 0.9))
+def fc6(d, p, poll):
+    airflow_err = _f(p, "airflow_err", 0.15)
+    oat_rat_min = _f(p, "oat_rat_delta_min", 5.0)
+    design_cfm = _f(p, "min_cfm_design", 5000.0)
+    fan = _fan(d)
+    rat_minus_oat = (d["return-air-temp"] - d["outside-air-temp"]).abs()
+    pct_oa = ((d["mixed-air-temp"] - d["return-air-temp"]) / (d["outside-air-temp"] - d["return-air-temp"]).replace(0, np.nan)).clip(lower=0)
+    perc_oamin = design_cfm / d["vav-total-airflow"].replace(0, np.nan)
+    oa_err = (pct_oa - perc_oamin).abs()
+    return (
+        d["mixed-air-temp"].notna() & d["outside-air-temp"].notna() & d["return-air-temp"].notna() & d["vav-total-airflow"].notna()
+        & (rat_minus_oat >= oat_rat_min) & (oa_err > airflow_err) & (fan > FAN_ON_MIN)
     )
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+
+d = apply_fault(d, fc6(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
----
+### FC7 — SAT low with full heating (GL36 E)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan on AND heating > 90% AND SAT < SAT SP − 1.0°F.  
+**Default confirmation:** 600 s
 
-### AHU — Additional patterns
+**Required roles:** `discharge-air-temp`, `discharge-air-temp-sp`, `fan-cmd`, `heating-valve`
 
-#### SAT deviation from setpoint
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `sat_err` | SAT error | °F | 1.0 | 0.25–5.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
-ERR = 5.0
 
-mask = d["sat"].notna() & d["sat_sp"].notna() & (d["sat"].sub(d["sat_sp"]).abs() > ERR)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+def fc7(d, p, poll):
+    sat_err = _f(p, "sat_err", 1.0)
+    fan = _fan(d)
+    htg = norm_cmd(d["heating-valve"]).fillna(0)
+    return (
+        d["discharge-air-temp"].notna() & d["discharge-air-temp-sp"].notna()
+        & (fan > FAN_ON_MIN) & (d["discharge-air-temp"] < d["discharge-air-temp-sp"] - sat_err) & (htg > 0.9)
+    )
+
+d = apply_fault(d, fc7(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
-#### Duct static pressure high
+### FC8 — SAT/MAT mismatch in economizer (GL36 F)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Economizer open, CHW < 10%, |SAT − 0.55°F − MAT| > √(supply_tol²+mix_tol²).  
+**Default confirmation:** 600 s
 
-```python
-FAULT_CONFIRM_SECONDS = 300
-MARGIN = 0.25
+**Required roles:** `discharge-air-temp`, `mixed-air-temp`, `outside-air-damper`, `cooling-valve`
 
-mask = d["duct_static"].notna() & d["duct_static_sp"].notna() & (
-    d["duct_static"] > d["duct_static_sp"] + MARGIN
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
+**Tunable params**
 
-#### Fan off but duct still warm
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+| `supply_tol` | Supply tolerance | °F | 1.15 | 0.25–3.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
-DELTA = 15.0
 
-mask = (
-    d["fan_cmd"].notna() & d["duct_t"].notna() & d["oa_t"].notna()
-    & (d["fan_cmd"] == False) & (d["duct_t"] > d["oa_t"] + DELTA)
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+def fc8(d, p, poll):
+    mix_tol = _f(p, "mix_tol", MIX_TOL)
+    supply_tol = _f(p, "supply_tol", SUPPLY_TOL)
+    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    clg = norm_cmd(d["cooling-valve"]).fillna(0)
+    sat_mat_err = (d["discharge-air-temp"] - DELTA_SUPPLY_FAN - d["mixed-air-temp"]).abs()
+    sqrt_tol = float(np.sqrt(supply_tol**2 + mix_tol**2))
+    return (
+        d["discharge-air-temp"].notna() & d["mixed-air-temp"].notna()
+        & (econ > AHU_MIN_OA_DPR) & (clg < 0.1) & (sat_mat_err > sqrt_tol)
+    )
+
+d = apply_fault(d, fc8(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
-#### Heating and cooling simultaneous
+### FC9 — OAT too warm for free cooling (GL36 G)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Economizer open, CHW < 10%, OAT − mix_tol > SAT SP − 0.55°F + mix_tol.  
+**Default confirmation:** 600 s
+
+**Required roles:** `outside-air-temp`, `discharge-air-temp-sp`, `outside-air-damper`, `cooling-valve`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def fc9(d, p, poll):
+    mix_tol = _f(p, "mix_tol", MIX_TOL)
+    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    clg = norm_cmd(d["cooling-valve"]).fillna(0)
+    return (
+        d["outside-air-temp"].notna() & d["discharge-air-temp-sp"].notna()
+        & (econ > AHU_MIN_OA_DPR) & (clg < 0.1)
+        & ((d["outside-air-temp"] - mix_tol) > (d["discharge-air-temp-sp"] - DELTA_SUPPLY_FAN + mix_tol))
+    )
+
+d = apply_fault(d, fc9(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### FC10 — OAT/MAT mismatch + mech cooling (GL36 H)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** CHW > 1%, economizer > 90%, |MAT − OAT| > √(mix_tol²+mix_tol²).  
+**Default confirmation:** 600 s
+
+**Required roles:** `mixed-air-temp`, `outside-air-temp`, `outside-air-damper`, `cooling-valve`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def fc10(d, p, poll):
+    mix_tol = _f(p, "mix_tol", MIX_TOL)
+    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    clg = norm_cmd(d["cooling-valve"]).fillna(0)
+    abs_mat_oat = (d["mixed-air-temp"] - d["outside-air-temp"]).abs()
+    sqrt_tol = float(np.sqrt(mix_tol**2 + mix_tol**2))
+    return d["mixed-air-temp"].notna() & d["outside-air-temp"].notna() & (clg > 0.01) & (econ > 0.9) & (abs_mat_oat > sqrt_tol)
+
+d = apply_fault(d, fc10(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### FC11 — OAT/MAT mismatch economizer-only (GL36 I)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** CHW > 1%, economizer > 90%, OAT + mix_tol < SAT SP − 0.55°F − mix_tol.  
+**Default confirmation:** 600 s
+
+**Required roles:** `outside-air-temp`, `discharge-air-temp-sp`, `outside-air-damper`, `cooling-valve`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def fc11(d, p, poll):
+    mix_tol = _f(p, "mix_tol", MIX_TOL)
+    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    clg = norm_cmd(d["cooling-valve"]).fillna(0)
+    return (
+        d["outside-air-temp"].notna() & d["discharge-air-temp-sp"].notna() & (clg > 0.01) & (econ > 0.9)
+        & ((d["outside-air-temp"] + mix_tol) < (d["discharge-air-temp-sp"] - DELTA_SUPPLY_FAN - mix_tol))
+    )
+
+d = apply_fault(d, fc11(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### FC12 — SAT above blend in cooling (GL36 J)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** CHW > 1%, SAT − supply_tol − 0.55°F > MAT + mix_tol at min or full economizer.  
+**Default confirmation:** 600 s
+
+**Required roles:** `discharge-air-temp`, `mixed-air-temp`, `outside-air-damper`, `cooling-valve`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+| `supply_tol` | Supply tolerance | °F | 1.15 | 0.25–3.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def fc12(d, p, poll):
+    mix_tol = _f(p, "mix_tol", MIX_TOL)
+    supply_tol = _f(p, "supply_tol", SUPPLY_TOL)
+    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    clg = norm_cmd(d["cooling-valve"]).fillna(0)
+    sat_check = d["discharge-air-temp"] - supply_tol - DELTA_SUPPLY_FAN
+    mat_check = d["mixed-air-temp"] + mix_tol
+    return (
+        d["discharge-air-temp"].notna() & d["mixed-air-temp"].notna() & (clg > 0.01)
+        & (sat_check > mat_check) & ((econ <= AHU_MIN_OA_DPR) | (econ > 0.9))
+    )
+
+d = apply_fault(d, fc12(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### FC13 — SAT above SP at full cooling (GL36 K)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** CHW > 1%, SAT > SAT SP + 1.0°F at min or full economizer.  
+**Default confirmation:** 600 s
+
+**Required roles:** `discharge-air-temp`, `discharge-air-temp-sp`, `outside-air-damper`, `cooling-valve`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `sat_err` | SAT error | °F | 1.0 | 0.25–5.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def fc13(d, p, poll):
+    sat_err = _f(p, "sat_err", 1.0)
+    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    clg = norm_cmd(d["cooling-valve"]).fillna(0)
+    return (
+        d["discharge-air-temp"].notna() & d["discharge-air-temp-sp"].notna() & (clg > 0.01)
+        & (d["discharge-air-temp"] > d["discharge-air-temp-sp"] + sat_err) & ((econ <= AHU_MIN_OA_DPR) | (econ > 0.9))
+    )
+
+d = apply_fault(d, fc13(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### FC14 — CHW coil ΔT when inactive (GL36 L)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Cooling coil ΔT ≥ √(mix_tol²+mix_tol²)+0.55°F while coil should be inactive.  
+**Default confirmation:** 600 s
+
+**Required roles:** `cooling-coil-entering-temp`, `cooling-coil-leaving-temp`, `outside-air-damper`, `cooling-valve`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def fc14(d, p, poll):
+    mix_tol = _f(p, "mix_tol", MIX_TOL)
+    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    clg = norm_cmd(d["cooling-valve"]).fillna(0)
+    htg = norm_cmd(d["heating-valve"]).fillna(0) if "heating-valve" in d else pd.Series(0.0, index=d.index)
+    fan = _fan(d)
+    delta = d["cooling-coil-entering-temp"] - d["cooling-coil-leaving-temp"]
+    tol = float(np.sqrt(mix_tol**2 + mix_tol**2)) + DELTA_SUPPLY_FAN
+    return (
+        d["cooling-coil-entering-temp"].notna() & d["cooling-coil-leaving-temp"].notna()
+        & (delta >= tol)
+        & (((econ > AHU_MIN_OA_DPR) & (clg < 0.1)) | ((htg > 0) & (fan > 0)))
+    )
+
+d = apply_fault(d, fc14(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### FC15 — HW coil ΔT when inactive (GL36 M)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Heating coil ΔT ≥ √(mix_tol²+mix_tol²)+0.55°F while coil should be inactive.  
+**Default confirmation:** 600 s
+
+**Required roles:** `heating-coil-entering-temp`, `heating-coil-leaving-temp`, `outside-air-damper`, `cooling-valve`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def fc15(d, p, poll):
+    mix_tol = _f(p, "mix_tol", MIX_TOL)
+    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    clg = norm_cmd(d["cooling-valve"]).fillna(0)
+    delta = d["heating-coil-entering-temp"] - d["heating-coil-leaving-temp"]
+    tol = float(np.sqrt(mix_tol**2 + mix_tol**2)) + DELTA_SUPPLY_FAN
+    return (
+        d["heating-coil-entering-temp"].notna() & d["heating-coil-leaving-temp"].notna()
+        & (delta >= tol)
+        & (((econ > AHU_MIN_OA_DPR) & (clg < 0.1)) | ((clg > 0.01) & (econ <= AHU_MIN_OA_DPR)) | ((clg > 0.01) & (econ > 0.9)))
+    )
+
+d = apply_fault(d, fc15(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### AHU-SATDEV — SAT deviation from setpoint
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** |SAT − SAT SP| > 5°F.  
+**Default confirmation:** 600 s
+
+**Required roles:** `discharge-air-temp`, `discharge-air-temp-sp`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `sat_dev_err` | SAT deviation | °F | 5.0 | 1.0–15.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def ahu_sat_dev(d, p, poll):
+    err = _f(p, "sat_dev_err", 5.0)
+    return d["discharge-air-temp"].notna() & d["discharge-air-temp-sp"].notna() & (d["discharge-air-temp"].sub(d["discharge-air-temp-sp"]).abs() > err)
+
+d = apply_fault(d, ahu_sat_dev(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### AHU-DUCTHI — Duct static pressure high
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Duct static > static SP + margin. Evaluates when fan is proven on OR duct static itself exceeds pressure_on_min (catches high static with fan-status off).  
+**Default confirmation:** 300 s
+
+**Required roles:** `duct-static-pressure`, `duct-static-pressure-sp`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `duct_high_margin` | High margin | in. w.c. | 0.25 | 0.05–1.0 |
+| `pressure_on_min` | Pressure-on evidence | in. w.c. | 0.2 | 0.05–1.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
 
-mask = d["htg_valve_pct"].notna() & d["clg_valve_pct"].notna() & (
-    (d["htg_valve_pct"] > 10.0) & (d["clg_valve_pct"] > 10.0)
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
+def ahu_duct_high(d, p, poll):
+    """Duct static above SP + margin. Gate (not equation) decides fan-vs-pressure active window."""
+    margin = _f(p, "duct_high_margin", 0.25)
+    return (
+        d["duct-static-pressure"].notna()
+        & d["duct-static-pressure-sp"].notna()
+        & (d["duct-static-pressure"] > d["duct-static-pressure-sp"] + margin)
+    )
+
+d = apply_fault(d, ahu_duct_high(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
----
+### AHU-SIMUL — Heating and cooling simultaneous
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Heating valve > 10% AND cooling valve > 10% at once.  
+**Default confirmation:** 300 s
 
-## VAV zones
+**Required roles:** `heating-valve`, `cooling-valve`
 
-### VAV-1 — Zone comfort band
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `valve_open_pct` | Valve open threshold | frac | 0.1 | 0.05–0.5 |
+
+```python
+FAULT_CONFIRM_SECONDS = 300
+
+def ahu_simul_heat_cool(d, p, poll):
+    thr = _f(p, "valve_open_pct", 0.10)
+    htg = norm_cmd(d["heating-valve"]).fillna(0)
+    clg = norm_cmd(d["cooling-valve"]).fillna(0)
+    return (htg > thr) & (clg > thr)
+
+d = apply_fault(d, ahu_simul_heat_cool(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### OAT-METEO — BAS outdoor-air sensor vs Open-Meteo
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** BAS OAT sensor differs from Open-Meteo dry bulb by more than 5°F.  
+**Default confirmation:** 900 s
+
+**Required roles:** `outside-air-temp`, `web-outside-air-temp`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `oat_err` | Max OAT disagreement | °F | 5.0 | 2.0–20.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
 
-v = df[df["equipment_id"] == "equip:your-vav"].copy()
-mask = v["zone_t"].notna() & ((v["zone_t"] < 68.0) | (v["zone_t"] > 76.0))
-v = apply_fault(v, mask)
-v["fault_confirmed"] = confirm_fault(v["fault_raw"])
+def oat_vs_meteo(d, p, poll):
+    """BAS outdoor-air sensor disagrees with Open-Meteo dry bulb by more than the threshold."""
+    if "web-outside-air-temp" not in d.columns:
+        return _false(d.index)
+    err = _f(p, "oat_err", 5.0)
+    return d["outside-air-temp"].notna() & d["web-outside-air-temp"].notna() & (d["outside-air-temp"].sub(d["web-outside-air-temp"]).abs() > err)
+
+d = apply_fault(d, oat_vs_meteo(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
-### VAV-2 — Night setback miss
+### ECON-1 — Economizer stuck closed
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan on, OA damper < 5%, OAT > 55°F (should be economizing).  
+**Default confirmation:** 600 s
+
+**Required roles:** `fan-cmd`, `outside-air-damper`, `outside-air-temp`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `econ1_oat_min` | Favorable OAT | °F | 55.0 | 45.0–70.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def econ1(d, p, poll):
+    oat_min = _f(p, "econ1_oat_min", 55.0)
+    fan = _fan(d)
+    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    return (fan > FAN_ON_MIN) & d["outside-air-damper"].notna() & d["outside-air-temp"].notna() & (econ < 0.05) & (d["outside-air-temp"] > oat_min)
+
+d = apply_fault(d, econ1(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### ECON-2 — Economizing when outdoor unfavorable
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** OAT > 63°F AND OA damper > 42% (should be at minimum).  
+**Default confirmation:** 300 s
+
+**Required roles:** `outside-air-temp`, `outside-air-damper`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `econ2_oat_hi` | OAT high cutoff | °F | 63.0 | 55.0–80.0 |
+| `econ2_damper` | Damper open frac | frac | 0.42 | 0.2–0.9 |
+
+```python
+FAULT_CONFIRM_SECONDS = 300
+
+def econ2(d, p, poll):
+    oat_hi = _f(p, "econ2_oat_hi", 63.0)
+    dmpr = _f(p, "econ2_damper", 0.42)
+    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    return d["outside-air-temp"].notna() & d["outside-air-damper"].notna() & (d["outside-air-temp"] > oat_hi) & (econ > dmpr)
+
+d = apply_fault(d, econ2(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### ECON-3 — Mech cooling without integrated economizer
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Web free-cooling opportunity: 60°F ≤ dry-bulb < 72°F AND dewpoint < 60°F (dewpoint from web sensor or calculated from web DB+RH). Fault when cooling valve is open while OA damper is below the integrated-economizer threshold (default 90%). No BAS OAT fallback. Screenable engineering defaults — not code limits.  
+**Default confirmation:** 300 s
+
+**Required roles:** `outside-air-damper`, `cooling-valve`
+
+**Optional roles:** `web-outside-air-temp`, `web-outside-air-dewpoint`, `web-outside-air-humidity`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `econ3_db_min` | Free-cool OA dry-bulb min | °F | 60.0 | 50.0–68.0 |
+| `econ3_db_max` | Free-cool OA dry-bulb max | °F | 72.0 | 65.0–80.0 |
+| `econ3_dp_max` | Free-cool OA dew point max | °F | 60.0 | 45.0–68.0 |
+| `econ3_damper_hi` | Integrated economizer damper | frac | 0.9 | 0.5–1.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 300
+
+def econ2(d, p, poll):
+    oat_hi = _f(p, "econ2_oat_hi", 63.0)
+    dmpr = _f(p, "econ2_damper", 0.42)
+    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    return d["outside-air-temp"].notna() & d["outside-air-damper"].notna() & (d["outside-air-temp"] > oat_hi) & (econ > dmpr)
+
+d = apply_fault(d, econ2(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### ECON-4 — Low estimated OA fraction
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan on, |RAT−OAT| > 2.2°F, estimated OA fraction < 21%.  
+**Default confirmation:** 600 s
+
+**Required roles:** `mixed-air-temp`, `return-air-temp`, `outside-air-temp`, `fan-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `oa_min_pct` | Min OA fraction | % | 21.0 | 5.0–40.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def econ4(d, p, poll):
+    oa_min_pct = _f(p, "oa_min_pct", 21.0)
+    fan = _fan(d)
+    oa_frac = (d["mixed-air-temp"] - d["return-air-temp"]) / (d["outside-air-temp"] - d["return-air-temp"]).replace(0, np.nan) * 100.0
+    return (
+        (fan > FAN_ON_MIN) & d["mixed-air-temp"].notna() & d["return-air-temp"].notna() & d["outside-air-temp"].notna()
+        & ((d["return-air-temp"] - d["outside-air-temp"]).abs() > 2.2) & (oa_frac < oa_min_pct)
+    )
+
+d = apply_fault(d, econ4(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### ECON-5 — Preheat over-conditioning
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Preheat leaving air > 2.2°F above target while preheat active.  
+**Default confirmation:** 600 s
+
+**Required roles:** `preheat-leaving-temp`, `discharge-air-temp-sp`, `outside-air-temp`, `heating-valve`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `preheat_over_f` | Preheat over ΔT | °F | 2.2 | 0.5–8.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def econ5(d, p, poll):
+    over = _f(p, "preheat_over_f", 2.2)
+    return (
+        d["preheat-leaving-temp"].notna() & d["discharge-air-temp-sp"].notna() & d["outside-air-temp"].notna() & d["heating-valve"].notna()
+        & (norm_cmd(d["heating-valve"]).fillna(0) > 0.01)
+        & (
+            ((d["outside-air-temp"] > d["discharge-air-temp-sp"]) & (d["preheat-leaving-temp"] - d["outside-air-temp"] > over))
+            | ((d["outside-air-temp"] < d["discharge-air-temp-sp"]) & (d["preheat-leaving-temp"] - d["discharge-air-temp-sp"] > over))
+        )
+    )
+
+d = apply_fault(d, econ5(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### ECON-6 — Economizing in freezing weather
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Web dry-bulb < 25°F AND OA damper above winter min-OA ceiling (default 25%). AHU should be at minimum OA in cold weather.  
+**Default confirmation:** 600 s
+
+**Required roles:** `outside-air-damper`
+
+**Optional roles:** `web-outside-air-temp`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `econ6_oat_max_f` | Winter OAT ceiling | °F | 25.0 | 15.0–40.0 |
+| `econ6_damper_max` | Winter min-OA damper | frac | 0.25 | 0.05–0.5 |
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def econ6_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    """Fault: OA damper above winter min-OA ceiling while web OAT < 25°F."""
+    del poll
+    if "outside-air-damper" not in d.columns:
+        return _false(d.index)
+    db, _dp, src = resolve_web_drybulb_dewpoint(d)
+    d.attrs["econ6_weather_source"] = src
+    if db is None:
+        return _false(d.index)
+    oat_max = _f(p, "econ6_oat_max_f", 25.0)
+    damper_max = _f(p, "econ6_damper_max", 0.25)
+    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    return (db.notna() & (db < oat_max) & (econ > damper_max)).fillna(False)
+
+d = apply_fault(d, econ6_compute(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### ECON-7 — Economizer OK but not economizing
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Economizer-OK web weather: dew point < 60°F AND dry-bulb < 72°F (above a 35°F freeze-guard floor; dewpoint from web sensor or calculated from web DB+RH). Fault when there is cooling demand (cooling valve open or proven DX/chiller cooling) but the OA damper stays below the economizing threshold (default 50%). Expected: economizer-only below 60°F DB (MECH-OAT-1) and mech + integrated economizer in the 60–72°F band (ECON-3). All thresholds are imperial sliders.  
+**Default confirmation:** 600 s
+
+**Required roles:** `outside-air-damper`
+
+**Optional roles:** `web-outside-air-temp`, `web-outside-air-dewpoint`, `web-outside-air-humidity`, `cooling-valve`, `compressor-status`, `dx-cool-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `econ7_db_min` | Econ-OK dry-bulb floor (freeze guard) | °F | 35.0 | 20.0–50.0 |
+| `econ7_db_max` | Econ-OK dry-bulb max | °F | 72.0 | 65.0–80.0 |
+| `econ7_dp_max` | Econ-OK dew point max | °F | 60.0 | 45.0–68.0 |
+| `econ7_damper_min` | Economizing damper threshold | frac | 0.5 | 0.2–0.9 |
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def econ7_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    """Fault: economizer-OK web weather with cooling demand, but OA damper not economizing.
+
+    Economizer OK: web dew point < 60°F AND dry-bulb < 72°F (above a freeze-guard
+    floor, default 35°F). Dewpoint comes from the web sensor or is calculated from
+    web DB+RH. Cooling demand: cooling valve open OR proven DX/chiller cooling.
+    Expected operation: economizer-only below 60°F DB (see MECH-OAT-1) and
+    mech + integrated economizer in the 60–72°F band (see ECON-3).
+    """
+    del poll
+    if "outside-air-damper" not in d.columns:
+        return _false(d.index)
+    db, dp, src = resolve_web_drybulb_dewpoint(d)
+    d.attrs["econ7_weather_source"] = src
+    if db is None or dp is None:
+        return _false(d.index)
+
+    db_min = _f(p, "econ7_db_min", 35.0)
+    db_max = _f(p, "econ7_db_max", 72.0)
+    dp_max = _f(p, "econ7_dp_max", 60.0)
+    damper_min = _f(p, "econ7_damper_min", 0.50)
+
+    econ_ok = free_cool_opportunity_mask(db, dp, db_min=db_min, db_max=db_max, dp_max=dp_max)
+
+    demand = _false(d.index)
+    has_demand_signal = False
+    if "cooling-valve" in d.columns and d["cooling-valve"].notna().any():
+        demand = demand | (norm_cmd(d["cooling-valve"]).fillna(0) > 0.05)
+        has_demand_signal = True
+    mech, kind = mechanical_proof_mask(d)
+    d.attrs["econ7_proof"] = kind
+    if kind:
+        demand = demand | mech
+        has_demand_signal = True
+    if not has_demand_signal:
+        d.attrs["econ7_skip"] = "missing_cooling_demand_signal"
+        return _false(d.index)
+
+    econ = norm_cmd(d["outside-air-damper"]).fillna(0)
+    return (econ_ok & demand & (econ < damper_min)).fillna(False)
+
+d = apply_fault(d, econ7_compute(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### MECH-OAT-1 — Mechanical cooling below 60°F web OAT
+**Family:** `ahu` · **Equipment:** `ahu`, `chiller`, `heatpump`  
+**Equation:** Proven DX/chiller mechanical cooling while web dry-bulb < 60°F. Uses compressor/chiller/pump/amps/power proof — not AHU cooling-valve alone. Below 60°F is outside the free-cool + integrated economizer band.  
+**Default confirmation:** 600 s
+
+**Optional roles:** `web-outside-air-temp`, `compressor-status`, `chiller-status`, `chw-pump-status`, `dx-cool-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mech_oat_max_f` | Mech-cool OAT ceiling | °F | 60.0 | 45.0–65.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def mech_oat1_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    """Fault: proven mechanical cooling while web dry-bulb < 60°F."""
+    del poll
+    db, _dp, src = resolve_web_drybulb_dewpoint(d)
+    d.attrs["mech_oat1_weather_source"] = src
+    if db is None:
+        return _false(d.index)
+    oat_max = _f(p, "mech_oat_max_f", 60.0)
+    run, kind = mechanical_proof_mask(d)
+    d.attrs["mech_oat1_proof"] = kind
+    if not kind:
+        return _false(d.index)
+    return (db.notna() & (db < oat_max) & run).fillna(False)
+
+d = apply_fault(d, mech_oat1_compute(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### CMD-1 — Fan cmd/status mismatch
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan command and proven status disagree.  
+**Default confirmation:** 600 s
+
+**Required roles:** `fan-cmd`, `fan-status`
+
+**Tunable params**
+
+_No tunable thresholds beyond confirmation delay._
+
+```python
+FAULT_CONFIRM_SECONDS = 600
+
+def cmd1(d, p, poll):
+    cmd_on = norm_cmd(d["fan-cmd"]).fillna(0) >= 0.05
+    return d["fan-status"].notna() & (cmd_on != as_bool(d["fan-status"]))
+
+d = apply_fault(d, cmd1(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### OA-1 — Low OA fraction
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Estimated OA fraction < 15% with adequate OAT/RAT split.  
+**Default confirmation:** 900 s
+
+**Required roles:** `mixed-air-temp`, `return-air-temp`, `outside-air-temp`, `fan-status`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `min_oa_frac` | Min OA fraction | frac | 0.15 | 0.05–0.4 |
+| `oat_rat_guard` | Min |RAT−OAT| guard | °F | 2.2 | 0.5–6.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def oa1(d, p, poll):
+    min_oa = _f(p, "min_oa_frac", 0.15)
+    guard = _f(p, "oat_rat_guard", 2.2)
+    oa_frac = (d["mixed-air-temp"] - d["return-air-temp"]) / (d["outside-air-temp"] - d["return-air-temp"]).replace(0, np.nan)
+    fan = _fan(d)
+    return (
+        (fan > FAN_ON_MIN) & d["outside-air-temp"].notna() & d["return-air-temp"].notna() & d["mixed-air-temp"].notna()
+        & ((d["return-air-temp"] - d["outside-air-temp"]).abs() > guard) & (oa_frac < min_oa)
+    )
+
+d = apply_fault(d, oa1(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### DMP-1 — OA damper leakage
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Damper ≤ 5% but MAT tracks OAT within 2°F — leaking OA damper.  
+**Default confirmation:** 900 s
+
+**Required roles:** `outside-air-temp`, `mixed-air-temp`, `outside-air-damper`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `leak_delta` | Leak ΔT | °F | 2.0 | 0.5–6.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def dmp1(d, p, poll):
+    leak_delta = _f(p, "leak_delta", 2.0)
+    dmp = norm_cmd(d["outside-air-damper"]).fillna(0)
+    return d["outside-air-temp"].notna() & d["mixed-air-temp"].notna() & (dmp <= 0.05) & (d["mixed-air-temp"].sub(d["outside-air-temp"]).abs() < leak_delta)
+
+d = apply_fault(d, dmp1(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### VLV-1 — Cooling valve leakage
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Cooling valve ≤ 5% AND (SAT < sat_sp − sat_err OR SAT < MAT − mat_leak_delta). Fan proven on when fan_status/fan_cmd present (operational gate).  
+**Default confirmation:** 900 s
+
+**Required roles:** `discharge-air-temp`, `discharge-air-temp-sp`, `cooling-valve`
+
+**Optional roles:** `mixed-air-temp`, `fan-status`, `fan-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `sat_err` | SAT vs SP leak ΔT | °F | 2.0 | 0.5–8.0 |
+| `mat_leak_delta` | SAT vs MAT leak ΔT | °F | 2.0 | 0.5–12.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def vlv1(d, p, poll):
+    """Cooling valve leak: valve closed AND (SAT low vs SP or SAT low vs MAT).
+
+    Fan proven-on is enforced by the VLV-1 operational gate when fan_status/fan_cmd exist.
+    """
+    sat_err = _f(p, "sat_err", 2.0)
+    mat_delta = _f(p, "mat_leak_delta", 2.0)
+    clg = norm_cmd(d["cooling-valve"]).fillna(0)
+    closed = clg <= 0.05
+    sat = pd.to_numeric(d["discharge-air-temp"], errors="coerce")
+    sat_sp = pd.to_numeric(d["discharge-air-temp-sp"], errors="coerce")
+    below_sp = sat.notna() & sat_sp.notna() & (sat < sat_sp - sat_err)
+    below_mat = pd.Series(False, index=d.index)
+    if "mixed-air-temp" in d.columns and d["mixed-air-temp"].notna().any():
+        mat = pd.to_numeric(d["mixed-air-temp"], errors="coerce")
+        below_mat = sat.notna() & mat.notna() & (sat < mat - mat_delta)
+    return closed & (below_sp | below_mat)
+
+d = apply_fault(d, vlv1(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+## VAV terminals
+
+### VAV-1 — Zone comfort band
+**Family:** `vav` · **Equipment:** `vav`, `zone`  
+**Equation:** Zone temp < 70°F or > 75°F.  
+**Default confirmation:** 900 s
+
+**Required roles:** `zone-air-temp`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `zone_lo` | Zone low | °F | 70.0 | 55.0–72.0 |
+| `zone_hi` | Zone high | °F | 75.0 | 72.0–85.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def vav1(d, p, poll):
+    lo = _f(p, "zone_lo", 70.0)
+    hi = _f(p, "zone_hi", 75.0)
+    return d["zone-air-temp"].notna() & ((d["zone-air-temp"] < lo) | (d["zone-air-temp"] > hi))
+
+d = apply_fault(d, vav1(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### VAV-3 — Excessive reheat during warm weather
+**Family:** `vav` · **Equipment:** `vav`  
+**Equation:** Air flowing AND OAT > 78°F AND reheat valve > 52%.  
+**Default confirmation:** 300 s
+
+**Required roles:** `outside-air-temp`, `reheat-valve`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `reheat_oat` | Warm OAT | °F | 78.0 | 65.0–90.0 |
+| `reheat_pct` | Reheat frac | frac | 0.52 | 0.1–1.0 |
+| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 300
+
+def vav3(d, p, poll):
+    oat_hi = _f(p, "reheat_oat", 78.0)
+    reheat_thr = _f(p, "reheat_pct", 0.52)
+    flow_min = _f(p, "flow_on_min", 25.0)
+    reheat = norm_cmd(d["reheat-valve"]).fillna(0)
+    return _vav_air_on(d, flow_min) & d["outside-air-temp"].notna() & (d["outside-air-temp"] > oat_hi) & (reheat > reheat_thr)
+
+d = apply_fault(d, vav3(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### VAV-4 — Damper stuck at full open
+**Family:** `vav` · **Equipment:** `vav`  
+**Equation:** Air flowing AND damper > 97.5% sustained across the window.  
+**Default confirmation:** 900 s
+
+**Required roles:** `damper`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `full_open_pct` | Full open frac | frac | 0.975 | 0.8–1.0 |
+| `sustain_hours` | Sustain window | h | 1.5 | 0.5–6.0 |
+| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def vav4(d, p, poll):
+    full_open = _f(p, "full_open_pct", 0.975)
+    hours = _f(p, "sustain_hours", 1.5)
+    flow_min = _f(p, "flow_on_min", 25.0)
+    roll = max(2, int(round(hours * 3600 / max(poll, 1))))
+    dmp = norm_cmd(d["damper"]).fillna(0)
+    return (
+        _vav_air_on(d, flow_min) & dmp.notna() & (dmp > full_open)
+        & (dmp.rolling(roll, min_periods=roll).min() > full_open)
+    )
+
+d = apply_fault(d, vav4(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### VAV-5 — Airflow sensor bias
+**Family:** `vav` · **Equipment:** `vav`  
+**Equation:** Airflow > 50 cfm while damper < 10% (implausible flow).  
+**Default confirmation:** 900 s
+
+**Required roles:** `zone-airflow`, `damper`
+
+**Tunable params**
+
+_No tunable thresholds beyond confirmation delay._
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def vav5(d, p, poll):
+    dmp = norm_cmd(d["damper"]).fillna(0)
+    return d["zone-airflow"].notna() & (d["zone-airflow"] > 50.0) & (dmp < 0.10)
+
+d = apply_fault(d, vav5(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### VAV-REHEAT — Reheat valve stuck / no temp rise
+**Family:** `vav` · **Equipment:** `vav`  
+**Equation:** Air flowing AND reheat valve > 30% AND box discharge temp rises < 3°F above duct inlet (air from AHU) — stuck or failed reheat valve/coil.  
+**Default confirmation:** 900 s
+
+**Required roles:** `reheat-valve`, `vav-discharge-air-temp`, `vav-inlet-air-temp`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `reheat_cmd` | Reheat open frac | frac | 0.3 | 0.1–1.0 |
+| `min_rise` | Min temp rise | °F | 3.0 | 0.5–15.0 |
+| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def vav_reheat_stuck(d, p, poll):
+    """Reheat valve commanded open but the box's discharge air never warms above inlet.
+
+    Inlet temp = duct air arriving from the AHU (≈ AHU discharge). Discharge temp = air
+    leaving the box after the reheat coil. Reheat open + air flowing + no rise → stuck /
+    failed reheat valve or coil. Fully computed from VAV-local sensors.
+    """
+    cmd_thr = _f(p, "reheat_cmd", 0.30)
+    min_rise = _f(p, "min_rise", 3.0)
+    flow_min = _f(p, "flow_on_min", 25.0)
+    reheat = norm_cmd(d["reheat-valve"]).fillna(0)
+    rise = d["vav-discharge-air-temp"] - d["vav-inlet-air-temp"]
+    return (
+        _vav_air_on(d, flow_min)
+        & d["vav-discharge-air-temp"].notna() & d["vav-inlet-air-temp"].notna()
+        & (reheat > cmd_thr) & (rise < min_rise)
+    )
+
+d = apply_fault(d, vav_reheat_stuck(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### VAV-AHU-LEAVE — VAV leave vs parent AHU SAT (fedBy)
+**Family:** `vav` · **Equipment:** `vav`  
+**Equation:** Air flowing AND |VAV discharge − parent AHU SAT| > band. Needs package topology (vav_to_ahu) so ahu_sat is enriched from the fedBy AHU; otherwise SKIPPED_MISSING_ROLES. Flags broken reheat, bad sensors, or rogue zones.  
+**Default confirmation:** 900 s
+
+**Required roles:** `vav-discharge-air-temp`, `ahu-discharge-air-temp`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `delta_f` | Leave Δ vs AHU SAT | °F | 8.0 | 2.0–25.0 |
+| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def vav_vs_ahu_leave(d, p, poll):
+    """VAV leave temp far from parent AHU SAT (fedBy) — broken reheat or sensor/rogue box.
+
+    Requires topology enrich: ``ahu_sat`` copied from parent AHU onto the VAV frame.
+    Without ``ahu_sat``, the rule is SKIPPED_MISSING_ROLES by the engine.
+    """
+    band = _f(p, "delta_f", 8.0)
+    flow_min = _f(p, "flow_on_min", 25.0)
+    leave = pd.to_numeric(d["vav-discharge-air-temp"], errors="coerce")
+    ahu = pd.to_numeric(d["ahu-discharge-air-temp"], errors="coerce")
+    return (
+        _vav_air_on(d, flow_min)
+        & leave.notna()
+        & ahu.notna()
+        & ((leave - ahu).abs() > band)
+    )
+
+d = apply_fault(d, vav_vs_ahu_leave(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### VAV-7 — Min airflow / fixed high flow
+**Family:** `vav` · **Equipment:** `vav`  
+**Equation:** Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too high / box never modulates), OR min_flow_sp itself is excessively high.  
+**Default confirmation:** 900 s
+
+**Required roles:** `zone-airflow`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+| `fixed_flow_max_std` | Fixed-flow max std | cfm | 15.0 | 1.0–80.0 |
+| `fixed_flow_min_mean` | Fixed-flow min mean | cfm | 200.0 | 50.0–2000.0 |
+| `high_min_flow_sp` | High min-flow SP | cfm | 250.0 | 50.0–2000.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def vav7(d, p, poll):
+    """Min-flow violation OR fixed/high airflow while air is moving (mins too high / no modulate)."""
+    under = (
+        d["zone-airflow"].notna() & d["min-flow-sp"].notna() & (d["zone-airflow"] < d["min-flow-sp"])
+        if "min-flow-sp" in d.columns
+        else _false(d.index)
+    )
+    flow = pd.to_numeric(d["zone-airflow"], errors="coerce") if "zone-airflow" in d.columns else None
+    if flow is None:
+        return under
+    flow_min = _f(p, "flow_on_min", 25.0)
+    air_on = _vav_air_on(d, flow_min)
+    window = max(6, int(round(3600.0 / max(float(poll), 1.0))))
+    roll_std = flow.rolling(window, min_periods=max(3, window // 2)).std()
+    roll_mean = flow.rolling(window, min_periods=max(3, window // 2)).mean()
+    max_std = _f(p, "fixed_flow_max_std", 15.0)
+    min_mean = _f(p, "fixed_flow_min_mean", 200.0)
+    fixed_high = air_on & flow.notna() & (roll_std < max_std) & (roll_mean > min_mean)
+    high_min = _false(d.index)
+    if "min-flow-sp" in d.columns:
+        high_min_thr = _f(p, "high_min_flow_sp", 250.0)
+        high_min = (
+            air_on
+            & d["min-flow-sp"].notna()
+            & (pd.to_numeric(d["min-flow-sp"], errors="coerce") > high_min_thr)
+            & (roll_std < max_std)
+        )
+    return under.fillna(False) | fixed_high.fillna(False) | high_min.fillna(False)
+
+d = apply_fault(d, vav7(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+## Central plant / condenser water
+
+### CHW-NOLOAD-1 — Chiller running with no building load
+**Family:** `plant` · **Equipment:** `chiller`  
+**Equation:** Chiller/plant proven running while building load is satisfied: all mapped zones inside comfort band OR all mapped AHU SAT within sat_band of setpoint. Default confirm 30 min.  
+**Default confirmation:** 1800 s
+
+**Optional roles:** `chiller-status`, `chw-pump-status`, `compressor-status`, `building-zone-load-satisfied`, `building-ahu-load-satisfied`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `comfort_low_f` | Comfort low | °F | 70.0 | 60.0–78.0 |
+| `comfort_high_f` | Comfort high | °F | 75.0 | 68.0–85.0 |
+| `sat_band_f` | AHU SAT≈SP band | °F | 2.0 | 0.5–6.0 |
+| `confirm_min` | Fault confirm delay | min | 30.0 | 0.0–60.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 1800
 
-mask = v["zone_t"].notna() & v["occ_mode"].notna() & (
-    (v["occ_mode"] == "unoccupied") & (v["zone_t"] > 78.0)
-)
-v = apply_fault(v, mask)
-v["fault_confirmed"] = confirm_fault(v["fault_raw"])
+def chw_noload1_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    """Fault: chiller proven running while building load is satisfied.
+
+    Satisfaction: ``building-zone-load-satisfied`` OR ``building-ahu-load-satisfied``
+    (injected by load_satisfaction before batch run).
+    """
+    del poll
+    run, kind = mechanical_proof_mask(d, equipment_type="CHILLER")
+    d.attrs["chw_noload_proof"] = kind
+    if not kind:
+        return _false(d.index)
+
+    zone_ok = None
+    ahu_ok = None
+    if "building-zone-load-satisfied" in d.columns and d["building-zone-load-satisfied"].notna().any():
+        zone_ok = as_bool(d["building-zone-load-satisfied"])
+    if "building-ahu-load-satisfied" in d.columns and d["building-ahu-load-satisfied"].notna().any():
+        ahu_ok = as_bool(d["building-ahu-load-satisfied"])
+    if zone_ok is None and ahu_ok is None:
+        d.attrs["chw_noload_skip"] = "missing_load_satisfaction"
+        return _false(d.index)
+
+    satisfied = _false(d.index)
+    if zone_ok is not None:
+        satisfied = satisfied | zone_ok.reindex(d.index).fillna(False)
+    if ahu_ok is not None:
+        satisfied = satisfied | ahu_ok.reindex(d.index).fillna(False)
+    return (run & satisfied).fillna(False)
+
+d = apply_fault(d, chw_noload1_compute(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
-### VAV-3 — Excessive reheat during warm weather
+### CHW-1 — Low chilled-water ΔT
+**Family:** `plant` · **Equipment:** `chiller`  
+**Equation:** Pump on AND (CHWR − CHWS) < 4°F.  
+**Default confirmation:** 900 s
 
-```python
-FAULT_CONFIRM_SECONDS = 300
+**Required roles:** `chilled-water-supply-temp`, `chilled-water-return-temp`
 
-reheat = norm_cmd(v["reheat_valve_pct"])
-mask = v["oa_t"].notna() & (v["oa_t"] > 78.0) & (reheat > 0.52)
-v = apply_fault(v, mask)
-v["fault_confirmed"] = confirm_fault(v["fault_raw"])
-```
+**Tunable params**
 
-### VAV-4 — Damper stuck at full open
-
-```python
-FAULT_CONFIRM_SECONDS = 900
-FULL_OPEN = 97.5
-ROLL = 105  # samples sustained
-
-mask = (
-    v["damper_pct"].notna()
-    & (v["damper_pct"] > FULL_OPEN)
-    & (v["damper_pct"].rolling(ROLL, min_periods=ROLL).min() > FULL_OPEN)
-)
-v = apply_fault(v, mask)
-v["fault_confirmed"] = confirm_fault(v["fault_raw"])
-```
-
----
-
-## Economizer & ventilation
-
-Analyst mirror of the [DataFusion economizer section](datafusion-sql-cookbook.html#economizer--ventilation). Use the same semantic columns and thresholds; export CSV from Open-FDD or vendor BMS for off-box RCx.
-
-### AHU economizer diagnostics guide
-
-#### Operating modes (GL36-style)
-
-```python
-AHU_MIN_OA_DPR = 0.05  # minimum OA damper position (0–1), tune per site
-
-def operating_mode_row(row) -> str:
-    """Classify one sample into OS1–OS4 (simplified GL36 bands)."""
-    htg = norm_cmd(pd.Series([row.get("htg_valve_pct", 0)])).iloc[0]
-    clg = norm_cmd(pd.Series([row.get("clg_valve_pct", 0)])).iloc[0]
-    fan = norm_cmd(pd.Series([row.get("fan_cmd", 0)])).iloc[0]
-    econ = norm_cmd(pd.Series([row.get("oa_damper_pct", 0)])).iloc[0]
-    if fan < 0.05:
-        return "off"
-    if htg > 0 and clg == 0:
-        return "OS1_heating"
-    if htg == 0 and clg == 0 and econ > AHU_MIN_OA_DPR:
-        return "OS2_economizer"
-    if htg == 0 and clg > 0 and econ > AHU_MIN_OA_DPR:
-        return "OS3_econ_mech"
-    if htg == 0 and clg > 0 and econ <= AHU_MIN_OA_DPR + 0.02:
-        return "OS4_mech_only"
-    return "other"
-```
-
-| Mode | Typical fault rules |
-|------|---------------------|
-| OS1 | FC5, FC7, ECON-5 |
-| OS2 | ECON-1, ECON-2 |
-| OS3 | ECON-3, FC8–FC11 |
-| OS4 | ECON-3 (inverse), cooling valve faults |
-
-#### Required columns
-
-Same semantic IDs as SQL: `oa_t`, `mat`, `rat`/`ra_t`, `oa_damper_pct`, `clg_valve_pct`, `htg_valve_pct`, `fan_cmd`, `fan_status`, `sat`, `sat_sp`, optional `oa_h`/`ra_h` for enthalpy sites.
-
-#### Core formulas
-
-```python
-def estimate_oa_fraction(d: pd.DataFrame) -> pd.Series:
-    """Dry-bulb OA fraction; NaN when mixing signal too weak."""
-    denom = (d["oa_t"] - d["rat"]).replace(0, np.nan)
-    frac = (d["mat"] - d["rat"]) / denom
-    weak = (d["rat"] - d["oa_t"]).abs() < 2.2
-    return frac.where(~weak)
-
-d["oa_frac"] = estimate_oa_fraction(d)
-```
-
-**Dry-bulb favorable:** `fan_proven & (oa_t < 63.0)` — align `63` with site `oat_cutoff`.
-
-**Enthalpy (optional):** compute outdoor/return enthalpy in the notebook (psychrometric library); gate economizer rules on `h_oa < h_ra` instead of OAT-only when the controller uses enthalpy logic.
-
-#### RCx diagnostic workflow
-
-1. Filter one AHU: `d = df[df["equipment_id"] == "equip:your-ahu"].copy()`
-2. Run sensor validation masks (SV section) on `oa_t`, `mat`, `rat`.
-3. Plot `oa_t`, `mat`, `rat`, `oa_damper_pct` for a summer weekday.
-4. Apply ECON-1 → ECON-5 below; cross-check OA-1, DMP-1 in [Extended v2](#oa-1--low-oa-fraction).
-5. Export confirmed intervals to Open-FDD SQL via [Export to Open-FDD SQL](#export-to-open-fdd-sql).
-
-#### Rule map (economizer family)
-
-| Rule | Focus | Section |
-|------|-------|---------|
-| ECON-1–5 | Core economizer faults | below |
-| OA-1, OA-2 | Ventilation minimum / DCV | [Extended v2 / P2](#oa-1--low-oa-fraction) |
-| DMP-1 | OA damper leakage | [Extended v2](#dmp-1--oa-damper-leakage) |
-| FC6, FC8–FC11 | GL36 economizer-mode AHU faults | [Air handling units](#air-handling-units) |
-
----
-
-### ECON-1 — Economizer stuck closed
-
-```python
-FAULT_CONFIRM_SECONDS = 600
-
-mask = (
-    d["fan_cmd"].astype(bool)
-    & d["oa_damper_pct"].notna() & d["oa_t"].notna()
-    & (d["oa_damper_pct"] < 5.0) & (d["oa_t"] > 55.0)
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
-### ECON-2 — Economizing when outdoor unfavorable
-
-```python
-FAULT_CONFIRM_SECONDS = 300
-
-mask = d["oa_t"].notna() & d["oa_damper_pct"].notna() & (
-    (d["oa_t"] > 63.0) & (d["oa_damper_pct"] > 0.42)
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
-### ECON-3 — Mech cooling when econ available
-
-```python
-FAULT_CONFIRM_SECONDS = 300
-
-mask = (
-    d["oa_t"].notna() & d["oa_damper_pct"].notna() & d["clg_valve_pct"].notna()
-    & (d["oa_t"] < 63.0) & (d["oa_damper_pct"] < 0.32) & (d["clg_valve_pct"] > 0.01)
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
-### ECON-4 — Low estimated OA fraction
-
-```python
-FAULT_CONFIRM_SECONDS = 600
-OA_MIN_PCT = 21.0
-
-fan = norm_cmd(d["fan_cmd"])
-d["oa_frac"] = (d["mat"] - d["rat"]) / (d["oat"] - d["rat"]).replace(0, np.nan) * 100.0
-
-mask = (
-    fan > FAN_ON_MIN
-    & d["mat"].notna() & d["rat"].notna() & d["oat"].notna()
-    & ((d["rat"] - d["oat"]).abs() > 2.2)
-    & (d["oa_frac"] < OA_MIN_PCT)
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
-### ECON-5 — Preheat over-conditioning
-
-```python
-FAULT_CONFIRM_SECONDS = 600
-
-mask = (
-    d["preheat_leave_t"].notna() & d["sat_sp"].notna() & d["oa_t"].notna() & d["htg_valve_pct"].notna()
-    & (d["htg_valve_pct"] > 0.01)
-    & (
-        ((d["oa_t"] > d["sat_sp"]) & (d["preheat_leave_t"] - d["oa_t"] > 2.2))
-        | ((d["oa_t"] < d["sat_sp"]) & (d["preheat_leave_t"] - d["sat_sp"] > 2.2))
-    )
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
----
-
-## Central plants
-
-### CHW-1 — Low chilled-water delta-T
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `min_dt` | Min ΔT | °F | 4.0 | 1.0–12.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
-MIN_DT = 4.0
 
-p = df[df["equipment_id"] == "equip:your-chiller-plant"].copy()
-p["chw_dt"] = p["chw_return_t"] - p["chw_supply_t"]
-mask = (
-    p["chw_supply_t"].notna() & p["chw_return_t"].notna()
-    & p["chw_pump_cmd"].astype(bool)
-    & (p["chw_dt"] < MIN_DT)
-)
-p = apply_fault(p, mask)
-p["fault_confirmed"] = confirm_fault(p["fault_raw"])
+def chw1(d, p, poll):
+    min_dt = _f(p, "min_dt", 4.0)
+    dt = d["chilled-water-return-temp"] - d["chilled-water-supply-temp"]
+    if "chw-pump-cmd" in d.columns:
+        pump = norm_cmd(d["chw-pump-cmd"]).fillna(0) > 0.05
+    else:
+        pump = pd.Series(True, index=d.index)
+    return d["chilled-water-supply-temp"].notna() & d["chilled-water-return-temp"].notna() & pump & (dt < min_dt)
+
+d = apply_fault(d, chw1(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
 ### CHW-2 — DP below SP at max pump speed
+**Family:** `plant` · **Equipment:** `chiller`  
+**Equation:** Pump ≥ 87% AND CHW DP < DP SP − 2.2.  
+**Default confirmation:** 300 s
+
+**Required roles:** `chw-diff-pressure`, `chw-diff-pressure-sp`, `chw-pump-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `dp_margin` | DP margin | psi | 2.2 | 0.5–6.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
-DP_MARGIN = 2.2
-PMP_HI = 0.87
 
-pump = norm_cmd(p["chw_pump_cmd"])
-mask = (
-    p["chw_dp"].notna() & p["chw_dp_sp"].notna()
-    & (p["chw_dp"] < p["chw_dp_sp"] - DP_MARGIN)
-    & (pump >= PMP_HI)
-)
-p = apply_fault(p, mask)
-p["fault_confirmed"] = confirm_fault(p["fault_raw"])
+def chw2(d, p, poll):
+    margin = _f(p, "dp_margin", 2.2)
+    pmp_hi = _f(p, "pump_hi", 0.87)
+    pump = norm_cmd(d["chw-pump-cmd"]).fillna(0)
+    return (
+        d["chw-diff-pressure"].notna() & d["chw-diff-pressure-sp"].notna()
+        & (d["chw-diff-pressure"] < d["chw-diff-pressure-sp"] - margin) & (pump >= pmp_hi)
+    )
+
+d = apply_fault(d, chw2(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
 ### CHW-3 — Plant supply temp outside deadband
+**Family:** `plant` · **Equipment:** `chiller`  
+**Equation:** Pump on AND |CHWS − CHWS SP| > 2.2°F.  
+**Default confirmation:** 300 s
+
+**Required roles:** `chilled-water-supply-temp`, `chilled-water-supply-temp-sp`, `chw-pump-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `sp_band` | SP band | °F | 2.2 | 0.5–6.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
-SP_BAND = 2.2
 
-pump = norm_cmd(p["chw_pump_cmd"])
-mask = (
-    pump > 0.01
-    & p["chw_supply_t"].notna() & p["chw_supply_t_sp"].notna()
-    & (
-        (p["chw_supply_t"] < p["chw_supply_t_sp"] - SP_BAND)
-        | (p["chw_supply_t"] > p["chw_supply_t_sp"] + SP_BAND)
+def chw3(d, p, poll):
+    band = _f(p, "sp_band", 2.2)
+    pump = norm_cmd(d["chw-pump-cmd"]).fillna(0)
+    return (
+        (pump > 0.01) & d["chilled-water-supply-temp"].notna() & d["chilled-water-supply-temp-sp"].notna()
+        & ((d["chilled-water-supply-temp"] < d["chilled-water-supply-temp-sp"] - band) | (d["chilled-water-supply-temp"] > d["chilled-water-supply-temp-sp"] + band))
     )
-)
-p = apply_fault(p, mask)
-p["fault_confirmed"] = confirm_fault(p["fault_raw"])
+
+d = apply_fault(d, chw3(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
 ### CHW-4 — Flow high at max pump
+**Family:** `plant` · **Equipment:** `chiller`  
+**Equation:** Pump ≥ 87% AND CHW flow > 1100 gpm.  
+**Default confirmation:** 300 s
+
+**Required roles:** `chw-flow`, `chw-pump-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `flow_hi` | Flow high | gpm | 1100 | 200–3000 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
-FLOW_HI = 1100.0
-PMP_HI = 0.87
 
-pump = norm_cmd(p["chw_pump_cmd"])
-mask = p["chw_flow"].notna() & (p["chw_flow"] > FLOW_HI) & (pump >= PMP_HI)
-p = apply_fault(p, mask)
-p["fault_confirmed"] = confirm_fault(p["fault_raw"])
+def chw4(d, p, poll):
+    flow_hi = _f(p, "flow_hi", 1100.0)
+    pmp_hi = _f(p, "pump_hi", 0.87)
+    pump = norm_cmd(d["chw-pump-cmd"]).fillna(0)
+    return d["chw-flow"].notna() & (d["chw-flow"] > flow_hi) & (pump >= pmp_hi)
+
+d = apply_fault(d, chw4(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
----
+### CW-OPT-1 — Condenser water not optimized vs wet-bulb
+**Family:** `plant` · **Equipment:** `chiller`, `cooling_tower`  
+**Equation:** CW supply significantly colder than web wet-bulb + design approach (Stull WB) — tower over-cooling / not optimized.  
+**Default confirmation:** 900 s
+
+**Required roles:** `condenser-water-supply-temp`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `cw_approach` | Design approach | °F | 7.0 | 3.0–15.0 |
+| `cw_slack` | Slack below target | °F | 2.0 | 0.5–6.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def cw_opt(d, p, poll):
+    """Condenser-water not optimized vs wet-bulb (Stull) — CW colder than WB + approach."""
+    if "condenser-water-supply-temp" not in d.columns:
+        return _false(d.index)
+    wb = d["web-outside-air-wetbulb"] if "web-outside-air-wetbulb" in d.columns else None
+    if wb is None or wb.notna().sum() == 0:
+        return _false(d.index)
+    approach = _f(p, "cw_approach", 7.0)
+    slack = _f(p, "cw_slack", 2.0)
+    # Over-cooled tower water: supply significantly below wet-bulb + design approach
+    return (
+        d["condenser-water-supply-temp"].notna()
+        & wb.notna()
+        & (pd.to_numeric(d["condenser-water-supply-temp"], errors="coerce") < (wb + approach - slack))
+    )
+
+d = apply_fault(d, cw_opt(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### CW-APR-1 — High CW approach at full tower fan
+**Family:** `plant` · **Equipment:** `chiller`, `cooling_tower`  
+**Equation:** At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 8°F, typically 5–10°F). Suspect OA→wet-bulb / CW sensor mismatch or cooling-tower performance degradation.  
+**Default confirmation:** 900 s
+
+**Required roles:** `condenser-water-supply-temp`
+
+**Optional roles:** `tower-fan-cmd`, `cw-fan-cmd`, `fan-cmd`, `web-outside-air-wetbulb`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `approach_max_f` | Max approach at full fan | °F | 8.0 | 5.0–15.0 |
+| `tower_fan_hi` | Tower fan full-speed threshold | frac | 0.95 | 0.8–1.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def cw_apr(d, p, poll):
+    """High CW approach at full tower fan — sensors or tower degradation."""
+    if "condenser-water-supply-temp" not in d.columns:
+        return _false(d.index)
+    if "web-outside-air-wetbulb" not in d.columns or d["web-outside-air-wetbulb"].notna().sum() == 0:
+        return _false(d.index)
+    if not any(r in d.columns and d[r].notna().any() for r in ("tower-fan-cmd", "cw-fan-cmd", "fan-cmd")):
+        return _false(d.index)
+    limit = _f(p, "approach_max_f", 8.0)
+    apr = _cw_approach_f(d)
+    return (
+        d["condenser-water-supply-temp"].notna()
+        & d["web-outside-air-wetbulb"].notna()
+        & _tower_fan_full_mask(d, p)
+        & (apr > limit)
+    )
+
+d = apply_fault(d, cw_apr(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
+
+### CW-FAN-1 — Excess tower fan energy vs wet-bulb limit
+**Family:** `plant` · **Equipment:** `chiller`, `cooling_tower`  
+**Equation:** Tower fans at full speed while leaving CW is well above web wet-bulb + design approach (approach + excess_beyond). Fans are chasing a CW temp that is theoretically hard/impossible — excess fan energy.  
+**Default confirmation:** 900 s
+
+**Required roles:** `condenser-water-supply-temp`
+
+**Optional roles:** `tower-fan-cmd`, `cw-fan-cmd`, `fan-cmd`, `web-outside-air-wetbulb`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `cw_approach` | Design approach | °F | 7.0 | 3.0–15.0 |
+| `excess_beyond_approach_f` | Excess beyond approach | °F | 5.0 | 2.0–20.0 |
+| `tower_fan_hi` | Tower fan full-speed threshold | frac | 0.95 | 0.8–1.0 |
+
+```python
+FAULT_CONFIRM_SECONDS = 900
+
+def cw_fan_excess(d, p, poll):
+    """Excess tower-fan energy — CW well above theoretical WB+approach at full fan."""
+    if "condenser-water-supply-temp" not in d.columns:
+        return _false(d.index)
+    if "web-outside-air-wetbulb" not in d.columns or d["web-outside-air-wetbulb"].notna().sum() == 0:
+        return _false(d.index)
+    if not any(r in d.columns and d[r].notna().any() for r in ("tower-fan-cmd", "cw-fan-cmd", "fan-cmd")):
+        return _false(d.index)
+    approach = _f(p, "cw_approach", 7.0)
+    excess = _f(p, "excess_beyond_approach_f", 5.0)
+    apr = _cw_approach_f(d)
+    return (
+        d["condenser-water-supply-temp"].notna()
+        & d["web-outside-air-wetbulb"].notna()
+        & _tower_fan_full_mask(d, p)
+        & (apr > (approach + excess))
+    )
+
+d = apply_fault(d, cw_fan_excess(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+```
 
 ## Heat pumps
 
 ### HP-1 — Discharge cold when heating
+**Family:** `heatpump` · **Equipment:** `heatpump`  
+**Equation:** Fan on, zone < 69°F, discharge SAT < 85°F.  
+**Default confirmation:** 600 s
+
+**Required roles:** `discharge-air-temp`, `zone-air-temp`, `fan-cmd`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `min_sat` | Min heating SAT | °F | 85.0 | 70.0–110.0 |
+| `zone_cold` | Zone cold | °F | 69.0 | 60.0–72.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
-MIN_SAT = 85.0
-ZONE_COLD = 69.0
 
-hp = df[df["equipment_id"] == "equip:your-hp"].copy()
-fan = norm_cmd(hp["fan_cmd"])
-mask = (
-    hp["sat"].notna() & hp["zone_t"].notna()
-    & (fan > FAN_ON_MIN)
-    & (hp["zone_t"] < ZONE_COLD)
-    & (hp["sat"] < MIN_SAT)
-)
-hp = apply_fault(hp, mask)
-hp["fault_confirmed"] = confirm_fault(hp["fault_raw"])
+def hp1(d, p, poll):
+    min_sat = _f(p, "min_sat", 85.0)
+    zone_cold = _f(p, "zone_cold", 69.0)
+    fan = _fan(d)
+    return (
+        d["discharge-air-temp"].notna() & d["zone-air-temp"].notna() & (fan > FAN_ON_MIN)
+        & (d["zone-air-temp"] < zone_cold) & (d["discharge-air-temp"] < min_sat)
+    )
+
+d = apply_fault(d, hp1(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
-
----
 
 ## Weather station
 
-### WX-1 — Temperature spike
+### WX-1 — OA temperature spike
+**Family:** `weather` · **Equipment:** `weather`  
+**Equation:** OAT sample-to-sample jump > 16°F.  
+**Default confirmation:** 300 s
+
+**Required roles:** `outside-air-temp`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `spike_limit` | Spike limit | °F | 16.0 | 4.0–40.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
-SPIKE_LIMIT = 16.0
 
-wx = df[df["equipment_id"] == "equip:weather-station"].copy()
-mask = wx["oa_t"].notna() & (wx["oa_t"].diff().abs() > SPIKE_LIMIT)
-wx = apply_fault(wx, mask)
-wx["fault_confirmed"] = confirm_fault(wx["fault_raw"])
+def wx1(d, p, poll):
+    """OAT sample-to-sample spike; limit scales with the sample gap vs poll."""
+    spike = _f(p, "spike_limit", 16.0)
+    s = pd.to_numeric(d["outside-air-temp"], errors="coerce")
+    jump = s.diff().abs()
+    if isinstance(d.index, pd.DatetimeIndex) and len(d.index) > 1:
+        dt_s = d.index.to_series().diff().dt.total_seconds()
+        scale = (dt_s / max(float(poll), 1.0)).fillna(1.0).clip(lower=1.0)
+        return s.notna() & (jump > (spike * scale))
+    return s.notna() & (jump > spike)
+
+d = apply_fault(d, wx1(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
-
-### WX-2 — Gust lower than sustained wind
-
-```python
-FAULT_CONFIRM_SECONDS = 300
-
-mask = wx["wind_gust"].notna() & wx["wind_speed"].notna() & (wx["wind_gust"] < wx["wind_speed"])
-wx = apply_fault(wx, mask)
-wx["fault_confirmed"] = confirm_fault(wx["fault_raw"])
-```
-
----
 
 ## Trim & respond advisory
 
-Use **`FAULT_CONFIRM_SECONDS = 1800`** or higher for advisory rules.
-
 ### TRIM-1 — Duct static trim advisory
+**Family:** `trim` · **Equipment:** `ahu`  
+**Equation:** Duct static high (> 1.35 in.w.c.) while VAV pressure requests are low.  
+**Default confirmation:** 1800 s
+
+**Required roles:** `duct-static-pressure`, `vav-pressure-request-sum`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `duct_hi` | Duct static high | in. w.c. | 1.35 | 0.5–3.0 |
+| `request_lo` | Request sum low | count | 1.0 | 0.0–10.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 1800
 
-mask = (
-    d["duct_static"].notna() & d["vav_press_req_sum"].notna()
-    & (d["duct_static"] > 0.80) & (d["vav_press_req_sum"] < 1.0)
-    & (d["duct_static"] > 1.35)
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
-```
+def trim1(d, p, poll):
+    duct_hi = _f(p, "duct_hi", 1.35)
+    req_lo = _f(p, "request_lo", 1.0)
+    return (
+        d["duct-static-pressure"].notna() & d["vav-pressure-request-sum"].notna()
+        & (d["duct-static-pressure"] > duct_hi) & (d["vav-pressure-request-sum"] < req_lo)
+    )
 
-### TRIM-2 — Chiller plant enable advisory
-
-```python
-FAULT_CONFIRM_SECONDS = 1800
-
-p = df[df["equipment_id"] == "equip:your-chiller-plant"].copy()
-mask = p["chw_valve_req_count"].notna() & (p["chw_valve_req_count"] < 2)
-p = apply_fault(p, mask)
-p["fault_confirmed"] = confirm_fault(p["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
+d = apply_fault(d, trim1(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
 ### TRIM-3 — HWST trim advisory
+**Family:** `trim` · **Equipment:** `boiler`  
+**Equation:** HW supply > 160°F while reset requests are low.  
+**Default confirmation:** 1800 s
+
+**Required roles:** `hot-water-supply-temp`, `hw-reset-request-sum`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `hwst_hi` | HWST high | °F | 160.0 | 120.0–200.0 |
+| `request_lo` | Request sum low | count | 1.0 | 0.0–10.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 1800
 
-hw = df[df["equipment_id"] == "equip:your-hw-plant"].copy()
-mask = hw["hw_supply_t"].notna() & hw["hw_reset_req_sum"].notna() & (
-    (hw["hw_supply_t"] > 160.0) & (hw["hw_reset_req_sum"] < 1.0)
-)
-hw = apply_fault(hw, mask)
-hw["fault_confirmed"] = confirm_fault(hw["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
+def trim3(d, p, poll):
+    hwst_hi = _f(p, "hwst_hi", 160.0)
+    req_lo = _f(p, "request_lo", 1.0)
+    return (
+        d["hot-water-supply-temp"].notna() & d["hw-reset-request-sum"].notna()
+        & (d["hot-water-supply-temp"] > hwst_hi) & (d["hw-reset-request-sum"] < req_lo)
+    )
+
+d = apply_fault(d, trim3(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
 ### TRIM-4 — CHW plant reset advisory
+**Family:** `trim` · **Equipment:** `chiller`  
+**Equation:** CHW supply < 45°F while reset requests are low.  
+**Default confirmation:** 1800 s
+
+**Required roles:** `chilled-water-supply-temp`, `chw-reset-request-sum`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `chw_lo` | CHWS low | °F | 45.0 | 35.0–55.0 |
+| `request_lo` | Request sum low | count | 1.0 | 0.0–10.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 1800
 
-mask = p["chw_supply_t"].notna() & p["chw_reset_req_sum"].notna() & (
-    (p["chw_supply_t"] < 45.0) & (p["chw_reset_req_sum"] < 1.0)
-)
-p = apply_fault(p, mask)
-p["fault_confirmed"] = confirm_fault(p["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
+def trim4(d, p, poll):
+    chw_lo = _f(p, "chw_lo", 45.0)
+    req_lo = _f(p, "request_lo", 1.0)
+    return (
+        d["chilled-water-supply-temp"].notna() & d["chw-reset-request-sum"].notna()
+        & (d["chilled-water-supply-temp"] < chw_lo) & (d["chw-reset-request-sum"] < req_lo)
+    )
+
+d = apply_fault(d, trim4(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
----
-
-## Extended rule families (v2)
-
-Mirrors [DataFusion SQL v2 section](datafusion-sql-cookbook.html#extended-rule-families-v2). Import [prerequisite macros](prerequisite-macros.html) helpers as needed.
-
-### RESET-1 — SAT reset not tracking outdoor air
-
-```python
-FAULT_CONFIRM_SECONDS = 900
-SAT_RESET_ERR = 3.0
-
-def expected_sat_sp(oat: pd.Series) -> pd.Series:
-    return 52.0 + 0.25 * (oat - 65.0)
-
-base = macro_fan_proven_on(d) if "fan_cmd" in d else pd.Series(True, index=d.index)
-mask = (
-    base & d["sat_sp"].notna() & d["oat"].notna()
-    & (d["sat_sp"].sub(expected_sat_sp(d["oat"])).abs() > SAT_RESET_ERR)
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
-```
+## Schedule & occupancy
 
 ### SCHED-1 — Unoccupied runtime
+**Family:** `schedule` · **Equipment:** `ahu`  
+**Equation:** Fan running while occupancy is unoccupied (Overview calendar → occ_mode). When zone_t is mapped, also require zone inside comfort_low_f…comfort_high_f (defaults 70–75°F; synced from Overview zone band).  
+**Default confirmation:** 1800 s
+
+**Required roles:** `occupied`, `fan-status`
+
+**Optional roles:** `zone-air-temp`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `comfort_low_f` | Comfort low | °F | 70.0 | 60.0–78.0 |
+| `comfort_high_f` | Comfort high | °F | 75.0 | 68.0–85.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 1800
-mask = d["occ_mode"].eq("unoccupied") & d["fan_status"].astype(bool)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
+
+def sched1(d, p, poll):
+    """Unoccupied fan runtime; optional zone comfort band when zone_t is mapped."""
+    if "occupied" not in d or "fan-status" not in d:
+        return _false(d.index)
+    base = (d["occupied"].astype(str).str.lower() == "unoccupied") & as_bool(d["fan-status"])
+    if "zone-air-temp" not in d.columns or d["zone-air-temp"].notna().sum() == 0:
+        return base
+    lo = _f(p, "comfort_low_f", 70.0)
+    hi = _f(p, "comfort_high_f", 75.0)
+    zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
+    in_band = zt.notna() & (zt >= lo) & (zt <= hi)
+    return base & in_band
+
+d = apply_fault(d, sched1(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
-### OVR-1 — Persistent override
+### SCHED-247 — Always-on fan or pump runtime
+**Family:** `schedule` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `heatpump`  
+**Equation:** Fan or pump (or similar motor proof/command) is on for ≥ always_on_pct of the analysis window — highlights equipment that appears to run 24/7. Applies to all fans and pumps regardless of equipment family when a status/cmd role is mapped.  
+**Default confirmation:** 3600 s
+
+**Optional roles:** `fan-status`, `pump-status`, `chw-pump-status`, `hw-pump-status`, `chiller-status`, `compressor-status`, `tower-fan-cmd`, `cw-fan-cmd`, `fan-cmd`, `chw-pump-cmd`, `hw-pump-cmd`, `duct-static-pressure`, `chw-diff-pressure`
+
+**Tunable params**
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `always_on_pct` | Always-on fraction | frac | 0.95 | 0.8–1.0 |
+| `pressure_on_min` | Pressure-on evidence | eng | 0.2 | 0.05–2.0 |
 
 ```python
 FAULT_CONFIRM_SECONDS = 3600
-mask = d["override_active"].fillna(False).astype(bool)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
+
+def _sched247(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    """Equipment essentially always-on (fan/pump/compressor status) over the window.
+
+    When the always-on fraction is exceeded, return the actual on-mask so fault-hours
+    equal run hours (not the full analysis window). Pressure sensors (duct static /
+    differential) above ``pressure_on_min`` also count as on — catches VAV systems
+    where fan cmd/status mismatch but the duct is pressurized.
+    """
+    thr = _f(p, "always_on_pct", 0.95)
+    proofs: list[pd.Series] = []
+    for role in (
+        "fan-status",
+        "pump-status",
+        "chw-pump-status",
+        "hw-pump-status",
+        "chiller-status",
+        "compressor-status",
+        "tower-fan-cmd",
+        "cw-fan-cmd",
+        "fan-cmd",
+        "chw-pump-cmd",
+        "hw-pump-cmd",
+    ):
+        if role not in d.columns or not d[role].notna().any():
+            continue
+        if role.endswith("-cmd"):
+            proofs.append(norm_cmd(d[role]).fillna(0) > SCHED247_CMD_ON_FRAC)
+        else:
+            proofs.append(as_bool(d[role]))
+    press = _pressure_on_mask(d, p)
+    if press is not None:
+        proofs.append(press)
+    if not proofs:
+        return _false(d.index)
+    on = proofs[0].fillna(False).astype(bool)
+    for s in proofs[1:]:
+        on = on | s.fillna(False).astype(bool)
+    frac = float(on.mean()) if len(on) else 0.0
+    if frac >= thr:
+        return on.reindex(d.index).fillna(False)
+    return _false(d.index)
+
+d = apply_fault(d, _sched247(d, params, POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
-### CMD-1 — Fan cmd/status mismatch
+## Not yet in validated catalog
 
-```python
-FAULT_CONFIRM_SECONDS = 600
-cmd_on = norm_cmd(d["fan_cmd"]) >= 0.05
-mask = d["fan_status"].notna() & (cmd_on != d["fan_status"].astype(bool))
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
+{: .important }
+The following rules remain documented for continuity but are **not** in the current validated vibe19 `RULES` catalog. Do not treat them as Streamlit-parity-tested until they are added to the catalog.
 
-### OA-1 — Low OA fraction
-
-```python
-FAULT_CONFIRM_SECONDS = 900
-MIN_OA = 0.15
-oa_frac = (d["mat"] - d["rat"]) / (d["oa_t"] - d["rat"]).replace(0, np.nan)
-mask = (
-    d["fan_status"].astype(bool) & d["oa_t"].notna() & d["rat"].notna() & d["mat"].notna()
-    & ((d["rat"] - d["oa_t"]).abs() > 0.5) & (oa_frac < MIN_OA)
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
-### VLV-1 — Cooling valve leakage
-
-```python
-FAULT_CONFIRM_SECONDS = 900
-clg = norm_cmd(d["clg_valve_pct"])
-mask = (
-    d["sat"].notna() & d["sat_sp"].notna()
-    & (clg <= 0.05) & (d["sat"] < d["sat_sp"] - 2.0)
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
-### DMP-1 — OA damper leakage
-
-```python
-FAULT_CONFIRM_SECONDS = 900
-LEAK_DELTA = 2.0
-damper = norm_cmd(d["oa_damper_pct"])
-mask = (
-    d["oa_t"].notna() & d["mat"].notna()
-    & (damper <= 0.05) & (d["mat"].sub(d["oa_t"]).abs() < LEAK_DELTA)
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
-### VAV-5 — Airflow sensor bias
-
-```python
-FAULT_CONFIRM_SECONDS = 900
-damper = norm_cmd(v["damper_pct"])
-mask = v["zone_flow"].notna() & (v["zone_flow"] > 50.0) & (damper < 0.10)
-v = apply_fault(v, mask)
-v["fault_confirmed"] = confirm_fault(v["fault_raw"])
-```
-
-### PLANT-1 — CHW DP reset missing
-
-```python
-FAULT_CONFIRM_SECONDS = 900
-pump = norm_cmd(p["chw_pump_cmd"])
-mask = (
-    p["chw_dp_sp"].notna() & p["chw_load_pct"].notna()
-    & (pump > 0.01) & (p["chw_load_pct"] < 0.40) & (p["chw_dp_sp"] > 18.0)
-)
-p = apply_fault(p, mask)
-p["fault_confirmed"] = confirm_fault(p["fault_raw"])
-```
-
-### SP-HIGH — Occupied setpoint too high
-
-```python
-FAULT_CONFIRM_SECONDS = 900
-mask = (
-    v["zone_t_sp"].notna() & v["occ_mode"].eq("occupied") & (v["zone_t_sp"] > 76.0)
-)
-v = apply_fault(v, mask)
-v["fault_confirmed"] = confirm_fault(v["fault_raw"])
-```
-
-### SP-LOW — Occupied setpoint too low
-
-```python
-FAULT_CONFIRM_SECONDS = 900
-mask = (
-    v["zone_t_sp"].notna() & v["occ_mode"].eq("occupied") & (v["zone_t_sp"] < 68.0)
-)
-v = apply_fault(v, mask)
-v["fault_confirmed"] = confirm_fault(v["fault_raw"])
-```
-
-### KPI-1 — Performance score (advisory)
-
-```python
-# Roll up confirmed fault counts by taxonomy family over 7 days — advisory only.
-# See benchmark-strategy.md for weight defaults.
-```
-
----
-
-## Extended rule families (P2)
-
-Mirrors [SQL P2 section](datafusion-sql-cookbook.html#extended-rule-families-p2).
-
-### VAV-6 — Reheat when cooling available
-
-```python
-FAULT_CONFIRM_SECONDS = 300
-reheat = norm_cmd(v["reheat_valve_pct"])
-mask = (
-    v.get("clg_available", False).astype(bool)
-    & v["oa_t"].notna() & (v["oa_t"] < 65.0) & (reheat > 0.25)
-)
-v = apply_fault(v, mask)
-v["fault_confirmed"] = confirm_fault(v["fault_raw"])
-```
-
-### VAV-7 — Minimum airflow violation
-
-```python
-FAULT_CONFIRM_SECONDS = 900
-fan = norm_cmd(v["fan_cmd"]) if "fan_cmd" in v else 1.0
-mask = (
-    v["zone_flow"].notna() & v["min_flow_sp"].notna()
-    & (fan > 0.01) & (v["zone_flow"] < v["min_flow_sp"])
-)
-v = apply_fault(v, mask)
-v["fault_confirmed"] = confirm_fault(v["fault_raw"])
-```
-
-### TOWER-1 — Cooling tower approach high
-
-```python
-FAULT_CONFIRM_SECONDS = 900
-MAX_APPROACH = 7.0
-t = df[df["equipment_id"] == "equip:your-cooling-tower"].copy()
-fan = norm_cmd(t["tower_fan_cmd"])
-mask = (
-    t["tower_leaving_t"].notna() & t["wb_t"].notna()
-    & (fan > 0.01) & ((t["tower_leaving_t"] - t["wb_t"]) > MAX_APPROACH)
-)
-t = apply_fault(t, mask)
-t["fault_confirmed"] = confirm_fault(t["fault_raw"])
-```
-
-### CTRL-2 — Generic control loop hunting
-
-```python
-FAULT_CONFIRM_SECONDS = 3600
-HUNT_REVERSALS = 8
-ROLL = 60  # samples ~1 h @ 60 s poll
-
-s = d["duct_static"].diff().apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
-reversals = (s != s.shift(1)) & (s != 0)
-mask = reversals.rolling(ROLL, min_periods=ROLL).sum() > HUNT_REVERSALS
-d = apply_fault(d, mask.fillna(False))
-d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=FAULT_CONFIRM_SECONDS // POLL_SECONDS)
-```
-
-### SV-7 — Wrong-units heuristic
-
-```python
-FAULT_CONFIRM_SECONDS = 300
-mask = d["oa_t"].notna() & ((d["oa_t"] > 200.0) | (d["oa_t"] < -60.0))
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
-
-### OA-2 — DCV minimum OA not met
-
-```python
-FAULT_CONFIRM_SECONDS = 900
-mask = (
-    d["oa_flow"].notna() & d["oa_flow_min_sp"].notna()
-    & d["occ_mode"].eq("occupied") & d["fan_status"].astype(bool)
-    & (d["oa_flow"] < d["oa_flow_min_sp"])
-)
-d = apply_fault(d, mask)
-d["fault_confirmed"] = confirm_fault(d["fault_raw"])
-```
+| ID | Title | Family | Notes |
+|----|-------|--------|-------|
+| `VAV-2` | Night setback miss | `vav` | Zone temp miss setback band during unoccupied hours. |
+| `VAV-6` | Reheat when cooling available | `vav` | Reheat valve open while OA is cool enough for free cooling. |
+| `TOWER-1` | Cooling tower approach high | `plant` | Tower leaving CW approach above design vs wet-bulb. |
+| `CTRL-2` | Generic control loop hunting | `control` | Simplified duct-static hunting screen (pandas-complete logic differs). |
+| `RESET-1` | SAT reset not tracking outdoor air | `ahu` | SAT SP not following expected OA reset curve. |
+| `OVR-1` | Persistent override | `ahu` | Manual override / hand mode held beyond confirm window. |
+| `OA-2` | DCV minimum OA not met | `ahu` | Estimated OA fraction below DCV/minimum OA setpoint. |
+| `PLANT-1` | CHW DP reset missing | `plant` | CHW differential pressure SP not resetting with load. |
+| `SP-HIGH` | Occupied setpoint too high | `vav` | Occupied zone SP above comfort policy. |
+| `SP-LOW` | Occupied setpoint too low | `vav` | Occupied zone SP below comfort policy. |
+| `KPI-1` | Performance score (advisory) | `site` | Site-level advisory KPI aggregation. |
+| `TRIM-2` | Chiller plant enable advisory | `trim` | Trim/respond chiller enable advisory. |
+| `WX-2` | Gust lower than sustained wind | `weather` | Wind gust reading inconsistent with sustained wind. |
 
 ---
 
 ## Framework docs
 
-| Doc | Purpose |
-|-----|---------|
-| [Taxonomy](taxonomy.html) | Public fault taxonomy |
-| [Rule schema](rule-schema.html) | Metadata source of truth |
-| [Gap matrix](gap-matrix.html) | Literature coverage |
-| [Parity matrix](parity-matrix.html) | SQL ↔ Pandas audit |
-| [Roadmap](roadmap.html) | Expansion priorities |
-| [Prerequisite macros](prerequisite-macros.html) | Shared guards |
-| [Benchmark strategy](benchmark-strategy.html) | Validation scenarios |
-| [Doc template](doc-template.html) | Per-rule standard |
-
----
-
-## Export to Open-FDD SQL
-
-After validating in Pandas, port the boolean expression to DataFusion SQL for production on the edge:
-
-| Pandas | DataFusion SQL |
-|--------|----------------|
-| `s.notna()` | `col IS NOT NULL` |
-| `a & b` | `a AND b` |
-| `a \| b` | `a OR b` |
-| `~a` | `NOT a` |
-| `s.abs()` | `ABS(col)` |
-| `np.minimum(a,b)` | `LEAST(a,b)` |
-| `np.maximum(a,b)` | `GREATEST(a,b)` |
-| `FAULT_CONFIRM_SECONDS = 300` | `"confirmation_seconds": 300` in API |
-
-Test SQL with `POST /api/fdd-rules/{id}/test-sql` before activate.
-
----
-
-**Next:** [DataFusion SQL cookbook](datafusion-sql-cookbook.html) — edge runtime rules for Open-FDD
+- [Rule Cookbook hub](index.html)
+- [DataFusion SQL cookbook](datafusion-sql-cookbook.html)
+- [P0 rule catalog](p0-rule-catalog.html)
+- [Parity matrix](parity-matrix.html)
+- [Prerequisite macros](prerequisite-macros.html)
+- [Benchmark strategy](benchmark-strategy.html)

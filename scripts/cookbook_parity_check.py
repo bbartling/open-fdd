@@ -1,27 +1,49 @@
 #!/usr/bin/env python3
-"""Offline Pandas parity checks for Open-FDD cookbook fixtures."""
+"""Offline Pandas parity checks + cookbook docs integrity for Open-FDD."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
-import pandas as pd
-
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURES = ROOT / "docs" / "rules" / "cookbook" / "fixtures"
+COOKBOOK = ROOT / "docs" / "rules" / "cookbook"
+FIXTURES = COOKBOOK / "fixtures"
+
+REQUIRED_PAGES = [
+    "index.md",
+    "datafusion-sql-cookbook.md",
+    "pandas-cookbook.md",
+    "taxonomy.md",
+    "rule-schema.md",
+    "gap-matrix.md",
+    "parity-matrix.md",
+    "roadmap.md",
+    "prerequisite-macros.md",
+    "benchmark-strategy.md",
+    "doc-template.md",
+    "p0-rule-catalog.md",
+]
+
+# Guard against accidental gut-outs of the public cookbook.
+MIN_RULE_HEADINGS = 55
+RULE_HEADING_RE = re.compile(r"^### [A-Z][A-Z0-9-]* —", re.MULTILINE)
 
 
-def norm_cmd(s: pd.Series) -> pd.Series:
+def norm_cmd(s):
     import numpy as np
+    import pandas as pd
 
     s = pd.to_numeric(s, errors="coerce")
     return pd.Series(np.where(s > 1.0, s / 100.0, s), index=s.index)
 
 
-def load_fixture(name: str) -> pd.DataFrame:
+def load_fixture(name: str):
+    import pandas as pd
+
     path = FIXTURES / name
     rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     df = pd.DataFrame(rows)
@@ -29,7 +51,7 @@ def load_fixture(name: str) -> pd.DataFrame:
     return df.sort_values("timestamp")
 
 
-def rule_reset1(df: pd.DataFrame) -> pd.Series:
+def rule_reset1(df):
     err = 3.0
     expected = 52.0 + 0.25 * (df["oat"] - 65.0)
     return (
@@ -40,11 +62,11 @@ def rule_reset1(df: pd.DataFrame) -> pd.Series:
     )
 
 
-def rule_sched1(df: pd.DataFrame) -> pd.Series:
+def rule_sched1(df):
     return df["occ_mode"].eq("unoccupied") & df["fan_status"].astype(bool)
 
 
-def rule_fc1(df: pd.DataFrame) -> pd.Series:
+def rule_fc1(df):
     fan = norm_cmd(df["fan_cmd"])
     return (
         df["duct_static"].notna()
@@ -54,7 +76,7 @@ def rule_fc1(df: pd.DataFrame) -> pd.Series:
     )
 
 
-def rule_vav6(df: pd.DataFrame) -> pd.Series:
+def rule_vav6(df):
     reheat = norm_cmd(df["reheat_valve_pct"])
     return (
         df.get("clg_available", False).astype(bool)
@@ -63,7 +85,7 @@ def rule_vav6(df: pd.DataFrame) -> pd.Series:
     )
 
 
-def rule_vav7(df: pd.DataFrame) -> pd.Series:
+def rule_vav7(df):
     return df["zone_flow"].notna() & df["min_flow_sp"].notna() & (
         df["zone_flow"] < df["min_flow_sp"]
     )
@@ -79,6 +101,28 @@ CHECKS = {
 }
 
 
+def run_docs_integrity() -> None:
+    missing = [p for p in REQUIRED_PAGES if not (COOKBOOK / p).is_file()]
+    if missing:
+        raise AssertionError(f"missing cookbook pages: {missing}")
+
+    for name in ("pandas-cookbook.md", "datafusion-sql-cookbook.md"):
+        text = (COOKBOOK / name).read_text(encoding="utf-8")
+        n = len(RULE_HEADING_RE.findall(text))
+        if n < MIN_RULE_HEADINGS:
+            raise AssertionError(
+                f"{name}: expected >= {MIN_RULE_HEADINGS} rule headings, found {n}"
+            )
+        print(f"PASS docs {name} ({n} rule headings)")
+
+    # Validated-catalog markers must remain (guard against vibe-coded gut-outs).
+    pandas_text = (COOKBOOK / "pandas-cookbook.md").read_text(encoding="utf-8")
+    for marker in ("SV-RANGE", "PID-HUNT-1", "FC1", "SCHED-247", "OAT-METEO"):
+        if marker not in pandas_text:
+            raise AssertionError(f"pandas-cookbook.md missing validated marker {marker}")
+    print(f"PASS docs integrity ({len(REQUIRED_PAGES)} pages)")
+
+
 def run_check(fixture: str, fn, expect_any: bool) -> None:
     df = load_fixture(fixture)
     raw = fn(df)
@@ -89,18 +133,27 @@ def run_check(fixture: str, fn, expect_any: bool) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Cookbook Pandas parity fixtures")
-    parser.add_argument("--all", action="store_true", help="Run all fixture checks")
+    parser = argparse.ArgumentParser(description="Cookbook docs integrity + Pandas fixtures")
+    parser.add_argument("--all", action="store_true", help="Run docs integrity + all fixtures")
+    parser.add_argument("--docs-only", action="store_true", help="Only docs integrity checks")
     parser.add_argument("--fixture", help="Single fixture filename")
     args = parser.parse_args()
 
     try:
-        import pandas  # noqa: F401
-    except ImportError:
-        print("SKIP: pandas not installed", file=sys.stderr)
+        run_docs_integrity()
+    except AssertionError as exc:
+        print(f"FAIL docs integrity: {exc}", file=sys.stderr)
+        return 1
+
+    if args.docs_only:
         return 0
 
-    targets = CHECKS.items() if args.all else []
+    try:
+        import pandas  # noqa: F401
+    except ImportError:
+        print("SKIP fixtures: pandas not installed", file=sys.stderr)
+        return 0 if (args.all or args.fixture) else 0
+
     if args.fixture:
         if args.fixture not in CHECKS:
             print(f"Unknown fixture: {args.fixture}", file=sys.stderr)
@@ -109,11 +162,11 @@ def main() -> int:
         run_check(args.fixture, fn, exp)
         return 0
 
-    if not targets:
+    if not args.all:
         parser.print_help()
         return 1
 
-    for fixture, (fn, exp) in targets:
+    for fixture, (fn, exp) in CHECKS.items():
         run_check(fixture, fn, exp)
     print(f"All {len(CHECKS)} fixture checks passed.")
     return 0

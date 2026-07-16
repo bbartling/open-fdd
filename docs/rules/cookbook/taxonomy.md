@@ -42,15 +42,15 @@ Neutral, standards-first taxonomy for Open-FDD rule cookbooks. Names are **gener
 
 | Family ID | Name | Typical symptoms |
 |-----------|------|------------------|
-| `sensor.quality` | Sensor validation | Out of range, flatline, spike, stale, mixing envelope |
-| `control.loop` | Control loop | Hunting, setpoint tracking error, simultaneous heat/cool |
+| `sensor.quality` | Sensor validation (sweep) | SV-RANGE, SV-FLATLINE, SV-SPIKE, SV-STALE, SV-RATE |
+| `control.loop` | Control loop | PID-HUNT-1, FC4 hunting, setpoint tracking, simultaneous heat/cool |
 | `economizer` | Economizer & OA | Stuck closed, unfavorable economizing, low OA fraction |
 | `ventilation` | Ventilation | Low OA, preheat over-conditioning, DCV miss |
 | `schedule` | Schedule & occupancy | Unoccupied runtime, setback miss, morning warm-up fail |
 | `reset` | Reset logic | Missing SAT/CHW/HW/DP reset, setpoint too high/low |
 | `override` | Overrides | Persistent manual override, bypass active |
 | `actuator.leakage` | Valve / damper leakage | Flow/temp when commanded closed |
-| `plant.performance` | Plant performance | Low ΔT, DP miss, flow anomaly, tower approach |
+| `plant.performance` | Plant performance | CHW ΔT/DP/flow, CHW-NOLOAD-1, CW approach/fan/opt |
 | `terminal.vav` | VAV terminals | Comfort band, reheat, damper stuck, airflow bias |
 | `command.status` | Command vs status | Fan/pump/damper cmd ≠ feedback |
 | `kpi.advisory` | Performance KPI | Trim/respond, energy opportunity scoring |
@@ -66,11 +66,11 @@ Neutral, standards-first taxonomy for Open-FDD rule cookbooks. Names are **gener
 
 Examples:
 
-- `sensor.quality.ahu.sv_oa_range`
-- `control.loop.ahu.fc4_pid_hunting`
-- `reset.plant.chw.dp_reset_missing`
-- `schedule.vav.unoccupied_runtime`
-- `override.ahu.persistent_manual`
+- `sensor.quality.site.sv_range`
+- `control.loop.generic.pid_hunt_1`
+- `control.loop.ahu.fc1_duct_static_low`
+- `schedule.ahu.sched_1_unoccupied_runtime`
+- `schedule.ahu.sched_247_always_on`
 
 ---
 

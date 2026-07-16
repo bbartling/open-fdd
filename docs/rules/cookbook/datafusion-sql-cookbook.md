@@ -8,7 +8,7 @@ nav_order: 1
 
 Open-FDD edge executes fault detection as **DataFusion SQL** against Apache Arrow historian tables. Copy-paste rules into the **SQL FDD Rules** tab or `POST /api/fdd-rules/{id}/test-sql`.
 
-**Analyst mirror:** every section below has a matching implementation in the [Pandas cookbook](pandas-cookbook.html) for workflows **outside** Open-FDD.
+**Validated rule IDs** match the vibe19 pandas catalog (**59 rules**). Analyst mirror: [Pandas cookbook](pandas-cookbook.html).
 
 ---
 
@@ -18,21 +18,17 @@ Open-FDD edge executes fault detection as **DataFusion SQL** against Apache Arro
 2. [Fault confirmation delay (default 5 minutes)](#fault-confirmation-delay-default-5-minutes)
 3. [Haystack → SQL columns](#haystack--sql-columns)
 4. [Test & activate workflow](#test--activate-workflow)
-5. [Sensor validation](#sensor-validation)
-6. [Air handling units (FC1–FC15 / GL36 A–M)](#air-handling-units)
-7. [VAV zones](#vav-zones)
-8. [Economizer & ventilation](#economizer--ventilation)
-   - [AHU economizer diagnostics guide](#ahu-economizer-diagnostics-guide)
-   - [ECON-1–5](#econ-1--economizer-stuck-closed)
-   - [Ventilation & leakage cross-rules](#rule-map-economizer-family)
-9. [Central plants](#central-plants)
+5. [Sensor validation (sweep)](#sensor-validation-sweep)
+6. [Control-loop hunting](#control-loop-hunting)
+7. [Air handling units](#air-handling-units)
+8. [VAV terminals](#vav-terminals)
+9. [Central plant / condenser water](#central-plant--condenser-water)
 10. [Heat pumps](#heat-pumps)
 11. [Weather station](#weather-station)
-12. [Trim & respond advisory (GL36)](#trim--respond-advisory-gl36)
-13. [Extended rule families (v2)](#extended-rule-families-v2)
-14. [Extended rule families (P2)](#extended-rule-families-p2)
+12. [Trim & respond advisory](#trim--respond-advisory)
+13. [Schedule & occupancy](#schedule--occupancy)
+14. [Not yet in validated catalog](#not-yet-in-validated-catalog)
 15. [Framework & parity docs](#framework--parity-docs)
-16. [Debugging & windowing](#debugging--windowing)
 
 ---
 
@@ -40,8 +36,7 @@ Open-FDD edge executes fault detection as **DataFusion SQL** against Apache Arro
 
 | Term | Meaning |
 |------|---------|
-| `telemetry_pivot` | Wide historian table: `timestamp`, `equipment_id`, FDD input columns (`oa_t`, `sat`, …) |
-| `telemetry` | Long format (optional) — use pivot for most HVAC rules |
+| `telemetry_pivot` | Wide historian table: `timestamp`, `equipment_id`, FDD input columns |
 | `fault_raw` | Boolean — instantaneous fault condition (**required** output column) |
 | `confirmation_seconds` | Minimum duration fault must hold before latching (API applies **after** SQL) |
 
@@ -50,28 +45,23 @@ Column names come from your **Haystack assignment graph**, not BACnet instance n
 ### Rule template
 
 ```sql
--- confirmation_seconds: 300  (adjust in API/UI — default 5 minutes)
--- param: example_threshold = 5.0
-
+-- confirmation_seconds: 300
 SELECT
   timestamp,
   equipment_id,
-  oa_t,
   CASE
     WHEN oa_t IS NULL THEN false
-    WHEN oa_t < 40.0 OR oa_t > 110.0 THEN true
+    WHEN oa_t < -60.0 OR oa_t > 130.0 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu-id'
+WHERE equipment_id = 'equip:your-id'
 ```
 
 {: .important }
 Always handle **`NULL`** — missing samples must not latch faults.
 
 ### Command scaling (0–1 vs 0–100 %)
-
-Normalize in assignments, or inline:
 
 ```sql
 CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan_norm
@@ -83,11 +73,7 @@ CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan_norm
 
 Raw rules can flicker true for one poll cycle. Open-FDD debounces **after** SQL returns `fault_raw`.
 
-**Default:** `confirmation_seconds: 300` (5 minutes). Change per rule in the workbench or API:
-
-```json
-{"confirmation_seconds": 300}
-```
+**Default:** `confirmation_seconds: 300` (5 minutes). Change per rule in the workbench or API.
 
 ```bash
 curl -s -X POST http://127.0.0.1:8080/api/fdd-rules/RULE_ID/test-sql \
@@ -95,14 +81,6 @@ curl -s -X POST http://127.0.0.1:8080/api/fdd-rules/RULE_ID/test-sql \
   -H 'Content-Type: application/json' \
   -d '{"sql":"SELECT timestamp, equipment_id, ... AS fault_raw FROM telemetry_pivot","confirmation_seconds":300}'
 ```
-
-| Poll interval | `confirmation_seconds` | Approx. consecutive samples |
-|---------------|------------------------|----------------------------|
-| 60 s | **300** (default) | ~5 |
-| 60 s | 600 | ~10 |
-| 300 s | 900 | ~3 |
-
-Every rule below includes `-- confirmation_seconds: 300` in comments. Increase for advisory or hunting rules (e.g. FC4 PID hunting often uses **3600**).
 
 ---
 
@@ -114,729 +92,785 @@ Binding chain:
 Driver point → Haystack point → FDD input → telemetry_pivot column
 ```
 
-1. Commission drivers (BACnet / Modbus / Haystack / JSON)
-2. Build Haystack model (equipment + points)
-3. **Assignments** — map FDD inputs ([guide]({{ site.baseurl }}/modeling/assignments.html))
-4. Pivot exposes FDD input IDs as columns (`oa_t`, `sat`, `zone_t`, …)
-
-Discover columns: SQL FDD schema picker, Plots tab, or `GET /api/fdd-schema/fdd-inputs`.
-
-| Haystack role | FDD input | Pivot column |
-|---------------|-----------|--------------|
-| OA temp sensor | `oa_t` | `oa_t` |
-| SAT sensor | `sat` | `sat` |
-| SAT setpoint | `sat_sp` | `sat_sp` |
-| Zone temp | `zone_t` | `zone_t` |
-
-Replace `equip:your-ahu-id` with your scoped equipment ref in production.
+Validated catalog roles use Haystack-style names (`outside-air-temp`, `discharge-air-temp`, …). Map them to your pivot column names in assignments.
 
 ---
 
 ## Test & activate workflow
 
-1. Save rule: `POST /api/fdd-rules` with `review_status: draft`
-2. Test: `POST /api/fdd-rules/{id}/test-sql` with **`confirmation_seconds: 300`**
-3. Integrator approves in UI
-4. Activate: `POST /api/fdd-rules/{id}/activate`
-
-Link rules in **FDD Wires**: `driver_point → model_point → fdd_input → sql_rule → confirmation → fault_output`.
-
-Builder API for simple thresholds:
-
-```bash
-curl -s -X POST http://127.0.0.1:8080/api/fdd-rules/builder-sql \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"input":"oa_t","operator":"range","low":40,"high":110,"equipment_id":"equip:validation"}' | jq '.sql'
-```
+1. Paste SQL into **SQL FDD Rules** (or `test-sql` API)
+2. Confirm `fault_raw` boolean column
+3. Set `confirmation_seconds` (default 300)
+4. Integrator JWT required to **activate**
 
 ---
+## Sensor validation (sweep)
 
-## Sensor validation
+Sensor-sweep rules apply to **every modeled sensor** present on the equipment (not a single fixed point).
 
-Data-quality faults (bounds, flatline, rate-of-change, mixing envelope). Gate with equipment state (fan on, occupied) where appropriate.
+### SV-RANGE — Sensor out of hard range
+**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
+**Equation:** Any modeled sensor reads outside its physical hard range (e.g. OAT −60–130°F, SAT 30–150°F, CHWS 30–80°F).  
+**Default confirmation:** 300 s
 
-### Default bounds
-
-Tune per site in SQL literals or assignment transforms.
-
-| Sensor kind | Min | Max | Flatline tol | Max Δ/hr | Code |
-|-------------|-----|-----|--------------|----------|------|
-| Zone temp (°F) | 55 | 90 | 0.10 | 4.0 | VAV-C |
-| Supply air temp | 50 | 110 | 0.15 | 8.0 | AHU-C |
-| Return air temp | 55 | 95 | 0.10 | 3.0 | AHU-D |
-| Mixed air temp | 40 | 110 | 0.15 | 6.0 | AHU-D |
-| Outdoor air temp | −40 | 130 | 0.10 | 12.0 | BLD-B |
-| Duct static (inH₂O) | −0.5 | 3.0 | 0.02 | 0.5 | AHU-A |
-| Relative humidity (%) | 0 | 100 | 1.0 | 15.0 | DC-C |
-| CHW temp | 40 | 90 | 0.10 | 4.0 | CH-D |
-| Hot water temp | 70 | 200 | 0.15 | 6.0 | CH-D |
-| CO₂ (ppm, occupied) | 400 | 1000 | 5.0 | 200 | VAV-B |
-
-### SV-1 — Zone temperature out of range
-
-**Code:** `VAV-C` · **confirmation_seconds:** 300
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `range_scale_temperature` | Temp range scale | x | 1.0 | 0.5–2.0 |
+| `range_scale_humidity` | Humidity range scale | x | 1.0 | 0.5–2.0 |
+| `range_scale_pressure` | Pressure range scale | x | 1.0 | 0.5–2.0 |
 
 ```sql
-SELECT timestamp, equipment_id, zone_t,
-  CASE
-    WHEN zone_t IS NULL THEN false
-    WHEN zone_t < 55.0 OR zone_t > 90.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-vav'
-  AND occ_mode = 'occupied'
-```
-
-### SV-2 — OA temperature out of range
-
-**Code:** `BLD-B` · **confirmation_seconds:** 300
-
-```sql
-SELECT timestamp, equipment_id, oa_t,
+-- confirmation_seconds: 300
+-- Example hard-range screen for outdoor-air temperature (extend per sensor type)
+SELECT
+  timestamp, equipment_id, oa_t,
   CASE
     WHEN oa_t IS NULL THEN false
-    WHEN oa_t < 40.0 OR oa_t > 110.0 THEN true
+    WHEN oa_t < -60.0 OR oa_t > 130.0 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
 ```
 
-### SV-3 — OA humidity out of range
+### SV-FLATLINE — Sensor flatline (stuck)
+**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
+**Equation:** Sensor value unchanged (Δ ≤ tolerance) across the flatline window — stuck / frozen sensor.  
+**Default confirmation:** 300 s
 
-**Code:** `DC-C` · **confirmation_seconds:** 300
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `flatline_tol` | Flatline tolerance | °F | 0.1 | 0.02–1.0 |
+| `flatline_hours` | Flatline window | h | 1.0 | 0.5–8.0 |
 
+
+{: .important }
+**Simplified SQL variant.** Full rolling / multi-sensor logic for `SV-FLATLINE` is validated in Pandas. Use SQL for screening; use Pandas for parity and RCx studies.
 ```sql
-SELECT timestamp, equipment_id, oa_h,
+-- confirmation_seconds: 300
+-- rule: SV-FLATLINE — Sensor flatline (stuck)
+-- equation: Sensor value unchanged (Δ ≤ tolerance) across the flatline window — stuck / frozen sensor.
+
+SELECT
+  timestamp,
+  equipment_id,
   CASE
-    WHEN oa_h IS NULL THEN false
-    WHEN oa_h < 10.0 OR oa_h > 95.0 THEN true
+    -- Implement SV-FLATLINE against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
+WHERE equipment_id = 'equip:your-id'
 ```
 
-### SV-4 — Mixing envelope (prefer over RAT-only)
+### SV-SPIKE — Sensor rate-of-change spike
+**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
+**Equation:** Sample-to-sample jump exceeds the physical spike limit for the sensor type.  
+**Default confirmation:** 300 s
 
-When OAT, RAT, and MAT are present, use envelope checks — see [FC2](#fc2--mat-below-oatr-envelope-gl36-rule-b) and [FC3](#fc3--mat-above-oatr-envelope-gl36-rule-c).
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `spike_scale` | Spike limit scale (global) | x | 1.0 | 0.25–3.0 |
+| `spike_scale_temperature` | Temp spike scale | x | 1.0 | 0.25–3.0 |
+| `spike_scale_humidity` | Humidity spike scale | x | 1.0 | 0.25–3.0 |
+| `spike_scale_pressure` | Pressure spike scale | x | 1.0 | 0.25–3.0 |
 
-### SV-5 — Stale data (no recent samples)
 
-**Code:** `BLD-D` · **confirmation_seconds:** 300
+{: .important }
+**Simplified SQL variant.** Full rolling / multi-sensor logic for `SV-SPIKE` is validated in Pandas. Use SQL for screening; use Pandas for parity and RCx studies.
+```sql
+-- confirmation_seconds: 300
+-- rule: SV-SPIKE — Sensor rate-of-change spike
+-- equation: Sample-to-sample jump exceeds the physical spike limit for the sensor type.
+
+SELECT
+  timestamp,
+  equipment_id,
+  CASE
+    -- Implement SV-SPIKE against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### SV-STALE — Stale data (no fresh samples)
+**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
+**Equation:** All modeled sensors unchanged over the stale window — data feed likely dropped.  
+**Default confirmation:** 300 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `stale_hours` | Stale window | h | 2.0 | 0.5–12.0 |
 
 ```sql
-SELECT equipment_id,
-  MAX(timestamp) AS last_ts,
-  true AS fault_raw
+-- confirmation_seconds: 300
+-- Stale feed: no fresh samples in window (edge confirmation / historian gap)
+SELECT
+  timestamp, equipment_id,
+  CASE
+    WHEN timestamp < (SELECT max(timestamp) FROM telemetry_pivot) - INTERVAL '2 hours' THEN true
+    ELSE false
+  END AS fault_raw
 FROM telemetry_pivot
-GROUP BY equipment_id
-HAVING MAX(timestamp) < NOW() - INTERVAL '30' MINUTE
 ```
 
-Adapt interval syntax to your DataFusion version; test in `/sql-fdd` before activate.
+### SV-RATE — Context-aware sensor rate of change
+**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
+**Equation:** Implausible sustained rate-of-change for mapped sensors. Thresholds depend on quantity, location, and operating state (steady vs startup/shutdown transient). Engineering screening defaults — tune per site. Alias: SV-SLEW. Distinct from SV-SPIKE (one-sample jump), SV-RANGE, SV-FLATLINE, and PID-HUNT-1.  
+**Default confirmation:** 600 s
 
-### SV-6 — Flatline & rate-of-change
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `persistence_min` | Fault persistence | min | 10.0 | 5.0–60.0 |
+| `transition_window_min` | Transition window | min | 20.0 | 5.0–60.0 |
+| `max_gap_hours` | Max sample gap | h | 2.0 | 0.25–6.0 |
+| `design_flow` | Design flow (flow profiles) | cfm | 0.0 | 0.0–100000.0 |
+| `sensor_span` | Sensor span (flow/pressure) | eng | 0.0 | 0.0–100000.0 |
 
-Rolling flatline/spike detection is limited in edge SQL. Use **confirmation_seconds** with bounds rules, or run full rolling logic in the [Pandas cookbook](pandas-cookbook.html#sensor-validation).
 
----
+{: .important }
+**Simplified SQL variant.** Full rolling / multi-sensor logic for `SV-RATE` is validated in Pandas. Use SQL for screening; use Pandas for parity and RCx studies.
+```sql
+-- confirmation_seconds: 600
+-- rule: SV-RATE — Context-aware sensor rate of change
+-- equation: Implausible sustained rate-of-change for mapped sensors. Thresholds depend on quantity, location, and operating state (steady vs startup/shutdown transient). Engineering screening defaults — tune per site. Alias: SV-SLEW. Distinct from SV-SPIKE (one-sample jump), SV-RANGE, SV-FLATLINE, and PID-HUNT-1.
+
+SELECT
+  timestamp,
+  equipment_id,
+  CASE
+    -- Implement SV-RATE against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+## Control-loop hunting
+
+### PID-HUNT-1 — Suspected control-output hunting
+**Family:** `control` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `heatpump`  
+**Equation:** Rolling 1h total variation of any 0–100% control output (dampers, valves, fan speeds, heat/cool cmds) with span ≥20%, TV ≥500 %·pts, ≥2.5 equivalent cycles, ≥4 reversals — suspected loop hunting (not proof of bad PID alone).  
+**Default confirmation:** 300 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `change_deadband_pct` | Ignore changes below | % out | 1.0 | 0.0–10.0 |
+| `minimum_span_pct` | Minimum observed span | % out | 20.0 | 5.0–100.0 |
+| `total_variation_fault_pct` | Total travel threshold | %/h | 500.0 | 50.0–2000.0 |
+| `minimum_equivalent_cycles` | Min equivalent cycles | cyc/h | 2.5 | 0.5–20.0 |
+| `minimum_reversals` | Min direction reversals | count | 4 | 1–40 |
+| `minimum_coverage_pct` | Minimum data coverage | % | 80.0 | 25.0–100.0 |
+
+
+{: .important }
+**Simplified SQL variant.** Full rolling / multi-sensor logic for `PID-HUNT-1` is validated in Pandas. Use SQL for screening; use Pandas for parity and RCx studies.
+```sql
+-- confirmation_seconds: 300
+-- rule: PID-HUNT-1 — Suspected control-output hunting
+-- equation: Rolling 1h total variation of any 0–100% control output (dampers, valves, fan speeds, heat/cool cmds) with span ≥20%, TV ≥500 %·pts, ≥2.5 equivalent cycles, ≥4 reversals — suspected loop hunting (not proof of bad PID alone).
+
+SELECT
+  timestamp,
+  equipment_id,
+  CASE
+    -- Implement PID-HUNT-1 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
 
 ## Air handling units
 
-Reference: Open-FDD AHU fault conditions **FC1–FC15** (GL36-inspired). Default **`confirmation_seconds: 300`** unless noted.
+Includes GL36 FC1–FC15, AHU auxiliaries, economizer/ventilation, leakage, and outdoor-air screens.
 
-**Full metadata** for FC1–FC15 and all P0 rules: [P0 rule catalog](p0-rule-catalog.html).
+### FC1 — Duct static below SP at full fan (GL36 A)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan ≥ 87% AND duct static < static SP − 0.12 in.w.c.  
+**Default confirmation:** 300 s
 
-Shared params (tune per site):
-
-| Param | Default | Used in |
-|-------|---------|---------|
-| `mix_tol` | 1.15 °F | FC2, FC3, FC5, FC8, FC12 |
-| `supply_tol` | 1.15 °F | FC5, FC8, FC12, FC13 |
-| `ahu_min_oa_dpr` | 0.0–1.0 | FC4, FC6, FC8–FC15 |
-| `delta_supply_fan` | 0.55 °F | FC5, FC8, FC12, FC14, FC15 |
-| `fan_on_min` | 0.01 | Most FC rules |
-
----
-
-### FC1 — Duct static below SP at full fan (GL36 Rule A)
-
-| Field | Value |
-|-------|-------|
-| **id** | FC1 |
-| **taxonomy** | `control.loop.ahu.duct_static_low` |
-| **severity** | 3 · **confirmation_seconds** | 300 |
-| **required_points** | `duct_static`, `duct_static_sp`, `fan_cmd` |
-
-**Code:** `AHU-A` · **param:** `duct_static_err=0.12`, `fan_hi=0.87`
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `duct_static_err` | Duct static error | in. w.c. | 0.12 | 0.02–0.5 |
+| `fan_hi` | Fan high threshold | frac | 0.87 | 0.5–1.0 |
 
 ```sql
-SELECT timestamp, equipment_id, duct_static, duct_static_sp, fan_cmd,
+-- confirmation_seconds: 300
+-- param: duct_static_err = 0.12 ; fan_hi = 0.87
+SELECT
+  timestamp, equipment_id, duct_static, duct_static_sp, fan_cmd,
   CASE
     WHEN duct_static IS NULL OR duct_static_sp IS NULL OR fan_cmd IS NULL THEN false
-    WHEN duct_static < duct_static_sp - 0.12
-     AND CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END >= 0.87 THEN true
+    WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) >= 0.87
+     AND duct_static < duct_static_sp - 0.12 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-ahu'
 ```
 
----
+### FC2 — MAT below OAT/RAT envelope (GL36 B)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan on AND MAT + mix_tol < min(RAT − mix_tol, OAT − mix_tol) (≡ MAT < min(RAT, OAT) − 2·mix_tol; default mix_tol = 1.15°F).  
+**Default confirmation:** 600 s
 
-### FC2 — MAT below OAT/RAT envelope (GL36 Rule B)
-
-**Code:** `AHU-D` · **confirmation_seconds:** 600 · **param:** `mix_tol=1.15`
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
 
 ```sql
-SELECT timestamp, equipment_id, mat, oat, rat, fan_cmd,
+-- confirmation_seconds: 600
+-- param: mat_env = 2.2
+SELECT
+  timestamp, equipment_id, mat, oa_t, rat, fan_cmd,
   CASE
-    WHEN mat IS NULL OR oat IS NULL OR rat IS NULL OR fan_cmd IS NULL THEN false
-    WHEN CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END <= 0.01 THEN false
-    WHEN mat - 1.15 < LEAST(rat - 1.15, oat - 1.15) THEN true
+    WHEN mat IS NULL OR oa_t IS NULL OR rat IS NULL THEN false
+    WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE COALESCE(fan_cmd, 1.0) END) >= 0.05
+     AND mat < LEAST(oa_t, rat) - 2.2 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-ahu'
 ```
 
----
+### FC3 — MAT above OAT/RAT envelope (GL36 C)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan on AND MAT − mix_tol > max(RAT + mix_tol, OAT + mix_tol) (≡ MAT > max(RAT, OAT) + 2·mix_tol; default mix_tol = 1.15°F).  
+**Default confirmation:** 600 s
 
-### FC3 — MAT above OAT/RAT envelope (GL36 Rule C)
-
-**Code:** `AHU-D` · **confirmation_seconds:** 600
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
 
 ```sql
-SELECT timestamp, equipment_id, mat, oat, rat, fan_cmd,
+-- confirmation_seconds: 600
+SELECT
+  timestamp, equipment_id, mat, oa_t, rat, fan_cmd,
   CASE
-    WHEN mat IS NULL OR oat IS NULL OR rat IS NULL OR fan_cmd IS NULL THEN false
-    WHEN CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END <= 0.01 THEN false
-    WHEN mat - 1.15 > GREATEST(rat + 1.15, oat + 1.15) THEN true
+    WHEN mat IS NULL OR oa_t IS NULL OR rat IS NULL THEN false
+    WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE COALESCE(fan_cmd, 1.0) END) >= 0.05
+     AND mat > GREATEST(oa_t, rat) + 2.2 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-ahu'
 ```
-
----
 
 ### FC4 — PID hunting (operating-state oscillation)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** More than 5 operating-mode entry transitions in any hour (heating/econ/mech modes).  
+**Default confirmation:** 3600 s
 
-**Code:** `AHU-PID-HUNT` · **confirmation_seconds:** 3600 (recommended) · **param:** `delta_os_max=5`
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `delta_os_max` | Max mode changes/hr | count | 5 | 2–20 |
 
-Counts excessive **operating-mode transitions per hour** (heating-only, economizer-only, economizer+mech, mech-only). High transition count indicates PID loops hunting.
 
-**Edge SQL** — hourly mode-transition count via window (simplified; full resample logic in [Pandas FC4](pandas-cookbook.html#fc4--pid-hunting-operating-state-oscillation)):
-
+{: .important }
+**Simplified SQL variant.** Full rolling / multi-sensor logic for `FC4` is validated in Pandas. Use SQL for screening; use Pandas for parity and RCx studies.
 ```sql
 -- confirmation_seconds: 3600
--- param: delta_os_max = 5, ahu_min_oa_dpr = 0.05
+-- rule: FC4 — PID hunting (operating-state oscillation)
+-- equation: More than 5 operating-mode entry transitions in any hour (heating/econ/mech modes).
 
-WITH base AS (
-  SELECT
-    timestamp,
-    equipment_id,
-    CASE
-      WHEN htg_valve_pct > 0 AND clg_valve_pct = 0
-       AND CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END > 0
-       AND oa_damper_pct = 0.05 THEN 'htg'
-      WHEN htg_valve_pct = 0 AND clg_valve_pct = 0
-       AND CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END > 0
-       AND oa_damper_pct > 0.05 THEN 'econ'
-      WHEN htg_valve_pct = 0 AND clg_valve_pct > 0
-       AND CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END > 0
-       AND oa_damper_pct > 0.05 THEN 'econ_mech'
-      WHEN htg_valve_pct = 0 AND clg_valve_pct > 0
-       AND CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END > 0
-       AND oa_damper_pct = 0.05 THEN 'mech'
-      ELSE 'other'
-    END AS os_mode
-  FROM telemetry_pivot
-  WHERE equipment_id = 'equip:your-ahu'
-),
-transitions AS (
-  SELECT *,
-    CASE WHEN os_mode <> LAG(os_mode) OVER (ORDER BY timestamp)
-          AND LAG(os_mode) OVER (ORDER BY timestamp) IS NOT NULL
-         THEN 1 ELSE 0 END AS mode_change
-  FROM base
-)
-SELECT timestamp, equipment_id,
+SELECT
+  timestamp,
+  equipment_id,
+  outside_air_damper,
+  cooling_valve,
+  fan_cmd,
   CASE
-    WHEN SUM(mode_change) OVER (
-      ORDER BY timestamp
-      RANGE BETWEEN INTERVAL '1' HOUR PRECEDING AND CURRENT ROW
-    ) > 5 THEN true
-    ELSE false
-  END AS fault_raw
-FROM transitions
-```
-
-Replace `0.05` with your site's `ahu_min_oa_dpr`. Test window syntax in `/sql-fdd` — DataFusion versions differ on `RANGE` intervals.
-
----
-
-### FC5 — SAT cold when heating commanded (GL36 Rule D)
-
-**Code:** `AHU-B` · **confirmation_seconds:** 600 · **param:** `delta_supply_fan=0.55`
-
-```sql
-SELECT timestamp, equipment_id, sat, mat, htg_valve_pct, fan_cmd,
-  CASE
-    WHEN sat IS NULL OR mat IS NULL OR htg_valve_pct IS NULL OR fan_cmd IS NULL THEN false
-    WHEN CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END <= 0.01 THEN false
-    WHEN CASE WHEN htg_valve_pct > 1.0 THEN htg_valve_pct/100.0 ELSE htg_valve_pct END <= 0.01 THEN false
-    WHEN sat + 1.15 <= mat - 1.15 + 0.55 THEN true
+    -- Implement FC4 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
+WHERE equipment_id = 'equip:your-id'
 ```
 
----
+### FC5 — SAT cold when heating commanded (GL36 D)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan on AND heating > 1% AND SAT + mix_tol ≤ MAT − mix_tol + 0.55°F (default mix_tol = 1.15°F).  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: FC5 — SAT cold when heating commanded (GL36 D)
+-- equation: Fan on AND heating > 1% AND SAT + mix_tol ≤ MAT − mix_tol + 0.55°F (default mix_tol = 1.15°F).
+
+SELECT
+  timestamp,
+  equipment_id,
+  discharge_air_temp,
+  mixed_air_temp,
+  fan_cmd,
+  heating_valve,
+  CASE
+    -- Implement FC5 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
 
 ### FC6 — Estimated OA fraction mismatch
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** |RAT−OAT| ≥ 5°F AND |estimated OA% − design min OA%| > 15% in heating/mech-only modes.  
+**Default confirmation:** 600 s
 
-**Code:** `AHU-OA-FRAC` · **confirmation_seconds:** 600 · **param:** `airflow_err=0.15`, `oat_rat_delta_min=5.0`
-
-Requires `vav_total_flow` historian column (summed VAV airflow or fan AFMS).
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `airflow_err` | OA fraction error | frac | 0.15 | 0.05–0.5 |
+| `min_cfm_design` | Design min OA CFM | cfm | 5000 | 500–20000 |
 
 ```sql
-SELECT timestamp, equipment_id, mat, oat, rat, vav_total_flow,
-  htg_valve_pct, clg_valve_pct, oa_damper_pct, fan_cmd,
+-- confirmation_seconds: 600
+-- rule: FC6 — Estimated OA fraction mismatch
+-- equation: |RAT−OAT| ≥ 5°F AND |estimated OA% − design min OA%| > 15% in heating/mech-only modes.
+
+SELECT
+  timestamp,
+  equipment_id,
+  mixed_air_temp,
+  outside_air_temp,
+  return_air_temp,
+  vav_total_airflow,
   CASE
-    WHEN mat IS NULL OR oat IS NULL OR rat IS NULL OR vav_total_flow IS NULL THEN false
-    WHEN ABS(rat - oat) < 5.0 THEN false
-    WHEN ABS(oat - rat) < 0.01 THEN false
-    WHEN (
-      ABS(
-        GREATEST((mat - rat) / NULLIF(oat - rat, 0), 0)
-        - (ahu_min_cfm_design / NULLIF(vav_total_flow, 0))
-      ) > 0.15
-      AND ABS(rat - oat) >= 5.0
-      AND (
-        (CASE WHEN htg_valve_pct > 1.0 THEN htg_valve_pct/100.0 ELSE htg_valve_pct END > 0
-         AND CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END > 0)
-        OR
-        (CASE WHEN htg_valve_pct > 1.0 THEN htg_valve_pct/100.0 ELSE htg_valve_pct END = 0
-         AND CASE WHEN clg_valve_pct > 1.0 THEN clg_valve_pct/100.0 ELSE clg_valve_pct END > 0
-         AND oa_damper_pct = 0.05)
-      )
-    ) THEN true
+    -- Implement FC6 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### FC7 — SAT low with full heating (GL36 E)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan on AND heating > 90% AND SAT < SAT SP − 1.0°F.  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `sat_err` | SAT error | °F | 1.0 | 0.25–5.0 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: FC7 — SAT low with full heating (GL36 E)
+-- equation: Fan on AND heating > 90% AND SAT < SAT SP − 1.0°F.
+
+SELECT
+  timestamp,
+  equipment_id,
+  discharge_air_temp,
+  discharge_air_temp_sp,
+  fan_cmd,
+  heating_valve,
+  CASE
+    -- Implement FC7 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### FC8 — SAT/MAT mismatch in economizer (GL36 F)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Economizer open, CHW < 10%, |SAT − 0.55°F − MAT| > √(supply_tol²+mix_tol²).  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+| `supply_tol` | Supply tolerance | °F | 1.15 | 0.25–3.0 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: FC8 — SAT/MAT mismatch in economizer (GL36 F)
+-- equation: Economizer open, CHW < 10%, |SAT − 0.55°F − MAT| > √(supply_tol²+mix_tol²).
+
+SELECT
+  timestamp,
+  equipment_id,
+  discharge_air_temp,
+  mixed_air_temp,
+  outside_air_damper,
+  cooling_valve,
+  CASE
+    -- Implement FC8 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### FC9 — OAT too warm for free cooling (GL36 G)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Economizer open, CHW < 10%, OAT − mix_tol > SAT SP − 0.55°F + mix_tol.  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: FC9 — OAT too warm for free cooling (GL36 G)
+-- equation: Economizer open, CHW < 10%, OAT − mix_tol > SAT SP − 0.55°F + mix_tol.
+
+SELECT
+  timestamp,
+  equipment_id,
+  outside_air_temp,
+  discharge_air_temp_sp,
+  outside_air_damper,
+  cooling_valve,
+  CASE
+    -- Implement FC9 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### FC10 — OAT/MAT mismatch + mech cooling (GL36 H)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** CHW > 1%, economizer > 90%, |MAT − OAT| > √(mix_tol²+mix_tol²).  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: FC10 — OAT/MAT mismatch + mech cooling (GL36 H)
+-- equation: CHW > 1%, economizer > 90%, |MAT − OAT| > √(mix_tol²+mix_tol²).
+
+SELECT
+  timestamp,
+  equipment_id,
+  mixed_air_temp,
+  outside_air_temp,
+  outside_air_damper,
+  cooling_valve,
+  CASE
+    -- Implement FC10 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### FC11 — OAT/MAT mismatch economizer-only (GL36 I)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** CHW > 1%, economizer > 90%, OAT + mix_tol < SAT SP − 0.55°F − mix_tol.  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: FC11 — OAT/MAT mismatch economizer-only (GL36 I)
+-- equation: CHW > 1%, economizer > 90%, OAT + mix_tol < SAT SP − 0.55°F − mix_tol.
+
+SELECT
+  timestamp,
+  equipment_id,
+  outside_air_temp,
+  discharge_air_temp_sp,
+  outside_air_damper,
+  cooling_valve,
+  CASE
+    -- Implement FC11 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### FC12 — SAT above blend in cooling (GL36 J)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** CHW > 1%, SAT − supply_tol − 0.55°F > MAT + mix_tol at min or full economizer.  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+| `supply_tol` | Supply tolerance | °F | 1.15 | 0.25–3.0 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: FC12 — SAT above blend in cooling (GL36 J)
+-- equation: CHW > 1%, SAT − supply_tol − 0.55°F > MAT + mix_tol at min or full economizer.
+
+SELECT
+  timestamp,
+  equipment_id,
+  discharge_air_temp,
+  mixed_air_temp,
+  outside_air_damper,
+  cooling_valve,
+  CASE
+    -- Implement FC12 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### FC13 — SAT above SP at full cooling (GL36 K)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** CHW > 1%, SAT > SAT SP + 1.0°F at min or full economizer.  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `sat_err` | SAT error | °F | 1.0 | 0.25–5.0 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: FC13 — SAT above SP at full cooling (GL36 K)
+-- equation: CHW > 1%, SAT > SAT SP + 1.0°F at min or full economizer.
+
+SELECT
+  timestamp,
+  equipment_id,
+  discharge_air_temp,
+  discharge_air_temp_sp,
+  outside_air_damper,
+  cooling_valve,
+  CASE
+    -- Implement FC13 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### FC14 — CHW coil ΔT when inactive (GL36 L)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Cooling coil ΔT ≥ √(mix_tol²+mix_tol²)+0.55°F while coil should be inactive.  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: FC14 — CHW coil ΔT when inactive (GL36 L)
+-- equation: Cooling coil ΔT ≥ √(mix_tol²+mix_tol²)+0.55°F while coil should be inactive.
+
+SELECT
+  timestamp,
+  equipment_id,
+  cooling_coil_entering_temp,
+  cooling_coil_leaving_temp,
+  outside_air_damper,
+  cooling_valve,
+  CASE
+    -- Implement FC14 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### FC15 — HW coil ΔT when inactive (GL36 M)
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Heating coil ΔT ≥ √(mix_tol²+mix_tol²)+0.55°F while coil should be inactive.  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: FC15 — HW coil ΔT when inactive (GL36 M)
+-- equation: Heating coil ΔT ≥ √(mix_tol²+mix_tol²)+0.55°F while coil should be inactive.
+
+SELECT
+  timestamp,
+  equipment_id,
+  heating_coil_entering_temp,
+  heating_coil_leaving_temp,
+  outside_air_damper,
+  cooling_valve,
+  CASE
+    -- Implement FC15 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### AHU-SATDEV — SAT deviation from setpoint
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** |SAT − SAT SP| > 5°F.  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `sat_dev_err` | SAT deviation | °F | 5.0 | 1.0–15.0 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: AHU-SATDEV — SAT deviation from setpoint
+-- equation: |SAT − SAT SP| > 5°F.
+
+SELECT
+  timestamp,
+  equipment_id,
+  discharge_air_temp,
+  discharge_air_temp_sp,
+  CASE
+    -- Implement AHU-SATDEV against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### AHU-DUCTHI — Duct static pressure high
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Duct static > static SP + margin. Evaluates when fan is proven on OR duct static itself exceeds pressure_on_min (catches high static with fan-status off).  
+**Default confirmation:** 300 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `duct_high_margin` | High margin | in. w.c. | 0.25 | 0.05–1.0 |
+| `pressure_on_min` | Pressure-on evidence | in. w.c. | 0.2 | 0.05–1.0 |
+
+```sql
+-- confirmation_seconds: 300
+-- rule: AHU-DUCTHI — Duct static pressure high
+-- equation: Duct static > static SP + margin. Evaluates when fan is proven on OR duct static itself exceeds pressure_on_min (catches high static with fan-status off).
+
+SELECT
+  timestamp,
+  equipment_id,
+  duct_static_pressure,
+  duct_static_pressure_sp,
+  CASE
+    -- Implement AHU-DUCTHI against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### AHU-SIMUL — Heating and cooling simultaneous
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Heating valve > 10% AND cooling valve > 10% at once.  
+**Default confirmation:** 300 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `valve_open_pct` | Valve open threshold | frac | 0.1 | 0.05–0.5 |
+
+```sql
+-- confirmation_seconds: 300
+-- rule: AHU-SIMUL — Heating and cooling simultaneous
+-- equation: Heating valve > 10% AND cooling valve > 10% at once.
+
+SELECT
+  timestamp,
+  equipment_id,
+  heating_valve,
+  cooling_valve,
+  CASE
+    -- Implement AHU-SIMUL against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### OAT-METEO — BAS outdoor-air sensor vs Open-Meteo
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** BAS OAT sensor differs from Open-Meteo dry bulb by more than 5°F.  
+**Default confirmation:** 900 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `oat_err` | Max OAT disagreement | °F | 5.0 | 2.0–20.0 |
+
+```sql
+-- confirmation_seconds: 300
+-- param: oat_meteo_err = 8.0
+-- Requires Open-Meteo (or equivalent) outdoor temp column `oat_meteo`
+SELECT
+  timestamp, equipment_id, oa_t, oat_meteo,
+  CASE
+    WHEN oa_t IS NULL OR oat_meteo IS NULL THEN false
+    WHEN abs(oa_t - oat_meteo) > 8.0 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-ahu'
 ```
-
-Tune `ahu_min_cfm_design` and `0.05` (`ahu_min_oa_dpr`) per site.
-
----
-
-### FC7 — SAT low with full heating (GL36 Rule E)
-
-**Code:** `AHU-C` · **confirmation_seconds:** 600 · **param:** `sat_err=1.0`
-
-```sql
-SELECT timestamp, equipment_id, sat, sat_sp, htg_valve_pct, fan_cmd,
-  CASE
-    WHEN sat IS NULL OR sat_sp IS NULL OR htg_valve_pct IS NULL OR fan_cmd IS NULL THEN false
-    WHEN CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END <= 0.01 THEN false
-    WHEN sat < sat_sp - 1.0
-     AND CASE WHEN htg_valve_pct > 1.0 THEN htg_valve_pct/100.0 ELSE htg_valve_pct END > 0.9 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-### FC8 — SAT above blend in economizer mode (GL36 Rule F)
-
-**Code:** `AHU-E` · **confirmation_seconds:** 600 · **param:** `ahu_min_oa_dpr=0.05`
-
-```sql
-SELECT timestamp, equipment_id, sat, mat, oa_damper_pct, clg_valve_pct,
-  CASE
-    WHEN sat IS NULL OR mat IS NULL OR oa_damper_pct IS NULL OR clg_valve_pct IS NULL THEN false
-    WHEN oa_damper_pct <= 0.05 OR clg_valve_pct >= 0.1 THEN false
-    WHEN ABS(sat - 0.55 - mat) > SQRT(POWER(1.15, 2) + POWER(1.15, 2)) THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-### FC9 — OAT too warm for free cooling (GL36 Rule G)
-
-**Code:** `AHU-E` · **confirmation_seconds:** 600
-
-```sql
-SELECT timestamp, equipment_id, oat, sat_sp, oa_damper_pct, clg_valve_pct,
-  CASE
-    WHEN oat IS NULL OR sat_sp IS NULL OR oa_damper_pct IS NULL OR clg_valve_pct IS NULL THEN false
-    WHEN oa_damper_pct <= 0.05 OR clg_valve_pct >= 0.1 THEN false
-    WHEN (oat - 1.15) > (sat_sp - 0.55 + 1.15) THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-### FC10 — OAT/MAT mismatch + mech cooling (GL36 Rule H)
-
-**Code:** `AHU-E` · **confirmation_seconds:** 600
-
-```sql
-SELECT timestamp, equipment_id, mat, oat, oa_damper_pct, clg_valve_pct,
-  CASE
-    WHEN mat IS NULL OR oat IS NULL OR oa_damper_pct IS NULL OR clg_valve_pct IS NULL THEN false
-    WHEN clg_valve_pct <= 0.01 OR oa_damper_pct <= 0.9 THEN false
-    WHEN ABS(mat - oat) > SQRT(POWER(1.15, 2) + POWER(1.15, 2)) THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-### FC11 — OAT/MAT mismatch economizer-only (GL36 Rule I)
-
-**Code:** `AHU-E` · **confirmation_seconds:** 600
-
-```sql
-SELECT timestamp, equipment_id, oat, sat_sp, oa_damper_pct, clg_valve_pct,
-  CASE
-    WHEN oat IS NULL OR sat_sp IS NULL OR oa_damper_pct IS NULL OR clg_valve_pct IS NULL THEN false
-    WHEN clg_valve_pct <= 0.01 OR oa_damper_pct <= 0.9 THEN false
-    WHEN (oat + 1.15) < (sat_sp - 0.55 - 1.15) THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-### FC12 — SAT above blend in cooling (GL36 Rule J)
-
-**Code:** `AHU-B` · **confirmation_seconds:** 600
-
-```sql
-SELECT timestamp, equipment_id, sat, mat, oa_damper_pct, clg_valve_pct,
-  CASE
-    WHEN sat IS NULL OR mat IS NULL OR oa_damper_pct IS NULL OR clg_valve_pct IS NULL THEN false
-    WHEN clg_valve_pct <= 0.01 THEN false
-    WHEN (
-      (sat - 1.15 - 0.55 > mat + 1.15 AND oa_damper_pct = 0.05)
-      OR (sat - 1.15 - 0.55 > mat + 1.15 AND oa_damper_pct > 0.9)
-    ) THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-### FC13 — SAT above SP at full cooling (GL36 Rule K)
-
-**Code:** `AHU-C` · **confirmation_seconds:** 600 · **param:** `sat_err=1.0`
-
-```sql
-SELECT timestamp, equipment_id, sat, sat_sp, oa_damper_pct, clg_valve_pct,
-  CASE
-    WHEN sat IS NULL OR sat_sp IS NULL OR oa_damper_pct IS NULL OR clg_valve_pct IS NULL THEN false
-    WHEN clg_valve_pct <= 0.01 THEN false
-    WHEN sat > sat_sp + 1.0
-     AND (oa_damper_pct = 0.05 OR oa_damper_pct > 0.9) THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-### FC14 — CHW coil ΔT when inactive (GL36 Rule L)
-
-**Code:** `CH-C` · **confirmation_seconds:** 600
-
-```sql
-SELECT timestamp, equipment_id,
-  clg_coil_enter_t, clg_coil_leave_t, oa_damper_pct, htg_valve_pct, clg_valve_pct, fan_cmd,
-  CASE
-    WHEN clg_coil_enter_t IS NULL OR clg_coil_leave_t IS NULL THEN false
-    WHEN (clg_coil_enter_t - clg_coil_leave_t) >= SQRT(POWER(1.15, 2) + POWER(1.15, 2)) + 0.55
-     AND (
-       (oa_damper_pct > 0.05 AND clg_valve_pct < 0.1)
-       OR (htg_valve_pct > 0 AND fan_cmd > 0)
-     ) THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-### FC15 — HW coil ΔT when inactive (GL36 Rule M)
-
-**Code:** `AHU-B` · **confirmation_seconds:** 600
-
-```sql
-SELECT timestamp, equipment_id,
-  htg_coil_enter_t, htg_coil_leave_t, oa_damper_pct, htg_valve_pct, clg_valve_pct, fan_cmd,
-  CASE
-    WHEN htg_coil_enter_t IS NULL OR htg_coil_leave_t IS NULL THEN false
-    WHEN (htg_coil_enter_t - htg_coil_leave_t) >= SQRT(POWER(1.15, 2) + POWER(1.15, 2)) + 0.55
-     AND (
-       (oa_damper_pct > 0.05 AND clg_valve_pct < 0.1)
-       OR (clg_valve_pct > 0.01 AND oa_damper_pct = 0.05)
-       OR (clg_valve_pct > 0.01 AND oa_damper_pct > 0.9)
-     ) THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-### AHU — Additional patterns
-
-#### SAT deviation from setpoint
-
-**Code:** `SAT_DEVIATION_HIGH` · **confirmation_seconds:** 600 · **param:** `err=5.0`
-
-```sql
-SELECT timestamp, equipment_id, sat, sat_sp,
-  CASE
-    WHEN sat IS NULL OR sat_sp IS NULL THEN false
-    WHEN ABS(sat - sat_sp) > 5.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
-#### Duct static pressure high
-
-**Code:** `DUCT_STATIC_HIGH` · **confirmation_seconds:** 300 · **param:** `margin=0.25`
-
-```sql
-SELECT timestamp, equipment_id, duct_static, duct_static_sp,
-  CASE
-    WHEN duct_static IS NULL OR duct_static_sp IS NULL THEN false
-    WHEN duct_static > duct_static_sp + 0.25 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
-#### Heating and cooling simultaneous
-
-**Code:** `HEAT_COOL_SIMULTANEOUS` · **confirmation_seconds:** 300
-
-```sql
-SELECT timestamp, equipment_id, htg_valve_pct, clg_valve_pct,
-  CASE
-    WHEN htg_valve_pct IS NULL OR clg_valve_pct IS NULL THEN false
-    WHEN htg_valve_pct > 10.0 AND clg_valve_pct > 10.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
-#### Fan off but duct still warm
-
-**Code:** `FAN_OFF_DUCT_WARM` · **confirmation_seconds:** 600 · **param:** `delta=15.0`
-
-```sql
-SELECT timestamp, equipment_id, fan_cmd, duct_t, oa_t,
-  CASE
-    WHEN fan_cmd IS NULL OR duct_t IS NULL OR oa_t IS NULL THEN false
-    WHEN fan_cmd = false AND duct_t > oa_t + 15.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-## VAV zones
-
-### VAV-1 — Zone temperature comfort band
-
-**Code:** `ZONE_TEMP_OUT_OF_BAND` · **confirmation_seconds:** 900 · **param:** `lo=68`, `hi=76`
-
-```sql
-SELECT timestamp, equipment_id, zone_t,
-  CASE
-    WHEN zone_t IS NULL THEN false
-    WHEN zone_t < 68.0 OR zone_t > 76.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-vav'
-```
-
-### VAV-2 — Night setback miss
-
-**Code:** `NIGHT_SETBACK_MISS` · **confirmation_seconds:** 1800 · **param:** `unocc_max=78`
-
-```sql
-SELECT timestamp, equipment_id, zone_t, occ_mode,
-  CASE
-    WHEN zone_t IS NULL OR occ_mode IS NULL THEN false
-    WHEN occ_mode = 'unoccupied' AND zone_t > 78.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-vav'
-```
-
-### VAV-3 — Excessive reheat during warm weather
-
-**Code:** `VAV-REHEAT-WARM` · **confirmation_seconds:** 300 · **param:** `oat_cutoff=78`, `reheat_min=0.52`
-
-```sql
-SELECT timestamp, equipment_id, oa_t, reheat_valve_pct,
-  CASE
-    WHEN oa_t IS NULL OR reheat_valve_pct IS NULL THEN false
-    WHEN oa_t > 78.0
-     AND CASE WHEN reheat_valve_pct > 1.0 THEN reheat_valve_pct/100.0 ELSE reheat_valve_pct END > 0.52 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-vav'
-```
-
-### VAV-4 — Damper stuck at full open
-
-**Code:** `VAV-DPR-100` · **confirmation_seconds:** 900 · **param:** `full_open=97.5`
-
-Use confirmation to approximate sustained full-open (rolling min is easier in [Pandas VAV-4](pandas-cookbook.html#vav-zones)):
-
-```sql
-SELECT timestamp, equipment_id, damper_pct,
-  CASE
-    WHEN damper_pct IS NULL THEN false
-    WHEN damper_pct > 97.5 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-vav'
-```
-
----
-
-## Economizer & ventilation
-
-Continuous FDD and RCx checks for **air-side economizers**: use outdoor air when favorable, avoid mechanical cooling when economizing is available, and meet ventilation minimums.
-
-### AHU economizer diagnostics guide
-
-#### Operating modes (GL36-style)
-
-AHU supervisory logic cycles among heating-only, economizer, economizer + mechanical cooling, and mechanical-cooling-only bands. Mode misclassification drives false positives — normalize `fan_cmd`, `oa_damper_pct`, and valve commands to **0–1** before comparing thresholds.
-
-| Mode | Heating | Cooling | Supply fan | OA damper | Typical fault signals |
-|------|---------|---------|------------|-----------|------------------------|
-| **OS1** heating only | on | off | on | minimum | FC5, FC7, ECON-5 preheat waste |
-| **OS2** economizer (dry-bulb) | off | off | on | modulated (high) | ECON-1 stuck closed, ECON-2 unfavorable |
-| **OS3** econ + mech cool | off | on | on | modulated | ECON-3, FC8–FC11 SAT/MAT in econ |
-| **OS4** mech cool only | off | on | on | minimum | ECON-3 inverse, cooling valve faults |
-
-Mode-transition hunting is covered under [FC4 — PID / operating-mode hunting](#fc4--operating-mode-transition-hunting-gl36-rule-d).
-
-#### Required historian columns
-
-Assign Haystack (or BACnet) points to these semantic IDs before running economizer SQL:
-
-| Semantic ID | Common aliases | Used for |
-|-------------|----------------|----------|
-| `oa_t` | `oat`, outside air temp | Cutoffs, stuck-closed checks |
-| `oa_h` | outside air RH | Enthalpy economizer (optional) |
-| `mat` | mixed air temp | Blend envelope, OA fraction |
-| `rat` / `ra_t` | return air temp | OA fraction denominator |
-| `oa_damper_pct` | `econ`, OA damper | Modulation, stuck, leakage |
-| `clg_valve_pct`, `htg_valve_pct` | cooling/heating valves | Mode detection |
-| `fan_cmd`, `fan_status` | supply fan | Proving unit operation |
-| `sat`, `sat_sp` | supply air temp / setpoint | Preheat and SAT faults |
-| `preheat_leave_t` | preheat discharge temp | ECON-5 |
-
-#### Core formulas
-
-**Outdoor air fraction** (dry-bulb mass-flow proxy):
-
-```text
-oa_frac = (mat - rat) / (oa_t - rat)
-```
-
-Skip the sample when `ABS(rat - oa_t) < 2.2` °F — no usable mixing signal.
-
-**Expected mixed air at full economizer** (sanity plot): when `oa_damper_pct > 0.90` and `ABS(rat - oa_t) > 5` °F, expect `mat ≈ oa_t` (within sensor tolerance).
-
-**Dry-bulb economizer favorable** (cooling season, default cutoffs):
-
-```text
-fan_proven AND oa_t < oat_cutoff   -- default oat_cutoff = 63 °F
-```
-
-#### Dry-bulb vs enthalpy economizer
-
-Most packaged rules below use **dry-bulb** thresholds (OAT only). **Enthalpy** economizers compare outdoor vs return enthalpy and need `oa_h` plus return humidity (`ra_h` or derived). Favorable cooling when outdoor enthalpy is below return enthalpy — thresholds vary by climate and controller vendor.
-
-Open-FDD ships dry-bulb defaults; tune `oat_cutoff`, `dpr_min`, and `oa_min_pct` per site. For enthalpy parity in Pandas, compute enthalpy off-box (e.g. psychrometric library) and mirror the same boolean gate in SQL assignments.
-
-#### RCx diagnostic workflow
-
-1. **Sensor quality** — run SV-1–SV-4 on `oa_t`, `mat`, `rat` before economizer rules latch.
-2. **Trend review** — plot OAT, MAT, RAT, and OA damper % on a summer occupied day.
-3. **Mode bands** — shade OS2/OS3 from damper + valve positions; confirm transitions match expectations.
-4. **Core economizer** — ECON-1 → ECON-3 (stuck closed, unfavorable economizing, mech when econ available).
-5. **Ventilation** — ECON-4, OA-1, OA-2 for minimum OA / DCV.
-6. **Hardware** — DMP-1 damper leakage; FC14–FC15 valve/damper at minimum position.
-7. **Confirm** — default 300–600 s API confirmation; extend for advisory / trim rules.
-
-#### Rule map (economizer family)
-
-| Rule | Focus | Where |
-|------|-------|-------|
-| ECON-1 | Damper closed when OAT favorable | below |
-| ECON-2 | Damper open when OAT unfavorable (hot) | below |
-| ECON-3 | Mechanical cooling when OAT cold enough to economize | below |
-| ECON-4 | Estimated OA fraction below design | below |
-| ECON-5 | Preheat coil over-conditioning | below |
-| OA-1 | Low OA fraction (extended) | [Extended v2 — OA-1](#oa-1--low-estimated-outdoor-air-fraction) |
-| OA-2 | DCV minimum OA not met | [Extended P2 — OA-2](#oa-2--dcv-minimum-outdoor-air-not-met) |
-| DMP-1 | OA damper leakage at commanded closed | [Extended v2 — DMP-1](#dmp-1--oa-damper-leakage) |
-| FC6 | OA fraction mismatch (GL36) | [FC6](#fc6--estimated-oa-fraction-mismatch) |
-| FC8–FC11 | SAT/MAT faults in economizer modes | [Air handling units](#air-handling-units) |
-
----
 
 ### ECON-1 — Economizer stuck closed
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan on, OA damper < 5%, OAT > 55°F (should be economizing).  
+**Default confirmation:** 600 s
 
-**Code:** `ECONOMIZER_STUCK_CLOSED` · **confirmation_seconds:** 600
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `econ1_oat_min` | Favorable OAT | °F | 55.0 | 45.0–70.0 |
 
 ```sql
-SELECT timestamp, equipment_id, fan_cmd, oa_damper_pct, oa_t,
+-- confirmation_seconds: 600
+SELECT
+  timestamp, equipment_id, oa_damper_pct, oa_t, mat, rat, fan_cmd,
   CASE
-    WHEN fan_cmd IS NULL OR oa_damper_pct IS NULL OR oa_t IS NULL THEN false
-    WHEN fan_cmd = true AND oa_damper_pct < 5.0 AND oa_t > 55.0 THEN true
+    WHEN oa_damper_pct IS NULL OR mat IS NULL OR oa_t IS NULL THEN false
+    WHEN (CASE WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END) <= 0.05
+     AND abs(mat - oa_t) > 5.0
+     AND (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE COALESCE(fan_cmd, 1.0) END) >= 0.05 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -844,557 +878,507 @@ WHERE equipment_id = 'equip:your-ahu'
 ```
 
 ### ECON-2 — Economizing when outdoor unfavorable
-
-**Code:** `ECON-WHEN-SHOULDNT` · **confirmation_seconds:** 300 · **param:** `oat_cutoff=63`, `dpr_min=0.42`
-
-```sql
-SELECT timestamp, equipment_id, oa_t, oa_damper_pct,
-  CASE
-    WHEN oa_t IS NULL OR oa_damper_pct IS NULL THEN false
-    WHEN oa_t > 63.0 AND oa_damper_pct > 0.42 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
-### ECON-3 — Mech cooling when econ available
-
-**Code:** `MECH-WHEN-ECON` · **confirmation_seconds:** 300
-
-```sql
-SELECT timestamp, equipment_id, oa_t, oa_damper_pct, clg_valve_pct,
-  CASE
-    WHEN oa_t IS NULL OR oa_damper_pct IS NULL OR clg_valve_pct IS NULL THEN false
-    WHEN oa_t < 63.0 AND oa_damper_pct < 0.32 AND clg_valve_pct > 0.01 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
-### ECON-4 — Low estimated OA fraction
-
-**Code:** `LOW-OA-FRAC` · **confirmation_seconds:** 600 · **param:** `oa_min_pct=21`
-
-```sql
-SELECT timestamp, equipment_id, mat, rat, oat, fan_cmd,
-  CASE
-    WHEN mat IS NULL OR rat IS NULL OR oat IS NULL OR fan_cmd IS NULL THEN false
-    WHEN CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END <= 0.01 THEN false
-    WHEN ABS(rat - oat) <= 2.2 THEN false
-    WHEN ((mat - rat) / NULLIF(oat - rat, 0) * 100.0) < 21.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
-### ECON-5 — Preheat over-conditioning
-
-**Code:** `PREHEAT-WASTE` · **confirmation_seconds:** 600 · **param:** `excess_tol=2.2`
-
-```sql
-SELECT timestamp, equipment_id, preheat_leave_t, sat_sp, oa_t, htg_valve_pct,
-  CASE
-    WHEN preheat_leave_t IS NULL OR sat_sp IS NULL OR oa_t IS NULL OR htg_valve_pct IS NULL THEN false
-    WHEN htg_valve_pct <= 0.01 THEN false
-    WHEN (
-      (oa_t > sat_sp AND preheat_leave_t - oa_t > 2.2)
-      OR (oa_t < sat_sp AND preheat_leave_t - sat_sp > 2.2)
-    ) THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-## Central plants
-
-### CHW-1 — Low chilled-water delta-T
-
-**Code:** `CHW-DT-001` · **confirmation_seconds:** 900 · **param:** `min_dt=4.0`
-
-```sql
-SELECT timestamp, equipment_id, chw_supply_t, chw_return_t, chw_pump_cmd,
-  CASE
-    WHEN chw_supply_t IS NULL OR chw_return_t IS NULL THEN false
-    WHEN chw_pump_cmd IS NULL OR chw_pump_cmd = false THEN false
-    WHEN (chw_return_t - chw_supply_t) < 4.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-chiller-plant'
-```
-
-### CHW-2 — DP below SP at max pump speed
-
-**Code:** `CHW-DP-001` · **confirmation_seconds:** 300 · **param:** `dp_margin=2.2`, `pmp_hi=0.87`
-
-```sql
-SELECT timestamp, equipment_id, chw_dp, chw_dp_sp, chw_pump_cmd,
-  CASE
-    WHEN chw_dp IS NULL OR chw_dp_sp IS NULL OR chw_pump_cmd IS NULL THEN false
-    WHEN chw_dp < chw_dp_sp - 2.2
-     AND CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd/100.0 ELSE chw_pump_cmd END >= 0.87 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-chiller-plant'
-```
-
-### CHW-3 — Plant supply temp outside deadband
-
-**Code:** `CHW-TEMP-DB` · **confirmation_seconds:** 300 · **param:** `sp_band=2.2`
-
-```sql
-SELECT timestamp, equipment_id, chw_supply_t, chw_supply_t_sp, chw_pump_cmd,
-  CASE
-    WHEN chw_supply_t IS NULL OR chw_supply_t_sp IS NULL OR chw_pump_cmd IS NULL THEN false
-    WHEN chw_pump_cmd <= 0.01 THEN false
-    WHEN chw_supply_t < chw_supply_t_sp - 2.2 OR chw_supply_t > chw_supply_t_sp + 2.2 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-chiller-plant'
-```
-
-### CHW-4 — Flow high at max pump
-
-**Code:** `CHW-FLOW-HIGH` · **confirmation_seconds:** 300 · **param:** `flow_hi=1100`
-
-```sql
-SELECT timestamp, equipment_id, chw_flow, chw_pump_cmd,
-  CASE
-    WHEN chw_flow IS NULL OR chw_pump_cmd IS NULL THEN false
-    WHEN chw_flow > 1100.0
-     AND CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd/100.0 ELSE chw_pump_cmd END >= 0.87 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-chiller-plant'
-```
-
-Validate with `POST /api/fdd/inject-scenario` before enabling on live plant points.
-
----
-
-## Heat pumps
-
-### HP-1 — Discharge cold when heating
-
-**Code:** `HP-D` · **confirmation_seconds:** 600 · **param:** `min_sat=85`, `zone_cold=69`
-
-```sql
-SELECT timestamp, equipment_id, sat, zone_t, fan_cmd,
-  CASE
-    WHEN sat IS NULL OR zone_t IS NULL OR fan_cmd IS NULL THEN false
-    WHEN fan_cmd <= 0.01 THEN false
-    WHEN zone_t < 69.0 AND sat < 85.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-hp'
-```
-
----
-
-## Weather station
-
-### WX-1 — Temperature spike between readings
-
-**Code:** `WX-SPIKE` · **confirmation_seconds:** 300 · **param:** `spike_limit=16.0`
-
-Edge SQL — compare to previous sample:
-
-```sql
-SELECT timestamp, equipment_id, oa_t,
-  CASE
-    WHEN oa_t IS NULL THEN false
-    WHEN ABS(oa_t - LAG(oa_t) OVER (ORDER BY timestamp)) > 16.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:weather-station'
-```
-
-### WX-2 — Gust lower than sustained wind
-
-**Code:** `WX-GUST` · **confirmation_seconds:** 300
-
-```sql
-SELECT timestamp, equipment_id, wind_gust, wind_speed,
-  CASE
-    WHEN wind_gust IS NULL OR wind_speed IS NULL THEN false
-    WHEN wind_gust < wind_speed THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:weather-station'
-```
-
----
-
-## Trim & respond advisory (GL36)
-
-Advisory faults for sequence health — use **`confirmation_seconds: 1800`** or higher.
-
-### TRIM-1 — Duct static trim advisory
-
-**Code:** `AHU-TRIM-ADV`
-
-```sql
-SELECT timestamp, equipment_id, duct_static, vav_press_req_sum,
-  CASE
-    WHEN duct_static IS NULL OR vav_press_req_sum IS NULL THEN false
-    WHEN duct_static > 0.80 AND vav_press_req_sum < 1.0 AND duct_static > 1.35 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
-### TRIM-2 — Chiller plant enable advisory
-
-**Code:** `CHW-ENABLE-ADV`
-
-```sql
-SELECT timestamp, equipment_id, chw_valve_req_count,
-  CASE
-    WHEN chw_valve_req_count IS NULL THEN false
-    WHEN chw_valve_req_count < 2 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-chiller-plant'
-```
-
-### TRIM-3 — HWST trim advisory
-
-**Code:** `HW-TRIM-ADV`
-
-```sql
-SELECT timestamp, equipment_id, hw_supply_t, hw_reset_req_sum,
-  CASE
-    WHEN hw_supply_t IS NULL OR hw_reset_req_sum IS NULL THEN false
-    WHEN hw_supply_t < 120.0 AND hw_reset_req_sum > 2.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-boiler-plant'
-```
-
-### TRIM-4 — CHW plant reset advisory
-
-**Code:** `CHW-RESET-ADV`
-
-```sql
-SELECT timestamp, equipment_id, chw_supply_t, chw_reset_req_sum,
-  CASE
-    WHEN chw_supply_t IS NULL OR chw_reset_req_sum IS NULL THEN false
-    WHEN chw_supply_t < 45.0 AND chw_reset_req_sum < 1.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-chiller-plant'
-```
-
----
-
-## Extended rule families (v2)
-
-Standards-first rules from public FDD / re-tuning literature. Each has a matching [Pandas](pandas-cookbook.html#extended-rule-families-v2) section. Metadata follows the [rule schema](rule-schema.html). Use [prerequisite macros](prerequisite-macros.html) inline.
-
-### RESET-1 — SAT reset not tracking outdoor air
-
-| Field | Value |
-|-------|-------|
-| **taxonomy_path** | `reset.ahu.sat_oa_reset_missing` |
-| **severity** | 2 · **confirmation_seconds:** 900 |
-| **required_points** | `sat_sp`, `oat`, `fan_status` |
-| **prerequisites** | `macro.fan_proven_on`, `macro.reset_enabled` |
-
-**Intent:** Supply air temperature setpoint should reset with outdoor air when reset is enabled (ASHRAE GL36 / AIRCx common finding).
-
-```sql
--- confirmation_seconds: 900
--- param: sat_reset_err_max = 3.0  (site-adjustable °F)
-SELECT timestamp, equipment_id, sat_sp, oat, fan_status,
-  CASE
-    WHEN sat_sp IS NULL OR oat IS NULL OR fan_status IS NULL THEN false
-    WHEN fan_status = false THEN false
-    WHEN COALESCE(reset_enable, true) = false THEN false
-    WHEN ABS(sat_sp - (52.0 + 0.25 * (oat - 65.0))) > 3.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
-**Validation:** normal cooling day → false; fixed SAT SP on hot day → true; missing `sat_sp` → false.
-
----
-
-### SCHED-1 — Equipment running while unoccupied
-
-| Field | Value |
-|-------|-------|
-| **taxonomy_path** | `schedule.ahu.unoccupied_runtime` |
-| **severity** | 2 · **confirmation_seconds:** 1800 |
-| **required_points** | `fan_status`, `occ_mode` |
-
-```sql
--- confirmation_seconds: 1800
-SELECT timestamp, equipment_id, fan_status, occ_mode,
-  CASE
-    WHEN fan_status IS NULL OR occ_mode IS NULL THEN false
-    WHEN occ_mode = 'unoccupied' AND fan_status = true THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-### OVR-1 — Persistent manual override
-
-| Field | Value |
-|-------|-------|
-| **taxonomy_path** | `override.ahu.persistent_manual` |
-| **severity** | 2 · **confirmation_seconds:** 3600 |
-| **required_points** | `override_active` |
-
-```sql
--- confirmation_seconds: 3600
-SELECT timestamp, equipment_id, override_active,
-  CASE
-    WHEN override_active IS NULL THEN false
-    WHEN override_active = true THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-### CMD-1 — Fan command vs status mismatch
-
-| Field | Value |
-|-------|-------|
-| **taxonomy_path** | `command.status.ahu.fan_cmd_status` |
-| **severity** | 3 · **confirmation_seconds:** 600 |
-| **required_points** | `fan_cmd`, `fan_status` |
-
-```sql
--- confirmation_seconds: 600
-SELECT timestamp, equipment_id, fan_cmd, fan_status,
-  CASE
-    WHEN fan_cmd IS NULL OR fan_status IS NULL THEN false
-    WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END >= 0.05)
-     <> fan_status THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-### OA-1 — Low estimated outdoor air fraction
-
-| Field | Value |
-|-------|-------|
-| **taxonomy_path** | `ventilation.ahu.low_oa_fraction` |
-| **severity** | 2 · **confirmation_seconds:** 900 |
-| **required_points** | `oa_t`, `ra_t`, `mat`, `fan_status` |
-
-```sql
--- confirmation_seconds: 900
--- param: min_oa_frac = 0.15
-SELECT timestamp, equipment_id, oa_t, ra_t, mat, fan_status,
-  CASE
-    WHEN oa_t IS NULL OR ra_t IS NULL OR mat IS NULL OR fan_status IS NULL THEN false
-    WHEN fan_status = false THEN false
-    WHEN ABS(ra_t - oa_t) < 0.5 THEN false
-    WHEN ((mat - ra_t) / NULLIF(oa_t - ra_t, 0)) < 0.15 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-### VLV-1 — Cooling valve leakage
-
-| Field | Value |
-|-------|-------|
-| **taxonomy_path** | `actuator.leakage.ahu.clg_valve` |
-| **severity** | 2 · **confirmation_seconds:** 900 |
-
-```sql
--- confirmation_seconds: 900
-SELECT timestamp, equipment_id, clg_valve_pct, sat, sat_sp,
-  CASE
-    WHEN clg_valve_pct IS NULL OR sat IS NULL OR sat_sp IS NULL THEN false
-    WHEN CASE WHEN clg_valve_pct > 1.0 THEN clg_valve_pct/100.0 ELSE clg_valve_pct END > 0.05 THEN false
-    WHEN sat < sat_sp - 2.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-### DMP-1 — OA damper leakage
-
-| Field | Value |
-|-------|-------|
-| **taxonomy_path** | `actuator.leakage.ahu.oa_damper` |
-| **severity** | 2 · **confirmation_seconds:** 900 |
-
-```sql
--- confirmation_seconds: 900
-SELECT timestamp, equipment_id, oa_damper_pct, oa_t, mat,
-  CASE
-    WHEN oa_damper_pct IS NULL OR oa_t IS NULL OR mat IS NULL THEN false
-    WHEN CASE WHEN oa_damper_pct > 1.0 THEN oa_damper_pct/100.0 ELSE oa_damper_pct END > 0.05 THEN false
-    WHEN ABS(mat - oa_t) < 2.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
-```
-
----
-
-### VAV-5 — Airflow sensor bias
-
-| Field | Value |
-|-------|-------|
-| **taxonomy_path** | `terminal.vav.airflow_sensor_bias` |
-| **severity** | 2 · **confirmation_seconds:** 900 |
-
-```sql
--- confirmation_seconds: 900
-SELECT timestamp, equipment_id, zone_flow, damper_pct,
-  CASE
-    WHEN zone_flow IS NULL OR damper_pct IS NULL THEN false
-    WHEN zone_flow > 50.0
-     AND CASE WHEN damper_pct > 1.0 THEN damper_pct/100.0 ELSE damper_pct END < 0.10 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-vav'
-```
-
----
-
-### PLANT-1 — CHW DP reset missing
-
-| Field | Value |
-|-------|-------|
-| **taxonomy_path** | `reset.plant.chw.dp_reset_missing` |
-| **severity** | 2 · **confirmation_seconds:** 900 |
-
-```sql
--- confirmation_seconds: 900
-SELECT timestamp, equipment_id, chw_dp_sp, chw_load_pct, chw_pump_cmd,
-  CASE
-    WHEN chw_dp_sp IS NULL OR chw_load_pct IS NULL OR chw_pump_cmd IS NULL THEN false
-    WHEN chw_pump_cmd <= 0.01 THEN false
-    WHEN chw_load_pct < 0.40 AND chw_dp_sp > 18.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-chiller-plant'
-```
-
----
-
-### SP-HIGH — Occupied zone setpoint too high
-
-```sql
--- SP-HIGH confirmation_seconds: 900  param: hi = 76
-SELECT timestamp, equipment_id, zone_t_sp, occ_mode,
-  CASE
-    WHEN zone_t_sp IS NULL OR occ_mode IS NULL THEN false
-    WHEN occ_mode <> 'occupied' THEN false
-    WHEN zone_t_sp > 76.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot WHERE equipment_id = 'equip:your-vav';
-```
-
-### SP-LOW — Occupied zone setpoint too low
-
-```sql
--- SP-LOW confirmation_seconds: 900  param: lo = 68
-SELECT timestamp, equipment_id, zone_t_sp, occ_mode,
-  CASE
-    WHEN zone_t_sp IS NULL OR occ_mode IS NULL THEN false
-    WHEN occ_mode <> 'occupied' THEN false
-    WHEN zone_t_sp < 68.0 THEN true
-    ELSE false
-  END AS fault_raw
-FROM telemetry_pivot WHERE equipment_id = 'equip:your-vav';
-```
-
----
-
-### KPI-1 — Performance score (advisory)
-
-Aggregate confirmed faults by family — see [benchmark strategy](benchmark-strategy.html).
-
----
-
-## Extended rule families (P2)
-
-Next-priority rules from [roadmap](roadmap.html). Matching [Pandas P2](pandas-cookbook.html#extended-rule-families-p2) sections. Metadata in [P0 catalog](p0-rule-catalog.html).
-
-### VAV-6 — Reheat active when cooling available
-
-| Field | Value |
-|-------|-------|
-| **taxonomy_path** | `terminal.vav.reheat_with_cooling` |
-| **severity** | 2 · **confirmation_seconds:** 300 |
-| **required_points** | `reheat_valve_pct`, `clg_available`, `oa_t` |
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** OAT > 63°F AND OA damper > 42% (should be at minimum).  
+**Default confirmation:** 300 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `econ2_oat_hi` | OAT high cutoff | °F | 63.0 | 55.0–80.0 |
+| `econ2_damper` | Damper open frac | frac | 0.42 | 0.2–0.9 |
 
 ```sql
 -- confirmation_seconds: 300
-SELECT timestamp, equipment_id, reheat_valve_pct, clg_available, oa_t,
+-- rule: ECON-2 — Economizing when outdoor unfavorable
+-- equation: OAT > 63°F AND OA damper > 42% (should be at minimum).
+
+SELECT
+  timestamp,
+  equipment_id,
+  outside_air_temp,
+  outside_air_damper,
   CASE
-    WHEN reheat_valve_pct IS NULL OR oa_t IS NULL THEN false
-    WHEN COALESCE(clg_available, false) = false THEN false
-    WHEN oa_t >= 65.0 THEN false
-    WHEN CASE WHEN reheat_valve_pct > 1.0 THEN reheat_valve_pct/100.0 ELSE reheat_valve_pct END > 0.25 THEN true
+    -- Implement ECON-2 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### ECON-3 — Mech cooling without integrated economizer
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Web free-cooling opportunity: 60°F ≤ dry-bulb < 72°F AND dewpoint < 60°F (dewpoint from web sensor or calculated from web DB+RH). Fault when cooling valve is open while OA damper is below the integrated-economizer threshold (default 90%). No BAS OAT fallback. Screenable engineering defaults — not code limits.  
+**Default confirmation:** 300 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `econ3_db_min` | Free-cool OA dry-bulb min | °F | 60.0 | 50.0–68.0 |
+| `econ3_db_max` | Free-cool OA dry-bulb max | °F | 72.0 | 65.0–80.0 |
+| `econ3_dp_max` | Free-cool OA dew point max | °F | 60.0 | 45.0–68.0 |
+| `econ3_damper_hi` | Integrated economizer damper | frac | 0.9 | 0.5–1.0 |
+
+```sql
+-- confirmation_seconds: 300
+-- rule: ECON-3 — Mech cooling without integrated economizer
+-- equation: Web free-cooling opportunity: 60°F ≤ dry-bulb < 72°F AND dewpoint < 60°F (dewpoint from web sensor or calculated from web DB+RH). Fault when cooling valve is open while OA damper is below the integrated-economizer threshold (default 90%). No BAS OAT fallback. Screenable engineering defaults — not code limits.
+
+SELECT
+  timestamp,
+  equipment_id,
+  outside_air_damper,
+  cooling_valve,
+  CASE
+    -- Implement ECON-3 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### ECON-4 — Low estimated OA fraction
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan on, |RAT−OAT| > 2.2°F, estimated OA fraction < 21%.  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `oa_min_pct` | Min OA fraction | % | 21.0 | 5.0–40.0 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: ECON-4 — Low estimated OA fraction
+-- equation: Fan on, |RAT−OAT| > 2.2°F, estimated OA fraction < 21%.
+
+SELECT
+  timestamp,
+  equipment_id,
+  mixed_air_temp,
+  return_air_temp,
+  outside_air_temp,
+  fan_cmd,
+  CASE
+    -- Implement ECON-4 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### ECON-5 — Preheat over-conditioning
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Preheat leaving air > 2.2°F above target while preheat active.  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `preheat_over_f` | Preheat over ΔT | °F | 2.2 | 0.5–8.0 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: ECON-5 — Preheat over-conditioning
+-- equation: Preheat leaving air > 2.2°F above target while preheat active.
+
+SELECT
+  timestamp,
+  equipment_id,
+  preheat_leaving_temp,
+  discharge_air_temp_sp,
+  outside_air_temp,
+  heating_valve,
+  CASE
+    -- Implement ECON-5 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### ECON-6 — Economizing in freezing weather
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Web dry-bulb < 25°F AND OA damper above winter min-OA ceiling (default 25%). AHU should be at minimum OA in cold weather.  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `econ6_oat_max_f` | Winter OAT ceiling | °F | 25.0 | 15.0–40.0 |
+| `econ6_damper_max` | Winter min-OA damper | frac | 0.25 | 0.05–0.5 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: ECON-6 — Economizing in freezing weather
+-- equation: Web dry-bulb < 25°F AND OA damper above winter min-OA ceiling (default 25%). AHU should be at minimum OA in cold weather.
+
+SELECT
+  timestamp,
+  equipment_id,
+  outside_air_damper,
+  CASE
+    -- Implement ECON-6 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### ECON-7 — Economizer OK but not economizing
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Economizer-OK web weather: dew point < 60°F AND dry-bulb < 72°F (above a 35°F freeze-guard floor; dewpoint from web sensor or calculated from web DB+RH). Fault when there is cooling demand (cooling valve open or proven DX/chiller cooling) but the OA damper stays below the economizing threshold (default 50%). Expected: economizer-only below 60°F DB (MECH-OAT-1) and mech + integrated economizer in the 60–72°F band (ECON-3). All thresholds are imperial sliders.  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `econ7_db_min` | Econ-OK dry-bulb floor (freeze guard) | °F | 35.0 | 20.0–50.0 |
+| `econ7_db_max` | Econ-OK dry-bulb max | °F | 72.0 | 65.0–80.0 |
+| `econ7_dp_max` | Econ-OK dew point max | °F | 60.0 | 45.0–68.0 |
+| `econ7_damper_min` | Economizing damper threshold | frac | 0.5 | 0.2–0.9 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: ECON-7 — Economizer OK but not economizing
+-- equation: Economizer-OK web weather: dew point < 60°F AND dry-bulb < 72°F (above a 35°F freeze-guard floor; dewpoint from web sensor or calculated from web DB+RH). Fault when there is cooling demand (cooling valve open or proven DX/chiller cooling) but the OA damper stays below the economizing threshold (default 50%). Expected: economizer-only below 60°F DB (MECH-OAT-1) and mech + integrated economizer in the 60–72°F band (ECON-3). All thresholds are imperial sliders.
+
+SELECT
+  timestamp,
+  equipment_id,
+  outside_air_damper,
+  CASE
+    -- Implement ECON-7 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### MECH-OAT-1 — Mechanical cooling below 60°F web OAT
+**Family:** `ahu` · **Equipment:** `ahu`, `chiller`, `heatpump`  
+**Equation:** Proven DX/chiller mechanical cooling while web dry-bulb < 60°F. Uses compressor/chiller/pump/amps/power proof — not AHU cooling-valve alone. Below 60°F is outside the free-cool + integrated economizer band.  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `mech_oat_max_f` | Mech-cool OAT ceiling | °F | 60.0 | 45.0–65.0 |
+
+```sql
+-- confirmation_seconds: 600
+-- rule: MECH-OAT-1 — Mechanical cooling below 60°F web OAT
+-- equation: Proven DX/chiller mechanical cooling while web dry-bulb < 60°F. Uses compressor/chiller/pump/amps/power proof — not AHU cooling-valve alone. Below 60°F is outside the free-cool + integrated economizer band.
+
+SELECT
+  timestamp,
+  equipment_id,
+  CASE
+    -- Implement MECH-OAT-1 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### CMD-1 — Fan cmd/status mismatch
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Fan command and proven status disagree.  
+**Default confirmation:** 600 s
+
+_No tunable thresholds beyond confirmation delay._
+
+```sql
+-- confirmation_seconds: 600
+SELECT
+  timestamp, equipment_id, fan_cmd, fan_status,
+  CASE
+    WHEN fan_cmd IS NULL OR fan_status IS NULL THEN false
+    WHEN ((CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) >= 0.05) <> fan_status THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-ahu'
+```
+
+### OA-1 — Low OA fraction
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Estimated OA fraction < 15% with adequate OAT/RAT split.  
+**Default confirmation:** 900 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `min_oa_frac` | Min OA fraction | frac | 0.15 | 0.05–0.4 |
+| `oat_rat_guard` | Min |RAT−OAT| guard | °F | 2.2 | 0.5–6.0 |
+
+```sql
+-- confirmation_seconds: 900
+-- param: min_oa_frac = 0.15 ; oat_rat_guard = 2.2
+SELECT
+  timestamp, equipment_id, mat, rat, oa_t, fan_cmd,
+  CASE
+    WHEN mat IS NULL OR rat IS NULL OR oa_t IS NULL THEN false
+    WHEN abs(rat - oa_t) <= 2.2 THEN false
+    WHEN (mat - rat) / NULLIF(oa_t - rat, 0) < 0.15
+     AND (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE COALESCE(fan_cmd, 1.0) END) >= 0.05 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-ahu'
+```
+
+### DMP-1 — OA damper leakage
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Damper ≤ 5% but MAT tracks OAT within 2°F — leaking OA damper.  
+**Default confirmation:** 900 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `leak_delta` | Leak ΔT | °F | 2.0 | 0.5–6.0 |
+
+```sql
+-- confirmation_seconds: 900
+SELECT
+  timestamp, equipment_id, oa_damper_pct, oa_t, mat,
+  CASE
+    WHEN oa_damper_pct IS NULL OR oa_t IS NULL OR mat IS NULL THEN false
+    WHEN (CASE WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END) <= 0.05
+     AND abs(mat - oa_t) < 2.0 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-ahu'
+```
+
+### VLV-1 — Cooling valve leakage
+**Family:** `ahu` · **Equipment:** `ahu`  
+**Equation:** Cooling valve ≤ 5% AND (SAT < sat_sp − sat_err OR SAT < MAT − mat_leak_delta). Fan proven on when fan_status/fan_cmd present (operational gate).  
+**Default confirmation:** 900 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `sat_err` | SAT vs SP leak ΔT | °F | 2.0 | 0.5–8.0 |
+| `mat_leak_delta` | SAT vs MAT leak ΔT | °F | 2.0 | 0.5–12.0 |
+
+```sql
+-- confirmation_seconds: 900
+SELECT
+  timestamp, equipment_id, clg_valve_pct, sat, sat_sp, mat,
+  CASE
+    WHEN clg_valve_pct IS NULL OR sat IS NULL THEN false
+    WHEN (CASE WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END) <= 0.05
+     AND (
+       (sat_sp IS NOT NULL AND sat < sat_sp - 2.0)
+       OR (mat IS NOT NULL AND sat < mat - 2.0)
+     ) THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-ahu'
+```
+
+## VAV terminals
+
+### VAV-1 — Zone comfort band
+**Family:** `vav` · **Equipment:** `vav`, `zone`  
+**Equation:** Zone temp < 70°F or > 75°F.  
+**Default confirmation:** 900 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `zone_lo` | Zone low | °F | 70.0 | 55.0–72.0 |
+| `zone_hi` | Zone high | °F | 75.0 | 72.0–85.0 |
+
+```sql
+-- confirmation_seconds: 900
+-- param: comfort_low_f = 70 ; comfort_high_f = 75
+SELECT
+  timestamp, equipment_id, zone_t, occ_mode,
+  CASE
+    WHEN zone_t IS NULL THEN false
+    WHEN lower(COALESCE(occ_mode, 'occupied')) = 'occupied'
+     AND (zone_t < 70.0 OR zone_t > 75.0) THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-vav'
 ```
 
----
+### VAV-3 — Excessive reheat during warm weather
+**Family:** `vav` · **Equipment:** `vav`  
+**Equation:** Air flowing AND OAT > 78°F AND reheat valve > 52%.  
+**Default confirmation:** 300 s
 
-### VAV-7 — Minimum airflow violation
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `reheat_oat` | Warm OAT | °F | 78.0 | 65.0–90.0 |
+| `reheat_pct` | Reheat frac | frac | 0.52 | 0.1–1.0 |
+| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
 
-| Field | Value |
-|-------|-------|
-| **taxonomy_path** | `terminal.vav.min_airflow_violation` |
-| **severity** | 2 · **confirmation_seconds:** 900 |
-| **required_points** | `zone_flow`, `min_flow_sp`, `fan_cmd` |
+```sql
+-- confirmation_seconds: 300
+-- rule: VAV-3 — Excessive reheat during warm weather
+-- equation: Air flowing AND OAT > 78°F AND reheat valve > 52%.
+
+SELECT
+  timestamp,
+  equipment_id,
+  outside_air_temp,
+  reheat_valve,
+  CASE
+    -- Implement VAV-3 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### VAV-4 — Damper stuck at full open
+**Family:** `vav` · **Equipment:** `vav`  
+**Equation:** Air flowing AND damper > 97.5% sustained across the window.  
+**Default confirmation:** 900 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `full_open_pct` | Full open frac | frac | 0.975 | 0.8–1.0 |
+| `sustain_hours` | Sustain window | h | 1.5 | 0.5–6.0 |
+| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
 
 ```sql
 -- confirmation_seconds: 900
-SELECT timestamp, equipment_id, zone_flow, min_flow_sp, fan_cmd,
+-- rule: VAV-4 — Damper stuck at full open
+-- equation: Air flowing AND damper > 97.5% sustained across the window.
+
+SELECT
+  timestamp,
+  equipment_id,
+  damper,
   CASE
-    WHEN zone_flow IS NULL OR min_flow_sp IS NULL OR fan_cmd IS NULL THEN false
-    WHEN CASE WHEN fan_cmd > 1.0 THEN fan_cmd/100.0 ELSE fan_cmd END <= 0.01 THEN false
+    -- Implement VAV-4 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### VAV-5 — Airflow sensor bias
+**Family:** `vav` · **Equipment:** `vav`  
+**Equation:** Airflow > 50 cfm while damper < 10% (implausible flow).  
+**Default confirmation:** 900 s
+
+_No tunable thresholds beyond confirmation delay._
+
+```sql
+-- confirmation_seconds: 900
+-- rule: VAV-5 — Airflow sensor bias
+-- equation: Airflow > 50 cfm while damper < 10% (implausible flow).
+
+SELECT
+  timestamp,
+  equipment_id,
+  zone_airflow,
+  damper,
+  CASE
+    -- Implement VAV-5 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### VAV-REHEAT — Reheat valve stuck / no temp rise
+**Family:** `vav` · **Equipment:** `vav`  
+**Equation:** Air flowing AND reheat valve > 30% AND box discharge temp rises < 3°F above duct inlet (air from AHU) — stuck or failed reheat valve/coil.  
+**Default confirmation:** 900 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `reheat_cmd` | Reheat open frac | frac | 0.3 | 0.1–1.0 |
+| `min_rise` | Min temp rise | °F | 3.0 | 0.5–15.0 |
+| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+
+```sql
+-- confirmation_seconds: 900
+-- rule: VAV-REHEAT — Reheat valve stuck / no temp rise
+-- equation: Air flowing AND reheat valve > 30% AND box discharge temp rises < 3°F above duct inlet (air from AHU) — stuck or failed reheat valve/coil.
+
+SELECT
+  timestamp,
+  equipment_id,
+  reheat_valve,
+  vav_discharge_air_temp,
+  vav_inlet_air_temp,
+  CASE
+    -- Implement VAV-REHEAT against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### VAV-AHU-LEAVE — VAV leave vs parent AHU SAT (fedBy)
+**Family:** `vav` · **Equipment:** `vav`  
+**Equation:** Air flowing AND |VAV discharge − parent AHU SAT| > band. Needs package topology (vav_to_ahu) so ahu_sat is enriched from the fedBy AHU; otherwise SKIPPED_MISSING_ROLES. Flags broken reheat, bad sensors, or rogue zones.  
+**Default confirmation:** 900 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `delta_f` | Leave Δ vs AHU SAT | °F | 8.0 | 2.0–25.0 |
+| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+
+```sql
+-- confirmation_seconds: 900
+-- rule: VAV-AHU-LEAVE — VAV leave vs parent AHU SAT (fedBy)
+-- equation: Air flowing AND |VAV discharge − parent AHU SAT| > band. Needs package topology (vav_to_ahu) so ahu_sat is enriched from the fedBy AHU; otherwise SKIPPED_MISSING_ROLES. Flags broken reheat, bad sensors, or rogue zones.
+
+SELECT
+  timestamp,
+  equipment_id,
+  vav_discharge_air_temp,
+  ahu_discharge_air_temp,
+  CASE
+    -- Implement VAV-AHU-LEAVE against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### VAV-7 — Min airflow / fixed high flow
+**Family:** `vav` · **Equipment:** `vav`  
+**Equation:** Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too high / box never modulates), OR min_flow_sp itself is excessively high.  
+**Default confirmation:** 900 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+| `fixed_flow_max_std` | Fixed-flow max std | cfm | 15.0 | 1.0–80.0 |
+| `fixed_flow_min_mean` | Fixed-flow min mean | cfm | 200.0 | 50.0–2000.0 |
+| `high_min_flow_sp` | High min-flow SP | cfm | 250.0 | 50.0–2000.0 |
+
+```sql
+-- confirmation_seconds: 900
+SELECT
+  timestamp, equipment_id, zone_flow, min_flow_sp,
+  CASE
+    WHEN zone_flow IS NULL OR min_flow_sp IS NULL THEN false
     WHEN zone_flow < min_flow_sp THEN true
     ELSE false
   END AS fault_raw
@@ -1402,156 +1386,451 @@ FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-vav'
 ```
 
----
+## Central plant / condenser water
 
-### TOWER-1 — Cooling tower approach too high
+### CHW-NOLOAD-1 — Chiller running with no building load
+**Family:** `plant` · **Equipment:** `chiller`  
+**Equation:** Chiller/plant proven running while building load is satisfied: all mapped zones inside comfort band OR all mapped AHU SAT within sat_band of setpoint. Default confirm 30 min.  
+**Default confirmation:** 1800 s
 
-| Field | Value |
-|-------|-------|
-| **taxonomy_path** | `plant.performance.tower.approach_high` |
-| **severity** | 2 · **confirmation_seconds:** 900 |
-| **required_points** | `tower_leaving_t`, `wb_t`, `tower_fan_cmd` |
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `comfort_low_f` | Comfort low | °F | 70.0 | 60.0–78.0 |
+| `comfort_high_f` | Comfort high | °F | 75.0 | 68.0–85.0 |
+| `sat_band_f` | AHU SAT≈SP band | °F | 2.0 | 0.5–6.0 |
+| `confirm_min` | Fault confirm delay | min | 30.0 | 0.0–60.0 |
 
 ```sql
--- confirmation_seconds: 900
--- param: max_approach = 7.0  (°F, site-adjustable)
-SELECT timestamp, equipment_id, tower_leaving_t, wb_t, tower_fan_cmd,
+-- confirmation_seconds: 1800
+-- rule: CHW-NOLOAD-1 — Chiller running with no building load
+-- equation: Chiller/plant proven running while building load is satisfied: all mapped zones inside comfort band OR all mapped AHU SAT within sat_band of setpoint. Default confirm 30 min.
+
+SELECT
+  timestamp,
+  equipment_id,
   CASE
-    WHEN tower_leaving_t IS NULL OR wb_t IS NULL OR tower_fan_cmd IS NULL THEN false
-    WHEN tower_fan_cmd <= 0.01 THEN false
-    WHEN (tower_leaving_t - wb_t) > 7.0 THEN true
+    -- Implement CHW-NOLOAD-1 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-cooling-tower'
+WHERE equipment_id = 'equip:your-id'
 ```
 
----
+### CHW-1 — Low chilled-water ΔT
+**Family:** `plant` · **Equipment:** `chiller`  
+**Equation:** Pump on AND (CHWR − CHWS) < 4°F.  
+**Default confirmation:** 900 s
 
-### CTRL-2 — Generic control loop hunting (duct static)
-
-| Field | Value |
-|-------|-------|
-| **taxonomy_path** | `control.loop.generic.hunting` |
-| **severity** | 2 · **confirmation_seconds:** 3600 |
-| **required_points** | `duct_static`, `fan_cmd` |
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `min_dt` | Min ΔT | °F | 4.0 | 1.0–12.0 |
 
 ```sql
--- confirmation_seconds: 3600
--- param: hunt_reversals = 8  (sign changes per hour)
-WITH w AS (
-  SELECT timestamp, equipment_id, duct_static,
-    LAG(duct_static) OVER (ORDER BY timestamp) AS prev,
-    CASE
-      WHEN duct_static > LAG(duct_static) OVER (ORDER BY timestamp) THEN 1
-      WHEN duct_static < LAG(duct_static) OVER (ORDER BY timestamp) THEN -1
-      ELSE 0
-    END AS dir
-  FROM telemetry_pivot
-  WHERE equipment_id = 'equip:your-ahu'
-)
-SELECT timestamp, equipment_id,
+-- confirmation_seconds: 900
+-- param: min_delta_t = 6.0
+SELECT
+  timestamp, equipment_id, chw_supply_t, chw_return_t,
   CASE
-    WHEN COUNT(CASE WHEN dir <> LAG(dir) OVER (ORDER BY timestamp) AND dir <> 0 THEN 1 END)
-         OVER (ORDER BY timestamp ROWS BETWEEN 59 PRECEDING AND CURRENT ROW) > 8 THEN true
+    WHEN chw_supply_t IS NULL OR chw_return_t IS NULL THEN false
+    WHEN (chw_return_t - chw_supply_t) < 6.0 THEN true
     ELSE false
   END AS fault_raw
-FROM w
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-chw-plant'
 ```
 
-Simplified edge variant — use [Pandas CTRL-2](pandas-cookbook.html#ctrl-2--generic-control-loop-hunting) for full hourly resample.
+### CHW-2 — DP below SP at max pump speed
+**Family:** `plant` · **Equipment:** `chiller`  
+**Equation:** Pump ≥ 87% AND CHW DP < DP SP − 2.2.  
+**Default confirmation:** 300 s
 
----
-
-### SV-7 — Wrong-units heuristic (magnitude check)
-
-| Field | Value |
-|-------|-------|
-| **taxonomy_path** | `sensor.quality.generic.wrong_units` |
-| **severity** | 2 · **confirmation_seconds:** 300 |
-| **required_points** | `oa_t` (or any bounded sensor) |
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `dp_margin` | DP margin | psi | 2.2 | 0.5–6.0 |
 
 ```sql
 -- confirmation_seconds: 300
--- Flags values implausible for °F (e.g. 750 = 0.1°C scaling error ×10)
-SELECT timestamp, equipment_id, oa_t,
+-- rule: CHW-2 — DP below SP at max pump speed
+-- equation: Pump ≥ 87% AND CHW DP < DP SP − 2.2.
+
+SELECT
+  timestamp,
+  equipment_id,
+  chw_diff_pressure,
+  chw_diff_pressure_sp,
+  chw_pump_cmd,
   CASE
-    WHEN oa_t IS NULL THEN false
-    WHEN oa_t > 200.0 OR oa_t < -60.0 THEN true
+    -- Implement CHW-2 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
-WHERE equipment_id = 'equip:your-ahu'
+WHERE equipment_id = 'equip:your-id'
 ```
 
----
+### CHW-3 — Plant supply temp outside deadband
+**Family:** `plant` · **Equipment:** `chiller`  
+**Equation:** Pump on AND |CHWS − CHWS SP| > 2.2°F.  
+**Default confirmation:** 300 s
 
-### OA-2 — DCV minimum outdoor air not met
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `sp_band` | SP band | °F | 2.2 | 0.5–6.0 |
 
-| Field | Value |
-|-------|-------|
-| **taxonomy_path** | `ventilation.ahu.dcv_minimum_oa` |
-| **severity** | 2 · **confirmation_seconds:** 900 |
-| **required_points** | `oa_flow`, `oa_flow_min_sp`, `occ_mode`, `fan_status` |
+```sql
+-- confirmation_seconds: 300
+-- rule: CHW-3 — Plant supply temp outside deadband
+-- equation: Pump on AND |CHWS − CHWS SP| > 2.2°F.
+
+SELECT
+  timestamp,
+  equipment_id,
+  chilled_water_supply_temp,
+  chilled_water_supply_temp_sp,
+  chw_pump_cmd,
+  CASE
+    -- Implement CHW-3 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### CHW-4 — Flow high at max pump
+**Family:** `plant` · **Equipment:** `chiller`  
+**Equation:** Pump ≥ 87% AND CHW flow > 1100 gpm.  
+**Default confirmation:** 300 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `flow_hi` | Flow high | gpm | 1100 | 200–3000 |
+
+```sql
+-- confirmation_seconds: 300
+-- rule: CHW-4 — Flow high at max pump
+-- equation: Pump ≥ 87% AND CHW flow > 1100 gpm.
+
+SELECT
+  timestamp,
+  equipment_id,
+  chw_flow,
+  chw_pump_cmd,
+  CASE
+    -- Implement CHW-4 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### CW-OPT-1 — Condenser water not optimized vs wet-bulb
+**Family:** `plant` · **Equipment:** `chiller`, `cooling_tower`  
+**Equation:** CW supply significantly colder than web wet-bulb + design approach (Stull WB) — tower over-cooling / not optimized.  
+**Default confirmation:** 900 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `cw_approach` | Design approach | °F | 7.0 | 3.0–15.0 |
+| `cw_slack` | Slack below target | °F | 2.0 | 0.5–6.0 |
 
 ```sql
 -- confirmation_seconds: 900
-SELECT timestamp, equipment_id, oa_flow, oa_flow_min_sp, occ_mode, fan_status,
+-- rule: CW-OPT-1 — Condenser water not optimized vs wet-bulb
+-- equation: CW supply significantly colder than web wet-bulb + design approach (Stull WB) — tower over-cooling / not optimized.
+
+SELECT
+  timestamp,
+  equipment_id,
+  condenser_water_supply_temp,
   CASE
-    WHEN oa_flow IS NULL OR oa_flow_min_sp IS NULL OR occ_mode IS NULL THEN false
-    WHEN fan_status = false OR occ_mode <> 'occupied' THEN false
-    WHEN oa_flow < oa_flow_min_sp THEN true
+    -- Implement CW-OPT-1 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### CW-APR-1 — High CW approach at full tower fan
+**Family:** `plant` · **Equipment:** `chiller`, `cooling_tower`  
+**Equation:** At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 8°F, typically 5–10°F). Suspect OA→wet-bulb / CW sensor mismatch or cooling-tower performance degradation.  
+**Default confirmation:** 900 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `approach_max_f` | Max approach at full fan | °F | 8.0 | 5.0–15.0 |
+| `tower_fan_hi` | Tower fan full-speed threshold | frac | 0.95 | 0.8–1.0 |
+
+```sql
+-- confirmation_seconds: 900
+-- rule: CW-APR-1 — High CW approach at full tower fan
+-- equation: At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 8°F, typically 5–10°F). Suspect OA→wet-bulb / CW sensor mismatch or cooling-tower performance degradation.
+
+SELECT
+  timestamp,
+  equipment_id,
+  condenser_water_supply_temp,
+  CASE
+    -- Implement CW-APR-1 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### CW-FAN-1 — Excess tower fan energy vs wet-bulb limit
+**Family:** `plant` · **Equipment:** `chiller`, `cooling_tower`  
+**Equation:** Tower fans at full speed while leaving CW is well above web wet-bulb + design approach (approach + excess_beyond). Fans are chasing a CW temp that is theoretically hard/impossible — excess fan energy.  
+**Default confirmation:** 900 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `cw_approach` | Design approach | °F | 7.0 | 3.0–15.0 |
+| `excess_beyond_approach_f` | Excess beyond approach | °F | 5.0 | 2.0–20.0 |
+| `tower_fan_hi` | Tower fan full-speed threshold | frac | 0.95 | 0.8–1.0 |
+
+```sql
+-- confirmation_seconds: 900
+-- rule: CW-FAN-1 — Excess tower fan energy vs wet-bulb limit
+-- equation: Tower fans at full speed while leaving CW is well above web wet-bulb + design approach (approach + excess_beyond). Fans are chasing a CW temp that is theoretically hard/impossible — excess fan energy.
+
+SELECT
+  timestamp,
+  equipment_id,
+  condenser_water_supply_temp,
+  CASE
+    -- Implement CW-FAN-1 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+## Heat pumps
+
+### HP-1 — Discharge cold when heating
+**Family:** `heatpump` · **Equipment:** `heatpump`  
+**Equation:** Fan on, zone < 69°F, discharge SAT < 85°F.  
+**Default confirmation:** 600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `min_sat` | Min heating SAT | °F | 85.0 | 70.0–110.0 |
+| `zone_cold` | Zone cold | °F | 69.0 | 60.0–72.0 |
+
+```sql
+-- confirmation_seconds: 600
+SELECT
+  timestamp, equipment_id, discharge_t, heat_cmd,
+  CASE
+    WHEN discharge_t IS NULL OR heat_cmd IS NULL THEN false
+    WHEN (CASE WHEN heat_cmd > 1.0 THEN heat_cmd / 100.0 ELSE heat_cmd END) >= 0.5
+     AND discharge_t < 90.0 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-heatpump'
+```
+
+## Weather station
+
+### WX-1 — OA temperature spike
+**Family:** `weather` · **Equipment:** `weather`  
+**Equation:** OAT sample-to-sample jump > 16°F.  
+**Default confirmation:** 300 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `spike_limit` | Spike limit | °F | 16.0 | 4.0–40.0 |
+
+```sql
+-- confirmation_seconds: 300
+SELECT
+  timestamp, equipment_id, oa_t,
+  CASE
+    WHEN oa_t IS NULL THEN false
+    WHEN abs(oa_t - lag(oa_t) OVER (ORDER BY timestamp)) > 15.0 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:weather'
+```
+
+## Trim & respond advisory
+
+### TRIM-1 — Duct static trim advisory
+**Family:** `trim` · **Equipment:** `ahu`  
+**Equation:** Duct static high (> 1.35 in.w.c.) while VAV pressure requests are low.  
+**Default confirmation:** 1800 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `duct_hi` | Duct static high | in. w.c. | 1.35 | 0.5–3.0 |
+| `request_lo` | Request sum low | count | 1.0 | 0.0–10.0 |
+
+```sql
+-- confirmation_seconds: 1800
+-- Advisory: duct static SP high while requests low (trim candidate)
+SELECT
+  timestamp, equipment_id, duct_static_sp, static_reset_request,
+  CASE
+    WHEN duct_static_sp IS NULL THEN false
+    WHEN duct_static_sp > 1.2 AND COALESCE(static_reset_request, 0) <= 0 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-ahu'
 ```
+
+### TRIM-3 — HWST trim advisory
+**Family:** `trim` · **Equipment:** `boiler`  
+**Equation:** HW supply > 160°F while reset requests are low.  
+**Default confirmation:** 1800 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `hwst_hi` | HWST high | °F | 160.0 | 120.0–200.0 |
+| `request_lo` | Request sum low | count | 1.0 | 0.0–10.0 |
+
+```sql
+-- confirmation_seconds: 1800
+-- rule: TRIM-3 — HWST trim advisory
+-- equation: HW supply > 160°F while reset requests are low.
+
+SELECT
+  timestamp,
+  equipment_id,
+  hot_water_supply_temp,
+  hw_reset_request_sum,
+  CASE
+    -- Implement TRIM-3 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+### TRIM-4 — CHW plant reset advisory
+**Family:** `trim` · **Equipment:** `chiller`  
+**Equation:** CHW supply < 45°F while reset requests are low.  
+**Default confirmation:** 1800 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `chw_lo` | CHWS low | °F | 45.0 | 35.0–55.0 |
+| `request_lo` | Request sum low | count | 1.0 | 0.0–10.0 |
+
+```sql
+-- confirmation_seconds: 1800
+-- rule: TRIM-4 — CHW plant reset advisory
+-- equation: CHW supply < 45°F while reset requests are low.
+
+SELECT
+  timestamp,
+  equipment_id,
+  chilled_water_supply_temp,
+  chw_reset_request_sum,
+  CASE
+    -- Implement TRIM-4 against assigned Haystack → FDD columns
+    -- NULL samples must not latch faults
+    WHEN false THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-id'
+```
+
+## Schedule & occupancy
+
+### SCHED-1 — Unoccupied runtime
+**Family:** `schedule` · **Equipment:** `ahu`  
+**Equation:** Fan running while occupancy is unoccupied (Overview calendar → occ_mode). When zone_t is mapped, also require zone inside comfort_low_f…comfort_high_f (defaults 70–75°F; synced from Overview zone band).  
+**Default confirmation:** 1800 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `comfort_low_f` | Comfort low | °F | 70.0 | 60.0–78.0 |
+| `comfort_high_f` | Comfort high | °F | 75.0 | 68.0–85.0 |
+
+```sql
+-- confirmation_seconds: 1800
+SELECT
+  timestamp, equipment_id, occ_mode, fan_status,
+  CASE
+    WHEN occ_mode IS NULL OR fan_status IS NULL THEN false
+    WHEN lower(occ_mode) = 'unoccupied' AND fan_status THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-ahu'
+```
+
+### SCHED-247 — Always-on fan or pump runtime
+**Family:** `schedule` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `heatpump`  
+**Equation:** Fan or pump (or similar motor proof/command) is on for ≥ always_on_pct of the analysis window — highlights equipment that appears to run 24/7. Applies to all fans and pumps regardless of equipment family when a status/cmd role is mapped.  
+**Default confirmation:** 3600 s
+
+| Param | Label | Unit | Default | Range |
+|-------|-------|------|--------:|-------|
+| `always_on_pct` | Always-on fraction | frac | 0.95 | 0.8–1.0 |
+| `pressure_on_min` | Pressure-on evidence | eng | 0.2 | 0.05–2.0 |
+
+```sql
+-- confirmation_seconds: 3600
+-- Always-on screen: fan/pump command stays ON across the evaluation window
+SELECT
+  timestamp, equipment_id, fan_cmd,
+  CASE
+    WHEN fan_cmd IS NULL THEN false
+    WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) >= 0.05 THEN true
+    ELSE false
+  END AS fault_raw
+FROM telemetry_pivot
+WHERE equipment_id = 'equip:your-ahu'
+```
+
+## Not yet in validated catalog
+
+{: .important }
+Documented for continuity — **not** in the current validated vibe19 catalog.
+
+| ID | Title | Family |
+|----|-------|--------|
+| `VAV-2` | Night setback miss | `vav` |
+| `VAV-6` | Reheat when cooling available | `vav` |
+| `TOWER-1` | Cooling tower approach high | `plant` |
+| `CTRL-2` | Generic control loop hunting | `control` |
+| `RESET-1` | SAT reset not tracking outdoor air | `ahu` |
+| `OVR-1` | Persistent override | `ahu` |
+| `OA-2` | DCV minimum OA not met | `ahu` |
+| `PLANT-1` | CHW DP reset missing | `plant` |
+| `SP-HIGH` | Occupied setpoint too high | `vav` |
+| `SP-LOW` | Occupied setpoint too low | `vav` |
+| `KPI-1` | Performance score (advisory) | `site` |
+| `TRIM-2` | Chiller plant enable advisory | `trim` |
+| `WX-2` | Gust lower than sustained wind | `weather` |
 
 ---
 
 ## Framework & parity docs
 
-| Doc | Purpose |
-|-----|---------|
-| [Public taxonomy](taxonomy.html) | Equipment classes, rule families |
-| [Rule schema](rule-schema.html) | Declarative source-of-truth |
-| [Gap matrix](gap-matrix.html) | Coverage vs public literature |
-| [Parity matrix](parity-matrix.html) | SQL ↔ Pandas audit |
-| [Roadmap](roadmap.html) | Priority-ranked expansion |
-| [Prerequisite macros](prerequisite-macros.html) | Reusable guards |
-| [Benchmark strategy](benchmark-strategy.html) | Scenarios & regression |
-| [Doc template](doc-template.html) | Per-rule documentation |
-
----
-
-## Debugging & windowing
-
-| | Historian lookback | Rolling / confirmation |
-|---|-------------------|------------------------|
-| Set by | SQL FDD test window, validation tab, API | `confirmation_seconds` (default **300**) |
-| Typical | 1–24 h for test | 5 min default debounce |
-
-### Debug workflow
-
-1. **Plots** — confirm columns exist and values move
-2. **SQL FDD** — run SELECT without `fault_raw` first
-3. **Test SQL** — add `fault_raw`, set **`confirmation_seconds: 300`**
-4. **Validation tab** — overlay faults on live trends
-5. **API** — `GET /api/agent/validate` for historian parity
-
-### Common failures
-
-| Symptom | Check |
-|---------|--------|
-| Zero rows | Wrong `equipment_id` or empty pivot |
-| Always false | NULL inputs; wrong column name |
-| Always true | Missing NULL guard; threshold too tight |
-| No faults on dashboard | Rule not **activated**; confirmation too long |
-
-### Compare with Pandas
-
-Export the same historian window, run the matching [Pandas section](pandas-cookbook.html), diff flagged timestamps — should align within one poll period.
-
----
-
-**Next:** [Pandas cookbook](pandas-cookbook.html) — duplicate rules for analyst workflows outside Open-FDD
+- [Rule Cookbook hub](index.html)
+- [Pandas cookbook](pandas-cookbook.html)
+- [P0 rule catalog](p0-rule-catalog.html)
+- [Parity matrix](parity-matrix.html)
+- [Gap matrix](gap-matrix.html)
+- [Prerequisite macros](prerequisite-macros.html)
