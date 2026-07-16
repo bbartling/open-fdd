@@ -1,0 +1,3 @@
+{"timestamp":"2026-07-01T14:00:00Z","equipment_id":"equip:test-ahu","mat":45.0,"rat":72.0,"oat":30.0,"oa_damper":0.05,"fan_cmd":0.9}
+{"timestamp":"2026-07-01T14:01:00Z","equipment_id":"equip:test-ahu","mat":44.5,"rat":72.0,"oat":29.5,"oa_damper":0.04,"fan_cmd":0.91}
+{"timestamp":"2026-07-01T14:02:00Z","equipment_id":"equip:test-ahu","mat":44.0,"rat":71.5,"oat":29.0,"oa_damper":0.03,"fan_cmd":0.92}

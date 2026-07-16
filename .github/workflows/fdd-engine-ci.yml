@@ -51,7 +51,11 @@ jobs:
           if missing:
               print("Missing SQL files:", missing)
               sys.exit(1)
-          print(f"OK: {len(reg['rules'])} rules")
+          n = len(reg.get("rules", []))
+          if n < 59:
+              print(f"Expected >= 59 registry rules (vibe19 catalog), got {n}")
+              sys.exit(1)
+          print(f"OK: {n} rules")
           PY
       - name: fixture validate
         run: cargo run -p fdd_cli --release -- validate --data-root examples/sample_data --building BUILDING_FIXTURE

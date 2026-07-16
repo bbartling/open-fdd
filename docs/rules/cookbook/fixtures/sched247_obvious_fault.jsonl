@@ -1,0 +1,3 @@
+{"timestamp":"2026-07-01T03:00:00Z","equipment_id":"equip:test-ahu","fan_status":true,"occ_mode":"unoccupied"}
+{"timestamp":"2026-07-01T03:15:00Z","equipment_id":"equip:test-ahu","fan_status":true,"occ_mode":"unoccupied"}
+{"timestamp":"2026-07-01T03:30:00Z","equipment_id":"equip:test-ahu","fan_status":true,"occ_mode":"unoccupied"}
