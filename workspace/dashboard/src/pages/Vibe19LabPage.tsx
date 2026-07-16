@@ -1,11 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
-import { barChart, plotlyConfig, ruleResultChart, vavComfortDonut } from "../vibe19/charts";
+import {
+  barChart,
+  basVsWebOatOverlay,
+  meteringBarScatter,
+  multiEquipmentBox,
+  oatScatter,
+  plotlyConfig,
+  ruleResultChart,
+  vavComfortDonut,
+} from "../vibe19/charts";
 import {
   type RegistryRule,
+  type RcxPresetMeta,
   type RuleParamDef,
   type Vibe19Section,
+  RCX_PRESETS,
   VIBE19_SECTIONS,
 } from "../vibe19/contract";
 import { PlotHost } from "../vibe19/PlotHost";
@@ -79,6 +90,7 @@ function OverviewSection({ cache, rules }: { cache?: CacheStatus; rules?: Regist
       <div className="vibe19-card wide">
         <PlotHost data={bars.data} layout={bars.layout} config={plotlyConfig()} height={280} />
       </div>
+      <OverviewExtras />
     </div>
   );
 }
@@ -276,9 +288,15 @@ function ResultsSection({ rules }: { rules?: RegistryRule[] }) {
   );
 }
 
-function FddPlotsSection() {
+function FddPlotsSection({ rules }: { rules?: RegistryRule[] }) {
+  const [focus, setFocus] = useState<string>("");
+  const wired = useMemo(
+    () => (rules ?? []).filter((r) => r.dashboard_wired).slice(0, 12),
+    [rules],
+  );
+  const active = focus || wired[0]?.rule_id || "DEMO";
   const demo = ruleResultChart({
-    title: "Example rule card chart (SAT + confirmed fault)",
+    title: `${active} — rule card (demo series)`,
     series: [
       {
         name: "sat",
@@ -291,13 +309,188 @@ function FddPlotsSection() {
     confirmed: Array.from({ length: 48 }, (_, i) => ({ t: i, fault: i > 30 && i < 40 })),
   });
   return (
-    <div className="vibe19-card">
-      <h3>FDD Plots</h3>
-      <p className="muted">
-        Rule cards use <code>rule_result_chart</code> — multi-y traces with a confirmed-fault swim
-        lane. Live series wire to registry run outputs next.
-      </p>
-      <PlotHost data={demo.data} layout={demo.layout} config={plotlyConfig()} height={360} />
+    <div className="vibe19-run">
+      <aside className="vibe19-sidebar">
+        <h3>Rule cards</h3>
+        <p className="muted">Auto-list applicable (dashboard_wired) rules.</p>
+        <ul>
+          {wired.map((r) => (
+            <li key={r.rule_id}>
+              <button type="button" className={r.rule_id === active ? "active" : ""} onClick={() => setFocus(r.rule_id)}>
+                {r.rule_id}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </aside>
+      <div className="vibe19-card grow">
+        <h3>FDD Plots — {active}</h3>
+        <p className="muted">
+          Cards use <code>rule_result_chart</code> (multi-y + confirmed-fault swim lane). Display
+          downsample ≤5k points; rule math stays full-resolution.
+        </p>
+        <PlotHost data={demo.data} layout={demo.layout} config={plotlyConfig()} height={360} />
+      </div>
+    </div>
+  );
+}
+
+function demoSeries(seed: number) {
+  return Array.from({ length: 60 }, (_, i) => ({
+    t: i,
+    y: 50 + seed * 3 + Math.sin((i + seed) / 6) * 4,
+  }));
+}
+
+function RcxPlotsSection() {
+  const [presetId, setPresetId] = useState(RCX_PRESETS[0].id);
+  const preset = RCX_PRESETS.find((p) => p.id === presetId) ?? RCX_PRESETS[0];
+  const fig = useMemo(() => buildRcxDemo(preset), [preset]);
+  const families = useMemo(() => {
+    const m = new Map<string, RcxPresetMeta[]>();
+    for (const p of RCX_PRESETS) {
+      const arr = m.get(p.family) ?? [];
+      arr.push(p);
+      m.set(p.family, arr);
+    }
+    return [...m.entries()];
+  }, []);
+  return (
+    <div className="vibe19-run">
+      <aside className="vibe19-sidebar">
+        <h3>RCx presets</h3>
+        <p className="muted">
+          Weather: dry-bulb for SAT/HW/CHW resets; wet-bulb for CW/tower.
+        </p>
+        {families.map(([fam, list]) => (
+          <details key={fam} open>
+            <summary>
+              {fam} ({list.length})
+            </summary>
+            <ul>
+              {list.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    className={p.id === presetId ? "active" : ""}
+                    onClick={() => setPresetId(p.id)}
+                  >
+                    {p.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ))}
+      </aside>
+      <div className="vibe19-card grow">
+        <h3>
+          {preset.label}{" "}
+          <span className="muted">
+            ({preset.weatherAxis === "none" ? "no weather axis" : preset.weatherAxis})
+          </span>
+        </h3>
+        <PlotHost data={fig.data} layout={fig.layout} config={plotlyConfig()} height={380} />
+      </div>
+    </div>
+  );
+}
+
+function buildRcxDemo(preset: RcxPresetMeta) {
+  if (preset.chart === "donut") {
+    return vavComfortDonut({ title: preset.label, inComfort: 72, outComfort: 28 });
+  }
+  if (preset.chart === "box") {
+    return multiEquipmentBox({
+      title: preset.label,
+      series: [
+        { name: "AHU-1", values: [1.1, 1.2, 1.15, 1.3, 0.9] },
+        { name: "AHU-2", values: [0.8, 0.85, 0.9, 1.0, 0.75] },
+      ],
+    });
+  }
+  if (preset.chart === "scatter") {
+    const axis =
+      preset.weatherAxis === "wet_bulb" ? "Web wet-bulb °F" : "Web dry-bulb °F";
+    return oatScatter({
+      title: preset.label,
+      x: Array.from({ length: 80 }, (_, i) => 40 + (i % 40)),
+      y: Array.from({ length: 80 }, (_, i) => 55 + Math.sin(i / 7) * 8),
+      xTitle: axis,
+      yTitle: "Leave / SAT °F",
+    });
+  }
+  if (preset.chart === "metering") {
+    return meteringBarScatter({
+      title: preset.label,
+      months: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+      usage: [120, 110, 95, 80, 70, 90],
+      degreeDays: [900, 750, 500, 200, 50, 100],
+      usageName: preset.id.includes("gas") ? "gas" : "kWh",
+      ddName: preset.id.includes("gas") ? "HDD" : "CDD",
+    });
+  }
+  const s1 = demoSeries(1);
+  const s2 = demoSeries(2);
+  return {
+    data: [
+      {
+        type: "scatter",
+        mode: "lines",
+        name: "eq-1",
+        x: s1.map((p) => p.t),
+        y: s1.map((p) => p.y),
+      },
+      {
+        type: "scatter",
+        mode: "lines",
+        name: "eq-2",
+        x: s2.map((p) => p.t),
+        y: s2.map((p) => p.y),
+      },
+    ],
+    layout: { title: { text: preset.label }, margin: { t: 48, r: 24, b: 40, l: 48 } },
+  };
+}
+
+function MeteringSection() {
+  const elec = meteringBarScatter({
+    title: "Electric kWh vs CDD",
+    months: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+    usage: [140, 120, 100, 85, 95, 110],
+    degreeDays: [50, 80, 200, 350, 450, 500],
+    usageName: "kWh",
+    ddName: "CDD",
+  });
+  const gas = meteringBarScatter({
+    title: "Gas vs HDD",
+    months: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+    usage: [300, 260, 180, 90, 40, 20],
+    degreeDays: [900, 750, 500, 200, 50, 10],
+    usageName: "therms",
+    ddName: "HDD",
+  });
+  return (
+    <div className="vibe19-grid">
+      <div className="vibe19-card wide">
+        <PlotHost data={elec.data} layout={elec.layout} config={plotlyConfig()} height={320} />
+      </div>
+      <div className="vibe19-card wide">
+        <PlotHost data={gas.data} layout={gas.layout} config={plotlyConfig()} height={320} />
+      </div>
+    </div>
+  );
+}
+
+function OverviewExtras() {
+  const overlay = basVsWebOatOverlay({
+    title: "BAS vs web OAT",
+    bas: demoSeries(0).map((p) => ({ ...p, y: (p.y ?? 0) + 20 })),
+    web: demoSeries(1).map((p) => ({ ...p, y: (p.y ?? 0) + 18 })),
+  });
+  return (
+    <div className="vibe19-card wide">
+      <PlotHost data={overlay.data} layout={overlay.layout} config={plotlyConfig()} height={280} />
     </div>
   );
 }
@@ -357,16 +550,9 @@ export default function Vibe19LabPage() {
         {section === "Results by Category" ? (
           <ResultsSection rules={rulesQ.data?.rules} />
         ) : null}
-        {section === "FDD Plots" ? <FddPlotsSection /> : null}
-        {section === "RCx Plots" ? (
-          <Placeholder
-            title="RCx Plots"
-            blurb="Frozen RCx presets (zone comfort, AHU resets, OA scatters) — chart builders landed; preset picker next."
-          />
-        ) : null}
-        {section === "Metering" ? (
-          <Placeholder title="Metering" blurb="Electric/gas monthly + degree-day charts." />
-        ) : null}
+        {section === "FDD Plots" ? <FddPlotsSection rules={rulesQ.data?.rules} /> : null}
+        {section === "RCx Plots" ? <RcxPlotsSection /> : null}
+        {section === "Metering" ? <MeteringSection /> : null}
         {section === "Export" ? (
           <Placeholder title="Export" blurb="CSV / session / health / data-model exports." />
         ) : null}

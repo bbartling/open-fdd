@@ -90,6 +90,22 @@
   margin: 0.35rem 0 0.75rem;
 }
 
+.vibe19-sidebar button {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  padding: 0.15rem 0.25rem;
+  border-radius: 4px;
+  width: 100%;
+}
+
+.vibe19-sidebar button.active {
+  background: #1f6feb33;
+  font-weight: 600;
+}
+
 .vibe19-sidebar details summary {
   cursor: pointer;
   font-weight: 600;
