@@ -41,6 +41,7 @@ See [examples/external-agents.md](../examples/external-agents.md).
 | [model-routing.md](model-routing.md) | Codex/Cursor agent routing |
 | [openfdd-mcp-tool-contract.md](openfdd-mcp-tool-contract.md) | MCP tool surface |
 | [bench-vs-source.md](bench-vs-source.md) | Bench vs product source trees *(paste-only — not on Pages)* |
+| [vibe19-parity-nightly-monster-prompt.md](vibe19-parity-nightly-monster-prompt.md) | **Product agent** — vibe19 look/feel + 59 rules + security PR train *(paste-only)* |
 | [vibe16-bacnet-feather-port-agent-prompt.md](vibe16-bacnet-feather-port-agent-prompt.md) | **Product agent** — vibe16 BACnet/Feather port cycle *(paste-only)* |
 | [linux-edge-tester-prompt.md](linux-edge-tester-prompt.md) | **Linux edge tester** — turnkey copy-paste validation *(paste-only)* |
 | [bench-330-beta-cycle-agent-prompt.md](bench-330-beta-cycle-agent-prompt.md) | **Bench agent** — full 3.3.0-beta cycle *(paste-only)* |

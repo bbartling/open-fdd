@@ -1,6 +1,6 @@
 # React / TypeScript dashboard cutover plan
 
-**Status:** Planning only — do not expand UI scope until PR #477 is on `master` and nightly GHCR is green.
+**Status:** **Shipped (vibe19 parity train)** — registry APIs on master (#505); SQL catalog 59+ (#506); React lab `/lab` with Plotly chart parity (#507). Remaining: GHCR nightly verify + bench handoff.
 
 ## Current layout
 
@@ -19,15 +19,15 @@ Production serves **one** Rust edge image (API + static dashboard). No separate 
 2. Vite writes to `frontend/` (`VITE_OUT_DIR=../frontend` in Dockerfile)
 3. Rust edge binary serves `FRONTEND_DIR=/app/frontend`
 
-### Phase B — API wiring (in progress)
+### Phase B — API wiring (done)
 
 Wire dashboard to existing edge `/api/*` endpoints via Vite dev proxy and production same-origin fetch.
 
-### Phase C — FDD engine UI (after engine on master)
+### Phase C — FDD engine UI (done — Open-FDD Lab `/lab`)
 
 Typed surfaces (no raw SQL editing in operator UI):
 
-- 50-rule registry browser (from `sql_rules/registry.yaml`)
+- 59+ rule registry browser (from `sql_rules/registry.yaml`)
 - Rule tuning panel (`control`-typed parameters per `SQL_RULE_TUNING_CONTRACT.md`)
 - DataFusion run/preview (trigger `fdd_cli` or future edge API)
 - Parquet/cache status

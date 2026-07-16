@@ -27,7 +27,7 @@ Standalone stack UI (Caddy) reverse-proxies `/api*` → `central:8080`.
 | --- | --- | --- |
 | GET | `/api/fdd/rules` | Registry from `sql_rules/registry.yaml` |
 | GET | `/api/fdd/rules/{id}/params` | Tuning schema (`control` field per parameter) |
-| POST | `/api/fdd/run` | Execute rules — prefer `{ "mode": "registry", "rule_ids": [...] }` (typed params). Raw SQL only for integrator lab. |
+| POST | `/api/fdd/run` | Execute registry rules — `{ "mode": "registry", "rule_ids": [...], "params": {...} }` only. **Raw SQL is rejected** (integrator SQL lab: `/api/rules`). |
 | GET | `/api/fdd/cache/status` | Parquet ingest / results status |
 | GET | `/api/fdd/roles` | Column role mappings |
 | GET | `/api/fdd/status` | Registry count + rules dir |
