@@ -81,9 +81,8 @@ impl Modify for SecurityAddon {
 
 /// Swagger UI at `/docs`; OpenAPI JSON at `/openapi.json` (mounted once by SwaggerUi).
 pub fn router() -> Router {
-    Router::new().merge(
-        utoipa_swagger_ui::SwaggerUi::new("/docs").url("/openapi.json", ApiDoc::openapi()),
-    )
+    Router::new()
+        .merge(utoipa_swagger_ui::SwaggerUi::new("/docs").url("/openapi.json", ApiDoc::openapi()))
 }
 
 #[cfg(test)]

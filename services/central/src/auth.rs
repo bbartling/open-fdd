@@ -145,7 +145,11 @@ impl AuthConfig {
 
     /// Validate username/password for UI login. Accepts `admin` (or `operator`) when
     /// `OPENFDD_ADMIN_PASSWORD` matches.
-    pub fn authenticate_password(&self, username: &str, password: &str) -> Result<(String, Role), String> {
+    pub fn authenticate_password(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<(String, Role), String> {
         let expected = self
             .admin_password
             .as_ref()
