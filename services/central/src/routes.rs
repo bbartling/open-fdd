@@ -564,7 +564,9 @@ pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
         "mode": body.params.get("mode").cloned().unwrap_or(json!("registry")),
         "rule_ids": body.params.get("rule_ids").cloned(),
     });
-    Json(open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload))
+    Json(open_fdd_edge_prototype::fdd::registry_api::run_registry(
+        &payload,
+    ))
 }
 
 pub async fn fdd_registry_rules() -> Json<Value> {
