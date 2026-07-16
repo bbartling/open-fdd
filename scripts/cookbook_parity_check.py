@@ -91,13 +91,37 @@ def rule_vav7(df):
     )
 
 
+def rule_vav1(df):
+    return df["zone_t"].notna() & ((df["zone_t"] < 68.0) | (df["zone_t"] > 76.0))
+
+
+def rule_fc2(df):
+    """MAT too cold vs RAT/OAT mix when OA damper nearly closed (screening oracle)."""
+    fan = norm_cmd(df["fan_cmd"])
+    return (
+        df["mat"].notna()
+        & df["rat"].notna()
+        & (df["oa_damper"] <= 0.1)
+        & (df["mat"] < df["rat"] - 8.0)
+        & (fan >= 0.5)
+    )
+
+
+def rule_sched247(df):
+    """After-hours fan run while unoccupied (aligned with SCHED-1 / SCHED-247 family)."""
+    return df["occ_mode"].eq("unoccupied") & df["fan_status"].astype(bool)
+
+
 CHECKS = {
     "reset1_obvious_fault.jsonl": (rule_reset1, True),
     "reset1_normal.jsonl": (rule_reset1, False),
     "sched1_obvious_fault.jsonl": (rule_sched1, True),
     "fc1_obvious_fault.jsonl": (rule_fc1, True),
+    "fc2_obvious_fault.jsonl": (rule_fc2, True),
+    "vav1_obvious_fault.jsonl": (rule_vav1, True),
     "vav6_obvious_fault.jsonl": (rule_vav6, True),
     "vav7_obvious_fault.jsonl": (rule_vav7, True),
+    "sched247_obvious_fault.jsonl": (rule_sched247, True),
 }
 
 

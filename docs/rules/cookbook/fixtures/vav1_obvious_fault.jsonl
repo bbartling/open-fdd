@@ -1,0 +1,4 @@
+{"timestamp":"2026-07-01T14:00:00Z","equipment_id":"equip:test-vav","zone_t":82.0,"occ_mode":"occupied"}
+{"timestamp":"2026-07-01T14:05:00Z","equipment_id":"equip:test-vav","zone_t":82.5,"occ_mode":"occupied"}
+{"timestamp":"2026-07-01T14:10:00Z","equipment_id":"equip:test-vav","zone_t":83.0,"occ_mode":"occupied"}
+{"timestamp":"2026-07-01T14:15:00Z","equipment_id":"equip:test-vav","zone_t":83.2,"occ_mode":"occupied"}
