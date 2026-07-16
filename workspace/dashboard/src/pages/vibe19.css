@@ -1,0 +1,165 @@
+.vibe19-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.5rem 0 2rem;
+}
+
+.vibe19-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.vibe19-hero h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.6rem;
+}
+
+.vibe19-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  border-bottom: 1px solid var(--border, #2a3344);
+  padding-bottom: 0.5rem;
+}
+
+.vibe19-nav button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.vibe19-nav button.active {
+  background: #1f6feb33;
+  border-color: #1f6feb;
+}
+
+.vibe19-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.vibe19-metric,
+.vibe19-card {
+  background: var(--panel, #121821);
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+}
+
+.vibe19-metric .label {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.vibe19-metric .value {
+  font-size: 1.4rem;
+  font-weight: 650;
+  margin-top: 0.25rem;
+}
+
+.vibe19-card.wide {
+  grid-column: 1 / -1;
+}
+
+.vibe19-run {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 0.75rem;
+}
+
+.vibe19-sidebar {
+  background: var(--panel, #121821);
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 10px;
+  padding: 0.75rem;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.vibe19-sidebar ul {
+  list-style: none;
+  padding-left: 0.5rem;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.vibe19-sidebar button {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  padding: 0.15rem 0.25rem;
+  border-radius: 4px;
+  width: 100%;
+}
+
+.vibe19-sidebar button.active {
+  background: #1f6feb33;
+  font-weight: 600;
+}
+
+.vibe19-sidebar details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.vibe19-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.vibe19-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.vibe19-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.vibe19-table th,
+.vibe19-table td {
+  border-bottom: 1px solid var(--border, #2a3344);
+  text-align: left;
+  padding: 0.35rem 0.4rem;
+}
+
+.vibe19-pre {
+  font-size: 0.75rem;
+  max-height: 240px;
+  overflow: auto;
+  background: #0b1018;
+  padding: 0.5rem;
+  border-radius: 6px;
+}
+
+.vibe19-role-list {
+  columns: 2;
+  gap: 1rem;
+}
+
+.vibe19-card.grow {
+  min-height: 320px;
+}
+
+@media (max-width: 900px) {
+  .vibe19-run {
+    grid-template-columns: 1fr;
+  }
+  .vibe19-role-list {
+    columns: 1;
+  }
+}
