@@ -22,10 +22,9 @@ pub fn health_json(auth_required: bool) -> serde_json::Value {
     let image_tag = env_or("OPENFDD_IMAGE_TAG", edge_version());
     let git_sha = env_or("OPENFDD_GIT_SHA", "unknown");
     let git_sha_short = git_sha_short(&git_sha);
-    let image_name =
-        env_or("OPENFDD_IMAGE_NAME", "ghcr.io/bbartling/openfdd-central");
-    let image_ref = std::env::var("OPENFDD_IMAGE_REF")
-        .unwrap_or_else(|_| format!("{image_name}:{image_tag}"));
+    let image_name = env_or("OPENFDD_IMAGE_NAME", "ghcr.io/bbartling/openfdd-central");
+    let image_ref =
+        std::env::var("OPENFDD_IMAGE_REF").unwrap_or_else(|_| format!("{image_name}:{image_tag}"));
     serde_json::json!({
         "ok": true,
         "version": edge_version(),

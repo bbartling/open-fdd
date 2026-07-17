@@ -35,7 +35,8 @@ impl Server {
             .unwrap_or_else(|poison| poison.into_inner());
 
         let port = pick_port();
-        let workspace = std::env::temp_dir().join(format!("openfdd-central-it-{}", std::process::id()));
+        let workspace =
+            std::env::temp_dir().join(format!("openfdd-central-it-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&workspace);
         std::fs::create_dir_all(&workspace).unwrap();
         let parquet_root = workspace.join(".cache/parquet");
@@ -44,7 +45,10 @@ impl Server {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let repo_root = manifest_dir.join("../..");
         let sql_rules = repo_root.join("sql_rules");
-        assert!(sql_rules.join("registry.yaml").is_file(), "sql_rules missing");
+        assert!(
+            sql_rules.join("registry.yaml").is_file(),
+            "sql_rules missing"
+        );
 
         let bin = env!("CARGO_BIN_EXE_openfdd-central");
         let mut child = Command::new(bin)
@@ -59,7 +63,12 @@ impl Server {
             .expect("start openfdd-central");
 
         for _ in 0..80 {
-            let (status, body) = http_raw("GET", &format!("http://127.0.0.1:{port}/api/health"), None, None);
+            let (status, body) = http_raw(
+                "GET",
+                &format!("http://127.0.0.1:{port}/api/health"),
+                None,
+                None,
+            );
             if status == 200 && body.contains("\"openfdd-central\"") {
                 return Self {
                     child,
@@ -90,7 +99,11 @@ impl Drop for Server {
 fn http_raw(method: &str, url: &str, body: Option<&str>, bearer: Option<&str>) -> (u16, String) {
     let url = url.strip_prefix("http://").unwrap();
     let (host_port, path) = url.split_once('/').unwrap_or((url, ""));
-    let path = if path.is_empty() { "/" } else { &format!("/{path}") };
+    let path = if path.is_empty() {
+        "/"
+    } else {
+        &format!("/{path}")
+    };
     let mut stream = match TcpStream::connect(host_port) {
         Ok(s) => s,
         Err(_) => return (0, String::new()),
@@ -185,14 +198,22 @@ fn csv_upload_execute_then_fc1_registry_run() {
     let preflight_body = json!({ "session_id": session_id }).to_string();
     let (status, preflight) = post_json(&srv.url("/api/csv/import/preflight"), &preflight_body);
     assert_eq!(status, 200, "preflight: {preflight}");
-    assert_eq!(preflight.get("ok"), Some(&json!(true)), "preflight: {preflight}");
+    assert_eq!(
+        preflight.get("ok"),
+        Some(&json!(true)),
+        "preflight: {preflight}"
+    );
 
     let execute_body = json!({ "session_id": session_id, "confirm": true }).to_string();
     let (status, execute) = post_json(&srv.url("/api/csv/import/execute"), &execute_body);
     assert_eq!(status, 200, "execute: {execute}");
     assert_eq!(execute.get("ok"), Some(&json!(true)), "execute: {execute}");
     let parquet = execute.get("parquet_ingest").expect("parquet_ingest");
-    assert_eq!(parquet.get("ok"), Some(&json!(true)), "parquet_ingest: {parquet}");
+    assert_eq!(
+        parquet.get("ok"),
+        Some(&json!(true)),
+        "parquet_ingest: {parquet}"
+    );
 
     let fdd_body = json!({
         "params": {
