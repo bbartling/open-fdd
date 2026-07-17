@@ -6,6 +6,10 @@ nav_order: 12
 
 # Linux edge tester — stack recipes GHCR soak
 
+**Living daily prompt.** Rewrite this file in place each day (or whenever nightlies
+change). Do **not** create dated copies (`*-2026-07-17.md`, `bench-NNN-*`, etc.).
+One path forever: `docs/agent/linux-edge-tester-stack-recipes-prompt.md`.
+
 Copy-paste prompt for a **second OT bench**. Pulls GHCR nightlies, exercises all four
 compose build recipes, validates BACnet device **5007** via fieldbus, then **leaves
 the standalone stack running** for human Niagara Workbench validation of hosted

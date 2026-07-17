@@ -130,6 +130,17 @@ def run_docs_integrity() -> None:
     if missing:
         raise AssertionError(f"missing cookbook pages: {missing}")
 
+    # The README must always link the cookbook — it is the heart of the project
+    # and must never be vibe-coded out of the front page again.
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    for required_link in (
+        "https://bbartling.github.io/open-fdd/rules/cookbook/",
+        "https://bbartling.github.io/open-fdd/",
+    ):
+        if required_link not in readme:
+            raise AssertionError(f"README.md missing required docs link: {required_link}")
+    print("PASS README cookbook + docs links present")
+
     for name in ("pandas-cookbook.md", "datafusion-sql-cookbook.md"):
         text = (COOKBOOK / name).read_text(encoding="utf-8")
         n = len(RULE_HEADING_RE.findall(text))

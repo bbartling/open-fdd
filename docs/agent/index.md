@@ -43,7 +43,7 @@ See [examples/external-agents.md](../examples/external-agents.md).
 | [bench-vs-source.md](bench-vs-source.md) | Bench vs product source trees *(paste-only — not on Pages)* |
 | [vibe19-parity-nightly-monster-prompt.md](vibe19-parity-nightly-monster-prompt.md) | **Product agent** — vibe19 look/feel + 59 rules + security PR train *(paste-only)* |
 | [vibe16-bacnet-feather-port-agent-prompt.md](vibe16-bacnet-feather-port-agent-prompt.md) | **Product agent** — vibe16 BACnet/Feather port cycle *(paste-only)* |
-| [linux-edge-tester-stack-recipes-prompt.md](linux-edge-tester-stack-recipes-prompt.md) | **Second bench** — all 4 recipes, 5007, leave-running + human Workbench *(paste-only)* |
+| [linux-edge-tester-stack-recipes-prompt.md](linux-edge-tester-stack-recipes-prompt.md) | **Second bench** — living daily prompt (overwrite in place, never date) — 4 recipes, 5007, leave-running + human Workbench *(paste-only)* |
 | [linux-edge-tester-stack-nightly-prompt.md](linux-edge-tester-stack-nightly-prompt.md) | **Linux edge tester** — standalone stack nightly (central/ui/fieldbus/mqtt) *(paste-only)* |
 | [linux-edge-tester-second-bench-ghcr-soak-prompt.md](linux-edge-tester-second-bench-ghcr-soak-prompt.md) | **Second bench** — rigorous GHCR soak (superseded by stack-recipes prompt) *(paste-only)* |
 | [linux-edge-tester-prompt.md](linux-edge-tester-prompt.md) | **Linux edge tester** — turnkey copy-paste validation *(paste-only)* |
