@@ -26,6 +26,9 @@ fn default_control() -> String {
 #[derive(Debug, Clone, Deserialize)]
 pub struct RuleSpec {
     pub rule_id: String,
+    /// Alternate IDs accepted by `/api/fdd/run` (e.g. cookbook `FC13` → `FC13-SAT-HIGH`).
+    #[serde(default)]
+    pub aliases: Vec<String>,
     pub sql_file: String,
     pub description: String,
     #[serde(default)]

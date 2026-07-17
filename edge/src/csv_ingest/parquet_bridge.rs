@@ -55,11 +55,13 @@ pub fn ingest_rows_to_parquet(dataset_id: &str, rows: &[OutputRow]) -> Value {
     value_keys.sort();
     value_keys.dedup();
 
+    let grid_minutes = infer_grid_minutes(rows).unwrap_or(5);
     let manifest = json!({
-        "grid_minutes": 5,
+        "grid_minutes": grid_minutes,
         "export_metadata": {
             "source": "csv_import",
             "dataset_id": dataset_id,
+            "inferred_grid_minutes": grid_minutes,
         }
     });
     if let Err(e) = fs::write(
@@ -85,6 +87,7 @@ pub fn ingest_rows_to_parquet(dataset_id: &str, rows: &[OutputRow]) -> Value {
             "equipment_written": report.equipment_written,
             "total_rows": report.total_rows,
             "total_ms": report.total_ms,
+            "grid_minutes": grid_minutes,
             "package_root": building_root.display().to_string(),
         }),
         Err(e) => json!({
@@ -94,6 +97,34 @@ pub fn ingest_rows_to_parquet(dataset_id: &str, rows: &[OutputRow]) -> Value {
             "out_dir": out_dir.display().to_string(),
         }),
     }
+}
+
+/// Median positive Δt between consecutive UTC timestamps, rounded to whole minutes (≥1).
+fn infer_grid_minutes(rows: &[OutputRow]) -> Option<u32> {
+    let mut ts: Vec<i64> = rows
+        .iter()
+        .filter_map(|r| r.ts_utc.map(|t| t.timestamp()))
+        .collect();
+    if ts.len() < 2 {
+        return None;
+    }
+    ts.sort_unstable();
+    ts.dedup();
+    if ts.len() < 2 {
+        return None;
+    }
+    let mut deltas: Vec<i64> = ts
+        .windows(2)
+        .map(|w| w[1] - w[0])
+        .filter(|d| *d > 0)
+        .collect();
+    if deltas.is_empty() {
+        return None;
+    }
+    deltas.sort_unstable();
+    let median = deltas[deltas.len() / 2];
+    let minutes = ((median as f64) / 60.0).round() as i64;
+    Some(minutes.clamp(1, 60) as u32)
 }
 
 fn write_history_wide(
@@ -135,6 +166,8 @@ fn write_columns_csv(path: &Path, value_keys: &[String]) -> Result<(), String> {
     let mut f = fs::File::create(path).map_err(|e| e.to_string())?;
     writeln!(f, "column,role").map_err(|e| e.to_string())?;
     for k in value_keys {
+        // Role left blank; fdd_core::infer_role_from_column_name maps identity
+        // cookbook names (fan_cmd, duct_static, …) at parquet ingest (#525).
         writeln!(f, "{k},").map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -155,24 +188,50 @@ mod tests {
         std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.join(".cache/parquet"));
 
         let mut values = BTreeMap::new();
-        values.insert("sat".into(), "55.0".into());
-        values.insert("oa_t".into(), "70.0".into());
-        let rows = vec![OutputRow {
-            ts_utc: Some(chrono::Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap()),
-            ts_local: String::new(),
-            timezone: "UTC".into(),
-            source_timestamp_raw: String::new(),
-            source_timestamp_parse_status: "ok".into(),
-            source_timestamp_fold: None,
-            source_file: "t.csv".into(),
-            source_row_number: 1,
-            values,
-            fill_created: false,
-        }];
+        values.insert("duct_static".into(), "0.5".into());
+        values.insert("duct_static_sp".into(), "1.4".into());
+        values.insert("fan_cmd".into(), "1.0".into());
+        let rows: Vec<OutputRow> = (0..3)
+            .map(|i| OutputRow {
+                ts_utc: Some(chrono::Utc.with_ymd_and_hms(2024, 1, 1, 12, i, 0).unwrap()),
+                ts_local: String::new(),
+                timezone: "UTC".into(),
+                source_timestamp_raw: String::new(),
+                source_timestamp_parse_status: "ok".into(),
+                source_timestamp_fold: None,
+                source_file: "t.csv".into(),
+                source_row_number: i as u64 + 1,
+                values: values.clone(),
+                fill_created: false,
+            })
+            .collect();
         let out = ingest_rows_to_parquet("fc1_job", &rows);
         assert_eq!(out.get("ok"), Some(&json!(true)), "{out}");
+        assert_eq!(out.get("grid_minutes"), Some(&json!(1)), "{out}");
         let pq = tmp.join(".cache/parquet/building=fc1_job/equipment=fc1_job/history.parquet");
         assert!(pq.is_file(), "missing {}", pq.display());
+        let cols =
+            fs::read_to_string(tmp.join("data/csv_buildings/fc1_job/fc1_job/columns.csv")).unwrap();
+        assert!(cols.contains("fan_cmd"), "{cols}");
         let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn infer_grid_minutes_from_1min_cadence() {
+        let rows: Vec<OutputRow> = (0..5)
+            .map(|i| OutputRow {
+                ts_utc: Some(chrono::Utc.with_ymd_and_hms(2024, 1, 1, 12, i, 0).unwrap()),
+                ts_local: String::new(),
+                timezone: "UTC".into(),
+                source_timestamp_raw: String::new(),
+                source_timestamp_parse_status: "ok".into(),
+                source_timestamp_fold: None,
+                source_file: "t.csv".into(),
+                source_row_number: i as u64 + 1,
+                values: BTreeMap::new(),
+                fill_created: false,
+            })
+            .collect();
+        assert_eq!(infer_grid_minutes(&rows), Some(1));
     }
 }

@@ -31,6 +31,7 @@ services:
       OPENFDD_MQTT_CERT_PEM: /mqtt/central.cert.pem
       OPENFDD_MQTT_KEY_PEM: /mqtt/central.key.pem
       OPENFDD_WORKSPACE: /workspace
+      OPENFDD_PARQUET_ROOT: /workspace/.cache/parquet
       # Remote UI login (optional). When JWT secret is set, also set OPENFDD_ADMIN_PASSWORD
       # and sign in as admin/operator/viewer with that password from http://<host>:3000/login
       OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}

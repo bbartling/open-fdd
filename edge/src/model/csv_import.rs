@@ -106,6 +106,7 @@ pub fn pivot_alias(slug: &str) -> Option<&'static str> {
         "sat_sp" | "supply_air_temp_sp" | "sat_setpoint" => Some("sat_sp"),
         "fan_cmd" | "fan_status" | "fan" => Some("fan_cmd"),
         "duct_static" | "static_pressure" => Some("duct_static"),
+        "duct_static_sp" | "duct_static_setpoint" | "static_pressure_sp" => Some("duct_static_sp"),
         "occ" | "occupancy" | "occupancy_mode_indicator" => Some("occ"),
         _ => pivot_alias_fuzzy(slug),
     }
@@ -121,7 +122,7 @@ fn pivot_alias_fuzzy(slug: &str) -> Option<&'static str> {
     if slug.contains("supply_air_temp") {
         return Some("sat");
     }
-    if slug.contains("duct_static") && slug.contains("set") {
+    if slug.contains("duct_static") && (slug.contains("set") || slug.ends_with("_sp")) {
         return Some("duct_static_sp");
     }
     if slug.contains("duct_static") || slug.contains("static_pressure") {

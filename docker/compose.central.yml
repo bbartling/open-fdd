@@ -30,6 +30,7 @@ services:
       OPENFDD_MQTT_CERT_PEM: /mqtt/central.cert.pem
       OPENFDD_MQTT_KEY_PEM: /mqtt/central.key.pem
       OPENFDD_WORKSPACE: /workspace
+      OPENFDD_PARQUET_ROOT: /workspace/.cache/parquet
       OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}
       OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
     ports:
