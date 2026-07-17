@@ -46,6 +46,24 @@ Bump all three together when cutting a coordinated stack release.
 
 ## Latest verified nightlies
 
-See the most recent commit that updates this section after GHCR publish succeeds. Use `./scripts/openfdd_stack_up.sh standalone` on the bench for retest.
+Published successfully from stack-only `master` tip **`1eb82b98`**:
+
+| Images | Immutable tag | Workflow |
+|--------|---------------|----------|
+| `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` | `sha-1eb82b9` | [29585092421](https://github.com/bbartling/open-fdd/actions/runs/29585092421) — success |
+| `openfdd-mcp` | `sha-1eb82b9` | [29585091221](https://github.com/bbartling/open-fdd/actions/runs/29585091221) — success |
+
+```bash
+export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-1eb82b9
+export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-1eb82b9
+export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-1eb82b9
+export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-1eb82b9
+export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-1eb82b9
+```
+
+The workflows verified build/push metadata and manifests. Pull/run verification is
+the next bench gate because Docker is unavailable in the current WSL environment.
+Run `docs/agent/linux-edge-tester-stack-recipes-prompt.md`; leave standalone
+running for the human Niagara check.
 
 **Human Workbench gate** still required before BACnet OT PASS (hosted **599999** discoverability). See `docs/agent/linux-edge-tester-stack-recipes-prompt.md`.
