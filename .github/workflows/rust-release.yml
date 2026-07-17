@@ -90,6 +90,10 @@ jobs:
           VITE_OUT_DIR=dist npm run build
           test -f dist/index.html
       - run: |
+          export OPENFDD_SITE_ID=local
+          export OPENFDD_EDGE_ID=fieldbus-1
+          export OPENFDD_MQTT_HOST=127.0.0.1
+          export OPENFDD_EDGE_KIT_DIR=deploy/mqtt/kits/local__fieldbus-1
           for f in docker/compose.standalone.yml docker/compose.central.yml docker/compose.edge.yml docker/compose.csv.yml; do
             docker compose -f "$f" config >/dev/null
           done
