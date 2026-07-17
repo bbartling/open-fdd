@@ -8,10 +8,10 @@ nav_order: 11
 
 ## Deployment posture
 
-Open-FDD is **local-first** for LAN, VPN, or OT networks. Default compose binds **127.0.0.1:8080**.
+Open-FDD is **local-first** for LAN, VPN, or OT networks. Central binds the API on **:8080** and the `openfdd-ui` Caddy container serves the UI on **:3000**.
 
 {: .warning }
-Do not expose the bridge API directly on the public internet.
+Do not expose the central API directly on the public internet.
 
 ## Authentication
 
@@ -21,14 +21,10 @@ Do not expose the bridge API directly on the public internet.
 
 ## TLS
 
-Use **Caddy** profiles (`caddy-http`, `caddy-tls`) or an external reverse proxy for HTTPS on the LAN edge.
-
-Generate self-signed certs for lab TLS:
-
-```bash
-# See compose comments — openfdd-edge tls generate
-docker compose -f docker/compose.edge.rust.yml --profile caddy-tls up -d
-```
+The `openfdd-ui` Caddy container terminates HTTP and proxies `/api` to central.
+For HTTPS on the LAN edge, front the stack with a TLS reverse proxy (Caddy or
+similar) or terminate TLS on your ingress. MQTT between fieldbus edges and
+central is always MQTTS (8883) using the per-site provisioning kits.
 
 ## Secrets
 
@@ -43,7 +39,8 @@ docker compose -f docker/compose.edge.rust.yml --profile caddy-tls up -d
 
 ## Backup before change
 
-Always run `openfdd_rust_site_backup.sh` before image updates or historian purges.
+Always back up `workspace/` before image updates or historian purges — see
+[Backup, update, restore](backup-update-restore.html).
 
 ## Dependency scanning
 

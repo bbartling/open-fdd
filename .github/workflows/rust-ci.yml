@@ -1,7 +1,8 @@
-# Canonical production edge PR/push gate.
+# Canonical PR/push gate for the Open-FDD container stack.
 # FDD engine path-scoped gate: fdd-engine-ci.yml
-# Trusted nightly publish: rust-ghcr.yml (does not duplicate every PR check)
-name: Rust Edge CI
+# Nightly stack publish: ghcr-openfdd-stack.yml
+# MCP publish: rust-ghcr-mcp.yml
+name: Rust Stack CI
 
 on:
   push:
@@ -31,7 +32,7 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Edge and MCP tests
+      - name: Edge lib and MCP tests
         run: cargo test --workspace --all-targets -p open_fdd_edge_prototype -p openfdd-mcp
 
       - name: Central / fieldbus / MQTT contract tests
@@ -71,13 +72,7 @@ jobs:
         working-directory: workspace/dashboard
         run: npm test
 
-      - name: Production build
-        working-directory: workspace/dashboard
-        env:
-          VITE_OUT_DIR: ../../frontend
-        run: npm run build
-
-      - name: Split UI image artifact (dist)
+      - name: Production build (UI image dist)
         working-directory: workspace/dashboard
         env:
           VITE_OUT_DIR: dist
@@ -87,10 +82,9 @@ jobs:
 
       - name: Built UI guards
         run: |
-          test -f frontend/index.html
           grep -q "Drivers" workspace/dashboard/src/pages/DriversPage.tsx
           grep -q "SupervisoryOverridePanel" workspace/dashboard/src/components/SupervisoryOverridePanel.tsx
-          ! grep -R "Rule Lab" workspace/dashboard/src frontend/index.html || true
+          ! grep -R "Rule Lab" workspace/dashboard/src || true
 
       - name: BACnet NIC helper guards
         run: |
@@ -101,208 +95,43 @@ jobs:
           grep -q "OPENFDD_VALIDATION_PROFILE" .env.example
           test -x scripts/audit_no_private_bench_hardcoding.sh
           ./scripts/audit_no_private_bench_hardcoding.sh
-          test -f docker-compose.bacnet-live.yml
           test -f VERSION
           grep -qE '^3\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$' VERSION
 
   docker:
-    name: Docker build and compose config
+    name: Stack compose config and Dockerfiles
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compose config
+      - name: Compose config (all recipes)
         run: |
-          mkdir -p workspace/bacnet/commissioning
-          echo 'OFDD_AUTH_REQUIRED=true' > workspace/auth.env.local
-          touch workspace/data.env.local workspace/bacnet/commissioning/commission.env
-          export OPENFDD_COMPOSE_ROOT="$PWD"
-          docker compose -f docker/compose.edge.rust.yml config
-
-      - name: Docker image build
-        run: docker build -t openfdd-edge-rust:ci .
-
-  compose-smoke:
-    name: Docker Compose API smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Prepare workspace for non-root container user
-        run: |
-          mkdir -p workspace/overrides workspace/bacnet/overrides workspace/data/drivers workspace/logs workspace/reports/generated
-          cat > workspace/data.env.local <<'EOF'
-          OPENFDD_BACNET_MODE=live
-          OPENFDD_MODBUS_MODE=live
-          EOF
-          cat > workspace/auth.env.local <<'EOF'
-          OFDD_AUTH_REQUIRED=true
-          OFDD_AUTH_SECRET=ci-test-secret-openfdd-edge-do-not-use-in-production
-          OFDD_OPERATOR_USER=operator
-          OFDD_OPERATOR_PASSWORD=ci-operator-pass
-          OFDD_INTEGRATOR_USER=integrator
-          OFDD_INTEGRATOR_PASSWORD=ci-integrator-pass
-          OFDD_AGENT_USER=agent
-          OFDD_AGENT_PASSWORD=ci-agent-pass
-          EOF
-          chmod 600 workspace/auth.env.local
-          sudo chown -R 10001:10001 workspace/overrides workspace/bacnet workspace/data workspace/logs workspace/reports
-
-      - name: Compose build
-        run: docker compose build --no-cache
-
-      - name: Compose up
-        run: docker compose up -d
-
-      - name: Wait for bridge
-        run: |
-          sleep 5
-          for i in $(seq 1 60); do
-            code="$(curl -sS -o /tmp/health.json -w '%{http_code}' http://127.0.0.1:8080/api/health || echo 000)"
-            if [[ "$code" == "200" ]]; then
-              cat /tmp/health.json
-              exit 0
-            fi
-            echo "wait $i: HTTP $code"
-            sleep 2
+          for f in docker/compose.standalone.yml docker/compose.central.yml docker/compose.edge.yml docker/compose.csv.yml; do
+            test -f "$f"
+            docker compose -f "$f" config >/dev/null
+            echo "OK config: $f"
           done
-          docker compose logs
-          exit 1
 
-      - name: UI served is TypeScript driver-tree build
+      - name: File smoke (stack recipes)
+        run: bash scripts/release/smoke_standalone_mqtts.sh
+
+      - name: Stack script syntax
         run: |
-          curl -fsS http://127.0.0.1:8080/ | grep -q 'id="root"'
-          curl -fsS http://127.0.0.1:8080/ | grep -q '/assets/index-'
-
-      - name: BACnet override scanner smoke
-        run: |
-          AGENT_PW="$(grep '^OFDD_AGENT_PASSWORD=' workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
-          TOKEN="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
-            -H 'Content-Type: application/json' \
-            -d "$(jq -nc --arg p "$AGENT_PW" '{username:"agent",password:$p}')" | jq -r '.token // .access_token')"
-
-          test -n "$TOKEN"
-          test "$TOKEN" != "null"
-
-          curl -fsS http://127.0.0.1:8080/api/bacnet/driver/tree \
-            -H "Authorization: Bearer $TOKEN" | jq -e '((.drivers // []) | length >= 1) or ((.devices // []) | length >= 1)'
-
-          curl -fsS http://127.0.0.1:8080/api/bacnet/commission/status \
-            -H "Authorization: Bearer $TOKEN" | jq -e '.config.mode == "live"'
-
-          curl -fsS -X POST http://127.0.0.1:8080/api/bacnet/overrides/scan-once \
-            -H "Authorization: Bearer $TOKEN" \
-            -H 'Content-Type: application/json' \
-            -d '{}' | jq -e '.ok == true and (.summary.total // 0) >= 0'
-
-          curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/status \
-            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true'
-
-          curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export \
-            -H "Authorization: Bearer $TOKEN" | grep "scanned_at"
-
-          curl -fsS -D - -o /dev/null http://127.0.0.1:8080/api/bacnet/overrides/export \
-            -H "Authorization: Bearer $TOKEN" | grep -i 'Content-Disposition: attachment; filename="bacnet_overrides_export.csv"'
-
-          curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/summary \
-            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and (.operator_priority // 0) >= 1'
-
-          curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export/p8 \
-            -H "Authorization: Bearer $TOKEN" | grep "override_kind"
-
-          curl -fsS http://127.0.0.1:8080/api/bacnet/overrides/export/non-p8 \
-            -H "Authorization: Bearer $TOKEN" | grep "override_kind"
-
-      - name: Modbus live-mode smoke
-        run: |
-          AGENT_PW="$(grep '^OFDD_AGENT_PASSWORD=' workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
-          TOKEN="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
-            -H 'Content-Type: application/json' \
-            -d "$(jq -nc --arg p "$AGENT_PW" '{username:"agent",password:$p}')" | jq -r '.token // .access_token')"
-
-          curl -fsS http://127.0.0.1:8080/api/modbus/points \
-            -H "Authorization: Bearer $TOKEN" | jq -e 'type == "array"'
-
-          curl -fsS http://127.0.0.1:8080/api/modbus/commission/status \
-            -H "Authorization: Bearer $TOKEN" | jq -e '.ok == true and .config.mode == "live"'
-
-          curl -fsS -X POST http://127.0.0.1:8080/api/modbus/scan \
-            -H "Authorization: Bearer $TOKEN" \
-            -H 'Content-Type: application/json' \
-            -d '{}' | jq -e '.ok == false'
-
-          curl -fsS -X POST http://127.0.0.1:8080/api/modbus/read \
-            -H "Authorization: Bearer $TOKEN" \
-            -H 'Content-Type: application/json' \
-            -d '{"register":40001,"function":"holding_register"}' | jq -e '.ok == false'
-
-      - name: FDD Wires and DataFusion SQL
-        run: |
-          INTEGRATOR_PW="$(grep '^OFDD_INTEGRATOR_PASSWORD=' workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
-          AGENT_PW="$(grep '^OFDD_AGENT_PASSWORD=' workspace/auth.env.local | cut -d= -f2- | tr -d '\r')"
-          INT="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
-            -H 'Content-Type: application/json' \
-            -d "$(jq -nc --arg p "$INTEGRATOR_PW" '{username:"integrator",password:$p}')" | jq -r '.token // .access_token')"
-          AGENT="$(curl -fsS -X POST http://127.0.0.1:8080/api/auth/login \
-            -H 'Content-Type: application/json' \
-            -d "$(jq -nc --arg p "$AGENT_PW" '{username:"agent",password:$p}')" | jq -r '.token // .access_token')"
-
-          curl -fsS http://127.0.0.1:8080/api/fdd-wires/graphs?site_id=site:unknown \
-            -H "Authorization: Bearer $INT" | jq -e '.ok == true'
-
-          curl -fsS -X POST http://127.0.0.1:8080/api/fdd-wires/propose-assignments \
-            -H "Authorization: Bearer $AGENT" -H 'Content-Type: application/json' \
-            -d '{"site_id":"site:unknown","equipment_type":"ahu"}' | jq -e '.review_status == "needs_review"'
-
-          curl -fsS -X POST http://127.0.0.1:8080/api/fdd-rules/oa_temp_out_of_range/test-sql \
-            -H "Authorization: Bearer $INT" -H 'Content-Type: application/json' \
-            -d '{"sql":"SELECT timestamp, equipment_id, oa_t FROM telemetry_pivot LIMIT 1","confirmation_seconds":300}' \
-            | jq -e '.ok == false or (.engine | type == "string")'
-
-          curl -sS -X POST http://127.0.0.1:8080/api/fdd-rules/oa_temp_out_of_range/activate \
-            -H "Authorization: Bearer $AGENT" -H 'Content-Type: application/json' -d '{}' \
-            | jq -e '.ok == false'
-
-          curl -fsS http://127.0.0.1:8080/api/fdd-schema/fdd-inputs \
-            -H "Authorization: Bearer $INT" | jq -e '(.fdd_inputs // []) | length >= 1'
-
-          curl -fsS http://127.0.0.1:8080/api/rules \
-            -H "Authorization: Bearer $INT" | jq -e '.ok == true'
-
-      - name: No-hardcoding audit
-        run: ./scripts/audit_no_private_bench_hardcoding.sh
-
-      - name: CSV files created in workspace
-        run: |
-          test -f workspace/bacnet/overrides/registry.json
-          test -f workspace/bacnet/overrides/overrides_export.csv
-          test -f workspace/overrides/bacnet_overrides.csv
-          test -f workspace/overrides/bacnet_priority8_overrides.csv
-          test -f workspace/overrides/bacnet_non_priority8_overrides.csv
-          test -f workspace/overrides/last_scan.json
-
-      - name: Show logs on failure
-        if: failure()
-        run: docker compose logs
-
-      - name: Compose down
-        if: always()
-        run: docker compose down
+          bash -n scripts/openfdd_stack_lib.sh
+          bash -n scripts/openfdd_stack_pull.sh
+          bash -n scripts/openfdd_stack_up.sh
+          bash -n scripts/release/smoke_standalone_mqtts.sh
 
   lifecycle-scripts:
-    name: Bootstrap script syntax
+    name: Stack script syntax
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - run: |
-          bash -n scripts/openfdd_rust_site_lib.sh
-          bash -n scripts/openfdd_rust_edge_bootstrap.sh
-          bash -n scripts/openfdd_rust_site_update.sh
-          bash -n scripts/openfdd_rust_site_backup.sh
-          bash -n scripts/openfdd_rust_check_ghcr_platform.sh
-          bash -n scripts/openfdd_rust_edge_validate.sh
+          bash -n scripts/openfdd_stack_lib.sh
+          bash -n scripts/openfdd_stack_pull.sh
+          bash -n scripts/openfdd_stack_up.sh
           bash -n scripts/openfdd_csv_import_sidecar.sh
           bash -n scripts/openfdd_csv_export_sidecar.sh

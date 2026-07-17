@@ -13,18 +13,18 @@ A **future** thin Linux host image for field edge devices:
 - A/B OTA updates (RAUC or similar) for OS + supervisor bundle
 - Board support: x86_64 UEFI (VM/bench), Raspberry Pi 4/5 (ARM64 field Pi)
 
-**Application logic stays in published GHCR images**, compiled from the Rust workspace (`edge/`, `mcp/`) — not baked into the OS rootfs.
+**Application logic stays in published GHCR images**, compiled from the Rust workspace (`services/`, `mcp/`) — not baked into the OS rootfs.
 
 ## What this is not (today)
 
 | Do not use `os/` for | Use instead |
 | --- | --- |
-| Fresh site install | [`scripts/openfdd_rust_edge_bootstrap.sh`](../scripts/openfdd_rust_edge_bootstrap.sh) |
-| Image updates | [`scripts/openfdd_rust_site_update.sh`](../scripts/openfdd_rust_site_update.sh) + GHCR |
-| Compose stack | [`docker/compose.edge.rust.yml`](../docker/compose.edge.rust.yml) |
-| Optional MCP sidecar | [`mcp/README.md`](../mcp/README.md) (`--profile mcp-sidecar`) |
+| Fresh site install | [`scripts/openfdd_stack_up.sh`](../scripts/openfdd_stack_up.sh) |
+| Image updates | [`scripts/openfdd_stack_up.sh`](../scripts/openfdd_stack_up.sh) + GHCR |
+| Compose stack | [`docker/compose.standalone.yml`](../docker/compose.standalone.yml) (+ central/edge/csv recipes) |
+| Optional MCP server | [`mcp/README.md`](../mcp/README.md) |
 
-Current production path: **Ubuntu (or Pi OS) + Docker CE + GHCR Rust edge** — same operational model Home Assistant used before HA OS matured, but with Open-FDD’s Rust cargo crates under the hood.
+Current production path: **Ubuntu (or Pi OS) + Docker CE + the GHCR container stack** — same operational model Home Assistant used before HA OS matured, but with Open-FDD’s Rust cargo crates under the hood.
 
 ## Layered model (HA OS–like)
 
@@ -39,12 +39,12 @@ Current production path: **Ubuntu (or Pi OS) + Docker CE + GHCR Rust edge** — 
 │  Pins GHCR tags · health · rollback · addon profiles           │
 └───────────────────────────┬─────────────────────────────────┘
                             │
-        ┌───────────────────┼───────────────────┐
-        ▼                   ▼                   ▼
-  openfdd-bridge      openfdd-commission   openfdd-haystack-gw
-  (Rust edge crate)   (same image)         (same image)
-        │                   │                   │
-        └───────────────────┴───────────────────┘
+    ┌──────────┬───────────┼───────────┬──────────┐
+    ▼          ▼           ▼           ▼          
+  central      ui       fieldbus     mqtt
+  (API/FDD)  (Caddy)   (BACnet→MQTTS) (broker)
+    │          │           │           │
+    └──────────┴───────────┴───────────┘
                             │
                     workspace/ (persistent)
                     historian · Haystack model · rules · auth
@@ -53,7 +53,7 @@ Current production path: **Ubuntu (or Pi OS) + Docker CE + GHCR Rust edge** — 
 Optional addon (separate GHCR image, stdio MCP):
 
 ```text
-  openfdd-mcp  ←  cargo crate `openfdd-mcp`, profile `mcp-sidecar`
+  openfdd-mcp  ←  cargo crate `openfdd-mcp`, talks to central
 ```
 
 ## Repo layout (concept vs implemented)
@@ -61,9 +61,9 @@ Optional addon (separate GHCR image, stdio MCP):
 | Path | Role | 3.2.x today |
 | --- | --- | --- |
 | `os/` | Board defs, Buildroot external, OTA bundles | **This folder — docs only** |
-| `edge/` | Rust bridge, historian, FDD, drivers (`open_fdd_edge_prototype`) | **Implemented** |
-| `mcp/` | Read-first MCP stdio sidecar (`openfdd-mcp`) | **Scaffold + GHCR** |
-| `docker/` | `Dockerfile`, `compose.edge.rust.yml` | **Implemented** |
+| `services/` | Rust central/fieldbus/mqtt + UI build | **Implemented** |
+| `mcp/` | Read-first MCP stdio server (`openfdd-mcp`) | **Scaffold + GHCR** |
+| `docker/` | compose recipes (standalone/central/edge/csv) | **Implemented** |
 | `workspace/` | Site state (bind-mounted) | **Implemented** |
 | `scripts/` | Bootstrap, backup, update, validate | **Implemented** |
 
@@ -73,12 +73,15 @@ There is **no** `supervisor/` crate yet; today Compose + lifecycle scripts play 
 
 Open-FDD OS would **not** ship Python or `pip install` on the host. Containers are built from:
 
-| Crate / package | GHCR image | `SERVICE_MODE` |
+| Crate / package | GHCR image | Role |
 | --- | --- | --- |
-| `open_fdd_edge_prototype` | `ghcr.io/bbartling/openfdd-edge-rust` | `bridge`, `commission`, `haystack-gateway` |
-| `openfdd-mcp` | `ghcr.io/bbartling/openfdd-mcp` | stdio MCP (sidecar) |
+| `openfdd-central` | `ghcr.io/bbartling/openfdd-central` | API + FDD engine |
+| UI (Vite → Caddy) | `ghcr.io/bbartling/openfdd-ui` | static dashboard |
+| `openfdd-fieldbus` | `ghcr.io/bbartling/openfdd-fieldbus` | BACnet → MQTTS |
+| `openfdd-mqtt` | `ghcr.io/bbartling/openfdd-mqtt` | Mosquitto broker |
+| `openfdd-mcp` | `ghcr.io/bbartling/openfdd-mcp` | stdio MCP |
 
-CI: [`.github/workflows/rust-ghcr.yml`](../.github/workflows/rust-ghcr.yml), [`.github/workflows/rust-ghcr-mcp.yml`](../.github/workflows/rust-ghcr-mcp.yml).
+CI: [`.github/workflows/ghcr-openfdd-stack.yml`](../.github/workflows/ghcr-openfdd-stack.yml), [`.github/workflows/rust-ghcr-mcp.yml`](../.github/workflows/rust-ghcr-mcp.yml).
 
 ## Documentation
 
@@ -89,6 +92,6 @@ CI: [`.github/workflows/rust-ghcr.yml`](../.github/workflows/rust-ghcr.yml), [`.
 
 ## Development today
 
-Use a normal Linux edge host (WSL bench, VM, Raspberry Pi) with Docker and the Rust GHCR stack. Do **not** block releases on `os/` image work.
+Use a normal Linux edge host (WSL bench, VM, Raspberry Pi) with Docker and the GHCR container stack. Do **not** block releases on `os/` image work.
 
-Quick start: [docs/quick-start/rust-edge-bootstrap.md](../docs/quick-start/rust-edge-bootstrap.md).
+Quick start: [docs/quick-start/docker-ghcr.md](../docs/quick-start/docker-ghcr.md).

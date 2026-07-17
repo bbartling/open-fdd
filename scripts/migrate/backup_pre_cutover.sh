@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Pre-cutover backup: workspace tarball + driver_tree/assignments JSON sidecars.
-# Run before stopping the legacy stack or switching to the central+fieldbus compose.
+# Backup: workspace tarball + driver_tree/assignments JSON sidecars + image-tag manifest.
+# Run before any stack image update or destructive change (rollback unit).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -68,7 +68,7 @@ MANIFEST="$BACKUP_DIR/pre-cutover-${TS}-image-tags.env"
   echo "OPENFDD_UI_IMAGE=${OPENFDD_UI_IMAGE:-ghcr.io/bbartling/openfdd-ui:nightly}"
   echo "OPENFDD_FIELDBUS_IMAGE=${OPENFDD_FIELDBUS_IMAGE:-ghcr.io/bbartling/openfdd-fieldbus:nightly}"
   echo "OPENFDD_MQTT_IMAGE=${OPENFDD_MQTT_IMAGE:-ghcr.io/bbartling/openfdd-mqtt:nightly}"
-  echo "OPENFDD_EDGE_RUST_IMAGE=${OPENFDD_EDGE_RUST_IMAGE:-ghcr.io/bbartling/openfdd-edge-rust:nightly}"
+  echo "OPENFDD_MCP_IMAGE=${OPENFDD_MCP_IMAGE:-ghcr.io/bbartling/openfdd-mcp:nightly}"
 } >"$MANIFEST"
 echo "image tag manifest: $MANIFEST"
 

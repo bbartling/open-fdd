@@ -1,7 +1,5 @@
 # Publish Open-FDD MQTT stack images to GHCR (central, ui, fieldbus, mqtt).
 # Nightly on master; semver + sha tags on every push to master or version tags.
-#
-# Legacy monolithic edge: rust-ghcr.yml → openfdd-edge-rust (separate lineage).
 name: Publish Open-FDD stack to GHCR
 
 on:
@@ -65,10 +63,17 @@ jobs:
           npm run build
           test -f dist/index.html
 
-      - name: Compose config check
+      - name: Compose config check (all recipes)
         run: |
+          for f in docker/compose.standalone.yml docker/compose.central.yml docker/compose.edge.yml docker/compose.csv.yml; do
+            docker compose -f "$f" config >/dev/null
+            echo "OK config: $f"
+          done
           chmod +x scripts/release/smoke_standalone_mqtts.sh
           ./scripts/release/smoke_standalone_mqtts.sh
+          bash -n scripts/openfdd_stack_lib.sh
+          bash -n scripts/openfdd_stack_up.sh
+          bash -n scripts/openfdd_stack_pull.sh
 
   publish:
     needs: test

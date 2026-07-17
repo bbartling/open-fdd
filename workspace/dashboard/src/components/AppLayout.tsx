@@ -35,6 +35,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: "Model & rules",
     items: [
       { to: "/lab", icon: "🧪", label: "Open-FDD Lab (vibe19)", protected: true },
+      { to: "/csv", icon: "📥", label: "CSV job upload", protected: true },
       { to: "/model", icon: "📐", label: "Model & FDD assignments", protected: true },
       { to: "/sql-fdd", icon: "⚡", label: "SQL FDD lab (integrator)", protected: true },
       { to: "/plot", icon: "📈", label: "Plots", protected: true },

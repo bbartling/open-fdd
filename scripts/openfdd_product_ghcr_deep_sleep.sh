@@ -27,7 +27,7 @@ for ((i = 1; i <= MAX_WAKES; i++)); do
   echo "wake=$i $(date -u +%Y-%m-%dT%H:%M:%SZ) conclusion=${con:-pending}" >>"$LOG"
   case "$con" in
   success)
-    gh issue comment "$ISSUE" --repo "$REPO" --body "**NIGHTLY READY** — GHCR run ${RUN_ID} success. Bench: \`OPENFDD_IMAGE_TAG=nightly ./scripts/openfdd_rust_site_update.sh\` then \`docs/agent/linux-edge-tester-nightly-retest-prompt.md\`." >>"$LOG" 2>&1 || true
+    gh issue comment "$ISSUE" --repo "$REPO" --body "**NIGHTLY READY** — GHCR run ${RUN_ID} success. Bench: \`OPENFDD_IMAGE_TAG=nightly ./scripts/openfdd_stack_up.sh standalone\` then \`docs/agent/linux-edge-tester-nightly-retest-prompt.md\`." >>"$LOG" 2>&1 || true
     exit 0
     ;;
   failure | cancelled)

@@ -9,10 +9,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=scripts/openfdd_auth_lib.sh
 source "$ROOT/scripts/openfdd_auth_lib.sh"
-# shellcheck source=scripts/openfdd_bench_lib.sh
-source "$ROOT/scripts/openfdd_bench_lib.sh"
-
-openfdd_bench_load_profile "$ROOT" || true
+# shellcheck source=scripts/openfdd_stack_lib.sh
+source "$ROOT/scripts/openfdd_stack_lib.sh"
 
 BASE="${OPENFDD_API_BASE:-http://127.0.0.1:8080}"
 COMMISSION="${OPENFDD_COMMISSION_BASE:-http://127.0.0.1:9091}"

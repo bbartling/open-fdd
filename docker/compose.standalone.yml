@@ -81,6 +81,21 @@ services:
       - fieldbus-spool:/spool
     restart: unless-stopped
 
+  mcp:
+    profiles: ["mcp"]
+    image: ${OPENFDD_MCP_IMAGE:-ghcr.io/bbartling/openfdd-mcp:nightly}
+    build:
+      context: ..
+      dockerfile: Dockerfile.mcp
+    environment:
+      OPENFDD_API_BASE: http://central:8080
+      OPENFDD_MCP_TOKEN: ${OPENFDD_MCP_TOKEN:-}
+    depends_on:
+      - central
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
 volumes:
   mqtt-data:
   fieldbus-spool:

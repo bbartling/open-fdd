@@ -1,5 +1,4 @@
-#!/usr/bin/env bash
-# Prune old GHCR container package versions (openfdd-edge-rust, openfdd-mcp).
+# Prune old GHCR container package versions (stack + MCP).
 set -euo pipefail
 
 OWNER="${GHCR_OWNER:-bbartling}"
@@ -54,8 +53,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ "$ALL_IMAGES" -eq 1 ]] && PACKAGES=(openfdd-edge-rust openfdd-mcp)
-[[ ${#PACKAGES[@]} -eq 0 ]] && PACKAGES=(openfdd-edge-rust openfdd-mcp)
+[[ "$ALL_IMAGES" -eq 1 ]] && PACKAGES=(openfdd-central openfdd-ui openfdd-fieldbus openfdd-mqtt openfdd-mcp)
+[[ ${#PACKAGES[@]} -eq 0 ]] && PACKAGES=(openfdd-central openfdd-ui openfdd-fieldbus openfdd-mqtt openfdd-mcp)
 
 load_protected() {
   if [[ -n "$PROTECTED_FILE" && -f "$PROTECTED_FILE" ]]; then

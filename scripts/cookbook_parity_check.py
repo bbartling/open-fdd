@@ -29,7 +29,7 @@ REQUIRED_PAGES = [
 ]
 
 # Guard against accidental gut-outs of the public cookbook.
-MIN_RULE_HEADINGS = 55
+MIN_RULE_HEADINGS = 59
 RULE_HEADING_RE = re.compile(r"^### [A-Z][A-Z0-9-]* —", re.MULTILINE)
 
 

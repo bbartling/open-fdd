@@ -1,6 +1,6 @@
 # Open-FDD multi-image version manifest
 
-All four container images in the MQTT stack share a **coordinated release** tied to the Cargo workspace version in the repository root `Cargo.toml` (`[workspace.package].version`).
+All container images in the MQTT / CSV stack share a **coordinated release** tied to the Cargo workspace version in the repository root `Cargo.toml` (`[workspace.package].version`).
 
 ## Images
 
@@ -10,60 +10,42 @@ All four container images in the MQTT stack share a **coordinated release** tied
 | `ghcr.io/bbartling/openfdd-ui` | `workspace/dashboard/Dockerfile` | React operator dashboard (static + Caddy) |
 | `ghcr.io/bbartling/openfdd-fieldbus` | `services/fieldbus/Dockerfile` | BACnet/Modbus/Haystack edge + local Swagger |
 | `ghcr.io/bbartling/openfdd-mqtt` | `services/mqtt/Dockerfile` | Mosquitto MQTTS broker |
+| `ghcr.io/bbartling/openfdd-mcp` | `Dockerfile.mcp` | Optional MCP stdio sidecar → central |
 
-## Tags (`.github/workflows/ghcr-openfdd-stack.yml`)
+## Tags
 
 | Tag | When | Purpose |
 |-----|------|---------|
 | `sha-<7-char-git-sha>` | Every publish | Immutable rollback unit |
-| `<workspace.version>` | Every publish | Semver from `Cargo.toml` (e.g. `3.3.0`) |
+| `<workspace.version>` | Every publish | Semver from `Cargo.toml` |
 | `nightly` | `master` branch only | Floating integration channel |
 
-Current stack publish builds **linux/amd64** only so RocksDB-heavy central/fieldbus images finish within GH Actions time budgets (QEMU arm64 previously timed out at 2h). Re-enable multi-arch when a native arm64 runner or longer budget is available.
+Stack publish builds **linux/amd64**. MCP also publishes multi-arch. Re-enable stack multi-arch when a native arm64 runner is available.
 
-Only advance `nightly` after `scripts/release/smoke_standalone_mqtts.sh` passes on the candidate SHA.
+Only advance `nightly` after recipe file smoke (`scripts/release/smoke_standalone_mqtts.sh`) passes on the candidate SHA.
 
 ## Compose alignment
 
-`docker/compose.standalone.yml`, `docker/compose.central.yml`, and `docker/compose.edge.yml` default to `:nightly` image tags. Pin all four services to the same `sha-*` or semver tag for production:
+`docker/compose.standalone.yml`, `docker/compose.central.yml`, `docker/compose.edge.yml`, and `docker/compose.csv.yml` default to `:nightly`. Pin services to the same `sha-*` or semver tag for production:
 
 ```bash
 export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-abc1234
 export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-abc1234
 export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-abc1234
 export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-abc1234
+export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-abc1234
 ```
 
 ## Version source of truth
 
-1. **Cargo workspace** — `[workspace.package].version` in `/Cargo.toml` (used by GHCR workflow).
-2. **VERSION file** — human-facing release label (may include pre-release suffix, e.g. `3.3.0-beta.1`).
-3. **Per-crate `Cargo.toml`** — individual crates inherit workspace version; keep in sync via `cargo workspaces` or manual bump.
+1. **Cargo workspace** — `[workspace.package].version` in `/Cargo.toml`.
+2. **VERSION file** — human-facing release label.
+3. **Per-crate `Cargo.toml`** — inherit workspace version.
 
 Bump all three together when cutting a coordinated stack release.
 
-## Latest verified nightlies (vibe19 parity train)
+## Latest verified nightlies
 
-Recorded after monster PR train `#504`→`#509` on `master` tip **`c87a0ae8`** (`c87a0ae`).
+See the most recent commit that updates this section after GHCR publish succeeds. Use `./scripts/openfdd_stack_up.sh standalone` on the bench for retest.
 
-| Channel | Git SHA | GHCR workflow run |
-|---------|---------|-------------------|
-| Stack (`openfdd-{central,ui,fieldbus,mqtt}:nightly`) | `c87a0ae8` / `sha-c87a0ae` | [29549666487](https://github.com/bbartling/open-fdd/actions/runs/29549666487) — **success** |
-| Legacy edge (`openfdd-edge-rust:nightly`) | `c87a0ae8` | [29549652669](https://github.com/bbartling/open-fdd/actions/runs/29549652669) — **success** |
-
-Pin compose to immutable tags for bench retest:
-
-```bash
-export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-c87a0ae
-export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-c87a0ae
-export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-c87a0ae
-export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-c87a0ae
-# or floating:
-# export OPENFDD_*_IMAGE=ghcr.io/bbartling/openfdd-*:nightly
-```
-
-**Human Workbench gate still required** before BACnet OT PASS (hosted **599999** discoverability). See `docs/agent/vibe19-parity-nightly-monster-prompt.md` and `docs/agent/linux-edge-tester-stack-nightly-prompt.md`.
-
-## Legacy
-
-`ghcr.io/bbartling/openfdd-edge-rust` (monolithic bridge image) is a separate lineage published by `rust-ghcr.yml`. It is not part of this four-image manifest and is superseded by the split stack for new deployments.
+**Human Workbench gate** still required before BACnet OT PASS (hosted **599999** discoverability). See `docs/agent/linux-edge-tester-stack-recipes-prompt.md`.

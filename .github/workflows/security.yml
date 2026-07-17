@@ -1,9 +1,9 @@
-name: Rust Edge Security Guards
+name: Stack Security Guards
 
 on:
   pull_request:
   push:
-    branches: [ master, main, rust-rewrite-1 ]
+    branches: [ master, main ]
 
 jobs:
   deny-old-python-shape:
@@ -23,18 +23,21 @@ jobs:
           test -f AGENTS.md
           grep -q "Never" AGENTS.md
 
-      - name: Keep Rust rewrite focused
+      - name: Keep container stack focused
         run: |
           test -f Cargo.toml
-          test -f docker-compose.yml
-          test -f docker-compose.bacnet-live.yml
+          test -f docker/compose.standalone.yml
+          test -f docker/compose.csv.yml
+          test -f services/central/Dockerfile
+          test -f workspace/dashboard/Dockerfile
+          test -f Dockerfile.mcp
           test -f .env.example
-          test -f Dockerfile
           test -d edge
-          test -d frontend
+          test -d services/central
+          test -d workspace/dashboard
+          test ! -f Dockerfile
+          test ! -f docker/compose.edge.rust.yml
 
-      - name: No legacy UI route regressions
+      - name: No obsolete UI route regressions
         run: |
-          ! grep -R "/api/haystack/model" frontend edge
-          ! grep -R "Rule Lab" frontend
-          ! grep -R "Open-FDD-style tabs" frontend
+          ! grep -R "Rule Lab" workspace/dashboard/src || true

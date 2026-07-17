@@ -1,6 +1,7 @@
 //! HTTP handlers for CSV UT3 import API.
 
 pub mod dataset;
+pub mod parquet_bridge;
 pub mod parse;
 pub mod plan;
 pub mod session;
@@ -412,7 +413,9 @@ pub fn execute_handler(body: &Value) -> Value {
         &validation_report,
         &json!({"session_id": session_id}),
     ) {
-        Ok(result) => {
+        Ok(mut result) => {
+            let parquet = parquet_bridge::ingest_rows_to_parquet(&dataset_id, &rows);
+            result["parquet_ingest"] = parquet;
             let mut session = session;
             session["status"] = json!("executed");
             session["result"] = result.clone();

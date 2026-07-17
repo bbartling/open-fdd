@@ -1,47 +1,42 @@
 # Release channels
 
-Open-FDD Rust edge uses separate channels for automated nightly builds and manual promoted releases.
+Open-FDD uses separate channels for automated nightly builds and manual promoted releases. Every stack image moves together on the same channel tags.
 
 ## Channels
 
 | Tag | Source | Trigger | Mutable |
 | --- | --- | --- | --- |
-| `nightly` | `rust-ghcr.yml` | push to `master`, daily cron, manual | yes |
-| `sha-<short>` | `rust-ghcr.yml` | same as nightly | no (immutable reference) |
-| `nightly-YYYYMMDD` | `rust-ghcr.yml` | same as nightly | optional date stamp |
-| `beta` | `rust-release.yml` | manual `workflow_dispatch` | yes until next beta |
-| `stable` | `rust-release.yml` | manual `workflow_dispatch` | yes until next stable |
-| semver (e.g. `3.3.0`) | `rust-release.yml` | manual | immutable release |
+| `nightly` | `ghcr-openfdd-stack.yml` | push to `master`, daily cron, manual | yes |
+| `sha-<short>` | `ghcr-openfdd-stack.yml` | same as nightly | no (immutable reference) |
+| `nightly-YYYYMMDD` | `ghcr-openfdd-stack.yml` | same as nightly | optional date stamp |
+| `beta` | stack release workflow | manual `workflow_dispatch` | yes until next beta |
+| `stable` | stack release workflow | manual `workflow_dispatch` | yes until next stable |
+| semver (e.g. `3.3.0`) | stack release workflow | manual | immutable release |
 
-## Image
-
-Primary production image:
+## Images
 
 ```
-ghcr.io/bbartling/openfdd-edge-rust
-```
-
-MCP sidecar (separate workflow):
-
-```
+ghcr.io/bbartling/openfdd-central
+ghcr.io/bbartling/openfdd-ui
+ghcr.io/bbartling/openfdd-fieldbus
+ghcr.io/bbartling/openfdd-mqtt
 ghcr.io/bbartling/openfdd-mcp
 ```
 
+`OPENFDD_IMAGE_TAG` picks the channel for a recipe. Which images a recipe pulls is in [Build recipes](../operations/build-recipes.md).
+
 ## What nightly includes
 
-One Rust edge container serving:
+The container stack:
 
-- HTTP API at `/api/*`
-- Compiled React dashboard at `/` (from `workspace/dashboard` → `frontend/`)
-
-No separate frontend container in the default production layout.
-
-## Legacy Python-era images
-
-Archived workflows (`docker-publish.yml`, `ghcr-multiarch-publish.yml`) may still publish legacy images (`openfdd-bridge`, etc.) **only via manual dispatch with confirmation**. They do not publish `openfdd-edge-rust:nightly`.
+- `openfdd-central` — HTTP API at `/api/*` and the FDD engine
+- `openfdd-ui` — Caddy serving the compiled React dashboard, proxying `/api` to central
+- `openfdd-fieldbus` — BACnet/IP poller publishing over MQTTS
+- `openfdd-mqtt` — Mosquitto broker
+- `openfdd-mcp` — slim Rust MCP server
 
 ## Operator guidance
 
-- **Development / CI validation:** `openfdd-edge-rust:sha-<commit>` for a pinned build.
-- **Latest master:** `openfdd-edge-rust:nightly`.
-- **Production pilot:** promote via `rust-release.yml` → `beta`, then `stable`.
+- **Development / CI validation:** pin `OPENFDD_IMAGE_TAG=sha-<commit>`.
+- **Latest master:** `OPENFDD_IMAGE_TAG=nightly` (default).
+- **Production pilot:** promote to `beta`, then `stable`.

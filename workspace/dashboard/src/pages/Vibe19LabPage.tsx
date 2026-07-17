@@ -80,6 +80,12 @@ function OverviewSection({ cache, rules }: { cache?: CacheStatus; rules?: Regist
           {cache?.parquet_exists ? `${cache.parquet_file_count} files` : "missing"}
         </div>
       </div>
+      <p className="vibe19-lede" style={{ gridColumn: "1 / -1" }}>
+        Start a job from CSV:{" "}
+        <a href="/csv">CSV job upload</a>
+        {" · "}
+        then tune rules below without a full page reload.
+      </p>
       <div className="vibe19-metric">
         <div className="label">Result files</div>
         <div className="value">{cache?.result_file_count ?? 0}</div>

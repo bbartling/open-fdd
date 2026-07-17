@@ -6,16 +6,19 @@ nav_order: 1
 
 # BACnet driver
 
-BACnet/IP runs in the **commission** container (`network_mode: host`). The bridge exposes commissioning UI and REST routes.
+BACnet/IP runs in the **fieldbus** container (`network_mode: host`), which polls
+devices and publishes readings to central over MQTTS. Central exposes the
+commissioning UI and REST routes; it never touches the BACnet wire itself.
 
 ## Configuration
 
-- `workspace/bacnet/commissioning/commission.env` — NIC, BBMD, device filters (**`OPENFDD_BACNET_SERVER_ENABLED=0`** on commission)
-- `docker/compose.edge.rust.yml` — bridge vs commission server flags split (bridge **1**, commission **0**)
+- `config/fieldbus/` — device filters, NIC/BBMD, poll config for the fieldbus container
+- Recipe: `standalone` runs fieldbus alongside central; `edge` runs fieldbus only and attaches to a remote central (see [Build recipes](../operations/build-recipes.md))
 - `OPENFDD_BACNET_MODE` — `live` for field buses
 
 {: .important }
-**Compose split:** bridge runs the local diagnostic device (599999). Commission runs field Who-Is — never enable the local BACnet server on the commission container.
+The fieldbus container owns UDP 47808 and the local diagnostic device (599999).
+Do not run a second BACnet server on the same host.
 
 ## Key API routes
 

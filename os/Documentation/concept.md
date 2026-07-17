@@ -58,7 +58,7 @@ The OS image would ship **Docker + RAUC + kernel** only. Application bytes come 
 
 ## Relationship to current deploys
 
-**Phase A (now):** Ubuntu 24.04 or Raspberry Pi OS + Docker CE + [`docker/compose.edge.rust.yml`](../../docker/compose.edge.rust.yml) + [`scripts/openfdd_rust_site_update.sh`](../../scripts/openfdd_rust_site_update.sh).
+**Phase A (now):** Ubuntu 24.04 or Raspberry Pi OS + Docker CE + the compose recipes in [`docker/`](../../docker/) via [`scripts/openfdd_stack_up.sh`](../../scripts/openfdd_stack_up.sh).
 
 **Phase D (future):** Flash Open-FDD OS image → supervisor pulls pinned GHCR tags → OTA updates OS and app bundle.
 

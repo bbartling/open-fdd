@@ -18,7 +18,7 @@ aux_links:
   GitHub:
     - //github.com/bbartling/open-fdd
   GHCR:
-    - //github.com/bbartling/open-fdd/pkgs/container/openfdd-edge-rust
+    - //github.com/bbartling/open-fdd/pkgs/container/openfdd-central
   Releases:
     - //github.com/bbartling/open-fdd/releases
 

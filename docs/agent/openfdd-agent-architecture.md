@@ -20,11 +20,11 @@ Open-FDD is a **deterministic Rust edge runtime**. Assistance is provided by **e
                             │ git, bash, curl+JWT (127.0.0.1)
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Open-FDD Rust edge (deterministic)                          │
-│  openfdd-bridge │ openfdd-commission │ openfdd-haystack-gw   │
+│  Open-FDD container stack (deterministic)                    │
+│  central (API/FDD) │ ui (Caddy) │ fieldbus │ mqtt (broker)   │
 │  historian · DataFusion FDD · drivers · reports              │
 └───────────────────────────┬─────────────────────────────────┘
-                            │ BACnet / Modbus / Haystack (OT LAN)
+                            │ fieldbus: BACnet/IP (OT LAN) → MQTTS
                             ▼
                      Field devices & stations
 ```

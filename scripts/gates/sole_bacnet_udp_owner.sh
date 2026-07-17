@@ -10,6 +10,7 @@ echo "== gate: sole_bacnet_udp_owner =="
 CENTRAL_COMPOSE=(
   docker/compose.central.yml
   docker/compose.standalone.yml
+  docker/compose.csv.yml
 )
 
 FIELDBUS_COMPOSE=(
@@ -50,18 +51,6 @@ if [[ "$fieldbus_hits" -lt 1 ]]; then
   echo "FAIL: expected at least one compose file with fieldbus + network_mode: host" >&2
   failed=1
 fi
-
-# Legacy monolithic compose must not re-bind 47808 on central services.
-LEGACY=(
-  docker/compose.edge.rust.yml
-  docker-compose.bacnet-live.yml
-)
-for f in "${LEGACY[@]}"; do
-  [[ -f "$f" ]] || continue
-  if grep -nE '47808' "$f" >/dev/null 2>&1; then
-    echo "WARN: legacy $f still references 47808 — retire before cutover" >&2
-  fi
-done
 
 if [[ "$failed" -ne 0 ]]; then
   exit 1

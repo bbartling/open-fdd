@@ -1,5 +1,5 @@
-# Promote a Rust edge release: CI → GHCR (edge + MCP) → git tag → GitHub Release.
-# Nightly builds on master use rust-ghcr.yml (:nightly + :sha-*).
+# Promote a coordinated stack + MCP release: CI → GHCR → git tag → GitHub Release.
+# Nightly builds on master use ghcr-openfdd-stack.yml and rust-ghcr-mcp.yml.
 name: Rust Release (GHCR + GitHub Release)
 
 on:
@@ -23,8 +23,11 @@ permissions:
   packages: write
 
 env:
-  EDGE_IMAGE: ghcr.io/bbartling/openfdd-edge-rust
   MCP_IMAGE: ghcr.io/bbartling/openfdd-mcp
+  CENTRAL_IMAGE: ghcr.io/bbartling/openfdd-central
+  UI_IMAGE: ghcr.io/bbartling/openfdd-ui
+  FIELDBUS_IMAGE: ghcr.io/bbartling/openfdd-fieldbus
+  MQTT_IMAGE: ghcr.io/bbartling/openfdd-mqtt
 
 jobs:
   validate:
@@ -84,21 +87,19 @@ jobs:
           cd workspace/dashboard
           npm ci
           npm run test
-          npm run build
-          test -f ../../frontend/index.html
+          VITE_OUT_DIR=dist npm run build
+          test -f dist/index.html
       - run: |
-          mkdir -p workspace/bacnet/commissioning
-          echo 'OFDD_AUTH_REQUIRED=true' > workspace/auth.env.local
-          touch workspace/data.env.local workspace/bacnet/commissioning/commission.env
-          export OPENFDD_COMPOSE_ROOT="$PWD"
-          docker compose -f docker/compose.edge.rust.yml config
+          for f in docker/compose.standalone.yml docker/compose.central.yml docker/compose.edge.yml docker/compose.csv.yml; do
+            docker compose -f "$f" config >/dev/null
+          done
+          bash scripts/release/smoke_standalone_mqtts.sh
 
-  publish-edge:
+  publish-stack:
     needs: [validate, test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -106,48 +107,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.EDGE_IMAGE }}
-          tags: |
-            type=raw,value=${{ needs.validate.outputs.version }}
-            type=raw,value=v${{ needs.validate.outputs.version }}
-            type=raw,value=beta,enable=${{ needs.validate.outputs.channel == 'beta' }}
-            type=raw,value=latest,enable=${{ needs.validate.outputs.channel == 'stable' }}
-            type=sha,prefix=sha-,format=short
-          labels: |
-            org.opencontainers.image.title=Open-FDD Rust Edge
-            org.opencontainers.image.source=https://github.com/bbartling/open-fdd
-            org.opencontainers.image.version=${{ needs.validate.outputs.version }}
-
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            OPENFDD_IMAGE_TAG=${{ needs.validate.outputs.version }}
-            OPENFDD_BUILD_GIT_SHA=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Verify published tags
+      - name: Publish stack images
         env:
           VER: ${{ needs.validate.outputs.version }}
           CHANNEL: ${{ needs.validate.outputs.channel }}
+          SHA: ${{ github.sha }}
         run: |
-          for tag in "${VER}" "v${VER}"; do
-            docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:${tag}"
-          done
-          if [[ "$CHANNEL" == "beta" ]]; then
-            docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:beta"
-          else
-            docker buildx imagetools inspect "${{ env.EDGE_IMAGE }}:latest"
-          fi
+          SHORT="$(echo "$SHA" | cut -c1-7)"
+          channel_tag="beta"
+          [[ "$CHANNEL" == "stable" ]] && channel_tag="latest"
+
+          build_one() {
+            local name="$1" file="$2" context="$3"
+            local img="ghcr.io/bbartling/${name}"
+            docker buildx build --push \
+              --platform linux/amd64 \
+              -f "$file" \
+              -t "${img}:${VER}" \
+              -t "${img}:v${VER}" \
+              -t "${img}:${channel_tag}" \
+              -t "${img}:sha-${SHORT}" \
+              "$context"
+            docker buildx imagetools inspect "${img}:${VER}"
+          }
+
+          build_one openfdd-central services/central/Dockerfile .
+          build_one openfdd-ui workspace/dashboard/Dockerfile .
+          build_one openfdd-fieldbus services/fieldbus/Dockerfile .
+          build_one openfdd-mqtt services/mqtt/Dockerfile services/mqtt
 
   publish-mcp:
     needs: [validate, test]
@@ -203,7 +190,7 @@ jobs:
           fi
 
   release:
-    needs: [validate, publish-edge, publish-mcp]
+    needs: [validate, publish-stack, publish-mcp]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -217,7 +204,7 @@ jobs:
           if git ls-remote --exit-code origin "refs/tags/${TAG}" >/dev/null 2>&1; then
             echo "Tag ${TAG} already exists on origin — skipping create/push (republish)"
           else
-            git tag -a "${TAG}" -m "Open-FDD ${TAG} — Rust Edge (${{ needs.validate.outputs.channel }})"
+            git tag -a "${TAG}" -m "Open-FDD ${TAG} — container stack (${{ needs.validate.outputs.channel }})"
             git push origin "${TAG}"
           fi
 
@@ -225,33 +212,31 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.validate.outputs.version }}
-          name: Open-FDD v${{ needs.validate.outputs.version }} — Rust Edge (${{ needs.validate.outputs.channel }})
+          name: Open-FDD v${{ needs.validate.outputs.version }} — stack (${{ needs.validate.outputs.channel }})
           prerelease: ${{ needs.validate.outputs.channel == 'beta' }}
           make_latest: ${{ needs.validate.outputs.channel == 'stable' }}
           body: |
-            ## Open-FDD Rust Edge v${{ needs.validate.outputs.version }} (${{ needs.validate.outputs.channel }})
+            ## Open-FDD container stack v${{ needs.validate.outputs.version }} (${{ needs.validate.outputs.channel }})
 
-            **Primary runtime image (LAN/VPN/OT — not public internet):**
+            **Images:**
             ```bash
-            ghcr.io/bbartling/openfdd-edge-rust:${{ needs.validate.outputs.version }}
-            # Floating channel: beta or latest (see Release channels doc)
-            ```
-
-            **MCP sidecar** (also bundled in edge image as `openfdd-mcp`):
-            ```bash
+            ghcr.io/bbartling/openfdd-central:${{ needs.validate.outputs.version }}
+            ghcr.io/bbartling/openfdd-ui:${{ needs.validate.outputs.version }}
+            ghcr.io/bbartling/openfdd-fieldbus:${{ needs.validate.outputs.version }}
+            ghcr.io/bbartling/openfdd-mqtt:${{ needs.validate.outputs.version }}
             ghcr.io/bbartling/openfdd-mcp:${{ needs.validate.outputs.version }}
             ```
 
-            ### Deploy
+            ### Deploy (standalone recipe)
             ```bash
             export OPENFDD_IMAGE_TAG=${{ needs.validate.outputs.version }}
-            ./scripts/openfdd_rust_edge_bootstrap.sh --start
+            ./scripts/openfdd_stack_up.sh standalone
             ```
 
-            See [Release channels](https://bbartling.github.io/open-fdd/operations/release-channels.html) for nightly / beta / stable policy.
+            See [Build recipes](https://bbartling.github.io/open-fdd/operations/build-recipes.html) for csv / central / edge recipes.
 
   prune-ghcr:
-    needs: [validate, publish-edge, publish-mcp]
+    needs: [validate, publish-stack, publish-mcp]
     runs-on: ubuntu-latest
     permissions:
       contents: read

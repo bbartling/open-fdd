@@ -6,13 +6,19 @@ nav_order: 3
 
 # GHCR images
 
-## Primary runtime
+## Stack images
 
 ```text
-ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-ui:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-fieldbus:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-mqtt:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
 ```
 
-Channel policy: [Release channels](release-channels.html).
+Which images a deployment pulls depends on the recipe — see
+[Build recipes](build-recipes.html). Channel policy:
+[Release channels](release-channels.html).
 
 ## Tag reference
 
@@ -26,26 +32,25 @@ Channel policy: [Release channels](release-channels.html).
 | `v3.3.0` | Immutable | Release tag alias |
 | `sha-abc1234` | Immutable | Short git SHA (traceability) |
 
-## MCP sidecar
+## MCP server
 
 ```text
 ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
 ```
 
-Same channel tags as edge. Prefer the edge image with `--entrypoint openfdd-mcp` when possible.
+Slim Rust image; talks to central via `OPENFDD_API_BASE`. Same channel tags as the rest of the stack.
 
 ## Multi-arch
 
 Images publish `linux/amd64` and `linux/arm64`:
 
 ```bash
-./scripts/openfdd_rust_check_ghcr_platform.sh
-docker manifest inspect ghcr.io/bbartling/openfdd-edge-rust:nightly
+docker manifest inspect ghcr.io/bbartling/openfdd-central:nightly
 ```
 
 ## OCI labels
 
-Release images include `org.opencontainers.image.version`, `revision`, `source`, and title `Open-FDD Rust Edge`.
+Release images include `org.opencontainers.image.version`, `revision`, `source`, and per-image titles (e.g. `Open-FDD Central`).
 
 ## Retention
 

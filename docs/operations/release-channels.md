@@ -16,14 +16,18 @@ Open-FDD publishes **three GHCR channels**. Only **stable** is intended for prod
 | **Beta** | `:beta` (+ immutable semver e.g. `3.3.0-beta.1`) | Maintainer promotion after bench milestone | Pilot integrators, early OT sites |
 | **Stable** | `:latest` (+ immutable semver e.g. `3.3.0`) | Maintainer promotion after beta sign-off | Production-ish edge deployments |
 
+Every stack image (`openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`,
+`openfdd-mqtt`, `openfdd-mcp`) shares the same channel tags and moves together:
+
 ```text
-ghcr.io/bbartling/openfdd-edge-rust:nightly
-ghcr.io/bbartling/openfdd-edge-rust:beta
-ghcr.io/bbartling/openfdd-edge-rust:latest
-ghcr.io/bbartling/openfdd-edge-rust:3.3.0-beta.1   # immutable pin
+ghcr.io/bbartling/openfdd-central:nightly
+ghcr.io/bbartling/openfdd-central:beta
+ghcr.io/bbartling/openfdd-central:latest
+ghcr.io/bbartling/openfdd-central:3.3.0-beta.1   # immutable pin
 ```
 
-MCP uses the same channel tags on `ghcr.io/bbartling/openfdd-mcp`. The `openfdd-mcp` binary is also bundled in the edge image.
+`OPENFDD_IMAGE_TAG` selects the channel for a whole recipe — see
+[Build recipes](build-recipes.html).
 
 ## What to pull
 
@@ -51,35 +55,34 @@ Open-FDD has **not** published a stable release under this model yet. Current li
 
 ### Nightly (automatic)
 
-Push to `master` → workflow **Publish Rust edge to GHCR** → `:nightly` + `:sha-*`.
+Push to `master` → workflow **Publish Open-FDD stack to GHCR** → `:nightly` + `:sha-*` on all stack images.
 
 No semver bump on `master`. The `VERSION` file tracks the **next** beta/stable candidate only.
 
 ### Beta promotion
 
 1. Bump `VERSION` to e.g. `3.3.0-beta.2` on `master`.
-2. GitHub Actions → **Rust Release (GHCR + GitHub Release)**.
+2. GitHub Actions → **Stack Release (GHCR + GitHub Release)**.
 3. `version`: `3.3.0-beta.2`, `channel`: **beta**.
 4. Creates GitHub **Pre-release**, moves `:beta`, publishes immutable semver tags.
 
 ### Stable promotion
 
 1. Bump `VERSION` to e.g. `3.3.0` (no prerelease suffix).
-2. **Rust Release** → `version`: `3.3.0`, `channel`: **stable**.
+2. **Stack Release** → `version`: `3.3.0`, `channel`: **stable**.
 3. Creates GitHub Release, moves `:latest`.
 
 ## Site lifecycle
 
 ```bash
 # Dev / bench
-export OPENFDD_IMAGE_TAG=nightly
-./scripts/openfdd_rust_edge_bootstrap.sh --start
+OPENFDD_IMAGE_TAG=nightly ./scripts/openfdd_stack_up.sh standalone
 
 # Upgrade to a promoted beta
-NEW_TAG=3.3.0-beta.1 ./scripts/openfdd_rust_site_update.sh
+OPENFDD_IMAGE_TAG=3.3.0-beta.1 ./scripts/openfdd_stack_up.sh standalone
 
 # Upgrade to stable
-NEW_TAG=latest ./scripts/openfdd_rust_site_update.sh
+OPENFDD_IMAGE_TAG=latest ./scripts/openfdd_stack_up.sh standalone
 ```
 
 See [GHCR images](ghcr-images.html) for retention, multi-arch, and diagnostics.

@@ -29,7 +29,7 @@ PATTERNS=(
   'OPENFDD_MODBUS_HOST.*192\.168\.204\.14'
 )
 
-SCAN_DIRS=(edge workspace/dashboard/src scripts docs docker-compose.yml .env.example .github)
+SCAN_DIRS=(edge workspace/dashboard/src scripts docs docker .env.example .github)
 
 is_allowed() {
   local file="$1"
@@ -51,11 +51,9 @@ is_allowed() {
     edge/src/validation/audit.rs) return 0 ;;
     edge/src/main.rs) return 0 ;;
     scripts/bench_5007_long_smoke.sh) return 0 ;;
-    scripts/openfdd_haystack_smoke.sh) return 0 ;;
     scripts/audit_no_private_bench_hardcoding.sh) return 0 ;;
     scripts/audit_no_hardcoding.sh) return 0 ;;
     workspace/dashboard/src/App.tsx) return 0 ;;
-    docker-compose.bacnet-live.yml) return 0 ;;
   esac
   return 1
 }
