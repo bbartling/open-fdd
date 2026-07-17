@@ -44,20 +44,20 @@ Bump all three together when cutting a coordinated stack release.
 
 ## Latest verified nightlies (vibe19 parity train)
 
-Recorded after monster PR train `#504`→`#509` on `master` tip **`9e44f1cb`** (`9e44f1c`).
+Recorded after monster PR train `#504`→`#509` on `master` tip **`c87a0ae8`** (`c87a0ae`).
 
 | Channel | Git SHA | GHCR workflow run |
 |---------|---------|-------------------|
-| Stack (`openfdd-{central,ui,fieldbus,mqtt}:nightly`) | `9e44f1cb` / `sha-9e44f1c` | [29543750678](https://github.com/bbartling/open-fdd/actions/runs/29543750678) — **success** |
-| Legacy edge (`openfdd-edge-rust:nightly`) | `9e44f1cb` | [29543751569](https://github.com/bbartling/open-fdd/actions/runs/29543751569) — publish in flight / verify before claiming |
+| Stack (`openfdd-{central,ui,fieldbus,mqtt}:nightly`) | `c87a0ae8` / `sha-c87a0ae` | [29549666487](https://github.com/bbartling/open-fdd/actions/runs/29549666487) — **success** |
+| Legacy edge (`openfdd-edge-rust:nightly`) | `c87a0ae8` | [29549652669](https://github.com/bbartling/open-fdd/actions/runs/29549652669) — **success** |
 
 Pin compose to immutable tags for bench retest:
 
 ```bash
-export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-9e44f1c
-export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-9e44f1c
-export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-9e44f1c
-export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-9e44f1c
+export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-c87a0ae
+export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-c87a0ae
+export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-c87a0ae
+export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-c87a0ae
 # or floating:
 # export OPENFDD_*_IMAGE=ghcr.io/bbartling/openfdd-*:nightly
 ```
