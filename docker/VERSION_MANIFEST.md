@@ -42,6 +42,28 @@ export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-abc1234
 
 Bump all three together when cutting a coordinated stack release.
 
+## Latest verified nightlies (vibe19 parity train)
+
+Recorded after monster PR train `#504`→`#509` on `master` tip **`9e44f1cb`** (`9e44f1c`).
+
+| Channel | Git SHA | GHCR workflow run |
+|---------|---------|-------------------|
+| Stack (`openfdd-{central,ui,fieldbus,mqtt}:nightly`) | `9e44f1cb` / `sha-9e44f1c` | [29543750678](https://github.com/bbartling/open-fdd/actions/runs/29543750678) — **success** |
+| Legacy edge (`openfdd-edge-rust:nightly`) | `9e44f1cb` | [29543751569](https://github.com/bbartling/open-fdd/actions/runs/29543751569) — publish in flight / verify before claiming |
+
+Pin compose to immutable tags for bench retest:
+
+```bash
+export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-9e44f1c
+export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-9e44f1c
+export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-9e44f1c
+export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-9e44f1c
+# or floating:
+# export OPENFDD_*_IMAGE=ghcr.io/bbartling/openfdd-*:nightly
+```
+
+**Human Workbench gate still required** before BACnet OT PASS (hosted **599999** discoverability). See `docs/agent/vibe19-parity-nightly-monster-prompt.md` and `docs/agent/linux-edge-tester-stack-nightly-prompt.md`.
+
 ## Legacy
 
 `ghcr.io/bbartling/openfdd-edge-rust` (monolithic bridge image) is a separate lineage published by `rust-ghcr.yml`. It is not part of this four-image manifest and is superseded by the split stack for new deployments.
