@@ -11,7 +11,8 @@ MSG="$(gh api "repos/${REPO}/commits/${BRANCH}" --jq '.commit.message' | head -1
 
 WORKFLOWS=(
   "rust-ci.yml"
-  "rust-ghcr.yml"
+  "ghcr-openfdd-stack.yml"
+  "rust-ghcr-mcp.yml"
   "security.yml"
   "appsec.yml"
   "docs-pages.yml"

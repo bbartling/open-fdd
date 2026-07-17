@@ -40,7 +40,7 @@ export OPENFDD_IMAGE_TAG=nightly
 
 Pin semver when reporting a sign-off candidate: `OPENFDD_BENCH_TAG=3.3.0-beta.1`.
 
-**Watch nightly:** [Rust GHCR workflow](https://github.com/bbartling/open-fdd/actions/workflows/rust-ghcr.yml) — green master → `:nightly` + `:sha-*` within ~15 min.
+**Watch nightly:** [Publish Open-FDD stack to GHCR](https://github.com/bbartling/open-fdd/actions/workflows/ghcr-openfdd-stack.yml) and [Publish Open-FDD MCP to GHCR](https://github.com/bbartling/open-fdd/actions/workflows/rust-ghcr-mcp.yml) — green master → `:nightly` + `:sha-*` within ~15 min.
 
 ---
 

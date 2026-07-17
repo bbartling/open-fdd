@@ -15,7 +15,7 @@ Redeploy Docs/Pages or verify GHCR when a fix lands.
 Go SILENT when all critical workflows are success on master HEAD — no status spam.
 
 Acknowledged. Product tree /home/ben/src/open-fdd. Channel: master CI → GHCR :nightly.
-Critical workflows: Rust Edge CI, Publish Rust edge to GHCR, Security Guards, AppSec, Docs.
+Critical workflows: Rust Stack CI, Publish Open-FDD stack to GHCR, Publish Open-FDD MCP to GHCR, Security Guards, AppSec, Docs.
 Will wake only on failure or stuck publish (>2h in_progress).
 ```
 
@@ -52,9 +52,9 @@ The script prints `AGENT_LOOP_WAKE_GH_ACTIONS` only when a workflow **failed** o
 ### Stuck GHCR publish (>2 h `in_progress`)
 
 ```bash
-gh run list --repo bbartling/open-fdd --workflow "Publish Rust edge to GHCR" --limit 3
+gh run list --repo bbartling/open-fdd --workflow "Publish Open-FDD stack to GHCR" --limit 3
 gh run cancel <run_id>   # if hung
-gh workflow run rust-ghcr.yml --ref master   # if workflow supports dispatch
+gh workflow run ghcr-openfdd-stack.yml --ref master   # if workflow supports dispatch
 ```
 
 ---
@@ -63,8 +63,8 @@ gh workflow run rust-ghcr.yml --ref master   # if workflow supports dispatch
 
 When `./scripts/openfdd_product_gh_actions_watch.sh` exits **0** with no output:
 
-- Rust CI + GHCR publish + guards + AppSec + Pages all **success** on `master` HEAD
-- `:nightly` is published for edge to pull
+- Rust Stack CI + stack/MCP GHCR publish + guards + AppSec + Pages all **success** on `master` HEAD
+- `:nightly` is published for bench to pull (`openfdd_stack_pull.sh`)
 - No comment on #429 unless edge is waiting for explicit handoff
 
 ---

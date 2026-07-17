@@ -43,12 +43,12 @@ Open-FDD must work for **any** BACnet/IP site. Never expect upstream to hardcode
 
 ## Wait for product merge + nightly
 
-Watch: https://github.com/bbartling/open-fdd/actions/workflows/rust-ghcr.yml  
+Watch: https://github.com/bbartling/open-fdd/actions/workflows/ghcr-openfdd-stack.yml  
 
 Poll **at most every 15–30 minutes**. Need `conclusion=success` with **`headSha` newer** than your last tested nightly.
 
 ```bash
-gh run list --workflow=rust-ghcr.yml --branch master --limit 3 \
+gh run list --workflow=ghcr-openfdd-stack.yml --branch master --limit 3 \
   --json databaseId,status,conclusion,headSha,displayTitle
 ```
 

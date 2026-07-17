@@ -611,9 +611,12 @@ pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
         "mode": body.params.get("mode").cloned().unwrap_or(json!("registry")),
         "rule_ids": body.params.get("rule_ids").cloned(),
     });
-    Json(open_fdd_edge_prototype::fdd::registry_api::run_registry(
-        &payload,
-    ))
+    let result = tokio::task::spawn_blocking(move || {
+        open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload)
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("fdd run task failed: {e}")}));
+    Json(result)
 }
 
 pub async fn fdd_registry_rules() -> Json<Value> {

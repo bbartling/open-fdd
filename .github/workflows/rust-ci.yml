@@ -38,6 +38,7 @@ jobs:
       - name: Central / fieldbus / MQTT contract tests
         run: |
           cargo test -p openfdd_contracts -p openfdd_mqtt -p openfdd-central -p openfdd-fieldbus
+          cargo test -p openfdd-central --test csv_fdd_integration
 
       - name: Architecture / MQTT cutover gates
         run: bash scripts/gates/run_all_gates.sh --quick

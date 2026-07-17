@@ -2851,6 +2851,7 @@ version = "3.3.0"
 dependencies = [
  "anyhow",
  "axum",
+ "base64",
  "bytes",
  "chrono",
  "dashmap",
