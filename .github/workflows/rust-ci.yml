@@ -43,6 +43,9 @@ jobs:
       - name: Architecture / MQTT cutover gates
         run: bash scripts/gates/run_all_gates.sh --quick
 
+      - name: Cookbook + README docs integrity (59-rule floor, cookbook link)
+        run: python3 scripts/cookbook_parity_check.py --docs-only
+
       - name: Anti-hardcoding audit
         run: bash -n scripts/audit_no_private_bench_hardcoding.sh && ./scripts/audit_no_private_bench_hardcoding.sh
 

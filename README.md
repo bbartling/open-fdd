@@ -15,6 +15,24 @@
   <img src="https://raw.githubusercontent.com/bbartling/open-fdd/master/image_new_chiller.png" alt="Open-FDD logo" width="440">
 </p>
 
+<p align="center">
+  <a href="https://bbartling.github.io/open-fdd/">
+    <img src="https://img.shields.io/badge/Docs-online-2563EB?style=for-the-badge" alt="Online docs">
+  </a>
+  <a href="https://bbartling.github.io/open-fdd/rules/cookbook/">
+    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-59%20rules%20SQL%20%2B%20Pandas-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — DataFusion SQL + Pandas">
+  </a>
+  <a href="https://bbartling.github.io/open-fdd/quick-start/docker-ghcr.html">
+    <img src="https://img.shields.io/badge/Quick%20Start-GHCR%20stack-059669?style=for-the-badge" alt="Quick start">
+  </a>
+  <a href="https://arrow.apache.org/">
+    <img src="https://img.shields.io/badge/Apache%20Arrow-columnar%20data-0B7285?style=for-the-badge" alt="Apache Arrow">
+  </a>
+  <a href="https://datafusion.apache.org/">
+    <img src="https://img.shields.io/badge/DataFusion-SQL%20engine-6D28D9?style=for-the-badge" alt="Apache DataFusion">
+  </a>
+</p>
+
 
 > **Open-source semantic building analytics and HVAC supervisory fault detection. Local-first. On-premises. Vendor-neutral. Free to run at the edge or offline.**
 
@@ -48,6 +66,17 @@ Open-FDD supports flexible deployment recipes:
 ### CSV-only
 
 `central` + `ui` — bulk CSV jobs and FDD without pulling mqtt or fieldbus images.
+
+---
+
+## FDD Rule Cookbook (the heart of the project)
+
+The **[HVAC FDD Rule Cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/)** is the validated catalog of **59 fault-detection rules**, published in two parity-matched flavors:
+
+- **[DataFusion SQL cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/datafusion-sql-cookbook.html)** — copy-paste SQL that runs on the edge/central Arrow historian
+- **[Pandas cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html)** — the same rules for notebooks, CSV exports, and RCx studies
+
+Rules use generic Haystack semantic roles, so they are portable across any modeled site. CI enforces a minimum of 59 rule headings in both cookbooks (`scripts/cookbook_parity_check.py`) — the catalog can never shrink.
 
 ---
 
