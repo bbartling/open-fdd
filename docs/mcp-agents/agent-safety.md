@@ -23,10 +23,10 @@ Automation and MCP agents must follow the same rules as human operators.
 
 | Action | When |
 |--------|------|
-| `openfdd_rust_site_backup.sh` | Before updates or destructive changes |
+| Back up `workspace/` | Before updates or destructive changes |
 | Preflight CSV import | Before `/api/csv/import/execute` |
 | Dry-run BACnet writes | Before `/api/bacnet/write` |
-| Validate after changes | `openfdd_rust_edge_validate.sh` |
+| Validate after changes | `openfdd_health_check.sh` |
 
 ## Assignment rule
 

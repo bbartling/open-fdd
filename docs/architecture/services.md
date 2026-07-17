@@ -4,53 +4,59 @@ parent: Architecture
 nav_order: 1
 ---
 
-# Edge services
+# Stack services
 
-All production services run from one GHCR image with different `SERVICE_MODE` values:
-
-```text
-ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-nightly}
-```
-
-## Service modes
-
-| Container | `SERVICE_MODE` | Role |
-|-----------|----------------|------|
-| `openfdd-bridge` | `bridge` | REST API, JWT auth, React dashboard, Modbus/JSON drivers, historian writes, DataFusion FDD, reports |
-| `openfdd-commission` | `commission` | BACnet discover/poll/override scan (`network_mode: host`) |
-| `openfdd-haystack-gateway` | `haystack-gateway` | Haystack read/nav/ops against a remote Haystack server |
+Open-FDD runs as a small set of GHCR images composed per recipe. See
+[Build recipes](../operations/build-recipes.md) for which images each recipe pulls.
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│  openfdd-bridge (:8080)                                      │
-│  REST · JWT · dashboard · historian · DataFusion · MCP APIs  │
-└──────────────────────────────────────────────────────────────┘
-         │ shared workspace volume
-         ▼
-┌─────────────────────────┐  ┌────────────────────────────────┐
-│ openfdd-commission      │  │ openfdd-haystack-gateway       │
-│ BACnet / Modbus poll    │  │ Haystack client (BAS / nHaystack) │
-└─────────────────────────┘  └────────────────────────────────┘
+ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-ui:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-fieldbus:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-mqtt:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
 ```
 
-## Optional profiles
+## Containers
 
-| Profile | Service | Notes |
-|---------|---------|-------|
-| `caddy-http` / `caddy-tls` | Caddy reverse proxy | TLS termination for LAN ingress |
-| `mcp-sidecar` | `openfdd-mcp` | Optional stdio MCP for external agents (Codex, Cursor, OpenClaw, …) |
+| Container | Image | Role |
+|-----------|-------|------|
+| `central` | `openfdd-central` | REST API (`:8080`), JWT auth, historian, DataFusion FDD engine, reports, MCP API surface |
+| `ui` | `openfdd-ui` | Caddy static React dashboard (`:3000`), proxies `/api` to central |
+| `fieldbus` | `openfdd-fieldbus` | BACnet/IP poll (`network_mode: host`), publishes over MQTTS |
+| `mqtt` | `openfdd-mqtt` | Mosquitto broker, MQTTS on `:8883` |
+| `mcp` | `openfdd-mcp` | Slim Rust MCP server for external agents |
 
-## MCP binary
+```text
+┌──────────────────────┐        ┌──────────────────────────────┐
+│ ui (Caddy :3000)     │──/api─▶│ central (:8080)              │
+└──────────────────────┘        │ REST · JWT · historian · FDD │
+                                 └──────────────────────────────┘
+                                          ▲ MQTTS (8883)
+                                          │
+              ┌───────────────────────────┴───────────────┐
+              │ mqtt (Mosquitto)                            │
+              └───────────────────────────▲─────────────────┘
+                                          │ MQTTS haystack kv
+                                 ┌────────┴─────────┐
+                                 │ fieldbus (BACnet)│
+                                 └──────────────────┘
+```
 
-The edge image bundles `/usr/local/bin/openfdd-mcp`. Run MCP without a sidecar:
+## MCP server
+
+`openfdd-mcp` is a slim Rust image that talks to central over
+`OPENFDD_API_BASE` (default `http://central:8080`):
 
 ```bash
 docker run --rm -i \
-  -v ~/open-fdd/workspace:/var/openfdd/workspace \
-  --entrypoint openfdd-mcp \
-  ghcr.io/bbartling/openfdd-edge-rust:latest
+  -e OPENFDD_API_BASE=http://central:8080 \
+  ghcr.io/bbartling/openfdd-mcp:latest
 ```
+
+See [MCP & agents](../mcp-agents/mcp.md).
 
 ## Workspace
 
-All durable site state lives under `workspace/` (bind-mounted). Never delete it.
+All durable site state lives under `workspace/` (bind-mounted into central).
+Never delete it.

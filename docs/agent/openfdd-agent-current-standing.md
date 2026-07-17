@@ -10,9 +10,9 @@ nav_order: 2
 
 | Item | State |
 |------|-------|
-| Runtime | Rust `openfdd-edge` + React dashboard |
-| Image | `ghcr.io/bbartling/openfdd-edge-rust` |
-| Services | `openfdd-bridge`, `openfdd-commission`, `openfdd-haystack-gateway` |
+| Runtime | Container stack: `openfdd-central` + `openfdd-ui` + `openfdd-fieldbus` + `openfdd-mqtt` |
+| Images | `ghcr.io/bbartling/openfdd-{central,ui,fieldbus,mqtt,mcp}` |
+| Services | `central` (API/FDD), `ui` (Caddy), `fieldbus` (BACnet→MQTTS), `mqtt` (broker) |
 | Auth | JWT + RBAC |
 | Historian / FDD | Arrow + DataFusion SQL |
 | Agent HTTP | `GET /api/agent/tools`, `GET /api/agent/config` |
@@ -23,7 +23,7 @@ nav_order: 2
 
 | Role | Tooling |
 |------|---------|
-| Runtime | Open-FDD Rust edge only |
+| Runtime | Open-FDD container stack only |
 | Development / ops | Codex CLI, Cursor, OpenClaw (LAN) |
 | MCP | `openfdd-mcp` with JWT |
 

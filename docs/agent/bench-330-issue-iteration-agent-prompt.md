@@ -57,11 +57,8 @@ gh run list --workflow=rust-ghcr.yml --branch master --limit 3 \
 ```bash
 cd /home/ben/open-fdd
 export OPENFDD_IMAGE_TAG=nightly
-OPENFDD_IMAGE_TAG=nightly ./scripts/openfdd_bench_pull_ghcr.sh
-NEW_TAG=nightly OPENFDD_RESTORE_HISTORIAN_AFTER_UPDATE=1 ./scripts/openfdd_rust_site_update.sh
-OPENFDD_IMAGE_TAG=nightly ./scripts/openfdd_src_sync_for_test.sh
-./scripts/openfdd_rust_dcompose up -d --force-recreate
-./scripts/openfdd_rust_edge_validate.sh
+./scripts/openfdd_stack_up.sh standalone
+./scripts/openfdd_health_check.sh
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/health | jq '{status,image_tag,git_sha}'
 ```
 

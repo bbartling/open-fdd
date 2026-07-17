@@ -98,7 +98,8 @@ cd ../dashboard && npm test -- --run
 Docker smoke (when touching drivers/compose):
 
 ```bash
-./scripts/openfdd_rust_edge_validate.sh
+./scripts/openfdd_stack_up.sh standalone --build
+./scripts/openfdd_health_check.sh
 ```
 
 ### Cycle 3 — PR

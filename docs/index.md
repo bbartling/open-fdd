@@ -52,10 +52,16 @@ Open-FDD is intended for **LAN, VPN, or OT-network deployment**. Do not expose t
 7. [Security]({{ site.baseurl }}/operations/security.html) — auth, secrets, BACnet write safety
 8. [Documentation site]({{ site.baseurl }}/operations/github-pages.html) — GitHub Pages build (Actions-only)
 
-## Primary image
+## Stack images
 
 ```text
-ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-ui:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-fieldbus:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-mqtt:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
 ```
 
-See [Release channels]({{ site.baseurl }}/operations/release-channels.html) for `:beta` and `:latest` promotion policy.
+See [Build recipes]({{ site.baseurl }}/operations/build-recipes.html) for how to
+compose them and [Release channels]({{ site.baseurl }}/operations/release-channels.html)
+for `:beta` and `:latest` promotion policy.

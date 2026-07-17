@@ -454,7 +454,7 @@ Confirm these workflows succeeded on `master` after PR-6 merge:
 | Workflow | Images |
 |----------|--------|
 | `ghcr-openfdd-stack` | `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` |
-| `rust-ghcr` | `openfdd-edge-rust` (legacy monolith — note separately) |
+| `rust-ghcr-mcp` | `openfdd-mcp` |
 
 ```bash
 gh run list --workflow=ghcr-openfdd-stack.yml --limit 3

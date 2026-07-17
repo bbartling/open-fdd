@@ -1,17 +1,27 @@
-# Central + fieldbus atomic cutover runbook
+# Central + fieldbus deployment runbook
 
-Open-FDD deploys **atomically** from the legacy monolithic edge to the four-container MQTTS stack. There is no transitional HTTP field-ingest or duplicate BACnet runtime. Use this document for cutover rehearsal and rollback.
+Open-FDD is a four-container MQTTS stack (`openfdd-central`, `openfdd-ui`,
+`openfdd-fieldbus`, `openfdd-mqtt`) plus the slim `openfdd-mcp` server. Central
+never touches the BACnet wire — `fieldbus` is the sole BACnet/IP runtime and
+publishes to central over MQTTS. This runbook covers deploying, pinning, and
+rolling back a site.
 
-## Rollback unit
+For the recipe/env matrix see [Build recipes](operations/build-recipes.md).
 
-Keep two artifacts from the pre-cutover environment:
+## Backup + pin (before any change)
 
-1. **Workspace backup tarball** — `scripts/migrate/backup_pre_cutover.sh` writes `backups/pre-cutover-<timestamp>.tar.gz` plus optional migration sidecars and an image-tag manifest.
-2. **Immutable GHCR image tags** — pin all four new-stack images (or the previous `openfdd-edge-rust` tag) to the same `sha-<git-sha>` recorded before cutover. See `docker/VERSION_MANIFEST.md`.
+Keep two artifacts so you can roll back a change:
 
-Rollback = restore tarball + redeploy previous image tags. Do not advance `nightly` until standalone MQTTS smoke passes on the candidate SHA.
+1. **Workspace backup tarball** — `scripts/migrate/backup_pre_cutover.sh` writes
+   `backups/pre-cutover-<timestamp>.tar.gz` plus optional migration sidecars and
+   an image-tag manifest.
+2. **Immutable GHCR image tags** — pin all stack images to the same
+   `sha-<git-sha>`. See `docker/VERSION_MANIFEST.md`.
 
-## Pre-cutover checklist
+Do not advance `nightly` until the standalone MQTTS smoke passes on the
+candidate SHA.
+
+## Pre-deploy checklist
 
 Run in order on the production or staging host:
 
@@ -21,9 +31,9 @@ cd /path/to/open-fdd
 # 1. Backup workspace + driver_tree/assignments sidecars
 ./scripts/migrate/backup_pre_cutover.sh
 
-# 2. Dry-run driver tree → fieldbus migration report
+# 2. Dry-run driver tree → fieldbus config report
 ./scripts/migrate/dry_run_migration_report.sh
-# Review reports/migration-report.json — resolve fatal 599999 conflicts before cutover
+# Review reports/migration-report.json — resolve fatal 599999 conflicts first
 
 # 3. Pass all gates (contracts, architecture, MQTT security, compose smoke)
 ./scripts/gates/run_all_gates.sh
@@ -33,12 +43,13 @@ cd /path/to/open-fdd
 # Follow scripts/gates/e2e_mqtts_feather.md for Feather/FDD/UI/ack validation
 ```
 
-## Atomic cutover procedure
+## Deploy procedure
 
-1. **Stop legacy stack** — monolithic edge / `compose.edge.rust.yml` / any process binding UDP 47808 outside fieldbus.
-2. **Apply fieldbus config** — merge migration TOML into `config/fieldbus/field_devices.toml`; verify hosted `objects.csv` for device 599999.
-3. **Provision MQTT** — `cargo run -p openfdd_mqtt --bin openfdd-provision -- edge` for each edge; central subscriber kit under `deploy/mqtt/kits/<site>__central/`.
-4. **Pin images** — export coordinated tags:
+1. **Apply fieldbus config** — set `config/fieldbus/field_devices.toml`; verify
+   hosted `objects.csv` for device 599999.
+2. **Provision MQTT** — `cargo run -p openfdd_mqtt --bin openfdd-provision -- edge`
+   for each edge; central subscriber kit under `deploy/mqtt/kits/<site>__central/`.
+3. **Pin images** — export coordinated tags (or set `OPENFDD_IMAGE_TAG`):
 
 ```bash
 export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-<sha>
@@ -47,40 +58,39 @@ export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-<sha>
 export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-<sha>
 ```
 
-5. **Start new stack** — standalone (all-in-one) or split central + remote edge:
+4. **Start the stack** — standalone (all-in-one) or split central + remote edge:
 
 ```bash
 # Standalone (dev / single host)
-docker compose -f docker/compose.standalone.yml up -d
+./scripts/openfdd_stack_up.sh standalone
 
 # Central only
-docker compose -f docker/compose.central.yml up -d
+./scripts/openfdd_stack_up.sh central
 
 # Remote edge (outbound 8883 only)
 export OPENFDD_MQTT_HOST=mqtt.your-central.example.com
+export OPENFDD_SITE_ID=<site>
 export OPENFDD_EDGE_KIT_DIR=/path/to/deploy/mqtt/kits/<site>__<edge>
-docker compose -f docker/compose.edge.yml up -d
+./scripts/openfdd_stack_up.sh edge
 ```
 
-6. **Verify** — ingest stats, Feather files, FDD status, UI login, command ack (see `scripts/gates/e2e_mqtts_feather.md`).
+5. **Verify** — ingest stats, Feather files, FDD status, UI login, command ack
+   (see `scripts/gates/e2e_mqtts_feather.md`).
 
 ## Rollback procedure
 
 ```bash
-# Stop new stack
+# Stop the stack
 docker compose -f docker/compose.standalone.yml down
 docker compose -f docker/compose.central.yml down
 docker compose -f docker/compose.edge.yml down
 
-# Restore workspace from pre-cutover tarball
+# Restore workspace from the backup tarball
 tar -xzf backups/pre-cutover-<timestamp>.tar.gz -C /path/to/parent-of-workspace
 
-# Restore previous images (from backup manifest or your records)
+# Restore previous pinned images and restart
 source backups/pre-cutover-<timestamp>-image-tags.env
-# Or legacy:
-export OPENFDD_EDGE_RUST_IMAGE=ghcr.io/bbartling/openfdd-edge-rust:sha-<previous>
-
-# Start previous stack and confirm historian + UI parity
+OPENFDD_IMAGE_TAG=<previous-sha> ./scripts/openfdd_stack_up.sh standalone
 ```
 
 ## Environment variables
@@ -123,6 +133,7 @@ export OPENFDD_EDGE_RUST_IMAGE=ghcr.io/bbartling/openfdd-edge-rust:sha-<previous
 | `OPENFDD_UI_IMAGE` | `ghcr.io/bbartling/openfdd-ui` |
 | `OPENFDD_FIELDBUS_IMAGE` | `ghcr.io/bbartling/openfdd-fieldbus` |
 | `OPENFDD_MQTT_IMAGE` | `ghcr.io/bbartling/openfdd-mqtt` |
+| `OPENFDD_MCP_IMAGE` | `ghcr.io/bbartling/openfdd-mcp` |
 
 ### Migration / backup
 
@@ -145,11 +156,10 @@ export OPENFDD_EDGE_RUST_IMAGE=ghcr.io/bbartling/openfdd-edge-rust:sha-<previous
 | Standalone compose smoke | `scripts/release/smoke_standalone_mqtts.sh` |
 | All gates | `scripts/gates/run_all_gates.sh` |
 
-## Known gaps after cutover
+## Known gaps
 
 - **Live OT BACnet** — validate on bench hardware with `scripts/fieldbus/bench_test.sh`; not part of default CI gates.
-- **Selenium UI rig** — `tests/selenium/` covers legacy flows; extend for central edge-shadow pages.
-- **Modbus/Haystack migration** — `dry_run_migration_report.sh` flags manual mapping; configure in `config/fieldbus/` per report `unresolved[]`.
+- **Modbus/Haystack config** — `dry_run_migration_report.sh` flags manual mapping; configure in `config/fieldbus/` per report `unresolved[]`.
 - **Full Docker E2E in CI** — `e2e_mqtts_smoke.sh` validates compose + gates; full Feather/FDD/UI path is `DOCKER_REQUIRED` locally.
 
 ## Related docs

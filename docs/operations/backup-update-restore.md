@@ -6,39 +6,40 @@ nav_order: 2
 
 # Backup, update, restore
 
+All persistent state lives under `workspace/`. Back it up before any image
+update. See [Build recipes](build-recipes.html) for the recipe/env matrix.
+
 ## Backup
 
 ```bash
 cd ~/open-fdd
-./scripts/openfdd_rust_site_backup.sh
+mkdir -p ~/openfdd-backups/latest
+tar -czf ~/openfdd-backups/latest/workspace-full.tgz workspace/
 ```
-
-Output: `~/openfdd-backups/latest/workspace-full.tgz`
 
 ## Update
 
 ```bash
-./scripts/openfdd_rust_site_backup.sh
-NEW_TAG=3.2.4 ./scripts/openfdd_rust_site_update.sh
-./scripts/openfdd_rust_edge_validate.sh
+# 1. back up workspace/ (above)
+# 2. re-pull the target tag and recreate the stack
+OPENFDD_IMAGE_TAG=3.3.0 ./scripts/openfdd_stack_up.sh standalone
+./scripts/openfdd_health_check.sh
 ```
-
-`REQUIRE_BACKUP=1` (default) blocks update without a recent backup.
 
 ## Restore
 
 ```bash
 tar -xzf ~/openfdd-backups/latest/workspace-full.tgz -C ~/open-fdd
-docker compose up -d --force-recreate
-./scripts/openfdd_rust_edge_validate.sh
+./scripts/openfdd_stack_up.sh standalone --no-pull
+./scripts/openfdd_health_check.sh
 ```
 
 ## Manual release (maintainers)
 
 ```bash
-gh workflow run "Rust Release (GHCR + GitHub Release)" \
-  --ref release/v3.2.4 \
-  -f version=3.2.4 \
+gh workflow run "Stack Release (GHCR + GitHub Release)" \
+  --ref release/v3.3.0 \
+  -f version=3.3.0 \
   -f prerelease=false
 ```
 

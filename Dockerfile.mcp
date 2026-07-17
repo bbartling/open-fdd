@@ -1,5 +1,5 @@
-# MCP alias image — same binaries as openfdd-edge-rust; stdio entrypoint only.
-# Prefer: docker run -i --entrypoint openfdd-mcp ghcr.io/bbartling/openfdd-edge-rust:<tag>
+# Slim Rust MCP image — stdio entrypoint only; talks to central over OPENFDD_API_BASE.
+# Run: docker run -i ghcr.io/bbartling/openfdd-mcp:<tag>
 FROM rust:1.95-bookworm AS builder
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
@@ -20,6 +20,7 @@ RUN apt-get update \
   && useradd --create-home --uid 10002 --shell /usr/sbin/nologin openfdd-mcp
 COPY --from=builder /app/target/release/openfdd-mcp /usr/local/bin/openfdd-mcp
 ENV OPENFDD_IMAGE_TAG=${OPENFDD_IMAGE_TAG} \
-    OPENFDD_GIT_SHA=${OPENFDD_BUILD_GIT_SHA}
+    OPENFDD_GIT_SHA=${OPENFDD_BUILD_GIT_SHA} \
+    OPENFDD_API_BASE=http://central:8080
 USER openfdd-mcp
 ENTRYPOINT ["openfdd-mcp"]

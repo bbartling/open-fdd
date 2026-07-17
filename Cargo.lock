@@ -2824,6 +2824,7 @@ dependencies = [
  "encoding_rs",
  "fdd_rules",
  "fdd_sql",
+ "fdd_store",
  "hex",
  "hmac",
  "once_cell",
@@ -2850,6 +2851,7 @@ version = "3.3.0"
 dependencies = [
  "anyhow",
  "axum",
+ "bytes",
  "chrono",
  "dashmap",
  "fdd_rules",

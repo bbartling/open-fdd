@@ -16,9 +16,9 @@ You are the **orchestrator** for Open-FDD retrofit and edge releases. Open-FDD i
 
 ## Current stack facts
 
-- Image: `ghcr.io/bbartling/openfdd-edge-rust`
-- Services: `openfdd-bridge`, `openfdd-commission`, `openfdd-haystack-gateway`
-- MCP (`openfdd-mcp`): optional external-agent boundary — not required for edge runtime
+- Images: `ghcr.io/bbartling/openfdd-{central,ui,fieldbus,mqtt,mcp}`
+- Services: `central` (API/FDD), `ui` (Caddy), `fieldbus` (BACnet→MQTTS), `mqtt` (broker)
+- MCP (`openfdd-mcp`): optional external-agent boundary — not required for stack runtime
 
 ## Model routing
 

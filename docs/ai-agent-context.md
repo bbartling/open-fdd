@@ -27,8 +27,8 @@ POST /api/fdd-rules/{id}/test-sql
 ## Safe scripts
 
 ```bash
-./scripts/openfdd_rust_edge_bootstrap.sh --start
-./scripts/openfdd_rust_edge_validate.sh
+./scripts/openfdd_stack_up.sh standalone
+./scripts/openfdd_health_check.sh
 ```
 
 External agents (Codex, Cursor, MCP hosts) run **outside** the dashboard — see [agent/model-routing.md](agent/model-routing.md).

@@ -6,20 +6,23 @@ nav_order: 1
 
 # Docker & GHCR bootstrap
 
-## One-liner (no git clone on device)
+The stack runs from compose recipes in the repo. Clone once, then bring up a
+recipe with `scripts/openfdd_stack_up.sh` (it pulls the GHCR images and waits
+on health).
 
 ```bash
-curl -fsSL -o /tmp/openfdd_rust_edge_bootstrap.sh \
-  https://github.com/bbartling/open-fdd/raw/refs/heads/master/scripts/openfdd_rust_edge_bootstrap.sh
-OPENFDD_IMAGE_TAG=nightly bash /tmp/openfdd_rust_edge_bootstrap.sh --start
+git clone https://github.com/bbartling/open-fdd.git
+cd open-fdd
+./scripts/openfdd_stack_up.sh standalone
 ```
 
-This creates `~/open-fdd/` with compose, scripts, and `workspace/` for site state.
+`workspace/` holds site state. See [Build recipes](../operations/build-recipes.md)
+for the full recipe/env matrix.
 
 ## Image channels
 
 ```yaml
-image: ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-nightly}
+image: ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:-nightly}
 ```
 
 | Channel | Tag | Use |
@@ -28,75 +31,42 @@ image: ghcr.io/bbartling/openfdd-edge-rust:${OPENFDD_IMAGE_TAG:-nightly}
 | Beta | `beta` or `3.3.0-beta.N` | After maintainer promotion |
 | Stable | `latest` or `3.3.0` | Production (when published) |
 
-See [Release channels](../operations/release-channels.html).
+`OPENFDD_IMAGE_TAG` applies to every stack image at once. See
+[Release channels](../operations/release-channels.html).
 
-Multi-arch: `linux/amd64` and `linux/arm64`. Optional platform check:
-
-```bash
-OPENFDD_IMAGE_TAG=nightly ./scripts/openfdd_rust_check_ghcr_platform.sh
-```
-
-## Compose profiles
-
-From `docker/compose.edge.rust.yml`:
-
-| Profile | Use |
-|---------|-----|
-| `desktop-json-csv` | Bridge only — CSV/JSON workflows on a workstation |
-| `full-edge` | Bridge + BACnet commission + Haystack gateway |
-| `caddy-http` / `caddy-tls` | Reverse proxy in front of the bridge |
-| `mcp-sidecar` | Optional `openfdd-mcp` stdio sidecar for external agents |
-
-Examples:
+Multi-arch: `linux/amd64` and `linux/arm64`.
 
 ```bash
-# Full OT edge
-export OPENFDD_COMPOSE_ROOT=~/open-fdd
-export OPENFDD_IMAGE_TAG=nightly
-docker compose -f docker/compose.edge.rust.yml --profile full-edge up -d
-
-# Desktop CSV / JSON mode
-docker compose -f docker/compose.edge.rust.yml --profile desktop-json-csv up -d
+docker manifest inspect ghcr.io/bbartling/openfdd-central:nightly
 ```
 
-## Bootstrap flags
+## Recipes
 
-| Flag | Purpose |
-|------|---------|
-| `--start` | Pull image and start compose |
-| `--image-tag TAG` | Pin GHCR tag (`nightly`, `beta`, semver, `sha-*`) |
-| `--platform auto\|linux/amd64\|linux/arm64` | Pull platform |
-| `--root PATH` | Install root (default `~/open-fdd`) |
-| `--restart` | `compose up -d --force-recreate` |
+| Recipe | Command | Services |
+|--------|---------|----------|
+| standalone | `./scripts/openfdd_stack_up.sh standalone` | mqtt + central + ui + fieldbus |
+| central | `./scripts/openfdd_stack_up.sh central` | mqtt + central + ui |
+| edge | `./scripts/openfdd_stack_up.sh edge` | fieldbus only |
+| csv | `./scripts/openfdd_stack_up.sh csv` | central + ui (no MQTT) |
 
-## Layout after bootstrap
+Build locally instead of pulling GHCR:
 
-```text
-~/open-fdd/
-  docker-compose.yml
-  workspace/
-    auth.env.local       # integrator password — chmod 600, never commit
-    data.env.local
-    bacnet/commissioning/commission.env
-    data/historian/      # Arrow / Feather partitions
-    data/drivers/
-  scripts/
-    openfdd_rust_site_backup.sh
-    openfdd_rust_site_update.sh
-    openfdd_rust_edge_validate.sh
+```bash
+./scripts/openfdd_stack_up.sh standalone --build
 ```
 
 ## First login & health
 
 ```bash
 cd ~/open-fdd
-./scripts/openfdd_rust_edge_validate.sh
+./scripts/openfdd_health_check.sh
 curl -s http://127.0.0.1:8080/api/health | jq '{version, image_tag}'
 ```
 
-Open `http://127.0.0.1:8080` — sign in with the integrator user from `workspace/auth.env.local`.
+Open the UI at `http://<host>:3000`. When `OPENFDD_JWT_SECRET` is set, sign in
+with the admin/operator/viewer password from `OPENFDD_ADMIN_PASSWORD`.
 
-Default bind is **127.0.0.1:8080**. Reach the UI over Tailscale, VPN, or a reverse proxy — not raw public internet.
+Reach the UI over Tailscale, VPN, or a reverse proxy — not raw public internet.
 
 {: .warning }
 Never run `docker compose down -v`. Never delete `workspace/`.

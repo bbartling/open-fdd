@@ -419,12 +419,12 @@ impl BridgeClient {
             "ok": true,
             "dry_run": true,
             "steps": [
-                "DRY_RUN=1 NEW_TAG=<tag> ./scripts/openfdd_rust_site_update.sh",
-                "./scripts/openfdd_rust_site_backup.sh",
-                "./scripts/openfdd_rust_edge_validate.sh",
+                "tar -czf ~/openfdd-backups/latest/workspace-full.tgz workspace/",
+                "OPENFDD_IMAGE_TAG=<tag> ./scripts/openfdd_stack_up.sh standalone",
+                "./scripts/openfdd_health_check.sh",
                 "./scripts/openfdd_drivers_validate.sh"
             ],
-            "doc": "docs/quick-start/rust-site-lifecycle.md",
+            "doc": "docs/quick-start/site-lifecycle.md",
             "note": "MCP does not execute site update — operator or bench agent runs scripts on host."
         })
     }

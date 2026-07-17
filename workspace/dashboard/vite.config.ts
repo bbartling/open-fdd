@@ -8,8 +8,8 @@ export default defineConfig({
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },
   build: {
-    outDir: process.env.VITE_OUT_DIR || "../../frontend",
-    emptyOutDir: false,
+    outDir: process.env.VITE_OUT_DIR || "dist",
+    emptyOutDir: true,
   },
   server: {
     port: Number(process.env.VITE_DEV_PORT || 5173),

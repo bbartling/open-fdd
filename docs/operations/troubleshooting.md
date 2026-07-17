@@ -6,19 +6,19 @@ nav_order: 12
 
 # Troubleshooting
 
-## Bridge not healthy
+## Central not healthy
 
 ```bash
-docker compose ps
-docker compose logs openfdd-bridge --tail 100
+docker compose -f docker/compose.standalone.yml ps
+docker compose -f docker/compose.standalone.yml logs central --tail 100
 curl -s http://127.0.0.1:8080/api/health | jq .
-./scripts/openfdd_rust_edge_validate.sh
+./scripts/openfdd_health_check.sh
 ```
 
 ## Login fails
 
 - Confirm `workspace/auth.env.local` exists and permissions are `600`
-- Recreate bridge after auth changes: `docker compose up -d --force-recreate openfdd-bridge`
+- Recreate central after auth changes: `docker compose -f docker/compose.standalone.yml up -d --force-recreate central`
 - Check `GET /api/auth/status`
 
 ## No historian data in plots
@@ -43,15 +43,15 @@ curl -s http://127.0.0.1:8080/api/health | jq .
 ## Wrong GHCR architecture
 
 ```bash
-./scripts/openfdd_rust_check_ghcr_platform.sh
-NEW_TAG=3.2.4 OPENFDD_DOCKER_PLATFORM=linux/arm64 ./scripts/openfdd_rust_site_update.sh
+docker manifest inspect ghcr.io/bbartling/openfdd-central:nightly
+OPENFDD_IMAGE_TAG=3.3.0 ./scripts/openfdd_stack_up.sh standalone
 ```
 
 ## After bad update
 
 ```bash
 tar -xzf ~/openfdd-backups/latest/workspace-full.tgz -C ~/open-fdd
-docker compose up -d --force-recreate
+./scripts/openfdd_stack_up.sh standalone --no-pull
 ```
 
 ## Get help

@@ -58,11 +58,8 @@ TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
 
 # Pull + deploy nightly
 export OPENFDD_IMAGE_TAG=nightly
-OPENFDD_IMAGE_TAG=nightly ./scripts/openfdd_bench_pull_ghcr.sh
-NEW_TAG=nightly OPENFDD_RESTORE_HISTORIAN_AFTER_UPDATE=1 ./scripts/openfdd_rust_site_update.sh
-OPENFDD_IMAGE_TAG=nightly ./scripts/openfdd_src_sync_for_test.sh
-./scripts/openfdd_rust_dcompose up -d --force-recreate
-./scripts/openfdd_rust_edge_validate.sh
+./scripts/openfdd_stack_up.sh standalone
+./scripts/openfdd_health_check.sh
 
 # Confirm tag
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/health | jq '{status,image_tag,version}'
@@ -93,14 +90,14 @@ OPENFDD_BACNET_DAEMON_MAX_CYCLES=0 ./scripts/openfdd_bacnet_poll_daemon.sh start
 | **After any test** | Verify daemon still running; restart if dead |
 | **Never** | Stop daemon at end of report "to save CPU" — charts/FDD need continuous ingest |
 
-**BACnet local diagnostic server vs OT Who-Is (compose enforces defaults):**
+**BACnet local diagnostic server vs OT Who-Is (fieldbus owns the wire):**
 
-| Service | Default `OPENFDD_BACNET_SERVER_ENABLED` | Role |
-|---------|----------------------------------------|------|
-| `openfdd-bridge` | `1` (`OPENFDD_BRIDGE_BACNET_SERVER_ENABLED`) | Optional local diagnostic device (default instance **599999**) |
-| `openfdd-commission` | `0` (`OPENFDD_COMMISSION_BACNET_SERVER_ENABLED`) | OT Who-Is / ReadProperty on host-network UDP |
+| Service | Role |
+|---------|------|
+| `fieldbus` | OT Who-Is / ReadProperty on host-network UDP 47808; owns the local diagnostic device (default instance **599999**) |
+| `central` | Never touches BACnet — subscribes to fieldbus readings over MQTTS |
 
-Field devices are **whatever Who-Is returns** on that site — never hardcoded in product code. Verify with `docker exec … printenv OPENFDD_BACNET_SERVER_ENABLED`. After env/compose change: `openfdd_rust_dcompose up -d --force-recreate`.
+Field devices are **whatever Who-Is returns** on that site — never hardcoded in product code. After config/compose change: `./scripts/openfdd_stack_up.sh standalone --no-pull`.
 
 ---
 
@@ -187,8 +184,8 @@ Close only when WSL ships fix + you re-verify on pinned tag.
 
 When #429 shows poll→feather→FDD green on **pinned** `3.3.0-beta.N`:
 
-1. WSL cuts beta via Actions → **Rust Release** → channel **beta**
-2. You deploy: `NEW_TAG=beta ./scripts/openfdd_rust_site_update.sh`
+1. WSL cuts beta via Actions → **Stack Release** → channel **beta**
+2. You deploy: `OPENFDD_IMAGE_TAG=beta ./scripts/openfdd_stack_up.sh standalone`
 3. Re-run full matrix with `OPENFDD_BENCH_TAG=3.3.0-beta.N`
 4. Update #429 with **Sign-off: YES** or remaining FAILs
 

@@ -19,9 +19,9 @@
 
 ```bash
 cd /home/ben/open-fdd
-NEW_TAG=nightly ./scripts/openfdd_rust_site_update.sh
+OPENFDD_IMAGE_TAG=nightly ./scripts/openfdd_stack_up.sh standalone
 chmod 644 workspace/auth.env.local
-curl -fsS http://127.0.0.1:8080/health | jq '{ok,version,git_sha_short}'
+curl -fsS http://127.0.0.1:8080/api/health | jq '{ok,version,git_sha_short}'
 ```
 
 ## 5007 acceptance gates

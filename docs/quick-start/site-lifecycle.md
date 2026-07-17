@@ -7,39 +7,31 @@ nav_order: 3
 # Site lifecycle
 
 Standard operator sequence: **backup → pull/update → validate → report**.
+All persistent state lives under `workspace/`.
 
 ## Backup
 
 ```bash
 cd ~/open-fdd
-./scripts/openfdd_rust_site_backup.sh
+mkdir -p ~/openfdd-backups/latest
+tar -czf ~/openfdd-backups/latest/workspace-full.tgz workspace/
 ```
-
-Environment:
-
-| Variable | Effect |
-|----------|--------|
-| `BACKUP_INCLUDE_HISTORIAN=0` | Skip large historian samples |
-| `BACKUP_INCLUDE_POLL_SAMPLES=0` | Skip poll sample blobs |
-
-Archive: `~/openfdd-backups/latest/workspace-full.tgz`
 
 ## Update
 
+Re-pull the target tag and recreate the running recipe:
+
 ```bash
-NEW_TAG=3.2.4 ./scripts/openfdd_rust_site_update.sh
+OPENFDD_IMAGE_TAG=3.3.0 ./scripts/openfdd_stack_up.sh standalone
 ```
 
-| Variable | Effect |
-|----------|--------|
-| `OPENFDD_DOCKER_PLATFORM` | `auto`, `linux/arm64`, or `linux/amd64` |
-| `REQUIRE_BACKUP=1` | Default — refuse update without recent backup |
-| `DRY_RUN=1` | Print plan only |
+Pin `OPENFDD_IMAGE_TAG` (semver or `sha-*`) for production; the same tag
+applies to every stack image. See [Build recipes](../operations/build-recipes.md).
 
 ## Validate
 
 ```bash
-./scripts/openfdd_rust_edge_validate.sh
+./scripts/openfdd_health_check.sh
 curl -s http://127.0.0.1:8080/api/health | jq '{version, image_tag}'
 ```
 
@@ -47,15 +39,15 @@ curl -s http://127.0.0.1:8080/api/health | jq '{version, image_tag}'
 
 ```bash
 tar -xzf ~/openfdd-backups/latest/workspace-full.tgz -C ~/open-fdd
-docker compose up -d --force-recreate
-./scripts/openfdd_rust_edge_validate.sh
+./scripts/openfdd_stack_up.sh standalone --no-pull
+./scripts/openfdd_health_check.sh
 ```
 
 ## Safe operations
 
 | Do | Don't |
 |----|-------|
-| `openfdd_rust_site_backup.sh` before updates | `docker compose down -v` |
+| Back up `workspace/` before updates | `docker compose down -v` |
 | Pin `OPENFDD_IMAGE_TAG` for production | `docker volume prune` |
 | Keep `workspace/` on durable storage | `rm -rf workspace` |
 

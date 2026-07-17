@@ -1,24 +1,23 @@
 # openfdd-mcp
 
-Read-first [Model Context Protocol](https://modelcontextprotocol.io/) server for Open-FDD Rust edge. Proxies JWT-authenticated REST calls to `openfdd-bridge` and commission BACnet reads.
+Read-first [Model Context Protocol](https://modelcontextprotocol.io/) server for Open-FDD. Proxies JWT-authenticated REST calls to **central** and commission BACnet reads.
 
 Open-FDD does **not** include a built-in AI chatbot. External agents (Codex CLI, Cursor, Claude Desktop, OpenClaw, etc.) connect through this optional stdio server or JWT REST — see [docs/examples/external-agents.md](../docs/examples/external-agents.md).
 
-**Image:** `openfdd-mcp` binary is bundled in `ghcr.io/bbartling/openfdd-edge-rust`. The slim `ghcr.io/bbartling/openfdd-mcp` image is MCP stdio entrypoint only (same release tag).
+**Image:** the slim `ghcr.io/bbartling/openfdd-mcp` image is an MCP stdio entrypoint only, published on the same channel tags as the rest of the stack (`OPENFDD_IMAGE_TAG`). See [docs/operations/build-recipes.md](../docs/operations/build-recipes.md).
 
-## After a Docker / GHCR site update
+## Pull and wire after the stack is healthy
 
-`openfdd_rust_site_update.sh` updates the **edge stack only**. MCP is opt-in — pull and wire it **after** the edge is healthy, using the **same semver tag** as the edge (`OPENFDD_IMAGE_TAG`, e.g. `3.2.6` or pinned `3.2.5`).
+MCP is opt-in — bring up a stack recipe first, then pull MCP on the **same tag**.
 
 ```bash
 cd ~/open-fdd
-export OPENFDD_COMPOSE_ROOT="$PWD"
-export OPENFDD_IMAGE_TAG=3.2.6
+export OPENFDD_IMAGE_TAG=nightly   # or a pinned semver / sha-*
 
-# Pull MCP image (optional — docker run will pull if missing)
-docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar pull openfdd-mcp
+# Pull the slim MCP image (docker run will also pull if missing)
+./scripts/openfdd_stack_pull.sh mcp
 
-# JWT for bridge REST (integrator or agent role)
+# JWT for central REST (integrator or agent role)
 source scripts/openfdd_auth_lib.sh
 INTEGRATOR_PW="$(openfdd_auth_plaintext_password workspace/auth.env.local integrator)"
 export OPENFDD_MCP_TOKEN="$(
@@ -29,7 +28,7 @@ export OPENFDD_MCP_TOKEN="$(
 )"
 ```
 
-**Cursor (stdio via Docker)** — MCP speaks JSON-RPC on stdin/stdout, not HTTP:
+**Cursor (stdio via Docker)** — MCP speaks JSON-RPC on stdin/stdout, not HTTP. Use `OPENFDD_API_BASE=http://central:8080` inside the compose network, or `http://127.0.0.1:8080` from the host:
 
 ```json
 {
@@ -41,7 +40,7 @@ export OPENFDD_MCP_TOKEN="$(
         "-e", "OPENFDD_API_BASE=http://127.0.0.1:8080",
         "-e", "OPENFDD_COMMISSION_BASE=http://127.0.0.1:9091",
         "-e", "OPENFDD_MCP_TOKEN",
-        "ghcr.io/bbartling/openfdd-mcp:3.2.6"
+        "ghcr.io/bbartling/openfdd-mcp:nightly"
       ],
       "env": {
         "OPENFDD_MCP_TOKEN": "<JWT from login above>"
@@ -60,7 +59,7 @@ docker run -i --rm --network host \
   ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG}
 ```
 
-The compose service `openfdd-mcp` (`profiles: ["mcp-sidecar"]`) exists to **pull** the image with the same env/volume wiring as production; interactive MCP clients should use `docker run -i` (or the release binary below), not a detached `up -d`.
+Interactive MCP clients should use `docker run -i` (or the release binary below), not a detached `up -d`.
 
 ## Transport
 
@@ -94,7 +93,7 @@ docker run -i --rm --network host \
 
 | Tool | Description |
 |------|-------------|
-| `openfdd_health` | Bridge liveness |
+| `openfdd_health` | Central liveness |
 | `openfdd_driver_status` | Driver status bundle |
 | `openfdd_bench_topology` | Bench layout file or doc pointer |
 | `openfdd_haystack_status` | Haystack gateway status |
@@ -131,7 +130,7 @@ docker build -f Dockerfile.mcp -t openfdd-mcp:local .
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `OPENFDD_API_BASE` | `http://127.0.0.1:8080` | Bridge REST |
+| `OPENFDD_API_BASE` | `http://127.0.0.1:8080` | Central REST (`http://central:8080` in compose) |
 | `OPENFDD_COMMISSION_BASE` | `http://127.0.0.1:9091` | BACnet OT reads |
 | `OPENFDD_MCP_TOKEN` | — | Bearer JWT (integrator/agent) |
 | `OPENFDD_MCP_ALLOW_WRITES` | — | Set to `1` to enable write tools (requires `confirm:true` per call) |

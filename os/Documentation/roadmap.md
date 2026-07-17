@@ -15,8 +15,8 @@ Design principles:
 
 | Phase | Deliverable | Status (3.2.3-prep) | Notes |
 | --- | --- | --- | --- |
-| **A** | Ubuntu/Pi OS + Docker + `docker/compose.edge.rust.yml` + lifecycle scripts | **Shipping** | [`openfdd_rust_edge_bootstrap.sh`](../../scripts/openfdd_rust_edge_bootstrap.sh), [`openfdd_rust_site_update.sh`](../../scripts/openfdd_rust_site_update.sh) |
-| **B** | GHCR multi-arch Rust edge + MCP images, version pins | **Shipping** | `ghcr.io/bbartling/openfdd-edge-rust`, `ghcr.io/bbartling/openfdd-mcp`; tag via `VERSION` + CI |
+| **A** | Ubuntu/Pi OS + Docker + compose recipes + lifecycle scripts | **Shipping** | [`openfdd_stack_up.sh`](../../scripts/openfdd_stack_up.sh); recipes in [`docker/`](../../docker/) |
+| **B** | GHCR multi-arch stack + MCP images, version pins | **Shipping** | `ghcr.io/bbartling/openfdd-{central,ui,fieldbus,mqtt,mcp}`; tag via `VERSION` + CI |
 | **C** | `os/buildroot-external` board defconfig (x86_64, then Pi) | **Not started** | Docker pre-installed, no apt on target; placeholder dir only |
 | **D** | RAUC OTA for OS + supervisor bundle (compose + manifest) | **Not started** | Replace manual pull/recreate; rollback slot |
 
@@ -35,9 +35,8 @@ Supervisor manifest (future) might pin:
 
 ```yaml
 # conceptual — not implemented
-edge_image: ghcr.io/bbartling/openfdd-edge-rust:3.2.3
-mcp_image: ghcr.io/bbartling/openfdd-mcp:3.2.3
-profiles: [full-edge]
+image_tag: 3.3.0        # applies to all stack images
+recipe: standalone      # standalone | central | edge | csv
 workspace_mount: /var/openfdd/workspace
 ```
 

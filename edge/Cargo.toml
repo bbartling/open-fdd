@@ -42,4 +42,5 @@ rusty-modbus-types = { git = "https://github.com/jscott3201/rusty-modbus", versi
 oxigraph = "0.5"
 fdd_rules = { path = "../crates/fdd_rules" }
 fdd_sql = { path = "../crates/fdd_sql" }
+fdd_store = { path = "../crates/fdd_store" }
 walkdir = "2"

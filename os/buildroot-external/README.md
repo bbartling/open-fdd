@@ -9,4 +9,4 @@ When work starts, this tree will follow a Home Assistant OS–style layout:
 - RAUC hooks for A/B updates
 - First-boot mount of `/var/openfdd` for `workspace/`
 
-Until then, use standard Linux + [docker/compose.edge.rust.yml](../../docker/compose.edge.rust.yml).
+Until then, use standard Linux + the compose recipes in [docker/](../../docker/) via [`scripts/openfdd_stack_up.sh`](../../scripts/openfdd_stack_up.sh).

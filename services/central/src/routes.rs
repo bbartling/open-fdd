@@ -2,13 +2,16 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::{DefaultBodyLimit, Path, Query, State};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware;
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use bytes::Bytes;
 use chrono::Utc;
 use openfdd_contracts::{CommandEnvelope, Protocol, TopicBuilder, TopicKind};
 use openfdd_mqtt::publish_json;
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::auth;
@@ -28,6 +31,34 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/auth/me", get(auth_me))
         .route("/api/auth/login", post(auth_login));
 
+    let csv = Router::new()
+        .route("/api/csv/import/preview", post(csv_preview))
+        .route("/api/csv/import/plan", post(csv_plan))
+        .route("/api/csv/import/preflight", post(csv_preflight))
+        .route("/api/csv/import/execute", post(csv_execute))
+        .route("/api/csv/import/sessions", get(csv_list_sessions))
+        .route(
+            "/api/csv/import/sessions/latest/planned",
+            get(csv_latest_planned),
+        )
+        .route(
+            "/api/csv/import/sessions/{session_id}",
+            get(csv_get_session).delete(csv_delete_session),
+        )
+        .route(
+            "/api/csv/import/sessions/{session_id}/fusion-preview",
+            get(csv_fusion_preview),
+        )
+        .route(
+            "/api/datasets",
+            get(csv_list_datasets).delete(csv_delete_dataset),
+        )
+        .route(
+            "/api/datasets/{dataset_id}/preview",
+            get(csv_preview_dataset),
+        )
+        .layer(DefaultBodyLimit::max(128 * 1024 * 1024));
+
     let protected = Router::new()
         .route("/api/edges", get(list_edges))
         .route("/api/edges/{edge_id}", get(get_edge))
@@ -43,6 +74,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/fdd/roles", get(fdd_roles))
         .route("/api/fdd/run", post(fdd_run))
         .route("/api/fdd/status", get(fdd_status))
+        .merge(csv)
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
             auth::jwt_middleware,
@@ -538,6 +570,21 @@ pub async fn agent_tools() -> Json<AgentToolsResponse> {
                 method: "GET".into(),
                 path: "/api/fdd/status".into(),
             },
+            AgentTool {
+                name: "csv.import.preview".into(),
+                method: "POST".into(),
+                path: "/api/csv/import/preview".into(),
+            },
+            AgentTool {
+                name: "csv.import.execute".into(),
+                method: "POST".into(),
+                path: "/api/csv/import/execute".into(),
+            },
+            AgentTool {
+                name: "datasets.list".into(),
+                method: "GET".into(),
+                path: "/api/datasets".into(),
+            },
         ],
     })
 }
@@ -624,4 +671,127 @@ fn mqtt_enabled() -> bool {
             .as_str(),
         "1" | "true" | "yes" | "on"
     )
+}
+
+// --- CSV import (UT3) — same handlers as edge lib; execute also fills parquet cache ---
+
+fn content_type(headers: &HeaderMap) -> String {
+    headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string()
+}
+
+pub async fn csv_preview(headers: HeaderMap, body: Bytes) -> Json<Value> {
+    let ct = content_type(&headers);
+    if ct.contains("application/json") {
+        let v: Value = serde_json::from_slice(&body).unwrap_or(json!({}));
+        return Json(open_fdd_edge_prototype::csv_ingest::preview_json_handler(
+            &v,
+        ));
+    }
+    Json(open_fdd_edge_prototype::csv_ingest::preview_handler(
+        &ct, &body, None,
+    ))
+}
+
+pub async fn csv_plan(Json(body): Json<Value>) -> Json<Value> {
+    Json(open_fdd_edge_prototype::csv_ingest::plan_handler(&body))
+}
+
+pub async fn csv_preflight(Json(body): Json<Value>) -> Json<Value> {
+    Json(open_fdd_edge_prototype::csv_ingest::preflight_handler(
+        &body,
+    ))
+}
+
+pub async fn csv_execute(Json(body): Json<Value>) -> Json<Value> {
+    Json(open_fdd_edge_prototype::csv_ingest::execute_handler(&body))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SessionListQuery {
+    pub limit: Option<usize>,
+}
+
+pub async fn csv_list_sessions(Query(q): Query<SessionListQuery>) -> Json<Value> {
+    Json(open_fdd_edge_prototype::csv_ingest::list_sessions_handler(
+        q.limit.unwrap_or(50),
+    ))
+}
+
+pub async fn csv_latest_planned() -> Json<Value> {
+    Json(open_fdd_edge_prototype::csv_ingest::latest_planned_session_handler())
+}
+
+pub async fn csv_get_session(Path(session_id): Path<String>) -> Json<Value> {
+    Json(open_fdd_edge_prototype::csv_ingest::get_session_handler(
+        &session_id,
+    ))
+}
+
+pub async fn csv_delete_session(Path(session_id): Path<String>) -> Json<Value> {
+    Json(open_fdd_edge_prototype::csv_ingest::delete_session_handler(
+        &session_id,
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FusionPreviewQuery {
+    pub limit: Option<usize>,
+}
+
+pub async fn csv_fusion_preview(
+    Path(session_id): Path<String>,
+    Query(q): Query<FusionPreviewQuery>,
+) -> Json<Value> {
+    let limit = open_fdd_edge_prototype::csv_ingest::fusion_preview_limit_from_query(
+        q.limit.map(|n| n.to_string()).as_deref(),
+    );
+    Json(open_fdd_edge_prototype::csv_ingest::fusion_preview_handler(
+        &session_id,
+        limit,
+    ))
+}
+
+pub async fn csv_list_datasets() -> Json<Value> {
+    Json(open_fdd_edge_prototype::csv_ingest::list_datasets())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DatasetIdQuery {
+    pub id: Option<String>,
+}
+
+pub async fn csv_delete_dataset(
+    Query(q): Query<DatasetIdQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let Some(id) = q.id.as_deref().filter(|s| !s.is_empty()) else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "id query required"})),
+        ));
+    };
+    match open_fdd_edge_prototype::csv_ingest::delete_dataset(id) {
+        Ok(()) => Ok(Json(json!({"ok": true}))),
+        Err(e) => Ok(Json(json!({"ok": false, "error": e}))),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DatasetPreviewQuery {
+    pub offset: Option<usize>,
+    pub limit: Option<usize>,
+}
+
+pub async fn csv_preview_dataset(
+    Path(dataset_id): Path<String>,
+    Query(q): Query<DatasetPreviewQuery>,
+) -> Json<Value> {
+    Json(open_fdd_edge_prototype::csv_ingest::preview_dataset(
+        &dataset_id,
+        q.offset.unwrap_or(0) as u64,
+        q.limit.unwrap_or(100) as u64,
+    ))
 }

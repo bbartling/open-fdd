@@ -1,5 +1,5 @@
-# Transitional MCP-only image — MCP binary is also bundled in openfdd-edge-rust.
-# Nightly on master; semver/beta/stable via rust-release.yml.
+# Slim Rust MCP image — talks to central over OPENFDD_API_BASE.
+# Nightly on master; semver/beta/stable via the stack release workflow.
 name: Publish Open-FDD MCP to GHCR
 
 on:
@@ -51,7 +51,7 @@ jobs:
           labels: |
             org.opencontainers.image.title=Open-FDD MCP
             org.opencontainers.image.source=https://github.com/bbartling/open-fdd
-            org.opencontainers.image.description=MCP stdio sidecar — prefer openfdd-edge-rust with entrypoint openfdd-mcp
+            org.opencontainers.image.description=Slim Rust MCP stdio server for Open-FDD central
             org.opencontainers.image.version=nightly
 
       - uses: docker/build-push-action@v6

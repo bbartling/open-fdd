@@ -1,0 +1,33 @@
+# Open-FDD CSV-only recipe: central + UI (no MQTT, no fieldbus).
+# Use when starting jobs from bulk CSV upload without live OT drivers.
+
+name: openfdd-csv
+
+services:
+  central:
+    image: ${OPENFDD_CENTRAL_IMAGE:-ghcr.io/bbartling/openfdd-central:nightly}
+    build:
+      context: ..
+      dockerfile: services/central/Dockerfile
+    environment:
+      OPENFDD_MQTT_ENABLED: "0"
+      OPENFDD_WORKSPACE: /workspace
+      OPENFDD_PARQUET_ROOT: /workspace/.cache/parquet
+      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}
+      OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../workspace:/workspace
+    restart: unless-stopped
+
+  ui:
+    image: ${OPENFDD_UI_IMAGE:-ghcr.io/bbartling/openfdd-ui:nightly}
+    build:
+      context: ..
+      dockerfile: workspace/dashboard/Dockerfile
+    ports:
+      - "${OPENFDD_UI_BIND:-0.0.0.0}:3000:80"
+    depends_on:
+      - central
+    restart: unless-stopped

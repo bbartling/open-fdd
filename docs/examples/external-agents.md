@@ -12,7 +12,7 @@ This keeps Open-FDD vendor-neutral, local-first, safe for OT networks, and indep
 
 ## Preferred workflow
 
-1. Start Open-FDD edge locally or on the LAN/VPN (`openfdd_rust_edge_bootstrap.sh --start`).
+1. Bring up the stack locally or on the LAN/VPN (`./scripts/openfdd_stack_up.sh standalone`).
 2. Confirm health: `curl -fsS http://127.0.0.1:8080/api/health`.
 3. Obtain an integrator or agent JWT (never print or commit tokens).
 4. Run `openfdd-mcp` **outside** the Open-FDD web UI (stdio JSON-RPC).
@@ -34,11 +34,10 @@ If your Codex install supports MCP server configuration, point it at the same `o
       "command": "docker",
       "args": [
         "run", "-i", "--rm", "--network", "host",
-        "--entrypoint", "openfdd-mcp",
         "-e", "OPENFDD_API_BASE=http://127.0.0.1:8080",
         "-e", "OPENFDD_COMMISSION_BASE=http://127.0.0.1:9091",
         "-e", "OPENFDD_MCP_TOKEN",
-        "ghcr.io/bbartling/openfdd-edge-rust:latest"
+        "ghcr.io/bbartling/openfdd-mcp:latest"
       ],
       "env": { "OPENFDD_MCP_TOKEN": "<JWT from login>" }
     }
@@ -49,7 +48,7 @@ If your Codex install supports MCP server configuration, point it at the same `o
 ## Generic MCP host
 
 - Transport: stdio JSON-RPC (MCP 2024-11-05)
-- Binary: `/usr/local/bin/openfdd-mcp` inside `openfdd-edge-rust`, or slim `ghcr.io/bbartling/openfdd-mcp:<tag>`
+- Image: slim `ghcr.io/bbartling/openfdd-mcp:<tag>`
 - Auth: `OPENFDD_MCP_TOKEN` bearer JWT
 - Writes: gated — see [mcp/INSTRUCTIONS.md](../../mcp/INSTRUCTIONS.md)
 

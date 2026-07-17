@@ -6,23 +6,23 @@ nav_order: 1
 
 # MCP setup
 
-## Images
+## Image
 
 | Image | Use |
 |-------|-----|
-| `ghcr.io/bbartling/openfdd-edge-rust` | Bundled `openfdd-mcp` via `--entrypoint openfdd-mcp` |
-| `ghcr.io/bbartling/openfdd-mcp` | Transitional slim MCP-only image |
+| `ghcr.io/bbartling/openfdd-mcp` | Slim Rust MCP stdio server; talks to central over `OPENFDD_API_BASE` |
 
-## Edge entrypoint (preferred)
+## Run (stdio)
 
 ```bash
-docker run --rm -i \
-  -v ~/open-fdd/workspace:/var/openfdd/workspace \
-  -e OPENFDD_API_URL=http://host.docker.internal:8080 \
-  -e OPENFDD_JWT="$TOKEN" \
-  --entrypoint openfdd-mcp \
-  ghcr.io/bbartling/openfdd-edge-rust:latest
+docker run --rm -i --network host \
+  -e OPENFDD_API_BASE=http://127.0.0.1:8080 \
+  -e OPENFDD_MCP_TOKEN="$TOKEN" \
+  ghcr.io/bbartling/openfdd-mcp:latest
 ```
+
+Inside the compose network, point at central directly:
+`OPENFDD_API_BASE=http://central:8080`.
 
 ## Cursor `mcp.json` (illustrative)
 
@@ -32,12 +32,12 @@ docker run --rm -i \
     "openfdd": {
       "command": "docker",
       "args": [
-        "run", "--rm", "-i",
-        "-v", "/home/user/open-fdd/workspace:/var/openfdd/workspace",
-        "-e", "OPENFDD_JWT",
+        "run", "--rm", "-i", "--network", "host",
+        "-e", "OPENFDD_API_BASE=http://127.0.0.1:8080",
+        "-e", "OPENFDD_MCP_TOKEN",
         "ghcr.io/bbartling/openfdd-mcp:latest"
       ],
-      "env": { "OPENFDD_JWT": "<integrator JWT>" }
+      "env": { "OPENFDD_MCP_TOKEN": "<integrator JWT>" }
     }
   }
 }
@@ -51,8 +51,11 @@ MCP tools map to REST endpoints — ingest preflight, assignments, rules batch, 
 GET /api/agent/tools
 ```
 
-## Compose sidecar (optional)
+## Pull with the stack
 
 ```bash
-docker compose -f docker/compose.edge.rust.yml --profile mcp-sidecar up -d openfdd-mcp
+./scripts/openfdd_stack_pull.sh mcp
 ```
+
+MCP clients speak stdio JSON-RPC, so launch with `docker run -i` (above) rather
+than a detached compose service. See [Build recipes](../operations/build-recipes.md).

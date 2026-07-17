@@ -13,6 +13,7 @@ COMPOSE_FILES=(
   docker/compose.standalone.yml
   docker/compose.central.yml
   docker/compose.edge.yml
+  docker/compose.csv.yml
 )
 
 for f in "${COMPOSE_FILES[@]}"; do

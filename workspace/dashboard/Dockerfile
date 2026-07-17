@@ -4,7 +4,7 @@ WORKDIR /src
 COPY workspace/dashboard/package.json workspace/dashboard/package-lock.json ./
 RUN npm ci
 COPY workspace/dashboard ./
-# Split UI image uses /src/dist (legacy monolith still embeds ../../frontend via vite default).
+# UI image builds to /src/dist, copied into the Caddy runtime stage below.
 ARG VITE_OUT_DIR=dist
 ENV VITE_OUT_DIR=$VITE_OUT_DIR
 ARG VITE_API_BASE=
