@@ -64,6 +64,11 @@ jobs:
           test -f dist/index.html
 
       - name: Compose config check (all recipes)
+        env:
+          OPENFDD_SITE_ID: local
+          OPENFDD_EDGE_ID: fieldbus-1
+          OPENFDD_MQTT_HOST: 127.0.0.1
+          OPENFDD_EDGE_KIT_DIR: deploy/mqtt/kits/local__fieldbus-1
         run: |
           for f in docker/compose.standalone.yml docker/compose.central.yml docker/compose.edge.yml docker/compose.csv.yml; do
             docker compose -f "$f" config >/dev/null
