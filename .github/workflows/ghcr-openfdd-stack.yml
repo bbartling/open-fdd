@@ -81,6 +81,11 @@ jobs:
           bash -n scripts/openfdd_stack_up.sh
           bash -n scripts/openfdd_stack_pull.sh
 
+      - name: CSV recipe boot smoke (central + UI proxy)
+        run: |
+          chmod +x scripts/release/smoke_csv_central_boot.sh
+          ./scripts/release/smoke_csv_central_boot.sh
+
   publish:
     needs: test
     runs-on: ubuntu-latest

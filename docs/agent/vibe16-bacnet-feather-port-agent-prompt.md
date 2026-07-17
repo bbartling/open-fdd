@@ -133,7 +133,7 @@ Comment on **#429** and **#433**:
 **Bench:** please re-run orchestration loop (linux-edge-tester-prompt) — all-drivers matrix + A→A′→B.
 ```
 
-Do **not** poll GH Actions in a tight loop. Check `rust-ghcr.yml` once per 15–30 min.
+Do **not** poll GH Actions in a tight loop. Check `ghcr-openfdd-stack.yml` once per 15–30 min.
 
 ### When bench posts Product handoff (FAIL block)
 
