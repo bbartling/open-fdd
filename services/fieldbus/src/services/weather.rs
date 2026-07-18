@@ -124,7 +124,25 @@ impl WeatherService {
                 }
                 Err(e) => {
                     warn!("weather poll failed: {e}");
-                    let fb = self.fallback(&e);
+                    // Hold last-known-good on a transient fetch error (marked
+                    // stale via from_api=false → app-fault BV active) instead
+                    // of dropping BACnet consumers to the canned fallback.
+                    let degraded = {
+                        let cache = self.cache.lock().await;
+                        match cache.as_ref() {
+                            Some(prev) if prev.from_api => Some(WeatherReading {
+                                from_api: false,
+                                reason: format!("stale (last good held): {e}"),
+                                location: prev.location.clone(),
+                                ..prev.clone()
+                            }),
+                            Some(prev) if prev.reason.starts_with("stale") => {
+                                Some(prev.clone())
+                            }
+                            _ => None,
+                        }
+                    };
+                    let fb = degraded.unwrap_or_else(|| self.fallback(&e));
                     *self.cache.lock().await = Some(fb.clone());
                     let _ = self.mirror_to_bacnet(&fb).await;
                 }
