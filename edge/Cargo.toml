@@ -40,7 +40,12 @@ reqwest = { version = "0.13.4", default-features = false, features = ["blocking"
 rusty-modbus-client = { git = "https://github.com/jscott3201/rusty-modbus", version = "0.1.0" }
 rusty-modbus-types = { git = "https://github.com/jscott3201/rusty-modbus", version = "0.1.0" }
 oxigraph = "0.5"
+fdd_core = { path = "../crates/fdd_core" }
 fdd_rules = { path = "../crates/fdd_rules" }
 fdd_sql = { path = "../crates/fdd_sql" }
 fdd_store = { path = "../crates/fdd_store" }
 walkdir = "2"
+zip = { version = "3", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+tempfile = "3"

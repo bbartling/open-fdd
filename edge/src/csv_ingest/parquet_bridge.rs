@@ -181,6 +181,7 @@ mod tests {
 
     #[test]
     fn ingest_rows_writes_parquet_layout() {
+        let _env = crate::test_support::workspace_env_lock();
         let tmp = std::env::temp_dir().join(format!("openfdd_pq_test_{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();

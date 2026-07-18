@@ -1,6 +1,7 @@
 //! HTTP handlers for CSV UT3 import API.
 
 pub mod dataset;
+pub mod package;
 pub mod parquet_bridge;
 pub mod parse;
 pub mod plan;
