@@ -9,52 +9,52 @@ type HealthInfo = { version?: string; image_tag?: string };
 type NavItem = {
   to: string;
   end?: boolean;
-  icon: string;
   label: string;
   protected?: boolean;
   disabled?: boolean;
   disabledHint?: string;
 };
 
+/* Streamlit-parity nav: plain text labels, no emoji icons. */
 const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Overview",
-    items: [{ to: "/", end: true, icon: "🏠", label: "Dashboard" }],
+    items: [{ to: "/", end: true, label: "Dashboard" }],
   },
   {
     title: "Integrations",
     items: [
-      { to: "/edge-fleet", icon: "🛰️", label: "Edge fleet", protected: true },
-      { to: "/bacnet", icon: "📡", label: "BACnet (legacy)", protected: true },
-      { to: "/haystack", icon: "🌿", label: "Haystack (legacy)", protected: true },
-      { to: "/modbus", icon: "🔌", label: "Modbus (legacy)", protected: true },
-      { to: "/json-api", icon: "🌐", label: "JSON API", protected: true },
+      { to: "/edge-fleet", label: "Edge fleet", protected: true },
+      { to: "/bacnet", label: "BACnet (legacy)", protected: true },
+      { to: "/haystack", label: "Haystack (legacy)", protected: true },
+      { to: "/modbus", label: "Modbus (legacy)", protected: true },
+      { to: "/json-api", label: "JSON API", protected: true },
     ],
   },
   {
     title: "Model & rules",
     items: [
-      { to: "/lab", icon: "🧪", label: "Open-FDD Lab (vibe19)", protected: true },
-      { to: "/csv", icon: "📥", label: "CSV job upload", protected: true },
-      { to: "/model", icon: "📐", label: "Model & FDD assignments", protected: true },
-      { to: "/sql-fdd", icon: "⚡", label: "SQL FDD lab (integrator)", protected: true },
-      { to: "/plot", icon: "📈", label: "Plots", protected: true },
-      { to: "/reports", icon: "📄", label: "Reports", protected: true },
+      { to: "/lab", label: "Open-FDD Lab (vibe19)", protected: true },
+      { to: "/csv", label: "CSV job upload", protected: true },
+      { to: "/model", label: "Model & FDD assignments", protected: true },
+      { to: "/sql-fdd", label: "SQL FDD lab (integrator)", protected: true },
+      { to: "/plot", label: "Plots", protected: true },
+      { to: "/reports", label: "Reports", protected: true },
     ],
   },
   {
     title: "Data & ops",
     items: [
-      { to: "/exports", icon: "⬇️", label: "Data export", protected: true },
-      { to: "/data-management", icon: "🗄️", label: "Historian storage", protected: true },
-      { to: "/host", icon: "📊", label: "Host stats", protected: true },
-      { to: "/algorithms", icon: "⚙️", label: "Algorithms", protected: true },
+      { to: "/exports", label: "Data export", protected: true },
+      { to: "/data-management", label: "Historian storage", protected: true },
+      { to: "/host", label: "Host stats", protected: true },
+      { to: "/algorithms", label: "Algorithms", protected: true },
     ],
   },
   {
     title: "Settings",
     items: [
-      { to: "/agent", icon: "🔌", label: "External agents", protected: true },
+      { to: "/agent", label: "External agents", protected: true },
     ],
   },
 ];
@@ -149,7 +149,6 @@ export default function AppLayout() {
                     title={item.disabledHint ?? "Coming soon"}
                     aria-disabled="true"
                   >
-                    <span className="nav-icon">{item.icon}</span>
                     {item.label}
                     <span className="nav-soon">Soon</span>
                   </span>
@@ -160,7 +159,6 @@ export default function AppLayout() {
                     end={item.end}
                     className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
                   >
-                    <span className="nav-icon">{item.icon}</span>
                     {item.label}
                   </NavLink>
                 ),

@@ -18,11 +18,18 @@ import {
 } from "./contract";
 
 describe("vibe19 contract", () => {
-  it("keeps frozen main sections", () => {
-    expect(VIBE19_SECTIONS).toContain("Overview");
-    expect(VIBE19_SECTIONS).toContain("Run Rules");
-    expect(VIBE19_SECTIONS).toContain("FDD Plots");
-    expect(VIBE19_SECTIONS).toContain("RCx Plots");
+  it("keeps frozen main sections (all nine, vibe19 order)", () => {
+    expect([...VIBE19_SECTIONS]).toEqual([
+      "Overview",
+      "Data Model",
+      "Run Rules",
+      "Results by Category",
+      "FDD Plots",
+      "RCx Plots",
+      "Metering",
+      "Energy Model",
+      "Export",
+    ]);
   });
 
   it("lists required chart APIs", () => {

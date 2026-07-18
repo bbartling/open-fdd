@@ -11,52 +11,55 @@
   border: 0;
 }
 
+/* Streamlit default palette parity (vibe19 ships no custom theme):
+   light = white content / #f0f2f6 sidebar / #ff4b4b primary / #31333f text,
+   dark  = #0e1117 content / #262730 sidebar / #fafafa text. */
 :root {
   color-scheme: light;
-  --bg: #f4f6fb;
+  --bg: #ffffff;
   --panel: #ffffff;
-  --panel-soft: #eef2f8;
-  --text: #1a2332;
-  --muted: #5c6b82;
-  --primary: #3b6de0;
-  --primary-strong: #2f5fcc;
-  --border: #d8e0ec;
-  --sidebar-bg: #ffffff;
-  --nav-hover-bg: #eef2f8;
-  --nav-active-bg: #e3ebfa;
-  --nav-active-text: #1a3f8f;
+  --panel-soft: #f0f2f6;
+  --text: #31333f;
+  --muted: #808495;
+  --primary: #ff4b4b;
+  --primary-strong: #e03c3c;
+  --border: #e3e6ee;
+  --sidebar-bg: #f0f2f6;
+  --nav-hover-bg: #e4e7ee;
+  --nav-active-bg: rgba(255, 75, 75, 0.12);
+  --nav-active-text: #d33030;
   --input-bg: #ffffff;
-  --input-text: #1a2332;
-  --danger: #c53d3d;
-  --ok: #2d9a52;
-  --warning: #c9870a;
+  --input-text: #31333f;
+  --danger: #ff2b2b;
+  --ok: #21a353;
+  --warning: #d9a207;
   --accent: var(--primary);
-  --traffic-housing-bg: #e8edf4;
-  --traffic-lamp-off: #c5cedb;
+  --traffic-housing-bg: #e8ebf2;
+  --traffic-lamp-off: #c9cfda;
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0f1218;
-  --panel: #161b24;
-  --panel-soft: #1b2230;
-  --text: #e8edf6;
-  --muted: #97a3b8;
-  --primary: #4f78e8;
-  --primary-strong: #5b82ef;
-  --border: #273043;
-  --sidebar-bg: #131923;
-  --nav-hover-bg: #1f2735;
-  --nav-active-bg: #293855;
-  --nav-active-text: #f6f9ff;
-  --input-bg: #121824;
-  --input-text: #e8edf6;
-  --danger: #d45555;
-  --ok: #7fd992;
+  --bg: #0e1117;
+  --panel: #14181f;
+  --panel-soft: #262730;
+  --text: #fafafa;
+  --muted: #a3a8b8;
+  --primary: #ff4b4b;
+  --primary-strong: #ff6c6c;
+  --border: #31333f;
+  --sidebar-bg: #262730;
+  --nav-hover-bg: #31333f;
+  --nav-active-bg: rgba(255, 75, 75, 0.22);
+  --nav-active-text: #ff8383;
+  --input-bg: #14181f;
+  --input-text: #fafafa;
+  --danger: #ff6c6c;
+  --ok: #5fd38d;
   --warning: #fbbf24;
   --accent: var(--primary);
-  --traffic-housing-bg: #11151c;
-  --traffic-lamp-off: #2a313f;
+  --traffic-housing-bg: #171b23;
+  --traffic-lamp-off: #333846;
 }
 
 * {
@@ -68,7 +71,7 @@ body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
-  font-family: "SF Pro Display", Inter, "Segoe UI", system-ui, sans-serif;
+  font-family: "Source Sans Pro", "Source Sans 3", "Segoe UI", system-ui, sans-serif;
   line-height: 1.45;
 }
 
@@ -290,11 +293,6 @@ a {
 .nav-item.active {
   background: var(--nav-active-bg);
   color: var(--nav-active-text);
-}
-
-.nav-icon {
-  width: 18px;
-  text-align: center;
 }
 
 .app-main {

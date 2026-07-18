@@ -29,8 +29,11 @@ import {
   RCX_PRESETS,
   VIBE19_SECTIONS,
 } from "../vibe19/contract";
+import { groupRulesByFamily } from "../vibe19/families";
 import { PlotHost } from "../vibe19/PlotHost";
 import "./vibe19.css";
+
+type ParamOverrides = Record<string, Record<string, number>>;
 
 type RulesResponse = { ok: boolean; count: number; rules: RegistryRule[]; error?: string };
 type ParamsResponse = {
@@ -138,16 +141,19 @@ function DataModelSection({ rules }: { rules?: RegistryRule[] }) {
 /** Save / load openfdd_session_v1 fault settings (#515) wired to the rule sliders. */
 function SessionConfigPanel({
   paramOverrides,
+  unitSystem,
+  baseConfig,
+  onBaseConfig,
+  onUnitSystem,
   onLoaded,
 }: {
-  paramOverrides: Record<string, Record<string, number>>;
-  onLoaded: (
-    overrides: Record<string, Record<string, number>>,
-    config: SessionConfig,
-  ) => void;
+  paramOverrides: ParamOverrides;
+  unitSystem: SessionConfig["unit_system"];
+  baseConfig: SessionConfig | null;
+  onBaseConfig: (config: SessionConfig) => void;
+  onUnitSystem: (unit: SessionConfig["unit_system"]) => void;
+  onLoaded: (overrides: ParamOverrides, config: SessionConfig) => void;
 }) {
-  const [unitSystem, setUnitSystem] = useState<SessionConfig["unit_system"]>("imperial");
-  const [baseConfig, setBaseConfig] = useState<SessionConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
@@ -160,8 +166,8 @@ function SessionConfigPanel({
     void fetchSessionConfig()
       .then((res) => {
         if (!res.ok || !res.config) return;
-        setBaseConfig(res.config);
-        setUnitSystem(res.config.unit_system ?? "imperial");
+        onBaseConfig(res.config);
+        onUnitSystem(res.config.unit_system ?? "imperial");
         if (res.persisted) {
           onLoaded(sessionConfigToParamOverrides(res.config), res.config);
           setNote("Loaded persisted session config (sliders seeded).");
@@ -170,7 +176,7 @@ function SessionConfigPanel({
       .catch(() => {
         /* offline / unauthenticated — keep defaults */
       });
-  }, [onLoaded]);
+  }, [onBaseConfig, onLoaded, onUnitSystem]);
 
   async function save() {
     setBusy(true);
@@ -180,7 +186,7 @@ function SessionConfigPanel({
       const cfg = buildSessionConfig(paramOverrides, unitSystem, baseConfig);
       const out = await saveSessionConfig(cfg);
       if (!out.ok) throw new Error(out.error ?? "save failed");
-      setBaseConfig(out.config ?? cfg);
+      onBaseConfig(out.config ?? cfg);
       const warn = out.warnings?.length ? ` · ${out.warnings.length} warning(s)` : "";
       setNote(`Session saved to server${warn}.`);
     } catch (e) {
@@ -199,8 +205,8 @@ function SessionConfigPanel({
       const out = await saveSessionConfig(cfg);
       if (!out.ok) throw new Error(out.error ?? "load failed");
       const effective = out.config ?? cfg;
-      setBaseConfig(effective);
-      setUnitSystem(effective.unit_system ?? "imperial");
+      onBaseConfig(effective);
+      onUnitSystem(effective.unit_system ?? "imperial");
       onLoaded(sessionConfigToParamOverrides(effective), effective);
       const warn = out.warnings?.length ? ` · ${out.warnings.join("; ")}` : "";
       setNote(`Session loaded — sliders updated${warn}.`);
@@ -212,41 +218,23 @@ function SessionConfigPanel({
   }
 
   return (
-    <div className="vibe19-card">
-      <h3>Session / fault settings (openfdd_session_v1)</h3>
+    <div className="vibe19-sidebar-block">
+      <h3>Session restore</h3>
       {error ? <p className="error">{error}</p> : null}
       {note ? <p className="ok">{note}</p> : null}
-      <div className="toolbar toolbar-spaced">
-        <label>
-          Units{" "}
-          <select
-            value={unitSystem}
-            disabled={busy}
-            onChange={(e) => setUnitSystem(e.target.value as SessionConfig["unit_system"])}
-          >
-            <option value="imperial">imperial</option>
-            <option value="metric">metric</option>
-            <option value="si">si</option>
-          </select>
-        </label>
-        <button type="button" className="secondary-btn" disabled={busy} onClick={() => void save()}>
+      <div className="vibe19-sidebar-actions">
+        <button type="button" disabled={busy} onClick={() => void save()}>
           {busy ? "Working…" : "Save session"}
         </button>
         <button
           type="button"
-          className="secondary-btn"
           disabled={busy}
           onClick={() => downloadSessionConfig(buildSessionConfig(paramOverrides, unitSystem, baseConfig))}
         >
-          Download JSON
+          Download session config
         </button>
-        <button
-          type="button"
-          className="secondary-btn"
-          disabled={busy}
-          onClick={() => fileRef.current?.click()}
-        >
-          Load JSON…
+        <button type="button" disabled={busy} onClick={() => fileRef.current?.click()}>
+          Load session JSON…
         </button>
         <input
           ref={fileRef}
@@ -261,24 +249,219 @@ function SessionConfigPanel({
         />
       </div>
       <p className="muted">
-        Saves slider overrides + unit system to the server and seeds them on reload. The same
-        JSON travels inside <code>openfdd_package_v1</code> zips as <code>session_config.json</code>.
+        openfdd_session_v1 — slider overrides + units persist on the server and travel inside
+        package zips as <code>session_config.json</code>.
       </p>
     </div>
   );
 }
 
-function RunRulesSection({ rules }: { rules?: RegistryRule[] }) {
+/** Per-rule tuning expander — params fetched lazily on first open (no full-app rerun). */
+function RuleTuningExpander({
+  rule,
+  overrides,
+  onChange,
+}: {
+  rule: RegistryRule;
+  overrides: Record<string, number> | undefined;
+  onChange: (key: string, value: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const paramsQ = useQuery({
+    queryKey: ["fdd-params", rule.rule_id],
+    queryFn: () => fetchParams(rule.rule_id),
+    enabled: open,
+  });
+  const modified = Boolean(overrides && Object.keys(overrides).length);
+  const title = rule.description
+    ? `${rule.rule_id} — ${rule.description.slice(0, 36)}`
+    : rule.rule_id;
+  return (
+    <details onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+      <summary>
+        {title}
+        {modified ? <span className="modified"> · modified</span> : null}
+      </summary>
+      {!open ? null : paramsQ.isLoading ? (
+        <p className="muted">Loading params…</p>
+      ) : (
+        <div className="vibe19-sliders">
+          {Object.values(paramsQ.data?.params ?? {}).map((p) => {
+            const val = overrides?.[p.key] ?? overrides?.[p.sql_placeholder] ?? p.default;
+            return (
+              <label key={p.key} className="vibe19-slider">
+                <span>
+                  {p.label} ({p.unit}) — <strong>{val}</strong>
+                </span>
+                <input
+                  type="range"
+                  min={p.min}
+                  max={p.max}
+                  step={p.step}
+                  value={val}
+                  onChange={(e) => onChange(p.key, Number(e.target.value))}
+                />
+              </label>
+            );
+          })}
+          {Object.keys(paramsQ.data?.params ?? {}).length === 0 ? (
+            <p className="muted">No tunable params.</p>
+          ) : null}
+        </div>
+      )}
+    </details>
+  );
+}
+
+/** Sidebar rule tuning — vibe19 category selectbox + per-rule expanders. */
+function RuleTuningSidebar({
+  rules,
+  paramOverrides,
+  setParamOverrides,
+}: {
+  rules: RegistryRule[];
+  paramOverrides: ParamOverrides;
+  setParamOverrides: React.Dispatch<React.SetStateAction<ParamOverrides>>;
+}) {
+  const [category, setCategory] = useState("(all)");
+  const grouped = useMemo(
+    () => groupRulesByFamily(rules.map((r) => r.rule_id)),
+    [rules],
+  );
+  const byId = useMemo(() => new Map(rules.map((r) => [r.rule_id, r])), [rules]);
+  const shown = grouped.filter(([label]) => category === "(all)" || label === category);
+  const modifiedCount = Object.keys(paramOverrides).filter(
+    (id) => Object.keys(paramOverrides[id] ?? {}).length,
+  ).length;
+  return (
+    <div className="vibe19-sidebar-block">
+      <h3>Rule tuning</h3>
+      <label>
+        Category
+        <select value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option value="(all)">(all)</option>
+          {grouped.map(([label]) => (
+            <option key={label} value={label}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="muted">
+        Sliders update local state only — run rules to apply.{" "}
+        {modifiedCount ? `${modifiedCount} rule(s) modified.` : ""}
+      </p>
+      <div className="vibe19-sidebar-actions">
+        <button type="button" onClick={() => setParamOverrides({})}>
+          Reset all tuning
+        </button>
+      </div>
+      <div className="vibe19-tuning">
+        {shown.map(([label, ids]) => (
+          <div key={label}>
+            <p className="vibe19-tuning-family">{label}</p>
+            {ids.map((id) => {
+              const rule = byId.get(id);
+              if (!rule) return null;
+              return (
+                <RuleTuningExpander
+                  key={id}
+                  rule={rule}
+                  overrides={paramOverrides[id]}
+                  onChange={(key, value) =>
+                    setParamOverrides((prev) => ({
+                      ...prev,
+                      [id]: { ...(prev[id] ?? {}), [key]: value },
+                    }))
+                  }
+                />
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Streamlit-parity page sidebar: data load → session restore → display & site → rule tuning. */
+function LabSidebar({
+  cache,
+  rules,
+  paramOverrides,
+  setParamOverrides,
+  unitSystem,
+  setUnitSystem,
+  baseConfig,
+  setBaseConfig,
+}: {
+  cache?: CacheStatus;
+  rules: RegistryRule[];
+  paramOverrides: ParamOverrides;
+  setParamOverrides: React.Dispatch<React.SetStateAction<ParamOverrides>>;
+  unitSystem: SessionConfig["unit_system"];
+  setUnitSystem: (u: SessionConfig["unit_system"]) => void;
+  baseConfig: SessionConfig | null;
+  setBaseConfig: (c: SessionConfig) => void;
+}) {
+  return (
+    <aside className="vibe19-lab-sidebar">
+      <div className="vibe19-sidebar-block">
+        <h3>Building data</h3>
+        <p className="muted">
+          {cache?.parquet_exists
+            ? `Parquet cache ready (${cache.parquet_file_count} files).`
+            : "No building data loaded yet."}
+        </p>
+        <div className="vibe19-sidebar-actions">
+          <a href="/csv">
+            <button type="button">Load CSV / package zip…</button>
+          </a>
+        </div>
+      </div>
+      <hr />
+      <SessionConfigPanel
+        paramOverrides={paramOverrides}
+        unitSystem={unitSystem}
+        baseConfig={baseConfig}
+        onBaseConfig={setBaseConfig}
+        onUnitSystem={setUnitSystem}
+        onLoaded={(overrides) => setParamOverrides(overrides)}
+      />
+      <hr />
+      <div className="vibe19-sidebar-block">
+        <h3>Display &amp; site</h3>
+        <label>
+          Units
+          <select
+            value={unitSystem}
+            onChange={(e) => setUnitSystem(e.target.value as SessionConfig["unit_system"])}
+          >
+            <option value="imperial">imperial</option>
+            <option value="metric">metric</option>
+            <option value="si">si</option>
+          </select>
+        </label>
+      </div>
+      <hr />
+      <RuleTuningSidebar
+        rules={rules}
+        paramOverrides={paramOverrides}
+        setParamOverrides={setParamOverrides}
+      />
+    </aside>
+  );
+}
+
+function RunRulesSection({
+  rules,
+  paramOverrides,
+}: {
+  rules?: RegistryRule[];
+  paramOverrides: ParamOverrides;
+}) {
   const qc = useQueryClient();
   const [selected, setSelected] = useState<string[]>([]);
-  const [activeRule, setActiveRule] = useState<string>("");
-  const [paramOverrides, setParamOverrides] = useState<Record<string, Record<string, number>>>({});
-
-  const paramsQ = useQuery({
-    queryKey: ["fdd-params", activeRule],
-    queryFn: () => fetchParams(activeRule),
-    enabled: Boolean(activeRule),
-  });
 
   const runMut = useMutation({
     mutationFn: () =>
@@ -293,22 +476,25 @@ function RunRulesSection({ rules }: { rules?: RegistryRule[] }) {
   });
 
   const families = useMemo(() => {
-    const m = new Map<string, RegistryRule[]>();
-    for (const r of rules ?? []) {
-      const fam = r.rule_id.split("-")[0] || "OTHER";
-      const arr = m.get(fam) ?? [];
-      arr.push(r);
-      m.set(fam, arr);
-    }
-    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const byId = new Map((rules ?? []).map((r) => [r.rule_id, r]));
+    return groupRulesByFamily([...byId.keys()]).map(
+      ([label, ids]) =>
+        [label, ids.map((id) => byId.get(id)!).filter(Boolean)] as [string, RegistryRule[]],
+    );
   }, [rules]);
+  const modifiedIds = Object.keys(paramOverrides).filter(
+    (id) => Object.keys(paramOverrides[id] ?? {}).length,
+  );
 
   return (
     <div className="vibe19-run">
       <aside className="vibe19-sidebar">
-        <h3>Rule families</h3>
+        <h3>Scope</h3>
+        <p className="muted">
+          {selected.length ? `${selected.length} rule(s) selected` : "All rules (no selection)"}
+        </p>
         {families.map(([fam, list]) => (
-          <details key={fam} open={fam === "FC" || fam === "VAV" || fam === "SV"}>
+          <details key={fam}>
             <summary>
               {fam} ({list.length})
             </summary>
@@ -325,7 +511,6 @@ function RunRulesSection({ rules }: { rules?: RegistryRule[] }) {
                             ? [...prev, r.rule_id]
                             : prev.filter((id) => id !== r.rule_id),
                         );
-                        setActiveRule(r.rule_id);
                       }}
                     />{" "}
                     {r.rule_id}
@@ -341,56 +526,33 @@ function RunRulesSection({ rules }: { rules?: RegistryRule[] }) {
           disabled={runMut.isPending}
           onClick={() => runMut.mutate()}
         >
-          {runMut.isPending ? "Running…" : "Run selected (registry)"}
+          {runMut.isPending ? "Running…" : selected.length ? "Run selected" : "Run all rules"}
         </button>
         {runMut.isError ? (
           <p className="error">{(runMut.error as Error).message}</p>
         ) : null}
+      </aside>
+      <div className="vibe19-card grow">
+        <h3>Run rules</h3>
+        <p className="muted">
+          Thresholds come from <strong>Rule tuning</strong> in the left sidebar — slider changes
+          stay local until you press Run (no Streamlit-style rerun).
+        </p>
+        {modifiedIds.length ? (
+          <p>
+            Tuned rules applied on run:{" "}
+            {modifiedIds.map((id) => (
+              <code key={id} style={{ marginRight: "0.4rem" }}>
+                {id}
+              </code>
+            ))}
+          </p>
+        ) : (
+          <p className="muted">No slider overrides yet — registry defaults will be used.</p>
+        )}
         {runMut.data ? (
           <pre className="vibe19-pre">{JSON.stringify(runMut.data, null, 2)}</pre>
         ) : null}
-      </aside>
-      <div className="vibe19-card grow">
-        <h3>Sliders — {activeRule || "select a rule"}</h3>
-        {!activeRule ? (
-          <p className="muted">Select a rule to tune confirm_min and thresholds (no raw SQL).</p>
-        ) : paramsQ.isLoading ? (
-          <p className="muted">Loading params…</p>
-        ) : (
-          <div className="vibe19-sliders">
-            {Object.values(paramsQ.data?.params ?? {}).map((p) => {
-              const val =
-                paramOverrides[activeRule]?.[p.key] ??
-                paramOverrides[activeRule]?.[p.sql_placeholder] ??
-                p.default;
-              return (
-                <label key={p.key} className="vibe19-slider">
-                  <span>
-                    {p.label} ({p.unit}) — <strong>{val}</strong>
-                  </span>
-                  <input
-                    type="range"
-                    min={p.min}
-                    max={p.max}
-                    step={p.step}
-                    value={val}
-                    onChange={(e) => {
-                      const n = Number(e.target.value);
-                      setParamOverrides((prev) => ({
-                        ...prev,
-                        [activeRule]: { ...(prev[activeRule] ?? {}), [p.key]: n },
-                      }));
-                    }}
-                  />
-                </label>
-              );
-            })}
-          </div>
-        )}
-        <SessionConfigPanel
-          paramOverrides={paramOverrides}
-          onLoaded={(overrides) => setParamOverrides(overrides)}
-        />
       </div>
     </div>
   );
@@ -659,57 +821,81 @@ function Placeholder({ title, blurb }: { title: string; blurb: string }) {
 
 export default function Vibe19LabPage() {
   const [section, setSection] = useState<Vibe19Section>("Overview");
+  const [paramOverrides, setParamOverrides] = useState<ParamOverrides>({});
+  const [unitSystem, setUnitSystem] = useState<SessionConfig["unit_system"]>("imperial");
+  const [baseConfig, setBaseConfig] = useState<SessionConfig | null>(null);
   const rulesQ = useQuery({ queryKey: ["fdd-rules"], queryFn: fetchRules });
   const cacheQ = useQuery({ queryKey: ["fdd-cache"], queryFn: fetchCache });
 
   return (
     <div className="vibe19-shell">
-      <header className="vibe19-hero">
-        <div>
-          <h1>Open-FDD Lab</h1>
-          <p className="muted">
-            vibe19 look &amp; feel — data-model driven, registry sliders, Plotly charts (no Streamlit
-            reruns).
-          </p>
-        </div>
-        <div className="vibe19-hero-meta">
-          {rulesQ.data?.ok ? (
-            <span>{rulesQ.data.count} rules</span>
-          ) : (
-            <span className="error">{rulesQ.data?.error ?? (rulesQ.isError ? "API error" : "…")}</span>
-          )}
-        </div>
-      </header>
+      <LabSidebar
+        cache={cacheQ.data}
+        rules={rulesQ.data?.rules ?? []}
+        paramOverrides={paramOverrides}
+        setParamOverrides={setParamOverrides}
+        unitSystem={unitSystem}
+        setUnitSystem={setUnitSystem}
+        baseConfig={baseConfig}
+        setBaseConfig={setBaseConfig}
+      />
 
-      <nav className="vibe19-nav" aria-label="Lab sections">
-        {VIBE19_SECTIONS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            className={s === section ? "active" : ""}
-            onClick={() => setSection(s)}
-          >
-            {s}
-          </button>
-        ))}
-      </nav>
+      <div className="vibe19-content">
+        <header className="vibe19-hero">
+          <div>
+            <h1>Open FDD Vibe Coder</h1>
+            <p className="muted">
+              Streamlit-parity lab — tune rules in the left sidebar, run on demand, browse
+              sections below. Units: {unitSystem}.
+            </p>
+          </div>
+          <div className="vibe19-hero-meta">
+            {rulesQ.data?.ok ? (
+              <span>{rulesQ.data.count} rules</span>
+            ) : (
+              <span className="error">{rulesQ.data?.error ?? (rulesQ.isError ? "API error" : "…")}</span>
+            )}
+          </div>
+        </header>
 
-      <main className="vibe19-main">
-        {section === "Overview" ? (
-          <OverviewSection cache={cacheQ.data} rules={rulesQ.data?.rules} />
-        ) : null}
-        {section === "Data Model" ? <DataModelSection rules={rulesQ.data?.rules} /> : null}
-        {section === "Run Rules" ? <RunRulesSection rules={rulesQ.data?.rules} /> : null}
-        {section === "Results by Category" ? (
-          <ResultsSection rules={rulesQ.data?.rules} />
-        ) : null}
-        {section === "FDD Plots" ? <FddPlotsSection rules={rulesQ.data?.rules} /> : null}
-        {section === "RCx Plots" ? <RcxPlotsSection /> : null}
-        {section === "Metering" ? <MeteringSection /> : null}
-        {section === "Export" ? (
-          <Placeholder title="Export" blurb="CSV / session / health / data-model exports." />
-        ) : null}
-      </main>
+        <nav className="vibe19-nav" aria-label="Lab sections">
+          {VIBE19_SECTIONS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              className={s === section ? "active" : ""}
+              onClick={() => setSection(s)}
+            >
+              {s}
+            </button>
+          ))}
+        </nav>
+
+        <main className="vibe19-main">
+          {section === "Overview" ? (
+            <OverviewSection cache={cacheQ.data} rules={rulesQ.data?.rules} />
+          ) : null}
+          {section === "Data Model" ? <DataModelSection rules={rulesQ.data?.rules} /> : null}
+          {section === "Run Rules" ? (
+            <RunRulesSection rules={rulesQ.data?.rules} paramOverrides={paramOverrides} />
+          ) : null}
+          {section === "Results by Category" ? (
+            <ResultsSection rules={rulesQ.data?.rules} />
+          ) : null}
+          {section === "FDD Plots" ? <FddPlotsSection rules={rulesQ.data?.rules} /> : null}
+          {section === "RCx Plots" ? <RcxPlotsSection /> : null}
+          {section === "Metering" ? <MeteringSection /> : null}
+          {section === "Energy Model" ? (
+            <Placeholder
+              title="Energy Model"
+              blurb="WattLab energy model wizard port is tracked separately — section reserved for parity with the vibe19 dashboard contract."
+            />
+          ) : null}
+          {section === "Export" ? (
+            <Placeholder title="Export" blurb="CSV / session / health / data-model exports." />
+          ) : null}
+        </main>
+      </div>
     </div>
   );
 }
