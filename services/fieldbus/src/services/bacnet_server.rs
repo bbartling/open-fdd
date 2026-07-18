@@ -91,11 +91,14 @@ impl BacnetServerManager {
         let rows = load_objects_csv(Some(&self.settings.objects_csv))?;
         let db = build_database(cfg.device_instance, &cfg.device_name, &rows)?;
 
-        let server = BACnetServer::bip_builder()
-            .interface(cfg.interface)
-            .port(cfg.port)
-            .broadcast_address(cfg.broadcast)
+        // Use the generic builder: only it exposes vendor_id, and the default
+        // (0, ASHRAE reserved) leaks into I-Am responses (#537).
+        let transport =
+            bacnet_transport::bip::BipTransport::new(cfg.interface, cfg.port, cfg.broadcast);
+        let server = BACnetServer::generic_builder()
+            .vendor_id(OPENFDD_VENDOR_ID)
             .database(db)
+            .transport(transport)
             .build()
             .await
             .map_err(|e| e.to_string())?;

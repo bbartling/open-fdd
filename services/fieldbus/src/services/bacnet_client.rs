@@ -567,7 +567,16 @@ impl BacnetClientService {
             // received on the client's ephemeral UDP port (hosted server owns :47808).
             self.seed_configured_field_devices(&client).await?;
             let devices = client.discovered_devices().await;
-            Ok(devices.iter().map(device_summary).collect())
+            // #539: discovered_devices() is a full device-table snapshot (incl.
+            // seeded devices); honor the caller's requested instance range.
+            Ok(devices
+                .iter()
+                .filter(|d| {
+                    let instance = d.object_identifier.instance_number();
+                    low.is_none_or(|lo| instance >= lo) && high.is_none_or(|hi| instance <= hi)
+                })
+                .map(device_summary)
+                .collect())
         }
         .await;
         Self::finish_client(client, result).await

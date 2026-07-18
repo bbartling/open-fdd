@@ -117,12 +117,33 @@ impl<T: TransportPort + 'static> BACnetClient<T> {
     pub fn local_mac(&self) -> &[u8] {
         &self.local_mac
     }
-    /// Stop the client, aborting the dispatch task.
+    /// Stop the client: abort the dispatch task, then stop the network layer
+    /// and its transport so the underlying socket is actually closed.
+    ///
+    /// Without the transport shutdown every short-lived client leaked one UDP
+    /// socket (the transport recv task owns an `Arc<UdpSocket>` that outlives
+    /// the dropped client), exhausting the process fd limit under a
+    /// one-client-per-operation usage pattern.
     pub async fn stop(&mut self) -> Result<(), Error> {
         if let Some(task) = self.dispatch_task.take() {
             task.abort();
             let _ = task.await;
         }
-        Ok(())
+        // The dispatch task held the only long-lived clone of `network`; other
+        // clones are transient within in-flight operations. Yield a few times
+        // to let those drop, then reclaim exclusive access and stop the
+        // transport (which aborts its recv task and drops the socket).
+        for _ in 0..64 {
+            if Arc::get_mut(&mut self.network).is_some() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        match Arc::get_mut(&mut self.network) {
+            Some(network) => network.stop().await,
+            None => Err(Error::Encoding(
+                "cannot stop transport: network layer still shared".into(),
+            )),
+        }
     }
 }
