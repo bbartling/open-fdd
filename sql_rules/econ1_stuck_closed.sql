@@ -11,7 +11,7 @@ SELECT
   equipment_id,
   SUM(CASE
     WHEN fan_cmd > 0.01 AND oa_damper_pct IS NOT NULL AND oa_t IS NOT NULL
-     AND oa_damper_pct < 0.05 AND oa_t > 55.0
+     AND oa_damper_pct < 0.05 AND oa_t > {{ECON1_OAT_MIN}}
     THEN 1 ELSE 0 END) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
 FROM h
 GROUP BY equipment_id;

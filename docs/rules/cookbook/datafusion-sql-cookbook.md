@@ -256,7 +256,7 @@ WHERE equipment_id = 'equip:your-id'
 ### PID-HUNT-1 — Suspected control-output hunting
 **Family:** `control` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `heatpump`  
 **Equation:** Rolling 1h total variation of any 0–100% control output (dampers, valves, fan speeds, heat/cool cmds) with span ≥20%, TV ≥500 %·pts, ≥2.5 equivalent cycles, ≥4 reversals — suspected loop hunting (not proof of bad PID alone).  
-**Default confirmation:** 300 s
+**Default confirmation:** 0 s (rolling 1h window is its own persistence)
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
@@ -271,7 +271,7 @@ WHERE equipment_id = 'equip:your-id'
 {: .important }
 **Simplified SQL variant.** Full rolling / multi-sensor logic for `PID-HUNT-1` is validated in Pandas. Use SQL for screening; use Pandas for parity and RCx studies.
 ```sql
--- confirmation_seconds: 300
+-- confirmation_seconds: 0  (rolling 1h window is its own persistence)
 -- rule: PID-HUNT-1 — Suspected control-output hunting
 -- equation: Rolling 1h total variation of any 0–100% control output (dampers, valves, fan speeds, heat/cool cmds) with span ≥20%, TV ≥500 %·pts, ≥2.5 equivalent cycles, ≥4 reversals — suspected loop hunting (not proof of bad PID alone).
 
@@ -294,17 +294,20 @@ Includes GL36 FC1–FC15, AHU auxiliaries, economizer/ventilation, leakage, and 
 
 ### FC1 — Duct static below SP at full fan (GL36 A)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan ≥ 87% AND duct static < static SP − 0.12 in.w.c.  
+**Equation:** DSP < DSPSP − εDSP AND VFDSPD ≥ 100% − εVFDSPD.  
 **Default confirmation:** 300 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `duct_static_err` | Duct static error | in. w.c. | 0.12 | 0.02–0.5 |
-| `fan_hi` | Fan high threshold | frac | 0.87 | 0.5–1.0 |
+| `eps_dsp` | Duct-static error εDSP (GL36 default 0.1 in.w.c.) | in. w.c. | 0.12 | 0.0–0.5 |
+| `eps_vfd_spd` | VFD speed error εVFDSPD (GL36 default 5%) | frac | 0.13 | 0.0–0.5 |
+| `duct_static_err` | Legacy duct-static error (sets εDSP) | in. w.c. | 0.12 | 0.0–0.5 |
+| `fan_hi` | Legacy fan-high threshold (sets εVFDSPD) | frac | 0.87 | 0.5–1.0 |
+| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 ```sql
 -- confirmation_seconds: 300
--- param: duct_static_err = 0.12 ; fan_hi = 0.87
+-- param: eps_dsp = 0.12 ; eps_vfd_spd = 0.13  (fan high = 1.0 − eps_vfd_spd = 0.87)
 SELECT
   timestamp, equipment_id, duct_static, duct_static_sp, fan_cmd,
   CASE
@@ -319,12 +322,17 @@ WHERE equipment_id = 'equip:your-ahu'
 
 ### FC2 — MAT below OAT/RAT envelope (GL36 B)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan on AND MAT below min(OAT, RAT) envelope (default mix_tol = 1.15°F ⇒ 2.3°F).  
+**Equation:** MATavg + εMAT < min(RATavg − εRAT, OATavg − εOAT).  
 **Default confirmation:** 600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.5–3.0 |
+| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
+| `eps_rat` | RAT sensor error εRAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
+| `eps_oat` | OAT sensor error εOAT (GL36 default 2°F local / 5°F global) | °F | 1.15 | 0.0–10.0 |
+| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
+| `fan_on_min` | Fan-on command threshold | frac | 0.01 | 0.0–0.25 |
+| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 ```sql
 -- confirmation_seconds: 600
@@ -344,12 +352,17 @@ WHERE equipment_id = 'equip:your-ahu'
 
 ### FC3 — MAT above OAT/RAT envelope (GL36 C)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan on AND MAT above max(OAT, RAT) envelope (default mix_tol = 1.15°F ⇒ 2.3°F).  
+**Equation:** MATavg − εMAT > max(RATavg + εRAT, OATavg + εOAT).  
 **Default confirmation:** 600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.5–3.0 |
+| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
+| `eps_rat` | RAT sensor error εRAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
+| `eps_oat` | OAT sensor error εOAT (GL36 default 2°F local / 5°F global) | °F | 1.15 | 0.0–10.0 |
+| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
+| `fan_on_min` | Fan-on command threshold | frac | 0.01 | 0.0–0.25 |
+| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 ```sql
 -- confirmation_seconds: 600
@@ -368,12 +381,13 @@ WHERE equipment_id = 'equip:your-ahu'
 
 ### FC4 — PID hunting (operating-state oscillation)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** More than 5 operating-mode entry transitions in any hour (heating/econ/mech modes).  
+**Equation:** ΔOS > ΔOSmax during the prior 60-minute moving window.  
 **Default confirmation:** 3600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `delta_os_max` | Max mode changes/hr | count | 5 | 2–20 |
+| `delta_os_max` | Max mode changes/hr ΔOSmax (GL36 default 7) | count | 5 | 1–30 |
+| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 
 {: .important }
@@ -401,12 +415,18 @@ WHERE equipment_id = 'equip:your-id'
 
 ### FC5 — SAT cold when heating commanded (GL36 D)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan on AND heating > 1% AND SAT + mix_tol ≤ MAT − mix_tol + 0.55°F (default mix_tol = 1.15°F).  
+**Equation:** SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.  
 **Default confirmation:** 600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.5–3.0 |
+| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
+| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
+| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
+| `htg_on_min` | Heating-command ON threshold | frac | 0.01 | 0.0–0.25 |
+| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
+| `fan_on_min` | Fan-on command threshold | frac | 0.01 | 0.0–0.25 |
+| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 ```sql
 -- confirmation_seconds: 600
@@ -427,13 +447,18 @@ WHERE equipment_id = 'equip:your-ahu'
 
 ### FC6 — Estimated OA fraction mismatch
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** |RAT−OAT| ≥ 5°F AND |estimated OA% − design min OA%| > 15% in heating/mech-only modes.  
+**Equation:** |RATavg−OATavg| ≥ ΔTmin AND |estimated OA% − design min OA%| > εF.  
 **Default confirmation:** 600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `airflow_err` | OA fraction error | frac | 0.15 | 0.05–0.5 |
+| `eps_airflow` | Airflow error εF (GL36 default 30%) | frac | 0.15 | 0.05–1.0 |
+| `delta_t_min` | Minimum |OAT−RAT| ΔTmin (GL36 default 10°F) | °F | 5.0 | 0.0–30.0 |
+| `airflow_err` | Legacy OA-fraction error (sets εF) | frac | 0.15 | 0.05–1.0 |
+| `oat_rat_delta_min` | Legacy OAT/RAT guard (sets ΔTmin) | °F | 5.0 | 0.0–30.0 |
 | `min_cfm_design` | Design min OA CFM | cfm | 5000 | 500–20000 |
+| `fan_on_min` | Fan-on command threshold | frac | 0.01 | 0.0–0.25 |
+| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 ```sql
 -- confirmation_seconds: 600
@@ -459,12 +484,16 @@ WHERE equipment_id = 'equip:your-id'
 
 ### FC7 — SAT low with full heating (GL36 E)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan on AND heating > 90% AND SAT < SAT SP − 1.0°F.  
+**Equation:** SATavg < SATSP − εSAT AND HC ≥ full-heating threshold.  
 **Default confirmation:** 600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `sat_err` | SAT error | °F | 1.0 | 0.25–5.0 |
+| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.0 | 0.0–10.0 |
+| `sat_err` | Legacy SAT error (sets εSAT) | °F | 1.0 | 0.0–10.0 |
+| `htg_full_min` | Full-heating threshold (GL36 99%) | frac | 0.9 | 0.5–1.0 |
+| `fan_on_min` | Fan-on command threshold | frac | 0.01 | 0.0–0.25 |
+| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 ```sql
 -- confirmation_seconds: 600
@@ -490,13 +519,19 @@ WHERE equipment_id = 'equip:your-id'
 
 ### FC8 — SAT/MAT mismatch in economizer (GL36 F)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Economizer open, CHW < 10%, |SAT − 0.55°F − MAT| > √(supply_tol²+mix_tol²).  
+**Equation:** |SATavg − ΔTSF − MATavg| > √(εSAT² + εMAT²) in OS#2.  
 **Default confirmation:** 600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
-| `supply_tol` | Supply tolerance | °F | 1.15 | 0.25–3.0 |
+| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
+| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
+| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
+| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
+| `clg_inactive_max` | Cooling-command inactive ceiling | frac | 0.1 | 0.0–0.5 |
+| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
+| `supply_tol` | Legacy SAT tolerance master (sets εSAT) | °F | 1.15 | 0.0–10.0 |
+| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 ```sql
 -- confirmation_seconds: 600
@@ -522,12 +557,18 @@ WHERE equipment_id = 'equip:your-id'
 
 ### FC9 — OAT too warm for free cooling (GL36 G)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Economizer open, CHW < 10%, OAT − mix_tol > SAT SP − 0.55°F + mix_tol.  
+**Equation:** OATavg − εOAT > SATSP − ΔTSF + εSAT in OS#2.  
 **Default confirmation:** 600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+| `eps_oat` | OAT sensor error εOAT (GL36 default 2°F local / 5°F global) | °F | 1.15 | 0.0–10.0 |
+| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
+| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
+| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
+| `clg_inactive_max` | Cooling-command inactive ceiling | frac | 0.1 | 0.0–0.5 |
+| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
+| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 ```sql
 -- confirmation_seconds: 600
@@ -553,12 +594,17 @@ WHERE equipment_id = 'equip:your-id'
 
 ### FC10 — OAT/MAT mismatch + mech cooling (GL36 H)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** CHW > 1%, economizer > 90%, |MAT − OAT| > √(mix_tol²+mix_tol²).  
+**Equation:** |MATavg − OATavg| > √(εMAT² + εOAT²) in OS#3.  
 **Default confirmation:** 600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
+| `eps_oat` | OAT sensor error εOAT (GL36 default 2°F local / 5°F global) | °F | 1.15 | 0.0–10.0 |
+| `econ_full_open` | Economizer full-open threshold | frac | 0.9 | 0.5–1.0 |
+| `clg_on_min` | Cooling-command ON threshold | frac | 0.01 | 0.0–0.25 |
+| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
+| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 ```sql
 -- confirmation_seconds: 600
@@ -584,12 +630,18 @@ WHERE equipment_id = 'equip:your-id'
 
 ### FC11 — OAT/MAT mismatch economizer-only (GL36 I)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** CHW > 1%, economizer > 90%, OAT + mix_tol < SAT SP − 0.55°F − mix_tol.  
+**Equation:** OATavg + εOAT < SATSP − ΔTSF − εSAT in OS#3.  
 **Default confirmation:** 600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+| `eps_oat` | OAT sensor error εOAT (GL36 default 2°F local / 5°F global) | °F | 1.15 | 0.0–10.0 |
+| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
+| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
+| `econ_full_open` | Economizer full-open threshold | frac | 0.9 | 0.5–1.0 |
+| `clg_on_min` | Cooling-command ON threshold | frac | 0.01 | 0.0–0.25 |
+| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
+| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 ```sql
 -- confirmation_seconds: 600
@@ -615,13 +667,20 @@ WHERE equipment_id = 'equip:your-id'
 
 ### FC12 — SAT above blend in cooling (GL36 J)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** CHW > 1%, SAT − supply_tol − 0.55°F > MAT + mix_tol at min or full economizer.  
+**Equation:** SATavg − εSAT − ΔTSF ≥ MATavg + εMAT in OS#3/OS#4.  
 **Default confirmation:** 600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
-| `supply_tol` | Supply tolerance | °F | 1.15 | 0.25–3.0 |
+| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
+| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
+| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
+| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
+| `econ_full_open` | Economizer full-open threshold | frac | 0.9 | 0.5–1.0 |
+| `clg_on_min` | Cooling-command ON threshold | frac | 0.01 | 0.0–0.25 |
+| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
+| `supply_tol` | Legacy SAT tolerance master (sets εSAT) | °F | 1.15 | 0.0–10.0 |
+| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 ```sql
 -- confirmation_seconds: 600
@@ -647,12 +706,17 @@ WHERE equipment_id = 'equip:your-id'
 
 ### FC13 — SAT above SP at full cooling (GL36 K)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** CHW > 1%, SAT > SAT SP + 1.0°F at min or full economizer.  
+**Equation:** SATavg > SATSP + εSAT AND CC ≥ full-cooling threshold in OS#3/OS#4.  
 **Default confirmation:** 600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `sat_err` | SAT error | °F | 1.0 | 0.25–5.0 |
+| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.0 | 0.0–10.0 |
+| `sat_err` | Legacy SAT error (sets εSAT) | °F | 1.0 | 0.0–10.0 |
+| `clg_full_min` | Full-cooling threshold (GL36 99%) | frac | 0.01 | 0.5–1.0 |
+| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
+| `econ_full_open` | Economizer full-open threshold | frac | 0.9 | 0.5–1.0 |
+| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 ```sql
 -- confirmation_seconds: 600
@@ -678,12 +742,19 @@ WHERE equipment_id = 'equip:your-id'
 
 ### FC14 — CHW coil ΔT when inactive (GL36 L)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Cooling coil ΔT ≥ √(mix_tol²+mix_tol²)+0.55°F while coil should be inactive.  
+**Equation:** Cooling-coil ΔT ≥ √(εCCET² + εCCLT²) + ΔTSF while coil should be inactive.  
 **Default confirmation:** 600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+| `eps_ccet` | Cooling-coil entering sensor error εCCET | °F | 1.15 | 0.0–10.0 |
+| `eps_cclt` | Cooling-coil leaving sensor error εCCLT | °F | 1.15 | 0.0–10.0 |
+| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
+| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
+| `clg_inactive_max` | Cooling-command inactive ceiling | frac | 0.1 | 0.0–0.5 |
+| `htg_on_min` | Heating-command ON threshold | frac | 0.01 | 0.0–0.25 |
+| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
+| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 ```sql
 -- confirmation_seconds: 600
@@ -709,12 +780,20 @@ WHERE equipment_id = 'equip:your-id'
 
 ### FC15 — HW coil ΔT when inactive (GL36 M)
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Heating coil ΔT ≥ √(mix_tol²+mix_tol²)+0.55°F while coil should be inactive.  
+**Equation:** Heating-coil ΔT ≥ √(εHCET² + εHCLT²) + ΔTSF while coil should be inactive.  
 **Default confirmation:** 600 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `mix_tol` | Mixing tolerance | °F | 1.15 | 0.25–3.0 |
+| `eps_hcet` | Heating-coil entering sensor error εHCET | °F | 1.15 | 0.0–10.0 |
+| `eps_hclt` | Heating-coil leaving sensor error εHCLT | °F | 1.15 | 0.0–10.0 |
+| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
+| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
+| `econ_full_open` | Economizer full-open threshold | frac | 0.9 | 0.5–1.0 |
+| `clg_inactive_max` | Cooling-command inactive ceiling | frac | 0.1 | 0.0–0.5 |
+| `clg_on_min` | Cooling-command ON threshold | frac | 0.01 | 0.0–0.25 |
+| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
+| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
 
 ```sql
 -- confirmation_seconds: 600
@@ -833,7 +912,7 @@ WHERE equipment_id = 'equip:your-id'
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `oat_err` | OAT vs meteo error | °F | 5.0 | 2.0–15.0 |
+| `oat_err` | Max OAT disagreement | °F | 5.0 | 2.0–20.0 |
 
 ```sql
 -- confirmation_seconds: 900
@@ -1391,7 +1470,6 @@ WHERE equipment_id = 'equip:your-vav'
 | `comfort_low_f` | Comfort low | °F | 70.0 | 60.0–78.0 |
 | `comfort_high_f` | Comfort high | °F | 75.0 | 68.0–85.0 |
 | `sat_band_f` | AHU SAT≈SP band | °F | 2.0 | 0.5–6.0 |
-| `confirm_min` | Fault confirm delay | min | 30.0 | 0.0–60.0 |
 
 ```sql
 -- confirmation_seconds: 1800
@@ -1418,7 +1496,7 @@ WHERE equipment_id = 'equip:your-id'
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `min_dt` | Minimum delta-T | °F | 4.0 | 2.0–12.0 |
+| `min_dt` | Min ΔT | °F | 4.0 | 1.0–12.0 |
 
 ```sql
 -- confirmation_seconds: 900
@@ -1445,6 +1523,7 @@ WHERE equipment_id = 'equip:your-chw-plant'
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
 | `dp_margin` | DP margin | psi | 2.2 | 0.5–6.0 |
+| `pump_hi` | Pump high-speed threshold | frac | 0.87 | 0.5–1.0 |
 
 ```sql
 -- confirmation_seconds: 300
@@ -1505,6 +1584,7 @@ WHERE equipment_id = 'equip:your-id'
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
 | `flow_hi` | Flow high | gpm | 1100 | 200–3000 |
+| `pump_hi` | Pump high-speed threshold | frac | 0.87 | 0.5–1.0 |
 
 ```sql
 -- confirmation_seconds: 300
@@ -1623,8 +1703,8 @@ WHERE equipment_id = 'equip:your-id'
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `min_sat` | Min discharge SAT | °F | 85.0 | 70.0–110.0 |
-| `zone_cold` | Zone cold threshold | °F | 69.0 | 60.0–75.0 |
+| `min_sat` | Min heating SAT | °F | 85.0 | 70.0–110.0 |
+| `zone_cold` | Zone cold | °F | 69.0 | 60.0–72.0 |
 
 ```sql
 -- confirmation_seconds: 600
@@ -1650,7 +1730,7 @@ WHERE equipment_id = 'equip:your-heatpump'
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
-| `spike_limit` | Spike limit | °F | 16.0 | 5.0–30.0 |
+| `spike_limit` | Spike limit | °F | 16.0 | 4.0–40.0 |
 
 ```sql
 -- confirmation_seconds: 300

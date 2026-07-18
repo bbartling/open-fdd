@@ -13,7 +13,7 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN chw_dp IS NULL OR chw_dp_sp IS NULL OR pump IS NULL THEN 0
-      WHEN pump >= 0.87 AND chw_dp < chw_dp_sp - {{DP_MARGIN}} THEN 1
+      WHEN pump >= {{PUMP_HI}} AND chw_dp < chw_dp_sp - {{DP_MARGIN}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

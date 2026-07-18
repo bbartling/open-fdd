@@ -15,7 +15,7 @@ base AS (
     CAST(CASE
       WHEN mat IS NULL OR rat IS NULL OR oa_t IS NULL OR fan IS NULL THEN 0
       WHEN fan < 0.05 THEN 0
-      WHEN ABS(rat - oa_t) < 5.0 THEN 0
+      WHEN ABS(rat - oa_t) < {{DELTA_T_MIN}} THEN 0
       WHEN ABS((mat - rat) / NULLIF(oa_t - rat, 0) - 0.20) > {{AIRFLOW_ERR}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
