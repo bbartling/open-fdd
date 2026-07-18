@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import CsvSessionSidecart from "../components/CsvSessionSidecart";
+import PackageImportPanel from "../components/PackageImportPanel";
 import Spinner from "../components/Spinner";
 import { hasToken } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
@@ -8,6 +9,10 @@ import {
   uploadFilesForPreview,
   type CsvPreviewFileProfile,
 } from "../lib/csvImportUpload";
+import {
+  uploadPackageZip,
+  type PackageImportResponse,
+} from "../lib/csvPackageImport";
 import {
   datasetFromFusionPreview,
   fetchAgentSessionFusionPreview,
@@ -23,6 +28,38 @@ export default function CsvWorkbenchPage() {
   const [status, setStatus] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [uploadCards, setUploadCards] = useState<UploadCard[]>([]);
+  const [packageResult, setPackageResult] = useState<PackageImportResponse | null>(null);
+
+  const ingestPackage = useCallback(async (zips: File[]): Promise<boolean> => {
+    setError("");
+    setPackageResult(null);
+    setBusy("package");
+    try {
+      let last: PackageImportResponse | null = null;
+      for (const zip of zips) {
+        const res = await uploadPackageZip(zip);
+        if (!res.ok) {
+          const missing = res.missing_maps?.length
+            ? ` — missing maps: ${res.missing_maps.join(", ")}`
+            : "";
+          throw new Error(`${res.error ?? "package load failed"}${missing}`);
+        }
+        last = res;
+      }
+      if (last) {
+        setPackageResult(last);
+        setStatus(
+          `Package ${last.building_id} ingested — ${last.equipment_written ?? 0} equipment, ${last.total_rows?.toLocaleString() ?? "?"} rows. FDD rules can run now.`,
+        );
+      }
+      return true;
+    } catch (e) {
+      setError(formatApiError(e));
+      return false;
+    } finally {
+      setBusy("");
+    }
+  }, []);
 
   const ingestFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -30,12 +67,18 @@ export default function CsvWorkbenchPage() {
         setError("Sign in to upload CSV files.");
         return;
       }
-      const list = Array.from(files).filter((f) => f.name.toLowerCase().endsWith(".csv"));
+      const all = Array.from(files);
+      const zips = all.filter((f) => f.name.toLowerCase().endsWith(".zip"));
+      const list = all.filter((f) => f.name.toLowerCase().endsWith(".csv"));
+      if (zips.length) {
+        const ok = await ingestPackage(zips);
+        if (!ok || !list.length) return;
+      }
       if (!list.length) {
-        setError("Choose one or more .csv files.");
+        if (!zips.length) setError("Choose one or more .csv files or an openfdd_package_v1 .zip.");
         return;
       }
-      setError("");
+      if (!zips.length) setError("");
       setBusy("upload");
       try {
         const res = await uploadFilesForPreview(list, sessionId || undefined);
@@ -55,7 +98,7 @@ export default function CsvWorkbenchPage() {
         setBusy("");
       }
     },
-    [sessionId],
+    [sessionId, ingestPackage],
   );
 
   const openSession = useCallback(async (id: string) => {
@@ -120,10 +163,13 @@ export default function CsvWorkbenchPage() {
           void ingestFiles(e.dataTransfer.files);
         }}
       >
-        <p className="csv-drop-title">Drop CSV files here</p>
-        <p className="muted">Multiple files append to one import session · long Niagara exports may need agent pivot before preflight pass</p>
+        <p className="csv-drop-title">Drop CSV files or an openfdd_package_v1 .zip here</p>
+        <p className="muted">
+          Multiple CSVs append to one import session · zip packages (manifest.json + per-equipment
+          history_wide.csv + Haystack column maps) ingest straight to the FDD store
+        </p>
         <label className="primary-btn csv-drop-btn">
-          {busy === "upload" ? (
+          {busy === "upload" || busy === "package" ? (
             <>
               <Spinner inline /> Uploading…
             </>
@@ -132,10 +178,10 @@ export default function CsvWorkbenchPage() {
           )}
           <input
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,text/csv,.zip,application/zip"
             multiple
             hidden
-            disabled={busy === "upload"}
+            disabled={busy === "upload" || busy === "package"}
             onChange={(e) => {
               if (e.target.files?.length) void ingestFiles(e.target.files);
               e.target.value = "";
@@ -143,6 +189,8 @@ export default function CsvWorkbenchPage() {
           />
         </label>
       </div>
+
+      {packageResult ? <PackageImportPanel result={packageResult} /> : null}
 
       {uploadCards.length > 0 ? (
         <section className="panel">

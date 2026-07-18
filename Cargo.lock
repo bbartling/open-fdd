@@ -2822,6 +2822,7 @@ dependencies = [
  "csv",
  "datafusion",
  "encoding_rs",
+ "fdd_core",
  "fdd_rules",
  "fdd_sql",
  "fdd_store",
@@ -2840,9 +2841,11 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "subtle",
+ "tempfile",
  "tokio",
  "toml 1.1.2+spec-1.1.0",
  "walkdir",
+ "zip",
 ]
 
 [[package]]
@@ -2871,6 +2874,7 @@ dependencies = [
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
+ "zip",
 ]
 
 [[package]]

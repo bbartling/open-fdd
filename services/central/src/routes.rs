@@ -33,6 +33,11 @@ pub fn router(state: Arc<AppState>) -> Router {
 
     let csv = Router::new()
         .route("/api/csv/import/preview", post(csv_preview))
+        .route("/api/csv/import/package", post(csv_import_package))
+        .route(
+            "/api/csv/import/package/roles",
+            post(csv_import_package_roles),
+        )
         .route("/api/csv/import/plan", post(csv_plan))
         .route("/api/csv/import/preflight", post(csv_preflight))
         .route("/api/csv/import/execute", post(csv_execute))
@@ -697,6 +702,27 @@ pub async fn csv_preview(headers: HeaderMap, body: Bytes) -> Json<Value> {
     Json(open_fdd_edge_prototype::csv_ingest::preview_handler(
         &ct, &body, None,
     ))
+}
+
+/// `openfdd_package_v1` zip upload (#514): multipart, JSON base64, or raw zip body.
+pub async fn csv_import_package(headers: HeaderMap, body: Bytes) -> Json<Value> {
+    let ct = content_type(&headers);
+    let result = tokio::task::spawn_blocking(move || {
+        open_fdd_edge_prototype::csv_ingest::package::import_package_handler(&ct, &body)
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("package import task: {e}")}));
+    Json(result)
+}
+
+/// Edit role assignments for an ingested package equipment, then re-ingest.
+pub async fn csv_import_package_roles(Json(body): Json<Value>) -> Json<Value> {
+    let result = tokio::task::spawn_blocking(move || {
+        open_fdd_edge_prototype::csv_ingest::package::update_package_roles_handler(&body)
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("package roles task: {e}")}));
+    Json(result)
 }
 
 pub async fn csv_plan(Json(body): Json<Value>) -> Json<Value> {

@@ -109,6 +109,30 @@ fn extract_form_name(line: &str, key: &str) -> Option<String> {
     }
 }
 
+/// Binary-safe multipart parse (no lossy UTF-8 on file contents) — required for zip uploads.
+pub(super) fn parse_multipart_files(content_type: &str, body: &[u8]) -> UploadParseResult {
+    // Parse Content-Type parameters case-insensitively (Boundary=…; charset=…).
+    let boundary = content_type
+        .split(';')
+        .skip(1)
+        .find_map(|param| {
+            let param = param.trim();
+            let (key, value) = param.split_once('=')?;
+            if key.eq_ignore_ascii_case("boundary") {
+                let b = value.trim().trim_matches('"').to_string();
+                if b.is_empty() {
+                    None
+                } else {
+                    Some(b)
+                }
+            } else {
+                None
+            }
+        })
+        .ok_or("missing multipart boundary")?;
+    parse_multipart_binary(&boundary, body)
+}
+
 fn parse_multipart_binary(boundary: &str, body: &[u8]) -> UploadParseResult {
     let marker = format!("--{boundary}");
     let parts: Vec<&[u8]> = split_bytes(body, marker.as_bytes());
