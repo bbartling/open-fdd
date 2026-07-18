@@ -156,6 +156,7 @@ mod tests {
     fn sample_rule() -> RuleSpec {
         RuleSpec {
             rule_id: "VAV-1".into(),
+            aliases: vec![],
             sql_file: "vav1_comfort_fault.sql".into(),
             description: "test".into(),
             required_roles: vec![],

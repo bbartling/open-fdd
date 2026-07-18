@@ -58,7 +58,6 @@ impl Server {
             .env("OPENFDD_WORKSPACE", &workspace)
             .env("OPENFDD_PARQUET_ROOT", &parquet_root)
             .env("OPENFDD_SQL_RULES_DIR", &sql_rules)
-            .env("OPENFDD_CSV_STRICT", "0")
             .spawn()
             .expect("start openfdd-central");
 
@@ -183,9 +182,9 @@ fn csv_upload_execute_then_fc1_registry_run() {
                 "timestamp_column": "Date",
                 "timezone": "America/Chicago",
                 "value_columns": [
-                    "AHU: Supply Air Duct Static Pressure Set Point",
-                    "AHU: Supply Air Duct Static Pressure",
-                    "AHU: Supply Air Fan Status"
+                    "duct_static",
+                    "duct_static_sp",
+                    "fan_cmd"
                 ]
             }]
         }

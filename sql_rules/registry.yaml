@@ -179,6 +179,7 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: FC13-SAT-HIGH
+    aliases: [FC13]
     sql_file: sat_high_fault.sql
     pandas_function: fc13
     description: SAT above setpoint at full cooling

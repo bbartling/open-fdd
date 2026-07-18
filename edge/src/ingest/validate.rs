@@ -121,7 +121,11 @@ pub fn evaluate_csv_session(input: ValidationInput<'_>) -> Value {
             .iter()
             .filter(|c| {
                 let lc = c.to_ascii_lowercase();
-                lc != "timestamp" && lc != "timezone" && lc != "equipment_id" && lc != "site_id"
+                !is_pipeline_metadata_column(&lc)
+                    && lc != "timestamp"
+                    && lc != "timestamp_utc"
+                    && lc != "equipment_id"
+                    && lc != "site_id"
             })
             .cloned()
             .collect();
@@ -136,9 +140,13 @@ pub fn evaluate_csv_session(input: ValidationInput<'_>) -> Value {
         }
 
         let mut unknown = 0u64;
+        let mut unknown_examples: Vec<Value> = Vec::new();
         for col in &numeric_cols {
             if pivot_alias(col).is_none() && !col.starts_with("equip") {
                 unknown += 1;
+                if unknown_examples.len() < 5 {
+                    unknown_examples.push(json!(col));
+                }
             }
         }
         if unknown > 0 {
@@ -147,7 +155,7 @@ pub fn evaluate_csv_session(input: ValidationInput<'_>) -> Value {
                 "warn",
                 format!("{unknown} column(s) have no standard FDD alias"),
                 unknown,
-                numeric_cols.iter().take(5).map(|s| json!(s)).collect(),
+                unknown_examples,
             ));
         }
 
@@ -265,6 +273,22 @@ pub fn evaluate_csv_session(input: ValidationInput<'_>) -> Value {
     })
 }
 
+/// Importer-internal columns that appear in plan preview but are never FDD roles (#529).
+fn is_pipeline_metadata_column(col: &str) -> bool {
+    matches!(
+        col,
+        "ts_utc"
+            | "ts_local"
+            | "timezone"
+            | "source_timestamp_raw"
+            | "source_timestamp_parse_status"
+            | "source_timestamp_fold"
+            | "source_file"
+            | "source_row_number"
+            | "fill_created"
+    )
+}
+
 fn check(
     code: &str,
     severity: &str,
@@ -365,5 +389,46 @@ mod tests {
             validation_report: None,
         });
         assert_eq!(out["verdict"], "pass");
+    }
+
+    #[test]
+    fn pipeline_metadata_does_not_block_strict_preflight() {
+        let preview = PlanPreview {
+            row_count: 11,
+            column_names: vec![
+                "ts_utc".into(),
+                "ts_local".into(),
+                "timezone".into(),
+                "source_file".into(),
+                "source_row_number".into(),
+                "source_timestamp_raw".into(),
+                "source_timestamp_parse_status".into(),
+                "duct_static".into(),
+                "duct_static_sp".into(),
+                "fan_cmd".into(),
+            ],
+            sample_rows: vec![json!({
+                "ts_utc": "2024-01-01T12:00:00Z",
+                "duct_static": "0.5",
+                "duct_static_sp": "1.4",
+                "fan_cmd": "1.0",
+                "source_file": "fc1.csv"
+            })],
+            timestamp_analysis: TimestampAnalysis::default(),
+            warnings: vec![],
+            time_range: None,
+        };
+        let out = evaluate_csv_session(ValidationInput {
+            session_files: &[],
+            plan: None,
+            preview: Some(&preview),
+            validation_report: None,
+        });
+        assert_eq!(out["verdict"], "pass", "{out}");
+        let checks = out["checks"].as_array().unwrap();
+        assert!(
+            !checks.iter().any(|c| c["code"] == "COLUMN_UNKNOWN"),
+            "{out}"
+        );
     }
 }

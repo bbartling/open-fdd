@@ -29,6 +29,14 @@ fn parquet_root() -> PathBuf {
     if let Ok(p) = std::env::var("OPENFDD_PARQUET_ROOT") {
         return PathBuf::from(p);
     }
+    // Prefer workspace-relative cache so CSV ingest and /api/fdd/run agree when
+    // only OPENFDD_WORKSPACE is set (standalone recipe parity with csv recipe).
+    if let Ok(ws) = std::env::var("OPENFDD_WORKSPACE") {
+        let under_ws = PathBuf::from(&ws).join(".cache/parquet");
+        if under_ws.is_dir() || PathBuf::from(&ws).is_dir() {
+            return under_ws;
+        }
+    }
     for c in [
         PathBuf::from(".cache/parquet"),
         PathBuf::from("/var/openfdd/workspace/.cache/parquet"),
@@ -246,9 +254,10 @@ pub fn run_registry(payload: &Value) -> Value {
 
     let filtered = if let Some(ids) = filter {
         let mut clone = reg.clone();
-        clone
-            .rules
-            .retain(|r| ids.iter().any(|id| id == &r.rule_id));
+        clone.rules.retain(|r| {
+            ids.iter()
+                .any(|id| id == &r.rule_id || r.aliases.iter().any(|a| a == id))
+        });
         clone
     } else {
         reg

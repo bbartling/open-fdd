@@ -502,6 +502,14 @@ pub fn load_settings() -> Settings {
             s.bacnet_server.port = port;
         }
     }
+    if let Some(v) = env_first(&[
+        "OPENFDD_BACNET_DEVICE_INSTANCE",
+        "OPENFDD_FIELDBUS_DEVICE_INSTANCE",
+    ]) {
+        if let Ok(instance) = v.parse::<u32>() {
+            s.bacnet_server.device_instance = instance;
+        }
+    }
     if let Some(v) = env_first(&["OPENFDD_FIELDBUS_HTTP_HOST", "RUSTY_GATEWAY_HTTP_HOST"]) {
         s.http_host = v;
     }

@@ -111,8 +111,41 @@ pub fn normalize_role(role: &str) -> String {
     }
 }
 
+/// Cookbook roles that may appear as literal CSV column names (identity mapping).
+fn is_known_cookbook_role(role: &str) -> bool {
+    matches!(
+        role,
+        "fan_cmd"
+            | "fan_status"
+            | "sat"
+            | "sat_sp"
+            | "oa_t"
+            | "rat"
+            | "mat"
+            | "duct_static"
+            | "duct_static_sp"
+            | "oa_damper_pct"
+            | "clg_valve_pct"
+            | "htg_valve_pct"
+            | "zone_t"
+            | "chw_supply_t"
+            | "chw_return_t"
+            | "hw_supply_t"
+            | "hw_return_t"
+            | "oa_h"
+            | "occ_mode"
+            | "return_fan"
+    )
+}
+
 fn infer_role_from_column_name(column: &str) -> Option<String> {
     let c = column.to_lowercase();
+    // Identity: column already named a canonical cookbook role (e.g. fan_cmd).
+    // Without this, blank columns.csv roles silently drop the column at parquet ingest.
+    let as_role = normalize_role(&c);
+    if is_known_cookbook_role(&as_role) {
+        return Some(as_role);
+    }
     if c.contains("supply_fan_speed")
         || c.contains("supply_fan_status")
         || c == "supplyfan"
@@ -205,6 +238,37 @@ mod tests {
         assert_eq!(normalize_role("supply_fan"), "fan_cmd");
         assert_eq!(normalize_role("fan_status"), "fan_status");
         assert_eq!(normalize_role("ra_t"), "rat");
+    }
+
+    #[test]
+    fn literal_fan_cmd_column_maps_identity() {
+        assert_eq!(
+            infer_role_from_column_name("fan_cmd").as_deref(),
+            Some("fan_cmd")
+        );
+        assert_eq!(
+            infer_role_from_column_name("duct_static_sp").as_deref(),
+            Some("duct_static_sp")
+        );
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("columns.csv");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(
+            f,
+            "column,role\n\
+             timestamp_utc,\n\
+             duct_static,\n\
+             duct_static_sp,\n\
+             fan_cmd,"
+        )
+        .unwrap();
+        let map = load_column_role_map(&path).unwrap();
+        assert_eq!(map.get("fan_cmd"), Some(&"fan_cmd".to_string()));
+        assert_eq!(map.get("duct_static"), Some(&"duct_static".to_string()));
+        assert_eq!(
+            map.get("duct_static_sp"),
+            Some(&"duct_static_sp".to_string())
+        );
     }
 
     #[test]
