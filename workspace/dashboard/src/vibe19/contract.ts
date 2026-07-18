@@ -8,6 +8,7 @@ export const VIBE19_SECTIONS = [
   "FDD Plots",
   "RCx Plots",
   "Metering",
+  "Energy Model",
   "Export",
 ] as const;
 

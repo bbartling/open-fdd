@@ -1,8 +1,23 @@
+/* Streamlit-parity Lab layout: persistent left tuning sidebar + lazy sections. */
 .vibe19-shell {
+  display: grid;
+  grid-template-columns: minmax(280px, 320px) 1fr;
+  gap: 1.25rem;
+  padding: 0.5rem 0 2rem;
+  align-items: start;
+}
+
+.vibe19-content {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 0.5rem 0 2rem;
+  min-width: 0;
+}
+
+.vibe19-hero h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.7rem;
+  font-weight: 700;
 }
 
 .vibe19-hero {
@@ -12,32 +27,140 @@
   gap: 1rem;
 }
 
-.vibe19-hero h1 {
-  margin: 0 0 0.25rem;
-  font-size: 1.6rem;
-}
-
+/* Section picker — Streamlit horizontal radio look. */
 .vibe19-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
-  border-bottom: 1px solid var(--border, #2a3344);
-  padding-bottom: 0.5rem;
+  gap: 0.25rem 0.9rem;
+  border-bottom: 1px solid var(--border, #e3e6ee);
+  padding-bottom: 0.4rem;
 }
 
 .vibe19-nav button {
-  border: 1px solid transparent;
+  border: none;
   background: transparent;
   color: inherit;
-  padding: 0.4rem 0.75rem;
-  border-radius: 999px;
+  padding: 0.35rem 0.15rem;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
+}
+
+.vibe19-nav button:hover {
+  color: var(--primary, #ff4b4b);
 }
 
 .vibe19-nav button.active {
-  background: #1f6feb33;
-  border-color: #1f6feb;
+  color: var(--primary, #ff4b4b);
+  border-bottom-color: var(--primary, #ff4b4b);
+  font-weight: 600;
+}
+
+/* Streamlit-style page sidebar (secondary background, full height). */
+.vibe19-lab-sidebar {
+  background: var(--panel-soft, #f0f2f6);
+  border: 1px solid var(--border, #e3e6ee);
+  border-radius: 10px;
+  padding: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  position: sticky;
+  top: 0.5rem;
+  max-height: calc(100vh - 1rem);
+  overflow: auto;
+}
+
+.vibe19-lab-sidebar h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+}
+
+.vibe19-lab-sidebar hr {
+  border: none;
+  border-top: 1px solid var(--border, #e3e6ee);
+  margin: 0;
+  width: 100%;
+}
+
+.vibe19-sidebar-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+}
+
+.vibe19-sidebar-block label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.82rem;
+}
+
+.vibe19-sidebar-block select,
+.vibe19-sidebar-block input[type="text"] {
+  background: var(--input-bg, #fff);
+  color: var(--input-text, inherit);
+  border: 1px solid var(--border, #e3e6ee);
+  border-radius: 6px;
+  padding: 0.3rem 0.4rem;
+  font-size: 0.85rem;
+}
+
+.vibe19-sidebar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.vibe19-sidebar-actions button {
+  border: 1px solid var(--border, #e3e6ee);
+  background: var(--panel, #fff);
+  color: inherit;
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.vibe19-sidebar-actions button:hover {
+  border-color: var(--primary, #ff4b4b);
+  color: var(--primary, #ff4b4b);
+}
+
+/* Rule tuning expanders (one per rule, collapsed by default). */
+.vibe19-tuning {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.vibe19-tuning details {
+  border: 1px solid var(--border, #e3e6ee);
+  border-radius: 8px;
+  background: var(--panel, #fff);
+  padding: 0.35rem 0.55rem;
+}
+
+.vibe19-tuning summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  list-style-position: inside;
+}
+
+.vibe19-tuning summary .modified {
+  color: var(--primary, #ff4b4b);
+  font-weight: 700;
+}
+
+.vibe19-tuning-family {
+  margin: 0.35rem 0 0.1rem;
+  font-size: 0.78rem;
+  text-transform: none;
+  color: var(--muted, #808495);
+  font-weight: 700;
 }
 
 .vibe19-grid {
@@ -48,8 +171,8 @@
 
 .vibe19-metric,
 .vibe19-card {
-  background: var(--panel, #121821);
-  border: 1px solid var(--border, #2a3344);
+  background: var(--panel, #fff);
+  border: 1px solid var(--border, #e3e6ee);
   border-radius: 10px;
   padding: 0.9rem 1rem;
 }
@@ -76,8 +199,8 @@
 }
 
 .vibe19-sidebar {
-  background: var(--panel, #121821);
-  border: 1px solid var(--border, #2a3344);
+  background: var(--panel, #fff);
+  border: 1px solid var(--border, #e3e6ee);
   border-radius: 10px;
   padding: 0.75rem;
   max-height: 70vh;
@@ -102,7 +225,8 @@
 }
 
 .vibe19-sidebar button.active {
-  background: #1f6feb33;
+  background: color-mix(in srgb, var(--primary, #ff4b4b) 14%, transparent);
+  color: var(--primary, #ff4b4b);
   font-weight: 600;
 }
 
@@ -123,6 +247,11 @@
   gap: 0.35rem;
 }
 
+.vibe19-slider input[type="range"],
+.vibe19-tuning input[type="range"] {
+  accent-color: var(--primary, #ff4b4b);
+}
+
 .vibe19-table {
   width: 100%;
   border-collapse: collapse;
@@ -132,7 +261,7 @@
 
 .vibe19-table th,
 .vibe19-table td {
-  border-bottom: 1px solid var(--border, #2a3344);
+  border-bottom: 1px solid var(--border, #e3e6ee);
   text-align: left;
   padding: 0.35rem 0.4rem;
 }
@@ -141,7 +270,7 @@
   font-size: 0.75rem;
   max-height: 240px;
   overflow: auto;
-  background: #0b1018;
+  background: var(--panel-soft, #f0f2f6);
   padding: 0.5rem;
   border-radius: 6px;
 }
@@ -153,6 +282,16 @@
 
 .vibe19-card.grow {
   min-height: 320px;
+}
+
+@media (max-width: 1100px) {
+  .vibe19-shell {
+    grid-template-columns: 1fr;
+  }
+  .vibe19-lab-sidebar {
+    position: static;
+    max-height: none;
+  }
 }
 
 @media (max-width: 900px) {
