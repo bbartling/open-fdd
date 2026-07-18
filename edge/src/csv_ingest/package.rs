@@ -594,6 +594,17 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
             building_root.join("session_config.json"),
             serde_json::to_string_pretty(cfg).unwrap_or_default(),
         );
+        // Honor packaged session config (#515): persist workspace-wide so the
+        // Lab sliders pick it up. Invalid configs only warn — never block ingest.
+        match crate::fdd::session_config::normalize_session_config(cfg) {
+            Ok((normalized, mut cfg_warnings)) => {
+                if let Err(e) = crate::fdd::session_config::save_session_config(&normalized) {
+                    warnings.push(format!("session_config.json not persisted: {e}"));
+                }
+                warnings.append(&mut cfg_warnings);
+            }
+            Err(e) => warnings.push(format!("session_config.json invalid: {e}")),
+        }
     }
 
     let mut equipment_report = Vec::new();

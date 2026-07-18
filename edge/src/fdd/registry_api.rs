@@ -61,6 +61,20 @@ fn load_reg() -> Result<RuleRegistry, String> {
     load_registry(&dir).map_err(|e| format!("load registry {}: {e}", dir.display()))
 }
 
+/// Registry rules keyed by rule_id and aliases (empty map when registry is unavailable).
+pub fn load_registry_rules_map() -> HashMap<String, RuleSpec> {
+    let mut out = HashMap::new();
+    if let Ok(reg) = load_reg() {
+        for rule in reg.rules {
+            for alias in &rule.aliases {
+                out.insert(alias.clone(), rule.clone());
+            }
+            out.insert(rule.rule_id.clone(), rule);
+        }
+    }
+    out
+}
+
 fn param_to_json(rule: &RuleSpec) -> Value {
     let mut params = serde_json::Map::new();
     for (key, def) in &rule.parameters {

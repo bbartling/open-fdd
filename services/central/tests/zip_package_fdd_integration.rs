@@ -236,6 +236,57 @@ fn zip_package_upload_then_fc1_registry_run() {
     assert_eq!(status, 200, "roles: {upd}");
     assert_eq!(upd.get("ok"), Some(&json!(true)), "roles: {upd}");
 
+    // #515: packaged session_config.json persists workspace-wide.
+    let (status, sess) = {
+        let (status, text) = http_raw(
+            "GET",
+            srv.port,
+            "/api/fdd/session-config",
+            None,
+            "application/json",
+        );
+        (
+            status,
+            serde_json::from_str::<Value>(&text).unwrap_or(json!({"raw": text})),
+        )
+    };
+    assert_eq!(status, 200, "session-config: {sess}");
+    assert_eq!(sess["persisted"], json!(true), "{sess}");
+    assert_eq!(sess["config"]["unit_system"], json!("imperial"), "{sess}");
+
+    // #515: PUT session config with rule params + role_map applied to the building.
+    let put_body = json!({
+        "building_id": "ZIP_BUILDING_1",
+        "config": {
+            "schema_version": "openfdd_session_v1",
+            "unit_system": "metric",
+            "params": {"FC1": {"eps_dsp": 0.2}},
+            "role_map": {"AHU_1": {"fan_cmd": "SF_SPD", "duct_static": "DA_P", "duct_static_sp": "DA_P_SP"}}
+        }
+    })
+    .to_string();
+    let (status, put) = {
+        let (status, text) = http_raw(
+            "PUT",
+            srv.port,
+            "/api/fdd/session-config",
+            Some(put_body.as_bytes()),
+            "application/json",
+        );
+        (
+            status,
+            serde_json::from_str::<Value>(&text).unwrap_or(json!({"raw": text})),
+        )
+    };
+    assert_eq!(status, 200, "session-config put: {put}");
+    assert_eq!(put.get("ok"), Some(&json!(true)), "put: {put}");
+    assert_eq!(put["config"]["unit_system"], json!("metric"), "{put}");
+    assert_eq!(
+        put["applied_role_map"][0]["ok"],
+        json!(true),
+        "role_map should apply to AHU_1: {put}"
+    );
+
     let fdd_body = json!({
         "params": {
             "mode": "registry",
