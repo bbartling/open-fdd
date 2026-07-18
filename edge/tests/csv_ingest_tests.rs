@@ -55,6 +55,7 @@ fn append_school_samples() {
         timestamp_column: "Date".into(),
         timezone: "America/Chicago".into(),
         value_columns: vec!["kW".into()],
+        equipment_id_column: None,
     };
     let rows_a = parse_file_to_rows(csv, &mapping, ',', "first").unwrap();
     let rows_b = parse_file_to_rows(csv, &mapping, ',', "first").unwrap();
@@ -71,12 +72,14 @@ fn join_weather_floor_hour() {
         timestamp_column: "Date".into(),
         timezone: "America/Chicago".into(),
         value_columns: vec!["kW".into()],
+        equipment_id_column: None,
     };
     let wx_map = FileMapping {
         filename: "wx.csv".into(),
         timestamp_column: "time_local".into(),
         timezone: "America/Chicago".into(),
         value_columns: vec!["temp_f".into(), "humidity".into()],
+        equipment_id_column: None,
     };
     let left = parse_file_to_rows(kw_csv, &kw_map, ',', "first").unwrap();
     let right = parse_file_to_rows(wx_csv, &wx_map, ',', "first").unwrap();
@@ -106,6 +109,24 @@ fn dataset_save_and_list() {
 }
 
 #[test]
+fn equipment_id_column_mapping_copies_ids_into_rows() {
+    // #536: an explicitly mapped equipment-id column lands in row values
+    // under the canonical `equipment_id` key.
+    let csv = "Date,kW,ahu_name\n6/19/2013 0:15,1,AHU-1\n6/19/2013 0:30,2,AHU-2\n";
+    let mapping = FileMapping {
+        filename: "wide.csv".into(),
+        timestamp_column: "Date".into(),
+        timezone: "America/Chicago".into(),
+        value_columns: vec!["kW".into()],
+        equipment_id_column: Some("ahu_name".into()),
+    };
+    let rows = parse_file_to_rows(csv, &mapping, ',', "first").unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].values.get("equipment_id").unwrap(), "AHU-1");
+    assert_eq!(rows[1].values.get("equipment_id").unwrap(), "AHU-2");
+}
+
+#[test]
 fn path_traversal_filename_rejected() {
     assert!(sanitize_filename("../evil.csv").is_err());
 }
@@ -126,6 +147,7 @@ fn resample_kw_hourly_averages() {
         timestamp_column: "Date".into(),
         timezone: "America/Chicago".into(),
         value_columns: vec!["kW".into()],
+        equipment_id_column: None,
     };
     let left = parse_file_to_rows(kw_csv, &kw_map, ',', "first").unwrap();
     assert_eq!(left.len(), 3);
@@ -160,18 +182,21 @@ fn join_schools_then_weather() {
         timestamp_column: "Date".into(),
         timezone: "America/Chicago".into(),
         value_columns: vec!["kW".into()],
+        equipment_id_column: None,
     };
     let kw_map_b = FileMapping {
         filename: "school_b.csv".into(),
         timestamp_column: "Date".into(),
         timezone: "America/Chicago".into(),
         value_columns: vec!["kW".into()],
+        equipment_id_column: None,
     };
     let wx_map = FileMapping {
         filename: "open_meteo_weather.csv".into(),
         timestamp_column: "time_local".into(),
         timezone: "America/Chicago".into(),
         value_columns: vec!["temp_f".into(), "humidity".into()],
+        equipment_id_column: None,
     };
     let left_a = parse_file_to_rows(kw_csv, &kw_map, ',', "first").unwrap();
     let left_b = parse_file_to_rows(kw_csv, &kw_map_b, ',', "first").unwrap();

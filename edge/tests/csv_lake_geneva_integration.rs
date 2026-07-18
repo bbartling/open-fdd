@@ -33,6 +33,7 @@ fn lake_geneva_append_four_school_files() {
             timestamp_column: "Date".into(),
             timezone: "America/Chicago".into(),
             value_columns: vec!["kW".into()],
+            equipment_id_column: None,
         };
         let rows = parse_file_to_rows(&text, &mapping, profile.delimiter, "first").unwrap();
         assert!(rows.len() > 1000, "{name} should have substantial rows");
@@ -57,6 +58,7 @@ fn lake_geneva_join_weather_to_kw() {
         timestamp_column: "Date".into(),
         timezone: "America/Chicago".into(),
         value_columns: vec!["kW".into()],
+        equipment_id_column: None,
     };
     let wx_map = FileMapping {
         filename: "weather.csv".into(),
@@ -69,6 +71,7 @@ fn lake_geneva_join_weather_to_kw() {
             .take(5)
             .cloned()
             .collect(),
+        equipment_id_column: None,
     };
     let left = parse_file_to_rows(&kw_text, &kw_map, kw_profile.delimiter, "first").unwrap();
     let right = parse_file_to_rows(&wx_text, &wx_map, wx_profile.delimiter, "first").unwrap();
