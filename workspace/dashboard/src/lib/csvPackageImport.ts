@@ -68,6 +68,7 @@ export const COOKBOOK_ROLES: string[] = [
   "chw_dp_sp",
   "chw_flow",
   "chw_pump_cmd",
+  "cw_pump_cmd",
   "cw_supply_t",
   "cw_return_t",
   "tower_fan_cmd",
@@ -76,6 +77,7 @@ export const COOKBOOK_ROLES: string[] = [
   "preheat_leave_t",
   "web_oa_t",
   "web_oa_dp",
+  "web_oa_h",
   "web_wb_t",
 ];
 

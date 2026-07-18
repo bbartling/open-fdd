@@ -30,8 +30,9 @@ export default function CsvWorkbenchPage() {
   const [uploadCards, setUploadCards] = useState<UploadCard[]>([]);
   const [packageResult, setPackageResult] = useState<PackageImportResponse | null>(null);
 
-  const ingestPackage = useCallback(async (zips: File[]) => {
+  const ingestPackage = useCallback(async (zips: File[]): Promise<boolean> => {
     setError("");
+    setPackageResult(null);
     setBusy("package");
     try {
       let last: PackageImportResponse | null = null;
@@ -51,8 +52,10 @@ export default function CsvWorkbenchPage() {
           `Package ${last.building_id} ingested — ${last.equipment_written ?? 0} equipment, ${last.total_rows?.toLocaleString() ?? "?"} rows. FDD rules can run now.`,
         );
       }
+      return true;
     } catch (e) {
       setError(formatApiError(e));
+      return false;
     } finally {
       setBusy("");
     }
@@ -66,15 +69,16 @@ export default function CsvWorkbenchPage() {
       }
       const all = Array.from(files);
       const zips = all.filter((f) => f.name.toLowerCase().endsWith(".zip"));
-      if (zips.length) {
-        await ingestPackage(zips);
-      }
       const list = all.filter((f) => f.name.toLowerCase().endsWith(".csv"));
+      if (zips.length) {
+        const ok = await ingestPackage(zips);
+        if (!ok || !list.length) return;
+      }
       if (!list.length) {
         if (!zips.length) setError("Choose one or more .csv files or an openfdd_package_v1 .zip.");
         return;
       }
-      setError("");
+      if (!zips.length) setError("");
       setBusy("upload");
       try {
         const res = await uploadFilesForPreview(list, sessionId || undefined);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatApiError } from "../lib/formatApiError";
 import {
   COOKBOOK_ROLES,
@@ -12,6 +12,13 @@ type Props = {
   onRolesSaved?: (equipmentId: string, roles: Record<string, string>) => void;
 };
 
+function rolesFromEquipment(equipment: PackageEquipment): Record<string, string> {
+  return {
+    ...(equipment.roles ?? {}),
+    ...Object.fromEntries((equipment.unmapped_columns ?? []).map((c) => [c, ""])),
+  };
+}
+
 function EquipmentRolesCard({
   buildingId,
   equipment,
@@ -21,14 +28,18 @@ function EquipmentRolesCard({
   equipment: PackageEquipment;
   onRolesSaved?: Props["onRolesSaved"];
 }) {
-  const initial: Record<string, string> = {
-    ...(equipment.roles ?? {}),
-    ...Object.fromEntries((equipment.unmapped_columns ?? []).map((c) => [c, ""])),
-  };
-  const [roles, setRoles] = useState<Record<string, string>>(initial);
+  const [roles, setRoles] = useState<Record<string, string>>(() => rolesFromEquipment(equipment));
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+
+  // Remount-safe: if the same equipment_id is re-imported, reset local edits.
+  useEffect(() => {
+    setRoles(rolesFromEquipment(equipment));
+    setNote("");
+    setError("");
+  }, [equipment]);
+
   const columns = Object.keys(roles).sort();
 
   async function save() {

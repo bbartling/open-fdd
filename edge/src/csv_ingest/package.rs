@@ -12,7 +12,7 @@
 
 use crate::historian::store::workspace_dir;
 use serde_json::{json, Map, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -27,7 +27,8 @@ fn env_cap_mb(name: &str, default_mb: u64) -> u64 {
 }
 
 fn max_uncompressed_bytes() -> u64 {
-    env_cap_mb("OPENFDD_MAX_UNCOMPRESSED_MB", 2048) * 1024 * 1024
+    // Cap default at 512 MiB so concurrent uploads cannot pin multi-GiB in RAM.
+    env_cap_mb("OPENFDD_MAX_UNCOMPRESSED_MB", 512) * 1024 * 1024
 }
 
 fn max_entries() -> usize {
@@ -136,16 +137,25 @@ fn parse_manifest(raw: &Value) -> Result<PackageManifest, String> {
     })
 }
 
-fn sanitize_id(id: &str) -> String {
-    let s: String = id
-        .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
-        .collect();
-    if s.is_empty() {
-        "building".into()
-    } else {
-        s
+/// Accept only a single safe path component (no slash / traversal / empty).
+/// Distinct inputs must not collapse into the same directory name.
+fn validate_id(id: &str) -> Result<String, String> {
+    let id = id.trim();
+    if id.is_empty() {
+        return Err("id must be non-empty".into());
     }
+    if id == "." || id == ".." || id.contains('/') || id.contains('\\') || id.contains(':') {
+        return Err(format!("id {id:?} is not a single safe path component"));
+    }
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!(
+            "id {id:?} may only contain ASCII alphanumeric, '-', or '_'"
+        ));
+    }
+    Ok(id.to_string())
 }
 
 /// Normalize a zip entry name: forward slashes, reject traversal / absolute paths.
@@ -442,12 +452,29 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
 
     let mut plans: Vec<EquipmentPlan> = Vec::new();
     let mut missing_maps: Vec<String> = Vec::new();
+    let mut seen_leaf_ids: BTreeSet<String> = BTreeSet::new();
     for dir in &equip_dirs {
         let equip_id = dir
             .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("equipment")
             .to_string();
+        let equip_id = match validate_id(&equip_id) {
+            Ok(id) => id,
+            Err(e) => {
+                warnings.push(format!("{}: {e} — skipped", dir.display()));
+                continue;
+            }
+        };
+        if !seen_leaf_ids.insert(equip_id.clone()) {
+            return json!({
+                "ok": false,
+                "error": format!(
+                    "duplicate equipment id {equip_id:?} — two folders flatten to the same leaf name under the building root"
+                ),
+                "hint": "rename equipment folders so each leaf directory name is unique",
+            });
+        }
         let is_weather = equip_id.eq_ignore_ascii_case("weather");
         let history = in_building
             .get(&dir.join("history_wide.csv"))
@@ -534,7 +561,12 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
     }
 
     // Materialize csv_buildings/<building_id>/ layout.
-    let building_id = sanitize_id(&manifest.building_id);
+    let building_id = match validate_id(&manifest.building_id) {
+        Ok(id) => id,
+        Err(e) => {
+            return json!({"ok": false, "error": format!("manifest building_id: {e}")});
+        }
+    };
     let data_root = workspace_dir().join("data").join("csv_buildings");
     let building_root = data_root.join(&building_id);
     let _ = std::fs::remove_dir_all(&building_root);
@@ -655,25 +687,28 @@ pub fn import_package_handler(content_type: &str, body: &[u8]) -> Value {
 /// Update role assignments for one ingested package equipment and re-ingest.
 /// Body: `{"building_id": "...", "equipment_id": "...", "roles": {"column": "role"}}`.
 pub fn update_package_roles_handler(body: &Value) -> Value {
-    let building_id = sanitize_id(
+    let building_id = match validate_id(
         body.get("building_id")
             .and_then(|v| v.as_str())
             .unwrap_or(""),
-    );
-    let equipment_id = body
-        .get("equipment_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .trim();
+    ) {
+        Ok(id) => id,
+        Err(e) => return json!({"ok": false, "error": format!("building_id: {e}")}),
+    };
+    let equipment_id = match validate_id(
+        body.get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or(""),
+    ) {
+        Ok(id) => id,
+        Err(e) => return json!({"ok": false, "error": format!("equipment_id: {e}")}),
+    };
     let Some(roles_obj) = body.get("roles").and_then(|v| v.as_object()) else {
         return json!({"ok": false, "error": "roles object required"});
     };
-    if building_id.is_empty() || equipment_id.is_empty() {
-        return json!({"ok": false, "error": "building_id and equipment_id required"});
-    }
     let data_root = workspace_dir().join("data").join("csv_buildings");
     let building_root = data_root.join(&building_id);
-    let eq_dir = match find_equipment_dir(&building_root, equipment_id) {
+    let eq_dir = match find_equipment_dir(&building_root, &equipment_id) {
         Some(d) => d,
         None => {
             return json!({
@@ -721,6 +756,7 @@ pub fn update_package_roles_handler(body: &Value) -> Value {
 }
 
 fn find_equipment_dir(building_root: &Path, equipment_id: &str) -> Option<PathBuf> {
+    // equipment_id is already validate_id()'d — exactly one safe path component.
     let direct = building_root.join(equipment_id);
     if direct.join("history_wide.csv").is_file() {
         return Some(direct);
