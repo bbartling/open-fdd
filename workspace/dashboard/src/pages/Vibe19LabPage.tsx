@@ -1,6 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../lib/api";
+import { formatApiError } from "../lib/formatApiError";
+import {
+  buildSessionConfig,
+  downloadSessionConfig,
+  fetchSessionConfig,
+  parseSessionConfigFile,
+  saveSessionConfig,
+  sessionConfigToParamOverrides,
+  type SessionConfig,
+} from "../lib/sessionConfig";
 import {
   barChart,
   basVsWebOatOverlay,
@@ -125,6 +135,139 @@ function DataModelSection({ rules }: { rules?: RegistryRule[] }) {
   );
 }
 
+/** Save / load openfdd_session_v1 fault settings (#515) wired to the rule sliders. */
+function SessionConfigPanel({
+  paramOverrides,
+  onLoaded,
+}: {
+  paramOverrides: Record<string, Record<string, number>>;
+  onLoaded: (
+    overrides: Record<string, Record<string, number>>,
+    config: SessionConfig,
+  ) => void;
+}) {
+  const [unitSystem, setUnitSystem] = useState<SessionConfig["unit_system"]>("imperial");
+  const [baseConfig, setBaseConfig] = useState<SessionConfig | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const seededRef = useRef(false);
+
+  useEffect(() => {
+    if (seededRef.current) return;
+    seededRef.current = true;
+    void fetchSessionConfig()
+      .then((res) => {
+        if (!res.ok || !res.config) return;
+        setBaseConfig(res.config);
+        setUnitSystem(res.config.unit_system ?? "imperial");
+        if (res.persisted) {
+          onLoaded(sessionConfigToParamOverrides(res.config), res.config);
+          setNote("Loaded persisted session config (sliders seeded).");
+        }
+      })
+      .catch(() => {
+        /* offline / unauthenticated — keep defaults */
+      });
+  }, [onLoaded]);
+
+  async function save() {
+    setBusy(true);
+    setError("");
+    setNote("");
+    try {
+      const cfg = buildSessionConfig(paramOverrides, unitSystem, baseConfig);
+      const out = await saveSessionConfig(cfg);
+      if (!out.ok) throw new Error(out.error ?? "save failed");
+      setBaseConfig(out.config ?? cfg);
+      const warn = out.warnings?.length ? ` · ${out.warnings.length} warning(s)` : "";
+      setNote(`Session saved to server${warn}.`);
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadFile(file: File) {
+    setBusy(true);
+    setError("");
+    setNote("");
+    try {
+      const cfg = parseSessionConfigFile(await file.text());
+      const out = await saveSessionConfig(cfg);
+      if (!out.ok) throw new Error(out.error ?? "load failed");
+      const effective = out.config ?? cfg;
+      setBaseConfig(effective);
+      setUnitSystem(effective.unit_system ?? "imperial");
+      onLoaded(sessionConfigToParamOverrides(effective), effective);
+      const warn = out.warnings?.length ? ` · ${out.warnings.join("; ")}` : "";
+      setNote(`Session loaded — sliders updated${warn}.`);
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="vibe19-card">
+      <h3>Session / fault settings (openfdd_session_v1)</h3>
+      {error ? <p className="error">{error}</p> : null}
+      {note ? <p className="ok">{note}</p> : null}
+      <div className="toolbar toolbar-spaced">
+        <label>
+          Units{" "}
+          <select
+            value={unitSystem}
+            disabled={busy}
+            onChange={(e) => setUnitSystem(e.target.value as SessionConfig["unit_system"])}
+          >
+            <option value="imperial">imperial</option>
+            <option value="metric">metric</option>
+            <option value="si">si</option>
+          </select>
+        </label>
+        <button type="button" className="secondary-btn" disabled={busy} onClick={() => void save()}>
+          {busy ? "Working…" : "Save session"}
+        </button>
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={busy}
+          onClick={() => downloadSessionConfig(buildSessionConfig(paramOverrides, unitSystem, baseConfig))}
+        >
+          Download JSON
+        </button>
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={busy}
+          onClick={() => fileRef.current?.click()}
+        >
+          Load JSON…
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void loadFile(f);
+            e.target.value = "";
+          }}
+        />
+      </div>
+      <p className="muted">
+        Saves slider overrides + unit system to the server and seeds them on reload. The same
+        JSON travels inside <code>openfdd_package_v1</code> zips as <code>session_config.json</code>.
+      </p>
+    </div>
+  );
+}
+
 function RunRulesSection({ rules }: { rules?: RegistryRule[] }) {
   const qc = useQueryClient();
   const [selected, setSelected] = useState<string[]>([]);
@@ -244,6 +387,10 @@ function RunRulesSection({ rules }: { rules?: RegistryRule[] }) {
             })}
           </div>
         )}
+        <SessionConfigPanel
+          paramOverrides={paramOverrides}
+          onLoaded={(overrides) => setParamOverrides(overrides)}
+        />
       </div>
     </div>
   );

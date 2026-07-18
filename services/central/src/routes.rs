@@ -77,6 +77,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/fdd/rules/{rule_id}/params", get(fdd_rule_params))
         .route("/api/fdd/cache/status", get(fdd_cache_status))
         .route("/api/fdd/roles", get(fdd_roles))
+        .route(
+            "/api/fdd/session-config",
+            get(fdd_session_config_get).put(fdd_session_config_put),
+        )
         .route("/api/fdd/run", post(fdd_run))
         .route("/api/fdd/status", get(fdd_status))
         .merge(csv)
@@ -638,6 +642,20 @@ pub async fn fdd_cache_status() -> Json<Value> {
 
 pub async fn fdd_roles() -> Json<Value> {
     Json(open_fdd_edge_prototype::fdd::registry_api::roles_response())
+}
+
+/// `openfdd_session_v1` session/fault settings (#515) — persisted per workspace.
+pub async fn fdd_session_config_get() -> Json<Value> {
+    Json(open_fdd_edge_prototype::fdd::session_config::get_session_config())
+}
+
+pub async fn fdd_session_config_put(Json(body): Json<Value>) -> Json<Value> {
+    let result = tokio::task::spawn_blocking(move || {
+        open_fdd_edge_prototype::fdd::session_config::put_session_config(&body)
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("session config task: {e}")}));
+    Json(result)
 }
 
 #[utoipa::path(
