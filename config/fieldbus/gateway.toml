@@ -36,3 +36,12 @@ base_url = "http://127.0.0.1:8081"
 username = "admin"
 # Local demo credentials only — override via env in real deployments (never use defaults OT-side).
 password = "changeme"
+
+# Generic REST/JSON driver (#540). Device catalog lives in rest_devices.toml.
+# Writes fail closed: allow_write here AND the per-binding enabled flag must
+# both be true before POST /rest/write does anything.
+[rest]
+default_timeout_secs = 10
+default_tls_verify = true
+default_poll_interval_secs = 60
+allow_write = false

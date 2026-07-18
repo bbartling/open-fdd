@@ -13,6 +13,7 @@ pub enum Protocol {
     Bacnet,
     Modbus,
     Haystack,
+    Rest,
     JsonApi,
     Weather,
     Mixed,

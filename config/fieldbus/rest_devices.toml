@@ -1,0 +1,46 @@
+# REST/JSON device catalog for the fieldbus edge (#540).
+#
+# Rules (enforced at startup — the service refuses to boot on violations):
+#   * Secrets are env-indirect only: `token_env` names an environment variable;
+#     an enabled device whose env var is missing/empty aborts startup.
+#   * `auth` is one of: bearer | api_key_header | basic | none.
+#     - bearer:          token_env holds the bearer token
+#     - api_key_header:  token_env holds the key, sent in `api_key_header`
+#                        (default header name "X-API-Key")
+#     - basic:           `basic_username` (non-secret) + token_env as password
+#   * Point/write paths are relative to base_url only — absolute URLs, `//`,
+#     schemes, and `..` traversal are rejected (SSRF guard). The HTTP API takes
+#     device/point/binding names only, never free-form URLs.
+#   * TLS verification defaults on (`[rest] default_tls_verify` in gateway.toml).
+#   * Writes fail closed: `[rest] allow_write` in gateway.toml AND the
+#     per-binding `enabled` flag must both be true. Every write attempt is
+#     audit-logged (target = rest_audit).
+#
+# Devices default to enabled = false; flip deliberately per site.
+
+[[devices]]
+name = "example-disabled"
+enabled = false
+base_url = "https://127.0.0.1:8443/api"
+auth = "bearer" # bearer | api_key_header | basic | none
+token_env = "OPENFDD_REST_TOKEN_EXAMPLE"
+tls_verify = true
+timeout_secs = 10
+# poll_interval_secs = 60   # per-device override of [rest] default
+
+  [[devices.points]]
+  point_name = "CHW-ST"
+  method = "GET"
+  path = "/points/chw_supply_temp"
+  select = "$.value" # minimal JSONPath: $.key.sub[0].leaf
+  units = "°F"
+  scale = 1.0
+
+  [[devices.writes]]
+  name = "chw_setpoint"
+  enabled = false # fail closed — enable per binding, per site
+  method = "POST"
+  path = "/points/chw_setpoint"
+  body_template = '{"value": {{value}}, "priority": 8}'
+  value_min = 40.0
+  value_max = 55.0

@@ -46,6 +46,10 @@ use crate::openapi_paths::*;
         doc_haystack_read,
         doc_haystack_nav,
         doc_haystack_his_read,
+        doc_rest_devices,
+        doc_rest_read,
+        doc_rest_get,
+        doc_rest_write,
     ),
     components(schemas(
         BacnetReadRequest,
@@ -62,6 +66,9 @@ use crate::openapi_paths::*;
         HaystackReadRequest,
         HaystackNavRequest,
         HaystackHisReadRequest,
+        RestReadRequest,
+        RestGetRequest,
+        RestWriteRequest,
         WeatherResponse,
         OkResponse,
     )),
@@ -74,6 +81,7 @@ use crate::openapi_paths::*;
         (name = "Weather", description = "Open-Meteo weather cache"),
         (name = "Modbus", description = "Modbus TCP reads"),
         (name = "Haystack", description = "Read-only Haystack client"),
+        (name = "REST/JSON", description = "Generic REST/JSON driver — catalog devices only, fail-closed writes"),
         (name = "Open-FDD compat", description = "Open-FDD /api aliases"),
     )
 )]

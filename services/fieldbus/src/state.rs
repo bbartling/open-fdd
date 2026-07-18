@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::config::Settings;
 use crate::services::{
     bacnet_client::BacnetClientService, bacnet_server::BacnetServerManager,
-    haystack::HaystackService, poll::PollEngine, weather::WeatherService,
+    haystack::HaystackService, poll::PollEngine, rest::RestClientService, weather::WeatherService,
 };
 
 #[derive(Clone)]
@@ -17,4 +17,5 @@ pub struct AppState {
     pub poll_engine: Arc<PollEngine>,
     pub weather: Arc<WeatherService>,
     pub haystack: Arc<HaystackService>,
+    pub rest: Arc<RestClientService>,
 }

@@ -281,3 +281,57 @@ pub(crate) fn doc_haystack_nav() {}
     responses((status = 200, description = "History grid"))
 )]
 pub(crate) fn doc_haystack_his_read() {}
+
+/// List configured REST/JSON devices with per-device health.
+#[utoipa::path(
+    get,
+    path = "/rest/devices",
+    tag = "REST/JSON",
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Device catalog + circuit-breaker health"))
+)]
+pub(crate) fn doc_rest_devices() {}
+
+/// Live read of one configured point (select + scale applied).
+#[utoipa::path(
+    post,
+    path = "/rest/read",
+    tag = "REST/JSON",
+    request_body = RestReadRequest,
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Point value"),
+        (status = 404, description = "Unknown device or point"),
+        (status = 502, description = "Upstream error or circuit open")
+    )
+)]
+pub(crate) fn doc_rest_read() {}
+
+/// Raw passthrough GET below the device base_url (relative path only).
+#[utoipa::path(
+    post,
+    path = "/rest/get",
+    tag = "REST/JSON",
+    request_body = RestGetRequest,
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Raw upstream response"),
+        (status = 400, description = "Path must be relative")
+    )
+)]
+pub(crate) fn doc_rest_get() {}
+
+/// Allowlisted write — 403 unless rest.allow_write AND the binding are enabled.
+#[utoipa::path(
+    post,
+    path = "/rest/write",
+    tag = "REST/JSON",
+    request_body = RestWriteRequest,
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Write executed"),
+        (status = 403, description = "Writes disabled (fail closed)"),
+        (status = 404, description = "Unknown device or write binding")
+    )
+)]
+pub(crate) fn doc_rest_write() {}

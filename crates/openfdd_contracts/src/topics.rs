@@ -88,6 +88,7 @@ fn protocol_slug(p: Protocol) -> &'static str {
         Protocol::Bacnet => "bacnet",
         Protocol::Modbus => "modbus",
         Protocol::Haystack => "haystack",
+        Protocol::Rest => "rest",
         Protocol::JsonApi => "json_api",
         Protocol::Weather => "weather",
         Protocol::Mixed => "mixed",
