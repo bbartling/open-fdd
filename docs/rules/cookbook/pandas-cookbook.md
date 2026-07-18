@@ -614,7 +614,7 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
 | `eps_airflow` | Airflow error εF (GL36 default 30%) | frac | 0.15 | 0.05–1.0 |
-| `delta_t_min` | Minimum |OAT−RAT| ΔTmin (GL36 default 10°F) | °F | 5.0 | 0.0–30.0 |
+| `delta_t_min` | Minimum \|OAT−RAT\| ΔTmin (GL36 default 10°F) | °F | 5.0 | 0.0–30.0 |
 | `airflow_err` | Legacy OA-fraction error (sets εF) | frac | 0.15 | 0.05–1.0 |
 | `oat_rat_delta_min` | Legacy OAT/RAT guard (sets ΔTmin) | °F | 5.0 | 0.0–30.0 |
 | `min_cfm_design` | Design min OA CFM | cfm | 5000 | 500–20000 |
