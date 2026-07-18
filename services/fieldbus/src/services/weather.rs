@@ -136,9 +136,7 @@ impl WeatherService {
                                 location: prev.location.clone(),
                                 ..prev.clone()
                             }),
-                            Some(prev) if prev.reason.starts_with("stale") => {
-                                Some(prev.clone())
-                            }
+                            Some(prev) if prev.reason.starts_with("stale") => Some(prev.clone()),
                             _ => None,
                         }
                     };
