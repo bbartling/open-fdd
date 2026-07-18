@@ -856,12 +856,25 @@ mod tests {
 
     #[test]
     fn loads_package_maps_roles_and_ingests() {
+        // Serialize against other env-mutating unit tests; unique dir per run.
         let _env = crate::test_support::workspace_env_lock();
-        let tmp = std::env::temp_dir().join(format!("openfdd_pkg_test_{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!(
+            "openfdd_pkg_test_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
-        std::env::set_var("OPENFDD_WORKSPACE", &tmp);
-        std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.join(".cache/parquet"));
+        // Re-assert env immediately before each call that reads workspace_dir(),
+        // because other tests still mutate OPENFDD_WORKSPACE without the lock.
+        let set_ws = |tmp: &std::path::Path| {
+            std::env::set_var("OPENFDD_WORKSPACE", tmp);
+            std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.join(".cache/parquet"));
+        };
+        set_ws(&tmp);
 
         let map = r#"{"equipType":"ahu","points":{
             "fan-cmd":"SF_SPD",
@@ -880,6 +893,7 @@ mod tests {
             ("BUILDING_9/AHU_1/history_wide.csv", &history_csv()),
             ("BUILDING_9/AHU_1/history_wide.json", map),
         ]);
+        set_ws(&tmp);
         let out = import_package_zip(&zip);
         assert_eq!(out["ok"], json!(true), "{out}");
         assert_eq!(out["building_id"], json!("BUILDING_9"));
@@ -891,15 +905,25 @@ mod tests {
             json!("imperial"),
             "{out}"
         );
-        let cols =
-            std::fs::read_to_string(tmp.join("data/csv_buildings/BUILDING_9/AHU_1/columns.csv"))
-                .unwrap();
+        let cols_path = tmp.join("data/csv_buildings/BUILDING_9/AHU_1/columns.csv");
+        let cols = std::fs::read_to_string(&cols_path).unwrap_or_else(|e| {
+            panic!(
+                "missing {}: {e}; import out={out}; tmp entries={:?}",
+                cols_path.display(),
+                std::fs::read_dir(&tmp)
+                    .map(|d| d
+                        .filter_map(|e| e.ok().map(|e| e.path()))
+                        .collect::<Vec<_>>())
+                    .unwrap_or_default()
+            )
+        });
         assert!(cols.contains("SF_SPD,fan_cmd"), "{cols}");
         assert!(tmp
             .join(".cache/parquet/building=BUILDING_9/equipment=AHU_1/history.parquet")
             .is_file());
 
         // Role update rewrites columns.csv and re-ingests.
+        set_ws(&tmp);
         let upd = update_package_roles_handler(&json!({
             "building_id": "BUILDING_9",
             "equipment_id": "AHU_1",
@@ -907,9 +931,7 @@ mod tests {
         }));
         assert_eq!(upd["ok"], json!(true), "{upd}");
         assert_eq!(upd["ignored_columns"], json!(["GHOST"]), "{upd}");
-        let cols =
-            std::fs::read_to_string(tmp.join("data/csv_buildings/BUILDING_9/AHU_1/columns.csv"))
-                .unwrap();
+        let cols = std::fs::read_to_string(&cols_path).unwrap();
         assert!(cols.contains("SF_SPD,fan_status"), "{cols}");
         let _ = std::fs::remove_dir_all(&tmp);
     }
