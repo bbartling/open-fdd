@@ -116,6 +116,18 @@ pub fn evaluate_csv_session(input: ValidationInput<'_>) -> Value {
             ));
         }
 
+        // Columns explicitly mapped as equipment ids are identifiers, not values.
+        let mapped_equip_cols: Vec<String> = input
+            .plan
+            .map(|plan| {
+                plan.files
+                    .iter()
+                    .filter_map(|f| f.equipment_id_column.clone())
+                    .filter(|c| !c.is_empty())
+                    .map(|c| c.to_ascii_lowercase())
+                    .collect()
+            })
+            .unwrap_or_default();
         let numeric_cols: Vec<String> = p
             .column_names
             .iter()
@@ -126,6 +138,7 @@ pub fn evaluate_csv_session(input: ValidationInput<'_>) -> Value {
                     && lc != "timestamp_utc"
                     && lc != "equipment_id"
                     && lc != "site_id"
+                    && !mapped_equip_cols.contains(&lc)
             })
             .cloned()
             .collect();
@@ -163,14 +176,18 @@ pub fn evaluate_csv_session(input: ValidationInput<'_>) -> Value {
             .column_names
             .iter()
             .any(|c| c.eq_ignore_ascii_case("equipment_id"));
-        if !has_equip_col {
+        // An explicit per-file equipment_id_column mapping counts as present.
+        if !has_equip_col && mapped_equip_cols.is_empty() {
             if let Some(plan) = input.plan {
                 if plan.mode == crate::csv_ingest::plan::OperationMode::Single
                     && plan.files.len() == 1
                 {
+                    // Severity "info": this documents a defined fallback
+                    // (filename-derived equip id) and must not fail-close a
+                    // strict execute (#536).
                     checks.push(check(
                         "EQUIPMENT_ID_MISSING",
-                        "warn",
+                        "info",
                         "Wide CSV has no equipment_id column — historian will use filename-derived equip id",
                         0,
                         vec![],
@@ -389,6 +406,80 @@ mod tests {
             validation_report: None,
         });
         assert_eq!(out["verdict"], "pass");
+    }
+
+    #[test]
+    fn equipment_id_missing_is_informational_not_blocking() {
+        // #536: a plain wide CSV without an equipment_id column must still
+        // reach verdict "pass" under strict defaults; the check documents a
+        // defined fallback (filename-derived equip id).
+        let preview = PlanPreview {
+            row_count: 100,
+            column_names: vec!["timestamp".into(), "oa_t".into(), "fan_cmd".into()],
+            sample_rows: vec![],
+            timestamp_analysis: TimestampAnalysis::default(),
+            warnings: vec![],
+            time_range: None,
+        };
+        let plan = ImportPlan {
+            mode: crate::csv_ingest::plan::OperationMode::Single,
+            files: vec![crate::csv_ingest::plan::FileMapping {
+                filename: "wide.csv".into(),
+                timestamp_column: "timestamp".into(),
+                timezone: "UTC".into(),
+                value_columns: vec!["oa_t".into(), "fan_cmd".into()],
+                equipment_id_column: None,
+            }],
+            ..Default::default()
+        };
+        let out = evaluate_csv_session(ValidationInput {
+            session_files: &[],
+            plan: Some(&plan),
+            preview: Some(&preview),
+            validation_report: None,
+        });
+        assert_eq!(out["verdict"], "pass", "{out}");
+        let checks = out["checks"].as_array().unwrap();
+        let equip = checks
+            .iter()
+            .find(|c| c["code"] == "EQUIPMENT_ID_MISSING")
+            .expect("informational check still surfaces");
+        assert_eq!(equip["severity"], "info");
+    }
+
+    #[test]
+    fn explicit_equipment_id_mapping_suppresses_check() {
+        let preview = PlanPreview {
+            row_count: 100,
+            column_names: vec!["timestamp".into(), "ahu_name".into(), "oa_t".into()],
+            sample_rows: vec![],
+            timestamp_analysis: TimestampAnalysis::default(),
+            warnings: vec![],
+            time_range: None,
+        };
+        let plan = ImportPlan {
+            mode: crate::csv_ingest::plan::OperationMode::Single,
+            files: vec![crate::csv_ingest::plan::FileMapping {
+                filename: "wide.csv".into(),
+                timestamp_column: "timestamp".into(),
+                timezone: "UTC".into(),
+                value_columns: vec!["oa_t".into()],
+                equipment_id_column: Some("ahu_name".into()),
+            }],
+            ..Default::default()
+        };
+        let out = evaluate_csv_session(ValidationInput {
+            session_files: &[],
+            plan: Some(&plan),
+            preview: Some(&preview),
+            validation_report: None,
+        });
+        assert_eq!(out["verdict"], "pass", "{out}");
+        let checks = out["checks"].as_array().unwrap();
+        assert!(
+            !checks.iter().any(|c| c["code"] == "EQUIPMENT_ID_MISSING"),
+            "{out}"
+        );
     }
 
     #[test]

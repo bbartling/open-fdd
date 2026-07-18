@@ -48,6 +48,11 @@ pub struct FileMapping {
     pub timestamp_column: String,
     pub timezone: String,
     pub value_columns: Vec<String>,
+    /// Optional explicit equipment-id column for wide CSVs whose id column is
+    /// not literally named `equipment_id` (#536). Values are copied into the
+    /// output rows under the `equipment_id` key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub equipment_id_column: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -120,6 +125,11 @@ pub fn parse_file_to_rows(
                 .map(|i| (vc.clone(), i))
         })
         .collect();
+    let equip_idx: Option<usize> = mapping
+        .equipment_id_column
+        .as_deref()
+        .filter(|c| !c.is_empty())
+        .and_then(|col| profile.headers.iter().position(|h| h == col));
 
     let mut rdr = csv::ReaderBuilder::new()
         .delimiter(delimiter as u8)
@@ -137,6 +147,12 @@ pub fn parse_file_to_rows(
                 crate::csv_ingest::parse::sanitize_header(name),
                 rec.get(*idx).unwrap_or("").to_string(),
             );
+        }
+        if let Some(ei) = equip_idx {
+            let equip = rec.get(ei).unwrap_or("").trim().to_string();
+            if !equip.is_empty() {
+                values.insert("equipment_id".into(), equip);
+            }
         }
         let pt = crate::csv_ingest::timestamp::parse_row_timestamp(&raw_ts, tz, ambiguous_policy);
         rows.push(OutputRow {
@@ -566,6 +582,7 @@ pub fn auto_detect_mapping(filename: &str, headers: &[String]) -> FileMapping {
         timestamp_column: ts_candidates,
         timezone: "America/Chicago".into(),
         value_columns,
+        equipment_id_column: None,
     }
 }
 
