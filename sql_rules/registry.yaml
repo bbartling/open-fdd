@@ -27,17 +27,17 @@ rules:
     confirm_seconds: 900
     parameters:
       zone_t_lo:
-        label: Zone comfort low
-        default: 68.0
-        min: 60.0
+        label: Zone low
+        default: 70.0
+        min: 55.0
         max: 72.0
         step: 0.5
         unit: degF
         frontend_control: slider
         sql_placeholder: ZONE_T_LO
       zone_t_hi:
-        label: Zone comfort high
-        default: 76.0
+        label: Zone high
+        default: 75.0
         min: 72.0
         max: 85.0
         step: 0.5
@@ -162,8 +162,8 @@ rules:
       oat_err:
         label: OAT vs meteo tolerance
         default: 5.0
-        min: 1.0
-        max: 15.0
+        min: 2.0
+        max: 20.0
         step: 0.5
         unit: degF
         frontend_control: slider
@@ -194,8 +194,8 @@ rules:
       sat_err:
         label: SAT high error band
         default: 1.0
-        min: 0.25
-        max: 5.0
+        min: 0.0
+        max: 10.0
         step: 0.25
         unit: degF
         frontend_control: slider
@@ -248,6 +248,34 @@ rules:
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 300
+    parameters:
+      econ2_oat_hi:
+        label: OAT high cutoff
+        default: 63.0
+        min: 55.0
+        max: 80.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON2_OAT_HI
+      econ2_damper:
+        label: Damper open frac
+        default: 0.42
+        min: 0.2
+        max: 0.9
+        step: 0.02
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON2_DAMPER
+      confirm_seconds:
+        label: Confirm time
+        default: 300
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: FC1
     sql_file: fc1_duct_static_low.sql
@@ -260,6 +288,34 @@ rules:
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 300
+    parameters:
+      eps_dsp:
+        label: Duct-static error epsDSP (GL36 default 0.1 in.w.c.)
+        default: 0.12
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: inwc
+        frontend_control: slider
+        sql_placeholder: EPS_DSP
+      eps_vfd_spd:
+        label: VFD speed error epsVFDSPD (GL36 default 5%)
+        default: 0.13
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: EPS_VFD_SPD
+      confirm_seconds:
+        label: Confirm time
+        default: 300
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: FC2
     sql_file: fc2_mat_low.sql
@@ -297,6 +353,34 @@ rules:
     delete_python_candidate: false
     blocker: "htg_valve_pct missing on some AHUs — Python and SQL both skip"
     confirm_seconds: 600
+    parameters:
+      sat_err:
+        label: Legacy SAT error (sets epsSAT)
+        default: 1.0
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SAT_ERR
+      htg_full_min:
+        label: Full-heating threshold (GL36 99%)
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: HTG_FULL_MIN
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: FC8
     sql_file: fc8_sat_mat_econ.sql
@@ -369,6 +453,16 @@ rules:
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
+    parameters:
+      econ1_oat_min:
+        label: Favorable OAT
+        default: 55.0
+        min: 45.0
+        max: 70.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON1_OAT_MIN
 
   - rule_id: ECON-4
     sql_file: econ4_low_oa_frac.sql
@@ -381,6 +475,25 @@ rules:
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
+    parameters:
+      oa_min_pct:
+        label: Min OA fraction
+        default: 21.0
+        min: 5.0
+        max: 40.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: OA_MIN_PCT
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
 
 # --- Ported from datafusion-sql-cookbook (feat/sql-rules-59) ---
 
@@ -410,7 +523,7 @@ rules:
         default: 1.0
         min: 0.5
         max: 2.0
-        step: 0.25
+        step: 0.1
         unit: x
         frontend_control: slider
         sql_placeholder: RANGE_SCALE_TEMPERATURE
@@ -441,7 +554,7 @@ rules:
         default: 0.1
         min: 0.02
         max: 1.0
-        step: 0.01
+        step: 0.02
         unit: degF
         frontend_control: slider
         sql_placeholder: FLATLINE_TOL
@@ -509,6 +622,7 @@ rules:
         sql_placeholder: STALE_HOURS
 
   - rule_id: SV-RATE
+    aliases: [SV-SLEW]
     sql_file: sv_rate.sql
     pandas_function: null
     description: Context-aware sensor rate of change
@@ -549,11 +663,11 @@ rules:
     parity_status: ported_from_cookbook
     dashboard_wired: false
     delete_python_candidate: false
-    confirm_seconds: 300
+    confirm_seconds: 0
     parameters:
       confirm_seconds:
         label: Confirm time
-        default: 300.0
+        default: 0.0
         min: 0.0
         max: 3600.0
         step: 300.0
@@ -574,7 +688,7 @@ rules:
         default: 20.0
         min: 5.0
         max: 100.0
-        step: 1.0
+        step: 5.0
         unit: pct
         frontend_control: slider
         sql_placeholder: MINIMUM_SPAN_PCT
@@ -623,14 +737,23 @@ rules:
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       mix_tol:
-        label: Mixing tolerance
+        label: Legacy master sensor tolerance (sets all eps values)
         default: 1.15
-        min: 0.5
-        max: 3.0
+        min: 0.0
+        max: 10.0
         step: 0.25
         unit: degF
         frontend_control: slider
         sql_placeholder: MIX_TOL
+      htg_on_min:
+        label: Heating-command ON threshold
+        default: 0.01
+        min: 0.0
+        max: 0.25
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: HTG_ON_MIN
 
   - rule_id: FC6
     sql_file: fc6_oa_frac_mismatch.sql
@@ -654,14 +777,23 @@ rules:
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       airflow_err:
-        label: OA fraction error
+        label: Airflow error epsF (GL36 default 30%)
         default: 0.15
         min: 0.05
-        max: 0.5
+        max: 1.0
         step: 0.01
         unit: frac
         frontend_control: slider
         sql_placeholder: AIRFLOW_ERR
+      delta_t_min:
+        label: Minimum |OAT-RAT| deltaTmin (GL36 default 10degF)
+        default: 5.0
+        min: 0.0
+        max: 30.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_T_MIN
 
   - rule_id: FC14
     sql_file: fc14_chw_coil_dt_inactive.sql
@@ -685,10 +817,10 @@ rules:
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       mix_tol:
-        label: Mixing tolerance
+        label: Legacy master sensor tolerance (sets all eps values)
         default: 1.15
-        min: 0.25
-        max: 3.0
+        min: 0.0
+        max: 10.0
         step: 0.25
         unit: degF
         frontend_control: slider
@@ -716,10 +848,10 @@ rules:
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       mix_tol:
-        label: Mixing tolerance
+        label: Legacy master sensor tolerance (sets all eps values)
         default: 1.15
-        min: 0.25
-        max: 3.0
+        min: 0.0
+        max: 10.0
         step: 0.25
         unit: degF
         frontend_control: slider
@@ -782,7 +914,7 @@ rules:
         default: 0.25
         min: 0.05
         max: 1.0
-        step: 0.01
+        step: 0.05
         unit: in_wc
         frontend_control: slider
         sql_placeholder: DUCT_HIGH_MARGIN
@@ -791,7 +923,7 @@ rules:
         default: 0.2
         min: 0.05
         max: 1.0
-        step: 0.01
+        step: 0.05
         unit: in_wc
         frontend_control: slider
         sql_placeholder: PRESSURE_ON_MIN
@@ -853,7 +985,7 @@ rules:
         default: 60.0
         min: 50.0
         max: 68.0
-        step: 0.5
+        step: 1.0
         unit: degF
         frontend_control: slider
         sql_placeholder: ECON3_DB_MIN
@@ -862,7 +994,7 @@ rules:
         default: 72.0
         min: 65.0
         max: 80.0
-        step: 0.5
+        step: 1.0
         unit: degF
         frontend_control: slider
         sql_placeholder: ECON3_DB_MAX
@@ -880,7 +1012,7 @@ rules:
         default: 0.9
         min: 0.5
         max: 1.0
-        step: 0.01
+        step: 0.02
         unit: frac
         frontend_control: slider
         sql_placeholder: ECON3_DAMPER_HI
@@ -911,7 +1043,7 @@ rules:
         default: 2.2
         min: 0.5
         max: 8.0
-        step: 0.5
+        step: 0.1
         unit: degF
         frontend_control: slider
         sql_placeholder: PREHEAT_OVER_F
@@ -991,7 +1123,7 @@ rules:
         default: 72.0
         min: 65.0
         max: 80.0
-        step: 0.5
+        step: 1.0
         unit: degF
         frontend_control: slider
         sql_placeholder: ECON7_DB_MAX
@@ -1009,7 +1141,7 @@ rules:
         default: 0.5
         min: 0.2
         max: 0.9
-        step: 0.01
+        step: 0.02
         unit: frac
         frontend_control: slider
         sql_placeholder: ECON7_DAMPER_MIN
@@ -1040,7 +1172,7 @@ rules:
         default: 60.0
         min: 45.0
         max: 65.0
-        step: 0.5
+        step: 1.0
         unit: degF
         frontend_control: slider
         sql_placeholder: MECH_OAT_MAX_F
@@ -1098,12 +1230,12 @@ rules:
         frontend_control: slider
         sql_placeholder: MIN_OA_FRAC
       oat_rat_guard:
-        label: Oat Rat Guard
-        default: 1.0
-        min: 0.0
-        max: 100.0
-        step: 0.5
-        unit: eng
+        label: OAT/RAT guard
+        default: 2.2
+        min: 0.5
+        max: 6.0
+        step: 0.1
+        unit: degF
         frontend_control: slider
         sql_placeholder: OAT_RAT_GUARD
 
@@ -1213,7 +1345,7 @@ rules:
         default: 0.52
         min: 0.1
         max: 1.0
-        step: 0.01
+        step: 0.02
         unit: frac
         frontend_control: slider
         sql_placeholder: REHEAT_PCT
@@ -1222,7 +1354,7 @@ rules:
         default: 25.0
         min: 0.0
         max: 200.0
-        step: 10.0
+        step: 5.0
         unit: cfm
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
@@ -1253,7 +1385,7 @@ rules:
         default: 0.975
         min: 0.8
         max: 1.0
-        step: 0.01
+        step: 0.005
         unit: frac
         frontend_control: slider
         sql_placeholder: FULL_OPEN_PCT
@@ -1262,7 +1394,7 @@ rules:
         default: 25.0
         min: 0.0
         max: 200.0
-        step: 10.0
+        step: 5.0
         unit: cfm
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
@@ -1315,7 +1447,7 @@ rules:
         default: 0.3
         min: 0.1
         max: 1.0
-        step: 0.01
+        step: 0.05
         unit: frac
         frontend_control: slider
         sql_placeholder: REHEAT_CMD
@@ -1333,7 +1465,7 @@ rules:
         default: 25.0
         min: 0.0
         max: 200.0
-        step: 10.0
+        step: 5.0
         unit: cfm
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
@@ -1364,7 +1496,7 @@ rules:
         default: 8.0
         min: 2.0
         max: 25.0
-        step: 1.0
+        step: 0.5
         unit: degF
         frontend_control: slider
         sql_placeholder: DELTA_F
@@ -1373,7 +1505,7 @@ rules:
         default: 25.0
         min: 0.0
         max: 200.0
-        step: 10.0
+        step: 5.0
         unit: cfm
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
@@ -1404,7 +1536,7 @@ rules:
         default: 250.0
         min: 50.0
         max: 2000.0
-        step: 50.0
+        step: 10.0
         unit: cfm
         frontend_control: slider
         sql_placeholder: HIGH_MIN_FLOW_SP
@@ -1464,7 +1596,7 @@ rules:
       min_dt:
         label: Minimum delta-T
         default: 4.0
-        min: 2.0
+        min: 1.0
         max: 12.0
         step: 0.5
         unit: degF
@@ -1497,10 +1629,19 @@ rules:
         default: 2.2
         min: 0.5
         max: 6.0
-        step: 0.5
+        step: 0.1
         unit: psi
         frontend_control: slider
         sql_placeholder: DP_MARGIN
+      pump_hi:
+        label: Pump high-speed threshold
+        default: 0.87
+        min: 0.5
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: PUMP_HI
 
   - rule_id: CHW-3
     sql_file: chw3_supply_band.sql
@@ -1528,7 +1669,7 @@ rules:
         default: 2.2
         min: 0.5
         max: 6.0
-        step: 0.5
+        step: 0.1
         unit: degF
         frontend_control: slider
         sql_placeholder: SP_BAND
@@ -1563,6 +1704,15 @@ rules:
         unit: gpm
         frontend_control: slider
         sql_placeholder: FLOW_HI
+      pump_hi:
+        label: Pump high-speed threshold
+        default: 0.87
+        min: 0.5
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: PUMP_HI
 
   - rule_id: CW-OPT-1
     sql_file: cw_opt_1.sql
@@ -1727,7 +1877,7 @@ rules:
         label: Zone cold threshold
         default: 69.0
         min: 60.0
-        max: 75.0
+        max: 72.0
         step: 0.5
         unit: degF
         frontend_control: slider
@@ -1757,8 +1907,8 @@ rules:
       spike_limit:
         label: Spike limit
         default: 16.0
-        min: 5.0
-        max: 30.0
+        min: 4.0
+        max: 40.0
         step: 1.0
         unit: degF
         frontend_control: slider
@@ -1790,7 +1940,7 @@ rules:
         default: 1.35
         min: 0.5
         max: 3.0
-        step: 0.25
+        step: 0.05
         unit: in_wc
         frontend_control: slider
         sql_placeholder: DUCT_HI

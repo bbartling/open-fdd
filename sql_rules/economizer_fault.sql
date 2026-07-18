@@ -1,4 +1,4 @@
--- economizer_fault.sql — ECON-2 cookbook defaults (OAT > 63°F, damper > 42%) + confirm
+-- economizer_fault.sql — ECON-2 economizing when outdoor unfavorable + confirm
 WITH h AS (
   SELECT
     equipment_id,
@@ -13,7 +13,7 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN oa_t IS NOT NULL AND oa_damper_pct IS NOT NULL
-       AND oa_t > 63.0 AND oa_damper_pct > 0.42
+       AND oa_t > {{ECON2_OAT_HI}} AND oa_damper_pct > {{ECON2_DAMPER}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),

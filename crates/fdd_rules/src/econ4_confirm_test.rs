@@ -74,7 +74,9 @@ mod tests {
             .unwrap_or_else(|e| panic!("read {}: {e}", sql_path.display()));
 
         // registry.yaml: ECON-4 confirm_seconds = 600 -> CONFIRM_ROWS = ceil(600/300) = 2.
-        let params = rule_params(300.0, 600);
+        let mut params = rule_params(300.0, 600);
+        // Registry default for the ECON-4 tunable (min OA fraction, percent).
+        params.insert("OA_MIN_PCT".into(), "21".into());
         let sql = substitute_sql(&raw_sql, &params);
         let result = run_sql(&ctx, &sql).await.unwrap();
 

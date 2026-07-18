@@ -14,8 +14,8 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN duct_static IS NOT NULL AND duct_static_sp IS NOT NULL
-       AND duct_static < duct_static_sp - 0.12
-       AND fan_cmd >= 0.87
+       AND duct_static < duct_static_sp - {{EPS_DSP}}
+       AND fan_cmd >= 1.0 - {{EPS_VFD_SPD}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),

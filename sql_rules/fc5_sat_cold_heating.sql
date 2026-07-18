@@ -14,7 +14,7 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN sat IS NULL OR mat IS NULL OR htg IS NULL OR fan IS NULL THEN 0
-      WHEN fan >= 0.05 AND htg > 0.01
+      WHEN fan >= 0.05 AND htg > {{HTG_ON_MIN}}
        AND (sat + {{MIX_TOL}}) <= (mat - {{MIX_TOL}} + 0.55) THEN 1
       ELSE 0
     END AS INT) AS raw_fault

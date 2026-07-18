@@ -15,7 +15,7 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN sat IS NOT NULL AND sat_sp IS NOT NULL AND fan > 0.01
-       AND sat < sat_sp - 1.0 AND htg_valve_pct > 0.9
+       AND sat < sat_sp - {{SAT_ERR}} AND htg_valve_pct > {{HTG_FULL_MIN}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),
