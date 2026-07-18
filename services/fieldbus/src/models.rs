@@ -192,6 +192,38 @@ pub struct HaystackHisReadRequest {
     pub range_end: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema, Validate)]
+pub struct RestReadRequest {
+    /// Configured device name from `rest_devices.toml` (no free-form URLs).
+    #[validate(length(min = 1, max = 128))]
+    pub device: String,
+    /// Configured point name on that device.
+    #[validate(length(min = 1, max = 256))]
+    pub point: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema, Validate)]
+pub struct RestGetRequest {
+    /// Configured device name from `rest_devices.toml` (no free-form URLs).
+    #[validate(length(min = 1, max = 128))]
+    pub device: String,
+    /// Relative path joined below the device base_url (absolute URLs rejected).
+    #[validate(length(min = 1, max = 2048))]
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema, Validate)]
+pub struct RestWriteRequest {
+    /// Configured device name from `rest_devices.toml`.
+    #[validate(length(min = 1, max = 128))]
+    pub device: String,
+    /// Allowlisted write binding name on that device.
+    #[validate(length(min = 1, max = 256))]
+    pub name: String,
+    /// Numeric value substituted into the binding's body_template.
+    pub value: f64,
+}
+
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct WeatherResponse {
     pub temp_f: f64,

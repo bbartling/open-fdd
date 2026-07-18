@@ -21,6 +21,7 @@ use tracing::{info, warn};
 use crate::config::Settings;
 use crate::services::bacnet_client::BacnetClientService;
 use crate::services::poll::PollEngine;
+use crate::services::rest::RestClientService;
 
 const MAX_SEEN_COMMANDS: usize = 10_000;
 
@@ -322,10 +323,41 @@ async fn connect_mqtt_session(
     })
 }
 
+/// Map REST poll rows into telemetry points (`rest:<device>:<point>` ids).
+fn rest_telemetry_points(rows: &[serde_json::Value]) -> Vec<TelemetryPoint> {
+    rows.iter()
+        .filter_map(|v| {
+            let device = v.get("device")?.as_str()?;
+            let point = v.get("point")?.as_str()?;
+            Some(TelemetryPoint {
+                id: format!("rest:{device}:{point}"),
+                display_name: Some(point.to_string()),
+                kind: Some(ValueKind::Number),
+                value: v.get("value").cloned().unwrap_or(serde_json::Value::Null),
+                unit: v
+                    .get("units")
+                    .and_then(|x| x.as_str())
+                    .filter(|u| !u.is_empty())
+                    .map(str::to_string),
+                quality: if v.get("error").map(|e| e.is_null()).unwrap_or(true) {
+                    Quality::Good
+                } else {
+                    Quality::Bad
+                },
+                tags: serde_json::json!({"rest": true, "device": device})
+                    .as_object()
+                    .cloned()
+                    .unwrap_or_default(),
+            })
+        })
+        .collect()
+}
+
 pub async fn spawn_if_configured(
     settings: Arc<Settings>,
     poll: Arc<PollEngine>,
     bacnet_client: Arc<BacnetClientService>,
+    rest: Arc<RestClientService>,
 ) {
     if !mqtt_enabled() {
         info!("MQTT bridge disabled (set OPENFDD_MQTT_ENABLED=1 to enable)");
@@ -373,9 +405,6 @@ pub async fn spawn_if_configured(
                 .and_then(|v| v.as_array())
                 .cloned()
                 .unwrap_or_default();
-            if last_values.is_empty() {
-                continue;
-            }
             let points: Vec<TelemetryPoint> = last_values
                 .into_iter()
                 .filter_map(|v| {
@@ -406,14 +435,26 @@ pub async fn spawn_if_configured(
                     })
                 })
                 .collect();
-            if points.is_empty() {
+            let rest_rows = rest.last_values().await;
+            let rest_points = rest_telemetry_points(&rest_rows);
+            if points.is_empty() && rest_points.is_empty() {
                 continue;
             }
-            let env = TelemetryEnvelope::new(&site_id, &edge_id, Protocol::Bacnet, seq, points);
-            let topic = topics.topic(TopicKind::Telemetry, Some(Protocol::Bacnet));
-            if let Err(err) = spool.enqueue(&topic, env).await {
-                warn!(%err, "spool enqueue failed");
-                continue;
+            if !points.is_empty() {
+                let env = TelemetryEnvelope::new(&site_id, &edge_id, Protocol::Bacnet, seq, points);
+                let topic = topics.topic(TopicKind::Telemetry, Some(Protocol::Bacnet));
+                if let Err(err) = spool.enqueue(&topic, env).await {
+                    warn!(%err, "spool enqueue failed");
+                    continue;
+                }
+            }
+            if !rest_points.is_empty() {
+                let env =
+                    TelemetryEnvelope::new(&site_id, &edge_id, Protocol::Rest, seq, rest_points);
+                let topic = topics.topic(TopicKind::Telemetry, Some(Protocol::Rest));
+                if let Err(err) = spool.enqueue(&topic, env).await {
+                    warn!(%err, "rest spool enqueue failed");
+                }
             }
 
             if mqtt.is_none() {
@@ -479,6 +520,27 @@ mod tests {
         assert_eq!(telemetry_point_value(&legacy), serde_json::json!(70.25));
         let missing = serde_json::json!({"point_name": "OA-T"});
         assert_eq!(telemetry_point_value(&missing), serde_json::Value::Null);
+    }
+
+    #[test]
+    fn rest_rows_map_to_rest_telemetry_points() {
+        let rows = vec![
+            serde_json::json!({
+                "device": "chiller-api", "point": "CHW-ST",
+                "value": 44.2, "units": "°F", "error": null
+            }),
+            serde_json::json!({
+                "device": "chiller-api", "point": "CHW-RT",
+                "value": null, "units": "", "error": "circuit open"
+            }),
+        ];
+        let points = rest_telemetry_points(&rows);
+        assert_eq!(points.len(), 2);
+        assert_eq!(points[0].id, "rest:chiller-api:CHW-ST");
+        assert_eq!(points[0].quality, Quality::Good);
+        assert_eq!(points[0].unit.as_deref(), Some("°F"));
+        assert_eq!(points[1].quality, Quality::Bad);
+        assert_eq!(points[1].unit, None);
     }
 
     #[test]

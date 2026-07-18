@@ -2,6 +2,7 @@ pub mod bacnet;
 pub mod compat;
 pub mod haystack;
 pub mod modbus;
+pub mod rest;
 pub mod root;
 pub mod weather;
 
@@ -17,6 +18,7 @@ pub fn api_routes(state: AppState) -> Router {
         .merge(weather::router())
         .merge(modbus::router())
         .merge(haystack::router())
+        .merge(rest::router())
         .merge(compat::router())
         .nest("/api", {
             Router::new()
@@ -24,6 +26,7 @@ pub fn api_routes(state: AppState) -> Router {
                 .merge(weather::router())
                 .merge(modbus::router())
                 .merge(haystack::router())
+                .merge(rest::router())
         })
         .with_state(state)
 }

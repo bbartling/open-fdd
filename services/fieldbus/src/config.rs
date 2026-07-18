@@ -93,6 +93,124 @@ impl Default for ModbusSettings {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct RestSettings {
+    pub default_timeout_secs: u64,
+    pub default_tls_verify: bool,
+    pub default_poll_interval_secs: u64,
+    pub allow_write: bool,
+}
+
+impl Default for RestSettings {
+    fn default() -> Self {
+        Self {
+            default_timeout_secs: 10,
+            default_tls_verify: true,
+            default_poll_interval_secs: 60,
+            allow_write: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RestAuth {
+    None,
+    Bearer,
+    ApiKeyHeader,
+    Basic,
+}
+
+impl RestAuth {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RestAuth::None => "none",
+            RestAuth::Bearer => "bearer",
+            RestAuth::ApiKeyHeader => "api_key_header",
+            RestAuth::Basic => "basic",
+        }
+    }
+}
+
+fn parse_rest_auth(raw: &str) -> Result<RestAuth, String> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "" | "none" => Ok(RestAuth::None),
+        "bearer" => Ok(RestAuth::Bearer),
+        "api_key_header" => Ok(RestAuth::ApiKeyHeader),
+        "basic" => Ok(RestAuth::Basic),
+        other => Err(format!(
+            "invalid rest auth '{other}' (expected bearer | api_key_header | basic | none)"
+        )),
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RestPoint {
+    pub point_name: String,
+    /// Validated to GET at load time; retained for catalog parity.
+    #[allow(dead_code)]
+    pub method: String,
+    pub path: String,
+    pub select: String,
+    pub units: String,
+    pub scale: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct RestWriteBinding {
+    pub name: String,
+    pub enabled: bool,
+    pub method: String,
+    pub path: String,
+    pub body_template: String,
+    pub value_min: Option<f64>,
+    pub value_max: Option<f64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RestDevice {
+    pub name: String,
+    pub enabled: bool,
+    pub base_url: String,
+    pub auth: RestAuth,
+    pub token_env: Option<String>,
+    pub api_key_header: String,
+    pub basic_username: Option<String>,
+    pub tls_verify: bool,
+    pub timeout_secs: u64,
+    pub poll_interval_secs: u64,
+    pub points: Vec<RestPoint>,
+    pub writes: Vec<RestWriteBinding>,
+}
+
+/// Reject anything that is not a plain relative path joined below `base_url`
+/// (SSRF guard: no absolute URLs, schemes, authority tricks, or traversal).
+pub fn validate_rest_path(path: &str) -> Result<(), String> {
+    let p = path.trim();
+    if p.is_empty() {
+        return Err("path must be non-empty".into());
+    }
+    if !p.starts_with('/') {
+        return Err(format!(
+            "path '{p}' must start with '/' (relative to base_url)"
+        ));
+    }
+    if p.starts_with("//") {
+        return Err(format!("path '{p}' must not start with '//'"));
+    }
+    if p.contains("://") || p.contains('\\') {
+        return Err(format!(
+            "path '{p}' must be relative (no scheme or backslashes)"
+        ));
+    }
+    if p.split('/').any(|seg| seg == "..") {
+        return Err(format!("path '{p}' must not contain '..' segments"));
+    }
+    if p.contains(char::is_whitespace) {
+        return Err(format!("path '{p}' must not contain whitespace"));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HaystackAuthMode {
     Scram,
@@ -188,6 +306,7 @@ pub struct Settings {
     pub weather: WeatherSettings,
     pub modbus: ModbusSettings,
     pub haystack: HaystackSettings,
+    pub rest: RestSettings,
     pub poll: PollSettings,
     pub http_host: String,
     pub http_port: u16,
@@ -206,6 +325,7 @@ impl Default for Settings {
             weather: WeatherSettings::default(),
             modbus: ModbusSettings::default(),
             haystack: HaystackSettings::default(),
+            rest: RestSettings::default(),
             poll: PollSettings::default(),
             http_host: "0.0.0.0".into(),
             http_port: 8080,
@@ -224,7 +344,16 @@ struct GatewayToml {
     weather: Option<WeatherToml>,
     modbus: Option<ModbusToml>,
     haystack: Option<HaystackToml>,
+    rest: Option<RestToml>,
     poll: Option<PollToml>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RestToml {
+    default_timeout_secs: Option<u64>,
+    default_tls_verify: Option<bool>,
+    default_poll_interval_secs: Option<u64>,
+    allow_write: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -305,6 +434,49 @@ struct FieldPointToml {
     object_instance: u32,
     point_name: Option<String>,
     units: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct RestDevicesToml {
+    #[serde(default)]
+    devices: Vec<RestDeviceToml>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RestDeviceToml {
+    name: String,
+    enabled: Option<bool>,
+    base_url: String,
+    auth: Option<String>,
+    token_env: Option<String>,
+    api_key_header: Option<String>,
+    basic_username: Option<String>,
+    tls_verify: Option<bool>,
+    timeout_secs: Option<u64>,
+    poll_interval_secs: Option<u64>,
+    points: Option<Vec<RestPointToml>>,
+    writes: Option<Vec<RestWriteToml>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RestPointToml {
+    point_name: String,
+    method: Option<String>,
+    path: String,
+    select: Option<String>,
+    units: Option<String>,
+    scale: Option<f64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RestWriteToml {
+    name: String,
+    enabled: Option<bool>,
+    method: Option<String>,
+    path: String,
+    body_template: String,
+    value_min: Option<f64>,
+    value_max: Option<f64>,
 }
 
 pub fn config_dir() -> PathBuf {
@@ -461,6 +633,20 @@ pub fn load_settings() -> Settings {
         }
         if let Some(v) = h.tls_verify {
             s.haystack.tls_verify = v;
+        }
+    }
+    if let Some(r) = raw.rest {
+        if let Some(v) = r.default_timeout_secs {
+            s.rest.default_timeout_secs = v;
+        }
+        if let Some(v) = r.default_tls_verify {
+            s.rest.default_tls_verify = v;
+        }
+        if let Some(v) = r.default_poll_interval_secs {
+            s.rest.default_poll_interval_secs = v;
+        }
+        if let Some(v) = r.allow_write {
+            s.rest.allow_write = v;
         }
     }
     if let Some(p) = raw.poll {
@@ -623,6 +809,102 @@ pub fn load_field_devices(path: Option<&Path>) -> Result<Vec<FieldDevice>, Strin
         .collect())
 }
 
+/// Load the REST/JSON device catalog. A missing file means "no REST devices"
+/// (the driver is optional); a malformed file or invalid entry is a hard error.
+pub fn load_rest_devices(
+    path: Option<&Path>,
+    defaults: &RestSettings,
+) -> Result<Vec<RestDevice>, String> {
+    let toml_path = path
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| config_dir().join("rest_devices.toml"));
+    if !toml_path.exists() {
+        return Ok(Vec::new());
+    }
+    let text = std::fs::read_to_string(&toml_path)
+        .map_err(|e| format!("failed to read {}: {e}", toml_path.display()))?;
+    let data: RestDevicesToml =
+        toml::from_str(&text).map_err(|e| format!("{}: {e}", toml_path.display()))?;
+
+    let mut devices = Vec::new();
+    for d in data.devices {
+        let auth = parse_rest_auth(d.auth.as_deref().unwrap_or("none"))
+            .map_err(|e| format!("rest device '{}': {e}", d.name))?;
+        let base = d.base_url.trim();
+        if !(base.starts_with("http://") || base.starts_with("https://")) {
+            return Err(format!(
+                "rest device '{}': base_url must be http(s), got '{base}'",
+                d.name
+            ));
+        }
+        let mut points = Vec::new();
+        for p in d.points.unwrap_or_default() {
+            validate_rest_path(&p.path)
+                .map_err(|e| format!("rest device '{}' point '{}': {e}", d.name, p.point_name))?;
+            let method = p.method.unwrap_or_else(|| "GET".into()).to_uppercase();
+            if method != "GET" {
+                return Err(format!(
+                    "rest device '{}' point '{}': only GET reads are supported",
+                    d.name, p.point_name
+                ));
+            }
+            points.push(RestPoint {
+                point_name: p.point_name,
+                method,
+                path: p.path,
+                select: p.select.unwrap_or_default(),
+                units: p.units.unwrap_or_default(),
+                scale: p.scale.unwrap_or(1.0),
+            });
+        }
+        let mut writes = Vec::new();
+        for w in d.writes.unwrap_or_default() {
+            validate_rest_path(&w.path)
+                .map_err(|e| format!("rest device '{}' write '{}': {e}", d.name, w.name))?;
+            let method = w.method.unwrap_or_else(|| "POST".into()).to_uppercase();
+            if !matches!(method.as_str(), "POST" | "PUT" | "PATCH") {
+                return Err(format!(
+                    "rest device '{}' write '{}': method must be POST, PUT, or PATCH",
+                    d.name, w.name
+                ));
+            }
+            writes.push(RestWriteBinding {
+                name: w.name,
+                // Writes fail closed: bindings are disabled unless explicitly enabled.
+                enabled: w.enabled.unwrap_or(false),
+                method,
+                path: w.path,
+                body_template: w.body_template,
+                value_min: w.value_min,
+                value_max: w.value_max,
+            });
+        }
+        devices.push(RestDevice {
+            name: d.name,
+            enabled: d.enabled.unwrap_or(false),
+            base_url: base.trim_end_matches('/').to_string(),
+            auth,
+            token_env: d.token_env,
+            api_key_header: d.api_key_header.unwrap_or_else(|| "X-API-Key".into()),
+            basic_username: d.basic_username,
+            tls_verify: d.tls_verify.unwrap_or(defaults.default_tls_verify),
+            timeout_secs: d.timeout_secs.unwrap_or(defaults.default_timeout_secs),
+            poll_interval_secs: d
+                .poll_interval_secs
+                .unwrap_or(defaults.default_poll_interval_secs),
+            points,
+            writes,
+        });
+    }
+    let mut names: Vec<&str> = devices.iter().map(|d| d.name.as_str()).collect();
+    names.sort_unstable();
+    names.dedup();
+    if names.len() != devices.len() {
+        return Err("rest_devices.toml: device names must be unique".into());
+    }
+    Ok(devices)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -750,6 +1032,72 @@ mod tests {
         assert_eq!(parse_haystack_auth_mode("basic"), HaystackAuthMode::Basic);
         assert_eq!(parse_haystack_auth_mode("niagara"), HaystackAuthMode::Basic);
         assert_eq!(parse_haystack_auth_mode("scram"), HaystackAuthMode::Scram);
+    }
+
+    #[test]
+    fn rest_settings_defaults_fail_closed() {
+        let s = RestSettings::default();
+        assert_eq!(s.default_timeout_secs, 10);
+        assert!(s.default_tls_verify);
+        assert_eq!(s.default_poll_interval_secs, 60);
+        assert!(!s.allow_write);
+    }
+
+    #[test]
+    fn load_rest_devices_repo_example() {
+        std::env::set_var("OPENFDD_FIELDBUS_CONFIG_DIR", repo_config_dir());
+        let devices = load_rest_devices(None, &RestSettings::default()).expect("rest_devices");
+        assert_eq!(devices.len(), 1);
+        let d = &devices[0];
+        assert_eq!(d.name, "example-disabled");
+        assert!(!d.enabled, "shipped example must stay disabled");
+        assert_eq!(d.auth, RestAuth::Bearer);
+        assert_eq!(d.token_env.as_deref(), Some("OPENFDD_REST_TOKEN_EXAMPLE"));
+        assert!(d.tls_verify);
+        assert_eq!(d.points.len(), 1);
+        assert_eq!(d.points[0].point_name, "CHW-ST");
+        assert_eq!(d.points[0].select, "$.value");
+        assert_eq!(d.writes.len(), 1);
+        assert!(
+            !d.writes[0].enabled,
+            "shipped write binding must stay disabled"
+        );
+        assert_eq!(d.writes[0].value_min, Some(40.0));
+        assert_eq!(d.writes[0].value_max, Some(55.0));
+    }
+
+    #[test]
+    fn load_rest_devices_missing_file_is_empty() {
+        let devices = load_rest_devices(
+            Some(Path::new("/nonexistent/rest_devices.toml")),
+            &RestSettings::default(),
+        )
+        .unwrap();
+        assert!(devices.is_empty());
+    }
+
+    #[test]
+    fn rest_path_must_be_relative() {
+        assert!(validate_rest_path("/points/chw_supply_temp").is_ok());
+        assert!(validate_rest_path("/a/b?x=1").is_ok());
+        assert!(validate_rest_path("").is_err());
+        assert!(validate_rest_path("points/x").is_err());
+        assert!(validate_rest_path("https://evil.example/x").is_err());
+        assert!(validate_rest_path("//evil.example/x").is_err());
+        assert!(validate_rest_path("/a/../secrets").is_err());
+        assert!(validate_rest_path("/a b").is_err());
+    }
+
+    #[test]
+    fn rest_auth_parsing() {
+        assert_eq!(parse_rest_auth("bearer").unwrap(), RestAuth::Bearer);
+        assert_eq!(
+            parse_rest_auth("api_key_header").unwrap(),
+            RestAuth::ApiKeyHeader
+        );
+        assert_eq!(parse_rest_auth("basic").unwrap(), RestAuth::Basic);
+        assert_eq!(parse_rest_auth("none").unwrap(), RestAuth::None);
+        assert!(parse_rest_auth("oauth-dance").is_err());
     }
 
     #[test]

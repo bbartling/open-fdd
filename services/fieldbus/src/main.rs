@@ -18,7 +18,7 @@ use axum::middleware;
 use config::load_settings;
 use services::{
     bacnet_client::BacnetClientService, bacnet_server::BacnetServerManager,
-    haystack::HaystackService, poll::PollEngine, weather::WeatherService,
+    haystack::HaystackService, poll::PollEngine, rest::RestClientService, weather::WeatherService,
 };
 use state::AppState;
 use tower_http::trace::TraceLayer;
@@ -61,10 +61,21 @@ async fn run(
 
     let haystack = Arc::new(HaystackService::new(settings.haystack.clone()));
 
+    // REST/JSON driver (#540): startup fails loudly when an enabled device
+    // references a missing secret env var.
+    let rest_devices =
+        config::load_rest_devices(None, &settings.rest).map_err(std::io::Error::other)?;
+    let rest = Arc::new(
+        RestClientService::from_config(settings.rest.clone(), rest_devices)
+            .map_err(std::io::Error::other)?,
+    );
+    rest.start().await;
+
     mqtt_bridge::spawn_if_configured(
         Arc::clone(&settings),
         Arc::clone(&poll_engine),
         Arc::clone(&bacnet_client),
+        Arc::clone(&rest),
     )
     .await;
 
@@ -84,6 +95,7 @@ async fn run(
         poll_engine,
         weather,
         haystack,
+        rest,
     };
 
     info!(
@@ -112,6 +124,7 @@ async fn run(
             state.poll_engine.clone(),
             state.bacnet_server.clone(),
             state.haystack.clone(),
+            state.rest.clone(),
         ))
         .await?;
 
@@ -123,10 +136,12 @@ async fn shutdown_signal(
     poll_engine: Arc<PollEngine>,
     bacnet_server: Arc<BacnetServerManager>,
     haystack: Arc<HaystackService>,
+    rest: Arc<RestClientService>,
 ) {
     let _ = tokio::signal::ctrl_c().await;
     info!("Shutting down...");
     haystack.close().await;
+    rest.stop().await;
     poll_engine.stop().await;
     weather.stop().await;
     let _ = bacnet_server.stop().await;
@@ -160,6 +175,9 @@ mod tests {
             Arc::clone(&bacnet_server),
         ));
         let haystack = Arc::new(HaystackService::new(settings.haystack.clone()));
+        let rest_devices = config::load_rest_devices(None, &settings.rest).unwrap();
+        let rest =
+            Arc::new(RestClientService::from_config(settings.rest.clone(), rest_devices).unwrap());
         AppState {
             settings,
             api_key: None,
@@ -168,6 +186,7 @@ mod tests {
             poll_engine,
             weather,
             haystack,
+            rest,
         }
     }
 
