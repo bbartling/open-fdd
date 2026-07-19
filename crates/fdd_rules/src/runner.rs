@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
@@ -33,6 +34,20 @@ pub async fn run_all_rules(
     parquet_root: &Path,
     registry: &RuleRegistry,
     out_dir: &Path,
+) -> Result<RuleRunReport> {
+    run_all_rules_with_overrides(parquet_root, registry, out_dir, &HashMap::new(), None).await
+}
+
+/// Run registry rules with request/session parameter overrides.
+///
+/// Keys are canonical rule IDs and registry parameter names. This keeps the
+/// HTTP layer typed: arbitrary SQL is never accepted from the dashboard.
+pub async fn run_all_rules_with_overrides(
+    parquet_root: &Path,
+    registry: &RuleRegistry,
+    out_dir: &Path,
+    overrides: &HashMap<String, HashMap<String, f64>>,
+    equipment_filter: Option<&str>,
 ) -> Result<RuleRunReport> {
     let started = std::time::Instant::now();
     std::fs::create_dir_all(out_dir)?;
@@ -78,7 +93,8 @@ pub async fn run_all_rules(
         }
         let confirm_secs = rule.confirm_seconds;
         let mut params = rule_params(poll_seconds, confirm_secs);
-        if let Ok(tuned) = effective_param_strings(rule, &tuning, None, None, None) {
+        let session_override = overrides.get(&rule.rule_id);
+        if let Ok(tuned) = effective_param_strings(rule, &tuning, None, None, session_override) {
             for (k, v) in tuned {
                 params.insert(k, v);
             }
@@ -90,7 +106,15 @@ pub async fn run_all_rules(
                 params.insert("CONFIRM_ROWS".into(), rows.to_string());
             }
         }
-        let sql = substitute_sql(&raw_sql, &params);
+        let mut sql = substitute_sql(&raw_sql, &params);
+        if let Some(equipment_id) = equipment_filter {
+            let escaped = equipment_id.replace('\'', "''");
+            sql = format!(
+                "SELECT * FROM ({}) filtered_rule WHERE equipment_id = '{}'",
+                sql.trim().trim_end_matches(';'),
+                escaped
+            );
+        }
         match run_sql(&ctx, &sql).await {
             Ok(result) => {
                 std::fs::write(

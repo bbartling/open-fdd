@@ -27,6 +27,7 @@ pub fn router(state: Arc<AppState>) -> Router {
     let public = Router::new()
         .route("/api/health", get(health))
         .route("/health", get(health))
+        .route("/api/capabilities", get(capabilities))
         .route("/api/auth/status", get(auth_status))
         .route("/api/auth/me", get(auth_me))
         .route("/api/auth/login", post(auth_login));
@@ -76,6 +77,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/fdd/rules", get(fdd_registry_rules))
         .route("/api/fdd/rules/{rule_id}/params", get(fdd_rule_params))
         .route("/api/fdd/cache/status", get(fdd_cache_status))
+        .route("/api/fdd/equipment", get(fdd_equipment))
+        .route("/api/fdd/results", get(fdd_results))
+        .route("/api/fdd/series", get(fdd_series))
         .route("/api/fdd/roles", get(fdd_roles))
         .route(
             "/api/fdd/session-config",
@@ -111,6 +115,30 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
         ingest_dup: *state.ingest_dup.lock().unwrap(),
         ingest_reject: *state.ingest_reject.lock().unwrap(),
     })
+}
+
+/// Feature advertisement for UI capability gates and MCP accuracy checks.
+pub async fn capabilities() -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "capabilities": {
+            "lab": true,
+            "fdd_registry": true,
+            "fdd_equipment": true,
+            "fdd_results": true,
+            "fdd_series": true,
+            "session_config": true,
+            "csv_package": true,
+            "reports": false,
+            "export": false,
+            "data_management": false,
+            "host_stats": false,
+            "faults": false,
+            "health_stack": false,
+            "fdd_rules_authoring": false,
+            "fdd_schema": false
+        }
+    }))
 }
 
 #[utoipa::path(
@@ -617,8 +645,9 @@ pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
     let payload = json!({
         "confirmation_seconds": body.confirmation_seconds,
         "params": body.params,
-        "mode": body.params.get("mode").cloned().unwrap_or(json!("registry")),
-        "rule_ids": body.params.get("rule_ids").cloned(),
+        "mode": body.mode,
+        "rule_ids": body.rule_ids,
+        "equipment_id": body.equipment_id,
     });
     let result = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload)
@@ -638,6 +667,32 @@ pub async fn fdd_rule_params(Path(rule_id): Path<String>) -> Json<Value> {
 
 pub async fn fdd_cache_status() -> Json<Value> {
     Json(open_fdd_edge_prototype::fdd::registry_api::cache_status())
+}
+
+pub async fn fdd_equipment() -> Json<Value> {
+    Json(open_fdd_edge_prototype::fdd::registry_api::equipment_response())
+}
+
+pub async fn fdd_results() -> Json<Value> {
+    Json(open_fdd_edge_prototype::fdd::registry_api::results_response())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FddSeriesQuery {
+    equipment_id: String,
+    rule_id: String,
+}
+
+pub async fn fdd_series(Query(query): Query<FddSeriesQuery>) -> Json<Value> {
+    let result = tokio::task::spawn_blocking(move || {
+        open_fdd_edge_prototype::fdd::registry_api::series_response(
+            &query.equipment_id,
+            &query.rule_id,
+        )
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("series task failed: {e}")}));
+    Json(result)
 }
 
 pub async fn fdd_roles() -> Json<Value> {

@@ -109,9 +109,15 @@ docker run -i --rm --network host \
 | `openfdd_csv_fusion_preview` | Merged grid preview |
 | `openfdd_csv_import_execute` | Save to Arrow (write gate) |
 | `openfdd_historian_query` | Historian pivot query |
-| `openfdd_fdd_rules_list` | FDD rule catalog |
+| `openfdd_fdd_rules_list` | Legacy wire/SQL FDD rule catalog |
+| `openfdd_fdd_registry` | Production DataFusion registry |
+| `openfdd_fdd_equipment` | Loaded equipment IDs/types |
+| `openfdd_fdd_results` | Latest per-equipment rule outcomes |
+| `openfdd_fdd_series` | Mapped live display series |
+| `openfdd_fdd_session_config` | Active units / role map / tuning |
+| `openfdd_fdd_accuracy_snapshot` | MCP vs central count parity check |
 | `openfdd_fdd_rule_test_sql` | Test rule SQL |
-| `openfdd_fdd_run` | Run ad-hoc FDD SQL (write gate) |
+| `openfdd_fdd_run` | Run typed registry FDD rules (write gate) |
 | `openfdd_model_assignments_save` | Save assignments (write gate) |
 | `openfdd_reports_draft` / `patch` / `render_pdf` | Report → PDF pipeline (write gate) |
 
