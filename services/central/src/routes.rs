@@ -87,6 +87,30 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .route("/api/fdd/run", post(fdd_run))
         .route("/api/fdd/status", get(fdd_status))
+        .route("/api/health/stack", get(health_stack))
+        .route("/api/building/snapshot", get(building_snapshot))
+        .route("/api/faults/status", get(faults_status))
+        .route("/api/faults/summary", get(faults_summary))
+        .route("/api/export/meta", get(export_meta))
+        .route("/api/data-management/summary", get(data_management_summary))
+        .route("/api/host/stats", get(host_stats))
+        .route("/api/fdd-schema/tables", get(fdd_schema_tables))
+        .route("/api/fdd-rules", get(fdd_rules_list))
+        .route("/api/reports", get(reports_list))
+        .route("/api/reports/templates", get(reports_templates))
+        .route("/api/reports/draft", post(reports_draft))
+        .route(
+            "/api/reports/{report_id}",
+            get(reports_get).patch(reports_patch).delete(reports_delete),
+        )
+        .route(
+            "/api/reports/{report_id}/render/pdf",
+            post(reports_render_pdf),
+        )
+        .route(
+            "/api/reports/{report_id}/download.pdf",
+            get(reports_download_pdf),
+        )
         .merge(csv)
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
@@ -129,14 +153,14 @@ pub async fn capabilities() -> Json<Value> {
             "fdd_series": true,
             "session_config": true,
             "csv_package": true,
-            "reports": false,
-            "export": false,
-            "data_management": false,
-            "host_stats": false,
-            "faults": false,
-            "health_stack": false,
-            "fdd_rules_authoring": false,
-            "fdd_schema": false
+            "reports": true,
+            "export": true,
+            "data_management": true,
+            "host_stats": true,
+            "faults": true,
+            "health_stack": true,
+            "fdd_rules_authoring": true,
+            "fdd_schema": true
         }
     }))
 }
@@ -896,4 +920,120 @@ pub async fn csv_preview_dataset(
         q.offset.unwrap_or(0) as u64,
         q.limit.unwrap_or(100) as u64,
     ))
+}
+
+pub async fn health_stack() -> Json<Value> {
+    Json(open_fdd_edge_prototype::dashboard::stack_health())
+}
+
+pub async fn building_snapshot() -> Json<Value> {
+    Json(open_fdd_edge_prototype::dashboard::building_snapshot())
+}
+
+pub async fn faults_status() -> Json<Value> {
+    Json(open_fdd_edge_prototype::faults::status_json())
+}
+
+pub async fn faults_summary() -> Json<Value> {
+    Json(open_fdd_edge_prototype::faults::summary_json())
+}
+
+pub async fn export_meta() -> Json<Value> {
+    Json(open_fdd_edge_prototype::export::meta_json())
+}
+
+pub async fn data_management_summary() -> Json<Value> {
+    Json(open_fdd_edge_prototype::data_management::storage_summary())
+}
+
+pub async fn host_stats() -> Json<Value> {
+    Json(open_fdd_edge_prototype::ops::host_stats::stats_json())
+}
+
+pub async fn fdd_schema_tables() -> Json<Value> {
+    match serde_json::from_str(&open_fdd_edge_prototype::fdd::wires::api::schema_tables_json()) {
+        Ok(v) => Json(v),
+        Err(e) => Json(json!({"ok": false, "error": e.to_string()})),
+    }
+}
+
+pub async fn fdd_rules_list() -> Json<Value> {
+    match serde_json::from_str(&open_fdd_edge_prototype::fdd::wires::api::list_rules_json()) {
+        Ok(v) => Json(v),
+        Err(e) => Json(json!({"ok": false, "error": e.to_string()})),
+    }
+}
+
+pub async fn reports_list() -> Json<Value> {
+    Json(open_fdd_edge_prototype::reports::list_reports())
+}
+
+pub async fn reports_templates() -> Json<Value> {
+    Json(open_fdd_edge_prototype::reports::templates())
+}
+
+pub async fn reports_draft(Json(body): Json<Value>) -> Json<Value> {
+    let result =
+        tokio::task::spawn_blocking(move || open_fdd_edge_prototype::reports::create_draft(&body))
+            .await
+            .unwrap_or_else(|e| json!({"ok": false, "error": format!("reports draft task: {e}")}));
+    Json(result)
+}
+
+pub async fn reports_get(Path(report_id): Path<String>) -> Json<Value> {
+    Json(open_fdd_edge_prototype::reports::get_report(&report_id))
+}
+
+pub async fn reports_patch(Path(report_id): Path<String>, Json(body): Json<Value>) -> Json<Value> {
+    let result = tokio::task::spawn_blocking(move || {
+        open_fdd_edge_prototype::reports::patch_report(&report_id, &body)
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("reports patch task: {e}")}));
+    Json(result)
+}
+
+pub async fn reports_delete(Path(report_id): Path<String>) -> Json<Value> {
+    let result = tokio::task::spawn_blocking(move || {
+        open_fdd_edge_prototype::reports::delete_report(&report_id)
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("reports delete task: {e}")}));
+    Json(result)
+}
+
+pub async fn reports_render_pdf(Path(report_id): Path<String>) -> Json<Value> {
+    let result = tokio::task::spawn_blocking(move || {
+        open_fdd_edge_prototype::reports::render_pdf_bundle(&report_id)
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("reports render task: {e}")}));
+    Json(result)
+}
+
+pub async fn reports_download_pdf(
+    Path(report_id): Path<String>,
+) -> Result<(StatusCode, HeaderMap, Vec<u8>), (StatusCode, Json<Value>)> {
+    let path =
+        open_fdd_edge_prototype::reports::download_path(&report_id, "pdf").ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({"ok": false, "error": "pdf not found — render first"})),
+            )
+        })?;
+    let bytes = std::fs::read(&path).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": e.to_string()})),
+        )
+    })?;
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONTENT_TYPE, "application/pdf".parse().unwrap());
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        format!("attachment; filename=\"report-{report_id}.pdf\"")
+            .parse()
+            .unwrap(),
+    );
+    Ok((StatusCode::OK, headers, bytes))
 }
