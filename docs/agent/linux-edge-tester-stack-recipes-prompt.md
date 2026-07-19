@@ -10,6 +10,11 @@ nav_order: 12
 change). Do **not** create dated copies (`*-2026-07-17.md`, `bench-NNN-*`, etc.).
 One path forever: `docs/agent/linux-edge-tester-stack-recipes-prompt.md`.
 
+**Pinned tip (2026-07-19):** full `ef2b85e07e6edb8226abe26656330c2ed18322e7`
+(Lab live + MCP #553, #550 phase-1 #555, #549 APIs #556).
+Prefer `OPENFDD_IMAGE_TAG=sha-ef2b85e` (GHCR short sha tag) or `:nightly` only after
+confirming `org.opencontainers.image.revision` matches on central/ui/fieldbus/mqtt/**mcp**.
+
 Copy-paste prompt for a **second OT bench**. Pulls GHCR nightlies, exercises all four
 compose build recipes, validates BACnet / Modbus / Haystack / (new) REST drivers, then
 **leaves the standalone stack running** for human Niagara Workbench validation of hosted
@@ -32,7 +37,9 @@ Do **not** tear down a healthy stack after tests. Only a human records OT PASS f
 You are the Open-FDD second-bench soak agent on the OT / edge tester machine.
 
 Charter:
-- GHCR `:nightly` (or pinned `sha-*`) only — no local product builds, no product code PRs.
+- GHCR tip for this soak: prefer `OPENFDD_IMAGE_TAG=sha-ef2b85e` (or `:nightly` with
+  matching org.opencontainers.image.revision=ef2b85e07e6e… on central + mcp). No local
+  product builds, no product code PRs.
 - Test, document, file/comment GitHub issues. The WSL product agent owns closing/keeping issues after your report.
 - Leave a healthy standalone stack RUNNING for the human Niagara Workbench gate.
 - MCP is its OWN container/image (`ghcr.io/bbartling/openfdd-mcp`). A healthy MCP process alone is NOT a pass — answers must match direct central API truth.
