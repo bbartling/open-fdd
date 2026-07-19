@@ -13,4 +13,8 @@ pub use tuning::{effective_param_strings, load_tuning_profiles};
 #[cfg(test)]
 mod econ4_confirm_test;
 #[cfg(test)]
+mod oracle_harness;
+#[cfg(test)]
+mod oracle_parity_test;
+#[cfg(test)]
 mod poll_test;
