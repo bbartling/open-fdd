@@ -23,7 +23,7 @@ Acknowledged. Product agent on /home/ben/src/open-fdd. Implement vibe16 BACnet/F
 |--------------|----------------------------------|
 | — | Pull `:nightly`, run local harness, post on **#429** |
 | — | **No** Rust/TS edits, **no** git push from bench |
-| — | Prompt: [bench-330-beta-cycle-agent-prompt.md](./bench-330-beta-cycle-agent-prompt.md) |
+| — | Prompt: [linux-edge-tester-stack-recipes-prompt.md](./linux-edge-tester-stack-recipes-prompt.md) |
 
 ---
 
@@ -203,7 +203,7 @@ Product agent posts **merge + sha**; bench posts **pass/fail evidence**.
 | **FDD Rule Cookbook** | https://bbartling.github.io/open-fdd/rules/cookbook/ |
 | Release channels | https://bbartling.github.io/open-fdd/operations/release-channels.html |
 | BACnet driver | https://bbartling.github.io/open-fdd/drivers/bacnet.html |
-| Bench cycle prompt | [bench-330-beta-cycle-agent-prompt.md](./bench-330-beta-cycle-agent-prompt.md) |
+| Bench cycle prompt | [linux-edge-tester-stack-recipes-prompt.md](./linux-edge-tester-stack-recipes-prompt.md) |
 
 ---
 

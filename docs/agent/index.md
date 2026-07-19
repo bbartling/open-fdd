@@ -47,8 +47,6 @@ See [examples/external-agents.md](../examples/external-agents.md).
 | [linux-edge-tester-stack-nightly-prompt.md](linux-edge-tester-stack-nightly-prompt.md) | **Linux edge tester** — standalone stack nightly (central/ui/fieldbus/mqtt) *(paste-only)* |
 | [linux-edge-tester-second-bench-ghcr-soak-prompt.md](linux-edge-tester-second-bench-ghcr-soak-prompt.md) | **Second bench** — rigorous GHCR soak (superseded by stack-recipes prompt) *(paste-only)* |
 | [linux-edge-tester-prompt.md](linux-edge-tester-prompt.md) | **Linux edge tester** — turnkey copy-paste validation *(paste-only)* |
-| [bench-330-beta-cycle-agent-prompt.md](bench-330-beta-cycle-agent-prompt.md) | **Bench agent** — full 3.3.0-beta cycle *(paste-only)* |
-| [bench-330-issue-iteration-agent-prompt.md](bench-330-issue-iteration-agent-prompt.md) | Bench iteration loop after product merges *(paste-only)* |
 | [bench-driver-setup-wsl-agent.md](bench-driver-setup-wsl-agent.md) | WSL setup reference |
 
 ## Repo-side config (allowed)
