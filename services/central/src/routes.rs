@@ -1031,27 +1031,27 @@ pub async fn reports_download_pdf(
             Json(json!({"ok": false, "error": "invalid report_id"})),
         ));
     }
-    let path =
-        open_fdd_edge_prototype::reports::download_path(&report_id, "pdf").ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({"ok": false, "error": "pdf not found — render first"})),
-            )
-        })?;
-    let bytes = tokio::task::spawn_blocking(move || std::fs::read(path))
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"ok": false, "error": format!("reports download task: {e}")})),
-            )
-        })?
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"ok": false, "error": e.to_string()})),
-            )
-        })?;
+    let report_id_for_io = report_id.clone();
+    let bytes = tokio::task::spawn_blocking(move || {
+        let path = open_fdd_edge_prototype::reports::download_path(&report_id_for_io, "pdf")
+            .ok_or_else(|| "pdf not found — render first".to_string())?;
+        std::fs::read(path).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": format!("reports download task: {e}")})),
+        )
+    })?
+    .map_err(|e| {
+        let status = if e.contains("not found") {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        };
+        (status, Json(json!({"ok": false, "error": e})))
+    })?;
     let mut headers = HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "application/pdf".parse().unwrap());
     let disposition = format!("attachment; filename=\"report-{safe_id}.pdf\"");
