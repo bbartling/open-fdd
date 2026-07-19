@@ -385,7 +385,7 @@ impl BridgeClient {
                 "ok": false,
                 "optional": true,
                 "error": error,
-                "hint": "capabilities will be required after #549 lands"
+                "hint": "capabilities endpoint unavailable"
             })
         });
 

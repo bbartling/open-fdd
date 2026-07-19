@@ -13,6 +13,12 @@ type NavItem = {
   protected?: boolean;
   disabled?: boolean;
   disabledHint?: string;
+  requiredCapability?: string;
+};
+
+type CapabilitiesResponse = {
+  ok?: boolean;
+  capabilities?: Record<string, boolean>;
 };
 
 /* Streamlit-parity nav: plain text labels, no emoji icons. */
@@ -37,17 +43,42 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: "/lab", label: "Open-FDD Lab (vibe19)", protected: true },
       { to: "/csv", label: "CSV job upload", protected: true },
       { to: "/model", label: "Model & FDD assignments", protected: true },
-      { to: "/sql-fdd", label: "SQL FDD lab (integrator)", protected: true },
+      {
+        to: "/sql-fdd",
+        label: "SQL FDD lab (integrator)",
+        protected: true,
+        requiredCapability: "fdd_rules_authoring",
+      },
       { to: "/plot", label: "Plots", protected: true },
-      { to: "/reports", label: "Reports", protected: true },
+      {
+        to: "/reports",
+        label: "Reports",
+        protected: true,
+        requiredCapability: "reports",
+      },
     ],
   },
   {
     title: "Data & ops",
     items: [
-      { to: "/exports", label: "Data export", protected: true },
-      { to: "/data-management", label: "Historian storage", protected: true },
-      { to: "/host", label: "Host stats", protected: true },
+      {
+        to: "/exports",
+        label: "Data export",
+        protected: true,
+        requiredCapability: "export",
+      },
+      {
+        to: "/data-management",
+        label: "Historian storage",
+        protected: true,
+        requiredCapability: "data_management",
+      },
+      {
+        to: "/host",
+        label: "Host stats",
+        protected: true,
+        requiredCapability: "host_stats",
+      },
       { to: "/algorithms", label: "Algorithms", protected: true },
     ],
   },
@@ -67,6 +98,7 @@ export default function AppLayout() {
   const [sessionRole, setSessionRole] = useState<string | null>(null);
   const [sessionUser, setSessionUser] = useState<string | null>(null);
   const [edgeVersion, setEdgeVersion] = useState<string | null>(null);
+  const [capabilities, setCapabilities] = useState<Record<string, boolean> | null>(null);
 
   useEffect(() => {
     const base = getBridgeBase();
@@ -74,6 +106,12 @@ export default function AppLayout() {
       .then((r) => r.json())
       .then((h: HealthInfo) => setEdgeVersion(h.version || h.image_tag || null))
       .catch(() => setEdgeVersion(null));
+    fetch(`${base}/api/capabilities`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body: CapabilitiesResponse | null) => {
+        setCapabilities(body?.capabilities ?? null);
+      })
+      .catch(() => setCapabilities(null));
   }, []);
 
   useEffect(() => {
@@ -141,12 +179,22 @@ export default function AppLayout() {
           {NAV_SECTIONS.map((section) => (
             <div key={section.title} className="nav-section">
               <div className="nav-section-title">{section.title}</div>
-              {section.items.map((item) =>
-                item.disabled ? (
+              {section.items.map((item) => {
+                const capabilityMissing =
+                  Boolean(item.requiredCapability) &&
+                  capabilities != null &&
+                  capabilities[item.requiredCapability!] !== true;
+                const disabled = Boolean(item.disabled || capabilityMissing);
+                return disabled ? (
                   <span
                     key={item.to}
                     className="nav-item nav-item-disabled"
-                    title={item.disabledHint ?? "Coming soon"}
+                    title={
+                      item.disabledHint ??
+                      (capabilityMissing
+                        ? `Unavailable — central missing ${item.requiredCapability}`
+                        : "Coming soon")
+                    }
                     aria-disabled="true"
                   >
                     {item.label}
@@ -161,8 +209,8 @@ export default function AppLayout() {
                   >
                     {item.label}
                   </NavLink>
-                ),
-              )}
+                );
+              })}
             </div>
           ))}
         </nav>
