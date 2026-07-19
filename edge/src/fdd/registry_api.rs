@@ -4,9 +4,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use fdd_rules::{
-    effective_param_strings, load_registry, load_tuning_profiles, rule_params, run_all_rules,
-    substitute_sql, RuleRegistry, RuleSpec,
+    effective_param_strings, load_registry, load_tuning_profiles, rule_params,
+    run_all_rules_with_overrides, substitute_sql, RuleRegistry, RuleSpec,
 };
+use fdd_sql::{register_parquet_tree, run_sql};
 use serde_json::{json, Value};
 
 fn sql_rules_dir() -> PathBuf {
@@ -198,6 +199,181 @@ fn walkdir_count(root: &Path, ext: &str) -> usize {
         .count()
 }
 
+fn infer_equipment_type(equipment_id: &str) -> &'static str {
+    let id = equipment_id.to_ascii_uppercase();
+    if id.contains("VAV") || id.contains("ZONE") {
+        "VAV"
+    } else if id.contains("AHU") || id.contains("RTU") || id.contains("MAU") {
+        "AHU"
+    } else if id.contains("CHILL")
+        || id.contains("BOILER")
+        || id.contains("PUMP")
+        || id.contains("TOWER")
+    {
+        "PLANT"
+    } else if id.contains("HP") || id.contains("HEAT_PUMP") {
+        "HEAT_PUMP"
+    } else if id.contains("METER") {
+        "METER"
+    } else {
+        "GENERAL"
+    }
+}
+
+/// `GET /api/fdd/equipment` — equipment present in the parquet cache.
+pub fn equipment_response() -> Value {
+    let root = parquet_root();
+    let mut ids = Vec::new();
+    if root.is_dir() {
+        for entry in walkdir::WalkDir::new(&root)
+            .min_depth(1)
+            .max_depth(3)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_dir())
+        {
+            if let Some(id) = entry
+                .file_name()
+                .to_str()
+                .and_then(|name| name.strip_prefix("equipment="))
+            {
+                ids.push(id.to_string());
+            }
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    let equipment: Vec<Value> = ids
+        .iter()
+        .map(|id| {
+            json!({
+                "equipment_id": id,
+                "equipment_type": infer_equipment_type(id),
+            })
+        })
+        .collect();
+    json!({"ok": true, "count": equipment.len(), "equipment": equipment})
+}
+
+/// `GET /api/fdd/results` — normalized rows from the most recent registry run.
+pub fn results_response() -> Value {
+    let dir = results_dir();
+    let reg = load_reg().ok();
+    let mut metadata = HashMap::new();
+    if let Some(reg) = &reg {
+        for rule in &reg.rules {
+            metadata.insert(rule.rule_id.clone(), rule.description.clone());
+        }
+    }
+    let mut rows = Vec::new();
+    if dir.is_dir() {
+        let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("json"))
+            .collect();
+        files.sort();
+        for path in files {
+            let Some(rule_id) = path.file_stem().and_then(|x| x.to_str()) else {
+                continue;
+            };
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            let Ok(body) = serde_json::from_str::<Value>(&text) else {
+                continue;
+            };
+            for row in body
+                .get("rows")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                let equipment_id = row
+                    .get("equipment_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown");
+                let fault_hours = row
+                    .get("fault_hours")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0);
+                rows.push(json!({
+                    "rule_id": rule_id,
+                    "title": metadata.get(rule_id).cloned().unwrap_or_default(),
+                    "equipment_id": equipment_id,
+                    "equipment_type": infer_equipment_type(equipment_id),
+                    "status": if fault_hours > 0.0 { "FAULT" } else { "PASS" },
+                    "fault_hours": fault_hours,
+                    "fault_pct": row.get("fault_pct").and_then(Value::as_f64),
+                    "missing_roles": [],
+                    "notes": row.get("notes").cloned().unwrap_or(Value::Null),
+                }));
+            }
+        }
+    }
+    json!({"ok": true, "count": rows.len(), "results": rows})
+}
+
+/// Downsampled history series for one equipment/rule. Rule math continues to
+/// use full-resolution parquet; only this display response is capped.
+pub fn series_response(equipment_id: &str, rule_id: &str) -> Value {
+    let reg = match load_reg() {
+        Ok(r) => r,
+        Err(e) => return json!({"ok": false, "error": e}),
+    };
+    let Some(rule) = reg
+        .rules
+        .iter()
+        .find(|r| r.rule_id == rule_id || r.aliases.iter().any(|a| a == rule_id))
+    else {
+        return json!({"ok": false, "error": format!("unknown rule_id {rule_id}")});
+    };
+    let columns: Vec<&str> = rule
+        .required_roles
+        .iter()
+        .map(String::as_str)
+        .filter(|name| name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+        .collect();
+    if columns.is_empty() {
+        return json!({"ok": true, "equipment_id": equipment_id, "rule_id": rule.rule_id, "rows": []});
+    }
+    let escaped_equipment = equipment_id.replace('\'', "''");
+    let sql = format!(
+        "SELECT timestamp_utc, equipment_id, {} FROM history WHERE equipment_id = '{}' ORDER BY timestamp_utc LIMIT 5000",
+        columns.join(", "),
+        escaped_equipment
+    );
+    let root = parquet_root();
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => return json!({"ok": false, "error": format!("runtime: {e}")}),
+    };
+    rt.block_on(async {
+        let ctx = datafusion::prelude::SessionContext::new();
+        if let Err(e) = register_parquet_tree(&ctx, &root).await {
+            return json!({"ok": false, "error": e.to_string()});
+        }
+        match run_sql(&ctx, &sql).await {
+            Ok(result) => json!({
+                "ok": true,
+                "equipment_id": equipment_id,
+                "equipment_type": infer_equipment_type(equipment_id),
+                "rule_id": rule.rule_id,
+                "roles": columns,
+                "rows": result.rows,
+                "downsampled": result.row_count >= 5000,
+                "max_points": 5000,
+            }),
+            Err(e) => json!({"ok": false, "error": e.to_string()}),
+        }
+    })
+}
+
 /// `GET /api/fdd/roles` — role map file if present.
 pub fn roles_response() -> Value {
     let candidates = [
@@ -281,21 +457,40 @@ pub fn run_registry(payload: &Value) -> Value {
         return json!({"ok": false, "error": "no matching rules to run"});
     }
 
-    // Apply request overrides into a temp tuning overlay via env is overkill;
-    // runner uses registry defaults + rule_tuning/. Request params are applied
-    // by rewriting confirm_seconds on a per-rule clone when provided.
+    // Normalize aliases and pass typed request overrides into the runner.
     let mut effective = filtered.clone();
+    let mut session_overrides: HashMap<String, HashMap<String, f64>> = HashMap::new();
     if let Some(params_by_rule) = payload.get("params").and_then(|v| v.as_object()) {
         for rule in &mut effective.rules {
-            if let Some(p) = params_by_rule
-                .get(&rule.rule_id)
-                .and_then(|v| v.as_object())
-            {
+            let supplied = params_by_rule.get(&rule.rule_id).or_else(|| {
+                rule.aliases
+                    .iter()
+                    .find_map(|alias| params_by_rule.get(alias))
+            });
+            if let Some(p) = supplied.and_then(|v| v.as_object()) {
                 if let Some(cm) = p.get("confirm_min").and_then(|v| v.as_f64()) {
                     rule.confirm_seconds = (cm * 60.0).round() as u32;
                 }
                 if let Some(cs) = p.get("confirm_seconds").and_then(|v| v.as_f64()) {
                     rule.confirm_seconds = cs.round() as u32;
+                }
+                let mut typed = HashMap::new();
+                for (key, value) in p {
+                    let Some(number) = value.as_f64() else {
+                        continue;
+                    };
+                    if rule.parameters.contains_key(key) {
+                        typed.insert(key.clone(), number);
+                    } else if let Some((param_key, _)) = rule
+                        .parameters
+                        .iter()
+                        .find(|(_, def)| def.sql_placeholder == *key)
+                    {
+                        typed.insert(param_key.clone(), number);
+                    }
+                }
+                if !typed.is_empty() {
+                    session_overrides.insert(rule.rule_id.clone(), typed);
                 }
             }
         }
@@ -309,19 +504,29 @@ pub fn run_registry(payload: &Value) -> Value {
         Ok(r) => r,
         Err(e) => return json!({"ok": false, "error": format!("runtime: {e}")}),
     };
-    match rt.block_on(run_all_rules(&pq, &effective, &out)) {
-        Ok(report) => json!({
-            "ok": true,
-            "engine": "fdd_rules+DataFusion",
-            "mode": "registry",
-            "rules_run": report.rules_run,
-            "rules_succeeded": report.rules_succeeded,
-            "rules_failed": report.rules_failed,
-            "poll_seconds": report.poll_seconds,
-            "total_ms": report.total_ms,
-            "timings": report.timings,
-            "results_dir": out.display().to_string(),
-        }),
+    match rt.block_on(run_all_rules_with_overrides(
+        &pq,
+        &effective,
+        &out,
+        &session_overrides,
+        payload.get("equipment_id").and_then(Value::as_str),
+    )) {
+        Ok(report) => {
+            let normalized = results_response();
+            json!({
+                "ok": true,
+                "engine": "fdd_rules+DataFusion",
+                "mode": "registry",
+                "rules_run": report.rules_run,
+                "rules_succeeded": report.rules_succeeded,
+                "rules_failed": report.rules_failed,
+                "poll_seconds": report.poll_seconds,
+                "total_ms": report.total_ms,
+                "timings": report.timings,
+                "results_dir": out.display().to_string(),
+                "results": normalized.get("results").cloned().unwrap_or_else(|| json!([])),
+            })
+        }
         Err(e) => json!({"ok": false, "error": e.to_string()}),
     }
 }

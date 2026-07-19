@@ -126,6 +126,12 @@ pub struct EdgePayloadResponse {
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct FddRunRequest {
+    #[serde(default = "default_registry_mode")]
+    pub mode: String,
+    #[serde(default)]
+    pub rule_ids: Option<Vec<String>>,
+    #[serde(default)]
+    pub equipment_id: Option<String>,
     #[serde(default)]
     #[schema(value_type = Object)]
     pub params: Value,
@@ -133,6 +139,10 @@ pub struct FddRunRequest {
     pub confirmation_seconds: Option<i64>,
     #[serde(default)]
     pub sql: Option<String>,
+}
+
+fn default_registry_mode() -> String {
+    "registry".into()
 }
 
 #[derive(Debug, Serialize, ToSchema)]

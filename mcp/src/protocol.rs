@@ -63,7 +63,10 @@ impl Server {
             tool("openfdd_bench_topology", "Bench NIC, API bases, driver endpoints (from OPENFDD_BENCH_TOPOLOGY_FILE or doc pointer)", json!({})),
             tool("openfdd_driver_status", "Poll bridge driver status endpoints", json!({})),
             tool("openfdd_health", "GET /api/health (public liveness)", json!({})),
+            tool("openfdd_capabilities", "GET /api/capabilities — central feature contract", json!({})),
             tool("openfdd_stack_status", "GET /api/health/stack — data plane strip (JWT)", json!({})),
+            tool("openfdd_faults_status", "GET /api/faults/status — live fault subsystem status", json!({})),
+            tool("openfdd_export_meta", "GET /api/export/meta — available export contract", json!({})),
             tool("openfdd_haystack_status", "GET /api/haystack/status", json!({})),
             tool("openfdd_haystack_test", "POST /api/haystack/test", json!({})),
             tool("openfdd_haystack_read", "POST /api/haystack/read", json!({"filter": {"type": "string"}})),
@@ -132,17 +135,26 @@ impl Server {
                 "equipment_id": {"type": "string"}
             })),
             tool("openfdd_fdd_rules_list", "GET /api/fdd-rules — list wire/SQL fault rules", json!({})),
+            tool("openfdd_fdd_registry", "GET /api/fdd/rules — production DataFusion registry", json!({})),
+            tool("openfdd_fdd_equipment", "GET /api/fdd/equipment — loaded equipment IDs and types", json!({})),
+            tool("openfdd_fdd_results", "GET /api/fdd/results — latest per-equipment rule outcomes", json!({})),
+            tool("openfdd_fdd_series", "GET /api/fdd/series — mapped live display series (max 5000 points)", json!({
+                "equipment_id": {"type": "string"},
+                "rule_id": {"type": "string"}
+            })),
+            tool("openfdd_fdd_session_config", "GET /api/fdd/session-config — active units, role map, and typed tuning", json!({})),
+            tool("openfdd_fdd_accuracy_snapshot", "Cross-check registry/equipment/result counts against central truth without inventing defaults", json!({})),
             tool("openfdd_fdd_rule_test_sql", "POST /api/fdd-rules/{id}/test-sql — dry-run rule SQL on sample/historian data", json!({
                 "rule_id": {"type": "string"},
                 "sql": {"type": "string"},
                 "params": {"type": "object"},
                 "confirmation_seconds": {"type": "integer"}
             })),
-            tool("openfdd_fdd_run", "POST /api/fdd/run — execute ad-hoc DataFusion SQL FDD (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+            tool("openfdd_fdd_run", "POST /api/fdd/run — execute production registry rules with typed params (write gate)", json!({
                 "confirm": {"type": "boolean", "description": "Must be true"},
-                "sql": {"type": "string"},
-                "params": {"type": "object"},
-                "confirmation_seconds": {"type": "integer"}
+                "rule_ids": {"type": "array", "items": {"type": "string"}},
+                "equipment_id": {"type": "string"},
+                "params": {"type": "object", "description": "rule_id → typed parameter overrides"}
             })),
             tool("openfdd_model_assignments_save", "POST /api/model/assignments/save — persist Haystack assignments (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
                 "confirm": {"type": "boolean"},
@@ -218,7 +230,10 @@ impl Server {
             "openfdd_bench_topology" => Ok(self.bridge.bench_topology()),
             "openfdd_driver_status" => Ok(self.bridge.driver_status()),
             "openfdd_health" => self.bridge.get("/api/health"),
+            "openfdd_capabilities" => self.bridge.get("/api/capabilities"),
             "openfdd_stack_status" => self.bridge.get("/api/health/stack"),
+            "openfdd_faults_status" => self.bridge.get("/api/faults/status"),
+            "openfdd_export_meta" => self.bridge.get("/api/export/meta"),
             "openfdd_haystack_status" => self.bridge.get("/api/haystack/status"),
             "openfdd_haystack_test" => self.bridge.post("/api/haystack/test", &json!({})),
             "openfdd_haystack_read" => self.bridge.haystack_read(args),
@@ -285,6 +300,22 @@ impl Server {
             }
             "openfdd_historian_query" => self.bridge.historian_query(args),
             "openfdd_fdd_rules_list" => self.bridge.fdd_rules_list(),
+            "openfdd_fdd_registry" => self.bridge.get("/api/fdd/rules"),
+            "openfdd_fdd_equipment" => self.bridge.get("/api/fdd/equipment"),
+            "openfdd_fdd_results" => self.bridge.get("/api/fdd/results"),
+            "openfdd_fdd_series" => {
+                let equipment_id = args
+                    .get("equipment_id")
+                    .and_then(Value::as_str)
+                    .ok_or("equipment_id required")?;
+                let rule_id = args
+                    .get("rule_id")
+                    .and_then(Value::as_str)
+                    .ok_or("rule_id required")?;
+                self.bridge.fdd_series(equipment_id, rule_id)
+            }
+            "openfdd_fdd_session_config" => self.bridge.get("/api/fdd/session-config"),
+            "openfdd_fdd_accuracy_snapshot" => self.bridge.fdd_accuracy_snapshot(),
             "openfdd_fdd_rule_test_sql" => self.bridge.fdd_rule_test_sql(args),
             "openfdd_fdd_run" => {
                 require_write_confirm(args, "openfdd_fdd_run")?;
@@ -396,4 +427,30 @@ fn tool(name: &str, description: &str, schema: Value) -> Value {
             "additionalProperties": false
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lists_production_fdd_accuracy_tools() {
+        let server = Server::new(BridgeClient::from_env());
+        let tools = server.tools_list();
+        let names: Vec<&str> = tools
+            .iter()
+            .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+            .collect();
+        for expected in [
+            "openfdd_capabilities",
+            "openfdd_fdd_registry",
+            "openfdd_fdd_equipment",
+            "openfdd_fdd_results",
+            "openfdd_fdd_series",
+            "openfdd_fdd_session_config",
+            "openfdd_fdd_accuracy_snapshot",
+        ] {
+            assert!(names.contains(&expected), "missing MCP tool {expected}");
+        }
+    }
 }
