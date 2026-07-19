@@ -132,10 +132,10 @@ export default function ReportBuilderPage() {
     const id = searchParams.get("id");
     if (id) {
       void loadReportById(id);
-    } else {
-      void createDraft();
     }
-  }, [searchParams]);
+    // Do not auto-create a draft on mount — wait for an explicit user action
+    // so product shells stay quiet when reports APIs are unavailable.
+  }, [searchParams, loadReportById, loadReports]);
 
   async function deleteReport(reportId: string) {
     setBusy(true);
