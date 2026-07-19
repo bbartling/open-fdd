@@ -64,7 +64,7 @@ impl Server {
             tool("openfdd_driver_status", "Poll bridge driver status endpoints", json!({})),
             tool("openfdd_health", "GET /api/health (public liveness)", json!({})),
             tool("openfdd_capabilities", "GET /api/capabilities — central feature contract", json!({})),
-            tool("openfdd_stack_status", "GET /api/health/stack — data plane strip (JWT)", json!({})),
+            tool("openfdd_stack_status", "GET /api/health/stack — data plane strip (public)", json!({})),
             tool("openfdd_faults_status", "GET /api/faults/status — live fault subsystem status", json!({})),
             tool("openfdd_export_meta", "GET /api/export/meta — available export contract", json!({})),
             tool("openfdd_haystack_status", "GET /api/haystack/status", json!({})),

@@ -82,7 +82,7 @@ export default function ReportBuilderPage() {
     } catch (e) {
       setError(formatApiError(e));
     }
-  }, [templateId, includeBranding]);
+  }, []);
 
   const sections = useMemo(
     () => [...(report?.sections ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
@@ -112,7 +112,7 @@ export default function ReportBuilderPage() {
     } finally {
       setBusy(false);
     }
-  }, [templateId]);
+  }, [templateId, includeBranding]);
 
   const loadReportById = useCallback(async (reportId: string) => {
     setBusy(true);
@@ -127,15 +127,16 @@ export default function ReportBuilderPage() {
     }
   }, []);
 
+  const reportIdFromQuery = searchParams.get("id");
+
   useEffect(() => {
     void loadReports();
-    const id = searchParams.get("id");
-    if (id) {
-      void loadReportById(id);
+    if (reportIdFromQuery) {
+      void loadReportById(reportIdFromQuery);
     }
     // Do not auto-create a draft on mount — wait for an explicit user action
     // so product shells stay quiet when reports APIs are unavailable.
-  }, [searchParams, loadReportById, loadReports]);
+  }, [reportIdFromQuery, loadReportById, loadReports]);
 
   async function deleteReport(reportId: string) {
     setBusy(true);

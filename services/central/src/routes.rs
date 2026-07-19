@@ -30,7 +30,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/capabilities", get(capabilities))
         .route("/api/auth/status", get(auth_status))
         .route("/api/auth/me", get(auth_me))
-        .route("/api/auth/login", post(auth_login));
+        .route("/api/auth/login", post(auth_login))
+        // Shell strip + building summary are intentionally public (UI before login).
+        .route("/api/health/stack", get(health_stack))
+        .route("/api/building/snapshot", get(building_snapshot));
 
     let csv = Router::new()
         .route("/api/csv/import/preview", post(csv_preview))
@@ -87,8 +90,6 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .route("/api/fdd/run", post(fdd_run))
         .route("/api/fdd/status", get(fdd_status))
-        .route("/api/health/stack", get(health_stack))
-        .route("/api/building/snapshot", get(building_snapshot))
         .route("/api/faults/status", get(faults_status))
         .route("/api/faults/summary", get(faults_summary))
         .route("/api/export/meta", get(export_meta))
@@ -1014,6 +1015,22 @@ pub async fn reports_render_pdf(Path(report_id): Path<String>) -> Json<Value> {
 pub async fn reports_download_pdf(
     Path(report_id): Path<String>,
 ) -> Result<(StatusCode, HeaderMap, Vec<u8>), (StatusCode, Json<Value>)> {
+    let safe_id: String = report_id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if safe_id.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "invalid report_id"})),
+        ));
+    }
     let path =
         open_fdd_edge_prototype::reports::download_path(&report_id, "pdf").ok_or_else(|| {
             (
@@ -1021,19 +1038,29 @@ pub async fn reports_download_pdf(
                 Json(json!({"ok": false, "error": "pdf not found — render first"})),
             )
         })?;
-    let bytes = std::fs::read(&path).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": e.to_string()})),
-        )
-    })?;
+    let bytes = tokio::task::spawn_blocking(move || std::fs::read(path))
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": format!("reports download task: {e}")})),
+            )
+        })?
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": e.to_string()})),
+            )
+        })?;
     let mut headers = HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "application/pdf".parse().unwrap());
-    headers.insert(
-        header::CONTENT_DISPOSITION,
-        format!("attachment; filename=\"report-{report_id}.pdf\"")
-            .parse()
-            .unwrap(),
-    );
+    let disposition = format!("attachment; filename=\"report-{safe_id}.pdf\"");
+    let disposition_value = disposition.parse().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "invalid report_id for Content-Disposition"})),
+        )
+    })?;
+    headers.insert(header::CONTENT_DISPOSITION, disposition_value);
     Ok((StatusCode::OK, headers, bytes))
 }
