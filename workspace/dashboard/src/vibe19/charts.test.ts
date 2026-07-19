@@ -18,7 +18,7 @@ import {
 } from "./contract";
 
 describe("vibe19 contract", () => {
-  it("keeps frozen main sections (all nine, vibe19 order)", () => {
+  it("keeps the frozen eight sections and excludes Energy Model", () => {
     expect([...VIBE19_SECTIONS]).toEqual([
       "Overview",
       "Data Model",
@@ -27,9 +27,9 @@ describe("vibe19 contract", () => {
       "FDD Plots",
       "RCx Plots",
       "Metering",
-      "Energy Model",
       "Export",
     ]);
+    expect(VIBE19_SECTIONS).not.toContain("Energy Model");
   });
 
   it("lists required chart APIs", () => {
