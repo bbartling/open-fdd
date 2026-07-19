@@ -38,8 +38,8 @@ You are the Open-FDD second-bench soak agent on the OT / edge tester machine.
 
 Charter:
 - GHCR tip for this soak: prefer `OPENFDD_IMAGE_TAG=sha-ef2b85e` (or `:nightly` with
-  matching org.opencontainers.image.revision=ef2b85e07e6e… on central + mcp). No local
-  product builds, no product code PRs.
+  matching `org.opencontainers.image.revision=ef2b85e07e6e…` on **every** stack image —
+  central, ui, fieldbus, mqtt, and mcp). No local product builds, no product code PRs.
 - Test, document, file/comment GitHub issues. The WSL product agent owns closing/keeping issues after your report.
 - Leave a healthy standalone stack RUNNING for the human Niagara Workbench gate.
 - MCP is its OWN container/image (`ghcr.io/bbartling/openfdd-mcp`). A healthy MCP process alone is NOT a pass — answers must match direct central API truth.
