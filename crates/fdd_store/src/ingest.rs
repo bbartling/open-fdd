@@ -149,7 +149,22 @@ fn read_csv_batch(path: &Path, columns_path: &Path) -> Result<(RecordBatch, u64)
         included.push((idx, role));
     }
     included.sort_by_key(|(idx, _)| *idx);
-    let mut num_cols: Vec<Vec<Option<f64>>> = vec![Vec::new(); included.len()];
+    // Most FDD roles are numeric; a few categorical schedule/mode roles must stay Utf8
+    // so SQL like LOWER(occ_mode)='unoccupied' works (#550 / SCHED-*).
+    let mut num_cols: Vec<Vec<Option<f64>>> = Vec::new();
+    let mut str_cols: Vec<Vec<Option<String>>> = Vec::new();
+    let mut col_kind: Vec<bool> = Vec::new(); // true => Utf8
+    for (_, role) in &included {
+        if is_utf8_role(role) {
+            col_kind.push(true);
+            str_cols.push(Vec::new());
+            num_cols.push(Vec::new());
+        } else {
+            col_kind.push(false);
+            str_cols.push(Vec::new());
+            num_cols.push(Vec::new());
+        }
+    }
     let mut rows = 0u64;
 
     for rec in rdr.records() {
@@ -165,8 +180,16 @@ fn read_csv_batch(path: &Path, columns_path: &Path) -> Result<(RecordBatch, u64)
             .unwrap_or(0);
         ts_vals.push(ts);
         for (j, (i, _)) in included.iter().enumerate() {
-            let v = rec.get(*i).and_then(|s| s.parse::<f64>().ok());
-            num_cols[j].push(v);
+            let cell = rec.get(*i).unwrap_or("").trim();
+            if col_kind[j] {
+                if cell.is_empty() {
+                    str_cols[j].push(None);
+                } else {
+                    str_cols[j].push(Some(cell.to_string()));
+                }
+            } else {
+                num_cols[j].push(cell.parse::<f64>().ok());
+            }
         }
     }
 
@@ -179,9 +202,15 @@ fn read_csv_batch(path: &Path, columns_path: &Path) -> Result<(RecordBatch, u64)
         vec![std::sync::Arc::new(TimestampNanosecondArray::from(ts_vals)) as _];
 
     for (j, (_, role)) in included.iter().enumerate() {
-        fields.push(Field::new(role, DataType::Float64, true));
-        let arr = Float64Array::from(num_cols[j].clone());
-        arrays.push(std::sync::Arc::new(arr) as _);
+        if col_kind[j] {
+            fields.push(Field::new(role, DataType::Utf8, true));
+            let arr = StringArray::from(str_cols[j].clone());
+            arrays.push(std::sync::Arc::new(arr) as _);
+        } else {
+            fields.push(Field::new(role, DataType::Float64, true));
+            let arr = Float64Array::from(num_cols[j].clone());
+            arrays.push(std::sync::Arc::new(arr) as _);
+        }
     }
 
     // equipment_id column for SQL joins
@@ -197,6 +226,13 @@ fn read_csv_batch(path: &Path, columns_path: &Path) -> Result<(RecordBatch, u64)
     let schema = Schema::new(fields);
     let batch = RecordBatch::try_new(std::sync::Arc::new(schema), arrays)?;
     Ok((batch, rows))
+}
+
+fn is_utf8_role(role: &str) -> bool {
+    matches!(
+        role,
+        "occ_mode" | "occupancy" | "schedule" | "mode" | "equip_mode"
+    )
 }
 
 /// When multiple CSV columns map to the same role, pick the oracle-preferred column.
@@ -355,6 +391,47 @@ mod tests {
         let min = col.iter().flatten().fold(f64::INFINITY, f64::min);
         let max = col.iter().flatten().fold(f64::NEG_INFINITY, f64::max);
         assert!(min > 60.0 && max < 90.0, "zone_t range {min}..{max}");
+    }
+
+    #[test]
+    fn occ_mode_ingested_as_utf8() {
+        let tmp = TempDir::new().unwrap();
+        let data = tmp.path().join("BUILDING_100");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = data.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nocc_col,occ_mode\nfan_col,fan_status\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,occ_col,fan_col").unwrap();
+        writeln!(f, "2026-01-01T00:00:00Z,unoccupied,1").unwrap();
+
+        let out = tmp.path().join("parquet");
+        ingest_building(tmp.path(), "BUILDING_100", &out).unwrap();
+        let pq = out.join("building=BUILDING_100/equipment=AHU_1/history.parquet");
+        let file = std::fs::File::open(&pq).unwrap();
+        let reader = parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder::try_new(file)
+            .unwrap()
+            .build()
+            .unwrap();
+        let batch = reader.into_iter().next().unwrap().unwrap();
+        let occ = batch
+            .schema()
+            .fields()
+            .iter()
+            .position(|f| f.name() == "occ_mode")
+            .expect("occ_mode");
+        assert_eq!(batch.schema().field(occ).data_type(), &DataType::Utf8);
+        let arr = batch
+            .column(occ)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        assert_eq!(arr.value(0), "unoccupied");
     }
 
     #[test]
