@@ -885,12 +885,6 @@ export default function Vibe19LabPage() {
           {section === "FDD Plots" ? <FddPlotsSection rules={rulesQ.data?.rules} /> : null}
           {section === "RCx Plots" ? <RcxPlotsSection /> : null}
           {section === "Metering" ? <MeteringSection /> : null}
-          {section === "Energy Model" ? (
-            <Placeholder
-              title="Energy Model"
-              blurb="WattLab energy model wizard port is tracked separately — section reserved for parity with the vibe19 dashboard contract."
-            />
-          ) : null}
           {section === "Export" ? (
             <Placeholder title="Export" blurb="CSV / session / health / data-model exports." />
           ) : null}

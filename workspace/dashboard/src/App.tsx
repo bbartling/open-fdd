@@ -22,19 +22,36 @@ import AlgorithmsPage from "./pages/AlgorithmsPage";
 import DataExportPage from "./pages/DataExportPage";
 import EdgeFleetPage from "./pages/EdgeFleet";
 import { TabErrorBoundary } from "./components/TabDebugPanel";
+import LabShell from "./components/LabShell";
 
 export default function App() {
   return (
-    <DashboardStreamProvider>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route element={<RequireAuth />}>
+        <Route element={<LabShell />}>
+          <Route
+            path="lab"
+            element={
+              <TabErrorBoundary tab="lab">
+                <Vibe19LabPage />
+              </TabErrorBoundary>
+            }
+          />
+        </Route>
+      </Route>
+      <Route
+        element={
+          <DashboardStreamProvider>
+            <AppLayout />
+          </DashboardStreamProvider>
+        }
+      >
         {/* Public check-engine views — no sign-in required */}
-        <Route element={<AppLayout />}>
-          <Route index element={<HomePage />} />
-          <Route path="faults" element={<Navigate to="/" replace />} />
-          <Route element={<RequireAuth />}>
-            <Route path="lab" element={<TabErrorBoundary tab="lab"><Vibe19LabPage /></TabErrorBoundary>} />
-            <Route path="live-fdd-validation" element={<TabErrorBoundary tab="live-fdd-validation"><LiveFddValidationPage /></TabErrorBoundary>} />
+        <Route index element={<HomePage />} />
+        <Route path="faults" element={<Navigate to="/" replace />} />
+        <Route element={<RequireAuth />}>
+          <Route path="live-fdd-validation" element={<TabErrorBoundary tab="live-fdd-validation"><LiveFddValidationPage /></TabErrorBoundary>} />
             <Route path="bench-5007" element={<Navigate to="/live-fdd-validation" replace />} />
             <Route path="sql-fdd" element={<TabErrorBoundary tab="sql-fdd"><SqlFddRulesPage /></TabErrorBoundary>} />
             <Route path="rule-lab" element={<Navigate to="/lab" replace />} />
@@ -61,9 +78,8 @@ export default function App() {
             <Route path="fdd" element={<Navigate to="/lab" replace />} />
             <Route path="fdd-wires" element={<Navigate to="/model" replace />} />
             <Route path="rules" element={<Navigate to="/model" replace />} />
-          </Route>
         </Route>
-      </Routes>
-    </DashboardStreamProvider>
+      </Route>
+    </Routes>
   );
 }
