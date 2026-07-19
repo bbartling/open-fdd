@@ -118,6 +118,57 @@
   font-size: 0.82rem;
 }
 
+.vibe19-checkbox {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.45rem !important;
+}
+
+.vibe19-equipment-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: 32rem;
+  font-weight: 600;
+}
+
+.vibe19-equipment-picker select,
+.vibe19-sidebar select {
+  background: var(--input-bg, #fff);
+  color: var(--input-text, inherit);
+  border: 1px solid var(--border, #e3e6ee);
+  border-radius: 0.35rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.vibe19-status-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(7rem, 1fr));
+  gap: 0.55rem;
+  margin-bottom: 0.8rem;
+}
+
+.vibe19-result-device {
+  border: 1px solid var(--border, #e3e6ee);
+  border-radius: 0.4rem;
+  padding: 0.5rem 0.7rem;
+  margin-bottom: 0.5rem;
+  background: var(--panel, #fff);
+}
+
+.vibe19-result-device summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.vibe19-inline-radio {
+  border: 1px solid var(--border, #e3e6ee);
+  border-radius: 0.4rem;
+  display: flex;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
 .vibe19-sidebar-block select,
 .vibe19-sidebar-block input[type="text"] {
   background: var(--input-bg, #fff);
@@ -325,5 +376,8 @@
   }
   .vibe19-role-list {
     columns: 1;
+  }
+  .vibe19-status-metrics {
+    grid-template-columns: repeat(2, minmax(7rem, 1fr));
   }
 }

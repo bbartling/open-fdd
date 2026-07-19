@@ -67,11 +67,15 @@ impl BridgeClient {
     }
 
     fn request(&self, req: reqwest::blocking::RequestBuilder) -> Result<Value, String> {
-        self.auth(req)
-            .send()
-            .map_err(|e| e.to_string())?
-            .json()
-            .map_err(|e| e.to_string())
+        let response = self.auth(req).send().map_err(|e| e.to_string())?;
+        let status = response.status();
+        let text = response.text().map_err(|e| e.to_string())?;
+        let body: Value = serde_json::from_str(&text)
+            .map_err(|e| format!("HTTP {status}: invalid JSON response ({e}): {text}"))?;
+        if !status.is_success() {
+            return Err(format!("HTTP {status}: {body}"));
+        }
+        Ok(body)
     }
 
     pub fn csv_import_preview(&self, args: &Value) -> Result<Value, String> {
@@ -361,6 +365,81 @@ impl BridgeClient {
         self.get("/api/fdd-rules")
     }
 
+    pub fn fdd_series(&self, equipment_id: &str, rule_id: &str) -> Result<Value, String> {
+        let mut url =
+            reqwest::Url::parse(&self.url("/api/fdd/series")).map_err(|e| e.to_string())?;
+        url.query_pairs_mut()
+            .append_pair("equipment_id", equipment_id)
+            .append_pair("rule_id", rule_id);
+        self.request(self.http.get(url))
+    }
+
+    /// Fetch the same central truth surfaces exposed as individual MCP tools
+    /// and verify their count fields against the arrays actually returned.
+    pub fn fdd_accuracy_snapshot(&self) -> Result<Value, String> {
+        let registry = self.get("/api/fdd/rules")?;
+        let equipment = self.get("/api/fdd/equipment")?;
+        let results = self.get("/api/fdd/results")?;
+        let capabilities = self.get("/api/capabilities").unwrap_or_else(|error| {
+            json!({
+                "ok": false,
+                "optional": true,
+                "error": error,
+                "hint": "capabilities will be required after #549 lands"
+            })
+        });
+
+        let checks = [
+            (
+                "registry_count",
+                registry.get("count").and_then(Value::as_u64),
+                registry
+                    .get("rules")
+                    .and_then(Value::as_array)
+                    .map(|rows| rows.len() as u64),
+            ),
+            (
+                "equipment_count",
+                equipment.get("count").and_then(Value::as_u64),
+                equipment
+                    .get("equipment")
+                    .and_then(Value::as_array)
+                    .map(|rows| rows.len() as u64),
+            ),
+            (
+                "results_count",
+                results.get("count").and_then(Value::as_u64),
+                results
+                    .get("results")
+                    .and_then(Value::as_array)
+                    .map(|rows| rows.len() as u64),
+            ),
+        ];
+        let check_rows: Vec<Value> = checks
+            .into_iter()
+            .map(|(name, declared, actual)| {
+                json!({
+                    "name": name,
+                    "ok": declared.is_some() && declared == actual,
+                    "declared": declared,
+                    "actual": actual,
+                })
+            })
+            .collect();
+        let ok = check_rows
+            .iter()
+            .all(|row| row.get("ok").and_then(Value::as_bool) == Some(true));
+
+        Ok(json!({
+            "ok": ok,
+            "checks": check_rows,
+            "registry": registry,
+            "equipment": equipment,
+            "results": results,
+            "capabilities": capabilities,
+        }))
+    }
+
     pub fn fdd_rule_test_sql(&self, args: &Value) -> Result<Value, String> {
         let rule_id = args
             .get("rule_id")
@@ -374,9 +453,17 @@ impl BridgeClient {
     }
 
     pub fn fdd_run(&self, args: &Value) -> Result<Value, String> {
+        if args
+            .get("sql")
+            .and_then(Value::as_str)
+            .is_some_and(|s| !s.trim().is_empty())
+        {
+            return Err("raw SQL rejected — use mode=registry with typed rule_ids/params".into());
+        }
         let mut body = args.clone();
         if let Some(obj) = body.as_object_mut() {
             obj.remove("confirm");
+            obj.insert("mode".into(), json!("registry"));
         }
         self.post("/api/fdd/run", &body)
     }
