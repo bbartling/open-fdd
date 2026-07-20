@@ -1,4 +1,4 @@
-"""Vibe Code App 19 — 50-rule pandas/Streamlit FDD demo."""
+"""Open-FDD Streamlit lab — zip → Feather/SQL; Run Rules via central DataFusion."""
 
 from __future__ import annotations
 
@@ -120,7 +120,8 @@ def _render_app_hero() -> None:
     """Brand header: title → subtitle → compact logo → how-it-works."""
     st.title(APP_TITLE)
     st.markdown(
-        "Educational Streamlit + pandas lab for the Open-FDD 50-rule cookbook. "
+        "Streamlit lab for Open-FDD: Load zip → central Feather store; Run Rules → DataFusion SQL. "
+        "Rule-tuning sliders map to SQL registry params (confirm delay = confirm_min → confirm_seconds). "
         "CSVs stay as-is — you only map columns to roles."
     )
     if _HERO_IMG.is_file():

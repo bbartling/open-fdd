@@ -26,6 +26,19 @@ fn sql_rules_dir() -> PathBuf {
     PathBuf::from("sql_rules")
 }
 
+/// Map Streamlit / pandas cookbook slider keys onto SQL registry parameter keys.
+fn alias_ui_param_key<'a>(rule_id: &str, key: &'a str) -> &'a str {
+    match (rule_id, key) {
+        ("VAV-1", "zone_lo") => "zone_t_lo",
+        ("VAV-1", "zone_hi") => "zone_t_hi",
+        ("FC1", "duct_static_err") => "eps_dsp",
+        ("SV-SPIKE", "spike_scale_temperature" | "spike_scale_humidity" | "spike_scale_pressure") => {
+            "spike_scale"
+        }
+        _ => key,
+    }
+}
+
 fn parquet_root() -> PathBuf {
     if let Ok(p) = std::env::var("OPENFDD_PARQUET_ROOT") {
         return PathBuf::from(p);
@@ -468,25 +481,48 @@ pub fn run_registry(payload: &Value) -> Value {
                     .find_map(|alias| params_by_rule.get(alias))
             });
             if let Some(p) = supplied.and_then(|v| v.as_object()) {
+                // UI vibe19 sliders store confirm_min (minutes). Always fold into
+                // rule.confirm_seconds AND typed overrides so parameter-default
+                // CONFIRM_SECONDS cannot wipe the slider (soak BUG-2).
+                let mut confirm_override: Option<f64> = None;
                 if let Some(cm) = p.get("confirm_min").and_then(|v| v.as_f64()) {
                     rule.confirm_seconds = (cm * 60.0).round() as u32;
+                    confirm_override = Some(rule.confirm_seconds as f64);
                 }
                 if let Some(cs) = p.get("confirm_seconds").and_then(|v| v.as_f64()) {
                     rule.confirm_seconds = cs.round() as u32;
+                    confirm_override = Some(rule.confirm_seconds as f64);
                 }
                 let mut typed = HashMap::new();
                 for (key, value) in p {
-                    let Some(number) = value.as_f64() else {
+                    if key == "confirm_min" {
+                        continue;
+                    }
+                    let Some(mut number) = value.as_f64() else {
                         continue;
                     };
-                    if rule.parameters.contains_key(key) {
+                    // FC1 legacy fan_hi (fan-on frac) → eps_vfd_spd = 1 - fan_hi
+                    let mut mapped = alias_ui_param_key(&rule.rule_id, key).to_string();
+                    if rule.rule_id == "FC1" && key == "fan_hi" {
+                        if p.get("eps_vfd_spd").and_then(|v| v.as_f64()).is_some() {
+                            continue;
+                        }
+                        mapped = "eps_vfd_spd".into();
+                        number = (1.0 - number).clamp(0.0, 1.0);
+                    }
+                    if rule.parameters.contains_key(&mapped) {
+                        typed.insert(mapped, number);
+                    } else if rule.parameters.contains_key(key) {
                         typed.insert(key.clone(), number);
-                    } else if let Some((param_key, _)) = rule
-                        .parameters
-                        .iter()
-                        .find(|(_, def)| def.sql_placeholder == *key)
-                    {
+                    } else if let Some((param_key, _)) = rule.parameters.iter().find(|(_, def)| {
+                        def.sql_placeholder == *key || def.sql_placeholder == mapped
+                    }) {
                         typed.insert(param_key.clone(), number);
+                    }
+                }
+                if let Some(cs) = confirm_override {
+                    if rule.parameters.contains_key("confirm_seconds") {
+                        typed.insert("confirm_seconds".into(), cs);
                     }
                 }
                 if !typed.is_empty() {

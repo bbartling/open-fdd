@@ -96,15 +96,20 @@ pub async fn run_all_rules_with_overrides(
         let session_override = overrides.get(&rule.rule_id);
         if let Ok(tuned) = effective_param_strings(rule, &tuning, None, None, session_override) {
             for (k, v) in tuned {
+                // Do not let registry parameter defaults for CONFIRM_* wipe the
+                // confirm window already applied via rule.confirm_seconds /
+                // confirm_min (soak BUG-2). Session overrides for confirm_seconds
+                // are already merged into rule.confirm_seconds by the API layer.
+                if k == "CONFIRM_SECONDS" || k == "CONFIRM_ROWS" {
+                    continue;
+                }
                 params.insert(k, v);
             }
-            if let Some(cs) = params
-                .get("CONFIRM_SECONDS")
-                .and_then(|s| s.parse::<u32>().ok())
-            {
-                let rows = ((cs as f64 / poll_seconds.max(1.0)).ceil() as u32).max(1);
-                params.insert("CONFIRM_ROWS".into(), rows.to_string());
-            }
+        }
+        // Always re-assert confirm from the (possibly mutated) rule spec.
+        let confirm_params = rule_params(poll_seconds, rule.confirm_seconds);
+        for (k, v) in confirm_params {
+            params.insert(k, v);
         }
         let mut sql = substitute_sql(&raw_sql, &params);
         if let Some(equipment_id) = equipment_filter {

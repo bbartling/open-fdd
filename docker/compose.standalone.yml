@@ -52,6 +52,11 @@ services:
       dockerfile: Dockerfile
     environment:
       OPENFDD_API_BASE: http://central:8080
+      # JWT-secured central: set OPENFDD_API_TOKEN or OPENFDD_ADMIN_PASSWORD (UI logs in as admin).
+      OPENFDD_API_TOKEN: ${OPENFDD_API_TOKEN:-}
+      OPENFDD_UI_USERNAME: ${OPENFDD_UI_USERNAME:-admin}
+      OPENFDD_UI_PASSWORD: ${OPENFDD_UI_PASSWORD:-}
+      OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
     ports:
       # Bind all interfaces so LAN clients can reach http://<bench-ip>:3000
       - "${OPENFDD_UI_BIND:-0.0.0.0}:3000:8501"

@@ -46,25 +46,24 @@ Bump all three together when cutting a coordinated stack release.
 
 ## Latest verified nightlies
 
-Published successfully from stack-only `master` tip **`db159949`**:
+Published successfully from Streamlit UI + Feather/SQL tip **`f454792e`** (merge #559):
 
 | Images | Immutable tag | Workflow |
 |--------|---------------|----------|
-| `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` | `sha-db15994` | [29591686722](https://github.com/bbartling/open-fdd/actions/runs/29591686722) — success |
-| `openfdd-mcp` | `sha-db15994` | [29591686920](https://github.com/bbartling/open-fdd/actions/runs/29591686920) — success |
+| `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` | `sha-f454792` | [29751954018](https://github.com/bbartling/open-fdd/actions/runs/29751954018) — success |
+| `openfdd-mcp` | `sha-f454792` | [29751953969](https://github.com/bbartling/open-fdd/actions/runs/29751953969) — success |
 
 ```bash
-export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-db15994
-export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-db15994
-export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-db15994
-export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-db15994
-export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-db15994
+export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-f454792
+export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-f454792
+export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-f454792
+export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-f454792
+export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-f454792
 ```
 
-The workflows verified build/push metadata, manifests, MCP↔central smoke, and
-csv-recipe boot + `/api/health`. Pull/run verification of all four recipes is
-the next bench gate because Docker is unavailable in the current WSL environment.
-Run `docs/agent/linux-edge-tester-stack-recipes-prompt.md`; leave standalone
-running for the human Niagara check.
+UI is Streamlit (`services/ui`); FDD operator path is central DataFusion SQL.
+When `OPENFDD_JWT_SECRET` is set, also set `OPENFDD_ADMIN_PASSWORD` (or
+`OPENFDD_API_TOKEN`) on **both** central and ui so Run Rules / package ingest
+can authenticate.
 
 **Human Workbench gate** still required before BACnet OT PASS (hosted **599999** discoverability). See `docs/agent/linux-edge-tester-stack-recipes-prompt.md`.
