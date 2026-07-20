@@ -305,48 +305,133 @@ def run_rules(
     *,
     require_operational_gates: bool = True,
 ) -> AgentRun:
-    """Run all 50 canonical rules (optionally filtered) — never silently omit."""
+    """Run FDD via central DataFusion SQL (default). Pandas only if explicitly allowed."""
+    import os
+
+    from app import central_client
+    from app.rules.base import RuleResult
+
     merged_params = {**dataset.params, **(params or {})}
-    _attach_role_map(dataset.frames, dataset.role_map)
     eq_filter = set(equipment_ids) if equipment_ids is not None else None
     t_rules = time.perf_counter()
-    if require_operational_gates:
-        results = run_batch(
-            dataset.frames,
-            params_by_rule=merged_params,
-            weather=dataset.weather,
-            equipment_filter=eq_filter,
-        )
-    else:
-        from app.role_map import apply_role_map
-        from app.rules.runner import run_all_cookbook_rules
 
-        results = []
-        for eq_id, raw_df in sorted(dataset.frames.items()):
-            if eq_filter is not None and eq_id not in eq_filter:
+    allow_pandas = (os.environ.get("OPENFDD_ALLOW_PANDAS_FDD") or "").strip() in {
+        "1",
+        "true",
+        "TRUE",
+        "yes",
+        "YES",
+    }
+    engine = "datafusion"
+
+    if not allow_pandas:
+        # Prefer SQL — dataset must already be ingested to central (same building_id).
+        float_params: dict[str, dict[str, float]] = {}
+        for rid, block in merged_params.items():
+            if not isinstance(block, dict):
                 continue
-            mapped = apply_role_map(raw_df, eq_id, dataset.role_map)
-            mapped.attrs.update(raw_df.attrs)
-            poll = float(raw_df.attrs.get("poll_seconds") or 300.0)
-            results.extend(
-                run_all_cookbook_rules(
-                    mapped,
-                    equipment_id=eq_id,
-                    poll_seconds=poll,
-                    params_by_rule=merged_params,
-                    weather=dataset.weather,
-                    site_id=str(raw_df.attrs.get("site_id", "")),
-                    building_id=str(raw_df.attrs.get("building_id", dataset.building_id)),
-                    equipment_type=resolve_equipment_type(
-                        eq_id, df=raw_df, role_map=dataset.role_map
-                    ),
-                    require_operational_gates=False,
+            float_params[str(rid)] = {
+                str(k): float(v) for k, v in block.items() if isinstance(v, (int, float))
+            }
+        selected_rules = list(rule_ids) if rule_ids is not None else [r.id for r in RULES]
+        equipment_id = None
+        if eq_filter is not None and len(eq_filter) == 1:
+            equipment_id = next(iter(eq_filter))
+        body = central_client.run_fdd(
+            rule_ids=selected_rules,
+            params=float_params or None,
+            equipment_id=equipment_id,
+        )
+        if not body.get("ok", False):
+            err = body.get("error") or "SQL FDD run failed"
+            raise RuntimeError(
+                f"{err} (set OPENFDD_ALLOW_PANDAS_FDD=1 only for emergency local pandas)"
+            )
+        rows = body.get("results") or []
+        if not isinstance(rows, list) or not rows:
+            cached = central_client.fdd_results()
+            rows = cached.get("results") or []
+        if eq_filter is not None:
+            rows = [
+                r
+                for r in rows
+                if isinstance(r, dict) and r.get("equipment_id") in eq_filter
+            ]
+        if rule_ids is not None:
+            allow = set(rule_ids)
+            rows = [r for r in rows if isinstance(r, dict) and r.get("rule_id") in allow]
+        meta = {r.id: r for r in RULES}
+        results: list[RuleResult] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            rid = str(row.get("rule_id") or "")
+            eq = str(row.get("equipment_id") or "")
+            if not rid or not eq:
+                continue
+            rule = meta.get(rid)
+            title = str(row.get("title") or (getattr(rule, "title", "") if rule else "") or rid)
+            status = str(row.get("status") or "PASS")
+            fh = row.get("fault_hours")
+            fp = row.get("fault_pct")
+            notes = row.get("notes")
+            if notes is not None and not isinstance(notes, str):
+                notes = str(notes)
+            results.append(
+                RuleResult(
+                    rule_id=rid,
+                    equipment_id=eq,
+                    status=status,  # type: ignore[arg-type]
+                    applicable=status not in {"NOT_APPLICABLE_EQUIPMENT_TYPE"},
+                    equipment_type=str(row.get("equipment_type") or ""),
+                    building_id=str(dataset.building_id or ""),
+                    missing_roles=list(row.get("missing_roles") or []),
+                    fault_hours=float(fh) if fh is not None else None,
+                    fault_pct=float(fp) if fp is not None else None,
+                    notes=notes or f"DataFusion SQL · {title}",
                 )
             )
+    else:
+        engine = "pandas"
+        _attach_role_map(dataset.frames, dataset.role_map)
+        if require_operational_gates:
+            results = run_batch(
+                dataset.frames,
+                params_by_rule=merged_params,
+                weather=dataset.weather,
+                equipment_filter=eq_filter,
+            )
+        else:
+            from app.role_map import apply_role_map
+            from app.rules.runner import run_all_cookbook_rules
+
+            results = []
+            for eq_id, raw_df in sorted(dataset.frames.items()):
+                if eq_filter is not None and eq_id not in eq_filter:
+                    continue
+                mapped = apply_role_map(raw_df, eq_id, dataset.role_map)
+                mapped.attrs.update(raw_df.attrs)
+                poll = float(raw_df.attrs.get("poll_seconds") or 300.0)
+                results.extend(
+                    run_all_cookbook_rules(
+                        mapped,
+                        equipment_id=eq_id,
+                        poll_seconds=poll,
+                        params_by_rule=merged_params,
+                        weather=dataset.weather,
+                        site_id=str(raw_df.attrs.get("site_id", "")),
+                        building_id=str(raw_df.attrs.get("building_id", dataset.building_id)),
+                        equipment_type=resolve_equipment_type(
+                            eq_id, df=raw_df, role_map=dataset.role_map
+                        ),
+                        require_operational_gates=False,
+                    )
+                )
+        if rule_ids is not None:
+            allow = set(rule_ids)
+            results = [r for r in results if r.rule_id in allow]
+
     rule_execution_seconds = round(time.perf_counter() - t_rules, 6)
-    if rule_ids is not None:
-        allow = set(rule_ids)
-        results = [r for r in results if r.rule_id in allow]
     # Ensure every requested rule id still appears conceptually — when filtering,
     # callers asked for a subset; full catalog length is len(RULES)*equip when unfiltered.
     summary = results_summary_table(results)
@@ -375,6 +460,7 @@ def run_rules(
             "prefer_web_oat": dataset.prefer_web_oat,
             "require_operational_gates": require_operational_gates,
             "rule_execution_seconds": rule_execution_seconds,
+            "fdd_engine": engine,
         },
     )
 

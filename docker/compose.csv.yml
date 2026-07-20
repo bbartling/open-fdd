@@ -28,6 +28,10 @@ services:
       dockerfile: Dockerfile
     environment:
       OPENFDD_API_BASE: http://central:8080
+      OPENFDD_API_TOKEN: ${OPENFDD_API_TOKEN:-}
+      OPENFDD_UI_USERNAME: ${OPENFDD_UI_USERNAME:-admin}
+      OPENFDD_UI_PASSWORD: ${OPENFDD_UI_PASSWORD:-}
+      OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
     ports:
       - "${OPENFDD_UI_BIND:-0.0.0.0}:3000:8501"
     depends_on:
