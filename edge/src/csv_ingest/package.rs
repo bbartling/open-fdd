@@ -637,23 +637,58 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
     }
 
     let out_dir = parquet_out_dir();
-    match fdd_store::ingest_building(&data_root, &building_id, &out_dir) {
-        Ok(report) => json!({
-            "ok": true,
-            "schema_version": PACKAGE_SCHEMA,
-            "building_id": building_id,
-            "grid_minutes": manifest.grid_minutes,
-            "poll_seconds": manifest.grid_minutes.saturating_mul(60),
-            "timezone": manifest.timezone,
-            "equipment": equipment_report,
-            "equipment_written": report.equipment_written,
-            "total_rows": report.total_rows,
-            "total_ms": report.total_ms,
-            "out_dir": report.out_dir,
-            "package_root": building_root.display().to_string(),
-            "session_config": session_config,
-            "warnings": warnings,
-        }),
+    let mut feather_written = 0usize;
+    let mut feather_warnings: Vec<String> = Vec::new();
+    let building_id_for_feather = building_id.clone();
+    match fdd_store::ingest_building_with_batch_hook(
+        &data_root,
+        &building_id,
+        &out_dir,
+        |equipment_id, batch| {
+            match crate::historian::feather_store::write_equipment_history(
+                "package",
+                &building_id_for_feather,
+                equipment_id,
+                batch,
+            ) {
+                Ok(_) => feather_written += 1,
+                Err(e) => feather_warnings.push(format!("{equipment_id}: {e}")),
+            }
+            Ok(())
+        },
+    ) {
+        Ok(report) => {
+            warnings.extend(feather_warnings);
+            if let Err(e) = crate::csv_ingest::dataset::register_package_dataset(
+                &building_id,
+                report.total_rows,
+                report.equipment_written,
+                &json!({
+                    "package_root": building_root.display().to_string(),
+                    "feather_written": feather_written,
+                }),
+            ) {
+                warnings.push(format!("dataset registry: {e}"));
+            }
+            json!({
+                "ok": true,
+                "schema_version": PACKAGE_SCHEMA,
+                "building_id": building_id,
+                "grid_minutes": manifest.grid_minutes,
+                "poll_seconds": manifest.grid_minutes.saturating_mul(60),
+                "timezone": manifest.timezone,
+                "equipment": equipment_report,
+                "equipment_written": report.equipment_written,
+                "total_rows": report.total_rows,
+                "total_ms": report.total_ms,
+                "out_dir": report.out_dir,
+                "package_root": building_root.display().to_string(),
+                "session_config": session_config,
+                "feather_written": feather_written,
+                "feather_files": feather_written,
+                "warnings": warnings,
+            })
+        }
         Err(e) => json!({
             "ok": false,
             "error": format!("parquet ingest failed: {e:#}"),
@@ -752,7 +787,22 @@ pub fn update_package_roles_handler(body: &Value) -> Value {
     if let Err(e) = write_columns_csv(&eq_dir.join("columns.csv"), &headers, &roles) {
         return json!({"ok": false, "error": e});
     }
-    match fdd_store::ingest_building(&data_root, &building_id, &parquet_out_dir()) {
+    let out_dir = parquet_out_dir();
+    let building_id_for_feather = building_id.clone();
+    match fdd_store::ingest_building_with_batch_hook(
+        &data_root,
+        &building_id,
+        &out_dir,
+        |eq_id, batch| {
+            let _ = crate::historian::feather_store::write_equipment_history(
+                "package",
+                &building_id_for_feather,
+                eq_id,
+                batch,
+            );
+            Ok(())
+        },
+    ) {
         Ok(report) => json!({
             "ok": true,
             "building_id": building_id,

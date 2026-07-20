@@ -29,15 +29,21 @@ jobs:
           test -f docker/compose.standalone.yml
           test -f docker/compose.csv.yml
           test -f services/central/Dockerfile
-          test -f workspace/dashboard/Dockerfile
+          test -f services/ui/Dockerfile
+          test -f services/ui/streamlit_app.py
           test -f Dockerfile.mcp
           test -f .env.example
           test -d edge
           test -d services/central
-          test -d workspace/dashboard
+          test -d services/ui
+          test -d workspace
           test ! -f Dockerfile
           test ! -f docker/compose.edge.rust.yml
+          test ! -d workspace/dashboard/src
 
-      - name: No obsolete UI route regressions
+      - name: No React UI recreation
         run: |
-          ! grep -R "Rule Lab" workspace/dashboard/src || true
+          ! test -f workspace/dashboard/package.json
+          ! test -f frontend/package.json
+          grep -q "streamlit" services/ui/requirements.txt
+          grep -q "Rule tuning" services/ui/streamlit_app.py

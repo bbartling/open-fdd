@@ -75,20 +75,16 @@ jobs:
         with:
           workspaces: |
             . -> target
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v5
         with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: workspace/dashboard/package-lock.json
+          python-version: "3.12"
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --all-targets
       - run: |
-          cd workspace/dashboard
-          npm ci
-          npm run test
-          VITE_OUT_DIR=dist npm run build
-          test -f dist/index.html
+          python3 -m py_compile services/ui/streamlit_app.py services/ui/app/central_client.py
+          test -f services/ui/Dockerfile
+          test -f services/ui/requirements.txt
       - run: |
           export OPENFDD_SITE_ID=local
           export OPENFDD_EDGE_ID=fieldbus-1
@@ -137,7 +133,7 @@ jobs:
           }
 
           build_one openfdd-central services/central/Dockerfile .
-          build_one openfdd-ui workspace/dashboard/Dockerfile .
+          build_one openfdd-ui services/ui/Dockerfile services/ui
           build_one openfdd-fieldbus services/fieldbus/Dockerfile .
           build_one openfdd-mqtt services/mqtt/Dockerfile services/mqtt
 

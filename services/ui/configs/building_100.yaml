@@ -1,0 +1,5 @@
+# Default demo building — override with HVAC_DATA_ROOT / HVAC_BUILDING env vars.
+data_root: ./data/hvac_systems_CLEANED
+building_id: BUILDING_100
+weather_subdir: weather
+grid_minutes: 5

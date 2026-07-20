@@ -38,6 +38,21 @@ pub fn ingest_building(
     building_id: &str,
     out_dir: &Path,
 ) -> Result<IngestReport> {
+    ingest_building_with_batch_hook(data_root, building_id, out_dir, |_, _| Ok(()))
+}
+
+/// Same as [`ingest_building`], but invokes `on_batch` once per equipment after the
+/// CSV→Arrow batch is built and parquet is written — so callers can dual-write
+/// Feather (or other stores) without re-reading parquet.
+pub fn ingest_building_with_batch_hook<F>(
+    data_root: &Path,
+    building_id: &str,
+    out_dir: &Path,
+    mut on_batch: F,
+) -> Result<IngestReport>
+where
+    F: FnMut(&str, &RecordBatch) -> Result<()>,
+{
     let started = Instant::now();
     std::fs::create_dir_all(out_dir)?;
     let validation = validate_building(data_root, building_id)?;
@@ -58,6 +73,7 @@ pub fn ingest_building(
 
         let t1 = Instant::now();
         write_parquet(&parquet_path, &batch)?;
+        on_batch(&eq.equipment_id, &batch)?;
         let write_ms = t1.elapsed().as_millis();
 
         let src = Path::new(&eq.history_path);

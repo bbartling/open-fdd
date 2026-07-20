@@ -56,39 +56,31 @@ jobs:
           grep -q 'auth.env.local' .gitignore || grep -q '/workspace' .gitignore
 
   frontend:
-    name: TypeScript dashboard build and tests
+    name: Streamlit UI checks
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v5
         with:
-          node-version: "22"
+          python-version: "3.12"
 
-      - name: Install dashboard dependencies
-        working-directory: workspace/dashboard
-        run: npm ci
-
-      - name: Vitest
-        working-directory: workspace/dashboard
-        run: npm test
-
-      - name: Production build (UI image dist)
-        working-directory: workspace/dashboard
-        env:
-          VITE_OUT_DIR: dist
+      - name: Streamlit UI syntax + layout guards
         run: |
-          npm run build
-          test -f dist/index.html
-
-      - name: Built UI guards
-        run: |
-          grep -q "Drivers" workspace/dashboard/src/pages/DriversPage.tsx
-          grep -q "SupervisoryOverridePanel" workspace/dashboard/src/components/SupervisoryOverridePanel.tsx
-          ! grep -R "Rule Lab" workspace/dashboard/src || true
+          test -f services/ui/Dockerfile
+          test -f services/ui/streamlit_app.py
+          test -f services/ui/requirements.txt
+          test -f services/ui/app/central_client.py
+          python3 -m py_compile services/ui/streamlit_app.py services/ui/app/central_client.py
+          grep -q "Rule tuning" services/ui/streamlit_app.py
+          grep -q "Delete dataset" services/ui/streamlit_app.py
+          grep -q "def _run_rule_list" services/ui/streamlit_app.py
+          grep -q "DataFusion" services/ui/streamlit_app.py || grep -q "run_fdd" services/ui/app/central_client.py
+          ! test -d workspace/dashboard/src
+          ! test -f workspace/dashboard/package.json
 
       - name: BACnet NIC helper guards
         run: |

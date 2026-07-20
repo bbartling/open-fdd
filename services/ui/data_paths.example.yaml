@@ -1,0 +1,7 @@
+# Copy to data_paths.local.yaml (gitignored) or set HVAC_DATA_ROOT env var.
+#
+# Point at your local CSV export tree (5-min grid + optional per-VAV folders):
+data_root: /path/to/hvac_systems_CLEANED
+building: BUILDING_100
+
+# Other building: BUILDING_50

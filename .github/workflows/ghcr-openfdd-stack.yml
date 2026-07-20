@@ -37,12 +37,6 @@ jobs:
           toolchain: 1.95.0
           components: rustfmt, clippy
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: workspace/dashboard/package-lock.json
-
       - uses: Swatinem/rust-cache@v2
 
       - name: Format check
@@ -54,14 +48,11 @@ jobs:
       - name: Stack crate tests
         run: cargo test -p openfdd-central -p openfdd-fieldbus -p openfdd_mqtt
 
-      - name: Dashboard production build
-        env:
-          VITE_OUT_DIR: dist
+      - name: Streamlit UI syntax check
         run: |
-          cd workspace/dashboard
-          npm ci
-          npm run build
-          test -f dist/index.html
+          python3 -m py_compile services/ui/streamlit_app.py services/ui/app/central_client.py
+          test -f services/ui/Dockerfile
+          test -f services/ui/requirements.txt
 
       - name: Compose config check (all recipes)
         env:
@@ -81,7 +72,7 @@ jobs:
           bash -n scripts/openfdd_stack_up.sh
           bash -n scripts/openfdd_stack_pull.sh
 
-      - name: CSV recipe boot smoke (central + UI proxy)
+      - name: CSV recipe boot smoke (central + Streamlit UI)
         run: |
           chmod +x scripts/release/smoke_csv_central_boot.sh
           ./scripts/release/smoke_csv_central_boot.sh
@@ -145,18 +136,18 @@ jobs:
         uses: docker/build-push-action@v6
         timeout-minutes: 30
         with:
-          context: .
-          file: workspace/dashboard/Dockerfile
+          context: services/ui
+          file: services/ui/Dockerfile
           platforms: linux/amd64
           push: true
           tags: |
             ${{ env.UI_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
             ${{ env.UI_IMAGE }}:${{ steps.vars.outputs.version }}
           build-args: |
-            VITE_OUT_DIR=dist
-            VITE_API_BASE=
+            OPENFDD_GIT_SHA=${{ github.sha }}
+            OPENFDD_IMAGE_TAG=sha-${{ steps.vars.outputs.short_sha }}
           labels: |
-            org.opencontainers.image.title=Open-FDD UI
+            org.opencontainers.image.title=Open-FDD UI (Streamlit vibe19)
             org.opencontainers.image.source=https://github.com/bbartling/open-fdd
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.vars.outputs.version }}

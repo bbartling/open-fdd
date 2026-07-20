@@ -1,0 +1,41 @@
+# Local data path overrides
+data_paths.local.yaml
+data_paths.local.json
+.env
+!.env.example
+
+# Client CSV trees (use HVAC_DATA_ROOT / ./data/hvac_systems_CLEANED junction)
+data/hvac_systems_CLEANED/
+BUILDING_*/
+weather/
+**/history_wide.csv
+!tests/fixtures/analytics_pkg/**/history_wide.csv
+!tests/fixtures/analytics_pkg/weather/history_wide.csv
+**/columns.csv
+
+# Generated / cache artifacts
+.artifacts/
+.cache/
+..cache/
+
+# Stale packages (removed — do not recreate)
+haystack_rdf/
+fdd_app/
+csv_fdd_dashboard/
+fdd_dashboard_model/
+
+# Generated RDF models
+data/rdf/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.pytest_cache_local/
+.pytest_tmp/
+.streamlit/
+!.streamlit/config.toml
+.last_agent_session.json
+.last_browser_session.json
+*.egg-info/

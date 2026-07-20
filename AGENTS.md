@@ -5,7 +5,7 @@ Open-FDD ships as a **container stack**: `openfdd-central`, `openfdd-ui`, `openf
 | Layer | Responsibility |
 | --- | --- |
 | **central** | MQTTS ingest, Feather, FDD registry SQL, REST + JWT |
-| **ui** | React operator dashboard (Caddy proxies `/api` → central) |
+| **ui** | Streamlit vibe19 lab (`services/ui`) — Feather ingest + DataFusion SQL FDD |
 | **fieldbus** | BACnet / Modbus / Haystack OT drivers |
 | **mqtt** | Mosquitto MQTTS broker |
 | **mcp** | Optional read-first stdio tools → central (`OPENFDD_API_BASE`) |

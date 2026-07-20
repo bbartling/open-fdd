@@ -26,7 +26,7 @@ done
 
 DOCKERFILES=(
   services/central/Dockerfile
-  workspace/dashboard/Dockerfile
+  services/ui/Dockerfile
   services/fieldbus/Dockerfile
   services/mqtt/Dockerfile
 )
@@ -39,17 +39,17 @@ for f in "${DOCKERFILES[@]}"; do
   echo "OK dockerfile: $f"
 done
 
-if [[ ! -f workspace/dashboard/package.json ]]; then
-  echo "FAIL: workspace/dashboard/package.json missing" >&2
+if [[ ! -f services/ui/streamlit_app.py ]]; then
+  echo "FAIL: services/ui/streamlit_app.py missing" >&2
   exit 1
 fi
-echo "OK dashboard package.json"
+echo "OK Streamlit UI entrypoint"
 
-if [[ ! -f workspace/dashboard/.env.example ]]; then
-  echo "FAIL: workspace/dashboard/.env.example missing (VITE_API_BASE)" >&2
+if [[ ! -f services/ui/requirements.txt ]]; then
+  echo "FAIL: services/ui/requirements.txt missing" >&2
   exit 1
 fi
-echo "OK dashboard .env.example"
+echo "OK Streamlit requirements"
 
 if [[ ! -f docker/VERSION_MANIFEST.md ]]; then
   echo "FAIL: docker/VERSION_MANIFEST.md missing" >&2
