@@ -1,0 +1,481 @@
+{
+  "version": 1,
+  "building_id": "BUILDING_100",
+  "generated_by": "heuristic",
+  "notes": "Auto-generated from columns.csv point_role + header heuristics. An LLM can refine column_roles using the README prompt.",
+  "equipment": {
+    "AHU_1": {
+      "equipment_type": "AHU",
+      "column_roles": {
+        "clg_valve_pct": "chw_valve_pct",
+        "duct_static": "da_p_inwc",
+        "duct_static_sp": "da_p_setpoint_inwc",
+        "fan_cmd": "return_fan_speed_pct",
+        "fan_status": "return_fan_status",
+        "mat": "mixed_air_temp_f",
+        "oa_damper_pct": "ex_dmpr_pos_fan_enable_pct",
+        "oa_t": "outside_air_temp_f",
+        "rat": "return_air_temp_f",
+        "sat": "discharge_air_temp_f",
+        "sat_sp": "dat_reset_f",
+        "zone_t": "zone_t100_fifth_floor_vav_10_space_temp_f"
+      }
+    },
+    "AHU_2": {
+      "equipment_type": "AHU",
+      "column_roles": {
+        "clg_valve_pct": "chw_valve_pct",
+        "duct_static": "da_p_inwc",
+        "duct_static_sp": "da_p_setpoint_inwc",
+        "fan_cmd": "return_fan_speed_pct",
+        "fan_status": "return_fan_status",
+        "mat": "mixed_air_temp_f",
+        "oa_damper_pct": "ex_dmpr_pos_fan_enable_pct",
+        "oa_t": "outside_air_temp_f",
+        "rat": "return_air_temp_f",
+        "sat": "discharge_air_temp_f",
+        "sat_sp": "dat_reset_f",
+        "zone_t": "zone_t100_fifth_floor_vav_18_space_temp_f"
+      }
+    },
+    "BOILERS_PUMPS": {
+      "equipment_type": "BOILER",
+      "column_roles": {
+        "oa_t": "outside_air_temp_f"
+      }
+    },
+    "CHILLER_1": {
+      "equipment_type": "CHW_PLANT",
+      "column_roles": {
+        "oa_t": "oat_chiller_enable_setpoint_f"
+      }
+    },
+    "CHILLER_2": {
+      "equipment_type": "CHW_PLANT",
+      "column_roles": {
+        "oa_t": "oat_chiller_enable_setpoint_f"
+      }
+    },
+    "VAVFC_100": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "vavactuatorcommand_pct_49",
+        "vav_inlet_t": "ductintemp_f_40",
+        "zone_flow": "supply_airflow_cfm_337",
+        "zone_t": "space_temp_f_49"
+      }
+    },
+    "VAVH_109": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_19",
+        "oa_damper_pct": "damper_pct_19",
+        "vav_inlet_t": "ductintemp1_f",
+        "zone_flow": "supply_airflow_cfm_393",
+        "zone_t": "space_temp_f_57"
+      }
+    },
+    "VAVH_115": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_11",
+        "oa_damper_pct": "damper_pct_11",
+        "vav_inlet_t": "ductintemp_f_39",
+        "zone_flow": "supply_airflow_cfm_330",
+        "zone_t": "space_temp_f_48"
+      }
+    },
+    "VAV_1": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_40",
+        "oa_damper_pct": "damper_pct_40",
+        "reheat_valve_pct": "reheat_valve_pct",
+        "vav_inlet_t": "vav_1_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_400",
+        "zone_t": "space_temp_f_80"
+      }
+    },
+    "VAV_10": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_34",
+        "oa_damper_pct": "damper_pct_34",
+        "reheat_valve_pct": "reheat_valve_pct_10",
+        "vav_inlet_t": "vav_10_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_409",
+        "zone_t": "space_temp_f_74"
+      }
+    },
+    "VAV_106": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_16",
+        "oa_damper_pct": "damper_pct_16",
+        "vav_inlet_t": "ductintemp_f_45",
+        "zone_flow": "supply_airflow_cfm_372",
+        "zone_t": "space_temp_f_54"
+      }
+    },
+    "VAV_107": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_17",
+        "oa_damper_pct": "damper_pct_17",
+        "vav_inlet_t": "ductintemp_f_46",
+        "zone_flow": "supply_airflow_cfm_379",
+        "zone_t": "space_temp_f_55"
+      }
+    },
+    "VAV_108": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_18",
+        "oa_damper_pct": "damper_pct_18",
+        "vav_inlet_t": "ductintemp_f_47",
+        "zone_flow": "supply_airflow_cfm_386",
+        "zone_t": "space_temp_f_56"
+      }
+    },
+    "VAV_11": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_33",
+        "oa_damper_pct": "damper_pct_33",
+        "reheat_valve_pct": "reheat_valve_pct_11",
+        "vav_inlet_t": "vav_11_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_410",
+        "zone_t": "space_temp_f_73"
+      }
+    },
+    "VAV_112": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_12",
+        "oa_damper_pct": "damper_pct_12",
+        "vav_inlet_t": "ductintemp_f_41",
+        "zone_flow": "supply_airflow_cfm_344",
+        "zone_t": "space_temp_f_50"
+      }
+    },
+    "VAV_113": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_13",
+        "oa_damper_pct": "damper_pct_13",
+        "vav_inlet_t": "ductintemp_f_42",
+        "zone_flow": "supply_airflow_cfm_351",
+        "zone_t": "space_temp_f_51"
+      }
+    },
+    "VAV_114": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_14",
+        "oa_damper_pct": "damper_pct_14",
+        "vav_inlet_t": "ductintemp_f_43",
+        "zone_flow": "supply_airflow_cfm_358",
+        "zone_t": "space_temp_f_52"
+      }
+    },
+    "VAV_115": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_15",
+        "oa_damper_pct": "damper_pct_15",
+        "vav_inlet_t": "ductintemp_f_44",
+        "zone_flow": "supply_airflow_cfm_365",
+        "zone_t": "space_temp_f_53"
+      }
+    },
+    "VAV_12": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_32",
+        "oa_damper_pct": "damper_pct_32",
+        "reheat_valve_pct": "reheat_valve_pct_12",
+        "vav_inlet_t": "vav_12_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_411",
+        "zone_t": "space_temp_f_72"
+      }
+    },
+    "VAV_13": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_31",
+        "oa_damper_pct": "damper_pct_31",
+        "reheat_valve_pct": "reheat_valve_pct_13",
+        "vav_inlet_t": "vav_13_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_412",
+        "zone_t": "space_temp_f_71"
+      }
+    },
+    "VAV_14": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_30",
+        "oa_damper_pct": "damper_pct_30",
+        "reheat_valve_pct": "reheat_valve_pct_14",
+        "vav_inlet_t": "vav_14_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_413",
+        "zone_t": "space_temp_f_70"
+      }
+    },
+    "VAV_15": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_29",
+        "oa_damper_pct": "damper_pct_29",
+        "reheat_valve_pct": "reheat_valve_pct_15",
+        "vav_inlet_t": "vav_15_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_414",
+        "zone_t": "space_temp_f_69"
+      }
+    },
+    "VAV_16": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_28",
+        "oa_damper_pct": "damper_pct_28",
+        "reheat_valve_pct": "reheat_valve_pct_16",
+        "vav_inlet_t": "vav_16_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_415",
+        "zone_t": "space_temp_f_68"
+      }
+    },
+    "VAV_17": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_27",
+        "oa_damper_pct": "damper_pct_27",
+        "reheat_valve_pct": "reheat_valve_pct_17",
+        "vav_inlet_t": "vav_17_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_416",
+        "zone_t": "space_temp_f_67"
+      }
+    },
+    "VAV_18": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_26",
+        "oa_damper_pct": "damper_pct_26",
+        "reheat_valve_pct": "reheat_valve_pct_18",
+        "vav_inlet_t": "vav_18_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_417",
+        "zone_t": "space_temp_f_66"
+      }
+    },
+    "VAV_19": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_25",
+        "oa_damper_pct": "damper_pct_25",
+        "reheat_valve_pct": "reheat_valve_pct_19",
+        "vav_inlet_t": "vav_19_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_418",
+        "zone_t": "space_temp_f_65"
+      }
+    },
+    "VAV_2": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_39",
+        "oa_damper_pct": "damper_pct_39",
+        "reheat_valve_pct": "reheat_valve_pct_2",
+        "vav_inlet_t": "vav_2_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_401",
+        "zone_t": "space_temp_f_79"
+      }
+    },
+    "VAV_20": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_24",
+        "oa_damper_pct": "damper_pct_24",
+        "reheat_valve_pct": "reheat_valve_pct_20",
+        "vav_inlet_t": "vav_20_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_419",
+        "zone_t": "space_temp_f_64"
+      }
+    },
+    "VAV_21": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_23",
+        "oa_damper_pct": "damper_pct_23",
+        "reheat_valve_pct": "reheat_valve_pct_21",
+        "vav_inlet_t": "vav_21_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_420",
+        "zone_t": "space_temp_f_63"
+      }
+    },
+    "VAV_22": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_22",
+        "oa_damper_pct": "damper_pct_22",
+        "reheat_valve_pct": "reheat_valve_pct_22",
+        "vav_inlet_t": "vav_22_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_421",
+        "zone_t": "space_temp_f_62"
+      }
+    },
+    "VAV_23": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_21",
+        "oa_damper_pct": "damper_pct_21",
+        "reheat_valve_pct": "reheat_valve_pct_23",
+        "vav_inlet_t": "vav_23_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_422",
+        "zone_t": "space_temp_f_61"
+      }
+    },
+    "VAV_24": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_20",
+        "oa_damper_pct": "damper_pct_20",
+        "reheat_valve_pct": "reheat_valve_pct_24",
+        "vav_inlet_t": "vav_24_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_423",
+        "zone_t": "space_temp_f_60"
+      }
+    },
+    "VAV_25": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "reheat_valve_pct": "reheat_valve_pct_30",
+        "zone_flow": "supply_airflow_cfm_430",
+        "zone_t": "vav_25_space_temp_f"
+      }
+    },
+    "VAV_25A": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "reheat_valve_pct": "reheat_valve_pct_25",
+        "zone_flow": "supply_airflow_cfm_424"
+      }
+    },
+    "VAV_26": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "zone_flow": "supply_airflow_cfm_425",
+        "zone_t": "vav_26_space_temp_f"
+      }
+    },
+    "VAV_27": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "vav_27_vavactuatorcommand_pct",
+        "reheat_valve_pct": "reheat_valve_pct_26",
+        "zone_flow": "supply_airflow_cfm_426",
+        "zone_t": "vav_27_space_temp_f"
+      }
+    },
+    "VAV_28": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "reheat_valve_pct": "reheat_valve_pct_27",
+        "zone_flow": "supply_airflow_cfm_427",
+        "zone_t": "vav_28_space_temp_f"
+      }
+    },
+    "VAV_29": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "reheat_valve_pct": "reheat_valve_pct_28",
+        "zone_flow": "supply_airflow_cfm_428",
+        "zone_t": "vav_29_space_temp_f"
+      }
+    },
+    "VAV_3": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_38",
+        "oa_damper_pct": "damper_pct_38",
+        "reheat_valve_pct": "reheat_valve_pct_3",
+        "vav_inlet_t": "vav_3_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_402",
+        "zone_t": "space_temp_f_78"
+      }
+    },
+    "VAV_30": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "reheat_valve_pct": "reheat_valve_pct_29",
+        "zone_flow": "supply_airflow_cfm_429",
+        "zone_t": "vav_30_space_temp_f"
+      }
+    },
+    "VAV_32": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "zone_t": "vav_32_space_temp_f"
+      }
+    },
+    "VAV_33": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "zone_t": "vav_33_space_temp_f"
+      }
+    },
+    "VAV_4": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "reheat_valve_pct": "reheat_valve_pct_4",
+        "zone_flow": "supply_airflow_cfm_403",
+        "zone_t": "vav_4_space_temp_f"
+      }
+    },
+    "VAV_5": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "reheat_valve_pct": "reheat_valve_pct_5",
+        "zone_flow": "supply_airflow_cfm_404",
+        "zone_t": "vav_5_space_temp_f"
+      }
+    },
+    "VAV_6": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "reheat_valve_pct": "reheat_valve_pct_6",
+        "zone_flow": "supply_airflow_cfm_405",
+        "zone_t": "vav_6_space_temp_f"
+      }
+    },
+    "VAV_7": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_37",
+        "oa_damper_pct": "damper_pct_37",
+        "reheat_valve_pct": "reheat_valve_pct_7",
+        "vav_inlet_t": "vav_7_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_406",
+        "zone_t": "space_temp_f_58"
+      }
+    },
+    "VAV_8": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_36",
+        "oa_damper_pct": "damper_pct_36",
+        "reheat_valve_pct": "reheat_valve_pct_8",
+        "vav_inlet_t": "vav_8_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_407",
+        "zone_t": "space_temp_f_76"
+      }
+    },
+    "VAV_9": {
+      "equipment_type": "VAV",
+      "column_roles": {
+        "damper_pct": "damper_pct_35",
+        "oa_damper_pct": "damper_pct_35",
+        "reheat_valve_pct": "reheat_valve_pct_9",
+        "vav_inlet_t": "vav_9_ductintemp_f",
+        "zone_flow": "supply_airflow_cfm_408",
+        "zone_t": "space_temp_f_75"
+      }
+    }
+  }
+}

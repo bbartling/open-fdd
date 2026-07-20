@@ -1,24 +1,20 @@
 #!/usr/bin/env bash
-# Local React UI dev — Vite hot reload, API proxied to central :8080.
+# Local Streamlit vibe19 UI — hot reload against central :8080.
 #
-#   ./scripts/openfdd_ui_dev.sh              # localhost:5173
-#   ./scripts/openfdd_ui_dev.sh --lan        # 0.0.0.0:5173 for remote browser on LAN
-#   ./scripts/openfdd_ui_dev.sh --build-only # build UI dist only
+#   ./scripts/openfdd_ui_dev.sh              # localhost:8501
+#   ./scripts/openfdd_ui_dev.sh --lan        # 0.0.0.0:8501 for remote browser on LAN
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 LAN=0
-BUILD_ONLY=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --lan) LAN=1 ;;
-    --build-only) BUILD_ONLY=1 ;;
     -h|--help)
       cat <<'EOF'
-Usage: scripts/openfdd_ui_dev.sh [--lan] [--build-only]
+Usage: scripts/openfdd_ui_dev.sh [--lan]
 
-  --lan         Bind Vite to 0.0.0.0
-  --build-only  npm run build → workspace/dashboard/dist; skip Vite server
+  --lan  Bind Streamlit to 0.0.0.0:8501
 EOF
       exit 0
       ;;
@@ -27,18 +23,12 @@ EOF
   shift
 done
 
-cd "$ROOT/workspace/dashboard"
-npm ci
+cd "$ROOT/services/ui"
+python3 -m pip install -q -r requirements.txt
 
-if [[ "$BUILD_ONLY" -eq 1 ]]; then
-  VITE_OUT_DIR=dist npm run build
-  test -f dist/index.html
-  echo "OK built workspace/dashboard/dist"
-  exit 0
-fi
-
-export VITE_DEV_HOST="127.0.0.1"
-[[ "$LAN" -eq 1 ]] && export VITE_DEV_HOST="0.0.0.0"
-echo "==> Vite on http://${VITE_DEV_HOST}:5173 (proxy /api → :8080)"
-echo "    Start central first: ./scripts/openfdd_stack_up.sh csv   # or standalone"
-npm run dev
+export OPENFDD_API_BASE="${OPENFDD_API_BASE:-http://127.0.0.1:8080}"
+ADDR="127.0.0.1"
+[[ "$LAN" -eq 1 ]] && ADDR="0.0.0.0"
+echo "==> Streamlit on http://${ADDR}:8501 (OPENFDD_API_BASE=${OPENFDD_API_BASE})"
+echo "    Start central first: ./scripts/openfdd_stack_up.sh csv"
+exec streamlit run streamlit_app.py --server.port=8501 --server.address="$ADDR"

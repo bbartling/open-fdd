@@ -9,7 +9,9 @@ pub mod session;
 pub mod timestamp;
 mod upload;
 
-pub use dataset::{delete_dataset, list_datasets, preview_dataset, save_dataset};
+pub use dataset::{
+    delete_dataset, list_datasets, preview_dataset, register_package_dataset, save_dataset,
+};
 
 use plan::{
     auto_detect_mapping, infer_ut3_plan_from_session, is_weather_filename, plan_from_json,

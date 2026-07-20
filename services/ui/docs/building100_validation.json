@@ -1,0 +1,150 @@
+{
+  "building_id": "BUILDING_100",
+  "equipment_count": 48,
+  "canonical_rules": 50,
+  "total_evaluations": 2400,
+  "pass": 121,
+  "fault": 215,
+  "skipped": 187,
+  "not_applicable": 1877,
+  "error": 0,
+  "top_missing_roles": [
+    [
+      "oa_t",
+      43
+    ],
+    [
+      "vav_disch_t",
+      43
+    ],
+    [
+      "min_flow_sp",
+      43
+    ],
+    [
+      "reheat_valve_pct",
+      26
+    ],
+    [
+      "damper_pct",
+      22
+    ],
+    [
+      "vav_inlet_t",
+      12
+    ],
+    [
+      "htg_valve_pct",
+      8
+    ],
+    [
+      "chw_supply_t",
+      6
+    ],
+    [
+      "chw_pump_cmd",
+      6
+    ],
+    [
+      "wx_oa_t",
+      4
+    ],
+    [
+      "any sensor role from sweep list",
+      4
+    ],
+    [
+      "zone_flow",
+      4
+    ],
+    [
+      "vav_total_flow",
+      2
+    ],
+    [
+      "clg_coil_enter_t",
+      2
+    ],
+    [
+      "clg_coil_leave_t",
+      2
+    ]
+  ],
+  "top_faults": [
+    {
+      "rule_id": "SV-RANGE",
+      "equipment_id": "VAV_7",
+      "fault_hours": 2631.42
+    },
+    {
+      "rule_id": "VAV-1",
+      "equipment_id": "VAV_7",
+      "fault_hours": 2631.25
+    },
+    {
+      "rule_id": "SV-FLATLINE",
+      "equipment_id": "VAV_7",
+      "fault_hours": 2630.5
+    },
+    {
+      "rule_id": "SV-STALE",
+      "equipment_id": "VAV_7",
+      "fault_hours": 2629.5
+    },
+    {
+      "rule_id": "SV-FLATLINE",
+      "equipment_id": "CHILLER_2",
+      "fault_hours": 2627.58
+    },
+    {
+      "rule_id": "SV-FLATLINE",
+      "equipment_id": "CHILLER_1",
+      "fault_hours": 2627.5
+    },
+    {
+      "rule_id": "SV-FLATLINE",
+      "equipment_id": "BOILERS_PUMPS",
+      "fault_hours": 2624.83
+    },
+    {
+      "rule_id": "SV-STALE",
+      "equipment_id": "CHILLER_2",
+      "fault_hours": 2623.58
+    },
+    {
+      "rule_id": "SV-STALE",
+      "equipment_id": "CHILLER_1",
+      "fault_hours": 2623.5
+    },
+    {
+      "rule_id": "SV-STALE",
+      "equipment_id": "BOILERS_PUMPS",
+      "fault_hours": 2618.83
+    },
+    {
+      "rule_id": "SV-FLATLINE",
+      "equipment_id": "VAVH_109",
+      "fault_hours": 2223.17
+    },
+    {
+      "rule_id": "SV-STALE",
+      "equipment_id": "VAVH_109",
+      "fault_hours": 2045.92
+    },
+    {
+      "rule_id": "SV-FLATLINE",
+      "equipment_id": "VAV_107",
+      "fault_hours": 1929.33
+    },
+    {
+      "rule_id": "SV-FLATLINE",
+      "equipment_id": "VAV_26",
+      "fault_hours": 1854.92
+    },
+    {
+      "rule_id": "AHU-SATDEV",
+      "equipment_id": "AHU_2",
+      "fault_hours": 1794.58
+    }
+  ]
+}

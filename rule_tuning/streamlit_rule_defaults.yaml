@@ -1,0 +1,2381 @@
+AHU-DUCTHI:
+  confirm_min:
+    default: 5.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  duct_high_margin:
+    default: 0.25
+    direction: fewer
+    help: "High margin \u2014 increasing this usually flags fewer faults."
+    label: High margin
+    max: 1.0
+    min: 0.05
+    step: 0.05
+    unit: in. w.c.
+  pressure_on_min:
+    default: 0.2
+    direction: stricter
+    help: "Pressure-on evidence \u2014 increasing this usually flags more faults (stricter\
+      \ / wider detection)."
+    label: Pressure-on evidence
+    max: 1.0
+    min: 0.05
+    step: 0.05
+    unit: in. w.c.
+AHU-SATDEV:
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  sat_dev_err:
+    default: 5.0
+    direction: fewer
+    help: "SAT deviation \u2014 increasing this usually flags fewer faults."
+    label: SAT deviation
+    max: 15.0
+    min: 1.0
+    step: 0.5
+    unit: "\xB0F"
+AHU-SIMUL:
+  confirm_min:
+    default: 5.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  valve_open_pct:
+    default: 0.1
+    direction: ''
+    help: Valve open threshold
+    label: Valve open threshold
+    max: 0.5
+    min: 0.05
+    step: 0.01
+    unit: frac
+CHW-1:
+  confirm_min:
+    default: 15.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  min_dt:
+    default: 4.0
+    direction: ''
+    help: "Min \u0394T"
+    label: "Min \u0394T"
+    max: 12.0
+    min: 1.0
+    step: 0.5
+    unit: "\xB0F"
+CHW-2:
+  confirm_min:
+    default: 5.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  dp_margin:
+    default: 2.2
+    direction: ''
+    help: DP margin
+    label: DP margin
+    max: 6.0
+    min: 0.5
+    step: 0.1
+    unit: psi
+  pump_hi:
+    default: 0.87
+    direction: ''
+    help: Pump high-speed threshold
+    label: Pump high-speed threshold
+    max: 1.0
+    min: 0.5
+    step: 0.01
+    unit: frac
+CHW-3:
+  confirm_min:
+    default: 5.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  sp_band:
+    default: 2.2
+    direction: ''
+    help: SP band
+    label: SP band
+    max: 6.0
+    min: 0.5
+    step: 0.1
+    unit: "\xB0F"
+CHW-4:
+  confirm_min:
+    default: 5.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  flow_hi:
+    default: 1100
+    direction: ''
+    help: Flow high
+    label: Flow high
+    max: 3000
+    min: 200
+    step: 50
+    unit: gpm
+  pump_hi:
+    default: 0.87
+    direction: ''
+    help: Pump high-speed threshold
+    label: Pump high-speed threshold
+    max: 1.0
+    min: 0.5
+    step: 0.01
+    unit: frac
+CHW-NOLOAD-1:
+  comfort_high_f:
+    default: 75.0
+    direction: ''
+    help: Comfort high
+    label: Comfort high
+    max: 85.0
+    min: 68.0
+    step: 0.5
+    unit: "\xB0F"
+  comfort_low_f:
+    default: 70.0
+    direction: ''
+    help: Comfort low
+    label: Comfort low
+    max: 78.0
+    min: 60.0
+    step: 0.5
+    unit: "\xB0F"
+  confirm_min:
+    default: 30.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  sat_band_f:
+    default: 2.0
+    direction: ''
+    help: "AHU SAT\u2248SP band"
+    label: "AHU SAT\u2248SP band"
+    max: 6.0
+    min: 0.5
+    step: 0.5
+    unit: "\xB0F"
+CMD-1:
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+CW-APR-1:
+  approach_max_f:
+    default: 8.0
+    direction: ''
+    help: Max approach at full fan
+    label: Max approach at full fan
+    max: 15.0
+    min: 5.0
+    step: 0.5
+    unit: "\xB0F"
+  confirm_min:
+    default: 15.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  tower_fan_hi:
+    default: 0.95
+    direction: ''
+    help: Tower fan full-speed threshold
+    label: Tower fan full-speed threshold
+    max: 1.0
+    min: 0.8
+    step: 0.01
+    unit: frac
+CW-FAN-1:
+  confirm_min:
+    default: 15.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  cw_approach:
+    default: 7.0
+    direction: ''
+    help: Design approach
+    label: Design approach
+    max: 15.0
+    min: 3.0
+    step: 0.5
+    unit: "\xB0F"
+  excess_beyond_approach_f:
+    default: 5.0
+    direction: ''
+    help: Excess beyond approach
+    label: Excess beyond approach
+    max: 20.0
+    min: 2.0
+    step: 0.5
+    unit: "\xB0F"
+  tower_fan_hi:
+    default: 0.95
+    direction: ''
+    help: Tower fan full-speed threshold
+    label: Tower fan full-speed threshold
+    max: 1.0
+    min: 0.8
+    step: 0.01
+    unit: frac
+CW-OPT-1:
+  confirm_min:
+    default: 15.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  cw_approach:
+    default: 7.0
+    direction: stricter
+    help: "Design approach \u2014 increasing this usually flags more faults (stricter\
+      \ / wider detection)."
+    label: Design approach
+    max: 15.0
+    min: 3.0
+    step: 0.5
+    unit: "\xB0F"
+  cw_slack:
+    default: 2.0
+    direction: fewer
+    help: "Slack below target \u2014 increasing this usually flags fewer faults."
+    label: Slack below target
+    max: 6.0
+    min: 0.5
+    step: 0.5
+    unit: "\xB0F"
+DMP-1:
+  confirm_min:
+    default: 15.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  leak_delta:
+    default: 2.0
+    direction: ''
+    help: "Leak \u0394T"
+    label: "Leak \u0394T"
+    max: 6.0
+    min: 0.5
+    step: 0.5
+    unit: "\xB0F"
+ECON-1:
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  econ1_oat_min:
+    default: 55.0
+    direction: ''
+    help: Favorable OAT
+    label: Favorable OAT
+    max: 70.0
+    min: 45.0
+    step: 1.0
+    unit: "\xB0F"
+ECON-2:
+  confirm_min:
+    default: 5.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  econ2_damper:
+    default: 0.42
+    direction: ''
+    help: Damper open frac
+    label: Damper open frac
+    max: 0.9
+    min: 0.2
+    step: 0.02
+    unit: frac
+  econ2_oat_hi:
+    default: 63.0
+    direction: ''
+    help: OAT high cutoff
+    label: OAT high cutoff
+    max: 80.0
+    min: 55.0
+    step: 1.0
+    unit: "\xB0F"
+ECON-3:
+  confirm_min:
+    default: 5.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  econ3_damper_hi:
+    default: 0.9
+    direction: fewer
+    help: "Integrated economizer damper \u2014 increasing this usually flags fewer\
+      \ faults."
+    label: Integrated economizer damper
+    max: 1.0
+    min: 0.5
+    step: 0.02
+    unit: frac
+  econ3_db_max:
+    default: 72.0
+    direction: ''
+    help: Free-cool OA dry-bulb max
+    label: Free-cool OA dry-bulb max
+    max: 80.0
+    min: 65.0
+    step: 1.0
+    unit: "\xB0F"
+  econ3_db_min:
+    default: 60.0
+    direction: ''
+    help: Free-cool OA dry-bulb min
+    label: Free-cool OA dry-bulb min
+    max: 68.0
+    min: 50.0
+    step: 1.0
+    unit: "\xB0F"
+  econ3_dp_max:
+    default: 60.0
+    direction: ''
+    help: Free-cool OA dew point max
+    label: Free-cool OA dew point max
+    max: 68.0
+    min: 45.0
+    step: 1.0
+    unit: "\xB0F"
+ECON-4:
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  oa_min_pct:
+    default: 21.0
+    direction: stricter
+    help: "Min OA fraction \u2014 increasing this usually flags more faults (stricter\
+      \ / wider detection)."
+    label: Min OA fraction
+    max: 40.0
+    min: 5.0
+    step: 1.0
+    unit: '%'
+ECON-5:
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  preheat_over_f:
+    default: 2.2
+    direction: fewer
+    help: "Preheat over \u0394T \u2014 increasing this usually flags fewer faults."
+    label: "Preheat over \u0394T"
+    max: 8.0
+    min: 0.5
+    step: 0.1
+    unit: "\xB0F"
+ECON-6:
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  econ6_damper_max:
+    default: 0.25
+    direction: ''
+    help: Winter min-OA damper
+    label: Winter min-OA damper
+    max: 0.5
+    min: 0.05
+    step: 0.01
+    unit: frac
+  econ6_oat_max_f:
+    default: 25.0
+    direction: ''
+    help: Winter OAT ceiling
+    label: Winter OAT ceiling
+    max: 40.0
+    min: 15.0
+    step: 1.0
+    unit: "\xB0F"
+ECON-7:
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  econ7_damper_min:
+    default: 0.5
+    direction: stricter
+    help: "Economizing damper threshold \u2014 increasing this usually flags more\
+      \ faults (stricter / wider detection)."
+    label: Economizing damper threshold
+    max: 0.9
+    min: 0.2
+    step: 0.02
+    unit: frac
+  econ7_db_max:
+    default: 72.0
+    direction: ''
+    help: Econ-OK dry-bulb max
+    label: Econ-OK dry-bulb max
+    max: 80.0
+    min: 65.0
+    step: 1.0
+    unit: "\xB0F"
+  econ7_db_min:
+    default: 35.0
+    direction: ''
+    help: Econ-OK dry-bulb floor (freeze guard)
+    label: Econ-OK dry-bulb floor (freeze guard)
+    max: 50.0
+    min: 20.0
+    step: 1.0
+    unit: "\xB0F"
+  econ7_dp_max:
+    default: 60.0
+    direction: ''
+    help: Econ-OK dew point max
+    label: Econ-OK dew point max
+    max: 68.0
+    min: 45.0
+    step: 1.0
+    unit: "\xB0F"
+FC1:
+  confirm_min:
+    default: 5.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  duct_static_err:
+    default: 0.12
+    direction: ''
+    help: "Legacy duct-static error (sets \u03B5DSP)"
+    label: "Legacy duct-static error (sets \u03B5DSP)"
+    max: 0.5
+    min: 0.0
+    step: 0.01
+    unit: in. w.c.
+  eps_dsp:
+    default: 0.12
+    direction: ''
+    help: "Duct-static error \u03B5DSP (GL36 default 0.1 in.w.c.)"
+    label: "Duct-static error \u03B5DSP (GL36 default 0.1 in.w.c.)"
+    max: 0.5
+    min: 0.0
+    step: 0.01
+    unit: in. w.c.
+  eps_vfd_spd:
+    default: 0.13
+    direction: ''
+    help: "VFD speed error \u03B5VFDSPD (GL36 default 5%)"
+    label: "VFD speed error \u03B5VFDSPD (GL36 default 5%)"
+    max: 0.5
+    min: 0.0
+    step: 0.01
+    unit: frac
+  fan_hi:
+    default: 0.87
+    direction: ''
+    help: "Legacy fan-high threshold (sets \u03B5VFDSPD)"
+    label: "Legacy fan-high threshold (sets \u03B5VFDSPD)"
+    max: 1.0
+    min: 0.5
+    step: 0.01
+    unit: frac
+  mode_delay_min:
+    default: 0.0
+    direction: fewer
+    help: "Mode-change suspension (GL36 default 30) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: Mode-change suspension (GL36 default 30)
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+FC10:
+  clg_on_min:
+    default: 0.01
+    direction: ''
+    help: Cooling-command ON threshold
+    label: Cooling-command ON threshold
+    max: 0.25
+    min: 0.0
+    step: 0.01
+    unit: frac
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  econ_full_open:
+    default: 0.9
+    direction: ''
+    help: Economizer full-open threshold
+    label: Economizer full-open threshold
+    max: 1.0
+    min: 0.5
+    step: 0.01
+    unit: frac
+  eps_mat:
+    default: 1.15
+    direction: fewer
+    help: "MAT sensor error \u03B5MAT (GL36 default 5\xB0F) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "MAT sensor error \u03B5MAT (GL36 default 5\xB0F)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  eps_oat:
+    default: 1.15
+    direction: fewer
+    help: "OAT sensor error \u03B5OAT (GL36 default 2\xB0F local / 5\xB0F global)\
+      \ \u2014 increasing this usually flags fewer faults."
+    label: "OAT sensor error \u03B5OAT (GL36 default 2\xB0F local / 5\xB0F global)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mix_tol:
+    default: 1.15
+    direction: fewer
+    help: "Legacy master sensor tolerance (sets all \u03B5 values) \u2014 increasing\
+      \ this usually flags fewer faults."
+    label: "Legacy master sensor tolerance (sets all \u03B5 values)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mode_delay_min:
+    default: 0.0
+    direction: fewer
+    help: "Mode-change suspension (GL36 default 30) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: Mode-change suspension (GL36 default 30)
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+FC11:
+  clg_on_min:
+    default: 0.01
+    direction: ''
+    help: Cooling-command ON threshold
+    label: Cooling-command ON threshold
+    max: 0.25
+    min: 0.0
+    step: 0.01
+    unit: frac
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  delta_supply_fan:
+    default: 0.55
+    direction: ''
+    help: "Supply-fan heat rise \u0394TSF (GL36 default 2\xB0F)"
+    label: "Supply-fan heat rise \u0394TSF (GL36 default 2\xB0F)"
+    max: 5.0
+    min: 0.0
+    step: 0.05
+    unit: "\xB0F"
+  econ_full_open:
+    default: 0.9
+    direction: ''
+    help: Economizer full-open threshold
+    label: Economizer full-open threshold
+    max: 1.0
+    min: 0.5
+    step: 0.01
+    unit: frac
+  eps_oat:
+    default: 1.15
+    direction: fewer
+    help: "OAT sensor error \u03B5OAT (GL36 default 2\xB0F local / 5\xB0F global)\
+      \ \u2014 increasing this usually flags fewer faults."
+    label: "OAT sensor error \u03B5OAT (GL36 default 2\xB0F local / 5\xB0F global)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  eps_sat:
+    default: 1.15
+    direction: fewer
+    help: "SAT sensor error \u03B5SAT (GL36 default 2\xB0F) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "SAT sensor error \u03B5SAT (GL36 default 2\xB0F)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mix_tol:
+    default: 1.15
+    direction: fewer
+    help: "Legacy master sensor tolerance (sets all \u03B5 values) \u2014 increasing\
+      \ this usually flags fewer faults."
+    label: "Legacy master sensor tolerance (sets all \u03B5 values)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mode_delay_min:
+    default: 0.0
+    direction: fewer
+    help: "Mode-change suspension (GL36 default 30) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: Mode-change suspension (GL36 default 30)
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+FC12:
+  clg_on_min:
+    default: 0.01
+    direction: ''
+    help: Cooling-command ON threshold
+    label: Cooling-command ON threshold
+    max: 0.25
+    min: 0.0
+    step: 0.01
+    unit: frac
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  delta_supply_fan:
+    default: 0.55
+    direction: ''
+    help: "Supply-fan heat rise \u0394TSF (GL36 default 2\xB0F)"
+    label: "Supply-fan heat rise \u0394TSF (GL36 default 2\xB0F)"
+    max: 5.0
+    min: 0.0
+    step: 0.05
+    unit: "\xB0F"
+  econ_full_open:
+    default: 0.9
+    direction: ''
+    help: Economizer full-open threshold
+    label: Economizer full-open threshold
+    max: 1.0
+    min: 0.5
+    step: 0.01
+    unit: frac
+  econ_min_pos:
+    default: 0.05
+    direction: ''
+    help: Economizer minimum-position threshold
+    label: Economizer minimum-position threshold
+    max: 0.5
+    min: 0.0
+    step: 0.01
+    unit: frac
+  eps_mat:
+    default: 1.15
+    direction: fewer
+    help: "MAT sensor error \u03B5MAT (GL36 default 5\xB0F) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "MAT sensor error \u03B5MAT (GL36 default 5\xB0F)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  eps_sat:
+    default: 1.15
+    direction: fewer
+    help: "SAT sensor error \u03B5SAT (GL36 default 2\xB0F) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "SAT sensor error \u03B5SAT (GL36 default 2\xB0F)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mix_tol:
+    default: 1.15
+    direction: fewer
+    help: "Legacy master sensor tolerance (sets all \u03B5 values) \u2014 increasing\
+      \ this usually flags fewer faults."
+    label: "Legacy master sensor tolerance (sets all \u03B5 values)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mode_delay_min:
+    default: 0.0
+    direction: fewer
+    help: "Mode-change suspension (GL36 default 30) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: Mode-change suspension (GL36 default 30)
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  supply_tol:
+    default: 1.15
+    direction: fewer
+    help: "Legacy SAT tolerance master (sets \u03B5SAT) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: "Legacy SAT tolerance master (sets \u03B5SAT)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+FC13:
+  clg_full_min:
+    default: 0.01
+    direction: ''
+    help: Full-cooling threshold (GL36 99%)
+    label: Full-cooling threshold (GL36 99%)
+    max: 1.0
+    min: 0.5
+    step: 0.01
+    unit: frac
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  econ_full_open:
+    default: 0.9
+    direction: ''
+    help: Economizer full-open threshold
+    label: Economizer full-open threshold
+    max: 1.0
+    min: 0.5
+    step: 0.01
+    unit: frac
+  econ_min_pos:
+    default: 0.05
+    direction: ''
+    help: Economizer minimum-position threshold
+    label: Economizer minimum-position threshold
+    max: 0.5
+    min: 0.0
+    step: 0.01
+    unit: frac
+  eps_sat:
+    default: 1.0
+    direction: fewer
+    help: "SAT sensor error \u03B5SAT (GL36 default 2\xB0F) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "SAT sensor error \u03B5SAT (GL36 default 2\xB0F)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mode_delay_min:
+    default: 0.0
+    direction: fewer
+    help: "Mode-change suspension (GL36 default 30) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: Mode-change suspension (GL36 default 30)
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  sat_err:
+    default: 1.0
+    direction: ''
+    help: "Legacy SAT error (sets \u03B5SAT)"
+    label: "Legacy SAT error (sets \u03B5SAT)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+FC14:
+  clg_inactive_max:
+    default: 0.1
+    direction: fewer
+    help: "Cooling-command inactive ceiling \u2014 increasing this usually flags fewer\
+      \ faults."
+    label: Cooling-command inactive ceiling
+    max: 0.5
+    min: 0.0
+    step: 0.01
+    unit: frac
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  delta_supply_fan:
+    default: 0.55
+    direction: ''
+    help: "Supply-fan heat rise \u0394TSF (GL36 default 2\xB0F)"
+    label: "Supply-fan heat rise \u0394TSF (GL36 default 2\xB0F)"
+    max: 5.0
+    min: 0.0
+    step: 0.05
+    unit: "\xB0F"
+  econ_min_pos:
+    default: 0.05
+    direction: ''
+    help: Economizer minimum-position threshold
+    label: Economizer minimum-position threshold
+    max: 0.5
+    min: 0.0
+    step: 0.01
+    unit: frac
+  eps_ccet:
+    default: 1.15
+    direction: fewer
+    help: "Cooling-coil entering sensor error \u03B5CCET \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: "Cooling-coil entering sensor error \u03B5CCET"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  eps_cclt:
+    default: 1.15
+    direction: fewer
+    help: "Cooling-coil leaving sensor error \u03B5CCLT \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: "Cooling-coil leaving sensor error \u03B5CCLT"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  htg_on_min:
+    default: 0.01
+    direction: ''
+    help: Heating-command ON threshold
+    label: Heating-command ON threshold
+    max: 0.25
+    min: 0.0
+    step: 0.01
+    unit: frac
+  mix_tol:
+    default: 1.15
+    direction: fewer
+    help: "Legacy master sensor tolerance (sets all \u03B5 values) \u2014 increasing\
+      \ this usually flags fewer faults."
+    label: "Legacy master sensor tolerance (sets all \u03B5 values)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mode_delay_min:
+    default: 0.0
+    direction: fewer
+    help: "Mode-change suspension (GL36 default 30) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: Mode-change suspension (GL36 default 30)
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+FC15:
+  clg_inactive_max:
+    default: 0.1
+    direction: fewer
+    help: "Cooling-command inactive ceiling \u2014 increasing this usually flags fewer\
+      \ faults."
+    label: Cooling-command inactive ceiling
+    max: 0.5
+    min: 0.0
+    step: 0.01
+    unit: frac
+  clg_on_min:
+    default: 0.01
+    direction: ''
+    help: Cooling-command ON threshold
+    label: Cooling-command ON threshold
+    max: 0.25
+    min: 0.0
+    step: 0.01
+    unit: frac
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  delta_supply_fan:
+    default: 0.55
+    direction: ''
+    help: "Supply-fan heat rise \u0394TSF (GL36 default 2\xB0F)"
+    label: "Supply-fan heat rise \u0394TSF (GL36 default 2\xB0F)"
+    max: 5.0
+    min: 0.0
+    step: 0.05
+    unit: "\xB0F"
+  econ_full_open:
+    default: 0.9
+    direction: ''
+    help: Economizer full-open threshold
+    label: Economizer full-open threshold
+    max: 1.0
+    min: 0.5
+    step: 0.01
+    unit: frac
+  econ_min_pos:
+    default: 0.05
+    direction: ''
+    help: Economizer minimum-position threshold
+    label: Economizer minimum-position threshold
+    max: 0.5
+    min: 0.0
+    step: 0.01
+    unit: frac
+  eps_hcet:
+    default: 1.15
+    direction: fewer
+    help: "Heating-coil entering sensor error \u03B5HCET \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: "Heating-coil entering sensor error \u03B5HCET"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  eps_hclt:
+    default: 1.15
+    direction: fewer
+    help: "Heating-coil leaving sensor error \u03B5HCLT \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: "Heating-coil leaving sensor error \u03B5HCLT"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mix_tol:
+    default: 1.15
+    direction: fewer
+    help: "Legacy master sensor tolerance (sets all \u03B5 values) \u2014 increasing\
+      \ this usually flags fewer faults."
+    label: "Legacy master sensor tolerance (sets all \u03B5 values)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mode_delay_min:
+    default: 0.0
+    direction: fewer
+    help: "Mode-change suspension (GL36 default 30) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: Mode-change suspension (GL36 default 30)
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+FC2:
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  eps_mat:
+    default: 1.15
+    direction: fewer
+    help: "MAT sensor error \u03B5MAT (GL36 default 5\xB0F) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "MAT sensor error \u03B5MAT (GL36 default 5\xB0F)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  eps_oat:
+    default: 1.15
+    direction: fewer
+    help: "OAT sensor error \u03B5OAT (GL36 default 2\xB0F local / 5\xB0F global)\
+      \ \u2014 increasing this usually flags fewer faults."
+    label: "OAT sensor error \u03B5OAT (GL36 default 2\xB0F local / 5\xB0F global)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  eps_rat:
+    default: 1.15
+    direction: fewer
+    help: "RAT sensor error \u03B5RAT (GL36 default 2\xB0F) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "RAT sensor error \u03B5RAT (GL36 default 2\xB0F)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  fan_on_min:
+    default: 0.01
+    direction: ''
+    help: Fan-on command threshold
+    label: Fan-on command threshold
+    max: 0.25
+    min: 0.0
+    step: 0.01
+    unit: frac
+  mix_tol:
+    default: 1.15
+    direction: fewer
+    help: "Legacy master sensor tolerance (sets all \u03B5 values) \u2014 increasing\
+      \ this usually flags fewer faults."
+    label: "Legacy master sensor tolerance (sets all \u03B5 values)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mode_delay_min:
+    default: 0.0
+    direction: fewer
+    help: "Mode-change suspension (GL36 default 30) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: Mode-change suspension (GL36 default 30)
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+FC3:
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  eps_mat:
+    default: 1.15
+    direction: fewer
+    help: "MAT sensor error \u03B5MAT (GL36 default 5\xB0F) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "MAT sensor error \u03B5MAT (GL36 default 5\xB0F)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  eps_oat:
+    default: 1.15
+    direction: fewer
+    help: "OAT sensor error \u03B5OAT (GL36 default 2\xB0F local / 5\xB0F global)\
+      \ \u2014 increasing this usually flags fewer faults."
+    label: "OAT sensor error \u03B5OAT (GL36 default 2\xB0F local / 5\xB0F global)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  eps_rat:
+    default: 1.15
+    direction: fewer
+    help: "RAT sensor error \u03B5RAT (GL36 default 2\xB0F) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "RAT sensor error \u03B5RAT (GL36 default 2\xB0F)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  fan_on_min:
+    default: 0.01
+    direction: ''
+    help: Fan-on command threshold
+    label: Fan-on command threshold
+    max: 0.25
+    min: 0.0
+    step: 0.01
+    unit: frac
+  mix_tol:
+    default: 1.15
+    direction: fewer
+    help: "Legacy master sensor tolerance (sets all \u03B5 values) \u2014 increasing\
+      \ this usually flags fewer faults."
+    label: "Legacy master sensor tolerance (sets all \u03B5 values)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mode_delay_min:
+    default: 0.0
+    direction: fewer
+    help: "Mode-change suspension (GL36 default 30) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: Mode-change suspension (GL36 default 30)
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+FC4:
+  confirm_min:
+    default: 60.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  delta_os_max:
+    default: 5
+    direction: fewer
+    help: "Max mode changes/hr \u0394OSmax (GL36 default 7) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "Max mode changes/hr \u0394OSmax (GL36 default 7)"
+    max: 30
+    min: 1
+    step: 1
+    unit: count
+  mode_delay_min:
+    default: 0.0
+    direction: fewer
+    help: "Mode-change suspension (GL36 default 30) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: Mode-change suspension (GL36 default 30)
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+FC5:
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  delta_supply_fan:
+    default: 0.55
+    direction: ''
+    help: "Supply-fan heat rise \u0394TSF (GL36 default 2\xB0F)"
+    label: "Supply-fan heat rise \u0394TSF (GL36 default 2\xB0F)"
+    max: 5.0
+    min: 0.0
+    step: 0.05
+    unit: "\xB0F"
+  eps_mat:
+    default: 1.15
+    direction: fewer
+    help: "MAT sensor error \u03B5MAT (GL36 default 5\xB0F) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "MAT sensor error \u03B5MAT (GL36 default 5\xB0F)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  eps_sat:
+    default: 1.15
+    direction: fewer
+    help: "SAT sensor error \u03B5SAT (GL36 default 2\xB0F) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "SAT sensor error \u03B5SAT (GL36 default 2\xB0F)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  fan_on_min:
+    default: 0.01
+    direction: ''
+    help: Fan-on command threshold
+    label: Fan-on command threshold
+    max: 0.25
+    min: 0.0
+    step: 0.01
+    unit: frac
+  htg_on_min:
+    default: 0.01
+    direction: ''
+    help: Heating-command ON threshold
+    label: Heating-command ON threshold
+    max: 0.25
+    min: 0.0
+    step: 0.01
+    unit: frac
+  mix_tol:
+    default: 1.15
+    direction: fewer
+    help: "Legacy master sensor tolerance (sets all \u03B5 values) \u2014 increasing\
+      \ this usually flags fewer faults."
+    label: "Legacy master sensor tolerance (sets all \u03B5 values)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mode_delay_min:
+    default: 0.0
+    direction: fewer
+    help: "Mode-change suspension (GL36 default 30) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: Mode-change suspension (GL36 default 30)
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+FC6:
+  airflow_err:
+    default: 0.15
+    direction: ''
+    help: "Legacy OA-fraction error (sets \u03B5F)"
+    label: "Legacy OA-fraction error (sets \u03B5F)"
+    max: 1.0
+    min: 0.05
+    step: 0.01
+    unit: frac
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  delta_t_min:
+    default: 5.0
+    direction: ''
+    help: "Minimum |OAT\u2212RAT| \u0394Tmin (GL36 default 10\xB0F)"
+    label: "Minimum |OAT\u2212RAT| \u0394Tmin (GL36 default 10\xB0F)"
+    max: 30.0
+    min: 0.0
+    step: 0.5
+    unit: "\xB0F"
+  eps_airflow:
+    default: 0.15
+    direction: ''
+    help: "Airflow error \u03B5F (GL36 default 30%)"
+    label: "Airflow error \u03B5F (GL36 default 30%)"
+    max: 1.0
+    min: 0.05
+    step: 0.01
+    unit: frac
+  fan_on_min:
+    default: 0.01
+    direction: ''
+    help: Fan-on command threshold
+    label: Fan-on command threshold
+    max: 0.25
+    min: 0.0
+    step: 0.01
+    unit: frac
+  min_cfm_design:
+    default: 5000
+    direction: ''
+    help: Design min OA CFM
+    label: Design min OA CFM
+    max: 20000
+    min: 500
+    step: 500
+    unit: cfm
+  mode_delay_min:
+    default: 0.0
+    direction: fewer
+    help: "Mode-change suspension (GL36 default 30) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: Mode-change suspension (GL36 default 30)
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  oat_rat_delta_min:
+    default: 5.0
+    direction: ''
+    help: "Legacy OAT/RAT guard (sets \u0394Tmin)"
+    label: "Legacy OAT/RAT guard (sets \u0394Tmin)"
+    max: 30.0
+    min: 0.0
+    step: 0.5
+    unit: "\xB0F"
+FC7:
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  eps_sat:
+    default: 1.0
+    direction: fewer
+    help: "SAT sensor error \u03B5SAT (GL36 default 2\xB0F) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "SAT sensor error \u03B5SAT (GL36 default 2\xB0F)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  fan_on_min:
+    default: 0.01
+    direction: ''
+    help: Fan-on command threshold
+    label: Fan-on command threshold
+    max: 0.25
+    min: 0.0
+    step: 0.01
+    unit: frac
+  htg_full_min:
+    default: 0.9
+    direction: ''
+    help: Full-heating threshold (GL36 99%)
+    label: Full-heating threshold (GL36 99%)
+    max: 1.0
+    min: 0.5
+    step: 0.01
+    unit: frac
+  mode_delay_min:
+    default: 0.0
+    direction: fewer
+    help: "Mode-change suspension (GL36 default 30) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: Mode-change suspension (GL36 default 30)
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  sat_err:
+    default: 1.0
+    direction: ''
+    help: "Legacy SAT error (sets \u03B5SAT)"
+    label: "Legacy SAT error (sets \u03B5SAT)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+FC8:
+  clg_inactive_max:
+    default: 0.1
+    direction: fewer
+    help: "Cooling-command inactive ceiling \u2014 increasing this usually flags fewer\
+      \ faults."
+    label: Cooling-command inactive ceiling
+    max: 0.5
+    min: 0.0
+    step: 0.01
+    unit: frac
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  delta_supply_fan:
+    default: 0.55
+    direction: ''
+    help: "Supply-fan heat rise \u0394TSF (GL36 default 2\xB0F)"
+    label: "Supply-fan heat rise \u0394TSF (GL36 default 2\xB0F)"
+    max: 5.0
+    min: 0.0
+    step: 0.05
+    unit: "\xB0F"
+  econ_min_pos:
+    default: 0.05
+    direction: ''
+    help: Economizer minimum-position threshold
+    label: Economizer minimum-position threshold
+    max: 0.5
+    min: 0.0
+    step: 0.01
+    unit: frac
+  eps_mat:
+    default: 1.15
+    direction: fewer
+    help: "MAT sensor error \u03B5MAT (GL36 default 5\xB0F) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "MAT sensor error \u03B5MAT (GL36 default 5\xB0F)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  eps_sat:
+    default: 1.15
+    direction: fewer
+    help: "SAT sensor error \u03B5SAT (GL36 default 2\xB0F) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "SAT sensor error \u03B5SAT (GL36 default 2\xB0F)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mix_tol:
+    default: 1.15
+    direction: fewer
+    help: "Legacy master sensor tolerance (sets all \u03B5 values) \u2014 increasing\
+      \ this usually flags fewer faults."
+    label: "Legacy master sensor tolerance (sets all \u03B5 values)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mode_delay_min:
+    default: 0.0
+    direction: fewer
+    help: "Mode-change suspension (GL36 default 30) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: Mode-change suspension (GL36 default 30)
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  supply_tol:
+    default: 1.15
+    direction: fewer
+    help: "Legacy SAT tolerance master (sets \u03B5SAT) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: "Legacy SAT tolerance master (sets \u03B5SAT)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+FC9:
+  clg_inactive_max:
+    default: 0.1
+    direction: fewer
+    help: "Cooling-command inactive ceiling \u2014 increasing this usually flags fewer\
+      \ faults."
+    label: Cooling-command inactive ceiling
+    max: 0.5
+    min: 0.0
+    step: 0.01
+    unit: frac
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  delta_supply_fan:
+    default: 0.55
+    direction: ''
+    help: "Supply-fan heat rise \u0394TSF (GL36 default 2\xB0F)"
+    label: "Supply-fan heat rise \u0394TSF (GL36 default 2\xB0F)"
+    max: 5.0
+    min: 0.0
+    step: 0.05
+    unit: "\xB0F"
+  econ_min_pos:
+    default: 0.05
+    direction: ''
+    help: Economizer minimum-position threshold
+    label: Economizer minimum-position threshold
+    max: 0.5
+    min: 0.0
+    step: 0.01
+    unit: frac
+  eps_oat:
+    default: 1.15
+    direction: fewer
+    help: "OAT sensor error \u03B5OAT (GL36 default 2\xB0F local / 5\xB0F global)\
+      \ \u2014 increasing this usually flags fewer faults."
+    label: "OAT sensor error \u03B5OAT (GL36 default 2\xB0F local / 5\xB0F global)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  eps_sat:
+    default: 1.15
+    direction: fewer
+    help: "SAT sensor error \u03B5SAT (GL36 default 2\xB0F) \u2014 increasing this\
+      \ usually flags fewer faults."
+    label: "SAT sensor error \u03B5SAT (GL36 default 2\xB0F)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mix_tol:
+    default: 1.15
+    direction: fewer
+    help: "Legacy master sensor tolerance (sets all \u03B5 values) \u2014 increasing\
+      \ this usually flags fewer faults."
+    label: "Legacy master sensor tolerance (sets all \u03B5 values)"
+    max: 10.0
+    min: 0.0
+    step: 0.25
+    unit: "\xB0F"
+  mode_delay_min:
+    default: 0.0
+    direction: fewer
+    help: "Mode-change suspension (GL36 default 30) \u2014 increasing this usually\
+      \ flags fewer faults."
+    label: Mode-change suspension (GL36 default 30)
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+HP-1:
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  min_sat:
+    default: 85.0
+    direction: stricter
+    help: "Min heating SAT \u2014 increasing this usually flags more faults (stricter\
+      \ / wider detection)."
+    label: Min heating SAT
+    max: 110.0
+    min: 70.0
+    step: 1.0
+    unit: "\xB0F"
+  zone_cold:
+    default: 69.0
+    direction: stricter
+    help: "Zone cold \u2014 increasing this usually flags more faults (stricter /\
+      \ wider detection)."
+    label: Zone cold
+    max: 72.0
+    min: 60.0
+    step: 0.5
+    unit: "\xB0F"
+MECH-OAT-1:
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  mech_oat_max_f:
+    default: 60.0
+    direction: stricter
+    help: "Mech-cool OAT ceiling \u2014 increasing this usually flags more faults\
+      \ (stricter / wider detection)."
+    label: Mech-cool OAT ceiling
+    max: 65.0
+    min: 45.0
+    step: 1.0
+    unit: "\xB0F"
+OA-1:
+  confirm_min:
+    default: 15.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  min_oa_frac:
+    default: 0.15
+    direction: stricter
+    help: "Min OA fraction \u2014 increasing this usually flags more faults (stricter\
+      \ / wider detection)."
+    label: Min OA fraction
+    max: 0.4
+    min: 0.05
+    step: 0.01
+    unit: frac
+  oat_rat_guard:
+    default: 2.2
+    direction: fewer
+    help: "Min |RAT\u2212OAT| guard \u2014 increasing this usually flags fewer faults."
+    label: "Min |RAT\u2212OAT| guard"
+    max: 6.0
+    min: 0.5
+    step: 0.1
+    unit: "\xB0F"
+OAT-METEO:
+  confirm_min:
+    default: 15.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  oat_err:
+    default: 5.0
+    direction: fewer
+    help: "Max OAT disagreement \u2014 increasing this usually flags fewer faults."
+    label: Max OAT disagreement
+    max: 20.0
+    min: 2.0
+    step: 0.5
+    unit: "\xB0F"
+PID-HUNT-1:
+  change_deadband_pct:
+    default: 1.0
+    direction: ''
+    help: Ignore changes below
+    label: Ignore changes below
+    max: 10.0
+    min: 0.0
+    step: 0.5
+    unit: '% out'
+  confirm_min:
+    default: 0.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  minimum_coverage_pct:
+    default: 80.0
+    direction: ''
+    help: Minimum data coverage
+    label: Minimum data coverage
+    max: 100.0
+    min: 25.0
+    step: 5.0
+    unit: '%'
+  minimum_equivalent_cycles:
+    default: 2.5
+    direction: ''
+    help: Min equivalent cycles
+    label: Min equivalent cycles
+    max: 20.0
+    min: 0.5
+    step: 0.5
+    unit: cyc/h
+  minimum_reversals:
+    default: 4
+    direction: ''
+    help: Min direction reversals
+    label: Min direction reversals
+    max: 40
+    min: 1
+    step: 1
+    unit: count
+  minimum_span_pct:
+    default: 20.0
+    direction: ''
+    help: Minimum observed span
+    label: Minimum observed span
+    max: 100.0
+    min: 5.0
+    step: 5.0
+    unit: '% out'
+  total_variation_fault_pct:
+    default: 500.0
+    direction: ''
+    help: Total travel threshold
+    label: Total travel threshold
+    max: 2000.0
+    min: 50.0
+    step: 50.0
+    unit: '%/h'
+SCHED-1:
+  comfort_high_f:
+    default: 75.0
+    direction: ''
+    help: Comfort high
+    label: Comfort high
+    max: 85.0
+    min: 68.0
+    step: 0.5
+    unit: "\xB0F"
+  comfort_low_f:
+    default: 70.0
+    direction: ''
+    help: Comfort low
+    label: Comfort low
+    max: 78.0
+    min: 60.0
+    step: 0.5
+    unit: "\xB0F"
+  confirm_min:
+    default: 30.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+SCHED-247:
+  always_on_pct:
+    default: 0.95
+    direction: fewer
+    help: "Always-on fraction \u2014 increasing this usually flags fewer faults."
+    label: Always-on fraction
+    max: 1.0
+    min: 0.8
+    step: 0.01
+    unit: frac
+  confirm_min:
+    default: 60.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  pressure_on_min:
+    default: 0.2
+    direction: stricter
+    help: "Pressure-on evidence \u2014 increasing this usually flags more faults (stricter\
+      \ / wider detection)."
+    label: Pressure-on evidence
+    max: 2.0
+    min: 0.05
+    step: 0.05
+    unit: eng
+SV-FLATLINE:
+  confirm_min:
+    default: 5.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  flatline_hours:
+    default: 1.0
+    direction: fewer
+    help: "Flatline window \u2014 increasing this usually flags fewer faults."
+    label: Flatline window
+    max: 8.0
+    min: 0.5
+    step: 0.5
+    unit: h
+  flatline_tol:
+    default: 0.1
+    direction: stricter
+    help: "Flatline tolerance \u2014 increasing this usually flags more faults (stricter\
+      \ / wider detection)."
+    label: Flatline tolerance
+    max: 1.0
+    min: 0.02
+    step: 0.02
+    unit: "\xB0F"
+SV-RANGE:
+  confirm_min:
+    default: 5.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  range_scale_humidity:
+    default: 1.0
+    direction: fewer
+    help: "Humidity range scale \u2014 increasing this usually flags fewer faults."
+    label: Humidity range scale
+    max: 2.0
+    min: 0.5
+    step: 0.1
+    unit: x
+  range_scale_pressure:
+    default: 1.0
+    direction: fewer
+    help: "Pressure range scale \u2014 increasing this usually flags fewer faults."
+    label: Pressure range scale
+    max: 2.0
+    min: 0.5
+    step: 0.1
+    unit: x
+  range_scale_temperature:
+    default: 1.0
+    direction: fewer
+    help: "Temp range scale \u2014 increasing this usually flags fewer faults."
+    label: Temp range scale
+    max: 2.0
+    min: 0.5
+    step: 0.1
+    unit: x
+SV-RATE:
+  confirm_min:
+    default: 10.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  design_flow:
+    default: 0.0
+    direction: ''
+    help: Design flow (flow profiles)
+    label: Design flow (flow profiles)
+    max: 100000.0
+    min: 0.0
+    step: 100.0
+    unit: cfm
+  max_gap_hours:
+    default: 2.0
+    direction: ''
+    help: Max sample gap
+    label: Max sample gap
+    max: 6.0
+    min: 0.25
+    step: 0.25
+    unit: h
+  persistence_min:
+    default: 10.0
+    direction: ''
+    help: Fault persistence
+    label: Fault persistence
+    max: 60.0
+    min: 5.0
+    step: 1.0
+    unit: min
+  sensor_span:
+    default: 0.0
+    direction: ''
+    help: Sensor span (flow/pressure)
+    label: Sensor span (flow/pressure)
+    max: 100000.0
+    min: 0.0
+    step: 10.0
+    unit: eng
+  transition_window_min:
+    default: 20.0
+    direction: ''
+    help: Transition window
+    label: Transition window
+    max: 60.0
+    min: 5.0
+    step: 5.0
+    unit: min
+SV-SPIKE:
+  confirm_min:
+    default: 5.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  spike_scale:
+    default: 1.0
+    direction: fewer
+    help: "Spike limit scale (global) \u2014 increasing this usually flags fewer faults."
+    label: Spike limit scale (global)
+    max: 3.0
+    min: 0.25
+    step: 0.25
+    unit: x
+  spike_scale_humidity:
+    default: 1.0
+    direction: fewer
+    help: "Humidity spike scale \u2014 increasing this usually flags fewer faults."
+    label: Humidity spike scale
+    max: 3.0
+    min: 0.25
+    step: 0.25
+    unit: x
+  spike_scale_pressure:
+    default: 1.0
+    direction: fewer
+    help: "Pressure spike scale \u2014 increasing this usually flags fewer faults."
+    label: Pressure spike scale
+    max: 3.0
+    min: 0.25
+    step: 0.25
+    unit: x
+  spike_scale_temperature:
+    default: 1.0
+    direction: fewer
+    help: "Temp spike scale \u2014 increasing this usually flags fewer faults."
+    label: Temp spike scale
+    max: 3.0
+    min: 0.25
+    step: 0.25
+    unit: x
+SV-STALE:
+  confirm_min:
+    default: 5.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  stale_hours:
+    default: 2.0
+    direction: ''
+    help: Stale window
+    label: Stale window
+    max: 12.0
+    min: 0.5
+    step: 0.5
+    unit: h
+TRIM-1:
+  confirm_min:
+    default: 30.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  duct_hi:
+    default: 1.35
+    direction: fewer
+    help: "Duct static high \u2014 increasing this usually flags fewer faults."
+    label: Duct static high
+    max: 3.0
+    min: 0.5
+    step: 0.05
+    unit: in. w.c.
+  request_lo:
+    default: 1.0
+    direction: stricter
+    help: "Request sum low \u2014 increasing this usually flags more faults (stricter\
+      \ / wider detection)."
+    label: Request sum low
+    max: 10.0
+    min: 0.0
+    step: 0.5
+    unit: count
+TRIM-3:
+  confirm_min:
+    default: 30.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  hwst_hi:
+    default: 160.0
+    direction: fewer
+    help: "HWST high \u2014 increasing this usually flags fewer faults."
+    label: HWST high
+    max: 200.0
+    min: 120.0
+    step: 1.0
+    unit: "\xB0F"
+  request_lo:
+    default: 1.0
+    direction: stricter
+    help: "Request sum low \u2014 increasing this usually flags more faults (stricter\
+      \ / wider detection)."
+    label: Request sum low
+    max: 10.0
+    min: 0.0
+    step: 0.5
+    unit: count
+TRIM-4:
+  chw_lo:
+    default: 45.0
+    direction: stricter
+    help: "CHWS low \u2014 increasing this usually flags more faults (stricter / wider\
+      \ detection)."
+    label: CHWS low
+    max: 55.0
+    min: 35.0
+    step: 0.5
+    unit: "\xB0F"
+  confirm_min:
+    default: 30.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  request_lo:
+    default: 1.0
+    direction: stricter
+    help: "Request sum low \u2014 increasing this usually flags more faults (stricter\
+      \ / wider detection)."
+    label: Request sum low
+    max: 10.0
+    min: 0.0
+    step: 0.5
+    unit: count
+VAV-1:
+  confirm_min:
+    default: 15.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  zone_hi:
+    default: 75.0
+    direction: ''
+    help: Zone high
+    label: Zone high
+    max: 85.0
+    min: 72.0
+    step: 0.5
+    unit: "\xB0F"
+  zone_lo:
+    default: 70.0
+    direction: ''
+    help: Zone low
+    label: Zone low
+    max: 72.0
+    min: 55.0
+    step: 0.5
+    unit: "\xB0F"
+VAV-3:
+  confirm_min:
+    default: 5.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  flow_on_min:
+    default: 25.0
+    direction: ''
+    help: Airflow-on min
+    label: Airflow-on min
+    max: 200.0
+    min: 0.0
+    step: 5.0
+    unit: cfm
+  reheat_oat:
+    default: 78.0
+    direction: ''
+    help: Warm OAT
+    label: Warm OAT
+    max: 90.0
+    min: 65.0
+    step: 1.0
+    unit: "\xB0F"
+  reheat_pct:
+    default: 0.52
+    direction: ''
+    help: Reheat frac
+    label: Reheat frac
+    max: 1.0
+    min: 0.1
+    step: 0.02
+    unit: frac
+VAV-4:
+  confirm_min:
+    default: 15.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  flow_on_min:
+    default: 25.0
+    direction: ''
+    help: Airflow-on min
+    label: Airflow-on min
+    max: 200.0
+    min: 0.0
+    step: 5.0
+    unit: cfm
+  full_open_pct:
+    default: 0.975
+    direction: ''
+    help: Full open frac
+    label: Full open frac
+    max: 1.0
+    min: 0.8
+    step: 0.005
+    unit: frac
+  sustain_hours:
+    default: 1.5
+    direction: ''
+    help: Sustain window
+    label: Sustain window
+    max: 6.0
+    min: 0.5
+    step: 0.5
+    unit: h
+VAV-5:
+  confirm_min:
+    default: 15.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+VAV-7:
+  confirm_min:
+    default: 15.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  fixed_flow_max_std:
+    default: 15.0
+    direction: stricter
+    help: "Fixed-flow max std \u2014 increasing this usually flags more faults (stricter\
+      \ / wider detection)."
+    label: Fixed-flow max std
+    max: 80.0
+    min: 1.0
+    step: 1.0
+    unit: cfm
+  fixed_flow_min_mean:
+    default: 200.0
+    direction: fewer
+    help: "Fixed-flow min mean \u2014 increasing this usually flags fewer faults."
+    label: Fixed-flow min mean
+    max: 2000.0
+    min: 50.0
+    step: 10.0
+    unit: cfm
+  flow_on_min:
+    default: 25.0
+    direction: ''
+    help: Airflow-on min
+    label: Airflow-on min
+    max: 200.0
+    min: 0.0
+    step: 5.0
+    unit: cfm
+  high_min_flow_sp:
+    default: 250.0
+    direction: fewer
+    help: "High min-flow SP \u2014 increasing this usually flags fewer faults."
+    label: High min-flow SP
+    max: 2000.0
+    min: 50.0
+    step: 10.0
+    unit: cfm
+VAV-AHU-LEAVE:
+  confirm_min:
+    default: 15.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  delta_f:
+    default: 8.0
+    direction: ''
+    help: "Leave \u0394 vs AHU SAT"
+    label: "Leave \u0394 vs AHU SAT"
+    max: 25.0
+    min: 2.0
+    step: 0.5
+    unit: "\xB0F"
+  flow_on_min:
+    default: 25.0
+    direction: ''
+    help: Airflow-on min
+    label: Airflow-on min
+    max: 200.0
+    min: 0.0
+    step: 5.0
+    unit: cfm
+VAV-REHEAT:
+  confirm_min:
+    default: 15.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  flow_on_min:
+    default: 25.0
+    direction: ''
+    help: Airflow-on min
+    label: Airflow-on min
+    max: 200.0
+    min: 0.0
+    step: 5.0
+    unit: cfm
+  min_rise:
+    default: 3.0
+    direction: ''
+    help: Min temp rise
+    label: Min temp rise
+    max: 15.0
+    min: 0.5
+    step: 0.5
+    unit: "\xB0F"
+  reheat_cmd:
+    default: 0.3
+    direction: ''
+    help: Reheat open frac
+    label: Reheat open frac
+    max: 1.0
+    min: 0.1
+    step: 0.05
+    unit: frac
+VLV-1:
+  confirm_min:
+    default: 15.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  mat_leak_delta:
+    default: 2.0
+    direction: ''
+    help: "SAT vs MAT leak \u0394T"
+    label: "SAT vs MAT leak \u0394T"
+    max: 12.0
+    min: 0.5
+    step: 0.5
+    unit: "\xB0F"
+  sat_err:
+    default: 2.0
+    direction: ''
+    help: "SAT vs SP leak \u0394T"
+    label: "SAT vs SP leak \u0394T"
+    max: 8.0
+    min: 0.5
+    step: 0.5
+    unit: "\xB0F"
+WX-1:
+  confirm_min:
+    default: 5.0
+    direction: fewer
+    help: "Fault confirm delay \u2014 increasing this usually flags fewer faults."
+    label: Fault confirm delay
+    max: 60.0
+    min: 0.0
+    step: 1.0
+    unit: min
+  spike_limit:
+    default: 16.0
+    direction: ''
+    help: Spike limit
+    label: Spike limit
+    max: 40.0
+    min: 4.0
+    step: 1.0
+    unit: "\xB0F"

@@ -173,6 +173,52 @@ pub fn feather_file_count() -> usize {
     walk_feather_files(&root()).count()
 }
 
+/// Write a full Arrow RecordBatch as one Feather IPC file under
+/// `feather_store/<source>/<site_id>/<equipment_id>/history.feather`.
+pub fn write_equipment_history(
+    source: &str,
+    site_id: &str,
+    equipment_id: &str,
+    batch: &RecordBatch,
+) -> Result<PathBuf, String> {
+    write_equipment_history_batches(source, site_id, equipment_id, std::slice::from_ref(batch))
+}
+
+/// Write one or more RecordBatches into a single Feather IPC file.
+pub fn write_equipment_history_batches(
+    source: &str,
+    site_id: &str,
+    equipment_id: &str,
+    batches: &[RecordBatch],
+) -> Result<PathBuf, String> {
+    if batches.is_empty() || batches.iter().all(|b| b.num_rows() == 0) {
+        return Err("empty batch".into());
+    }
+    let dir = site_dir(source, site_id).join(safe_path_part(equipment_id));
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("history.feather");
+    let schema = batches[0].schema();
+    let file = fs::File::create(&path).map_err(|e| e.to_string())?;
+    let mut writer = FileWriter::try_new(file, &schema).map_err(|e| e.to_string())?;
+    for batch in batches {
+        if batch.num_rows() == 0 {
+            continue;
+        }
+        writer.write(batch).map_err(|e| e.to_string())?;
+    }
+    writer.finish().map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
+/// Remove all Feather shards/tables for a site (building) under a source.
+pub fn remove_site(source: &str, site_id: &str) -> Result<(), String> {
+    let dir = site_dir(source, site_id);
+    if dir.exists() {
+        fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 fn walk_feather_files(root: &Path) -> impl Iterator<Item = PathBuf> + '_ {
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         if let Ok(rd) = fs::read_dir(dir) {

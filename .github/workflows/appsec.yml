@@ -47,17 +47,15 @@ jobs:
         run: trivy fs --exit-code 1 --severity HIGH,CRITICAL .
 
   dashboard-audit:
-    name: npm audit (dashboard)
+    name: Streamlit UI requirements present
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - run: npm ci
-        working-directory: workspace/dashboard
-      - run: npm audit --audit-level=high
-        working-directory: workspace/dashboard
+      - name: Guard Streamlit UI (no React)
+        run: |
+          test -f services/ui/requirements.txt
+          grep -qi streamlit services/ui/requirements.txt
+          ! test -f workspace/dashboard/package.json
 
   dockerfile-lint:
     name: Hadolint
@@ -70,10 +68,10 @@ jobs:
           dockerfile: services/central/Dockerfile
           failure-threshold: error
           ignore: DL3008
-      - name: Hadolint UI
+      - name: Hadolint UI (Streamlit)
         uses: hadolint/hadolint-action@v3.1.0
         with:
-          dockerfile: workspace/dashboard/Dockerfile
+          dockerfile: services/ui/Dockerfile
           failure-threshold: error
           ignore: DL3008
       - name: Hadolint fieldbus

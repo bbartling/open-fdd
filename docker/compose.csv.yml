@@ -24,10 +24,12 @@ services:
   ui:
     image: ${OPENFDD_UI_IMAGE:-ghcr.io/bbartling/openfdd-ui:nightly}
     build:
-      context: ..
-      dockerfile: workspace/dashboard/Dockerfile
+      context: ../services/ui
+      dockerfile: Dockerfile
+    environment:
+      OPENFDD_API_BASE: http://central:8080
     ports:
-      - "${OPENFDD_UI_BIND:-0.0.0.0}:3000:80"
+      - "${OPENFDD_UI_BIND:-0.0.0.0}:3000:8501"
     depends_on:
       - central
     restart: unless-stopped

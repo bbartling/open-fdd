@@ -448,5 +448,57 @@ pub fn delete_dataset(dataset_id: &str) -> Result<(), String> {
         arr.retain(|d| d.get("id").and_then(|v| v.as_str()) != Some(id.as_str()));
         save_registry(&reg)?;
     }
+    // Package / Haystack building cleanup: csv_buildings, feather, parquet partition.
+    let ws = crate::historian::store::workspace_dir();
+    let csv_buildings = ws.join("data").join("csv_buildings").join(&id);
+    if csv_buildings.exists() {
+        let _ = fs::remove_dir_all(&csv_buildings);
+    }
+    let _ = crate::historian::feather_store::remove_site("package", &id);
+    let _ = crate::historian::feather_store::remove_site("csv", &id);
+    let parquet_roots = [
+        std::env::var("OPENFDD_PARQUET_ROOT")
+            .ok()
+            .map(PathBuf::from),
+        Some(ws.join(".cache/parquet")),
+        Some(PathBuf::from(".cache/parquet")),
+    ];
+    for root in parquet_roots.into_iter().flatten() {
+        let part = root.join(format!("building={id}"));
+        if part.exists() {
+            let _ = fs::remove_dir_all(&part);
+        }
+    }
+    Ok(())
+}
+
+/// Register a package building id in the dataset registry (for Delete dataset by Haystack name).
+pub fn register_package_dataset(
+    building_id: &str,
+    row_count: u64,
+    equipment_count: usize,
+    extra: &Value,
+) -> Result<(), String> {
+    let id = sanitize_id(building_id);
+    if id.is_empty() {
+        return Err("invalid building id".into());
+    }
+    let metadata = json!({
+        "id": id,
+        "row_count": row_count,
+        "equipment_count": equipment_count,
+        "source": "openfdd_package_v1",
+        "created_at": Utc::now().to_rfc3339(),
+        "extra": extra,
+    });
+    let mut reg = load_registry();
+    let datasets = reg
+        .as_object_mut()
+        .and_then(|o| o.get_mut("datasets"))
+        .and_then(|d| d.as_array_mut())
+        .ok_or("registry corrupt")?;
+    datasets.retain(|d| d.get("id").and_then(|v| v.as_str()) != Some(id.as_str()));
+    datasets.push(metadata);
+    save_registry(&reg)?;
     Ok(())
 }

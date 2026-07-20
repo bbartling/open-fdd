@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vibe19-fdd-demo"
+version = "0.2.0"
+description = "Educational pandas/Streamlit FDD demo for BUILDING_100-style CSV data"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0",
+    "pyyaml>=6.0",
+    "streamlit>=1.28",
+    "plotly>=5.18",
+    "duckdb>=0.9",
+    "pydantic>=2.0",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "playwright>=1.40"]
+sqlserver = ["sqlalchemy>=2.0", "pyodbc>=5.0"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+# optional_zip: needs real BUILDING_100.zip / weather.zip (VIBE19_TEST_PACKAGE_DIR or local sample).
+# Default suite stays green with 0 skips; run with: pytest -m optional_zip
+addopts = ["-m", "not optional_zip"]
+markers = [
+    "optional_zip: real BUILDING_100.zip / weather.zip integration (skipped when absent; excluded from default runs)",
+]
