@@ -32,9 +32,10 @@ fn alias_ui_param_key<'a>(rule_id: &str, key: &'a str) -> &'a str {
         ("VAV-1", "zone_lo") => "zone_t_lo",
         ("VAV-1", "zone_hi") => "zone_t_hi",
         ("FC1", "duct_static_err") => "eps_dsp",
-        ("SV-SPIKE", "spike_scale_temperature" | "spike_scale_humidity" | "spike_scale_pressure") => {
-            "spike_scale"
-        }
+        (
+            "SV-SPIKE",
+            "spike_scale_temperature" | "spike_scale_humidity" | "spike_scale_pressure",
+        ) => "spike_scale",
         _ => key,
     }
 }

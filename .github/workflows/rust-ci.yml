@@ -83,7 +83,7 @@ jobs:
           grep -q "confirm_seconds" services/ui/app/central_client.py
           ! test -d workspace/dashboard/src
           ! test -f workspace/dashboard/package.json
-          pip install -q pytest
+          pip install -q pytest requests
           (cd services/ui && PYTHONPATH=. python3 -m pytest app/test_central_client_normalize.py -q)
       - name: BACnet NIC helper guards
         run: |
