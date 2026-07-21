@@ -257,6 +257,7 @@ def run_fdd(
     rule_ids: list[str] | None = None,
     params: dict[str, dict[str, float]] | None = None,
     equipment_id: str | None = None,
+    building_id: str | None = None,
     timeout: float = 900.0,
 ) -> dict[str, Any]:
     """POST /api/fdd/run — DataFusion SQL registry engine (no pandas)."""
@@ -268,6 +269,8 @@ def run_fdd(
         payload["params"] = normalized
     if equipment_id:
         payload["equipment_id"] = equipment_id
+    if building_id:
+        payload["building_id"] = building_id
     try:
         resp = _request(
             "POST",
