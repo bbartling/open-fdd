@@ -29,7 +29,8 @@ devices **599999** (bench) and **600000** (Pi edge, if present).
 - Docker + `gh` CLI authenticated for GHCR (`gh auth token` → `docker login ghcr.io`)
 - Repo checkout or compose files available
 - OT LAN reachability to device instance **5007** (and Pi edge if cloud-sim)
-- Env: `OPENFDD_JWT_SECRET`, `OPENFDD_ADMIN_PASSWORD` (and MQTT kits for standalone/central)
+- Env: `OPENFDD_JWT_SECRET`, `OPENFDD_ADMIN_PASSWORD` on **central and ui** (and MQTT kits for standalone/central)
+- Weather soak: set `WEATHER_SOAK_SECS` ≥ **2×** Pi/fieldbus weather `interval_secs` (often 1200) before failing gate 08 on `last-updated`
 - On arm64 Pi: pull with `--platform linux/amd64` explicitly; **fail loud** on digest drift
   vs the bench (do not silently reuse a stale local image — that caused duplicate 599999)
 
@@ -93,16 +94,18 @@ Goal:
      write 403 when disabled, write clamp, circuit-breaker on sim kill,
      FD-count stability across ≥500 polls (no #535-style leak on reqwest).
 10. Lab UX IA gate (**Streamlit** — FAIL if any miss; do NOT require React LabShell — #564):
+   - Preferred harness: `scripts/release/smoke_streamlit_ui_gates.sh` (CENTRAL/UI env).
    - UI http://<bench-ip>:3000 is Streamlit (`<title>Streamlit</title>` / CMD streamlit run).
    - Sections: Overview / Data Model / Run Rules / Results / FDD Plots / RCx / Metering / Export.
    - Left rail: package ZIP + **Delete dataset** + Rule tuning sliders (`confirm_min`, etc.).
    - Run Rules → central `POST /api/fdd/run` (DataFusion); with JWT, no Bearer errors.
    - Slider legitimacy: `confirm_min` must change fault hours; `eps_dsp` positive control still works.
    - FDD Plots: live series or honest empty (no fake sine). Run is explicit (sliders do not auto-run).
-11. #549 dashboard API matrix: **superseded for product UI** by Streamlit #559 — skip React shell
-    asserts. Only note if Streamlit still calls a broken central route.
+11. #549 dashboard API matrix: covered by the same smoke script + Streamlit operator loop.
+    Skip React shell asserts. Only note if Streamlit still calls a broken central route.
 12. #550 / SQL honesty: dual catalog UI~59 vs SQL~63 OK to note; do not claim full pandas parity.
     Operator + agent paths must be SQL (pandas only if OPENFDD_ALLOW_PANDAS_FDD=1).
+    Smoke script asserts registry catalog without false “54 full parity” claims.
 13. Standalone MCP accuracy gate (OWN container — required):
    - Pull/run `ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG}` separately (compose profile `mcp`
      or `docker run -i`). Do NOT accept MCP embedded inside central/ui.
@@ -151,8 +154,10 @@ Recommendations mean:
 
 Current known board (update if gh list differs):
 KEEP OPEN / retest:
-- #564 Rewrite soak gates 10–12 for Streamlit (harness — React LabShell asserts retired in this prompt; close when harness scripts match)
-- Human Workbench discoverability of hosted **599999** (not a GH issue — human gate)
+- #526 fieldbus Who-Is misses co-located hosted BACnet (Workbench OK; client ephemeral bind) — product synthesizes local hosted into Who-Is on tip after this PR
+- #564 harness scripts on overlays may still assert React — in-repo `scripts/release/smoke_streamlit_ui_gates.sh` is the Streamlit replacement; close #564 when overlays call it
+- Human Workbench discoverability of hosted **599999** (human gate)
+- Phantom Workbench network **28271** — JCI/Niagara `.200` wire noise, **not** Open-FDD
 
 Expect CLOSED on tip nightlies (confirm still green; do not reopen if PASS):
 - #514 package ZIP, #515 session_config

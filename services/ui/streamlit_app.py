@@ -1144,10 +1144,15 @@ def _sidebar_sliders(defaults_cfg: dict) -> None:
         "Require operational proof (fan/pump status)",
         value=st.session_state.get("require_operational_gates", True),
         help=(
-            "When checked, RUN rules only evaluate while fan/pump/compressor is proven on "
-            "(status preferred over command). Off-period samples become SKIPPED_EQUIPMENT_OFF, not PASS."
+            "Legacy pandas-lab gate. Run Rules uses central DataFusion SQL and ignores this "
+            "checkbox — kept only for emergency OPENFDD_ALLOW_PANDAS_FDD=1 agent paths. "
+            "When that emergency path is on: status preferred over command; off-period samples "
+            "become SKIPPED_EQUIPMENT_OFF, not PASS."
         ),
         key="ops_gate_global",
+    )
+    st.sidebar.caption(
+        "FDD math: central DataFusion SQL. Pandas frames still load for plots/analytics only."
     )
     fam_labels = [family_label(f) for f in FAMILY_ORDER if _rules_by_family().get(f)]
     fam_pick = st.sidebar.selectbox(
