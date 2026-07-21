@@ -569,17 +569,48 @@ impl BacnetClientService {
             let devices = client.discovered_devices().await;
             // #539: discovered_devices() is a full device-table snapshot (incl.
             // seeded devices); honor the caller's requested instance range.
-            Ok(devices
+            let mut out: Vec<Value> = devices
                 .iter()
                 .filter(|d| {
                     let instance = d.object_identifier.instance_number();
                     low.is_none_or(|lo| instance >= lo) && high.is_none_or(|hi| instance <= hi)
                 })
                 .map(device_summary)
-                .collect())
+                .collect();
+            // #526 follow-up: co-located hosted BACnet server answers Workbench on :47808,
+            // but the client Who-Is socket is ephemeral and often never sees that I-Am.
+            // Surface the local hosted device in Who-Is results so self-discovery matches OT.
+            self.merge_local_hosted_device(&mut out, low, high);
+            Ok(out)
         }
         .await;
         Self::finish_client(client, result).await
+    }
+
+    /// Append configured hosted BACnet server instance when missing from discovery.
+    fn merge_local_hosted_device(&self, out: &mut Vec<Value>, low: Option<u32>, high: Option<u32>) {
+        let hosted = self.settings.bacnet_server.device_instance;
+        if low.is_some_and(|lo| hosted < lo) || high.is_some_and(|hi| hosted > hi) {
+            return;
+        }
+        let already = out.iter().any(|v| {
+            v.get("device_instance")
+                .and_then(|x| x.as_u64())
+                .is_some_and(|n| n as u32 == hosted)
+        });
+        if already {
+            return;
+        }
+        let port = self.settings.bacnet_server.port;
+        out.push(json!({
+            "device_instance": hosted,
+            "address": format!("local-hosted:{port}"),
+            "vendor_id": 999,
+            "source_network": null,
+            "max_apdu": null,
+            "hosted_local": true,
+            "note": "synthesized — client ephemeral Who-Is often misses I-Am on :47808 (#526)",
+        }));
     }
 
     pub async fn who_is_router_to_network(&self) -> Result<Vec<Value>, String> {

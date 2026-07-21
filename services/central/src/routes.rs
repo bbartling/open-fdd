@@ -266,9 +266,18 @@ pub async fn list_edges(State(state): State<Arc<AppState>>) -> Json<EdgesListRes
     let edges = state
         .edges
         .iter()
-        .map(|e| crate::models::EdgeSummary {
-            edge_id: e.key().clone(),
-            has_telemetry: e.value().lock().unwrap().last_telemetry.is_some(),
+        .map(|e| {
+            let g = e.value().lock().unwrap();
+            let site_id = g
+                .last_telemetry
+                .as_ref()
+                .map(|t| t.site_id.clone())
+                .filter(|s| !s.is_empty());
+            crate::models::EdgeSummary {
+                edge_id: e.key().clone(),
+                site_id,
+                has_telemetry: g.last_telemetry.is_some(),
+            }
         })
         .collect();
     Json(EdgesListResponse { ok: true, edges })
