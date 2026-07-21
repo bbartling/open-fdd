@@ -10,10 +10,11 @@ nav_order: 12
 change). Do **not** create dated copies (`*-2026-07-17.md`, `bench-NNN-*`, etc.).
 One path forever: `docs/agent/linux-edge-tester-stack-recipes-prompt.md`.
 
-**Pinned tip (2026-07-21):** full `884aaed6594d119c63b4463da4ccd91db7d695ee`
-(Streamlit UI #559 + soak P0 JWT/`confirm_min`/aliases #565).
-Prefer `OPENFDD_IMAGE_TAG=sha-884aaed` (GHCR short sha tag) or `:nightly` only after
+**Pinned tip (2026-07-21):** full `58e0d0e919fdc2f3b4296ff83bf350db0423e108`
+(merge #567 — Who-Is hosted merge, edges `site_id`, Streamlit gates smoke).
+Prefer `OPENFDD_IMAGE_TAG=sha-58e0d0e` (GHCR short sha tag) or `:nightly` only after
 confirming `org.opencontainers.image.revision` matches on central/ui/fieldbus/mqtt/**mcp**.
+Prior soak pin `sha-884aaed` (#565) remains valid for bisect of Streamlit SQL P0s.
 
 Copy-paste prompt for a **second OT bench**. Pulls GHCR nightlies, exercises all four
 compose build recipes, validates BACnet / Modbus / Haystack / (new) REST drivers, then
@@ -40,8 +41,8 @@ devices **599999** (bench) and **600000** (Pi edge, if present).
 You are the Open-FDD second-bench soak agent on the OT / edge tester machine.
 
 Charter:
-- GHCR tip for this soak: prefer `OPENFDD_IMAGE_TAG=sha-884aaed` (or `:nightly` with
-  matching `org.opencontainers.image.revision=884aaed6594d…` on **every** stack image —
+- GHCR tip for this soak: prefer `OPENFDD_IMAGE_TAG=sha-58e0d0e` (or `:nightly` with
+  matching `org.opencontainers.image.revision=58e0d0e919fd…` on **every** stack image —
   central, ui, fieldbus, mqtt, and mcp). No local product builds, no product code PRs.
 - UI is **Streamlit** at http://<bench-ip>:3000 (not React). JWT stacks need
   `OPENFDD_ADMIN_PASSWORD` (or `OPENFDD_API_TOKEN`) on ui **and** central so Run Rules /
@@ -154,12 +155,12 @@ Recommendations mean:
 
 Current known board (update if gh list differs):
 KEEP OPEN / retest:
-- #526 fieldbus Who-Is misses co-located hosted BACnet (Workbench OK; client ephemeral bind) — product synthesizes local hosted into Who-Is on tip after this PR
 - #564 harness scripts on overlays may still assert React — in-repo `scripts/release/smoke_streamlit_ui_gates.sh` is the Streamlit replacement; close #564 when overlays call it
 - Human Workbench discoverability of hosted **599999** (human gate)
 - Phantom Workbench network **28271** — JCI/Niagara `.200` wire noise, **not** Open-FDD
 
 Expect CLOSED on tip nightlies (confirm still green; do not reopen if PASS):
+- #526 fieldbus Who-Is co-located hosted (#567 synthesize `hosted_local`) — confirm on tip Who-Is
 - #514 package ZIP, #515 session_config
 - #549 React dashboard APIs (superseded by Streamlit #559)
 - #550 phase-1 honesty docs; full oracle backlog is ongoing narrative not a reopen trigger unless soak finds new P0
@@ -202,8 +203,8 @@ Final report structure (paste back to product agent):
 See [Build recipes](../operations/build-recipes.md). Helper scripts:
 
 ```bash
-export OPENFDD_IMAGE_TAG=sha-884aaed
-# pin when bisecting: e.g. OPENFDD_IMAGE_TAG=sha-<rev>
+export OPENFDD_IMAGE_TAG=sha-58e0d0e
+# pin when bisecting: e.g. OPENFDD_IMAGE_TAG=sha-884aaed (#565 Streamlit SQL P0s)
 ./scripts/openfdd_stack_pull.sh all
 ./scripts/openfdd_stack_pull.sh mcp
 ./scripts/openfdd_stack_up.sh csv
