@@ -10,9 +10,9 @@ nav_order: 12
 change). Do **not** create dated copies (`*-2026-07-17.md`, `bench-NNN-*`, etc.).
 One path forever: `docs/agent/linux-edge-tester-stack-recipes-prompt.md`.
 
-**Pinned tip (2026-07-19):** full `ef2b85e07e6edb8226abe26656330c2ed18322e7`
-(Lab live + MCP #553, #550 phase-1 #555, #549 APIs #556).
-Prefer `OPENFDD_IMAGE_TAG=sha-ef2b85e` (GHCR short sha tag) or `:nightly` only after
+**Pinned tip (2026-07-21):** full `884aaed6594d119c63b4463da4ccd91db7d695ee`
+(Streamlit UI #559 + soak P0 JWT/`confirm_min`/aliases #565).
+Prefer `OPENFDD_IMAGE_TAG=sha-884aaed` (GHCR short sha tag) or `:nightly` only after
 confirming `org.opencontainers.image.revision` matches on central/ui/fieldbus/mqtt/**mcp**.
 
 Copy-paste prompt for a **second OT bench**. Pulls GHCR nightlies, exercises all four
@@ -20,7 +20,9 @@ compose build recipes, validates BACnet / Modbus / Haystack / (new) REST drivers
 **leaves the standalone stack running** for human Niagara Workbench validation of hosted
 devices **599999** (bench) and **600000** (Pi edge, if present).
 
-Do **not** tear down a healthy stack after tests. Only a human records OT PASS for Workbench.
+**UI is Streamlit** (`services/ui` → `:3000`). Do not assert React LabShell / `/srv/assets/index-*.js`
+(see #564). Operator FDD is central DataFusion SQL; with JWT auth set
+`OPENFDD_ADMIN_PASSWORD` (or `OPENFDD_API_TOKEN`) on **both** central and ui.
 
 ## Preconditions
 
@@ -37,9 +39,12 @@ Do **not** tear down a healthy stack after tests. Only a human records OT PASS f
 You are the Open-FDD second-bench soak agent on the OT / edge tester machine.
 
 Charter:
-- GHCR tip for this soak: prefer `OPENFDD_IMAGE_TAG=sha-ef2b85e` (or `:nightly` with
-  matching `org.opencontainers.image.revision=ef2b85e07e6e…` on **every** stack image —
+- GHCR tip for this soak: prefer `OPENFDD_IMAGE_TAG=sha-884aaed` (or `:nightly` with
+  matching `org.opencontainers.image.revision=884aaed6594d…` on **every** stack image —
   central, ui, fieldbus, mqtt, and mcp). No local product builds, no product code PRs.
+- UI is **Streamlit** at http://<bench-ip>:3000 (not React). JWT stacks need
+  `OPENFDD_ADMIN_PASSWORD` (or `OPENFDD_API_TOKEN`) on ui **and** central so Run Rules /
+  package / delete authenticate.
 - Test, document, file/comment GitHub issues. The WSL product agent owns closing/keeping issues after your report.
 - Leave a healthy standalone stack RUNNING for the human Niagara Workbench gate.
 - MCP is its OWN container/image (`ghcr.io/bbartling/openfdd-mcp`). A healthy MCP process alone is NOT a pass — answers must match direct central API truth.
@@ -66,9 +71,10 @@ Goal:
    - assert rules_succeeded≥1; note poll_seconds / grid_minutes for 1-min fixtures
    - assert response includes results[] rows with rule_id / equipment_id / status (not aggregates-only)
 5. openfdd_package_v1 ZIP:
-   - prefer IN-LAB upload on /lab (sidebar) OR POST /api/csv/import/package
-   - assert equipment roles + parquet; edit roles via package roles API
+   - prefer IN-LAB Streamlit upload (sidebar) OR POST /api/csv/import/package (Bearer if JWT on)
+   - assert equipment roles + parquet + feather_store; edit roles via package roles API
    - session_config.json inside the zip should seed GET /api/fdd/session-config (#515)
+   - Delete dataset from UI clears central data and keeps rule-tuning session params
 6. Weather + FD soak (gate 08 — critical after #535):
    - Sample fieldbus container FD count at t=0 and t≈30 min (`ls /proc/<pid>/fd | wc -l`
      or `docker exec … ls /proc/1/fd | wc -l`). Growth must be ≈flat (not +~180/h).
@@ -79,36 +85,24 @@ Goal:
 7. BACnet discovery / I-Am:
    - POST /bacnet/whois with a tight low/high range must NOT return out-of-range seeded devices (#539)
    - I-Am / device object vendor_id must be 999, not 0 (#537)
-   - #526: hosted devices still may be invisible to product whois (ephemeral bind); Workbench
-     binding :47808 is the human discovery gate — prepare evidence only.
+   - Hosted devices: Workbench binding :47808 is the human discovery gate for **599999**.
 8. Modbus OT (bench sim) + Haystack API surface — keep green; note any new fails.
 9. REST/JSON driver (#540) if present on this nightly — gate 09:
    - Stand up a tiny JSON sim (or use the disabled example flipped on with a test token env).
    - Assert GET point decode + scale, JSONPath miss → structured error, bearer/API-key auth,
      write 403 when disabled, write clamp, circuit-breaker on sim kill,
      FD-count stability across ≥500 polls (no #535-style leak on reqwest).
-10. Lab UX IA gate (Streamlit parity — FAIL if any miss):
-   - UI http://<bench-ip>:3000/lab is a FULL-BLEED lab shell — NOT wrapped in product
-     Integrations/Ops nav. Theme toggle + logout OK; no DashboardStream 15s polls to missing APIs.
-   - Exactly **8** horizontal sections (no Energy Model):
-     Overview → Data Model → Run Rules → Results by Category → FDD Plots → RCx Plots → Metering → Export
-   - Left rail: package ZIP + session save/load + display/site + rule family/sliders + Reset/Rerun cat.
-   - Center: equipment select + section radio.
-   - Results by Category groups by **equipment_type** (not parity_status); PASS/FAULT/SKIPPED metrics.
-   - FDD Plots: live series via /api/fdd/series (or honest empty). RCx/Metering: NO fake sine waves.
-   - Run Rules: explicit Run; sliders do not refetch until Run / Rerun cat.
-11. #549 central dashboard API matrix (product shell — not Lab):
-   - GET each must NOT 404: /api/health/stack, /api/building/snapshot, /api/faults/status,
-     /api/export/meta, /api/data-management/summary, /api/host/stats, /api/fdd-schema/tables,
-     /api/fdd-rules, /api/reports, /api/reports/templates, /api/capabilities
-   - GET /api/capabilities: reports/export/host_stats/faults/health_stack/data_management true
-   - Report Builder: must NOT auto-POST /api/reports/draft on page load (create only on user action)
-   - Product nav items with requiredCapability disable/hide when capability false
-12. #550 parity honesty (docs + behavior — do NOT claim full cookbook parity):
-   - Docs/registry story: ~18 proven_building_100, ~44 ported_from_cookbook, FC7 skipped.
-     “ported ≠ oracle.” FAIL the soak narrative if UI/docs still say “54 full parity”.
-   - Spot-check: SCHED-1 can consume string occ_mode (unoccupied/occupied) after package/CSV ingest.
-   - Note remaining oracle backlog (SV-*, PID-HUNT-1, FC4/6/14/15, TRIM-*, …) as KEEP OPEN on #550.
+10. Lab UX IA gate (**Streamlit** — FAIL if any miss; do NOT require React LabShell — #564):
+   - UI http://<bench-ip>:3000 is Streamlit (`<title>Streamlit</title>` / CMD streamlit run).
+   - Sections: Overview / Data Model / Run Rules / Results / FDD Plots / RCx / Metering / Export.
+   - Left rail: package ZIP + **Delete dataset** + Rule tuning sliders (`confirm_min`, etc.).
+   - Run Rules → central `POST /api/fdd/run` (DataFusion); with JWT, no Bearer errors.
+   - Slider legitimacy: `confirm_min` must change fault hours; `eps_dsp` positive control still works.
+   - FDD Plots: live series or honest empty (no fake sine). Run is explicit (sliders do not auto-run).
+11. #549 dashboard API matrix: **superseded for product UI** by Streamlit #559 — skip React shell
+    asserts. Only note if Streamlit still calls a broken central route.
+12. #550 / SQL honesty: dual catalog UI~59 vs SQL~63 OK to note; do not claim full pandas parity.
+    Operator + agent paths must be SQL (pandas only if OPENFDD_ALLOW_PANDAS_FDD=1).
 13. Standalone MCP accuracy gate (OWN container — required):
    - Pull/run `ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG}` separately (compose profile `mcp`
      or `docker run -i`). Do NOT accept MCP embedded inside central/ui.
@@ -123,7 +117,7 @@ Goal:
      unknown equipment_id / rule_id on series; central stopped / bad token; raw SQL rejected on run.
    - Optional local: scripts/release/smoke_mcp_central.sh against the pulled images if docker build
      is unavailable — still require MCP↔central equality evidence in the report.
-14. Optional cloud-sim / multi-site if LAN allows (Pi remote edge) — attach evidence to #519 / #530.
+14. Optional cloud-sim / multi-site if LAN allows (Pi remote edge) — attach evidence if relevant.
 15. Leave standalone healthy and RUNNING. Do not docker compose down. Do not prune volumes.
 16. Human gate: Niagara Workbench discovery + trend of 599999 (Madison) and 600000 (Chicago if Pi).
     Prepare evidence only; only a human records OT PASS.
@@ -138,6 +132,7 @@ Never:
 - Silently accept a stale local image when GHCR pull fails on arm64
 - Treat MCP “process up” as accuracy PASS
 - Claim SQL↔Pandas full parity for ported_from_cookbook rules
+- Assert React LabShell / `/srv/assets/index-*.js` (product UI is Streamlit)
 
 GitHub issue workflow (required):
 1. Before testing: `gh issue list --state open --limit 40` and note numbers that apply to this soak.
@@ -156,21 +151,14 @@ Recommendations mean:
 
 Current known board (update if gh list differs):
 KEEP OPEN / retest:
-- #526 Hosted BACnet Who-Is / I-Am (client ephemeral bind vs broadcast I-Am) — Workbench human gate
-- #530 No arm64 GHCR fieldbus image — RAISE PRIORITY (silent stale-image caused device-ID collision)
-- #519 Multi-site MQTT subscribe / ACL / site_id on /api/edges
-- #520 Feather→parquet live compaction
-- #516 Occupancy calendar / ops gates UI+SQL
-- #517 Live Open-Meteo psychrometrics in Lab charts
-- #518 DOCX / WattLab RCx Word export
-- #550 SQL↔Pandas oracle parity (phase 1 docs/harness may land; full rewrite NOT done)
+- #564 Rewrite soak gates 10–12 for Streamlit (harness — React LabShell asserts retired in this prompt; close when harness scripts match)
+- Human Workbench discoverability of hosted **599999** (not a GH issue — human gate)
 
-CLOSE candidates when this nightly proves them (comment evidence first):
-- #549 Central missing edge dashboard APIs (routes 200 + capabilities + no eager report draft)
-- Lab UX regressions previously filed as F+ theme-only (if gates 10 all PASS — cite PR tip)
-
-Expect CLOSED on tip nightlies after prior soaks (confirm still green; do not reopen if PASS):
+Expect CLOSED on tip nightlies (confirm still green; do not reopen if PASS):
 - #514 package ZIP, #515 session_config
+- #549 React dashboard APIs (superseded by Streamlit #559)
+- #550 phase-1 honesty docs; full oracle backlog is ongoing narrative not a reopen trigger unless soak finds new P0
+- #560 UI JWT Bearer, #561 confirm_min→SQL, #562 param aliases, #563 pandas quarantine (#565)
 - #535 BACnet client UDP FD leak (P0) — verify FD flat over soak
 - #536 EQUIPMENT_ID_MISSING no longer fail-closes strict execute
 - #537 I-Am vendor_id 999
@@ -209,7 +197,7 @@ Final report structure (paste back to product agent):
 See [Build recipes](../operations/build-recipes.md). Helper scripts:
 
 ```bash
-export OPENFDD_IMAGE_TAG=nightly
+export OPENFDD_IMAGE_TAG=sha-884aaed
 # pin when bisecting: e.g. OPENFDD_IMAGE_TAG=sha-<rev>
 ./scripts/openfdd_stack_pull.sh all
 ./scripts/openfdd_stack_pull.sh mcp
