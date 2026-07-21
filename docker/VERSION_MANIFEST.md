@@ -46,24 +46,29 @@ Bump all three together when cutting a coordinated stack release.
 
 ## Latest verified nightlies
 
-Published successfully from Streamlit UI + Feather/SQL tip **`f454792e`** (merge #559):
+Published successfully from soak-P0 tip **`884aaed6`** (merge #565 — JWT + confirm_min + aliases):
 
 | Images | Immutable tag | Workflow |
 |--------|---------------|----------|
-| `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` | `sha-f454792` | [29751954018](https://github.com/bbartling/open-fdd/actions/runs/29751954018) — success |
-| `openfdd-mcp` | `sha-f454792` | [29751953969](https://github.com/bbartling/open-fdd/actions/runs/29751953969) — success |
+| `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` | `sha-884aaed` | [29776327547](https://github.com/bbartling/open-fdd/actions/runs/29776327547) — success |
+| `openfdd-mcp` | `sha-884aaed` | [29776326354](https://github.com/bbartling/open-fdd/actions/runs/29776326354) — success |
 
 ```bash
-export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-f454792
-export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-f454792
-export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-f454792
-export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-f454792
-export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-f454792
+export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-884aaed
+export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-884aaed
+export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-884aaed
+export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-884aaed
+export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-884aaed
+# or OPENFDD_IMAGE_TAG=sha-884aaed / :nightly (same digest as of 2026-07-20 publish)
 ```
 
 UI is Streamlit (`services/ui`); FDD operator path is central DataFusion SQL.
 When `OPENFDD_JWT_SECRET` is set, also set `OPENFDD_ADMIN_PASSWORD` (or
 `OPENFDD_API_TOKEN`) on **both** central and ui so Run Rules / package ingest
 can authenticate.
+
+Workspace Cargo version remains **3.3.0** (no semver bump for this integration tip —
+nightlies key off `sha-*`). Bump workspace + `VERSION` together only when cutting a
+coordinated release.
 
 **Human Workbench gate** still required before BACnet OT PASS (hosted **599999** discoverability). See `docs/agent/linux-edge-tester-stack-recipes-prompt.md`.
