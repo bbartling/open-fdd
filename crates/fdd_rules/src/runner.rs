@@ -35,29 +35,36 @@ pub async fn run_all_rules(
     registry: &RuleRegistry,
     out_dir: &Path,
 ) -> Result<RuleRunReport> {
-    run_all_rules_with_overrides(parquet_root, registry, out_dir, &HashMap::new(), None).await
+    run_all_rules_with_overrides(parquet_root, registry, out_dir, &HashMap::new(), None, None).await
 }
 
 /// Run registry rules with request/session parameter overrides.
 ///
 /// Keys are canonical rule IDs and registry parameter names. This keeps the
 /// HTTP layer typed: arbitrary SQL is never accepted from the dashboard.
+///
+/// ``weather_root`` defaults to ``parquet_root``. When history is scoped to
+/// ``building={id}/``, pass the parent parquet cache so ``weather/`` still registers.
 pub async fn run_all_rules_with_overrides(
     parquet_root: &Path,
     registry: &RuleRegistry,
     out_dir: &Path,
     overrides: &HashMap<String, HashMap<String, f64>>,
     equipment_filter: Option<&str>,
+    weather_root: Option<&Path>,
 ) -> Result<RuleRunReport> {
     let started = std::time::Instant::now();
     std::fs::create_dir_all(out_dir)?;
-    let poll_seconds = read_poll_from_cache(parquet_root).unwrap_or(300.0);
+    let poll_seconds = read_poll_from_cache(parquet_root)
+        .or_else(|| weather_root.and_then(read_poll_from_cache))
+        .unwrap_or(300.0);
     let rules_dir = Path::new(&registry.rules_dir);
     let tuning = load_tuning_profiles(rules_dir)?;
 
     let ctx = SessionContext::new();
     register_parquet_tree(&ctx, parquet_root).await?;
-    register_weather_if_present(&ctx, parquet_root).await?;
+    let wx_root = weather_root.unwrap_or(parquet_root);
+    register_weather_if_present(&ctx, wx_root).await?;
 
     let mut timings = Vec::new();
     let mut rules_succeeded = 0usize;

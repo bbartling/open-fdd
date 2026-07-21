@@ -430,9 +430,12 @@ pub fn roles_response() -> Value {
 /// `POST /api/fdd/run` body for registry engine (typed params only — no raw SQL).
 ///
 /// ```json
-/// { "mode": "registry", "rule_ids": ["FC1","VAV-1"], "params": { "FC1": { "confirm_min": 5 } } }
+/// { "mode": "registry", "rule_ids": ["FC1","VAV-1"], "params": { "FC1": { "confirm_min": 5 } },
+///   "building_id": "BUILDING_100" }
 /// ```
-/// Omit `rule_ids` to run all. Without parquet cache, returns a clear error.
+/// Omit `rule_ids` to run all. Pass ``building_id`` to scope history to
+/// ``building={id}/`` (avoids bench_* bleed from other packages in the same cache).
+/// Without parquet cache, returns a clear error.
 pub fn run_registry(payload: &Value) -> Value {
     let pq = parquet_root();
     if !pq.is_dir() {
@@ -445,6 +448,29 @@ pub fn run_registry(payload: &Value) -> Value {
             "cache": cache_status(),
         });
     }
+    let building_id = payload
+        .get("building_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let (history_root, weather_root): (PathBuf, PathBuf) = match building_id {
+        Some(bid) => {
+            let scoped = pq.join(format!("building={bid}"));
+            if !scoped.is_dir() {
+                return json!({
+                    "ok": false,
+                    "error": format!(
+                        "no parquet for building_id={bid} under {} — ingest that package first",
+                        pq.display()
+                    ),
+                    "cache": cache_status(),
+                    "building_id": bid,
+                });
+            }
+            (scoped, pq.clone())
+        }
+        None => (pq.clone(), pq.clone()),
+    };
     let reg = match load_reg() {
         Ok(r) => r,
         Err(e) => return json!({"ok": false, "error": e}),
@@ -542,11 +568,12 @@ pub fn run_registry(payload: &Value) -> Value {
         Err(e) => return json!({"ok": false, "error": format!("runtime: {e}")}),
     };
     match rt.block_on(run_all_rules_with_overrides(
-        &pq,
+        &history_root,
         &effective,
         &out,
         &session_overrides,
         payload.get("equipment_id").and_then(Value::as_str),
+        Some(weather_root.as_path()),
     )) {
         Ok(report) => {
             let normalized = results_response();
@@ -554,6 +581,8 @@ pub fn run_registry(payload: &Value) -> Value {
                 "ok": true,
                 "engine": "fdd_rules+DataFusion",
                 "mode": "registry",
+                "building_id": building_id,
+                "history_root": history_root.display().to_string(),
                 "rules_run": report.rules_run,
                 "rules_succeeded": report.rules_succeeded,
                 "rules_failed": report.rules_failed,
