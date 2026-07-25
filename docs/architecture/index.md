@@ -8,10 +8,13 @@ permalink: /architecture/
 
 # Architecture
 
-Open-FDD is a **Rust edge application** with a React web UI, Arrow historian, DataFusion SQL engine, and Project Haystack semantic model.
+Open-FDD is a **container stack** (central / Streamlit UI / fieldbus / mqtt / mcp) with Arrow historian, DataFusion SQL FDD, and Project Haystack semantic model.
 
 | Topic | Document |
 |-------|----------|
-| [Services](services.html) | Bridge, commission, Haystack gateway, compose profiles |
-| [Data flow](data-flow.html) | Drivers → model → historian → FDD → dashboard |
+| [Services](services.html) | Stack images and compose roles |
+| [Data flow](data-flow.html) | Drivers → model → historian → FDD → UI |
 | [Storage & DataFusion](storage-and-datafusion.html) | Feather historian and SQL rules |
+| [DataFusion-first](datafusion-first.html) | Pandas policy and production SQL rule |
+| [Job workspaces](job-workspaces.html) | Persistent analysis Jobs under `workspace/jobs/` |
+| [Analytics boundary](analytics-boundary.html) | Typed DF analytics vs Streamlit |

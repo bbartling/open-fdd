@@ -46,20 +46,20 @@ Bump all three together when cutting a coordinated stack release.
 
 ## Latest verified nightlies
 
-Published successfully from soak follow-up tip **`58e0d0e9`** (merge #567 — Who-Is hosted merge, edges `site_id`, Streamlit gates):
+Published successfully from tip **`d631e9c8`** (merge #569 — FDD `building_id` hive scope):
 
 | Images | Immutable tag | Workflow |
 |--------|---------------|----------|
-| `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` | `sha-58e0d0e` | [29832414780](https://github.com/bbartling/open-fdd/actions/runs/29832414780) — success |
-| `openfdd-mcp` | `sha-58e0d0e` | [29832414898](https://github.com/bbartling/open-fdd/actions/runs/29832414898) — success |
+| `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` | `sha-d631e9c` | [29867342284](https://github.com/bbartling/open-fdd/actions/runs/29867342284) — success |
+| `openfdd-mcp` | `sha-d631e9c` | [29867342248](https://github.com/bbartling/open-fdd/actions/runs/29867342248) — success |
 
 ```bash
-export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-58e0d0e
-export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-58e0d0e
-export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-58e0d0e
-export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-58e0d0e
-export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-58e0d0e
-# or OPENFDD_IMAGE_TAG=sha-58e0d0e / :nightly (same digest as of 2026-07-21 publish)
+export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-d631e9c
+export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-d631e9c
+export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-d631e9c
+export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-d631e9c
+export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-d631e9c
+# or OPENFDD_IMAGE_TAG=sha-d631e9c / :nightly (same digest as of 2026-07-25 publish)
 ```
 
 UI is Streamlit (`services/ui`); FDD operator path is central DataFusion SQL.
@@ -67,7 +67,8 @@ When `OPENFDD_JWT_SECRET` is set, also set `OPENFDD_ADMIN_PASSWORD` (or
 `OPENFDD_API_TOKEN`) on **both** central and ui so Run Rules / package ingest
 can authenticate.
 
-In-repo Streamlit gates 10–12: `scripts/release/smoke_streamlit_ui_gates.sh` (#564 overlays still need to call it).
+Superset migration audit: `docs/migration/VIBE19_VIBE20_OPENFDD_AUDIT.md`.
+In-repo Streamlit gates 10–12: `scripts/release/smoke_streamlit_ui_gates.sh`.
 
 Workspace Cargo version remains **3.3.0** (no semver bump for this integration tip —
 nightlies key off `sha-*`). Bump workspace + `VERSION` together only when cutting a
