@@ -202,8 +202,8 @@ Contracts: [datafusion-first](../architecture/datafusion-first.md) · [job-works
 
 | Stage | Scope | Status |
 |-------|--------|--------|
-| **PR0** | This audit + matrices + tip pin + architecture stubs | This PR |
-| **PR1** | Job filesystem contract + tests + thin Jobs UI entry | Next |
+| **PR0** | This audit + matrices + tip pin + architecture stubs | Merged (#571) |
+| **PR1** | Job filesystem contract + tests + thin Jobs UI entry | This PR |
 | **PR2** | DataFusion analytics service boundary + instrumentation | Planned |
 | **PR3** | FDD oracle push (`ported` → `proven`) | Planned |
 | **PR4** | RCx family → SQL views | Planned |
