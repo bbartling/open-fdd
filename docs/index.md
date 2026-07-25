@@ -16,9 +16,11 @@ Open-FDD is open-source building analytics software for operators, integrators, 
 - Collects live data from **BACnet**, **Modbus**, **Haystack**, **JSON API**, and **CSV** imports
 - Stores telemetry in an **Apache Arrow / Feather** historian at the edge
 - Models sites, equipment, and points with **Project Haystack** semantics
-- Runs **DataFusion SQL** rules for supervisory fault detection
-- Serves a **React** dashboard for commissioning, plots, and PDF reports
+- Runs **DataFusion SQL** rules for supervisory fault detection (`sql_rules/` registry)
+- Serves a **Streamlit** engineering UI (`openfdd-ui`) — vibe19 FDD/RCx workflows plus vibe20 WattLab export handoff in **one** app
 - Exposes a **JWT-protected REST API** and **MCP** tools for AI-assisted engineering workflows
+
+Pandas rule recipes remain published in the [Pandas cookbook](rules/cookbook/pandas-cookbook.html) as the analyst/oracle mirror (tested in the vibe19 playground). Production Open-FDD FDD math is DataFusion SQL only.
 
 ## Who it is for
 

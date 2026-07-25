@@ -10,11 +10,11 @@ nav_order: 12
 change). Do **not** create dated copies (`*-2026-07-17.md`, `bench-NNN-*`, etc.).
 One path forever: `docs/agent/linux-edge-tester-stack-recipes-prompt.md`.
 
-**Pinned tip (2026-07-25):** full `d631e9c8c47a9fc4f1308218cf68834afd9f8093`
-(merge #569 — FDD `building_id` hive scope; prior #567 Who-Is/`site_id`/Streamlit gates).
-Prefer `OPENFDD_IMAGE_TAG=sha-d631e9c` (GHCR short sha tag) or `:nightly` only after
+**Pinned tip (2026-07-25):** full `8850b0bf62ad95977c0c1f7de6ede6d06a942e8f`
+(merge #572 Jobs + #571 audit; prior #569 building_id scope).
+Prefer `OPENFDD_IMAGE_TAG=sha-8850b0b` (GHCR short sha tag) or `:nightly` only after
 confirming `org.opencontainers.image.revision` matches on central/ui/fieldbus/mqtt/**mcp**.
-Bisect pins: `sha-58e0d0e` (#567), `sha-884aaed` (#565 Streamlit SQL P0s).
+Bisect pins: `sha-d631e9c` (#569), `sha-58e0d0e` (#567), `sha-884aaed` (#565).
 
 Copy-paste prompt for a **second OT bench**. Pulls GHCR nightlies, exercises all four
 compose build recipes, validates BACnet / Modbus / Haystack / (new) REST drivers, then
@@ -41,8 +41,8 @@ devices **599999** (bench) and **600000** (Pi edge, if present).
 You are the Open-FDD second-bench soak agent on the OT / edge tester machine.
 
 Charter:
-- GHCR tip for this soak: prefer `OPENFDD_IMAGE_TAG=sha-d631e9c` (or `:nightly` with
-  matching `org.opencontainers.image.revision=d631e9c8c47a…` on **every** stack image —
+- GHCR tip for this soak: prefer `OPENFDD_IMAGE_TAG=sha-8850b0b` (or `:nightly` with
+  matching `org.opencontainers.image.revision=8850b0bf62ad…` on **every** stack image —
   central, ui, fieldbus, mqtt, and mcp). No local product builds, no product code PRs.
 - UI is **Streamlit** at http://<bench-ip>:3000 (not React). JWT stacks need
   `OPENFDD_ADMIN_PASSWORD` (or `OPENFDD_API_TOKEN`) on ui **and** central so Run Rules /
@@ -204,8 +204,8 @@ Final report structure (paste back to product agent):
 See [Build recipes](../operations/build-recipes.md). Helper scripts:
 
 ```bash
-export OPENFDD_IMAGE_TAG=sha-d631e9c
-# pin when bisecting: e.g. OPENFDD_IMAGE_TAG=sha-58e0d0e (#567) or sha-884aaed (#565)
+export OPENFDD_IMAGE_TAG=sha-8850b0b
+# pin when bisecting: e.g. OPENFDD_IMAGE_TAG=sha-d631e9c (#569) or sha-884aaed (#565)
 ./scripts/openfdd_stack_pull.sh all
 ./scripts/openfdd_stack_pull.sh mcp
 ./scripts/openfdd_stack_up.sh csv

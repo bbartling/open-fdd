@@ -41,7 +41,7 @@ Open-FDD is an open-source analytics platform for building automation that combi
 The platform includes:
 
 - Semantic building modeling using **Project Haystack** knowledge graphs
-- JWT authentication and a modern React web interface
+- JWT authentication and a modern **Streamlit** engineering UI (`openfdd-ui`)
 - Apache Arrow & Feather columnar data storage
 - Apache DataFusion SQL analytics and fault detection (59+ cookbook rules)
 - BACnet, Modbus, Haystack, and JSON API drivers (fieldbus container)
@@ -87,7 +87,7 @@ Rules use generic Haystack semantic roles, so they are portable across any model
 | Image | Role |
 |-------|------|
 | [`ghcr.io/bbartling/openfdd-central`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-central) | MQTTS ingest, Feather historian, FDD registry, REST API |
-| [`ghcr.io/bbartling/openfdd-ui`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-ui) | React operator dashboard (Caddy → central) |
+| [`ghcr.io/bbartling/openfdd-ui`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-ui) | Streamlit operator UI (vibe19 + WattLab export → central) |
 | [`ghcr.io/bbartling/openfdd-fieldbus`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-fieldbus) | BACnet / Modbus / Haystack edge |
 | [`ghcr.io/bbartling/openfdd-mqtt`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mqtt) | Mosquitto MQTTS broker |
 | [`ghcr.io/bbartling/openfdd-mcp`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp) | Optional slim MCP stdio sidecar → central API |

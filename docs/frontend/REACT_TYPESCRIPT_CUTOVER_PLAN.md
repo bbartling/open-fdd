@@ -1,6 +1,8 @@
 # React / TypeScript dashboard cutover plan
 
-**Status:** **Shipped (vibe19 parity train)** — registry APIs on master (#505); SQL catalog 59+ (#506); React lab `/lab` with Plotly chart parity (#507). Remaining: GHCR nightly verify + bench handoff.
+> **OBSOLETE (2026-07-25).** Product UI is **Streamlit** (`services/ui` / `openfdd-ui`). The React dashboard was retired. Kept as historical cutover notes only — do not implement.
+
+**Former status:** Shipped then superseded by Streamlit #559. Registry APIs remain on central; chart parity lives in Streamlit Plotly helpers.
 
 ## Current layout
 

@@ -46,32 +46,27 @@ Bump all three together when cutting a coordinated stack release.
 
 ## Latest verified nightlies
 
-Published successfully from tip **`d631e9c8`** (merge #569 — FDD `building_id` hive scope):
+Published successfully from tip **`8850b0bf`** (merge #572 — Jobs contract; #571 audit):
 
 | Images | Immutable tag | Workflow |
 |--------|---------------|----------|
-| `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` | `sha-d631e9c` | [29867342284](https://github.com/bbartling/open-fdd/actions/runs/29867342284) — success |
-| `openfdd-mcp` | `sha-d631e9c` | [29867342248](https://github.com/bbartling/open-fdd/actions/runs/29867342248) — success |
+| `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` | `sha-8850b0b` | [30176649928](https://github.com/bbartling/open-fdd/actions/runs/30176649928) — success |
+| `openfdd-mcp` | `sha-8850b0b` | [30176649926](https://github.com/bbartling/open-fdd/actions/runs/30176649926) — success |
 
 ```bash
-export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-d631e9c
-export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-d631e9c
-export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-d631e9c
-export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-d631e9c
-export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-d631e9c
-# or OPENFDD_IMAGE_TAG=sha-d631e9c / :nightly (same digest as of 2026-07-25 publish)
+export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-8850b0b
+export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-8850b0b
+export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-8850b0b
+export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-8850b0b
+export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-8850b0b
+# or OPENFDD_IMAGE_TAG=sha-8850b0b / :nightly
 ```
 
-UI is Streamlit (`services/ui`); FDD operator path is central DataFusion SQL.
-When `OPENFDD_JWT_SECRET` is set, also set `OPENFDD_ADMIN_PASSWORD` (or
-`OPENFDD_API_TOKEN`) on **both** central and ui so Run Rules / package ingest
-can authenticate.
+UI is **one Streamlit app** (`services/ui`): vibe19 FDD/RCx/Jobs + WattLab export.  
+Production FDD = DataFusion SQL (`sql_rules/`, 63). Pandas cookbook (59) stays online + in-tree as oracle.
 
-Superset migration audit: `docs/migration/VIBE19_VIBE20_OPENFDD_AUDIT.md`.
-In-repo Streamlit gates 10–12: `scripts/release/smoke_streamlit_ui_gates.sh`.
+Superset audit: `docs/migration/VIBE19_VIBE20_OPENFDD_AUDIT.md`.
 
-Workspace Cargo version remains **3.3.0** (no semver bump for this integration tip —
-nightlies key off `sha-*`). Bump workspace + `VERSION` together only when cutting a
-coordinated release.
+Workspace Cargo version remains **3.3.0**.
 
-**Human Workbench gate** still required before BACnet OT PASS (hosted **599999** discoverability). See `docs/agent/linux-edge-tester-stack-recipes-prompt.md`.
+**Human Workbench gate** still required before BACnet OT PASS (hosted **599999**). See `docs/agent/linux-edge-tester-stack-recipes-prompt.md`.

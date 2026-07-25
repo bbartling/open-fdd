@@ -6,8 +6,14 @@ nav_order: 1
 
 # Vibe19 × Vibe20 × Open-FDD audit
 
-**Audit date:** 2026-07-25 · **Tip under audit:** `d631e9c8` (`sha-d631e9c`, merge #569)  
+**Audit date:** 2026-07-25 · **Tip under audit:** `8850b0bf` (`sha-8850b0b`, merges #571 audit + #572 Jobs)  
 **Rule:** trust tested current code over historical `docs/migration/vibe19/*` stage notes.
+
+**Hard product rules (2026-07-25):**
+
+1. Open-FDD Rust/central FDD = **DataFusion SQL only** (`sql_rules/registry.yaml`).
+2. **Pandas is not deleted** — online Pandas cookbook + vibe19 playground are the oracle/test home; in-tree `services/ui/app/rules/` stays.
+3. **One Streamlit app** unites vibe19 + vibe20 concepts (WattLab = Export handoff, not a second app).
 
 Reference checkouts (not vendored into open-fdd):
 
@@ -32,7 +38,7 @@ Companion matrices:
 | Image | Role (code truth) |
 |-------|-------------------|
 | `openfdd-central` | JWT REST, Feather ingest, DataFusion FDD (`POST /api/fdd/run` registry mode) |
-| `openfdd-ui` | **Streamlit** vibe19 lab (`services/ui`) — not React |
+| `openfdd-ui` | **One Streamlit app** (`services/ui`) — vibe19 FDD/RCx/Jobs + vibe20 WattLab **export** (not a second Streamlit; EnergyPlus stays external) |
 | `openfdd-fieldbus` | BACnet / Modbus / Haystack / REST OT |
 | `openfdd-mqtt` | MQTTS broker |
 | `openfdd-mcp` | Optional MCP stdio → central |
@@ -70,7 +76,8 @@ Streamlit continuity today: `st.session_state` + browser download/upload of `ses
 ### UI sections (frozen contract)
 
 [`dashboard_contract.py`](../../services/ui/app/dashboard_contract.py): Overview · Data Model · Run Rules · Results by Category · FDD Plots · RCx Plots · Metering · Export.  
-**No Jobs page.** Single large `streamlit_app.py` (not multipage).
+**Jobs:** sidebar **Jobs (persistent)** → `workspace/jobs/` ([`ui_jobs.py`](../../services/ui/app/ui_jobs.py) / [`job_store.py`](../../services/ui/app/job_store.py)).  
+**United app:** vibe19 + WattLab export share this single Streamlit process — not separate apps.
 
 ### WattLab / EnergyPlus
 

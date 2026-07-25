@@ -14,7 +14,7 @@ Supervisory fault detection runs as **DataFusion SQL** against Arrow historian t
 
 | Guide | Content |
 |-------|---------|
-| [**Rule Cookbook hub**](cookbook/) | **DataFusion SQL + Pandas** — validated vibe19 catalog (59 rules) |
+| [**Rule Cookbook hub**](cookbook/) | **DataFusion SQL** (production registry, 63 rules) + **Pandas** (59-rule oracle / docs) |
 | [DataFusion SQL cookbook](cookbook/datafusion-sql-cookbook.html) | Edge runtime — copy-paste rules for `/sql-fdd` and API |
 | [Pandas cookbook](cookbook/pandas-cookbook.html) | Same validated rules for analyst workflows **outside** Open-FDD |
 

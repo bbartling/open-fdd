@@ -6,7 +6,16 @@ nav_order: 6
 
 # SQL ↔ Pandas parity matrix
 
-**Audit date:** 2026-07-19 · **Registry source:** `sql_rules/registry.yaml` · **Target:** zero silent drift
+**Audit date:** 2026-07-19 · **Tip cross-check:** `sha-8850b0b` (2026-07-25) — counts below still match `sql_rules/registry.yaml` · **Target:** zero silent drift
+
+## Product split (read this first)
+
+| Surface | Count | Role |
+|---------|------:|------|
+| DataFusion SQL registry | **63** | Production Open-FDD FDD |
+| Pandas vibe19 catalog | **59** | Online docs + playground oracle (kept) |
+
+Open-FDD UI is **one Streamlit app** (vibe19 + WattLab export). Do not delete pandas because SQL exists.
 
 ## Honesty first
 

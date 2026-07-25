@@ -6,9 +6,11 @@ nav_order: 1
 
 # DataFusion SQL FDD Cookbook
 
-Open-FDD edge executes fault detection as **DataFusion SQL** against Apache Arrow historian tables. Copy-paste rules into the **SQL FDD Rules** tab or `POST /api/fdd-rules/{id}/test-sql`.
+Open-FDD executes production fault detection as **DataFusion SQL** against Apache Arrow / parquet historian tables via the canonical registry [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) (**63** rules). Operator path: Streamlit **Run Rules** → `POST /api/fdd/run` (`mode=registry`). Integrators may also exercise rules through the registry APIs — raw arbitrary SQL is rejected.
 
-**Validated rule IDs** match the vibe19 pandas catalog (**59 rules**). Analyst mirror: [Pandas cookbook](pandas-cookbook.html).
+**Pandas mirror:** the [Pandas cookbook](pandas-cookbook.html) documents the **59**-rule vibe19 oracle catalog (kept in-tree under `services/ui/app/rules/` and tested in the vibe19 playground). Do **not** treat “59” as the production registry size. See [parity matrix](parity-matrix.html).
+
+**Updated:** 2026-07-25 · tip `sha-8850b0b`
 
 ---
 

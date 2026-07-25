@@ -1,43 +1,26 @@
-# Streamlit demo — agent specification
+# Streamlit UI — agent specification (`services/ui`)
 
 ## Mission
 
-Maintain **Vibe Code App 19** as a lightweight **educational pandas/Streamlit FDD demo** for BUILDING_100-style CSV data.
-
-## Do not
-
-- Re-add Rust or DataFusion to this repo
-- Re-add Haystack/Oxigraph model services
-- Turn this into Open-FDD or claim production parity
-- Commit client historian CSV trees or generated caches
-- Add FastAPI product architecture unless explicitly requested
-
-## Open-FDD
-
-The production Rust/DataFusion engine lives at:
-
-`C:\Users\ben\Documents\open-fdd`
-
-Port inventory: `docs/PORT_FROM_VIBE19_INVENTORY.md` (in Open-FDD repo).
+Maintain the **single** Open-FDD Streamlit app: vibe19 operator workflows + Jobs + WattLab export handoff. Production FDD is **DataFusion SQL** on central. Pandas stays as the online cookbook / oracle (also tested in the external vibe19 playground).
 
 ## Do
 
-- Keep rules **readable** in `app/rules/`
-- Keep BUILDING_100 demo path easy (`HVAC_DATA_ROOT`, `configs/building_100.yaml`)
-- Support CSV upload, local folder, read-only SQLite/DuckDB
-- Use `st.cache_data` for expensive loads
-- Test with small fixtures under `tests/`
-- Update `docs/STREAMLIT_DEMO_SPEC.md` when behavior changes
+- Keep `app/rules/cookbook_catalog.py` (59) readable and importable
+- Route operator **Run Rules** through `central_client.run_fdd` (registry SQL)
+- Preserve WattLab dump on Export (external vibe20 consumer)
+- Preserve Jobs sidebar → `workspace/jobs/`
+- Update online cookbooks when rule semantics change
 
-## Entry point
+## Do not
 
-```bash
-cd vibe_code_apps_19
-streamlit run streamlit_app.py
-```
+- Delete pandas cookbook modules “because SQL exists”
+- Reintroduce React dashboard
+- Spawn a separate Streamlit app for vibe20 / EnergyPlus
+- Claim production pandas FDD without `OPENFDD_ALLOW_PANDAS_FDD=1`
+- Weaken CI layout guards in `dashboard_contract.py`
 
-## Tests
+## Open-FDD stack
 
-```bash
-python -m pytest -q
-```
+Images: `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt`, `openfdd-mcp`.  
+Docs: [DataFusion-first](../../docs/architecture/datafusion-first.md), [Rule Cookbook](../../docs/rules/cookbook/).
