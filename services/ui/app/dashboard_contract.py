@@ -52,4 +52,7 @@ REQUIRED_UI_ENTRYPOINTS: tuple[str, ...] = (
     "app.model_seed:infer_schedules",
     "app.model_seed:operating_signatures",
     "app.open_meteo:fetch_open_meteo",
+    "app.ui_jobs:render_jobs_sidebar",
+    "app.job_store:create_job",
+    "app.job_store:load_job",
 )

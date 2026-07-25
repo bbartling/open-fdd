@@ -2420,6 +2420,9 @@ def main() -> None:
     defaults_cfg = cached_rule_defaults(str(cfg.rule_defaults_path))
     _apply_agent_bootstrap_once()
     _apply_browser_autoload_once()
+    from app.ui_jobs import render_jobs_sidebar
+
+    render_jobs_sidebar()
     _load_data(cfg)
     _sidebar_sliders(defaults_cfg)
 
