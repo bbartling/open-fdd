@@ -10,16 +10,25 @@ permalink: /rules/cookbook/
 
 Open-source, **standards-first** fault detection for commercial HVAC. Rules use generic semantic variables / Haystack roles (`discharge-air-temp`, `outside-air-temp`, `fan-cmd`, …) — portable across modeled sites and generic BAS telemetry.
 
-**Validated catalog:** **59 rules** from the vibe19 Streamlit-tested pandas catalog. IDs below are canonical.
+**Two catalogs (do not conflate):**
 
-## Two cookbooks — parity target
+| Catalog | Count | Role |
+|---------|------:|------|
+| **DataFusion SQL** — [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) | **63** | **Production** FDD in Open-FDD Rust / central (`POST /api/fdd/run`) |
+| **Pandas** — vibe19 `cookbook_catalog.py` | **59** | **Oracle / docs / notebooks** — maintained in this cookbook and tested in the vibe19 playground; **not** deleted from `services/ui` |
+
+Parity honesty ([parity matrix](parity-matrix.html), audit 2026-07-19): **18** `proven_building_100` · **44** `ported_from_cookbook` · **1** skipped (`FC7`). SQL presence ≠ oracle-proven. Do not claim “54 full parity.”
+
+## Two cookbooks — complementary, not identical
 
 | Cookbook | Runtime | Use when |
 |----------|---------|----------|
-| [**DataFusion SQL**](datafusion-sql-cookbook.html) | **Open-FDD edge** | Live historian, `/sql-fdd`, API `test-sql`, confirmation engine |
-| [**Pandas**](pandas-cookbook.html) | **Outside Open-FDD** | CSV exports, notebooks, RCx, parity checks, public benchmarks |
+| [**DataFusion SQL**](datafusion-sql-cookbook.html) | **Open-FDD central / edge** | Live historian, registry SQL FDD, confirmation engine |
+| [**Pandas**](pandas-cookbook.html) | **Docs + vibe19 playground (+ emergency `OPENFDD_ALLOW_PANDAS_FDD=1`)** | CSV exports, notebooks, RCx studies, parity oracles |
 
-Every **validated** rule exists in **both** cookbooks. Rolling / multi-sensor screens (e.g. `SV-RATE`, `PID-HUNT-1`) ship a **simplified SQL** variant with an explicit caveat — full logic is Pandas-validated. See the [parity matrix](parity-matrix.html).
+SQL adds rollups (`FAN-RUNTIME-HOURS`, `AVG-ZONE-TEMP`, `ZONE-COMFORT-PCT`, `FAULT-ELAPSED-HOURS`) and aliases `FC13` → `FC13-SAT-HIGH`. Rolling / multi-sensor screens (e.g. `SV-RATE`, `PID-HUNT-1`) may ship a **simplified SQL** variant with an explicit caveat — full logic stays Pandas-validated until proven.
+
+Open-FDD ships **one Streamlit app** (`services/ui`) for vibe19 engineering + vibe20 WattLab **export** — not two Streamlit apps.
 
 ## Framework
 

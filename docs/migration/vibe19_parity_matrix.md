@@ -6,7 +6,9 @@ nav_order: 2
 
 # Vibe19 → Open-FDD capability parity matrix
 
-**Audit tip:** `sha-d631e9c` · **Rule SQL honesty:** [parity-matrix.md](../rules/cookbook/parity-matrix.md) (do not duplicate rule-level tables here).
+**Audit tip:** `sha-8850b0b` · **Rule SQL honesty:** [parity-matrix.md](../rules/cookbook/parity-matrix.md) (do not duplicate rule-level tables here).
+
+**Product UI:** one Streamlit app (`services/ui`) — vibe19 workflows + WattLab export. Pandas cookbook stays online + vibe19-tested; Open-FDD RS FDD is DataFusion SQL only.
 
 Status legend: **DONE** · **PARTIAL** · **MISSING** · **N/A** (intentional).
 
@@ -35,7 +37,7 @@ Status legend: **DONE** · **PARTIAL** · **MISSING** · **N/A** (intentional).
 | Engineering findings HITL | reporting/ | Export CSVs / wattlab findings | export | N/A | **No** page | Partial | MISSING | Need persisted findings |
 | Filled RCx DOCX | reporting pipeline | Template download only | docx_report | N/A | Partial | Guards | MISSING | No python-docx fill |
 | WattLab dump | wattlab_dump | Export “WattLab dump” | wattlab_dump | Mixed | Yes | Fixtures | DONE | Recompute cost still high |
-| Named Jobs persistence | (demo session) | — | — | — | No | — | MISSING | PR1 |
+| Named Jobs persistence | (demo session) | `workspace/jobs/` + sidebar | job_store | N/A | Thin | Yes | PARTIAL | PR1 landed; full restore UX later |
 | Agent / REST tools | agent_api | central `/api/agent/tools` + MCP | central | FDD SQL | N/A | Smoke | DONE | Extend with job tools later |
 
 ## Registry honesty (pointer)

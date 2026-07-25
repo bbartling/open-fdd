@@ -29,8 +29,8 @@ ghcr.io/bbartling/openfdd-mcp
 
 The container stack:
 
-- `openfdd-central` — HTTP API at `/api/*` and the FDD engine
-- `openfdd-ui` — Caddy serving the compiled React dashboard, proxying `/api` to central
+- `openfdd-central` — HTTP API at `/api/*` and the DataFusion FDD engine
+- `openfdd-ui` — Streamlit engineering UI (vibe19 + WattLab export), talks to central REST
 - `openfdd-fieldbus` — BACnet/IP poller publishing over MQTTS
 - `openfdd-mqtt` — Mosquitto broker
 - `openfdd-mcp` — slim Rust MCP server

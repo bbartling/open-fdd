@@ -1,41 +1,32 @@
-# Streamlit FDD demo spec
+# Streamlit UI contract (Open-FDD `services/ui`)
 
 ## Purpose
 
-Educational **pandas + Streamlit** lab for BUILDING_100-style CSV historian data. Tunable fault thresholds, readable rules, engineer notes on charts.
+Product **Streamlit** engineering UI for Open-FDD: vibe19 FDD / RCx / Jobs plus vibe20 WattLab **export** in **one** app (`streamlit_app.py`).
 
-**Not** Open-FDD. Production Rust/DataFusion engine: `C:\Users\ben\Documents\open-fdd`.
+| Layer | Engine |
+|-------|--------|
+| Production FDD | Central **DataFusion SQL** (`sql_rules/registry.yaml`, 63 rules) |
+| Pandas cookbook | Retained under `app/rules/` (59) for analytics, docs, oracle — FDD math only if `OPENFDD_ALLOW_PANDAS_FDD=1` |
 
-## Screens (tabs)
+External vibe19 playground remains the preferred place to **test/maintain** pandas recipes before documenting them online. Do **not** delete the in-tree pandas catalog.
 
-1. **Overview** — data source, equipment count, date range, poll interval, missing roles
-2. **Data Preview** — dataframe head, columns, timestamp health
-3. **Role Mapping** — assign semantic roles, save YAML
-4. **Rule Tuning** — sliders from `configs/rule_defaults.yaml`, run rules
-5. **Fault Results** — summary table, top faulted equipment
-6. **Trends** — point plots with optional fault overlay + engineer notes
-7. **Export** — CSV summary, debug CSV, Markdown/HTML report
+## Frozen sections (`dashboard_contract.py`)
 
-## Rules (demo subset)
+1. Overview  
+2. Data Model  
+3. Run Rules  
+4. Results by Category  
+5. FDD Plots  
+6. RCx Plots  
+7. Metering  
+8. Export (includes WattLab dump)
 
-| ID | Module | Notes |
-| --- | --- | --- |
-| FAN-RUNTIME | fan_rules | Fan on hours |
-| VAV-1 | vav_rules | Zone comfort band |
-| AVG-ZONE-TEMP | vav_rules | Analytics |
-| ZONE-COMFORT-PCT | vav_rules | Analytics |
-| SAT-HIGH | ahu_rules | FC13-style |
-| ECON-2 | economizer_rules | Unfavorable economizing |
-| ECON-1 | economizer_rules | Stuck closed |
-| OAT-METEO | economizer_rules | Needs weather CSV |
-| FC2-MAT-LOW | ahu_rules | Mixed air low |
+Plus sidebar: package ingest, Rule tuning, **Jobs (persistent)**.
 
-## Data inputs
+## Do not
 
-See `CSV_INPUT_GUIDE.md`, `SQL_INPUT_GUIDE.md`.
-
-## Performance
-
-- `st.cache_data` on loads
-- Vectorized pandas masks
-- Load selected equipment when possible
+- Revive React LabShell / `/srv/assets`
+- Add a second Streamlit process for WattLab/EnergyPlus
+- Silently fall back to pandas FDD when SQL fails
+- Claim full SQL↔pandas mask parity beyond [parity-matrix](../../docs/rules/cookbook/parity-matrix.md)

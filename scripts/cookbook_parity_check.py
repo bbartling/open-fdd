@@ -141,6 +141,42 @@ def run_docs_integrity() -> None:
             raise AssertionError(f"README.md missing required docs link: {required_link}")
     print("PASS README cookbook + docs links present")
 
+    # Published product UI must not claim React; SQL registry size must stay honest.
+    home = (ROOT / "docs" / "index.md").read_text(encoding="utf-8")
+    if re.search(r"Serves a \*\*React\*\*", home) or re.search(
+        r"\*\*React\*\* dashboard", home
+    ):
+        raise AssertionError("docs/index.md still claims React product dashboard")
+    if "Streamlit" not in home:
+        raise AssertionError("docs/index.md must mention Streamlit product UI")
+    print("PASS docs/index.md Streamlit (no React product claim)")
+
+    registry = (ROOT / "sql_rules" / "registry.yaml").read_text(encoding="utf-8")
+    # Count top-level rule id entries of form `- id:` or `id:` under rules list.
+    reg_ids = re.findall(r"(?m)^\s+-\s+rule_id:\s+\S+", registry)
+    if len(reg_ids) < 63:
+        raise AssertionError(
+            f"sql_rules/registry.yaml expected >= 63 rule ids, found {len(reg_ids)}"
+        )
+    print(f"PASS sql_rules/registry.yaml ({len(reg_ids)} rule ids)")
+
+    hub = (COOKBOOK / "index.md").read_text(encoding="utf-8")
+    if "63" not in hub or "59" not in hub:
+        raise AssertionError(
+            "cookbook/index.md must state both SQL registry 63 and pandas catalog 59"
+        )
+    sql_intro = (COOKBOOK / "datafusion-sql-cookbook.md").read_text(encoding="utf-8")[:2500]
+    pd_intro = (COOKBOOK / "pandas-cookbook.md").read_text(encoding="utf-8")[:2500]
+    if "63" not in sql_intro:
+        raise AssertionError("datafusion-sql-cookbook.md intro must mention registry 63")
+    if "59" not in pd_intro or "not" not in pd_intro.lower():
+        # require "not" near keep/delete messaging — soft check for retention language
+        if "not vibe-coded away" not in pd_intro and "intentionally maintained" not in pd_intro:
+            raise AssertionError(
+                "pandas-cookbook.md intro must state catalog is maintained (not deleted)"
+            )
+    print("PASS cookbook hub + intros dual-catalog honesty")
+
     for name in ("pandas-cookbook.md", "datafusion-sql-cookbook.md"):
         text = (COOKBOOK / name).read_text(encoding="utf-8")
         n = len(RULE_HEADING_RE.findall(text))

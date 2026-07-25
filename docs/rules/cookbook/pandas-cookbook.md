@@ -6,9 +6,13 @@ nav_order: 2
 
 # Pandas FDD Cookbook
 
-**Validated source of truth:** the Streamlit-tested vibe19 catalog (`app/rules/cookbook_catalog.py`) — **59 rules**. Open-FDD edge runs **Rust + Apache Arrow + DataFusion SQL**; this cookbook mirrors every validated rule for notebooks, CSV exports, RCx studies, and parity testing.
+**Oracle / documentation catalog:** the Streamlit-tested vibe19 catalog (`services/ui/app/rules/cookbook_catalog.py` and the external vibe19 playground) — **59 rules**.
 
-See also the [DataFusion SQL cookbook](datafusion-sql-cookbook.html) and [P0 rule catalog](p0-rule-catalog.html).
+This cookbook is **intentionally maintained**. It is **not** vibe-coded away. Production Open-FDD FDD math runs **Rust + Apache Arrow + DataFusion SQL** (`sql_rules/registry.yaml`, **63** rules). Use this pandas catalog for notebooks, CSV exports, RCx studies, and SQL↔pandas parity testing. In the Open-FDD UI, pandas FDD runs only with explicit `OPENFDD_ALLOW_PANDAS_FDD=1` (emergency / oracle) — never as a silent fallback.
+
+See also the [DataFusion SQL cookbook](datafusion-sql-cookbook.html), [parity matrix](parity-matrix.html), and [P0 rule catalog](p0-rule-catalog.html).
+
+**Updated:** 2026-07-25 · tip `sha-8850b0b`
 
 ---
 
