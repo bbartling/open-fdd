@@ -22,15 +22,15 @@ ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
 | Container | Image | Role |
 |-----------|-------|------|
 | `central` | `openfdd-central` | REST API (`:8080`), JWT auth, historian, DataFusion FDD engine, reports, MCP API surface |
-| `ui` | `openfdd-ui` | Caddy static React dashboard (`:3000`), proxies `/api` to central |
+| `ui` | `openfdd-ui` | Streamlit vibe19 lab (`:3000`); talks to central REST for SQL FDD |
 | `fieldbus` | `openfdd-fieldbus` | BACnet/IP poll (`network_mode: host`), publishes over MQTTS |
 | `mqtt` | `openfdd-mqtt` | Mosquitto broker, MQTTS on `:8883` |
 | `mcp` | `openfdd-mcp` | Slim Rust MCP server for external agents |
 
 ```text
 ┌──────────────────────┐        ┌──────────────────────────────┐
-│ ui (Caddy :3000)     │──/api─▶│ central (:8080)              │
-└──────────────────────┘        │ REST · JWT · historian · FDD │
+│ ui (Streamlit :3000) │───────▶│ central (:8080)              │
+└──────────────────────┘  REST  │ JWT · historian · SQL FDD    │
                                  └──────────────────────────────┘
                                           ▲ MQTTS (8883)
                                           │
