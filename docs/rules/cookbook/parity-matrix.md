@@ -23,8 +23,8 @@ Open-FDD UI is **one Streamlit app** (vibe19 + WattLab export). Do not delete pa
 
 | `parity_status` | Count (registry) | Meaning |
 |-----------------|-----------------:|---------|
-| `proven_building_100` | 21 | Exercised against BUILDING_100-style fixtures / production soak with matching fault-hour intent |
-| `ported_from_cookbook` | 41 | SQL exists and compiles; **ported ≠ oracle-proven**. Mask / confirm / rolling behavior may still diverge from Pandas |
+| `proven_building_100` | 24 | Exercised against BUILDING_100-style fixtures / production soak with matching fault-hour intent |
+| `ported_from_cookbook` | 38 | SQL exists and compiles; **ported ≠ oracle-proven**. Mask / confirm / rolling behavior may still diverge from Pandas |
 | `skipped_missing_roles` | 1 | `FC7` — skipped until required roles are modeled |
 
 **Do not claim “54 full parity.”** That figure was aspirational catalog coverage, not mask-level SQL↔Pandas agreement.
@@ -35,11 +35,11 @@ Oracle harness (phase 1, #550): `crates/fdd_rules` mask/fault-hour fixtures patt
 
 ## Proven vs ported (high level)
 
-### `proven_building_100` (21)
+### `proven_building_100` (24)
 
-`AVG-ZONE-TEMP`, `ECON-1`, `ECON-2`, `ECON-3`, `ECON-4`, `FAN-RUNTIME-HOURS`, `FAULT-ELAPSED-HOURS`, `FC1`, `FC2`, `FC3`, `FC8`, `FC9`, `FC10`, `FC11`, `FC12`, `FC13-SAT-HIGH`, `MECH-OAT-1`, `OAT-METEO`, `SCHED-1`, `VAV-1`, `ZONE-COMFORT-PCT`
+`AVG-ZONE-TEMP`, `ECON-1`, `ECON-2`, `ECON-3`, `ECON-4`, `ECON-5`, `ECON-6`, `ECON-7`, `FAN-RUNTIME-HOURS`, `FAULT-ELAPSED-HOURS`, `FC1`, `FC2`, `FC3`, `FC8`, `FC9`, `FC10`, `FC11`, `FC12`, `FC13-SAT-HIGH`, `MECH-OAT-1`, `OAT-METEO`, `SCHED-1`, `VAV-1`, `ZONE-COMFORT-PCT`
 
-Oracle fixtures (2026-07-26): `SCHED-1`, `MECH-OAT-1` (web OAT + `clg_valve_pct` proxy), `ECON-3` (strict web DB+DP) in `crates/fdd_rules/src/oracle_parity_test.rs`.
+Oracle fixtures (2026-07-26): `SCHED-1`, `MECH-OAT-1`, `ECON-3`, `ECON-5` (OAT-relative preheat), `ECON-6`/`ECON-7` (web weather + damper) in `crates/fdd_rules/src/oracle_parity_test.rs`. `SCHED-247` remains **ported** (screening streak ≠ window `always_on_pct`).
 
 ### Representative `ported_from_cookbook` risk set (phase-1 oracle focus)
 
@@ -49,10 +49,10 @@ These are the mismatch classes called out in #550 — SQL is present; treat resu
 |--------|----------|---------------|
 | sensor | `SV-RANGE`, `SV-FLATLINE`, `SV-SPIKE`, `SV-STALE`, `SV-RATE` | Rolling / multi-sensor / rate context simplified in SQL |
 | control | `PID-HUNT-1`, `FC4` | Hunting metrics screening vs full TV/reversal |
-| ahu | `FC6`, `FC14`, `FC15`, ECON-5/6/7, … | Mix / coil / remaining economizer gates |
+| ahu | `FC6`, `FC14`, `FC15`, … | Mix / coil gates |
 | vav | `VAV-4`, `VAV-7`, … | Rolling “fixed high” / high-min SP incomplete in SQL |
 | plant | `CHW-NOLOAD-1`, … | Load proxies simplified |
-| trim / schedule | `TRIM-*`, `SCHED-247` | Long confirm / always-on semantics |
+| trim / schedule | `TRIM-*`, `SCHED-247` | Long confirm / always-on window fraction |
 
 ---
 
@@ -62,11 +62,11 @@ These are the mismatch classes called out in #550 — SQL is present; treat resu
 |--------|-----------------|:--------:|:---------------:|:--------------:|
 | sensor | SV-* | ✅ | ✅ | mostly **ported** (screening fixtures for SV-RATE) |
 | control | PID-HUNT-1 | ✅* | ✅ | **ported** |
-| ahu | FC*, AHU-*, ECON-*, OAT-METEO, MECH-OAT-1, … | ✅ | ✅ | mixed (`ECON-1..4`, `MECH-OAT-1` proven) |
+| ahu | FC*, AHU-*, ECON-*, OAT-METEO, MECH-OAT-1, … | ✅ | ✅ | mixed (`ECON-1..7`, `MECH-OAT-1` proven) |
 | vav | VAV-1, VAV-3–5, VAV-7, VAV-REHEAT, VAV-AHU-LEAVE | ✅ | ✅ | mixed (`VAV-1` proven) |
 | plant | CHW-*, CW-*, … | ✅ | ✅ | **ported** |
 | trim | TRIM-1/3/4 | ✅ | ✅ | **ported** |
-| schedule | SCHED-1, SCHED-247 | ✅ | ✅ | mixed (`SCHED-1` proven) |
+| schedule | SCHED-1, SCHED-247 | ✅ | ✅ | mixed (`SCHED-1` proven; `SCHED-247` screening) |
 
 \* SQL often ships a **screening** variant; see per-rule caveats in the SQL cookbook.
 

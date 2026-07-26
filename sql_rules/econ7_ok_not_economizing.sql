@@ -15,7 +15,7 @@ base AS (
     CAST(CASE
       WHEN web_oa_t IS NULL OR web_oa_dp IS NULL OR oa_d IS NULL OR clg IS NULL THEN 0
       WHEN web_oa_t >= {{ECON7_DB_MIN}} AND web_oa_t < {{ECON7_DB_MAX}} AND web_oa_dp < {{ECON7_DP_MAX}}
-       AND clg > 0.01 AND oa_d < {{ECON7_DAMPER_MIN}} THEN 1
+       AND clg > 0.05 AND oa_d < {{ECON7_DAMPER_MIN}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

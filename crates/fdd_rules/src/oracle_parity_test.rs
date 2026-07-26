@@ -171,6 +171,209 @@ timestamp_utc,web_oat,web_dp,oa_d,clg_col
     }
 
     #[tokio::test]
+    async fn econ5_preheat_over_matches_pandas_reference() {
+        // Matches vibe19 econ5: htg open + (OAT>SAT⇒preheat−OAT>ΔT | OAT<SAT⇒preheat−SAT>ΔT).
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_ECON5");
+        std::fs::create_dir_all(&building).unwrap();
+
+        // over=2.2; OAT < SAT branch: preheat - sat_sp > 2.2 while htg open.
+        // Sequence: 0,0,1,1,1,0
+        let rows = "\
+timestamp_utc,preheat,sat,oat,htg
+2026-01-01T00:00:00Z,58,55,40,0
+2026-01-01T00:05:00Z,56,55,40,50
+2026-01-01T00:10:00Z,58,55,40,50
+2026-01-01T00:15:00Z,59,55,40,50
+2026-01-01T00:20:00Z,60,55,40,50
+2026-01-01T00:25:00Z,60,55,40,0
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "preheat",
+                    role: "preheat_leave_t",
+                },
+                RoleCol {
+                    csv_col: "sat",
+                    role: "sat_sp",
+                },
+                RoleCol {
+                    csv_col: "oat",
+                    role: "oa_t",
+                },
+                RoleCol {
+                    csv_col: "htg",
+                    role: "htg_valve_pct",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "econ5_preheat_over.sql",
+            300.0,
+            600,
+            &[("PREHEAT_OVER_F", "2.2")],
+        )
+        .await;
+
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(expected, 0.16666666666666666, "pandas reference");
+        assert_hours_close(got, expected, "ECON-5 SQL");
+    }
+
+    #[tokio::test]
+    async fn econ6_freezing_economizer_matches_pandas_reference() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_ECON6");
+        std::fs::create_dir_all(&building).unwrap();
+
+        // web_oa_t < 25 and oa_d > 0.25. Sequence: 0,0,1,1,1,0
+        let rows = "\
+timestamp_utc,web_oat,oa_d
+2026-01-01T00:00:00Z,30,0.5
+2026-01-01T00:05:00Z,20,0.1
+2026-01-01T00:10:00Z,20,0.5
+2026-01-01T00:15:00Z,15,0.4
+2026-01-01T00:20:00Z,10,0.6
+2026-01-01T00:25:00Z,20,0.1
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "web_oat",
+                    role: "web_oa_t",
+                },
+                RoleCol {
+                    csv_col: "oa_d",
+                    role: "oa_damper_pct",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "econ6_econ_freezing.sql",
+            300.0,
+            600,
+            &[("ECON6_OAT_MAX_F", "25"), ("ECON6_DAMPER_MAX", "0.25")],
+        )
+        .await;
+
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(expected, 0.16666666666666666, "pandas reference");
+        assert_hours_close(got, expected, "ECON-6 SQL");
+    }
+
+    #[tokio::test]
+    async fn econ7_ok_not_economizing_matches_pandas_reference() {
+        // Matches vibe19 econ7 with cooling-valve demand proxy (clg > 0.05).
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_ECON7");
+        std::fs::create_dir_all(&building).unwrap();
+
+        // 35<=DB<72, DP<60, clg>0.05, oa_d < 0.5. Sequence: 0,0,1,1,1,0
+        let rows = "\
+timestamp_utc,web_oat,web_dp,oa_d,clg_col
+2026-01-01T00:00:00Z,30,50,0.2,50
+2026-01-01T00:05:00Z,50,50,0.2,0
+2026-01-01T00:10:00Z,50,50,0.2,50
+2026-01-01T00:15:00Z,55,55,0.3,50
+2026-01-01T00:20:00Z,60,58,0.4,50
+2026-01-01T00:25:00Z,50,50,0.8,50
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "web_oat",
+                    role: "web_oa_t",
+                },
+                RoleCol {
+                    csv_col: "web_dp",
+                    role: "web_oa_dp",
+                },
+                RoleCol {
+                    csv_col: "oa_d",
+                    role: "oa_damper_pct",
+                },
+                RoleCol {
+                    csv_col: "clg_col",
+                    role: "clg_valve_pct",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "econ7_ok_not_economizing.sql",
+            300.0,
+            600,
+            &[
+                ("ECON7_DB_MIN", "35"),
+                ("ECON7_DB_MAX", "72"),
+                ("ECON7_DP_MAX", "60"),
+                ("ECON7_DAMPER_MIN", "0.5"),
+            ],
+        )
+        .await;
+
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(expected, 0.16666666666666666, "pandas reference");
+        assert_hours_close(got, expected, "ECON-7 SQL");
+    }
+
+    #[tokio::test]
+    async fn sched247_fan_cmd_screening_confirm_streak() {
+        // Screening: SQL confirms fan_cmd>=0.05 streaks — not vibe19 window always_on_pct.
+        // Keep parity_status ported_from_cookbook until SQL matches _sched247.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SCHED247");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,fan_col
+2026-01-01T00:00:00Z,0
+2026-01-01T00:05:00Z,0
+2026-01-01T00:10:00Z,50
+2026-01-01T00:15:00Z,50
+2026-01-01T00:20:00Z,50
+2026-01-01T00:25:00Z,0
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[RoleCol {
+                csv_col: "fan_col",
+                role: "fan_cmd",
+            }],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(&building, "sched247_always_on.sql", 300.0, 600, &[]).await;
+
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "SCHED-247 screening SQL");
+    }
+
+    #[tokio::test]
     async fn vav7_underflow_confirm_matches_pandas_reference() {
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_VAV7");

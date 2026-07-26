@@ -1,9 +1,11 @@
--- econ5_preheat_over.sql — Preheat over-conditioning
+-- econ5_preheat_over.sql — Preheat over-conditioning (matches vibe19 econ5)
+-- Target = OAT when OAT > SAT SP; else SAT SP. Fault when preheat exceeds target by ΔT
+-- while heating valve is open.
 WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    preheat_leave_t, sat_sp,
+    preheat_leave_t, sat_sp, oa_t,
     CASE WHEN htg_valve_pct IS NULL THEN 0.0 WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END AS htg
   FROM history
 ),
@@ -12,8 +14,11 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
-      WHEN preheat_leave_t IS NULL OR sat_sp IS NULL THEN 0
-      WHEN htg > 0.01 AND preheat_leave_t > sat_sp + {{PREHEAT_OVER_F}} THEN 1
+      WHEN preheat_leave_t IS NULL OR sat_sp IS NULL OR oa_t IS NULL THEN 0
+      WHEN htg > 0.01 AND (
+        (oa_t > sat_sp AND preheat_leave_t - oa_t > {{PREHEAT_OVER_F}})
+        OR (oa_t < sat_sp AND preheat_leave_t - sat_sp > {{PREHEAT_OVER_F}})
+      ) THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h
