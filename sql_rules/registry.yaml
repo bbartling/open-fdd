@@ -1021,10 +1021,10 @@ rules:
     sql_file: econ5_preheat_over.sql
     pandas_function: null
     description: Preheat over-conditioning
-    required_roles: [preheat_leave_t, sat_sp, htg_valve_pct]
+    required_roles: [preheat_leave_t, sat_sp, oa_t, htg_valve_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: proven_building_100
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
@@ -1055,7 +1055,7 @@ rules:
     required_roles: [web_oa_t, oa_damper_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: proven_building_100
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
@@ -1095,7 +1095,7 @@ rules:
     required_roles: [web_oa_t, web_oa_dp, oa_damper_pct, clg_valve_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: proven_building_100
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
