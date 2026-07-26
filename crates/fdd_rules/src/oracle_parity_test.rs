@@ -266,10 +266,7 @@ timestamp_utc,web_oat,oa_d
             "econ6_econ_freezing.sql",
             300.0,
             600,
-            &[
-                ("ECON6_OAT_MAX_F", "25"),
-                ("ECON6_DAMPER_MAX", "0.25"),
-            ],
+            &[("ECON6_OAT_MAX_F", "25"), ("ECON6_DAMPER_MAX", "0.25")],
         )
         .await;
 
@@ -369,8 +366,7 @@ timestamp_utc,fan_col
             rows,
         );
 
-        let got =
-            run_rule_fault_hours(&building, "sched247_always_on.sql", 300.0, 600, &[]).await;
+        let got = run_rule_fault_hours(&building, "sched247_always_on.sql", 300.0, 600, &[]).await;
 
         let raw = [false, false, true, true, true, false];
         let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
