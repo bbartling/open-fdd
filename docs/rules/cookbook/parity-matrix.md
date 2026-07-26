@@ -60,8 +60,8 @@ These are the mismatch classes called out in #550 — SQL is present; treat resu
 
 | Family | IDs in registry | SQL file | Pandas cookbook | Oracle-proven? |
 |--------|-----------------|:--------:|:---------------:|:--------------:|
-| sensor | SV-* | ✅ | ✅ | mostly **ported** (screening fixtures for SV-RATE) |
-| control | PID-HUNT-1 | ✅* | ✅ | **ported** |
+| sensor | SV-* | ✅ | ✅ | **screening** fixtures (RANGE/FLATLINE/SPIKE/STALE/RATE); keep ported |
+| control | PID-HUNT-1, FC4 | ✅* | ✅ | **screening** fixtures; keep ported until full TV/OS parity |
 | ahu | FC*, AHU-*, ECON-*, OAT-METEO, MECH-OAT-1, … | ✅ | ✅ | mixed (`ECON-1..7`, `MECH-OAT-1` proven) |
 | vav | VAV-1, VAV-3–5, VAV-7, VAV-REHEAT, VAV-AHU-LEAVE | ✅ | ✅ | mixed (`VAV-1` proven) |
 | plant | CHW-*, CW-*, … | ✅ | ✅ | **ported** |
@@ -69,6 +69,10 @@ These are the mismatch classes called out in #550 — SQL is present; treat resu
 | schedule | SCHED-1, SCHED-247 | ✅ | ✅ | mixed (`SCHED-1` proven; `SCHED-247` screening) |
 
 \* SQL often ships a **screening** variant; see per-rule caveats in the SQL cookbook.
+
+### Screening honesty (SV / FC4 / PID)
+
+Oracle fixtures exist for `SV-RANGE`, `SV-FLATLINE`, `SV-SPIKE`, `SV-STALE`, `SV-RATE`, `FC4`, and `PID-HUNT-1`, but they prove **SQL screening semantics only**. Do **not** flip these to `proven_building_100` until SQL matches vibe19 pandas (`sensor_rate.py` profiles, multi-sensor sweeps, full TV/reversal / OS hunting). `parity_status` remains `ported_from_cookbook`.
 
 ---
 

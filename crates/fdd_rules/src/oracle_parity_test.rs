@@ -374,6 +374,259 @@ timestamp_utc,fan_col
     }
 
     #[tokio::test]
+    async fn sv_range_screening_confirm_streak() {
+        // Screening OAT hard limits (−60…130°F × scale). Keep ported until multi-sensor sweep.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SVRANGE");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,oat_col
+2026-01-01T00:00:00Z,70
+2026-01-01T00:05:00Z,70
+2026-01-01T00:10:00Z,140
+2026-01-01T00:15:00Z,150
+2026-01-01T00:20:00Z,160
+2026-01-01T00:25:00Z,70
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[RoleCol {
+                csv_col: "oat_col",
+                role: "oa_t",
+            }],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "sv_range.sql",
+            300.0,
+            600,
+            &[("RANGE_SCALE_TEMPERATURE", "1")],
+        )
+        .await;
+
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "SV-RANGE screening SQL");
+    }
+
+    #[tokio::test]
+    async fn sv_flatline_screening_confirm_streak() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SVFLAT");
+        std::fs::create_dir_all(&building).unwrap();
+
+        // |Δ| <= 0.1 flatline. Sequence: 0 (no prev), 0 (Δ=5), 1,1,1, 0 (Δ=5)
+        let rows = "\
+timestamp_utc,oat_col
+2026-01-01T00:00:00Z,70
+2026-01-01T00:05:00Z,75
+2026-01-01T00:10:00Z,75.05
+2026-01-01T00:15:00Z,75.08
+2026-01-01T00:20:00Z,75.09
+2026-01-01T00:25:00Z,80
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[RoleCol {
+                csv_col: "oat_col",
+                role: "oa_t",
+            }],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "sv_flatline.sql",
+            300.0,
+            600,
+            &[("FLATLINE_TOL", "0.1")],
+        )
+        .await;
+
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "SV-FLATLINE screening SQL");
+    }
+
+    #[tokio::test]
+    async fn sv_spike_screening_confirm_streak() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SVSPIKE");
+        std::fs::create_dir_all(&building).unwrap();
+
+        // |Δ| > 16 × SPIKE_SCALE (1.0). Sequence: 0,0,1,1,1,0
+        let rows = "\
+timestamp_utc,oat_col
+2026-01-01T00:00:00Z,70
+2026-01-01T00:05:00Z,72
+2026-01-01T00:10:00Z,90
+2026-01-01T00:15:00Z,110
+2026-01-01T00:20:00Z,130
+2026-01-01T00:25:00Z,131
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[RoleCol {
+                csv_col: "oat_col",
+                role: "oa_t",
+            }],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "sv_spike.sql",
+            300.0,
+            600,
+            &[("SPIKE_SCALE", "1")],
+        )
+        .await;
+
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "SV-SPIKE screening SQL");
+    }
+
+    #[tokio::test]
+    async fn sv_stale_screening_confirm_streak() {
+        // Age vs MAX(ts) > STALE_HOURS. Keep ported (not pandas multi-point stale).
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SVSTALE");
+        std::fs::create_dir_all(&building).unwrap();
+
+        // STALE_HOURS=0.1 (6 min): first four rows older than 6 min from max.
+        let rows = "\
+timestamp_utc,oat_col
+2026-01-01T00:00:00Z,70
+2026-01-01T00:05:00Z,70
+2026-01-01T00:10:00Z,70
+2026-01-01T00:15:00Z,70
+2026-01-01T00:20:00Z,70
+2026-01-01T00:25:00Z,70
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[RoleCol {
+                csv_col: "oat_col",
+                role: "oa_t",
+            }],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "sv_stale.sql",
+            300.0,
+            600,
+            &[("STALE_HOURS", "0.1")],
+        )
+        .await;
+
+        // ages min: 25,20,15,10,5,0 → stale if >6: T,T,T,T,F,F
+        let raw = [true, true, true, true, false, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "SV-STALE screening SQL");
+    }
+
+    #[tokio::test]
+    async fn fc4_os_mode_change_screening_confirm_streak() {
+        // Screening: consecutive OS mode changes. Full pandas OS/TV hunting not claimed.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_FC4");
+        std::fs::create_dir_all(&building).unwrap();
+
+        // Modes: 1 (min OA), 2 (econ), 3 (mech). Sequence of mode flips => raw 0,0,1,1,1,0
+        let rows = "\
+timestamp_utc,oa_d,clg_col,fan_col
+2026-01-01T00:00:00Z,0.2,0,50
+2026-01-01T00:05:00Z,0.2,0,50
+2026-01-01T00:10:00Z,0.8,0,50
+2026-01-01T00:15:00Z,0.2,50,50
+2026-01-01T00:20:00Z,0.2,0,50
+2026-01-01T00:25:00Z,0.2,0,50
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "oa_d",
+                    role: "oa_damper_pct",
+                },
+                RoleCol {
+                    csv_col: "clg_col",
+                    role: "clg_valve_pct",
+                },
+                RoleCol {
+                    csv_col: "fan_col",
+                    role: "fan_cmd",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(&building, "fc4_os_hunting.sql", 300.0, 600, &[]).await;
+
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "FC4 screening SQL");
+    }
+
+    #[tokio::test]
+    async fn pid_hunt1_output_step_screening_confirm_streak() {
+        // Screening step detector — not full pandas TV/reversal. Keep ported.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_PIDHUNT");
+        std::fs::create_dir_all(&building).unwrap();
+
+        // |Δpct| > 1 and >= 20/10=2. Sequence: 0,0,1,1,1,0
+        let rows = "\
+timestamp_utc,clg_col
+2026-01-01T00:00:00Z,50
+2026-01-01T00:05:00Z,50
+2026-01-01T00:10:00Z,60
+2026-01-01T00:15:00Z,70
+2026-01-01T00:20:00Z,80
+2026-01-01T00:25:00Z,80
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[RoleCol {
+                csv_col: "clg_col",
+                role: "clg_valve_pct",
+            }],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "pid_hunt_1.sql",
+            300.0,
+            600,
+            &[("CHANGE_DEADBAND_PCT", "1"), ("MINIMUM_SPAN_PCT", "20")],
+        )
+        .await;
+
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(got, expected, "PID-HUNT-1 screening SQL");
+    }
+
+    #[tokio::test]
     async fn vav7_underflow_confirm_matches_pandas_reference() {
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_VAV7");
