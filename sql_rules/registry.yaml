@@ -966,7 +966,7 @@ rules:
     required_roles: [web_oa_t, web_oa_dp, oa_damper_pct, clg_valve_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: proven_building_100
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
@@ -1153,7 +1153,7 @@ rules:
     required_roles: [web_oa_t, clg_valve_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: proven_building_100
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
@@ -2041,7 +2041,7 @@ rules:
     required_roles: [occ_mode, fan_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: proven_building_100
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 1800
