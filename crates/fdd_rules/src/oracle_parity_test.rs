@@ -58,6 +58,119 @@ timestamp_utc,occ_col,fan_col
     }
 
     #[tokio::test]
+    async fn mech_oat1_web_oat_clg_proxy_matches_pandas_reference() {
+        // SQL uses web_oa_t + clg_valve_pct proxy (registry roles). Matches vibe19
+        // mech_oat1 when mechanical proof is cooling-valve.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_MECHOAT");
+        std::fs::create_dir_all(&building).unwrap();
+
+        // Fault when web_oa_t < 60 and clg > 0.05. Sequence: 0,0,1,1,1,0
+        let rows = "\
+timestamp_utc,web_oat,clg_col
+2026-01-01T00:00:00Z,65,50
+2026-01-01T00:05:00Z,55,0
+2026-01-01T00:10:00Z,55,50
+2026-01-01T00:15:00Z,50,50
+2026-01-01T00:20:00Z,45,50
+2026-01-01T00:25:00Z,70,50
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "web_oat",
+                    role: "web_oa_t",
+                },
+                RoleCol {
+                    csv_col: "clg_col",
+                    role: "clg_valve_pct",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "mech_oat_1.sql",
+            300.0,
+            600,
+            &[("MECH_OAT_MAX_F", "60")],
+        )
+        .await;
+
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(expected, 0.16666666666666666, "pandas reference");
+        assert_hours_close(got, expected, "MECH-OAT-1 SQL");
+    }
+
+    #[tokio::test]
+    async fn econ3_web_free_cool_not_integrated_matches_pandas_reference() {
+        // Strict web DB+DP; free-cool band + mech cooling + damper not integrated.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_ECON3");
+        std::fs::create_dir_all(&building).unwrap();
+
+        // Defaults: 60<=DB<72, DP<60, clg>0.01, oa_d<0.9
+        // Rows: no, no, fault, fault, fault, no (damper integrated)
+        let rows = "\
+timestamp_utc,web_oat,web_dp,oa_d,clg_col
+2026-01-01T00:00:00Z,50,50,0.2,50
+2026-01-01T00:05:00Z,65,50,0.2,0
+2026-01-01T00:10:00Z,65,50,0.2,50
+2026-01-01T00:15:00Z,68,55,0.3,50
+2026-01-01T00:20:00Z,70,58,0.4,50
+2026-01-01T00:25:00Z,65,50,0.95,50
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "web_oat",
+                    role: "web_oa_t",
+                },
+                RoleCol {
+                    csv_col: "web_dp",
+                    role: "web_oa_dp",
+                },
+                RoleCol {
+                    csv_col: "oa_d",
+                    role: "oa_damper_pct",
+                },
+                RoleCol {
+                    csv_col: "clg_col",
+                    role: "clg_valve_pct",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "econ3_mech_without_econ.sql",
+            300.0,
+            600,
+            &[
+                ("ECON3_DB_MIN", "60"),
+                ("ECON3_DB_MAX", "72"),
+                ("ECON3_DP_MAX", "60"),
+                ("ECON3_DAMPER_HI", "0.9"),
+            ],
+        )
+        .await;
+
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(expected, 0.16666666666666666, "pandas reference");
+        assert_hours_close(got, expected, "ECON-3 SQL");
+    }
+
+    #[tokio::test]
     async fn vav7_underflow_confirm_matches_pandas_reference() {
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_VAV7");
