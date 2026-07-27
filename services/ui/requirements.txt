@@ -7,4 +7,4 @@ duckdb>=0.9
 pydantic>=2.0
 requests>=2.31
 # Pandas oracle rules/analytics from PyPI (not a production FDD runtime)
-open-fdd[oracle]==4.1.0
+open-fdd[oracle]==4.1.1

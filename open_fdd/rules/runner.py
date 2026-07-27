@@ -632,13 +632,20 @@ def run_batch(
 
     if vav_to_ahu:
         try:
-            from open_fdd.analytics.topology_enrich import (  # type: ignore
+            from open_fdd.analytics.topology_enrich import (
                 enrich_frames_with_ahu_feeds,
                 stamp_feed_attrs,
             )
         except ImportError:
-            enrich_frames_with_ahu_feeds = None  # type: ignore[assignment]
-            stamp_feed_attrs = None  # type: ignore[assignment]
+            # Host apps (vibe19 / services/ui) may still keep a local module.
+            try:
+                from app.topology_enrich import (  # type: ignore
+                    enrich_frames_with_ahu_feeds,
+                    stamp_feed_attrs,
+                )
+            except ImportError:
+                enrich_frames_with_ahu_feeds = None  # type: ignore[assignment]
+                stamp_feed_attrs = None  # type: ignore[assignment]
         if stamp_feed_attrs is not None and enrich_frames_with_ahu_feeds is not None:
             stamp_feed_attrs(equipment_frames, vav_to_ahu)
             enrich_frames_with_ahu_feeds(equipment_frames, vav_to_ahu, role_map=rm)
