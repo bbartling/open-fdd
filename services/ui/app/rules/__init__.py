@@ -1,16 +1,18 @@
-"""Open-FDD pandas cookbook registry (+ optional CUSTOM-* agent rules)."""
+"""Open-FDD pandas cookbook registry (+ optional CUSTOM-* agent rules).
 
-from app.rules.base import RuleResult
-from app.rules.cookbook_catalog import RULES as CANONICAL_RULES
-from app.rules.cookbook_catalog import RULES_BY_ID as CANONICAL_RULES_BY_ID
-from app.rules.cookbook_catalog import catalog
+Canonical implementations: PyPI ``open_fdd.rules``. This package is a thin
+``app.rules`` compatibility surface for Streamlit UI imports.
+"""
+
+from open_fdd.rules.base import RuleResult
+from open_fdd.rules.cookbook_catalog import RULES as CANONICAL_RULES
+from open_fdd.rules.cookbook_catalog import RULES_BY_ID as CANONICAL_RULES_BY_ID
+from open_fdd.rules.cookbook_catalog import catalog
+from open_fdd.rules.runner import infer_equipment_kind, run_all_cookbook_rules, run_batch, run_cookbook_rule
+
 from app.rules.custom_registry import active_rules, active_rules_by_id, custom_rules
-from app.rules.runner import infer_equipment_kind, run_all_cookbook_rules, run_batch, run_cookbook_rule
 
-# Canonical Open-FDD cookbook (never shrink this silently).
 CANONICAL_RULE_COUNT = len(CANONICAL_RULES)
-
-# Active catalog = canonical + agent CUSTOM-* rules from custom_rules.py
 RULES = active_rules()
 RULES_BY_ID = active_rules_by_id()
 
