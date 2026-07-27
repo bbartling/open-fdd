@@ -8,6 +8,6 @@ Production FDD runs as DataFusion SQL in the GHCR container stack.
 
 from open_fdd.ecm_engineering import ECMJob
 
-__version__ = "4.1.0"
+__version__ = "4.1.1"
 
 __all__ = ["ECMJob", "__version__"]
