@@ -38,7 +38,7 @@
 
 Open-FDD is an open-source analytics platform for building automation that combines **semantic knowledge graph modeling**, **live operational technology (OT) data**, and **high-performance columnar analytics**.
 
-**PyPI (`pip install open-fdd`):** ECM engineering toolkit — generate human-auditable HVAC savings workbooks from agents/APIs (`open_fdd.ecm_engineering`). See [docs/ecm](docs/ecm/README.md). **FDD** (DataFusion SQL) ships via the **GHCR container stack**, not the PyPI wheel.
+**PyPI (`pip install open-fdd`):** ECM workbooks + optional pandas oracle (`open-fdd[oracle]` / `[reporting]` / `[vibe19]`). See [docs/ecm](docs/ecm/README.md) and [pandas cookbook](docs/rules/cookbook/pandas-cookbook.md). **FDD** (DataFusion SQL) ships via the **GHCR container stack**, not as the default PyPI runtime.
 
 The platform includes:
 

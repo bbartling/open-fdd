@@ -54,3 +54,7 @@ workspace/frontend/
 scripts/tadco_hvac_prepare.py
 scripts/openfdd_tadco_hvac_integration.sh
 services/central/.cache/
+
+*.egg-info/
+dist/
+build/

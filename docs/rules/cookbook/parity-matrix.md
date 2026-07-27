@@ -13,7 +13,7 @@ nav_order: 6
 | Surface | Count | Role |
 |---------|------:|------|
 | DataFusion SQL registry | **63** | Production Open-FDD FDD |
-| Pandas vibe19 catalog | **59** | Online docs + playground oracle (kept) |
+| Pandas vibe19 catalog | **59** | Online docs + PyPI `open_fdd.rules` (kept) |
 
 Open-FDD UI is **one Streamlit app** (vibe19 + WattLab export). Do not delete pandas because SQL exists.
 

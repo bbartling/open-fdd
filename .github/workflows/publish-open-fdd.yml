@@ -1,4 +1,4 @@
-# PyPI: open-fdd 4.x ECM engineering wheel (workbook + Python benchmarks).
+# PyPI: open-fdd 4.1+ (ECM + optional pandas oracle / reporting).
 # Tags: open-fdd-vX.Y.Z (preferred; avoids GHCR stack v* triggers) or vX.Y.Z
 # Trusted Publishing: bbartling/open-fdd → this workflow → environment pypi
 # Production FDD remains DataFusion/GHCR — not this package.
@@ -55,8 +55,8 @@ jobs:
         if: "!startsWith(github.ref, 'refs/tags/')"
         run: python scripts/release/check_version.py
 
-      - name: Run ECM package tests
-        run: python -m pytest tests/ecm -q
+      - name: Run package tests
+        run: python -m pytest tests/ecm tests/rules tests/analytics tests/reporting -q
 
       - name: Build sdist and wheel
         run: |
@@ -71,18 +71,22 @@ jobs:
           wheel="$(ls -1t dist/*.whl | head -n 1)"
           python -m zipfile -l "$wheel" | grep -E 'ecm_engineering/data/Open_FDD_ECM_Engineering_Toolkit\.xlsx'
           python -m zipfile -l "$wheel" | grep -E 'ecm_engineering/data/open_fdd_model\.json'
+          python -m zipfile -l "$wheel" | grep -E 'open_fdd/rules/cookbook_catalog\.py'
 
       - name: Verify wheel smoke
         run: |
           python -m venv /tmp/ofdd-wheel-smoke
           wheel="$(ls -1t dist/*.whl | head -n 1)"
-          /tmp/ofdd-wheel-smoke/bin/pip install "$wheel"
+          /tmp/ofdd-wheel-smoke/bin/pip install "$wheel[oracle]"
           /tmp/ofdd-wheel-smoke/bin/python - <<'PY'
           import tempfile
           from pathlib import Path
           import open_fdd
           from open_fdd.ecm_engineering import ECMJob
-          assert open_fdd.__version__ == "4.0.0"
+          from open_fdd.rules import CANONICAL_RULE_COUNT, RULES_BY_ID
+          assert open_fdd.__version__ == "4.1.0"
+          assert CANONICAL_RULE_COUNT == 59
+          assert "SCHED-1" in RULES_BY_ID
           out = Path(tempfile.mkdtemp()) / "smoke.xlsx"
           path = (
               ECMJob("CI Smoke", path=out)
@@ -144,5 +148,6 @@ jobs:
           generate_release_notes: true
           files: dist/*
           body: |
-            PyPI package `open-fdd` — ECM engineering toolkit (workbook + Python benchmarks).
+            PyPI package `open-fdd` — ECM + pandas oracle (`rules` / `analytics` / `reporting`).
             Production FDD remains the GHCR DataFusion stack.
+            Install oracle: `pip install "open-fdd[oracle]"`.

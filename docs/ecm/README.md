@@ -1,11 +1,11 @@
-# Open-FDD ECM Engineering
+# Open-FDD Python package (PyPI)
 
-`open-fdd` (PyPI 4.x) packages two complementary engineering surfaces:
+`open-fdd` (PyPI **4.1+**) ships:
 
-1. **Enhanced Excel ECM workbook** — the human-auditable source of truth.
-2. **Independent Python benchmark functions** — machine-friendly checks for AI agents, APIs and EnergyPlus comparisons.
+1. **ECM engineering** (`open_fdd.ecm_engineering`) — agent-drivable HVAC spreadsheet workbooks + Python benchmarks.
+2. **Pandas oracle** (`open_fdd.rules`, `open_fdd.analytics`, `open_fdd.reporting`) — vibe19 catalog, analytics helpers, Engineering Findings.
 
-The Python API fills the same workbook input cells a human engineer would fill.
+The ECM API fills the same workbook input cells a human engineer would fill.
 It does not replace the visible spreadsheet calculations.
 
 **Production FDD** (DataFusion SQL fault detection) lives in the [GHCR container stack](https://bbartling.github.io/open-fdd/quick-start/docker-ghcr.html), not this wheel.
@@ -13,13 +13,22 @@ It does not replace the visible spreadsheet calculations.
 ## Install
 
 ```bash
-pip install open-fdd
+pip install open-fdd                 # ECM only (stdlib)
+pip install "open-fdd[oracle]"       # + pandas rules / analytics
+pip install "open-fdd[reporting]"    # + Engineering Findings extras
+pip install "open-fdd[vibe19]"       # playground meta-extra
 ```
 
-For the FastAPI example:
+For the FastAPI ECM example:
 
 ```bash
 pip install "open-fdd[ecm-web]"
+```
+
+## Oracle rules (pandas)
+
+```python
+from open_fdd.rules import RULES, run_rule
 ```
 
 ## Generate a workbook in a few lines
