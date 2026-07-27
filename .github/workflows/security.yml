@@ -11,12 +11,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Ensure old Python project shape is gone
+      - name: Ensure slim PyPI shape (ECM-only; no old FDD wheel surface)
         run: |
-          test ! -f pyproject.toml
+          # Root packaging is allowed for open-fdd 4.x ECM engineering only.
+          test -f pyproject.toml
+          test -d open_fdd
+          test -d open_fdd/ecm_engineering
+          test -f open_fdd/ecm_engineering/data/Open_FDD_ECM_Engineering_Toolkit.xlsx
+          test -f open_fdd/ecm_engineering/data/open_fdd_model.json
+          # Old Arrow/pandas FDD wheel surface must stay deleted.
+          test ! -d open_fdd/arrow_runtime
+          test ! -d open_fdd/playground
+          test ! -d open_fdd/faults
           test ! -f requirements.txt
-          test ! -d open_fdd
           test ! -d bacnet_toolshed
+          grep -q 'name = "open-fdd"' pyproject.toml
+          grep -q 'ecm_engineering' pyproject.toml
 
       - name: Ensure safety docs exist
         run: |

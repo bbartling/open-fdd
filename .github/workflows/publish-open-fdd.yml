@@ -1,0 +1,148 @@
+# PyPI: open-fdd 4.x ECM engineering wheel (workbook + Python benchmarks).
+# Tags: open-fdd-vX.Y.Z (preferred; avoids GHCR stack v* triggers) or vX.Y.Z
+# Trusted Publishing: bbartling/open-fdd → this workflow → environment pypi
+# Production FDD remains DataFusion/GHCR — not this package.
+
+name: Publish open-fdd to PyPI
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "open-fdd-v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and test only (no PyPI upload)"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install build and test deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test,dev]"
+          python -m pip install build twine
+
+      - name: Check version matches tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: python scripts/release/check_version.py --tag "${GITHUB_REF_NAME}"
+
+      - name: Version consistency (local)
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        run: python scripts/release/check_version.py
+
+      - name: Run ECM package tests
+        run: python -m pytest tests/ecm -q
+
+      - name: Build sdist and wheel
+        run: |
+          rm -rf dist build *.egg-info
+          python -m build
+
+      - name: Check dist metadata
+        run: python -m twine check dist/*
+
+      - name: Assert package data in wheel
+        run: |
+          wheel="$(ls -1t dist/*.whl | head -n 1)"
+          python -m zipfile -l "$wheel" | grep -E 'ecm_engineering/data/Open_FDD_ECM_Engineering_Toolkit\.xlsx'
+          python -m zipfile -l "$wheel" | grep -E 'ecm_engineering/data/open_fdd_model\.json'
+
+      - name: Verify wheel smoke
+        run: |
+          python -m venv /tmp/ofdd-wheel-smoke
+          wheel="$(ls -1t dist/*.whl | head -n 1)"
+          /tmp/ofdd-wheel-smoke/bin/pip install "$wheel"
+          /tmp/ofdd-wheel-smoke/bin/python - <<'PY'
+          import tempfile
+          from pathlib import Path
+          import open_fdd
+          from open_fdd.ecm_engineering import ECMJob
+          assert open_fdd.__version__ == "4.0.0"
+          out = Path(tempfile.mkdtemp()) / "smoke.xlsx"
+          path = (
+              ECMJob("CI Smoke", path=out)
+              .set_global(area_ft2=10000, electric_rate=0.12)
+              .add_ecm(
+                  "static_pressure_reset",
+                  fan_kw=10.0,
+                  hours=1000,
+                  baseline_speed=0.8,
+                  proposed_speed=0.7,
+              )
+              .save()
+          )
+          assert path.exists() and path.stat().st_size > 1000
+          print("OK wheel smoke", path)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: dist/*
+
+  publish:
+    needs: build
+    if: >-
+      startsWith(github.ref, 'refs/tags/') &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.dry_run == 'false')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist
+
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  github-release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/open-fdd-v') || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/*
+          body: |
+            PyPI package `open-fdd` — ECM engineering toolkit (workbook + Python benchmarks).
+            Production FDD remains the GHCR DataFusion stack.

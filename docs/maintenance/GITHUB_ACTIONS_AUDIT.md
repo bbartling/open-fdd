@@ -16,7 +16,8 @@ Post PR #477 merge on `master` @ `3a7dafb5`.
 | `security.yml` | Rust | no | yes | yes | no | **keep** |
 | `docker-publish.yml` | Python | manual only | no | no | no | **archived/gated** |
 | `ghcr-multiarch-publish.yml` | Python | manual only | no | no | no | **archived/gated** |
-| `publish-open-fdd.yml` | Python PyPI | manual only | no | no | no | **archived/gated** |
+| `publish-open-fdd.yml` | Python PyPI ECM 4.x | tags `open-fdd-v*` / `v*.*.*` + dispatch | no | no | dry_run / tag | **active** (ECM-only wheel) |
+| `ecm-python.yml` | Python ECM tests | path | yes | yes | no | **keep** |
 | `docker-supervisor-check.yml` | ops | no | ? | ? | no | **keep** |
 | `docs-pages.yml` | docs | no | yes | yes (deploy master) | no | **keep** |
 | `docs-pdf.yml` | docs | no | manual | no | no | **keep** |
@@ -53,11 +54,17 @@ Post PR #477 merge on `master` @ `3a7dafb5`.
 - **Triggers:** all push/PR.
 - **Note:** Two overlapping workflows; both run on PR #477. Consolidate later.
 
+### Python PyPI (`publish-open-fdd.yml`) — ECM 4.x
+
+- **Purpose:** Publish slim `open-fdd` wheel (`open_fdd.ecm_engineering` only).
+- **Triggers:** tags `open-fdd-v*` (preferred) or `v*.*.*`; `workflow_dispatch` dry_run.
+- **Not included:** Arrow runtime / pandas FDD (those stay deleted; FDD is GHCR/SQL).
+- **OIDC:** Trusted Publishing env `pypi`.
+
 ### Python-era archived workflows
 
-- `docker-publish.yml`, `ghcr-multiarch-publish.yml`, `publish-open-fdd.yml`
-- **Gated:** `workflow_dispatch` only with confirmation input.
-- **Action:** **do not re-enable automatic publish**; no duplicate `openfdd-edge-rust:nightly`.
+- `docker-publish.yml`, `ghcr-multiarch-publish.yml` (deleted with monolith cleanup)
+- **Action:** do not resurrect edge-rust PyPI/Docker publish.
 
 ## Recommended next steps
 
