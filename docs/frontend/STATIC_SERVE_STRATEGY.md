@@ -1,38 +1,37 @@
-# Static serve strategy
+# UI serve strategy
+
+> **Updated 2026-07-27.** Product UI is Streamlit (`services/ui`), not a Vite/Caddy SPA.
 
 ## Production
 
-The UI is served by the `openfdd-ui` container: a Caddy image that hosts the
-compiled Vite dashboard from `/srv` and proxies API traffic to `central`. The
-UI listens on `:80` in-container (published as `:3000`) and central owns the
-API on `:8080`.
+The UI is served by the `openfdd-ui` container: Streamlit from `services/ui`,
+listening on **:8501** in-container (published as **:3000**). Central owns the
+API on **:8080**. The UI calls central over the compose network (or host
+`localhost` in local dev) — it is not a static SPA with a same-origin Caddy
+proxy.
 
-| Route | Behavior |
+| Surface | Behavior |
 | --- | --- |
-| `/api*` | `reverse_proxy central:8080` |
-| `/docs*`, `/openapi.json` | `reverse_proxy central:8080` |
-| `/` and other paths | static `/srv`, SPA fallback → `index.html` |
-
-Same-origin API means remote LAN browsers hit the UI on `:3000` and the proxy
-forwards `/api` to central — no CORS or separate API host needed.
+| UI browser | Streamlit on `:3000` (host) → `:8501` (container) |
+| API | Central on `:8080` (`/api/health`, JWT routes, FDD) |
+| Docs / OpenAPI | Served by central on `:8080` |
 
 ## Docker
 
-`workspace/dashboard/Dockerfile` stages:
+`services/ui/Dockerfile` builds the Streamlit image from the open-fdd repo
+(Python + `open-fdd[oracle]` + app code). Image:
+`ghcr.io/bbartling/openfdd-ui:${OPENFDD_IMAGE_TAG:-nightly}`.
 
-1. **build** — Node 22 builds `workspace/dashboard` → `/src/dist`
-2. **runtime** — `caddy:2-alpine`, copies `dist` → `/srv` and
-   `Caddyfile.ui` → `/etc/caddy/Caddyfile`
-
-Image: `ghcr.io/bbartling/openfdd-ui:${OPENFDD_IMAGE_TAG:-nightly}`.
+Historical Vite/Caddy SPA notes and cutover plans live under
+`docs/frontend/REACT_TYPESCRIPT_CUTOVER_PLAN.md` (obsolete) and
+`docs/archive/deployment/`.
 
 ## Verification
 
 ```bash
 ./scripts/openfdd_stack_up.sh standalone
 curl -fsS http://127.0.0.1:8080/api/health
-curl -fsS http://127.0.0.1:3000/          # UI index
-curl -fsS http://127.0.0.1:3000/api/health # proxied to central
+curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
 ```
 
 ## Security
