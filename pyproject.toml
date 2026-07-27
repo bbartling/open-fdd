@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "4.0.0"
-description = "Open-FDD ECM engineering — agent-drivable HVAC spreadsheet workbooks and independent Python benchmark calculators. Production FDD remains the DataFusion/GHCR stack."
+version = "4.1.0"
+description = "Open-FDD libraries: ECM engineering workbooks plus pandas oracle rules, analytics, and Engineering Findings reporting. Production FDD remains the DataFusion/GHCR stack."
 readme = "docs/ecm/README.md"
 license = { text = "MIT" }
 authors = [
@@ -25,7 +25,15 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering",
 ]
-keywords = ["hvac", "ecm", "energy-conservation", "building-automation", "spreadsheet", "open-fdd"]
+keywords = [
+    "hvac",
+    "ecm",
+    "fdd",
+    "fault-detection",
+    "energy-conservation",
+    "building-automation",
+    "open-fdd",
+]
 dependencies = []
 
 [project.urls]
@@ -35,6 +43,7 @@ Repository = "https://github.com/bbartling/open-fdd"
 
 [project.scripts]
 open-fdd-ecm = "open_fdd.ecm_engineering.cli:main"
+open-fdd-report = "open_fdd.reporting.cli:main"
 
 [project.optional-dependencies]
 ecm-web = [
@@ -42,13 +51,31 @@ ecm-web = [
     "uvicorn>=0.34",
     "pydantic>=2.4,<3",
 ]
+oracle = [
+    "pandas>=2.0.0",
+    "numpy>=1.26.0",
+    "pyyaml>=6.0",
+]
+reporting = [
+    "open-fdd[oracle]",
+    "python-docx>=1.1.0",
+    "openpyxl>=3.1.0",
+    "matplotlib>=3.8.0",
+    "plotly>=5.22.0",
+    "kaleido>=0.2.1",
+]
+vibe19 = [
+    "open-fdd[reporting]",
+]
 test = [
     "pytest>=7.0",
+    "open-fdd[reporting]",
 ]
 dev = [
     "pytest>=7.0",
     "build>=1.2.0",
     "twine>=6.0.0",
+    "open-fdd[reporting]",
 ]
 release = [
     "build>=1.2.0",
@@ -62,5 +89,5 @@ include = ["open_fdd*"]
 "open_fdd.ecm_engineering" = ["data/*.xlsx", "data/*.json"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/ecm"]
+testpaths = ["tests/ecm", "tests/rules", "tests/analytics", "tests/reporting"]
 pythonpath = ["."]

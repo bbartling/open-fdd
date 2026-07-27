@@ -12,7 +12,7 @@ Open-FDD ships as a **container stack**: `openfdd-central`, `openfdd-ui`, `openf
 
 **Docs:** [Build recipes](docs/operations/build-recipes.md) · [External agents](docs/examples/external-agents.md) · [MCP README](mcp/README.md) · [ECM engineering (PyPI)](docs/ecm/README.md)
 
-**PyPI (`open-fdd` 4.x):** agent-drivable HVAC ECM spreadsheet calcs only — `from open_fdd.ecm_engineering import ECMJob`. Production FDD is DataFusion/GHCR, not this wheel.
+**PyPI (`open-fdd` 4.1+):** ECM engineering + pandas oracle (`open_fdd.rules` / `analytics` / `reporting`) via extras. Production FDD is DataFusion/GHCR, not this wheel.
 
 ## Start session
 

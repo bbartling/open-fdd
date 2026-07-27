@@ -15,9 +15,9 @@ Open-source, **standards-first** fault detection for commercial HVAC. Rules use 
 | Catalog | Count | Role |
 |---------|------:|------|
 | **DataFusion SQL** — [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) | **63** | **Production** FDD in Open-FDD Rust / central (`POST /api/fdd/run`) |
-| **Pandas** — vibe19 `cookbook_catalog.py` | **59** | **Oracle / docs / notebooks** — maintained in this cookbook and tested in the vibe19 playground; **not** deleted from `services/ui` |
+| **Pandas** — `open_fdd.rules` (`pip install "open-fdd[oracle]"`) | **59** | **Oracle / docs / notebooks** — packaged on PyPI; vibe19 playground + Open-FDD UI consume the package |
 
-Parity honesty ([parity matrix](parity-matrix.html), audit 2026-07-19): **18** `proven_building_100` · **44** `ported_from_cookbook` · **1** skipped (`FC7`). SQL presence ≠ oracle-proven. Do not claim “54 full parity.”
+Parity honesty ([parity matrix](parity-matrix.html)): see live `sql_rules/registry.yaml` counts. SQL presence ≠ oracle-proven. Do not claim “54 full parity.”
 
 ## Two cookbooks — complementary, not identical
 
