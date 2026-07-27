@@ -1,0 +1,59 @@
+# PR/push gate for the slim open-fdd PyPI package (ECM engineering only).
+name: ECM Python package
+
+on:
+  push:
+    paths:
+      - "open_fdd/**"
+      - "tests/ecm/**"
+      - "pyproject.toml"
+      - "scripts/release/check_version.py"
+      - ".github/workflows/ecm-python.yml"
+      - ".github/workflows/publish-open-fdd.yml"
+  pull_request:
+    paths:
+      - "open_fdd/**"
+      - "tests/ecm/**"
+      - "pyproject.toml"
+      - "scripts/release/check_version.py"
+      - ".github/workflows/ecm-python.yml"
+      - ".github/workflows/publish-open-fdd.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  ecm-package:
+    name: pytest + wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test,dev]"
+          python -m pip install build twine
+
+      - name: Version consistency
+        run: python scripts/release/check_version.py
+
+      - name: Pytest ECM
+        run: python -m pytest tests/ecm -q
+
+      - name: Build and inspect wheel
+        run: |
+          rm -rf dist build *.egg-info
+          python -m build
+          python -m twine check dist/*
+          wheel="$(ls -1t dist/*.whl | head -n 1)"
+          python -m zipfile -l "$wheel" | grep -E 'ecm_engineering/data/Open_FDD_ECM_Engineering_Toolkit\.xlsx'
+          python -m zipfile -l "$wheel" | grep -E 'ecm_engineering/data/open_fdd_model\.json'

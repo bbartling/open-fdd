@@ -1,0 +1,869 @@
+{
+  "workbook": "Open_FDD_ECM_Engineering_Toolkit.xlsx",
+  "modules": {
+    "ECM_Fan_Schedule": {
+      "title": "Fan / AHU Runtime Scheduling",
+      "category": "Scheduling",
+      "sheet": "ECM_Fan_Schedule",
+      "description": "Reduces unnecessary fan runtime using measured fan kW and avoided operating hours.",
+      "cells": {
+        "fan_sched.fan_kw": "B6",
+        "fan_sched.base_hours": "B7",
+        "fan_sched.prop_hours": "B8",
+        "fan_sched.cost": "B9",
+        "fan_sched.base_kwh": "B12",
+        "fan_sched.prop_kwh": "B13",
+        "fan_sched.kwh_saved": "B14",
+        "fan_sched.cost_saved": "B15",
+        "fan_sched.payback": "B16"
+      },
+      "outputs": [
+        "fan_sched.base_kwh",
+        "fan_sched.prop_kwh",
+        "fan_sched.kwh_saved",
+        "fan_sched.cost_saved",
+        "fan_sched.payback"
+      ]
+    },
+    "ECM_Heat_Schedule": {
+      "title": "Heating Runtime Scheduling",
+      "category": "Scheduling",
+      "sheet": "ECM_Heat_Schedule",
+      "description": "Avoided heating runtime using measured/estimated heating capacity and load factor.",
+      "cells": {
+        "heat_sched.mbh": "B6",
+        "heat_sched.hours": "B7",
+        "heat_sched.load_frac": "B8",
+        "heat_sched.eff": "B9",
+        "heat_sched.cost": "B10",
+        "heat_sched.mmbtu": "B13",
+        "heat_sched.therms": "B14",
+        "heat_sched.cost_saved": "B15",
+        "heat_sched.payback": "B16"
+      },
+      "outputs": [
+        "heat_sched.mmbtu",
+        "heat_sched.therms",
+        "heat_sched.cost_saved",
+        "heat_sched.payback"
+      ]
+    },
+    "ECM_Cool_Schedule": {
+      "title": "Cooling Runtime Scheduling",
+      "category": "Scheduling",
+      "sheet": "ECM_Cool_Schedule",
+      "description": "Avoided mechanical-cooling runtime based on tons, kW/ton and load factor.",
+      "cells": {
+        "cool_sched.tons": "B6",
+        "cool_sched.hours": "B7",
+        "cool_sched.load_frac": "B8",
+        "cool_sched.kw_per_ton": "B9",
+        "cool_sched.cost": "B10",
+        "cool_sched.kwh_saved": "B13",
+        "cool_sched.cost_saved": "B14",
+        "cool_sched.payback": "B15"
+      },
+      "outputs": [
+        "cool_sched.kwh_saved",
+        "cool_sched.cost_saved",
+        "cool_sched.payback"
+      ]
+    },
+    "ECM_Unocc_OA_Heat": {
+      "title": "Unoccupied Outdoor-Air Heating Reduction",
+      "category": "Ventilation",
+      "sheet": "ECM_Unocc_OA_Heat",
+      "description": "Closes/reduces OA during unoccupied warm-up or setback periods; sensible heat only.",
+      "cells": {
+        "uoa_h.cfm": "B6",
+        "uoa_h.oa_base": "B7",
+        "uoa_h.oa_prop": "B8",
+        "uoa_h.ra_t": "B9",
+        "uoa_h.oa_t": "B10",
+        "uoa_h.hours": "B11",
+        "uoa_h.eff": "B12",
+        "uoa_h.cost": "B13",
+        "uoa_h.mmbtu": "B16",
+        "uoa_h.therms": "B17",
+        "uoa_h.cost_saved": "B18",
+        "uoa_h.payback": "B19"
+      },
+      "outputs": [
+        "uoa_h.mmbtu",
+        "uoa_h.therms",
+        "uoa_h.cost_saved",
+        "uoa_h.payback"
+      ]
+    },
+    "ECM_Unocc_OA_Cool": {
+      "title": "Unoccupied Outdoor-Air Cooling Reduction",
+      "category": "Ventilation",
+      "sheet": "ECM_Unocc_OA_Cool",
+      "description": "Reduces OA latent+sensible cooling during unoccupied operation using moist-air enthalpy difference.",
+      "cells": {
+        "uoa_c.cfm": "B6",
+        "uoa_c.oa_base": "B7",
+        "uoa_c.oa_prop": "B8",
+        "uoa_c.h_oa": "B9",
+        "uoa_c.h_ra": "B10",
+        "uoa_c.hours": "B11",
+        "uoa_c.cop": "B12",
+        "uoa_c.cost": "B13",
+        "uoa_c.mmbtu": "B16",
+        "uoa_c.kwh": "B17",
+        "uoa_c.cost_saved": "B18",
+        "uoa_c.payback": "B19"
+      },
+      "outputs": [
+        "uoa_c.mmbtu",
+        "uoa_c.kwh",
+        "uoa_c.cost_saved",
+        "uoa_c.payback"
+      ]
+    },
+    "ECM_DAT_Reset": {
+      "title": "Discharge-Air Temperature Reset",
+      "category": "Airside Reset",
+      "sheet": "ECM_DAT_Reset",
+      "description": "Screening estimate for warmer SAT/DAT at low load using measured baseline cooling energy and user-editable efficiency response.",
+      "cells": {
+        "dat.cool_kwh": "B6",
+        "dat.reset_f": "B7",
+        "dat.gain_per_f": "B8",
+        "dat.realization": "B9",
+        "dat.cost": "B10",
+        "dat.kwh_saved": "B13",
+        "dat.cost_saved": "B14",
+        "dat.payback": "B15"
+      },
+      "outputs": [
+        "dat.kwh_saved",
+        "dat.cost_saved",
+        "dat.payback"
+      ]
+    },
+    "ECM_Static_Reset": {
+      "title": "Duct Static-Pressure / Fan-Speed Reset",
+      "category": "Airside Reset",
+      "sheet": "ECM_Static_Reset",
+      "description": "Measured fan-speed bins are preferred. This simplified module applies fan affinity cube law to weighted baseline/proposed speed.",
+      "cells": {
+        "spr.fan_kw": "B6",
+        "spr.hours": "B7",
+        "spr.base_speed": "B8",
+        "spr.prop_speed": "B9",
+        "spr.realization": "B10",
+        "spr.cost": "B11",
+        "spr.base_kwh": "B14",
+        "spr.prop_kwh": "B15",
+        "spr.kwh_saved": "B16",
+        "spr.cost_saved": "B17",
+        "spr.payback": "B18"
+      },
+      "outputs": [
+        "spr.base_kwh",
+        "spr.prop_kwh",
+        "spr.kwh_saved",
+        "spr.cost_saved",
+        "spr.payback"
+      ]
+    },
+    "ECM_Enthalpy_Econ": {
+      "title": "Enthalpy Economizer Upgrade",
+      "category": "Economizer",
+      "sheet": "ECM_Enthalpy_Econ",
+      "description": "Compares mechanically cooled hours against additional free-cooling hours enabled by enthalpy logic; explicitly caps displacement by observed chiller hours.",
+      "cells": {
+        "econ.run_hours": "B6",
+        "econ.eligible_hours": "B7",
+        "econ.realization": "B8",
+        "econ.tons": "B9",
+        "econ.load": "B10",
+        "econ.kwpt": "B11",
+        "econ.cost": "B12",
+        "econ.displaced_hours": "B15",
+        "econ.kwh_saved": "B16",
+        "econ.cost_saved": "B17",
+        "econ.payback": "B18"
+      },
+      "outputs": [
+        "econ.displaced_hours",
+        "econ.kwh_saved",
+        "econ.cost_saved",
+        "econ.payback"
+      ]
+    },
+    "ECM_Dewpoint_Econ": {
+      "title": "Dew-Point Economizer Upgrade",
+      "category": "Economizer",
+      "sheet": "ECM_Dewpoint_Econ",
+      "description": "Alternative economizer eligibility screening using weather-derived additional suitable cooling hours.",
+      "cells": {
+        "dpe.run_hours": "B6",
+        "dpe.hours": "B7",
+        "dpe.realization": "B8",
+        "dpe.tons": "B9",
+        "dpe.load": "B10",
+        "dpe.kwpt": "B11",
+        "dpe.cost": "B12",
+        "dpe.displaced": "B15",
+        "dpe.kwh": "B16",
+        "dpe.cost_saved": "B17",
+        "dpe.payback": "B18"
+      },
+      "outputs": [
+        "dpe.displaced",
+        "dpe.kwh",
+        "dpe.cost_saved",
+        "dpe.payback"
+      ]
+    },
+    "ECM_DCV": {
+      "title": "Demand-Controlled Ventilation",
+      "category": "Ventilation",
+      "sheet": "ECM_DCV",
+      "description": "Reduces excess ventilation at low occupancy. Total cooling uses 4.5\u00d7CFM\u00d7\u0394h; heating uses 1.08\u00d7CFM\u00d7\u0394T.",
+      "cells": {
+        "dcv.oa_cfm": "B6",
+        "dcv.reduction": "B7",
+        "dcv.hours": "B8",
+        "dcv.heat_dt": "B9",
+        "dcv.cool_dh": "B10",
+        "dcv.heat_frac": "B11",
+        "dcv.cool_frac": "B12",
+        "dcv.heat_eff": "B13",
+        "dcv.cop": "B14",
+        "dcv.cost": "B15",
+        "dcv.therms": "B18",
+        "dcv.kwh": "B19",
+        "dcv.cost_saved": "B20",
+        "dcv.payback": "B21"
+      },
+      "outputs": [
+        "dcv.therms",
+        "dcv.kwh",
+        "dcv.cost_saved",
+        "dcv.payback"
+      ]
+    },
+    "ECM_Optimal_Start": {
+      "title": "Adaptive Optimal Start",
+      "category": "Scheduling",
+      "sheet": "ECM_Optimal_Start",
+      "description": "Replaces fixed prestart with adaptive recovery-rate lead time. Fan savings are directly calculated from avoided prestart runtime.",
+      "cells": {
+        "os.base_min": "B6",
+        "os.prop_min": "B7",
+        "os.days": "B8",
+        "os.fan_kw": "B9",
+        "os.thermal_savings": "B10",
+        "os.cost": "B11",
+        "os.hours_saved": "B14",
+        "os.kwh_saved": "B15",
+        "os.cost_saved": "B16",
+        "os.payback": "B17"
+      },
+      "outputs": [
+        "os.hours_saved",
+        "os.kwh_saved",
+        "os.cost_saved",
+        "os.payback"
+      ]
+    },
+    "ECM_Energy_Recovery": {
+      "title": "Air-to-Air Energy Recovery",
+      "category": "Ventilation",
+      "sheet": "ECM_Energy_Recovery",
+      "description": "Sensible heating recovery plus cooling enthalpy recovery, minus added fan pressure-drop and wheel/pump motor energy.",
+      "cells": {
+        "erv.oa_cfm": "B6",
+        "erv.exchange_cfm": "B7",
+        "erv.sens_eff": "B8",
+        "erv.heat_dt": "B9",
+        "erv.heat_hours": "B10",
+        "erv.heat_eff": "B11",
+        "erv.cool_dh": "B12",
+        "erv.cool_hours": "B13",
+        "erv.cop": "B14",
+        "erv.dp": "B15",
+        "erv.fan_eff": "B16",
+        "erv.motor_kw": "B17",
+        "erv.cost": "B18",
+        "erv.therms": "B21",
+        "erv.cool_kwh": "B22",
+        "erv.penalty_kwh": "B23",
+        "erv.cost_saved": "B24",
+        "erv.payback": "B25"
+      },
+      "outputs": [
+        "erv.therms",
+        "erv.cool_kwh",
+        "erv.penalty_kwh",
+        "erv.cost_saved",
+        "erv.payback"
+      ]
+    },
+    "ECM_HW_Pump_Control": {
+      "title": "Hot-Water Pump Runtime Control",
+      "category": "Hydronic",
+      "sheet": "ECM_HW_Pump_Control",
+      "description": "Simple runtime reduction for a constant-flow heating-loop pump.",
+      "cells": {
+        "hwp.kw": "B6",
+        "hwp.base_hours": "B7",
+        "hwp.prop_hours": "B8",
+        "hwp.cost": "B9",
+        "hwp.base_kwh": "B12",
+        "hwp.prop_kwh": "B13",
+        "hwp.kwh_saved": "B14",
+        "hwp.cost_saved": "B15",
+        "hwp.payback": "B16"
+      },
+      "outputs": [
+        "hwp.base_kwh",
+        "hwp.prop_kwh",
+        "hwp.kwh_saved",
+        "hwp.cost_saved",
+        "hwp.payback"
+      ]
+    },
+    "ECM_HW_Reset_Pipe": {
+      "title": "Hot-Water Reset \u2014 Distribution Heat-Loss Reduction",
+      "category": "Hydronic",
+      "sheet": "ECM_HW_Reset_Pipe",
+      "description": "Estimates reduced pipe heat loss from lower average hot-water temperature and credits useful winter heat separately.",
+      "cells": {
+        "hwrp.length": "B6",
+        "hwrp.loss_base": "B7",
+        "hwrp.loss_prop": "B8",
+        "hwrp.hours": "B9",
+        "hwrp.useful": "B10",
+        "hwrp.eff": "B11",
+        "hwrp.cost": "B12",
+        "hwrp.mmbtu": "B15",
+        "hwrp.therms": "B16",
+        "hwrp.cost_saved": "B17",
+        "hwrp.payback": "B18"
+      },
+      "outputs": [
+        "hwrp.mmbtu",
+        "hwrp.therms",
+        "hwrp.cost_saved",
+        "hwrp.payback"
+      ]
+    },
+    "ECM_Boiler_Replace": {
+      "title": "Boiler Efficiency Replacement",
+      "category": "Boiler",
+      "sheet": "ECM_Boiler_Replace",
+      "description": "Preferred screening method uses measured annual boiler therms and changes only conversion efficiency.",
+      "cells": {
+        "boilrep.therms": "B6",
+        "boilrep.old_eff": "B7",
+        "boilrep.new_eff": "B8",
+        "boilrep.cost": "B9",
+        "boilrep.load": "B12",
+        "boilrep.prop_therms": "B13",
+        "boilrep.saved": "B14",
+        "boilrep.cost_saved": "B15",
+        "boilrep.payback": "B16"
+      },
+      "outputs": [
+        "boilrep.load",
+        "boilrep.prop_therms",
+        "boilrep.saved",
+        "boilrep.cost_saved",
+        "boilrep.payback"
+      ]
+    },
+    "ECM_Boiler_Reset": {
+      "title": "Boiler Plant HWST Reset / Condensing Optimization",
+      "category": "Boiler",
+      "sheet": "ECM_Boiler_Reset",
+      "description": "Incremental plant-efficiency optimization from lower average HWR; use vendor efficiency maps for final analysis.",
+      "cells": {
+        "boilrst.base_therms": "B6",
+        "boilrst.base_eff": "B7",
+        "boilrst.prop_eff": "B8",
+        "boilrst.pump_kwh": "B9",
+        "boilrst.cost": "B10",
+        "boilrst.load": "B13",
+        "boilrst.prop_therms": "B14",
+        "boilrst.saved": "B15",
+        "boilrst.cost_saved": "B16",
+        "boilrst.payback": "B17"
+      },
+      "outputs": [
+        "boilrst.load",
+        "boilrst.prop_therms",
+        "boilrst.saved",
+        "boilrst.cost_saved",
+        "boilrst.payback"
+      ]
+    },
+    "ECM_CHW_Reset": {
+      "title": "Chilled-Water Supply Temperature Reset",
+      "category": "Chiller",
+      "sheet": "ECM_CHW_Reset",
+      "description": "Simple low-load CHWS reset. User-editable %/\u00b0F correction is a screening proxy; vendor curves are preferred.",
+      "cells": {
+        "chwrst.base_kwh": "B6",
+        "chwrst.reset_f": "B7",
+        "chwrst.gain_per_f": "B8",
+        "chwrst.realization": "B9",
+        "chwrst.pump_kwh": "B10",
+        "chwrst.cost": "B11",
+        "chwrst.kwh": "B14",
+        "chwrst.net_kwh": "B15",
+        "chwrst.cost_saved": "B16",
+        "chwrst.payback": "B17"
+      },
+      "outputs": [
+        "chwrst.kwh",
+        "chwrst.net_kwh",
+        "chwrst.cost_saved",
+        "chwrst.payback"
+      ]
+    },
+    "ECM_CW_Reset": {
+      "title": "Cooling-Tower / Condenser-Water Reset",
+      "category": "Chiller",
+      "sheet": "ECM_CW_Reset",
+      "description": "Total-plant screening: colder condenser water may improve chiller efficiency while tower fan energy may rise or fall.",
+      "cells": {
+        "cwrst.ch_kwh": "B6",
+        "cwrst.cw_reduction": "B7",
+        "cwrst.ch_gain": "B8",
+        "cwrst.tower_base": "B9",
+        "cwrst.tower_prop": "B10",
+        "cwrst.pump_kwh": "B11",
+        "cwrst.cost": "B12",
+        "cwrst.ch_saved": "B15",
+        "cwrst.tower_saved": "B16",
+        "cwrst.net_kwh": "B17",
+        "cwrst.cost_saved": "B18",
+        "cwrst.payback": "B19"
+      },
+      "outputs": [
+        "cwrst.ch_saved",
+        "cwrst.tower_saved",
+        "cwrst.net_kwh",
+        "cwrst.cost_saved",
+        "cwrst.payback"
+      ]
+    },
+    "ECM_Fan_VFD": {
+      "title": "Fan VFD Retrofit",
+      "category": "Fans",
+      "sheet": "ECM_Fan_VFD",
+      "description": "Converts constant-speed/damper operation to variable-speed fan control using affinity cube law.",
+      "cells": {
+        "fvfd.kw": "B6",
+        "fvfd.hours": "B7",
+        "fvfd.flow_frac": "B8",
+        "fvfd.base_power_frac": "B9",
+        "fvfd.vfd_eff": "B10",
+        "fvfd.cost": "B11",
+        "fvfd.base_kwh": "B14",
+        "fvfd.prop_kwh": "B15",
+        "fvfd.saved": "B16",
+        "fvfd.cost_saved": "B17",
+        "fvfd.payback": "B18"
+      },
+      "outputs": [
+        "fvfd.base_kwh",
+        "fvfd.prop_kwh",
+        "fvfd.saved",
+        "fvfd.cost_saved",
+        "fvfd.payback"
+      ]
+    },
+    "ECM_Pump_VFD": {
+      "title": "Pump Variable-Speed / Differential-Pressure Control",
+      "category": "Pumps",
+      "sheet": "ECM_Pump_VFD",
+      "description": "Variable-speed pump screening using cube law and measured/estimated average flow fraction.",
+      "cells": {
+        "pvfd.kw": "B6",
+        "pvfd.hours": "B7",
+        "pvfd.flow_frac": "B8",
+        "pvfd.base_frac": "B9",
+        "pvfd.vfd_eff": "B10",
+        "pvfd.cost": "B11",
+        "pvfd.base_kwh": "B14",
+        "pvfd.prop_kwh": "B15",
+        "pvfd.saved": "B16",
+        "pvfd.cost_saved": "B17",
+        "pvfd.payback": "B18"
+      },
+      "outputs": [
+        "pvfd.base_kwh",
+        "pvfd.prop_kwh",
+        "pvfd.saved",
+        "pvfd.cost_saved",
+        "pvfd.payback"
+      ]
+    },
+    "ECM_Dirty_Filter": {
+      "title": "Dirty Filter / Excess Pressure-Drop Correction",
+      "category": "Fans",
+      "sheet": "ECM_Dirty_Filter",
+      "description": "Converts avoidable filter pressure drop into fan kW using air horsepower relationship.",
+      "cells": {
+        "filter.cfm": "B6",
+        "filter.dp": "B7",
+        "filter.fan_eff": "B8",
+        "filter.motor_eff": "B9",
+        "filter.hours": "B10",
+        "filter.cost": "B11",
+        "filter.kw": "B14",
+        "filter.kwh": "B15",
+        "filter.cost_saved": "B16",
+        "filter.payback": "B17"
+      },
+      "outputs": [
+        "filter.kw",
+        "filter.kwh",
+        "filter.cost_saved",
+        "filter.payback"
+      ]
+    },
+    "ECM_Exhaust_Control": {
+      "title": "Exhaust Fan Scheduling / Control",
+      "category": "Fans",
+      "sheet": "ECM_Exhaust_Control",
+      "description": "Avoided exhaust-fan runtime plus optional makeup-air heating/cooling penalty reduction.",
+      "cells": {
+        "exh.kw": "B6",
+        "exh.hours": "B7",
+        "exh.cfm": "B8",
+        "exh.heat_dt": "B9",
+        "exh.heat_frac": "B10",
+        "exh.heat_eff": "B11",
+        "exh.cost": "B12",
+        "exh.kwh": "B15",
+        "exh.therms": "B16",
+        "exh.cost_saved": "B17",
+        "exh.payback": "B18"
+      },
+      "outputs": [
+        "exh.kwh",
+        "exh.therms",
+        "exh.cost_saved",
+        "exh.payback"
+      ]
+    },
+    "ECM_Infiltration": {
+      "title": "Building Infiltration Reduction",
+      "category": "Envelope",
+      "sheet": "ECM_Infiltration",
+      "description": "Sensible heating and total/sensible cooling savings from reduced uncontrolled infiltration airflow.",
+      "cells": {
+        "inf.cfm": "B6",
+        "inf.heat_dt": "B7",
+        "inf.heat_hours": "B8",
+        "inf.heat_eff": "B9",
+        "inf.cool_dh": "B10",
+        "inf.cool_hours": "B11",
+        "inf.cop": "B12",
+        "inf.cost": "B13",
+        "inf.therms": "B16",
+        "inf.kwh": "B17",
+        "inf.cost_saved": "B18",
+        "inf.payback": "B19"
+      },
+      "outputs": [
+        "inf.therms",
+        "inf.kwh",
+        "inf.cost_saved",
+        "inf.payback"
+      ]
+    },
+    "ECM_Motor_Eff": {
+      "title": "Premium-Efficiency Motor Replacement",
+      "category": "Motors",
+      "sheet": "ECM_Motor_Eff",
+      "description": "Compares electrical input required for the same shaft load at old vs new motor efficiency.",
+      "cells": {
+        "motor.hp": "B6",
+        "motor.load": "B7",
+        "motor.hours": "B8",
+        "motor.old_eff": "B9",
+        "motor.new_eff": "B10",
+        "motor.cost": "B11",
+        "motor.base_kwh": "B14",
+        "motor.prop_kwh": "B15",
+        "motor.saved": "B16",
+        "motor.cost_saved": "B17",
+        "motor.payback": "B18"
+      },
+      "outputs": [
+        "motor.base_kwh",
+        "motor.prop_kwh",
+        "motor.saved",
+        "motor.cost_saved",
+        "motor.payback"
+      ]
+    },
+    "ECM_Pipe_Insulation": {
+      "title": "Pipe Insulation Improvement",
+      "category": "Envelope",
+      "sheet": "ECM_Pipe_Insulation",
+      "description": "Compares linear pipe heat-loss rates before and after insulation.",
+      "cells": {
+        "pipe.length": "B6",
+        "pipe.loss_old": "B7",
+        "pipe.loss_new": "B8",
+        "pipe.hours": "B9",
+        "pipe.waste": "B10",
+        "pipe.eff": "B11",
+        "pipe.cost": "B12",
+        "pipe.mmbtu": "B15",
+        "pipe.therms": "B16",
+        "pipe.cost_saved": "B17",
+        "pipe.payback": "B18"
+      },
+      "outputs": [
+        "pipe.mmbtu",
+        "pipe.therms",
+        "pipe.cost_saved",
+        "pipe.payback"
+      ]
+    },
+    "ECM_Lighting": {
+      "title": "Lighting Power Retrofit",
+      "category": "Lighting",
+      "sheet": "ECM_Lighting",
+      "description": "Simple fixture wattage/quantity/runtime calculation with optional cooling interaction omitted for conservative screening.",
+      "cells": {
+        "ltg.qty": "B6",
+        "ltg.w_old": "B7",
+        "ltg.w_new": "B8",
+        "ltg.hours": "B9",
+        "ltg.cost": "B10",
+        "ltg.base_kwh": "B13",
+        "ltg.prop_kwh": "B14",
+        "ltg.saved": "B15",
+        "ltg.cost_saved": "B16",
+        "ltg.payback": "B17"
+      },
+      "outputs": [
+        "ltg.base_kwh",
+        "ltg.prop_kwh",
+        "ltg.saved",
+        "ltg.cost_saved",
+        "ltg.payback"
+      ]
+    },
+    "ECM_Lighting_Control": {
+      "title": "Lighting Scheduling / Occupancy Control",
+      "category": "Lighting",
+      "sheet": "ECM_Lighting_Control",
+      "description": "Reduces operating hours of an existing lighting load.",
+      "cells": {
+        "lctl.kw": "B6",
+        "lctl.base_hours": "B7",
+        "lctl.prop_hours": "B8",
+        "lctl.realization": "B9",
+        "lctl.cost": "B10",
+        "lctl.base_kwh": "B13",
+        "lctl.prop_kwh": "B14",
+        "lctl.saved": "B15",
+        "lctl.cost_saved": "B16",
+        "lctl.payback": "B17"
+      },
+      "outputs": [
+        "lctl.base_kwh",
+        "lctl.prop_kwh",
+        "lctl.saved",
+        "lctl.cost_saved",
+        "lctl.payback"
+      ]
+    },
+    "ECM_Humidifier": {
+      "title": "Humidifier Runtime / Setpoint Optimization",
+      "category": "Humidification",
+      "sheet": "ECM_Humidifier",
+      "description": "Avoided steam humidification energy from reduced humidifier output or runtime.",
+      "cells": {
+        "hum.lbhr": "B6",
+        "hum.hours": "B7",
+        "hum.btulb": "B8",
+        "hum.eff": "B9",
+        "hum.cost": "B10",
+        "hum.mmbtu": "B13",
+        "hum.therms": "B14",
+        "hum.cost_saved": "B15",
+        "hum.payback": "B16"
+      },
+      "outputs": [
+        "hum.mmbtu",
+        "hum.therms",
+        "hum.cost_saved",
+        "hum.payback"
+      ]
+    },
+    "ECM_Steam_Leak": {
+      "title": "Steam Leak Repair",
+      "category": "Steam",
+      "sheet": "ECM_Steam_Leak",
+      "description": "Values avoided steam loss using measured/estimated leak mass flow and steam energy content.",
+      "cells": {
+        "steam.lbhr": "B6",
+        "steam.hours": "B7",
+        "steam.btulb": "B8",
+        "steam.eff": "B9",
+        "steam.cost": "B10",
+        "steam.mmbtu": "B13",
+        "steam.therms": "B14",
+        "steam.cost_saved": "B15",
+        "steam.payback": "B16"
+      },
+      "outputs": [
+        "steam.mmbtu",
+        "steam.therms",
+        "steam.cost_saved",
+        "steam.payback"
+      ]
+    },
+    "ECM_Gas_vs_Electric": {
+      "title": "Gas vs Electric Heating Cost Comparison",
+      "category": "Fuel",
+      "sheet": "ECM_Gas_vs_Electric",
+      "description": "Compares annual cost for the same delivered heating load across gas combustion and electric/heat-pump options.",
+      "cells": {
+        "fuel.load": "B6",
+        "fuel.gas_eff": "B7",
+        "fuel.cop": "B8",
+        "fuel.gas_om": "B9",
+        "fuel.elec_om": "B10",
+        "fuel.gas_cost": "B13",
+        "fuel.elec_cost": "B14",
+        "fuel.delta": "B15"
+      },
+      "outputs": [
+        "fuel.gas_cost",
+        "fuel.elec_cost",
+        "fuel.delta"
+      ]
+    },
+    "ECM_Occ_Sensors": {
+      "title": "HVAC Occupancy Sensor / Setback Control",
+      "category": "Scheduling",
+      "sheet": "ECM_Occ_Sensors",
+      "description": "Reduces fan and conditioning runtime in intermittently occupied zones/RTUs.",
+      "cells": {
+        "occ.fan_kw": "B6",
+        "occ.fan_hours": "B7",
+        "occ.cool_kwh": "B8",
+        "occ.heat_therm": "B9",
+        "occ.cost": "B10",
+        "occ.fan_kwh": "B13",
+        "occ.cost_saved": "B14",
+        "occ.payback": "B15"
+      },
+      "outputs": [
+        "occ.fan_kwh",
+        "occ.cost_saved",
+        "occ.payback"
+      ]
+    },
+    "ECM_Return_Fan": {
+      "title": "Return Fan Pressure / Fan Synchronization",
+      "category": "Fans",
+      "sheet": "ECM_Return_Fan",
+      "description": "Reduces return-fan power by lowering unnecessary pressure/speed while maintaining building pressure.",
+      "cells": {
+        "rfan.kw": "B6",
+        "rfan.hours": "B7",
+        "rfan.base_speed": "B8",
+        "rfan.prop_speed": "B9",
+        "rfan.cost": "B10",
+        "rfan.base_kwh": "B13",
+        "rfan.prop_kwh": "B14",
+        "rfan.saved": "B15",
+        "rfan.cost_saved": "B16",
+        "rfan.payback": "B17"
+      },
+      "outputs": [
+        "rfan.base_kwh",
+        "rfan.prop_kwh",
+        "rfan.saved",
+        "rfan.cost_saved",
+        "rfan.payback"
+      ]
+    },
+    "ECM_Unit_Heater_Fan": {
+      "title": "Unit-Heater / Cabinet-Heater Fan Control",
+      "category": "Fans",
+      "sheet": "ECM_Unit_Heater_Fan",
+      "description": "Turns small heating-unit fans off when heat is not required.",
+      "cells": {
+        "uh.kw": "B6",
+        "uh.count": "B7",
+        "uh.hours": "B8",
+        "uh.cost": "B9",
+        "uh.kwh": "B12",
+        "uh.cost_saved": "B13",
+        "uh.payback": "B14"
+      },
+      "outputs": [
+        "uh.kwh",
+        "uh.cost_saved",
+        "uh.payback"
+      ]
+    },
+    "ECM_WHP_Cooling": {
+      "title": "Water-Source Heat-Pump Cooling Reduction",
+      "category": "Heat Pumps",
+      "sheet": "ECM_WHP_Cooling",
+      "description": "Screens avoidable simultaneous or unnecessary cooling using measured compressor kW and hours avoided.",
+      "cells": {
+        "whp.kw": "B6",
+        "whp.hours": "B7",
+        "whp.realization": "B8",
+        "whp.cost": "B9",
+        "whp.kwh": "B12",
+        "whp.cost_saved": "B13",
+        "whp.payback": "B14"
+      },
+      "outputs": [
+        "whp.kwh",
+        "whp.cost_saved",
+        "whp.payback"
+      ]
+    },
+    "HVAC_Capacity_Screen": {
+      "title": "ASHRAE-Style HVAC Capacity Screening",
+      "category": "Capacity",
+      "sheet": "HVAC_Capacity_Screen",
+      "description": "Rule-of-thumb screening only: estimates cooling tons, supply airflow and fan horsepower from floor area.",
+      "cells": {
+        "cap.area": "B6",
+        "cap.sf_per_ton": "B7",
+        "cap.cfm_sf": "B8",
+        "cap.w_cfm": "B9",
+        "cap.tons": "B12",
+        "cap.cfm": "B13",
+        "cap.fan_kw": "B14",
+        "cap.fan_hp": "B15"
+      },
+      "outputs": [
+        "cap.tons",
+        "cap.cfm",
+        "cap.fan_kw",
+        "cap.fan_hp"
+      ]
+    }
+  },
+  "global_inputs": {
+    "global.area_ft2": "Global_Inputs!B5",
+    "global.electric_rate": "Global_Inputs!B6",
+    "global.demand_rate": "Global_Inputs!B7",
+    "global.demand_months": "Global_Inputs!B8",
+    "global.gas_rate": "Global_Inputs!B9",
+    "global.analysis_years": "Global_Inputs!B10",
+    "global.discount_rate": "Global_Inputs!B11",
+    "global.escalation": "Global_Inputs!B12"
+  }
+}
