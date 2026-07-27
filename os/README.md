@@ -42,7 +42,7 @@ Current production path: **Ubuntu (or Pi OS) + Docker CE + the GHCR container st
     ┌──────────┬───────────┼───────────┬──────────┐
     ▼          ▼           ▼           ▼          
   central      ui       fieldbus     mqtt
-  (API/FDD)  (Caddy)   (BACnet→MQTTS) (broker)
+  (API/FDD) (Streamlit) (BACnet→MQTTS) (broker)
     │          │           │           │
     └──────────┴───────────┴───────────┘
                             │
@@ -76,7 +76,7 @@ Open-FDD OS would **not** ship Python or `pip install` on the host. Containers a
 | Crate / package | GHCR image | Role |
 | --- | --- | --- |
 | `openfdd-central` | `ghcr.io/bbartling/openfdd-central` | API + FDD engine |
-| UI (Vite → Caddy) | `ghcr.io/bbartling/openfdd-ui` | static dashboard |
+| Streamlit UI (`services/ui`) | `ghcr.io/bbartling/openfdd-ui` | engineering UI |
 | `openfdd-fieldbus` | `ghcr.io/bbartling/openfdd-fieldbus` | BACnet → MQTTS |
 | `openfdd-mqtt` | `ghcr.io/bbartling/openfdd-mqtt` | Mosquitto broker |
 | `openfdd-mcp` | `ghcr.io/bbartling/openfdd-mcp` | stdio MCP |

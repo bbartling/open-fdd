@@ -8,7 +8,7 @@ nav_order: 11
 
 ## Deployment posture
 
-Open-FDD is **local-first** for LAN, VPN, or OT networks. Central binds the API on **:8080** and the `openfdd-ui` Caddy container serves the UI on **:3000**.
+Open-FDD is **local-first** for LAN, VPN, or OT networks. Central binds the API on **:8080** and the `openfdd-ui` Streamlit container serves the engineering UI on **:3000**.
 
 {: .warning }
 Do not expose the central API directly on the public internet.
@@ -21,10 +21,10 @@ Do not expose the central API directly on the public internet.
 
 ## TLS
 
-The `openfdd-ui` Caddy container terminates HTTP and proxies `/api` to central.
-For HTTPS on the LAN edge, front the stack with a TLS reverse proxy (Caddy or
-similar) or terminate TLS on your ingress. MQTT between fieldbus edges and
-central is always MQTTS (8883) using the per-site provisioning kits.
+The `openfdd-ui` Streamlit app talks to central’s REST API (`:8080`). For HTTPS
+on the LAN edge, front the stack with a TLS reverse proxy (Caddy or similar) or
+terminate TLS on your ingress. MQTT between fieldbus edges and central is always
+MQTTS (8883) using the per-site provisioning kits.
 
 ## Secrets
 
