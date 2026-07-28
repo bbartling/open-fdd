@@ -39,6 +39,9 @@ POST      /api/jobs/{job_id}/restore
 POST      /api/jobs/{job_id}/runs
 GET       /api/jobs/{job_id}/runs/{run_id}
 POST      /api/jobs/{job_id}/runs/{run_id}/stale
+GET/PUT   /api/jobs/{job_id}/findings
+GET/PUT   /api/jobs/{job_id}/dispositions
+POST      /api/jobs/{job_id}/wattlab/handoffs
 ```
 
 ## Cookbook preservation
@@ -57,4 +60,11 @@ Dual cookbooks unchanged; ownership CI + cookbook-parity remain green.
 
 ## Merged PRs
 
-Filled as PRs land (B0 #583, B1, B2+).
+| PR | Scope |
+|----|-------|
+| [#583](https://github.com/bbartling/open-fdd/pull/583) | B0 — Milestone A closeout audit + ownership CI |
+| [#584](https://github.com/bbartling/open-fdd/pull/584) | B1 — Job filesystem contract + tests |
+| [#585](https://github.com/bbartling/open-fdd/pull/585) | B2–B8 — central `/api/jobs`, runs, stale, UI client |
+| _(B6/B9 closeout PR)_ | Findings/dispositions API, stale banner, acceptance |
+
+**Tip SHA (post #585):** `9f53792e836981bd236114681c5b67a432de3552`

@@ -12,8 +12,8 @@ nav_order: 22
 
 | Check | Command / evidence | Result |
 |-------|-------------------|--------|
-| Job store unit tests | `pytest services/ui/app/test_job_store.py` | 13 passed (B1) |
-| Central jobs unit tests | `cargo test -p openfdd-central jobs::` | 5 passed |
+| Job store unit tests | `pytest services/ui/app/test_job_store.py` | 14 passed |
+| Central jobs unit tests | `cargo test -p openfdd-central jobs::` | 7 passed |
 | Architecture ownership | `python3 scripts/architecture_ownership_check.py` | OK |
 | Cookbook docs | `cookbook_parity_check.py --docs-only` | PASS |
 
@@ -34,10 +34,10 @@ Record tip SHA and image digests here when the acceptance run is executed on a l
 
 | Field | Value |
 |-------|-------|
-| Open-FDD SHA | _(fill on live run)_ |
-| `openfdd-ui` digest | _(fill)_ |
-| `openfdd-central` digest | _(fill)_ |
-| Notes | Automated unit/API tests green in CI; full browser restart soak = operator confirmation |
+| Open-FDD SHA | `9f53792e` (post #585); B6 closeout PR pending |
+| `openfdd-ui` digest | GHCR publish workflow triggered on #585 merge — verify `ghcr.io/bbartling/openfdd-ui:sha-9f53792e` |
+| `openfdd-central` digest | verify `ghcr.io/bbartling/openfdd-central:sha-9f53792e` |
+| Notes | Unit tests + ownership + cookbook parity green locally; stack soak = operator confirmation |
 
 ## GitHub Actions
 

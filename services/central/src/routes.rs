@@ -124,6 +124,18 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/jobs/{job_id}/runs/{run_id}/stale",
             post(jobs_eval_stale),
         )
+        .route(
+            "/api/jobs/{job_id}/findings",
+            get(jobs_get_findings).put(jobs_put_findings),
+        )
+        .route(
+            "/api/jobs/{job_id}/dispositions",
+            get(jobs_get_dispositions).put(jobs_put_dispositions),
+        )
+        .route(
+            "/api/jobs/{job_id}/wattlab/handoffs",
+            post(jobs_create_wattlab_handoff),
+        )
         .merge(csv)
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
@@ -1278,4 +1290,53 @@ async fn jobs_eval_stale(
         "stale": stale,
         "reasons": reasons,
     })))
+}
+
+#[derive(Debug, Deserialize)]
+struct PutFindingsBody {
+    findings: Value,
+    #[serde(default)]
+    findings_revision: Option<String>,
+}
+
+async fn jobs_get_findings(
+    Path(job_id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let findings = jobs::load_findings(&job_id).map_err(job_err)?;
+    Ok(Json(json!({"ok": true, "findings": findings})))
+}
+
+async fn jobs_put_findings(
+    Path(job_id): Path<String>,
+    Json(body): Json<PutFindingsBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let meta =
+        jobs::save_findings(&job_id, body.findings, body.findings_revision).map_err(job_err)?;
+    Ok(Json(json!({"ok": true, "job": meta})))
+}
+
+async fn jobs_get_dispositions(
+    Path(job_id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let dispositions = jobs::load_dispositions(&job_id).map_err(job_err)?;
+    Ok(Json(json!({"ok": true, "dispositions": dispositions})))
+}
+
+async fn jobs_put_dispositions(
+    Path(job_id): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    jobs::save_dispositions(&job_id, body).map_err(job_err)?;
+    Ok(Json(json!({"ok": true})))
+}
+
+async fn jobs_create_wattlab_handoff(
+    Path(job_id): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
+    let handoff = jobs::save_wattlab_handoff(&job_id, body).map_err(job_err)?;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({"ok": true, "handoff": handoff})),
+    ))
 }
