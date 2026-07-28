@@ -41,11 +41,15 @@ Run: `python3 scripts/cookbook_parity_check.py --all`
 
 See also [`fixtures/README.md`](../rules/cookbook/fixtures/README.md).
 
-## Mutation-check section (checklist — harness residual)
+## Mutation-check section
 
-High-risk families should get selective mutation checks before claiming parity.
-Until a harness lands, reviewers manually verify that tests **fail** if any of
-the following regressions are introduced:
+**D2 path harness:** [`scripts/rule_parity_mutation_check.py`](../../scripts/rule_parity_mutation_check.py)
+(registry count, dual cookbooks, heading floor, high-risk keywords, delete-path
+guards). See [`MILESTONE_D_RULE_PARITY.md`](MILESTONE_D_RULE_PARITY.md).
+
+High-risk families should also get selective **logical** mutation checks before
+claiming parity. Until those land, reviewers manually verify that tests **fail**
+if any of the following regressions are introduced:
 
 | Mutation | Expected failure signal |
 |----------|-------------------------|
@@ -61,5 +65,5 @@ Central analytics already encodes the pump≠compressor gate in
 ## Residual
 
 - Broader SQL rule fixture coverage per family
-- Automated mutation CI job
+- Logical gate-mutation tests (path mutation CI is done in D2)
 - Honest per-rule state column in the parity matrix beyond docs-only notes
