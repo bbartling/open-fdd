@@ -4,15 +4,19 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process::{Child, Command};
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
 use serde_json::{json, Value};
 
+static SERVER_LOCK: Mutex<()> = Mutex::new(());
+
 struct Server {
     child: Child,
     port: u16,
     workspace: PathBuf,
+    _guard: std::sync::MutexGuard<'static, ()>,
 }
 
 impl Server {
@@ -21,13 +25,17 @@ impl Server {
     }
 
     fn start_with_env(extra: &[(&str, &str)]) -> Self {
+        let guard = SERVER_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let port = TcpListener::bind("127.0.0.1:0")
             .expect("bind ephemeral")
             .local_addr()
             .expect("port")
             .port();
-        let workspace =
-            std::env::temp_dir().join(format!("openfdd-jobs-api-{}", std::process::id()));
+        let workspace = std::env::temp_dir().join(format!(
+            "openfdd-jobs-api-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
         let _ = std::fs::remove_dir_all(&workspace);
         std::fs::create_dir_all(&workspace).unwrap();
 
@@ -54,6 +62,7 @@ impl Server {
                     child,
                     port,
                     workspace,
+                    _guard: guard,
                 };
             }
             thread::sleep(Duration::from_millis(250));

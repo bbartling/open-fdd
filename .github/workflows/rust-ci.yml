@@ -33,12 +33,13 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Edge lib and MCP tests
-        run: cargo test --workspace --all-targets -p open_fdd_edge_prototype -p openfdd-mcp
+        run: cargo test --all-targets -p open_fdd_edge_prototype -p openfdd-mcp
 
       - name: Central / fieldbus / MQTT contract tests
         run: |
           cargo test -p openfdd_contracts -p openfdd_mqtt -p openfdd-central -p openfdd-fieldbus
           cargo test -p openfdd-central --test csv_fdd_integration
+          cargo test -p openfdd-central --test jobs_api_integration -- --test-threads=1
 
       - name: Architecture / MQTT cutover gates
         run: bash scripts/gates/run_all_gates.sh --quick
