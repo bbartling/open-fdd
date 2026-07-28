@@ -313,3 +313,68 @@ def auth_status(timeout: float = 5.0) -> dict[str, Any]:
         return body if isinstance(body, dict) else {"ok": False}
     except requests.RequestException as exc:
         return {"ok": False, "error": str(exc), "central_down": True}
+
+
+def jobs_list(*, include_archived: bool = False, timeout: float = 15.0) -> dict[str, Any]:
+    try:
+        resp = _request(
+            "GET",
+            f"{api_base()}/api/jobs",
+            timeout=timeout,
+            params={"include_archived": str(include_archived).lower()},
+        )
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}
+
+
+def jobs_create(job_name: str, **fields: Any) -> dict[str, Any]:
+    payload = {"job_name": job_name, **fields}
+    try:
+        resp = _request("POST", f"{api_base()}/api/jobs", timeout=30.0, json=payload)
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}
+
+
+def jobs_get(job_id: str) -> dict[str, Any]:
+    try:
+        resp = _request("GET", f"{api_base()}/api/jobs/{job_id}", timeout=15.0)
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}
+
+
+def jobs_archive(job_id: str) -> dict[str, Any]:
+    try:
+        resp = _request("POST", f"{api_base()}/api/jobs/{job_id}/archive", timeout=15.0)
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}
+
+
+def jobs_create_run(job_id: str, fingerprint_components: dict[str, Any], **fields: Any) -> dict[str, Any]:
+    payload = {"fingerprint_components": fingerprint_components, **fields}
+    try:
+        resp = _request(
+            "POST",
+            f"{api_base()}/api/jobs/{job_id}/runs",
+            timeout=30.0,
+            json=payload,
+        )
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}
+
+
+def jobs_eval_stale(job_id: str, run_id: str, fingerprint_components: dict[str, Any]) -> dict[str, Any]:
+    try:
+        resp = _request(
+            "POST",
+            f"{api_base()}/api/jobs/{job_id}/runs/{run_id}/stale",
+            timeout=15.0,
+            json={"fingerprint_components": fingerprint_components},
+        )
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}

@@ -26,3 +26,7 @@ Newest first. Append after non-trivial agent work.
   `sha-f5207f6` (post-#580); MCP GHCR green.
 - Prior: PyPI 4.1.0/4.1.1; playground #55–#58; open-fdd #578/#579; eight vibe20
   ECM twins delegated.
+
+## 2026-07-28 — Milestone B Jobs (B1–B8 core)
+
+- B1 job_store contract; B2 central /api/jobs; runs/stale/fingerprints; UI prefers central; findings + WattLab handoff helpers; closeout docs.

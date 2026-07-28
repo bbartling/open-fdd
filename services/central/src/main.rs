@@ -2,6 +2,7 @@
 
 mod auth;
 mod ingest;
+mod jobs;
 mod models;
 mod openapi;
 mod routes;
