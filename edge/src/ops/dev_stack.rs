@@ -53,7 +53,11 @@ pub fn run_script(body: &Value) -> Value {
     }
     let script_key = body.get("script").and_then(|v| v.as_str()).unwrap_or("");
     let (label, rel, extra): (&str, &str, &str) = match script_key {
-        "ui_dev" => ("Streamlit UI dev server", "scripts/openfdd_ui_dev.sh", "--lan"),
+        "ui_dev" => (
+            "Streamlit UI dev server",
+            "scripts/openfdd_ui_dev.sh",
+            "--lan",
+        ),
         other => {
             return json!({
                 "ok": false,
