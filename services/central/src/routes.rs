@@ -15,6 +15,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::auth;
+use crate::jobs;
 use crate::models::{
     AgentTool, AgentToolsResponse, AuthLoginRequest, AuthLoginResponse, AuthMeResponse,
     AuthStatusResponse, CommandAckResponse, EdgeDetailResponse, EdgePayloadResponse,
@@ -111,6 +112,17 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/api/reports/{report_id}/download.pdf",
             get(reports_download_pdf),
+        )
+        .route("/api/jobs", get(jobs_list).post(jobs_create))
+        .route("/api/jobs/{job_id}", get(jobs_get).patch(jobs_patch))
+        .route("/api/jobs/{job_id}/duplicate", post(jobs_duplicate))
+        .route("/api/jobs/{job_id}/archive", post(jobs_archive))
+        .route("/api/jobs/{job_id}/restore", post(jobs_restore))
+        .route("/api/jobs/{job_id}/runs", post(jobs_create_run))
+        .route("/api/jobs/{job_id}/runs/{run_id}", get(jobs_get_run))
+        .route(
+            "/api/jobs/{job_id}/runs/{run_id}/stale",
+            post(jobs_eval_stale),
         )
         .merge(csv)
         .layer(middleware::from_fn_with_state(
@@ -1072,4 +1084,198 @@ pub async fn reports_download_pdf(
     })?;
     headers.insert(header::CONTENT_DISPOSITION, disposition_value);
     Ok((StatusCode::OK, headers, bytes))
+}
+
+#[derive(Debug, Deserialize)]
+struct JobsListQuery {
+    #[serde(default)]
+    include_archived: Option<bool>,
+    status: Option<String>,
+    site_id: Option<String>,
+    tag: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateJobBody {
+    job_name: String,
+    #[serde(default)]
+    site_id: Option<String>,
+    #[serde(default)]
+    site_name: Option<String>,
+    #[serde(default)]
+    building_name: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
+    created_by: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PatchJobBody {
+    #[serde(default)]
+    job_name: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    tags: Option<Vec<String>>,
+    #[serde(default)]
+    site_id: Option<String>,
+    #[serde(default)]
+    expected_meta_revision: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DuplicateJobBody {
+    #[serde(default)]
+    new_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateRunBody {
+    #[serde(default = "default_run_type")]
+    run_type: String,
+    #[serde(default)]
+    fingerprint_components: Value,
+    #[serde(default)]
+    engine_version: String,
+    #[serde(default)]
+    rule_registry_hash: String,
+}
+
+fn default_run_type() -> String {
+    "fdd_registry".into()
+}
+
+#[derive(Debug, Deserialize)]
+struct StaleBody {
+    fingerprint_components: Value,
+}
+
+fn job_err(e: jobs::JobError) -> (StatusCode, Json<Value>) {
+    (e.status_code(), Json(e.to_json()))
+}
+
+async fn jobs_list(
+    Query(q): Query<JobsListQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let include = q.include_archived.unwrap_or(true);
+    let jobs = jobs::list_jobs(
+        include,
+        q.status.as_deref(),
+        q.site_id.as_deref(),
+        q.tag.as_deref(),
+    );
+    Ok(Json(json!({"ok": true, "jobs": jobs})))
+}
+
+async fn jobs_create(
+    Json(body): Json<CreateJobBody>,
+) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
+    let meta = jobs::create_job(
+        &body.job_name,
+        body.site_id,
+        body.site_name,
+        body.building_name,
+        body.description,
+        body.tags,
+        body.created_by,
+    )
+    .map_err(job_err)?;
+    Ok((StatusCode::CREATED, Json(json!({"ok": true, "job": meta}))))
+}
+
+async fn jobs_get(Path(job_id): Path<String>) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let meta = jobs::load_job(&job_id).map_err(job_err)?;
+    Ok(Json(json!({"ok": true, "job": meta})))
+}
+
+async fn jobs_patch(
+    Path(job_id): Path<String>,
+    Json(body): Json<PatchJobBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let mut meta = jobs::load_job(&job_id).map_err(job_err)?;
+    let expected = body
+        .expected_meta_revision
+        .unwrap_or_else(|| meta.meta_revision.clone());
+    if let Some(name) = body.job_name {
+        let n = name.trim();
+        if n.is_empty() {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"ok": false, "error": "job_name is required"})),
+            ));
+        }
+        meta.job_name = n.to_string();
+    }
+    if let Some(d) = body.description {
+        meta.description = Some(d);
+    }
+    if let Some(tags) = body.tags {
+        meta.tags = tags;
+    }
+    if let Some(sid) = body.site_id {
+        meta.site_id = Some(sid);
+    }
+    let meta = jobs::save_job(meta, Some(&expected)).map_err(job_err)?;
+    Ok(Json(json!({"ok": true, "job": meta})))
+}
+
+async fn jobs_duplicate(
+    Path(job_id): Path<String>,
+    body: Option<Json<DuplicateJobBody>>,
+) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
+    let new_name = body.and_then(|Json(b)| b.new_name);
+    let meta = jobs::duplicate_job(&job_id, new_name.as_deref()).map_err(job_err)?;
+    Ok((StatusCode::CREATED, Json(json!({"ok": true, "job": meta}))))
+}
+
+async fn jobs_archive(
+    Path(job_id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let meta = jobs::archive_job(&job_id).map_err(job_err)?;
+    Ok(Json(json!({"ok": true, "job": meta})))
+}
+
+async fn jobs_restore(
+    Path(job_id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let meta = jobs::restore_job(&job_id).map_err(job_err)?;
+    Ok(Json(json!({"ok": true, "job": meta})))
+}
+
+async fn jobs_create_run(
+    Path(job_id): Path<String>,
+    Json(body): Json<CreateRunBody>,
+) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
+    let run = jobs::create_run(
+        &job_id,
+        &body.run_type,
+        body.fingerprint_components,
+        &body.engine_version,
+        &body.rule_registry_hash,
+    )
+    .map_err(job_err)?;
+    Ok((StatusCode::CREATED, Json(json!({"ok": true, "run": run}))))
+}
+
+async fn jobs_get_run(
+    Path((job_id, run_id)): Path<(String, String)>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let run = jobs::load_run(&job_id, &run_id).map_err(job_err)?;
+    Ok(Json(json!({"ok": true, "run": run})))
+}
+
+async fn jobs_eval_stale(
+    Path((job_id, run_id)): Path<(String, String)>,
+    Json(body): Json<StaleBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let (stale, reasons) =
+        jobs::evaluate_stale(&job_id, &run_id, &body.fingerprint_components).map_err(job_err)?;
+    Ok(Json(json!({
+        "ok": true,
+        "stale": stale,
+        "reasons": reasons,
+    })))
 }

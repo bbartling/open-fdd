@@ -464,3 +464,56 @@ def delete_job(job_id: str, *, ws: Path | None = None, confirm: bool = False) ->
     if root not in resolved.parents and resolved != root:
         raise RuntimeError("refusing to delete path outside jobs root")
     shutil.rmtree(resolved)
+
+
+def save_findings(
+    job_id: str,
+    findings: dict[str, Any],
+    *,
+    findings_revision: str | None = None,
+    ws: Path | None = None,
+) -> JobMeta:
+    if not isinstance(findings, dict) or findings.get("schema_version") is None:
+        raise ValueError("findings must be an object with schema_version")
+    meta = load_job(job_id, ws=ws)
+    expected = meta.meta_revision
+    path = job_dir(job_id, ws) / "findings" / "findings.json"
+    _atomic_write_json(path, findings)
+    meta.latest_findings_revision = findings_revision or _utc_now()
+    return save_job(meta, ws=ws, expected_meta_revision=expected)
+
+
+def load_findings(job_id: str, *, ws: Path | None = None) -> dict[str, Any]:
+    path = job_dir(job_id, ws) / "findings" / "findings.json"
+    if not path.is_file():
+        return {"schema_version": "1", "findings": []}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("findings must be a JSON object")
+    return raw
+
+
+def save_wattlab_handoff(
+    job_id: str,
+    handoff: dict[str, Any],
+    *,
+    handoff_id: str | None = None,
+    ws: Path | None = None,
+) -> Path:
+    """Write job-native WattLab handoff manifest (B8). Does not duplicate telemetry."""
+    if not isinstance(handoff, dict):
+        raise ValueError("handoff must be an object")
+    hid = handoff_id or f"handoff-{uuid.uuid4()}"
+    meta = load_job(job_id, ws=ws)
+    payload = {
+        "schema_version": "1",
+        "handoff_id": hid,
+        "job_id": job_id,
+        "run_id": handoff.get("run_id") or meta.latest_run_id,
+        "findings_revision": handoff.get("findings_revision") or meta.latest_findings_revision,
+        "created_at": _utc_now(),
+        **{k: v for k, v in handoff.items() if k not in {"schema_version", "handoff_id", "job_id"}},
+    }
+    path = job_dir(job_id, ws) / "wattlab" / "handoffs" / f"{hid}.json"
+    _atomic_write_json(path, payload)
+    return path
