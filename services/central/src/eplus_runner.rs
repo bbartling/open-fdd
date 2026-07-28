@@ -206,9 +206,7 @@ pub fn attach_artifact_meta(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static LOCK: Mutex<()> = Mutex::new(());
+    use crate::jobs::WORKSPACE_ENV_TEST_LOCK;
 
     fn valid_policy() -> RunnerPolicy {
         RunnerPolicy {
@@ -263,7 +261,7 @@ mod tests {
 
     #[test]
     fn queue_writes_queued_json() {
-        let _g = LOCK.lock().unwrap();
+        let _g = WORKSPACE_ENV_TEST_LOCK.lock().unwrap();
         let dir = std::env::temp_dir().join(format!("openfdd-eplus-{}", Uuid::new_v4()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();

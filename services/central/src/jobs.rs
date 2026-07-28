@@ -49,6 +49,10 @@ pub fn workspace_root() -> PathBuf {
     PathBuf::from("workspace")
 }
 
+/// Serializes unit tests that mutate ``OPENFDD_WORKSPACE`` (jobs + eplus_runner).
+#[cfg(test)]
+pub(crate) static WORKSPACE_ENV_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 pub fn jobs_root() -> PathBuf {
     let root = workspace_root().join("jobs");
     let _ = fs::create_dir_all(&root);
@@ -819,12 +823,9 @@ pub fn save_wattlab_handoff(job_id: &str, handoff: Value) -> Result<Value, JobEr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static LOCK: Mutex<()> = Mutex::new(());
 
     fn with_tmp_ws<F: FnOnce(PathBuf)>(f: F) {
-        let _g = LOCK.lock().unwrap();
+        let _g = WORKSPACE_ENV_TEST_LOCK.lock().unwrap();
         let dir = std::env::temp_dir().join(format!("openfdd-jobs-{}", Uuid::new_v4()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
