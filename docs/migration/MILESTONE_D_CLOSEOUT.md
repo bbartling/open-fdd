@@ -10,7 +10,7 @@ nav_order: 33
 
 | Pin | Value |
 |-----|-------|
-| open-fdd (pre-D5 tip) | `7da7c310` (D0–D2 merged; D3/D4 via #593) |
+| open-fdd (pre-D5 tip) | `e5bd0ffd` (D0–D4 merged) |
 | playground | `d553e31` (`develop`) |
 | PyPI | `open-fdd` ≥ 4.1.1 (oracle extras) |
 
