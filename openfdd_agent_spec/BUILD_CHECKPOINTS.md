@@ -96,3 +96,22 @@ Docs: [`MILESTONE_C_CLOSEOUT.md`](../docs/migration/MILESTONE_C_CLOSEOUT.md),
 - [~] C9 — Metering monthly kWh sum (minimal)
 - [~] C10 — Rule parity fixture notes + mutation checklist (harness residual)
 - [ ] C11 — Retire production pandas paths; filled benchmarks; `sha-*` acceptance
+
+---
+
+# Milestone D — Gaps bridge + WattLab / E+ (2026-07-28)
+
+**Status:** **Partial** on branch `milestone-d/d1-historian-datafusion-runtime`.
+Docs: [`MILESTONE_D_CLOSEOUT.md`](../docs/migration/MILESTONE_D_CLOSEOUT.md),
+[`MILESTONE_D_ACCEPTANCE.md`](../docs/migration/MILESTONE_D_ACCEPTANCE.md),
+[`MILESTONE_D_RULE_PARITY.md`](../docs/migration/MILESTONE_D_RULE_PARITY.md),
+[`MILESTONE_D_GAP_REGISTER.md`](../docs/migration/MILESTONE_D_GAP_REGISTER.md).
+
+- [x] D1 — Historian DataFusion bridge for runtime analytics
+- [x] D2 — SQL rule parity mutation path check + CI + BUILDING_100 note
+- [x] D3 — Job-native WattLab handoff UI (zip additive)
+- [x] D4 — Restricted E+ runner policy + QUEUED persist stub (no in-process E+)
+- [x] D5 — Vite `:5173` hint scrub + closeout / acceptance / gap register
+- [ ] D4b — External runner claim loop + full artifact attach UX
+- [ ] D2b — Logical gate mutations + `PROVEN_MULTI_BUILDING`
+- [ ] D5z — Full-stack `sha-*` soak

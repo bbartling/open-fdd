@@ -53,7 +53,7 @@ pub fn run_script(body: &Value) -> Value {
     }
     let script_key = body.get("script").and_then(|v| v.as_str()).unwrap_or("");
     let (label, rel, extra): (&str, &str, &str) = match script_key {
-        "ui_dev" => ("Vite UI dev server", "scripts/openfdd_ui_dev.sh", "--lan"),
+        "ui_dev" => ("Streamlit UI dev server", "scripts/openfdd_ui_dev.sh", "--lan"),
         other => {
             return json!({
                 "ok": false,
@@ -99,7 +99,7 @@ pub fn run_script(body: &Value) -> Value {
             "label": label,
             "log": log.display().to_string(),
             "hint": if script_key == "ui_dev" {
-                "Open http://127.0.0.1:5173/ after a few seconds"
+                "Open http://127.0.0.1:8501/ after a few seconds"
             } else {
                 "Refresh AI integrations status in ~10s"
             }
