@@ -1,0 +1,26 @@
+# Cookbook ownership
+
+Both expression cookbooks are **permanent project deliverables**.
+
+| Cookbook | Path | Engine |
+| --- | --- | --- |
+| DataFusion SQL | [`docs/rules/cookbook/datafusion-sql-cookbook.md`](../../docs/rules/cookbook/datafusion-sql-cookbook.md) | Production (`sql_rules/`) |
+| Pandas | [`docs/rules/cookbook/pandas-cookbook.md`](../../docs/rules/cookbook/pandas-cookbook.md) | Oracle (`open_fdd.rules`) |
+| Parity matrix | [`docs/rules/cookbook/parity-matrix.md`](../../docs/rules/cookbook/parity-matrix.md) | Honesty layer |
+| Gap / taxonomy / schema | sibling files under `docs/rules/cookbook/` | Supporting |
+
+## Rules for agents
+
+1. Never delete either cookbook because the other engine is “canonical for production.”
+2. Never replace cookbooks with generated API documentation alone.
+3. Keep rule IDs and metadata synchronized; be honest about parity gaps.
+4. Hand-written engineering expressions stay in cookbooks — manifests hold identity/metadata only.
+5. CI entrypoint today: `.github/workflows/cookbook-parity.yml` → `scripts/cookbook_parity_check.py`.
+6. When adding a production SQL rule, update registry + SQL file + cookbook heading + parity row.
+7. When adding a pandas oracle rule, update `open_fdd.rules` + pandas cookbook + parity row.
+
+## Milestone A hardening targets
+
+Detect: missing headings, duplicate IDs, missing SQL files, missing pandas entries,
+undocumented SQL-only rules, broken aliases, parameter/role drift, accidental
+shrinkage, broken links, examples that no longer import.

@@ -12,6 +12,8 @@ Open-FDD ships as a **container stack**: `openfdd-central`, `openfdd-ui`, `openf
 
 **Docs:** [Build recipes](docs/operations/build-recipes.md) · [External agents](docs/examples/external-agents.md) · [MCP README](mcp/README.md) · [ECM engineering (PyPI)](docs/ecm/README.md)
 
+**Software-engineering agent OS:** [`openfdd_agent_spec/`](openfdd_agent_spec/) — architecture locks, skills, Milestone A ([`openfdd_agent_spec/MILESTONE_A.md`](openfdd_agent_spec/MILESTONE_A.md)). Ops/edge soak prompts stay under [`docs/agent/`](docs/agent/).
+
 **PyPI (`open-fdd` 4.1+):** ECM engineering + pandas oracle (`open_fdd.rules` / `analytics` / `reporting`) via extras. Production FDD is DataFusion/GHCR, not this wheel.
 
 ## Start session
@@ -53,3 +55,5 @@ Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:808
 - embed vendor chat relays or model API keys in the stack
 
 See [docs/agent/index.md](docs/agent/index.md) for external-agent architecture and API context.
+
+For library/migration/PR missions (Milestone A), start at [openfdd_agent_spec/AGENTS.md](openfdd_agent_spec/AGENTS.md).

@@ -10,11 +10,13 @@ permalink: /agent/
 
 Open-FDD is a **vendor-neutral, local-first edge platform**. It does **not** ship an embedded AI chatbot or in-dashboard LLM runtime.
 
+**Split:** this folder holds **ops / edge / GHCR soak** prompts. Software-engineering missions (architecture, PyPI oracle, Milestone A) live in [`openfdd_agent_spec/`](../../openfdd_agent_spec/).
+
 ## Open-FDD core (GHCR edge)
 
 | Layer | Components |
 |-------|------------|
-| Runtime | `central` (API/FDD), `ui` (Caddy), `fieldbus` (BACnet→MQTTS), `mqtt` (broker) |
+| Runtime | `central` (API/FDD), `ui` (Streamlit), `fieldbus` (BACnet→MQTTS), `mqtt` (broker) |
 | Data | Arrow/Feather historian, DataFusion SQL FDD |
 | Model | Haystack RDF, assignments, FDD wires |
 | API | JWT REST, `/api/agent/tools` catalog |
@@ -53,6 +55,7 @@ See [examples/external-agents.md](../examples/external-agents.md).
 
 | Path | Role |
 |------|------|
+| [`openfdd_agent_spec/`](../../openfdd_agent_spec/) | Software-engineering agent OS (Milestone A, skills) |
 | `.codex/` | Codex CLI project agents + MCP |
 | `.cursor/agents/` | Cursor external development agents |
 | `.agents/skills/` | Portable review skills (not edge runtime) |
