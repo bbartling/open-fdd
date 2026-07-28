@@ -2,7 +2,10 @@
 
 use serde_json::json;
 
-use super::{envelope, resolve_query_version, AnalyticsEnvelope, AnalyticsRequest};
+use super::{
+    envelope, finalize_historian, historian, resolve_query_version, AnalyticsEnvelope,
+    AnalyticsRequest,
+};
 
 pub const QV_RCX_CHILLER: &str = "rcx-chiller-v1";
 pub const QV_RCX_BOILER: &str = "rcx-boiler-v1";
@@ -15,6 +18,53 @@ pub fn handle_chiller(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 
 pub fn handle_boiler(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     handle_plant(req, QV_RCX_BOILER, "boiler")
+}
+
+/// Async chiller handler: prefer historian descriptive counts via DataFusion
+/// when no inline series is provided (never invents kW/ton); else inline.
+pub async fn handle_chiller_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
+    if let Some(env) = plant_from_history(req, QV_RCX_CHILLER, "chiller").await {
+        return env;
+    }
+    handle_chiller(req)
+}
+
+/// Async boiler handler: prefer historian descriptive counts via DataFusion
+/// when no inline series is provided; else inline.
+pub async fn handle_boiler_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
+    if let Some(env) = plant_from_history(req, QV_RCX_BOILER, "boiler").await {
+        return env;
+    }
+    handle_boiler(req)
+}
+
+/// Historian descriptive-count bridge shared by chiller/boiler async handlers.
+/// Returns `None` when inline series is present or historian is unavailable, so
+/// the caller falls back to the inline descriptive-RCx path.
+async fn plant_from_history(
+    req: &AnalyticsRequest,
+    expected_qv: &str,
+    kind: &str,
+) -> Option<AnalyticsEnvelope> {
+    if req.series.is_some() {
+        return None;
+    }
+    let note =
+        format!("{kind} plant: run_hours / kW-ton evidence requires inline series.equipment[]");
+    match historian::descriptive_counts_from_history(
+        expected_qv,
+        req.query.equipment_ids.as_deref(),
+        &note,
+    )
+    .await
+    {
+        Ok(Some(env)) => Some(finalize_historian(req, env, expected_qv)),
+        Ok(None) => None,
+        Err(e) => {
+            tracing::warn!(error = %e, "historian plant path failed; using inline/empty fallback");
+            None
+        }
+    }
 }
 
 fn handle_plant(req: &AnalyticsRequest, expected_qv: &str, kind: &str) -> AnalyticsEnvelope {

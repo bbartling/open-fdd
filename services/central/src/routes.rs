@@ -1393,62 +1393,62 @@ async fn analytics_runtime(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
 async fn analytics_sensor_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
     Json(json!({
         "ok": true,
-        "analytics": analytics::sensor_health::handle(&req).to_json(),
+        "analytics": analytics::sensor_health::handle_async(&req).await.to_json(),
     }))
 }
 
 async fn analytics_schedule(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
     Json(json!({
         "ok": true,
-        "analytics": analytics::schedule::handle(&req).to_json(),
+        "analytics": analytics::schedule::handle_async(&req).await.to_json(),
     }))
 }
 
 async fn analytics_mechanical_cooling(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
     Json(json!({
         "ok": true,
-        "analytics": analytics::mechanical_cooling::handle(&req).to_json(),
+        "analytics": analytics::mechanical_cooling::handle_async(&req).await.to_json(),
     }))
 }
 
 async fn analytics_economizer(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
     Json(json!({
         "ok": true,
-        "analytics": analytics::economizer::handle(&req).to_json(),
+        "analytics": analytics::economizer::handle_async(&req).await.to_json(),
     }))
 }
 
 async fn analytics_rcx_ahu(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
     Json(json!({
         "ok": true,
-        "analytics": analytics::rcx::handle_ahu(&req).to_json(),
+        "analytics": analytics::rcx::handle_ahu_async(&req).await.to_json(),
     }))
 }
 
 async fn analytics_rcx_vav(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
     Json(json!({
         "ok": true,
-        "analytics": analytics::rcx::handle_vav(&req).to_json(),
+        "analytics": analytics::rcx::handle_vav_async(&req).await.to_json(),
     }))
 }
 
 async fn analytics_rcx_chiller(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
     Json(json!({
         "ok": true,
-        "analytics": analytics::plant::handle_chiller(&req).to_json(),
+        "analytics": analytics::plant::handle_chiller_async(&req).await.to_json(),
     }))
 }
 
 async fn analytics_rcx_boiler(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
     Json(json!({
         "ok": true,
-        "analytics": analytics::plant::handle_boiler(&req).to_json(),
+        "analytics": analytics::plant::handle_boiler_async(&req).await.to_json(),
     }))
 }
 
 async fn analytics_metering(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
     Json(json!({
         "ok": true,
-        "analytics": analytics::metering::handle(&req).to_json(),
+        "analytics": analytics::metering::handle_async(&req).await.to_json(),
     }))
 }

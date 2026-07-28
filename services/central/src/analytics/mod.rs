@@ -158,6 +158,23 @@ pub fn resolve_query_version(req: &AnalyticsRequest, expected: &str) -> (String,
     (expected.to_string(), warnings)
 }
 
+/// Merge request context (query_version, job/run ids, version warnings) into an
+/// envelope produced by a historian DataFusion path. Request-derived warnings
+/// are prepended so provenance stays honest.
+pub fn finalize_historian(
+    req: &AnalyticsRequest,
+    mut env: AnalyticsEnvelope,
+    expected_qv: &str,
+) -> AnalyticsEnvelope {
+    let (qv, mut warnings) = resolve_query_version(req, expected_qv);
+    env.query_version = qv;
+    env.job_id = req.query.job_id.clone().or(env.job_id);
+    env.run_id = req.query.run_id.clone().or(env.run_id);
+    warnings.append(&mut env.warnings);
+    env.warnings = warnings;
+    env
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

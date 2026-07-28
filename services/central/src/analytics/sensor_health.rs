@@ -6,7 +6,8 @@ use serde_json::json;
 use std::collections::BTreeMap;
 
 use super::{
-    envelope, resolve_query_version, AnalyticsEnvelope, AnalyticsRequest, QV_SENSOR_HEALTH,
+    envelope, finalize_historian, historian, resolve_query_version, AnalyticsEnvelope,
+    AnalyticsRequest, QV_SENSOR_HEALTH,
 };
 
 /// Default minimum sample count before flatline flag can fire.
@@ -159,6 +160,21 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         }
     }
     env
+}
+
+/// Async handler: prefer historian DataFusion aggregate SQL when no inline
+/// series is provided; otherwise inline central-analytics-v1 compute.
+pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
+    if req.series.is_none() {
+        match historian::sensor_health_from_history(req.query.equipment_ids.as_deref()).await {
+            Ok(Some(env)) => return finalize_historian(req, env, QV_SENSOR_HEALTH),
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(error = %e, "historian sensor_health path failed; using inline/empty fallback");
+            }
+        }
+    }
+    handle(req)
 }
 
 fn parse_points(req: &AnalyticsRequest) -> Option<Vec<SensorPoint>> {

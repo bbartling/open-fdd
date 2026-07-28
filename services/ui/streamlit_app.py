@@ -2301,6 +2301,60 @@ def _render_occupancy_editor(*, key_prefix: str) -> OccupancySchedule:
     return OccupancySchedule.from_dict(out)
 
 
+def _render_central_sensor_health(device: str, frames: dict) -> None:
+    """Central sensor-health (coverage / missingness / flatline) via analytics API.
+
+    Prefers openfdd-central; on failure shows an error. No silent pandas fallback
+    — the rule-based fault-hours matrix below is a separate, complementary view.
+    """
+    from app import ui_analytics as _ui_analytics
+
+    with st.expander("Sensor health — central coverage / missingness (DataFusion)", expanded=False):
+        if not _ui_analytics.prefer_central_analytics():
+            if _ui_analytics.oracle_fallback_enabled():
+                st.info(
+                    "Central analytics unavailable — coverage/missingness stats require "
+                    "openfdd-central (OPENFDD_ANALYTICS_ORACLE only gates pandas oracle paths)."
+                )
+            else:
+                st.error(
+                    "Central sensor-health unavailable: openfdd-central is required "
+                    "(no silent pandas fallback)."
+                )
+            return
+        raw = frames.get(device)
+        if raw is None:
+            st.info("No frame for this device.")
+            return
+        with st.spinner("Running central sensor-health…"):
+            result = _ui_analytics.fetch_sensor_health_analytics(
+                {device: raw}, st.session_state.role_map, equipment_ids=[device]
+            )
+        if not result.get("ok"):
+            msg = result.get("error") or "central error"
+            if _ui_analytics.oracle_fallback_enabled():
+                st.warning(f"Central sensor-health unavailable: {msg} (oracle set; no pandas port here).")
+            else:
+                st.error(f"Central sensor-health unavailable: {msg}. No silent pandas fallback.")
+            return
+        env = result.get("analytics") or {}
+        cap = _ui_analytics.provenance_caption(env)
+        if cap:
+            st.caption(cap)
+        for w in env.get("warnings") or []:
+            st.caption(f"⚠ {w}")
+        rows = env.get("rows") or env.get("equipment") or []
+        if rows:
+            st.dataframe(
+                pd.DataFrame(rows),
+                hide_index=True,
+                width="stretch",
+                height=min(320, 80 + 28 * len(rows)),
+            )
+        else:
+            st.info("Central sensor-health returned no series rows.")
+
+
 def _render_building_schedule_overview() -> float:
     """Main-dashboard occupancy + zone SP; returns bare-min occupied hours/week."""
     st.markdown("##### Building schedule & zone comfort (FDD starting point)")
@@ -3342,6 +3396,8 @@ def main() -> None:
                 focus_rule_id = None
                 st.info("No applicable cookbook rules for this equipment type.")
 
+            _render_central_sensor_health(device, frames)
+
             sens = sensor_fault_summary(plot_df, device_results, equipment_id=device)
             health = sensor_health_matrix(plot_df, device_results, equipment_id=device)
             with st.expander("Sensor health — per sensor", expanded=not health.empty):
@@ -3622,8 +3678,57 @@ def main() -> None:
                     config=plotly_config(filename=f"meter_{kind}_scatter"),
                     key=f"meter_{kind}_scatter",
                 )
-            if stats is not None and not stats.empty:
-                st.dataframe(stats, hide_index=True, width="stretch")
+            from app import ui_analytics as _ui_analytics
+
+            st.markdown("###### Monthly totals")
+
+            def _render_pandas_meter_stats() -> None:
+                if stats is not None and not stats.empty:
+                    st.dataframe(stats, hide_index=True, width="stretch")
+
+            if _ui_analytics.prefer_central_analytics():
+                central_meter = _ui_analytics.fetch_metering_analytics(
+                    monthly, energy_col=energy_col
+                )
+                if central_meter.get("ok"):
+                    env = central_meter.get("analytics") or {}
+                    cap = _ui_analytics.provenance_caption(env)
+                    if cap:
+                        st.caption(cap)
+                    for w in env.get("warnings") or []:
+                        st.caption(f"⚠ {w}")
+                    crows = env.get("rows") or []
+                    if crows:
+                        st.dataframe(pd.DataFrame(crows), hide_index=True, width="stretch")
+                    else:
+                        st.info("Central metering returned no monthly rows.")
+                elif _ui_analytics.oracle_fallback_enabled():
+                    st.caption(
+                        "monthly totals via pandas oracle "
+                        "(OPENFDD_ANALYTICS_ORACLE=1; central metering unavailable)"
+                    )
+                    _render_pandas_meter_stats()
+                else:
+                    st.error(
+                        "Monthly meter totals unavailable from central analytics"
+                        + (
+                            f": {central_meter.get('error')}"
+                            if central_meter.get("error")
+                            else "."
+                        )
+                        + " Set OPENFDD_ANALYTICS_ORACLE=1 for pandas oracle fallback."
+                    )
+            elif _ui_analytics.oracle_fallback_enabled():
+                st.caption(
+                    "monthly totals via pandas oracle "
+                    "(OPENFDD_ANALYTICS_ORACLE=1; central analytics not preferred)"
+                )
+                _render_pandas_meter_stats()
+            else:
+                st.error(
+                    "Monthly meter totals require openfdd-central (no silent pandas "
+                    "fallback). Set OPENFDD_ANALYTICS_ORACLE=1 for pandas oracle fallback."
+                )
             st.download_button(
                 f"Download {kind} monthly CSV",
                 to_csv_bytes(monthly),

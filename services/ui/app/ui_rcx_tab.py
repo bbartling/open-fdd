@@ -512,9 +512,46 @@ def render_rcx_plots_tab(
                 config=plotly_config(filename=f"rcx_{preset.id}_scatter"),
                 key=f"rcx_meter_scatter_{preset.id}",
             )
-        st.markdown("##### Summary statistics")
-        if not stats_df.empty:
-            st.dataframe(stats_df, hide_index=True, width="stretch", height=min(360, 80 + 28 * len(stats_df)))
+        st.markdown("##### Monthly totals")
+        if ui_analytics.prefer_central_analytics():
+            central_meter = ui_analytics.fetch_metering_analytics(monthly_df, energy_col=energy_col)
+            if central_meter.get("ok"):
+                env = central_meter.get("analytics") or {}
+                cap = ui_analytics.provenance_caption(env)
+                if cap:
+                    st.caption(cap)
+                for w in env.get("warnings") or []:
+                    st.caption(f"⚠ {w}")
+                crows = env.get("rows") or []
+                if crows:
+                    st.dataframe(pd.DataFrame(crows), hide_index=True, width="stretch")
+                else:
+                    st.info("Central metering returned no monthly rows.")
+            elif ui_analytics.oracle_fallback_enabled():
+                st.caption(
+                    "monthly totals via pandas oracle "
+                    "(OPENFDD_ANALYTICS_ORACLE=1; central metering unavailable)"
+                )
+                if not stats_df.empty:
+                    st.dataframe(stats_df, hide_index=True, width="stretch", height=min(360, 80 + 28 * len(stats_df)))
+            else:
+                st.error(
+                    "Monthly meter totals unavailable from central analytics"
+                    + (f": {central_meter.get('error')}" if central_meter.get("error") else ".")
+                    + " Set OPENFDD_ANALYTICS_ORACLE=1 for pandas oracle fallback."
+                )
+        elif ui_analytics.oracle_fallback_enabled():
+            st.caption(
+                "monthly totals via pandas oracle "
+                "(OPENFDD_ANALYTICS_ORACLE=1; central analytics not preferred)"
+            )
+            if not stats_df.empty:
+                st.dataframe(stats_df, hide_index=True, width="stretch", height=min(360, 80 + 28 * len(stats_df)))
+        else:
+            st.error(
+                "Monthly meter totals require openfdd-central (no silent pandas fallback). "
+                "Set OPENFDD_ANALYTICS_ORACLE=1 for pandas oracle fallback."
+            )
         st.dataframe(monthly_df, hide_index=True, width="stretch", height=min(360, 80 + 28 * len(monthly_df)))
         st.download_button(
             "Download monthly metering CSV",

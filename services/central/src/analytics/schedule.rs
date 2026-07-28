@@ -4,7 +4,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use super::{envelope, resolve_query_version, AnalyticsEnvelope, AnalyticsRequest, QV_SCHEDULE};
+use super::{
+    envelope, finalize_historian, historian, resolve_query_version, AnalyticsEnvelope,
+    AnalyticsRequest, QV_SCHEDULE,
+};
 
 /// Occupied-mask sample (boolean occupancy at a timestamp).
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -157,6 +160,22 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         }
     }
     env
+}
+
+/// Async handler: prefer historian DataFusion occupied-mask Δt integration when
+/// no inline series is provided and `occ_mode` exists; else inline central path.
+pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
+    if req.series.is_none() {
+        let max_gap = req.max_gap_seconds.unwrap_or(900.0);
+        match historian::schedule_from_history(req.query.equipment_ids.as_deref(), max_gap).await {
+            Ok(Some(env)) => return finalize_historian(req, env, QV_SCHEDULE),
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(error = %e, "historian schedule path failed; using inline/empty fallback");
+            }
+        }
+    }
+    handle(req)
 }
 
 fn parse_series(req: &AnalyticsRequest) -> (Option<Vec<OccupiedSample>>, Option<Vec<FanSample>>) {

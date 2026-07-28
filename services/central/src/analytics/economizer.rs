@@ -4,7 +4,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use super::{envelope, resolve_query_version, AnalyticsEnvelope, AnalyticsRequest, QV_ECONOMIZER};
+use super::{
+    envelope, finalize_historian, historian, resolve_query_version, AnalyticsEnvelope,
+    AnalyticsRequest, QV_ECONOMIZER,
+};
 
 pub const DEFAULT_DT_MIN_F: f64 = 10.0;
 
@@ -257,6 +260,23 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         }
     }
     env
+}
+
+/// Async handler: prefer historian DataFusion (fan-on / identifiable counts)
+/// when no inline series is provided and oat/rat/mat columns exist; otherwise
+/// the inline central-analytics-v1 mixing diagnostics.
+pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
+    if req.series.is_none() {
+        let dt_min = req.dt_min_f.unwrap_or(DEFAULT_DT_MIN_F);
+        match historian::economizer_from_history(req.query.equipment_ids.as_deref(), dt_min).await {
+            Ok(Some(env)) => return finalize_historian(req, env, QV_ECONOMIZER),
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(error = %e, "historian economizer path failed; using inline/empty fallback");
+            }
+        }
+    }
+    handle(req)
 }
 
 fn parse_points(req: &AnalyticsRequest) -> Option<Vec<EconomizerPointIn>> {

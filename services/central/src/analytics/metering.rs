@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::BTreeMap;
 
-use super::{envelope, resolve_query_version, AnalyticsEnvelope, AnalyticsRequest, QV_METERING};
+use super::{
+    envelope, finalize_historian, historian, resolve_query_version, AnalyticsEnvelope,
+    AnalyticsRequest, QV_METERING,
+};
 
 /// One metering energy row: period label (e.g. `2024-01`) + kWh.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -78,6 +81,28 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         }
     }
     env
+}
+
+/// Async handler: when no inline `{period,kwh}` rows are provided, register
+/// historian Parquet and return descriptive per-equipment row counts via
+/// DataFusion (no invented energy). Otherwise the inline monthly kWh sum.
+pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
+    if req.series.is_none() {
+        match historian::descriptive_counts_from_history(
+            QV_METERING,
+            req.query.equipment_ids.as_deref(),
+            "metering: monthly kWh aggregation requires inline {period,kwh} rows",
+        )
+        .await
+        {
+            Ok(Some(env)) => return finalize_historian(req, env, QV_METERING),
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(error = %e, "historian metering path failed; using inline/empty fallback");
+            }
+        }
+    }
+    handle(req)
 }
 
 fn parse_rows(req: &AnalyticsRequest) -> Option<Vec<MeterRow>> {
