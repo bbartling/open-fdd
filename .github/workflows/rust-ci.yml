@@ -85,7 +85,7 @@ jobs:
           grep -q "Jobs (persistent)" services/ui/app/ui_jobs.py
           ! test -d workspace/dashboard/src
           ! test -f workspace/dashboard/package.json
-          pip install -q pytest requests pandas
+          pip install -q pytest requests pandas pyyaml
           (cd services/ui && PYTHONPATH=. python3 -m pytest app/test_central_client_normalize.py app/test_job_store.py app/test_jobs_central_client.py app/test_ui_analytics.py -q)
       - name: BACnet NIC helper guards
         run: |
