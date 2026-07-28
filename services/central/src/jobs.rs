@@ -515,6 +515,108 @@ pub fn load_run(job_id: &str, run_id: &str) -> Result<RunMeta, JobError> {
     serde_json::from_str(&raw).map_err(|e| JobError::Invalid(format!("malformed run.json: {e}")))
 }
 
+fn save_run(run: &RunMeta) -> Result<(), JobError> {
+    validate_run_id(&run.run_id)?;
+    let path = job_dir(&run.job_id)?
+        .join("runs")
+        .join(&run.run_id)
+        .join("run.json");
+    let value = serde_json::to_value(run).map_err(|e| JobError::Io(e.to_string()))?;
+    atomic_write_json(&path, &value)
+}
+
+/// Transition a run status. Allowed terminal statuses: SUCCEEDED, FAILED, CANCELLED, STALE.
+/// `RUNNING` may be set from `QUEUED`. Interrupted `RUNNING` runs are recovered on startup.
+pub fn update_run_status(
+    job_id: &str,
+    run_id: &str,
+    status: &str,
+    error: Option<String>,
+) -> Result<RunMeta, JobError> {
+    let allowed = [
+        "QUEUED",
+        "RUNNING",
+        "SUCCEEDED",
+        "FAILED",
+        "CANCELLED",
+        "STALE",
+    ];
+    if !allowed.contains(&status) {
+        return Err(JobError::Invalid(format!("invalid run status: {status}")));
+    }
+    let mut run = load_run(job_id, run_id)?;
+    let now = utc_now();
+    if status == "RUNNING" && run.started_at.is_none() {
+        run.started_at = Some(now.clone());
+    }
+    if matches!(status, "SUCCEEDED" | "FAILED" | "CANCELLED" | "STALE") {
+        run.completed_at = Some(now);
+    }
+    run.status = status.to_string();
+    if let Some(err) = error {
+        run.error = Some(err);
+    }
+    save_run(&run)?;
+    Ok(run)
+}
+
+/// On central restart: mark any `RUNNING` runs as `FAILED` with a restart-recovery note.
+/// Policy: interrupted in-flight work is not auto-rerun; callers must create a new run.
+pub fn recover_interrupted_runs() -> Result<usize, JobError> {
+    let root = jobs_root();
+    if !root.is_dir() {
+        return Ok(0);
+    }
+    let mut recovered = 0usize;
+    let entries = fs::read_dir(&root).map_err(|e| JobError::Io(e.to_string()))?;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(job_id) = name.to_str() else {
+            continue;
+        };
+        if !is_job_id(job_id) {
+            continue;
+        }
+        let runs_dir = entry.path().join("runs");
+        if !runs_dir.is_dir() {
+            continue;
+        }
+        let run_entries = match fs::read_dir(&runs_dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for run_ent in run_entries.flatten() {
+            let run_name = run_ent.file_name();
+            let Some(run_id) = run_name.to_str() else {
+                continue;
+            };
+            if !is_run_id(run_id) {
+                continue;
+            }
+            let path = run_ent.path().join("run.json");
+            if !path.is_file() {
+                continue;
+            }
+            let Ok(raw) = fs::read_to_string(&path) else {
+                continue;
+            };
+            let Ok(mut run) = serde_json::from_str::<RunMeta>(&raw) else {
+                continue;
+            };
+            if run.status != "RUNNING" {
+                continue;
+            }
+            run.status = "FAILED".into();
+            run.completed_at = Some(utc_now());
+            run.error = Some("interrupted by central restart; create a new run to continue".into());
+            if save_run(&run).is_ok() {
+                recovered += 1;
+            }
+        }
+    }
+    Ok(recovered)
+}
+
 pub fn evaluate_stale(
     job_id: &str,
     run_id: &str,
@@ -851,6 +953,39 @@ mod tests {
                 .join("wattlab/handoffs")
                 .join(format!("{hid}.json"));
             assert!(path.is_file());
+        });
+    }
+
+    #[test]
+    fn recover_interrupted_running_runs() {
+        with_tmp_ws(|_dir| {
+            let job = create_job("R", None, None, None, None, vec![], None).unwrap();
+            let comps = json!({"mapping_revision": "m1"});
+            let run = create_run(&job.job_id, "fdd_registry", comps, "1", "r1").unwrap();
+            update_run_status(&job.job_id, &run.run_id, "RUNNING", None).unwrap();
+            assert_eq!(
+                load_run(&job.job_id, &run.run_id).unwrap().status,
+                "RUNNING"
+            );
+            let n = recover_interrupted_runs().unwrap();
+            assert_eq!(n, 1);
+            let after = load_run(&job.job_id, &run.run_id).unwrap();
+            assert_eq!(after.status, "FAILED");
+            assert!(after.error.as_deref().unwrap_or("").contains("restart"));
+            assert!(after.completed_at.is_some());
+        });
+    }
+
+    #[test]
+    fn findings_reject_missing_correlation_key() {
+        with_tmp_ws(|_dir| {
+            let job = create_job("BadF", None, None, None, None, vec![], None).unwrap();
+            let bad = json!({
+                "schema_version": "1",
+                "findings": [{"finding_id": "finding-1"}]
+            });
+            let err = save_findings(&job.job_id, bad, None).unwrap_err();
+            assert!(matches!(err, JobError::Invalid(_)));
         });
     }
 }

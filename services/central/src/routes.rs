@@ -119,7 +119,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/jobs/{job_id}/archive", post(jobs_archive))
         .route("/api/jobs/{job_id}/restore", post(jobs_restore))
         .route("/api/jobs/{job_id}/runs", post(jobs_create_run))
-        .route("/api/jobs/{job_id}/runs/{run_id}", get(jobs_get_run))
+        .route(
+            "/api/jobs/{job_id}/runs/{run_id}",
+            get(jobs_get_run).patch(jobs_patch_run),
+        )
         .route(
             "/api/jobs/{job_id}/runs/{run_id}/stale",
             post(jobs_eval_stale),
@@ -1276,6 +1279,22 @@ async fn jobs_get_run(
     Path((job_id, run_id)): Path<(String, String)>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let run = jobs::load_run(&job_id, &run_id).map_err(job_err)?;
+    Ok(Json(json!({"ok": true, "run": run})))
+}
+
+#[derive(Debug, Deserialize)]
+struct PatchRunBody {
+    status: String,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+async fn jobs_patch_run(
+    Path((job_id, run_id)): Path<(String, String)>,
+    Json(body): Json<PatchRunBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let run =
+        jobs::update_run_status(&job_id, &run_id, &body.status, body.error).map_err(job_err)?;
     Ok(Json(json!({"ok": true, "run": run})))
 }
 

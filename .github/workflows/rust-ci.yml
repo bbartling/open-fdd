@@ -85,7 +85,7 @@ jobs:
           ! test -d workspace/dashboard/src
           ! test -f workspace/dashboard/package.json
           pip install -q pytest requests
-          (cd services/ui && PYTHONPATH=. python3 -m pytest app/test_central_client_normalize.py app/test_job_store.py -q)
+          (cd services/ui && PYTHONPATH=. python3 -m pytest app/test_central_client_normalize.py app/test_job_store.py app/test_jobs_central_client.py -q)
       - name: BACnet NIC helper guards
         run: |
           test -x scripts/openfdd_bacnet_nic_setup.sh
