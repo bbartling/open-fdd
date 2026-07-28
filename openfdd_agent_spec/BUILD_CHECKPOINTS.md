@@ -71,3 +71,28 @@ Legend: `[x]` done · `[~]` partial / residual · `[ ]` remaining
 - [x] B7 — Streamlit Jobs on central API + stale banner
 - [x] B8 — WattLab handoff manifest (job-native)
 - [x] B9 — Acceptance doc + GHCR publish on merge
+
+---
+
+# Milestone C — DataFusion analytics cutover (2026-07-28)
+
+**Status:** **Partial** on branch `milestone-c/c1-c2-analytics-runtime`.
+Engine label: `central-analytics-v1` (DF SQL MemTable follow-up).
+Docs: [`MILESTONE_C_CLOSEOUT.md`](../docs/migration/MILESTONE_C_CLOSEOUT.md),
+[`MILESTONE_C_ACCEPTANCE.md`](../docs/migration/MILESTONE_C_ACCEPTANCE.md),
+[`MILESTONE_C_ANALYTICS_MATRIX.md`](../docs/migration/MILESTONE_C_ANALYTICS_MATRIX.md),
+[`MILESTONE_C_RULE_PARITY.md`](../docs/migration/MILESTONE_C_RULE_PARITY.md),
+[`MILESTONE_C_ANALYTICS.md`](../docs/benchmarks/MILESTONE_C_ANALYTICS.md).
+
+- [x] C0 — B adversarial verification + README / cookbook honesty
+- [x] C1 — Analytics envelope + `/api/analytics/*` contracts
+- [x] C2 — Runtime Δt compute + economizer diagnostics (live)
+- [~] C3 — Sensor health minimal compute (coverage / flatline / stats)
+- [~] C4 — Schedule occupied + after-hours fan hours (minimal)
+- [~] C5 — Mechanical cooling evidence hierarchy (minimal; OAT bins residual)
+- [~] C6 — Economizer live; RCx AHU coverage stub; full RCx UI residual
+- [~] C7 — VAV comfort ranking minimal; full VAV RCx residual
+- [ ] C8 — Plant evidence (chiller/boiler) — not started
+- [~] C9 — Metering monthly kWh sum (minimal)
+- [~] C10 — Rule parity fixture notes + mutation checklist (harness residual)
+- [ ] C11 — Retire production pandas paths; filled benchmarks; `sha-*` acceptance

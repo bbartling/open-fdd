@@ -29,8 +29,8 @@ product Streamlit UI so agents do not confuse lab/oracle paths with production.
 |------|---------|--------------|-------|--------|--------|
 |services/ui/app/agent_api.py|oracle/analytics helpers (lab path)|services/ui Streamlit (not central FDD)|ORACLE_ONLY|temporary_ok|DataFusion analytics where production; keep oracle for vibe19 parity|
 |services/ui/app/agent_prerun.py|oracle/analytics helpers (lab path)|services/ui Streamlit (not central FDD)|ORACLE_ONLY|temporary_ok|DataFusion analytics where production; keep oracle for vibe19 parity|
-|services/ui/app/analytics.py|oracle/analytics helpers (lab path)|services/ui Streamlit (not central FDD)|ORACLE_ONLY|temporary_ok|DataFusion analytics where production; keep oracle for vibe19 parity|
-|services/ui/app/analytics_baseline.py|oracle/analytics helpers (lab path)|services/ui Streamlit (not central FDD)|ORACLE_ONLY|temporary_ok|DataFusion analytics where production; keep oracle for vibe19 parity|
+|services/ui/app/analytics.py|oracle/analytics helpers (lab path); production callers → central `/api/analytics/*`|services/ui Streamlit|MIGRATE_TO_DATAFUSION|temporary_ok|central-analytics-v1 APIs now; DataFusion SQL follow-up per family|
+|services/ui/app/analytics_baseline.py|oracle/analytics helpers (lab path); production callers → central `/api/analytics/*`|services/ui Streamlit|MIGRATE_TO_DATAFUSION|temporary_ok|central-analytics-v1 APIs now; DataFusion SQL follow-up per family|
 |services/ui/app/cache.py|UI/lab pandas usage|services/ui Streamlit (not central FDD)|DISPLAY_BOUNDARY|temporary_ok|review in Milestone B Jobs cutover|
 |services/ui/app/charts.py|Streamlit plots / UI tables|services/ui Streamlit (not central FDD)|DISPLAY_BOUNDARY|approved|keep display; FDD exec via central SQL|
 |services/ui/app/column_map_json.py|CSV/package/WattLab I/O|services/ui Streamlit (not central FDD)|PACKAGE_IO|approved|keep|
@@ -40,12 +40,12 @@ product Streamlit UI so agents do not confuse lab/oracle paths with production.
 |services/ui/app/daytypes.py|UI/lab pandas usage|services/ui Streamlit (not central FDD)|DISPLAY_BOUNDARY|temporary_ok|review in Milestone B Jobs cutover|
 |services/ui/app/docx_report.py|report rendering|services/ui Streamlit (not central FDD)|REPORT_RENDERING|approved|open_fdd.reporting where shared|
 |services/ui/app/load_satisfaction.py|oracle/analytics helpers (lab path)|services/ui Streamlit (not central FDD)|ORACLE_ONLY|temporary_ok|DataFusion analytics where production; keep oracle for vibe19 parity|
-|services/ui/app/metering.py|oracle/analytics helpers (lab path)|services/ui Streamlit (not central FDD)|ORACLE_ONLY|temporary_ok|DataFusion analytics where production; keep oracle for vibe19 parity|
+|services/ui/app/metering.py|oracle/analytics helpers (lab path); production → `/api/analytics/metering`|services/ui Streamlit|MIGRATE_TO_DATAFUSION|temporary_ok|central metering stub live; DF SQL follow-up|
 |services/ui/app/model_seed.py|UI/lab pandas usage|services/ui Streamlit (not central FDD)|DISPLAY_BOUNDARY|temporary_ok|review in Milestone B Jobs cutover|
 |services/ui/app/occupancy.py|oracle/analytics helpers (lab path)|services/ui Streamlit (not central FDD)|ORACLE_ONLY|temporary_ok|DataFusion analytics where production; keep oracle for vibe19 parity|
 |services/ui/app/open_meteo.py|UI/lab pandas usage|services/ui Streamlit (not central FDD)|DISPLAY_BOUNDARY|temporary_ok|review in Milestone B Jobs cutover|
 |services/ui/app/package_io.py|CSV/package/WattLab I/O|services/ui Streamlit (not central FDD)|PACKAGE_IO|approved|keep|
-|services/ui/app/rcx_plots.py|Streamlit plots / UI tables|services/ui Streamlit (not central FDD)|DISPLAY_BOUNDARY|approved|keep display; FDD exec via central SQL|
+|services/ui/app/rcx_plots.py|Streamlit plots; production series → `/api/analytics/rcx/*`|services/ui Streamlit|MIGRATE_TO_DATAFUSION|temporary_ok|display stays; compute via central analytics|
 |services/ui/app/reports.py|report rendering|services/ui Streamlit (not central FDD)|REPORT_RENDERING|approved|open_fdd.reporting where shared|
 |services/ui/app/role_map.py|oracle/analytics helpers (lab path)|services/ui Streamlit (not central FDD)|ORACLE_ONLY|temporary_ok|DataFusion analytics where production; keep oracle for vibe19 parity|
 |services/ui/app/role_map_gap.py|oracle/analytics helpers (lab path)|services/ui Streamlit (not central FDD)|ORACLE_ONLY|temporary_ok|DataFusion analytics where production; keep oracle for vibe19 parity|
@@ -64,12 +64,12 @@ product Streamlit UI so agents do not confuse lab/oracle paths with production.
 |services/ui/app/rules/runner.py|pandas oracle / custom rule surface|services/ui Streamlit (not central FDD)|ORACLE_ONLY|approved|keep (oracle)|
 |services/ui/app/rules/sensor_rate.py|pandas oracle / custom rule surface|services/ui Streamlit (not central FDD)|ORACLE_ONLY|approved|keep (oracle)|
 |services/ui/app/rules/sensor_rate_profiles.py|pandas oracle / custom rule surface|services/ui Streamlit (not central FDD)|ORACLE_ONLY|approved|keep (oracle)|
-|services/ui/app/runtime_intervals.py|oracle/analytics helpers (lab path)|services/ui Streamlit (not central FDD)|ORACLE_ONLY|temporary_ok|DataFusion analytics where production; keep oracle for vibe19 parity|
+|services/ui/app/runtime_intervals.py|oracle/analytics helpers; production → `/api/analytics/runtime`|services/ui Streamlit|MIGRATE_TO_DATAFUSION|temporary_ok|central runtime Δt compute live; keep oracle for vibe19 parity|
 |services/ui/app/source_profile.py|CSV/package/WattLab I/O|services/ui Streamlit (not central FDD)|PACKAGE_IO|approved|keep|
 |services/ui/app/sql_sources.py|SQL/DataFusion bridge helpers using pandas frames|services/ui Streamlit (not central FDD)|MIGRATE_TO_DATAFUSION|temporary_ok|central DataFusion-first APIs|
 |services/ui/app/topology_enrich.py|oracle/analytics helpers (lab path)|services/ui Streamlit (not central FDD)|ORACLE_ONLY|temporary_ok|DataFusion analytics where production; keep oracle for vibe19 parity|
 |services/ui/app/tuning_report.py|report rendering|services/ui Streamlit (not central FDD)|REPORT_RENDERING|approved|open_fdd.reporting where shared|
-|services/ui/app/ui_rcx_tab.py|Streamlit plots / UI tables|services/ui Streamlit (not central FDD)|DISPLAY_BOUNDARY|approved|keep display; FDD exec via central SQL|
+|services/ui/app/ui_rcx_tab.py|Streamlit plots; production analytics → `/api/analytics/*`|services/ui Streamlit|MIGRATE_TO_DATAFUSION|temporary_ok|cut over to central envelopes; keep display/Plotly in UI|
 |services/ui/app/unit_system.py|UI/lab pandas usage|services/ui Streamlit (not central FDD)|DISPLAY_BOUNDARY|temporary_ok|review in Milestone B Jobs cutover|
 |services/ui/app/wattlab_dump.py|CSV/package/WattLab I/O|services/ui Streamlit (not central FDD)|PACKAGE_IO|approved|keep|
 |services/ui/app/weather_psychrometrics.py|oracle/analytics helpers (lab path)|services/ui Streamlit (not central FDD)|ORACLE_ONLY|temporary_ok|DataFusion analytics where production; keep oracle for vibe19 parity|
@@ -91,5 +91,6 @@ runners are **oracle / lab** paths only.
 ## Related
 
 - [Analytics boundary](analytics-boundary.md)
+- [Milestone C analytics matrix](../migration/MILESTONE_C_ANALYTICS_MATRIX.md)
 - [Milestone A closeout](../migration/MILESTONE_A_CLOSEOUT.md)
 - [openfdd_agent_spec ARCHITECTURE](../../openfdd_agent_spec/ARCHITECTURE.md)

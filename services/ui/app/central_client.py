@@ -441,3 +441,77 @@ def jobs_create_wattlab_handoff(job_id: str, handoff: dict[str, Any]) -> dict[st
         return _parse_json_response(resp)
     except requests.RequestException as exc:
         return {"ok": False, "error": str(exc), "central_down": True}
+
+
+# Milestone C — typed analytics envelopes (no Plotly JSON).
+ANALYTICS_FAMILIES: frozenset[str] = frozenset(
+    {
+        "runtime",
+        "sensor-health",
+        "schedule",
+        "mechanical-cooling",
+        "economizer",
+        "rcx/ahu",
+        "rcx/vav",
+        "metering",
+    }
+)
+
+
+def analytics_post(family: str, payload: dict[str, Any], *, timeout: float = 120.0) -> dict[str, Any]:
+    """POST ``/api/analytics/{family}`` — returns central JSON (ok + analytics envelope)."""
+    fam = (family or "").strip().strip("/")
+    if fam not in ANALYTICS_FAMILIES:
+        return {
+            "ok": False,
+            "error": f"unknown analytics family '{family}' "
+            f"(expected one of: {', '.join(sorted(ANALYTICS_FAMILIES))})",
+        }
+    url = f"{api_base()}/api/analytics/{fam}"
+    try:
+        resp = _request(
+            "POST",
+            url,
+            timeout=timeout,
+            json=payload or {},
+            headers={"Content-Type": "application/json"},
+        )
+    except requests.RequestException as exc:
+        return {
+            "ok": False,
+            "error": f"central unreachable ({api_base()}): {exc}",
+            "central_down": True,
+        }
+    return _parse_json_response(resp)
+
+
+def analytics_runtime(payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+    return analytics_post("runtime", payload, **kwargs)
+
+
+def analytics_economizer(payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+    return analytics_post("economizer", payload, **kwargs)
+
+
+def analytics_sensor_health(payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+    return analytics_post("sensor-health", payload, **kwargs)
+
+
+def analytics_schedule(payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+    return analytics_post("schedule", payload, **kwargs)
+
+
+def analytics_mechanical_cooling(payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+    return analytics_post("mechanical-cooling", payload, **kwargs)
+
+
+def analytics_rcx_ahu(payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+    return analytics_post("rcx/ahu", payload, **kwargs)
+
+
+def analytics_rcx_vav(payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+    return analytics_post("rcx/vav", payload, **kwargs)
+
+
+def analytics_metering(payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+    return analytics_post("metering", payload, **kwargs)

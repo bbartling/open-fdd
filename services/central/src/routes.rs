@@ -14,6 +14,7 @@ use openfdd_mqtt::publish_json;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use crate::analytics::{self, AnalyticsRequest};
 use crate::auth;
 use crate::jobs;
 use crate::models::{
@@ -139,6 +140,22 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/jobs/{job_id}/wattlab/handoffs",
             post(jobs_create_wattlab_handoff),
         )
+        .route("/api/analytics/runtime", post(analytics_runtime))
+        .route(
+            "/api/analytics/sensor-health",
+            post(analytics_sensor_health),
+        )
+        .route("/api/analytics/schedule", post(analytics_schedule))
+        .route(
+            "/api/analytics/mechanical-cooling",
+            post(analytics_mechanical_cooling),
+        )
+        .route("/api/analytics/economizer", post(analytics_economizer))
+        .route("/api/analytics/rcx/ahu", post(analytics_rcx_ahu))
+        .route("/api/analytics/rcx/vav", post(analytics_rcx_vav))
+        .route("/api/analytics/rcx/chiller", post(analytics_rcx_chiller))
+        .route("/api/analytics/rcx/boiler", post(analytics_rcx_boiler))
+        .route("/api/analytics/metering", post(analytics_metering))
         .merge(csv)
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
@@ -188,7 +205,8 @@ pub async fn capabilities() -> Json<Value> {
             "faults": true,
             "health_stack": true,
             "fdd_rules_authoring": true,
-            "fdd_schema": true
+            "fdd_schema": true,
+            "analytics": true
         }
     }))
 }
@@ -1358,4 +1376,78 @@ async fn jobs_create_wattlab_handoff(
         StatusCode::CREATED,
         Json(json!({"ok": true, "handoff": handoff})),
     ))
+}
+
+// ---------------------------------------------------------------------------
+// Analytics (Milestone C) — typed envelopes, no Plotly JSON
+// ---------------------------------------------------------------------------
+
+async fn analytics_runtime(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::runtime::handle(&req).to_json(),
+    }))
+}
+
+async fn analytics_sensor_health(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::sensor_health::handle(&req).to_json(),
+    }))
+}
+
+async fn analytics_schedule(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::schedule::handle(&req).to_json(),
+    }))
+}
+
+async fn analytics_mechanical_cooling(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::mechanical_cooling::handle(&req).to_json(),
+    }))
+}
+
+async fn analytics_economizer(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::economizer::handle(&req).to_json(),
+    }))
+}
+
+async fn analytics_rcx_ahu(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::rcx::handle_ahu(&req).to_json(),
+    }))
+}
+
+async fn analytics_rcx_vav(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::rcx::handle_vav(&req).to_json(),
+    }))
+}
+
+async fn analytics_rcx_chiller(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::plant::handle_chiller(&req).to_json(),
+    }))
+}
+
+async fn analytics_rcx_boiler(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::plant::handle_boiler(&req).to_json(),
+    }))
+}
+
+async fn analytics_metering(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::metering::handle(&req).to_json(),
+    }))
 }

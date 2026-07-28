@@ -30,6 +30,110 @@ from app.rcx_plots import (
 )
 from app.reports import to_csv_bytes
 from app.unit_system import convert_series
+from app import ui_analytics
+
+
+def _render_economizer_diagnostics(
+    frames: dict[str, pd.DataFrame],
+    role_map: dict,
+    *,
+    weather: pd.DataFrame | None,
+) -> None:
+    """AHU free-cooling economizer diagnostics via central ``/api/analytics/economizer``."""
+    st.markdown("##### Economizer diagnostics")
+    st.caption(
+        "Central analytics (Guideline 36–aligned mixing). Fan-on samples only; "
+        "identifiability when |OAT−RAT| ≥ dt_min."
+    )
+    prefer_web = bool(st.session_state.get("prefer_web_oat", True))
+    dt_min = float(st.session_state.get("econ_dt_min_f", 10.0))
+
+    if not ui_analytics.prefer_central_analytics():
+        st.info("Central analytics unavailable — economizer diagnostics need openfdd-central.")
+        return
+
+    with st.spinner("Running central economizer diagnostics…"):
+        result = ui_analytics.fetch_economizer_analytics(
+            frames,
+            role_map,
+            weather=weather,
+            prefer_web_oat=prefer_web,
+            dt_min_f=dt_min,
+        )
+
+    if not result.get("ok"):
+        st.warning(
+            f"Economizer diagnostics unavailable: {result.get('error') or 'central error'}"
+        )
+        return
+
+    env = result.get("analytics") or {}
+    cap = ui_analytics.provenance_caption(env)
+    if cap:
+        st.caption(cap)
+    for w in env.get("warnings") or []:
+        st.caption(f"⚠ {w}")
+
+    equip = env.get("equipment") or []
+    skipped = env.get("skipped") or []
+    points = env.get("points") or []
+
+    if equip:
+        metrics_df = pd.DataFrame(equip)
+        st.markdown("###### Equipment metrics")
+        st.dataframe(metrics_df, hide_index=True, width="stretch", height=min(320, 80 + 28 * len(metrics_df)))
+    else:
+        st.info("No economizer equipment metrics returned.")
+
+    if skipped:
+        skip_df = pd.DataFrame(skipped)
+        st.markdown("###### Skipped equipment")
+        st.dataframe(skip_df, hide_index=True, width="stretch", height=min(240, 80 + 28 * len(skip_df)))
+
+    if points:
+        pts_df = pd.DataFrame(points)
+        # Prefer API delta_* fields; fall back to oat/mat − rat if present.
+        if "delta_or_f" in pts_df.columns:
+            pts_df = pts_df.assign(oat_minus_rat=pts_df["delta_or_f"])
+        elif {"oat_f", "rat_f"}.issubset(pts_df.columns):
+            pts_df = pts_df.assign(oat_minus_rat=pts_df["oat_f"] - pts_df["rat_f"])
+        if "delta_mr_f" in pts_df.columns:
+            pts_df = pts_df.assign(mat_minus_rat=pts_df["delta_mr_f"])
+        elif {"mat_f", "rat_f"}.issubset(pts_df.columns):
+            pts_df = pts_df.assign(mat_minus_rat=pts_df["mat_f"] - pts_df["rat_f"])
+
+        if {"oat_minus_rat", "mat_minus_rat"}.issubset(pts_df.columns):
+            try:
+                import plotly.express as px
+
+                fig = px.scatter(
+                    pts_df,
+                    x="oat_minus_rat",
+                    y="mat_minus_rat",
+                    color="equipment_id" if "equipment_id" in pts_df.columns else None,
+                    title="Economizer ΔT scatter (OAT−RAT vs MAT−RAT)",
+                    labels={
+                        "oat_minus_rat": "OAT − RAT (°F)",
+                        "mat_minus_rat": "MAT − RAT (°F)",
+                    },
+                )
+                st.plotly_chart(
+                    fig,
+                    width="stretch",
+                    config=plotly_config(filename="economizer_delta_scatter"),
+                    key="rcx_econ_delta_scatter",
+                )
+            except Exception as exc:
+                st.caption(f"Scatter unavailable: {exc}")
+
+        st.download_button(
+            "Download economizer points CSV",
+            to_csv_bytes(pts_df),
+            "economizer_diagnostics_points.csv",
+            key="dl_rcx_econ_points",
+        )
+    else:
+        st.info("No economizer diagnostic points returned.")
 
 
 def _convert_map(series_map: dict[str, pd.Series], role: str, system: str) -> tuple[dict[str, pd.Series], str]:
@@ -177,6 +281,11 @@ def render_rcx_plots_tab(
             key="dl_rcx_coverage",
         )
     family_presets = presets_for_family(family)
+
+    # Economizer diagnostics — AHU family only (central API; presets unchanged below).
+    if str(family).startswith("AHU"):
+        _render_economizer_diagnostics(frames, role_map, weather=weather)
+
     if not family_presets:
         st.info(
             f"No RCx chart presets in **{family}** yet — use the Word template above "
