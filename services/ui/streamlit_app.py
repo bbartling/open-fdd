@@ -2533,6 +2533,8 @@ def main() -> None:
     cool_bins = pd.DataFrame()
     cool_coverage = pd.DataFrame()
     central_runtime: dict | None = None
+    central_mech: dict | None = None
+    central_mech_ok = False
     if section == "Overview":
         # Prefer central runtime when OPENFDD_ANALYTICS_CENTRAL=1 or health_ok.
         try:
@@ -2561,31 +2563,43 @@ def main() -> None:
                 except Exception as exc:
                     st.warning(f"Weekly motor hours unavailable: {exc}")
             # else: no silent pandas — error shown in Overview section below
+        from app import ui_analytics as _ui_analytics
+
         try:
-            cool_bins = mech_cooling_oat_bins(
-                frames,
-                st.session_state.role_map,
-                weather=st.session_state.weather,
-                prefer_web_oat=bool(st.session_state.get("prefer_web_oat", True)),
-                chw_leave_max_f=float(st.session_state.get("chw_leave_max_f", 48.0)),
-                include_ahu_chw_valve=False,
-                include_total=True,
-                use_status_proof=bool(
-                    st.session_state.get("use_mech_cooling_status_proof", True)
-                ),
-            )
-            cool_coverage = mech_cooling_coverage(
-                frames,
-                st.session_state.role_map,
-                weather=st.session_state.weather,
-                prefer_web_oat=bool(st.session_state.get("prefer_web_oat", True)),
-                chw_leave_max_f=float(st.session_state.get("chw_leave_max_f", 48.0)),
-                use_status_proof=bool(
-                    st.session_state.get("use_mech_cooling_status_proof", True)
-                ),
-            )
+            if _ui_analytics.prefer_central_analytics():
+                central_mech = _ui_analytics.fetch_mechanical_cooling_analytics(
+                    frames, st.session_state.role_map
+                )
         except Exception as exc:
-            st.warning(f"Mech-cooling OAT bins unavailable: {exc}")
+            central_mech = {"ok": False, "error": str(exc)}
+        central_mech_ok = isinstance(central_mech, dict) and bool(central_mech.get("ok"))
+        # Pandas mech-cooling analytics are the explicit oracle path only.
+        if not central_mech_ok and _ui_analytics.oracle_fallback_enabled():
+            try:
+                cool_bins = mech_cooling_oat_bins(
+                    frames,
+                    st.session_state.role_map,
+                    weather=st.session_state.weather,
+                    prefer_web_oat=bool(st.session_state.get("prefer_web_oat", True)),
+                    chw_leave_max_f=float(st.session_state.get("chw_leave_max_f", 48.0)),
+                    include_ahu_chw_valve=False,
+                    include_total=True,
+                    use_status_proof=bool(
+                        st.session_state.get("use_mech_cooling_status_proof", True)
+                    ),
+                )
+                cool_coverage = mech_cooling_coverage(
+                    frames,
+                    st.session_state.role_map,
+                    weather=st.session_state.weather,
+                    prefer_web_oat=bool(st.session_state.get("prefer_web_oat", True)),
+                    chw_leave_max_f=float(st.session_state.get("chw_leave_max_f", 48.0)),
+                    use_status_proof=bool(
+                        st.session_state.get("use_mech_cooling_status_proof", True)
+                    ),
+                )
+            except Exception as exc:
+                st.warning(f"Mech-cooling OAT bins unavailable: {exc}")
     start_s = span["start"].strftime("%Y-%m-%d %H:%M") if span["start"] is not None else "—"
     end_s = span["end"].strftime("%Y-%m-%d %H:%M") if span["end"] is not None else "—"
 
@@ -2695,69 +2709,103 @@ def main() -> None:
             "activity, proof, runtime, and reason. Temperature-derived runtime is "
             "labeled inferred — cold water can flow through an idle chiller."
         )
-        zero_warn = mech_cooling_zero_eligible_warning(cool_coverage)
-        if zero_warn:
-            st.warning(zero_warn)
-        runtime_msg = mech_cooling_runtime_message(cool_coverage)
-        if runtime_msg:
-            st.info(runtime_msg)
-        cool_fig = mech_cooling_oat_histogram(cool_bins)
-        if cool_fig is None and not zero_warn:
-            st.info(
-                "No compressor runtime bins for the selected proof mode. Eligible "
-                "devices with zero observed runtime still appear in the coverage table "
-                "as **No runtime observed**. Map chiller/compressor status, command, "
-                "amps, or power, or uncheck status proof and set CHW leave proof max °F. "
-                "AHU CHW valves excluded."
-            )
-        elif cool_fig is not None:
-            st.plotly_chart(
-                cool_fig,
-                width="stretch",
-                config=plotly_config(filename="mech_cooling_oat_bins"),
-                key="overview_cool_bins",
-            )
-            st.dataframe(cool_bins, hide_index=True, width="stretch", height=280)
-            st.download_button(
-                "Download mech cooling OAT bins CSV",
-                to_csv_bytes(cool_bins),
-                "mech_cooling_oat_bins.csv",
-                key="dl_cool_bins_overview",
-            )
-        if not cool_coverage.empty:
-            if "included" in cool_coverage.columns:
-                n_inc = int(cool_coverage["included"].fillna(False).astype(bool).sum())
-                n_exc = int((~cool_coverage["included"].fillna(False).astype(bool)).sum())
+        def _render_pandas_mech_cooling() -> None:
+            zero_warn = mech_cooling_zero_eligible_warning(cool_coverage)
+            if zero_warn:
+                st.warning(zero_warn)
+            runtime_msg = mech_cooling_runtime_message(cool_coverage)
+            if runtime_msg:
+                st.info(runtime_msg)
+            cool_fig = mech_cooling_oat_histogram(cool_bins)
+            if cool_fig is None and not zero_warn:
+                st.info(
+                    "No compressor runtime bins for the selected proof mode. Eligible "
+                    "devices with zero observed runtime still appear in the coverage table "
+                    "as **No runtime observed**. Map chiller/compressor status, command, "
+                    "amps, or power, or uncheck status proof and set CHW leave proof max °F. "
+                    "AHU CHW valves excluded."
+                )
+            elif cool_fig is not None:
+                st.plotly_chart(
+                    cool_fig,
+                    width="stretch",
+                    config=plotly_config(filename="mech_cooling_oat_bins"),
+                    key="overview_cool_bins",
+                )
+                st.dataframe(cool_bins, hide_index=True, width="stretch", height=280)
+                st.download_button(
+                    "Download mech cooling OAT bins CSV",
+                    to_csv_bytes(cool_bins),
+                    "mech_cooling_oat_bins.csv",
+                    key="dl_cool_bins_overview",
+                )
+            if not cool_coverage.empty:
+                if "included" in cool_coverage.columns:
+                    n_inc = int(cool_coverage["included"].fillna(False).astype(bool).sum())
+                    n_exc = int((~cool_coverage["included"].fillna(False).astype(bool)).sum())
+                else:
+                    n_inc = int((cool_coverage["status"] == "included").sum())
+                    n_exc = int((cool_coverage["status"] == "excluded").sum())
+                mode = (
+                    "mapped compressor/chiller status, command, amps, or power"
+                    if st.session_state.get("use_mech_cooling_status_proof", True)
+                    else "inferred CHW leaving temperature"
+                )
+                st.markdown(
+                    f"###### Mechanical cooling devices — {n_inc} included, {n_exc} excluded"
+                )
+                st.caption(
+                    f"Selected proof mode: **{mode}**. Coverage shows eligibility, activity, "
+                    "proof, runtime, and reason for every cooling-capable device. Eligible "
+                    "devices with no observed runtime remain visible as **No runtime "
+                    "observed**. Temperature-derived runtime is inferred: cold water can "
+                    "flow through an idle chiller."
+                )
+                coverage_display = format_mech_cooling_coverage_display(cool_coverage)
+                st.dataframe(
+                    coverage_display,
+                    hide_index=True,
+                    width="stretch",
+                    height=min(360, 38 + 35 * max(1, len(coverage_display))),
+                )
+                st.download_button(
+                    "Download cooling coverage CSV",
+                    to_csv_bytes(cool_coverage),
+                    "mech_cooling_coverage.csv",
+                    key="dl_cool_coverage_overview",
+                )
+
+        from app import ui_analytics as _ui_analytics
+
+        if central_mech_ok:
+            env = (central_mech or {}).get("analytics") or {}
+            cap = _ui_analytics.provenance_caption(env)
+            if cap:
+                st.caption(cap)
+            for w in env.get("warnings") or []:
+                st.caption(f"⚠ {w}")
+            mech_rows = env.get("rows") or env.get("equipment") or []
+            if mech_rows:
+                st.dataframe(
+                    pd.DataFrame(mech_rows),
+                    hide_index=True,
+                    width="stretch",
+                    height=min(360, 80 + 28 * len(mech_rows)),
+                )
             else:
-                n_inc = int((cool_coverage["status"] == "included").sum())
-                n_exc = int((cool_coverage["status"] == "excluded").sum())
-            mode = (
-                "mapped compressor/chiller status, command, amps, or power"
-                if st.session_state.get("use_mech_cooling_status_proof", True)
-                else "inferred CHW leaving temperature"
-            )
-            st.markdown(
-                f"###### Mechanical cooling devices — {n_inc} included, {n_exc} excluded"
-            )
+                st.info("Central mechanical-cooling returned no evidence rows.")
+        elif _ui_analytics.oracle_fallback_enabled():
             st.caption(
-                f"Selected proof mode: **{mode}**. Coverage shows eligibility, activity, "
-                "proof, runtime, and reason for every cooling-capable device. Eligible "
-                "devices with no observed runtime remain visible as **No runtime "
-                "observed**. Temperature-derived runtime is inferred: cold water can "
-                "flow through an idle chiller."
+                "mechanical cooling via pandas oracle "
+                "(OPENFDD_ANALYTICS_ORACLE=1; central analytics unavailable)"
             )
-            coverage_display = format_mech_cooling_coverage_display(cool_coverage)
-            st.dataframe(
-                coverage_display,
-                hide_index=True,
-                width="stretch",
-                height=min(360, 38 + 35 * max(1, len(coverage_display))),
-            )
-            st.download_button(
-                "Download cooling coverage CSV",
-                to_csv_bytes(cool_coverage),
-                "mech_cooling_coverage.csv",
-                key="dl_cool_coverage_overview",
+            _render_pandas_mech_cooling()
+        else:
+            err = (central_mech or {}).get("error") if isinstance(central_mech, dict) else None
+            st.error(
+                "Mechanical cooling unavailable from central analytics"
+                + (f": {err}" if err else ".")
+                + " No silent pandas fallback — set OPENFDD_ANALYTICS_ORACLE=1 for the pandas oracle path."
             )
 
         st.markdown("##### Economizer weather opportunity / compliance")

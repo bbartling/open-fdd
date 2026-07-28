@@ -368,6 +368,49 @@ def render_rcx_plots_tab(
     x_title = "Web dry-bulb °F"
 
     if chart_kind == "ranking":
+        st.markdown("##### Zone comfort fail ranking")
+        st.caption(
+            f"Occupied hours only (Overview schedule). Band **{zone_lo_f:g}–{zone_hi_f:g} °F** "
+            f"(same as VAV-1 / SCHED-1). Worst % outside first."
+        )
+        # Prefer central rcx/vav; pandas donut/ranking is the explicit oracle path only.
+        _band_f = max(0.5, (float(zone_hi_f) - float(zone_lo_f)) / 2.0)
+        central_vav = (
+            ui_analytics.fetch_rcx_vav_analytics(frames, role_map, band_f=_band_f)
+            if ui_analytics.prefer_central_analytics()
+            else None
+        )
+        if isinstance(central_vav, dict) and central_vav.get("ok"):
+            env = central_vav.get("analytics") or {}
+            cap = ui_analytics.provenance_caption(env)
+            if cap:
+                st.caption(cap)
+            for w in env.get("warnings") or []:
+                st.caption(f"⚠ {w}")
+            crows = env.get("rows") or env.get("equipment") or []
+            if crows:
+                st.dataframe(
+                    pd.DataFrame(crows),
+                    hide_index=True,
+                    width="stretch",
+                    height=min(480, 80 + 28 * len(crows)),
+                )
+            else:
+                st.info("Central VAV zone-comfort returned no zones.")
+            return
+        if not ui_analytics.oracle_fallback_enabled():
+            err = central_vav.get("error") if isinstance(central_vav, dict) else None
+            st.error(
+                "Zone comfort ranking unavailable from central analytics"
+                + (f": {err}" if err else ".")
+                + " No silent pandas fallback — set OPENFDD_ANALYTICS_ORACLE=1 for the "
+                "pandas oracle path."
+            )
+            return
+        st.caption(
+            "zone comfort via pandas oracle "
+            "(OPENFDD_ANALYTICS_ORACLE=1; central analytics unavailable)"
+        )
         rank = zone_comfort_fail_ranking(
             frames,
             role_map,
@@ -376,11 +419,6 @@ def render_rcx_plots_tab(
             comfort_high_f=zone_hi_f,
             equipment_types=equipment_types,
             outlier_z=outlier_z,
-        )
-        st.markdown("##### Zone comfort fail ranking")
-        st.caption(
-            f"Occupied hours only (Overview schedule). Band **{zone_lo_f:g}–{zone_hi_f:g} °F** "
-            f"(same as VAV-1 / SCHED-1). Worst % outside first."
         )
         if rank.empty:
             st.info("No VAV `zone_t` samples during occupied hours — check mapping and schedule.")
