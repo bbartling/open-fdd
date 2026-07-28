@@ -453,6 +453,8 @@ ANALYTICS_FAMILIES: frozenset[str] = frozenset(
         "economizer",
         "rcx/ahu",
         "rcx/vav",
+        "rcx/chiller",
+        "rcx/boiler",
         "metering",
     }
 )
@@ -515,3 +517,11 @@ def analytics_rcx_vav(payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
 
 def analytics_metering(payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
     return analytics_post("metering", payload, **kwargs)
+
+
+def analytics_rcx_chiller(payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+    return analytics_post("rcx/chiller", payload, **kwargs)
+
+
+def analytics_rcx_boiler(payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+    return analytics_post("rcx/boiler", payload, **kwargs)

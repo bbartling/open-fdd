@@ -49,7 +49,17 @@ def _render_economizer_diagnostics(
     dt_min = float(st.session_state.get("econ_dt_min_f", 10.0))
 
     if not ui_analytics.prefer_central_analytics():
-        st.info("Central analytics unavailable — economizer diagnostics need openfdd-central.")
+        if ui_analytics.oracle_fallback_enabled():
+            st.info(
+                "Central analytics unavailable — set OPENFDD_ANALYTICS_ORACLE only for "
+                "pandas oracle paths; economizer diagnostics still require openfdd-central."
+            )
+        else:
+            st.error(
+                "Economizer diagnostics unavailable: central analytics is required "
+                "(no silent pandas fallback). Set OPENFDD_ANALYTICS_ORACLE=1 only for "
+                "explicit oracle/dev use."
+            )
         return
 
     with st.spinner("Running central economizer diagnostics…"):
@@ -62,9 +72,16 @@ def _render_economizer_diagnostics(
         )
 
     if not result.get("ok"):
-        st.warning(
-            f"Economizer diagnostics unavailable: {result.get('error') or 'central error'}"
-        )
+        if ui_analytics.oracle_fallback_enabled():
+            st.warning(
+                f"Economizer diagnostics unavailable: {result.get('error') or 'central error'} "
+                "(OPENFDD_ANALYTICS_ORACLE=1 set but economizer has no pandas UI path here)."
+            )
+        else:
+            st.error(
+                f"Economizer diagnostics unavailable: {result.get('error') or 'central error'}. "
+                "No silent pandas fallback."
+            )
         return
 
     env = result.get("analytics") or {}
@@ -351,6 +368,49 @@ def render_rcx_plots_tab(
     x_title = "Web dry-bulb °F"
 
     if chart_kind == "ranking":
+        st.markdown("##### Zone comfort fail ranking")
+        st.caption(
+            f"Occupied hours only (Overview schedule). Band **{zone_lo_f:g}–{zone_hi_f:g} °F** "
+            f"(same as VAV-1 / SCHED-1). Worst % outside first."
+        )
+        # Prefer central rcx/vav; pandas donut/ranking is the explicit oracle path only.
+        _band_f = max(0.5, (float(zone_hi_f) - float(zone_lo_f)) / 2.0)
+        central_vav = (
+            ui_analytics.fetch_rcx_vav_analytics(frames, role_map, band_f=_band_f)
+            if ui_analytics.prefer_central_analytics()
+            else None
+        )
+        if isinstance(central_vav, dict) and central_vav.get("ok"):
+            env = central_vav.get("analytics") or {}
+            cap = ui_analytics.provenance_caption(env)
+            if cap:
+                st.caption(cap)
+            for w in env.get("warnings") or []:
+                st.caption(f"⚠ {w}")
+            crows = env.get("rows") or env.get("equipment") or []
+            if crows:
+                st.dataframe(
+                    pd.DataFrame(crows),
+                    hide_index=True,
+                    width="stretch",
+                    height=min(480, 80 + 28 * len(crows)),
+                )
+            else:
+                st.info("Central VAV zone-comfort returned no zones.")
+            return
+        if not ui_analytics.oracle_fallback_enabled():
+            err = central_vav.get("error") if isinstance(central_vav, dict) else None
+            st.error(
+                "Zone comfort ranking unavailable from central analytics"
+                + (f": {err}" if err else ".")
+                + " No silent pandas fallback — set OPENFDD_ANALYTICS_ORACLE=1 for the "
+                "pandas oracle path."
+            )
+            return
+        st.caption(
+            "zone comfort via pandas oracle "
+            "(OPENFDD_ANALYTICS_ORACLE=1; central analytics unavailable)"
+        )
         rank = zone_comfort_fail_ranking(
             frames,
             role_map,
@@ -359,11 +419,6 @@ def render_rcx_plots_tab(
             comfort_high_f=zone_hi_f,
             equipment_types=equipment_types,
             outlier_z=outlier_z,
-        )
-        st.markdown("##### Zone comfort fail ranking")
-        st.caption(
-            f"Occupied hours only (Overview schedule). Band **{zone_lo_f:g}–{zone_hi_f:g} °F** "
-            f"(same as VAV-1 / SCHED-1). Worst % outside first."
         )
         if rank.empty:
             st.info("No VAV `zone_t` samples during occupied hours — check mapping and schedule.")
@@ -495,9 +550,46 @@ def render_rcx_plots_tab(
                 config=plotly_config(filename=f"rcx_{preset.id}_scatter"),
                 key=f"rcx_meter_scatter_{preset.id}",
             )
-        st.markdown("##### Summary statistics")
-        if not stats_df.empty:
-            st.dataframe(stats_df, hide_index=True, width="stretch", height=min(360, 80 + 28 * len(stats_df)))
+        st.markdown("##### Monthly totals")
+        if ui_analytics.prefer_central_analytics():
+            central_meter = ui_analytics.fetch_metering_analytics(monthly_df, energy_col=energy_col)
+            if central_meter.get("ok"):
+                env = central_meter.get("analytics") or {}
+                cap = ui_analytics.provenance_caption(env)
+                if cap:
+                    st.caption(cap)
+                for w in env.get("warnings") or []:
+                    st.caption(f"⚠ {w}")
+                crows = env.get("rows") or []
+                if crows:
+                    st.dataframe(pd.DataFrame(crows), hide_index=True, width="stretch")
+                else:
+                    st.info("Central metering returned no monthly rows.")
+            elif ui_analytics.oracle_fallback_enabled():
+                st.caption(
+                    "monthly totals via pandas oracle "
+                    "(OPENFDD_ANALYTICS_ORACLE=1; central metering unavailable)"
+                )
+                if not stats_df.empty:
+                    st.dataframe(stats_df, hide_index=True, width="stretch", height=min(360, 80 + 28 * len(stats_df)))
+            else:
+                st.error(
+                    "Monthly meter totals unavailable from central analytics"
+                    + (f": {central_meter.get('error')}" if central_meter.get("error") else ".")
+                    + " Set OPENFDD_ANALYTICS_ORACLE=1 for pandas oracle fallback."
+                )
+        elif ui_analytics.oracle_fallback_enabled():
+            st.caption(
+                "monthly totals via pandas oracle "
+                "(OPENFDD_ANALYTICS_ORACLE=1; central analytics not preferred)"
+            )
+            if not stats_df.empty:
+                st.dataframe(stats_df, hide_index=True, width="stretch", height=min(360, 80 + 28 * len(stats_df)))
+        else:
+            st.error(
+                "Monthly meter totals require openfdd-central (no silent pandas fallback). "
+                "Set OPENFDD_ANALYTICS_ORACLE=1 for pandas oracle fallback."
+            )
         st.dataframe(monthly_df, hide_index=True, width="stretch", height=min(360, 80 + 28 * len(monthly_df)))
         st.download_button(
             "Download monthly metering CSV",

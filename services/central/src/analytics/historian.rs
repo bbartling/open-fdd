@@ -1,0 +1,859 @@
+//! Historian Parquet bridge for DataFusion analytics (Milestone D1).
+
+use std::collections::HashSet;
+use std::path::PathBuf;
+
+use anyhow::{anyhow, Result};
+use datafusion::prelude::SessionContext;
+use fdd_sql::{register_parquet_tree, run_sql};
+use serde_json::json;
+
+use super::{
+    envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, DF_ENGINE, QV_ECONOMIZER, QV_RUNTIME,
+    QV_SCHEDULE, QV_SENSOR_HEALTH,
+};
+
+/// Canonical numeric role columns that may appear as `history` columns after
+/// ingest (see `fdd_core::columns::normalize_role`). `occ_mode` is Utf8 and is
+/// handled separately by the schedule path.
+const NUMERIC_ROLE_COLS: &[&str] = &[
+    "oa_t",
+    "rat",
+    "mat",
+    "sat",
+    "zone_t",
+    "fan_cmd",
+    "fan_status",
+    "oa_damper_pct",
+    "clg_valve_pct",
+    "htg_valve_pct",
+    "sat_sp",
+    "duct_static",
+    "duct_static_sp",
+    "chw_supply_t",
+    "chw_return_t",
+    "hw_supply_t",
+    "hw_return_t",
+    "oa_h",
+    "return_fan",
+];
+
+/// Resolve Parquet historian root — same env fallbacks as edge FDD registry.
+pub fn parquet_root() -> PathBuf {
+    if let Ok(p) = std::env::var("OPENFDD_PARQUET_ROOT") {
+        return PathBuf::from(p);
+    }
+    if let Ok(ws) = std::env::var("OPENFDD_WORKSPACE") {
+        let under_ws = PathBuf::from(&ws).join(".cache/parquet");
+        if under_ws.is_dir() || PathBuf::from(&ws).is_dir() {
+            return under_ws;
+        }
+    }
+    for c in [
+        PathBuf::from(".cache/parquet"),
+        PathBuf::from("/var/openfdd/workspace/.cache/parquet"),
+        PathBuf::from("workspace/.cache/parquet"),
+    ] {
+        if c.is_dir() {
+            return c;
+        }
+    }
+    PathBuf::from(".cache/parquet")
+}
+
+/// Register `history` from parquet_root when the tree exists and has data.
+/// Returns `Ok(true)` on success, `Ok(false)` when missing/empty/unusable.
+pub async fn try_register_history(ctx: &SessionContext) -> Result<bool> {
+    let root = parquet_root();
+    if !root.is_dir() {
+        return Ok(false);
+    }
+    match register_parquet_tree(ctx, &root).await {
+        Ok(_) => Ok(true),
+        Err(e) => {
+            tracing::debug!(error = %e, root = %root.display(), "historian parquet register skipped");
+            Ok(false)
+        }
+    }
+}
+
+async fn history_columns_async(ctx: &SessionContext) -> Result<HashSet<String>> {
+    let df = ctx
+        .table("history")
+        .await
+        .map_err(|e| anyhow!("history table: {e}"))?;
+    Ok(df
+        .schema()
+        .fields()
+        .iter()
+        .map(|f| f.name().to_string())
+        .collect())
+}
+
+fn pick_ts_col(cols: &HashSet<String>) -> Option<&'static str> {
+    ["timestamp_utc", "ts", "timestamp"]
+        .into_iter()
+        .find(|&c| cols.contains(c))
+}
+
+/// Boolean on-expression preferring fan_status, then fan_cmd (normalized > 0.05).
+fn on_expr(cols: &HashSet<String>) -> Option<String> {
+    let has_status = cols.contains("fan_status");
+    let has_cmd = cols.contains("fan_cmd");
+    if has_status && has_cmd {
+        Some(
+            "CASE \
+               WHEN fan_status IS NOT NULL THEN \
+                 CASE WHEN fan_status > 0.05 THEN true ELSE false END \
+               WHEN fan_cmd IS NOT NULL THEN \
+                 CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.05 \
+                   THEN true ELSE false END \
+               ELSE false \
+             END"
+            .into(),
+        )
+    } else if has_status {
+        Some(
+            "CASE WHEN fan_status IS NOT NULL AND fan_status > 0.05 THEN true ELSE false END"
+                .into(),
+        )
+    } else if has_cmd {
+        Some(
+            "CASE WHEN fan_cmd IS NOT NULL AND \
+               (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.05 \
+             THEN true ELSE false END"
+                .into(),
+        )
+    } else {
+        None
+    }
+}
+
+fn round2(x: f64) -> f64 {
+    (x * 100.0).round() / 100.0
+}
+
+fn equipment_filter_sql(equipment_filter: Option<&[String]>) -> String {
+    match equipment_filter {
+        Some(ids) if !ids.is_empty() => {
+            let list = ids
+                .iter()
+                .map(|id| format!("'{}'", id.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(" AND equipment_id IN ({list})")
+        }
+        _ => String::new(),
+    }
+}
+
+/// Load runtime hours from historian Parquet via DataFusion.
+///
+/// Returns `Ok(None)` when parquet is missing/empty. When columns support Δt
+/// integration (`equipment_id`, timestamp, fan_status/fan_cmd), computes real
+/// forward-interval run hours with gap clipping. Otherwise returns a count-based
+/// envelope with `engine=datafusion` and a warning that column-mapped runtime is next.
+pub async fn runtime_from_history(
+    equipment_filter: Option<&[String]>,
+    max_gap_seconds: f64,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let ctx = SessionContext::new();
+    if !try_register_history(&ctx).await? {
+        return Ok(None);
+    }
+
+    let count = run_sql(&ctx, "SELECT COUNT(*) AS n FROM history").await?;
+    let n = count
+        .rows
+        .first()
+        .and_then(|r| r.get("n"))
+        .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
+        .unwrap_or(0);
+    if n <= 0 {
+        return Ok(None);
+    }
+
+    let cols = history_columns_async(&ctx).await?;
+    let query = AnalyticsQuery::default();
+    let max_gap = max_gap_seconds.max(0.0);
+    let eq_filter = equipment_filter_sql(equipment_filter);
+
+    if cols.contains("equipment_id") {
+        if let (Some(ts_col), Some(on_sql)) = (pick_ts_col(&cols), on_expr(&cols)) {
+            let sql = format!(
+                r#"
+WITH ordered AS (
+  SELECT
+    equipment_id,
+    {ts_col} AS ts,
+    {on_sql} AS is_on,
+    LEAD({ts_col}) OVER (PARTITION BY equipment_id ORDER BY {ts_col}) AS next_ts
+  FROM history
+  WHERE equipment_id IS NOT NULL{eq_filter}
+),
+raw_intervals AS (
+  SELECT
+    equipment_id,
+    is_on,
+    (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0 AS dt_raw
+  FROM ordered
+  WHERE next_ts IS NOT NULL
+),
+intervals AS (
+  SELECT
+    equipment_id,
+    is_on,
+    CASE
+      WHEN dt_raw < 0.0 THEN 0.0
+      WHEN dt_raw > {max_gap} THEN {max_gap}
+      ELSE dt_raw
+    END AS dt_sec
+  FROM raw_intervals
+),
+spans AS (
+  SELECT
+    equipment_id,
+    (CAST(MAX(ts) AS BIGINT) - CAST(MIN(ts) AS BIGINT)) / 1000000000.0 AS span_sec
+  FROM ordered
+  GROUP BY equipment_id
+),
+counts AS (
+  SELECT
+    equipment_id,
+    COUNT(*) AS samples,
+    SUM(CASE WHEN is_on THEN 1 ELSE 0 END) AS on_samples
+  FROM ordered
+  GROUP BY equipment_id
+)
+SELECT
+  i.equipment_id,
+  SUM(CASE WHEN i.is_on THEN i.dt_sec ELSE 0.0 END) / 3600.0 AS run_hours,
+  CASE
+    WHEN MAX(s.span_sec) > 0.0 THEN 100.0 * SUM(i.dt_sec) / MAX(s.span_sec)
+    ELSE 0.0
+  END AS coverage_pct,
+  MAX(c.samples) AS samples,
+  MAX(c.on_samples) AS on_samples
+FROM intervals i
+JOIN counts c ON c.equipment_id = i.equipment_id
+JOIN spans s ON s.equipment_id = i.equipment_id
+GROUP BY i.equipment_id
+ORDER BY i.equipment_id
+"#
+            );
+
+            match run_sql(&ctx, &sql).await {
+                Ok(result) => {
+                    let warnings = vec![
+                        "runtime hours from historian Parquet via DataFusion Δt integration".into(),
+                    ];
+                    let mut equipment = Vec::new();
+                    for row in &result.rows {
+                        let eq = row
+                            .get("equipment_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let run_hours =
+                            row.get("run_hours").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        let coverage_pct = row
+                            .get("coverage_pct")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0);
+                        let samples = row
+                            .get("samples")
+                            .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|i| i as u64)))
+                            .unwrap_or(0);
+                        let on_samples = row
+                            .get("on_samples")
+                            .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|i| i as u64)))
+                            .unwrap_or(0);
+                        equipment.push(json!({
+                            "equipment_id": eq,
+                            "run_hours": round2(run_hours),
+                            "coverage_pct": round2(coverage_pct),
+                            "samples": samples,
+                            "on_samples": on_samples,
+                        }));
+                    }
+                    let mut env = envelope_with_engine(QV_RUNTIME, &query, warnings, DF_ENGINE);
+                    env.equipment = equipment.clone();
+                    env.rows = equipment;
+                    env.coverage = Some(json!({
+                        "equipment_count": env.equipment.len(),
+                        "history_rows": n,
+                        "max_gap_seconds": max_gap,
+                        "source": "historian_parquet",
+                    }));
+                    return Ok(Some(env));
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "historian Δt runtime SQL failed; falling back to count probe");
+                }
+            }
+        }
+    }
+
+    // Minimum bridge: registered history with rows, engine honesty for DataFusion.
+    let warnings = vec![
+        "historian Parquet registered via DataFusion; column-mapped runtime Δt SQL is next \
+         (need equipment_id + timestamp_utc + fan_status/fan_cmd)"
+            .into(),
+    ];
+    let mut env = envelope_with_engine(QV_RUNTIME, &query, warnings, DF_ENGINE);
+    env.coverage = Some(json!({
+        "history_rows": n,
+        "max_gap_seconds": max_gap,
+        "source": "historian_parquet",
+    }));
+    Ok(Some(env))
+}
+
+/// Register `history` and return `(ctx, columns, row_count)` when the parquet
+/// tree exists and has rows; `Ok(None)` when missing/empty (caller falls back).
+async fn open_history() -> Result<Option<(SessionContext, HashSet<String>, i64)>> {
+    let ctx = SessionContext::new();
+    if !try_register_history(&ctx).await? {
+        return Ok(None);
+    }
+    let count = run_sql(&ctx, "SELECT COUNT(*) AS n FROM history").await?;
+    let n = count
+        .rows
+        .first()
+        .and_then(|r| r.get("n"))
+        .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
+        .unwrap_or(0);
+    if n <= 0 {
+        return Ok(None);
+    }
+    let cols = history_columns_async(&ctx).await?;
+    Ok(Some((ctx, cols, n)))
+}
+
+fn as_f64(v: Option<&serde_json::Value>) -> Option<f64> {
+    v.and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)))
+}
+
+fn as_u64(v: Option<&serde_json::Value>) -> u64 {
+    v.and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|i| i as u64)))
+        .unwrap_or(0)
+}
+
+/// Sensor health from historian Parquet via DataFusion aggregate SQL.
+///
+/// For each canonical numeric role column present in `history`, computes
+/// per-`equipment_id` coverage, missingness, and flatline stats. Sets
+/// `engine=datafusion` only when the aggregate SQL actually runs.
+pub async fn sensor_health_from_history(
+    equipment_filter: Option<&[String]>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n)) = open_history().await? else {
+        return Ok(None);
+    };
+
+    let role_cols: Vec<&str> = NUMERIC_ROLE_COLS
+        .iter()
+        .copied()
+        .filter(|c| cols.contains(*c))
+        .collect();
+    if role_cols.is_empty() {
+        // No usable numeric role columns — let inline/central path handle it.
+        return Ok(None);
+    }
+
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let selects: Vec<String> = role_cols
+        .iter()
+        .map(|role| {
+            format!(
+                "SELECT equipment_id AS equipment_id, '{role}' AS role, \
+                   COUNT(*) AS n, COUNT({role}) AS n_finite, \
+                   MIN({role}) AS minv, MAX({role}) AS maxv, \
+                   AVG({role}) AS meanv, STDDEV_POP({role}) AS stdv \
+                 FROM history \
+                 WHERE equipment_id IS NOT NULL{eq_filter} \
+                 GROUP BY equipment_id"
+            )
+        })
+        .collect();
+    let sql = format!(
+        "{} ORDER BY equipment_id, role",
+        selects.join(" UNION ALL ")
+    );
+
+    let result = run_sql(&ctx, &sql).await?;
+    let min_n = super::sensor_health::DEFAULT_FLATLINE_MIN_N as u64;
+    let eps = super::sensor_health::DEFAULT_FLATLINE_STD_EPS;
+
+    let mut rows = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        let n_all = as_u64(r.get("n"));
+        let n_finite = as_u64(r.get("n_finite"));
+        if n_finite == 0 {
+            // Drop role columns that never applied to this equipment.
+            continue;
+        }
+        let coverage_pct = if n_all > 0 {
+            100.0 * n_finite as f64 / n_all as f64
+        } else {
+            0.0
+        };
+        let missingness = if n_all > 0 {
+            1.0 - (n_finite as f64 / n_all as f64)
+        } else {
+            0.0
+        };
+        let std = as_f64(r.get("stdv"));
+        let flatline_flag = n_finite > min_n && std.map(|s| s <= eps).unwrap_or(false);
+        let mut obj = json!({
+            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+            "role": r.get("role").cloned().unwrap_or(json!("")),
+            "n": n_all,
+            "n_finite": n_finite,
+            "coverage_pct": round2(coverage_pct),
+            "missingness": round4(missingness),
+            "flatline_flag": flatline_flag,
+        });
+        if let Some(v) = as_f64(r.get("minv")) {
+            obj["min"] = json!(round4(v));
+        }
+        if let Some(v) = as_f64(r.get("maxv")) {
+            obj["max"] = json!(round4(v));
+        }
+        if let Some(v) = as_f64(r.get("meanv")) {
+            obj["mean"] = json!(round4(v));
+        }
+        if let Some(v) = std {
+            obj["std"] = json!(round6(v));
+        }
+        rows.push(obj);
+    }
+
+    let warnings = vec![
+        "sensor_health from historian Parquet via DataFusion aggregate SQL \
+         (coverage / missingness / flatline over canonical numeric roles)"
+            .into(),
+    ];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine(QV_SENSOR_HEALTH, &query, warnings, DF_ENGINE);
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({
+        "series_count": env.rows.len(),
+        "history_rows": n,
+        "roles": role_cols,
+        "source": "historian_parquet",
+    }));
+    Ok(Some(env))
+}
+
+/// Boolean occupied-expression from `occ_mode` (Utf8). Unoccupied labels map to
+/// false; any other non-null value is treated as occupied.
+fn occupied_expr() -> &'static str {
+    "CASE \
+       WHEN occ_mode IS NULL THEN NULL \
+       WHEN LOWER(CAST(occ_mode AS VARCHAR)) IN \
+         ('unoccupied','unocc','off','0','false','night','standby','setback') THEN false \
+       ELSE true \
+     END"
+}
+
+/// Schedule occupied / unoccupied hours from historian Parquet via DataFusion
+/// Δt integration over the `occ_mode` mask. Returns `Ok(None)` when no
+/// `occ_mode` column exists (caller keeps inline central-analytics-v1).
+pub async fn schedule_from_history(
+    equipment_filter: Option<&[String]>,
+    max_gap_seconds: f64,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n)) = open_history().await? else {
+        return Ok(None);
+    };
+    if !cols.contains("occ_mode") {
+        return Ok(None);
+    }
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    let max_gap = max_gap_seconds.max(0.0);
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let occ_sql = occupied_expr();
+
+    let sql = format!(
+        r#"
+WITH ordered AS (
+  SELECT
+    equipment_id,
+    {ts_col} AS ts,
+    {occ_sql} AS occ,
+    LEAD({ts_col}) OVER (PARTITION BY equipment_id ORDER BY {ts_col}) AS next_ts
+  FROM history
+  WHERE equipment_id IS NOT NULL AND occ_mode IS NOT NULL{eq_filter}
+),
+intervals AS (
+  SELECT
+    equipment_id,
+    occ,
+    CASE
+      WHEN (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0 < 0.0 THEN 0.0
+      WHEN (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0 > {max_gap} THEN {max_gap}
+      ELSE (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0
+    END AS dt_sec
+  FROM ordered
+  WHERE next_ts IS NOT NULL
+)
+SELECT
+  equipment_id,
+  SUM(CASE WHEN occ THEN dt_sec ELSE 0.0 END) / 3600.0 AS occupied_hours,
+  SUM(CASE WHEN occ THEN 0.0 ELSE dt_sec END) / 3600.0 AS unoccupied_hours,
+  SUM(dt_sec) / 3600.0 AS coverage_hours,
+  SUM(CASE WHEN occ THEN 1 ELSE 0 END) AS occupied_samples,
+  COUNT(*) AS total_samples
+FROM intervals
+GROUP BY equipment_id
+ORDER BY equipment_id
+"#
+    );
+
+    let result = run_sql(&ctx, &sql).await?;
+    let mut rows = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        rows.push(json!({
+            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+            "occupied_hours": round4(as_f64(r.get("occupied_hours")).unwrap_or(0.0)),
+            "unoccupied_hours": round4(as_f64(r.get("unoccupied_hours")).unwrap_or(0.0)),
+            "coverage_hours": round4(as_f64(r.get("coverage_hours")).unwrap_or(0.0)),
+            "occupied_samples": as_u64(r.get("occupied_samples")),
+            "total_samples": as_u64(r.get("total_samples")),
+        }));
+    }
+
+    let warnings = vec![
+        "schedule occupied/unoccupied hours from historian Parquet via DataFusion \
+         Δt integration over occ_mode; after-hours fan overlay is inline-only"
+            .into(),
+    ];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine(QV_SCHEDULE, &query, warnings, DF_ENGINE);
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({
+        "equipment_count": env.equipment.len(),
+        "history_rows": n,
+        "max_gap_seconds": max_gap,
+        "source": "historian_parquet",
+    }));
+    Ok(Some(env))
+}
+
+/// Economizer descriptive diagnostics from historian Parquet via DataFusion.
+///
+/// Requires `oa_t`, `rat`, `mat` columns and a fan on-expression. Computes
+/// per-equipment fan-on and identifiable (`|OAT−RAT| >= dt_min`) sample counts.
+/// Never invents MAT residuals; those remain the inline central path only.
+pub async fn economizer_from_history(
+    equipment_filter: Option<&[String]>,
+    dt_min_f: f64,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n)) = open_history().await? else {
+        return Ok(None);
+    };
+    if !(cols.contains("oa_t") && cols.contains("rat") && cols.contains("mat")) {
+        return Ok(None);
+    }
+    let Some(on_sql) = on_expr(&cols) else {
+        return Ok(None);
+    };
+    let dt_min = dt_min_f.max(0.0);
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let has_damper_col = cols.contains("oa_damper_pct");
+    let damper_present = if has_damper_col {
+        "COUNT(oa_damper_pct)"
+    } else {
+        "0"
+    };
+
+    let sql = format!(
+        r#"
+WITH base AS (
+  SELECT
+    equipment_id,
+    oa_t, rat, mat,
+    {on_sql} AS fan_on
+  FROM history
+  WHERE equipment_id IS NOT NULL{eq_filter}
+)
+SELECT
+  equipment_id,
+  SUM(CASE WHEN fan_on THEN 1 ELSE 0 END) AS n_fan_on,
+  SUM(CASE WHEN fan_on AND oa_t IS NOT NULL AND rat IS NOT NULL
+             AND ABS(oa_t - rat) >= {dt_min} THEN 1 ELSE 0 END) AS n_identifiable,
+  {damper_present} AS n_damper
+FROM base
+GROUP BY equipment_id
+ORDER BY equipment_id
+"#
+    );
+
+    let result = run_sql(&ctx, &sql).await?;
+    let mut equipment = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        let n_fan_on = as_u64(r.get("n_fan_on"));
+        if n_fan_on == 0 {
+            continue;
+        }
+        equipment.push(json!({
+            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+            "equipment_type": "AHU",
+            "n_fan_on_samples": n_fan_on,
+            "n_identifiable": as_u64(r.get("n_identifiable")),
+            "has_damper": as_u64(r.get("n_damper")) > 0,
+            "dt_min_f": dt_min,
+        }));
+    }
+
+    let warnings = vec![
+        "economizer fan-on / identifiable sample counts from historian Parquet via \
+         DataFusion; MAT residual (median/MAE) requires the inline central path and \
+         is not fabricated here"
+            .into(),
+    ];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine(QV_ECONOMIZER, &query, warnings, DF_ENGINE);
+    env.equipment = equipment.clone();
+    env.rows = equipment;
+    env.coverage = Some(json!({
+        "equipment_count": env.equipment.len(),
+        "history_rows": n,
+        "dt_min_f": dt_min,
+        "source": "historian_parquet",
+    }));
+    Ok(Some(env))
+}
+
+/// Generic descriptive per-equipment row-count evidence from historian Parquet
+/// via DataFusion. Used by families (mechanical_cooling, metering, rcx/*, plant)
+/// that do not yet have a family-specific DF metric. Honest: sets
+/// `engine=datafusion` only because a real `GROUP BY` count ran, and never
+/// invents engineering values (kW/ton, tons, etc.).
+pub async fn descriptive_counts_from_history(
+    query_version: &str,
+    equipment_filter: Option<&[String]>,
+    note: &str,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, _cols, n)) = open_history().await? else {
+        return Ok(None);
+    };
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let sql = format!(
+        "SELECT equipment_id, COUNT(*) AS history_rows FROM history \
+         WHERE equipment_id IS NOT NULL{eq_filter} \
+         GROUP BY equipment_id ORDER BY equipment_id"
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    let mut rows = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        rows.push(json!({
+            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+            "history_rows": as_u64(r.get("history_rows")),
+            "evidence_class": "descriptive_historian_counts",
+        }));
+    }
+
+    let warnings = vec![format!(
+        "{note} — descriptive historian row-count evidence via DataFusion only; \
+         family-specific engineering metrics are not fabricated"
+    )];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine(query_version, &query, warnings, DF_ENGINE);
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({
+        "equipment_count": env.equipment.len(),
+        "history_rows": n,
+        "source": "historian_parquet",
+    }));
+    Ok(Some(env))
+}
+
+fn round4(x: f64) -> f64 {
+    (x * 10_000.0).round() / 10_000.0
+}
+
+fn round6(x: f64) -> f64 {
+    (x * 1_000_000.0).round() / 1_000_000.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tokio::sync::Mutex;
+
+    /// Serializes tests that mutate the process-global `OPENFDD_PARQUET_ROOT`.
+    /// Async-aware so the guard may be held across `.await` (clippy-clean).
+    static ENV_LOCK: Mutex<()> = Mutex::const_new(());
+
+    #[tokio::test]
+    async fn runtime_from_history_none_when_no_parquet() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let missing = tmp.path().join("no_such_parquet");
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &missing);
+        let out = runtime_from_history(None, 900.0).await.unwrap();
+        assert!(out.is_none());
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+    }
+
+    #[tokio::test]
+    async fn runtime_from_history_sets_datafusion_engine() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_TEST");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nfan_speed_pct,fan_cmd\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,fan_speed_pct").unwrap();
+        writeln!(f, "2026-01-01T00:00:00Z,100").unwrap();
+        writeln!(f, "2026-01-01T00:05:00Z,100").unwrap();
+        writeln!(f, "2026-01-01T00:10:00Z,0").unwrap();
+
+        let parquet = tmp.path().join("parquet");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_TEST", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = runtime_from_history(None, 900.0)
+            .await
+            .unwrap()
+            .expect("expected historian envelope");
+        assert_eq!(env.engine, DF_ENGINE);
+        assert_eq!(env.query_version, QV_RUNTIME);
+        assert!(!env.equipment.is_empty());
+        let hours = env.equipment[0]["run_hours"].as_f64().unwrap();
+        // Two on intervals of 300s → 600s = 1/6 h
+        assert!((hours - (600.0 / 3600.0)).abs() < 0.02, "hours={hours}");
+        let cov = env.equipment[0]["coverage_pct"].as_f64().unwrap();
+        assert!((cov - 100.0).abs() < 1.0, "coverage={cov}");
+
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+    }
+
+    #[tokio::test]
+    async fn sensor_health_from_history_none_when_no_parquet() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let missing = tmp.path().join("no_such_parquet_sh");
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &missing);
+        let out = sensor_health_from_history(None).await.unwrap();
+        assert!(out.is_none());
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+    }
+
+    #[tokio::test]
+    async fn sensor_health_from_history_sets_datafusion_engine() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SH");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_SH1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nzone_temp_f,zone_temp\nmixed_air_temp_f,mixed_air_temp\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,zone_temp_f,mixed_air_temp_f").unwrap();
+        writeln!(f, "2026-01-01T00:00:00Z,72.0,55.0").unwrap();
+        writeln!(f, "2026-01-01T00:05:00Z,73.0,").unwrap();
+        writeln!(f, "2026-01-01T00:10:00Z,74.0,57.0").unwrap();
+
+        let parquet = tmp.path().join("parquet_sh");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_SH", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = sensor_health_from_history(None)
+            .await
+            .unwrap()
+            .expect("expected sensor_health historian envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert_eq!(env.engine, DF_ENGINE);
+        assert_eq!(env.query_version, QV_SENSOR_HEALTH);
+        assert!(!env.rows.is_empty());
+
+        let zone = env
+            .rows
+            .iter()
+            .find(|r| r["role"] == "zone_t")
+            .expect("zone_t row present");
+        assert_eq!(zone["n"].as_u64().unwrap(), 3);
+        assert_eq!(zone["n_finite"].as_u64().unwrap(), 3);
+        assert!((zone["coverage_pct"].as_f64().unwrap() - 100.0).abs() < 1e-6);
+
+        let mat = env
+            .rows
+            .iter()
+            .find(|r| r["role"] == "mat")
+            .expect("mat row present");
+        // One of three MAT samples is missing → coverage ~66.67%.
+        assert_eq!(mat["n_finite"].as_u64().unwrap(), 2);
+        assert!((mat["coverage_pct"].as_f64().unwrap() - 66.67).abs() < 0.1);
+    }
+
+    #[tokio::test]
+    async fn descriptive_counts_from_history_sets_datafusion_engine() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_DC");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_DC1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nfan_speed_pct,fan_cmd\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,fan_speed_pct").unwrap();
+        writeln!(f, "2026-01-01T00:00:00Z,100").unwrap();
+        writeln!(f, "2026-01-01T00:05:00Z,0").unwrap();
+
+        let parquet = tmp.path().join("parquet_dc");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_DC", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = descriptive_counts_from_history(
+            crate::analytics::QV_METERING,
+            None,
+            "metering test note",
+        )
+        .await
+        .unwrap()
+        .expect("expected descriptive historian envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert_eq!(env.engine, DF_ENGINE);
+        assert_eq!(env.query_version, crate::analytics::QV_METERING);
+        assert!(!env.rows.is_empty());
+        assert_eq!(env.rows[0]["history_rows"].as_u64().unwrap(), 2);
+        assert!(env.warnings.iter().any(|w| w.contains("not fabricated")));
+    }
+
+    #[test]
+    fn parquet_root_respects_env() {
+        let _guard = ENV_LOCK.blocking_lock();
+        let tmp = tempfile::TempDir::new().unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.path());
+        assert_eq!(parquet_root(), tmp.path());
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+    }
+}

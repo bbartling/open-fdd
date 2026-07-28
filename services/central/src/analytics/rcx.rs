@@ -6,7 +6,8 @@ use serde_json::json;
 use std::collections::BTreeMap;
 
 use super::{
-    envelope, resolve_query_version, AnalyticsEnvelope, AnalyticsRequest, QV_RCX_AHU, QV_RCX_VAV,
+    envelope, finalize_historian, historian, resolve_query_version, AnalyticsEnvelope,
+    AnalyticsRequest, QV_RCX_AHU, QV_RCX_VAV,
 };
 
 /// Generic series point used for AHU reset coverage stubs.
@@ -250,6 +251,48 @@ pub fn handle_vav(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         }
     }
     env
+}
+
+/// Async AHU handler: prefer historian descriptive counts via DataFusion when
+/// no inline series is provided; otherwise inline reset-evidence coverage stub.
+pub async fn handle_ahu_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
+    if req.series.is_none() {
+        match historian::descriptive_counts_from_history(
+            QV_RCX_AHU,
+            req.query.equipment_ids.as_deref(),
+            "rcx/ahu: reset-evidence coverage requires inline series",
+        )
+        .await
+        {
+            Ok(Some(env)) => return finalize_historian(req, env, QV_RCX_AHU),
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(error = %e, "historian rcx/ahu path failed; using inline/empty fallback");
+            }
+        }
+    }
+    handle_ahu(req)
+}
+
+/// Async VAV handler: prefer historian descriptive counts via DataFusion when
+/// no inline series is provided; otherwise inline zone-comfort ranking.
+pub async fn handle_vav_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
+    if req.series.is_none() {
+        match historian::descriptive_counts_from_history(
+            QV_RCX_VAV,
+            req.query.equipment_ids.as_deref(),
+            "rcx/vav: zone-comfort ranking requires inline zone_temp/setpoint series",
+        )
+        .await
+        {
+            Ok(Some(env)) => return finalize_historian(req, env, QV_RCX_VAV),
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(error = %e, "historian rcx/vav path failed; using inline/empty fallback");
+            }
+        }
+    }
+    handle_vav(req)
 }
 
 fn parse_rcx_series(req: &AnalyticsRequest) -> Option<Vec<RcxSeriesPoint>> {

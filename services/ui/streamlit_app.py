@@ -2301,6 +2301,60 @@ def _render_occupancy_editor(*, key_prefix: str) -> OccupancySchedule:
     return OccupancySchedule.from_dict(out)
 
 
+def _render_central_sensor_health(device: str, frames: dict) -> None:
+    """Central sensor-health (coverage / missingness / flatline) via analytics API.
+
+    Prefers openfdd-central; on failure shows an error. No silent pandas fallback
+    — the rule-based fault-hours matrix below is a separate, complementary view.
+    """
+    from app import ui_analytics as _ui_analytics
+
+    with st.expander("Sensor health — central coverage / missingness (DataFusion)", expanded=False):
+        if not _ui_analytics.prefer_central_analytics():
+            if _ui_analytics.oracle_fallback_enabled():
+                st.info(
+                    "Central analytics unavailable — coverage/missingness stats require "
+                    "openfdd-central (OPENFDD_ANALYTICS_ORACLE only gates pandas oracle paths)."
+                )
+            else:
+                st.error(
+                    "Central sensor-health unavailable: openfdd-central is required "
+                    "(no silent pandas fallback)."
+                )
+            return
+        raw = frames.get(device)
+        if raw is None:
+            st.info("No frame for this device.")
+            return
+        with st.spinner("Running central sensor-health…"):
+            result = _ui_analytics.fetch_sensor_health_analytics(
+                {device: raw}, st.session_state.role_map, equipment_ids=[device]
+            )
+        if not result.get("ok"):
+            msg = result.get("error") or "central error"
+            if _ui_analytics.oracle_fallback_enabled():
+                st.warning(f"Central sensor-health unavailable: {msg} (oracle set; no pandas port here).")
+            else:
+                st.error(f"Central sensor-health unavailable: {msg}. No silent pandas fallback.")
+            return
+        env = result.get("analytics") or {}
+        cap = _ui_analytics.provenance_caption(env)
+        if cap:
+            st.caption(cap)
+        for w in env.get("warnings") or []:
+            st.caption(f"⚠ {w}")
+        rows = env.get("rows") or env.get("equipment") or []
+        if rows:
+            st.dataframe(
+                pd.DataFrame(rows),
+                hide_index=True,
+                width="stretch",
+                height=min(320, 80 + 28 * len(rows)),
+            )
+        else:
+            st.info("Central sensor-health returned no series rows.")
+
+
 def _render_building_schedule_overview() -> float:
     """Main-dashboard occupancy + zone SP; returns bare-min occupied hours/week."""
     st.markdown("##### Building schedule & zone comfort (FDD starting point)")
@@ -2479,6 +2533,8 @@ def main() -> None:
     cool_bins = pd.DataFrame()
     cool_coverage = pd.DataFrame()
     central_runtime: dict | None = None
+    central_mech: dict | None = None
+    central_mech_ok = False
     if section == "Overview":
         # Prefer central runtime when OPENFDD_ANALYTICS_CENTRAL=1 or health_ok.
         try:
@@ -2491,42 +2547,59 @@ def main() -> None:
                 )
         except Exception as exc:
             central_runtime = {"ok": False, "error": str(exc)}
-        if not (isinstance(central_runtime, dict) and central_runtime.get("ok")):
+        central_ok = isinstance(central_runtime, dict) and central_runtime.get("ok")
+        if not central_ok:
+            from app import ui_analytics as _ui_analytics
+
+            if _ui_analytics.oracle_fallback_enabled():
+                try:
+                    motor_weekly = motor_run_hours_weekly(
+                        frames,
+                        st.session_state.role_map,
+                        chw_leave_max_f=float(st.session_state.get("chw_leave_max_f", 48.0)),
+                        weather=st.session_state.weather,
+                        prefer_web_oat=bool(st.session_state.get("prefer_web_oat", True)),
+                    )
+                except Exception as exc:
+                    st.warning(f"Weekly motor hours unavailable: {exc}")
+            # else: no silent pandas — error shown in Overview section below
+        from app import ui_analytics as _ui_analytics
+
+        try:
+            if _ui_analytics.prefer_central_analytics():
+                central_mech = _ui_analytics.fetch_mechanical_cooling_analytics(
+                    frames, st.session_state.role_map
+                )
+        except Exception as exc:
+            central_mech = {"ok": False, "error": str(exc)}
+        central_mech_ok = isinstance(central_mech, dict) and bool(central_mech.get("ok"))
+        # Pandas mech-cooling analytics are the explicit oracle path only.
+        if not central_mech_ok and _ui_analytics.oracle_fallback_enabled():
             try:
-                motor_weekly = motor_run_hours_weekly(
+                cool_bins = mech_cooling_oat_bins(
                     frames,
                     st.session_state.role_map,
-                    chw_leave_max_f=float(st.session_state.get("chw_leave_max_f", 48.0)),
                     weather=st.session_state.weather,
                     prefer_web_oat=bool(st.session_state.get("prefer_web_oat", True)),
+                    chw_leave_max_f=float(st.session_state.get("chw_leave_max_f", 48.0)),
+                    include_ahu_chw_valve=False,
+                    include_total=True,
+                    use_status_proof=bool(
+                        st.session_state.get("use_mech_cooling_status_proof", True)
+                    ),
+                )
+                cool_coverage = mech_cooling_coverage(
+                    frames,
+                    st.session_state.role_map,
+                    weather=st.session_state.weather,
+                    prefer_web_oat=bool(st.session_state.get("prefer_web_oat", True)),
+                    chw_leave_max_f=float(st.session_state.get("chw_leave_max_f", 48.0)),
+                    use_status_proof=bool(
+                        st.session_state.get("use_mech_cooling_status_proof", True)
+                    ),
                 )
             except Exception as exc:
-                st.warning(f"Weekly motor hours unavailable: {exc}")
-        try:
-            cool_bins = mech_cooling_oat_bins(
-                frames,
-                st.session_state.role_map,
-                weather=st.session_state.weather,
-                prefer_web_oat=bool(st.session_state.get("prefer_web_oat", True)),
-                chw_leave_max_f=float(st.session_state.get("chw_leave_max_f", 48.0)),
-                include_ahu_chw_valve=False,
-                include_total=True,
-                use_status_proof=bool(
-                    st.session_state.get("use_mech_cooling_status_proof", True)
-                ),
-            )
-            cool_coverage = mech_cooling_coverage(
-                frames,
-                st.session_state.role_map,
-                weather=st.session_state.weather,
-                prefer_web_oat=bool(st.session_state.get("prefer_web_oat", True)),
-                chw_leave_max_f=float(st.session_state.get("chw_leave_max_f", 48.0)),
-                use_status_proof=bool(
-                    st.session_state.get("use_mech_cooling_status_proof", True)
-                ),
-            )
-        except Exception as exc:
-            st.warning(f"Mech-cooling OAT bins unavailable: {exc}")
+                st.warning(f"Mech-cooling OAT bins unavailable: {exc}")
     start_s = span["start"].strftime("%Y-%m-%d %H:%M") if span["start"] is not None else "—"
     end_s = span["end"].strftime("%Y-%m-%d %H:%M") if span["end"] is not None else "—"
 
@@ -2599,13 +2672,30 @@ def main() -> None:
             else:
                 st.info("Central runtime returned no equipment rows.")
         else:
-            st.caption("runtime via pandas oracle (central analytics unavailable)")
-            _render_plant_motor_weekly(
-                motor_weekly,
-                key_prefix="overview",
-                show_table=True,
-                min_air_hours=min_air_hours,
-            )
+            from app import ui_analytics as _ui_analytics
+
+            if _ui_analytics.oracle_fallback_enabled() and not motor_weekly.empty:
+                st.caption(
+                    "runtime via pandas oracle "
+                    "(OPENFDD_ANALYTICS_ORACLE=1; central analytics unavailable)"
+                )
+                _render_plant_motor_weekly(
+                    motor_weekly,
+                    key_prefix="overview",
+                    show_table=True,
+                    min_air_hours=min_air_hours,
+                )
+            else:
+                err = (
+                    (central_runtime or {}).get("error")
+                    if isinstance(central_runtime, dict)
+                    else None
+                )
+                st.error(
+                    "Motor run hours unavailable from central analytics"
+                    + (f": {err}" if err else ".")
+                    + " Set OPENFDD_ANALYTICS_ORACLE=1 for pandas oracle fallback."
+                )
 
         st.markdown("##### Mechanical cooling hours by OAT bin")
         st.caption(
@@ -2619,69 +2709,103 @@ def main() -> None:
             "activity, proof, runtime, and reason. Temperature-derived runtime is "
             "labeled inferred — cold water can flow through an idle chiller."
         )
-        zero_warn = mech_cooling_zero_eligible_warning(cool_coverage)
-        if zero_warn:
-            st.warning(zero_warn)
-        runtime_msg = mech_cooling_runtime_message(cool_coverage)
-        if runtime_msg:
-            st.info(runtime_msg)
-        cool_fig = mech_cooling_oat_histogram(cool_bins)
-        if cool_fig is None and not zero_warn:
-            st.info(
-                "No compressor runtime bins for the selected proof mode. Eligible "
-                "devices with zero observed runtime still appear in the coverage table "
-                "as **No runtime observed**. Map chiller/compressor status, command, "
-                "amps, or power, or uncheck status proof and set CHW leave proof max °F. "
-                "AHU CHW valves excluded."
-            )
-        elif cool_fig is not None:
-            st.plotly_chart(
-                cool_fig,
-                width="stretch",
-                config=plotly_config(filename="mech_cooling_oat_bins"),
-                key="overview_cool_bins",
-            )
-            st.dataframe(cool_bins, hide_index=True, width="stretch", height=280)
-            st.download_button(
-                "Download mech cooling OAT bins CSV",
-                to_csv_bytes(cool_bins),
-                "mech_cooling_oat_bins.csv",
-                key="dl_cool_bins_overview",
-            )
-        if not cool_coverage.empty:
-            if "included" in cool_coverage.columns:
-                n_inc = int(cool_coverage["included"].fillna(False).astype(bool).sum())
-                n_exc = int((~cool_coverage["included"].fillna(False).astype(bool)).sum())
+        def _render_pandas_mech_cooling() -> None:
+            zero_warn = mech_cooling_zero_eligible_warning(cool_coverage)
+            if zero_warn:
+                st.warning(zero_warn)
+            runtime_msg = mech_cooling_runtime_message(cool_coverage)
+            if runtime_msg:
+                st.info(runtime_msg)
+            cool_fig = mech_cooling_oat_histogram(cool_bins)
+            if cool_fig is None and not zero_warn:
+                st.info(
+                    "No compressor runtime bins for the selected proof mode. Eligible "
+                    "devices with zero observed runtime still appear in the coverage table "
+                    "as **No runtime observed**. Map chiller/compressor status, command, "
+                    "amps, or power, or uncheck status proof and set CHW leave proof max °F. "
+                    "AHU CHW valves excluded."
+                )
+            elif cool_fig is not None:
+                st.plotly_chart(
+                    cool_fig,
+                    width="stretch",
+                    config=plotly_config(filename="mech_cooling_oat_bins"),
+                    key="overview_cool_bins",
+                )
+                st.dataframe(cool_bins, hide_index=True, width="stretch", height=280)
+                st.download_button(
+                    "Download mech cooling OAT bins CSV",
+                    to_csv_bytes(cool_bins),
+                    "mech_cooling_oat_bins.csv",
+                    key="dl_cool_bins_overview",
+                )
+            if not cool_coverage.empty:
+                if "included" in cool_coverage.columns:
+                    n_inc = int(cool_coverage["included"].fillna(False).astype(bool).sum())
+                    n_exc = int((~cool_coverage["included"].fillna(False).astype(bool)).sum())
+                else:
+                    n_inc = int((cool_coverage["status"] == "included").sum())
+                    n_exc = int((cool_coverage["status"] == "excluded").sum())
+                mode = (
+                    "mapped compressor/chiller status, command, amps, or power"
+                    if st.session_state.get("use_mech_cooling_status_proof", True)
+                    else "inferred CHW leaving temperature"
+                )
+                st.markdown(
+                    f"###### Mechanical cooling devices — {n_inc} included, {n_exc} excluded"
+                )
+                st.caption(
+                    f"Selected proof mode: **{mode}**. Coverage shows eligibility, activity, "
+                    "proof, runtime, and reason for every cooling-capable device. Eligible "
+                    "devices with no observed runtime remain visible as **No runtime "
+                    "observed**. Temperature-derived runtime is inferred: cold water can "
+                    "flow through an idle chiller."
+                )
+                coverage_display = format_mech_cooling_coverage_display(cool_coverage)
+                st.dataframe(
+                    coverage_display,
+                    hide_index=True,
+                    width="stretch",
+                    height=min(360, 38 + 35 * max(1, len(coverage_display))),
+                )
+                st.download_button(
+                    "Download cooling coverage CSV",
+                    to_csv_bytes(cool_coverage),
+                    "mech_cooling_coverage.csv",
+                    key="dl_cool_coverage_overview",
+                )
+
+        from app import ui_analytics as _ui_analytics
+
+        if central_mech_ok:
+            env = (central_mech or {}).get("analytics") or {}
+            cap = _ui_analytics.provenance_caption(env)
+            if cap:
+                st.caption(cap)
+            for w in env.get("warnings") or []:
+                st.caption(f"⚠ {w}")
+            mech_rows = env.get("rows") or env.get("equipment") or []
+            if mech_rows:
+                st.dataframe(
+                    pd.DataFrame(mech_rows),
+                    hide_index=True,
+                    width="stretch",
+                    height=min(360, 80 + 28 * len(mech_rows)),
+                )
             else:
-                n_inc = int((cool_coverage["status"] == "included").sum())
-                n_exc = int((cool_coverage["status"] == "excluded").sum())
-            mode = (
-                "mapped compressor/chiller status, command, amps, or power"
-                if st.session_state.get("use_mech_cooling_status_proof", True)
-                else "inferred CHW leaving temperature"
-            )
-            st.markdown(
-                f"###### Mechanical cooling devices — {n_inc} included, {n_exc} excluded"
-            )
+                st.info("Central mechanical-cooling returned no evidence rows.")
+        elif _ui_analytics.oracle_fallback_enabled():
             st.caption(
-                f"Selected proof mode: **{mode}**. Coverage shows eligibility, activity, "
-                "proof, runtime, and reason for every cooling-capable device. Eligible "
-                "devices with no observed runtime remain visible as **No runtime "
-                "observed**. Temperature-derived runtime is inferred: cold water can "
-                "flow through an idle chiller."
+                "mechanical cooling via pandas oracle "
+                "(OPENFDD_ANALYTICS_ORACLE=1; central analytics unavailable)"
             )
-            coverage_display = format_mech_cooling_coverage_display(cool_coverage)
-            st.dataframe(
-                coverage_display,
-                hide_index=True,
-                width="stretch",
-                height=min(360, 38 + 35 * max(1, len(coverage_display))),
-            )
-            st.download_button(
-                "Download cooling coverage CSV",
-                to_csv_bytes(cool_coverage),
-                "mech_cooling_coverage.csv",
-                key="dl_cool_coverage_overview",
+            _render_pandas_mech_cooling()
+        else:
+            err = (central_mech or {}).get("error") if isinstance(central_mech, dict) else None
+            st.error(
+                "Mechanical cooling unavailable from central analytics"
+                + (f": {err}" if err else ".")
+                + " No silent pandas fallback — set OPENFDD_ANALYTICS_ORACLE=1 for the pandas oracle path."
             )
 
         st.markdown("##### Economizer weather opportunity / compliance")
@@ -3320,6 +3444,8 @@ def main() -> None:
                 focus_rule_id = None
                 st.info("No applicable cookbook rules for this equipment type.")
 
+            _render_central_sensor_health(device, frames)
+
             sens = sensor_fault_summary(plot_df, device_results, equipment_id=device)
             health = sensor_health_matrix(plot_df, device_results, equipment_id=device)
             with st.expander("Sensor health — per sensor", expanded=not health.empty):
@@ -3600,8 +3726,57 @@ def main() -> None:
                     config=plotly_config(filename=f"meter_{kind}_scatter"),
                     key=f"meter_{kind}_scatter",
                 )
-            if stats is not None and not stats.empty:
-                st.dataframe(stats, hide_index=True, width="stretch")
+            from app import ui_analytics as _ui_analytics
+
+            st.markdown("###### Monthly totals")
+
+            def _render_pandas_meter_stats() -> None:
+                if stats is not None and not stats.empty:
+                    st.dataframe(stats, hide_index=True, width="stretch")
+
+            if _ui_analytics.prefer_central_analytics():
+                central_meter = _ui_analytics.fetch_metering_analytics(
+                    monthly, energy_col=energy_col
+                )
+                if central_meter.get("ok"):
+                    env = central_meter.get("analytics") or {}
+                    cap = _ui_analytics.provenance_caption(env)
+                    if cap:
+                        st.caption(cap)
+                    for w in env.get("warnings") or []:
+                        st.caption(f"⚠ {w}")
+                    crows = env.get("rows") or []
+                    if crows:
+                        st.dataframe(pd.DataFrame(crows), hide_index=True, width="stretch")
+                    else:
+                        st.info("Central metering returned no monthly rows.")
+                elif _ui_analytics.oracle_fallback_enabled():
+                    st.caption(
+                        "monthly totals via pandas oracle "
+                        "(OPENFDD_ANALYTICS_ORACLE=1; central metering unavailable)"
+                    )
+                    _render_pandas_meter_stats()
+                else:
+                    st.error(
+                        "Monthly meter totals unavailable from central analytics"
+                        + (
+                            f": {central_meter.get('error')}"
+                            if central_meter.get("error")
+                            else "."
+                        )
+                        + " Set OPENFDD_ANALYTICS_ORACLE=1 for pandas oracle fallback."
+                    )
+            elif _ui_analytics.oracle_fallback_enabled():
+                st.caption(
+                    "monthly totals via pandas oracle "
+                    "(OPENFDD_ANALYTICS_ORACLE=1; central analytics not preferred)"
+                )
+                _render_pandas_meter_stats()
+            else:
+                st.error(
+                    "Monthly meter totals require openfdd-central (no silent pandas "
+                    "fallback). Set OPENFDD_ANALYTICS_ORACLE=1 for pandas oracle fallback."
+                )
             st.download_button(
                 f"Download {kind} monthly CSV",
                 to_csv_bytes(monthly),

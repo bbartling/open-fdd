@@ -51,6 +51,12 @@ def prefer_central_analytics() -> bool:
     return central_client.health_ok()
 
 
+def oracle_fallback_enabled() -> bool:
+    """True when explicit pandas oracle fallback is allowed (dev/parity only)."""
+    flag = (os.environ.get("OPENFDD_ANALYTICS_ORACLE") or "").strip().lower()
+    return flag in ("1", "true", "yes", "on")
+
+
 def provenance_caption(envelope: dict[str, Any] | None) -> str:
     """Dev provenance string from an analytics envelope (engine / query_version / run_id)."""
     if not isinstance(envelope, dict):
@@ -309,3 +315,503 @@ def fetch_economizer_analytics(
     if not isinstance(analytics, dict):
         return {"ok": False, "error": "central response missing analytics envelope", **resp}
     return {"ok": True, "analytics": analytics, **{k: v for k, v in resp.items() if k != "analytics"}}
+
+
+# ---------------------------------------------------------------------------
+# Milestone D1 — central cutover for additional analytics families.
+#
+# Each ``fetch_*`` helper: gate on central health, build an inline payload from
+# frames/role_map (no fabrication), POST to central, and return either
+# ``{"ok": True, "analytics": envelope, ...}`` or an error dict. None of these
+# ever fall back to pandas — call sites gate pandas behind OPENFDD_ANALYTICS_ORACLE.
+# ---------------------------------------------------------------------------
+
+
+def _normalize_central_response(resp: Any) -> dict[str, Any]:
+    """Shared central-envelope unwrap (mirrors runtime/economizer tails)."""
+    if not isinstance(resp, dict):
+        return {"ok": False, "error": f"unexpected central response: {resp!r}"}
+    if resp.get("ok") is False or resp.get("central_down"):
+        return resp
+    analytics = resp.get("analytics")
+    if not isinstance(analytics, dict):
+        return {"ok": False, "error": "central response missing analytics envelope", **resp}
+    return {
+        "ok": True,
+        "analytics": analytics,
+        **{k: v for k, v in resp.items() if k != "analytics"},
+    }
+
+
+# Numeric role columns (post ``apply_role_map`` dashed names) worth sensor stats.
+SENSOR_HEALTH_ROLES: tuple[str, ...] = (
+    "outside-air-temp",
+    "return-air-temp",
+    "mixed-air-temp",
+    "discharge-air-temp",
+    "zone-air-temp",
+    "fan-cmd",
+    "fan-status",
+    "outside-air-damper",
+    "cooling-valve",
+    "heating-valve",
+    "supply-air-temp-sp",
+    "duct-static",
+    "duct-static-sp",
+    "zone-airflow",
+)
+
+
+def build_sensor_health_series(
+    frames: dict[str, pd.DataFrame],
+    role_map: dict | None,
+    *,
+    equipment_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build ``{"points": [{equipment_id, role, timestamp, value}]}`` for sensor health."""
+    role_map = role_map or {}
+    points: list[dict[str, Any]] = []
+    ids = equipment_ids or list(frames.keys())
+    for eq_id in ids:
+        raw = frames.get(eq_id)
+        if raw is None or raw.empty:
+            continue
+        mapped = apply_role_map(raw, eq_id, role_map)
+        idx = mapped.index
+        if not isinstance(idx, pd.DatetimeIndex):
+            continue
+        iso_index = [_ts_iso(ts) for ts in idx]
+        for role in SENSOR_HEALTH_ROLES:
+            if role not in mapped.columns:
+                continue
+            col = pd.to_numeric(mapped[role], errors="coerce")
+            if not col.notna().any():
+                continue
+            for iso, val in zip(iso_index, col):
+                if iso is None:
+                    continue
+                points.append(
+                    {
+                        "equipment_id": str(eq_id),
+                        "role": role,
+                        "timestamp": iso,
+                        "value": None if pd.isna(val) else float(val),
+                    }
+                )
+    return {"points": points}
+
+
+def fetch_sensor_health_analytics(
+    frames: dict[str, pd.DataFrame],
+    role_map: dict | None,
+    *,
+    equipment_ids: list[str] | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """POST sensor-health series to central when healthy; error dict otherwise (no pandas)."""
+    if not central_client.health_ok():
+        return {"ok": False, "error": "central health check failed", "central_down": True}
+    series = build_sensor_health_series(frames, role_map, equipment_ids=equipment_ids)
+    if not series.get("points"):
+        return {"ok": False, "error": "no sensor series points to send"}
+    payload: dict[str, Any] = {"series": series, "query_version": "sensor-health-v1"}
+    if equipment_ids:
+        payload["equipment_ids"] = list(equipment_ids)
+    if extra:
+        payload.update(extra)
+    return _normalize_central_response(central_client.analytics_post("sensor-health", payload))
+
+
+def build_schedule_series(
+    frames: dict[str, pd.DataFrame],
+    role_map: dict | None,
+    *,
+    occupancy: Any | None = None,
+    equipment_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build ``{"occupied": [...], "fan": [...]}`` from an occupancy schedule + fan roles."""
+    role_map = role_map or {}
+    ids = equipment_ids or list(frames.keys())
+    occupied: list[dict[str, Any]] = []
+    fan: list[dict[str, Any]] = []
+    seen_occ: set[str] = set()
+    occ_mask_fn = None
+    if occupancy is not None:
+        try:
+            from app.occupancy import occupied_mask as occ_mask_fn  # type: ignore
+        except Exception:
+            occ_mask_fn = None
+
+    for eq_id in ids:
+        raw = frames.get(eq_id)
+        if raw is None or raw.empty:
+            continue
+        mapped = apply_role_map(raw, eq_id, role_map)
+        idx = mapped.index
+        if not isinstance(idx, pd.DatetimeIndex):
+            continue
+        if occ_mask_fn is not None:
+            try:
+                mask = occ_mask_fn(idx, occupancy)
+            except Exception:
+                mask = None
+            if mask is not None:
+                for ts, occ in zip(idx, mask):
+                    iso = _ts_iso(ts)
+                    if iso is None or iso in seen_occ:
+                        continue
+                    seen_occ.add(iso)
+                    occupied.append({"timestamp": iso, "occupied": bool(occ)})
+        fan_ser: pd.Series | None = None
+        for role in FAN_ROLES:
+            if role in mapped.columns and mapped[role].notna().any():
+                fan_ser = _is_on(mapped[role])
+                break
+        if fan_ser is not None:
+            for ts, on in zip(idx, fan_ser.fillna(False).astype(bool)):
+                iso = _ts_iso(ts)
+                if iso is None:
+                    continue
+                fan.append(
+                    {"timestamp": iso, "fan_on": bool(on), "equipment_id": str(eq_id)}
+                )
+
+    out: dict[str, Any] = {}
+    if occupied:
+        out["occupied"] = occupied
+    if fan:
+        out["fan"] = fan
+    return out
+
+
+def fetch_schedule_analytics(
+    frames: dict[str, pd.DataFrame],
+    role_map: dict | None,
+    *,
+    occupancy: Any | None = None,
+    max_gap_seconds: float = 900.0,
+    equipment_ids: list[str] | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """POST schedule occupied mask (+ fan overlay) to central; error dict otherwise."""
+    if not central_client.health_ok():
+        return {"ok": False, "error": "central health check failed", "central_down": True}
+    series = build_schedule_series(
+        frames, role_map, occupancy=occupancy, equipment_ids=equipment_ids
+    )
+    if not series.get("occupied"):
+        return {
+            "ok": False,
+            "error": "no occupied-mask samples to send (occupancy schedule required)",
+        }
+    payload: dict[str, Any] = {
+        "series": series,
+        "max_gap_seconds": float(max_gap_seconds),
+        "query_version": "schedule-v1",
+    }
+    if equipment_ids:
+        payload["equipment_ids"] = list(equipment_ids)
+    if extra:
+        payload.update(extra)
+    return _normalize_central_response(central_client.analytics_post("schedule", payload))
+
+
+# Dashed role column → central mechanical-cooling evidence_kind.
+MECH_COOLING_EVIDENCE_ROLES: dict[str, str] = {
+    "compressor-status": "compressor_status",
+    "chiller-status": "chiller_status",
+    "cooling-valve": "valve_cmd",
+    "chw-valve": "valve_cmd",
+    "pump-status": "pump_status",
+    "chw-pump-status": "pump_status",
+    "chw-pump": "pump_status",
+}
+
+
+def build_mechanical_cooling_evidence(
+    frames: dict[str, pd.DataFrame],
+    role_map: dict | None,
+    *,
+    equipment_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build ``{"evidence": [{equipment_id, evidence_kind, role, present}]}`` from role presence."""
+    role_map = role_map or {}
+    ids = equipment_ids or list(frames.keys())
+    evidence: list[dict[str, Any]] = []
+    for eq_id in ids:
+        raw = frames.get(eq_id)
+        if raw is None or raw.empty:
+            continue
+        mapped = apply_role_map(raw, eq_id, role_map)
+        for role_col, kind in MECH_COOLING_EVIDENCE_ROLES.items():
+            if role_col in mapped.columns and mapped[role_col].notna().any():
+                evidence.append(
+                    {
+                        "equipment_id": str(eq_id),
+                        "evidence_kind": kind,
+                        "role": role_col,
+                        "present": True,
+                    }
+                )
+    return {"evidence": evidence}
+
+
+def fetch_mechanical_cooling_analytics(
+    frames: dict[str, pd.DataFrame],
+    role_map: dict | None,
+    *,
+    equipment_ids: list[str] | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """POST mechanical-cooling evidence to central; error dict otherwise (no pandas)."""
+    if not central_client.health_ok():
+        return {"ok": False, "error": "central health check failed", "central_down": True}
+    series = build_mechanical_cooling_evidence(frames, role_map, equipment_ids=equipment_ids)
+    if not series.get("evidence"):
+        return {"ok": False, "error": "no mechanical-cooling evidence rows to send"}
+    payload: dict[str, Any] = {"series": series, "query_version": "mechanical-cooling-v1"}
+    if equipment_ids:
+        payload["equipment_ids"] = list(equipment_ids)
+    if extra:
+        payload.update(extra)
+    return _normalize_central_response(
+        central_client.analytics_post("mechanical-cooling", payload)
+    )
+
+
+# Dashed reset-evidence role column → central rcx role name.
+RCX_AHU_RESET_ROLES: dict[str, str] = {
+    "supply-air-temp-sp": "sat_sp",
+    "duct-static-sp": "duct_static_sp",
+}
+
+
+def build_rcx_ahu_series(
+    frames: dict[str, pd.DataFrame],
+    role_map: dict | None,
+    *,
+    equipment_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build ``{"points": [{equipment_id, role, timestamp, value}]}`` for AHU reset evidence."""
+    role_map = role_map or {}
+    ids = equipment_ids or list(frames.keys())
+    points: list[dict[str, Any]] = []
+    for eq_id in ids:
+        raw = frames.get(eq_id)
+        if raw is None or raw.empty:
+            continue
+        mapped = apply_role_map(raw, eq_id, role_map)
+        idx = mapped.index
+        if not isinstance(idx, pd.DatetimeIndex):
+            continue
+        iso_index = [_ts_iso(ts) for ts in idx]
+        for role_col, central_role in RCX_AHU_RESET_ROLES.items():
+            if role_col not in mapped.columns:
+                continue
+            col = pd.to_numeric(mapped[role_col], errors="coerce")
+            if not col.notna().any():
+                continue
+            for iso, val in zip(iso_index, col):
+                if iso is None:
+                    continue
+                points.append(
+                    {
+                        "equipment_id": str(eq_id),
+                        "role": central_role,
+                        "timestamp": iso,
+                        "value": None if pd.isna(val) else float(val),
+                    }
+                )
+    return {"points": points}
+
+
+def fetch_rcx_ahu_analytics(
+    frames: dict[str, pd.DataFrame],
+    role_map: dict | None,
+    *,
+    equipment_ids: list[str] | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """POST AHU reset-evidence series to central; error dict otherwise (no pandas)."""
+    if not central_client.health_ok():
+        return {"ok": False, "error": "central health check failed", "central_down": True}
+    series = build_rcx_ahu_series(frames, role_map, equipment_ids=equipment_ids)
+    if not series.get("points"):
+        return {"ok": False, "error": "no AHU reset-evidence points to send"}
+    payload: dict[str, Any] = {"series": series, "query_version": "rcx-ahu-v1"}
+    if equipment_ids:
+        payload["equipment_ids"] = list(equipment_ids)
+    if extra:
+        payload.update(extra)
+    return _normalize_central_response(central_client.analytics_post("rcx/ahu", payload))
+
+
+# Candidate dashed setpoint columns for VAV zone comfort (first present wins).
+VAV_SETPOINT_ROLES: tuple[str, ...] = (
+    "zone-temp-sp",
+    "zone-air-temp-sp",
+    "cooling-setpoint",
+    "effective-setpoint",
+)
+
+
+def build_rcx_vav_zones(
+    frames: dict[str, pd.DataFrame],
+    role_map: dict | None,
+    *,
+    equipment_ids: list[str] | None = None,
+    band_f: float = 2.0,
+) -> dict[str, Any]:
+    """Build ``{"zones": [{equipment_id, timestamp, zone_temp, setpoint, band_f}]}``."""
+    role_map = role_map or {}
+    ids = equipment_ids or list(frames.keys())
+    zones: list[dict[str, Any]] = []
+    for eq_id in ids:
+        raw = frames.get(eq_id)
+        if raw is None or raw.empty:
+            continue
+        mapped = apply_role_map(raw, eq_id, role_map)
+        idx = mapped.index
+        if "zone-air-temp" not in mapped.columns or not isinstance(idx, pd.DatetimeIndex):
+            continue
+        zt = pd.to_numeric(mapped["zone-air-temp"], errors="coerce")
+        if not zt.notna().any():
+            continue
+        sp = None
+        for sp_role in VAV_SETPOINT_ROLES:
+            if sp_role in mapped.columns and mapped[sp_role].notna().any():
+                sp = pd.to_numeric(mapped[sp_role], errors="coerce")
+                break
+        if sp is None:
+            continue
+        for i, ts in enumerate(idx):
+            iso = _ts_iso(ts)
+            if iso is None:
+                continue
+            zt_v = zt.iloc[i]
+            sp_v = sp.iloc[i]
+            if pd.isna(zt_v) or pd.isna(sp_v):
+                continue
+            zones.append(
+                {
+                    "equipment_id": str(eq_id),
+                    "timestamp": iso,
+                    "zone_temp": float(zt_v),
+                    "setpoint": float(sp_v),
+                    "band_f": float(band_f),
+                }
+            )
+    return {"zones": zones}
+
+
+def fetch_rcx_vav_analytics(
+    frames: dict[str, pd.DataFrame],
+    role_map: dict | None,
+    *,
+    equipment_ids: list[str] | None = None,
+    band_f: float = 2.0,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """POST VAV zone-comfort series to central; error dict otherwise (no pandas)."""
+    if not central_client.health_ok():
+        return {"ok": False, "error": "central health check failed", "central_down": True}
+    series = build_rcx_vav_zones(frames, role_map, equipment_ids=equipment_ids, band_f=band_f)
+    if not series.get("zones"):
+        return {"ok": False, "error": "no VAV zone_temp/setpoint samples to send"}
+    payload: dict[str, Any] = {"series": series, "query_version": "rcx-vav-v1"}
+    if equipment_ids:
+        payload["equipment_ids"] = list(equipment_ids)
+    if extra:
+        payload.update(extra)
+    return _normalize_central_response(central_client.analytics_post("rcx/vav", payload))
+
+
+def build_metering_rows(
+    monthly_df: pd.DataFrame,
+    *,
+    energy_col: str = "kwh",
+) -> dict[str, Any]:
+    """Convert an app.metering monthly frame to central ``{"rows": [{period, kwh, meter_id}]}``."""
+    rows: list[dict[str, Any]] = []
+    if monthly_df is None or monthly_df.empty:
+        return {"rows": rows}
+    period_col = "month_label" if "month_label" in monthly_df.columns else None
+    for _, r in monthly_df.iterrows():
+        if period_col is not None:
+            period = str(r[period_col])
+        else:
+            period = str(r.get("month", ""))
+        val = r.get(energy_col)
+        if val is None or pd.isna(val):
+            continue
+        rows.append(
+            {
+                "period": period,
+                "kwh": float(val),
+                "meter_id": str(r.get("equipment_id") or r.get("role") or ""),
+            }
+        )
+    return {"rows": rows}
+
+
+def fetch_metering_analytics(
+    monthly_df: pd.DataFrame,
+    *,
+    energy_col: str = "kwh",
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """POST monthly meter rows to central for the metering envelope; error dict otherwise."""
+    if not central_client.health_ok():
+        return {"ok": False, "error": "central health check failed", "central_down": True}
+    series = build_metering_rows(monthly_df, energy_col=energy_col)
+    if not series.get("rows"):
+        return {"ok": False, "error": "no metering {period,kwh} rows to send"}
+    payload: dict[str, Any] = {"series": series, "query_version": "metering-v1"}
+    if extra:
+        payload.update(extra)
+    return _normalize_central_response(central_client.analytics_post("metering", payload))
+
+
+def _fetch_plant_analytics(
+    family: str,
+    query_version: str,
+    equipment_rows: list[dict[str, Any]] | None,
+    equipment_ids: list[str] | None,
+    extra: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not central_client.health_ok():
+        return {"ok": False, "error": "central health check failed", "central_down": True}
+    payload: dict[str, Any] = {"query_version": query_version}
+    if equipment_rows:
+        payload["series"] = {"equipment": equipment_rows}
+    if equipment_ids:
+        payload["equipment_ids"] = list(equipment_ids)
+    if not equipment_rows and not equipment_ids:
+        return {"ok": False, "error": "no plant equipment rows or equipment_ids to send"}
+    if extra:
+        payload.update(extra)
+    return _normalize_central_response(central_client.analytics_post(family, payload))
+
+
+def fetch_plant_chiller_analytics(
+    equipment_rows: list[dict[str, Any]] | None = None,
+    *,
+    equipment_ids: list[str] | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """POST chiller plant evidence rows (run_hours etc.); never invents kW/ton."""
+    return _fetch_plant_analytics(
+        "rcx/chiller", "rcx-chiller-v1", equipment_rows, equipment_ids, extra
+    )
+
+
+def fetch_plant_boiler_analytics(
+    equipment_rows: list[dict[str, Any]] | None = None,
+    *,
+    equipment_ids: list[str] | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """POST boiler plant evidence rows (run_hours etc.); descriptive only."""
+    return _fetch_plant_analytics(
+        "rcx/boiler", "rcx-boiler-v1", equipment_rows, equipment_ids, extra
+    )

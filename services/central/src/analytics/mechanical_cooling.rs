@@ -8,7 +8,8 @@ use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    envelope, resolve_query_version, AnalyticsEnvelope, AnalyticsRequest, QV_MECHANICAL_COOLING,
+    envelope, finalize_historian, historian, resolve_query_version, AnalyticsEnvelope,
+    AnalyticsRequest, QV_MECHANICAL_COOLING,
 };
 
 /// Evidence kinds recognized by the hierarchy.
@@ -170,6 +171,28 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         }
     }
     env
+}
+
+/// Async handler: when no inline evidence is provided, register historian
+/// Parquet and return descriptive per-equipment row counts via DataFusion
+/// (no fabricated tons / kW). Otherwise the inline evidence-hierarchy gate.
+pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
+    if req.series.is_none() {
+        match historian::descriptive_counts_from_history(
+            QV_MECHANICAL_COOLING,
+            req.query.equipment_ids.as_deref(),
+            "mechanical_cooling: compressor/chiller evidence gate requires inline series",
+        )
+        .await
+        {
+            Ok(Some(env)) => return finalize_historian(req, env, QV_MECHANICAL_COOLING),
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(error = %e, "historian mechanical_cooling path failed; using inline/empty fallback");
+            }
+        }
+    }
+    handle(req)
 }
 
 fn parse_evidence(req: &AnalyticsRequest) -> Option<Vec<EvidenceRow>> {
