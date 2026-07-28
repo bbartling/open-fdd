@@ -24,6 +24,13 @@ REQUIRED_COOKBOOKS = (
     "parity-matrix.md",
 )
 
+# Dual cookbooks are large expression catalogs — reject vibe-coded stubs.
+COOKBOOK_MIN_BYTES = {
+    "datafusion-sql-cookbook.md": 40_000,
+    "pandas-cookbook.md": 40_000,
+    "parity-matrix.md": 1_500,
+}
+
 # README navigation / product wording invariants (C0).
 README_REQUIRED_MARKERS = (
     "FDD Rule Cookbook",
@@ -124,8 +131,23 @@ def main() -> int:
         path = COOKBOOK / name
         if not path.is_file():
             errors.append(f"missing cookbook {path.relative_to(ROOT)}")
-        elif path.stat().st_size < 200:
-            errors.append(f"cookbook suspiciously small: {path.relative_to(ROOT)}")
+            continue
+        size = path.stat().st_size
+        floor = COOKBOOK_MIN_BYTES.get(name, 200)
+        if size < floor:
+            errors.append(
+                f"cookbook too small (docs fortress): {path.relative_to(ROOT)} "
+                f"has {size} bytes, need >= {floor}"
+            )
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if name.endswith("cookbook.md"):
+            if "required" not in text.lower() and "Required" not in text:
+                errors.append(f"{name}: missing required-roles style content")
+            if text.count("#") < 20:
+                errors.append(f"{name}: too few markdown headings (catalog must not shrink)")
+        if name == "parity-matrix.md":
+            if "59" not in text or "63" not in text:
+                errors.append("parity-matrix.md must state cookbook 59 and registry 63")
 
     _check_readme(errors)
 
