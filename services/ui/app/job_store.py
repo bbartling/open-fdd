@@ -1,8 +1,10 @@
 """Persistent analysis Job store under ``workspace/jobs/<job_id>/``.
 
-Filesystem contract for Open-FDD engineering Jobs (migration PR1).
+Filesystem contract for Open-FDD engineering Jobs (Milestone B1).
 Telemetry stays in Feather/parquet; this store holds metadata, mapping,
-configs, and run/findings directories — never SQLite historian tables.
+configs, dataset refs, and run/findings directories — never SQLite historian tables.
+
+Streamlit ``st.session_state`` is **not** the source of truth.
 """
 
 from __future__ import annotations
@@ -10,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import tempfile
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -19,15 +22,28 @@ from typing import Any, Iterable
 
 SCHEMA_VERSION = 1
 _JOB_ID_RE = re.compile(r"^job-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$")
+_RUN_ID_RE = re.compile(r"^run-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$")
 _SUBDIRS = (
     "mapping",
     "configs",
+    "datasets",
     "runs",
     "findings",
     "reports",
     "wattlab",
     "artifacts",
 )
+
+
+class RevisionConflict(Exception):
+    """Stale write — client meta_revision does not match on-disk value."""
+
+    def __init__(self, expected: str, current: str) -> None:
+        self.expected = expected
+        self.current = current
+        super().__init__(
+            f"revision_conflict expected={expected!r} current={current!r}"
+        )
 
 
 def _utc_now() -> str:
@@ -41,7 +57,6 @@ def workspace_root(explicit: str | Path | None = None) -> Path:
     env = os.environ.get("OPENFDD_WORKSPACE") or os.environ.get("OPENFDD_WORKSPACE_DIR")
     if env:
         return Path(env).expanduser().resolve()
-    # Common local / compose defaults
     for candidate in (Path("workspace"), Path("/workspace"), Path.cwd() / "workspace"):
         if candidate.is_dir():
             return candidate.resolve()
@@ -84,13 +99,18 @@ class JobMeta:
     status: str = "active"  # active | archived
     created_at: str = ""
     updated_at: str = ""
+    created_by: str | None = None
+    site_id: str | None = None
     tags: list[str] = field(default_factory=list)
     revisions: JobRevisions = field(default_factory=JobRevisions)
-    mapping_path: str | None = None  # relative to job dir when set
+    mapping_path: str | None = None
+    latest_run_id: str | None = None
+    latest_findings_revision: str | None = None
+    meta_revision: str = ""
+    archived: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        d = asdict(self)
-        return d
+        return asdict(self)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> JobMeta:
@@ -99,7 +119,7 @@ class JobMeta:
         job_id = raw.get("job_id")
         if not isinstance(job_id, str) or not _JOB_ID_RE.match(job_id):
             raise ValueError(f"invalid job_id: {job_id!r}")
-        name = raw.get("job_name")
+        name = raw.get("job_name") or raw.get("name")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("job_name is required")
         ver = raw.get("schema_version", SCHEMA_VERSION)
@@ -111,6 +131,14 @@ class JobMeta:
         tags = raw.get("tags") or []
         if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
             raise ValueError("tags must be a list of strings")
+        latest_run = raw.get("latest_run_id")
+        if latest_run is not None and (
+            not isinstance(latest_run, str) or not _RUN_ID_RE.match(latest_run)
+        ):
+            raise ValueError(f"invalid latest_run_id: {latest_run!r}")
+        archived = bool(raw.get("archived", status == "archived"))
+        if status == "archived":
+            archived = True
         return cls(
             schema_version=int(ver),
             job_id=job_id,
@@ -121,9 +149,15 @@ class JobMeta:
             status=status,
             created_at=str(raw.get("created_at") or ""),
             updated_at=str(raw.get("updated_at") or ""),
+            created_by=raw.get("created_by"),
+            site_id=raw.get("site_id"),
             tags=list(tags),
             revisions=JobRevisions.from_dict(raw.get("revisions")),
             mapping_path=raw.get("mapping_path"),
+            latest_run_id=latest_run,
+            latest_findings_revision=raw.get("latest_findings_revision"),
+            meta_revision=str(raw.get("meta_revision") or ""),
+            archived=archived,
         )
 
 
@@ -131,10 +165,22 @@ def new_job_id() -> str:
     return f"job-{uuid.uuid4()}"
 
 
+def new_run_id() -> str:
+    return f"run-{uuid.uuid4()}"
+
+
+def new_meta_revision() -> str:
+    return uuid.uuid4().hex
+
+
 def job_dir(job_id: str, ws: Path | None = None) -> Path:
     if not _JOB_ID_RE.match(job_id):
         raise ValueError(f"invalid job_id: {job_id!r}")
-    return jobs_root(ws) / job_id
+    root = jobs_root(ws).resolve()
+    path = (root / job_id).resolve()
+    if root not in path.parents and path != root:
+        raise ValueError("path traversal rejected for job_id")
+    return path
 
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -160,6 +206,9 @@ def _ensure_layout(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
     for name in _SUBDIRS:
         (path / name).mkdir(parents=True, exist_ok=True)
+    # Nested wattlab handoffs
+    (path / "wattlab" / "handoffs").mkdir(parents=True, exist_ok=True)
+    (path / "wattlab" / "runs").mkdir(parents=True, exist_ok=True)
 
 
 def create_job(
@@ -169,6 +218,8 @@ def create_job(
     building_name: str | None = None,
     description: str | None = None,
     tags: Iterable[str] | None = None,
+    created_by: str | None = None,
+    site_id: str | None = None,
     ws: Path | None = None,
 ) -> JobMeta:
     now = _utc_now()
@@ -182,7 +233,11 @@ def create_job(
         status="active",
         created_at=now,
         updated_at=now,
+        created_by=created_by,
+        site_id=site_id,
         tags=list(tags or []),
+        meta_revision=new_meta_revision(),
+        archived=False,
     )
     if not meta.job_name:
         raise ValueError("job_name is required")
@@ -191,16 +246,36 @@ def create_job(
         raise RuntimeError(f"job directory already exists: {path}")
     _ensure_layout(path)
     _atomic_write_json(path / "job.json", meta.to_dict())
+    _atomic_write_json(
+        path / "datasets" / "dataset_refs.json",
+        {"schema_version": "1", "datasets": []},
+    )
     return meta
 
 
-def save_job(meta: JobMeta, *, ws: Path | None = None) -> JobMeta:
-    """Persist metadata (updates ``updated_at``)."""
-    meta = JobMeta.from_dict(meta.to_dict())  # validate
-    meta.updated_at = _utc_now()
+def save_job(
+    meta: JobMeta,
+    *,
+    ws: Path | None = None,
+    expected_meta_revision: str | None = None,
+) -> JobMeta:
+    """Persist metadata (updates ``updated_at`` and bumps ``meta_revision``)."""
+    meta = JobMeta.from_dict(meta.to_dict())
     path = job_dir(meta.job_id, ws)
     if not path.is_dir():
         raise FileNotFoundError(f"job not found: {meta.job_id}")
+    on_disk = load_job(meta.job_id, ws=ws)
+    if expected_meta_revision is not None:
+        if on_disk.meta_revision != expected_meta_revision:
+            raise RevisionConflict(expected_meta_revision, on_disk.meta_revision)
+    elif meta.meta_revision and on_disk.meta_revision and meta.meta_revision != on_disk.meta_revision:
+        # Caller passed stale meta_revision in the object without expected= kw
+        raise RevisionConflict(meta.meta_revision, on_disk.meta_revision)
+
+    meta.updated_at = _utc_now()
+    meta.meta_revision = new_meta_revision()
+    if meta.status == "archived":
+        meta.archived = True
     _ensure_layout(path)
     _atomic_write_json(path / "job.json", meta.to_dict())
     return meta
@@ -217,7 +292,15 @@ def load_job(job_id: str, *, ws: Path | None = None) -> JobMeta:
     return JobMeta.from_dict(raw)
 
 
-def list_jobs(*, ws: Path | None = None, include_archived: bool = True) -> list[JobMeta]:
+def list_jobs(
+    *,
+    ws: Path | None = None,
+    include_archived: bool = True,
+    status: str | None = None,
+    site_id: str | None = None,
+    tag: str | None = None,
+) -> list[JobMeta]:
+    """List jobs from metadata only (skips corrupt job.json entries)."""
     root = jobs_root(ws)
     out: list[JobMeta] = []
     for child in sorted(root.iterdir()):
@@ -230,7 +313,15 @@ def list_jobs(*, ws: Path | None = None, include_archived: bool = True) -> list[
             meta = load_job(child.name, ws=ws)
         except (ValueError, FileNotFoundError, OSError):
             continue
+        if status == "active" and meta.status != "active":
+            continue
+        if status == "archived" and meta.status != "archived":
+            continue
         if not include_archived and meta.status == "archived":
+            continue
+        if site_id is not None and meta.site_id != site_id:
+            continue
+        if tag is not None and tag not in meta.tags:
             continue
         out.append(meta)
     out.sort(key=lambda m: m.updated_at or m.created_at, reverse=True)
@@ -239,16 +330,65 @@ def list_jobs(*, ws: Path | None = None, include_archived: bool = True) -> list[
 
 def archive_job(job_id: str, *, ws: Path | None = None) -> JobMeta:
     meta = load_job(job_id, ws=ws)
+    expected = meta.meta_revision
     meta.status = "archived"
-    return save_job(meta, ws=ws)
+    meta.archived = True
+    return save_job(meta, ws=ws, expected_meta_revision=expected)
+
+
+def restore_job(job_id: str, *, ws: Path | None = None) -> JobMeta:
+    meta = load_job(job_id, ws=ws)
+    expected = meta.meta_revision
+    meta.status = "active"
+    meta.archived = False
+    return save_job(meta, ws=ws, expected_meta_revision=expected)
 
 
 def rename_job(job_id: str, job_name: str, *, ws: Path | None = None) -> JobMeta:
     meta = load_job(job_id, ws=ws)
+    expected = meta.meta_revision
     meta.job_name = job_name.strip()
     if not meta.job_name:
         raise ValueError("job_name is required")
-    return save_job(meta, ws=ws)
+    return save_job(meta, ws=ws, expected_meta_revision=expected)
+
+
+def duplicate_job(job_id: str, *, new_name: str | None = None, ws: Path | None = None) -> JobMeta:
+    """Copy metadata + mapping/config/dataset_refs; do not copy runs/findings/reports."""
+    src = load_job(job_id, ws=ws)
+    src_dir = job_dir(job_id, ws)
+    copy = create_job(
+        new_name or f"{src.job_name} (copy)",
+        site_name=src.site_name,
+        building_name=src.building_name,
+        description=src.description,
+        tags=src.tags,
+        created_by=src.created_by,
+        site_id=src.site_id,
+        ws=ws,
+    )
+    dst_dir = job_dir(copy.job_id, ws)
+    for rel in (
+        "mapping/role_map.json",
+        "mapping/equipment_map.json",
+        "configs/session_config.json",
+        "configs/rule_parameters.json",
+        "configs/schedules.json",
+        "datasets/dataset_refs.json",
+    ):
+        src_path = src_dir / rel
+        if src_path.is_file():
+            dst = dst_dir / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_path, dst)
+    copy = load_job(copy.job_id, ws=ws)
+    expected = copy.meta_revision
+    if (dst_dir / "mapping" / "role_map.json").is_file():
+        copy.mapping_path = "mapping/role_map.json"
+        copy.revisions.mapping = src.revisions.mapping
+    copy.revisions.dataset = src.revisions.dataset
+    copy.revisions.config = src.revisions.config
+    return save_job(copy, ws=ws, expected_meta_revision=expected)
 
 
 def save_mapping(
@@ -258,15 +398,14 @@ def save_mapping(
     mapping_revision: str | None = None,
     ws: Path | None = None,
 ) -> JobMeta:
-    """Write ``mapping/role_map.json`` and stamp mapping revision."""
     meta = load_job(job_id, ws=ws)
+    expected = meta.meta_revision
     path = job_dir(job_id, ws)
     rel = "mapping/role_map.json"
     _atomic_write_json(path / rel, mapping)
     meta.mapping_path = rel
-    rev = mapping_revision or _utc_now()
-    meta.revisions.mapping = rev
-    return save_job(meta, ws=ws)
+    meta.revisions.mapping = mapping_revision or _utc_now()
+    return save_job(meta, ws=ws, expected_meta_revision=expected)
 
 
 def load_mapping(job_id: str, *, ws: Path | None = None) -> dict[str, Any] | None:
@@ -274,11 +413,43 @@ def load_mapping(job_id: str, *, ws: Path | None = None) -> dict[str, Any] | Non
     if not meta.mapping_path:
         return None
     path = job_dir(job_id, ws) / meta.mapping_path
+    # Containment
+    job_root = job_dir(job_id, ws).resolve()
+    resolved = path.resolve()
+    if job_root not in resolved.parents and resolved != job_root:
+        raise ValueError("mapping path escapes job directory")
     if not path.is_file():
         raise FileNotFoundError(f"mapping missing for {job_id}: {meta.mapping_path}")
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError("mapping must be a JSON object")
+    return raw
+
+
+def save_dataset_refs(
+    job_id: str,
+    refs: dict[str, Any],
+    *,
+    dataset_revision: str | None = None,
+    ws: Path | None = None,
+) -> JobMeta:
+    if not isinstance(refs, dict) or refs.get("schema_version") is None:
+        raise ValueError("dataset_refs must be an object with schema_version")
+    meta = load_job(job_id, ws=ws)
+    expected = meta.meta_revision
+    path = job_dir(job_id, ws) / "datasets" / "dataset_refs.json"
+    _atomic_write_json(path, refs)
+    meta.revisions.dataset = dataset_revision or _utc_now()
+    return save_job(meta, ws=ws, expected_meta_revision=expected)
+
+
+def load_dataset_refs(job_id: str, *, ws: Path | None = None) -> dict[str, Any]:
+    path = job_dir(job_id, ws) / "datasets" / "dataset_refs.json"
+    if not path.is_file():
+        return {"schema_version": "1", "datasets": []}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("dataset_refs must be a JSON object")
     return raw
 
 
@@ -288,11 +459,8 @@ def delete_job(job_id: str, *, ws: Path | None = None, confirm: bool = False) ->
     path = job_dir(job_id, ws)
     if not path.is_dir():
         raise FileNotFoundError(f"job not found: {job_id}")
-    # Safety: only delete under jobs_root
     root = jobs_root(ws).resolve()
     resolved = path.resolve()
     if root not in resolved.parents and resolved != root:
         raise RuntimeError("refusing to delete path outside jobs root")
-    import shutil
-
     shutil.rmtree(resolved)
