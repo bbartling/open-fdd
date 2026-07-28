@@ -19,9 +19,10 @@ fn is_uuid_suffix(s: &str) -> bool {
         return false;
     }
     let lens = [8usize, 4, 4, 4, 12];
-    parts.iter().zip(lens).all(|(p, n)| {
-        p.len() == n && p.chars().all(|c| c.is_ascii_hexdigit())
-    })
+    parts
+        .iter()
+        .zip(lens)
+        .all(|(p, n)| p.len() == n && p.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
 fn is_job_id(job_id: &str) -> bool {
@@ -192,8 +193,10 @@ fn atomic_write_json(path: &Path, payload: &Value) -> Result<(), JobError> {
     let tmp = path.with_extension("tmp");
     {
         let mut f = fs::File::create(&tmp).map_err(|e| JobError::Io(e.to_string()))?;
-        f.write_all(&data).map_err(|e| JobError::Io(e.to_string()))?;
-        f.write_all(b"\n").map_err(|e| JobError::Io(e.to_string()))?;
+        f.write_all(&data)
+            .map_err(|e| JobError::Io(e.to_string()))?;
+        f.write_all(b"\n")
+            .map_err(|e| JobError::Io(e.to_string()))?;
         f.sync_all().map_err(|e| JobError::Io(e.to_string()))?;
     }
     fs::rename(&tmp, path).map_err(|e| JobError::Io(e.to_string()))?;
@@ -254,9 +257,8 @@ pub fn load_job(job_id: &str) -> Result<JobMeta, JobError> {
         return Err(JobError::NotFound(format!("job not found: {job_id}")));
     }
     let raw = fs::read_to_string(&path).map_err(|e| JobError::Io(e.to_string()))?;
-    let meta: JobMeta = serde_json::from_str(&raw).map_err(|e| {
-        JobError::Invalid(format!("malformed job.json for {job_id}: {e}"))
-    })?;
+    let meta: JobMeta = serde_json::from_str(&raw)
+        .map_err(|e| JobError::Invalid(format!("malformed job.json for {job_id}: {e}")))?;
     if meta.schema_version != SCHEMA_VERSION {
         return Err(JobError::Invalid(format!(
             "unsupported schema_version: {}",
@@ -266,7 +268,10 @@ pub fn load_job(job_id: &str) -> Result<JobMeta, JobError> {
     Ok(meta)
 }
 
-pub fn save_job(mut meta: JobMeta, expected_meta_revision: Option<&str>) -> Result<JobMeta, JobError> {
+pub fn save_job(
+    mut meta: JobMeta,
+    expected_meta_revision: Option<&str>,
+) -> Result<JobMeta, JobError> {
     let on_disk = load_job(&meta.job_id)?;
     if let Some(expected) = expected_meta_revision {
         if on_disk.meta_revision != expected {
@@ -510,7 +515,11 @@ pub fn load_run(job_id: &str, run_id: &str) -> Result<RunMeta, JobError> {
     serde_json::from_str(&raw).map_err(|e| JobError::Invalid(format!("malformed run.json: {e}")))
 }
 
-pub fn evaluate_stale(job_id: &str, run_id: &str, current_components: &Value) -> Result<(bool, Vec<String>), JobError> {
+pub fn evaluate_stale(
+    job_id: &str,
+    run_id: &str,
+    current_components: &Value,
+) -> Result<(bool, Vec<String>), JobError> {
     let run = load_run(job_id, run_id)?;
     let (current_fp, _) = compute_input_fingerprint(current_components)?;
     if current_fp == run.input_fingerprint {

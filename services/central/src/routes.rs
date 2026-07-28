@@ -1186,9 +1186,7 @@ async fn jobs_create(
     Ok((StatusCode::CREATED, Json(json!({"ok": true, "job": meta}))))
 }
 
-async fn jobs_get(
-    Path(job_id): Path<String>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+async fn jobs_get(Path(job_id): Path<String>) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let meta = jobs::load_job(&job_id).map_err(job_err)?;
     Ok(Json(json!({"ok": true, "job": meta})))
 }
