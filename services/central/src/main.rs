@@ -27,6 +27,11 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let state = Arc::new(AppState::new());
+    match jobs::recover_interrupted_runs() {
+        Ok(n) if n > 0 => info!(recovered = n, "marked interrupted RUNNING jobs as FAILED"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(?e, "job restart recovery failed"),
+    }
     ingest::spawn_mqtt_ingest(Arc::clone(&state));
 
     let app = Router::new()
