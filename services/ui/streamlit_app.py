@@ -2478,17 +2478,30 @@ def main() -> None:
     motor_weekly = pd.DataFrame()
     cool_bins = pd.DataFrame()
     cool_coverage = pd.DataFrame()
+    central_runtime: dict | None = None
     if section == "Overview":
+        # Prefer central runtime when OPENFDD_ANALYTICS_CENTRAL=1 or health_ok.
         try:
-            motor_weekly = motor_run_hours_weekly(
-                frames,
-                st.session_state.role_map,
-                chw_leave_max_f=float(st.session_state.get("chw_leave_max_f", 48.0)),
-                weather=st.session_state.weather,
-                prefer_web_oat=bool(st.session_state.get("prefer_web_oat", True)),
-            )
+            from app import ui_analytics as _ui_analytics
+
+            if _ui_analytics.prefer_central_analytics():
+                central_runtime = _ui_analytics.fetch_runtime_analytics(
+                    frames,
+                    st.session_state.role_map,
+                )
         except Exception as exc:
-            st.warning(f"Weekly motor hours unavailable: {exc}")
+            central_runtime = {"ok": False, "error": str(exc)}
+        if not (isinstance(central_runtime, dict) and central_runtime.get("ok")):
+            try:
+                motor_weekly = motor_run_hours_weekly(
+                    frames,
+                    st.session_state.role_map,
+                    chw_leave_max_f=float(st.session_state.get("chw_leave_max_f", 48.0)),
+                    weather=st.session_state.weather,
+                    prefer_web_oat=bool(st.session_state.get("prefer_web_oat", True)),
+                )
+            except Exception as exc:
+                st.warning(f"Weekly motor hours unavailable: {exc}")
         try:
             cool_bins = mech_cooling_oat_bins(
                 frames,
@@ -2558,12 +2571,41 @@ def main() -> None:
         render_overview_rcx_download(key="overview_generic_rcx_docx")
 
         min_air_hours = _render_building_schedule_overview()
-        _render_plant_motor_weekly(
-            motor_weekly,
-            key_prefix="overview",
-            show_table=True,
-            min_air_hours=min_air_hours,
-        )
+        if isinstance(central_runtime, dict) and central_runtime.get("ok"):
+            from app import ui_analytics as _ui_analytics
+
+            env = central_runtime.get("analytics") or {}
+            rows = env.get("rows") or env.get("equipment") or []
+            st.markdown("##### Motor run hours (central analytics)")
+            cap = _ui_analytics.provenance_caption(env)
+            if cap:
+                st.caption(cap)
+            for w in env.get("warnings") or []:
+                st.caption(f"⚠ {w}")
+            if rows:
+                runtime_df = pd.DataFrame(rows)
+                st.dataframe(
+                    runtime_df,
+                    hide_index=True,
+                    width="stretch",
+                    height=min(360, 80 + 28 * len(runtime_df)),
+                )
+                st.download_button(
+                    "Download central runtime CSV",
+                    to_csv_bytes(runtime_df),
+                    "motor_runtime_central.csv",
+                    key="overview_dl_central_runtime",
+                )
+            else:
+                st.info("Central runtime returned no equipment rows.")
+        else:
+            st.caption("runtime via pandas oracle (central analytics unavailable)")
+            _render_plant_motor_weekly(
+                motor_weekly,
+                key_prefix="overview",
+                show_table=True,
+                min_air_hours=min_air_hours,
+            )
 
         st.markdown("##### Mechanical cooling hours by OAT bin")
         st.caption(
