@@ -9,6 +9,8 @@ nav_order: 1
 **Audit date:** 2026-07-25 · **Tip under audit:** `8850b0bf` (`sha-8850b0b`, merges #571 audit + #572 Jobs)  
 **Rule:** trust tested current code over historical `docs/migration/vibe19/*` stage notes.
 
+**Milestone A agent OS:** [`openfdd_agent_spec/MILESTONE_A.md`](../../openfdd_agent_spec/MILESTONE_A.md) · checkpoints [`openfdd_agent_spec/BUILD_CHECKPOINTS.md`](../../openfdd_agent_spec/BUILD_CHECKPOINTS.md).
+
 **Hard product rules (2026-07-25):**
 
 1. Open-FDD Rust/central FDD = **DataFusion SQL only** (`sql_rules/registry.yaml`).

@@ -1,0 +1,89 @@
+# ownership.yaml — Phase 0 seed (schema_version 1)
+# CI validation of this file is a Milestone A Phase 0 deliverable; this PR only seeds it.
+schema_version: 1
+
+components:
+  rule_metadata:
+    canonical_owner: open_fdd.contracts  # Phase 2 target — not shipped yet
+    interim_owners:
+      - sql_rules/registry.yaml
+      - open_fdd.rules.cookbook_catalog
+      - docs/rules/cookbook/
+
+  pandas_rule_execution:
+    canonical_owner: open_fdd.rules
+    related:
+      - open_fdd.analytics
+    pip_extras:
+      - oracle
+      - vibe19
+    allowed_consumers:
+      - vibe19
+      - services/ui  # display / lab paths only — production FDD via central SQL
+      - tests
+      - notebooks
+
+  production_rule_execution:
+    canonical_owner: openfdd-central
+    engine: datafusion_sql
+    registry: sql_rules/registry.yaml
+    forbidden:
+      - silent_pandas_fallback
+
+  generic_ecm_math:
+    canonical_owner: open_fdd.ecm_engineering
+    allowed_consumers:
+      - vibe20
+      - services/ui
+      - notebooks
+      - tests
+
+  energyplus_modeling:
+    canonical_owner: vibe20
+    includes:
+      - idf_editing
+      - simulation_orchestration
+      - apihelper_processing
+      - eplus_calibration
+
+  reporting:
+    canonical_owner: open_fdd.reporting
+    allowed_consumers:
+      - vibe19
+      - services/ui
+      - tests
+
+  product_streamlit_ui:
+    canonical_owner: services/ui
+    image: ghcr.io/bbartling/openfdd-ui
+    note: Single Streamlit surface — not Vite/Caddy SPA
+
+  vibe19_demo:
+    canonical_owner: vibe_code_apps_19
+    image: ghcr.io/bbartling/vibe19
+    role: educational_pandas_oracle_demo
+
+  vibe20_studio:
+    canonical_owner: vibe_code_apps_20
+    image: ghcr.io/bbartling/vibe20
+    role: energyplus_twin_and_ecm_crosscheck
+
+  cookbooks:
+    sql:
+      path: docs/rules/cookbook/datafusion-sql-cookbook.md
+      protected: true
+    pandas:
+      path: docs/rules/cookbook/pandas-cookbook.md
+      protected: true
+    parity_matrix:
+      path: docs/rules/cookbook/parity-matrix.md
+      protected: true
+
+  future_concepts:
+    - edge/
+    - os/
+    policy: never_delete
+
+  mcp:
+    canonical_owner: openfdd-mcp
+    role: read_first_central_tools
