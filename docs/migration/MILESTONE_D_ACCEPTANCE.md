@@ -41,6 +41,6 @@ is **not** claimed complete.
 
 | Field | Value |
 |-------|-------|
-| open-fdd tip (pre-D5) | `7da7c310` + #593 (D3/D4) |
+| open-fdd tip (pre-D5) | e5bd0ffd |
 | playground | `d553e31` |
 | Notes | Focused PRs #590–#593; D5 is docs/escape-hatch closeout |
