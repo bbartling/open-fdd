@@ -5,7 +5,7 @@ Checkpoint commit **`4fe1dc99`** recorded the gutted Open-FDD tree before port.
 ## Removed (531 files)
 
 - **`edge/`** — monolithic edge binary (auth, drivers, csv ingest, old DataFusion FDD)
-- **`workspace/dashboard/`** — React/Vite dashboard (future production UI TBD)
+- **`workspace/dashboard/`** — React/Vite dashboard (**historical**; production UI is Streamlit `services/ui`, not Vite `:5173`)
 - **Docker / compose / Caddy** — deployment stacks for old architecture
 - **Legacy docs** — archive, agent prompts, web-app routes, driver guides tied to removed code
 
