@@ -7,7 +7,7 @@ use super::{
 pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     let (qv, mut warnings) = resolve_query_version(req, QV_SENSOR_HEALTH);
     let mut env = empty_stub(&qv, &req.query, "sensor_health");
-    warnings.extend(env.warnings.drain(..));
+    warnings.append(&mut env.warnings);
     env.warnings = warnings;
     env
 }

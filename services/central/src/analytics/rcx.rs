@@ -7,7 +7,7 @@ use super::{
 pub fn handle_ahu(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     let (qv, mut warnings) = resolve_query_version(req, QV_RCX_AHU);
     let mut env = empty_stub(&qv, &req.query, "rcx/ahu");
-    warnings.extend(env.warnings.drain(..));
+    warnings.append(&mut env.warnings);
     env.warnings = warnings;
     env
 }
@@ -15,7 +15,7 @@ pub fn handle_ahu(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 pub fn handle_vav(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     let (qv, mut warnings) = resolve_query_version(req, QV_RCX_VAV);
     let mut env = empty_stub(&qv, &req.query, "rcx/vav");
-    warnings.extend(env.warnings.drain(..));
+    warnings.append(&mut env.warnings);
     env.warnings = warnings;
     env
 }

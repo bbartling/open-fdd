@@ -10,7 +10,7 @@ use super::{
 pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     let (qv, mut warnings) = resolve_query_version(req, QV_MECHANICAL_COOLING);
     let mut env = empty_stub(&qv, &req.query, "mechanical_cooling");
-    warnings.extend(env.warnings.drain(..));
+    warnings.append(&mut env.warnings);
     env.warnings = warnings;
     env
 }

@@ -5,7 +5,7 @@ use super::{empty_stub, resolve_query_version, AnalyticsEnvelope, AnalyticsReque
 pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     let (qv, mut warnings) = resolve_query_version(req, QV_SCHEDULE);
     let mut env = empty_stub(&qv, &req.query, "schedule");
-    warnings.extend(env.warnings.drain(..));
+    warnings.append(&mut env.warnings);
     env.warnings = warnings;
     env
 }

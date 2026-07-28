@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use std::collections::BTreeMap;
 
 use super::{envelope, resolve_query_version, AnalyticsEnvelope, AnalyticsRequest, QV_RUNTIME};

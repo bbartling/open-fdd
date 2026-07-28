@@ -182,7 +182,7 @@ pub fn compute_economizer_diagnostics(
         } else {
             resid_vals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let mid = resid_vals.len() / 2;
-            let median = if resid_vals.len() % 2 == 0 {
+            let median = if resid_vals.len().is_multiple_of(2) {
                 (resid_vals[mid - 1] + resid_vals[mid]) / 2.0
             } else {
                 resid_vals[mid]
