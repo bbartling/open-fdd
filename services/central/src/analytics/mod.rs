@@ -123,17 +123,6 @@ pub fn envelope(
     }
 }
 
-/// Empty stub response with a “full port in progress” warning.
-pub fn empty_stub(query_version: &str, query: &AnalyticsQuery, family: &str) -> AnalyticsEnvelope {
-    envelope(
-        query_version,
-        query,
-        vec![format!(
-            "{family}: schema-complete stub — full DataFusion / historian port in progress"
-        )],
-    )
-}
-
 /// Reject unknown query_version with a stable warning (still returns envelope).
 pub fn version_mismatch_warning(expected: &str, got: Option<&str>) -> Option<String> {
     match got {
@@ -187,14 +176,14 @@ mod tests {
     }
 
     #[test]
-    fn empty_stub_warns() {
-        let env = empty_stub(
-            QV_SENSOR_HEALTH,
-            &AnalyticsQuery::default(),
-            "sensor_health",
-        );
+    fn missing_inline_data_warns_honestly() {
+        let env = sensor_health::handle(&AnalyticsRequest {
+            query: AnalyticsQuery::default(),
+            ..Default::default()
+        });
         assert!(env.equipment.is_empty());
-        assert!(env.warnings[0].contains("in progress"));
+        assert!(env.warnings.iter().any(|w| w.contains("no inline")));
+        assert_eq!(env.engine, ENGINE);
     }
 
     #[test]
