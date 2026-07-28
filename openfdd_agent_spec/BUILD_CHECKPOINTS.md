@@ -1,6 +1,7 @@
 # Milestone A — build checkpoints
 
-Track durable progress. Update when PRs merge. Detail lives in
+Track durable progress. Update whenever Milestone A status changes (merge,
+blocker, or intentional exception). Detail lives in
 [`MILESTONE_A.md`](MILESTONE_A.md) and [`docs/MIGRATION_MATRIX.md`](docs/MIGRATION_MATRIX.md).
 
 Legend: `[x]` done · `[~]` partial · `[ ]` remaining

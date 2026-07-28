@@ -6,16 +6,13 @@ description: >-
   GHCR, openfdd_stack_up, OPENFDD_IMAGE_TAG.
 ---
 
-# Stack GHCR (nightly)
+# Stack GHCR (nightly channel → immutable verify)
 
 Full protocol: [`CONTAINER_AGENT.md`](../../CONTAINER_AGENT.md).
 
-```bash
-export OPENFDD_IMAGE_TAG=nightly
-./scripts/openfdd_stack_pull.sh standalone
-./scripts/openfdd_stack_up.sh standalone
-```
+`nightly` is the channel selector. Qualification pulls `sha-<commit>` for
+central/ui/fieldbus/mqtt, asserts digests match `:nightly`, then starts the
+stack with `OPENFDD_IMAGE_TAG=sha-<commit>`.
 
-Verify immutable `sha-<commit>` matches `:nightly` before trusting a refresh.
 Workflow: `ghcr-openfdd-stack.yml` (retargets nightly on master).
 MCP: separate `rust-ghcr-mcp.yml`.

@@ -80,8 +80,9 @@ components:
       protected: true
 
   future_concepts:
-    - edge/
-    - os/
+    paths:
+      - edge/
+      - os/
     policy: never_delete
 
   mcp:

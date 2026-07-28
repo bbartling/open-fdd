@@ -16,7 +16,7 @@ EnergyPlus-specific code stays in vibe20.
 
 ```text
 inventory → golden/characterize → implement/confirm in Open-FDD
-→ parity → switch adapter → delete twin → remove dead imports → docs
+→ parity → switch adapter → delete twin → regression → docs
 ```
 
 ## Already delegated (do not re-port)

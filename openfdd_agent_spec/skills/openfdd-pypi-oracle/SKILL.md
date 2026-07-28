@@ -23,6 +23,6 @@ Not production FDD. Consumers: vibe19, `services/ui` lab paths, tests, notebooks
 ## Agent rules
 
 1. Prefer clean venv + wheel install over editable-only proof.
-2. After API changes: bump package → publish → bump playground/UI pins → GHCR.
+2. After API changes: bump package → **build one wheel → test that exact wheel → publish that exact wheel** → bump playground/UI pins → GHCR.
 3. Shim pattern in apps: `sys.modules[__name__] = open_fdd...` for private imports.
 4. Keep custom rules local to vibe19/UI (`CUSTOM-*`).

@@ -11,8 +11,10 @@ Progress snapshot: [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md).
 PR loop: [`PR_PROTOCOL.md`](PR_PROTOCOL.md).
 Containers: [`CONTAINER_AGENT.md`](CONTAINER_AGENT.md).
 
-Do not stop after plans or scaffolding. Implement, test, push, review, correct,
-merge, refresh GHCR, and verify — until exit criteria or a genuine external
+Do not stop after plans or scaffolding. For each **bounded PR**, implement,
+test, push, review, correct, and merge what that PR declared — then refresh
+GHCR/dependents **only when the PR’s packaging or image scope requires it**.
+Continue across PRs until Milestone A exit criteria or a genuine external
 blocker.
 
 ---
@@ -20,11 +22,13 @@ blocker.
 ## Local repositories
 
 ```bash
-/home/ben/open-fdd                         # bbartling/open-fdd → master
-/home/ben/py-bacnet-stacks-playground      # bbartling/py-bacnet-stacks-playground → develop
+~/open-fdd                         # bbartling/open-fdd → master
+~/py-bacnet-stacks-playground      # bbartling/py-bacnet-stacks-playground → develop
   vibe_code_apps_19/
   vibe_code_apps_20/
 ```
+
+(Adjust clone roots; Ben’s WSL often uses `/home/ben/...`.)
 
 ---
 

@@ -53,13 +53,14 @@ Do **not** rename `open_fdd.rules` → `open_fdd.oracle` without an explicit pro
 11. Vibe 19 may keep Streamlit UX, custom `CUSTOM-*` rules, demos — not canonical rule/analytics twins.
 12. Vibe 20 owns EnergyPlus — keep IDF/sim/orchestration; delete only **generic** ECM twins after parity.
 13. Prefer exact wheel install tests over editable-only validation for packaging PRs.
-14. Never trust a moving GHCR tag as proof a local container updated — pull immutable `sha-*`, then recreate.
+14. Never trust a moving GHCR tag alone — resolve/pull immutable `sha-*`, recreate containers, then record the digest.
 15. Append [`SESSION_LOG.md`](SESSION_LOG.md) after non-trivial work.
-16. Update [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md) when Milestone A status changes.
+16. Update [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md) whenever Milestone A status changes (not only after merge).
 17. CodeRabbit: fix actionable defects; reject suggestions that violate architecture.
 18. Do not retire playground GHCR without an open-fdd capability parity matrix.
 19. vibe21 = separate plan — not Milestone A.
 20. When blocked (secrets, permissions, private data), finish non-blocked work and record the exact error.
+21. Bound each PR to its declared scope — docs-only PRs do not require cross-repo pin bumps or GHCR refreshes.
 
 ---
 
@@ -78,13 +79,16 @@ Do **not** rename `open_fdd.rules` → `open_fdd.oracle` without an explicit pro
 
 ## Local repositories
 
+Default checkouts on Ben’s WSL (adjust if your clone paths differ):
+
 ```text
-/home/ben/open-fdd                          # bbartling/open-fdd  (default: master)
-/home/ben/py-bacnet-stacks-playground       # bbartling/py-bacnet-stacks-playground (default: develop)
+~/open-fdd                          # bbartling/open-fdd  (default: master)
+~/py-bacnet-stacks-playground       # bbartling/py-bacnet-stacks-playground (default: develop)
   vibe_code_apps_19/
   vibe_code_apps_20/
 ```
 
+Sibling-repo locations are **examples** — resolve via `git rev-parse --show-toplevel` / env, not hardcoded usernames.
 ---
 
 ## Skill index
