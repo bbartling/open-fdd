@@ -140,7 +140,7 @@ fn jobs_crud_runs_stale_findings_wattlab() {
 
     let (st, body) = http("GET", port, "/api/jobs", None, None);
     assert_eq!(st, 200);
-    assert!(json_body(&body)["jobs"].as_array().unwrap().len() >= 1);
+    assert!(!json_body(&body)["jobs"].as_array().unwrap().is_empty());
 
     let bad_patch = json!({
         "job_name": "stale",
