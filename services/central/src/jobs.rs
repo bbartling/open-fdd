@@ -562,6 +562,158 @@ pub fn evaluate_stale(
     Ok((true, reasons))
 }
 
+fn validate_findings_payload(payload: &Value) -> Result<(), JobError> {
+    let obj = payload
+        .as_object()
+        .ok_or_else(|| JobError::Invalid("findings must be a JSON object".into()))?;
+    if obj.get("schema_version").is_none() {
+        return Err(JobError::Invalid(
+            "findings must include schema_version".into(),
+        ));
+    }
+    match obj.get("findings") {
+        None => {}
+        Some(Value::Array(items)) => {
+            for item in items {
+                let row = item.as_object().ok_or_else(|| {
+                    JobError::Invalid("each finding must be a JSON object".into())
+                })?;
+                if row.get("correlation_key").and_then(Value::as_str).is_none() {
+                    return Err(JobError::Invalid(
+                        "each finding must include correlation_key".into(),
+                    ));
+                }
+            }
+        }
+        Some(_) => {
+            return Err(JobError::Invalid(
+                "findings.findings must be an array".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_dispositions_payload(payload: &Value) -> Result<(), JobError> {
+    let obj = payload
+        .as_object()
+        .ok_or_else(|| JobError::Invalid("dispositions must be a JSON object".into()))?;
+    if obj.get("schema_version").is_none() {
+        return Err(JobError::Invalid(
+            "dispositions must include schema_version".into(),
+        ));
+    }
+    match obj.get("dispositions") {
+        None => {}
+        Some(Value::Array(items)) => {
+            for item in items {
+                let row = item.as_object().ok_or_else(|| {
+                    JobError::Invalid("each disposition must be a JSON object".into())
+                })?;
+                if row.get("correlation_key").and_then(Value::as_str).is_none() {
+                    return Err(JobError::Invalid(
+                        "each disposition must include correlation_key".into(),
+                    ));
+                }
+            }
+        }
+        Some(_) => {
+            return Err(JobError::Invalid(
+                "dispositions.dispositions must be an array".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub fn load_findings(job_id: &str) -> Result<Value, JobError> {
+    let path = job_dir(job_id)?.join("findings/findings.json");
+    if !path.is_file() {
+        return Ok(json!({"schema_version": "1", "findings": []}));
+    }
+    let raw = fs::read_to_string(&path).map_err(|e| JobError::Io(e.to_string()))?;
+    serde_json::from_str(&raw)
+        .map_err(|e| JobError::Invalid(format!("malformed findings.json: {e}")))
+}
+
+pub fn save_findings(
+    job_id: &str,
+    findings: Value,
+    findings_revision: Option<String>,
+) -> Result<JobMeta, JobError> {
+    validate_findings_payload(&findings)?;
+    let mut meta = load_job(job_id)?;
+    let expected = meta.meta_revision.clone();
+    atomic_write_json(&job_dir(job_id)?.join("findings/findings.json"), &findings)?;
+    meta.latest_findings_revision = Some(findings_revision.unwrap_or_else(utc_now));
+    save_job(meta, Some(&expected))
+}
+
+pub fn load_dispositions(job_id: &str) -> Result<Value, JobError> {
+    let path = job_dir(job_id)?.join("findings/dispositions.json");
+    if !path.is_file() {
+        return Ok(json!({"schema_version": "1", "dispositions": []}));
+    }
+    let raw = fs::read_to_string(&path).map_err(|e| JobError::Io(e.to_string()))?;
+    serde_json::from_str(&raw)
+        .map_err(|e| JobError::Invalid(format!("malformed dispositions.json: {e}")))
+}
+
+pub fn save_dispositions(job_id: &str, dispositions: Value) -> Result<(), JobError> {
+    let _ = load_job(job_id)?;
+    validate_dispositions_payload(&dispositions)?;
+    atomic_write_json(
+        &job_dir(job_id)?.join("findings/dispositions.json"),
+        &dispositions,
+    )
+}
+
+pub fn save_wattlab_handoff(job_id: &str, handoff: Value) -> Result<Value, JobError> {
+    let _ = load_job(job_id)?;
+    let obj = handoff
+        .as_object()
+        .ok_or_else(|| JobError::Invalid("handoff must be a JSON object".into()))?;
+    let handoff_id = obj
+        .get("handoff_id")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("handoff-{}", Uuid::new_v4()));
+    let meta = load_job(job_id)?;
+    let mut payload = json!({
+        "schema_version": "1",
+        "handoff_id": handoff_id,
+        "job_id": job_id,
+        "run_id": obj.get("run_id").cloned().unwrap_or_else(|| {
+            meta.latest_run_id
+                .clone()
+                .map(Value::String)
+                .unwrap_or(Value::Null)
+        }),
+        "findings_revision": obj.get("findings_revision").cloned().unwrap_or_else(|| {
+            meta.latest_findings_revision
+                .clone()
+                .map(Value::String)
+                .unwrap_or(Value::Null)
+        }),
+        "created_at": utc_now(),
+    });
+    if let Some(map) = payload.as_object_mut() {
+        for (k, v) in obj {
+            if !matches!(
+                k.as_str(),
+                "schema_version" | "handoff_id" | "job_id" | "created_at"
+            ) {
+                map.insert(k.clone(), v.clone());
+            }
+        }
+    }
+    let path = job_dir(job_id)?
+        .join("wattlab/handoffs")
+        .join(format!("{handoff_id}.json"));
+    atomic_write_json(&path, &payload)?;
+    Ok(payload)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -647,5 +799,58 @@ mod tests {
     fn rejects_bad_job_id() {
         assert!(validate_job_id("job-../../../etc").is_err());
         assert!(validate_job_id("not-a-job").is_err());
+    }
+
+    #[test]
+    fn findings_and_dispositions_roundtrip() {
+        with_tmp_ws(|_dir| {
+            let job = create_job("F", None, None, None, None, vec![], None).unwrap();
+            let findings = json!({
+                "schema_version": "1",
+                "findings": [{
+                    "finding_id": "finding-1",
+                    "correlation_key": "rule:VAV-1:equip:AHU-1",
+                    "run_id": "run-1",
+                    "evidence": {"sql_row_hash": "abc"}
+                }]
+            });
+            save_findings(&job.job_id, findings.clone(), Some("rev-1".into())).unwrap();
+            assert_eq!(
+                load_findings(&job.job_id).unwrap()["findings"][0]["evidence"],
+                findings["findings"][0]["evidence"]
+            );
+            let updated = load_job(&job.job_id).unwrap();
+            assert_eq!(updated.latest_findings_revision.as_deref(), Some("rev-1"));
+
+            let dispositions = json!({
+                "schema_version": "1",
+                "dispositions": [{
+                    "correlation_key": "rule:VAV-1:equip:AHU-1",
+                    "status": "confirmed",
+                    "updated_at": "2026-01-01T00:00:00Z"
+                }]
+            });
+            save_dispositions(&job.job_id, dispositions.clone()).unwrap();
+            assert_eq!(load_dispositions(&job.job_id).unwrap(), dispositions);
+        });
+    }
+
+    #[test]
+    fn wattlab_handoff_written() {
+        with_tmp_ws(|_dir| {
+            let job = create_job("W", None, None, None, None, vec![], None).unwrap();
+            let out = save_wattlab_handoff(
+                &job.job_id,
+                json!({"portable_zip_uri": "workspace://exports/demo.zip"}),
+            )
+            .unwrap();
+            assert!(out.get("handoff_id").is_some());
+            let hid = out["handoff_id"].as_str().unwrap();
+            let path = job_dir(&job.job_id)
+                .unwrap()
+                .join("wattlab/handoffs")
+                .join(format!("{hid}.json"));
+            assert!(path.is_file());
+        });
     }
 }

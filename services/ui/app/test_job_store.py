@@ -170,3 +170,45 @@ def test_list_filter_by_tag_and_site(ws: Path) -> None:
     job_store.create_job("B", tags=["beta"], site_id="s2", ws=ws)
     assert len(job_store.list_jobs(ws=ws, tag="alpha")) == 1
     assert len(job_store.list_jobs(ws=ws, site_id="s2")) == 1
+
+
+def test_findings_dispositions_and_wattlab(ws: Path) -> None:
+    meta = job_store.create_job("Findings", ws=ws)
+    findings = {
+        "schema_version": "1",
+        "findings": [
+            {
+                "finding_id": "finding-1",
+                "correlation_key": "rule:VAV-1:equip:AHU-1",
+                "run_id": "run-1",
+                "evidence": {"sql_row_hash": "abc123"},
+            }
+        ],
+    }
+    updated = job_store.save_findings(meta.job_id, findings, findings_revision="f-rev-1", ws=ws)
+    assert updated.latest_findings_revision == "f-rev-1"
+    loaded = job_store.load_findings(meta.job_id, ws=ws)
+    assert loaded["findings"][0]["evidence"]["sql_row_hash"] == "abc123"
+
+    dispositions = {
+        "schema_version": "1",
+        "dispositions": [
+            {
+                "correlation_key": "rule:VAV-1:equip:AHU-1",
+                "status": "confirmed",
+                "updated_at": "2026-01-01T00:00:00Z",
+            }
+        ],
+    }
+    job_store.save_dispositions(meta.job_id, dispositions, ws=ws)
+    assert job_store.load_dispositions(meta.job_id, ws=ws)["dispositions"][0]["status"] == "confirmed"
+
+    handoff_path = job_store.save_wattlab_handoff(
+        meta.job_id,
+        {"portable_zip_uri": "workspace://exports/demo.zip"},
+        ws=ws,
+    )
+    assert handoff_path.is_file()
+    payload = json.loads(handoff_path.read_text(encoding="utf-8"))
+    assert payload["job_id"] == meta.job_id
+    assert payload["portable_zip_uri"] == "workspace://exports/demo.zip"

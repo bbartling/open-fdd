@@ -51,7 +51,8 @@ Test on `:nightly` / `sha-*` per `CONTAINER_AGENT.md`.
 
 See closeout residuals + `BUILD_CHECKPOINTS.md`.
 
-## Milestone B handoff
+## Milestone B (complete 2026-07-28)
 
-Jobs UI filesystem store exists (`job_store.py`). Milestone B: central `/api/jobs`,
-provenance, runs, stale, findings, WattLab Job handoffs.
+Central `/api/jobs` is SoT when up; UI `job_store` is thin client + filesystem
+fallback. Delivered: fingerprints, runs, stale, findings/dispositions, WattLab
+handoffs. See `docs/migration/MILESTONE_B_CLOSEOUT.md`.

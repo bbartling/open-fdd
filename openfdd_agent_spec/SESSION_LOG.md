@@ -4,6 +4,12 @@ Newest first. Append after non-trivial agent work.
 
 ---
 
+## 2026-07-28 — Milestone B closeout (B6–B9)
+
+- #585 merged: central `/api/jobs`, runs, stale, UI client.
+- B6 findings/dispositions + WattLab handoff API; stale banner on job open.
+- 14 UI + 7 central job tests; acceptance + closeout docs updated.
+
 ## 2026-07-28 — Milestone A closeout (B0)
 
 - Added `docs/migration/MILESTONE_A_CLOSEOUT.md` and pandas UI inventory.

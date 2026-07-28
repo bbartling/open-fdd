@@ -378,3 +378,66 @@ def jobs_eval_stale(job_id: str, run_id: str, fingerprint_components: dict[str, 
         return _parse_json_response(resp)
     except requests.RequestException as exc:
         return {"ok": False, "error": str(exc), "central_down": True}
+
+
+def jobs_get_findings(job_id: str) -> dict[str, Any]:
+    try:
+        resp = _request("GET", f"{api_base()}/api/jobs/{job_id}/findings", timeout=15.0)
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}
+
+
+def jobs_put_findings(
+    job_id: str,
+    findings: dict[str, Any],
+    *,
+    findings_revision: str | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"findings": findings}
+    if findings_revision:
+        payload["findings_revision"] = findings_revision
+    try:
+        resp = _request(
+            "PUT",
+            f"{api_base()}/api/jobs/{job_id}/findings",
+            timeout=30.0,
+            json=payload,
+        )
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}
+
+
+def jobs_get_dispositions(job_id: str) -> dict[str, Any]:
+    try:
+        resp = _request("GET", f"{api_base()}/api/jobs/{job_id}/dispositions", timeout=15.0)
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}
+
+
+def jobs_put_dispositions(job_id: str, dispositions: dict[str, Any]) -> dict[str, Any]:
+    try:
+        resp = _request(
+            "PUT",
+            f"{api_base()}/api/jobs/{job_id}/dispositions",
+            timeout=30.0,
+            json=dispositions,
+        )
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}
+
+
+def jobs_create_wattlab_handoff(job_id: str, handoff: dict[str, Any]) -> dict[str, Any]:
+    try:
+        resp = _request(
+            "POST",
+            f"{api_base()}/api/jobs/{job_id}/wattlab/handoffs",
+            timeout=30.0,
+            json=handoff,
+        )
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}

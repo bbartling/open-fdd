@@ -6,7 +6,7 @@ nav_order: 11
 
 # Job workspaces
 
-**Status:** Milestone B1 filesystem contract (UI `job_store`; central `/api/jobs` in B2).
+**Status:** Milestone B complete — UI `job_store` + central `/api/jobs` (SoT when central is up).
 
 A browser session is not the project database. `st.session_state` is not durable storage.
 
@@ -52,7 +52,8 @@ Telemetry stays in Feather / parquet (site historian). Jobs hold **pointers**, c
 
 | Piece | Path |
 |-------|------|
-| Store (interim SoT until B2/B7) | [`services/ui/app/job_store.py`](../../services/ui/app/job_store.py) |
+| Store (thin client; central SoT when up) | [`services/ui/app/job_store.py`](../../services/ui/app/job_store.py) |
+| Central API | [`services/central/src/jobs.rs`](../../services/central/src/jobs.rs) |
 | Streamlit entry | [`services/ui/app/ui_jobs.py`](../../services/ui/app/ui_jobs.py) |
 | Tests | `services/ui/app/test_job_store.py` |
 
@@ -93,6 +94,10 @@ Telemetry stays in Feather / parquet (site historian). Jobs hold **pointers**, c
 Create · List (active/archived/filters) · Get · Update · Duplicate · Archive · Restore · Delete (confirm only).
 
 Duplicate copies mapping/config/dataset_refs — **not** runs, findings, or reports.
+
+## Findings and dispositions (B6)
+
+`findings/findings.json` holds machine evidence (SQL row hashes, rule outputs). Each finding requires `correlation_key` and `finding_id`. Dispositions live in `findings/dispositions.json` keyed by `correlation_key` — human status never overwrites evidence rows.
 
 ## Atomicity
 

@@ -54,6 +54,39 @@ def _apply_job_to_session(meta: job_store.JobMeta, mapping: dict[str, Any] | Non
         st.session_state["building_id"] = meta.building_name
     if mapping is not None:
         st.session_state["role_map"] = mapping
+    _refresh_stale_banner(meta)
+
+
+def _fingerprint_from_session(meta: job_store.JobMeta) -> dict[str, Any]:
+    rev = meta.revisions
+    return {
+        "telemetry_content_hash": st.session_state.get("telemetry_content_hash") or "",
+        "mapping_revision": rev.mapping or "",
+        "config_revision": rev.config or "",
+        "schedule_revision": st.session_state.get("schedule_revision") or "",
+        "weather_hash": st.session_state.get("weather_hash") or "",
+        "rule_registry_hash": st.session_state.get("rule_registry_hash") or "",
+        "rule_parameters_hash": st.session_state.get("rule_parameters_hash") or "",
+        "engine_version": st.session_state.get("engine_version") or "",
+        "unit_normalization_version": st.session_state.get("unit_normalization_version") or "",
+    }
+
+
+def _refresh_stale_banner(meta: job_store.JobMeta) -> None:
+    run_id = meta.latest_run_id
+    if not run_id:
+        st.session_state.pop("openfdd_run_stale_reasons", None)
+        return
+    components = _fingerprint_from_session(meta)
+    if central_client.health_ok():
+        resp = central_client.jobs_eval_stale(meta.job_id, run_id, components)
+        if resp.get("ok"):
+            if resp.get("stale"):
+                st.session_state["openfdd_run_stale_reasons"] = list(resp.get("reasons") or [])
+            else:
+                st.session_state.pop("openfdd_run_stale_reasons", None)
+            return
+    st.session_state.pop("openfdd_run_stale_reasons", None)
 
 
 def render_jobs_sidebar() -> None:
@@ -141,6 +174,14 @@ def render_jobs_sidebar() -> None:
             else:
                 try:
                     job_store.save_mapping(current, role_map, ws=_ws())
+                    meta = None
+                    if central_client.health_ok():
+                        resp = central_client.jobs_get(current)
+                        if resp.get("ok") and isinstance(resp.get("job"), dict):
+                            meta = _meta_from_api(resp["job"])
+                    if meta is None:
+                        meta = job_store.load_job(current, ws=_ws())
+                    _refresh_stale_banner(meta)
                     st.success("Mapping saved to job.")
                 except (ValueError, OSError) as exc:
                     st.error(str(exc))

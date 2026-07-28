@@ -493,6 +493,36 @@ def load_findings(job_id: str, *, ws: Path | None = None) -> dict[str, Any]:
     return raw
 
 
+def save_dispositions(
+    job_id: str,
+    dispositions: dict[str, Any],
+    *,
+    ws: Path | None = None,
+) -> None:
+    if not isinstance(dispositions, dict) or dispositions.get("schema_version") is None:
+        raise ValueError("dispositions must be an object with schema_version")
+    items = dispositions.get("dispositions")
+    if items is not None:
+        if not isinstance(items, list):
+            raise ValueError("dispositions.dispositions must be an array")
+        for row in items:
+            if not isinstance(row, dict) or not row.get("correlation_key"):
+                raise ValueError("each disposition must include correlation_key")
+    _ = load_job(job_id, ws=ws)
+    path = job_dir(job_id, ws) / "findings" / "dispositions.json"
+    _atomic_write_json(path, dispositions)
+
+
+def load_dispositions(job_id: str, *, ws: Path | None = None) -> dict[str, Any]:
+    path = job_dir(job_id, ws) / "findings" / "dispositions.json"
+    if not path.is_file():
+        return {"schema_version": "1", "dispositions": []}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("dispositions must be a JSON object")
+    return raw
+
+
 def save_wattlab_handoff(
     job_id: str,
     handoff: dict[str, Any],
