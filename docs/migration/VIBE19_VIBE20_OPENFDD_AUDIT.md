@@ -9,7 +9,7 @@ nav_order: 1
 **Audit date:** 2026-07-25 · **Tip under audit:** `8850b0bf` (`sha-8850b0b`, merges #571 audit + #572 Jobs)  
 **Rule:** trust tested current code over historical `docs/migration/vibe19/*` stage notes.
 
-**Milestone A agent OS:** [`openfdd_agent_spec/MILESTONE_A.md`](../../openfdd_agent_spec/MILESTONE_A.md) · checkpoints [`openfdd_agent_spec/BUILD_CHECKPOINTS.md`](../../openfdd_agent_spec/BUILD_CHECKPOINTS.md).
+**Milestone A agent OS:** [`openfdd_agent_spec/MILESTONE_A.md`](../../openfdd_agent_spec/MILESTONE_A.md) · checkpoints [`openfdd_agent_spec/BUILD_CHECKPOINTS.md`](../../openfdd_agent_spec/BUILD_CHECKPOINTS.md) · **closeout** [`MILESTONE_A_CLOSEOUT.md`](MILESTONE_A_CLOSEOUT.md).
 
 **Hard product rules (2026-07-25):**
 

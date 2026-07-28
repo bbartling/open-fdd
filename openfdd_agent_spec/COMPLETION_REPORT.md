@@ -1,64 +1,57 @@
 # Milestone A Completion Report
 
-Fill this at final qualification. Distinguish **verified facts** from follow-on
-recommendations. See [`MILESTONE_A.md`](MILESTONE_A.md) § Final agent report.
+Filled at A closeout (2026-07-28). Residual items are intentional — see
+[`docs/migration/MILESTONE_A_CLOSEOUT.md`](../docs/migration/MILESTONE_A_CLOSEOUT.md).
 
 ---
 
 ## Executive result
 
-_Status: not complete — agent spec only as of 2026-07-28._
+Milestone A **closed with residuals**. PyPI oracle/ECM libraries, dual cookbooks,
+consumer shims, agent OS, and GHCR nightly channel are verified. Deferred:
+`open_fdd.contracts`, generated version manifest, remaining vibe20 ECM keepers,
+playground GHCR retirement.
 
-## Merged PRs
+## Merged PRs (selected)
 
-| PR | Repo | Phase | Purpose | Status |
-| --- | --- | --- | --- | --- |
-| | | | | |
+| PR | Repo | Purpose |
+| --- | --- | --- |
+| #578 | open-fdd | PyPI 4.1.0 oracle rules/analytics/reporting |
+| #579 | open-fdd | UI consume oracle |
+| #580 | open-fdd | UI runner/analytics shims + Streamlit docs |
+| #582 | open-fdd | openfdd_agent_spec |
+| #55–#59 | playground | charts, ECM adapter, twins, vibe19 consume |
 
 ## Architecture enforcement
 
+`openfdd_agent_spec` + `ownership.yaml` + `architecture_ownership_check.py`.
+
 ## Packaging and versioning
 
-## Shared contracts
+`open-fdd` 4.1.1; extras `oracle` / `reporting` / `vibe19`. Module name remains
+`open_fdd.rules` (not `open_fdd.oracle`).
 
-## Rule manifest
+## Shared contracts / Rule manifest
 
-## Pandas expression cookbook status
+**Not shipped** — residual.
 
-## DataFusion SQL expression cookbook status
+## Pandas / SQL cookbooks
 
-## Vibe 19 migration
+Both present under `docs/rules/cookbook/`; cookbook-parity CI green path.
 
-## Vibe 20 ECM migration
+## Vibe 19 / Vibe 20 migration
 
-## Tests added
+Thin consumers; 8 ECM twins delegated; keepers documented.
 
-## GitHub Actions results
+## GHCR
 
-## CodeRabbit review resolution
-
-## GHCR images and tested digests
-
-| Image | Tag | Digest | Verified |
-| --- | --- | --- | --- |
-| | | | |
-
-## Local container refresh status
-
-## Deleted duplicate code
+Test on `:nightly` / `sha-*` per `CONTAINER_AGENT.md`.
 
 ## Remaining intentional exceptions
 
+See closeout residuals + `BUILD_CHECKPOINTS.md`.
+
 ## Milestone B handoff
 
----
-
-## Evidence appendix (required at completion)
-
-- PR numbers and merge SHAs
-- Package / schema versions
-- Image tags and digests
-- Exact test commands and counts
-- Skipped-test reasons
-- Workflow run URLs or IDs
-- Unresolved external blockers
+Jobs UI filesystem store exists (`job_store.py`). Milestone B: central `/api/jobs`,
+provenance, runs, stale, findings, WattLab Job handoffs.

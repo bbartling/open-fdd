@@ -7,14 +7,20 @@ on:
     branches: [master, main]
     paths:
       - "docs/rules/cookbook/**"
+      - "docs/migration/MILESTONE_A_CLOSEOUT.md"
+      - "openfdd_agent_spec/ownership.yaml"
       - "scripts/cookbook_parity_check.py"
+      - "scripts/architecture_ownership_check.py"
       - ".github/workflows/cookbook-parity.yml"
       - "README.md"
   pull_request:
     branches: [master, main]
     paths:
       - "docs/rules/cookbook/**"
+      - "docs/migration/MILESTONE_A_CLOSEOUT.md"
+      - "openfdd_agent_spec/ownership.yaml"
       - "scripts/cookbook_parity_check.py"
+      - "scripts/architecture_ownership_check.py"
       - ".github/workflows/cookbook-parity.yml"
       - "README.md"
 
@@ -28,8 +34,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pandas
-        run: pip install pandas
+      - name: Install pandas + PyYAML
+        run: pip install pandas pyyaml
+
+      - name: Architecture ownership + cookbook path smoke
+        run: python3 scripts/architecture_ownership_check.py
 
       - name: Run cookbook fixture checks
         run: python3 scripts/cookbook_parity_check.py --all

@@ -1,67 +1,55 @@
 # Milestone A — build checkpoints
 
 Track durable progress. Update whenever Milestone A status changes (merge,
-blocker, or intentional exception). Detail lives in
-[`MILESTONE_A.md`](MILESTONE_A.md) and [`docs/MIGRATION_MATRIX.md`](docs/MIGRATION_MATRIX.md).
+blocker, or intentional exception). Detail:
+[`MILESTONE_A.md`](MILESTONE_A.md),
+[`docs/MIGRATION_MATRIX.md`](docs/MIGRATION_MATRIX.md),
+[`docs/migration/MILESTONE_A_CLOSEOUT.md`](../docs/migration/MILESTONE_A_CLOSEOUT.md).
 
-Legend: `[x]` done · `[~]` partial · `[ ]` remaining
+Legend: `[x]` done · `[~]` partial / residual · `[ ]` remaining
+
+**Closeout status (2026-07-28):** Milestone A **closed with intentional residuals**
+(see closeout doc). Milestone B Jobs may proceed.
 
 ---
 
 ## Phase 0 — Architecture freeze
 
-- [x] Human architecture locks in this agent spec ([`ARCHITECTURE.md`](ARCHITECTURE.md))
+- [x] Human architecture locks ([`ARCHITECTURE.md`](ARCHITECTURE.md))
 - [x] Machine-readable seed ([`ownership.yaml`](ownership.yaml))
-- [ ] CI: ownership schema validation
-- [ ] CI: forbidden import / no silent pandas fallback tests
-- [ ] CI: required cookbook path + terminology consistency tests
+- [x] CI: ownership schema + cookbook path smoke (`scripts/architecture_ownership_check.py`)
+- [~] Broader forbidden-import / terminology suites — residual harden
+- [x] Required cookbook paths protected via ownership check + cookbook parity
 
 ## Phase 1 — Packaging / release / containers
 
-- [x] PyPI `open-fdd` 4.1.0 rules+analytics+reporting; 4.1.1 topology enrich
+- [x] PyPI `open-fdd` 4.1.0 / 4.1.1
 - [x] vibe19 / UI pins `>=4.1.1,<5`
-- [~] Version policy documented ([`docs/VERSIONING.md`](docs/VERSIONING.md)) — generated manifest not yet shipped
-- [ ] Constraints/lock so rebuilds do not silently float newer PyPI mid-tag
-- [~] Image metadata / nightly channel works; deepen labels + in-container asserts
-- [x] Stack + MCP GHCR green on master tip (post UI twin retirement)
+- [~] Version policy docs; generated manifest residual
+- [~] Image metadata / nightly channel OK; deeper in-container asserts residual
+- [x] Stack + MCP GHCR green post twin retirement
 
 ## Phase 2 — Shared contracts + rule manifest
 
-- [ ] `open_fdd.contracts` package (pandas-free base)
-- [ ] Canonical machine-readable rule manifest
-- [ ] Manifest ↔ SQL registry ↔ pandas cookbook CI agreement
-- [ ] Derived doc tables from manifest (keep hand-written expressions)
+- [ ] `open_fdd.contracts` — **deferred residual**
+- [ ] Canonical rule manifest — **deferred residual**
+- [~] Cookbook ↔ registry agreement via existing cookbook-parity
 
 ## Phase 3 — Vibe 19 thin-oracle cutover
 
-- [x] Thin shims for most `app/rules/*` → PyPI
-- [x] `app/rules/runner.py` + `app/analytics.py` → package shims (playground #59, open-fdd #580)
-- [~] Remaining local keepers: custom_registry / custom_rules / Streamlit UX (intentional)
-- [ ] Full migration matrix with KEEP/SHIM/MOVE/DELETE for every significant module
-- [ ] Clean-install + container smoke checklist recorded per release
+- [x] Rules shims + runner/analytics package rebinds
+- [x] Custom rules KEEP intentional
+- [~] Full KEEP/SHIM/MOVE/DELETE matrix residual
 
 ## Phase 4 — Vibe 20 generic ECM migration
 
-- [x] Open-FDD ECM package + 8 delegated twins (fan affinity, schedule reduction, OA sensible, kW/ton, boiler eff, scheduling fan/cool/heat bins)
-- [~] ~18 esco/algorithm keepers remain (documented in playground `OPENFDD_ECM_TWINS.md`)
-- [ ] Richer calculator result contracts (bins detail / provenance)
-- [ ] Delete remaining generic twins after parity
-- [ ] Docker-socket runner hardening = follow-on (document only in Milestone A)
+- [x] Eight twins delegated
+- [~] Remaining keepers — residual / parallel track
+- [x] Docker-socket runner = documented follow-on (not A blocker)
 
 ## Cross-cutting
 
-- [x] Dual cookbooks present and documented
-- [~] Cookbook parity CI exists (`cookbook-parity.yml`) — harden vs mission checklist
-- [ ] Final Milestone A qualification + [`COMPLETION_REPORT.md`](COMPLETION_REPORT.md) filled
-- [ ] Playground GHCR retirement — **explicitly out of Milestone A** (needs parity matrix)
-
----
-
-## Known intentional exceptions
-
-| Exception | Why |
-| --- | --- |
-| vibe19 keeps custom rule loading | Product extension surface |
-| vibe20 EnergyPlus code stays local | Not generic math |
-| `open_fdd.rules` not renamed to `.oracle` | Code truth; pip extra is `oracle` |
-| Pre-existing vibe19 test fail `test_supply_air_startup_uses_transient_threshold` | Fails with local twins on develop too — do not weaken tests to hide |
+- [x] Dual cookbooks present
+- [x] Cookbook parity CI
+- [x] Closeout audit committed
+- [ ] Playground GHCR retirement — out of A

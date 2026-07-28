@@ -284,8 +284,16 @@ mod tests {
 
     #[test]
     fn default_config_is_disabled() {
+        // CI / other tests may set OPENFDD_HAYSTACK_FIXTURE=1; isolate this assertion.
+        let prev = env::var("OPENFDD_HAYSTACK_FIXTURE").ok();
+        env::remove_var("OPENFDD_HAYSTACK_FIXTURE");
         let cfg = HaystackConfig::default();
-        assert!(!cfg.effective_enabled());
+        let enabled = cfg.effective_enabled();
+        match prev {
+            Some(v) => env::set_var("OPENFDD_HAYSTACK_FIXTURE", v),
+            None => env::remove_var("OPENFDD_HAYSTACK_FIXTURE"),
+        }
+        assert!(!enabled);
     }
 
     #[test]

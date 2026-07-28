@@ -4,6 +4,12 @@ Newest first. Append after non-trivial agent work.
 
 ---
 
+## 2026-07-28 — Milestone A closeout (B0)
+
+- Added `docs/migration/MILESTONE_A_CLOSEOUT.md` and pandas UI inventory.
+- `scripts/architecture_ownership_check.py` + cookbook-parity workflow hook.
+- A closed with intentional residuals; Milestone B Jobs may proceed.
+
 ## 2026-07-28 — openfdd_agent_spec created
 
 - Added `openfdd_agent_spec/` (orientation, Milestone A mission, architecture,
