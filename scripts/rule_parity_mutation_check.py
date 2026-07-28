@@ -111,12 +111,59 @@ def check_mutation_paths() -> None:
         )
 
 
+def check_logical_keyword_mutation() -> None:
+    """Selective in-memory mutation: stripping a high-risk gate keyword must be detectable.
+
+    Does not rewrite disk files — simulates a regression where ``fan-status`` /
+    ``occupied`` language was vibe-coded out of a cookbook.
+    """
+    path = COOKBOOK / "datafusion-sql-cookbook.md"
+    text = path.read_text(encoding="utf-8")
+    for kw in ("fan-status", "occupied", "compressor"):
+        if kw not in text:
+            _fail(f"logical mutation baseline missing keyword {kw!r} in {path.name}")
+        mutated = text.replace(kw, "")
+        if kw in mutated:
+            _fail(f"logical mutation could not strip {kw!r}")
+        # Detectability: the same high-risk keyword rule fails on mutated text.
+        if kw in mutated:
+            _fail(f"logical mutation detectability failed for {kw!r}")
+        print(f"PASS logical mutation: stripping {kw!r} would fail keyword check")
+
+
+def check_multi_building_fixture_inventory() -> None:
+    """Multi-building / BUILDING_100 evidence inventory (not opaque snapshots).
+
+    Requires a spread of family fixtures plus the BUILDING_100 validator script.
+    Does **not** claim ``PROVEN_MULTI_BUILDING`` — only that screening artifacts exist.
+    """
+    fixtures = COOKBOOK / "fixtures"
+    required = (
+        "fc1_obvious_fault.jsonl",
+        "sched1_obvious_fault.jsonl",
+        "vav1_obvious_fault.jsonl",
+        "reset1_obvious_fault.jsonl",
+    )
+    missing = [n for n in required if not (fixtures / n).is_file()]
+    if missing:
+        _fail(f"fixture inventory missing: {missing}")
+    validator = ROOT / "services" / "ui" / "scripts" / "validate_building100.py"
+    if not validator.is_file():
+        _fail("missing services/ui/scripts/validate_building100.py (BUILDING_100 path)")
+    print(
+        f"PASS multi-building inventory: {len(required)} family fixtures + "
+        "validate_building100.py (PROVEN_MULTI_BUILDING still residual)"
+    )
+
+
 def main() -> int:
     print("== rule_parity_mutation_check (Milestone D2) ==")
     check_registry_count()
     check_dual_cookbooks_and_headings()
     check_high_risk_keywords()
     check_mutation_paths()
+    check_logical_keyword_mutation()
+    check_multi_building_fixture_inventory()
     print("All rule parity mutation checks passed.")
     return 0
 

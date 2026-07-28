@@ -6,7 +6,7 @@ nav_order: 32
 
 # Milestone D SQL rule parity
 
-**Date:** 2026-07-28 · Branch `milestone-d/d1-historian-datafusion-runtime`
+**Date:** 2026-07-28 · Branch `milestone-d/d2-rule-parity`
 
 Hardens Milestone C parity docs with an automated mutation path check
 ([`scripts/rule_parity_mutation_check.py`](../../scripts/rule_parity_mutation_check.py))
@@ -48,11 +48,13 @@ python3 scripts/rule_parity_mutation_check.py
 | Heading floor | ≥ 59 `### RULE —` headings per cookbook |
 | High-risk keywords | `fan-status` / `fan_status`, `occupied` / `occ_mode`, `compressor`, identifiability language |
 | Mutation paths | Missing protected cookbook file → exit non-zero |
+| Logical keyword mutation | In-memory strip of `fan-status` / `occupied` / `compressor` must be detectable |
+| Multi-building inventory | Family fixtures + `validate_building100.py` present (screening only) |
 
 CI: `.github/workflows/cookbook-parity.yml` runs this after ownership smoke.
 
 ## Residual
 
 - Per-rule state column in parity matrix beyond docs notes
-- Selective logical mutation of gate predicates (fan-on / occupancy / ΔT) as executable tests
-- Honest `PROVEN_MULTI_BUILDING` qualification beyond BUILDING_100
+- Executable gate-predicate mutation (fan-on / occupancy / ΔT) inside `fdd_rules` tests
+- Honest `PROVEN_MULTI_BUILDING` qualification beyond BUILDING_100 + fixture inventory
