@@ -1,10 +1,11 @@
-//! Central analytics envelopes and family compute modules (Milestone C).
+//! Central analytics envelopes and family compute modules (Milestone C/D).
 //!
-//! Engine label is honestly `central-analytics-v1` (pure Rust / Arrow-ready
-//! algorithms). DataFusion SQL MemTable wiring is the documented follow-up in
-//! `docs/migration/MILESTONE_C_ANALYTICS_MATRIX.md`.
+//! Engine labels:
+//! - [`CENTRAL_ENGINE`] — pure Rust / Arrow-ready algorithms (inline samples)
+//! - [`DF_ENGINE`] — DataFusion SQL over historian Parquet (see `historian`)
 
 pub mod economizer;
+pub mod historian;
 pub mod mechanical_cooling;
 pub mod metering;
 pub mod plant;
@@ -17,8 +18,12 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-/// Honest engine id until DataFusion SQL paths land per family.
-pub const ENGINE: &str = "central-analytics-v1";
+/// Pure Rust / inline-sample engine id.
+pub const CENTRAL_ENGINE: &str = "central-analytics-v1";
+/// DataFusion SQL / historian Parquet engine id (set only when DF path executes).
+pub const DF_ENGINE: &str = "datafusion";
+/// Alias for [`CENTRAL_ENGINE`] (legacy call sites / tests).
+pub const ENGINE: &str = CENTRAL_ENGINE;
 pub const SCHEMA_VERSION: &str = "analytics-envelope-v1";
 
 pub const QV_RUNTIME: &str = "runtime-v1";
@@ -101,11 +106,21 @@ impl AnalyticsEnvelope {
     }
 }
 
-/// Build a populated envelope from query context.
+/// Build a populated envelope from query context (defaults to [`ENGINE`] / [`CENTRAL_ENGINE`]).
 pub fn envelope(
     query_version: &str,
     query: &AnalyticsQuery,
     warnings: Vec<String>,
+) -> AnalyticsEnvelope {
+    envelope_with_engine(query_version, query, warnings, ENGINE)
+}
+
+/// Build an envelope with an explicit engine label (e.g. [`DF_ENGINE`]).
+pub fn envelope_with_engine(
+    query_version: &str,
+    query: &AnalyticsQuery,
+    warnings: Vec<String>,
+    engine: &str,
 ) -> AnalyticsEnvelope {
     AnalyticsEnvelope {
         schema_version: SCHEMA_VERSION.into(),
@@ -114,7 +129,7 @@ pub fn envelope(
         run_id: query.run_id.clone(),
         input_fingerprint: None,
         generated_at: Utc::now(),
-        engine: ENGINE.into(),
+        engine: engine.into(),
         coverage: None,
         warnings,
         rows: Vec::new(),
@@ -171,9 +186,18 @@ mod tests {
         ] {
             assert!(v.get(key).is_some(), "missing {key}");
         }
-        assert_eq!(v["engine"], ENGINE);
+        assert_eq!(v["engine"], CENTRAL_ENGINE);
+        assert_eq!(ENGINE, CENTRAL_ENGINE);
         assert_eq!(v["query_version"], QV_RUNTIME);
         assert!(v.get("plotly").is_none());
+    }
+
+    #[test]
+    fn envelope_with_engine_sets_datafusion() {
+        let q = AnalyticsQuery::default();
+        let env = envelope_with_engine(QV_RUNTIME, &q, vec![], DF_ENGINE);
+        assert_eq!(env.engine, DF_ENGINE);
+        assert_eq!(env.to_json()["engine"], DF_ENGINE);
     }
 
     #[test]
@@ -184,7 +208,7 @@ mod tests {
         });
         assert!(env.equipment.is_empty());
         assert!(env.warnings.iter().any(|w| w.contains("no inline")));
-        assert_eq!(env.engine, ENGINE);
+        assert_eq!(env.engine, CENTRAL_ENGINE);
     }
 
     #[test]

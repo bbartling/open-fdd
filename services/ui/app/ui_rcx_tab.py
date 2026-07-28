@@ -49,7 +49,17 @@ def _render_economizer_diagnostics(
     dt_min = float(st.session_state.get("econ_dt_min_f", 10.0))
 
     if not ui_analytics.prefer_central_analytics():
-        st.info("Central analytics unavailable — economizer diagnostics need openfdd-central.")
+        if ui_analytics.oracle_fallback_enabled():
+            st.info(
+                "Central analytics unavailable — set OPENFDD_ANALYTICS_ORACLE only for "
+                "pandas oracle paths; economizer diagnostics still require openfdd-central."
+            )
+        else:
+            st.error(
+                "Economizer diagnostics unavailable: central analytics is required "
+                "(no silent pandas fallback). Set OPENFDD_ANALYTICS_ORACLE=1 only for "
+                "explicit oracle/dev use."
+            )
         return
 
     with st.spinner("Running central economizer diagnostics…"):
@@ -62,9 +72,16 @@ def _render_economizer_diagnostics(
         )
 
     if not result.get("ok"):
-        st.warning(
-            f"Economizer diagnostics unavailable: {result.get('error') or 'central error'}"
-        )
+        if ui_analytics.oracle_fallback_enabled():
+            st.warning(
+                f"Economizer diagnostics unavailable: {result.get('error') or 'central error'} "
+                "(OPENFDD_ANALYTICS_ORACLE=1 set but economizer has no pandas UI path here)."
+            )
+        else:
+            st.error(
+                f"Economizer diagnostics unavailable: {result.get('error') or 'central error'}. "
+                "No silent pandas fallback."
+            )
         return
 
     env = result.get("analytics") or {}

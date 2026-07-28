@@ -51,6 +51,12 @@ def prefer_central_analytics() -> bool:
     return central_client.health_ok()
 
 
+def oracle_fallback_enabled() -> bool:
+    """True when explicit pandas oracle fallback is allowed (dev/parity only)."""
+    flag = (os.environ.get("OPENFDD_ANALYTICS_ORACLE") or "").strip().lower()
+    return flag in ("1", "true", "yes", "on")
+
+
 def provenance_caption(envelope: dict[str, Any] | None) -> str:
     """Dev provenance string from an analytics envelope (engine / query_version / run_id)."""
     if not isinstance(envelope, dict):

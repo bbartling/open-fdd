@@ -1383,9 +1383,10 @@ async fn jobs_create_wattlab_handoff(
 // ---------------------------------------------------------------------------
 
 async fn analytics_runtime(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    let env = analytics::runtime::handle_async(&req).await;
     Json(json!({
         "ok": true,
-        "analytics": analytics::runtime::handle(&req).to_json(),
+        "analytics": env.to_json(),
     }))
 }
 

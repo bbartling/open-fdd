@@ -14,6 +14,8 @@ openfdd_contracts = { path = "../../crates/openfdd_contracts", features = ["open
 openfdd_mqtt = { path = "../../crates/openfdd_mqtt" }
 open_fdd_edge_prototype = { path = "../../edge" }
 fdd_rules = { path = "../../crates/fdd_rules" }
+fdd_sql = { path = "../../crates/fdd_sql" }
+datafusion.workspace = true
 
 axum = { version = "0.8", features = ["macros"] }
 bytes = "1"
@@ -39,7 +41,9 @@ rumqttc = { version = "0.24", default-features = false, features = ["use-native-
 
 [dev-dependencies]
 base64 = "0.22"
+fdd_store = { path = "../../crates/fdd_store" }
 jsonwebtoken = { version = "10", default-features = false, features = ["aws_lc_rs"] }
 serde_json = "1"
+tempfile = "3"
 uuid = { version = "1", features = ["v4"] }
 zip = { version = "3", default-features = false, features = ["deflate"] }

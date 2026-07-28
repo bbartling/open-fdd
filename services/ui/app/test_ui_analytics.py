@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -139,6 +140,14 @@ def test_provenance_caption() -> None:
     assert "central-analytics-v1" in cap
     assert "runtime-v1" in cap
     assert "run-abc" in cap
+
+
+def test_oracle_fallback_enabled_reads_env() -> None:
+    with patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("OPENFDD_ANALYTICS_ORACLE", None)
+        assert ui_analytics.oracle_fallback_enabled() is False
+    with patch.dict(os.environ, {"OPENFDD_ANALYTICS_ORACLE": "1"}):
+        assert ui_analytics.oracle_fallback_enabled() is True
 
 
 def test_analytics_post_rejects_unknown_family() -> None:

@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::BTreeMap;
 
-use super::{envelope, resolve_query_version, AnalyticsEnvelope, AnalyticsRequest, QV_RUNTIME};
+use super::{
+    envelope, historian, resolve_query_version, AnalyticsEnvelope, AnalyticsRequest,
+    CENTRAL_ENGINE, QV_RUNTIME,
+};
 
 /// One runtime boolean sample for inline compute.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -145,6 +148,7 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
                 "equipment_count": env.equipment.len(),
                 "max_gap_seconds": max_gap,
             }));
+            env.engine = CENTRAL_ENGINE.into();
         }
         _ => {
             warnings.push(
@@ -154,6 +158,34 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         }
     }
     env
+}
+
+/// Async runtime handler: prefer historian DataFusion when samples are empty,
+/// otherwise fall back to inline Δt compute ([`CENTRAL_ENGINE`]).
+pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
+    let has_inline = req.samples.as_ref().map(|s| !s.is_empty()).unwrap_or(false);
+
+    if !has_inline {
+        let max_gap = req.max_gap_seconds.unwrap_or(900.0);
+        let filter = req.query.equipment_ids.as_deref();
+        match historian::runtime_from_history(filter, max_gap).await {
+            Ok(Some(mut env)) => {
+                let (qv, mut warnings) = resolve_query_version(req, QV_RUNTIME);
+                env.query_version = qv;
+                env.job_id = req.query.job_id.clone().or(env.job_id);
+                env.run_id = req.query.run_id.clone().or(env.run_id);
+                warnings.append(&mut env.warnings);
+                env.warnings = warnings;
+                return env;
+            }
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(error = %e, "historian runtime path failed; using inline/empty fallback");
+            }
+        }
+    }
+
+    handle(req)
 }
 
 fn round2(x: f64) -> f64 {
@@ -244,6 +276,30 @@ mod tests {
         let env = handle(&req);
         assert_eq!(env.query_version, QV_RUNTIME);
         assert_eq!(env.equipment.len(), 2);
+        assert_eq!(env.engine, CENTRAL_ENGINE);
         assert!(env.to_json().get("plotly").is_none());
+    }
+
+    #[tokio::test]
+    async fn handle_async_inline_keeps_central_engine() {
+        let req = AnalyticsRequest {
+            samples: Some(vec![
+                RuntimeSample {
+                    equipment_id: "AHU-1".into(),
+                    timestamp: ts(0),
+                    on: true,
+                },
+                RuntimeSample {
+                    equipment_id: "AHU-1".into(),
+                    timestamp: ts(300),
+                    on: true,
+                },
+            ]),
+            max_gap_seconds: Some(900.0),
+            ..Default::default()
+        };
+        let env = handle_async(&req).await;
+        assert_eq!(env.engine, CENTRAL_ENGINE);
+        assert_eq!(env.equipment.len(), 1);
     }
 }

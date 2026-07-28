@@ -2491,17 +2491,22 @@ def main() -> None:
                 )
         except Exception as exc:
             central_runtime = {"ok": False, "error": str(exc)}
-        if not (isinstance(central_runtime, dict) and central_runtime.get("ok")):
-            try:
-                motor_weekly = motor_run_hours_weekly(
-                    frames,
-                    st.session_state.role_map,
-                    chw_leave_max_f=float(st.session_state.get("chw_leave_max_f", 48.0)),
-                    weather=st.session_state.weather,
-                    prefer_web_oat=bool(st.session_state.get("prefer_web_oat", True)),
-                )
-            except Exception as exc:
-                st.warning(f"Weekly motor hours unavailable: {exc}")
+        central_ok = isinstance(central_runtime, dict) and central_runtime.get("ok")
+        if not central_ok:
+            from app import ui_analytics as _ui_analytics
+
+            if _ui_analytics.oracle_fallback_enabled():
+                try:
+                    motor_weekly = motor_run_hours_weekly(
+                        frames,
+                        st.session_state.role_map,
+                        chw_leave_max_f=float(st.session_state.get("chw_leave_max_f", 48.0)),
+                        weather=st.session_state.weather,
+                        prefer_web_oat=bool(st.session_state.get("prefer_web_oat", True)),
+                    )
+                except Exception as exc:
+                    st.warning(f"Weekly motor hours unavailable: {exc}")
+            # else: no silent pandas — error shown in Overview section below
         try:
             cool_bins = mech_cooling_oat_bins(
                 frames,
@@ -2599,13 +2604,30 @@ def main() -> None:
             else:
                 st.info("Central runtime returned no equipment rows.")
         else:
-            st.caption("runtime via pandas oracle (central analytics unavailable)")
-            _render_plant_motor_weekly(
-                motor_weekly,
-                key_prefix="overview",
-                show_table=True,
-                min_air_hours=min_air_hours,
-            )
+            from app import ui_analytics as _ui_analytics
+
+            if _ui_analytics.oracle_fallback_enabled() and not motor_weekly.empty:
+                st.caption(
+                    "runtime via pandas oracle "
+                    "(OPENFDD_ANALYTICS_ORACLE=1; central analytics unavailable)"
+                )
+                _render_plant_motor_weekly(
+                    motor_weekly,
+                    key_prefix="overview",
+                    show_table=True,
+                    min_air_hours=min_air_hours,
+                )
+            else:
+                err = (
+                    (central_runtime or {}).get("error")
+                    if isinstance(central_runtime, dict)
+                    else None
+                )
+                st.error(
+                    "Motor run hours unavailable from central analytics"
+                    + (f": {err}" if err else ".")
+                    + " Set OPENFDD_ANALYTICS_ORACLE=1 for pandas oracle fallback."
+                )
 
         st.markdown("##### Mechanical cooling hours by OAT bin")
         st.caption(
