@@ -24,6 +24,9 @@ Each domain: typed inputs, params, SQL, Arrow schema, null/unit rules, tests.
 ## Today
 
 - FDD: `crates/fdd_sql` + `fdd_rules` (production)
-- RCx / analytics: still largely `services/ui/app/analytics.py` + `rcx_plots.py` (pandas) — migrate per audit inventory
+- Analytics APIs: `services/central/src/analytics/` + `POST /api/analytics/{runtime,sensor-health,schedule,mechanical-cooling,economizer,rcx/ahu,rcx/vav,metering}`
+  - Engine: `central-analytics-v1` (pure Rust; DataFusion SQL wiring next — see [MILESTONE_C_ANALYTICS_MATRIX](../migration/MILESTONE_C_ANALYTICS_MATRIX.md))
+  - Runtime + economizer: live compute from inline samples/series; other families schema stubs
+- RCx / Overview UI: still largely pandas via `services/ui/app/analytics.py` + `rcx_plots.py` — migrate per matrix
 
 No arbitrary operator SQL editor. Integrator SQL lab (if any) is separate and gated.
