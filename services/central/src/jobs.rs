@@ -185,7 +185,7 @@ fn ensure_layout(path: &Path) -> Result<(), JobError> {
     Ok(())
 }
 
-fn atomic_write_json(path: &Path, payload: &Value) -> Result<(), JobError> {
+pub(crate) fn atomic_write_json(path: &Path, payload: &Value) -> Result<(), JobError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| JobError::Io(e.to_string()))?;
     }

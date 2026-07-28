@@ -3794,7 +3794,11 @@ def main() -> None:
         )
         results = st.session_state.batch_results
 
-        st.markdown("##### WattLab dump (vibe20 handoff)")
+        from app.ui_wattlab_job import render_job_native_wattlab_handoff
+
+        render_job_native_wattlab_handoff()
+
+        st.markdown("##### WattLab dump zip (additive)")
         if not frames:
             st.info("Load a package first — the dump needs equipment data.")
         else:

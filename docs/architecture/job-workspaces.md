@@ -99,6 +99,15 @@ Duplicate copies mapping/config/dataset_refs — **not** runs, findings, or repo
 
 `findings/findings.json` holds machine evidence (SQL row hashes, rule outputs). Each finding requires `correlation_key` and `finding_id`. Dispositions live in `findings/dispositions.json` keyed by `correlation_key` — human status never overwrites evidence rows.
 
+## WattLab (job-native SoT)
+
+**Production source of truth** is job-native handoffs under `wattlab/handoffs/*.json`
+(central `POST /api/jobs/{id}/wattlab/handoffs`, Streamlit helper
+[`ui_wattlab_job.py`](../../services/ui/app/ui_wattlab_job.py)). Zip dumps from Export
+remain **additive** for offline / vibe20 / backup — they do not replace the job
+manifest. External EnergyPlus run metadata (when queued) lands under
+`wattlab/runs/*.json`; central tracks status/artifacts only.
+
 ## Atomicity
 
 Metadata writes use temp file + fsync + rename.

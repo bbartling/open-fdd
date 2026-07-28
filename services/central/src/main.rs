@@ -2,6 +2,7 @@
 
 mod analytics;
 mod auth;
+mod eplus_runner;
 mod ingest;
 mod jobs;
 mod models;

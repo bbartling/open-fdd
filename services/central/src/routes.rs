@@ -16,6 +16,7 @@ use serde_json::{json, Value};
 
 use crate::analytics::{self, AnalyticsRequest};
 use crate::auth;
+use crate::eplus_runner;
 use crate::jobs;
 use crate::models::{
     AgentTool, AgentToolsResponse, AuthLoginRequest, AuthLoginResponse, AuthMeResponse,
@@ -139,6 +140,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/api/jobs/{job_id}/wattlab/handoffs",
             post(jobs_create_wattlab_handoff),
+        )
+        .route("/api/jobs/{job_id}/eplus/runs", post(jobs_queue_eplus_run))
+        .route(
+            "/api/jobs/{job_id}/eplus/runs/{eplus_run_id}/artifacts",
+            post(jobs_attach_eplus_artifact),
         )
         .route("/api/analytics/runtime", post(analytics_runtime))
         .route(
@@ -1376,6 +1382,28 @@ async fn jobs_create_wattlab_handoff(
         StatusCode::CREATED,
         Json(json!({"ok": true, "handoff": handoff})),
     ))
+}
+
+/// Queue an external EnergyPlus run (Milestone D4).
+///
+/// Central **persists** `QUEUED` metadata under `wattlab/runs/*.json` only.
+/// It does not attach to a Docker socket or execute EnergyPlus in-process;
+/// an approved external runner claims the record and later attaches artifacts.
+async fn jobs_queue_eplus_run(
+    Path(job_id): Path<String>,
+    Json(body): Json<eplus_runner::JobRunRequest>,
+) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
+    let run = eplus_runner::queue_external_run(&job_id, body).map_err(job_err)?;
+    Ok((StatusCode::CREATED, Json(json!({"ok": true, "run": run}))))
+}
+
+/// Record artifact metadata for an external E+ run (hashes/paths only — no bytes).
+async fn jobs_attach_eplus_artifact(
+    Path((job_id, eplus_run_id)): Path<(String, String)>,
+    Json(body): Json<eplus_runner::AttachArtifactMeta>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let run = eplus_runner::attach_artifact_meta(&job_id, &eplus_run_id, body).map_err(job_err)?;
+    Ok(Json(json!({"ok": true, "run": run})))
 }
 
 // ---------------------------------------------------------------------------
