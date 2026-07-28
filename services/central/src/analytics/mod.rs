@@ -7,6 +7,7 @@
 pub mod economizer;
 pub mod mechanical_cooling;
 pub mod metering;
+pub mod plant;
 pub mod rcx;
 pub mod runtime;
 pub mod schedule;

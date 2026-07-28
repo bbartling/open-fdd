@@ -2711,6 +2711,10 @@ def main() -> None:
                 "economizer_weather.csv",
                 key="dl_econ_weather_overview",
             )
+            st.info(
+                "Detailed free-cooling / mixing diagnostics (delta scatter, MAT residual, OA fraction) "
+                "live under **RCx Plots → AHU → Economizer diagnostics** (canonical central dataset)."
+            )
 
         st.markdown("##### BAS vs web outdoor-air temperature")
         st.caption(

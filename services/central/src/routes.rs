@@ -153,6 +153,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/analytics/economizer", post(analytics_economizer))
         .route("/api/analytics/rcx/ahu", post(analytics_rcx_ahu))
         .route("/api/analytics/rcx/vav", post(analytics_rcx_vav))
+        .route("/api/analytics/rcx/chiller", post(analytics_rcx_chiller))
+        .route("/api/analytics/rcx/boiler", post(analytics_rcx_boiler))
         .route("/api/analytics/metering", post(analytics_metering))
         .merge(csv)
         .layer(middleware::from_fn_with_state(
@@ -1426,6 +1428,20 @@ async fn analytics_rcx_vav(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
     Json(json!({
         "ok": true,
         "analytics": analytics::rcx::handle_vav(&req).to_json(),
+    }))
+}
+
+async fn analytics_rcx_chiller(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::plant::handle_chiller(&req).to_json(),
+    }))
+}
+
+async fn analytics_rcx_boiler(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "analytics": analytics::plant::handle_boiler(&req).to_json(),
     }))
 }
 
