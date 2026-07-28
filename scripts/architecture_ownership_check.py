@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Validate openfdd_agent_spec ownership.yaml + required cookbook paths.
+"""Validate openfdd_agent_spec ownership.yaml + required cookbook paths + README invariants.
 
-Lightweight Milestone A Phase 0 CI smoke — does not replace cookbook_parity_check.
+Lightweight Milestone A/C0 CI smoke — does not replace cookbook_parity_check.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover
 
 ROOT = Path(__file__).resolve().parents[1]
 OWNERSHIP = ROOT / "openfdd_agent_spec" / "ownership.yaml"
+README = ROOT / "README.md"
 COOKBOOK = ROOT / "docs" / "rules" / "cookbook"
 REQUIRED_COOKBOOKS = (
     "datafusion-sql-cookbook.md",
@@ -23,16 +24,56 @@ REQUIRED_COOKBOOKS = (
     "parity-matrix.md",
 )
 
+# README navigation / product wording invariants (C0).
+README_REQUIRED_MARKERS = (
+    "FDD Rule Cookbook",
+    "pypi.org/project/open-fdd",
+    "Apache DataFusion",
+    "Apache Arrow",
+    "datafusion-sql-cookbook",
+    "pandas-cookbook",
+    "img.shields.io/badge/Docs-online",
+    "FDD%20Rule%20Cookbook",
+    "img.shields.io/pypi/v/open-fdd",
+    "Quick%20Start-GHCR%20stack",
+    "Apache%20Arrow-columnar%20data",
+    "DataFusion-SQL%20engine",
+)
+
+
+def _check_readme(errors: list[str]) -> None:
+    if not README.is_file():
+        errors.append("missing README.md")
+        return
+    text = README.read_text(encoding="utf-8")
+    for marker in README_REQUIRED_MARKERS:
+        if marker not in text:
+            errors.append(f"README.md missing required marker: {marker!r}")
+    # Forbidden production-UI claims
+    if "Vite :5173" in text or "Vite/Caddy SPA" in text and "not a Vite" not in text:
+        # Allow explicit negation ("not a Vite/Caddy SPA") but not the old develop hint.
+        if "Vite :5173" in text:
+            errors.append("README.md must not claim Vite :5173 as the UI develop path")
+    if "59" not in text or "63" not in text:
+        errors.append(
+            "README.md must state both public cookbook 59 and SQL registry 63 (count contract)"
+        )
+    if "Streamlit" not in text:
+        errors.append("README.md must identify Streamlit as the operator UI")
+    if "GHCR" not in text and "ghcr.io" not in text:
+        errors.append("README.md must mention GHCR stack for production DataFusion FDD")
+
 
 def main() -> int:
     errors: list[str] = []
     if not OWNERSHIP.is_file():
         errors.append(f"missing {OWNERSHIP.relative_to(ROOT)}")
     elif yaml is None:
-        # stdlib-only fallback: require non-empty YAML-looking file
         text = OWNERSHIP.read_text(encoding="utf-8")
         if "schema_version:" not in text or "components:" not in text:
             errors.append("ownership.yaml missing required keys (install PyYAML for full parse)")
+        if "protected_docs:" not in text:
+            errors.append("ownership.yaml missing protected_docs (install PyYAML for full parse)")
     else:
         data = yaml.safe_load(OWNERSHIP.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
@@ -59,12 +100,34 @@ def main() -> int:
                 elif future is not None:
                     errors.append("future_concepts must be a mapping with paths + policy")
 
+            protected = data.get("protected_docs")
+            if not isinstance(protected, dict):
+                errors.append("protected_docs must be a mapping")
+            else:
+                for key in (
+                    "root_readme_navigation",
+                    "pandas_cookbook",
+                    "sql_cookbook",
+                    "parity_matrix",
+                ):
+                    if key not in protected:
+                        errors.append(f"protected_docs missing {key}")
+                nav = protected.get("root_readme_navigation") or {}
+                if isinstance(nav, dict):
+                    markers = nav.get("required_markers") or []
+                    if not isinstance(markers, list) or len(markers) < 4:
+                        errors.append(
+                            "protected_docs.root_readme_navigation.required_markers incomplete"
+                        )
+
     for name in REQUIRED_COOKBOOKS:
         path = COOKBOOK / name
         if not path.is_file():
             errors.append(f"missing cookbook {path.relative_to(ROOT)}")
         elif path.stat().st_size < 200:
             errors.append(f"cookbook suspiciously small: {path.relative_to(ROOT)}")
+
+    _check_readme(errors)
 
     if errors:
         print("architecture_ownership_check FAILED:", file=sys.stderr)

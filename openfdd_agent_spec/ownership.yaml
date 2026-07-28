@@ -88,3 +88,21 @@ components:
   mcp:
     canonical_owner: openfdd-mcp
     role: read_first_central_tools
+
+# Milestone C0 — documentation sections that must not be vibe-coded away.
+protected_docs:
+  root_readme_navigation:
+    path: README.md
+    required_markers:
+      - "FDD Rule Cookbook"
+      - "pypi.org/project/open-fdd"
+      - "Apache DataFusion"
+      - "Apache Arrow"
+      - "datafusion-sql-cookbook"
+      - "pandas-cookbook"
+  pandas_cookbook:
+    path: docs/rules/cookbook/pandas-cookbook.md
+  sql_cookbook:
+    path: docs/rules/cookbook/datafusion-sql-cookbook.md
+  parity_matrix:
+    path: docs/rules/cookbook/parity-matrix.md

@@ -22,6 +22,9 @@
   <a href="https://bbartling.github.io/open-fdd/rules/cookbook/">
     <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-59%20rules%20SQL%20%2B%20Pandas-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — DataFusion SQL + Pandas">
   </a>
+  <a href="https://pypi.org/project/open-fdd/">
+    <img src="https://img.shields.io/pypi/v/open-fdd?style=for-the-badge&label=PyPI&color=3775A9" alt="Open-FDD on PyPI">
+  </a>
   <a href="https://bbartling.github.io/open-fdd/quick-start/docker-ghcr.html">
     <img src="https://img.shields.io/badge/Quick%20Start-GHCR%20stack-059669?style=for-the-badge" alt="Quick start">
   </a>
@@ -45,7 +48,7 @@ The platform includes:
 - Semantic building modeling using **Project Haystack** knowledge graphs
 - JWT authentication and a modern **Streamlit** engineering UI (`openfdd-ui`)
 - Apache Arrow & Feather columnar data storage
-- Apache DataFusion SQL analytics and fault detection (59+ cookbook rules)
+- Apache DataFusion SQL analytics and fault detection (59 cookbook rules; 63 SQL registry IDs)
 - BACnet, Modbus, Haystack, and JSON API drivers (fieldbus container)
 - Interactive plotting, dashboards, and CSV job workflows
 - Optional **external** agent integration via MCP stdio and JWT REST (no embedded chatbot)
@@ -79,6 +82,8 @@ The **[HVAC FDD Rule Cookbook](https://bbartling.github.io/open-fdd/rules/cookbo
 - **[Pandas cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html)** — the same rules for notebooks, CSV exports, and RCx studies
 
 Rules use generic Haystack semantic roles, so they are portable across any modeled site. CI enforces a minimum of 59 rule headings in both cookbooks (`scripts/cookbook_parity_check.py`) — the catalog can never shrink.
+
+**Count contract (honest):** the public dual cookbooks document **59** rules. The production DataFusion SQL registry (`sql_rules/registry.yaml`) currently lists **63** rule IDs (59 cookbook-covered + SQL-only additions). See the [parity matrix](docs/rules/cookbook/parity-matrix.md). Do not treat badge “59” as the registry length.
 
 ---
 
@@ -135,8 +140,10 @@ Full tool list: [mcp/README.md](mcp/README.md).
 ```bash
 git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
 ./scripts/openfdd_stack_up.sh csv --build   # or: cargo run -p openfdd-central
-./scripts/openfdd_ui_dev.sh                 # Vite :5173 → API :8080
+./scripts/openfdd_ui_dev.sh                 # Streamlit UI → central API :8080
 ```
+
+The production operator UI is **Streamlit** (`services/ui` / `ghcr.io/bbartling/openfdd-ui`), not a Vite/Caddy SPA.
 
 Native Rust: `cargo test --workspace`
 
