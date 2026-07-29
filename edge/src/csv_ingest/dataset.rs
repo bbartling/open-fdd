@@ -486,6 +486,37 @@ pub fn delete_dataset(dataset_id: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Register a package building id in the dataset registry (for Delete dataset by Haystack name).
+pub fn register_package_dataset(
+    building_id: &str,
+    row_count: u64,
+    equipment_count: usize,
+    extra: &Value,
+) -> Result<(), String> {
+    let id = sanitize_id(building_id);
+    if id.is_empty() {
+        return Err("invalid building id".into());
+    }
+    let metadata = json!({
+        "id": id,
+        "row_count": row_count,
+        "equipment_count": equipment_count,
+        "source": "openfdd_package_v1",
+        "created_at": Utc::now().to_rfc3339(),
+        "extra": extra,
+    });
+    let mut reg = load_registry();
+    let datasets = reg
+        .as_object_mut()
+        .and_then(|o| o.get_mut("datasets"))
+        .and_then(|d| d.as_array_mut())
+        .ok_or("registry corrupt")?;
+    datasets.retain(|d| d.get("id").and_then(|v| v.as_str()) != Some(id.as_str()));
+    datasets.push(metadata);
+    save_registry(&reg)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -539,35 +570,4 @@ mod tests {
             let _ = std::env::set_current_dir(cwd);
         }
     }
-}
-
-/// Register a package building id in the dataset registry (for Delete dataset by Haystack name).
-pub fn register_package_dataset(
-    building_id: &str,
-    row_count: u64,
-    equipment_count: usize,
-    extra: &Value,
-) -> Result<(), String> {
-    let id = sanitize_id(building_id);
-    if id.is_empty() {
-        return Err("invalid building id".into());
-    }
-    let metadata = json!({
-        "id": id,
-        "row_count": row_count,
-        "equipment_count": equipment_count,
-        "source": "openfdd_package_v1",
-        "created_at": Utc::now().to_rfc3339(),
-        "extra": extra,
-    });
-    let mut reg = load_registry();
-    let datasets = reg
-        .as_object_mut()
-        .and_then(|o| o.get_mut("datasets"))
-        .and_then(|d| d.as_array_mut())
-        .ok_or("registry corrupt")?;
-    datasets.retain(|d| d.get("id").and_then(|v| v.as_str()) != Some(id.as_str()));
-    datasets.push(metadata);
-    save_registry(&reg)?;
-    Ok(())
 }
