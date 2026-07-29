@@ -90,9 +90,6 @@ async fn sql_with_optional_null_roles(
             .collect::<String>()
             .to_ascii_lowercase()
     );
-    let hist = ctx.table("history").await?;
-    let _ = hist; // ensure history exists
-    // SELECT *, CAST(NULL AS DOUBLE) AS role ... via SQL for portability
     let null_cols: String = missing
         .iter()
         .map(|r| format!("CAST(NULL AS DOUBLE) AS \"{r}\""))
@@ -102,7 +99,6 @@ async fn sql_with_optional_null_roles(
         "CREATE OR REPLACE TEMP VIEW {view_name} AS SELECT history.*, {null_cols} FROM history"
     );
     ctx.sql(&create_sql).await?.collect().await?;
-    // Replace bare table name history with the augmented view (word-boundary-ish).
     let rewritten = sql
         .replace(" FROM history", &format!(" FROM {view_name}"))
         .replace(" from history", &format!(" from {view_name}"))
