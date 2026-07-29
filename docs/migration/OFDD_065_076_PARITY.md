@@ -6,7 +6,8 @@ nav_order: 40
 
 # OFDD 065–076 parity register
 
-**Date:** 2026-07-29 · Branch `fix/ofdd-gate-a-sites-sql-413`
+**Date:** 2026-07-29 · Branches `fix/ofdd-gate-a-sites-sql-413` (Gate A) →
+`fix/ofdd-gate-b-c-findings-ecm` (Gate B + Gate C, built on the Gate A tip)
 
 Tracks the Liberty B50/B100 parity hunt tickets OFDD-065…076 across the three
 gates defined in the combined vibe19+vibe20 plan. This file records **VERIFIED**
@@ -61,11 +62,27 @@ Next step (Gate A exit): run the `sha-*` soak, fill the deltas table above, then
 tighten SV-STALE/VAV-1/FC1 gates within documented bands without regressing
 `crates/fdd_rules` oracle-parity benches.
 
-## Later gates (tracked, not in this branch)
+## Gate B — vibe19 tip UI / Findings / economizer (branch `fix/ofdd-gate-b-c-findings-ecm`)
 
-| Ticket | Scope | Gate | Status |
-|--------|-------|------|--------|
-| OFDD-074 / 069 | Eng Findings HITL; retire Generic RCx DOCX story | B | Open |
-| OFDD-070 | Economizer historian/building-scoped Overview | B | Open |
-| OFDD-071 | OpenAPI live routes + health version = tip SHA | B | Open |
-| OFDD-076 / 072 | In-product vibe20 Jobs agent-build + cascade-if-ready | C | Open |
+| Ticket | Scope | Gate | Status | Notes |
+|--------|-------|------|--------|-------|
+| OFDD-074 / 069 | Eng Findings HITL; retire Generic RCx DOCX story | B | **VERIFIED** | Overview report story is now `app.eng_findings.render_engineering_findings_panel` over `open_fdd.reporting` (HITL: max-findings, pin/drop refs, `REF=note` notes → prioritized findings + DOCX/XLSX/JSON downloads). The active site's `batch_results` are `open_fdd.rules.base.RuleResult`, fed straight to `candidates_from_rule_results`. When the `reporting` extra is absent, the panel falls back to central `/api/reports` (list/draft) instead of a static DOCX. Static Generic RCx DOCX demoted to a secondary expander. Helper unit tests green. `dashboard_contract` updated. |
+| OFDD-070 | Economizer historian/building-scoped Overview | B | **VERIFIED** | `AnalyticsQuery.building_id` added; `economizer_from_history` + `open_history_scoped` register only `building={id}/**/*.parquet` (rejects path-escape ids; returns `None` for an un-ingested site rather than leaking the whole tree). UI (`ui_rcx_tab`/`ui_analytics.fetch_economizer_analytics`) forwards the active `building_id`. IT: two ingested buildings → each scope sees only its own AHU; coverage echoes `building_id`. |
+| OFDD-071 | OpenAPI live routes + health version = tip SHA | B | **VERIFIED** | `/api/health` `version` = `resolve_build_version()` → `{CARGO_PKG_VERSION}+{OPENFDD_GIT_SHA}` (runtime) or `OPENFDD_BUILD_GIT_SHA` (compile-time), else bare crate version (no more stale-only `3.3.0`). `/openapi.json` now advertises live jobs / analytics / datasets / fdd-results / reports routes (doc-only `#[utoipa::path]` descriptors + new tags). Tests: `openapi_lists_live_*`, `version_prefers_runtime_git_sha_then_crate_version`. |
+
+## Gate C — vibe20 in-product Jobs / ECM (branch `fix/ofdd-gate-b-c-findings-ecm`)
+
+| Ticket | Scope | Gate | Status | Notes |
+|--------|-------|------|--------|-------|
+| OFDD-076 / 072 | In-product vibe20 Jobs agent-build + cascade-if-ready | C | **VERIFIED (delegated)** | Jobs sidebar surfaces **create Job from active site** (site/building caption + scoped WattLab/ECM). New `app.ui_ecm_job` writes a job-native **ECM package request** under `wattlab/ecm/*.json` with `honesty.openfdd = "delegated"` when `open_fdd.ecm_engineering` imports (`"unavailable"` otherwise); WattLab notebook builder shell-out is detected and recorded when present. **cascade-if-ready**: when docker.sock **and** `energyplus-mcp-dev` are present, an external E+ run is queued via the existing `POST /api/jobs/{id}/eplus/runs` (`eplus_runner`, QUEUED-only); otherwise an honest `esco_screening_only` stamp — central stays free of IDF/E+ logic. Unit tests cover honesty states, the cascade gate, queue-when-ready, and the on-disk request. |
+
+## Gate B/C honesty caveats
+
+- **No Liberty zips in this environment**, so Eng Findings / economizer parity is
+  proven on synthetic fixtures + unit/integration tests, not a B50/B100 soak. The
+  `sha-*` soak (Gate A exit) still owns filling the FAULT deltas table above and
+  the vibe19-tip UX comparison screenshots.
+- ECM agent-build and any EnergyPlus calibration are **delegated** (WattLab /
+  external runner). open-fdd is not marketed as vibe20-complete: the in-product
+  path records requests and queues external runs; it does not itself parse IDF or
+  run EnergyPlus.
