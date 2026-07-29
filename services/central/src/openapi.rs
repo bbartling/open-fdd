@@ -133,6 +133,15 @@ mod live_routes {
     pub fn reports_list() {}
 
     #[utoipa::path(
+        get, path = "/api/reports/engineering-findings", tag = "reports",
+        responses(
+            (status = 200, description = "Most recent engineering-findings report", body = serde_json::Value),
+            (status = 404, description = "No engineering-findings report on disk", body = serde_json::Value)
+        )
+    )]
+    pub fn reports_engineering_findings() {}
+
+    #[utoipa::path(
         get, path = "/api/reports/templates", tag = "reports",
         responses((status = 200, description = "List report templates", body = serde_json::Value))
     )]
@@ -186,6 +195,7 @@ mod live_routes {
         live_routes::analytics_mechanical_cooling,
         live_routes::analytics_metering,
         live_routes::reports_list,
+        live_routes::reports_engineering_findings,
         live_routes::reports_templates,
         live_routes::reports_draft,
         live_routes::reports_get,
@@ -278,6 +288,7 @@ mod tests {
             "/api/fdd/results",
             "/api/analytics/economizer",
             "/api/reports",
+            "/api/reports/engineering-findings",
         ] {
             assert!(
                 paths.contains_key(expected),

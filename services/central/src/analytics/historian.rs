@@ -593,9 +593,10 @@ ORDER BY equipment_id
 
 /// Economizer descriptive diagnostics from historian Parquet via DataFusion.
 ///
-/// Requires `oa_t`, `rat`, `mat` columns and a fan on-expression. Computes
-/// per-equipment fan-on and identifiable (`|OAT−RAT| >= dt_min`) sample counts.
-/// Never invents MAT residuals; those remain the inline central path only.
+/// Requires an OAT column (`oa_t` or Liberty `web_oa_t`), plus `rat` and `mat`,
+/// and a fan on-expression. Computes per-equipment fan-on and identifiable
+/// (`|OAT−RAT| >= dt_min`) sample counts. Never invents MAT residuals; those
+/// remain the inline central path only.
 pub async fn economizer_from_history(
     equipment_filter: Option<&[String]>,
     dt_min_f: f64,
@@ -604,9 +605,32 @@ pub async fn economizer_from_history(
     let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
-    if !(cols.contains("oa_t") && cols.contains("rat") && cols.contains("mat")) {
+    // OFDD-070 / ENH-OFDD-001: Liberty packages expose web_oa_t (not oa_t).
+    let oat_col = if cols.contains("oa_t") {
+        "oa_t"
+    } else if cols.contains("web_oa_t") {
+        "web_oa_t"
+    } else {
         return Ok(None);
-    }
+    };
+    let rat_col = if cols.contains("rat") {
+        "rat"
+    } else if cols.contains("web_ra_t") {
+        "web_ra_t"
+    } else {
+        return Ok(None);
+    };
+    let mat_col = if cols.contains("mat") {
+        "mat"
+    } else if cols.contains("web_mat") || cols.contains("web_ma_t") {
+        if cols.contains("web_mat") {
+            "web_mat"
+        } else {
+            "web_ma_t"
+        }
+    } else {
+        return Ok(None);
+    };
     let Some(on_sql) = on_expr(&cols) else {
         return Ok(None);
     };
@@ -624,7 +648,9 @@ pub async fn economizer_from_history(
 WITH base AS (
   SELECT
     equipment_id,
-    oa_t, rat, mat,
+    {oat_col} AS oa_t,
+    {rat_col} AS rat,
+    {mat_col} AS mat,
     {on_sql} AS fan_on
   FROM history
   WHERE equipment_id IS NOT NULL{eq_filter}
@@ -674,6 +700,9 @@ ORDER BY equipment_id
         "dt_min_f": dt_min,
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
+        "oat_column": oat_col,
+        "rat_column": rat_col,
+        "mat_column": mat_col,
     }));
     Ok(Some(env))
 }

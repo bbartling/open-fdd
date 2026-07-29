@@ -22,7 +22,7 @@ while [[ $# -gt 0 ]]; do
     --pull) DO_PULL=1; shift ;;
     -h|--help)
       cat <<'EOF'
-Usage: openfdd_stack_up.sh [standalone|central|edge|csv] [--build|--no-pull]
+Usage: openfdd_stack_up.sh [standalone|central|edge|csv] [--build|--no-pull] [--caddy]
 
 Recipes:
   standalone  mqtt + central + ui + fieldbus
@@ -30,10 +30,15 @@ Recipes:
   edge        fieldbus only (needs OPENFDD_MQTT_HOST)
   csv         central + ui only (no mqtt/fieldbus)
 
+Options:
+  --caddy     Also start Caddy on :80 → Streamlit UI (/api* → central)
+
 Env: OPENFDD_IMAGE_TAG, OPENFDD_*_IMAGE, OPENFDD_JWT_SECRET, OPENFDD_ADMIN_PASSWORD
+     OPENFDD_CADDY=1 (same as --caddy), OPENFDD_CENTRAL_BIND=127.0.0.1 (LAN via Caddy)
 EOF
       exit 0
       ;;
+    --caddy) export OPENFDD_CADDY=1; shift ;;
     *) EXTRA+=("$1"); shift ;;
   esac
 done
@@ -48,6 +53,13 @@ if [[ "$DO_PULL" -eq 1 ]]; then
 fi
 
 ARGS=(-f "$COMPOSE")
+if [[ "${OPENFDD_CADDY:-0}" == "1" || "${OPENFDD_CADDY:-}" == "true" ]]; then
+  if [[ "$RECIPE" == "edge" ]]; then
+    echo "WARN: --caddy ignored for edge recipe (no UI)" >&2
+  else
+    ARGS+=(-f "$ROOT/docker/compose.caddy.yml")
+  fi
+fi
 if [[ "$DO_BUILD" -eq 1 ]]; then
   docker compose "${ARGS[@]}" up -d --build --remove-orphans "${EXTRA[@]+"${EXTRA[@]}"}"
 else
@@ -57,5 +69,8 @@ fi
 if [[ "$RECIPE" != "edge" ]]; then
   openfdd_stack_wait_health
   echo "UI: http://127.0.0.1:3000  API: ${OPENFDD_API_BASE:-http://127.0.0.1:8080}"
+  if [[ "${OPENFDD_CADDY:-0}" == "1" || "${OPENFDD_CADDY:-}" == "true" ]]; then
+    echo "Caddy: http://<host>/  (UI)  http://<host>/api/health  (central)"
+  fi
 fi
 echo "OK recipe=${RECIPE} up"

@@ -499,28 +499,35 @@ timestamp_utc,oat_col
     #[tokio::test]
     async fn sv_stale_screening_confirm_streak() {
         // Age vs MAX(ts) > STALE_HOURS. Keep ported (not pandas multi-point stale).
+        // OFDD-065: fan-on gate — fixture keeps fan_cmd=1 so expected hours unchanged.
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_SVSTALE");
         std::fs::create_dir_all(&building).unwrap();
 
         // STALE_HOURS=0.1 (6 min): first four rows older than 6 min from max.
         let rows = "\
-timestamp_utc,oat_col
-2026-01-01T00:00:00Z,70
-2026-01-01T00:05:00Z,70
-2026-01-01T00:10:00Z,70
-2026-01-01T00:15:00Z,70
-2026-01-01T00:20:00Z,70
-2026-01-01T00:25:00Z,70
+timestamp_utc,oat_col,fan_col
+2026-01-01T00:00:00Z,70,1
+2026-01-01T00:05:00Z,70,1
+2026-01-01T00:10:00Z,70,1
+2026-01-01T00:15:00Z,70,1
+2026-01-01T00:20:00Z,70,1
+2026-01-01T00:25:00Z,70,1
 ";
         write_equipment_fixture(
             &building,
             "AHU_1",
             5,
-            &[RoleCol {
-                csv_col: "oat_col",
-                role: "oa_t",
-            }],
+            &[
+                RoleCol {
+                    csv_col: "oat_col",
+                    role: "oa_t",
+                },
+                RoleCol {
+                    csv_col: "fan_col",
+                    role: "fan_cmd",
+                },
+            ],
             rows,
         );
 
@@ -537,6 +544,50 @@ timestamp_utc,oat_col
         let raw = [true, true, true, true, false, false];
         let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
         assert_hours_close(got, expected, "SV-STALE screening SQL");
+    }
+
+    #[tokio::test]
+    async fn sv_stale_fan_off_rows_excluded() {
+        // OFDD-065 regression: fan_cmd=0 rows must not accumulate FAULT hours.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SVSTALE_OFF");
+        std::fs::create_dir_all(&building).unwrap();
+
+        let rows = "\
+timestamp_utc,oat_col,fan_col
+2026-01-01T00:00:00Z,70,0
+2026-01-01T00:05:00Z,70,0
+2026-01-01T00:10:00Z,70,0
+2026-01-01T00:15:00Z,70,0
+2026-01-01T00:20:00Z,70,0
+2026-01-01T00:25:00Z,70,0
+";
+        write_equipment_fixture(
+            &building,
+            "AHU_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "oat_col",
+                    role: "oa_t",
+                },
+                RoleCol {
+                    csv_col: "fan_col",
+                    role: "fan_cmd",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "sv_stale.sql",
+            300.0,
+            600,
+            &[("STALE_HOURS", "0.1")],
+        )
+        .await;
+        assert_hours_close(got, 0.0, "SV-STALE fan-off excluded");
     }
 
     #[tokio::test]

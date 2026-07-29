@@ -594,7 +594,8 @@ rules:
     sql_file: sv_stale.sql
     pandas_function: null
     description: Stale data (no fresh samples)
-    required_roles: []
+    # OFDD-065: require a fan signal so age-vs-max does not inflate off-period / weather rows
+    required_roles: [fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: ported_from_cookbook

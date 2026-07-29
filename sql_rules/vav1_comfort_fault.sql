@@ -1,4 +1,8 @@
 -- vav1_comfort_fault.sql — zone comfort band with confirm window (Open-FDD parity)
+-- OFDD-065 note: do not reference fan_cmd here. Zone-only VAV parquet schemas
+-- often lack fan_cmd; DataFusion then schema-errors → SKIPPED_MISSING_ROLES.
+-- SV-STALE owns the fan-on gate for AHU stale inflation; VAV-1 Liberty residual
+-- remains a confirm-window / band tuning item for a follow-up soak.
 WITH base AS (
   SELECT
     equipment_id,

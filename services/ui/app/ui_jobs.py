@@ -150,19 +150,25 @@ def render_jobs_sidebar() -> None:
         if st.button("Create job", key="jobs_create_btn", disabled=not (name or "").strip()):
             try:
                 meta = None
+                # OFDD-076: persist building_id → site_id / building fields (Liberty soak).
+                building_id = st.session_state.get("building_id")
+                site_id = st.session_state.get("site_id") or building_id
+                site_name = st.session_state.get("site_name") or site_id
                 if central_client.health_ok():
                     resp = central_client.jobs_create(
                         name.strip(),
-                        site_name=st.session_state.get("site_id"),
-                        building_name=st.session_state.get("building_id"),
+                        site_id=site_id,
+                        site_name=site_name,
+                        building_name=building_id,
                     )
                     if resp.get("ok") and isinstance(resp.get("job"), dict):
                         meta = _meta_from_api(resp["job"])
                 if meta is None:
                     meta = job_store.create_job(
                         name.strip(),
-                        site_name=st.session_state.get("site_id"),
-                        building_name=st.session_state.get("building_id"),
+                        site_id=site_id,
+                        site_name=site_name,
+                        building_name=building_id,
                         ws=_ws(),
                     )
                 role_map = st.session_state.get("role_map")

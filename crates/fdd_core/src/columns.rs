@@ -71,15 +71,21 @@ fn header_index(headers: &csv::StringRecord, names: &[&str]) -> Option<usize> {
 /// Mirrors Python ``cookbook_engine.ROLE_CANDIDATES`` RDF role aliases.
 pub fn normalize_role(role: &str) -> String {
     match role.trim().to_lowercase().as_str() {
-        "oat" | "outside_air_temp" | "outside_air_temp_f" | "weather_oat" => "oa_t".into(),
+        "oat" | "outside_air_temp" | "outside_air_temp_f" | "weather_oat" | "oa_temp" => {
+            "oa_t".into()
+        }
         "zone_temp" | "zone_temperature" | "space_temp" | "zn_t" | "zone_t" => "zone_t".into(),
         "supply_air_temp"
         | "supply_air_temperature"
         | "discharge_air_temp"
         | "discharge_air_temp_f"
         | "sat" => "sat".into(),
-        "return_air_temp" | "return_air_temp_f" | "rat" | "ra_t" => "rat".into(),
-        "mixed_air_temp" | "mixed_air_temp_f" | "mat" | "ma_t" => "mat".into(),
+        // Keep web_oa_t as identity (mech_oat / econ3/6/7 SQL require that column name).
+        // Liberty economizer historian accepts web_oa_t as an oa_t alias in historian.rs.
+        "return_air_temp" | "return_air_temp_f" | "rat" | "ra_t" | "web_ra_t" | "web_rat"
+        | "return_air_t" => "rat".into(),
+        "mixed_air_temp" | "mixed_air_temp_f" | "mat" | "ma_t" | "web_mat" | "web_ma_t"
+        | "mixed_air_t" => "mat".into(),
         "fan_speed"
         | "fan_pct"
         | "fan_percent"
@@ -122,6 +128,8 @@ fn is_known_cookbook_role(role: &str) -> bool {
             | "oa_t"
             | "rat"
             | "mat"
+            | "web_oa_t"
+            | "web_oa_dp"
             | "duct_static"
             | "duct_static_sp"
             | "oa_damper_pct"
@@ -161,6 +169,10 @@ fn infer_role_from_column_name(column: &str) -> Option<String> {
         );
     }
     if c.contains("outside_air_temp") || c.contains("oa_t") || c.ends_with("oa-t") {
+        // Preserve first-class web_oa_t role for mech_oat / econ SQL (do not collapse to oa_t).
+        if c == "web_oa_t" || c == "web_oat" || c.starts_with("web_oa_t") {
+            return Some("web_oa_t".into());
+        }
         return Some("oa_t".into());
     }
     if c.contains("dry_bulb") || c.contains("drybulb") {
@@ -177,7 +189,12 @@ fn infer_role_from_column_name(column: &str) -> Option<String> {
     if c.contains("discharge_air") || c.starts_with("dat_") || c.contains(" da-t") {
         return Some("sat".into());
     }
-    if c.contains("return_air") || c.contains("ra_t") || c.contains("ra-t") {
+    if c.contains("return_air")
+        || c.contains("ra_t")
+        || c.contains("ra-t")
+        || c.starts_with("web_ra")
+        || c.starts_with("web_rat")
+    {
         return Some("rat".into());
     }
     if c.contains("mixed_air")
@@ -185,6 +202,8 @@ fn infer_role_from_column_name(column: &str) -> Option<String> {
         || c.contains("ma-t")
         || c == "mad_c"
         || c == "mad-c"
+        || c.starts_with("web_ma")
+        || c == "web_mat"
     {
         return Some("mat".into());
     }
@@ -238,6 +257,31 @@ mod tests {
         assert_eq!(normalize_role("supply_fan"), "fan_cmd");
         assert_eq!(normalize_role("fan_status"), "fan_status");
         assert_eq!(normalize_role("ra_t"), "rat");
+    }
+
+    #[test]
+    fn liberty_web_prefixed_econ_roles_normalize() {
+        // OFDD-070: web_oa_t stays first-class (mech_oat/econ SQL); rat/mat aliases map.
+        assert_eq!(normalize_role("web_oa_t"), "web_oa_t");
+        assert_eq!(normalize_role("oa_temp"), "oa_t");
+        assert_eq!(normalize_role("web_ra_t"), "rat");
+        assert_eq!(normalize_role("web_rat"), "rat");
+        assert_eq!(normalize_role("return_air_t"), "rat");
+        assert_eq!(normalize_role("web_mat"), "mat");
+        assert_eq!(normalize_role("web_ma_t"), "mat");
+        assert_eq!(normalize_role("mixed_air_t"), "mat");
+        assert_eq!(
+            infer_role_from_column_name("web_oa_t").as_deref(),
+            Some("web_oa_t")
+        );
+        assert_eq!(
+            infer_role_from_column_name("web_ra_t").as_deref(),
+            Some("rat")
+        );
+        assert_eq!(
+            infer_role_from_column_name("web_mat").as_deref(),
+            Some("mat")
+        );
     }
 
     #[test]

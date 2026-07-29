@@ -20,12 +20,37 @@ def test_jobs_list_central_down() -> None:
     assert out.get("ok") is False
 
 
-def test_jobs_create_central_down() -> None:
-    with patch.object(
-        central_client, "_request", side_effect=central_client.requests.RequestException("down")
-    ):
-        out = central_client.jobs_create("x")
-    assert out.get("central_down") is True
+def test_jobs_create_forwards_site_id_and_building_name() -> None:
+    """OFDD-076: create-from-site must persist site_id (not only site_name)."""
+    captured: dict = {}
+
+    def _capture(method, url, **kwargs):
+        captured["json"] = kwargs.get("json")
+        resp = MagicMock()
+        resp.status_code = 201
+        resp.json.return_value = {
+            "ok": True,
+            "job": {
+                "job_id": "job-test",
+                "job_name": "Liberty B50",
+                "site_id": "BUILDING_50",
+                "building_name": "BUILDING_50",
+            },
+        }
+        resp.raise_for_status = MagicMock()
+        return resp
+
+    with patch.object(central_client, "_request", side_effect=_capture):
+        out = central_client.jobs_create(
+            "Liberty B50",
+            site_id="BUILDING_50",
+            site_name="BUILDING_50",
+            building_name="BUILDING_50",
+        )
+    assert out.get("ok") is True
+    assert captured["json"]["site_id"] == "BUILDING_50"
+    assert captured["json"]["building_name"] == "BUILDING_50"
+    assert captured["json"]["job_name"] == "Liberty B50"
 
 
 def test_list_active_jobs_falls_back_to_filesystem(tmp_path, monkeypatch) -> None:

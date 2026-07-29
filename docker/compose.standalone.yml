@@ -37,7 +37,8 @@ services:
       OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}
       OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
     ports:
-      - "8080:8080"
+      # Prefer OPENFDD_CENTRAL_BIND=127.0.0.1 when Caddy fronts :80 on the LAN.
+      - "${OPENFDD_CENTRAL_BIND:-0.0.0.0}:8080:8080"
     volumes:
       - ../workspace:/workspace
       - ../deploy/mqtt/kits/${OPENFDD_SITE_ID:-local}__central:/mqtt:ro
