@@ -19,7 +19,6 @@ rules:
     pandas_function: vav1
     description: Zone comfort band violation hours with confirm window
     required_roles: [zone_t]
-    # fan_cmd/fan_status optional: when present, SQL gates on fan-on (OFDD-065)
     output_columns: [equipment_id, fault_hours, fault_pct]
     priority: P0
     parity_status: proven_building_100

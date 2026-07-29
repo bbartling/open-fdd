@@ -28,7 +28,7 @@ Companion matrices:
 | OFDD-066 | Skip-not-crash on missing roles | A | **VERIFIED** | Runner preflights `required_roles` vs history schema and classifies DataFusion schema errors → `SKIPPED_MISSING_ROLES` (`rules_skipped`), not `rules_failed`. `results_response` emits per-row status (`SKIPPED_MISSING_ROLES`/`FAULT`/`PASS`). |
 | OFDD-068 | Weather table/view | A | **VERIFIED** | `register_weather_if_present` falls back to a `weather` SQL view over `history` weather-station rows (`equipment_id ILIKE '%weather%'/'%meteo%'/'%oat%'`) when no `weather/` sidecar. Unit test covers the fallback. |
 | OFDD-075 | Analytics 413 | A | **VERIFIED** | `DefaultBodyLimit::max(128 MiB)` on the protected router (analytics + `fdd/run`); CSV nest already had its own limit. |
-| OFDD-065 | Directional FAULT parity (SV-STALE / VAV-1 / FC1) | A | **DIRECTIONAL / residual** | Fan-on gate added to SV-STALE + VAV-1 SQL (synthetic oracle fixtures green). Liberty deltas table still `_tbd_` until tip soak on B50/B100 zips. |
+| OFDD-065 | Directional FAULT parity (SV-STALE / VAV-1 / FC1) | A | **DIRECTIONAL / residual** | SV-STALE fan-on gate + `required_roles: [fan_cmd]` (synthetic oracle green). VAV-1 left without fan_cmd SQL refs so zone-only schemas do not SKIP; Liberty VAV-1/FC1 deltas still `_tbd_` until tip soak. |
 
 ## Known FAULT deltas (Liberty B50/B100 — placeholders)
 
