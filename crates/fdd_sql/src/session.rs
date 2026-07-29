@@ -21,22 +21,66 @@ pub async fn register_parquet_tree(ctx: &SessionContext, parquet_root: &Path) ->
     Ok(1)
 }
 
-/// Register weather sidecar Parquet (`parquet_root/weather/**/*.parquet`) when present.
+/// Register a `weather` table for weather-referencing rules (e.g. OAT-METEO).
+///
+/// Preference order (OFDD-068):
+/// 1. `parquet_root/weather/**/*.parquet` sidecar, when present.
+/// 2. Fallback SQL view over `history` rows whose `equipment_id` looks like a
+///    weather station (`ILIKE '%weather%'`/`'%meteo%'`/`'%oat%'`) — Liberty CSV
+///    packages land weather as `equipment=weather` in history rather than a
+///    sidecar, so without this the rule 413/crashes instead of running.
+///
+/// Returns `true` when a `weather` relation was registered by either path.
 pub async fn register_weather_if_present(
     ctx: &SessionContext,
     parquet_root: &Path,
 ) -> Result<bool> {
     let weather_dir = parquet_root.join("weather");
-    if !weather_dir.is_dir() {
+    if weather_dir.is_dir() {
+        let glob = weather_dir.join("**/*.parquet");
+        let glob_str = glob.to_string_lossy().to_string();
+        if ctx
+            .register_parquet("weather", glob_str.as_str(), ParquetReadOptions::default())
+            .await
+            .is_ok()
+        {
+            return Ok(true);
+        }
+    }
+    register_weather_view_from_history(ctx).await
+}
+
+/// Register a `weather` view from `history` weather-station rows. No-op (returns
+/// `false`) when `history` is unregistered or holds no weather-like equipment.
+async fn register_weather_view_from_history(ctx: &SessionContext) -> Result<bool> {
+    if ctx.table("history").await.is_err() {
         return Ok(false);
     }
-    let glob = weather_dir.join("**/*.parquet");
-    let glob_str = glob.to_string_lossy().to_string();
-    match ctx
-        .register_parquet("weather", glob_str.as_str(), ParquetReadOptions::default())
-        .await
-    {
-        Ok(_) => Ok(true),
+    let probe = "SELECT 1 FROM history \
+        WHERE equipment_id ILIKE '%weather%' \
+           OR equipment_id ILIKE '%meteo%' \
+           OR equipment_id ILIKE '%oat%' \
+        LIMIT 1";
+    let has_weather = match ctx.sql(probe).await {
+        Ok(df) => match df.collect().await {
+            Ok(batches) => batches.iter().any(|b| b.num_rows() > 0),
+            Err(_) => false,
+        },
+        Err(_) => false,
+    };
+    if !has_weather {
+        return Ok(false);
+    }
+    let create = "CREATE OR REPLACE VIEW weather AS \
+        SELECT * FROM history \
+        WHERE equipment_id ILIKE '%weather%' \
+           OR equipment_id ILIKE '%meteo%' \
+           OR equipment_id ILIKE '%oat%'";
+    match ctx.sql(create).await {
+        Ok(df) => {
+            let _ = df.collect().await;
+            Ok(ctx.table("weather").await.is_ok())
+        }
         Err(_) => Ok(false),
     }
 }

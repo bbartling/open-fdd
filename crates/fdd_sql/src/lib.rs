@@ -53,4 +53,42 @@ mod smoke {
             .unwrap();
         assert!((hours - 0.083333).abs() < 0.01);
     }
+
+    #[tokio::test]
+    async fn weather_view_falls_back_to_history() {
+        use std::sync::Arc;
+
+        use datafusion::arrow::array::{Float64Array, StringArray};
+        use datafusion::arrow::datatypes::{DataType, Field, Schema};
+        use datafusion::arrow::record_batch::RecordBatch;
+        use datafusion::datasource::MemTable;
+
+        use crate::register_weather_if_present;
+
+        let ctx = SessionContext::new();
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("equipment_id", DataType::Utf8, false),
+            Field::new("oa_t", DataType::Float64, false),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(StringArray::from(vec!["AHU_1", "weather_station"])) as _,
+                Arc::new(Float64Array::from(vec![70.0, 55.0])) as _,
+            ],
+        )
+        .unwrap();
+        let mem = MemTable::try_new(schema, vec![vec![batch]]).unwrap();
+        ctx.register_table("history", Arc::new(mem)).unwrap();
+
+        // No sidecar dir → register a `weather` view from weather-like history.
+        let registered =
+            register_weather_if_present(&ctx, std::path::Path::new("/nonexistent/xyz"))
+                .await
+                .unwrap();
+        assert!(registered, "expected weather view to register from history");
+        let res = run_sql(&ctx, "SELECT oa_t FROM weather").await.unwrap();
+        assert_eq!(res.row_count, 1, "only the weather-station row: {res:?}");
+        assert!((res.rows[0]["oa_t"].as_f64().unwrap() - 55.0).abs() < 1e-6);
+    }
 }
