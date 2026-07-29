@@ -2748,6 +2748,16 @@ def main() -> None:
 
     if section == "Overview":
         st.subheader("Overview")
+        # ENH-OFDD-008: dual-catalog honesty (production SQL vs pandas oracle cookbook).
+        st.warning(
+            "**Dual catalog:** production FDD math is DataFusion SQL "
+            "(`sql_rules/registry.yaml`, **63** rules). The pandas cookbook "
+            f"(**{CANONICAL_RULE_COUNT}** UI/oracle recipes) remains for docs, plots, and "
+            "parity — not the default production path. Skip / "
+            "`NOT_APPLICABLE_*` shapes differ; see "
+            "[migration catalog parity](https://github.com/bbartling/open-fdd/blob/master/docs/migration/CATALOG_RULE_PARITY_ONEPASS.md) "
+            "and OFDD residual tables."
+        )
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Equipment", len(frames))
         _n_custom = len(RULES) - CANONICAL_RULE_COUNT

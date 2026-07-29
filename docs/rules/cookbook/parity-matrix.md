@@ -39,7 +39,7 @@ Oracle harness (phase 1, #550): `crates/fdd_rules` mask/fault-hour fixtures patt
 
 `AVG-ZONE-TEMP`, `ECON-1`, `ECON-2`, `ECON-3`, `ECON-4`, `ECON-5`, `ECON-6`, `ECON-7`, `FAN-RUNTIME-HOURS`, `FAULT-ELAPSED-HOURS`, `FC1`, `FC2`, `FC3`, `FC8`, `FC9`, `FC10`, `FC11`, `FC12`, `FC13-SAT-HIGH`, `MECH-OAT-1`, `OAT-METEO`, `SCHED-1`, `VAV-1`, `ZONE-COMFORT-PCT`
 
-Oracle fixtures (2026-07-26): `SCHED-1`, `MECH-OAT-1`, `ECON-3`, `ECON-5` (OAT-relative preheat), `ECON-6`/`ECON-7` (web weather + damper) in `crates/fdd_rules/src/oracle_parity_test.rs`. `SCHED-247` remains **ported** (screening streak ≠ window `always_on_pct`).
+Oracle fixtures (2026-07-29): `SCHED-1` base + **zone comfort gate** (excess runtime when zone satisfied), `MECH-OAT-1`, `ECON-3`, `ECON-5` (OAT-relative preheat), `ECON-6`/`ECON-7` (web weather + damper) in `crates/fdd_rules/src/oracle_parity_test.rs`. `SCHED-247` remains **ported** (screening streak ≠ window `always_on_pct`). One-pass residuals: [`docs/migration/CATALOG_RULE_PARITY_ONEPASS.md`](../../migration/CATALOG_RULE_PARITY_ONEPASS.md).
 
 ### Representative `ported_from_cookbook` risk set (phase-1 oracle focus)
 

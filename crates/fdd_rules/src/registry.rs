@@ -33,6 +33,11 @@ pub struct RuleSpec {
     pub description: String,
     #[serde(default)]
     pub required_roles: Vec<String>,
+    /// Roles referenced by SQL that are optional (pandas-style). When absent
+    /// from history, the runner injects NULL columns so SQL still runs
+    /// (e.g. SCHED-1 zone comfort gate).
+    #[serde(default)]
+    pub optional_roles: Vec<String>,
     #[serde(default)]
     pub output_columns: Vec<String>,
     #[serde(default = "default_confirm")]

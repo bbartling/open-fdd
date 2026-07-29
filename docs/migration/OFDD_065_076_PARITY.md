@@ -74,7 +74,7 @@ tighten SV-STALE/VAV-1/FC1 gates within documented bands without regressing
 
 | Ticket | Scope | Gate | Status | Notes |
 |--------|-------|------|--------|-------|
-| OFDD-076 / 072 | In-product vibe20 Jobs agent-build + cascade-if-ready | C | **VERIFIED (delegated) / PENDING Liberty soak** | Jobs ECM request path remains delegated (Excel still vibe20). Tip persists `building_id` → `site_id` / `building_name` on `POST /api/jobs` create-from-site (OFDD-076 residual). Gate C exit still requires operator ECM without a separate vibe20 container. |
+| OFDD-076 / 072 | In-product vibe20 Jobs agent-build + cascade-if-ready | C | **VERIFIED (delegated) / PENDING Liberty soak** | Jobs ECM request path remains delegated (Excel still vibe20). Tip persists `building_id` → `site_id` / `building_name` on `POST /api/jobs` create-from-site (OFDD-076 residual). Gate C exit still requires operator ECM without a separate vibe20 container. **ENH-OFDD-007:** UI honestly links real `.xlsx` to vibe20 `wattlab notebook agent-build` / `reports/notebooks/**` — do not market Gate C as vibe20-complete for spreadsheets. |
 
 ## Gate B/C honesty caveats
 
