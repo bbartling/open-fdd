@@ -214,6 +214,9 @@ def _init_state() -> None:
         "mapping_rev": "",
         "rules_mapping_rev": "",
         "mapping_stale": False,
+        # OFDD-073 multi-site: snapshot store keyed by building_id + active site.
+        "sites": {},
+        "active_site": "",
     }.items():
         st.session_state.setdefault(k, v)
 
@@ -470,7 +473,13 @@ def _run_rule_list(
         if isinstance(p, dict) and p:
             params[rid] = {str(k): float(v) for k, v in p.items() if isinstance(v, (int, float))}
     equipment_id = eq_ids[0] if len(eq_ids) == 1 else None
-    body = central_client.run_fdd(rule_ids=rule_ids, params=params or None, equipment_id=equipment_id)
+    building_id = str(st.session_state.get("building_id") or "").strip() or None
+    body = central_client.run_fdd(
+        rule_ids=rule_ids,
+        params=params or None,
+        equipment_id=equipment_id,
+        building_id=building_id,
+    )
     if not body.get("ok", False):
         err = body.get("error") or "SQL FDD run failed"
         st.error(err)
@@ -530,7 +539,7 @@ def _apply_browser_autoload_once() -> None:
         st.session_state.bootstrap_status = (
             (st.session_state.get("bootstrap_status") or "")
             + f" · Restored last upload (`{pointer.get('building_id') or building_root.name}`) — "
-            "survives refresh until **Delete dataset**"
+            "survives refresh until **Delete site**"
         ).strip(" ·")
     except PackageError as exc:
         from app.browser_session import clear_browser_session_pointer
@@ -1524,6 +1533,132 @@ def _materialize_uploaded_tree(files: list) -> Path | None:
     return tmp if any(tmp.rglob("history_wide.csv")) else None
 
 
+# --- OFDD-073 multi-site store -------------------------------------------------
+# Per-site data keys snapshotted into ``st.session_state.sites[building_id]`` so
+# a second building adds a site (rather than replacing the first) and switching
+# rebinds Overview/FDD/RCx to the selected site.
+_SITE_DATA_KEYS = (
+    "equipment_frames",
+    "weather",
+    "batch_results",
+    "selected_equipment",
+    "data_source",
+    "building_id",
+    "central_dataset_id",
+    "package_report",
+    "upload_workdir",
+    "vav_to_ahu",
+)
+
+
+def _sites() -> dict:
+    return st.session_state.setdefault("sites", {})
+
+
+def _snapshot_site(site_id: str) -> None:
+    """Persist the current flat per-site state under ``site_id``."""
+    site_id = str(site_id or "").strip()
+    if not site_id:
+        return
+    _sites()[site_id] = {k: st.session_state.get(k) for k in _SITE_DATA_KEYS}
+
+
+def _load_site(site_id: str) -> None:
+    """Rebind flat per-site state from the stored snapshot for ``site_id``."""
+    snap = _sites().get(str(site_id or "").strip())
+    if not snap:
+        return
+    for k in _SITE_DATA_KEYS:
+        st.session_state[k] = snap.get(k)
+    st.session_state.active_site = str(site_id).strip()
+
+
+def _purge_site(site_id: str) -> None:
+    _sites().pop(str(site_id or "").strip(), None)
+
+
+def _sync_active_site() -> None:
+    """Adopt a freshly loaded building as the active site and keep its snapshot
+    fresh. Preserves previously loaded sites (they keep last run's snapshot)."""
+    bid = str(st.session_state.get("building_id") or "").strip()
+    if not bid:
+        return
+    active = str(st.session_state.get("active_site") or "").strip()
+    if bid != active:
+        st.session_state.active_site = bid
+    _snapshot_site(bid)
+
+
+def _render_site_selector() -> None:
+    """Sidebar Site picker — switch rebinds the whole per-site session."""
+    ids = sorted(_sites().keys())
+    if len(ids) < 2:
+        return
+    active = str(st.session_state.get("active_site") or "")
+    idx = ids.index(active) if active in ids else 0
+    sel = st.sidebar.selectbox(
+        "Site",
+        ids,
+        index=idx,
+        key="site_selector",
+        help="Switch between loaded buildings. Each site keeps its own data, faults, and Overview.",
+    )
+    if sel and sel != active:
+        _snapshot_site(active)
+        _load_site(sel)
+        st.rerun()
+
+
+def _delete_site_and_clear() -> None:
+    """Delete the active site's central data, drop its snapshot, and switch to a
+    remaining site (or clear when none remain)."""
+    from app import central_client
+
+    dataset_id = (
+        st.session_state.get("central_dataset_id")
+        or st.session_state.get("building_id")
+        or ""
+    ).strip()
+    if not dataset_id:
+        st.sidebar.warning("No site loaded — nothing to delete on central")
+        return
+    result = central_client.delete_dataset(dataset_id)
+    if result.get("central_down"):
+        st.sidebar.warning(result.get("error") or "central unreachable")
+        return
+    if not result.get("ok", False):
+        st.sidebar.warning(result.get("error") or f"delete failed for `{dataset_id}`")
+        return
+
+    from app.browser_session import clear_browser_session_pointer
+    from app.package_io import wipe_workdir
+
+    wipe_workdir(st.session_state.get("upload_workdir"))
+    clear_browser_session_pointer()
+    _purge_site(st.session_state.get("active_site") or dataset_id)
+    _purge_site(dataset_id)
+
+    remaining = sorted(_sites().keys())
+    if remaining:
+        _load_site(remaining[0])
+        st.sidebar.success(
+            f"Deleted site `{dataset_id}` — switched to `{remaining[0]}`"
+        )
+    else:
+        st.session_state.upload_workdir = None
+        st.session_state.package_report = None
+        st.session_state.equipment_frames = {}
+        st.session_state.weather = None
+        st.session_state.batch_results = []
+        st.session_state.selected_equipment = None
+        st.session_state.data_source = ""
+        st.session_state.building_id = ""
+        st.session_state.active_site = ""
+        st.session_state.pop("central_dataset_id", None)
+        st.sidebar.success(f"Deleted site `{dataset_id}` (session / fault sliders kept)")
+    st.session_state.zip_uploader_key = int(st.session_state.get("zip_uploader_key", 0)) + 1
+
+
 def _commit_frames(
     frames: dict[str, pd.DataFrame],
     *,
@@ -1534,6 +1669,11 @@ def _commit_frames(
 ) -> None:
     if not frames:
         return
+    # OFDD-073: preserve the currently active site before a new building rebinds
+    # the flat per-site keys, so loading a second zip *adds* a site.
+    prev_bid = str(st.session_state.get("building_id") or "").strip()
+    if prev_bid and prev_bid != building_id and st.session_state.get("equipment_frames"):
+        _snapshot_site(prev_bid)
     st.session_state.equipment_frames = frames
     st.session_state.weather = weather
     st.session_state.data_source = source
@@ -1559,6 +1699,9 @@ def _commit_frames(
     _attach_frames_meta(frames)
     if st.session_state.selected_equipment not in frames:
         st.session_state.selected_equipment = sorted(frames)[0]
+    # Register/refresh this building as the active site.
+    st.session_state.active_site = building_id
+    _snapshot_site(building_id)
 
 
 def _render_package_health_sidebar(report: dict | None, warnings: list[str] | None = None) -> None:
@@ -1886,9 +2029,7 @@ def _load_data(cfg: AppConfig) -> None:
         )
         st.sidebar.caption(
             f"Build check: zip-item limit **{agent_caps.max_entries}** "
-            f"(each file/folder inside the archive) · equip ≤**{agent_caps.max_equipment}**. "
-            f"If you still see **200**, `docker pull` the latest "
-            f"`ghcr.io/bbartling/vibe19:develop` — that machine is on an old image."
+            f"(each file/folder inside the archive) · equip ≤**{agent_caps.max_equipment}**."
         )
         c1, c2 = st.sidebar.columns(2)
         load_clicked = c1.button(
@@ -1898,12 +2039,12 @@ def _load_data(cfg: AppConfig) -> None:
             key="load_zip_unified",
         )
         delete_clicked = c2.button(
-            "Delete dataset",
+            "Delete site",
             key="delete_dataset_unified",
-            help="Delete Feather/parquet for the loaded Haystack building id. Keeps fault sliders & session maps.",
+            help="Delete Feather/parquet for the active site's building id, then switch to a remaining site. Keeps fault sliders & session maps.",
         )
         if delete_clicked:
-            _delete_dataset_and_clear()
+            _delete_site_and_clear()
             st.rerun()
         if load_clicked and zip_files:
             wipe_workdir(st.session_state.get("upload_workdir"))
@@ -2477,6 +2618,8 @@ def main() -> None:
     from app.ui_jobs import render_jobs_sidebar
 
     render_jobs_sidebar()
+    _sync_active_site()
+    _render_site_selector()
     _load_data(cfg)
     _sidebar_sliders(defaults_cfg)
 
@@ -2894,7 +3037,7 @@ def main() -> None:
         st.caption(
             "Pick any uploaded equipment (or weather) CSV and plot **all numeric / status columns** "
             "as stacked Plotly line charts. Data stays loaded across browser refresh until you click "
-            "**Delete dataset** in the sidebar (a container restart still clears temp files)."
+            "**Delete site** in the sidebar (a container restart still clears temp files)."
         )
         inspect_options: list[str] = list(eq_ids)
         weather_df = st.session_state.get("weather")

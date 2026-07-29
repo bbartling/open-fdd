@@ -163,6 +163,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/analytics/rcx/boiler", post(analytics_rcx_boiler))
         .route("/api/analytics/metering", post(analytics_metering))
         .merge(csv)
+        // OFDD-075: analytics/FDD posts (building-scoped Overview samples) can
+        // exceed Axum's ~2 MiB default and 413 before reaching the handler.
+        // Raise the whole protected router to 128 MiB (CSV nest already sets its
+        // own limit; this covers analytics + fdd/run).
+        .layer(DefaultBodyLimit::max(128 * 1024 * 1024))
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
             auth::jwt_middleware,
@@ -727,18 +732,38 @@ pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
             "error": "raw SQL rejected on /api/fdd/run; use mode=registry with typed params"
         }));
     }
+    // Resolve building_id from top-level field, or nested `params.building_id`
+    // (the hunt curl nests it inside params). Trim/blank guarded so an empty
+    // string never scopes to `building=/`.
+    let building_id = body
+        .building_id
+        .as_deref()
+        .or_else(|| body.params.get("building_id").and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
     let payload = json!({
         "confirmation_seconds": body.confirmation_seconds,
         "params": body.params,
         "mode": body.mode,
         "rule_ids": body.rule_ids,
         "equipment_id": body.equipment_id,
+        "building_id": building_id,
     });
-    let result = tokio::task::spawn_blocking(move || {
+    let echo_building_id = building_id.clone();
+    let mut result = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload)
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("fdd run task failed: {e}")}));
+    // Echo the requested building_id when the edge did not surface one, so the
+    // UI/MCP always know which site the run was scoped to.
+    if let (Some(bid), Some(obj)) = (echo_building_id, result.as_object_mut()) {
+        let missing = obj.get("building_id").map(|v| v.is_null()).unwrap_or(true);
+        if missing {
+            obj.insert("building_id".into(), json!(bid));
+        }
+    }
     Json(result)
 }
 
@@ -754,12 +779,26 @@ pub async fn fdd_cache_status() -> Json<Value> {
     Json(open_fdd_edge_prototype::fdd::registry_api::cache_status())
 }
 
-pub async fn fdd_equipment() -> Json<Value> {
-    Json(open_fdd_edge_prototype::fdd::registry_api::equipment_response())
+#[derive(Debug, Deserialize)]
+pub struct BuildingScopeQuery {
+    building_id: Option<String>,
 }
 
-pub async fn fdd_results() -> Json<Value> {
-    Json(open_fdd_edge_prototype::fdd::registry_api::results_response())
+impl BuildingScopeQuery {
+    fn scoped(&self) -> Option<&str> {
+        self.building_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+    }
+}
+
+pub async fn fdd_equipment(Query(q): Query<BuildingScopeQuery>) -> Json<Value> {
+    Json(open_fdd_edge_prototype::fdd::registry_api::equipment_response(q.scoped()))
+}
+
+pub async fn fdd_results(Query(q): Query<BuildingScopeQuery>) -> Json<Value> {
+    Json(open_fdd_edge_prototype::fdd::registry_api::results_response(q.scoped()))
 }
 
 #[derive(Debug, Deserialize)]

@@ -142,6 +142,10 @@ pub struct FddRunRequest {
     pub confirmation_seconds: Option<i64>,
     #[serde(default)]
     pub sql: Option<String>,
+    /// Scope history/results/equipment to `building={id}/` (avoids cross-site
+    /// bleed). May also be nested under `params.building_id` (hunt curl form).
+    #[serde(default)]
+    pub building_id: Option<String>,
 }
 
 fn default_registry_mode() -> String {

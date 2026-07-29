@@ -4,4 +4,4 @@
 - FDD execution is **DataFusion SQL via central** (`app/central_client.py` → `/api/fdd/run`).
 - Do **not** reintroduce pandas rule math for Run Rules.
 - Do **not** recreate React or Oxigraph/RDF UIs.
-- **Delete dataset** removes Feather/parquet by Haystack/building id; session sliders stay.
+- **Delete site** removes Feather/parquet/results for the selected building_id; session sliders stay.

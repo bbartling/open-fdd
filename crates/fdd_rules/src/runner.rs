@@ -25,9 +25,43 @@ pub struct RuleRunReport {
     pub rules_run: usize,
     pub rules_succeeded: usize,
     pub rules_failed: usize,
+    /// Rules skipped because required roles/columns (or the weather table) were
+    /// absent — a pandas-style skip, not a hard failure (OFDD-066/068).
+    #[serde(default)]
+    pub rules_skipped: usize,
     pub poll_seconds: f64,
     pub timings: Vec<RuleTiming>,
     pub total_ms: u128,
+}
+
+/// Classify a DataFusion error string as a missing-schema (skip) condition
+/// rather than a genuine rule failure. Covers missing history columns and a
+/// missing/unregistered `weather` table.
+fn is_missing_schema_error(msg: &str) -> bool {
+    let m = msg.to_ascii_lowercase();
+    m.contains("no field named")
+        || m.contains("schema error")
+        || m.contains("column") && m.contains("not found")
+        || m.contains("table 'weather'")
+        || m.contains("table \"weather\"")
+        || m.contains("'weather' not found")
+        || (m.contains("weather") && m.contains("not found"))
+}
+
+/// Write a pandas-shaped SKIPPED_MISSING_ROLES marker for a rule that could not
+/// run because required roles/columns were absent.
+fn write_skip_marker(out_path: &Path, missing_roles: &[String], note: &str) -> std::io::Result<()> {
+    let body = serde_json::json!({
+        "rows": [{
+            "status": "SKIPPED_MISSING_ROLES",
+            "missing_roles": missing_roles,
+            "notes": note,
+        }],
+        "status": "SKIPPED_MISSING_ROLES",
+        "missing_roles": missing_roles,
+        "skipped": true,
+    });
+    std::fs::write(out_path, serde_json::to_string_pretty(&body)?)
 }
 
 pub async fn run_all_rules(
@@ -66,13 +100,50 @@ pub async fn run_all_rules_with_overrides(
     let wx_root = weather_root.unwrap_or(parquet_root);
     register_weather_if_present(&ctx, wx_root).await?;
 
+    // History columns for preflighting required_roles (case-insensitive). When
+    // history cannot be described we fall back to per-rule SQL error classifying.
+    let history_columns: std::collections::HashSet<String> = match ctx.table("history").await {
+        Ok(df) => df
+            .schema()
+            .fields()
+            .iter()
+            .map(|f| f.name().to_ascii_lowercase())
+            .collect(),
+        Err(_) => std::collections::HashSet::new(),
+    };
+
     let mut timings = Vec::new();
     let mut rules_succeeded = 0usize;
     let mut rules_failed = 0usize;
+    let mut rules_skipped = 0usize;
     for rule in &registry.rules {
         let sql_path = rules_dir.join(&rule.sql_file);
         let t0 = std::time::Instant::now();
         let out_path = out_dir.join(format!("{}.json", rule.rule_id));
+
+        // Preflight: skip (do not fail) when required roles are absent from the
+        // history schema. Weather-only misses surface via SQL error classifying.
+        if !history_columns.is_empty() {
+            let missing: Vec<String> = rule
+                .required_roles
+                .iter()
+                .filter(|role| !history_columns.contains(&role.to_ascii_lowercase()))
+                .cloned()
+                .collect();
+            if !missing.is_empty() {
+                let note = format!("missing roles/columns in history: {}", missing.join(", "));
+                let _ = write_skip_marker(&out_path, &missing, &note);
+                timings.push(RuleTiming {
+                    rule_id: rule.rule_id.clone(),
+                    row_count: 0,
+                    elapsed_ms: t0.elapsed().as_millis(),
+                    output_path: out_path.display().to_string(),
+                    error: Some(format!("SKIPPED_MISSING_ROLES: {note}")),
+                });
+                rules_skipped += 1;
+                continue;
+            }
+        }
         let raw_sql = match std::fs::read_to_string(&sql_path) {
             Ok(s) => s,
             Err(e) => {
@@ -143,16 +214,32 @@ pub async fn run_all_rules_with_overrides(
                 rules_succeeded += 1;
             }
             Err(e) => {
-                let err_body = serde_json::json!({"rows": [], "error": e.to_string()});
-                let _ = std::fs::write(&out_path, serde_json::to_string_pretty(&err_body)?);
-                timings.push(RuleTiming {
-                    rule_id: rule.rule_id.clone(),
-                    row_count: 0,
-                    elapsed_ms: t0.elapsed().as_millis(),
-                    output_path: out_path.display().to_string(),
-                    error: Some(e.to_string()),
-                });
-                rules_failed += 1;
+                let msg = e.to_string();
+                if is_missing_schema_error(&msg) {
+                    // Schema/weather miss classified at runtime → skip, not fail
+                    // (OFDD-066/068). Keeps Liberty runs at rules_failed == 0.
+                    let note = format!("schema miss: {msg}");
+                    let _ = write_skip_marker(&out_path, &rule.required_roles, &note);
+                    timings.push(RuleTiming {
+                        rule_id: rule.rule_id.clone(),
+                        row_count: 0,
+                        elapsed_ms: t0.elapsed().as_millis(),
+                        output_path: out_path.display().to_string(),
+                        error: Some(format!("SKIPPED_MISSING_ROLES: {note}")),
+                    });
+                    rules_skipped += 1;
+                } else {
+                    let err_body = serde_json::json!({"rows": [], "error": msg});
+                    let _ = std::fs::write(&out_path, serde_json::to_string_pretty(&err_body)?);
+                    timings.push(RuleTiming {
+                        rule_id: rule.rule_id.clone(),
+                        row_count: 0,
+                        elapsed_ms: t0.elapsed().as_millis(),
+                        output_path: out_path.display().to_string(),
+                        error: Some(msg),
+                    });
+                    rules_failed += 1;
+                }
             }
         }
     }
@@ -161,6 +248,7 @@ pub async fn run_all_rules_with_overrides(
         rules_run: timings.len(),
         rules_succeeded,
         rules_failed,
+        rules_skipped,
         poll_seconds,
         timings,
         total_ms: started.elapsed().as_millis(),

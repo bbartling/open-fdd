@@ -64,11 +64,18 @@ fn parquet_root() -> PathBuf {
     PathBuf::from(".cache/parquet")
 }
 
-fn results_dir() -> PathBuf {
-    if let Ok(p) = std::env::var("OPENFDD_RULE_RESULTS_DIR") {
-        return PathBuf::from(p);
+/// Results directory, optionally scoped to a building so per-site runs do not
+/// overwrite each other. `None` → `.cache/rule_results`; `Some(id)` →
+/// `.cache/rule_results/building={id}/`.
+fn results_dir(building_id: Option<&str>) -> PathBuf {
+    let base = match std::env::var("OPENFDD_RULE_RESULTS_DIR") {
+        Ok(p) => PathBuf::from(p),
+        Err(_) => PathBuf::from(".cache/rule_results"),
+    };
+    match building_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(bid) => base.join(format!("building={bid}")),
+        None => base,
     }
-    PathBuf::from(".cache/rule_results")
 }
 
 fn load_reg() -> Result<RuleRegistry, String> {
@@ -179,7 +186,7 @@ pub fn rule_params_response(rule_id: &str) -> Value {
 /// `GET /api/fdd/cache/status` — parquet ingest / results status.
 pub fn cache_status() -> Value {
     let pq = parquet_root();
-    let results = results_dir();
+    let results = results_dir(None);
     let history = pq.join("history");
     let parquet_files = walkdir_count(&pq, "parquet");
     let result_files = walkdir_count(&results, "json");
@@ -235,8 +242,16 @@ fn infer_equipment_type(equipment_id: &str) -> &'static str {
 }
 
 /// `GET /api/fdd/equipment` — equipment present in the parquet cache.
-pub fn equipment_response() -> Value {
-    let root = parquet_root();
+///
+/// When `building_id` is set, only `building={id}/` is walked so a site's
+/// equipment list is not polluted by other buildings (or `bench_*`) in the
+/// shared cache.
+pub fn equipment_response(building_id: Option<&str>) -> Value {
+    let pq = parquet_root();
+    let root = match building_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(bid) => pq.join(format!("building={bid}")),
+        None => pq,
+    };
     let mut ids = Vec::new();
     if root.is_dir() {
         for entry in walkdir::WalkDir::new(&root)
@@ -270,8 +285,11 @@ pub fn equipment_response() -> Value {
 }
 
 /// `GET /api/fdd/results` — normalized rows from the most recent registry run.
-pub fn results_response() -> Value {
-    let dir = results_dir();
+///
+/// `building_id` reads from the site-scoped results dir so two buildings' runs
+/// do not clobber one another.
+pub fn results_response(building_id: Option<&str>) -> Value {
+    let dir = results_dir(building_id);
     let reg = load_reg().ok();
     let mut metadata = HashMap::new();
     if let Some(reg) = &reg {
@@ -313,15 +331,28 @@ pub fn results_response() -> Value {
                     .get("fault_hours")
                     .and_then(Value::as_f64)
                     .unwrap_or(0.0);
+                // Emit status directly from the row when present (skip markers),
+                // otherwise derive FAULT/PASS from fault_hours (OFDD-066).
+                let status = row
+                    .get("status")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .unwrap_or_else(|| {
+                        if fault_hours > 0.0 { "FAULT" } else { "PASS" }.to_string()
+                    });
+                let missing_roles = row
+                    .get("missing_roles")
+                    .cloned()
+                    .unwrap_or_else(|| json!([]));
                 rows.push(json!({
                     "rule_id": rule_id,
                     "title": metadata.get(rule_id).cloned().unwrap_or_default(),
                     "equipment_id": equipment_id,
                     "equipment_type": infer_equipment_type(equipment_id),
-                    "status": if fault_hours > 0.0 { "FAULT" } else { "PASS" },
+                    "status": status,
                     "fault_hours": fault_hours,
                     "fault_pct": row.get("fault_pct").and_then(Value::as_f64),
-                    "missing_roles": [],
+                    "missing_roles": missing_roles,
                     "notes": row.get("notes").cloned().unwrap_or(Value::Null),
                 }));
             }
@@ -559,7 +590,7 @@ pub fn run_registry(payload: &Value) -> Value {
         }
     }
 
-    let out = results_dir();
+    let out = results_dir(building_id);
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build();
@@ -576,7 +607,7 @@ pub fn run_registry(payload: &Value) -> Value {
         Some(weather_root.as_path()),
     )) {
         Ok(report) => {
-            let normalized = results_response();
+            let normalized = results_response(building_id);
             json!({
                 "ok": true,
                 "engine": "fdd_rules+DataFusion",
@@ -586,6 +617,7 @@ pub fn run_registry(payload: &Value) -> Value {
                 "rules_run": report.rules_run,
                 "rules_succeeded": report.rules_succeeded,
                 "rules_failed": report.rules_failed,
+                "rules_skipped": report.rules_skipped,
                 "poll_seconds": report.poll_seconds,
                 "total_ms": report.total_ms,
                 "timings": report.timings,
