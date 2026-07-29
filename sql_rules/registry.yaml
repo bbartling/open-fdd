@@ -2037,9 +2037,14 @@ rules:
 
   - rule_id: SCHED-1
     sql_file: sched1_unoccupied_runtime.sql
-    pandas_function: null
-    description: Unoccupied runtime
+    pandas_function: sched1
+    aliases: [excess_runtime]
+    description: >-
+      Excess / wasted unoccupied fan runtime when the zone is already in the
+      comfort band (optimal-start / schedule misconfig signal). Without zone_t,
+      falls back to unoccupied + fan_on (pandas sched1 base).
     required_roles: [occ_mode, fan_status]
+    optional_roles: [zone_t]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: proven_building_100
@@ -2056,6 +2061,24 @@ rules:
         unit: sec
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
+      comfort_low_f:
+        label: Zone comfort low
+        default: 70.0
+        min: 50.0
+        max: 80.0
+        step: 0.5
+        unit: °F
+        frontend_control: slider
+        sql_placeholder: ZONE_T_LO
+      comfort_high_f:
+        label: Zone comfort high
+        default: 75.0
+        min: 55.0
+        max: 90.0
+        step: 0.5
+        unit: °F
+        frontend_control: slider
+        sql_placeholder: ZONE_T_HI
 
   - rule_id: SCHED-247
     sql_file: sched247_always_on.sql

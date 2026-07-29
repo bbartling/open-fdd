@@ -1,11 +1,20 @@
--- sched1_unoccupied_runtime.sql — Unoccupied runtime
+-- sched1_unoccupied_runtime.sql — Excess / wasted unoccupied runtime
+-- Pandas sched1: unoccupied & fan_on; when zone_t mapped, also require comfort band
+-- (zone already satisfied → optimal-start / bad schedule signal).
+-- When zone_t is absent from history, the runner injects NULL zone_t (optional role)
+-- so behavior matches pandas “no zone → base only”.
 WITH base AS (
   SELECT
     equipment_id,
     timestamp_utc,
         CAST(CASE
           WHEN occ_mode IS NULL OR fan_status IS NULL THEN 0
-          WHEN LOWER(occ_mode) = 'unoccupied' AND fan_status > 0.5 THEN 1
+          WHEN LOWER(occ_mode) = 'unoccupied' AND fan_status > 0.5
+            AND (
+              zone_t IS NULL
+              OR (zone_t >= {{ZONE_T_LO}} AND zone_t <= {{ZONE_T_HI}})
+            )
+          THEN 1
           ELSE 0
         END AS INT) AS raw_fault
   FROM history

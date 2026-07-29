@@ -160,6 +160,7 @@ mod tests {
             sql_file: "vav1_comfort_fault.sql".into(),
             description: "test".into(),
             required_roles: vec![],
+            optional_roles: vec![],
             output_columns: vec![],
             confirm_seconds: 900,
             parity_status: String::new(),

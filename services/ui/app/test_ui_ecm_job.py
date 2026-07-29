@@ -102,3 +102,18 @@ def test_create_ecm_request_writes_under_job_wattlab(tmp_path, monkeypatch) -> N
     assert saved["job_id"] == meta.job_id
     assert saved["building_id"] == "BUILDING_100"
     assert "honesty" in saved
+
+
+def test_discover_wattlab_xlsx_nested(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "wattlab_ws"
+    nested = root / "reports" / "notebooks" / "pkg_a"
+    nested.mkdir(parents=True)
+    (nested / "book.xlsx").write_bytes(b"PK")  # minimal placeholder
+    (root / "reports" / "notebooks" / "top.xlsx").write_bytes(b"PK")
+    monkeypatch.setenv("OPENFDD_WATTLAB_WORKSPACE", str(root))
+    monkeypatch.delenv("WATTLAB_WORKSPACE", raising=False)
+    monkeypatch.delenv("OPENFDD_WORKSPACE", raising=False)
+    hits = ui_ecm_job.discover_wattlab_xlsx()
+    assert len(hits) == 2
+    assert any(h.endswith("top.xlsx") for h in hits)
+    assert any("pkg_a" in h and h.endswith("book.xlsx") for h in hits)

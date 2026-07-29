@@ -14,21 +14,22 @@ mod tests {
     async fn sched1_confirm_matches_pandas_reference() {
         // poll=300s, confirm=600s -> CONFIRM_ROWS=2 (narrower than registry default so the
         // synthetic series stays short; still exercises the same streak math).
+        // zone_t left empty → pandas "no zone mapped" base (unoccupied + fan only).
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_SCHED1");
         std::fs::create_dir_all(&building).unwrap();
 
         // occ unoccupied + fan on => raw 1. Sequence: 0,0,1,1,1,0,1,1
         let rows = "\
-timestamp_utc,occ_col,fan_col
-2026-01-01T00:00:00Z,occupied,1
-2026-01-01T00:05:00Z,occupied,1
-2026-01-01T00:10:00Z,unoccupied,1
-2026-01-01T00:15:00Z,unoccupied,1
-2026-01-01T00:20:00Z,unoccupied,1
-2026-01-01T00:25:00Z,occupied,0
-2026-01-01T00:30:00Z,unoccupied,1
-2026-01-01T00:35:00Z,unoccupied,1
+timestamp_utc,occ_col,fan_col,zone_col
+2026-01-01T00:00:00Z,occupied,1,
+2026-01-01T00:05:00Z,occupied,1,
+2026-01-01T00:10:00Z,unoccupied,1,
+2026-01-01T00:15:00Z,unoccupied,1,
+2026-01-01T00:20:00Z,unoccupied,1,
+2026-01-01T00:25:00Z,occupied,0,
+2026-01-01T00:30:00Z,unoccupied,1,
+2026-01-01T00:35:00Z,unoccupied,1,
 ";
         write_equipment_fixture(
             &building,
@@ -43,18 +44,85 @@ timestamp_utc,occ_col,fan_col
                     csv_col: "fan_col",
                     role: "fan_status",
                 },
+                RoleCol {
+                    csv_col: "zone_col",
+                    role: "zone_t",
+                },
             ],
             rows,
         );
 
-        let got =
-            run_rule_fault_hours(&building, "sched1_unoccupied_runtime.sql", 300.0, 600, &[]).await;
+        let got = run_rule_fault_hours(
+            &building,
+            "sched1_unoccupied_runtime.sql",
+            300.0,
+            600,
+            &[("ZONE_T_LO", "70"), ("ZONE_T_HI", "75")],
+        )
+        .await;
 
         let raw = [false, false, true, true, true, false, true, true];
         let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
         // indices 3,4,7 confirm => 3 * 300/3600 = 0.25h
         assert_hours_close(expected, 0.25, "pandas reference");
         assert_hours_close(got, expected, "SCHED-1 SQL");
+    }
+
+    #[tokio::test]
+    async fn sched1_zone_comfort_gate_matches_pandas() {
+        // When zone_t is mapped: fault only if unoccupied + fan + in comfort band.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SCHED1_ZONE");
+        std::fs::create_dir_all(&building).unwrap();
+
+        // Rows: occ/fan/zone — comfort band 70–75
+        // 0 occupied+fan+72
+        // 1 unoccupied+fan+80 (out of band → 0)
+        // 2–4 unoccupied+fan+72 (in band → 1)
+        // 5 unoccupied+fan+60 (out → 0)
+        let rows = "\
+timestamp_utc,occ_col,fan_col,zone_col
+2026-01-01T00:00:00Z,occupied,1,72
+2026-01-01T00:05:00Z,unoccupied,1,80
+2026-01-01T00:10:00Z,unoccupied,1,72
+2026-01-01T00:15:00Z,unoccupied,1,73
+2026-01-01T00:20:00Z,unoccupied,1,74
+2026-01-01T00:25:00Z,unoccupied,1,60
+";
+        write_equipment_fixture(
+            &building,
+            "VAV_1",
+            5,
+            &[
+                RoleCol {
+                    csv_col: "occ_col",
+                    role: "occ_mode",
+                },
+                RoleCol {
+                    csv_col: "fan_col",
+                    role: "fan_status",
+                },
+                RoleCol {
+                    csv_col: "zone_col",
+                    role: "zone_t",
+                },
+            ],
+            rows,
+        );
+
+        let got = run_rule_fault_hours(
+            &building,
+            "sched1_unoccupied_runtime.sql",
+            300.0,
+            600,
+            &[("ZONE_T_LO", "70"), ("ZONE_T_HI", "75")],
+        )
+        .await;
+
+        let raw = [false, false, true, true, true, false];
+        let expected = pandas_confirm_fault_hours(&raw, 300.0, 2);
+        assert_hours_close(expected, 0.16666666666666666, "pandas reference");
+        assert_hours_close(got, expected, "SCHED-1 zone-comfort SQL");
     }
 
     #[tokio::test]

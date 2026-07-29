@@ -212,9 +212,48 @@ def create_ecm_package_request(
     return {"ok": True, "path": str(path), "request": request, "cascade": cascade_result}
 
 
+def discover_wattlab_xlsx(ws: Any | None = None) -> list[str]:
+    """Find agent-built ECM workbooks under the WattLab workspace (honest handoff)."""
+    roots: list[Any] = []
+    env = (os.environ.get("OPENFDD_WATTLAB_WORKSPACE") or os.environ.get("WATTLAB_WORKSPACE") or "").strip()
+    if env:
+        roots.append(env)
+    if ws is not None:
+        roots.append(ws)
+    # Common lab bind: sibling wattlab_workspace next to OPENFDD_WORKSPACE
+    ofdd_ws = (os.environ.get("OPENFDD_WORKSPACE") or "").strip()
+    if ofdd_ws:
+        roots.append(os.path.join(os.path.dirname(ofdd_ws), "wattlab_workspace"))
+        roots.append(os.path.join(ofdd_ws, "wattlab"))
+    found: list[str] = []
+    seen: set[str] = set()
+    for root in roots:
+        if not root:
+            continue
+        base = os.path.join(str(root), "reports", "notebooks")
+        if not os.path.isdir(base):
+            continue
+        for dirpath, _dirnames, filenames in os.walk(base):
+            for name in filenames:
+                if not name.lower().endswith(".xlsx"):
+                    continue
+                path = os.path.join(dirpath, name)
+                if path in seen:
+                    continue
+                seen.add(path)
+                found.append(path)
+    found.sort()
+    return found[:40]
+
+
 def render_ecm_agent_build_panel() -> None:
     """Streamlit panel: create an ECM package request from the active Job/site."""
     st.markdown("##### ECM package (agent-build)")
+    st.info(
+        "**Gate C honesty:** open-fdd records the ECM package **request** only. "
+        "The real Excel workbook (`.xlsx` / `FORMULA_ESCO_*` / full-parity book) is built in "
+        "**vibe20** via `wattlab notebook agent-build`. open-fdd is not vibe20-complete for spreadsheets."
+    )
     st.caption(
         "Create an ECM Excel/notebook package request from the active Job. Heavy "
         "agent-build + EnergyPlus/IDF stay delegated to WattLab / the external E+ "
@@ -238,8 +277,21 @@ def render_ecm_agent_build_panel() -> None:
     if wattlab:
         st.caption(f"WattLab agent-build detected: `{wattlab}` (notebook builder path).")
     else:
-        st.caption("WattLab agent-build CLI not detected — request is recorded for later pickup.")
+        st.caption(
+            "WattLab agent-build CLI not detected — request is recorded for later pickup. "
+            "Run vibe20: `wattlab notebook agent-build --out reports/notebooks …`."
+        )
 
+    xlsx_hits = discover_wattlab_xlsx()
+    if xlsx_hits:
+        with st.expander(f"Found {len(xlsx_hits)} WattLab ECM workbook(s) (download handoff)", expanded=False):
+            for path in xlsx_hits:
+                st.code(path, language=None)
+    else:
+        st.caption(
+            "No `reports/notebooks/**/*.xlsx` found under WattLab workspace yet — "
+            "build in vibe20, then refresh this panel."
+        )
     readiness = cascade_readiness()
     if readiness["ready"]:
         st.success(
