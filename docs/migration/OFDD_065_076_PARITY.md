@@ -24,11 +24,11 @@ Companion matrices:
 | Ticket | Scope | Gate | Status | Notes |
 |--------|-------|------|--------|-------|
 | OFDD-067 | `building_id` scoping central→edge; results/equipment scoped | A | **VERIFIED** | `FddRunRequest.building_id` (+ nested `params.building_id`) forwarded top-level; edge scopes history, results dir (`building={id}/`), equipment listing; echoed in response. IT: two fake building parquet trees → distinct FAULT totals + separate results dirs. |
-| OFDD-073 | Multi-site Streamlit UI | A | **VERIFIED** | Session `sites{building_id→snapshot}`; sidebar **Site** select rebinds Overview/FDD/RCx; second zip **adds** a site; **Delete dataset → Delete site** purges + switches; `run_fdd` passes active `building_id`; vibe19 GHCR pull tip removed. |
+| OFDD-073 | Multi-site Streamlit UI + Hive purge | A | **VERIFIED (bench) / PENDING Liberty soak** | Session sites + Delete site UI verified earlier. Tip also purges `.cache/rule_results/building={id}/` on `DELETE /api/datasets` (OFDD-073 residual from 2026-07-29 soak). Liberty re-soak still required to prove B50 gone / B100 intact. |
 | OFDD-066 | Skip-not-crash on missing roles | A | **VERIFIED** | Runner preflights `required_roles` vs history schema and classifies DataFusion schema errors → `SKIPPED_MISSING_ROLES` (`rules_skipped`), not `rules_failed`. `results_response` emits per-row status (`SKIPPED_MISSING_ROLES`/`FAULT`/`PASS`). |
 | OFDD-068 | Weather table/view | A | **VERIFIED** | `register_weather_if_present` falls back to a `weather` SQL view over `history` weather-station rows (`equipment_id ILIKE '%weather%'/'%meteo%'/'%oat%'`) when no `weather/` sidecar. Unit test covers the fallback. |
 | OFDD-075 | Analytics 413 | A | **VERIFIED** | `DefaultBodyLimit::max(128 MiB)` on the protected router (analytics + `fdd/run`); CSV nest already had its own limit. |
-| OFDD-065 | Directional FAULT parity (SV-STALE / VAV-1 / FC1) | A | **DIRECTIONAL / residual** | See deltas table below. Building-scoping (067) removes cross-building `bench_*` bleed which was a primary inflation source. Remaining SQL-vs-pandas gate nuances documented; no bench-breaking gate changes made in this pass. |
+| OFDD-065 | Directional FAULT parity (SV-STALE / VAV-1 / FC1) | A | **DIRECTIONAL / residual** | Fan-on gate added to SV-STALE + VAV-1 SQL (synthetic oracle fixtures green). Liberty deltas table still `_tbd_` until tip soak on B50/B100 zips. |
 
 ## Known FAULT deltas (Liberty B50/B100 — placeholders)
 
@@ -66,22 +66,26 @@ tighten SV-STALE/VAV-1/FC1 gates within documented bands without regressing
 
 | Ticket | Scope | Gate | Status | Notes |
 |--------|-------|------|--------|-------|
-| OFDD-074 / 069 | Eng Findings HITL; retire Generic RCx DOCX story | B | **VERIFIED** | Overview report story is now `app.eng_findings.render_engineering_findings_panel` over `open_fdd.reporting` (HITL: max-findings, pin/drop refs, `REF=note` notes → prioritized findings + DOCX/XLSX/JSON downloads). The active site's `batch_results` are `open_fdd.rules.base.RuleResult`, fed straight to `candidates_from_rule_results`. When the `reporting` extra is absent, the panel falls back to central `/api/reports` (list/draft) instead of a static DOCX. Static Generic RCx DOCX demoted to a secondary expander. Helper unit tests green. `dashboard_contract` updated. |
-| OFDD-070 | Economizer historian/building-scoped Overview | B | **VERIFIED** | `AnalyticsQuery.building_id` added; `economizer_from_history` + `open_history_scoped` register only `building={id}/**/*.parquet` (rejects path-escape ids; returns `None` for an un-ingested site rather than leaking the whole tree). UI (`ui_rcx_tab`/`ui_analytics.fetch_economizer_analytics`) forwards the active `building_id`. IT: two ingested buildings → each scope sees only its own AHU; coverage echoes `building_id`. |
-| OFDD-071 | OpenAPI live routes + health version = tip SHA | B | **VERIFIED** | `/api/health` `version` = `resolve_build_version()` → `{CARGO_PKG_VERSION}+{OPENFDD_GIT_SHA}` (runtime) or `OPENFDD_BUILD_GIT_SHA` (compile-time), else bare crate version (no more stale-only `3.3.0`). `/openapi.json` now advertises live jobs / analytics / datasets / fdd-results / reports routes (doc-only `#[utoipa::path]` descriptors + new tags). Tests: `openapi_lists_live_*`, `version_prefers_runtime_git_sha_then_crate_version`. |
+| OFDD-074 / 069 | Eng Findings HITL; retire Generic RCx DOCX story | B | **VERIFIED (bench) / PENDING Liberty soak** | UI Eng Findings panel verified earlier. Tip adds `GET /api/reports/engineering-findings` (most recent `engineering_findings` draft, else 404). Liberty soak still required to prove artifacts after FDD run. |
+| OFDD-070 | Economizer historian/building-scoped Overview | B | **VERIFIED (bench) / PENDING Liberty soak** | Building scope verified earlier. Tip accepts Liberty `web_oa_t` (and rat/mat aliases) in `economizer_from_history` so scoped history no longer falls through to the stub warning when the econ trio is present under web_* names. Liberty re-soak still required. |
+| OFDD-071 | OpenAPI live routes + health version = tip SHA | B | **VERIFIED (bench) / PENDING image soak** | `resolve_build_version()` logic verified. Tip bakes `OPENFDD_GIT_SHA` into central Dockerfile + GHCR build-arg so `/api/health` reports `{version}+{sha}` on published images (was bare `3.3.0` on `sha-766dbc1`). |
 
 ## Gate C — vibe20 in-product Jobs / ECM (branch `fix/ofdd-gate-b-c-findings-ecm`)
 
 | Ticket | Scope | Gate | Status | Notes |
 |--------|-------|------|--------|-------|
-| OFDD-076 / 072 | In-product vibe20 Jobs agent-build + cascade-if-ready | C | **VERIFIED (delegated)** | Jobs sidebar surfaces **create Job from active site** (site/building caption + scoped WattLab/ECM). New `app.ui_ecm_job` writes a job-native **ECM package request** under `wattlab/ecm/*.json` with `honesty.openfdd = "delegated"` when `open_fdd.ecm_engineering` imports (`"unavailable"` otherwise); WattLab notebook builder shell-out is detected and recorded when present. **cascade-if-ready**: when docker.sock **and** `energyplus-mcp-dev` are present, an external E+ run is queued via the existing `POST /api/jobs/{id}/eplus/runs` (`eplus_runner`, QUEUED-only); otherwise an honest `esco_screening_only` stamp — central stays free of IDF/E+ logic. Unit tests cover honesty states, the cascade gate, queue-when-ready, and the on-disk request. |
+| OFDD-076 / 072 | In-product vibe20 Jobs agent-build + cascade-if-ready | C | **VERIFIED (delegated) / PENDING Liberty soak** | Jobs ECM request path remains delegated (Excel still vibe20). Tip persists `building_id` → `site_id` / `building_name` on `POST /api/jobs` create-from-site (OFDD-076 residual). Gate C exit still requires operator ECM without a separate vibe20 container. |
 
 ## Gate B/C honesty caveats
 
-- **No Liberty zips in this environment**, so Eng Findings / economizer parity is
-  proven on synthetic fixtures + unit/integration tests, not a B50/B100 soak. The
-  `sha-*` soak (Gate A exit) still owns filling the FAULT deltas table above and
-  the vibe19-tip UX comparison screenshots.
+- **2026-07-29 Liberty soak** downgraded several Gate B/C **VERIFIED** claims
+  (economizer stub on `web_oa_t`, Eng Findings API 404, delete-site ghost
+  rule_results, Jobs `site_id` null, health bare `3.3.0`). This tip lands the
+  code-path fixes; Liberty zip re-soak still owns filling the FAULT deltas table
+  and confirming UX parity.
+- **No Liberty zips in CI**, so Eng Findings / economizer / SV-STALE / VAV-1
+  gates are proven on synthetic fixtures + unit/integration tests, not a
+  B50/B100 soak.
 - ECM agent-build and any EnergyPlus calibration are **delegated** (WattLab /
   external runner). open-fdd is not marketed as vibe20-complete: the in-product
   path records requests and queues external runs; it does not itself parse IDF or

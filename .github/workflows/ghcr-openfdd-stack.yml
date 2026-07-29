@@ -120,6 +120,8 @@ jobs:
           tags: |
             ${{ env.CENTRAL_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
             ${{ env.CENTRAL_IMAGE }}:${{ steps.vars.outputs.version }}
+          build-args: |
+            OPENFDD_GIT_SHA=${{ github.sha }}
           labels: |
             org.opencontainers.image.title=Open-FDD Central
             org.opencontainers.image.source=https://github.com/bbartling/open-fdd

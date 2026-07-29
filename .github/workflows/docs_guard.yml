@@ -1,0 +1,17 @@
+name: docs-guard
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Guard protected docs
+        run: bash scripts/guard_docs.sh

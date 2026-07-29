@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM rust:1.95-bookworm AS builder
+ARG OPENFDD_GIT_SHA=""
+ENV OPENFDD_GIT_SHA=$OPENFDD_GIT_SHA
 RUN apt-get update \
   && apt-get install -y --no-install-recommends clang libclang-dev build-essential pkg-config libssl-dev \
   && rm -rf /var/lib/apt/lists/*
@@ -15,6 +17,7 @@ COPY rule_tuning ./rule_tuning
 RUN cargo build --release -p openfdd-central -p openfdd_mqtt
 
 FROM debian:bookworm-slim
+ARG OPENFDD_GIT_SHA=""
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl libssl3 \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
@@ -26,6 +29,8 @@ ENV OPENFDD_CENTRAL_HOST=0.0.0.0
 ENV OPENFDD_IMAGE_NAME=ghcr.io/bbartling/openfdd-central
 ENV OPENFDD_SQL_RULES_DIR=/app/sql_rules
 ENV OPENFDD_CENTRAL_PORT=8080
+# OFDD-071: stamp tip SHA so /api/health → {version}+{sha} (runtime env preferred by resolve_build_version).
+ENV OPENFDD_GIT_SHA=$OPENFDD_GIT_SHA
 EXPOSE 8080
 HEALTHCHECK CMD curl -fsS http://127.0.0.1:8080/api/health || exit 1
 ENTRYPOINT ["/usr/local/bin/openfdd-central"]

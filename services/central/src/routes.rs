@@ -104,6 +104,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/reports/templates", get(reports_templates))
         .route("/api/reports/draft", post(reports_draft))
         .route(
+            "/api/reports/engineering-findings",
+            get(reports_engineering_findings),
+        )
+        .route(
             "/api/reports/{report_id}",
             get(reports_get).patch(reports_patch).delete(reports_delete),
         )
@@ -1103,6 +1107,49 @@ pub async fn fdd_rules_list() -> Json<Value> {
 
 pub async fn reports_list() -> Json<Value> {
     Json(open_fdd_edge_prototype::reports::list_reports())
+}
+
+/// OFDD-069: dedicated Eng Findings lookup used by Liberty soak / HITL clients.
+///
+/// Returns the most recent report whose `report_type` / `template_id` / `kind`
+/// matches `engineering_findings`, or `{ok:false, error:"report not found"}`.
+pub async fn reports_engineering_findings() -> (StatusCode, Json<Value>) {
+    let listed = open_fdd_edge_prototype::reports::list_reports();
+    let records = listed
+        .get("records")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let match_type = |v: &Value| -> bool {
+        let t = v
+            .get("report_type")
+            .or_else(|| v.get("template_id"))
+            .or_else(|| v.get("kind"))
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        t == "engineering_findings" || t == "engineering-findings" || t.contains("engineering_finding")
+    };
+    if let Some(best) = records.into_iter().find(|r| match_type(r)) {
+        let report_id = best
+            .get("report_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if !report_id.is_empty() {
+            let full = open_fdd_edge_prototype::reports::get_report(report_id);
+            if full.get("ok") == Some(&json!(true)) || full.get("report_id").is_some() {
+                return (StatusCode::OK, Json(full));
+            }
+        }
+        return (
+            StatusCode::OK,
+            Json(json!({"ok": true, "report": best})),
+        );
+    }
+    (
+        StatusCode::NOT_FOUND,
+        Json(json!({"ok": false, "error": "report not found"})),
+    )
 }
 
 pub async fn reports_templates() -> Json<Value> {

@@ -1,4 +1,7 @@
 -- vav1_comfort_fault.sql — zone comfort band with confirm window (Open-FDD parity)
+-- OFDD-065: when fan_cmd is present, require fan-on (vibe19 applicability).
+-- When fan_cmd is NULL (zone-only VAV rows in a wide schema), keep the row.
+-- Do not reference fan_status here — DataFusion errors if the column is absent.
 WITH base AS (
   SELECT
     equipment_id,
@@ -6,6 +9,10 @@ WITH base AS (
     CAST(CASE WHEN zone_t < {{ZONE_T_LO}} OR zone_t > {{ZONE_T_HI}} THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM history
   WHERE zone_t IS NOT NULL
+    AND (
+      fan_cmd IS NULL
+      OR COALESCE(CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END, 0.0) > 0.05
+    )
 ),
 lagged AS (
   SELECT

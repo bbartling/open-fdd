@@ -149,6 +149,7 @@ pub fn templates() -> Value {
 pub fn create_draft(body: &Value) -> Value {
     let template = body
         .get("template_id")
+        .or_else(|| body.get("kind"))
         .and_then(|v| v.as_str())
         .unwrap_or("validation-summary");
     let title = body
@@ -276,6 +277,7 @@ pub fn create_draft(body: &Value) -> Value {
         "sections": sections,
         "metadata": {
             "generator": "open-fdd-rust-report-builder",
+            "template_id": template,
             "pdf_ready": false
         }
     });

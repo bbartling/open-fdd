@@ -469,7 +469,76 @@ pub fn delete_dataset(dataset_id: &str) -> Result<(), String> {
             let _ = fs::remove_dir_all(&part);
         }
     }
+    // OFDD-073: purge scoped FDD rule_results so DELETE site leaves no ghost FAULTs.
+    let rule_results_roots = [
+        std::env::var("OPENFDD_RULE_RESULTS_DIR")
+            .ok()
+            .map(PathBuf::from),
+        Some(ws.join(".cache/rule_results")),
+        Some(PathBuf::from(".cache/rule_results")),
+    ];
+    for root in rule_results_roots.into_iter().flatten() {
+        let part = root.join(format!("building={id}"));
+        if part.exists() {
+            let _ = fs::remove_dir_all(&part);
+        }
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::TempDir;
+
+    #[test]
+    fn delete_dataset_purges_rule_results_building_partition() {
+        let tmp = TempDir::new().unwrap();
+        // isolate workspace + CWD-relative rule_results roots used by delete_dataset
+        let prev_ws = std::env::var("OPENFDD_WORKSPACE").ok();
+        let prev_cwd = std::env::current_dir().ok();
+        std::env::set_var("OPENFDD_WORKSPACE", tmp.path());
+        std::env::set_current_dir(tmp.path()).unwrap();
+
+        let id = "BUILDING_50";
+        let results = tmp
+            .path()
+            .join(".cache/rule_results")
+            .join(format!("building={id}"));
+        fs::create_dir_all(&results).unwrap();
+        let mut f = fs::File::create(results.join("SV-STALE.json")).unwrap();
+        writeln!(f, "{{\"fault_hours\": 1.0}}").unwrap();
+
+        let pq = tmp
+            .path()
+            .join(".cache/parquet")
+            .join(format!("building={id}"));
+        fs::create_dir_all(&pq).unwrap();
+        fs::write(pq.join("marker"), b"x").unwrap();
+
+        // also leave a sibling building so we prove scoped purge
+        let keep = tmp
+            .path()
+            .join(".cache/rule_results")
+            .join("building=BUILDING_100");
+        fs::create_dir_all(&keep).unwrap();
+        fs::write(keep.join("keep.json"), b"{}").unwrap();
+
+        delete_dataset(id).expect("delete ok");
+        assert!(!results.exists(), "BUILDING_50 rule_results must be purged");
+        assert!(!pq.exists(), "BUILDING_50 parquet partition must be purged");
+        assert!(keep.exists(), "BUILDING_100 rule_results must remain");
+
+        if let Some(ws) = prev_ws {
+            std::env::set_var("OPENFDD_WORKSPACE", ws);
+        } else {
+            std::env::remove_var("OPENFDD_WORKSPACE");
+        }
+        if let Some(cwd) = prev_cwd {
+            let _ = std::env::set_current_dir(cwd);
+        }
+    }
 }
 
 /// Register a package building id in the dataset registry (for Delete dataset by Haystack name).
