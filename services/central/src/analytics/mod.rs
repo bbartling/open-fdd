@@ -42,6 +42,11 @@ pub struct AnalyticsQuery {
     pub job_id: Option<String>,
     #[serde(default)]
     pub run_id: Option<String>,
+    /// Site / building scope (OFDD-070). When set, historian analytics read only
+    /// `building={id}/` under the parquet root so a site's Overview economizer
+    /// (and other historian families) are not contaminated by other packages.
+    #[serde(default)]
+    pub building_id: Option<String>,
     #[serde(default)]
     pub equipment_ids: Option<Vec<String>>,
     #[serde(default)]

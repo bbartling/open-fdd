@@ -179,6 +179,43 @@ pub fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
+/// Resolve the reported build version (OFDD-071).
+///
+/// Preference order so `/api/health` reflects the deployed tip, not the stale
+/// crate literal:
+/// 1. Runtime `OPENFDD_GIT_SHA` → `{CARGO_PKG_VERSION}+{sha}` (CI/deploy stamps this).
+/// 2. Compile-time `OPENFDD_BUILD_GIT_SHA` (build.rs / docker `--build-arg`).
+/// 3. Bare `CARGO_PKG_VERSION` fallback.
+pub fn resolve_build_version() -> String {
+    let base = env!("CARGO_PKG_VERSION");
+    if let Ok(sha) = std::env::var("OPENFDD_GIT_SHA") {
+        let sha = sha.trim();
+        if !sha.is_empty() {
+            return format!("{base}+{}", short_sha(sha));
+        }
+    }
+    if let Some(sha) = option_env!("OPENFDD_BUILD_GIT_SHA") {
+        let sha = sha.trim();
+        if !sha.is_empty() {
+            return format!("{base}+{}", short_sha(sha));
+        }
+    }
+    base.to_string()
+}
+
+fn short_sha(sha: &str) -> String {
+    let clean: String = sha
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(12)
+        .collect();
+    if clean.is_empty() {
+        "unknown".into()
+    } else {
+        clean
+    }
+}
+
 #[utoipa::path(
     get,
     path = "/api/health",
@@ -189,7 +226,7 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
     Json(OkHealthResponse {
         ok: true,
         service: "openfdd-central".into(),
-        version: env!("CARGO_PKG_VERSION").into(),
+        version: resolve_build_version(),
         edges: state.edges.len(),
         ingest_ok: *state.ingest_ok.lock().unwrap(),
         ingest_dup: *state.ingest_dup.lock().unwrap(),
@@ -1518,4 +1555,30 @@ async fn analytics_metering(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
         "ok": true,
         "analytics": analytics::metering::handle_async(&req).await.to_json(),
     }))
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::resolve_build_version;
+
+    // Single test so the shared `OPENFDD_GIT_SHA` env var is never raced by a
+    // parallel sibling test.
+    #[test]
+    fn version_prefers_runtime_git_sha_then_crate_version() {
+        std::env::set_var("OPENFDD_GIT_SHA", "abcdef1234567890deadbeef");
+        let v = resolve_build_version();
+        assert!(v.starts_with(env!("CARGO_PKG_VERSION")), "v={v}");
+        assert!(v.contains('+'), "expected version+sha, got {v}");
+        // Short SHA capped at 12 alphanumerics.
+        assert_eq!(v.split('+').nth(1).unwrap(), "abcdef123456");
+
+        std::env::remove_var("OPENFDD_GIT_SHA");
+        let fallback = resolve_build_version();
+        // Without a runtime SHA it may still carry a compile-time build SHA;
+        // at minimum it must start with the crate version.
+        assert!(
+            fallback.starts_with(env!("CARGO_PKG_VERSION")),
+            "v={fallback}"
+        );
+    }
 }
