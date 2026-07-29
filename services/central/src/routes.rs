@@ -1128,23 +1128,19 @@ pub async fn reports_engineering_findings() -> (StatusCode, Json<Value>) {
             .and_then(|x| x.as_str())
             .unwrap_or("")
             .to_ascii_lowercase();
-        t == "engineering_findings" || t == "engineering-findings" || t.contains("engineering_finding")
+        t == "engineering_findings"
+            || t == "engineering-findings"
+            || t.contains("engineering_finding")
     };
     if let Some(best) = records.into_iter().find(|r| match_type(r)) {
-        let report_id = best
-            .get("report_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let report_id = best.get("report_id").and_then(|v| v.as_str()).unwrap_or("");
         if !report_id.is_empty() {
             let full = open_fdd_edge_prototype::reports::get_report(report_id);
             if full.get("ok") == Some(&json!(true)) || full.get("report_id").is_some() {
                 return (StatusCode::OK, Json(full));
             }
         }
-        return (
-            StatusCode::OK,
-            Json(json!({"ok": true, "report": best})),
-        );
+        return (StatusCode::OK, Json(json!({"ok": true, "report": best})));
     }
     (
         StatusCode::NOT_FOUND,

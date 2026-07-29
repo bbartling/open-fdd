@@ -82,10 +82,10 @@ pub fn normalize_role(role: &str) -> String {
         | "sat" => "sat".into(),
         // Keep web_oa_t as identity (mech_oat / econ3/6/7 SQL require that column name).
         // Liberty economizer historian accepts web_oa_t as an oa_t alias in historian.rs.
-        "return_air_temp" | "return_air_temp_f" | "rat" | "ra_t"
-        | "web_ra_t" | "web_rat" | "return_air_t" => "rat".into(),
-        "mixed_air_temp" | "mixed_air_temp_f" | "mat" | "ma_t"
-        | "web_mat" | "web_ma_t" | "mixed_air_t" => "mat".into(),
+        "return_air_temp" | "return_air_temp_f" | "rat" | "ra_t" | "web_ra_t" | "web_rat"
+        | "return_air_t" => "rat".into(),
+        "mixed_air_temp" | "mixed_air_temp_f" | "mat" | "ma_t" | "web_mat" | "web_ma_t"
+        | "mixed_air_t" => "mat".into(),
         "fan_speed"
         | "fan_pct"
         | "fan_percent"
