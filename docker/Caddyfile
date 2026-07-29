@@ -1,18 +1,32 @@
-# Open-FDD production reverse proxy (Caddy 2).
-# Self-signed TLS for lab / remote pen-test.
+# Open-FDD edge reverse proxy (Caddy 2) — default entry: UI on :80/:443.
+# Prefer docker/caddy/Caddyfile.* with compose.caddy.yml for recipes.
+# Legacy openfdd-bridge upstream removed — Streamlit ui:8501 + central:8080.
 
-127.0.0.1, localhost {
-	tls internal
-	encode gzip zstd
-	header {
-		-Server
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		X-Content-Type-Options nosniff
-		Referrer-Policy no-referrer
-	}
-	reverse_proxy openfdd-bridge:8080
+{
+	admin off
+	auto_https off
 }
 
 :80 {
-	redir https://localhost{uri} permanent
+	encode gzip zstd
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options SAMEORIGIN
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
+	@blocked path /.env /.git /.git/* /wp-admin /wp-admin/* /xmlrpc.php
+	respond @blocked 404
+
+	handle /api* {
+		reverse_proxy central:8080
+	}
+
+	handle {
+		reverse_proxy ui:8501 {
+			flush_interval -1
+		}
+	}
 }

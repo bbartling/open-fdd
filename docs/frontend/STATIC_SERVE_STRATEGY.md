@@ -13,7 +13,9 @@ proxy.
 | Surface | Behavior |
 | --- | --- |
 | UI browser | Streamlit on `:3000` (host) → `:8501` (container) |
+| UI via Caddy (optional) | `http://<host>/` → `ui:8501` (`OPENFDD_CADDY=1` / `compose.caddy.yml`) |
 | API | Central on `:8080` (`/api/health`, JWT routes, FDD) |
+| API via Caddy | `http://<host>/api*` → `central:8080` |
 | Docs / OpenAPI | Served by central on `:8080` |
 
 ## Docker

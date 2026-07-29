@@ -11,12 +11,32 @@
 :443 {
 	tls /certs/cert.pem /certs/key.pem
 	encode gzip zstd
+
 	header {
 		-Server
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
 		X-Frame-Options SAMEORIGIN
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 	}
-	reverse_proxy openfdd-bridge:8080
+
+	@blocked path /.env /.git /.git/* /wp-admin /wp-admin/* /xmlrpc.php
+	respond @blocked 404
+
+	handle /api* {
+		reverse_proxy {$OPENFDD_CADDY_API_UPSTREAM:central:8080} {
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	handle {
+		reverse_proxy {$OPENFDD_CADDY_UI_UPSTREAM:ui:8501} {
+			header_up Host {host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+			flush_interval -1
+		}
+	}
 }

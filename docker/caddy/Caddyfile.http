@@ -1,16 +1,45 @@
-# HTTP mode — Caddy on port 80, proxy to Rust bridge (lab / non-TLS LAN)
+# HTTP edge — hit http://<machine-ip>/ → Streamlit UI (lab / LAN).
+# Optional: /api* → central (health, OpenAPI, JWT) on the same origin.
+#
+# Compose overlay: docker compose -f docker/compose.standalone.yml -f docker/compose.caddy.yml up -d
+# Or: OPENFDD_CADDY=1 ./scripts/openfdd_stack_up.sh standalone
 
 {
 	admin off
+	auto_https off
 }
 
 :80 {
 	encode gzip zstd
+
 	header {
 		-Server
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
 		X-Frame-Options SAMEORIGIN
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# Lab/LAN HTTP — omit HSTS (no TLS). TLS Caddyfiles set HSTS.
 	}
-	reverse_proxy {$OPENFDD_CADDY_UPSTREAM:openfdd-bridge:8080}
+
+	# Cheap scanner / probe noise
+	@blocked path /.env /.git /.git/* /wp-admin /wp-admin/* /xmlrpc.php
+	respond @blocked 404
+
+	# Central REST / health / OpenAPI (same-origin convenience)
+	handle /api* {
+		reverse_proxy {$OPENFDD_CADDY_API_UPSTREAM:central:8080} {
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# Default: Streamlit UI (websockets OK)
+	handle {
+		reverse_proxy {$OPENFDD_CADDY_UI_UPSTREAM:ui:8501} {
+			header_up Host {host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+			flush_interval -1
+		}
+	}
 }
