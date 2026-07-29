@@ -77,7 +77,7 @@ jobs:
           test -f services/ui/app/central_client.py
           python3 -m py_compile services/ui/streamlit_app.py services/ui/app/central_client.py services/ui/app/agent_api.py services/ui/app/job_store.py services/ui/app/ui_jobs.py
           grep -q "Rule tuning" services/ui/streamlit_app.py
-          grep -q "Delete dataset" services/ui/streamlit_app.py
+          grep -q "Delete site" services/ui/streamlit_app.py
           grep -q "def _run_rule_list" services/ui/streamlit_app.py
           grep -q "DataFusion" services/ui/streamlit_app.py || grep -q "run_fdd" services/ui/app/central_client.py
           grep -q "Authorization" services/ui/app/central_client.py
