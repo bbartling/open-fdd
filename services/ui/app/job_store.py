@@ -547,3 +547,36 @@ def save_wattlab_handoff(
     path = job_dir(job_id, ws) / "wattlab" / "handoffs" / f"{hid}.json"
     _atomic_write_json(path, payload)
     return path
+
+
+def save_ecm_request(
+    job_id: str,
+    request: dict[str, Any],
+    *,
+    request_id: str | None = None,
+    ws: Path | None = None,
+) -> Path:
+    """Write an ECM package (agent-build) request under ``wattlab/ecm/`` (OFDD-076).
+
+    Central stays free of ECM/IDF logic; this is a job-native placeholder request
+    that the WattLab / open_fdd.ecm_engineering agent-build path consumes. Does not
+    duplicate telemetry.
+    """
+    if not isinstance(request, dict):
+        raise ValueError("ecm request must be an object")
+    rid = request_id or f"ecm-{uuid.uuid4()}"
+    if "/" in rid or "\\" in rid or ".." in rid:
+        raise ValueError("invalid ecm request id")
+    meta = load_job(job_id, ws=ws)
+    payload = {
+        "schema_version": "1",
+        "kind": "ecm_package_request",
+        "request_id": rid,
+        "job_id": job_id,
+        "run_id": request.get("run_id") or meta.latest_run_id,
+        "created_at": _utc_now(),
+        **{k: v for k, v in request.items() if k not in {"schema_version", "kind", "request_id", "job_id"}},
+    }
+    path = job_dir(job_id, ws) / "wattlab" / "ecm" / f"{rid}.json"
+    _atomic_write_json(path, payload)
+    return path

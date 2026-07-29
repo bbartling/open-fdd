@@ -136,6 +136,16 @@ def render_jobs_sidebar() -> None:
             st.caption("No active jobs yet.")
 
         st.markdown("**New job**")
+        active_site = st.session_state.get("site_id")
+        active_building = st.session_state.get("building_id")
+        if active_building or active_site:
+            st.caption(
+                "Creates from active site: "
+                f"`{active_site or '—'}` / building `{active_building or '—'}` "
+                "(scopes WattLab handoff + ECM agent-build to this site)."
+            )
+        else:
+            st.caption("Load a site first to scope the job to a building.")
         name = st.text_input("Job name", key="jobs_new_name", placeholder="e.g. Building 100 RCx")
         if st.button("Create job", key="jobs_create_btn", disabled=not (name or "").strip()):
             try:

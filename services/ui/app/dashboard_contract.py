@@ -45,6 +45,9 @@ REQUIRED_UI_ENTRYPOINTS: tuple[str, ...] = (
     "app.rule_card:build_rule_card",
     "app.docx_report:load_generic_rcx_report",
     "app.docx_report:applicable_rules_for_equipment",
+    # OFDD-074/069: Engineering Findings (open_fdd.reporting HITL) is the Overview
+    # report story. The static Generic RCx DOCX remains as a secondary template.
+    "app.eng_findings:render_engineering_findings_panel",
     "app.report_downloads:render_overview_rcx_download",
     "app.browser_session:write_browser_session_pointer",
     "app.browser_session:read_browser_session_pointer",
@@ -55,4 +58,8 @@ REQUIRED_UI_ENTRYPOINTS: tuple[str, ...] = (
     "app.ui_jobs:render_jobs_sidebar",
     "app.job_store:create_job",
     "app.job_store:load_job",
+    # OFDD-076/072: in-product vibe20 Jobs — WattLab handoff + ECM agent-build.
+    "app.ui_wattlab_job:render_job_native_wattlab_handoff",
+    "app.ui_ecm_job:render_ecm_agent_build_panel",
+    "app.job_store:save_ecm_request",
 )
