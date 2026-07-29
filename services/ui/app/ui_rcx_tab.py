@@ -69,6 +69,7 @@ def _render_economizer_diagnostics(
             weather=weather,
             prefer_web_oat=prefer_web,
             dt_min_f=dt_min,
+            building_id=st.session_state.get("building_id"),
         )
 
     if not result.get("ok"):

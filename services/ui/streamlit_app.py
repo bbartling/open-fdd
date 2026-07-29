@@ -2782,9 +2782,17 @@ def main() -> None:
         d2.metric("Dataset end", end_s)
         d3.metric("Span (h)", f"{span['span_hours']:.1f}")
 
-        from app.report_downloads import render_overview_rcx_download
+        # OFDD-074/069: Engineering Findings (open_fdd.reporting HITL) is the
+        # Overview report story now — the static Generic RCx DOCX template is
+        # demoted to a secondary download below, not the primary narrative.
+        from app.eng_findings import render_engineering_findings_panel
 
-        render_overview_rcx_download(key="overview_generic_rcx_docx")
+        render_engineering_findings_panel(key="overview_eng_findings")
+
+        with st.expander("RCx report template (static DOCX)", expanded=False):
+            from app.report_downloads import render_overview_rcx_download
+
+            render_overview_rcx_download(key="overview_generic_rcx_docx")
 
         min_air_hours = _render_building_schedule_overview()
         if isinstance(central_runtime, dict) and central_runtime.get("ok"):
@@ -3940,6 +3948,10 @@ def main() -> None:
         from app.ui_wattlab_job import render_job_native_wattlab_handoff
 
         render_job_native_wattlab_handoff()
+
+        from app.ui_ecm_job import render_ecm_agent_build_panel
+
+        render_ecm_agent_build_panel()
 
         st.markdown("##### WattLab dump zip (additive)")
         if not frames:

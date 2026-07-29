@@ -64,14 +64,53 @@ pub fn parquet_root() -> PathBuf {
 /// Register `history` from parquet_root when the tree exists and has data.
 /// Returns `Ok(true)` on success, `Ok(false)` when missing/empty/unusable.
 pub async fn try_register_history(ctx: &SessionContext) -> Result<bool> {
+    try_register_history_scoped(ctx, None).await
+}
+
+/// Sanitize a `building_id` for use as a Hive path segment. Rejects any value
+/// with path separators or `..` so a query field can never escape the parquet
+/// root; returns `None` for empty/unsafe ids (caller falls back to whole tree).
+fn safe_building_segment(building_id: Option<&str>) -> Option<String> {
+    let bid = building_id.map(str::trim).filter(|s| !s.is_empty())?;
+    if bid.contains('/') || bid.contains('\\') || bid.contains("..") || bid.contains('\0') {
+        return None;
+    }
+    Some(bid.to_string())
+}
+
+/// Register `history` for an optional `building_id` scope (OFDD-070).
+///
+/// When `building_id` is set and `building={id}/` exists under the parquet root,
+/// only that site's parquet is registered (mirrors the edge FDD registry Hive
+/// layout `building={id}/equipment={eq}/history.parquet`). Otherwise the whole
+/// tree is registered. Returns `Ok(false)` when nothing usable is present.
+pub async fn try_register_history_scoped(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+) -> Result<bool> {
     let root = parquet_root();
     if !root.is_dir() {
         return Ok(false);
     }
-    match register_parquet_tree(ctx, &root).await {
+    let scoped = match safe_building_segment(building_id) {
+        Some(bid) => {
+            let dir = root.join(format!("building={bid}"));
+            if dir.is_dir() {
+                Some(dir)
+            } else {
+                // Requested site has no parquet yet — do not silently fall back to
+                // the whole tree (that would mix other buildings into the scope).
+                tracing::debug!(building = %bid, "no building-scoped parquet; historian scope empty");
+                return Ok(false);
+            }
+        }
+        None => None,
+    };
+    let target = scoped.as_deref().unwrap_or(&root);
+    match register_parquet_tree(ctx, target).await {
         Ok(_) => Ok(true),
         Err(e) => {
-            tracing::debug!(error = %e, root = %root.display(), "historian parquet register skipped");
+            tracing::debug!(error = %e, root = %target.display(), "historian parquet register skipped");
             Ok(false)
         }
     }
@@ -312,8 +351,15 @@ ORDER BY i.equipment_id
 /// Register `history` and return `(ctx, columns, row_count)` when the parquet
 /// tree exists and has rows; `Ok(None)` when missing/empty (caller falls back).
 async fn open_history() -> Result<Option<(SessionContext, HashSet<String>, i64)>> {
+    open_history_scoped(None).await
+}
+
+/// Like [`open_history`] but scoped to an optional `building_id` (OFDD-070).
+async fn open_history_scoped(
+    building_id: Option<&str>,
+) -> Result<Option<(SessionContext, HashSet<String>, i64)>> {
     let ctx = SessionContext::new();
-    if !try_register_history(&ctx).await? {
+    if !try_register_history_scoped(&ctx, building_id).await? {
         return Ok(None);
     }
     let count = run_sql(&ctx, "SELECT COUNT(*) AS n FROM history").await?;
@@ -553,8 +599,9 @@ ORDER BY equipment_id
 pub async fn economizer_from_history(
     equipment_filter: Option<&[String]>,
     dt_min_f: f64,
+    building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history().await? else {
+    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     if !(cols.contains("oa_t") && cols.contains("rat") && cols.contains("mat")) {
@@ -626,6 +673,7 @@ ORDER BY equipment_id
         "history_rows": n,
         "dt_min_f": dt_min,
         "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
     }));
     Ok(Some(env))
 }
@@ -846,6 +894,91 @@ mod tests {
         assert!(!env.rows.is_empty());
         assert_eq!(env.rows[0]["history_rows"].as_u64().unwrap(), 2);
         assert!(env.warnings.iter().any(|w| w.contains("not fabricated")));
+    }
+
+    #[tokio::test]
+    async fn economizer_from_history_is_building_scoped() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let parquet = tmp.path().join("parquet_econ");
+
+        // Two buildings with distinct AHU ids, each with oat/rat/mat + fan.
+        for (bid, eq) in [("BUILDING_50", "AHU_B50"), ("BUILDING_100", "AHU_B100")] {
+            let building = tmp.path().join(bid);
+            let ahu = building.join(eq);
+            std::fs::create_dir_all(&ahu).unwrap();
+            std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+            std::fs::write(
+                ahu.join("columns.csv"),
+                "col,point_role\noat,outside_air_temp\nrat,return_air_temp\n\
+                 mat,mixed_air_temp\nfan,fan_status\n",
+            )
+            .unwrap();
+            let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+            writeln!(f, "timestamp_utc,oat,rat,mat,fan").unwrap();
+            writeln!(f, "2026-01-01T00:00:00Z,40,70,55,1").unwrap();
+            writeln!(f, "2026-01-01T00:05:00Z,41,70,56,1").unwrap();
+            fdd_store::ingest_building(tmp.path(), bid, &parquet).unwrap();
+        }
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let b50 = economizer_from_history(None, 10.0, Some("BUILDING_50"))
+            .await
+            .unwrap()
+            .expect("B50 economizer envelope");
+        let b100 = economizer_from_history(None, 10.0, Some("BUILDING_100"))
+            .await
+            .unwrap()
+            .expect("B100 economizer envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        // Each scope sees only its own AHU — no cross-building bleed.
+        let ids_b50: Vec<String> = b50
+            .equipment
+            .iter()
+            .filter_map(|e| e["equipment_id"].as_str().map(str::to_string))
+            .collect();
+        let ids_b100: Vec<String> = b100
+            .equipment
+            .iter()
+            .filter_map(|e| e["equipment_id"].as_str().map(str::to_string))
+            .collect();
+        assert_eq!(ids_b50, vec!["AHU_B50".to_string()]);
+        assert_eq!(ids_b100, vec!["AHU_B100".to_string()]);
+        assert_eq!(
+            b50.coverage.as_ref().unwrap()["building_id"],
+            serde_json::json!("BUILDING_50")
+        );
+    }
+
+    #[tokio::test]
+    async fn economizer_from_history_none_for_unknown_building() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let parquet = tmp.path().join("parquet_econ_missing");
+        let building = tmp.path().join("BUILDING_50");
+        let ahu = building.join("AHU_B50");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\noat,outside_air_temp\nrat,return_air_temp\n\
+             mat,mixed_air_temp\nfan,fan_status\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,oat,rat,mat,fan").unwrap();
+        writeln!(f, "2026-01-01T00:00:00Z,40,70,55,1").unwrap();
+        fdd_store::ingest_building(tmp.path(), "BUILDING_50", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        // Requesting a site that was never ingested must not fall back to the
+        // whole tree (that would leak BUILDING_50 into a BUILDING_999 scope).
+        let out = economizer_from_history(None, 10.0, Some("BUILDING_999"))
+            .await
+            .unwrap();
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        assert!(out.is_none());
     }
 
     #[test]

@@ -282,9 +282,15 @@ def fetch_economizer_analytics(
     dt_min_f: float = 10.0,
     max_points: int = 8000,
     equipment_ids: list[str] | None = None,
+    building_id: str | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """POST economizer series to central when healthy; return error dict on failure."""
+    """POST economizer series to central when healthy; return error dict on failure.
+
+    OFDD-070: when ``building_id`` is provided it is forwarded so central can scope
+    the historian read to ``building={id}/`` (no cross-site parquet bleed). Inline
+    series is still built from the active site's frames.
+    """
     if not central_client.health_ok():
         return {"ok": False, "error": "central health check failed", "central_down": True}
     series = build_economizer_series(
@@ -304,6 +310,9 @@ def fetch_economizer_analytics(
     }
     if equipment_ids:
         payload["equipment_ids"] = list(equipment_ids)
+    bid = (building_id or "").strip()
+    if bid:
+        payload["building_id"] = bid
     if extra:
         payload.update(extra)
     resp = central_client.analytics_post("economizer", payload)

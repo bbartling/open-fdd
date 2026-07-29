@@ -443,6 +443,67 @@ def jobs_create_wattlab_handoff(job_id: str, handoff: dict[str, Any]) -> dict[st
         return {"ok": False, "error": str(exc), "central_down": True}
 
 
+def jobs_queue_eplus_run(job_id: str, run: dict[str, Any], *, timeout: float = 30.0) -> dict[str, Any]:
+    """POST an external EnergyPlus run request (central persists QUEUED metadata only).
+
+    Central never opens a Docker socket or parses IDF; an approved external runner
+    (playground vibe20 / energyplus-mcp) claims QUEUED records. See eplus_runner.rs.
+    """
+    try:
+        resp = _request(
+            "POST",
+            f"{api_base()}/api/jobs/{job_id}/eplus/runs",
+            timeout=timeout,
+            json=run or {},
+            headers={"Content-Type": "application/json"},
+        )
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}
+
+
+# Reports (OFDD-074/069) — Engineering Findings artifacts / templates / drafts.
+def reports_list(*, timeout: float = 30.0) -> dict[str, Any]:
+    try:
+        resp = _request("GET", f"{api_base()}/api/reports", timeout=timeout)
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}
+
+
+def reports_templates(*, timeout: float = 30.0) -> dict[str, Any]:
+    try:
+        resp = _request("GET", f"{api_base()}/api/reports/templates", timeout=timeout)
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}
+
+
+def reports_draft(body: dict[str, Any], *, timeout: float = 60.0) -> dict[str, Any]:
+    try:
+        resp = _request(
+            "POST",
+            f"{api_base()}/api/reports/draft",
+            timeout=timeout,
+            json=body or {},
+            headers={"Content-Type": "application/json"},
+        )
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}
+
+
+def reports_get(report_id: str, *, timeout: float = 30.0) -> dict[str, Any]:
+    rid = (report_id or "").strip()
+    if not rid:
+        return {"ok": False, "error": "report_id required"}
+    try:
+        resp = _request("GET", f"{api_base()}/api/reports/{rid}", timeout=timeout)
+        return _parse_json_response(resp)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": str(exc), "central_down": True}
+
+
 # Milestone C — typed analytics envelopes (no Plotly JSON).
 ANALYTICS_FAMILIES: frozenset[str] = frozenset(
     {
