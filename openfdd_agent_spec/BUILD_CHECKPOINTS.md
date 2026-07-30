@@ -120,7 +120,7 @@ Docs: [`MILESTONE_D_CLOSEOUT.md`](../docs/migration/MILESTONE_D_CLOSEOUT.md),
 
 # Liberty soak turnkey (2026-07-30) — post-064eadb
 
-**Status:** open-fdd PR **#601 open** (not merged) · playground #69 **merged** (`2323f28` on develop).
+**Status:** open-fdd #601 **merged** (`f904715` / `sha-f904715`) · playground #69 **merged** (`2323f28`).
 
 - [x] Phase 0 — GH tidy + csv+caddy on `sha-064eadb`
 - [x] OFDD-070b economizer CTE + OFDD-076b `building_id`→`site_id`
@@ -130,4 +130,4 @@ Docs: [`MILESTONE_D_CLOSEOUT.md`](../docs/migration/MILESTONE_D_CLOSEOUT.md),
 - [x] OFDD-UI-V20 WattLab section + compose.wattlab + Caddy smoke
 - [x] OFDD-069 findings draft persist + OFDD-065 Liberty deltas + MCP-IT doc
 - [x] ECM-ERV-001 HAS_EP_PROTOTYPE residual stub (not product cascade)
-- [ ] Merge #601 → GHCR `:sha-<final>` + `:nightly` → re-soak checklist
+- [x] Merge #601 → GHCR `:sha-<final>` + `:nightly` → re-soak checklist

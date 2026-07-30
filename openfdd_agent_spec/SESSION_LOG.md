@@ -4,6 +4,14 @@ Newest first. Append after non-trivial agent work.
 
 ---
 
+## 2026-07-30 — Liberty soak turnkey closeout
+
+- Merged open-fdd #601 → master `f904715` / GHCR `sha-f904715` (`f9047154dab631f0fecf81094bcc177c23c69712`).
+- Playground #69 on develop `2323f28` (BUG-ECM-015 + ECM-ERV stub).
+- Stack refreshed: csv + caddy (+ wattlab) on `sha-f904715` (API host :18080; Caddy :80).
+- Health: `3.3.0+f9047154dab6`. Re-soak: Site UI 1-site; Delete…; economizer;
+  Eng Findings 200; WattLab pages; Studio ss_*; MCP companion; no `d631e9c` pin.
+
 ## 2026-07-30 — Liberty soak turnkey (implementation)
 
 - OFDD-070b CTE damper project; OFDD-076b `building_id`→`site_id`; Brand Open FDD;
