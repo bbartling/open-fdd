@@ -6,24 +6,25 @@ nav_order: 36
 
 # FDD ops story → Twin schedule knobs (pointer)
 
-**Ownership:** EnergyPlus IDF / G14 calibration stays in **vibe20 / WattLab** —
-never inside `openfdd-mcp`. This page only tells open-fdd agents **where to
-hand off** when FDD / dump / bills disagree with the model.
+**Ownership:** EnergyPlus IDF / G14 calibration runs via **EnergyPlus-MCP** on the
+**open-fdd** stack (WattLab section) — never inside `openfdd-mcp`. vibe19/vibe20
+app tips are **frozen** (2026-07-30 cutover). This page only tells open-fdd agents
+**where to continue** when FDD / dump / bills disagree with the model.
 
-## When to leave open-fdd
+## When to leave openfdd-mcp (stay in open-fdd product)
 
-| Signal in Open FDD | Hand off to |
-|--------------------|-------------|
-| Scheduling / always-on / OA / fan runtime findings | vibe20 Twin dial (ops schedules) |
+| Signal in Open FDD | Continue with |
+|--------------------|---------------|
+| Scheduling / always-on / OA / fan runtime findings | Twin dial (ops schedules) in openfdd-ui WattLab |
 | Monthly bills vs Twin ±% charts wrong shape | `wattlab-twin-ops-reheat-dial` + playbook §2c |
 | Envelope / glass / infil still annual-short | `wattlab-twin-calibrate-dial` Phase 1 |
-| IDF patch / EnergyPlus simulate | EnergyPlus-MCP / `wattlab mcp-exec` |
+| IDF patch / EnergyPlus simulate | EnergyPlus-MCP / stack `mcp-exec` |
 
 ## Recipe (generic — no campus IDs)
 
 1. Read monthly ±% (Studio dial charts) and any dump DAT/fan/OA story.
 2. Form **one** schedule/HW hypothesis (see reheat coupling below).
-3. Patch + simulate in vibe20 — score **both** fuels every run.
+3. Patch + simulate via EnergyPlus-MCP — score **both** fuels every run.
 4. Do **not** invent ECM savings or flip a previously-passing fuel.
 
 ### Reheat coupling

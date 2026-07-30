@@ -39,6 +39,8 @@
 
 > **Open-source semantic building analytics and HVAC supervisory fault detection. Local-first. On-premises. Vendor-neutral. Free to run at the edge or offline.**
 
+**Cutover (2026-07-30):** **open-fdd is the product.** vibe19 / vibe20 app images are **frozen** — no further tip features. Fuel / Twin / ECM / FDD ship via **GHCR open-fdd** + **PyPI `open-fdd`**. EnergyPlus stays a stack companion (MCP/DinD), not a separate vibe Studio product.
+
 Open-FDD is an open-source analytics platform for building automation that combines **Haystack-style semantic point roles** (JSON site/equipment maps), **live or historical OT/CSV data**, and **high-performance columnar analytics**.
 
 The platform includes:
@@ -46,7 +48,7 @@ The platform includes:
 - Haystack-style point roles in JSON (`column_map`) — not RDF-first
 - Streamlit UI for CSV / zip FDD, RCx, findings, and **WattLab** (Fuel / Twin / ECM)
 - Arrow historian + DataFusion SQL fault detection (59 cookbook rules)
-- ECM helpers on PyPI; EnergyPlus runner is a stack companion (MCP/DinD), not vibe20-only
+- ECM / industry 2nd-eyes on **PyPI**; EnergyPlus runner is an open-fdd stack companion
 - Docker compose images on GHCR; OT fieldbus / MQTTS still roadmap
 
 Open-FDD ships compose recipes for lab and production-shaped stacks.

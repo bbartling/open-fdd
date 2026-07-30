@@ -9,17 +9,19 @@ nav_order: 5
 **Read this when the task involves Twin calibrate, Fuel bills, ECM Excel, or IDF/EnergyPlus.**  
 `openfdd-mcp` alone is **FDD / sites / historian** — it does **not** perform EnergyPlus IDF surgery.
 
+**Cutover (2026-07-30):** Operator UI is **openfdd-ui** (WattLab section). vibe19/vibe20 app tips are **frozen**. Prefer baked `wattlab` in GHCR UI + `/data` workspace + EnergyPlus-MCP sidecar — not a separate vibe Studio on `:8520`.
+
 ## Three surfaces (do not collapse)
 
 | Surface | Role | How agents reach it |
 |---------|------|---------------------|
 | **openfdd-mcp** | JWT → central REST: health, CSV ingest, FDD SQL, Haystack, reports | Cursor `mcp.json` `openfdd` server; `mcp/INSTRUCTIONS.md` |
-| **EnergyPlus-MCP** | LBNL ~35 tools in `wattlab_workspace/third_party/EnergyPlus-MCP` → image `energyplus-mcp-dev` | Separate MCP server **or** `wattlab energyplus-ensure` + `wattlab mcp-exec` |
-| **WattLab `tools/` + skills** | CLIs, playbooks, full-parity Excel builders, Cursor skills | Files under `~/wattlab_workspace/tools/`; `~/.cursor/skills/wattlab-*` |
+| **EnergyPlus-MCP** | LBNL ~35 tools in `wattlab_workspace/third_party/EnergyPlus-MCP` → image `energyplus-mcp-dev` | Separate MCP server **or** stack `energyplus-ensure` / `mcp-exec` |
+| **WattLab package + `tools/`** | Studio pages (in openfdd-ui), CLIs, Excel builders, skills | Baked/`PYTHONPATH` `wattlab`; files under `~/wattlab_workspace/tools/` |
 
-Hard rule: **never** embed EnergyPlus IDF surgery inside `openfdd-mcp`. Always point Twin/ECM work at EnergyPlus-MCP / vibe20 wrappers.
+Hard rule: **never** embed EnergyPlus IDF surgery inside `openfdd-mcp`. Twin/ECM IDF work → EnergyPlus-MCP; spreadsheet honesty → **PyPI `open_fdd.ecm_engineering`**.
 
-When FDD / dump implies as-operated schedules or bills disagree with Twin shape, read [`fdd-ops-to-twin-knobs.md`](fdd-ops-to-twin-knobs.md) then hand off to vibe20 skills (no IDF in openfdd-mcp).
+When FDD / dump implies as-operated schedules or bills disagree with Twin shape, read [`fdd-ops-to-twin-knobs.md`](fdd-ops-to-twin-knobs.md) then use Twin dial skills against the **open-fdd WattLab** path (no IDF in openfdd-mcp).
 
 ## Golden loop (Liberty Twin → ECM)
 
@@ -29,16 +31,14 @@ A. Context (every Twin/ECM session)
    2. tools/AGENT_CONTEXT.md + tools/BEST_PRACTICES_EPLUS_MCP_ECM.md
    3. reports/BUG_REPORT.md (OFDD-* / BUG-ECM-*)
    4. Skills: wattlab-energyplus-mcp, wattlab-twin-calibrate-dial,
-      wattlab-twin-ops-reheat-dial, wattlab-agent-driven-ecm-excel
+      wattlab-twin-ops-reheat-dial, openfdd-ecm-engineering
       Method SoT: BUG_REPORT_TWIN_DIAL_AI_CONTEXT.md (ops/reheat chess)
+      Product ECM: docs/ecm/OPENFDD_AGENT_ECM_HANDOFF.md + PyPI example workbook
 
 B. FDD / sites / historian  →  openfdd-mcp (or JWT REST)
-C. Twin / IDF / simulate     →  EnergyPlus-MCP or vibe20 mcp-exec
-   docker exec vibe20 wattlab energyplus-ensure
-   docker exec vibe20 wattlab mcp-exec -- <tool> …
-D. ECM Excel / Compare       →  vibe20 + tools/ scripts
-   python /data/tools/build_full_parity_ecm_workbook_v2.py
-   Preferred book: reports/notebooks/full_parity_ecm/ECM_FULL_PARITY.xlsx
+C. Twin / IDF / simulate     →  EnergyPlus-MCP (open-fdd stack companion)
+D. ECM Excel / Compare       →  openfdd-ui WattLab + PyPI open_fdd.ecm_engineering
+   Golden book: open_fdd/ecm_engineering/examples/liberty_dual_ahu/ECM_FULL_PARITY.xlsx
 ```
 
 ## Paths
