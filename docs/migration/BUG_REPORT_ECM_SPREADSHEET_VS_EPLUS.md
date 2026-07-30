@@ -33,6 +33,8 @@ Twin / WattLab Studio / EnergyPlus patch + notebook builder code primarily lives
 | **BUG-ECM-012** | Partial | Load-shed DR not in product agent Excel / cascade; workaround tool `load_shed_demand_screen.py` exists. |
 | **BUG-ECM-014** | Open (doc) | Calendar FanAvail / OAT-bin hours ≠ formula FLH. Pasting calendar into Inputs over-predicts vs E+. Fix: Matchup calendar + FLH Inputs (`build_eplus_matched_ecm_workbook.py` / full-parity builder). |
 | **BUG-ECM-015** | Open | Studio **ECMs** tab does not show full-parity sheet↔E+ results. Page uses `reports/ecm_compare.json` with spreadsheet side `pending_external`; agent xlsx retired; legacy download only globs top-level `notebooks/*.xlsx` (misses `full_parity_ecm/`). |
+| **BUG-ECM-018** | Open (PyPI train) | Exact sheet↔E+ match labeled **BALLPARK** (fitted FLH greenwash). Status must be **FITTED** when hours were reverse-fitted — see [Engineer upsell brief](../ecm/ENGINEER_UPSELL_BRIEF.md). |
+| **BUG-ECM-019** | Open (PyPI train) | Dual-AHU `sat_reset` flat 14°C / Sys1-only showed **−7 MWh**; correct patch (preserve winter dump + raise cool DAT on **both** AHUs) **+122 MWh** / +8.5k therms. Retire broken patch in PyPI → open-fdd. |
 
 ---
 
@@ -68,10 +70,10 @@ Twin / WattLab Studio / EnergyPlus patch + notebook builder code primarily lives
 - vibe19/20 ops BUG-061–064 (tip through `56f6e7b`+)
 - open-fdd SQL ↔ pandas parity
 - Investment-grade M&V / IPMVP
-- Container / GHCR refresh (deferred — more ECM work coming)
+- **vibe app tip churn after 2026-07-30 freeze** — product path is **PyPI → open-fdd** ([upsell brief](../ecm/ENGINEER_UPSELL_BRIEF.md))
 
 ---
 
 ## Sync rule
 
-Product fixes for Twin / Studio / ECM Excel in **vibe20** must be mirrored or tracked in **open-fdd** (combined product) and noted from **vibe19** agent docs when FDD dumps feed the same ECM path. Do not leave this register drift between repos.
+Product fixes for Twin / Studio / ECM Excel land in **PyPI `open-fdd`** then **open-fdd** UI/Jobs/MCP. Do not leave this register drift. Workspace builders (`build_full_parity_ecm_workbook_v2.py`, `patch_sat_reset_dual_ahu.py`) are **port sources**, not the customer product surface.

@@ -10,6 +10,8 @@ It does not replace the visible spreadsheet calculations.
 
 **Production FDD** (DataFusion SQL fault detection) lives in the [GHCR container stack](https://bbartling.github.io/open-fdd/quick-start/docker-ghcr.html), not this wheel.
 
+**Product freeze / upsell:** [Engineer upsell brief — open-fdd + PyPI (vibe freeze)](ENGINEER_UPSELL_BRIEF.md) — after 2026-07-30, customers see ECM via **PyPI → open-fdd**, not vibe19/vibe20 tip churn.
+
 ## Install
 
 ```bash
