@@ -43,23 +43,11 @@ Open-FDD is an open-source analytics platform for building automation that combi
 
 The platform includes:
 
-- Building point modeling with **Project Haystack–style tags and roles** in JSON
-  (`column_map` / package maps — equipment → tags → CSV columns). Optional RDF/Turtle
-  + SPARQL views exist on the model API; they are **not** the primary CSV/FDD path
-- JWT authentication and a modern **Streamlit** engineering UI (`openfdd-ui`) —
-  vibe19 FDD/RCx workflows + **WattLab** section (Fuel / Twin / ECMs pages when
-  the `wattlab` package is mounted; otherwise honest “runner not attached”)
-- Apache Arrow & Feather columnar data storage; multi-site Hive (`building_id`)
-- Apache DataFusion SQL analytics and fault detection (59 cookbook rules; 63 SQL registry IDs)
-- Engineering Findings HITL + central report drafts (detection ≠ finding)
-- ECM spreadsheet helpers on **PyPI** (`open_fdd.ecm_engineering`); Studio Compare
-  `ss_*` / cascade handoff when WattLab workspace is shared
-- **EnergyPlus twin / G14 calibrate / IDF** — **not** in-process here; stays in
-  vibe20 + EnergyPlus-MCP (see [WattLab companion](docs/mcp-agents/companion-wattlab-energyplus.md))
-- BACnet, Modbus, Haystack, and JSON API drivers (fieldbus container — **coming soon**; not production-ready in current builds)
-- Interactive plotting, dashboards, and CSV / zip package workflows
-- Optional **external** agent integration via MCP stdio and JWT REST (no embedded chatbot)
-- Docker compose **build recipes** published to GitHub Container Registry
+- Haystack-style point roles in JSON (`column_map`) — not RDF-first
+- Streamlit UI for CSV / zip FDD, RCx, and findings
+- Arrow historian + DataFusion SQL fault detection (59 cookbook rules)
+- ECM helpers on PyPI; EnergyPlus twin stays in vibe20 / EnergyPlus-MCP
+- Docker compose images on GHCR; OT fieldbus / MQTTS still roadmap
 
 Open-FDD ships compose recipes for lab and production-shaped stacks.
 
@@ -86,10 +74,6 @@ The **[HVAC FDD Rule Cookbook](https://bbartling.github.io/open-fdd/rules/cookbo
 
 - **[DataFusion SQL cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/datafusion-sql-cookbook.html)** — copy-paste SQL that runs on the edge/central Arrow historian
 - **[Pandas cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html)** — the same rules for notebooks, CSV exports, and RCx studies
-
-Rules use generic Haystack semantic roles, so they are portable across any modeled site. CI enforces a minimum of 59 rule headings in both cookbooks (`scripts/cookbook_parity_check.py`) — the catalog can never shrink.
-
-**Count contract (honest):** the public dual cookbooks document **59** rules. The production DataFusion SQL registry (`sql_rules/registry.yaml`) currently lists **63** rule IDs (59 cookbook-covered + SQL-only additions). See the [parity matrix](docs/rules/cookbook/parity-matrix.md). Do not treat badge “59” as the registry length.
 
 ---
 
