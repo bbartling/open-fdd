@@ -267,17 +267,24 @@ pub fn create_draft(body: &Value) -> Value {
     for plot in suggested_plot_blocks() {
         sections.push(plot);
     }
+    let report_type = body
+        .get("report_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or(template);
     let doc = json!({
         "ok": true,
         "report_id": report_id,
         "title": title,
         "template_id": template,
+        "report_type": report_type,
+        "kind": template,
         "created_at": Utc::now().to_rfc3339(),
         "updated_at": Utc::now().to_rfc3339(),
         "sections": sections,
         "metadata": {
             "generator": "open-fdd-rust-report-builder",
             "template_id": template,
+            "report_type": report_type,
             "pdf_ready": false
         }
     });
@@ -585,7 +592,15 @@ pub fn list_reports() -> Value {
             records.push(json!({
                 "report_id": id,
                 "title": doc.get("title").cloned().unwrap_or(json!(null)),
-                "report_type": meta.get("template_id").or(doc.get("template_id")).cloned().unwrap_or(json!("validation-summary")),
+                "report_type": meta
+                    .get("report_type")
+                    .or_else(|| doc.get("report_type"))
+                    .or_else(|| meta.get("template_id"))
+                    .or_else(|| doc.get("template_id"))
+                    .cloned()
+                    .unwrap_or(json!("validation-summary")),
+                "template_id": doc.get("template_id").cloned().unwrap_or(json!(null)),
+                "kind": doc.get("kind").cloned().unwrap_or(json!(null)),
                 "validation_run_id": meta.get("validation_run_id").cloned().unwrap_or(json!(null)),
                 "status": meta.get("validation_status").cloned().unwrap_or(json!("draft")),
                 "created_at": meta.get("created_at").cloned().or_else(|| doc.get("created_at").cloned()).unwrap_or(json!(null)),
@@ -864,6 +879,42 @@ mod tests {
         let doc = create_draft(&json!({"title": "Test Report"}));
         assert_eq!(doc["ok"], true, "draft error: {:?}", doc.get("error"));
         assert!(doc["sections"].as_array().unwrap().len() >= 5);
+        std::env::remove_var("OPENFDD_WORKSPACE");
+        let _ = std::fs::remove_dir_all(tmp);
+    }
+
+    #[test]
+    fn engineering_findings_draft_listed_for_ofdd_069() {
+        // OFDD-069: synthetic draft must be discoverable via list_reports kind/template.
+        let _guard = workspace_test_lock();
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let tmp = std::env::temp_dir().join(format!("ofdd-eng-findings-{}-{n}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", tmp.to_string_lossy().as_ref());
+        let doc = create_draft(&json!({
+            "title": "Engineering Findings",
+            "kind": "engineering_findings",
+            "template_id": "engineering_findings",
+            "report_type": "engineering_findings"
+        }));
+        assert_eq!(doc["ok"], true, "draft error: {:?}", doc.get("error"));
+        assert_eq!(doc["template_id"], "engineering_findings");
+        assert_eq!(doc["report_type"], "engineering_findings");
+        let listed = list_reports();
+        let records = listed["records"].as_array().cloned().unwrap_or_default();
+        assert!(
+            records.iter().any(|r| {
+                r.get("report_type")
+                    .or_else(|| r.get("template_id"))
+                    .and_then(|v| v.as_str())
+                    .map(|t| t.contains("engineering_finding"))
+                    .unwrap_or(false)
+            }),
+            "engineering_findings missing from list: {listed}"
+        );
         std::env::remove_var("OPENFDD_WORKSPACE");
         let _ = std::fs::remove_dir_all(tmp);
     }

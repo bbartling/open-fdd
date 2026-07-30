@@ -840,6 +840,27 @@ mod tests {
     }
 
     #[test]
+    fn create_job_persists_site_id() {
+        // OFDD-076b: callers (routes) map building_id → site_id before create_job.
+        with_tmp_ws(|_dir| {
+            let meta = create_job(
+                "Bound",
+                Some("BUILDING_100".into()),
+                Some("Liberty B100".into()),
+                Some("BUILDING_100".into()),
+                None,
+                vec![],
+                None,
+            )
+            .unwrap();
+            assert_eq!(meta.site_id.as_deref(), Some("BUILDING_100"));
+            assert_eq!(meta.building_name.as_deref(), Some("BUILDING_100"));
+            let loaded = load_job(&meta.job_id).unwrap();
+            assert_eq!(loaded.site_id.as_deref(), Some("BUILDING_100"));
+        });
+    }
+
+    #[test]
     fn create_list_archive_restore() {
         with_tmp_ws(|_dir| {
             let meta = create_job("Test", None, None, None, None, vec!["t".into()], None).unwrap();

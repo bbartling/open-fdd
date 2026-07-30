@@ -28,21 +28,25 @@ UI pandas cookbook recipes: **59**. SQL registry: **63**. Dual-catalog banner is
 | SCHED-1 | Excess runtime when zone satisfied | Zone comfort band when `zone_t` present; base-only when absent/NULL | SQL + optional_roles inject + oracle zone fixture | None for mask intent; Liberty hours still soak |
 | SCHED-247 | Always-on | Screening streak ≠ window `always_on_pct` | No flip to proven | Keep ported |
 | CHW-NOLOAD-1 | Plant running while load satisfied | Oracle screening fixture already present | Listed; no SQL gap found this pass | Keep ported until plant soak |
-| SV-STALE | Stale sensor | Fan-on gate present (OFDD-065) | No further SQL change | Liberty `_tbd_` deltas |
-| VAV-1 | Comfort | Zone-only schema safe (no fan_cmd in SQL) | No change | Liberty `_tbd_` |
+| SV-STALE | Stale sensor | Fan-on gate present (OFDD-065) | No further SQL change | Liberty **WIDE** (B50 +2500 / B100 +2728 hrs) |
+| VAV-1 | Comfort | Zone-only schema safe (no fan_cmd in SQL) | No change | Liberty **WIDE** (B50 +21k / B100 +17k hrs) |
 | SV-RANGE / FLATLINE / SPIKE / RATE | Sensor family | Screening oracles only | No flip | Keep ported |
 | FC4 / PID-HUNT-1 | Hunting | Screening oracles only | No flip | Keep ported |
 | FC7 | Missing roles | skipped_missing_roles | Untouched | Needs role model |
 
 ## Liberty FAULT deltas
 
-Do **not** invent. Fill only when local soak zips exist:
+Filled from Liberty soak `parity_hunt_20260730T003200Z` (tip `sha-064eadb`). Do **not** flip `proven` from hours alone:
 
 | Rule | Site | pandas h | SQL h | Δ | Status |
 |------|------|---------:|------:|--:|--------|
-| SV-STALE | B50/B100 | _tbd_ | _tbd_ | _tbd_ | soak required |
-| VAV-1 | B50/B100 | _tbd_ | _tbd_ | _tbd_ | soak required |
-| SCHED-1 zone gate | B50/B100 | _tbd_ | _tbd_ | _tbd_ | soak required |
+| SV-STALE | B50 | 884 | 3384 | +2500 | **WIDE** |
+| SV-STALE | B100 | 543 | 3271 | +2728 | **WIDE** |
+| VAV-1 | B50 | 2815 | 24550 | +21735 | **WIDE** |
+| VAV-1 | B100 | 3789 | 21615 | +17826 | **WIDE** |
+| SCHED-247 | B50 | 0 | 3235 | +3235 | **WIDE** (streak residual) |
+| ECON-1 | B50 | 700 | 0.6 | −699 | **WIDE** |
+| ECON-2 | B50 | 191 | 3143 | +2952 | **WIDE** |
 
 ## Docs discipline
 

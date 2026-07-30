@@ -4,6 +4,22 @@ Newest first. Append after non-trivial agent work.
 
 ---
 
+## 2026-07-30 — Liberty soak turnkey (implementation)
+
+- OFDD-070b CTE damper project; OFDD-076b `building_id`→`site_id`; Brand Open FDD;
+  Sites Hive picker + Delete…; Jobs expander off default chrome; WattLab section +
+  compose.wattlab / Caddy smoke; Eng Findings draft persist; OFDD-065 Liberty deltas;
+  MCP companion + `openfdd_agent_context_pointers` + dual-site IT doc.
+- Playground: BUG-ECM-015 + ECM-ERV-001 HAS_EP_PROTOTYPE stub (PR #69).
+
+## 2026-07-30 — Liberty soak turnkey start (post-064eadb)
+
+- Tip: open-fdd `064eadbc` / GHCR `sha-064eadb` · playground `4f3cdfd`.
+- Phase 0: fetch/prune clean; no open PRs; csv stack + Caddy `:80` → UI,
+  `/api/health` → `3.3.0+064eadbceda2` (central also on `:18080`).
+- Campaign: OFDD-070b/076b, BUG-ECM-015, Brand, Sites/Jobs, WattLab V20,
+  Findings, OFDD-065 deltas, MCP-CTX/IT, ERV P2, agent_spec sync.
+
 ## 2026-07-28 — Milestone B closeout (B6–B9)
 
 - #585 merged: central `/api/jobs`, runs, stale, UI client.

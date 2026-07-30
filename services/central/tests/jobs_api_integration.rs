@@ -140,11 +140,27 @@ fn jobs_crud_runs_stale_findings_wattlab() {
     let server = Server::start();
     let port = server.port;
 
-    let create = json!({"job_name": "C0 Job", "tags": ["c0"]}).to_string();
+    let create = json!({
+        "job_name": "C0 Job",
+        "tags": ["c0"],
+        "building_id": "BUILDING_100"
+    })
+    .to_string();
     let (st, body) = http("POST", port, "/api/jobs", Some(&create), None);
     assert_eq!(st, 201, "{body}");
     let job = &json_body(&body)["job"];
     let job_id = job["job_id"].as_str().unwrap();
+    // OFDD-076b: building_id maps to site_id when site_id omitted
+    assert_eq!(
+        job["site_id"].as_str(),
+        Some("BUILDING_100"),
+        "building_id must bind site_id: {body}"
+    );
+    assert_eq!(
+        job["building_name"].as_str(),
+        Some("BUILDING_100"),
+        "{body}"
+    );
     let rev = job["meta_revision"].as_str().unwrap().to_string();
 
     let (st, body) = http("GET", port, "/api/jobs", None, None);

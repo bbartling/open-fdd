@@ -188,6 +188,7 @@ impl Server {
             tool("openfdd_datasets", "GET /api/datasets — list Feather/Arrow datasets in registry", json!({})),
             tool("openfdd_timeseries_series", "GET /api/timeseries/series — plot catalog after CSV save", json!({"site_id": {"type": "string"}})),
             tool("openfdd_auth_credentials_hint", "Where MCP/agents find Open-FDD login (workspace/bootstrap_credentials.once.txt, auth.env.local) — no secrets returned", json!({})),
+            tool("openfdd_agent_context_pointers", "Read-only pointers to WattLab / EnergyPlus companion docs and lab paths (OFDD-MCP-CTX); never performs IDF surgery", json!({})),
             tool("openfdd_auth_login", "Login as integrator/agent/operator/admin — returns JWT from handoff/env (password never echoed)", json!({
                 "role": {"type": "string", "description": "integrator (default), agent, operator, admin"}
             })),
@@ -377,6 +378,7 @@ impl Server {
                 }
             }
             "openfdd_auth_credentials_hint" => Ok(crate::auth::credentials_hint()),
+            "openfdd_agent_context_pointers" => Ok(self.bridge.agent_context_pointers()),
             "openfdd_auth_login" => {
                 let role = args.get("role").and_then(|v| v.as_str()).unwrap_or("integrator");
                 let base = std::env::var("OPENFDD_API_BASE")
@@ -449,8 +451,23 @@ mod tests {
             "openfdd_fdd_series",
             "openfdd_fdd_session_config",
             "openfdd_fdd_accuracy_snapshot",
+            "openfdd_agent_context_pointers",
         ] {
             assert!(names.contains(&expected), "missing MCP tool {expected}");
         }
+    }
+
+    #[test]
+    fn agent_context_pointers_are_read_only_docs() {
+        let server = Server::new(BridgeClient::from_env());
+        let payload = server
+            .dispatch_tool("openfdd_agent_context_pointers", &json!({}))
+            .expect("pointers");
+        assert_eq!(payload["ok"], true);
+        assert!(payload["never_idf_surgery_in_openfdd_mcp"].as_bool().unwrap_or(false));
+        assert!(payload["companion_doc"]
+            .as_str()
+            .unwrap_or("")
+            .contains("companion-wattlab-energyplus"));
     }
 }

@@ -2,6 +2,16 @@
 
 Read-first MCP sidecar for the Rust edge bridge. Requires JWT via `OPENFDD_MCP_TOKEN` or unauthenticated `/api/health` only.
 
+## Twin / ECM / EnergyPlus?
+
+**This server is FDD + sites + historian only.** For WattLab Twin calibrate, Fuel, ECM Excel, or IDF surgery, read:
+
+→ [`docs/mcp-agents/companion-wattlab-energyplus.md`](../docs/mcp-agents/companion-wattlab-energyplus.md)
+
+Wire **EnergyPlus-MCP** (or `wattlab energyplus-ensure` / `mcp-exec`) separately. Never expect openfdd-mcp to patch IDFs.
+
+**MCP tools:** `openfdd_agent_context_pointers` — companion doc paths + dual-site checklist (read-only).
+
 ## Login / credentials (agents)
 
 MCP runs on the **host** and resolves passwords locally — never from bcrypt hashes in `auth.env.local`.
