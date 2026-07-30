@@ -64,7 +64,13 @@ Open-FDD supports flexible deployment recipes:
 
 ### Fieldbus edge only
 
-`fieldbus` alone — attach to a remote central via MQTTS.
+**Not ready yet** — reserved for a future release. Planned shape: a remote IoT
+edge speaking **JSON API**, **BACnet**, **Modbus**, and **Haystack**, forwarding
+telemetry to a remote Open-FDD **central** (cloud or LAN) over **MQTTS**.
+
+Broker: the `openfdd-mqtt` image (Mosquitto) terminates TLS MQTTS for edge↔central
+ingest; edges do not talk to central REST over the public internet — they publish
+to the broker, and central consumes from it.
 
 ### CSV-only
 
