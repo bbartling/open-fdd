@@ -44,9 +44,9 @@ Open-FDD is an open-source analytics platform for building automation that combi
 The platform includes:
 
 - Haystack-style point roles in JSON (`column_map`) — not RDF-first
-- Streamlit UI for CSV / zip FDD, RCx, and findings
+- Streamlit UI for CSV / zip FDD, RCx, findings, and **WattLab** (Fuel / Twin / ECM)
 - Arrow historian + DataFusion SQL fault detection (59 cookbook rules)
-- ECM helpers on PyPI; EnergyPlus twin stays in vibe20 / EnergyPlus-MCP
+- ECM helpers on PyPI; EnergyPlus runner is a stack companion (MCP/DinD), not vibe20-only
 - Docker compose images on GHCR; OT fieldbus / MQTTS still roadmap
 
 Open-FDD ships compose recipes for lab and production-shaped stacks.
