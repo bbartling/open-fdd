@@ -86,7 +86,13 @@ release = [
 include = ["open_fdd*"]
 
 [tool.setuptools.package-data]
-"open_fdd.ecm_engineering" = ["data/*.xlsx", "data/*.json"]
+"open_fdd.ecm_engineering" = [
+    "data/*.xlsx",
+    "data/*.json",
+    "examples/**/*.xlsx",
+    "examples/**/*.md",
+    "examples/**/*.json",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/ecm", "tests/rules", "tests/analytics", "tests/reporting"]

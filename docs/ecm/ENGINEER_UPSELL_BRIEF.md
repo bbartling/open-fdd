@@ -63,3 +63,6 @@ Twin export API, massing PNG, `shell_summary`, schedule grids, Jobs “current T
 
 **Workspace refs (port into PyPI, don’t productize in place):**  
 `ECM_FULL_PARITY.xlsx` · `tools/build_full_parity_ecm_workbook_v2.py` · `tools/patch_sat_reset_dual_ahu.py` · `reports/ecm_industry_method_gap.md`
+
+**In-repo golden (build machine):**  
+[`examples/liberty_dual_ahu/ECM_FULL_PARITY.xlsx`](../../open_fdd/ecm_engineering/examples/liberty_dual_ahu/ECM_FULL_PARITY.xlsx) · [OPENFDD_AGENT_ECM_HANDOFF.md](OPENFDD_AGENT_ECM_HANDOFF.md)
