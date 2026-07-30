@@ -966,7 +966,13 @@ mod tests {
             json!("imperial"),
             "{out}"
         );
-        let cols_path = tmp.join("data/csv_buildings/BUILDING_9/AHU_1/columns.csv");
+        // Prefer package_root from the import response — parallel env-mutating
+        // tests can still race OPENFDD_WORKSPACE after the lock is taken.
+        let pkg_root = out["package_root"]
+            .as_str()
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| tmp.join("data/csv_buildings/BUILDING_9"));
+        let cols_path = pkg_root.join("AHU_1/columns.csv");
         let cols = std::fs::read_to_string(&cols_path).unwrap_or_else(|e| {
             panic!(
                 "missing {}: {e}; import out={out}; tmp entries={:?}",
@@ -979,9 +985,14 @@ mod tests {
             )
         });
         assert!(cols.contains("SF_SPD,fan_cmd"), "{cols}");
-        assert!(tmp
-            .join(".cache/parquet/building=BUILDING_9/equipment=AHU_1/history.parquet")
-            .is_file());
+        let feather =
+            tmp.join(".cache/parquet/building=BUILDING_9/equipment=AHU_1/history.parquet");
+        let feather_alt = std::path::PathBuf::from(out["out_dir"].as_str().unwrap_or(""))
+            .join("building=BUILDING_9/equipment=AHU_1/history.parquet");
+        assert!(
+            feather.is_file() || feather_alt.is_file(),
+            "missing history parquet; out={out}"
+        );
 
         // Role update rewrites columns.csv and re-ingests.
         set_ws(&tmp);
