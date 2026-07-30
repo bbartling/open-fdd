@@ -985,12 +985,10 @@ mod tests {
             )
         });
         assert!(cols.contains("SF_SPD,fan_cmd"), "{cols}");
-        let feather = tmp
-            .join(".cache/parquet/building=BUILDING_9/equipment=AHU_1/history.parquet");
-        let feather_alt = std::path::PathBuf::from(
-            out["out_dir"].as_str().unwrap_or(""),
-        )
-        .join("building=BUILDING_9/equipment=AHU_1/history.parquet");
+        let feather =
+            tmp.join(".cache/parquet/building=BUILDING_9/equipment=AHU_1/history.parquet");
+        let feather_alt = std::path::PathBuf::from(out["out_dir"].as_str().unwrap_or(""))
+            .join("building=BUILDING_9/equipment=AHU_1/history.parquet");
         assert!(
             feather.is_file() || feather_alt.is_file(),
             "missing history parquet; out={out}"
