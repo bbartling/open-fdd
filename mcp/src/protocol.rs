@@ -464,7 +464,9 @@ mod tests {
             .dispatch_tool("openfdd_agent_context_pointers", &json!({}))
             .expect("pointers");
         assert_eq!(payload["ok"], true);
-        assert!(payload["never_idf_surgery_in_openfdd_mcp"].as_bool().unwrap_or(false));
+        assert!(payload["never_idf_surgery_in_openfdd_mcp"]
+            .as_bool()
+            .unwrap_or(false));
         assert!(payload["companion_doc"]
             .as_str()
             .unwrap_or("")

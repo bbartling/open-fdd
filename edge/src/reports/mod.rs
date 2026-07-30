@@ -890,7 +890,8 @@ mod tests {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let n = NEXT.fetch_add(1, Ordering::Relaxed);
-        let tmp = std::env::temp_dir().join(format!("ofdd-eng-findings-{}-{n}", std::process::id()));
+        let tmp =
+            std::env::temp_dir().join(format!("ofdd-eng-findings-{}-{n}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
         std::env::set_var("OPENFDD_WORKSPACE", tmp.to_string_lossy().as_ref());
