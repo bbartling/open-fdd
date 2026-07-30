@@ -163,15 +163,19 @@ Native Rust: `cargo test --workspace`
 
 ## Releases
 
-| Channel | Tag | When to use |
-|---------|-----|-------------|
-| **Nightly** | `:nightly` / `:sha-*` | Dev, bench, agents (default) |
-| **Beta** | `:beta` / `3.3.0-beta.N` | Pilot sites after bench sign-off |
-| **Stable** | `:latest` / `3.3.0` | Production (when promoted) |
+**What we run day-to-day:** GHCR **`:nightly`** and immutable **`:sha-<7>`** (every
+`master` merge). Health reports Cargo **`3.3.0+<sha>`** (e.g. `3.3.0+f9047154dab6`).
 
-**Maintainers:** Actions → **Rust Release** → set `VERSION` match + channel `beta` or `stable`.
+| Channel | Tag | Status today |
+|---------|-----|----------------|
+| **Nightly** | `:nightly` / `:sha-*` | **Default** — bench, agents, soaks |
+| **Semver alias** | `:3.3.0` | Often retargeted with nightly publish (same digest as `:nightly` right now) — **not** a signed-off stable cut |
+| **Beta** | `:beta` / `3.3.0-beta.N` | **Not published yet** — next candidate in repo `VERSION` is `3.3.0-beta.1` |
+| **Stable** | `:latest` / promoted semver | **Not published yet** |
 
-Full policy: [Release channels](https://bbartling.github.io/open-fdd/operations/release-channels.html) · [GHCR images](https://bbartling.github.io/open-fdd/operations/ghcr-images.html)
+**Maintainers:** Actions → **Rust Release** → set `VERSION` match + channel `beta` or `stable` when promoting off nightly.
+
+Prefer `OPENFDD_IMAGE_TAG=sha-*` (or `nightly`) until a real beta/stable promotion exists. Full policy: [Release channels](https://bbartling.github.io/open-fdd/operations/release-channels.html) · [GHCR images](https://bbartling.github.io/open-fdd/operations/ghcr-images.html)
 
 Open-FDD is for **LAN / VPN / OT networks**, not public internet hosting.
 
@@ -179,4 +183,4 @@ Open-FDD is for **LAN / VPN / OT networks**, not public internet hosting.
 
 MIT — see [LICENSE](LICENSE).
 
-Version: **3.3.0-beta.1** (next release candidate — see [release channels](https://bbartling.github.io/open-fdd/operations/release-channels.html))
+Version: Cargo **`3.3.0`** on `master` · repo `VERSION` next candidate **`3.3.0-beta.1`** · run **`:nightly` / `:sha-*`** (see [release channels](https://bbartling.github.io/open-fdd/operations/release-channels.html))
