@@ -19,6 +19,8 @@ nav_order: 5
 
 Hard rule: **never** embed EnergyPlus IDF surgery inside `openfdd-mcp`. Always point Twin/ECM work at EnergyPlus-MCP / vibe20 wrappers.
 
+When FDD / dump implies as-operated schedules or bills disagree with Twin shape, read [`fdd-ops-to-twin-knobs.md`](fdd-ops-to-twin-knobs.md) then hand off to vibe20 skills (no IDF in openfdd-mcp).
+
 ## Golden loop (Liberty Twin → ECM)
 
 ```text
@@ -27,7 +29,8 @@ A. Context (every Twin/ECM session)
    2. tools/AGENT_CONTEXT.md + tools/BEST_PRACTICES_EPLUS_MCP_ECM.md
    3. reports/BUG_REPORT.md (OFDD-* / BUG-ECM-*)
    4. Skills: wattlab-energyplus-mcp, wattlab-twin-calibrate-dial,
-      wattlab-agent-driven-ecm-excel
+      wattlab-twin-ops-reheat-dial, wattlab-agent-driven-ecm-excel
+      Method SoT: BUG_REPORT_TWIN_DIAL_AI_CONTEXT.md (ops/reheat chess)
 
 B. FDD / sites / historian  →  openfdd-mcp (or JWT REST)
 C. Twin / IDF / simulate     →  EnergyPlus-MCP or vibe20 mcp-exec

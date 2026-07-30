@@ -39,38 +39,32 @@
 
 > **Open-source semantic building analytics and HVAC supervisory fault detection. Local-first. On-premises. Vendor-neutral. Free to run at the edge or offline.**
 
-Open-FDD is an open-source analytics platform for building automation that combines **semantic knowledge graph modeling**, **live operational technology (OT) data**, and **high-performance columnar analytics**.
-
-**PyPI (`pip install open-fdd`):** ECM workbooks + optional pandas oracle (`open-fdd[oracle]` / `[reporting]` / `[vibe19]`). See [docs/ecm](docs/ecm/README.md) and [pandas cookbook](docs/rules/cookbook/pandas-cookbook.md). **FDD** (DataFusion SQL) ships via the **GHCR container stack**, not as the default PyPI runtime.
+Open-FDD is an open-source analytics platform for building automation that combines **Haystack-style semantic point roles** (JSON site/equipment maps), **live or historical OT/CSV data**, and **high-performance columnar analytics**.
 
 The platform includes:
 
-- Semantic building modeling using **Project Haystack** knowledge graphs
-- JWT authentication and a modern **Streamlit** engineering UI (`openfdd-ui`)
-- Apache Arrow & Feather columnar data storage
-- Apache DataFusion SQL analytics and fault detection (59 cookbook rules; 63 SQL registry IDs)
-- BACnet, Modbus, Haystack, and JSON API drivers (fieldbus container)
-- Interactive plotting, dashboards, and CSV job workflows
-- Optional **external** agent integration via MCP stdio and JWT REST (no embedded chatbot)
-- Docker compose **build recipes** published to GitHub Container Registry
+- Haystack-style point roles in JSON (`column_map`) — not RDF-first
+- Streamlit UI for CSV / zip FDD, RCx, and findings
+- Arrow historian + DataFusion SQL fault detection (59 cookbook rules)
+- ECM helpers on PyPI; EnergyPlus twin stays in vibe20 / EnergyPlus-MCP
+- Docker compose images on GHCR; OT fieldbus / MQTTS still roadmap
 
-Open-FDD supports flexible deployment recipes:
+Open-FDD ships compose recipes for lab and production-shaped stacks.
 
-### Standalone (all-on-edge)
+### CSV-only (ready today)
 
-`mqtt` + `central` + `ui` + `fieldbus` on one host — internal MQTTS, full OT + analytics.
+`central` + `ui` — bulk CSV / zip packages, historian, DataFusion FDD, Streamlit.
+No MQTT or fieldbus required. Prefer this for lab soaks and agent workflows.
 
-### Central hub
+`central` (+ optional `mqtt` + `ui`) also covers JWT API hub soaks without OT drivers.
 
-`mqtt` + `central` + `ui` — cloud or LAN hub; remote fieldbus edges attach over MQTTS.
+### Roadmap — OT edge / MQTTS (not ready in any build yet)
 
-### Fieldbus edge only
-
-`fieldbus` alone — attach to a remote central via MQTTS.
-
-### CSV-only
-
-`central` + `ui` — bulk CSV jobs and FDD without pulling mqtt or fieldbus images.
+Soon: remote IoT edges speaking **JSON API**, **BACnet**, **Modbus**, and
+**Haystack**, publishing to a Mosquitto **MQTTS** broker (`openfdd-mqtt`); central
+consumes from the broker (no public REST to the edge). Standalone
+(`mqtt`+`central`+`ui`+`fieldbus`) and `stack_up.sh edge` are placeholders until
+that path ships — do not treat them as supported product recipes today.
 
 ---
 
@@ -80,10 +74,6 @@ The **[HVAC FDD Rule Cookbook](https://bbartling.github.io/open-fdd/rules/cookbo
 
 - **[DataFusion SQL cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/datafusion-sql-cookbook.html)** — copy-paste SQL that runs on the edge/central Arrow historian
 - **[Pandas cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html)** — the same rules for notebooks, CSV exports, and RCx studies
-
-Rules use generic Haystack semantic roles, so they are portable across any modeled site. CI enforces a minimum of 59 rule headings in both cookbooks (`scripts/cookbook_parity_check.py`) — the catalog can never shrink.
-
-**Count contract (honest):** the public dual cookbooks document **59** rules. The production DataFusion SQL registry (`sql_rules/registry.yaml`) currently lists **63** rule IDs (59 cookbook-covered + SQL-only additions). See the [parity matrix](docs/rules/cookbook/parity-matrix.md). Do not treat badge “59” as the registry length.
 
 ---
 
@@ -95,7 +85,7 @@ Rules use generic Haystack semantic roles, so they are portable across any model
 |-------|------|
 | [`ghcr.io/bbartling/openfdd-central`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-central) | MQTTS ingest, Feather historian, FDD registry, REST API |
 | [`ghcr.io/bbartling/openfdd-ui`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-ui) | Streamlit operator UI (vibe19 + WattLab export → central) |
-| [`ghcr.io/bbartling/openfdd-fieldbus`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-fieldbus) | BACnet / Modbus / Haystack edge |
+| [`ghcr.io/bbartling/openfdd-fieldbus`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-fieldbus) | BACnet / Modbus / Haystack / JSON edge (**not ready** — image may publish; product path soon) |
 | [`ghcr.io/bbartling/openfdd-mqtt`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mqtt) | Mosquitto MQTTS broker |
 | [`ghcr.io/bbartling/openfdd-mcp`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp) | Optional slim MCP stdio sidecar → central API |
 
@@ -115,9 +105,9 @@ export OPENFDD_ADMIN_PASSWORD='change-me'
 ### Other recipes
 
 ```bash
-./scripts/openfdd_stack_up.sh csv          # central + ui only
-./scripts/openfdd_stack_up.sh central      # hub without fieldbus
-./scripts/openfdd_stack_up.sh edge         # fieldbus only (set OPENFDD_MQTT_HOST)
+./scripts/openfdd_stack_up.sh csv          # central + ui only (recommended today)
+./scripts/openfdd_stack_up.sh central      # hub + mqtt broker (no fieldbus)
+./scripts/openfdd_stack_up.sh edge         # fieldbus-only — not a supported path yet
 ```
 
 See [Build recipes](docs/operations/build-recipes.md) and [docker/VERSION_MANIFEST.md](docker/VERSION_MANIFEST.md).
@@ -135,6 +125,23 @@ Full tool list: [mcp/README.md](mcp/README.md).
 
 ---
 
+## PyPI package (`pip install open-fdd`)
+
+The [PyPI package](https://pypi.org/project/open-fdd/) is a **library** surface — not a substitute for the operator stack.
+
+| Install | What you get |
+|---------|----------------|
+| `pip install open-fdd` | ECM engineering helpers / workbook builders |
+| `pip install "open-fdd[oracle]"` | Optional pandas oracle for rule screening |
+| `pip install "open-fdd[reporting]"` | Engineering findings / report writers |
+| `pip install "open-fdd[vibe19]"` | vibe19-aligned pandas rule helpers |
+
+**FDD (DataFusion SQL)** — historian, registry, Streamlit UI, BACnet/Modbus — ships in the **GHCR container stack** (`openfdd-central` / `openfdd-ui` / …), not as the default PyPI runtime. Use `./scripts/openfdd_stack_up.sh` (above) for that path.
+
+Docs: [ECM](docs/ecm/README.md) · [pandas cookbook](docs/rules/cookbook/pandas-cookbook.md) · [DataFusion SQL cookbook](docs/rules/cookbook/datafusion-sql-cookbook.md)
+
+---
+
 ## Develop
 
 ```bash
@@ -149,15 +156,19 @@ Native Rust: `cargo test --workspace`
 
 ## Releases
 
-| Channel | Tag | When to use |
-|---------|-----|-------------|
-| **Nightly** | `:nightly` / `:sha-*` | Dev, bench, agents (default) |
-| **Beta** | `:beta` / `3.3.0-beta.N` | Pilot sites after bench sign-off |
-| **Stable** | `:latest` / `3.3.0` | Production (when promoted) |
+**What we run day-to-day:** GHCR **`:nightly`** and immutable **`:sha-<7>`** (every
+`master` merge). Health reports Cargo **`3.3.0+<sha>`** (e.g. `3.3.0+f9047154dab6`).
 
-**Maintainers:** Actions → **Rust Release** → set `VERSION` match + channel `beta` or `stable`.
+| Channel | Tag | Status today |
+|---------|-----|----------------|
+| **Nightly** | `:nightly` / `:sha-*` | **Default** — bench, agents, soaks |
+| **Semver alias** | `:3.3.0` | Often retargeted with nightly publish (same digest as `:nightly` right now) — **not** a signed-off stable cut |
+| **Beta** | `:beta` / `3.3.0-beta.N` | **Not published yet** — next candidate in repo `VERSION` is `3.3.0-beta.1` |
+| **Stable** | `:latest` / promoted semver | **Not published yet** |
 
-Full policy: [Release channels](https://bbartling.github.io/open-fdd/operations/release-channels.html) · [GHCR images](https://bbartling.github.io/open-fdd/operations/ghcr-images.html)
+**Maintainers:** Actions → **Rust Release** → set `VERSION` match + channel `beta` or `stable` when promoting off nightly.
+
+Prefer `OPENFDD_IMAGE_TAG=sha-*` (or `nightly`) until a real beta/stable promotion exists. Full policy: [Release channels](https://bbartling.github.io/open-fdd/operations/release-channels.html) · [GHCR images](https://bbartling.github.io/open-fdd/operations/ghcr-images.html)
 
 Open-FDD is for **LAN / VPN / OT networks**, not public internet hosting.
 
@@ -165,4 +176,4 @@ Open-FDD is for **LAN / VPN / OT networks**, not public internet hosting.
 
 MIT — see [LICENSE](LICENSE).
 
-Version: **3.3.0-beta.1** (next release candidate — see [release channels](https://bbartling.github.io/open-fdd/operations/release-channels.html))
+Version: Cargo **`3.3.0`** on `master` · repo `VERSION` next candidate **`3.3.0-beta.1`** · run **`:nightly` / `:sha-*`** (see [release channels](https://bbartling.github.io/open-fdd/operations/release-channels.html))
