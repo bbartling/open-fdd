@@ -78,6 +78,27 @@ list_ecm_modules()   # names accepted by add_ecm (aliases included)
 list_calculators()   # independent Python benchmarks (job.calc), not sheet names
 ```
 
+New in **4.2.0**: `chiller_lockout`, `load_shed`, `schedule_align` / `ahu_sched_align`.
+
+### Honesty / twin compare export (4.2.0)
+
+```python
+job.attach_twin_compare({
+    "provenance": {"idf_path": "...", "g14_pass": True},
+    "inputs": [{"name": "lockout_hours", "value": 612, "provenance": "FITTED_FROM_EPLUS"}],
+    "measures": [{
+        "measure_id": "ECM-CHILLER-LOCKOUT",
+        "name": "Chiller OAT lockout",
+        "eplus_source": "cascade",
+        "fitted_sheet_kwh": 101580.56,
+        "eplus_kwh": 101580.56,
+        "hours_provenance": "FITTED_FROM_EPLUS",
+    }],
+    "demand": {"july_weekday_kw": 420, "july_weekend_kw": 280, "loadshed_kw": 365},
+})
+job.save("honesty.xlsx")  # Contents, Measures, … (FITTED ≠ independent validation)
+```
+
 ## Independent benchmark
 
 ```python

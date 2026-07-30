@@ -4,6 +4,13 @@ Newest first. Append after non-trivial agent work.
 
 ---
 
+## 2026-07-30 — PyPI ECM bugfix train (4.2.0)
+
+- BUG-OFDD-ECM-007: toolkit modules `chiller_lockout` / `load_shed` / `schedule_align`.
+- BUG-OFDD-ECM-009: `attach_twin_compare` + honesty workbook export (Contents…Measures/Demand).
+- BUG-ECM-018: `MeasureHonestyStatus` FITTED/BALLPARK/NO_EP/FAIL_SIGN.
+- Version bump **4.1.2 → 4.2.0**.
+
 ## 2026-07-30 — PyPI ECM bugfix train (4.1.2)
 
 - BUG-OFDD-ECM-002: `save_as` same-path guard (no `SameFileError`).

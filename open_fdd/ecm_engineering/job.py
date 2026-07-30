@@ -5,6 +5,7 @@ from typing import Any
 import re
 
 from .algorithms import calculate
+from .honesty_export import build_honesty_workbook
 from .workbook import OpenFDDECMWorkbook
 
 MODULE_ALIASES = {
@@ -44,6 +45,10 @@ MODULE_ALIASES = {
     "unit_heater_fan": "ECM_Unit_Heater_Fan",
     "water_source_heat_pump_cooling": "ECM_WHP_Cooling",
     "capacity_screen": "HVAC_Capacity_Screen",
+    "chiller_lockout": "ECM_Chiller_Lockout",
+    "load_shed": "ECM_Load_Shed",
+    "schedule_align": "ECM_Schedule_Align",
+    "ahu_sched_align": "ECM_Schedule_Align",
 }
 
 FIELD_ALIASES = {
@@ -217,6 +222,41 @@ FIELD_ALIASES = {
         "hours": "filter.hours",
         "cost": "filter.cost",
     },
+    "ECM_Chiller_Lockout": {
+        "plant_kw": "lockout.plant_kw",
+        "tons": "lockout.tons",
+        "kw_per_ton": "lockout.kw_per_ton",
+        "lockout_hours": "lockout.hours",
+        "hours": "lockout.hours",
+        "lockout_oat_f": "lockout.oat_f",
+        "oat_f": "lockout.oat_f",
+        "cost": "lockout.cost",
+    },
+    "ECM_Load_Shed": {
+        "plant_kw": "loadshed.plant_kw",
+        "kw_fraction": "loadshed.kw_fraction",
+        "loadshed_kw_fraction": "loadshed.kw_fraction",
+        "hours": "loadshed.hours",
+        "loadshed_hours": "loadshed.hours",
+        "delta_f": "loadshed.delta_f",
+        "cost": "loadshed.cost",
+    },
+    "ECM_Schedule_Align": {
+        "fan_kw": "sched.fan_kw",
+        "plant_kw": "sched.plant_kw",
+        "sched_hours_saved": "sched.hours_saved",
+        "hours_saved": "sched.hours_saved",
+        "cost": "sched.cost",
+        "current_weekly_h": "sched.current_weekly_h",
+        "future_weekly_h": "sched.future_weekly_h",
+        "override_pad": "sched.override_pad",
+        "warmup_cooldown_h": "sched.warmup_cooldown_h",
+        "tons_base": "sched.tons_base",
+        "cool_bin_hours": "sched.cool_bin_hours",
+        "kw_per_ton": "sched.kw_per_ton",
+        "fan_run_hours": "sched.fan_run_hours",
+        "oad_tons_delta": "sched.oad_tons_delta",
+    },
 }
 
 
@@ -234,6 +274,8 @@ class ECMJob:
     path: str | Path | None = None
     _book: OpenFDDECMWorkbook = field(init=False, repr=False)
     _modules: list[str] = field(default_factory=list, init=False)
+    _twin_compare: dict[str, Any] | None = field(default=None, init=False, repr=False)
+    _export_honesty: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.path is None:
@@ -298,6 +340,17 @@ class ECMJob:
             self._modules.append(module)
         return self
 
+    def attach_twin_compare(self, payload: dict[str, Any]) -> "ECMJob":
+        """Attach twin/cascade/G14/demand payload; honesty sheets written on ``save()``."""
+        self._twin_compare = dict(payload)
+        self._export_honesty = True
+        return self
+
+    def export_honesty(self, enabled: bool = True) -> "ECMJob":
+        """Request Contents/Measures honesty export on next ``save()`` (even without twin)."""
+        self._export_honesty = enabled
+        return self
+
     def calc(self, calculator: str, **inputs: Any) -> dict[str, Any]:
         return calculate(calculator, inputs)
 
@@ -309,7 +362,18 @@ class ECMJob:
 
         Inputs are already flushed by ``set_global`` / ``add_ecm`` (``set_many``).
         ``save()`` and ``save(self.path)`` are idempotent (BUG-OFDD-ECM-002).
+
+        When ``attach_twin_compare`` / ``export_honesty`` is set, writes honesty sheets
+        (Contents, Model_Provenance, Inputs, Industry_Screening, Measures, …) to the
+        destination path (BUG-OFDD-ECM-009).
         """
+        target = Path(output_path) if output_path is not None else Path(self.path)
+        if self._export_honesty or self._twin_compare is not None:
+            return build_honesty_workbook(
+                target,
+                twin_payload=self._twin_compare,
+                job_name=self.name,
+            )
         if output_path is not None:
             return self._book.save_as(output_path)
         return Path(self.path)

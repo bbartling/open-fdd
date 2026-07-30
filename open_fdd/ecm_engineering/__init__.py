@@ -2,6 +2,8 @@
 from .algorithms import calculate, list_calculators
 from .crosscheck import crosscheck
 from .finance import npv, simple_payback
+from .honesty_export import build_honesty_workbook
+from .honesty_status import MeasureHonestyStatus, classify_measure_status
 from .job import ECMJob, list_ecm_modules
 from .provenance import EvidenceValue, ProvenanceClass
 from .workbook import OpenFDDECMWorkbook, create_workbook
@@ -32,4 +34,7 @@ __all__ = [
     "validate_simulation_evidence",
     "CalculationTrace",
     "build_stage2_workbook",
+    "build_honesty_workbook",
+    "MeasureHonestyStatus",
+    "classify_measure_status",
 ]

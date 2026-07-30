@@ -854,6 +854,92 @@
         "cap.fan_kw",
         "cap.fan_hp"
       ]
+    },
+    "ECM_Chiller_Lockout": {
+      "title": "Chiller Outdoor-Air Temperature Lockout",
+      "category": "Plant / Cooling",
+      "sheet": "ECM_Chiller_Lockout",
+      "description": "Avoids mechanical cooling below an OAT lockout using plant kW × lockout hours (or tons×kW/ton×hours).",
+      "cells": {
+        "lockout.plant_kw": "B6",
+        "lockout.tons": "B7",
+        "lockout.kw_per_ton": "B8",
+        "lockout.hours": "B9",
+        "lockout.oat_f": "B10",
+        "lockout.cost": "B11",
+        "lockout.eff_plant_kw": "B14",
+        "lockout.kwh_saved": "B15",
+        "lockout.cost_saved": "B16",
+        "lockout.payback": "B17"
+      },
+      "outputs": [
+        "lockout.eff_plant_kw",
+        "lockout.kwh_saved",
+        "lockout.cost_saved",
+        "lockout.payback"
+      ]
+    },
+    "ECM_Load_Shed": {
+      "title": "Demand Response / Load Shed",
+      "category": "Demand Response",
+      "sheet": "ECM_Load_Shed",
+      "description": "Peak-period load shed screening: plant_kw × kW fraction × shed hours.",
+      "cells": {
+        "loadshed.plant_kw": "B6",
+        "loadshed.kw_fraction": "B7",
+        "loadshed.hours": "B8",
+        "loadshed.delta_f": "B9",
+        "loadshed.cost": "B10",
+        "loadshed.kwh_saved": "B13",
+        "loadshed.cost_saved": "B14",
+        "loadshed.payback": "B15"
+      },
+      "outputs": [
+        "loadshed.kwh_saved",
+        "loadshed.cost_saved",
+        "loadshed.payback"
+      ]
+    },
+    "ECM_Schedule_Align": {
+      "title": "AHU Schedule Align / Opt-Start + OAD 0% Recirc",
+      "category": "Scheduling",
+      "sheet": "ECM_Schedule_Align",
+      "description": "Industry total = fan cut + cool cut + OAD 0% recirculation; optional fitted FLH stub.",
+      "cells": {
+        "sched.fan_kw": "B6",
+        "sched.plant_kw": "B7",
+        "sched.hours_saved": "B8",
+        "sched.cost": "B9",
+        "sched.current_weekly_h": "B10",
+        "sched.future_weekly_h": "B11",
+        "sched.override_pad": "B12",
+        "sched.warmup_cooldown_h": "B13",
+        "sched.tons_base": "B14",
+        "sched.cool_bin_hours": "B15",
+        "sched.kw_per_ton": "B16",
+        "sched.fan_run_hours": "B17",
+        "sched.oad_tons_delta": "B18",
+        "sched.hours_reduction_frac": "B21",
+        "sched.fan_kwh": "B22",
+        "sched.cool_kwh": "B23",
+        "sched.oad_kwh": "B24",
+        "sched.industry_kwh": "B25",
+        "sched.fitted_kwh": "B26",
+        "sched.kwh_saved": "B27",
+        "sched.cost_saved": "B28",
+        "sched.payback": "B29"
+      },
+      "outputs": [
+        "sched.hours_reduction_frac",
+        "sched.fan_kwh",
+        "sched.cool_kwh",
+        "sched.oad_kwh",
+        "sched.industry_kwh",
+        "sched.fitted_kwh",
+        "sched.kwh_saved",
+        "sched.cost_saved",
+        "sched.payback"
+      ]
     }
   },
   "global_inputs": {

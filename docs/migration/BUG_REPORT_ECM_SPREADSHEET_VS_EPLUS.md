@@ -33,7 +33,7 @@ Twin / WattLab Studio / EnergyPlus patch + notebook builder code primarily lives
 | **BUG-ECM-012** | Partial | Load-shed DR not in product agent Excel / cascade; workaround tool `load_shed_demand_screen.py` exists. |
 | **BUG-ECM-014** | Open (doc) | Calendar FanAvail / OAT-bin hours ≠ formula FLH. Pasting calendar into Inputs over-predicts vs E+. Fix: Matchup calendar + FLH Inputs (`build_eplus_matched_ecm_workbook.py` / full-parity builder). |
 | **BUG-ECM-015** | Open | Studio **ECMs** tab does not show full-parity sheet↔E+ results. Page uses `reports/ecm_compare.json` with spreadsheet side `pending_external`; agent xlsx retired; legacy download only globs top-level `notebooks/*.xlsx` (misses `full_parity_ecm/`). |
-| **BUG-ECM-018** | Open (PyPI train) | Exact sheet↔E+ match labeled **BALLPARK** (fitted FLH greenwash). Status must be **FITTED** when hours were reverse-fitted — see [Engineer upsell brief](../ecm/ENGINEER_UPSELL_BRIEF.md). |
+| **BUG-ECM-018** | Fixed in **4.2.0** | Exact sheet↔E+ match labeled **BALLPARK** (fitted FLH greenwash). Status must be **FITTED** when hours were reverse-fitted — see [Engineer upsell brief](../ecm/ENGINEER_UPSELL_BRIEF.md). |
 | **BUG-ECM-019** | Open (PyPI train) | Dual-AHU `sat_reset` flat 14°C / Sys1-only showed **−7 MWh**; correct patch (preserve winter dump + raise cool DAT on **both** AHUs) **+122 MWh** / +8.5k therms. Retire broken patch in PyPI → open-fdd. |
 
 ---
@@ -45,9 +45,9 @@ Twin / WattLab Studio / EnergyPlus patch + notebook builder code primarily lives
 | **BUG-OFDD-ECM-002** | Fixed in **4.1.2** | `ECMJob.save(same_path)` no longer raises `SameFileError`; inputs already persist via `set_many`. |
 | **BUG-OFDD-ECM-003** | Fixed in **4.1.2** | `list_ecm_modules()` — `add_ecm` names; distinct from `list_calculators()`. |
 | **BUG-OFDD-ECM-012** | Fixed in **4.1.2** | Expanded `FIELD_ALIASES` for DAT/SAT, ERV, occ, econ, schedules, DCV, etc. |
-| **BUG-OFDD-ECM-007** | Open → **4.2.0** | Missing `chiller_lockout` / `load_shed` / `schedule_align` modules. |
-| **BUG-OFDD-ECM-009** | Open → **4.2.0** | Honesty export: Contents / Provenance / Inputs / Industry_Screening / Measures (+ Demand). |
-| **BUG-ECM-018** | Open → **4.2.0** | FITTED vs BALLPARK honesty (see open bugs). |
+| **BUG-OFDD-ECM-007** | Fixed in **4.2.0** | Modules `chiller_lockout`, `load_shed`, `schedule_align` / `ahu_sched_align` (+ toolkit sheets). |
+| **BUG-OFDD-ECM-009** | Fixed in **4.2.0** | `attach_twin_compare` + honesty export (Contents / Provenance / Inputs / Industry_Screening / Measures / Demand). |
+| **BUG-ECM-018** | Fixed in **4.2.0** | `MeasureHonestyStatus` FITTED / BALLPARK / NO_EP / FAIL_SIGN; wiring_echo vs industry %. |
 | **BUG-ECM-019** | Open → wattlab | Dual-AHU `sat_reset` preserve-dump (playground package bake). |
 
 ---
