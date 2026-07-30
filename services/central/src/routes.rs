@@ -1260,6 +1260,9 @@ struct CreateJobBody {
     site_id: Option<String>,
     #[serde(default)]
     site_name: Option<String>,
+    /// OFDD-076b: agents may send building_id; maps to site_id when site_id empty.
+    #[serde(default)]
+    building_id: Option<String>,
     #[serde(default)]
     building_name: Option<String>,
     #[serde(default)]
@@ -1331,11 +1334,29 @@ async fn jobs_list(
 async fn jobs_create(
     Json(body): Json<CreateJobBody>,
 ) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
+    // OFDD-076b: building_id → site_id when site_id absent; also fill building_name.
+    let building_id = body
+        .building_id
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let site_id = body
+        .site_id
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(|| building_id.clone());
+    let building_name = body
+        .building_name
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(|| building_id.clone());
     let meta = jobs::create_job(
         &body.job_name,
-        body.site_id,
+        site_id,
         body.site_name,
-        body.building_name,
+        building_name,
         body.description,
         body.tags,
         body.created_by,

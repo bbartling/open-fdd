@@ -636,11 +636,12 @@ pub async fn economizer_from_history(
     };
     let dt_min = dt_min_f.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
-    let has_damper_col = cols.contains("oa_damper_pct");
-    let damper_present = if has_damper_col {
-        "COUNT(oa_damper_pct)"
+    // OFDD-070b: project damper into the CTE — COUNT(oa_damper_pct) from `base`
+    // fails when the column exists on `history` but was never selected into `base`.
+    let damper_proj = if cols.contains("oa_damper_pct") {
+        "oa_damper_pct"
     } else {
-        "0"
+        "CAST(NULL AS DOUBLE) AS oa_damper_pct"
     };
 
     let sql = format!(
@@ -651,7 +652,8 @@ WITH base AS (
     {oat_col} AS oa_t,
     {rat_col} AS rat,
     {mat_col} AS mat,
-    {on_sql} AS fan_on
+    {on_sql} AS fan_on,
+    {damper_proj}
   FROM history
   WHERE equipment_id IS NOT NULL{eq_filter}
 )
@@ -660,7 +662,7 @@ SELECT
   SUM(CASE WHEN fan_on THEN 1 ELSE 0 END) AS n_fan_on,
   SUM(CASE WHEN fan_on AND oa_t IS NOT NULL AND rat IS NOT NULL
              AND ABS(oa_t - rat) >= {dt_min} THEN 1 ELSE 0 END) AS n_identifiable,
-  {damper_present} AS n_damper
+  COUNT(oa_damper_pct) AS n_damper
 FROM base
 GROUP BY equipment_id
 ORDER BY equipment_id
@@ -978,6 +980,44 @@ mod tests {
             b50.coverage.as_ref().unwrap()["building_id"],
             serde_json::json!("BUILDING_50")
         );
+    }
+
+    #[tokio::test]
+    async fn economizer_from_history_with_damper_column_ok() {
+        // OFDD-070b: oa_damper_pct present on history must not schema-error.
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let parquet = tmp.path().join("parquet_econ_damp");
+        let building = tmp.path().join("BUILDING_50");
+        let ahu = building.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\noat,outside_air_temp\nrat,return_air_temp\n\
+             mat,mixed_air_temp\nfan,fan_status\ndamp,oa_damper_pct\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,oat,rat,mat,fan,damp").unwrap();
+        writeln!(f, "2026-01-01T00:00:00Z,40,70,55,1,0.4").unwrap();
+        writeln!(f, "2026-01-01T00:05:00Z,41,70,56,1,0.5").unwrap();
+        fdd_store::ingest_building(tmp.path(), "BUILDING_50", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = economizer_from_history(None, 10.0, Some("BUILDING_50"))
+            .await
+            .unwrap()
+            .expect("economizer with damper");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert_eq!(env.engine, DF_ENGINE);
+        assert!(!env.equipment.is_empty());
+        assert!(env.equipment[0]["has_damper"].as_bool().unwrap_or(false));
+        assert!(!env
+            .warnings
+            .iter()
+            .any(|w| w.contains("historian/job economizer load is next")));
     }
 
     #[tokio::test]

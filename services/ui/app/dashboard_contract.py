@@ -11,7 +11,7 @@ REQUIRED_MAIN_SECTIONS: tuple[str, ...] = (
     "FDD Plots",
     "RCx Plots",
     "Metering",
-    "Export",
+    "WattLab",
 )
 
 # Public chart helpers in app/charts.py used by FDD Plots / RCx / Overview / Metering.
@@ -55,10 +55,10 @@ REQUIRED_UI_ENTRYPOINTS: tuple[str, ...] = (
     "app.model_seed:infer_schedules",
     "app.model_seed:operating_signatures",
     "app.open_meteo:fetch_open_meteo",
-    "app.ui_jobs:render_jobs_sidebar",
     "app.job_store:create_job",
     "app.job_store:load_job",
-    # OFDD-076/072: in-product vibe20 Jobs — WattLab handoff + ECM agent-build.
+    # WattLab section (OFDD-UI-V20) — vibe20 studio pages + handoff/dump advanced
+    "app.ui_wattlab_studio:render_wattlab_section",
     "app.ui_wattlab_job:render_job_native_wattlab_handoff",
     "app.ui_ecm_job:render_ecm_agent_build_panel",
     "app.job_store:save_ecm_request",

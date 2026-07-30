@@ -6,8 +6,9 @@ nav_order: 40
 
 # OFDD 065–076 parity register
 
-**Date:** 2026-07-29 · Branches `fix/ofdd-gate-a-sites-sql-413` (Gate A) →
-`fix/ofdd-gate-b-c-findings-ecm` (Gate B + Gate C, built on the Gate A tip)
+**Date:** 2026-07-30 · Branches `fix/ofdd-gate-a-sites-sql-413` (Gate A) →
+`fix/ofdd-gate-b-c-findings-ecm` (Gate B + Gate C, built on the Gate A tip).
+**Updated:** Liberty soak `parity_hunt_20260730T003200Z` residuals filled below.
 
 Tracks the Liberty B50/B100 parity hunt tickets OFDD-065…076 across the three
 gates defined in the combined vibe19+vibe20 plan. This file records **VERIFIED**
@@ -28,39 +29,36 @@ Companion matrices:
 | OFDD-066 | Skip-not-crash on missing roles | A | **VERIFIED** | Runner preflights `required_roles` vs history schema and classifies DataFusion schema errors → `SKIPPED_MISSING_ROLES` (`rules_skipped`), not `rules_failed`. `results_response` emits per-row status (`SKIPPED_MISSING_ROLES`/`FAULT`/`PASS`). |
 | OFDD-068 | Weather table/view | A | **VERIFIED** | `register_weather_if_present` falls back to a `weather` SQL view over `history` weather-station rows (`equipment_id ILIKE '%weather%'/'%meteo%'/'%oat%'`) when no `weather/` sidecar. Unit test covers the fallback. |
 | OFDD-075 | Analytics 413 | A | **VERIFIED** | `DefaultBodyLimit::max(128 MiB)` on the protected router (analytics + `fdd/run`); CSV nest already had its own limit. |
-| OFDD-065 | Directional FAULT parity (SV-STALE / VAV-1 / FC1) | A | **DIRECTIONAL / residual** | SV-STALE fan-on gate + `required_roles: [fan_cmd]` (synthetic oracle green). VAV-1 left without fan_cmd SQL refs so zone-only schemas do not SKIP; Liberty VAV-1/FC1 deltas still `_tbd_` until tip soak. |
+| OFDD-065 | Directional FAULT parity (SV-STALE / VAV-1 / FC1) | A | **DIRECTIONAL / residual** | Liberty 2026-07-30 deltas filled (SV-STALE/VAV-1 still **WIDE**; FC1/OAT-METEO **TIGHT**). Do not close with bench-only. |
+| OFDD-070 | Economizer historian | B | **FIXED tip (OFDD-070b CTE)** | Damper projected into CTE; Liberty re-soak required to clear stub residual. |
+| OFDD-076 | Jobs site bind | C | **FIXED tip (OFDD-076b)** | `CreateJobBody.building_id` → `site_id` when empty. |
 
-## Known FAULT deltas (Liberty B50/B100 — placeholders)
+## Known FAULT deltas (Liberty B50/B100 — soak 2026-07-30)
 
-Populate from a `sha-*` soak comparing open-fdd SQL `results` vs vibe19
-`fdd_summary.csv` on `~/wattlab_workspace/uploads/openfdd/raw_BUILDING_{50,100}_openfdd.zip`.
-Rows are placeholders until the zips are available on the soak host (absent in
-this environment, so numbers are not fabricated here).
+From Liberty soak `parity_hunt_20260730T003200Z` vs tip `sha-064eadb` (vibe19
+`fdd_summary.csv`). Do **not** flip `proven` from these alone — WIDE bands need
+smoking-gun SQL + cheap fixtures first.
 
 | Rule | Building | vibe19 FAULT hrs | open-fdd FAULT hrs | Δ | Band | Root-cause hypothesis |
-|------|----------|------------------|--------------------|---|------|-----------------------|
-| SV-STALE | B50 | _tbd_ | _tbd_ | _tbd_ | ±? | fan-off applicability / stale-window confirm alignment |
-| SV-STALE | B100 | _tbd_ | _tbd_ | _tbd_ | ±? | as above |
-| VAV-1 | B50 | _tbd_ | _tbd_ | _tbd_ | ±? | comfort-band confirm rows vs pandas `confirm_fault()` |
-| VAV-1 | B100 | _tbd_ | _tbd_ | _tbd_ | ±? | as above |
-| FC1 | B50 | _tbd_ | _tbd_ | _tbd_ | ±? | duct-static ε / fan-on fraction mapping (`fan_hi`→`eps_vfd_spd`) |
-| FC1 | B100 | _tbd_ | _tbd_ | _tbd_ | ±? | as above |
+|------|----------|------------------:|-------------------:|--:|------|-----------------------|
+| SV-STALE | B50 | 884 | 3384 | +2500 | **WIDE** | stale-window / fan-on confirm vs pandas |
+| SV-STALE | B100 | 543 | 3271 | +2728 | **WIDE** | as above |
+| VAV-1 | B50 | 2815 | 24550 | +21735 | **WIDE** | comfort-band confirm vs pandas `confirm_fault()` |
+| VAV-1 | B100 | 3789 | 21615 | +17826 | **WIDE** | as above |
+| FC1 | B100 | 205 | 220 | +15 | **TIGHT** | duct-static ε / fan-on fraction |
+| OAT-METEO | both | match | match | 0 | **TIGHT** | — |
+| ECON-1 | B50 | 700 | 0.6 | −699 | **WIDE** | inverted / role mapping |
+| ECON-2 | B50 | 191 | 3143 | +2952 | **WIDE** | screening vs pandas |
+| FAULT-ELAPSED-HOURS | B50 | 0 | 11325 | +11325 | **WIDE** | SQL-only status rollup honesty |
+| SCHED-247 | B50 | 0 | 3235 | +3235 | **WIDE** | streak ≠ window `always_on_pct` |
 
 ## OFDD-065 residual (honest)
 
-Fan-off applicability and confirm-window semantics for **SV-STALE**, **VAV-1**,
-and **FC1** are the likely remaining SQL-vs-pandas divergences once building
-scoping (OFDD-067) removes cross-building contamination. This pass did **not**
-alter those SQL gates because:
-
-- No Liberty zips are present in this environment, so any gate change could not be
-  validated against the oracle or the existing `fdd_rules` benches.
-- The plan's operating law forbids bench-only closes; gate edits must be proven on
-  B50+B100 vs vibe19 before landing.
-
-Next step (Gate A exit): run the `sha-*` soak, fill the deltas table above, then
-tighten SV-STALE/VAV-1/FC1 gates within documented bands without regressing
-`crates/fdd_rules` oracle-parity benches.
+Liberty deltas are filled (above). **SV-STALE** / **VAV-1** remain **WIDE**;
+**FC1** / **OAT-METEO** are **TIGHT**. This pass does **not** flip registry
+`proven` without smoking-gun SQL + cheap fixtures. Priority tighten targets:
+VAV-1 confirm/band, ECON-1/2 inverted, FAULT-ELAPSED-HOURS honesty, SCHED-247
+residual note. Re-soak after OFDD-070b CTE for economizer Overview.
 
 ## Gate B — vibe19 tip UI / Findings / economizer (branch `fix/ofdd-gate-b-c-findings-ecm`)
 

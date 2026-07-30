@@ -557,6 +557,26 @@ impl BridgeClient {
         })
     }
 
+    /// OFDD-MCP-CTX / ENH-13f: pointer-only companion paths (no IDF surgery).
+    pub fn agent_context_pointers(&self) -> Value {
+        json!({
+            "ok": true,
+            "never_idf_surgery_in_openfdd_mcp": true,
+            "companion_doc": "docs/mcp-agents/companion-wattlab-energyplus.md",
+            "mcp_instructions": "mcp/INSTRUCTIONS.md",
+            "wattlab_workspace_env": ["WATTLAB_STUDIO_WORKSPACE", "WATTLAB_WORKSPACE", "OPENFDD_WATTLAB_WORKSPACE"],
+            "full_parity_workbook": "ECM_FULL_PARITY.xlsx",
+            "full_parity_builder": "build_full_parity_ecm_workbook_v2.py",
+            "energyplus_mcp": "Use EnergyPlus-MCP + tools/ for IDF edits — openfdd-mcp is pointer-only.",
+            "dual_site_checklist": [
+                "openfdd_datasets — confirm BUILDING_50 and BUILDING_100 distinct",
+                "openfdd_fdd_accuracy_snapshot is global (registry/equipment/results) — not site-scoped",
+                "openfdd_historian_query site_id=BUILDING_50 vs BUILDING_100",
+                "openfdd_reports_draft needs OPENFDD_MCP_ALLOW_WRITES=1 + confirm:true; then GET /api/reports/engineering-findings"
+            ]
+        })
+    }
+
     pub fn driver_status(&self) -> Value {
         let endpoints = [
             ("/api/health", "GET"),

@@ -300,6 +300,36 @@ def render_engineering_findings_panel(*, key: str = "overview_eng_findings") -> 
         st.session_state[f"{key}_files"] = files
         if err:
             st.warning(f"Some artifacts skipped (optional writer missing): {err}")
+        # OFDD-069: persist a central draft so GET /api/reports/engineering-findings works.
+        try:
+            from app import central_client
+
+            draft = central_client.reports_draft(
+                {
+                    "building": building,
+                    "kind": "engineering_findings",
+                    "template_id": "engineering_findings",
+                    "report_type": "engineering_findings",
+                    "summary": artifacts.to_dict().get("summary")
+                    if hasattr(artifacts, "to_dict")
+                    else None,
+                }
+            )
+            if draft.get("ok") is False:
+                st.caption(f"Central findings draft not stored: {draft.get('error')}")
+            else:
+                st.caption("Central engineering_findings draft stored (GET /api/reports/engineering-findings).")
+        except (OSError, ConnectionError, TimeoutError, ValueError, TypeError, KeyError) as exc:
+            st.caption(f"Central findings draft skipped: {exc}")
+        except Exception as exc:  # central_client may raise requests-like errors
+            if type(exc).__module__.startswith("requests") or type(exc).__name__ in {
+                "HTTPError",
+                "RequestException",
+                "CentralError",
+            }:
+                st.caption(f"Central findings draft skipped: {exc}")
+            else:
+                raise
 
     art = st.session_state.get(f"{key}_artifacts")
     if isinstance(art, dict):

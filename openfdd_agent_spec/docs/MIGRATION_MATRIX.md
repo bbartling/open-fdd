@@ -8,11 +8,14 @@ Do not fork parallel truth. Update existing audits when code changes.
 | [`docs/migration/vibe19_parity_matrix.md`](../../docs/migration/vibe19_parity_matrix.md) | vibe19 capability parity |
 | [`docs/migration/vibe20_integration_matrix.md`](../../docs/migration/vibe20_integration_matrix.md) | WattLab / vibe20 integration |
 | [`docs/rules/cookbook/parity-matrix.md`](../../docs/rules/cookbook/parity-matrix.md) | SQL ↔ pandas rule honesty |
+| [`docs/migration/OFDD_065_076_PARITY.md`](../../docs/migration/OFDD_065_076_PARITY.md) | Liberty B50/B100 FAULT deltas + Gate A–C |
+| [`docs/mcp-agents/companion-wattlab-energyplus.md`](../../docs/mcp-agents/companion-wattlab-energyplus.md) | Dual-MCP / no IDF in openfdd-mcp |
+| [`docs/mcp-agents/dual-site-mcp-it.md`](../../docs/mcp-agents/dual-site-mcp-it.md) | OFDD-MCP-IT A/B/C checklist |
 | Playground `vibe_code_apps_20/docs/OPENFDD_ECM_TWINS.md` | ECM twin vs keeper list |
-| [`BUILD_CHECKPOINTS.md`](../BUILD_CHECKPOINTS.md) | Milestone A checklist |
+| [`BUILD_CHECKPOINTS.md`](../BUILD_CHECKPOINTS.md) | Milestone + Liberty soak checklist |
 
-When Phase 0 coding starts, add `docs/migration/MILESTONE_A_EXECUTION.md` with
-per-PR and per-module tables.
+**Tip under Liberty turnkey:** playground develop `2323f28` (BUG-ECM-015 + ERV stub).
+open-fdd PR **#601 is still open** — tip advances on merge (was `064eadbc` / `sha-064eadb`).
 
 ---
 

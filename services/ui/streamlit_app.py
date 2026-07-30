@@ -103,7 +103,7 @@ from app.site_model import (  # noqa: E402
 try:
     from shared.branding import APP_TITLE
 except ImportError:  # pragma: no cover
-    APP_TITLE = "Open FDD Vibe Coder"
+    APP_TITLE = "Open FDD"
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 
@@ -117,13 +117,9 @@ _HERO_IMG = APP_ROOT / "assets" / "image_new_chiller.png"
 
 
 def _render_app_hero() -> None:
-    """Brand header: title → subtitle → compact logo → how-it-works."""
+    """Brand header: title → one product line → logo → how-it-works."""
     st.title(APP_TITLE)
-    st.markdown(
-        "Streamlit lab for Open-FDD: Load zip → central Feather store; Run Rules → DataFusion SQL. "
-        "Rule-tuning sliders map to SQL registry params (confirm delay = confirm_min → confirm_seconds). "
-        "CSVs stay as-is — you only map columns to roles."
-    )
+    st.markdown("Fault detection + WattLab energy twin — sites, FDD, and calibrated models.")
     if _HERO_IMG.is_file():
         # Narrower than full-bleed stretch so the logo sits under the brand, not above it
         _logo_l, _logo_m, _logo_r = st.columns([1, 2, 1])
@@ -131,15 +127,14 @@ def _render_app_hero() -> None:
             st.image(str(_HERO_IMG), width="stretch")
     st.markdown(
         """
-**How it works (2 pieces + run)**
+**How it works**
 
-1. **Data package** — Folder or `openfdd_package_v1` zip of historian CSVs  
-2. **Data model** — JSON column→role map (Mapping tab) or `session_config.json` role_map in the zip  
-3. **Run** — **Run Rules** → **FDD Plots** / **RCx Plots**
+1. **Sites** — Load a package zip; pick the active building from the Site list  
+2. **Data model** — Column→role map for the active site  
+3. **FDD / WattLab** — Run Rules, then WattLab (Fuel / Twin / ECMs) scoped to the site
         """.strip()
     )
     st.markdown(
-        f"[AGENTS.md]({_AGENTS_MD_URL}) · "
         f"[Open-FDD docs]({_OPENFDD_DOCS_URL}) · "
         f"[Open-FDD repo]({_OPENFDD_REPO_URL})"
     )
@@ -1589,60 +1584,152 @@ def _sync_active_site() -> None:
     _snapshot_site(bid)
 
 
+def _hive_site_ids() -> list[str]:
+    """Building ids from central GET /api/datasets (Hive registry)."""
+    try:
+        from app import central_client
+
+        resp = central_client.list_datasets(timeout=10.0)
+    except Exception:
+        return []
+    if not resp.get("ok"):
+        return []
+    out: list[str] = []
+    for d in resp.get("datasets") or []:
+        if isinstance(d, dict):
+            bid = d.get("id") or d.get("building_id") or d.get("dataset_id")
+            if bid:
+                out.append(str(bid).strip())
+        elif isinstance(d, str) and d.strip():
+            out.append(d.strip())
+    return out
+
+
+def _all_site_ids() -> list[str]:
+    """Union of Hive datasets and in-session snapshots (Active site = building_id)."""
+    return sorted({*(_sites().keys()), *_hive_site_ids()} - {""})
+
+
 def _render_site_selector() -> None:
-    """Sidebar Site picker — switch rebinds the whole per-site session."""
-    ids = sorted(_sites().keys())
-    if len(ids) < 2:
+    """Sidebar Sites card — always visible; Hive-driven (OFDD-UI-SITE)."""
+    st.sidebar.markdown("##### Sites")
+    ids = _all_site_ids()
+    if not ids:
+        st.sidebar.caption("No sites — load a package.")
         return
-    active = str(st.session_state.get("active_site") or "")
+    active = str(
+        st.session_state.get("active_site") or st.session_state.get("building_id") or ""
+    ).strip()
     idx = ids.index(active) if active in ids else 0
+    frames = st.session_state.get("equipment_frames") or {}
+    n_eq = len(frames) if active and active == st.session_state.get("building_id") else None
+    help_txt = "Active site = building_id from the package / Hive. Switch rebinds FDD data."
+    if n_eq is not None:
+        help_txt += f" Equip in session: {n_eq}."
     sel = st.sidebar.selectbox(
-        "Site",
+        "Active site",
         ids,
         index=idx,
         key="site_selector",
-        help="Switch between loaded buildings. Each site keeps its own data, faults, and Overview.",
+        help=help_txt,
     )
+    if sel and sel in _sites() and frames and active == sel:
+        st.sidebar.caption(f"Equip {len(frames)} · Feather/Hive yes")
+    elif sel and sel not in _sites():
+        st.sidebar.caption(
+            "Listed from central Hive — load/re-open this package to bind session data."
+        )
     if sel and sel != active:
-        _snapshot_site(active)
-        _load_site(sel)
+        if active and active in _sites():
+            _snapshot_site(active)
+        if sel in _sites():
+            _load_site(sel)
+        else:
+            st.session_state.active_site = sel
+            st.session_state.building_id = sel
+            st.session_state.central_dataset_id = sel
         st.rerun()
 
 
-def _delete_site_and_clear() -> None:
-    """Delete the active site's central data, drop its snapshot, and switch to a
-    remaining site (or clear when none remain)."""
+def _delete_site_and_clear() -> bool:
+    """Delete the Active site's Feathers + results (confirm via sidebar checkbox).
+
+    Returns True only when deletion completed so the caller can ``st.rerun()``.
+    """
+    import logging
     from app import central_client
 
+    _logger = logging.getLogger(__name__)
+
     dataset_id = (
-        st.session_state.get("central_dataset_id")
+        st.session_state.get("active_site")
+        or st.session_state.get("central_dataset_id")
         or st.session_state.get("building_id")
         or ""
     ).strip()
     if not dataset_id:
-        st.sidebar.warning("No site loaded — nothing to delete on central")
-        return
+        st.sidebar.warning("No site selected — nothing to delete")
+        return False
+    if not st.session_state.get("_confirm_delete_site"):
+        st.sidebar.error(
+            f"Confirm delete for `{dataset_id}`: check **Confirm delete** below, then click Delete again."
+        )
+        return False
     result = central_client.delete_dataset(dataset_id)
     if result.get("central_down"):
         st.sidebar.warning(result.get("error") or "central unreachable")
-        return
+        return False
     if not result.get("ok", False):
         st.sidebar.warning(result.get("error") or f"delete failed for `{dataset_id}`")
-        return
+        return False
 
     from app.browser_session import clear_browser_session_pointer
     from app.package_io import wipe_workdir
 
     wipe_workdir(st.session_state.get("upload_workdir"))
     clear_browser_session_pointer()
+    # Cascade local job folders keyed to this building when present
+    try:
+        from pathlib import Path
+        from app import job_store
+
+        ws = Path(job_store.workspace_root())
+        jobs_root = ws / "jobs"
+        if jobs_root.is_dir():
+            for meta_path in jobs_root.glob("*/job.json"):
+                try:
+                    import json
+
+                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                except Exception as exc:
+                    _logger.debug("skip unreadable job meta %s: %s", meta_path, exc)
+                    continue
+                sid = str(meta.get("site_id") or meta.get("building_name") or "")
+                if sid == dataset_id:
+                    import shutil
+
+                    shutil.rmtree(meta_path.parent, ignore_errors=True)
+    except Exception as exc:
+        _logger.warning("job-folder cascade cleanup failed for %s: %s", dataset_id, exc)
+
     _purge_site(st.session_state.get("active_site") or dataset_id)
     _purge_site(dataset_id)
+    st.session_state.pop("_confirm_delete_site", None)
 
-    remaining = sorted(_sites().keys())
-    if remaining:
+    remaining = _all_site_ids()
+    remaining = [r for r in remaining if r != dataset_id]
+    if remaining and remaining[0] in _sites():
         _load_site(remaining[0])
         st.sidebar.success(
             f"Deleted site `{dataset_id}` — switched to `{remaining[0]}`"
+        )
+    elif remaining:
+        st.session_state.active_site = remaining[0]
+        st.session_state.building_id = remaining[0]
+        st.session_state.central_dataset_id = remaining[0]
+        st.session_state.equipment_frames = {}
+        st.sidebar.success(
+            f"Deleted site `{dataset_id}` — active `{remaining[0]}` (reload package for session data)"
         )
     else:
         st.session_state.upload_workdir = None
@@ -1655,8 +1742,9 @@ def _delete_site_and_clear() -> None:
         st.session_state.building_id = ""
         st.session_state.active_site = ""
         st.session_state.pop("central_dataset_id", None)
-        st.sidebar.success(f"Deleted site `{dataset_id}` (session / fault sliders kept)")
+        st.sidebar.success(f"Deleted site `{dataset_id}`")
     st.session_state.zip_uploader_key = int(st.session_state.get("zip_uploader_key", 0)) + 1
+    return True
 
 
 def _commit_frames(
@@ -2039,13 +2127,18 @@ def _load_data(cfg: AppConfig) -> None:
             key="load_zip_unified",
         )
         delete_clicked = c2.button(
-            "Delete site",
+            "Delete…",
             key="delete_dataset_unified",
-            help="Delete Feather/parquet for the active site's building id, then switch to a remaining site. Keeps fault sliders & session maps.",
+            help="Purge Feathers + FDD results for the Active site (building_id). Other sites untouched.",
+        )
+        st.sidebar.checkbox(
+            "Confirm delete Active site",
+            key="_confirm_delete_site",
+            help="Required before Delete… removes historian Feathers + rule_results for that building only.",
         )
         if delete_clicked:
-            _delete_site_and_clear()
-            st.rerun()
+            if _delete_site_and_clear():
+                st.rerun()
         if load_clicked and zip_files:
             wipe_workdir(st.session_state.get("upload_workdir"))
             st.session_state.upload_workdir = None
@@ -2615,9 +2708,8 @@ def main() -> None:
     defaults_cfg = cached_rule_defaults(str(cfg.rule_defaults_path))
     _apply_agent_bootstrap_once()
     _apply_browser_autoload_once()
-    from app.ui_jobs import render_jobs_sidebar
-
-    render_jobs_sidebar()
+    # OFDD-UI-JOBS: default Jobs expander removed — Site spine owns building switch.
+    # /api/jobs remains for WattLab worksheets / advanced handoff.
     _sync_active_site()
     _render_site_selector()
     _load_data(cfg)
@@ -3945,76 +4037,70 @@ def main() -> None:
                 key=f"dl_meter_{kind}",
             )
 
-    if section == "Export":
-        st.subheader("Export")
-        st.caption(
-            "One big dump for WattLab (vibe20): every FDD rule, analytic CSVs, "
-            "sensor stats / 24h diurnal profiles (fan on/off × weekday/weekend/holiday), "
-            "setpoints, schedules, weather, data-derived model seed, and MANIFEST.json. "
-            "Session restore stays below; individual CSVs live under the expander."
+    if section == "WattLab":
+        from app.ui_wattlab_studio import render_wattlab_section
+
+        render_wattlab_section(
+            building_id=str(
+                st.session_state.get("building_id")
+                or st.session_state.get("active_site")
+                or ""
+            )
         )
         results = st.session_state.batch_results
-
-        from app.ui_wattlab_job import render_job_native_wattlab_handoff
-
-        render_job_native_wattlab_handoff()
-
-        from app.ui_ecm_job import render_ecm_agent_build_panel
-
-        render_ecm_agent_build_panel()
-
-        st.markdown("##### WattLab dump zip (additive)")
-        if not frames:
-            st.info("Load a package first — the dump needs equipment data.")
-        else:
-            profile_options = {
-                "Summary (default)": "summary",
-                "Diagnostic": "diagnostic",
-                "Forensic": "forensic",
-            }
-            # Durable non-widget key survives Export unmount; widget key is re-seeded.
-            if "wattlab_export_profile" not in st.session_state:
-                st.session_state["wattlab_export_profile"] = "summary"
-            if "wattlab_export_profile_label" not in st.session_state:
-                rev = {v: k for k, v in profile_options.items()}
-                st.session_state["wattlab_export_profile_label"] = rev.get(
-                    st.session_state["wattlab_export_profile"],
-                    "Summary (default)",
-                )
-            profile_label = st.selectbox(
-                "Export profile",
-                options=list(profile_options),
-                key="wattlab_export_profile_label",
-                help=(
-                    "Summary: shared telemetry + analytic tables, no per-rule timeseries. "
-                    "Diagnostic: FAULT/ERROR evidence. Forensic: applicable evidence."
-                ),
-            )
-            st.session_state["wattlab_export_profile"] = profile_options.get(
-                str(profile_label), "summary"
-            )
-            if st.button("Build WattLab dump (zip)", type="primary", key="wattlab_dump_build"):
-                with st.spinner("Running analytics + writing bundle…"):
-                    try:
-                        data, fname = _build_wattlab_dump_zip(
-                            profile=st.session_state.get("wattlab_export_profile", "summary")
-                        )
-                        st.session_state["wattlab_dump_zip"] = (data, fname)
-                        st.success(f"Dump ready · {len(data) / 1e6:.1f} MB — see README_WATTLAB.md inside")
-                    except Exception as exc:
-                        st.error(f"WattLab dump failed: {exc}")
-            dump = st.session_state.get("wattlab_dump_zip")
-            if dump:
-                st.download_button(
-                    "Download WattLab dump (zip)",
-                    data=dump[0],
-                    file_name=dump[1],
-                    mime="application/zip",
-                    key="wattlab_dump_dl",
-                )
-
         st.markdown("##### Session restore")
-        _render_session_config_io(key_prefix="export")
+        _render_session_config_io(key_prefix="wattlab")
+
+        with st.expander("WattLab dump zip (additive)", expanded=False):
+            if not frames:
+                st.info("Load a package first — the dump needs equipment data.")
+            else:
+                profile_options = {
+                    "Summary (default)": "summary",
+                    "Diagnostic": "diagnostic",
+                    "Forensic": "forensic",
+                }
+                if "wattlab_export_profile" not in st.session_state:
+                    st.session_state["wattlab_export_profile"] = "summary"
+                if "wattlab_export_profile_label" not in st.session_state:
+                    rev = {v: k for k, v in profile_options.items()}
+                    st.session_state["wattlab_export_profile_label"] = rev.get(
+                        st.session_state["wattlab_export_profile"],
+                        "Summary (default)",
+                    )
+                profile_label = st.selectbox(
+                    "Dump profile",
+                    options=list(profile_options),
+                    key="wattlab_export_profile_label",
+                    help=(
+                        "Summary: shared telemetry + analytic tables, no per-rule timeseries. "
+                        "Diagnostic: FAULT/ERROR evidence. Forensic: applicable evidence."
+                    ),
+                )
+                st.session_state["wattlab_export_profile"] = profile_options.get(
+                    str(profile_label), "summary"
+                )
+                if st.button("Build WattLab dump (zip)", type="primary", key="wattlab_dump_build"):
+                    with st.spinner("Running analytics + writing bundle…"):
+                        try:
+                            data, fname = _build_wattlab_dump_zip(
+                                profile=st.session_state.get("wattlab_export_profile", "summary")
+                            )
+                            st.session_state["wattlab_dump_zip"] = (data, fname)
+                            st.success(
+                                f"Dump ready · {len(data) / 1e6:.1f} MB — see README_WATTLAB.md inside"
+                            )
+                        except Exception as exc:
+                            st.error(f"WattLab dump failed: {exc}")
+                dump = st.session_state.get("wattlab_dump_zip")
+                if dump:
+                    st.download_button(
+                        "Download WattLab dump (zip)",
+                        data=dump[0],
+                        file_name=dump[1],
+                        mime="application/zip",
+                        key="wattlab_dump_dl",
+                    )
 
         with st.expander("Individual exports (summary CSV, column map, gap report, tuning report)"):
             if results:
@@ -4053,8 +4139,6 @@ def main() -> None:
                     trep = build_tuning_assistant_report(
                         tuned=results or [],
                         params=st.session_state.get("params") or {},
-                        has_web_weather=st.session_state.weather is not None,
-                        gap_report=gap_df,
                     )
                     st.download_button(
                         "Download tuning_assistant_report.json",
@@ -4069,6 +4153,7 @@ def main() -> None:
         st.caption(
             "Word report: download the Generic RCx template from the **Overview** section."
         )
+
 
 
 if __name__ == "__main__":

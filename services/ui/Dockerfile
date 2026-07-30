@@ -25,6 +25,14 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Optional WattLab package bake (OFDD-UI-V20). Lab soak usually mounts vibe20 via
+# docker/compose.wattlab.yml instead; set WATTLAB_PIP_SPEC at build for GHCR tips.
+ARG WATTLAB_PIP_SPEC=
+RUN if [ -n "$WATTLAB_PIP_SPEC" ]; then pip install --no-cache-dir "$WATTLAB_PIP_SPEC"; fi
+
+# Do not bake WATTLAB_STUDIO_WORKSPACE here — compose.wattlab.yml sets it when
+# /data is actually mounted; a baked ENV would defeat the UI mount warning.
+
 COPY . .
 
 EXPOSE 8501

@@ -26,6 +26,8 @@ Inside the compose network, point at central directly:
 
 ## Cursor `mcp.json` (illustrative)
 
+**FDD-only** (openfdd) leaves agents blind to Twin/ECM. Prefer **dual-MCP** — see [companion-wattlab-energyplus.md](companion-wattlab-energyplus.html).
+
 ```json
 {
   "mcpServers": {
@@ -38,6 +40,14 @@ Inside the compose network, point at central directly:
         "ghcr.io/bbartling/openfdd-mcp:latest"
       ],
       "env": { "OPENFDD_MCP_TOKEN": "<integrator JWT>" }
+    },
+    "energyplus": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-v", "/path/to/wattlab_workspace:/data",
+        "energyplus-mcp-dev"
+      ]
     }
   }
 }
