@@ -37,6 +37,84 @@ def _try_import_page(mod_name: str):
         return None
 
 
+def _render_ecm_monthly_pct_required_fallback(active: str) -> None:
+    """Keep ECM monthly ±% chart slots when wattlab.studio.pages.ecms is unavailable.
+
+    Prefers vibe20 ``render_required_monthly_pct_charts`` when importable; otherwise
+    draws Plotly placeholders + the same agent checklist text.
+    """
+    st.markdown("#### Monthly dial ±% (E+ model vs actual bills)")
+    st.caption(
+        "Required on the ECM tab. Chart frames stay visible even without scorecard JSON."
+    )
+    try:
+        from wattlab.studio.monthly_dial_chart import render_required_monthly_pct_charts
+
+        render_required_monthly_pct_charts(
+            [],
+            key_prefix="ofdd_ecm_monthly_pm",
+            twin_hint=active or None,
+        )
+        return
+    except Exception:
+        pass
+
+    months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ]
+    try:
+        import plotly.graph_objects as go
+
+        for fuel, title in (
+            ("elec", "Electricity — monthly dial ±% (model vs bills)"),
+            ("gas", "Natural gas — monthly dial ±% (model vs bills)"),
+        ):
+            fig = go.Figure(
+                data=[
+                    go.Bar(
+                        x=months,
+                        y=[0.0] * 12,
+                        marker_color="#cbd5e0",
+                        text=["—"] * 12,
+                        textposition="outside",
+                        name=f"{fuel} ±% (awaiting data)",
+                    )
+                ]
+            )
+            fig.add_annotation(
+                text="Awaiting utility_bills.per_month — chart slot reserved",
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.55,
+                showarrow=False,
+            )
+            fig.update_layout(title=title, height=360, showlegend=False)
+            st.plotly_chart(fig, width="stretch", key=f"ofdd_ecm_pm_fallback_{fuel}")
+    except Exception as exc:
+        st.info(f"Plotly unavailable for placeholder charts ({exc}).")
+
+    st.warning(
+        "**Please have AI agent render / attach:**\n"
+        "- Publish `calibration_scorecard.json` with `utility_bills.per_month`\n"
+        "- Elec months: `observed_kwh` + `modeled_kwh`/`simulated_kwh`\n"
+        "- Gas months: `observed_therms` + `modeled_therms`/`simulated_therms`\n"
+        "- Point ECM Twin at the calibrated `runs/…` folder\n"
+        f"- Active site hint: `{active or '(none)'}`"
+    )
+
+
 def render_wattlab_section(*, building_id: str | None = None) -> None:
     """Main-section WattLab workspace (replaces Export-as-only-story)."""
     st.subheader("WattLab")
@@ -93,11 +171,23 @@ def render_wattlab_section(*, building_id: str | None = None) -> None:
         if mod and hasattr(mod, "render"):
             mod.render(profile=profile)
             rendered = True
+        else:
+            _render_ecm_monthly_pct_required_fallback(active)
 
-    if not rendered:
+    if not rendered and page != "ECMs":
         st.warning(
             f"**{page}** UI requires the `wattlab` package in the openfdd-ui image "
             "(Option A embed). Until then use vibe20 Studio on `:8520` or install wattlab."
+        )
+        docker_sock = os.path.exists("/var/run/docker.sock")
+        st.caption(
+            f"Docker sock attached: {'yes' if docker_sock else 'no'} · "
+            f"EnergyPlus MCP: set `OPENFDD_ENERGYPLUS_MCP=1` when runner is available."
+        )
+    elif not rendered and page == "ECMs":
+        st.warning(
+            "Full ECM compare UI needs the `wattlab` package — monthly ±% chart "
+            "slots stay reserved below so the page never goes blank."
         )
         docker_sock = os.path.exists("/var/run/docker.sock")
         st.caption(
