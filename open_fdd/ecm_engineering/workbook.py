@@ -126,8 +126,17 @@ class OpenFDDECMWorkbook:
         tmp.replace(self.path)
 
     def save_as(self, output_path: str | Path) -> Path:
-        output = Path(output_path)
+        """Copy workbook to ``output_path``.
+
+        Idempotent when ``output_path`` resolves to the current path (inputs are
+        already persisted by ``set_many`` / ``create``). Otherwise copies and
+        retargets ``self.path``.
+        """
+        output = Path(output_path).resolve()
+        current = Path(self.path).resolve()
+        if output == current:
+            return current
         output.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(self.path, output)
+        shutil.copyfile(current, output)
         self.path = output
         return output

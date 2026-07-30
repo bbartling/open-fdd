@@ -62,6 +62,13 @@ FIELD_ALIASES = {
         "pump_kwh": "boilrst.pump_kwh",
         "cost": "boilrst.cost",
     },
+    "ECM_Boiler_Replace": {
+        "therms": "boilrep.therms",
+        "old_eff": "boilrep.old_eff",
+        "new_eff": "boilrep.new_eff",
+        "cost": "boilrep.cost",
+        "load": "boilrep.load",
+    },
     "ECM_CHW_Reset": {
         "base_kwh": "chwrst.base_kwh",
         "reset_f": "chwrst.reset_f",
@@ -79,11 +86,32 @@ FIELD_ALIASES = {
         "pump_kwh": "cwrst.pump_kwh",
         "cost": "cwrst.cost",
     },
+    "ECM_DAT_Reset": {
+        "cool_kwh": "dat.cool_kwh",
+        "reset_f": "dat.reset_f",
+        "gain_per_f": "dat.gain_per_f",
+        "realization": "dat.realization",
+        "cost": "dat.cost",
+    },
     "ECM_Fan_Schedule": {
         "fan_kw": "fan_sched.fan_kw",
         "baseline_hours": "fan_sched.base_hours",
         "proposed_hours": "fan_sched.prop_hours",
         "cost": "fan_sched.cost",
+    },
+    "ECM_Cool_Schedule": {
+        "hours": "cool_sched.hours",
+        "tons": "cool_sched.tons",
+        "load_frac": "cool_sched.load_frac",
+        "kw_per_ton": "cool_sched.kw_per_ton",
+        "cost": "cool_sched.cost",
+    },
+    "ECM_Heat_Schedule": {
+        "hours": "heat_sched.hours",
+        "mbh": "heat_sched.mbh",
+        "load_frac": "heat_sched.load_frac",
+        "eff": "heat_sched.eff",
+        "cost": "heat_sched.cost",
     },
     "ECM_Optimal_Start": {
         "baseline_lead_min": "os.base_min",
@@ -102,6 +130,69 @@ FIELD_ALIASES = {
         "kw_per_ton": "econ.kwpt",
         "cost": "econ.cost",
     },
+    "ECM_Dewpoint_Econ": {
+        "chiller_hours": "dpe.run_hours",
+        "eligible_hours": "dpe.hours",
+        "realization": "dpe.realization",
+        "tons": "dpe.tons",
+        "load_fraction": "dpe.load",
+        "kw_per_ton": "dpe.kwpt",
+        "cost": "dpe.cost",
+    },
+    "ECM_DCV": {
+        "oa_cfm": "dcv.oa_cfm",
+        "reduction": "dcv.reduction",
+        "hours": "dcv.hours",
+        "heat_dt": "dcv.heat_dt",
+        "cool_dh": "dcv.cool_dh",
+        "heat_frac": "dcv.heat_frac",
+        "cool_frac": "dcv.cool_frac",
+        "heat_eff": "dcv.heat_eff",
+        "cop": "dcv.cop",
+        "cost": "dcv.cost",
+    },
+    "ECM_Energy_Recovery": {
+        "oa_cfm": "erv.oa_cfm",
+        "exchange_cfm": "erv.exchange_cfm",
+        "sens_eff": "erv.sens_eff",
+        "heat_dt": "erv.heat_dt",
+        "heat_hours": "erv.heat_hours",
+        "heat_eff": "erv.heat_eff",
+        "cool_dh": "erv.cool_dh",
+        "cool_hours": "erv.cool_hours",
+        "cop": "erv.cop",
+        "dp": "erv.dp",
+        "fan_eff": "erv.fan_eff",
+        "motor_kw": "erv.motor_kw",
+        "cost": "erv.cost",
+    },
+    "ECM_Occ_Sensors": {
+        "fan_kw": "occ.fan_kw",
+        "fan_hours": "occ.fan_hours",
+        "cool_kwh": "occ.cool_kwh",
+        "heat_therm": "occ.heat_therm",
+        "cost": "occ.cost",
+    },
+    "ECM_Unocc_OA_Heat": {
+        "cfm": "uoa_h.cfm",
+        "oa_base": "uoa_h.oa_base",
+        "oa_prop": "uoa_h.oa_prop",
+        "ra_t": "uoa_h.ra_t",
+        "oa_t": "uoa_h.oa_t",
+        "hours": "uoa_h.hours",
+        "eff": "uoa_h.eff",
+        "cost": "uoa_h.cost",
+    },
+    "ECM_Unocc_OA_Cool": {
+        "cfm": "uoa_c.cfm",
+        "oa_base": "uoa_c.oa_base",
+        "oa_prop": "uoa_c.oa_prop",
+        "h_oa": "uoa_c.h_oa",
+        "h_ra": "uoa_c.h_ra",
+        "hours": "uoa_c.hours",
+        "cop": "uoa_c.cop",
+        "cost": "uoa_c.cost",
+    },
     "ECM_Fan_VFD": {
         "design_kw": "fvfd.kw",
         "hours": "fvfd.hours",
@@ -118,7 +209,20 @@ FIELD_ALIASES = {
         "vfd_eff": "pvfd.vfd_eff",
         "cost": "pvfd.cost",
     },
+    "ECM_Dirty_Filter": {
+        "cfm": "filter.cfm",
+        "dp": "filter.dp",
+        "fan_eff": "filter.fan_eff",
+        "motor_eff": "filter.motor_eff",
+        "hours": "filter.hours",
+        "cost": "filter.cost",
+    },
 }
+
+
+def list_ecm_modules() -> list[str]:
+    """Friendly ``ECMJob.add_ecm`` names (not ``list_calculators()`` / ``calculate()``)."""
+    return sorted(MODULE_ALIASES)
 
 def _slug(name: str) -> str:
     clean = re.sub(r"[^A-Za-z0-9._-]+", "_", name.strip())
@@ -201,6 +305,11 @@ class ECMJob:
         return list(self._modules)
 
     def save(self, output_path: str | Path | None = None) -> Path:
+        """Return workbook path; copy when ``output_path`` differs.
+
+        Inputs are already flushed by ``set_global`` / ``add_ecm`` (``set_many``).
+        ``save()`` and ``save(self.path)`` are idempotent (BUG-OFDD-ECM-002).
+        """
         if output_path is not None:
             return self._book.save_as(output_path)
         return Path(self.path)
