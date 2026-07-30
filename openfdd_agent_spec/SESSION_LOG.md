@@ -4,6 +4,12 @@ Newest first. Append after non-trivial agent work.
 
 ---
 
+## 2026-07-30 — Twin dial AI context pointer (FDD → vibe20)
+
+- Added `docs/mcp-agents/fdd-ops-to-twin-knobs.md` (pointer-only; no E+ ownership).
+- Linked from mcp-agents index + companion WattLab/EnergyPlus (ops/reheat skills).
+- Docs-only; G14 dial recipe lives in vibe20 `BUG_REPORT_TWIN_DIAL_AI_CONTEXT.md`.
+
 ## 2026-07-30 — Liberty soak turnkey closeout
 
 - Merged open-fdd #601 → master `f904715` / GHCR `sha-f904715` (`f9047154dab631f0fecf81094bcc177c23c69712`).
