@@ -52,35 +52,22 @@ The platform includes:
 - Optional **external** agent integration via MCP stdio and JWT REST (no embedded chatbot)
 - Docker compose **build recipes** published to GitHub Container Registry
 
-Open-FDD ships several compose recipes. **What works today** vs **what is still in flight**:
+Open-FDD ships compose recipes for lab and production-shaped stacks.
 
-### CSV-only (ready)
+### CSV-only (ready today)
 
 `central` + `ui` — bulk CSV / zip packages, historian, DataFusion FDD, Streamlit.
-No MQTT or fieldbus images required. Prefer this for lab soaks and agent workflows.
+No MQTT or fieldbus required. Prefer this for lab soaks and agent workflows.
 
-### Central hub (ready for analytics; OT edge later)
+`central` (+ optional `mqtt` + `ui`) also covers JWT API hub soaks without OT drivers.
 
-`mqtt` + `central` + `ui` — LAN or cloud hub: JWT API, Feather historian, FDD, UI.
+### Roadmap — OT edge / MQTTS (not ready in any build yet)
 
-Broker: `openfdd-mqtt` is **Mosquitto** with TLS (**MQTTS**). Future remote edges will
-publish telemetry to this broker; central will consume from it (edges will not expose
-central REST on the public internet).
-
-### Standalone (compose present; fieldbus OT not ready)
-
-`mqtt` + `central` + `ui` + `fieldbus` on one host is the intended all-on-edge
-layout (internal MQTTS + OT drivers + analytics). The **fieldbus / OT driver path
-is not ready in any current build** — treat standalone as “hub + broker today,”
-with live BACnet/Modbus/Haystack/JSON ingest landing soon.
-
-### Fieldbus edge only (not ready — any build)
-
-**Not ready yet** in nightly, beta, or local builds — reserved for a near-term
-release. Planned shape: a remote IoT edge speaking **JSON API**, **BACnet**,
-**Modbus**, and **Haystack**, forwarding points to a remote Open-FDD **central**
-(cloud or LAN) over **MQTTS** via the Mosquitto broker above. Do not run
-`./scripts/openfdd_stack_up.sh edge` expecting a supported product path today.
+Soon: remote IoT edges speaking **JSON API**, **BACnet**, **Modbus**, and
+**Haystack**, publishing to a Mosquitto **MQTTS** broker (`openfdd-mqtt`); central
+consumes from the broker (no public REST to the edge). Standalone
+(`mqtt`+`central`+`ui`+`fieldbus`) and `stack_up.sh edge` are placeholders until
+that path ships — do not treat them as supported product recipes today.
 
 ---
 
