@@ -5,7 +5,6 @@ from typing import Any
 import re
 
 from .algorithms import calculate
-from .honesty_export import build_honesty_workbook
 from .workbook import OpenFDDECMWorkbook
 
 MODULE_ALIASES = {
@@ -369,6 +368,8 @@ class ECMJob:
         """
         target = Path(output_path) if output_path is not None else Path(self.path)
         if self._export_honesty or self._twin_compare is not None:
+            from .honesty_export import build_honesty_workbook
+
             return build_honesty_workbook(
                 target,
                 twin_payload=self._twin_compare,

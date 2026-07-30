@@ -34,7 +34,9 @@ keywords = [
     "building-automation",
     "open-fdd",
 ]
-dependencies = []
+dependencies = [
+    "openpyxl>=3.1.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/bbartling/open-fdd"
