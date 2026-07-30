@@ -57,8 +57,9 @@ Twin export API, massing PNG, `shell_summary`, schedule grids, Jobs “current T
 ## Close criteria (sales-ready)
 
 - [x] PyPI **4.1.2** (save / list_ecm_modules / FIELD_ALIASES) + **4.2.0** (007 modules, 009 honesty, 018 FITTED)
+- [x] BUG-ECM-019 wattlab dual-AHU `sat_reset` (playground #74); open-fdd UI picks via `WATTLAB_PIP_SPEC` on next GHCR bake  
 - [ ] open-fdd release notes cite PyPI bump with 018/019  
-- [ ] Demo: Measures `%` columns + Industry_Screening; SAT positive after patch (019 wattlab)  
+- [ ] Demo: Measures `%` columns + Industry_Screening; SAT positive after patch  
 - [ ] Compare UI copy matches honesty rules (no fake BALLPARK)  
 - [x] vibe apps marked frozen in internal runbooks / upsell brief  
 
