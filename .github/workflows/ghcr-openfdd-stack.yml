@@ -148,8 +148,9 @@ jobs:
           build-args: |
             OPENFDD_GIT_SHA=${{ github.sha }}
             OPENFDD_IMAGE_TAG=sha-${{ steps.vars.outputs.short_sha }}
+            WATTLAB_PIP_SPEC=git+https://github.com/bbartling/py-bacnet-stacks-playground.git@develop#subdirectory=vibe_code_apps_20
           labels: |
-            org.opencontainers.image.title=Open-FDD UI (Streamlit vibe19)
+            org.opencontainers.image.title=Open-FDD UI (Streamlit + WattLab)
             org.opencontainers.image.source=https://github.com/bbartling/open-fdd
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.vars.outputs.version }}

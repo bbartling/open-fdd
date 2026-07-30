@@ -62,18 +62,25 @@ def _ensure_dt_index(d: pd.DataFrame) -> pd.DataFrame:
 
 
 def _mark_forward_windows(idx: pd.DatetimeIndex, event_mask: pd.Series, win: pd.Timedelta) -> np.ndarray:
-    """True where sample time is within [event, event+win] for any event. O(n log m)."""
+    """True where sample time is within [event, event+win] for any event. O(n log m).
+
+    Uses the DatetimeIndex's own tick unit (ns/us/ms) — hardcoding nanoseconds
+    breaks on pandas 2.2+ microsecond indexes (startup windows never expire).
+    """
     n = len(idx)
     out = np.zeros(n, dtype=bool)
     if n == 0 or not bool(event_mask.any()):
         return out
     times = np.asarray(idx.asi8)
-    win_ns = int(win.total_seconds() * 1e9)
+    unit = getattr(idx, "unit", None) or "ns"
+    win_ticks = int(pd.Timedelta(win) / pd.Timedelta(1, unit=unit))
+    if win_ticks < 0:
+        win_ticks = 0
     event_times = np.sort(times[event_mask.reindex(idx).fillna(False).to_numpy()])
     if len(event_times) == 0:
         return out
     # sample t is covered iff some event e with e <= t <= e+win  ⟺  e in [t-win, t]
-    left = np.searchsorted(event_times, times - win_ns, side="left")
+    left = np.searchsorted(event_times, times - win_ticks, side="left")
     right = np.searchsorted(event_times, times, side="right")
     return right > left
 
