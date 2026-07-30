@@ -47,34 +47,40 @@ The platform includes:
 - JWT authentication and a modern **Streamlit** engineering UI (`openfdd-ui`)
 - Apache Arrow & Feather columnar data storage
 - Apache DataFusion SQL analytics and fault detection (59 cookbook rules; 63 SQL registry IDs)
-- BACnet, Modbus, Haystack, and JSON API drivers (fieldbus container)
+- BACnet, Modbus, Haystack, and JSON API drivers (fieldbus container — **coming soon**; not production-ready in current builds)
 - Interactive plotting, dashboards, and CSV job workflows
 - Optional **external** agent integration via MCP stdio and JWT REST (no embedded chatbot)
 - Docker compose **build recipes** published to GitHub Container Registry
 
-Open-FDD supports flexible deployment recipes:
+Open-FDD ships several compose recipes. **What works today** vs **what is still in flight**:
 
-### Standalone (all-on-edge)
+### CSV-only (ready)
 
-`mqtt` + `central` + `ui` + `fieldbus` on one host — internal MQTTS, full OT + analytics.
+`central` + `ui` — bulk CSV / zip packages, historian, DataFusion FDD, Streamlit.
+No MQTT or fieldbus images required. Prefer this for lab soaks and agent workflows.
 
-### Central hub
+### Central hub (ready for analytics; OT edge later)
 
-`mqtt` + `central` + `ui` — cloud or LAN hub; remote fieldbus edges attach over MQTTS.
+`mqtt` + `central` + `ui` — LAN or cloud hub: JWT API, Feather historian, FDD, UI.
 
-### Fieldbus edge only
+Broker: `openfdd-mqtt` is **Mosquitto** with TLS (**MQTTS**). Future remote edges will
+publish telemetry to this broker; central will consume from it (edges will not expose
+central REST on the public internet).
 
-**Not ready yet** — reserved for a future release. Planned shape: a remote IoT
-edge speaking **JSON API**, **BACnet**, **Modbus**, and **Haystack**, forwarding
-telemetry to a remote Open-FDD **central** (cloud or LAN) over **MQTTS**.
+### Standalone (compose present; fieldbus OT not ready)
 
-Broker: the `openfdd-mqtt` image (Mosquitto) terminates TLS MQTTS for edge↔central
-ingest; edges do not talk to central REST over the public internet — they publish
-to the broker, and central consumes from it.
+`mqtt` + `central` + `ui` + `fieldbus` on one host is the intended all-on-edge
+layout (internal MQTTS + OT drivers + analytics). The **fieldbus / OT driver path
+is not ready in any current build** — treat standalone as “hub + broker today,”
+with live BACnet/Modbus/Haystack/JSON ingest landing soon.
 
-### CSV-only
+### Fieldbus edge only (not ready — any build)
 
-`central` + `ui` — bulk CSV jobs and FDD without pulling mqtt or fieldbus images.
+**Not ready yet** in nightly, beta, or local builds — reserved for a near-term
+release. Planned shape: a remote IoT edge speaking **JSON API**, **BACnet**,
+**Modbus**, and **Haystack**, forwarding points to a remote Open-FDD **central**
+(cloud or LAN) over **MQTTS** via the Mosquitto broker above. Do not run
+`./scripts/openfdd_stack_up.sh edge` expecting a supported product path today.
 
 ---
 
@@ -99,7 +105,7 @@ Rules use generic Haystack semantic roles, so they are portable across any model
 |-------|------|
 | [`ghcr.io/bbartling/openfdd-central`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-central) | MQTTS ingest, Feather historian, FDD registry, REST API |
 | [`ghcr.io/bbartling/openfdd-ui`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-ui) | Streamlit operator UI (vibe19 + WattLab export → central) |
-| [`ghcr.io/bbartling/openfdd-fieldbus`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-fieldbus) | BACnet / Modbus / Haystack edge |
+| [`ghcr.io/bbartling/openfdd-fieldbus`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-fieldbus) | BACnet / Modbus / Haystack / JSON edge (**not ready** — image may publish; product path soon) |
 | [`ghcr.io/bbartling/openfdd-mqtt`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mqtt) | Mosquitto MQTTS broker |
 | [`ghcr.io/bbartling/openfdd-mcp`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp) | Optional slim MCP stdio sidecar → central API |
 
@@ -119,9 +125,9 @@ export OPENFDD_ADMIN_PASSWORD='change-me'
 ### Other recipes
 
 ```bash
-./scripts/openfdd_stack_up.sh csv          # central + ui only
-./scripts/openfdd_stack_up.sh central      # hub without fieldbus
-./scripts/openfdd_stack_up.sh edge         # fieldbus only (set OPENFDD_MQTT_HOST)
+./scripts/openfdd_stack_up.sh csv          # central + ui only (recommended today)
+./scripts/openfdd_stack_up.sh central      # hub + mqtt broker (no fieldbus)
+./scripts/openfdd_stack_up.sh edge         # fieldbus-only — not a supported path yet
 ```
 
 See [Build recipes](docs/operations/build-recipes.md) and [docker/VERSION_MANIFEST.md](docker/VERSION_MANIFEST.md).
