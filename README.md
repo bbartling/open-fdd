@@ -41,8 +41,6 @@
 
 Open-FDD is an open-source analytics platform for building automation that combines **semantic knowledge graph modeling**, **live operational technology (OT) data**, and **high-performance columnar analytics**.
 
-**PyPI (`pip install open-fdd`):** ECM workbooks + optional pandas oracle (`open-fdd[oracle]` / `[reporting]` / `[vibe19]`). See [docs/ecm](docs/ecm/README.md) and [pandas cookbook](docs/rules/cookbook/pandas-cookbook.md). **FDD** (DataFusion SQL) ships via the **GHCR container stack**, not as the default PyPI runtime.
-
 The platform includes:
 
 - Semantic building modeling using **Project Haystack** knowledge graphs
@@ -132,6 +130,23 @@ docker run -i --rm --network host \
 ```
 
 Full tool list: [mcp/README.md](mcp/README.md).
+
+---
+
+## PyPI package (`pip install open-fdd`)
+
+The [PyPI package](https://pypi.org/project/open-fdd/) is a **library** surface — not a substitute for the operator stack.
+
+| Install | What you get |
+|---------|----------------|
+| `pip install open-fdd` | ECM engineering helpers / workbook builders |
+| `pip install "open-fdd[oracle]"` | Optional pandas oracle for rule screening |
+| `pip install "open-fdd[reporting]"` | Engineering findings / report writers |
+| `pip install "open-fdd[vibe19]"` | vibe19-aligned pandas rule helpers |
+
+**FDD (DataFusion SQL)** — historian, registry, Streamlit UI, BACnet/Modbus — ships in the **GHCR container stack** (`openfdd-central` / `openfdd-ui` / …), not as the default PyPI runtime. Use `./scripts/openfdd_stack_up.sh` (above) for that path.
+
+Docs: [ECM](docs/ecm/README.md) · [pandas cookbook](docs/rules/cookbook/pandas-cookbook.md) · [DataFusion SQL cookbook](docs/rules/cookbook/datafusion-sql-cookbook.md)
 
 ---
 
