@@ -56,10 +56,11 @@ Twin export API, massing PNG, `shell_summary`, schedule grids, Jobs “current T
 
 ## Close criteria (sales-ready)
 
+- [x] PyPI **4.1.2** (save / list_ecm_modules / FIELD_ALIASES) + **4.2.0** (007 modules, 009 honesty, 018 FITTED)
 - [ ] open-fdd release notes cite PyPI bump with 018/019  
-- [ ] Demo: Measures `%` columns + Industry_Screening; SAT positive after patch  
+- [ ] Demo: Measures `%` columns + Industry_Screening; SAT positive after patch (019 wattlab)  
 - [ ] Compare UI copy matches honesty rules (no fake BALLPARK)  
-- [ ] vibe apps marked frozen in internal runbooks  
+- [x] vibe apps marked frozen in internal runbooks / upsell brief  
 
 **Workspace refs (port into PyPI, don’t productize in place):**  
 `ECM_FULL_PARITY.xlsx` · `tools/build_full_parity_ecm_workbook_v2.py` · `tools/patch_sat_reset_dual_ahu.py` · `reports/ecm_industry_method_gap.md`
