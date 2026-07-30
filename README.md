@@ -44,11 +44,18 @@ Open-FDD is an open-source analytics platform for building automation that combi
 The platform includes:
 
 - Semantic building modeling using **Project Haystack** knowledge graphs
-- JWT authentication and a modern **Streamlit** engineering UI (`openfdd-ui`)
-- Apache Arrow & Feather columnar data storage
+- JWT authentication and a modern **Streamlit** engineering UI (`openfdd-ui`) —
+  vibe19 FDD/RCx workflows + **WattLab** section (Fuel / Twin / ECMs pages when
+  the `wattlab` package is mounted; otherwise honest “runner not attached”)
+- Apache Arrow & Feather columnar data storage; multi-site Hive (`building_id`)
 - Apache DataFusion SQL analytics and fault detection (59 cookbook rules; 63 SQL registry IDs)
+- Engineering Findings HITL + central report drafts (detection ≠ finding)
+- ECM spreadsheet helpers on **PyPI** (`open_fdd.ecm_engineering`); Studio Compare
+  `ss_*` / cascade handoff when WattLab workspace is shared
+- **EnergyPlus twin / G14 calibrate / IDF** — **not** in-process here; stays in
+  vibe20 + EnergyPlus-MCP (see [WattLab companion](docs/mcp-agents/companion-wattlab-energyplus.md))
 - BACnet, Modbus, Haystack, and JSON API drivers (fieldbus container — **coming soon**; not production-ready in current builds)
-- Interactive plotting, dashboards, and CSV job workflows
+- Interactive plotting, dashboards, and CSV / zip package workflows
 - Optional **external** agent integration via MCP stdio and JWT REST (no embedded chatbot)
 - Docker compose **build recipes** published to GitHub Container Registry
 
