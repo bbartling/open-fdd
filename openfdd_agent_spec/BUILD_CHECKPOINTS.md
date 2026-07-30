@@ -120,7 +120,7 @@ Docs: [`MILESTONE_D_CLOSEOUT.md`](../docs/migration/MILESTONE_D_CLOSEOUT.md),
 
 # Liberty soak turnkey (2026-07-30) — post-064eadb
 
-**Status:** open-fdd PR #601 · playground #69 **merged** (`2323f28` on develop).
+**Status:** open-fdd PR **#601 open** (not merged) · playground #69 **merged** (`2323f28` on develop).
 
 - [x] Phase 0 — GH tidy + csv+caddy on `sha-064eadb`
 - [x] OFDD-070b economizer CTE + OFDD-076b `building_id`→`site_id`

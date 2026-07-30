@@ -15,7 +15,7 @@ Do not fork parallel truth. Update existing audits when code changes.
 | [`BUILD_CHECKPOINTS.md`](../BUILD_CHECKPOINTS.md) | Milestone + Liberty soak checklist |
 
 **Tip under Liberty turnkey:** playground develop `2323f28` (BUG-ECM-015 + ERV stub).
-open-fdd tip advances on merge of PR #601 (was `064eadbc` / `sha-064eadb`).
+open-fdd PR **#601 is still open** — tip advances on merge (was `064eadbc` / `sha-064eadb`).
 
 ---
 
