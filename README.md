@@ -39,11 +39,13 @@
 
 > **Open-source semantic building analytics and HVAC supervisory fault detection. Local-first. On-premises. Vendor-neutral. Free to run at the edge or offline.**
 
-Open-FDD is an open-source analytics platform for building automation that combines **semantic knowledge graph modeling**, **live operational technology (OT) data**, and **high-performance columnar analytics**.
+Open-FDD is an open-source analytics platform for building automation that combines **Haystack-style semantic point roles** (JSON site/equipment maps), **live or historical OT/CSV data**, and **high-performance columnar analytics**.
 
 The platform includes:
 
-- Semantic building modeling using **Project Haystack** knowledge graphs
+- Building point modeling with **Project Haystack–style tags and roles** in JSON
+  (`column_map` / package maps — equipment → tags → CSV columns). Optional RDF/Turtle
+  + SPARQL views exist on the model API; they are **not** the primary CSV/FDD path
 - JWT authentication and a modern **Streamlit** engineering UI (`openfdd-ui`) —
   vibe19 FDD/RCx workflows + **WattLab** section (Fuel / Twin / ECMs pages when
   the `wattlab` package is mounted; otherwise honest “runner not attached”)
