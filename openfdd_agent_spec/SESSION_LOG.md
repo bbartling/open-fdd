@@ -66,3 +66,12 @@ Newest first. Append after non-trivial agent work.
 ## 2026-07-28 — Milestone B Jobs (B1–B8 core)
 
 - B1 job_store contract; B2 central /api/jobs; runs/stale/fingerprints; UI prefers central; findings + WattLab handoff helpers; closeout docs.
+
+## 2026-07-30 — vibe freeze / open-fdd cutover
+
+- **Freeze:** no further vibe19/vibe20 app tip features after today.
+- **Product:** open-fdd GHCR UI (WattLab) + PyPI `open_fdd.ecm_engineering` + EnergyPlus-MCP companion.
+- Docs: README cutover blurb; companion + FDD→Twin knobs rewritten off vibe Studio SoT.
+- Golden ECM: `examples/liberty_dual_ahu/ECM_FULL_PARITY.xlsx` + `docs/ecm/OPENFDD_AGENT_ECM_HANDOFF.md`.
+- PR: #607 (WattLab bake git + cutover docs + example).
+

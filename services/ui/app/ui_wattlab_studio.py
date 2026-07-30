@@ -142,7 +142,7 @@ def render_wattlab_section(*, building_id: str | None = None) -> None:
         list(WATTLab_PAGES),
         horizontal=True,
         key="wattlab_studio_page",
-        help="Uploads → Fuel → Twin → ECMs (same spine as vibe20 Studio).",
+        help="Uploads → Fuel → Twin → ECMs (open-fdd WattLab product path).",
     )
 
     profile: dict[str, Any] = {}
@@ -177,7 +177,8 @@ def render_wattlab_section(*, building_id: str | None = None) -> None:
     if not rendered and page != "ECMs":
         st.warning(
             f"**{page}** UI requires the `wattlab` package in the openfdd-ui image "
-            "(Option A embed). Until then use vibe20 Studio on `:8520` or install wattlab."
+            "(baked via WATTLAB_PIP_SPEC on GHCR, or compose.wattlab mount). "
+            "Recreate UI from tip nightly/sha; do not fall back to frozen vibe apps."
         )
         docker_sock = os.path.exists("/var/run/docker.sock")
         st.caption(
