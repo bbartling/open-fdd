@@ -267,24 +267,32 @@ pub fn create_draft(body: &Value) -> Value {
     for plot in suggested_plot_blocks() {
         sections.push(plot);
     }
+    // Prefer explicit `kind` over `template_id` so mixed payloads stay discoverable
+    // (e.g. template_id=validation-summary with kind=engineering_findings).
+    let kind = body
+        .get("kind")
+        .and_then(|v| v.as_str())
+        .unwrap_or(template);
     let report_type = body
         .get("report_type")
         .and_then(|v| v.as_str())
-        .unwrap_or(template);
+        .unwrap_or(kind);
     let doc = json!({
         "ok": true,
         "report_id": report_id,
         "title": title,
         "template_id": template,
         "report_type": report_type,
-        "kind": template,
+        "kind": kind,
         "created_at": Utc::now().to_rfc3339(),
         "updated_at": Utc::now().to_rfc3339(),
         "sections": sections,
+        "summary": body.get("summary").cloned().unwrap_or(json!(null)),
         "metadata": {
             "generator": "open-fdd-rust-report-builder",
             "template_id": template,
             "report_type": report_type,
+            "kind": kind,
             "pdf_ready": false
         }
     });
@@ -595,6 +603,7 @@ pub fn list_reports() -> Value {
                 "report_type": meta
                     .get("report_type")
                     .or_else(|| doc.get("report_type"))
+                    .or_else(|| doc.get("kind"))
                     .or_else(|| meta.get("template_id"))
                     .or_else(|| doc.get("template_id"))
                     .cloned()
@@ -899,16 +908,20 @@ mod tests {
             "title": "Engineering Findings",
             "kind": "engineering_findings",
             "template_id": "engineering_findings",
-            "report_type": "engineering_findings"
+            "report_type": "engineering_findings",
+            "summary": {"faults": 3, "note": "soak"}
         }));
         assert_eq!(doc["ok"], true, "draft error: {:?}", doc.get("error"));
         assert_eq!(doc["template_id"], "engineering_findings");
         assert_eq!(doc["report_type"], "engineering_findings");
+        assert_eq!(doc["kind"], "engineering_findings");
+        assert_eq!(doc["summary"]["faults"], 3);
         let listed = list_reports();
         let records = listed["records"].as_array().cloned().unwrap_or_default();
         assert!(
             records.iter().any(|r| {
-                r.get("report_type")
+                r.get("kind")
+                    .or_else(|| r.get("report_type"))
                     .or_else(|| r.get("template_id"))
                     .and_then(|v| v.as_str())
                     .map(|t| t.contains("engineering_finding"))
@@ -916,6 +929,22 @@ mod tests {
             }),
             "engineering_findings missing from list: {listed}"
         );
+
+        // kind must win over a mismatched template_id for discoverability.
+        let mixed = create_draft(&json!({
+            "title": "Mixed",
+            "template_id": "validation-summary",
+            "kind": "engineering_findings"
+        }));
+        assert_eq!(
+            mixed["ok"],
+            true,
+            "mixed draft error: {:?}",
+            mixed.get("error")
+        );
+        assert_eq!(mixed["template_id"], "validation-summary");
+        assert_eq!(mixed["kind"], "engineering_findings");
+        assert_eq!(mixed["report_type"], "engineering_findings");
         std::env::remove_var("OPENFDD_WORKSPACE");
         let _ = std::fs::remove_dir_all(tmp);
     }

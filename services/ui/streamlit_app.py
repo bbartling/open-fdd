@@ -1651,9 +1651,15 @@ def _render_site_selector() -> None:
         st.rerun()
 
 
-def _delete_site_and_clear() -> None:
-    """Delete the Active site's Feathers + results (confirm via sidebar checkbox)."""
+def _delete_site_and_clear() -> bool:
+    """Delete the Active site's Feathers + results (confirm via sidebar checkbox).
+
+    Returns True only when deletion completed so the caller can ``st.rerun()``.
+    """
+    import logging
     from app import central_client
+
+    _logger = logging.getLogger(__name__)
 
     dataset_id = (
         st.session_state.get("active_site")
@@ -1663,19 +1669,19 @@ def _delete_site_and_clear() -> None:
     ).strip()
     if not dataset_id:
         st.sidebar.warning("No site selected — nothing to delete")
-        return
+        return False
     if not st.session_state.get("_confirm_delete_site"):
         st.sidebar.error(
             f"Confirm delete for `{dataset_id}`: check **Confirm delete** below, then click Delete again."
         )
-        return
+        return False
     result = central_client.delete_dataset(dataset_id)
     if result.get("central_down"):
         st.sidebar.warning(result.get("error") or "central unreachable")
-        return
+        return False
     if not result.get("ok", False):
         st.sidebar.warning(result.get("error") or f"delete failed for `{dataset_id}`")
-        return
+        return False
 
     from app.browser_session import clear_browser_session_pointer
     from app.package_io import wipe_workdir
@@ -1695,15 +1701,16 @@ def _delete_site_and_clear() -> None:
                     import json
 
                     meta = json.loads(meta_path.read_text(encoding="utf-8"))
-                except Exception:
+                except Exception as exc:
+                    _logger.debug("skip unreadable job meta %s: %s", meta_path, exc)
                     continue
                 sid = str(meta.get("site_id") or meta.get("building_name") or "")
                 if sid == dataset_id:
                     import shutil
 
                     shutil.rmtree(meta_path.parent, ignore_errors=True)
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("job-folder cascade cleanup failed for %s: %s", dataset_id, exc)
 
     _purge_site(st.session_state.get("active_site") or dataset_id)
     _purge_site(dataset_id)
@@ -1737,6 +1744,7 @@ def _delete_site_and_clear() -> None:
         st.session_state.pop("central_dataset_id", None)
         st.sidebar.success(f"Deleted site `{dataset_id}`")
     st.session_state.zip_uploader_key = int(st.session_state.get("zip_uploader_key", 0)) + 1
+    return True
 
 
 def _commit_frames(
@@ -2124,13 +2132,13 @@ def _load_data(cfg: AppConfig) -> None:
             help="Purge Feathers + FDD results for the Active site (building_id). Other sites untouched.",
         )
         st.sidebar.checkbox(
-            f"Confirm delete Active site",
+            "Confirm delete Active site",
             key="_confirm_delete_site",
             help="Required before Delete… removes historian Feathers + rule_results for that building only.",
         )
         if delete_clicked:
-            _delete_site_and_clear()
-            st.rerun()
+            if _delete_site_and_clear():
+                st.rerun()
         if load_clicked and zip_files:
             wipe_workdir(st.session_state.get("upload_workdir"))
             st.session_state.upload_workdir = None

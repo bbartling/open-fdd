@@ -30,7 +30,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 ARG WATTLAB_PIP_SPEC=
 RUN if [ -n "$WATTLAB_PIP_SPEC" ]; then pip install --no-cache-dir "$WATTLAB_PIP_SPEC"; fi
 
-ENV WATTLAB_STUDIO_WORKSPACE=/data
+# Do not bake WATTLAB_STUDIO_WORKSPACE here — compose.wattlab.yml sets it when
+# /data is actually mounted; a baked ENV would defeat the UI mount warning.
 
 COPY . .
 

@@ -6,7 +6,8 @@ nav_order: 45
 
 # Catalog pandas ↔ DataFusion SQL parity — one-pass residuals
 
-**Date:** 2026-07-29 · **Scope:** best-effort alignment; honest residuals — not “all 63 proven.”
+**Date:** 2026-07-30 · **Scope:** best-effort alignment; honest residuals — not “all 63 proven.”
+**Updated:** Liberty soak deltas from `parity_hunt_20260730T003200Z` (tip `sha-064eadb`).
 
 Machine-readable claims remain `parity_status` in `sql_rules/registry.yaml`.
 This page records the one-pass inventory after SCHED-1 zone-comfort (PR C).

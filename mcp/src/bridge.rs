@@ -570,9 +570,9 @@ impl BridgeClient {
             "energyplus_mcp": "Use EnergyPlus-MCP + tools/ for IDF edits — openfdd-mcp is pointer-only.",
             "dual_site_checklist": [
                 "openfdd_datasets — confirm BUILDING_50 and BUILDING_100 distinct",
-                "openfdd_fdd_accuracy_snapshot with Active site scope",
-                "openfdd_historian_query site_id=B50 vs B100",
-                "GET /api/reports/engineering-findings after findings draft"
+                "openfdd_fdd_accuracy_snapshot is global (registry/equipment/results) — not site-scoped",
+                "openfdd_historian_query site_id=BUILDING_50 vs BUILDING_100",
+                "openfdd_reports_draft needs OPENFDD_MCP_ALLOW_WRITES=1 + confirm:true; then GET /api/reports/engineering-findings"
             ]
         })
     }

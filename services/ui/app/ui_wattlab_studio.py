@@ -32,7 +32,8 @@ def _try_import_page(mod_name: str):
         import importlib
 
         return importlib.import_module(f"wattlab.studio.pages.{mod_name}")
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
+        # Missing package / page only — surface other import-time bugs to the UI.
         return None
 
 

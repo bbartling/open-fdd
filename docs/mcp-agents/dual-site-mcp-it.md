@@ -12,9 +12,9 @@ Use after csv(+caddy) stack is up on tip `sha-*` with Liberty B50 + B100 loaded.
 
 | Case | Assert |
 |------|--------|
-| **A** Accuracy | `openfdd_fdd_accuracy_snapshot` for Active `BUILDING_50` ≠ `BUILDING_100` (distinct equipment / FAULT totals). |
-| **B** Historian | `openfdd_historian_query` with `site_id` / building filter returns scoped rows only. |
-| **C** Findings | After Eng Findings generate (or `openfdd_reports_draft` with `kind=engineering_findings`), `GET /api/reports/engineering-findings` → **200**. |
+| **A** Sites distinct | `openfdd_datasets` (or equipment list) shows distinct canonical IDs `BUILDING_50` vs `BUILDING_100`. Note: `openfdd_fdd_accuracy_snapshot` is **global** registry/result parity — not per-site. |
+| **B** Historian | `openfdd_historian_query` with `site_id=BUILDING_50` vs `BUILDING_100` returns scoped rows only. |
+| **C** Findings | With `OPENFDD_MCP_ALLOW_WRITES=1` on the MCP server, call `openfdd_reports_draft` with `confirm:true` and `kind=engineering_findings` (or Eng Findings UI generate); then `GET /api/reports/engineering-findings` → **200**. |
 
 ## Pointers (OFDD-MCP-CTX)
 

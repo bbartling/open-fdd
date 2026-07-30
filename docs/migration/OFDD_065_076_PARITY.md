@@ -6,8 +6,9 @@ nav_order: 40
 
 # OFDD 065–076 parity register
 
-**Date:** 2026-07-29 · Branches `fix/ofdd-gate-a-sites-sql-413` (Gate A) →
-`fix/ofdd-gate-b-c-findings-ecm` (Gate B + Gate C, built on the Gate A tip)
+**Date:** 2026-07-30 · Branches `fix/ofdd-gate-a-sites-sql-413` (Gate A) →
+`fix/ofdd-gate-b-c-findings-ecm` (Gate B + Gate C, built on the Gate A tip).
+**Updated:** Liberty soak `parity_hunt_20260730T003200Z` residuals filled below.
 
 Tracks the Liberty B50/B100 parity hunt tickets OFDD-065…076 across the three
 gates defined in the combined vibe19+vibe20 plan. This file records **VERIFIED**

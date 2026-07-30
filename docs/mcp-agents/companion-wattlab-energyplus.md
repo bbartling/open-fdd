@@ -57,12 +57,20 @@ D. ECM Excel / Compare       →  vibe20 + tools/ scripts
 
 Wire **both** servers. openfdd-only = FDD-blind-to-Twin.
 
+Point `OPENFDD_API_BASE` at a **reachable LAN/VPN** Central (not the MCP container’s loopback unless you use `--network host`). Inject the integrator JWT via env — do **not** paste tokens into checked-in snippets.
+
 ```json
 {
   "mcpServers": {
     "openfdd": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "ghcr.io/bbartling/openfdd-mcp:nightly"]
+      "args": [
+        "run", "--rm", "-i", "--network", "host",
+        "-e", "OPENFDD_API_BASE=http://127.0.0.1:8080",
+        "-e", "OPENFDD_MCP_TOKEN",
+        "ghcr.io/bbartling/openfdd-mcp:nightly"
+      ],
+      "env": { "OPENFDD_MCP_TOKEN": "<integrator JWT>" }
     },
     "energyplus": {
       "command": "docker",
@@ -75,5 +83,7 @@ Wire **both** servers. openfdd-only = FDD-blind-to-Twin.
   }
 }
 ```
+
+Inside Compose, use `OPENFDD_API_BASE=http://central:8080` (or the published Caddy URL on the LAN) instead of host loopback.
 
 See also: [mcp.md](mcp.md), [cursor-openclaw.md](cursor-openclaw.md), root `mcp/INSTRUCTIONS.md`.
