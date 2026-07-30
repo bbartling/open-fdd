@@ -38,6 +38,20 @@ Twin / WattLab Studio / EnergyPlus patch + notebook builder code primarily lives
 
 ---
 
+## PyPI `open_fdd.ecm_engineering` (OFDD train)
+
+| ID | Status | Summary |
+|----|--------|---------|
+| **BUG-OFDD-ECM-002** | Fixed in **4.1.2** | `ECMJob.save(same_path)` no longer raises `SameFileError`; inputs already persist via `set_many`. |
+| **BUG-OFDD-ECM-003** | Fixed in **4.1.2** | `list_ecm_modules()` — `add_ecm` names; distinct from `list_calculators()`. |
+| **BUG-OFDD-ECM-012** | Fixed in **4.1.2** | Expanded `FIELD_ALIASES` for DAT/SAT, ERV, occ, econ, schedules, DCV, etc. |
+| **BUG-OFDD-ECM-007** | Open → **4.2.0** | Missing `chiller_lockout` / `load_shed` / `schedule_align` modules. |
+| **BUG-OFDD-ECM-009** | Open → **4.2.0** | Honesty export: Contents / Provenance / Inputs / Industry_Screening / Measures (+ Demand). |
+| **BUG-ECM-018** | Open → **4.2.0** | FITTED vs BALLPARK honesty (see open bugs). |
+| **BUG-ECM-019** | Open → wattlab | Dual-AHU `sat_reset` preserve-dump (playground package bake). |
+
+---
+
 ## Fixed
 
 | ID | Notes |

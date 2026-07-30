@@ -62,10 +62,21 @@ job = (
     )
 )
 
+# set_many / add_ecm already persist; save() is idempotent on the same path
+# (BUG-OFDD-ECM-002) and can also copy to another path.
 job.save("Lincoln_Middle_School_ECMs.xlsx")
 ```
 
 The resulting XLSX contains the engineering inputs and formulas for human review.
+
+### Module names vs calculators
+
+```python
+from open_fdd.ecm_engineering import list_ecm_modules, list_calculators
+
+list_ecm_modules()   # names accepted by add_ecm (aliases included)
+list_calculators()   # independent Python benchmarks (job.calc), not sheet names
+```
 
 ## Independent benchmark
 

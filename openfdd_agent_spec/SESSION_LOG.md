@@ -4,6 +4,14 @@ Newest first. Append after non-trivial agent work.
 
 ---
 
+## 2026-07-30 — PyPI ECM bugfix train (4.1.2)
+
+- BUG-OFDD-ECM-002: `save_as` same-path guard (no `SameFileError`).
+- BUG-OFDD-ECM-003: `list_ecm_modules()` exported; docs vs `list_calculators()`.
+- BUG-OFDD-ECM-012: expanded `FIELD_ALIASES` for DAT/SAT, ERV, occ, econ, schedules, …
+- Version bump **4.1.1 → 4.1.2**; publish workflow assert updated.
+- Tests: `test_job_save_same_path`, `test_list_ecm_modules`.
+
 ## 2026-07-30 — Twin dial AI context pointer (FDD → vibe20)
 
 - Added `docs/mcp-agents/fdd-ops-to-twin-knobs.md` (pointer-only; no E+ ownership).

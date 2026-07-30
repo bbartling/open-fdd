@@ -84,7 +84,7 @@ jobs:
           import open_fdd
           from open_fdd.ecm_engineering import ECMJob
           from open_fdd.rules import CANONICAL_RULE_COUNT, RULES_BY_ID
-          assert open_fdd.__version__ == "4.1.1"
+          assert open_fdd.__version__ == "4.1.2"
           assert CANONICAL_RULE_COUNT == 59
           assert "SCHED-1" in RULES_BY_ID
           out = Path(tempfile.mkdtemp()) / "smoke.xlsx"
