@@ -2,7 +2,6 @@
 from .algorithms import calculate, list_calculators
 from .crosscheck import crosscheck
 from .finance import npv, simple_payback
-from .honesty_export import build_honesty_workbook
 from .honesty_status import MeasureHonestyStatus, classify_measure_status
 from .job import ECMJob, list_ecm_modules
 from .provenance import EvidenceValue, ProvenanceClass
@@ -15,6 +14,13 @@ from .contracts import (
 )
 from .calc_trace import CalculationTrace
 from .stage2_workbook import build_stage2_workbook
+
+
+def build_honesty_workbook(*args, **kwargs):
+    from .honesty_export import build_honesty_workbook as _build
+
+    return _build(*args, **kwargs)
+
 
 __all__ = [
     "calculate",

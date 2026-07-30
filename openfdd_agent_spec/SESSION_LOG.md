@@ -4,6 +4,10 @@ Newest first. Append after non-trivial agent work.
 
 ---
 
+## 2026-07-30 — PyPI 4.2.0 publish fix (openpyxl)
+
+- Core dep `openpyxl`; lazy honesty_export import so wheel smoke / bare install works.
+
 ## 2026-07-30 — PyPI ECM bugfix train (4.2.0)
 
 - BUG-OFDD-ECM-007: toolkit modules `chiller_lockout` / `load_shed` / `schedule_align`.

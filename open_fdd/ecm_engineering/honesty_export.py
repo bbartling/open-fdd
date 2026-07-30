@@ -5,8 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from openpyxl import Workbook
-
 from .honesty_status import (
     MeasureHonestyStatus,
     classify_measure_status,
@@ -34,6 +32,8 @@ def build_honesty_workbook(
     Skips Cover, Formula_Trace, and Documentation dumps (fold into Contents).
     Emits Demand when ``twin_payload`` includes demand; Twin_Calibrate when attached.
     """
+    from openpyxl import Workbook
+
     payload = twin_payload or {}
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
