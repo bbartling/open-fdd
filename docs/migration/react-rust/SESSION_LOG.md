@@ -2,6 +2,13 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M3-01
+
+- Expanded design tokens + Streamlit-like shell geometry (`LAYOUT_GEOMETRY.md`).
+- Collapsible sidebar, title/caption, horizontal section tabs (REQUIRED_MAIN_SECTIONS order).
+- Alert + skeleton/spinner styles; AppShell component tests.
+- Next: P1-M3-02 widget primitives.
+
 ## 2026-07-31 — P1-M2-03
 
 - Documented async poll contract (`ASYNC_OPS.md`) aligned with jobs run statuses.

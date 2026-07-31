@@ -30,12 +30,27 @@ export function HomePage() {
   }, []);
 
   return (
-    <AppShell title="Home">
+    <AppShell
+      title="Home"
+      caption="React shell — Streamlit frame parity (P1-M3-01)"
+      activeSectionId="overview"
+    >
       <div className="page-placeholder">
         <h2>Welcome to Open-FDD</h2>
         <p>React UI shell — Phase 1 parity scaffold.</p>
-        {loading && <p className="loading">Loading capabilities…</p>}
-        {error && <div className="page-error">{error}</div>}
+        {loading && (
+          <div data-testid="home-loading">
+            <span className="spinner" aria-hidden />{" "}
+            <span className="loading">Loading capabilities…</span>
+            <div className="skeleton skeleton--title" />
+            <div className="skeleton skeleton--line" />
+          </div>
+        )}
+        {error && (
+          <div className="alert alert--danger" role="alert">
+            {error}
+          </div>
+        )}
         {contractVersion && (
           <p>
             Contract version:{" "}
