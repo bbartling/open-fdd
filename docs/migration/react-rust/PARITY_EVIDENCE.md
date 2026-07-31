@@ -2,6 +2,7 @@
 
 | date | capability_id | fixture hash | source commit | engine versions | result | mismatch class | PR |
 |------|---------------|--------------|---------------|-----------------|--------|----------------|-----|
+| 2026-07-31 | CAP-ERRORS / shell | LAYOUT_GEOMETRY.md + AppShell tests | branch `feat/p1-m3-01-layout-tokens` | Vite React shell | Frame tokens + section order + collapse; screenshots still deferred to visual harness | INTERACTION | P1-M3-01 |
 | 2026-07-31 | catalog (all CAP-*) | `tests/react_parity/manifest.json` | branch `feat/p1-m1-fixtures-oracle-baseline` | exporter schema `openfdd.react_parity.reference` | M1 fixtures + oracle byte-stable; interaction baseline NONVISUAL → M3 | — | P1-M1 / #615 |
 
 ## M1 gate checklist

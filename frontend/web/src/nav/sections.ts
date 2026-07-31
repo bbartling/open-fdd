@@ -1,0 +1,23 @@
+/** Streamlit REQUIRED_MAIN_SECTIONS order (dashboard_contract.py). */
+export const MAIN_SECTIONS = [
+  { id: "overview", label: "Overview", path: "/" },
+  { id: "data-model", label: "Data Model", path: "/mapping" },
+  { id: "run-rules", label: "Run Rules", path: "/rules" },
+  { id: "results", label: "Results by Category", path: "/findings" },
+  { id: "fdd-plots", label: "FDD Plots", path: "/reports" },
+  { id: "rcx-plots", label: "RCx Plots", path: "/reports" },
+  { id: "metering", label: "Metering", path: "/reports" },
+  { id: "wattlab", label: "WattLab", path: "/wattlab" },
+] as const;
+
+/** Primary React routes (Jobs vertical slice ahead of Streamlit wiring). */
+export const SIDEBAR_NAV = [
+  { to: "/", label: "Home", short: "H", testId: "nav-home" },
+  { to: "/jobs", label: "Jobs", short: "J", testId: "nav-jobs" },
+  { to: "/upload", label: "Upload", short: "U", testId: "nav-upload" },
+  { to: "/mapping", label: "Mapping", short: "M", testId: "nav-mapping" },
+  { to: "/rules", label: "Rules", short: "R", testId: "nav-rules" },
+  { to: "/findings", label: "Findings", short: "F", testId: "nav-findings" },
+  { to: "/reports", label: "Reports", short: "P", testId: "nav-reports" },
+  { to: "/wattlab", label: "WattLab", short: "W", testId: "nav-wattlab" },
+] as const;
