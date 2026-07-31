@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M4-01
+
+- Typed `frontend/web/src/api/jobsApi.ts` for list/get/create/patch/archive/restore/duplicate against existing `/api/jobs*`.
+- `JobsPage` CRUD UI with archived toggle, URL-backed `?job=` selection, `meta_revision` patch conflicts, archive/restore/duplicate.
+- Vitest: `jobsApi.test.ts` + `JobsPage.test.tsx` (mocked API). Next: P1-M4-02 upload slice.
+
 ## 2026-07-31 — P1-M3-03
 
 - URL session translation (`?job=`, `?eq=`, `?site=`, `?wl=`, `?section=`) + form drafts in sessionStorage.

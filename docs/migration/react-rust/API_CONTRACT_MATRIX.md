@@ -22,7 +22,7 @@ Source: `services/central/src/routes.rs` at inventory time. Versioning/`/api/v1`
 | `/api/health` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/health, /api/health/stack |
 | `/api/host` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/host/stats |
 | `/api/ingest` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/ingest/stats |
-| `/api/jobs` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/jobs, /api/jobs/{job_id}, /api/jobs/{job_id}/archive, /api/jobs/{job_id}/dispositions (+9) |
+| `/api/jobs` | see OpenAPI | central | Phase 1 React | EXISTS | React consumer: `jobsApi.ts` + JobsPage (M4-01 list/create/patch/archive/restore/duplicate; revision conflict on PATCH) |
 | `/api/reports` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/reports, /api/reports/draft, /api/reports/engineering-findings, /api/reports/templates (+3) |
 
 ## Gaps for React (P1-M2+)
@@ -32,6 +32,6 @@ Source: `services/central/src/routes.rs` at inventory time. Versioning/`/api/v1`
 | Unified error envelope + request IDs | all screens | **DONE (M2-01)** — `contract.rs` + `CONTRACT_CONVENTIONS.md`; middleware echoes `x-request-id` |
 | Contract version on `/api/capabilities` | SPA bootstrap | **DONE (M2-01)** — `contract.contract_version` |
 | Async operation poll/cancel substrate | FDD run, import, reports | **DONE (M2-03)** — `ASYNC_OPS.md` + `frontend/web/src/api/asyncOps.ts` poll helper |
-| Typed TS client generation | SPA | **PARTIAL (M2-02)** — hand-written contract types + client |
+| Typed TS client generation | SPA | **PARTIAL (M4-01)** — hand-written contract types + client; jobs family in `jobsApi.ts` |
 | Package upload streaming defenses in Rust | CAP-UPLOAD | PARTIAL (csv import exists; hostile ZIP suite TBD) |
 | Plot dataset contracts (not chart HTML) | CAP-PLOTS | NOT_STARTED (M5-B) |
