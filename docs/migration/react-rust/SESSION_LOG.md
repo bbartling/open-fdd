@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M5-D
+
+- FindingsPage now uses job `/api/jobs/{id}/findings|dispositions` (not FDD results).
+- `findingsApi.ts`: get/put + disposition upsert by `correlation_key`.
+- FDD registry results remain on RulesPage. Next: P1-M5-E reports + WattLab handoff.
+
 ## 2026-07-31 — P1-M5-C
 
 - Typed `analyticsApi.ts`: metering / RCx / runtime POST clients + `listFddEquipment` + `monthlySumClient` parity helper.
