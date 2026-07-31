@@ -8,225 +8,308 @@ import {
   Select,
 } from "../components/widgets";
 import { useSessionQuery } from "../session";
-import { listPackageBuildings } from "../api/mappingApi";
+import { listJobs, type JobMeta } from "../api/jobsApi";
 import {
-  downloadTextFile,
-  getFddResults,
-  resultsToCsvArtifact,
-  resultsToJsonArtifact,
-  type FddResultRow,
-} from "../api/fddApi";
+  getJobDispositions,
+  getJobFindings,
+  putJobDispositions,
+  putJobFindings,
+  upsertDisposition,
+  type Disposition,
+  type DispositionsDocument,
+  type EngFinding,
+  type FindingsDocument,
+} from "../api/findingsApi";
 
-type ResultTableRow = {
-  rule_id: string;
-  equipment_id: string;
-  status: string;
-  fault_hours: string;
-  missing_roles: string;
+type FindingRow = {
+  finding_id: string;
+  correlation_key: string;
+  run_id: string;
+  disposition: string;
+  notes: string;
 };
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+const STATUS_OPTS = [
+  { value: "open", label: "open" },
+  { value: "confirmed", label: "confirmed" },
+  { value: "dismissed", label: "dismissed" },
+  { value: "deferred", label: "deferred" },
+];
+
 export function FindingsPage() {
   const { query, setQuery } = useSessionQuery();
-  const buildingId = query.siteId ?? "";
-  const equipmentFilter = query.equipment ?? "";
+  const jobId = query.jobId ?? "";
 
-  const [buildings, setBuildings] = useState<string[]>([]);
-  const [rows, setRows] = useState<FddResultRow[]>([]);
-  const [statusFilter, setStatusFilter] = useState("");
+  const [jobs, setJobs] = useState<JobMeta[]>([]);
+  const [findingsDoc, setFindingsDoc] = useState<FindingsDocument>({
+    schema_version: "1",
+    findings: [],
+  });
+  const [dispDoc, setDispDoc] = useState<DispositionsDocument>({
+    schema_version: "1",
+    dispositions: [],
+  });
+  const [selectedKey, setSelectedKey] = useState("");
+  const [status, setStatus] = useState("open");
+  const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!buildingId) {
-      setRows([]);
+    if (!jobId) {
+      setFindingsDoc({ schema_version: "1", findings: [] });
+      setDispDoc({ schema_version: "1", dispositions: [] });
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const results = await getFddResults(buildingId);
-      setRows(results);
+      const [f, d] = await Promise.all([
+        getJobFindings(jobId),
+        getJobDispositions(jobId),
+      ]);
+      setFindingsDoc(f);
+      setDispDoc(d);
     } catch (err) {
-      setRows([]);
       setError(formatErr(err));
     } finally {
       setLoading(false);
     }
-  }, [buildingId]);
+  }, [jobId]);
 
   useEffect(() => {
-    void listPackageBuildings()
-      .then(setBuildings)
-      .catch(() => setBuildings([]));
+    void listJobs()
+      .then(setJobs)
+      .catch(() => setJobs([]));
   }, []);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  const equipmentOptions = useMemo(() => {
-    const ids = Array.from(new Set(rows.map((r) => r.equipment_id))).sort();
-    return [
-      { value: "", label: "— all equipment —" },
-      ...ids.map((id) => ({ value: id, label: id })),
-    ];
-  }, [rows]);
+  const dispByKey = useMemo(() => {
+    const m = new Map<string, Disposition>();
+    for (const d of dispDoc.dispositions) {
+      m.set(d.correlation_key, d);
+    }
+    return m;
+  }, [dispDoc]);
 
-  const filtered = useMemo(() => {
-    return rows.filter((r) => {
-      if (equipmentFilter && r.equipment_id !== equipmentFilter) return false;
-      if (statusFilter && r.status !== statusFilter) return false;
-      return true;
+  const rows: FindingRow[] = useMemo(() => {
+    return findingsDoc.findings.map((f: EngFinding) => {
+      const d = dispByKey.get(f.correlation_key);
+      return {
+        finding_id: f.finding_id,
+        correlation_key: f.correlation_key,
+        run_id: String(f.run_id ?? ""),
+        disposition: d?.status ?? "—",
+        notes: String(d?.notes ?? ""),
+      };
     });
-  }, [rows, equipmentFilter, statusFilter]);
+  }, [findingsDoc, dispByKey]);
 
-  const tableRows: ResultTableRow[] = filtered.map((r) => ({
-    rule_id: r.rule_id,
-    equipment_id: r.equipment_id,
-    status: r.status,
-    fault_hours: String(r.fault_hours ?? ""),
-    missing_roles: (r.missing_roles ?? []).join(", "),
-  }));
-
-  const buildingOptions = [
-    { value: "", label: "— select building —" },
-    ...buildings.map((b) => ({ value: b, label: b })),
-  ];
-
-  const statusOptions = [
-    { value: "", label: "— all statuses —" },
-    { value: "FAULT", label: "FAULT" },
-    { value: "PASS", label: "PASS" },
-    { value: "SKIPPED", label: "SKIPPED" },
-  ];
-
-  const onDownloadJson = () => {
-    downloadTextFile(
-      `fdd_results_${buildingId || "unknown"}.json`,
-      resultsToJsonArtifact(filtered, {
-        building_id: buildingId,
-        equipment_filter: equipmentFilter || null,
-        status_filter: statusFilter || null,
-      }),
-      "application/json",
-    );
+  const onSelectFinding = (key: string) => {
+    setSelectedKey(key);
+    const d = dispByKey.get(key);
+    setStatus(d?.status ?? "open");
+    setNotes(String(d?.notes ?? ""));
   };
 
-  const onDownloadCsv = () => {
-    downloadTextFile(
-      `fdd_results_${buildingId || "unknown"}.csv`,
-      resultsToCsvArtifact(filtered),
-      "text/csv",
-    );
+  const onSaveDisposition = async () => {
+    if (!jobId || !selectedKey) return;
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const next = upsertDisposition(dispDoc, {
+        correlation_key: selectedKey,
+        status,
+        notes,
+        updated_at: new Date().toISOString(),
+      });
+      await putJobDispositions(jobId, next);
+      setDispDoc(next);
+      setNotice(`Saved disposition for ${selectedKey}`);
+    } catch (err) {
+      setError(formatErr(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onSeedDemoFinding = async () => {
+    if (!jobId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const seeded: FindingsDocument = {
+        schema_version: "1",
+        findings: [
+          ...findingsDoc.findings,
+          {
+            finding_id: `finding-${Date.now()}`,
+            correlation_key: `rule:DEMO:equip:AHU-1`,
+            run_id: "demo-run",
+            evidence: { note: "seeded from React FindingsPage" },
+          },
+        ],
+      };
+      await putJobFindings(jobId, seeded, `react-${Date.now()}`);
+      setFindingsDoc(seeded);
+      setNotice("Seeded demo finding (PUT /findings)");
+    } catch (err) {
+      setError(formatErr(err));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <AppShell
       title="Findings"
-      caption="FDD result rows from last registry run (Rust/DataFusion)."
+      caption="Job engineering findings + dispositions (P1-M5-D)"
       activeSectionId="results"
     >
-      <div className="page-placeholder" data-testid="findings-page">
-        <h2>Results</h2>
-        <p>
-          Loads <code>GET /api/fdd/results?building_id=</code>. Run rules from{" "}
-          <Link to={buildingId ? `/rules?site=${encodeURIComponent(buildingId)}` : "/rules"}>
-            Run Rules
-          </Link>
-          . Download filtered JSON/CSV artifacts (no Python).
-        </p>
+      <div className="page-stack" data-testid="findings-page">
+        <InlineAlert id="findings-scope" variant="info">
+          Durable job findings via `/api/jobs/{"{id}"}/findings|dispositions`. FDD
+          registry run results remain on{" "}
+          <Link to="/rules">Run Rules</Link>.
+        </InlineAlert>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-          <Select
-            id="findings-building"
-            label="Building"
-            value={buildingId}
-            options={buildingOptions}
-            onChange={(value) => setQuery({ siteId: value }, true)}
-            testId="findings-building-select"
-          />
-          <Select
-            id="findings-equipment"
-            label="Equipment"
-            value={equipmentFilter}
-            options={equipmentOptions}
-            onChange={(value) => setQuery({ equipment: value }, true)}
-            testId="findings-equipment-select"
-            disabled={!buildingId}
-          />
-          <Select
-            id="findings-status"
-            label="Status"
-            value={statusFilter}
-            options={statusOptions}
-            onChange={setStatusFilter}
-            testId="findings-status-select"
-          />
-        </div>
+        <Select
+          id="findings-job"
+          label="Job"
+          value={jobId}
+          options={[
+            { value: "", label: "— select job —" },
+            ...jobs.map((j) => ({
+              value: j.job_id,
+              label: `${j.job_name} (${j.job_id})`,
+            })),
+          ]}
+          onChange={(v) => setQuery({ jobId: v || undefined }, true)}
+          testId="findings-job"
+        />
 
-        <div style={{ display: "flex", gap: "0.5rem", margin: "0.75rem 0", flexWrap: "wrap" }}>
+        {!jobId && (
+          <InlineAlert id="findings-need-job" variant="warning">
+            Select a job (or open with ?job=).
+          </InlineAlert>
+        )}
+
+        {error && (
+          <InlineAlert id="findings-error" variant="danger">
+            {error}
+          </InlineAlert>
+        )}
+        {notice && (
+          <InlineAlert id="findings-notice" variant="success" testId="findings-notice">
+            {notice}
+          </InlineAlert>
+        )}
+
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
           <Button
             id="findings-reload"
             label={loading ? "Loading…" : "Reload"}
             onClick={() => void refresh()}
-            disabled={loading || !buildingId}
+            disabled={!jobId || loading}
             testId="findings-reload"
           />
           <Button
-            id="findings-download-json"
-            label="Download JSON"
+            id="findings-seed"
+            label="Seed demo finding"
             variant="secondary"
-            onClick={onDownloadJson}
-            disabled={!filtered.length}
-            testId="findings-download-json"
-          />
-          <Button
-            id="findings-download-csv"
-            label="Download CSV"
-            variant="secondary"
-            onClick={onDownloadCsv}
-            disabled={!filtered.length}
-            testId="findings-download-csv"
+            onClick={() => void onSeedDemoFinding()}
+            disabled={!jobId || saving}
+            testId="findings-seed"
           />
         </div>
 
-        {error ? (
-          <InlineAlert id="findings-error" variant="danger" testId="findings-error">
-            {error}
-          </InlineAlert>
-        ) : null}
-
-        {!buildingId ? (
-          <InlineAlert
-            id="findings-empty"
-            variant="info"
-            testId="findings-empty"
-          >
-            Select a building to load results.
-          </InlineAlert>
-        ) : null}
-
         <p data-testid="findings-count">
-          Showing {filtered.length} of {rows.length} row(s)
+          {rows.length} finding(s) · findings_revision on job meta when saved
         </p>
 
-        <DataTable
-          id="findings-table"
-          label="Fault / pass rows"
-          columns={[
-            { key: "rule_id", header: "Rule" },
-            { key: "equipment_id", header: "Equipment" },
-            { key: "status", header: "Status" },
-            { key: "fault_hours", header: "Fault hours" },
-            { key: "missing_roles", header: "Missing roles" },
-          ]}
-          rows={tableRows}
-          testId="findings-table"
-        />
+        <div data-testid="findings-table-wrap">
+          <DataTable
+            id="findings-table"
+            label="Findings"
+            columns={[
+              { key: "finding_id", header: "finding_id" },
+              { key: "correlation_key", header: "correlation_key" },
+              { key: "run_id", header: "run_id" },
+              { key: "disposition", header: "disposition" },
+              { key: "notes", header: "notes" },
+            ]}
+            rows={rows}
+            loading={loading}
+            testId="findings-table"
+          />
+          <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+            {rows.map((r) => (
+              <Button
+                key={r.correlation_key}
+                id={`findings-pick-${r.finding_id}`}
+                label={`Select ${r.correlation_key}`}
+                variant="secondary"
+                density="compact"
+                onClick={() => onSelectFinding(r.correlation_key)}
+                testId={`findings-pick-${r.correlation_key}`}
+              />
+            ))}
+          </div>
+        </div>
+
+        <section data-testid="findings-disposition-editor">
+          <h3>Disposition</h3>
+          <Select
+            id="findings-selected"
+            label="correlation_key"
+            value={selectedKey}
+            options={[
+              { value: "", label: "— select finding —" },
+              ...rows.map((r) => ({
+                value: r.correlation_key,
+                label: r.correlation_key,
+              })),
+            ]}
+            onChange={onSelectFinding}
+            testId="findings-selected"
+          />
+          <Select
+            id="findings-status"
+            label="status"
+            value={status}
+            options={STATUS_OPTS}
+            onChange={setStatus}
+            testId="findings-status"
+          />
+          <label htmlFor="findings-notes">
+            notes
+            <textarea
+              id="findings-notes"
+              data-testid="findings-notes"
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              style={{ width: "100%" }}
+            />
+          </label>
+          <Button
+            id="findings-save-disp"
+            label={saving ? "Saving…" : "Save disposition"}
+            onClick={() => void onSaveDisposition()}
+            disabled={!jobId || !selectedKey || saving}
+            testId="findings-save-disp"
+          />
+        </section>
       </div>
     </AppShell>
   );

@@ -3,24 +3,53 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { FindingsPage } from "./FindingsPage";
 
-vi.mock("../api/mappingApi", () => ({
-  listPackageBuildings: vi.fn(async () => ["B1"]),
+vi.mock("../api/jobsApi", () => ({
+  listJobs: vi.fn(async () => [
+    {
+      schema_version: 1,
+      job_id: "job-1",
+      job_name: "Alpha",
+      status: "active",
+      archived: false,
+      created_at: "",
+      updated_at: "",
+      tags: [],
+      meta_revision: "rev-1",
+      revisions: {},
+    },
+  ]),
 }));
 
-vi.mock("../api/fddApi", async () => {
-  const actual = await vi.importActual<typeof import("../api/fddApi")>(
-    "../api/fddApi",
+vi.mock("../api/findingsApi", async () => {
+  const actual = await vi.importActual<typeof import("../api/findingsApi")>(
+    "../api/findingsApi",
   );
   return {
     ...actual,
-    getFddResults: vi.fn(),
-    downloadTextFile: vi.fn(),
+    getJobFindings: vi.fn(async () => ({
+      schema_version: "1",
+      findings: [
+        {
+          finding_id: "f1",
+          correlation_key: "rule:VAV-1:equip:AHU-1",
+          run_id: "run-1",
+        },
+      ],
+    })),
+    getJobDispositions: vi.fn(async () => ({
+      schema_version: "1",
+      dispositions: [
+        { correlation_key: "rule:VAV-1:equip:AHU-1", status: "open" },
+      ],
+    })),
+    putJobDispositions: vi.fn(async () => undefined),
+    putJobFindings: vi.fn(async () => undefined),
   };
 });
 
-import { downloadTextFile, getFddResults } from "../api/fddApi";
+import { putJobDispositions } from "../api/findingsApi";
 
-function renderFindings(entry = "/findings?site=B1") {
+function renderPage(entry = "/findings?job=job-1") {
   return render(
     <MemoryRouter initialEntries={[entry]}>
       <FindingsPage />
@@ -28,54 +57,45 @@ function renderFindings(entry = "/findings?site=B1") {
   );
 }
 
-describe("FindingsPage", () => {
+describe("FindingsPage dispositions", () => {
   beforeEach(() => {
-    vi.mocked(getFddResults).mockResolvedValue([
-      {
-        rule_id: "FC1",
-        equipment_id: "AHU_1",
-        status: "FAULT",
-        fault_hours: 2,
-        missing_roles: [],
-      },
-      {
-        rule_id: "FC1",
-        equipment_id: "VAV_1",
-        status: "PASS",
-        fault_hours: 0,
-        missing_roles: [],
-      },
-    ]);
-    vi.mocked(downloadTextFile).mockClear();
+    vi.mocked(putJobDispositions).mockClear();
   });
 
-  it("loads results for building and filters by status", async () => {
-    renderFindings();
+  it("loads findings for ?job= and shows count", async () => {
+    renderPage();
     await waitFor(() => {
       expect(screen.getByTestId("findings-count").textContent).toMatch(
-        /Showing 2 of 2/,
+        /1 finding/,
       );
-    });
-    const statusSelect = screen
-      .getByTestId("findings-status-select")
-      .querySelector("select")!;
-    fireEvent.change(statusSelect, { target: { value: "FAULT" } });
-    await waitFor(() => {
-      expect(screen.getByTestId("findings-count").textContent).toMatch(
-        /Showing 1 of 2/,
-      );
+      expect(screen.getByTestId("findings-table")).toBeTruthy();
     });
   });
 
-  it("downloads JSON artifact", async () => {
-    renderFindings();
-    await waitFor(() => screen.getByTestId("findings-download-json"));
+  it("saves disposition for selected correlation_key", async () => {
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByTestId("findings-count").textContent).toMatch(
+        /1 finding/,
+      );
+    });
     fireEvent.click(
-      screen.getByTestId("findings-download-json").querySelector("button")!,
+      screen
+        .getByTestId("findings-pick-rule:VAV-1:equip:AHU-1")
+        .querySelector("button")!,
     );
-    expect(downloadTextFile).toHaveBeenCalled();
-    const [filename, content] = vi.mocked(downloadTextFile).mock.calls[0];
-    expect(filename).toMatch(/fdd_results_B1\.json/);
-    expect(String(content)).toMatch(/openfdd_fdd_results_v1/);
+    const status = screen
+      .getByTestId("findings-status")
+      .querySelector("select") as HTMLSelectElement;
+    fireEvent.change(status, { target: { value: "confirmed" } });
+    fireEvent.click(
+      screen.getByTestId("findings-save-disp").querySelector("button")!,
+    );
+    await waitFor(() => {
+      expect(putJobDispositions).toHaveBeenCalled();
+      expect(screen.getByTestId("findings-notice").textContent).toMatch(
+        /Saved disposition/,
+      );
+    });
   });
 });
