@@ -2,6 +2,13 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M2-01
+
+- Added `services/central/src/contract.rs`: error envelope, request-id middleware, contract metadata.
+- `GET /api/capabilities` now includes `contract.*` + `react_ui` flag (`OPENFDD_REACT_UI=1`).
+- Doc: `CONTRACT_CONVENTIONS.md`.
+- Next: P1-M2-02 React project shell.
+
 ## 2026-07-31 — P1-M1 gate (PR #615)
 
 - Fixture catalog + content hashes under `tests/react_parity/`.

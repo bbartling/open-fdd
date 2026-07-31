@@ -242,6 +242,7 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
 pub async fn capabilities() -> Json<Value> {
     Json(json!({
         "ok": true,
+        "contract": crate::contract::contract_capabilities_extra(),
         "capabilities": {
             "lab": true,
             "fdd_registry": true,
@@ -258,7 +259,9 @@ pub async fn capabilities() -> Json<Value> {
             "health_stack": true,
             "fdd_rules_authoring": true,
             "fdd_schema": true,
-            "analytics": true
+            "analytics": true,
+            "jobs": true,
+            "react_ui": std::env::var("OPENFDD_REACT_UI").ok().as_deref() == Some("1")
         }
     }))
 }
