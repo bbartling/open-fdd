@@ -65,6 +65,7 @@ Do **not** rename `open_fdd.rules` → `open_fdd.oracle` without an explicit pro
 20. When blocked (secrets, permissions, private data), finish non-blocked work and record the exact error.
 21. Bound each PR to its declared scope — docs-only PRs do not require cross-repo pin bumps or GHCR refreshes.
 22. React/Rust Phase 1: follow [`tools/open-fdd-modernization/`](../tools/open-fdd-modernization/README.md); keep [`docs/migration/react-rust/`](../docs/migration/react-rust/README.md) ledgers current in the same PR.
+23. For any Streamlit→React / `frontend/web` work: read and follow [`tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md`](../tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md) and the bridge [`AGENT_SKILL_BRIDGE.md`](../tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md) before editing UI.
 
 ---
 
@@ -79,6 +80,7 @@ Do **not** rename `open_fdd.rules` → `open_fdd.oracle` without an explicit pro
 7. Skill matching the work (below)
 8. Code truth: `docs/migration/`, `docs/migration/react-rust/`, `docs/rules/cookbook/`, `docs/architecture/`
 9. React/Rust program: [`../tools/open-fdd-modernization/README.md`](../tools/open-fdd-modernization/README.md)
+10. Phase 1 skill bridge: [`../tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md`](../tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md)
 
 ---
 
@@ -107,6 +109,7 @@ Sibling-repo locations are **examples** — resolve via `git rev-parse --show-to
 | [`openfdd-cookbook-parity`](skills/openfdd-cookbook-parity/SKILL.md) | Cookbook CI, parity matrix, docs headings |
 | [`openfdd-stack-ghcr`](skills/openfdd-stack-ghcr/SKILL.md) | Nightly stack pull, labels, smoke |
 | [`openfdd-milestone-a-pr`](skills/openfdd-milestone-a-pr/SKILL.md) | Inventory → parity → cutover → delete loop |
+| [`openfdd-streamlit-to-react`](skills/openfdd-streamlit-to-react/SKILL.md) | Phase 1 React parity / Streamlit port (wraps modernization skill) |
 
 ---
 

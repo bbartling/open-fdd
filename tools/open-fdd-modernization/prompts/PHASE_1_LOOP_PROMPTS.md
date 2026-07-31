@@ -16,19 +16,26 @@ Selected milestone/PR: [P1-M?-??]
 User scenario/capability IDs: [IDS]
 
 Before changing code:
-1. Resolve repo root and read the complete applicable AGENTS.md hierarchy.
-2. Read:
+1. Resolve repo root and read the complete applicable AGENTS.md hierarchy:
+   root AGENTS.md, openfdd_agent_spec/AGENTS.md, tools/open-fdd-modernization/AGENTS.md.
+2. Read tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md and load skills:
+   - ALWAYS for UI/parity work: skills/streamlit-to-react/SKILL.md
+     (+ openfdd_agent_spec/skills/openfdd-streamlit-to-react/SKILL.md)
+   - Plus any openfdd_agent_spec/skills/* matching SQL/cookbook/GHCR/ECM/ownership.
+3. Read:
    - docs/migration/react-rust/README.md
    - PHASE_1_PREP_AND_REACT_PARITY.md
    - TEST_PARITY_AND_ACCEPTANCE.md
    - AGENT_EXECUTION_SYSTEM.md
    - DECISIONS.md, CAPABILITY_MATRIX.md, PYTHON_EXIT_MATRIX.md,
      API_CONTRACT_MATRIX.md, PARITY_EVIDENCE.md, SESSION_LOG.md
-3. Inspect git status/branch/recent history. Preserve unrelated user changes.
-4. Inspect code truth for the selected capability: Streamlit render path,
+   - openfdd_agent_spec/BUILD_CHECKPOINTS.md (React/Rust section)
+4. Inspect git status/branch/recent history. Preserve unrelated user changes.
+5. Inspect code truth for the selected capability: Streamlit render path,
    session keys, Python call graph, current Rust routes/crates, SQL, storage,
-   tests, scripts, images, docs, and consumers.
-5. Restate the bounded objective, observable acceptance criteria, files likely
+   tests, scripts, images, docs, and consumers — following the streamlit-to-react
+   inventory workflow.
+6. Restate the bounded objective, observable acceptance criteria, files likely
    in scope, risks, and tests. Split the work if it combines architecture, API,
    SQL, React, persistence, topology, cutover, or deletion beyond one coherent
    vertical slice.

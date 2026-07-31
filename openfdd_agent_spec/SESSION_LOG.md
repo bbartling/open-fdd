@@ -4,6 +4,14 @@ Newest first. Append after non-trivial agent work.
 
 ---
 
+## 2026-07-31 — Agent skill bridge (Phase 1)
+
+- Added `tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md` linking agent_spec ↔ modernization.
+- Rewrote modernization `AGENTS.md` for Open-FDD (Rust/central; no FastAPI template).
+- Added `openfdd_agent_spec/skills/openfdd-streamlit-to-react` wrapper + Cursor rule.
+- Prompt 0 / AGENT_EXECUTION_SYSTEM require streamlit-to-react before UI edits.
+- BUILD_CHECKPOINTS Phase 1 status refreshed through M2 / M3 partial.
+
 ## 2026-07-31 — Phase 1 pause (M1 WIP on branch)
 
 - M0 complete on master (#613/#614).

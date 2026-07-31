@@ -21,6 +21,20 @@ Select the backend target from the repository's product goal:
 Never introduce a Python sidecar into a product whose stated goal is a
 Python-free runtime.
 
+### Open-FDD binding (this monorepo)
+
+For `bbartling/open-fdd` Phase 1+, **always** use the Rust retirement path:
+
+- Backend = `services/central` `/api/*` (not FastAPI).
+- Compute = DataFusion / `sql_rules/`.
+- Agent OS = `openfdd_agent_spec/` +
+  `tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md`.
+- Wrapper skill =
+  `openfdd_agent_spec/skills/openfdd-streamlit-to-react/SKILL.md`.
+
+When references mention FastAPI persistence or sidecars, substitute central
+Rust jobs/routes.
+
 ## Read references selectively
 
 - Read [component-mapping.md](references/component-mapping.md) when inventorying

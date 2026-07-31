@@ -83,6 +83,9 @@ MQTT behavior during Phases 1 or 2.
 
 | Document | Use |
 | --- | --- |
+| [AGENTS.md](AGENTS.md) | Open-FDD Streamlit→React agent law (Rust/central; no FastAPI) |
+| [AGENT_SKILL_BRIDGE.md](AGENT_SKILL_BRIDGE.md) | Bridges `openfdd_agent_spec` skills ↔ this kit + streamlit-to-react |
+| [skills/streamlit-to-react/SKILL.md](skills/streamlit-to-react/SKILL.md) | **Required** skill for every UI parity/port PR |
 | [PHASE_1_PREP_AND_REACT_PARITY.md](PHASE_1_PREP_AND_REACT_PARITY.md) | Detailed Phase 1 milestones, PRs, tests, and exit gate |
 | [PHASE_2_CUTOVER_AND_PYTHON_EXIT.md](PHASE_2_CUTOVER_AND_PYTHON_EXIT.md) | Detailed Phase 2 cutover, deletion, rollback, and qualification |
 | [PHASE_3_EDGE_STREAMING_OUTLOOK.md](PHASE_3_EDGE_STREAMING_OUTLOOK.md) | Later BACnet/MQTTS/live-data architecture and prerequisites |
@@ -92,6 +95,7 @@ MQTT behavior during Phases 1 or 2.
 | [AGENT_EXECUTION_SYSTEM.md](AGENT_EXECUTION_SYSTEM.md) | Rules for autonomous agents, bounded PR protocol, state files, and stop conditions |
 | [prompts/PHASE_1_LOOP_PROMPTS.md](prompts/PHASE_1_LOOP_PROMPTS.md) | Ready-to-paste Phase 1 execution prompts |
 | [prompts/PHASE_2_LOOP_PROMPTS.md](prompts/PHASE_2_LOOP_PROMPTS.md) | Ready-to-paste Phase 2 execution, review, recovery, and deletion prompts |
+| [`openfdd_agent_spec/`](../../openfdd_agent_spec/) | Product agent OS, PR protocol, Milestone skills, BUILD_CHECKPOINTS |
 
 ## Non-negotiable architecture
 

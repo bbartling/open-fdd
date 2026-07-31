@@ -14,6 +14,8 @@ Open-FDD ships as a **container stack**: `openfdd-central`, `openfdd-ui`, `openf
 
 **Software-engineering agent OS:** [`openfdd_agent_spec/`](openfdd_agent_spec/) — architecture locks, skills, Milestone A ([`openfdd_agent_spec/MILESTONE_A.md`](openfdd_agent_spec/MILESTONE_A.md)). Ops/edge soak prompts stay under [`docs/agent/`](docs/agent/).
 
+**React/Rust Phase 1:** [`tools/open-fdd-modernization/`](tools/open-fdd-modernization/README.md) · skill bridge [`AGENT_SKILL_BRIDGE.md`](tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md) · required UI skill [`streamlit-to-react`](tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md).
+
 **PyPI (`open-fdd` 4.1+):** ECM engineering + pandas oracle (`open_fdd.rules` / `analytics` / `reporting`) via extras. Production FDD is DataFusion/GHCR, not this wheel.
 
 ## Start session
