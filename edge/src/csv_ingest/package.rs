@@ -237,9 +237,6 @@ fn read_zip_entries(bytes: &[u8]) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> 
         }
         let declared = entry.size();
         let compressed = entry.compressed_size();
-        if declared < 0 || compressed < 0 {
-            return Err(format!("invalid zip entry sizes: {entry_name}"));
-        }
         if compressed > 0 && (declared as f64) / (compressed as f64) > MAX_COMPRESSION_RATIO {
             return Err(format!("suspicious compression ratio: {entry_name}"));
         }
@@ -251,7 +248,7 @@ fn read_zip_entries(bytes: &[u8]) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> 
         if !names_lower.insert(key) {
             return Err(format!("duplicate / case-colliding path: {entry_name}"));
         }
-        total = total.saturating_add(declared as u64);
+        total = total.saturating_add(declared);
         if total > cap {
             return Err(format!(
                 "zip expands past {} MB cap (OPENFDD_MAX_UNCOMPRESSED_MB)",
@@ -262,14 +259,14 @@ fn read_zip_entries(bytes: &[u8]) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> 
         entry
             .read_to_end(&mut buf)
             .map_err(|e| format!("zip entry {:?}: {e}", entry_name))?;
-        if buf.len() as u64 > cap || total.saturating_sub(declared as u64) + buf.len() as u64 > cap
-        {
+        let read_len = buf.len() as u64;
+        if read_len > cap || total.saturating_sub(declared) + read_len > cap {
             return Err(format!(
                 "zip expands past {} MB cap (OPENFDD_MAX_UNCOMPRESSED_MB)",
                 cap / (1024 * 1024)
             ));
         }
-        if declared > 0 && buf.len() as u64 > declared as u64 {
+        if declared > 0 && read_len > declared {
             return Err(format!(
                 "zip entry expanded past declared size: {entry_name}"
             ));
