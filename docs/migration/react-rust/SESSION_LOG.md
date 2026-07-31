@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M2-03
+
+- Documented async poll contract (`ASYNC_OPS.md`) aligned with jobs run statuses.
+- Added `frontend/web/src/api/asyncOps.ts` + vitest coverage.
+- M2 platform gate closed → next P1-M3 shell parity.
+
 ## 2026-07-31 — P1-M2-02
 
 - Scaffold `frontend/web` Vite+React+TS SPA (routes, API client, contract types, Docker).
