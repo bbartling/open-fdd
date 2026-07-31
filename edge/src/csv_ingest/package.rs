@@ -941,10 +941,7 @@ fn infer_parent_ahu(equipment_id: &str, siblings: &[String]) -> Option<String> {
     // Embedded `…AHU…N…` substring match against known AHU siblings.
     let ahus: Vec<&String> = siblings
         .iter()
-        .filter(|s| {
-            let u = s.to_ascii_uppercase();
-            u.contains("AHU") || u.contains("RTU") || u.contains("MAU")
-        })
+        .filter(|s| infer_equipment_type_local(s) == "AHU")
         .collect();
     for ahu in &ahus {
         let ahu_u = ahu.to_ascii_uppercase();
