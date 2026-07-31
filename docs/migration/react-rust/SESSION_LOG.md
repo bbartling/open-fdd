@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-07-31 — docs: agent skill bridge
+
+- Wired `openfdd_agent_spec` + streamlit-to-react skills into Phase 1 bootstrap
+  (`AGENT_SKILL_BRIDGE.md`, Cursor rule, Prompt 0).
+- Next: P1-M3-03 routing/session then M4 slice.
+
 ## 2026-07-31 — P1-M3-02
 
 - Accessible widget primitives under `frontend/web/src/components/widgets/` (select, slider, checkbox/radio/toggle, file upload, buttons, tabs, expander, metric, table, progress/badge, Plotly host placeholder, confirm modal, toast/inline alert).

@@ -137,14 +137,20 @@ Docs: [`MILESTONE_D_CLOSEOUT.md`](../docs/migration/MILESTONE_D_CLOSEOUT.md),
 # React / Rust modernization — Phase 1 (2026-07-31+)
 
 Program: [`tools/open-fdd-modernization/`](../tools/open-fdd-modernization/README.md) ·
+Skill bridge: [`AGENT_SKILL_BRIDGE.md`](../tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md) ·
+Streamlit→React skill: [`skills/streamlit-to-react`](../tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md) ·
 Ledgers: [`docs/migration/react-rust/`](../docs/migration/react-rust/README.md) ·
 ADR: [`ADR-001`](../docs/architecture/adr-001-react-rust-modernization.md)
 
+Agents **must** follow `openfdd_agent_spec` + streamlit-to-react skills for UI PRs
+(see Cursor rule `.cursor/rules/openfdd-phase1-react-parity.mdc`).
+
 - [x] P1-M0-01 — ADR + instruction reconciliation + policy CI
 - [x] P1-M0-02 — Capability / Python-exit / API ledgers
-- [ ] P1-M1 — Fixtures / oracle exporter / Streamlit baseline
-- [ ] P1-M2 — Rust contracts + React shell + async ops
-- [ ] P1-M3 — Parity shell / widgets / navigation
+- [x] P1-M1 — Fixtures / oracle exporter / Streamlit baseline (#615)
+- [x] P1-M2 — Rust contracts + React shell + async ops (#616–#618)
+- [~] P1-M3 — Parity shell / widgets / navigation (#619 done; M3-02/03 in flight)
 - [ ] P1-M4 — Jobs/CSV/map/run vertical slice
 - [ ] P1-M5 — Domain families
 - [ ] P1-M6 — No-Python RC qualification
+- [x] Agent skill bridge — `AGENT_SKILL_BRIDGE.md` + `openfdd-streamlit-to-react` skill + Cursor rule

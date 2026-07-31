@@ -9,21 +9,28 @@ and never overrides, the nearest repository `AGENTS.md`.
 ## Bootstrap order for every new session
 
 1. Resolve the repository root with `git rev-parse --show-toplevel`.
-2. Read every applicable `AGENTS.md` from root to the files in scope.
-3. Read the modernization `README.md`, current phase, test strategy, and this file.
-4. Read the latest:
+2. Read every applicable `AGENTS.md` from root to the files in scope, including
+   `openfdd_agent_spec/AGENTS.md` and `tools/open-fdd-modernization/AGENTS.md`.
+3. Read [`AGENT_SKILL_BRIDGE.md`](AGENT_SKILL_BRIDGE.md) and load the matching
+   skills — for any UI port, **read
+   [`skills/streamlit-to-react/SKILL.md`](skills/streamlit-to-react/SKILL.md)**
+   (and Open-FDD wrapper
+   `openfdd_agent_spec/skills/openfdd-streamlit-to-react/SKILL.md`) before editing.
+4. Read the modernization `README.md`, current phase, test strategy, and this file.
+5. Read the latest ledgers under `docs/migration/react-rust/`:
    - `DECISIONS.md`;
    - `CAPABILITY_MATRIX.md`;
    - `PYTHON_EXIT_MATRIX.md`;
    - `API_CONTRACT_MATRIX.md`;
    - `PARITY_EVIDENCE.md`;
    - `SESSION_LOG.md`;
-   - relevant existing architecture/migration docs.
-5. Inspect `git status`, current branch, recent commits, and open PR context.
-6. Revalidate referenced code paths. Treat docs as claims until code confirms them.
-7. Select exactly one bounded milestone/PR objective.
+   - plus `openfdd_agent_spec/BUILD_CHECKPOINTS.md` / `SESSION_LOG.md` when status changes.
+6. Inspect `git status`, current branch, recent commits, and open PR context.
+7. Revalidate referenced code paths. Treat docs as claims until code confirms them.
+8. Select exactly one bounded milestone/PR objective (`P1-M?-??`).
 
 Never begin by rewriting architecture from memory.
+Never skip the streamlit-to-react skill for shell/widget/parity/slice UI work.
 
 ## Authority and safety
 
