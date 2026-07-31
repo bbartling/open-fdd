@@ -1,0 +1,4 @@
+interface:
+  display_name: "Streamlit to React"
+  short_description: "Port Streamlit apps to pixel-matched React"
+  default_prompt: "Use $streamlit-to-react to port this Streamlit app into a visually faithful React client with a Python API sidecar."

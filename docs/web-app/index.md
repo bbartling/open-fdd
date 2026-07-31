@@ -8,9 +8,17 @@ permalink: /web-app/
 
 # Web application
 
-The operator UI is a **single Streamlit app** (`services/ui` → `openfdd-ui` on port **3000**). It unites vibe19 FDD / RCx / Jobs workflows with vibe20 **WattLab dump** export — not a separate Streamlit process and not a React SPA.
+**Current default:** a **single Streamlit app** (`services/ui` → `openfdd-ui` on
+port **3000**) uniting vibe19 FDD / RCx / Jobs with WattLab dump export.
 
-Central REST (`:8080`) owns JWT auth, historian, and **DataFusion SQL** FDD (`POST /api/fdd/run`). Most central APIs require JWT when auth is enabled.
+**Phase 1 target:** React + TypeScript SPA (feature-flagged) talking only to
+central Rust `/api` — see [ADR-001](../architecture/adr-001-react-rust-modernization.md)
+and [React/Rust modernization](../migration/react-rust/README.md). Streamlit
+remains the behavioral reference and rollback path until Phase 2. No FastAPI
+sidecar.
+
+Central REST (`:8080`) owns JWT auth, historian, and **DataFusion SQL** FDD
+(`POST /api/fdd/run`). Most central APIs require JWT when auth is enabled.
 
 | Guide | Content |
 |-------|---------|

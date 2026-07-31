@@ -8,10 +8,13 @@ on:
     paths:
       - "docs/rules/cookbook/**"
       - "docs/migration/MILESTONE_A_CLOSEOUT.md"
+      - "docs/migration/react-rust/**"
       - "openfdd_agent_spec/ownership.yaml"
       - "scripts/cookbook_parity_check.py"
       - "scripts/rule_parity_mutation_check.py"
       - "scripts/architecture_ownership_check.py"
+      - "scripts/architecture_react_policy_check.py"
+      - "docs/architecture/adr-001-react-rust-modernization.md"
       - "sql_rules/registry.yaml"
       - "docs/migration/MILESTONE_D_RULE_PARITY.md"
       - ".github/workflows/cookbook-parity.yml"
@@ -21,10 +24,13 @@ on:
     paths:
       - "docs/rules/cookbook/**"
       - "docs/migration/MILESTONE_A_CLOSEOUT.md"
+      - "docs/migration/react-rust/**"
       - "openfdd_agent_spec/ownership.yaml"
       - "scripts/cookbook_parity_check.py"
       - "scripts/rule_parity_mutation_check.py"
       - "scripts/architecture_ownership_check.py"
+      - "scripts/architecture_react_policy_check.py"
+      - "docs/architecture/adr-001-react-rust-modernization.md"
       - "sql_rules/registry.yaml"
       - "docs/migration/MILESTONE_D_RULE_PARITY.md"
       - ".github/workflows/cookbook-parity.yml"
@@ -43,8 +49,10 @@ jobs:
       - name: Install pandas + PyYAML
         run: pip install pandas pyyaml
 
-      - name: Architecture ownership + cookbook path smoke
-        run: python3 scripts/architecture_ownership_check.py
+      - name: Architecture ownership + React policy smoke
+        run: |
+          python3 scripts/architecture_ownership_check.py
+          python3 scripts/architecture_react_policy_check.py
 
       - name: Rule parity mutation path checks (D2)
         run: python3 scripts/rule_parity_mutation_check.py

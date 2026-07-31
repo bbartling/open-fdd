@@ -4,6 +4,14 @@ Newest first. Append after non-trivial agent work.
 
 ---
 
+## 2026-07-31 — P1-M0-01 React/Rust modernization ADR
+
+- Accepted ADR-001 (React+TS SPA → central Rust `/api`; DataFusion FDD; no FastAPI).
+- Reconciled AGENTS / UI AGENTS / frontend README / architecture + web-app docs.
+- Policy gate: `scripts/architecture_react_policy_check.py` (+ Stack Security Guards).
+- Program kit committed under `tools/open-fdd-modernization/`.
+- Ledgers path: `docs/migration/react-rust/` (matrices seeded in M0-02).
+
 ## 2026-07-30 — PyPI 4.2.0 publish fix (openpyxl)
 
 - Core dep `openpyxl`; lazy honesty_export import so wheel smoke / bare install works.
