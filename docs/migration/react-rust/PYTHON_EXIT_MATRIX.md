@@ -29,10 +29,10 @@ Disposition UNKNOWN until M1 characterization proves REPLACE / ORACLE-ONLY / DEL
 | services/ui/app/mapping_wizard.py | Role/column mapping wizard | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
 | services/ui/app/metering.py | Metering rollups (pandas path) | services/ui | YES | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
 | services/ui/app/model_seed.py | Model seed helpers | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
-| services/ui/app/multi_zip.py | Multi-ZIP package handling | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
+| services/ui/app/multi_zip.py | Multi-ZIP package handling | services/ui | MAYBE | edge/csv_ingest/package.rs (single zip); multi-part TBD | ORACLE-ONLY (M4-02) | hostile_zip + package.rs tests | Streamlit multi-part upload still default |
 | services/ui/app/occupancy.py | Occupancy helpers | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
 | services/ui/app/open_meteo.py | Open-Meteo weather fetch | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
-| services/ui/app/package_io.py | Package ZIP IO / validation | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
+| services/ui/app/package_io.py | Package ZIP IO / validation | services/ui | MAYBE | edge/csv_ingest/package.rs + central /api/csv/import/package | ORACLE-ONLY (M4-02) | hostile_zip + package.rs tests | React upload path bypasses Python defenses |
 | services/ui/app/rcx_plots.py | RCx plot builders | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
 | services/ui/app/report_downloads.py | Report download helpers | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
 | services/ui/app/reports.py | Report orchestration | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |

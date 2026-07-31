@@ -39,6 +39,15 @@ fn max_entries() -> usize {
         .unwrap_or(2000)
 }
 
+/// Max path depth inside the archive (matches vibe19 `package_io.MAX_PATH_DEPTH`).
+const MAX_PATH_DEPTH: usize = 8;
+
+/// Reject zip entries whose declared uncompressed/compressed ratio exceeds this (zip bomb heuristic).
+const MAX_COMPRESSION_RATIO: f64 = 100.0;
+
+/// Unix symlink mode nibble — mirrors vibe19 `package_io.stat_is_symlink`.
+const UNIX_SYMLINK_MODE: u32 = 0o120000;
+
 /// Project-Haystack-style point tags used by vibe19 column maps → SQL cookbook roles.
 /// Mirrors vibe19 `app/column_map_json.py` POINT_DISPLAY vocabulary.
 fn haystack_point_to_role(point: &str) -> String {
@@ -160,24 +169,48 @@ fn validate_id(id: &str) -> Result<String, String> {
 
 /// Normalize a zip entry name: forward slashes, reject traversal / absolute paths.
 fn safe_member_path(name: &str) -> Result<PathBuf, String> {
-    let name = name.replace('\\', "/");
-    let mut out = PathBuf::new();
-    for part in name.split('/') {
-        if part.is_empty() || part == "." {
-            continue;
-        }
-        if part == ".." || part.contains(':') {
-            return Err(format!("unsafe zip entry path: {name:?}"));
-        }
-        out.push(part);
+    let raw = name.replace('\\', "/");
+    let parts_src = raw.trim_end_matches('/');
+    if parts_src.is_empty() {
+        return Err(format!("empty zip entry path: {name:?}"));
     }
-    if out.components().count() == 0 || out.components().count() > 8 {
-        return Err(format!("unsupported zip entry path: {name:?}"));
+    if parts_src.starts_with('/')
+        || (parts_src.len() > 1 && parts_src.as_bytes()[1] == b':')
+    {
+        return Err(format!("absolute path in zip rejected: {name:?}"));
     }
-    Ok(out)
+    let parts: Vec<&str> = parts_src
+        .split('/')
+        .filter(|p| !p.is_empty() && *p != ".")
+        .collect();
+    if parts.iter().any(|p| *p == "..") {
+        return Err(format!("path traversal rejected: {name:?}"));
+    }
+    if parts.len() > MAX_PATH_DEPTH {
+        return Err(format!("path too deep (>{MAX_PATH_DEPTH}): {name:?}"));
+    }
+    Ok(parts.iter().collect())
+}
+
+fn zip_entry_is_symlink(entry: &zip::read::ZipFile<'_>) -> bool {
+    if entry.is_symlink() {
+        return true;
+    }
+    entry
+        .unix_mode()
+        .is_some_and(|mode| (mode & 0o170000) == UNIX_SYMLINK_MODE)
 }
 
 /// In-memory extraction of the package zip: relative path → bytes.
+///
+/// Rejected cases (hostile archive defenses):
+/// - path traversal (`../`), absolute paths (`/etc/passwd`, `C:\…`)
+/// - symlink entries (Unix mode or zip symlink marker)
+/// - too many entries (`OPENFDD_MAX_ENTRIES`)
+/// - uncompressed total over cap (`OPENFDD_MAX_UNCOMPRESSED_MB`)
+/// - suspicious per-entry compression ratio (>100:1)
+/// - duplicate paths differing only by case
+/// - declared size mismatch vs bytes actually read
 fn read_zip_entries(bytes: &[u8]) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> {
     let cursor = std::io::Cursor::new(bytes);
     let mut archive =
@@ -192,6 +225,7 @@ fn read_zip_entries(bytes: &[u8]) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> 
     let cap = max_uncompressed_bytes();
     let mut total: u64 = 0;
     let mut out = BTreeMap::new();
+    let mut names_lower: BTreeSet<String> = BTreeSet::new();
     for i in 0..archive.len() {
         let mut entry = archive
             .by_index(i)
@@ -199,18 +233,46 @@ fn read_zip_entries(bytes: &[u8]) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> 
         if entry.is_dir() {
             continue;
         }
-        let path = safe_member_path(entry.name())?;
-        total = total.saturating_add(entry.size());
+        let entry_name = entry.name().to_string();
+        if zip_entry_is_symlink(&entry) {
+            return Err(format!("symlink entries are not allowed: {entry_name}"));
+        }
+        let declared = entry.size();
+        let compressed = entry.compressed_size();
+        if declared < 0 || compressed < 0 {
+            return Err(format!("invalid zip entry sizes: {entry_name}"));
+        }
+        if compressed > 0 && (declared as f64) / (compressed as f64) > MAX_COMPRESSION_RATIO {
+            return Err(format!("suspicious compression ratio: {entry_name}"));
+        }
+        let path = safe_member_path(&entry_name)?;
+        let key = path
+            .to_string_lossy()
+            .replace('\\', "/")
+            .to_ascii_lowercase();
+        if !names_lower.insert(key) {
+            return Err(format!("duplicate / case-colliding path: {entry_name}"));
+        }
+        total = total.saturating_add(declared as u64);
         if total > cap {
             return Err(format!(
                 "zip expands past {} MB cap (OPENFDD_MAX_UNCOMPRESSED_MB)",
                 cap / (1024 * 1024)
             ));
         }
-        let mut buf = Vec::with_capacity(entry.size() as usize);
+        let mut buf = Vec::with_capacity(declared as usize);
         entry
             .read_to_end(&mut buf)
-            .map_err(|e| format!("zip entry {:?}: {e}", entry.name()))?;
+            .map_err(|e| format!("zip entry {:?}: {e}", entry_name))?;
+        if buf.len() as u64 > cap || total.saturating_sub(declared as u64) + buf.len() as u64 > cap {
+            return Err(format!(
+                "zip expands past {} MB cap (OPENFDD_MAX_UNCOMPRESSED_MB)",
+                cap / (1024 * 1024)
+            ));
+        }
+        if declared > 0 && buf.len() as u64 > declared as u64 {
+            return Err(format!("zip entry expanded past declared size: {entry_name}"));
+        }
         out.insert(path, buf);
     }
     if out.is_empty() {
@@ -895,7 +957,117 @@ mod tests {
         let zip = build_zip(&[("../evil.txt", "x")]);
         let out = import_package_zip(&zip);
         assert_eq!(out["ok"], json!(false));
-        assert!(out["error"].as_str().unwrap().contains("unsafe zip entry"));
+        assert!(
+            out["error"]
+                .as_str()
+                .unwrap()
+                .contains("path traversal rejected")
+        );
+    }
+
+    #[test]
+    fn hostile_zip_cases_from_fixture_catalog() {
+        // Mirrors tests/react_parity/fixtures/hostile_zip/cases.json — archives built at test time.
+        let slip = build_zip(&[("../../etc/passwd", "x")]);
+        let out = import_package_zip(&slip);
+        assert_eq!(out["ok"], json!(false));
+        assert!(
+            out["error"]
+                .as_str()
+                .unwrap()
+                .contains("path traversal rejected")
+        );
+
+        let absolute = build_zip(&[("/etc/passwd", "x")]);
+        let out = import_package_zip(&absolute);
+        assert_eq!(out["ok"], json!(false));
+        assert!(
+            out["error"]
+                .as_str()
+                .unwrap()
+                .contains("absolute path in zip rejected")
+        );
+
+        // Symlink entry (zip-slip variant) — name alone is harmless; Unix symlink mode is not.
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        {
+            let mut zw = zip::ZipWriter::new(&mut cursor);
+            let opts = zip::write::SimpleFileOptions::default()
+                .unix_permissions(0o120777);
+            zw.start_file("link_to_outside", opts).unwrap();
+            zw.write_all(b"../../etc/passwd").unwrap();
+            zw.finish().unwrap();
+        }
+        let symlink_zip = cursor.into_inner();
+        let out = import_package_zip(&symlink_zip);
+        assert_eq!(out["ok"], json!(false));
+        assert!(
+            out["error"]
+                .as_str()
+                .unwrap()
+                .contains("symlink entries are not allowed")
+        );
+
+        // Extension spoof is allowed at zip layer; ingest fails later on missing manifest/maps.
+        let spoof = build_zip(&[("evil.csv.exe", "not-a-package")]);
+        let out = import_package_zip(&spoof);
+        assert_eq!(out["ok"], json!(false));
+        assert!(
+            out["error"]
+                .as_str()
+                .unwrap()
+                .contains("manifest.json")
+        );
+
+        // Nested zip entries are ignored with a warning once a valid package is ingested elsewhere;
+        // a zip-only archive still fails closed on missing manifest.
+        let nested = build_zip(&[("payload.zip", "PK\x03\x04")]);
+        let out = import_package_zip(&nested);
+        assert_eq!(out["ok"], json!(false));
+
+        // Case-colliding paths.
+        let dup = build_zip(&[
+            ("MANIFEST.JSON", "x"),
+            ("manifest.json", "y"),
+        ]);
+        let out = import_package_zip(&dup);
+        assert_eq!(out["ok"], json!(false));
+        assert!(
+            out["error"]
+                .as_str()
+                .unwrap()
+                .contains("duplicate / case-colliding path")
+        );
+    }
+
+    #[test]
+    fn rejects_absolute_and_nested_zip_entries() {
+        let zip = build_zip(&[("/etc/passwd", "x")]);
+        let out = import_package_zip(&zip);
+        assert_eq!(out["ok"], json!(false), "{out}");
+        assert!(
+            out["error"]
+                .as_str()
+                .unwrap_or("")
+                .contains("absolute path in zip rejected"),
+            "{out}"
+        );
+
+        // Nested .zip members are ignored (not expanded) during ingest.
+        let outer = build_zip(&[
+            (
+                "manifest.json",
+                r#"{"schema_version":"openfdd_package_v1","building_id":"B_NEST","grid_minutes":5}"#,
+            ),
+            ("nested.zip", "PK\x03\x04not-a-real-nested"),
+        ]);
+        let out = import_package_zip(&outer);
+        // Missing equipment maps → ok=false, but must not crash on nested zip bytes.
+        assert_eq!(out["ok"], json!(false), "{out}");
+        assert!(
+            out["error"].as_str().is_some() || out["missing_maps"].is_array(),
+            "{out}"
+        );
     }
 
     #[test]
