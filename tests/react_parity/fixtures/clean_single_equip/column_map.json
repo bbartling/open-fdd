@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "equipment": {
+    "AHU-1": {
+      "sat": "sat_f",
+      "mat": "mat_f",
+      "fan_status": "fan_status"
+    }
+  }
+}

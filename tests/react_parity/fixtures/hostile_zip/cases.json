@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {
+      "id": "zip_slip",
+      "relative": "../../etc/passwd"
+    },
+    {
+      "id": "symlink",
+      "relative": "link_to_outside"
+    },
+    {
+      "id": "extension_spoof",
+      "relative": "evil.csv.exe"
+    }
+  ]
+}

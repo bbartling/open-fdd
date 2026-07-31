@@ -1,0 +1,11 @@
+{
+  "SCHED-1": {
+    "status": "pass"
+  },
+  "MISSING": {
+    "status": "insufficient_data"
+  },
+  "ERROR": {
+    "status": "error"
+  }
+}

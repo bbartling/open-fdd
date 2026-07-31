@@ -1,0 +1,7 @@
+{
+  "run_id": "r1",
+  "status": "succeeded",
+  "rules": [
+    "SCHED-1"
+  ]
+}
