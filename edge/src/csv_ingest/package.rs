@@ -926,7 +926,7 @@ fn infer_parent_ahu(equipment_id: &str, siblings: &[String]) -> Option<String> {
         return None;
     }
     // Explicit AHU token in the VAV id.
-    for part in upper.split(|c| c == '_' || c == '-' || c == '/') {
+    for part in upper.split(['_', '-', '/']) {
         if part.starts_with("AHU") && part.len() > 3 {
             let candidate = part.to_string();
             if siblings.iter().any(|s| s.eq_ignore_ascii_case(&candidate)) {
