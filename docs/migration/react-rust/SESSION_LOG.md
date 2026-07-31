@@ -2,6 +2,13 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M4-04
+
+- React `RulesPage` → `POST /api/fdd/run` (registry mode, AbortSignal cancel); `FindingsPage` → `GET /api/fdd/results` with equipment/status filters + JSON/CSV download.
+- Typed `fddApi.ts` (status/rules/run/results/series helpers). Run is synchronous (central `spawn_blocking`); UI shows progress + cancel via fetch abort.
+- No Python in React FDD path — DataFusion only. Compose no-Python profile remains M6-02.
+- Next: M5 family A (rule catalog/tuning depth) or M6 exit wave after M4 gate.
+
 ## 2026-07-31 — P1-M4-03
 
 - Added `GET /api/csv/import/package/mapping` + `/buildings` inventory (columns, unmapped/ambiguous, VAV parent AHU heuristic, sampling health, blockers vs warnings).
