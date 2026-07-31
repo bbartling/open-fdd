@@ -2,6 +2,7 @@
 
 mod analytics;
 mod auth;
+mod contract;
 mod eplus_runner;
 mod ingest;
 mod jobs;
@@ -13,6 +14,7 @@ mod state;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use axum::middleware;
 use axum::Router;
 use state::AppState;
 use tower_http::trace::TraceLayer;
@@ -39,6 +41,7 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .merge(routes::router(Arc::clone(&state)))
         .merge(openapi::router())
+        .layer(middleware::from_fn(contract::request_id_middleware))
         .layer(TraceLayer::new_for_http());
 
     let host = std::env::var("OPENFDD_CENTRAL_HOST").unwrap_or_else(|_| "0.0.0.0".into());
