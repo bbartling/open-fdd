@@ -45,6 +45,14 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/csv/import/package/roles",
             post(csv_import_package_roles),
         )
+        .route(
+            "/api/csv/import/package/mapping",
+            get(csv_import_package_mapping),
+        )
+        .route(
+            "/api/csv/import/package/buildings",
+            get(csv_import_package_buildings),
+        )
         .route("/api/csv/import/plan", post(csv_plan))
         .route("/api/csv/import/preflight", post(csv_preflight))
         .route("/api/csv/import/execute", post(csv_execute))
@@ -963,6 +971,53 @@ pub async fn csv_import_package_roles(Json(body): Json<Value>) -> Json<Value> {
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package roles task: {e}")}));
+    Json(result)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PackageMappingQuery {
+    building_id: Option<String>,
+    equipment_id: Option<String>,
+}
+
+/// Inventory + validation for ingested package column→role maps (P1-M4-03).
+pub async fn csv_import_package_mapping(Query(q): Query<PackageMappingQuery>) -> Json<Value> {
+    let Some(building_id) = q
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return Json(json!({
+            "ok": false,
+            "error": "building_id query parameter required",
+        }));
+    };
+    let equipment_id = q
+        .equipment_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let result = tokio::task::spawn_blocking(move || {
+        open_fdd_edge_prototype::csv_ingest::package::get_package_mapping_handler(
+            &building_id,
+            equipment_id.as_deref(),
+        )
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("package mapping task: {e}")}));
+    Json(result)
+}
+
+/// List ingested package buildings under workspace csv_buildings.
+pub async fn csv_import_package_buildings() -> Json<Value> {
+    let result = tokio::task::spawn_blocking(
+        open_fdd_edge_prototype::csv_ingest::package::list_package_buildings_handler,
+    )
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("package buildings task: {e}")}));
     Json(result)
 }
 

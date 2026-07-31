@@ -898,6 +898,369 @@ fn find_equipment_dir(building_root: &Path, equipment_id: &str) -> Option<PathBu
     None
 }
 
+fn infer_equipment_type_local(equipment_id: &str) -> &'static str {
+    let id = equipment_id.to_ascii_uppercase();
+    if id.contains("VAV") || id.contains("ZONE") {
+        "VAV"
+    } else if id.contains("AHU") || id.contains("RTU") || id.contains("MAU") {
+        "AHU"
+    } else if id.contains("CHILL")
+        || id.contains("BOILER")
+        || id.contains("PUMP")
+        || id.contains("TOWER")
+    {
+        "PLANT"
+    } else if id.contains("HP") || id.contains("HEAT_PUMP") {
+        "HEAT_PUMP"
+    } else if id.contains("METER") {
+        "METER"
+    } else {
+        "GENERAL"
+    }
+}
+
+/// Infer VAV→AHU parent from equipment id tokens (e.g. `VAV_1_AHU_2` → `AHU_2`).
+fn infer_parent_ahu(equipment_id: &str, siblings: &[String]) -> Option<String> {
+    let upper = equipment_id.to_ascii_uppercase();
+    if !upper.contains("VAV") && !upper.contains("ZONE") {
+        return None;
+    }
+    // Explicit AHU token in the VAV id.
+    for part in upper.split(['_', '-', '/']) {
+        if part.starts_with("AHU") && part.len() > 3 {
+            let candidate = part.to_string();
+            if siblings.iter().any(|s| s.eq_ignore_ascii_case(&candidate)) {
+                return siblings
+                    .iter()
+                    .find(|s| s.eq_ignore_ascii_case(&candidate))
+                    .cloned();
+            }
+            return Some(candidate);
+        }
+    }
+    // Embedded `…AHU…N…` substring match against known AHU siblings.
+    let ahus: Vec<&String> = siblings
+        .iter()
+        .filter(|s| infer_equipment_type_local(s) == "AHU")
+        .collect();
+    for ahu in &ahus {
+        let ahu_u = ahu.to_ascii_uppercase();
+        if upper.contains(&ahu_u) {
+            return Some((*ahu).clone());
+        }
+    }
+    if ahus.len() == 1 {
+        return Some(ahus[0].clone());
+    }
+    None
+}
+
+/// Raw columns.csv parse — empty roles stay empty (no silent inference for the editor).
+fn read_columns_csv_raw(path: &Path) -> Result<(Vec<String>, BTreeMap<String, String>), String> {
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let mut rdr = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(text.as_bytes());
+    let headers = rdr
+        .headers()
+        .map_err(|e| format!("columns.csv headers: {e}"))?
+        .clone();
+    let col_idx = headers
+        .iter()
+        .position(|h| matches!(h.trim().to_ascii_lowercase().as_str(), "column" | "col"));
+    let role_idx = headers.iter().position(|h| {
+        matches!(
+            h.trim().to_ascii_lowercase().as_str(),
+            "role" | "point_role"
+        )
+    });
+    let Some(col_idx) = col_idx else {
+        return Err(format!(
+            "columns.csv missing column header: {}",
+            path.display()
+        ));
+    };
+    let mut order = Vec::new();
+    let mut roles = BTreeMap::new();
+    for rec in rdr.records() {
+        let rec = rec.map_err(|e| format!("columns.csv row: {e}"))?;
+        let column = rec.get(col_idx).unwrap_or("").trim().to_string();
+        if column.is_empty() {
+            continue;
+        }
+        order.push(column.clone());
+        let role = role_idx
+            .and_then(|i| rec.get(i))
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if !role.is_empty() {
+            roles.insert(column, fdd_core::normalize_role(&role));
+        }
+    }
+    Ok((order, roles))
+}
+
+fn sampling_health(history_path: &Path) -> Value {
+    match std::fs::read(history_path) {
+        Ok(bytes) => {
+            let mut rdr = csv::ReaderBuilder::new()
+                .has_headers(true)
+                .from_reader(bytes.as_slice());
+            let mut count = 0u64;
+            let mut first: Option<String> = None;
+            let mut last: Option<String> = None;
+            let headers = rdr.headers().ok().cloned();
+            let ts_idx = headers.as_ref().and_then(|h| {
+                h.iter().position(|c| {
+                    matches!(
+                        c.trim().to_ascii_lowercase().as_str(),
+                        "timestamp_utc" | "timestamp" | "ts" | "time"
+                    )
+                })
+            });
+            for rec in rdr.records().flatten() {
+                count += 1;
+                if let Some(i) = ts_idx {
+                    if let Some(ts) = rec.get(i).map(str::trim).filter(|s| !s.is_empty()) {
+                        if first.is_none() {
+                            first = Some(ts.to_string());
+                        }
+                        last = Some(ts.to_string());
+                    }
+                }
+            }
+            json!({
+                "row_count": count,
+                "first_timestamp": first,
+                "last_timestamp": last,
+                "ok": count > 0,
+            })
+        }
+        Err(e) => json!({
+            "ok": false,
+            "error": format!("history_wide.csv: {e}"),
+            "row_count": 0,
+        }),
+    }
+}
+
+fn list_equipment_ids(building_root: &Path) -> Vec<String> {
+    let mut ids = Vec::new();
+    for e in walkdir::WalkDir::new(building_root)
+        .min_depth(1)
+        .max_depth(3)
+        .into_iter()
+        .flatten()
+    {
+        if e.file_type().is_dir() && e.path().join("history_wide.csv").is_file() {
+            if let Some(name) = e.file_name().to_str() {
+                if name != "weather" {
+                    ids.push(name.to_string());
+                }
+            }
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+/// `GET /api/csv/import/package/mapping` — inventory + validation for ingested package equipment.
+///
+/// Query via JSON body or caller-supplied ids: `building_id` required; `equipment_id` optional.
+/// Does not invent mappings for blank roles (gap stays visible).
+pub fn get_package_mapping_handler(building_id: &str, equipment_id: Option<&str>) -> Value {
+    let building_id = match validate_id(building_id) {
+        Ok(id) => id,
+        Err(e) => return json!({"ok": false, "error": format!("building_id: {e}")}),
+    };
+    let data_root = workspace_dir().join("data").join("csv_buildings");
+    let building_root = data_root.join(&building_id);
+    if !building_root.is_dir() {
+        return json!({
+            "ok": false,
+            "error": format!("building {building_id:?} not found under {}", data_root.display()),
+            "hint": "upload an openfdd_package_v1 zip first",
+        });
+    }
+
+    let all_ids = list_equipment_ids(&building_root);
+    let selected: Vec<String> = match equipment_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(eq) => match validate_id(eq) {
+            Ok(id) => {
+                if !all_ids.iter().any(|x| x == &id) {
+                    return json!({
+                        "ok": false,
+                        "error": format!("equipment {id:?} not found under building {building_id}"),
+                        "equipment_ids": all_ids,
+                    });
+                }
+                vec![id]
+            }
+            Err(e) => return json!({"ok": false, "error": format!("equipment_id: {e}")}),
+        },
+        None => all_ids.clone(),
+    };
+
+    let session = crate::fdd::session_config::get_session_config();
+    let unit_system = session
+        .get("config")
+        .and_then(|c| c.get("unit_system"))
+        .cloned()
+        .unwrap_or(json!("imperial"));
+    let session_role_map = session
+        .get("config")
+        .and_then(|c| c.get("role_map"))
+        .cloned()
+        .unwrap_or(json!({}));
+
+    let mut equipment = Vec::new();
+    let mut blocker_count = 0usize;
+    let mut warning_count = 0usize;
+
+    for eq_id in &selected {
+        let Some(eq_dir) = find_equipment_dir(&building_root, eq_id) else {
+            continue;
+        };
+        let cols_path = eq_dir.join("columns.csv");
+        let history_path = eq_dir.join("history_wide.csv");
+        let (columns_order, roles) = match read_columns_csv_raw(&cols_path) {
+            Ok(v) => v,
+            Err(e) => {
+                blocker_count += 1;
+                equipment.push(json!({
+                    "equipment_id": eq_id,
+                    "equipment_type": infer_equipment_type_local(eq_id),
+                    "parent_ahu": infer_parent_ahu(eq_id, &all_ids),
+                    "ok": false,
+                    "error": e,
+                    "blockers": ["columns.csv unreadable"],
+                    "warnings": [],
+                }));
+                continue;
+            }
+        };
+
+        let mut role_to_cols: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for (col, role) in &roles {
+            role_to_cols
+                .entry(role.clone())
+                .or_default()
+                .push(col.clone());
+        }
+        let ambiguous: BTreeMap<String, Vec<String>> = role_to_cols
+            .into_iter()
+            .filter(|(_, cols)| cols.len() > 1)
+            .collect();
+
+        let unmapped: Vec<String> = columns_order
+            .iter()
+            .filter(|c| !roles.contains_key(*c))
+            .cloned()
+            .collect();
+
+        let mut blockers = Vec::new();
+        let mut warnings = Vec::new();
+        if roles.is_empty() {
+            blockers.push("no roles mapped — FDD rules will skip this equipment".to_string());
+        }
+        if !ambiguous.is_empty() {
+            blockers.push(format!(
+                "{} ambiguous role(s) assigned to multiple columns",
+                ambiguous.len()
+            ));
+        }
+        if !unmapped.is_empty() {
+            warnings.push(format!("{} unmapped column(s)", unmapped.len()));
+        }
+        let parent_ahu = infer_parent_ahu(eq_id, &all_ids);
+        let eq_type = infer_equipment_type_local(eq_id);
+        if eq_type == "VAV" && parent_ahu.is_none() {
+            warnings.push(
+                "VAV has no inferred parent AHU — set relationship in session role_map when known"
+                    .into(),
+            );
+        }
+
+        blocker_count += blockers.len();
+        warning_count += warnings.len();
+
+        let column_rows: Vec<Value> = columns_order
+            .iter()
+            .map(|col| {
+                let role = roles.get(col).cloned().unwrap_or_default();
+                let status = if role.is_empty() {
+                    "unmapped"
+                } else if ambiguous.get(&role).is_some_and(|c| c.len() > 1) {
+                    "ambiguous"
+                } else {
+                    "mapped"
+                };
+                json!({
+                    "column": col,
+                    "role": role,
+                    "status": status,
+                })
+            })
+            .collect();
+
+        equipment.push(json!({
+            "equipment_id": eq_id,
+            "equipment_type": eq_type,
+            "parent_ahu": parent_ahu,
+            "ok": blockers.is_empty(),
+            "columns": column_rows,
+            "roles": roles,
+            "unmapped_columns": unmapped,
+            "ambiguous_roles": ambiguous,
+            "sampling": sampling_health(&history_path),
+            "blockers": blockers,
+            "warnings": warnings,
+        }));
+    }
+
+    json!({
+        "ok": true,
+        "building_id": building_id,
+        "unit_system": unit_system,
+        "equipment_ids": all_ids,
+        "equipment": equipment,
+        "session_role_map": session_role_map,
+        "validation": {
+            "blocker_count": blocker_count,
+            "warning_count": warning_count,
+            "equipment_count": equipment.len(),
+        },
+    })
+}
+
+/// `GET /api/csv/import/package/buildings` — list ingested package building ids.
+pub fn list_package_buildings_handler() -> Value {
+    let data_root = workspace_dir().join("data").join("csv_buildings");
+    let mut buildings = Vec::new();
+    if data_root.is_dir() {
+        if let Ok(rd) = std::fs::read_dir(&data_root) {
+            for e in rd.flatten() {
+                if e.path().is_dir() {
+                    if let Some(name) = e.file_name().to_str() {
+                        if !name.starts_with('.') {
+                            buildings.push(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    buildings.sort();
+    json!({
+        "ok": true,
+        "buildings": buildings,
+        "path": data_root.display().to_string(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1163,6 +1526,44 @@ mod tests {
         assert_eq!(upd["ignored_columns"], json!(["GHOST"]), "{upd}");
         let cols = std::fs::read_to_string(&cols_path).unwrap();
         assert!(cols.contains("SF_SPD,fan_status"), "{cols}");
+
+        set_ws(&tmp);
+        let inv = get_package_mapping_handler("BUILDING_9", Some("AHU_1"));
+        assert_eq!(inv["ok"], json!(true), "{inv}");
+        assert_eq!(inv["building_id"], json!("BUILDING_9"));
+        assert_eq!(inv["validation"]["equipment_count"], json!(1));
+        let eq0 = &inv["equipment"][0];
+        assert_eq!(eq0["equipment_id"], json!("AHU_1"));
+        assert_eq!(eq0["equipment_type"], json!("AHU"));
+        assert_eq!(eq0["roles"]["SF_SPD"], json!("fan_status"));
+        assert!(eq0["sampling"]["row_count"].as_u64().unwrap_or(0) >= 1);
+
+        let buildings = list_package_buildings_handler();
+        assert_eq!(buildings["ok"], json!(true), "{buildings}");
+        assert!(
+            buildings["buildings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|b| b == "BUILDING_9"),
+            "{buildings}"
+        );
+
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn parent_ahu_inference_from_vav_id() {
+        let siblings = vec!["AHU_1".into(), "VAV_2_AHU_1".into(), "VAV_9".into()];
+        assert_eq!(
+            infer_parent_ahu("VAV_2_AHU_1", &siblings).as_deref(),
+            Some("AHU_1")
+        );
+        assert_eq!(
+            infer_parent_ahu("VAV_9", &siblings).as_deref(),
+            Some("AHU_1"),
+            "single AHU sibling fallback"
+        );
+        assert_eq!(infer_parent_ahu("AHU_1", &siblings), None);
     }
 }
