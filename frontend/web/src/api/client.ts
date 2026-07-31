@@ -62,11 +62,19 @@ export async function apiFetch<T>(
   init?: RequestInit,
 ): Promise<T> {
   const requestId = newRequestId();
+  let authHeader: Record<string, string> = {};
+  try {
+    const token = sessionStorage.getItem("openfdd.auth.token");
+    if (token) authHeader = { Authorization: `Bearer ${token}` };
+  } catch {
+    // ignore
+  }
   const res = await fetch(buildUrl(path), {
     ...init,
     headers: {
       Accept: "application/json",
       [REQUEST_ID_HEADER]: requestId,
+      ...authHeader,
       ...(init?.headers ?? {}),
     },
   });

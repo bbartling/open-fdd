@@ -2,6 +2,11 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M5-F
+
+- Thin `AuthPage` + `authApi` for `/api/auth/status|me|login`; Bearer token in sessionStorage; `apiFetch` attaches Authorization.
+- Next: P1-M6-01 Python exit matrix closure.
+
 ## 2026-07-31 — P1-M5-E
 
 - ReportsPage: plots + Artifacts mode (`/api/reports` list/draft/engineering-findings). PDF/DOCX noted ORACLE.
