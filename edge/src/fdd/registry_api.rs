@@ -141,12 +141,14 @@ fn rule_summary(rule: &RuleSpec) -> Value {
         "sql_file": rule.sql_file,
         "description": rule.description,
         "required_roles": rule.required_roles,
+        "optional_roles": rule.optional_roles,
         "output_columns": rule.output_columns,
         "confirm_seconds": rule.confirm_seconds,
         "confirm_min": (rule.confirm_seconds as f64) / 60.0,
         "parity_status": rule.parity_status,
         "dashboard_wired": rule.dashboard_wired,
         "parameter_count": rule.parameters.len(),
+        "aliases": rule.aliases,
     })
 }
 

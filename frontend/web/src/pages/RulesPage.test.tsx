@@ -5,6 +5,20 @@ import { RulesPage } from "./RulesPage";
 
 vi.mock("../api/mappingApi", () => ({
   listPackageBuildings: vi.fn(async () => ["B1"]),
+  getSessionConfig: vi.fn(async () => ({
+    ok: true,
+    config: {
+      schema_version: "openfdd_session_v1",
+      unit_system: "imperial",
+      role_map: {},
+      params: {},
+    },
+  })),
+  putSessionConfig: vi.fn(async (config: unknown) => ({
+    ok: true,
+    config,
+    warnings: [],
+  })),
 }));
 
 vi.mock("../api/fddApi", async () => {
@@ -15,11 +29,13 @@ vi.mock("../api/fddApi", async () => {
     ...actual,
     getFddStatus: vi.fn(),
     listFddRules: vi.fn(),
+    getFddRuleParams: vi.fn(),
     runFdd: vi.fn(),
   };
 });
 
-import { getFddStatus, listFddRules, runFdd } from "../api/fddApi";
+import { getFddStatus, listFddRules, getFddRuleParams, runFdd } from "../api/fddApi";
+import { putSessionConfig } from "../api/mappingApi";
 
 function renderRules(entry = "/rules?site=B1") {
   return render(
@@ -42,9 +58,28 @@ describe("RulesPage", () => {
       {
         rule_id: "FC1",
         description: "Fan speed",
-        equipment_kinds: ["AHU"],
+        parity_status: "proven_building_100",
+        parameter_count: 1,
+        required_roles: ["fan_cmd"],
       },
     ]);
+    vi.mocked(getFddRuleParams).mockResolvedValue({
+      ok: true,
+      rule_id: "FC1",
+      params: {
+        eps_vfd_spd: {
+          key: "eps_vfd_spd",
+          label: "VFD eps",
+          default: 0.05,
+          min: 0,
+          max: 0.5,
+          step: 0.01,
+          unit: "frac",
+          control: "slider",
+          sql_placeholder: "EPS_VFD_SPD",
+        },
+      },
+    });
     vi.mocked(runFdd).mockResolvedValue({
       ok: true,
       engine: "fdd_rules+DataFusion",
@@ -88,5 +123,19 @@ describe("RulesPage", () => {
     await waitFor(() => screen.getByTestId("fdd-run"));
     const runBtn = screen.getByTestId("fdd-run").querySelector("button");
     expect(runBtn?.disabled).toBe(true);
+  });
+
+  it("loads param sliders and saves to session-config", async () => {
+    renderRules();
+    await waitFor(() => screen.getByTestId("fdd-param-eps_vfd_spd"));
+    fireEvent.change(screen.getByTestId("fdd-param-num-eps_vfd_spd"), {
+      target: { value: "0.12" },
+    });
+    const saveBtn = screen.getByTestId("fdd-save-params").querySelector("button");
+    fireEvent.click(saveBtn!);
+    await waitFor(() => {
+      expect(putSessionConfig).toHaveBeenCalled();
+      expect(screen.getByTestId("rules-notice").textContent).toMatch(/Saved params/);
+    });
   });
 });

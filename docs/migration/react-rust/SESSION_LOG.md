@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M5-A
+
+- Enriched `GET /api/fdd/rules` summaries (aliases, optional_roles).
+- RulesPage tuning panel: `GET /api/fdd/rules/{id}/params` → Slider + numeric entry; clamp to registry bounds; save via session-config `params`; bind into `/api/fdd/run`.
+- Next: P1-M5-B plot datasets.
+
 ## 2026-07-31 — P1-M4-04
 
 - React `RulesPage` → `POST /api/fdd/run` (registry mode, AbortSignal cancel); `FindingsPage` → `GET /api/fdd/results` with equipment/status filters + JSON/CSV download.
