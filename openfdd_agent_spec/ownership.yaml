@@ -56,7 +56,14 @@ components:
   product_streamlit_ui:
     canonical_owner: services/ui
     image: ghcr.io/bbartling/openfdd-ui
-    note: Single Streamlit surface — not Vite/Caddy SPA
+    note: Default Streamlit surface; React SPA Phase 1 behind flag (ADR-001) — not default Vite/Caddy SPA
+
+  product_react_spa:
+    canonical_owner: frontend
+    status: phase1_flagged
+    backend: services/central
+    note: Browser → central /api only; no FastAPI sidecar
+    adr: docs/architecture/adr-001-react-rust-modernization.md
 
   vibe19_demo:
     canonical_owner: vibe_code_apps_19

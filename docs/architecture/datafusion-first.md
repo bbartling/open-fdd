@@ -34,6 +34,9 @@ Pandas may remain as:
 Canonical path: `sql_rules/` + `crates/fdd_rules` + `POST /api/fdd/run`.  
 Pandas cookbook only with explicit `OPENFDD_ALLOW_PANDAS_FDD=1`.
 
-UI: **one** Streamlit app (`services/ui`) for vibe19 + WattLab export.
+UI: **one** Streamlit app (`services/ui`) for vibe19 + WattLab export as the
+**default** product surface. Phase 1 authorizes a React SPA behind a flag
+([ADR-001](adr-001-react-rust-modernization.md)); Streamlit remains fallback
+until Phase 2. Deterministic FDD stays DataFusion SQL either way.
 
-See [VIBE19_VIBE20_OPENFDD_AUDIT.md](../migration/VIBE19_VIBE20_OPENFDD_AUDIT.md) · [Rule Cookbook](../rules/cookbook/).
+See [VIBE19_VIBE20_OPENFDD_AUDIT.md](../migration/VIBE19_VIBE20_OPENFDD_AUDIT.md) · [Rule Cookbook](../rules/cookbook/) · [React/Rust modernization](../migration/react-rust/).

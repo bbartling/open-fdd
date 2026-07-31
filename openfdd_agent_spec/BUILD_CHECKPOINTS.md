@@ -131,3 +131,20 @@ Docs: [`MILESTONE_D_CLOSEOUT.md`](../docs/migration/MILESTONE_D_CLOSEOUT.md),
 - [x] OFDD-069 findings draft persist + OFDD-065 Liberty deltas + MCP-IT doc
 - [x] ECM-ERV-001 HAS_EP_PROTOTYPE residual stub (not product cascade)
 - [x] Merge #601 → GHCR `:sha-<final>` + `:nightly` → re-soak checklist
+
+---
+
+# React / Rust modernization — Phase 1 (2026-07-31+)
+
+Program: [`tools/open-fdd-modernization/`](../tools/open-fdd-modernization/README.md) ·
+Ledgers: [`docs/migration/react-rust/`](../docs/migration/react-rust/README.md) ·
+ADR: [`ADR-001`](../docs/architecture/adr-001-react-rust-modernization.md)
+
+- [x] P1-M0-01 — ADR + instruction reconciliation + policy CI
+- [ ] P1-M0-02 — Capability / Python-exit / API ledgers
+- [ ] P1-M1 — Fixtures / oracle exporter / Streamlit baseline
+- [ ] P1-M2 — Rust contracts + React shell + async ops
+- [ ] P1-M3 — Parity shell / widgets / navigation
+- [ ] P1-M4 — Jobs/CSV/map/run vertical slice
+- [ ] P1-M5 — Domain families
+- [ ] P1-M6 — No-Python RC qualification

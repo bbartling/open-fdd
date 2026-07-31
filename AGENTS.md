@@ -5,12 +5,12 @@ Open-FDD ships as a **container stack**: `openfdd-central`, `openfdd-ui`, `openf
 | Layer | Responsibility |
 | --- | --- |
 | **central** | MQTTS ingest, Feather, FDD registry SQL, REST + JWT |
-| **ui** | Streamlit vibe19 lab (`services/ui`) — Feather ingest + DataFusion SQL FDD |
+| **ui** | Streamlit product UI (`services/ui`) — default / Phase 1 fallback; React SPA authorized per [ADR-001](docs/architecture/adr-001-react-rust-modernization.md) |
 | **fieldbus** | BACnet / Modbus / Haystack OT drivers |
 | **mqtt** | Mosquitto MQTTS broker |
 | **mcp** | Optional read-first stdio tools → central (`OPENFDD_API_BASE`) |
 
-**Docs:** [Build recipes](docs/operations/build-recipes.md) · [External agents](docs/examples/external-agents.md) · [MCP README](mcp/README.md) · [ECM engineering (PyPI)](docs/ecm/README.md)
+**Docs:** [Build recipes](docs/operations/build-recipes.md) · [External agents](docs/examples/external-agents.md) · [MCP README](mcp/README.md) · [ECM engineering (PyPI)](docs/ecm/README.md) · [React/Rust modernization](docs/migration/react-rust/README.md)
 
 **Software-engineering agent OS:** [`openfdd_agent_spec/`](openfdd_agent_spec/) — architecture locks, skills, Milestone A ([`openfdd_agent_spec/MILESTONE_A.md`](openfdd_agent_spec/MILESTONE_A.md)). Ops/edge soak prompts stay under [`docs/agent/`](docs/agent/).
 
