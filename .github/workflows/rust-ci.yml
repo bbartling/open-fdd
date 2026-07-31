@@ -102,6 +102,29 @@ jobs:
           test -f VERSION
           grep -qE '^3\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$' VERSION
 
+  react-web:
+    name: React web (frontend/web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/web/package-lock.json
+      - name: typecheck, test, build
+        working-directory: frontend/web
+        run: |
+          npm ci
+          npm run typecheck
+          npm run test
+          npm run build
+      - name: architecture policy
+        run: python3 scripts/architecture_react_policy_check.py
+
   docker:
     name: Stack compose config and Dockerfiles
     runs-on: ubuntu-latest
