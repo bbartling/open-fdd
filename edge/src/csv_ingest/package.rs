@@ -181,7 +181,7 @@ fn safe_member_path(name: &str) -> Result<PathBuf, String> {
         .split('/')
         .filter(|p| !p.is_empty() && *p != ".")
         .collect();
-    if parts.iter().any(|p| *p == "..") {
+    if parts.contains(&"..") {
         return Err(format!("path traversal rejected: {name:?}"));
     }
     if parts.len() > MAX_PATH_DEPTH {
