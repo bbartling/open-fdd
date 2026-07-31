@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M3-02
+
+- Accessible widget primitives under `frontend/web/src/components/widgets/` (select, slider, checkbox/radio/toggle, file upload, buttons, tabs, expander, metric, table, progress/badge, Plotly host placeholder, confirm modal, toast/inline alert).
+- `widgets.css` token-driven styles; barrel `index.ts`; vitest coverage for select, slider keyboard, checkbox, modal, expander.
+- Home widget gallery demo on HomePage. Next: P1-M3-03 routing/session.
+
 ## 2026-07-31 — P1-M3-01
 
 - Expanded design tokens + Streamlit-like shell geometry (`LAYOUT_GEOMETRY.md`).
