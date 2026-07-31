@@ -4,6 +4,11 @@ Newest first. Append after non-trivial agent work.
 
 ---
 
+## 2026-07-31 — P1-M0-02 migration ledgers
+
+- Seeded `docs/migration/react-rust/` capability / Python-exit / API / parity matrices from code.
+- openfdd_agent_spec BUILD_CHECKPOINTS updated (M0 complete).
+
 ## 2026-07-31 — P1-M0-01 React/Rust modernization ADR
 
 - Accepted ADR-001 (React+TS SPA → central Rust `/api`; DataFusion FDD; no FastAPI).

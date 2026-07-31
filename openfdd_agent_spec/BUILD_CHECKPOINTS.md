@@ -141,7 +141,7 @@ Ledgers: [`docs/migration/react-rust/`](../docs/migration/react-rust/README.md) 
 ADR: [`ADR-001`](../docs/architecture/adr-001-react-rust-modernization.md)
 
 - [x] P1-M0-01 — ADR + instruction reconciliation + policy CI
-- [ ] P1-M0-02 — Capability / Python-exit / API ledgers
+- [x] P1-M0-02 — Capability / Python-exit / API ledgers
 - [ ] P1-M1 — Fixtures / oracle exporter / Streamlit baseline
 - [ ] P1-M2 — Rust contracts + React shell + async ops
 - [ ] P1-M3 — Parity shell / widgets / navigation

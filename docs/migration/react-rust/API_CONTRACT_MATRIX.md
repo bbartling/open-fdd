@@ -1,0 +1,36 @@
+# API contract matrix (P1-M0-02 seed)
+
+Source: `services/central/src/routes.rs` at inventory time. Versioning/`/api/v1` policy lands in P1-M2-01.
+
+| route family | methods (see OpenAPI) | owner | React consumer target | contract status | notes |
+|---|---|---|---|---|---|
+| `/api/agent` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/agent/tools |
+| `/api/analytics` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/analytics/economizer, /api/analytics/mechanical-cooling, /api/analytics/metering, /api/analytics/rcx/ahu (+6) |
+| `/api/auth` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/auth/login, /api/auth/me, /api/auth/status |
+| `/api/building` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/building/snapshot |
+| `/api/capabilities` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/capabilities |
+| `/api/commands` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/commands, /api/commands/{command_id}/ack |
+| `/api/csv` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/csv/import/execute, /api/csv/import/package, /api/csv/import/package/roles, /api/csv/import/plan (+6) |
+| `/api/data-management` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/data-management/summary |
+| `/api/datasets` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/datasets, /api/datasets/{dataset_id}/preview |
+| `/api/edges` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/edges, /api/edges/{edge_id}, /api/edges/{edge_id}/discovery, /api/edges/{edge_id}/metadata |
+| `/api/export` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/export/meta |
+| `/api/faults` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/faults/status, /api/faults/summary |
+| `/api/fdd` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/fdd/cache/status, /api/fdd/equipment, /api/fdd/results, /api/fdd/roles (+6) |
+| `/api/fdd-rules` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/fdd-rules |
+| `/api/fdd-schema` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/fdd-schema/tables |
+| `/api/health` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/health, /api/health/stack |
+| `/api/host` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/host/stats |
+| `/api/ingest` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/ingest/stats |
+| `/api/jobs` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/jobs, /api/jobs/{job_id}, /api/jobs/{job_id}/archive, /api/jobs/{job_id}/dispositions (+9) |
+| `/api/reports` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/reports, /api/reports/draft, /api/reports/engineering-findings, /api/reports/templates (+3) |
+
+## Gaps for React (P1-M2+)
+
+| gap | needed by | status |
+|---|---|---|
+| Unified error envelope + request IDs | all screens | NOT_STARTED (M2-01) |
+| Async operation poll/cancel substrate | FDD run, import, reports | PARTIAL via fdd/status + jobs runs |
+| Typed TS client generation | SPA | NOT_STARTED (M2-02) |
+| Package upload streaming defenses in Rust | CAP-UPLOAD | PARTIAL (csv import exists; hostile ZIP suite TBD) |
+| Plot dataset contracts (not chart HTML) | CAP-PLOTS | NOT_STARTED (M5-B) |
