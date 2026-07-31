@@ -4,6 +4,7 @@ Newest first. Record product/architecture calls only.
 
 | Date | Decision | Status |
 |------|----------|--------|
+| 2026-07-31 | FDD run is synchronous at `/api/fdd/run` (no run_id poll); React cancel = fetch AbortSignal; async job substrate reserved for longer ops | Accepted |
 | 2026-07-31 | Mapping uses `?site=` as building_id for package inventory; durable maps via package/roles + session-config (not sessionStorage) | Accepted |
 | 2026-07-31 | Shareable Streamlit session keys map to URL query (`job`/`eq`/`site`/`wl`/`section`); form drafts may use sessionStorage only | Accepted |
 | 2026-07-31 | Phase 1 agents must follow `openfdd_agent_spec` + `streamlit-to-react` skill (via AGENT_SKILL_BRIDGE); FastAPI text in generic skill maps to central Rust | Accepted |

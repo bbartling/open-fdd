@@ -16,7 +16,7 @@ Source: `services/central/src/routes.rs` at inventory time. Versioning/`/api/v1`
 | `/api/edges` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/edges, /api/edges/{edge_id}, /api/edges/{edge_id}/discovery, /api/edges/{edge_id}/metadata |
 | `/api/export` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/export/meta |
 | `/api/faults` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/faults/status, /api/faults/summary |
-| `/api/fdd` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/fdd/cache/status, /api/fdd/equipment, /api/fdd/results, /api/fdd/roles (+6) |
+| `/api/fdd` | see OpenAPI | central | Phase 1 React | EXISTS | React: `fddApi.ts` RulesPage run + FindingsPage results (M4-04); also equipment/roles/session-config/series |
 | `/api/fdd-rules` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/fdd-rules |
 | `/api/fdd-schema` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/fdd-schema/tables |
 | `/api/health` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/health, /api/health/stack |
