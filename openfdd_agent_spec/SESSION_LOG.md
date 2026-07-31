@@ -4,6 +4,12 @@ Newest first. Append after non-trivial agent work.
 
 ---
 
+## 2026-07-31 — Phase 1 pause (M1 WIP on branch)
+
+- M0 complete on master (#613/#614).
+- Branch `feat/p1-m1-fixtures-oracle-baseline`: fixtures + exporter + interaction baseline (not merged).
+- Resume: open/finish M1 PR → CI green → merge → continue M2–M6; keep GH tidy / CodeRabbit.
+
 ## 2026-07-31 — P1-M0-02 migration ledgers
 
 - Seeded `docs/migration/react-rust/` capability / Python-exit / API / parity matrices from code.

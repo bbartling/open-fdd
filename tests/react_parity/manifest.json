@@ -1,0 +1,65 @@
+{
+  "schema_version": "react_parity_fixtures.v1",
+  "fixtures": [
+    {
+      "id": "clean_single_equip",
+      "path": "tests/react_parity/fixtures/clean_single_equip",
+      "content_hash": "cfd7552a73b486cac81f7ee2be6768cfc92af466c400c2843cbb2148736ff531"
+    },
+    {
+      "id": "dup_timestamps",
+      "path": "tests/react_parity/fixtures/dup_timestamps",
+      "content_hash": "da4de837b88247afecdbcca608b87c09dd1917a25c89d6827246a43ad7115027"
+    },
+    {
+      "id": "empty_interval",
+      "path": "tests/react_parity/fixtures/empty_interval",
+      "content_hash": "bf6c62379d240792850ed388c15edf1ab3001824f57c708433994b3586fc571e"
+    },
+    {
+      "id": "hostile_zip",
+      "path": "tests/react_parity/fixtures/hostile_zip",
+      "content_hash": "f54ee955b3f2685cc9d1a327e43b7bbf33c99cc0b8e04d0a742191a355b49285"
+    },
+    {
+      "id": "irregular_sampling",
+      "path": "tests/react_parity/fixtures/irregular_sampling",
+      "content_hash": "d4e99f6075146f919293d34ad88ef16e06655da164d60f5cc764d17e746f3332"
+    },
+    {
+      "id": "job_full",
+      "path": "tests/react_parity/fixtures/job_full",
+      "content_hash": "6aa73f810667ef8ff90f13330a5fd18d9fd1f1d311d2c37a747eb0d813ad224e"
+    },
+    {
+      "id": "missing_role",
+      "path": "tests/react_parity/fixtures/missing_role",
+      "content_hash": "d4526c6f2ce37568f799d38bf8f739e8b739910db0e944db701427c43a787936"
+    },
+    {
+      "id": "multi_equip_package",
+      "path": "tests/react_parity/fixtures/multi_equip_package",
+      "content_hash": "de8d29666e752f2672d85cfbbe54ae876dc9641ae9a8d4cb97de98ddc3b13fa6"
+    },
+    {
+      "id": "partial_weather",
+      "path": "tests/react_parity/fixtures/partial_weather",
+      "content_hash": "d8cb652d8f114ba9894286afded5f8fc4fc0fc702fe525e63a943606d36ea60a"
+    },
+    {
+      "id": "rule_outcomes",
+      "path": "tests/react_parity/fixtures/rule_outcomes",
+      "content_hash": "dcd22c587c2cc5745324fcf8b69b05e3ee4e551e38c68f8cf34140c03c08a0ed"
+    },
+    {
+      "id": "unit_mismatch",
+      "path": "tests/react_parity/fixtures/unit_mismatch",
+      "content_hash": "11d9fa3356f1b9fb4e5dc233aaafcfc97d346be6745fd9e694cd631d7c613a07"
+    },
+    {
+      "id": "wattlab_v3",
+      "path": "tests/react_parity/fixtures/wattlab_v3",
+      "content_hash": "635277d3598d091eac7268817bcf769b644c00472fd9e787051b3539e0939cb9"
+    }
+  ]
+}
