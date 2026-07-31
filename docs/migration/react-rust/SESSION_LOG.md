@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M3-03
+
+- URL session translation (`?job=`, `?eq=`, `?site=`, `?wl=`, `?section=`) + form drafts in sessionStorage.
+- `useSessionQuery`, dirty-form unload warning; Jobs/WattLab/Mapping wired.
+- `SESSION_TRANSLATION.md` + deep-link tests. M3 shell gate → next M4-01 Jobs CRUD.
+
 ## 2026-07-31 — docs: agent skill bridge
 
 - Wired `openfdd_agent_spec` + streamlit-to-react skills into Phase 1 bootstrap

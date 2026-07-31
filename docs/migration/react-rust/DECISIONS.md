@@ -4,6 +4,7 @@ Newest first. Record product/architecture calls only.
 
 | Date | Decision | Status |
 |------|----------|--------|
+| 2026-07-31 | Shareable Streamlit session keys map to URL query (`job`/`eq`/`site`/`wl`/`section`); form drafts may use sessionStorage only | Accepted |
 | 2026-07-31 | Phase 1 agents must follow `openfdd_agent_spec` + `streamlit-to-react` skill (via AGENT_SKILL_BRIDGE); FastAPI text in generic skill maps to central Rust | Accepted |
 | 2026-07-31 | Widget primitives use native HTML + CSS tokens; PlotlyHost is a placeholder div until M5 chart parity (no plotly npm in M3) | Accepted |
 | 2026-07-31 | Shared `WidgetBaseProps` + `widgetTestId()` convention for all parity controls | Accepted |
