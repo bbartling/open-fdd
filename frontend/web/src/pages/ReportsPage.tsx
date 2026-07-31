@@ -6,6 +6,7 @@ import {
   DataTable,
   InlineAlert,
   PlotlyHost,
+  RadioGroup,
   Select,
 } from "../components/widgets";
 import { useSessionQuery } from "../session";
@@ -16,15 +17,31 @@ import {
   seriesRowsToFigure,
   type PlotlyFigure,
 } from "../api/plotDataset";
+import {
+  createReportDraft,
+  getEngineeringFindingsReport,
+  listReports,
+  type ReportRecord,
+} from "../api/reportsApi";
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+type ReportRow = {
+  report_id: string;
+  report_type: string;
+  title: string;
+};
+
 export function ReportsPage() {
   const { query, setQuery } = useSessionQuery();
   const buildingId = query.siteId ?? "";
   const equipmentId = query.equipment ?? "";
+  const mode =
+    query.section === "artifacts" || query.section === "metering"
+      ? "artifacts"
+      : "plots";
 
   const [buildings, setBuildings] = useState<string[]>([]);
   const [ruleId, setRuleId] = useState("");
@@ -38,6 +55,10 @@ export function ReportsPage() {
   const [figure, setFigure] = useState<PlotlyFigure | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [reports, setReports] = useState<ReportRecord[]>([]);
+  const [artifactsNotice, setArtifactsNotice] = useState<string | null>(null);
+  const [engFindings, setEngFindings] = useState("");
 
   useEffect(() => {
     void listPackageBuildings()
@@ -78,6 +99,22 @@ export function ReportsPage() {
       });
   }, [buildingId, equipmentId, setQuery]);
 
+  const refreshReports = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setReports(await listReports());
+    } catch (err) {
+      setError(formatErr(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (mode === "artifacts") void refreshReports();
+  }, [mode, refreshReports]);
+
   const loadSeries = useCallback(async () => {
     if (!equipmentId || !ruleId) {
       setError("Select equipment and rule");
@@ -105,6 +142,35 @@ export function ReportsPage() {
       setLoading(false);
     }
   }, [equipmentId, ruleId]);
+
+  const onCreateDraft = async () => {
+    setArtifactsNotice(null);
+    setError(null);
+    try {
+      const out = await createReportDraft({
+        template_id: "summary",
+        title: "React draft (P1-M5-E)",
+        note: "DOCX/PDF render may remain ORACLE until Rust owns them",
+      });
+      setArtifactsNotice(
+        `Draft created: ${String(out.report_id ?? JSON.stringify(out))}`,
+      );
+      await refreshReports();
+    } catch (err) {
+      setError(formatErr(err));
+    }
+  };
+
+  const onLoadEngFindings = async () => {
+    setError(null);
+    try {
+      const body = await getEngineeringFindingsReport();
+      setEngFindings(JSON.stringify(body, null, 2));
+    } catch (err) {
+      setEngFindings("");
+      setError(formatErr(err));
+    }
+  };
 
   const gapSummary = useMemo(() => {
     if (!figure) return "";
@@ -139,87 +205,168 @@ export function ReportsPage() {
     return Object.keys(previewRows[0]).map((k) => ({ key: k, header: k }));
   }, [previewRows]);
 
+  const reportRows: ReportRow[] = reports.map((r) => ({
+    report_id: String(r.report_id ?? ""),
+    report_type: String(r.report_type ?? r.template_id ?? r.kind ?? ""),
+    title: String(r.title ?? ""),
+  }));
+
   return (
     <AppShell
-      title="FDD Plots"
-      caption="Series datasets from Rust/DataFusion — React assembles the figure."
-      activeSectionId="fdd-plots"
+      title="Reports"
+      caption="FDD plots + /api/reports artifacts (P1-M5-E). PDF/DOCX may be ORACLE."
+      activeSectionId={mode === "artifacts" ? "metering" : "fdd-plots"}
     >
-      <div className="page-placeholder" data-testid="plots-page">
-        <h2>FDD plot datasets</h2>
-        <p>
-          Loads <code>GET /api/fdd/series?equipment_id=&rule_id=</code>. Chart
-          is an SVG stand-in for Plotly (dataset contract is the SoT). Run FDD
-          first via <Link to="/rules">Rules</Link> so results can seed equipment
-          lists.
-        </p>
-
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-          <Select
-            id="plots-building"
-            label="Building"
-            value={buildingId}
-            options={buildingOptions}
-            onChange={(value) => setQuery({ siteId: value }, true)}
-            testId="plots-building-select"
-          />
-          <Select
-            id="plots-equipment"
-            label="Equipment"
-            value={equipmentId}
-            options={equipmentOptions}
-            onChange={(value) => setQuery({ equipment: value }, true)}
-            testId="plots-equipment-select"
-          />
-          <Select
-            id="plots-rule"
-            label="Rule"
-            value={ruleId}
-            options={ruleOptions}
-            onChange={setRuleId}
-            testId="plots-rule-select"
-          />
-        </div>
-
-        <div style={{ margin: "0.75rem 0" }}>
-          <Button
-            id="plots-load"
-            label={loading ? "Loading…" : "Load series"}
-            onClick={() => void loadSeries()}
-            disabled={loading || !equipmentId || !ruleId}
-            testId="plots-load"
-          />
-        </div>
+      <div className="page-stack" data-testid="reports-page">
+        <RadioGroup
+          id="reports-mode"
+          label="Reports view"
+          value={mode}
+          options={[
+            { value: "plots", label: "FDD plots" },
+            { value: "artifacts", label: "Artifacts (/api/reports)" },
+          ]}
+          onChange={(v) =>
+            setQuery(
+              { section: v === "artifacts" ? "artifacts" : "fdd-plots" },
+              true,
+            )
+          }
+          testId="reports-mode"
+        />
 
         {error ? (
-          <InlineAlert id="plots-error" variant="danger" testId="plots-error">
+          <InlineAlert id="reports-error" variant="danger" testId="plots-error">
             {error}
           </InlineAlert>
         ) : null}
 
-        <PlotlyHost
-          id="fdd-series"
-          label={figure?.layout?.title ?? "FDD series"}
-          figure={figure}
-          loading={loading}
-          testId="plots-chart"
-        />
+        {mode === "plots" ? (
+          <div data-testid="plots-page">
+            <h2>FDD plot datasets</h2>
+            <p>
+              Loads <code>GET /api/fdd/series</code>. Run FDD via{" "}
+              <Link to="/rules">Rules</Link> first.
+            </p>
 
-        {figure ? (
-          <p data-testid="plots-gap-summary">
-            Missing segments by role: {gapSummary || "none"}
-          </p>
-        ) : null}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+              <Select
+                id="plots-building"
+                label="Building"
+                value={buildingId}
+                options={buildingOptions}
+                onChange={(value) => setQuery({ siteId: value }, true)}
+                testId="plots-building-select"
+              />
+              <Select
+                id="plots-equipment"
+                label="Equipment"
+                value={equipmentId}
+                options={equipmentOptions}
+                onChange={(value) => setQuery({ equipment: value }, true)}
+                testId="plots-equipment-select"
+              />
+              <Select
+                id="plots-rule"
+                label="Rule"
+                value={ruleId}
+                options={ruleOptions}
+                onChange={setRuleId}
+                testId="plots-rule-select"
+              />
+            </div>
 
-        {previewRows.length ? (
-          <DataTable
-            id="plots-preview"
-            label="Series preview (first rows)"
-            columns={previewColumns as Array<{ key: string; header: string }>}
-            rows={previewRows}
-            testId="plots-preview-table"
-          />
-        ) : null}
+            <div style={{ margin: "0.75rem 0" }}>
+              <Button
+                id="plots-load"
+                label={loading ? "Loading…" : "Load series"}
+                onClick={() => void loadSeries()}
+                disabled={loading || !equipmentId || !ruleId}
+                testId="plots-load"
+              />
+            </div>
+
+            <PlotlyHost
+              id="fdd-series"
+              label={figure?.layout?.title ?? "FDD series"}
+              figure={figure}
+              loading={loading}
+              testId="plots-chart"
+            />
+
+            {figure ? (
+              <p data-testid="plots-gap-summary">
+                Missing segments by role: {gapSummary || "none"}
+              </p>
+            ) : null}
+
+            {previewRows.length ? (
+              <DataTable
+                id="plots-preview"
+                label="Series preview (first rows)"
+                columns={
+                  previewColumns as Array<{ key: string; header: string }>
+                }
+                rows={previewRows}
+                testId="plots-preview-table"
+              />
+            ) : null}
+          </div>
+        ) : (
+          <div data-testid="reports-artifacts">
+            <h2>Report artifacts</h2>
+            <InlineAlert id="reports-oracle" variant="info">
+              List/draft/engineering-findings via Rust. PDF/DOCX render may stay
+              ORACLE-ONLY until deletion gates (see PYTHON_EXIT_MATRIX).
+            </InlineAlert>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <Button
+                id="reports-refresh"
+                label="Refresh list"
+                onClick={() => void refreshReports()}
+                testId="reports-refresh"
+              />
+              <Button
+                id="reports-draft"
+                label="Create draft"
+                variant="secondary"
+                onClick={() => void onCreateDraft()}
+                testId="reports-draft"
+              />
+              <Button
+                id="reports-eng"
+                label="Load engineering-findings"
+                variant="secondary"
+                onClick={() => void onLoadEngFindings()}
+                testId="reports-eng"
+              />
+            </div>
+            {artifactsNotice ? (
+              <InlineAlert
+                id="reports-notice"
+                variant="success"
+                testId="reports-notice"
+              >
+                {artifactsNotice}
+              </InlineAlert>
+            ) : null}
+            <DataTable
+              id="reports-table"
+              label="Reports"
+              columns={[
+                { key: "report_id", header: "report_id" },
+                { key: "report_type", header: "type" },
+                { key: "title", header: "title" },
+              ]}
+              rows={reportRows}
+              loading={loading}
+              testId="reports-table"
+            />
+            {engFindings ? (
+              <pre data-testid="reports-eng-json">{engFindings}</pre>
+            ) : null}
+          </div>
+        )}
       </div>
     </AppShell>
   );
