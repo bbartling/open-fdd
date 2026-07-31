@@ -14,7 +14,13 @@ export interface FddRuleSummary {
   aliases?: string[];
   equipment_kinds?: string[];
   required_roles?: string[];
+  optional_roles?: string[];
   confirm_seconds?: number;
+  confirm_min?: number;
+  parity_status?: string;
+  dashboard_wired?: boolean;
+  parameter_count?: number;
+  sql_file?: string;
   [key: string]: unknown;
 }
 
@@ -229,4 +235,62 @@ export function downloadTextFile(filename: string, content: string, mime: string
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+export interface FddRuleParamDef {
+  key: string;
+  label: string;
+  default: number;
+  min: number;
+  max: number;
+  step: number;
+  unit: string;
+  control: string;
+  sql_placeholder: string;
+}
+
+export interface FddRuleParamsResponse {
+  ok: boolean;
+  rule_id?: string;
+  confirm_seconds?: number;
+  required_roles?: string[];
+  params?: Record<string, FddRuleParamDef>;
+  error?: string;
+}
+
+export function buildFddRuleParamsPath(ruleId: string): string {
+  return `${FDD_RULES_PATH}/${encodeURIComponent(ruleId)}/params`;
+}
+
+export async function getFddRuleParams(ruleId: string): Promise<FddRuleParamsResponse> {
+  const body = await apiFetch<FddRuleParamsResponse>(buildFddRuleParamsPath(ruleId));
+  if (!body.ok) {
+    throw new Error(body.error || `Failed to load params for ${ruleId}`);
+  }
+  return body;
+}
+
+/** Clamp numeric param to registry bounds; returns null if NaN. */
+export function clampRuleParam(
+  value: number,
+  def: Pick<FddRuleParamDef, "min" | "max">,
+): number | null {
+  if (!Number.isFinite(value)) return null;
+  return Math.min(def.max, Math.max(def.min, value));
+}
+
+/** Build session-config params map for one rule from slider values. */
+export function buildRuleParamPayload(
+  values: Record<string, number>,
+  defs: Record<string, FddRuleParamDef>,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [key, raw] of Object.entries(values)) {
+    const def = defs[key];
+    if (!def) continue;
+    const clamped = clampRuleParam(raw, def);
+    if (clamped == null) continue;
+    out[key] = clamped;
+  }
+  return out;
 }

@@ -8,14 +8,23 @@ import {
   InlineAlert,
   Progress,
   Select,
+  Slider,
 } from "../components/widgets";
 import { useSessionQuery } from "../session";
-import { listPackageBuildings } from "../api/mappingApi";
 import {
+  getSessionConfig,
+  listPackageBuildings,
+  putSessionConfig,
+  type SessionConfig,
+} from "../api/mappingApi";
+import {
+  buildRuleParamPayload,
+  getFddRuleParams,
   getFddStatus,
   listFddRules,
   runFdd,
   type FddResultRow,
+  type FddRuleParamDef,
   type FddRuleSummary,
   type FddRunResponse,
   type FddStatus,
@@ -24,7 +33,8 @@ import {
 type RuleRow = {
   rule_id: string;
   description: string;
-  kinds: string;
+  parity: string;
+  params: string;
   selected: string;
 };
 
@@ -43,9 +53,22 @@ export function RulesPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [runAll, setRunAll] = useState(true);
 
+  const [tuneRuleId, setTuneRuleId] = useState("");
+  const [paramDefs, setParamDefs] = useState<Record<string, FddRuleParamDef>>(
+    {},
+  );
+  const [paramValues, setParamValues] = useState<Record<string, number>>({});
+  const [sessionParams, setSessionParams] = useState<
+    Record<string, Record<string, number>>
+  >({});
+  const [sessionConfig, setSessionConfig] = useState<SessionConfig | null>(null);
+  const [paramsDirty, setParamsDirty] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [savingParams, setSavingParams] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [runResult, setRunResult] = useState<FddRunResponse | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -53,14 +76,17 @@ export function RulesPage() {
     setLoading(true);
     setError(null);
     try {
-      const [st, ruleList, blds] = await Promise.all([
+      const [st, ruleList, blds, sess] = await Promise.all([
         getFddStatus(),
         listFddRules(),
         listPackageBuildings().catch(() => [] as string[]),
+        getSessionConfig().catch(() => ({ ok: true, config: null })),
       ]);
       setStatus(st);
       setRules(ruleList);
       setBuildings(blds);
+      setSessionConfig(sess.config ?? null);
+      setSessionParams(sess.config?.params ?? {});
       setSelected((prev) => {
         const next = { ...prev };
         for (const r of ruleList) {
@@ -68,21 +94,86 @@ export function RulesPage() {
         }
         return next;
       });
+      if (!tuneRuleId && ruleList[0]) {
+        setTuneRuleId(ruleList[0].rule_id);
+      }
     } catch (err) {
       setError(formatErr(err));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tuneRuleId]);
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
+  }, []);
+
+  useEffect(() => {
+    if (!tuneRuleId) {
+      setParamDefs({});
+      setParamValues({});
+      return;
+    }
+    let cancelled = false;
+    getFddRuleParams(tuneRuleId)
+      .then((body) => {
+        if (cancelled) return;
+        const defs = body.params ?? {};
+        setParamDefs(defs);
+        const defaults: Record<string, number> = {};
+        for (const [k, def] of Object.entries(defs)) {
+          defaults[k] = def.default;
+        }
+        const fromSession = sessionParams[tuneRuleId] ?? {};
+        setParamValues({ ...defaults, ...fromSession });
+        setParamsDirty(false);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(formatErr(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tuneRuleId, sessionParams]);
 
   const selectedIds = useMemo(
     () => Object.entries(selected).filter(([, v]) => v).map(([id]) => id),
     [selected],
   );
+
+  const onParamChange = (key: string, value: number) => {
+    setParamValues((prev) => ({ ...prev, [key]: value }));
+    setParamsDirty(true);
+    setNotice(null);
+  };
+
+  const onSaveParams = async () => {
+    if (!tuneRuleId) return;
+    setSavingParams(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const payload = buildRuleParamPayload(paramValues, paramDefs);
+      const nextParams = { ...sessionParams, [tuneRuleId]: payload };
+      const config: SessionConfig = {
+        schema_version: "openfdd_session_v1",
+        unit_system: sessionConfig?.unit_system ?? "imperial",
+        prefer_web_oat: sessionConfig?.prefer_web_oat ?? true,
+        role_map: sessionConfig?.role_map ?? {},
+        params: nextParams,
+      };
+      const saved = await putSessionConfig(config, buildingId || undefined);
+      setSessionConfig(saved.config ?? config);
+      setSessionParams(nextParams);
+      setParamsDirty(false);
+      setNotice(`Saved params for ${tuneRuleId} to session-config`);
+    } catch (err) {
+      setError(formatErr(err));
+    } finally {
+      setSavingParams(false);
+    }
+  };
 
   const onRun = async () => {
     if (!buildingId) {
@@ -100,12 +191,17 @@ export function RulesPage() {
     setError(null);
     setRunResult(null);
     try {
+      const liveParams = { ...sessionParams };
+      if (tuneRuleId && Object.keys(paramDefs).length) {
+        liveParams[tuneRuleId] = buildRuleParamPayload(paramValues, paramDefs);
+      }
       const result = await runFdd(
         {
           mode: "registry",
           building_id: buildingId,
           equipment_id: equipmentId || undefined,
           rule_ids: runAll ? undefined : selectedIds,
+          params: liveParams,
         },
         { signal: ac.signal },
       );
@@ -128,7 +224,8 @@ export function RulesPage() {
   const ruleRows: RuleRow[] = rules.map((r) => ({
     rule_id: r.rule_id,
     description: String(r.description ?? ""),
-    kinds: (r.equipment_kinds ?? []).join(", "),
+    parity: String(r.parity_status ?? ""),
+    params: String(r.parameter_count ?? 0),
     selected: selected[r.rule_id] ? "yes" : "no",
   }));
 
@@ -145,20 +242,36 @@ export function RulesPage() {
     { value: "", label: "— select building —" },
     ...buildings.map((b) => ({ value: b, label: b })),
   ];
+  const tuneOptions = [
+    { value: "", label: "— select rule to tune —" },
+    ...rules.map((r) => ({
+      value: r.rule_id,
+      label: `${r.rule_id} (${r.parameter_count ?? 0} params)`,
+    })),
+  ];
+
+  const tuneRule = rules.find((r) => r.rule_id === tuneRuleId);
 
   return (
     <AppShell
       title="Run Rules"
-      caption="SQL FDD via central Rust / DataFusion (no Python runner)."
+      caption="SQL FDD catalog + tuning via Rust registry (no Python)."
       activeSectionId="run-rules"
     >
       <div className="page-placeholder" data-testid="rules-page">
-        <h2>FDD run</h2>
+        <h2>FDD catalog & run</h2>
         <p>
-          <code>POST /api/fdd/run</code> mode=registry. Raw SQL is rejected.
-          Building from <code>?site=</code>; optional equipment{" "}
-          <code>?eq=</code>. Results also land on{" "}
-          <Link to={buildingId ? `/findings?site=${encodeURIComponent(buildingId)}` : "/findings"}>
+          Metadata from <code>GET /api/fdd/rules</code> /{" "}
+          <code>…/params</code>. Params save to{" "}
+          <code>PUT /api/fdd/session-config</code> and bind into{" "}
+          <code>POST /api/fdd/run</code>. Results on{" "}
+          <Link
+            to={
+              buildingId
+                ? `/findings?site=${encodeURIComponent(buildingId)}`
+                : "/findings"
+            }
+          >
             Findings
           </Link>
           .
@@ -196,10 +309,88 @@ export function RulesPage() {
             {error}
           </InlineAlert>
         ) : null}
+        {notice ? (
+          <InlineAlert id="rules-notice" variant="success" testId="rules-notice">
+            {notice}
+          </InlineAlert>
+        ) : null}
+
+        <section data-testid="fdd-tuning-panel" style={{ margin: "1rem 0" }}>
+          <h3>Parameter tuning</h3>
+          <Select
+            id="fdd-tune-rule"
+            label="Rule"
+            value={tuneRuleId}
+            options={tuneOptions}
+            onChange={setTuneRuleId}
+            testId="fdd-tune-rule"
+          />
+          {tuneRule ? (
+            <p data-testid="fdd-tune-meta">
+              <code>{tuneRule.rule_id}</code> · parity{" "}
+              <code>{tuneRule.parity_status || "—"}</code> · roles{" "}
+              {(tuneRule.required_roles ?? []).join(", ") || "—"}
+              {tuneRule.aliases?.length
+                ? ` · aliases ${tuneRule.aliases.join(", ")}`
+                : ""}
+            </p>
+          ) : null}
+          <div
+            style={{ display: "grid", gap: "0.75rem", maxWidth: "28rem" }}
+            data-testid="fdd-param-sliders"
+          >
+            {Object.entries(paramDefs).map(([key, def]) => (
+              <div key={key}>
+                <Slider
+                  id={`param-${key}`}
+                  label={`${def.label} (${def.unit || "—"})`}
+                  description={`${key} → ${def.sql_placeholder} · ${def.min}…${def.max}`}
+                  value={paramValues[key] ?? def.default}
+                  min={def.min}
+                  max={def.max}
+                  step={def.step || 1}
+                  onChange={(v) => onParamChange(key, v)}
+                  testId={`fdd-param-${key}`}
+                />
+                <label htmlFor={`param-num-${key}`}>
+                  Advanced
+                  <input
+                    id={`param-num-${key}`}
+                    type="number"
+                    data-testid={`fdd-param-num-${key}`}
+                    min={def.min}
+                    max={def.max}
+                    step={def.step || 1}
+                    value={paramValues[key] ?? def.default}
+                    onChange={(e) =>
+                      onParamChange(key, Number(e.target.value))
+                    }
+                  />
+                </label>
+              </div>
+            ))}
+            {!Object.keys(paramDefs).length && tuneRuleId ? (
+              <p>No tunable parameters for this rule.</p>
+            ) : null}
+          </div>
+          <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem" }}>
+            <Button
+              id="fdd-save-params"
+              label={savingParams ? "Saving…" : "Save params"}
+              onClick={() => void onSaveParams()}
+              disabled={savingParams || !paramsDirty || !tuneRuleId}
+              testId="fdd-save-params"
+            />
+          </div>
+        </section>
 
         {running ? (
           <div data-testid="fdd-run-progress">
-            <Progress id="fdd-run" label="Running FDD (blocking until DataFusion returns)…" value={0} />
+            <Progress
+              id="fdd-run"
+              label="Running FDD (blocking until DataFusion returns)…"
+              value={0}
+            />
             <Button
               id="fdd-cancel"
               label="Cancel"
@@ -252,7 +443,8 @@ export function RulesPage() {
           columns={[
             { key: "rule_id", header: "Rule" },
             { key: "description", header: "Description" },
-            { key: "kinds", header: "Equipment" },
+            { key: "parity", header: "Parity" },
+            { key: "params", header: "Params" },
             { key: "selected", header: "Selected" },
           ]}
           rows={ruleRows}
