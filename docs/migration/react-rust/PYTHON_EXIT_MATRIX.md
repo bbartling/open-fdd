@@ -26,7 +26,9 @@ Disposition UNKNOWN until M1 characterization proves REPLACE / ORACLE-ONLY / DEL
 | services/ui/app/eng_findings.py | Engineering findings UI/API glue | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
 | services/ui/app/job_store.py | Jobs thin client (central SoT) | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
 | services/ui/app/load_satisfaction.py | Load satisfaction analytics | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
-| services/ui/app/mapping_wizard.py | Role/column mapping wizard | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
+| services/ui/app/mapping_wizard.py | Role/column mapping wizard | services/ui | MAYBE | React MappingPage + package mapping API | ORACLE-ONLY (M4-03) | mapping unit + MappingPage vitest | Streamlit wizard still default |
+| services/ui/app/role_map.py | Role map resolve/persist | services/ui | MAYBE | session-config role_map + package/roles | ORACLE-ONLY (M4-03) | session_config + package roles | Streamlit still default |
+| services/ui/app/role_map_gap.py | Role-map gap analysis | services/ui | MAYBE | package mapping validation blockers/warnings | ORACLE-ONLY (M4-03) | mapping inventory validation | Full cookbook gap report still Python |
 | services/ui/app/metering.py | Metering rollups (pandas path) | services/ui | YES | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
 | services/ui/app/model_seed.py | Model seed helpers | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
 | services/ui/app/multi_zip.py | Multi-ZIP package handling | services/ui | MAYBE | edge/csv_ingest/package.rs (single zip); multi-part TBD | ORACLE-ONLY (M4-02) | hostile_zip + package.rs tests | Streamlit multi-part upload still default |
@@ -36,8 +38,6 @@ Disposition UNKNOWN until M1 characterization proves REPLACE / ORACLE-ONLY / DEL
 | services/ui/app/rcx_plots.py | RCx plot builders | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
 | services/ui/app/report_downloads.py | Report download helpers | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
 | services/ui/app/reports.py | Report orchestration | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
-| services/ui/app/role_map.py | Role map resolve/persist | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
-| services/ui/app/role_map_gap.py | Role-map gap analysis | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
 | services/ui/app/rule_card.py | Rule card UI helpers | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
 | services/ui/app/rule_plot_meta.py | Rule plot metadata | services/ui | MAYBE | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |
 | services/ui/app/rules/base.py | Rule base classes (emergency/oracle path) | services/ui (OPENFDD_ALLOW_PANDAS_FDD / custom rules) | YES | Rust/DataFusion or React presentation | UNKNOWN | call-site + parity | UNKNOWN |

@@ -10,7 +10,7 @@ Source: `services/central/src/routes.rs` at inventory time. Versioning/`/api/v1`
 | `/api/building` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/building/snapshot |
 | `/api/capabilities` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/capabilities |
 | `/api/commands` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/commands, /api/commands/{command_id}/ack |
-| `/api/csv` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/csv/import/execute, /api/csv/import/package, /api/csv/import/package/roles, /api/csv/import/plan (+6) |
+| `/api/csv` | see OpenAPI | central | Phase 1 React | EXISTS | package mapping: GET /api/csv/import/package/mapping, /buildings; POST /package, /package/roles; + plan/execute/preview |
 | `/api/data-management` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/data-management/summary |
 | `/api/datasets` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/datasets, /api/datasets/{dataset_id}/preview |
 | `/api/edges` | see OpenAPI | central | Phase 1 React | EXISTS | e.g. /api/edges, /api/edges/{edge_id}, /api/edges/{edge_id}/discovery, /api/edges/{edge_id}/metadata |

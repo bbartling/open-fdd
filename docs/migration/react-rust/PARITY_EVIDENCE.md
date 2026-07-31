@@ -2,6 +2,7 @@
 
 | date | capability_id | fixture hash | source commit | engine versions | result | mismatch class | PR |
 |------|---------------|--------------|---------------|-----------------|--------|----------------|-----|
+| 2026-07-31 | CAP-MAP | mapping inventory unit + `mappingApi.test.ts` / `MappingPage.test.tsx` | branch `feat/p1-m4-03-mapping-validation` | Vitest + edge unit tests | Unmapped/ambiguous blockers; VAV parent heuristic; session-config save; manifest download | EXACT+INTERACTION | P1-M4-03 |
 | 2026-07-31 | CAP-UPLOAD | `package.rs` hostile_zip unit tests + `uploadApi.test.ts` / `UploadPage.test.tsx` | branch `feat/p1-m4-02-upload-hostile-zip` | Vitest + edge unit tests | Traversal/symlink/ratio rejects; multipart upload UX | SECURITY+INTERACTION | P1-M4-02 |
 | 2026-07-31 | CAP-JOBS | `jobsApi.test.ts` + `JobsPage.test.tsx` | branch `feat/p1-m4-01-jobs-crud` | Vitest mocked `/api/jobs*` | List/create/patch/archive/restore/duplicate + revision conflict UX | INTERACTION | P1-M4-01 |
 | 2026-07-31 | CAP-ERRORS / session | SESSION_TRANSLATION.md + session tests | branch `feat/p1-m3-03-routing-session` | React Router URL state | Deep-link/back for job/eq/wl; drafts non-authoritative | INTERACTION | P1-M3-03 |

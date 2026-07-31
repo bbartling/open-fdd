@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M4-03
+
+- Added `GET /api/csv/import/package/mapping` + `/buildings` inventory (columns, unmapped/ambiguous, VAV parent AHU heuristic, sampling health, blockers vs warnings).
+- React `MappingPage` + `mappingApi.ts`: edit column→role, save via `POST …/package/roles` + revisioned `PUT /api/fdd/session-config`, download mapping manifest JSON.
+- Blank roles stay blank (no guessed fills). Next: P1-M4-04 run/results/download.
+
 ## 2026-07-31 — P1-M4-02
 
 - Extended Rust `openfdd_package_v1` ingest defenses in `edge/src/csv_ingest/package.rs` (traversal, absolute paths, symlinks, zip-bomb ratio, case collisions, size caps).
