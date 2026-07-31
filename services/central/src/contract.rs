@@ -88,7 +88,9 @@ pub fn json_error(
 ) -> Response {
     (
         status,
-        Json(ApiErrorEnvelope::new(code, message, request_id, retryable, None)),
+        Json(ApiErrorEnvelope::new(
+            code, message, request_id, retryable, None,
+        )),
     )
         .into_response()
 }
