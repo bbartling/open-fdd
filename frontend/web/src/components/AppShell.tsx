@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink } from "react-router";
 
 const NAV_ITEMS = [
   { to: "/", label: "Home", testId: "nav-home" },
