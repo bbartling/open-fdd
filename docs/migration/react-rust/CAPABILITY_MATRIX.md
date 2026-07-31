@@ -7,7 +7,7 @@ Columns: capability_id | user scenario | Streamlit/Python owner | current API/st
 | capability_id | user scenario | Streamlit/Python owner | current API/storage | target React | target Rust | target SQL | parity class | fixtures | flag | status | deletion blocker |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | CAP-AUTH | Login / JWT session | services/ui/streamlit_app.py + central_client | /api/auth/* | AuthPage | auth.rs | NONE | EXACT | UNKNOWN | react_ui | NOT_STARTED | Streamlit default |
-| CAP-UPLOAD | Upload CSV/ZIP package + hostile validation | package_io, multi_zip, data_loader | /api/csv/import/* | UploadPage | routes csv_import | NONE | SECURITY+EXACT | UNKNOWN | react_ui | NOT_STARTED | Python ZIP defenses still used |
+| CAP-UPLOAD | Upload CSV/ZIP package + hostile validation | package_io, multi_zip, data_loader | /api/csv/import/* | UploadPage | routes csv_import + edge package.rs | NONE | SECURITY+EXACT | hostile_zip + package.rs tests | react_ui | IN_PROGRESS | Rust ingest + React upload (M4-02); Streamlit still default |
 | CAP-SITE | Building/site selection + delete site data | site_model, streamlit_app | datasets + workspace paths | SitesPage | UNKNOWN | NONE | EXACT | UNKNOWN | react_ui | NOT_STARTED | Filesystem side effects |
 | CAP-JOBS | Jobs CRUD archive/restore/duplicate | ui_jobs, job_store | /api/jobs* | JobsPage | jobs.rs | NONE | EXACT | UNKNOWN | react_ui | IN_PROGRESS | React JobsPage CRUD (M4-01); Streamlit still default |
 | CAP-MAP | Role mapping + VAV/AHU relationships | mapping_wizard, role_map, role_map_gap | /api/fdd/roles + session-config | MappingPage | fdd routes | NONE | EXACT | UNKNOWN | react_ui | NOT_STARTED | UNKNOWN dual paths |

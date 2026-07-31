@@ -97,7 +97,9 @@ describe("JobsPage", () => {
     await waitFor(() => {
       expect(jobsApi.createJob).toHaveBeenCalledWith({ jobName: "Bravo", description: undefined });
     });
-    expect(screen.getByTestId("jobs-notice").textContent).toContain("Bravo");
+    await waitFor(() => {
+      expect(screen.getByTestId("jobs-notice").textContent).toContain("Bravo");
+    });
   });
 
   it("surfaces revision conflict on patch", async () => {

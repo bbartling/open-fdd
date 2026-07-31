@@ -2,6 +2,14 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M4-02
+
+- Extended Rust `openfdd_package_v1` ingest defenses in `edge/src/csv_ingest/package.rs` (traversal, absolute paths, symlinks, zip-bomb ratio, case collisions, size caps).
+- Hostile archive unit tests mirror `tests/react_parity/fixtures/hostile_zip/cases.json` (generated at test time).
+- React `UploadPage` + `uploadApi.ts` multipart client → `POST /api/csv/import/package`; dataset id = `building_id`.
+- `?job=` session selection display-only — package import API has no job association yet (noted in CAP-UPLOAD / DECISIONS).
+- Next: P1-M4-03 mapping/validation UI.
+
 ## 2026-07-31 — P1-M4-01
 
 - Typed `frontend/web/src/api/jobsApi.ts` for list/get/create/patch/archive/restore/duplicate against existing `/api/jobs*`.
