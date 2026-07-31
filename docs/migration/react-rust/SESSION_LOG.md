@@ -2,6 +2,13 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M5-C
+
+- Typed `analyticsApi.ts`: metering / RCx / runtime POST clients + `listFddEquipment` + `monthlySumClient` parity helper.
+- `MeteringPage`: inline `{period,kwh}` → `/api/analytics/metering`, client↔API parity metric, RCx AHU stub.
+- `HomePage` Overview: contract + equipment inventory table (widget gallery collapsed).
+- Next: P1-M5-D findings/dispositions.
+
 ## 2026-07-31 — P1-M5-B
 
 - FDD plot datasets: `plotDataset.ts` builds figure JSON from `/api/fdd/series`; `ReportsPage` loads building/eq/rule and renders SVG PlotlyHost + preview table.

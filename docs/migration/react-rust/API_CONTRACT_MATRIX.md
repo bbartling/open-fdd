@@ -32,6 +32,6 @@ Source: `services/central/src/routes.rs` at inventory time. Versioning/`/api/v1`
 | Unified error envelope + request IDs | all screens | **DONE (M2-01)** — `contract.rs` + `CONTRACT_CONVENTIONS.md`; middleware echoes `x-request-id` |
 | Contract version on `/api/capabilities` | SPA bootstrap | **DONE (M2-01)** — `contract.contract_version` |
 | Async operation poll/cancel substrate | FDD run, import, reports | **DONE (M2-03)** — `ASYNC_OPS.md` + `frontend/web/src/api/asyncOps.ts` poll helper |
-| Typed TS client generation | SPA | **PARTIAL (M4-02)** — jobs + upload clients (`jobsApi.ts`, `uploadApi.ts`) |
+| Typed TS client generation | SPA | **PARTIAL (M5-C)** — jobs, upload, mapping, fdd, analytics/metering clients |
 | Package upload streaming defenses in Rust | CAP-UPLOAD | **DONE (M4-02)** — `edge/csv_ingest/package.rs` hostile suite + `uploadApi.ts` multipart client |
 | Plot dataset contracts (not chart HTML) | CAP-PLOTS | NOT_STARTED (M5-B) |

@@ -1,170 +1,166 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router";
 import { AppShell } from "../components/AppShell";
 import { apiFetch } from "../api/client";
 import type { CapabilitiesResponse } from "../api/contract";
 import {
-  Select,
-  Slider,
-  Checkbox,
-  Metric,
+  DataTable,
   Expander,
   InlineAlert,
-  StatusBadge,
-  PlotlyHost,
-  ConfirmModal,
-  ToastRegion,
+  Metric,
+  Select,
 } from "../components/widgets";
+import { useSessionQuery } from "../session";
+import { listPackageBuildings } from "../api/mappingApi";
+import {
+  listFddEquipment,
+  type FddEquipmentItem,
+} from "../api/analyticsApi";
+
+type EqRow = {
+  equipment_id: string;
+  equipment_type: string;
+};
+
+function formatErr(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 export function HomePage() {
+  const { query, setQuery } = useSessionQuery();
+  const buildingId = query.siteId ?? "";
+
   const [contractVersion, setContractVersion] = useState<string | null>(null);
+  const [reactUi, setReactUi] = useState<boolean | null>(null);
+  const [buildings, setBuildings] = useState<string[]>([]);
+  const [equipment, setEquipment] = useState<FddEquipmentItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [galleryOpen, setGalleryOpen] = useState(false);
 
-  const [demoSelect, setDemoSelect] = useState("a");
-  const [demoSlider, setDemoSlider] = useState(50);
-  const [demoChecked, setDemoChecked] = useState(false);
-  const [demoExpanded, setDemoExpanded] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [toasts, setToasts] = useState<{ id: string; message: string }[]>([]);
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [caps, blds, eq] = await Promise.all([
+        apiFetch<CapabilitiesResponse>("/api/capabilities"),
+        listPackageBuildings().catch(() => [] as string[]),
+        listFddEquipment(buildingId || undefined).catch(
+          () => [] as FddEquipmentItem[],
+        ),
+      ]);
+      setContractVersion(caps.contract.contract_version);
+      setReactUi(Boolean(caps.capabilities?.react_ui));
+      setBuildings(blds);
+      setEquipment(eq);
+    } catch (err) {
+      setError(formatErr(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [buildingId]);
 
   useEffect(() => {
-    let cancelled = false;
-    apiFetch<CapabilitiesResponse>("/api/capabilities")
-      .then((body) => {
-        if (!cancelled) {
-          setContractVersion(body.contract.contract_version);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void refresh();
+  }, [refresh]);
+
+  const eqRows: EqRow[] = equipment.map((e) => ({
+    equipment_id: String(e.equipment_id),
+    equipment_type: String(e.equipment_type ?? ""),
+  }));
 
   return (
     <AppShell
-      title="Home"
-      caption="React shell — Streamlit frame parity (P1-M3-01)"
+      title="Overview"
+      caption="Equipment inventory + contract bootstrap (P1-M5-C)"
       activeSectionId="overview"
     >
-      <div className="page-placeholder">
-        <h2>Welcome to Open-FDD</h2>
-        <p>React UI shell — Phase 1 parity scaffold.</p>
+      <div className="page-stack" data-testid="overview-page">
+        <InlineAlert id="overview-hint" variant="info">
+          Thin Overview: capabilities + `/api/fdd/equipment`. Metering and RCx
+          live under Metering.
+        </InlineAlert>
+
+        <div className="form-row">
+          <Select
+            id="overview-building"
+            label="Building"
+            value={buildingId}
+            options={[
+              { value: "", label: "— all / none —" },
+              ...buildings.map((b) => ({ value: b, label: b })),
+            ]}
+            onChange={(v) => setQuery({ siteId: v || undefined }, true)}
+            testId="overview-building"
+          />
+        </div>
+
         {loading && (
           <div data-testid="home-loading">
             <span className="spinner" aria-hidden />{" "}
-            <span className="loading">Loading capabilities…</span>
-            <div className="skeleton skeleton--title" />
-            <div className="skeleton skeleton--line" />
+            <span className="loading">Loading overview…</span>
           </div>
         )}
         {error && (
-          <div className="alert alert--danger" role="alert">
+          <InlineAlert id="overview-error" variant="danger">
             {error}
-          </div>
-        )}
-        {contractVersion && (
-          <p>
-            Contract version:{" "}
-            <span className="contract-badge" data-testid="contract-version">
-              {contractVersion}
-            </span>
-          </p>
-        )}
-
-        <section className="widget-gallery" data-testid="widget-gallery">
-          <h2>Widget primitives (P1-M3-02)</h2>
-          <InlineAlert id="gallery-hint" variant="info">
-            Controlled parity widgets — keyboard and a11y baseline for M3 gate.
           </InlineAlert>
+        )}
 
-          <div className="widget-gallery__section">
-            <h3>Form controls</h3>
-            <div className="widget-gallery__grid">
-              <Select
-                id="demo-select"
-                label="Sample select"
-                value={demoSelect}
-                options={[
-                  { value: "a", label: "Option A" },
-                  { value: "b", label: "Option B" },
-                ]}
-                onChange={setDemoSelect}
-              />
-              <Slider
-                id="demo-slider"
-                label="Sample slider"
-                value={demoSlider}
-                min={0}
-                max={100}
-                step={5}
-                onChange={setDemoSlider}
-              />
-              <Checkbox
-                id="demo-checkbox"
-                label="Enable feature"
-                checked={demoChecked}
-                onChange={setDemoChecked}
-              />
-            </div>
-          </div>
+        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+          <Metric
+            id="overview-contract"
+            label="Contract"
+            value={contractVersion ?? "—"}
+            testId="contract-version"
+          />
+          <Metric
+            id="overview-react-ui"
+            label="react_ui"
+            value={reactUi == null ? "—" : reactUi ? "on" : "off"}
+            testId="overview-react-ui"
+          />
+          <Metric
+            id="overview-eq-count"
+            label="Equipment"
+            value={String(eqRows.length)}
+            testId="overview-eq-count"
+          />
+        </div>
 
-          <div className="widget-gallery__section">
-            <h3>Display &amp; feedback</h3>
-            <div className="widget-gallery__grid">
-              <Metric
-                id="demo-metric"
-                label="Energy savings"
-                value="12.4%"
-                delta={{ value: "+2.1%", direction: "up" }}
-              />
-              <StatusBadge
-                id="demo-badge"
-                label="Running"
-                variant="success"
-              />
-              <PlotlyHost id="demo-plot" label="Trend chart" />
-            </div>
-          </div>
+        <p>
+          <Link to="/metering">Open Metering</Link>
+          {" · "}
+          <Link to="/jobs">Jobs</Link>
+          {" · "}
+          <Link to="/rules">Run Rules</Link>
+        </p>
 
-          <div className="widget-gallery__section">
-            <Expander
-              id="demo-expander"
-              label="Advanced options"
-              expanded={demoExpanded}
-              onChange={setDemoExpanded}
-            >
-              <p>Expander content for parity demos and future form drafts.</p>
-            </Expander>
-          </div>
-        </section>
+        <DataTable
+          id="overview-equipment"
+          label="Equipment inventory"
+          columns={[
+            { key: "equipment_id", header: "equipment_id" },
+            { key: "equipment_type", header: "type" },
+          ]}
+          rows={eqRows}
+          loading={loading}
+          testId="overview-equipment"
+        />
+
+        <Expander
+          id="widget-gallery"
+          label="Widget gallery (M3 primitives)"
+          expanded={galleryOpen}
+          onChange={setGalleryOpen}
+          testId="widget-gallery"
+        >
+          <p>
+            Controlled parity widgets remain available for shell regression; primary
+            Overview content is equipment + contract metrics above.
+          </p>
+        </Expander>
       </div>
-
-      <ConfirmModal
-        id="demo-confirm"
-        open={modalOpen}
-        title="Confirm action"
-        message="This is a parity confirm modal."
-        onConfirm={() => {
-          setModalOpen(false);
-          setToasts((t) => [
-            ...t,
-            { id: String(Date.now()), message: "Confirmed" },
-          ]);
-        }}
-        onCancel={() => setModalOpen(false)}
-      />
-      <ToastRegion
-        toasts={toasts}
-        onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))}
-      />
     </AppShell>
   );
 }
