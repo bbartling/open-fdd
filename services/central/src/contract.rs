@@ -2,9 +2,9 @@
 
 use axum::{
     body::Body,
-    http::{HeaderMap, HeaderName, HeaderValue, Request, Response, StatusCode},
+    http::{HeaderMap, HeaderName, HeaderValue, Request, StatusCode},
     middleware::Next,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     Json,
 };
 use serde::Serialize;
@@ -18,6 +18,8 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
 /// Breaking changes require a new `CONTRACT_VERSION` and React client bump.
 pub const COMPATIBILITY_POLICY: &str = "additive_within_contract_version";
 
+/// Public contract types for React clients; handlers adopt incrementally (P1-M2+).
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 pub struct ErrorBody {
     pub code: String,
@@ -28,12 +30,15 @@ pub struct ErrorBody {
     pub request_id: String,
 }
 
+/// Public contract types for React clients; handlers adopt incrementally (P1-M2+).
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 pub struct ApiErrorEnvelope {
     pub error: ErrorBody,
 }
 
 impl ApiErrorEnvelope {
+    #[allow(dead_code)]
     pub fn new(
         code: impl Into<String>,
         message: impl Into<String>,
@@ -79,6 +84,8 @@ pub async fn request_id_middleware(mut req: Request<Body>, next: Next) -> Respon
     res
 }
 
+/// Stable error envelope helper; route handlers migrate onto this incrementally.
+#[allow(dead_code)]
 pub fn json_error(
     status: StatusCode,
     code: &str,
@@ -134,5 +141,17 @@ mod tests {
     #[test]
     fn contract_version_is_nonempty() {
         assert!(CONTRACT_VERSION.starts_with("openfdd.api.contract."));
+    }
+
+    #[test]
+    fn json_error_returns_envelope_status() {
+        let res = json_error(
+            StatusCode::BAD_REQUEST,
+            "validation.failed",
+            "bad input",
+            "req-2",
+            false,
+        );
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     }
 }
