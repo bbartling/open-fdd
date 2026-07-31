@@ -190,7 +190,7 @@ fn safe_member_path(name: &str) -> Result<PathBuf, String> {
     Ok(parts.iter().collect())
 }
 
-fn zip_entry_is_symlink(entry: &zip::read::ZipFile<'_>) -> bool {
+fn zip_entry_is_symlink<R: std::io::Read>(entry: &zip::read::ZipFile<'_, R>) -> bool {
     if entry.is_symlink() {
         return true;
     }
