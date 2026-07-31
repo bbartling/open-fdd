@@ -2,6 +2,7 @@
 
 | date | capability_id | fixture hash | source commit | engine versions | result | mismatch class | PR |
 |------|---------------|--------------|---------------|-----------------|--------|----------------|-----|
+| 2026-07-31 | CAP-PLOTS | `plotDataset` + ReportsPage vitest | branch `feat/p1-m5-b-plot-datasets` | Vitest | Series→figure contract; SVG host; gap counts | SEMANTIC+INTERACTION | P1-M5-B |
 | 2026-07-31 | CAP-RULES | rule params API + RulesPage tuning/sliders vitest | branch `feat/p1-m5-a-rule-catalog-tuning` | Vitest | Bounds clamp; session-config params; aliases/parity in catalog | EXACT+INTERACTION | P1-M5-A |
 | 2026-07-31 | CAP-RULES / results | `fddApi.test.ts` + RulesPage/FindingsPage vitest | branch `feat/p1-m4-04-fdd-run-results` | Vitest mocked `/api/fdd/*` | Registry run + result filter/download; cancel via AbortSignal | EXACT+INTERACTION | P1-M4-04 |
 | 2026-07-31 | CAP-MAP | mapping inventory unit + `mappingApi.test.ts` / `MappingPage.test.tsx` | branch `feat/p1-m4-03-mapping-validation` | Vitest + edge unit tests | Unmapped/ambiguous blockers; VAV parent heuristic; session-config save; manifest download | EXACT+INTERACTION | P1-M4-03 |
