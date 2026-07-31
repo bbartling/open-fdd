@@ -15,9 +15,9 @@ vi.mock("../api/uploadApi", () => ({
 import { getJob } from "../api/jobsApi";
 import { uploadPackage } from "../api/uploadApi";
 
-function renderUpload(initialEntries = "/upload") {
+function renderUpload(initialEntry = "/upload") {
   return render(
-    <MemoryRouter initialEntries={[initialEntries]}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <UploadPage />
     </MemoryRouter>,
   );
@@ -31,8 +31,9 @@ describe("UploadPage", () => {
 
   it("renders file upload and import button", () => {
     renderUpload();
-    expect(screen.getByText("Building package zip")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /import package/i })).toBeDisabled();
+    expect(screen.getByText("Building package zip")).toBeTruthy();
+    const btn = screen.getByTestId("upload-submit").querySelector("button");
+    expect(btn?.disabled).toBe(true);
   });
 
   it("shows session job context when ?job= is set", async () => {
@@ -50,9 +51,9 @@ describe("UploadPage", () => {
     });
     renderUpload("/upload?job=job-1");
     await waitFor(() => {
-      expect(screen.getByText(/Alpha/)).toBeInTheDocument();
+      expect(screen.getByTestId("upload-job-context").textContent).toMatch(/Alpha/);
     });
-    expect(screen.getByText(/does not yet associate uploads with jobs/i)).toBeInTheDocument();
+    expect(document.body.textContent).toMatch(/does not yet associate/);
   });
 
   it("shows success after upload", async () => {
@@ -64,17 +65,21 @@ describe("UploadPage", () => {
     });
 
     renderUpload();
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
     const file = new File(["zip"], "demo.zip", { type: "application/zip" });
     fireEvent.change(input, { target: { files: [file] } });
-    fireEvent.click(screen.getByRole("button", { name: /import package/i }));
+    fireEvent.click(
+      screen.getByTestId("upload-submit").querySelector("button")!,
+    );
 
     await waitFor(() => {
-      expect(screen.getByText(/BUILDING_9/)).toBeInTheDocument();
+      expect(screen.getByTestId("upload-success").textContent).toMatch(
+        /BUILDING_9/,
+      );
     });
-    expect(screen.getByRole("link", { name: /continue to mapping/i })).toHaveAttribute(
-      "href",
-      "/mapping?site=BUILDING_9",
-    );
+    const link = screen.getByRole("link", { name: /continue to mapping/i });
+    expect(link.getAttribute("href")).toBe("/mapping?site=BUILDING_9");
   });
 });
