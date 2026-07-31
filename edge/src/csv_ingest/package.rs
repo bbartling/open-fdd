@@ -174,9 +174,7 @@ fn safe_member_path(name: &str) -> Result<PathBuf, String> {
     if parts_src.is_empty() {
         return Err(format!("empty zip entry path: {name:?}"));
     }
-    if parts_src.starts_with('/')
-        || (parts_src.len() > 1 && parts_src.as_bytes()[1] == b':')
-    {
+    if parts_src.starts_with('/') || (parts_src.len() > 1 && parts_src.as_bytes()[1] == b':') {
         return Err(format!("absolute path in zip rejected: {name:?}"));
     }
     let parts: Vec<&str> = parts_src
@@ -264,14 +262,17 @@ fn read_zip_entries(bytes: &[u8]) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> 
         entry
             .read_to_end(&mut buf)
             .map_err(|e| format!("zip entry {:?}: {e}", entry_name))?;
-        if buf.len() as u64 > cap || total.saturating_sub(declared as u64) + buf.len() as u64 > cap {
+        if buf.len() as u64 > cap || total.saturating_sub(declared as u64) + buf.len() as u64 > cap
+        {
             return Err(format!(
                 "zip expands past {} MB cap (OPENFDD_MAX_UNCOMPRESSED_MB)",
                 cap / (1024 * 1024)
             ));
         }
         if declared > 0 && buf.len() as u64 > declared as u64 {
-            return Err(format!("zip entry expanded past declared size: {entry_name}"));
+            return Err(format!(
+                "zip entry expanded past declared size: {entry_name}"
+            ));
         }
         out.insert(path, buf);
     }
@@ -957,12 +958,10 @@ mod tests {
         let zip = build_zip(&[("../evil.txt", "x")]);
         let out = import_package_zip(&zip);
         assert_eq!(out["ok"], json!(false));
-        assert!(
-            out["error"]
-                .as_str()
-                .unwrap()
-                .contains("path traversal rejected")
-        );
+        assert!(out["error"]
+            .as_str()
+            .unwrap()
+            .contains("path traversal rejected"));
     }
 
     #[test]
@@ -971,29 +970,24 @@ mod tests {
         let slip = build_zip(&[("../../etc/passwd", "x")]);
         let out = import_package_zip(&slip);
         assert_eq!(out["ok"], json!(false));
-        assert!(
-            out["error"]
-                .as_str()
-                .unwrap()
-                .contains("path traversal rejected")
-        );
+        assert!(out["error"]
+            .as_str()
+            .unwrap()
+            .contains("path traversal rejected"));
 
         let absolute = build_zip(&[("/etc/passwd", "x")]);
         let out = import_package_zip(&absolute);
         assert_eq!(out["ok"], json!(false));
-        assert!(
-            out["error"]
-                .as_str()
-                .unwrap()
-                .contains("absolute path in zip rejected")
-        );
+        assert!(out["error"]
+            .as_str()
+            .unwrap()
+            .contains("absolute path in zip rejected"));
 
         // Symlink entry (zip-slip variant) — name alone is harmless; Unix symlink mode is not.
         let mut cursor = std::io::Cursor::new(Vec::new());
         {
             let mut zw = zip::ZipWriter::new(&mut cursor);
-            let opts = zip::write::SimpleFileOptions::default()
-                .unix_permissions(0o120777);
+            let opts = zip::write::SimpleFileOptions::default().unix_permissions(0o120777);
             zw.start_file("link_to_outside", opts).unwrap();
             zw.write_all(b"../../etc/passwd").unwrap();
             zw.finish().unwrap();
@@ -1001,23 +995,16 @@ mod tests {
         let symlink_zip = cursor.into_inner();
         let out = import_package_zip(&symlink_zip);
         assert_eq!(out["ok"], json!(false));
-        assert!(
-            out["error"]
-                .as_str()
-                .unwrap()
-                .contains("symlink entries are not allowed")
-        );
+        assert!(out["error"]
+            .as_str()
+            .unwrap()
+            .contains("symlink entries are not allowed"));
 
         // Extension spoof is allowed at zip layer; ingest fails later on missing manifest/maps.
         let spoof = build_zip(&[("evil.csv.exe", "not-a-package")]);
         let out = import_package_zip(&spoof);
         assert_eq!(out["ok"], json!(false));
-        assert!(
-            out["error"]
-                .as_str()
-                .unwrap()
-                .contains("manifest.json")
-        );
+        assert!(out["error"].as_str().unwrap().contains("manifest.json"));
 
         // Nested zip entries are ignored with a warning once a valid package is ingested elsewhere;
         // a zip-only archive still fails closed on missing manifest.
@@ -1026,18 +1013,13 @@ mod tests {
         assert_eq!(out["ok"], json!(false));
 
         // Case-colliding paths.
-        let dup = build_zip(&[
-            ("MANIFEST.JSON", "x"),
-            ("manifest.json", "y"),
-        ]);
+        let dup = build_zip(&[("MANIFEST.JSON", "x"), ("manifest.json", "y")]);
         let out = import_package_zip(&dup);
         assert_eq!(out["ok"], json!(false));
-        assert!(
-            out["error"]
-                .as_str()
-                .unwrap()
-                .contains("duplicate / case-colliding path")
-        );
+        assert!(out["error"]
+            .as_str()
+            .unwrap()
+            .contains("duplicate / case-colliding path"));
     }
 
     #[test]
