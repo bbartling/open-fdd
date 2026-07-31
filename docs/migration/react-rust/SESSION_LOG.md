@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M5-B
+
+- FDD plot datasets: `plotDataset.ts` builds figure JSON from `/api/fdd/series`; `ReportsPage` loads building/eq/rule and renders SVG PlotlyHost + preview table.
+- PlotlyHost now accepts figure traces (no plotly npm yet). Missing-segment counts for parity notes.
+- Next: P1-M5-C analytics/metering.
+
 ## 2026-07-31 — P1-M5-A
 
 - Enriched `GET /api/fdd/rules` summaries (aliases, optional_roles).

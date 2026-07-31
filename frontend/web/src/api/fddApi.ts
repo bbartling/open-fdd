@@ -90,8 +90,12 @@ export interface FddResultsResponse {
 export interface FddSeriesResponse {
   ok: boolean;
   equipment_id?: string;
+  equipment_type?: string;
   rule_id?: string;
-  rows?: unknown[];
+  roles?: string[];
+  rows?: Array<Record<string, unknown>>;
+  downsampled?: boolean;
+  max_points?: number;
   error?: string;
 }
 
