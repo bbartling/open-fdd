@@ -28,6 +28,13 @@ vi.mock("../api/fddApi", () => ({
   })),
 }));
 
+vi.mock("../api/reportsApi", () => ({
+  listReports: vi.fn(async () => []),
+  createReportDraft: vi.fn(async () => ({ report_id: "d1" })),
+  getEngineeringFindingsReport: vi.fn(async () => ({ ok: false })),
+  createWattlabHandoff: vi.fn(),
+}));
+
 import { getFddSeries } from "../api/fddApi";
 
 function renderPlots(entry = "/reports?site=B1&eq=VAV_1") {

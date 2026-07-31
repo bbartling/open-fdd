@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M5-E
+
+- ReportsPage: plots + Artifacts mode (`/api/reports` list/draft/engineering-findings). PDF/DOCX noted ORACLE.
+- WattLabPage: `POST /api/jobs/{id}/wattlab/handoffs` with portable_zip_uri.
+- Next: P1-M5-F thin AuthPage.
+
 ## 2026-07-31 — P1-M5-D
 
 - FindingsPage now uses job `/api/jobs/{id}/findings|dispositions` (not FDD results).

@@ -2,6 +2,7 @@
 
 | date | capability_id | fixture hash | source commit | engine versions | result | mismatch class | PR |
 |------|---------------|--------------|---------------|-----------------|--------|----------------|-----|
+| 2026-07-31 | CAP-REPORTS / CAP-WATTLAB | reportsApi + WattLabPage vitest | branch `feat/p1-m5-e-reports-wattlab` | Vitest | Reports list/draft; WattLab handoff POST | ARTIFACT+INTERACTION | P1-M5-E |
 | 2026-07-31 | CAP-FINDINGS | findingsApi upsert + FindingsPage vitest | branch `feat/p1-m5-d-findings-dispositions` | Vitest | Job findings load; disposition PUT by correlation_key | EXACT+INTERACTION | P1-M5-D |
 | 2026-07-31 | CAP-METER / CAP-RCX / CAP-OVERVIEW | `analyticsApi` monthlySum + MeteringPage/HomePage vitest | branch `feat/p1-m5-c-analytics-metering` | Vitest | Client↔API kWh parity; RCx AHU stub; equipment overview | NUMERIC+INTERACTION | P1-M5-C |
 | 2026-07-31 | CAP-PLOTS | `plotDataset` + ReportsPage vitest | branch `feat/p1-m5-b-plot-datasets` | Vitest | Series→figure contract; SVG host; gap counts | SEMANTIC+INTERACTION | P1-M5-B |
