@@ -1,0 +1,141 @@
+@import "./tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-slate-700);
+  background: var(--color-slate-100);
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100%;
+}
+
+.app-sidebar {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  background: var(--color-navy-900);
+  color: var(--color-white);
+  display: flex;
+  flex-direction: column;
+}
+
+.app-sidebar__brand {
+  padding: var(--space-md) var(--space-lg);
+  font-weight: 600;
+  font-size: 1.1rem;
+  border-bottom: 1px solid var(--color-navy-700);
+}
+
+.app-sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-sm) 0;
+}
+
+.app-sidebar__link {
+  display: block;
+  padding: var(--space-sm) var(--space-lg);
+  color: var(--color-slate-200);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.app-sidebar__link:hover {
+  background: var(--color-navy-800);
+  color: var(--color-white);
+}
+
+.app-sidebar__link--active {
+  background: var(--color-navy-700);
+  color: var(--color-teal-400);
+  border-left: 3px solid var(--color-teal-500);
+  padding-left: calc(var(--space-lg) - 3px);
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app-header {
+  height: var(--header-height);
+  background: var(--color-white);
+  border-bottom: 1px solid var(--color-slate-200);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-xl);
+}
+
+.app-header__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-navy-900);
+}
+
+.app-content {
+  flex: 1;
+  padding: var(--space-xl);
+  max-width: var(--content-max-width);
+}
+
+.page-placeholder {
+  background: var(--color-white);
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+}
+
+.page-placeholder h2 {
+  margin-top: 0;
+  color: var(--color-navy-800);
+}
+
+.page-error {
+  color: var(--color-danger);
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+}
+
+.page-json {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  background: var(--color-slate-100);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.contract-badge {
+  display: inline-block;
+  background: var(--color-teal-100);
+  color: var(--color-teal-500);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+}
+
+.loading {
+  color: var(--color-slate-500);
+}

@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M2-02
+
+- Scaffold `frontend/web` Vite+React+TS SPA (routes, API client, contract types, Docker).
+- CI job `React web (frontend/web)` in rust-ci.yml.
+- Next: P1-M2-03 async ops substrate.
+
 ## 2026-07-31 — P1-M2-01
 
 - Added `services/central/src/contract.rs`: error envelope, request-id middleware, contract metadata.

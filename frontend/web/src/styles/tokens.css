@@ -1,0 +1,33 @@
+:root {
+  /* Navy / teal palette — Streamlit-ish, no purple AI defaults */
+  --color-navy-900: #0b1f33;
+  --color-navy-800: #122a42;
+  --color-navy-700: #1a3550;
+  --color-teal-500: #0d9488;
+  --color-teal-400: #14b8a6;
+  --color-teal-100: #ccfbf1;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-500: #64748b;
+  --color-slate-700: #334155;
+  --color-white: #ffffff;
+  --color-danger: #dc2626;
+  --color-success: #059669;
+
+  /* Layout */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+
+  --sidebar-width: 220px;
+  --header-height: 3.5rem;
+  --content-max-width: 1200px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "Source Code Pro", monospace;
+}
