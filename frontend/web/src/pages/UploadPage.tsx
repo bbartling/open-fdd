@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { AppShell } from "../components/AppShell";
 import { FileUpload, Button, InlineAlert } from "../components/widgets";
@@ -10,7 +10,6 @@ import {
 } from "../api/uploadApi";
 import { ApiClientError } from "../api/client";
 import { getJob, type JobMeta } from "../api/jobsApi";
-import { useEffect } from "react";
 
 export function UploadPage() {
   const { query } = useSessionQuery();
