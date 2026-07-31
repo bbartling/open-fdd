@@ -7,7 +7,7 @@ Placeholders for CI hostile archive suite. Archives are **generated at test time
 | id | relative path | expected rejection |
 |---|---|---|
 | `zip_slip` | `../../etc/passwd` | `path traversal rejected` |
-| `symlink` | `link_to_outside` (Unix symlink mode 0o120777) | `symlink entries are not allowed` |
+| `symlink` | `link_to_outside` via `ZipWriter::add_symlink` (S_IFLNK) | `symlink entries are not allowed` |
 | `extension_spoof` | `evil.csv.exe` | fails closed on missing `manifest.json` / maps (not a valid package) |
 
 ## Rust defenses (`read_zip_entries`)

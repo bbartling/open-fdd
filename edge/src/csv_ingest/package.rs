@@ -980,22 +980,29 @@ mod tests {
             .unwrap()
             .contains("absolute path in zip rejected"));
 
-        // Symlink entry (zip-slip variant) — name alone is harmless; Unix symlink mode is not.
+        // Symlink entry (zip-slip variant). zip 3's unix_permissions() masks to 0o777,
+        // so use ZipWriter::add_symlink which sets S_IFLNK correctly.
         let mut cursor = std::io::Cursor::new(Vec::new());
         {
             let mut zw = zip::ZipWriter::new(&mut cursor);
-            let opts = zip::write::SimpleFileOptions::default().unix_permissions(0o120777);
-            zw.start_file("link_to_outside", opts).unwrap();
-            zw.write_all(b"../../etc/passwd").unwrap();
+            zw.add_symlink(
+                "link_to_outside",
+                "../../etc/passwd",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
             zw.finish().unwrap();
         }
         let symlink_zip = cursor.into_inner();
         let out = import_package_zip(&symlink_zip);
-        assert_eq!(out["ok"], json!(false));
-        assert!(out["error"]
-            .as_str()
-            .unwrap()
-            .contains("symlink entries are not allowed"));
+        assert_eq!(out["ok"], json!(false), "symlink zip response: {out}");
+        assert!(
+            out["error"]
+                .as_str()
+                .unwrap_or("")
+                .contains("symlink entries are not allowed"),
+            "symlink zip response: {out}"
+        );
 
         // Extension spoof is allowed at zip layer; ingest fails later on missing manifest/maps.
         let spoof = build_zip(&[("evil.csv.exe", "not-a-package")]);
