@@ -19,15 +19,6 @@ export function isTerminalRunStatus(status: string): boolean {
   return TERMINAL_RUN_STATUSES.has(status);
 }
 
-export type PollOptions = {
-  intervalMs?: number;
-  timeoutMs?: number;
-  signal?: AbortSignal;
-  isTerminal: (value: TGeneric) => boolean;
-};
-
-type TGeneric = unknown;
-
 export async function pollUntil<T>(
   fetchStatus: () => Promise<T>,
   opts: {
@@ -41,8 +32,7 @@ export async function pollUntil<T>(
   const timeoutMs = opts.timeoutMs ?? 120_000;
   const started = Date.now();
 
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
+  for (;;) {
     if (opts.signal?.aborted) {
       throw new ApiClientError("poll aborted", {
         code: "async.aborted",
