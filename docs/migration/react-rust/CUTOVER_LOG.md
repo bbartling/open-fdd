@@ -2,6 +2,11 @@
 
 Phase 2 operational record. Newest first.
 
+## 2026-08-01 — Phase 3 readiness (outlook only)
+
+- Evidence: `PHASE_3_READINESS.md`. No P3-M0+ implementation; no BACnet/MQTT changes.
+- Skill compliance PASS; agent_spec post–Phase-2 truth update in same pack.
+
 ## 2026-08-01 — Phase 2 exit APPROVED
 
 - Qualification: `PHASE_2_QUALIFICATION.md` **PASS**.

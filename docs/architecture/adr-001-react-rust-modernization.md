@@ -6,9 +6,11 @@ nav_order: 2
 
 # ADR-001 — React SPA and Python exit (Phase 1)
 
-- **Status:** Accepted (2026-07-31)
+- **Status:** Accepted (2026-07-31); **Phase 2 cutover completed 2026-08-01**
+  (React sole product UI; Streamlit archived — see `PHASE_2_QUALIFICATION.md`)
 - **Program:** [`tools/open-fdd-modernization/`](../../tools/open-fdd-modernization/README.md)
 - **Tracking:** [`docs/migration/react-rust/`](../migration/react-rust/README.md)
+- **Phase 3:** outlook only ([`PHASE_3_EDGE_STREAMING_OUTLOOK.md`](../../tools/open-fdd-modernization/PHASE_3_EDGE_STREAMING_OUTLOOK.md)); not started.
 
 ## Context
 
@@ -33,9 +35,11 @@ Rust-owned APIs, with Streamlit retained as fallback until Phase 2 cutover.
    central; SPA must carry request IDs; document CSRF/CORS/CSP and safe
    artifact Content-Disposition in the contract milestone (P1-M2). Prefer
    same-origin `/api` to simplify cookies/CORS.
-6. **Streamlit:** remains the default product UI and behavioral reference during
-   Phase 1. React ships behind a reversible feature flag. Streamlit deletion is
-   Phase 2 only, after proof and a rollback window.
+6. **Streamlit:** was the default product UI and behavioral reference during
+   Phase 1. React shipped behind a reversible feature flag. **After Phase 2
+   exit (2026-08-01):** React is the sole production UI; Streamlit is archived
+   (`services/ui/ARCHIVED.md`, compose profile `streamlit-legacy`). Deletion of
+   remaining archive sources is optional follow-on, not required for Phase 2 exit.
 7. **Python during Phase 1:** frozen for product features. Allowed: oracle /
    characterization / fixtures. Disallowed: new production Python services,
    silent pandas FDD fallback, new persistence formats React must later consume.

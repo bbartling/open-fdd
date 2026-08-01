@@ -134,7 +134,7 @@ Docs: [`MILESTONE_D_CLOSEOUT.md`](../docs/migration/MILESTONE_D_CLOSEOUT.md),
 
 ---
 
-# React / Rust modernization — Phase 1 (2026-07-31+)
+# React / Rust modernization — Phase 1+2 (2026-07-31 → 2026-08-01)
 
 Program: [`tools/open-fdd-modernization/`](../tools/open-fdd-modernization/README.md) ·
 Skill bridge: [`AGENT_SKILL_BRIDGE.md`](../tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md) ·
@@ -145,12 +145,29 @@ ADR: [`ADR-001`](../docs/architecture/adr-001-react-rust-modernization.md)
 Agents **must** follow `openfdd_agent_spec` + streamlit-to-react skills for UI PRs
 (see Cursor rule `.cursor/rules/openfdd-phase1-react-parity.mdc`).
 
+### Phase 1
+
 - [x] P1-M0-01 — ADR + instruction reconciliation + policy CI
 - [x] P1-M0-02 — Capability / Python-exit / API ledgers
 - [x] P1-M1 — Fixtures / oracle exporter / Streamlit baseline (#615)
 - [x] P1-M2 — Rust contracts + React shell + async ops (#616–#618)
-- [~] P1-M3 — Parity shell / widgets / navigation (#619 done; M3-02/03 in flight)
-- [ ] P1-M4 — Jobs/CSV/map/run vertical slice
-- [ ] P1-M5 — Domain families
-- [ ] P1-M6 — No-Python RC qualification
+- [x] P1-M3 — Parity shell / widgets / navigation (#619+)
+- [x] P1-M4 — Jobs/CSV/map/run vertical slice
+- [x] P1-M5 — Domain families (A–F) + Auth thin slice
+- [x] P1-M6 — No-Python RC qualification (exit approved)
 - [x] Agent skill bridge — `AGENT_SKILL_BRIDGE.md` + `openfdd-streamlit-to-react` skill + Cursor rule
+
+### Phase 2
+
+- [x] P2-M0 — Cutover control plane + telemetry + rollback (#636–#637)
+- [x] P2-M1 — Computation closure ledger + policy (#638)
+- [x] P2-M2 — Shadow/soak (#639)
+- [x] P2-M3 — Canary PROMOTE (#640)
+- [x] P2-M4 — React production default flip (#641)
+- [x] P2-M5 — Fallback closeout (#642)
+- [x] P2-M6 — Streamlit product path removal (#643)
+- [x] Prompt 8 — Final no-Python qualification PASS (#644)
+
+### Phase 3 (modernization edge/live) — outlook only
+
+- [ ] P3-M0+ — **Not started** (see `PHASE_3_READINESS.md`). Distinct from Milestone A Phase 3 (vibe19 oracle) above.

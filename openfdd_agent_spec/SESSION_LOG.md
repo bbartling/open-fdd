@@ -4,6 +4,13 @@ Newest first. Append after non-trivial agent work.
 
 ---
 
+## 2026-08-01 — Phase 2 exit + Phase 3 readiness (agent_spec)
+
+- Modernization Phase 1+2 exits approved; React sole product UI; Streamlit archived.
+- Updated AGENTS/ARCHITECTURE/BUILD_CHECKPOINTS + `openfdd-streamlit-to-react` for post-P2 truth.
+- Phase 3 (edge/live) remains outlook-only — `PHASE_3_READINESS.md`; no BACnet/MQTT work.
+- Milestone A Phase 2/3 checkboxes unchanged (different program).
+
 ## 2026-07-31 — Agent skill bridge (Phase 1)
 
 - Added `tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md` linking agent_spec ↔ modernization.

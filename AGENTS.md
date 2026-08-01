@@ -1,11 +1,16 @@
 # Agent Guide (container stack + external agents)
 
-Open-FDD ships as a **container stack**: `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt`, plus optional `openfdd-mcp`. It does **not** ship an embedded AI chatbot. External orchestrators — Codex CLI, Cursor, OpenClaw, Claude Desktop, or any MCP host — connect via **JWT REST** and optional **`openfdd-mcp` stdio**.
+Open-FDD ships as a **container stack**: `openfdd-central`, `openfdd-web` (React),
+`openfdd-fieldbus`, `openfdd-mqtt`, plus optional `openfdd-mcp` (legacy
+`openfdd-ui` Streamlit archived). It does **not** ship an embedded AI chatbot.
+External orchestrators — Codex CLI, Cursor, OpenClaw, Claude Desktop, or any MCP
+host — connect via **JWT REST** and optional **`openfdd-mcp` stdio**.
 
 | Layer | Responsibility |
 | --- | --- |
 | **central** | MQTTS ingest, Feather, FDD registry SQL, REST + JWT |
-| **ui** | Streamlit product UI (`services/ui`) — default / Phase 1 fallback; React SPA authorized per [ADR-001](docs/architecture/adr-001-react-rust-modernization.md) |
+| **web** | React product UI (`frontend/web`) — sole production UI after Phase 2 ([ADR-001](docs/architecture/adr-001-react-rust-modernization.md)) |
+| **ui (archived)** | Streamlit (`services/ui`) — recovery via `ARCHIVED.md` / `streamlit-legacy` |
 | **fieldbus** | BACnet / Modbus / Haystack OT drivers |
 | **mqtt** | Mosquitto MQTTS broker |
 | **mcp** | Optional read-first stdio tools → central (`OPENFDD_API_BASE`) |
@@ -14,7 +19,7 @@ Open-FDD ships as a **container stack**: `openfdd-central`, `openfdd-ui`, `openf
 
 **Software-engineering agent OS:** [`openfdd_agent_spec/`](openfdd_agent_spec/) — architecture locks, skills, Milestone A ([`openfdd_agent_spec/MILESTONE_A.md`](openfdd_agent_spec/MILESTONE_A.md)). Ops/edge soak prompts stay under [`docs/agent/`](docs/agent/).
 
-**React/Rust Phase 1:** [`tools/open-fdd-modernization/`](tools/open-fdd-modernization/README.md) · skill bridge [`AGENT_SKILL_BRIDGE.md`](tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md) · required UI skill [`streamlit-to-react`](tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md).
+**React/Rust modernization (Phase 1+2 exit approved; Phase 3 outlook):** [`tools/open-fdd-modernization/`](tools/open-fdd-modernization/README.md) · skill bridge [`AGENT_SKILL_BRIDGE.md`](tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md) · required UI skill [`streamlit-to-react`](tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md).
 
 **PyPI (`open-fdd` 4.1+):** ECM engineering + pandas oracle (`open_fdd.rules` / `analytics` / `reporting`) via extras. Production FDD is DataFusion/GHCR, not this wheel.
 
