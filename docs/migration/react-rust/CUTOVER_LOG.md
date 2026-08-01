@@ -2,6 +2,12 @@
 
 Phase 2 operational record. Newest first.
 
+## 2026-07-31 — P2-M0-02 / P2-M0-03 telemetry + rollback
+
+- Migration metrics: `GET /api/ui/migration-metrics` + `POST /api/ui/migration-event` (fallback_click / ui_error / datafusion_skip).
+- Rollback drill doc: `ROLLBACK_DRILL.md` (compose.react → compose.central, expand-only schema).
+- **Stop for human** before Prompt 2+ (computation closure / canary / deletion).
+
 ## 2026-07-31 — P2-M0-01 cohort routing
 
 - Added `/api/ui/generation` (cookie + header + env default).

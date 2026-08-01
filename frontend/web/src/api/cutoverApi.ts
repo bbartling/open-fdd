@@ -25,3 +25,23 @@ export async function setUiGeneration(
     body: JSON.stringify({ generation, reason }),
   });
 }
+
+export async function getMigrationMetrics(): Promise<Record<string, unknown>> {
+  return apiFetch("/api/ui/migration-metrics");
+}
+
+export async function postMigrationEvent(
+  event: string,
+  reasonCode?: string,
+  uiGeneration?: UiGeneration,
+): Promise<Record<string, unknown>> {
+  return apiFetch("/api/ui/migration-event", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      event,
+      reason_code: reasonCode,
+      ui_generation: uiGeneration,
+    }),
+  });
+}

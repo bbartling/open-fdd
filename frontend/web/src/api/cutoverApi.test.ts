@@ -39,4 +39,14 @@ describe("cutoverApi", () => {
     );
     expect(out.production_default_flipped).toBe(false);
   });
+
+  it("posts migration events", async () => {
+    vi.mocked(apiFetch).mockResolvedValue({ ok: true });
+    const { postMigrationEvent } = await import("./cutoverApi");
+    await postMigrationEvent("fallback_click", "user_opt_out", "react");
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/ui/migration-event",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
 });
