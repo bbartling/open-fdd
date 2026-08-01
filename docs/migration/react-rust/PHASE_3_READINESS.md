@@ -54,16 +54,26 @@ No code skill violations found requiring a fix in this pack. Spec/docs drift
 
 ## Digests
 
-**Tip verified:** `9ef0411` (2026-08-01)
+**Tip verified:** `61fee63` (2026-08-01)
 
 | workflow | run | result |
 |---|---|---|
-| Publish Open-FDD stack to GHCR | [30708116225](https://github.com/bbartling/open-fdd/actions/runs/30708116225) | **success** — tags `sha-9ef0411` + retarget `:nightly` for `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` |
-| Publish Open-FDD MCP to GHCR | [30708116291](https://github.com/bbartling/open-fdd/actions/runs/30708116291) | **success** — `openfdd-mcp:sha-9ef0411` + `:nightly` |
+| Publish Open-FDD stack to GHCR | [30710271297](https://github.com/bbartling/open-fdd/actions/runs/30710271297) | **success** — tags `sha-61fee63` + retarget `:nightly` for `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` |
+| Publish Open-FDD MCP to GHCR | [30710271292](https://github.com/bbartling/open-fdd/actions/runs/30710271292) | **success** — `openfdd-mcp:sha-61fee63` + `:nightly` |
 
-Immutable pin: `OPENFDD_IMAGE_TAG=sha-9ef0411`.
+Immutable pin: `OPENFDD_IMAGE_TAG=sha-61fee63`.
 
-**Note:** Local registry digest inspect requires `read:packages` (403 from this agent host). Operators with packages scope should confirm nightly↔sha digest equality per `CONTAINER_AGENT.md`. `compose.react.yml` references `openfdd-web` (build from `frontend/web`); stack GHCR currently publishes `openfdd-ui` (archived Streamlit) alongside central/fieldbus/mqtt — React SPA image is compose-build / future package until a dedicated web publish lands.
+Local pull smoke (nightly ↔ sha digest equality confirmed):
+
+| image | digest |
+|---|---|
+| `ghcr.io/bbartling/openfdd-central` | `sha256:6bb9efe10240dab920781bec7dafbb76ec776d7b942aa34d878984f9e71fead0` |
+| `ghcr.io/bbartling/openfdd-ui` | `sha256:46d453e121abc3b33914520b0c7ae62a1064ff78d14c24f43d8235801d4f8e45` |
+| `ghcr.io/bbartling/openfdd-fieldbus` | `sha256:5ea6a1bf6071d2f7bad71712b36cb295f37b0f2f9ea4fba2e6b8943a36282486` |
+| `ghcr.io/bbartling/openfdd-mqtt` | `sha256:c7c094d79536969b75b9038487c88071498d3cac0a37910f3a1d8c3a55934121` |
+| `ghcr.io/bbartling/openfdd-mcp` | `sha256:b8ef84859af54217051f2b966b3902e5bcb6fef84b5a62e13baf3342bf4a6072` |
+
+**Note:** `compose.react.yml` references `openfdd-web` (build from `frontend/web`); stack GHCR publishes `openfdd-ui` (archived Streamlit) alongside central/fieldbus/mqtt — React SPA image is compose-build / future package (`openfdd-web:nightly` not published).
 
 `docker compose -f docker/compose.react.yml config` → OK.
 

@@ -2,10 +2,15 @@
 
 Newest first.
 
+## 2026-08-01 — GHCR tip verify @ 61fee63
+
+- Stack + MCP GHCR publishes success for tip; nightly↔sha digests recorded in PHASE_3_READINESS.
+- compose.react.yml config smoke OK; openfdd-web GHCR absent (compose-build).
+- Tip Actions all green; 0 open PRs after this pack → program tidy gate.
+
 ## 2026-08-01 — GHCR tip verify @ 9ef0411
 
-- Stack + MCP GHCR publishes success for tip; digests recorded in PHASE_3_READINESS.
-- compose.react.yml config smoke OK.
+- Stack + MCP GHCR publishes success; superseded by `61fee63` digest record.
 
 ## 2026-08-01 — Phase 3 readiness + skill compliance
 
