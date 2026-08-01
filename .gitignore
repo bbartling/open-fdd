@@ -28,6 +28,11 @@ workspace/smoke-profiles/local/*.local.toml
 workspace/bootstrap_credentials*
 workspace/bench.env.local
 workspace/bench/
+scripts/nightly-ot-bench/bench.env.local
+docker/compose.standalone.local.yml
+docker/compose.react.fieldbus.local.yml
+docker/compose.cloudsim.local.yml
+
 workspace/ollama.env.local
 workspace/codex.env.local
 workspace/agent-chat/

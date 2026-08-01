@@ -92,7 +92,7 @@ jobs:
           export OPENFDD_MQTT_HOST=127.0.0.1
           mkdir -p deploy/mqtt/kits/local__fieldbus-1
           export OPENFDD_EDGE_KIT_DIR="$PWD/deploy/mqtt/kits/local__fieldbus-1"
-          for f in docker/compose.standalone.yml docker/compose.central.yml docker/compose.edge.yml docker/compose.csv.yml docker/compose.react.yml; do
+          for f in docker/compose.standalone.yml docker/compose.central.yml docker/compose.edge.yml docker/compose.csv.yml docker/compose.react.yml docker/compose.react.fieldbus.yml; do
             docker compose -f "$f" config >/dev/null
           done
           bash scripts/release/smoke_standalone_mqtts.sh

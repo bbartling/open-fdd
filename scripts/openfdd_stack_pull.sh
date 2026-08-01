@@ -28,6 +28,21 @@ case "$RECIPE" in
     docker pull "$OPENFDD_CENTRAL_IMAGE"
     docker pull "$OPENFDD_UI_IMAGE"
     ;;
+  react)
+    docker pull "$OPENFDD_CENTRAL_IMAGE"
+    docker pull "$OPENFDD_MQTT_IMAGE"
+    if ! docker pull "$OPENFDD_WEB_IMAGE" 2>/dev/null; then
+      echo "WARN: $OPENFDD_WEB_IMAGE not in registry — build web locally on up" >&2
+    fi
+    ;;
+  react-ot)
+    docker pull "$OPENFDD_CENTRAL_IMAGE"
+    docker pull "$OPENFDD_MQTT_IMAGE"
+    docker pull "$OPENFDD_FIELDBUS_IMAGE"
+    if ! docker pull "$OPENFDD_WEB_IMAGE" 2>/dev/null; then
+      echo "WARN: $OPENFDD_WEB_IMAGE not in registry — build web locally on up" >&2
+    fi
+    ;;
   mcp)
     docker pull "$OPENFDD_MCP_IMAGE"
     ;;
@@ -37,7 +52,7 @@ case "$RECIPE" in
     done
     ;;
   *)
-    echo "Usage: $0 [standalone|central|edge|csv|mcp|all]" >&2
+    echo "Usage: $0 [standalone|central|edge|csv|react|react-ot|mcp|all]" >&2
     exit 2
     ;;
 esac
