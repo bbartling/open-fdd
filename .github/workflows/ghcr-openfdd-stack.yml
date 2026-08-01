@@ -48,11 +48,11 @@ jobs:
       - name: Stack crate tests
         run: cargo test -p openfdd-central -p openfdd-fieldbus -p openfdd_mqtt
 
-      - name: Streamlit UI syntax check
+      - name: Product UI archive marker
         run: |
-          python3 -m py_compile services/ui/streamlit_app.py services/ui/app/central_client.py
-          test -f services/ui/Dockerfile
-          test -f services/ui/requirements.txt
+          test -f services/ui/ARCHIVED.md
+          test -f frontend/web/package.json
+          test -f docker/compose.react.yml
 
       - name: Compose config check (all recipes)
         env:

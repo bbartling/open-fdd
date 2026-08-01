@@ -20,8 +20,9 @@ Target RTO: **≤ 15 minutes** (operator + compose).
    ```
 4. Start Streamlit fallback topology (same workspace volume):
    ```bash
-   docker compose -f docker/compose.central.yml up -d
+   docker compose -f docker/compose.central.yml --profile streamlit-legacy up -d
    ```
+   (P2-M6: `ui` is profile-gated; without the profile, compose.central is central+mqtt only.)
 5. Verify Streamlit UI on `:3000` and central `:8080/api/health`.
 6. Optional: clear React sticky cookie / set generation streamlit:
    ```bash

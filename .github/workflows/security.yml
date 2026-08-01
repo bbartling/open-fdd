@@ -42,28 +42,27 @@ jobs:
           test -f Cargo.toml
           test -f docker/compose.standalone.yml
           test -f docker/compose.csv.yml
+          test -f docker/compose.react.yml
           test -f services/central/Dockerfile
-          test -f services/ui/Dockerfile
-          test -f services/ui/streamlit_app.py
+          test -f frontend/web/package.json
+          test -f frontend/web/Dockerfile
+          test -f services/ui/ARCHIVED.md
           test -f Dockerfile.mcp
           test -f .env.example
           test -d edge
           test -d services/central
-          test -d services/ui
+          test -d frontend/web
           test -d workspace
           test ! -f Dockerfile
           test ! -f docker/compose.edge.rust.yml
           test ! -d workspace/dashboard/src
 
-      - name: No abandoned dashboard SPA; React only via ADR-001 path
+      - name: React is sole production UI (Streamlit archived)
         run: |
-          # Legacy workspace dashboard must stay deleted.
           ! test -f workspace/dashboard/package.json
-          # Streamlit remains the shipping default UI.
-          grep -q "streamlit" services/ui/requirements.txt
-          grep -q "Rule tuning" services/ui/streamlit_app.py
-          # Phase 1 React is authorized (ADR-001); package.json may appear under
-          # frontend/ or web/ in later milestones. Policy script rejects Python backends.
+          test -f services/ui/ARCHIVED.md
+          grep -q "ARCHIVED" services/ui/ARCHIVED.md
+          grep -q "streamlit-legacy" docker/compose.central.yml
           test -f docs/architecture/adr-001-react-rust-modernization.md
           python3 scripts/architecture_react_policy_check.py
           python3 scripts/phase2_computation_policy_check.py

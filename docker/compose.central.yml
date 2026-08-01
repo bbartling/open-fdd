@@ -33,8 +33,9 @@ services:
       OPENFDD_PARQUET_ROOT: /workspace/.cache/parquet
       OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}
       OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
-      # Rollback / Streamlit stack: keep generation default on Streamlit.
-      OPENFDD_UI_GENERATION_DEFAULT: ${OPENFDD_UI_GENERATION_DEFAULT:-streamlit}
+      OPENFDD_REACT_UI: "1"
+      # P2-M6: React is the product default even on this compose file.
+      OPENFDD_UI_GENERATION_DEFAULT: ${OPENFDD_UI_GENERATION_DEFAULT:-react}
     ports:
       - "${OPENFDD_CENTRAL_BIND:-0.0.0.0}:8080:8080"
     volumes:
@@ -44,7 +45,9 @@ services:
       - mqtt
     restart: unless-stopped
 
+  # P2-M6: Streamlit is not the product UI. Enable only for emergency recovery.
   ui:
+    profiles: ["streamlit-legacy"]
     image: ${OPENFDD_UI_IMAGE:-ghcr.io/bbartling/openfdd-ui:nightly}
     build:
       context: ../services/ui
