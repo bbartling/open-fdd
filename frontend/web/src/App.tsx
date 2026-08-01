@@ -8,12 +8,14 @@ import { FindingsPage } from "./pages/FindingsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { MeteringPage } from "./pages/MeteringPage";
 import { WattLabPage } from "./pages/WattLabPage";
+import { AuthPage } from "./pages/AuthPage";
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/auth" element={<AuthPage />} />
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/upload" element={<UploadPage />} />
         <Route path="/mapping" element={<MappingPage />} />
