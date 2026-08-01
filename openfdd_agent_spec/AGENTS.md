@@ -47,7 +47,7 @@ Do **not** rename `open_fdd.rules` → `open_fdd.oracle` without an explicit pro
 2. Pandas oracle stays forever — cookbooks + vibe19 + PyPI `rules`/`analytics`. Never delete the pandas cookbook because production uses SQL.
 3. Never delete the SQL cookbook because pandas remains the oracle.
 4. **Product UI:** React SPA (`frontend/web` → `openfdd-web`, `compose.react.yml`) is the **sole production UI** after Phase 2 exit ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)). Streamlit (`services/ui`) is **archived** (`ARCHIVED.md`, compose profile `streamlit-legacy`). Browser → central Rust `/api` only — **no FastAPI sidecar**.
-5. Test open-fdd containers on **`OPENFDD_IMAGE_TAG=nightly`** (master retargets `:nightly`).
+5. Test open-fdd containers on **`OPENFDD_IMAGE_TAG=nightly`** (master retargets `:nightly`), but **pin/run `sha-*`** per [`CONTAINER_AGENT.md`](CONTAINER_AGENT.md). OT stress: [`scripts/nightly-ot-bench/`](../scripts/nightly-ot-bench/README.md) (`react-ot`).
 6. Playground images: `ghcr.io/bbartling/vibe19:develop`, `vibe20:develop`.
 7. `edge/` and `os/` are future concepts — never delete.
 8. Bounded PRs only — see [`PR_PROTOCOL.md`](PR_PROTOCOL.md).

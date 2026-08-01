@@ -2,6 +2,13 @@
 
 Newest first.
 
+## 2026-08-01 — Nightly OT bench modernized (react-ot)
+
+- Committed `scripts/nightly-ot-bench/` for post–Phase-2: pull `sha-*`, assert
+  nightly digests, `compose.react.yml` + `compose.react.fieldbus.yml`, React SPA
+  gates (replaced Streamlit Lab). Writes opt-in via `BENCH_ALLOW_WRITES=1`.
+- Stack recipe: `./scripts/openfdd_stack_up.sh react-ot`.
+
 ## 2026-08-01 — GHCR tip verify @ 61fee63
 
 - Stack + MCP GHCR publishes success for tip; nightly↔sha digests recorded in PHASE_3_READINESS.

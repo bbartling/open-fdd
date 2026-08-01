@@ -1,0 +1,37 @@
+# Open-FDD React OT overlay: host-net fieldbus for BACnet LAN benches.
+# Use with compose.react.yml (product SPA + central + mqtt):
+#
+#   docker compose -f docker/compose.react.yml -f docker/compose.react.fieldbus.yml up -d
+#
+# Optional local OT bind/keys (gitignored):
+#   -f docker/compose.react.fieldbus.local.yml
+
+services:
+  fieldbus:
+    image: ${OPENFDD_FIELDBUS_IMAGE:-ghcr.io/bbartling/openfdd-fieldbus:nightly}
+    build:
+      context: ..
+      dockerfile: services/fieldbus/Dockerfile
+    network_mode: host
+    environment:
+      OPENFDD_FIELDBUS_CONFIG_DIR: /app/config
+      OPENFDD_FIELDBUS_HTTP_HOST: 127.0.0.1
+      OPENFDD_FIELDBUS_HTTP_PORT: "8081"
+      OPENFDD_MQTT_ENABLED: "1"
+      OPENFDD_MQTT_HOST: 127.0.0.1
+      OPENFDD_MQTT_PORT: "8883"
+      OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:-local}
+      OPENFDD_EDGE_ID: ${OPENFDD_EDGE_ID:-fieldbus-1}
+      OPENFDD_MQTT_CA_PEM: /mqtt/ca.pem
+      OPENFDD_MQTT_CERT_PEM: /mqtt/edge.cert.pem
+      OPENFDD_MQTT_KEY_PEM: /mqtt/edge.key.pem
+      OPENFDD_MQTT_SPOOL_DIR: /spool
+      OPENFDD_FIELDBUS_API_KEY: ${OPENFDD_FIELDBUS_API_KEY:-}
+    volumes:
+      - ../config/fieldbus:/app/config:ro
+      - ../deploy/mqtt/kits/${OPENFDD_SITE_ID:-local}__${OPENFDD_EDGE_ID:-fieldbus-1}:/mqtt:ro
+      - fieldbus-spool:/spool
+    restart: unless-stopped
+
+volumes:
+  fieldbus-spool:

@@ -1,0 +1,9 @@
+# Copy to compose.react.fieldbus.local.yml (gitignored) for OT LAN bind + API key.
+# Do not commit real addresses or production keys.
+services:
+  fieldbus:
+    environment:
+      OPENFDD_FIELDBUS_BIND: "192.168.204.55"
+      OPENFDD_FIELDBUS_API_KEY: "bench-demo-key-1234567890"
+      OPENFDD_FIELDBUS_OPENAPI: "1"
+      OPENFDD_FIELDBUS_SWAGGER_BENCH: "1"

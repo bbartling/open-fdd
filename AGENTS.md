@@ -26,7 +26,8 @@ host — connect via **JWT REST** and optional **`openfdd-mcp` stdio**.
 ## Start session
 
 ```bash
-./scripts/openfdd_stack_up.sh standalone   # or csv / central
+./scripts/openfdd_stack_up.sh react-ot     # React SPA + mqtt + central + fieldbus
+# or: react (no fieldbus) / csv / standalone (Streamlit only with profile)
 TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"'"$OPENFDD_ADMIN_PASSWORD"'"}' \
@@ -38,8 +39,9 @@ Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:808
 ## Safe scripts
 
 ```bash
-./scripts/openfdd_stack_pull.sh standalone
-./scripts/openfdd_stack_up.sh standalone
+./scripts/openfdd_stack_pull.sh react-ot
+./scripts/openfdd_stack_up.sh react-ot
+./scripts/nightly-ot-bench/run_all.sh      # pull sha-* + aggressive OT/API gates
 ./scripts/openfdd_stack_up.sh csv
 ```
 
