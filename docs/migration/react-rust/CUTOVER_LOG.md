@@ -2,6 +2,12 @@
 
 Phase 2 operational record. Newest first.
 
+## 2026-08-01 — P2-M4 React default flip
+
+- Time: 2026-08-01 (turnkey auth). Config: `OPENFDD_UI_GENERATION_DEFAULT` default → `react`.
+- `production_default_flipped: true`. Streamlit fallback still available (cookie / compose.central).
+- Observation: migration metrics + fallback_click. Next: P2-M5 leaf twin deletion after observation note.
+
 ## 2026-08-01 — P2-M3 canary PROMOTE
 
 - Decision record: `CANARY_DECISIONS.md` — PROMOTE to 100% with Streamlit fallback.

@@ -4,6 +4,7 @@ Newest first. Record product/architecture calls only.
 
 | Date | Decision | Status |
 |------|----------|--------|
+| 2026-08-01 | P2-M4: production UI generation default is React; Streamlit via cookie/header or compose.central env | Accepted |
 | 2026-08-01 | P2-M3 canary: PROMOTE to 100% with Streamlit fallback; default flip deferred to P2-M4 | Accepted |
 | 2026-08-01 | Production rule statuses: proven_building_100→PROVEN; ported_from_cookbook→PROVISIONAL; skipped_missing_roles→DISABLED. Ported ≠ PROVEN | Accepted |
 | 2026-08-01 | React/no-Python product path has no production Python computation; Streamlit twins + gated pandas remain until deletion window | Accepted |

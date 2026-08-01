@@ -1,7 +1,7 @@
-//! UI generation cutover control plane (P2-M0-01).
+//! UI generation cutover control plane (P2-M0-01 / P2-M4-01).
 //!
-//! Default remains Streamlit. React is opt-in via cookie/header/env — never a
-//! silent production default flip in this module.
+//! P2-M4: production default is React. Streamlit remains available via sticky
+//! cookie/header or `OPENFDD_UI_GENERATION_DEFAULT=streamlit` (rollback stack).
 
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
@@ -48,12 +48,17 @@ impl UiGeneration {
     }
 }
 
-/// Safe default when config is absent/invalid: Streamlit.
+/// Safe default when config is absent/invalid: React (P2-M4).
 pub fn default_generation() -> UiGeneration {
     match std::env::var(ENV_DEFAULT) {
-        Ok(v) => UiGeneration::parse(&v).unwrap_or(UiGeneration::Streamlit),
-        Err(_) => UiGeneration::Streamlit,
+        Ok(v) => UiGeneration::parse(&v).unwrap_or(UiGeneration::React),
+        Err(_) => UiGeneration::React,
     }
+}
+
+/// True after the authorized P2-M4 production default flip.
+pub fn production_default_flipped() -> bool {
+    true
 }
 
 pub fn resolve_generation(headers: &HeaderMap) -> (UiGeneration, &'static str) {
@@ -146,8 +151,7 @@ async fn get_generation(headers: HeaderMap) -> Json<GenerationStatus> {
         generation,
         source: source.into(),
         default_generation: default_generation(),
-        // P2-M0-01 never flips the production default.
-        production_default_flipped: false,
+        production_default_flipped: production_default_flipped(),
         sticky_cookie: COOKIE_NAME.into(),
     })
 }
@@ -174,7 +178,7 @@ async fn put_generation(
         "from_source": prev_source,
         "to": generation.as_str(),
         "reason": body.reason,
-        "production_default_flipped": false,
+        "production_default_flipped": production_default_flipped(),
     });
     if let Err(e) = append_audit(&entry) {
         tracing::warn!(error = %e, "cutover audit write failed");
@@ -189,7 +193,7 @@ async fn put_generation(
         "generation": generation.as_str(),
         "source": "cookie",
         "audit": entry,
-        "production_default_flipped": false,
+        "production_default_flipped": production_default_flipped(),
     }))
     .into_response();
     if let Ok(val) = HeaderValue::from_str(&cookie) {
@@ -243,10 +247,12 @@ mod tests {
     use axum::http::HeaderValue;
 
     #[test]
-    fn invalid_env_defaults_to_streamlit() {
+    fn invalid_env_defaults_to_react() {
         std::env::set_var(ENV_DEFAULT, "bogus");
-        assert_eq!(default_generation(), UiGeneration::Streamlit);
+        assert_eq!(default_generation(), UiGeneration::React);
         std::env::remove_var(ENV_DEFAULT);
+        assert_eq!(default_generation(), UiGeneration::React);
+        assert!(production_default_flipped());
     }
 
     #[test]

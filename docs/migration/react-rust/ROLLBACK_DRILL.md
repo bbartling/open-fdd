@@ -32,3 +32,9 @@ Target RTO: **≤ 15 minutes** (operator + compose).
 7. Record end UTC; attach durations to CUTOVER_LOG.
 
 **Does not** rewrite jobs, findings, or artifacts. Rollback changes routing/compose only.
+
+## Post P2-M4 note
+
+Production default generation is **React**. `compose.central.yml` pins
+`OPENFDD_UI_GENERATION_DEFAULT=streamlit` so the Streamlit stack remains an
+explicit rollback path without rebuilding images.
