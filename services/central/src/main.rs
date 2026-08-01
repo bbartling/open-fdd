@@ -3,6 +3,7 @@
 mod analytics;
 mod auth;
 mod contract;
+mod cutover;
 mod eplus_runner;
 mod ingest;
 mod jobs;
@@ -40,6 +41,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .merge(routes::router(Arc::clone(&state)))
+        .merge(cutover::router())
         .merge(openapi::router())
         .layer(middleware::from_fn(contract::request_id_middleware))
         .layer(TraceLayer::new_for_http());

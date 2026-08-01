@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-07-31 — P2-M0-01
+
+- Phase 1 exit verified (CUTOVER_LOG / PHASE_1_QUALIFICATION).
+- Cutover control plane: `GET|PUT /api/ui/generation` with sticky cookie, header override, safe Streamlit default; audit JSONL; **production_default_flipped=false**.
+- React `cutoverApi.ts`. Next: P2-M0-02 telemetry + P2-M0-03 rollback drill.
+
 ## 2026-07-31 — P1-M6-03
 
 - Qualification pack: `PHASE_1_QUALIFICATION.md`
