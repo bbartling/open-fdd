@@ -4,6 +4,7 @@ Newest first. Record product/architecture calls only.
 
 | Date | Decision | Status |
 |------|----------|--------|
+| 2026-07-31 | P1-M6-01 closes Python exit matrix with DELETE-P2 / ORACLE-ONLY / KEEP-AS-LIB / REPLACE only; Phase 2 deletions enumerated but not executed | Accepted |
 | 2026-07-31 | M5-B plot datasets use SVG PlotlyHost stand-in (no plotly npm); figure JSON shape reserved for Plotly.react | Accepted |
 | 2026-07-31 | FDD run is synchronous at `/api/fdd/run` (no run_id poll); React cancel = fetch AbortSignal; async job substrate reserved for longer ops | Accepted |
 | 2026-07-31 | Mapping uses `?site=` as building_id for package inventory; durable maps via package/roles + session-config (not sessionStorage) | Accepted |
