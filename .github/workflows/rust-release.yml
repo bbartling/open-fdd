@@ -82,9 +82,10 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --all-targets
       - run: |
-          python3 -m py_compile services/ui/streamlit_app.py services/ui/app/central_client.py
-          test -f services/ui/Dockerfile
-          test -f services/ui/requirements.txt
+          test -f services/ui/ARCHIVED.md
+          test -f frontend/web/package.json
+          test -f frontend/web/Dockerfile
+          test -f docker/compose.react.yml
       - run: |
           export OPENFDD_SITE_ID=local
           export OPENFDD_EDGE_ID=fieldbus-1

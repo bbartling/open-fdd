@@ -6,7 +6,7 @@ ORACLE-ONLY / ARCHIVE-DECISION / KEEP-AS-LIB / REPLACE. Deletion is Phase 2 only
 
 | path | purpose | production consumers | oracle value | target owner | disposition | evidence required | deletion blocker |
 |---|---|---|---|---|---|---|---|
-| services/ui/streamlit_app.py | Product Streamlit entry | openfdd-ui image | behavioral reference | React SPA (Phase 2 delete) | DELETE-P2 | React path M4–M5; no-Python compose M6-02 | Streamlit fallback until P2 cutover |
+| services/ui/streamlit_app.py | Product Streamlit entry | openfdd-ui image | behavioral reference | React SPA | DELETED | P2-M6 product path; source archived `services/ui/ARCHIVED.md` | use compose `--profile streamlit-legacy` or GHCR digests |
 | services/ui/requirements.txt | Streamlit deps | openfdd-ui | — | web image without Streamlit | DELETE-P2 | React path M4–M5; no-Python compose M6-02 | Streamlit fallback until P2 cutover |
 | services/ui/app/agent_api.py | Local/agent helpers around UI workflows | services/ui | MAYBE | Rust/DataFusion or React presentation | DELETE-P2 | React path M4–M5; no-Python compose M6-02 | Streamlit fallback until P2 cutover |
 | services/ui/app/agent_prerun.py | Pre-run checks before FDD | services/ui | MAYBE | Rust/DataFusion or React presentation | DELETE-P2 | React path M4–M5; no-Python compose M6-02 | Streamlit fallback until P2 cutover |

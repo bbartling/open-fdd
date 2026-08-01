@@ -47,6 +47,7 @@ services:
     restart: unless-stopped
 
   ui:
+    profiles: ["streamlit-legacy"]
     image: ${OPENFDD_UI_IMAGE:-ghcr.io/bbartling/openfdd-ui:nightly}
     build:
       context: ../services/ui

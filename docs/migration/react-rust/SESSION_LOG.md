@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-08-01 — P2-M6 Streamlit product removal
+
+- `STREAMLIT_PRODUCT_REMOVAL.md` + `services/ui/ARCHIVED.md`.
+- Compose `ui` → `streamlit-legacy` profile; CI product gates → React.
+- Next: P2 final no-Python qualification (Prompt 8).
+
 ## 2026-08-01 — P2-M5 fallback closeout
 
 - `FALLBACK_CLOSEOUT.md`: fallback window closed; leaf deletes bundled into Prompt 7.

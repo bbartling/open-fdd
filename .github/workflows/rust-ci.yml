@@ -57,7 +57,7 @@ jobs:
           grep -q 'auth.env.local' .gitignore || grep -q '/workspace' .gitignore
 
   frontend:
-    name: Streamlit UI checks
+    name: Product UI guards (React) + archive marker
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -65,31 +65,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Streamlit UI syntax + layout guards
+      - name: React product UI + Streamlit archive
         run: |
-          test -f services/ui/Dockerfile
-          test -f services/ui/streamlit_app.py
-          test -f services/ui/requirements.txt
-          test -f services/ui/app/central_client.py
-          python3 -m py_compile services/ui/streamlit_app.py services/ui/app/central_client.py services/ui/app/agent_api.py services/ui/app/job_store.py services/ui/app/ui_jobs.py
-          grep -q "Rule tuning" services/ui/streamlit_app.py
-          grep -q "Delete…" services/ui/streamlit_app.py || grep -q "Delete site" services/ui/streamlit_app.py
-          grep -q "Active site" services/ui/streamlit_app.py
-          grep -q "def _run_rule_list" services/ui/streamlit_app.py
-          grep -q "DataFusion" services/ui/streamlit_app.py || grep -q "run_fdd" services/ui/app/central_client.py
-          grep -q "Authorization" services/ui/app/central_client.py
-          grep -q "confirm_seconds" services/ui/app/central_client.py
-          grep -q "Jobs (persistent)" services/ui/app/ui_jobs.py
-          grep -q "WattLab" services/ui/app/dashboard_contract.py
-          grep -q "render_wattlab_section" services/ui/app/ui_wattlab_studio.py
+          test -f frontend/web/package.json
+          test -f frontend/web/Dockerfile
+          test -f docker/compose.react.yml
+          test -f services/ui/ARCHIVED.md
+          grep -q "streamlit-legacy" docker/compose.central.yml
           ! test -d workspace/dashboard/src
           ! test -f workspace/dashboard/package.json
-          pip install -q pytest requests pandas pyyaml
-          (cd services/ui && PYTHONPATH=. python3 -m pytest app/test_central_client_normalize.py app/test_job_store.py app/test_jobs_central_client.py app/test_ui_analytics.py app/test_ui_ecm_job.py -q)
+
       - name: BACnet NIC helper guards
         run: |
           test -x scripts/openfdd_bacnet_nic_setup.sh

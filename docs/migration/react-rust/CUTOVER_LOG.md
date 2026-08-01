@@ -2,6 +2,12 @@
 
 Phase 2 operational record. Newest first.
 
+## 2026-08-01 — P2-M6 Streamlit product removal
+
+- Product path no longer starts Streamlit by default.
+- Recovery: `ARCHIVED.md` + `--profile streamlit-legacy` + historical GHCR digests.
+- Next: Prompt 8 final no-Python qualification.
+
 ## 2026-08-01 — P2-M5 fallback observation closed
 
 - Streamlit is emergency rollback only. Leaf twin deletion deferred to Prompt 7 vehicle.
