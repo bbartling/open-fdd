@@ -54,8 +54,18 @@ No code skill violations found requiring a fix in this pack. Spec/docs drift
 
 ## Digests
 
-Record tip GHCR digests after successful `Publish Open-FDD stack to GHCR` /
-MCP publish for the readiness merge SHA (see CUTOVER_LOG update after verify).
+**Tip verified:** `9ef0411` (2026-08-01)
+
+| workflow | run | result |
+|---|---|---|
+| Publish Open-FDD stack to GHCR | [30708116225](https://github.com/bbartling/open-fdd/actions/runs/30708116225) | **success** — tags `sha-9ef0411` + retarget `:nightly` for `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` |
+| Publish Open-FDD MCP to GHCR | [30708116291](https://github.com/bbartling/open-fdd/actions/runs/30708116291) | **success** — `openfdd-mcp:sha-9ef0411` + `:nightly` |
+
+Immutable pin: `OPENFDD_IMAGE_TAG=sha-9ef0411`.
+
+**Note:** Local registry digest inspect requires `read:packages` (403 from this agent host). Operators with packages scope should confirm nightly↔sha digest equality per `CONTAINER_AGENT.md`. `compose.react.yml` references `openfdd-web` (build from `frontend/web`); stack GHCR currently publishes `openfdd-ui` (archived Streamlit) alongside central/fieldbus/mqtt — React SPA image is compose-build / future package until a dedicated web publish lands.
+
+`docker compose -f docker/compose.react.yml config` → OK.
 
 ## Next
 
