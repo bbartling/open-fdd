@@ -36,12 +36,11 @@ Do not invent a React redesign. Port measurable Streamlit behavior.
 ## Open-FDD repository map
 
 ```text
-services/ui/streamlit_app.py     Streamlit reference (default product UI)
-services/ui/app/                 Streamlit modules
+frontend/web/                    React SPA (sole production UI)
 services/central/                Rust browser API + jobs + FDD orchestration
 sql_rules/ + crates/fdd_*        DataFusion FDD / analytics
-frontend/web/                    React SPA (Phase 1, flag-gated)
-docs/migration/react-rust/       Durable ledgers
+services/ui/                     Streamlit archive (ARCHIVED.md; not product default)
+docs/migration/react-rust/       Durable ledgers + Phase 3 readiness
 tools/open-fdd-modernization/    This program kit
 openfdd_agent_spec/              Engineering agent OS + Milestone skills
 open_fdd/                        PyPI oracle / ECM (not production FDD runtime)
@@ -49,14 +48,14 @@ open_fdd/                        PyPI oracle / ECM (not production FDD runtime)
 
 ## Source-of-truth hierarchy
 
-1. Running Streamlit at the target viewport and state.
-2. Streamlit source, assets, and `dashboard_contract.py` section order.
-3. Browser measurements and same-viewport screenshots.
-4. Installed Streamlit defaults when no theme is checked in.
+1. Running React at the target viewport and state (product path).
+2. Central `/api` contracts and ledgers under `docs/migration/react-rust/`.
+3. Archived Streamlit source when characterizing residual parity gaps.
+4. Browser measurements and same-viewport screenshots when doing visual work.
 5. Visual inference last — document uncertainty.
 
-Prefer the running reference when evidence conflicts. Document intentional
-differences (for example React Jobs routes ahead of Streamlit Jobs wiring).
+Document intentional differences. Prefer React + contract evidence over
+reintroducing Streamlit as the shipping default.
 
 ## Required architecture (Open-FDD)
 
