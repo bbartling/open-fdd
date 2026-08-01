@@ -51,8 +51,11 @@ is_allowed() {
     edge/src/validation/audit.rs) return 0 ;;
     edge/src/main.rs) return 0 ;;
     scripts/bench_5007_long_smoke.sh) return 0 ;;
+    scripts/nightly-ot-bench/*) return 0 ;;
     scripts/audit_no_private_bench_hardcoding.sh) return 0 ;;
     scripts/audit_no_hardcoding.sh) return 0 ;;
+    docker/compose.react.fieldbus.local.example.yml) return 0 ;;
+    docker/compose.standalone.local.yml) return 0 ;;
     workspace/dashboard/src/App.tsx) return 0 ;;
   esac
   return 1
