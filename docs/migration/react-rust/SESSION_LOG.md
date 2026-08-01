@@ -2,6 +2,11 @@
 
 Newest first.
 
+## 2026-07-31 — P2-M0-02 / P2-M0-03
+
+- Migration telemetry counters + event ingest; rollback drill + schema expand-only note.
+- Phase 2 M0 control plane complete. **Await human auth before Prompts 2–8.**
+
 ## 2026-07-31 — P2-M0-01
 
 - Phase 1 exit verified (CUTOVER_LOG / PHASE_1_QUALIFICATION).

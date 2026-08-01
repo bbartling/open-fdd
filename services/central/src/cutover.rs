@@ -12,10 +12,17 @@ use serde_json::{json, Value};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub const COOKIE_NAME: &str = "openfdd_ui_generation";
 pub const HEADER_NAME: &str = "x-openfdd-ui-generation";
 pub const ENV_DEFAULT: &str = "OPENFDD_UI_GENERATION_DEFAULT";
+
+static GEN_GETS: AtomicU64 = AtomicU64::new(0);
+static GEN_PUTS: AtomicU64 = AtomicU64::new(0);
+static FALLBACK_CLICKS: AtomicU64 = AtomicU64::new(0);
+static UI_ERRORS: AtomicU64 = AtomicU64::new(0);
+static DF_SKIPS: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -106,14 +113,33 @@ pub struct SetGenerationBody {
     pub reason: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct MigrationEventBody {
+    pub event: String,
+    #[serde(default)]
+    pub reason_code: Option<String>,
+    #[serde(default)]
+    pub ui_generation: Option<String>,
+}
+
 pub fn router() -> Router {
-    Router::new().route(
-        "/api/ui/generation",
-        axum::routing::get(get_generation).put(put_generation),
-    )
+    Router::new()
+        .route(
+            "/api/ui/generation",
+            axum::routing::get(get_generation).put(put_generation),
+        )
+        .route(
+            "/api/ui/migration-metrics",
+            axum::routing::get(migration_metrics),
+        )
+        .route(
+            "/api/ui/migration-event",
+            axum::routing::post(migration_event),
+        )
 }
 
 async fn get_generation(headers: HeaderMap) -> Json<GenerationStatus> {
+    GEN_GETS.fetch_add(1, Ordering::Relaxed);
     let (generation, source) = resolve_generation(&headers);
     Json(GenerationStatus {
         ok: true,
@@ -139,6 +165,7 @@ async fn put_generation(
             })),
         ));
     };
+    GEN_PUTS.fetch_add(1, Ordering::Relaxed);
     let (prev, prev_source) = resolve_generation(&headers);
     let entry = json!({
         "ts": Utc::now().to_rfc3339(),
@@ -169,6 +196,45 @@ async fn put_generation(
         response.headers_mut().append(header::SET_COOKIE, val);
     }
     Ok(response)
+}
+
+async fn migration_metrics() -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "generation_gets": GEN_GETS.load(Ordering::Relaxed),
+        "generation_puts": GEN_PUTS.load(Ordering::Relaxed),
+        "fallback_clicks": FALLBACK_CLICKS.load(Ordering::Relaxed),
+        "ui_errors": UI_ERRORS.load(Ordering::Relaxed),
+        "datafusion_skips": DF_SKIPS.load(Ordering::Relaxed),
+        "notes": [
+            "Counters are process-local (reset on restart).",
+            "Do not log tokens or sensitive payloads here.",
+            "Alert hooks: React uncaught <0.5%; core success not worse than Streamlit by >1pp (budgets in PHASE_2 doc)."
+        ]
+    }))
+}
+
+async fn migration_event(Json(body): Json<MigrationEventBody>) -> Json<Value> {
+    match body.event.as_str() {
+        "fallback_click" => {
+            FALLBACK_CLICKS.fetch_add(1, Ordering::Relaxed);
+        }
+        "ui_error" => {
+            UI_ERRORS.fetch_add(1, Ordering::Relaxed);
+        }
+        "datafusion_skip" => {
+            DF_SKIPS.fetch_add(1, Ordering::Relaxed);
+        }
+        _ => {}
+    }
+    let entry = json!({
+        "ts": Utc::now().to_rfc3339(),
+        "event": body.event,
+        "reason_code": body.reason_code,
+        "ui_generation": body.ui_generation,
+    });
+    let _ = append_audit(&entry);
+    Json(json!({"ok": true}))
 }
 
 #[cfg(test)]

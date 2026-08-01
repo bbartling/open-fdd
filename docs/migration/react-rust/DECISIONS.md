@@ -4,6 +4,7 @@ Newest first. Record product/architecture calls only.
 
 | Date | Decision | Status |
 |------|----------|--------|
+| 2026-07-31 | P2-M0 schema policy is expand-only during rollback window; Streamlit/React share Rust job store | Accepted |
 | 2026-07-31 | P1-M6-02 no-Python topology is `docker/compose.react.yml` (web+central+mqtt); Streamlit remains in compose.central for rollback | Accepted |
 | 2026-07-31 | P1-M6-01 closes Python exit matrix with DELETE-P2 / ORACLE-ONLY / KEEP-AS-LIB / REPLACE only; Phase 2 deletions enumerated but not executed | Accepted |
 | 2026-07-31 | M5-B plot datasets use SVG PlotlyHost stand-in (no plotly npm); figure JSON shape reserved for Plotly.react | Accepted |
