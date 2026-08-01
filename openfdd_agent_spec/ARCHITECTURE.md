@@ -11,8 +11,9 @@ Update this file when code truth changes.
 
 | Surface | Role | Must not |
 | --- | --- | --- |
-| **Open-FDD production** (GHCR stack) | Rust central, Arrow/Feather, DataFusion SQL FDD, JWT REST, `openfdd-ui` Streamlit (default) | Silent pandas FDD fallback; claim Vite/Caddy SPA is the **default** UI before Phase 2 |
-| **React SPA (Phase 1+)** | Feature-flagged product UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)) | FastAPI/Python sidecar; FDD math in TypeScript; BACnet wire ownership |
+| **Open-FDD production** (GHCR stack) | Rust central, Arrow/Feather, DataFusion SQL FDD, JWT REST, React SPA (`openfdd-web`) sole product UI | Silent pandas FDD fallback; claim Streamlit is still the shipping default after Phase 2 exit |
+| **React SPA** | Sole production UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md); Phase 2 exit) | FastAPI/Python sidecar; FDD math in TypeScript; BACnet wire ownership |
+| **Streamlit UI (archived)** | `services/ui` oracle/recovery (`ARCHIVED.md`, `streamlit-legacy` profile) | Be reintroduced as product default without a new ADR |
 | **Open-FDD PyPI** (`open-fdd`) | Reusable libs: `ecm_engineering`, `rules`, `analytics`, `reporting` | Be the production FDD runtime |
 | **Vibe 19** (playground) | Educational pandas oracle + Streamlit demo + GHCR demo image | Remain canonical home of duplicated rule/analytics/reporting once migrated |
 | **Vibe 20** (playground) | EnergyPlus twin, calibration, ECM cross-check, Studio | Retain duplicate **generic** ECM formulas after Open-FDD parity |

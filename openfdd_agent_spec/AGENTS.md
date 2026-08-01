@@ -18,12 +18,12 @@ bench, nightly retest, WSL sleep. Do not confuse those with this engineering OS.
 | Layer | Owns |
 | --- | --- |
 | `open_fdd/` | PyPI libraries: ECM + pandas oracle (`rules` / `analytics` / `reporting`) |
-| `services/` + `sql_rules/` | Production stack: central DataFusion SQL FDD, Streamlit UI (default), fieldbus, mqtt |
-| `frontend/` / React SPA | Phase 1+ flagged UI → central `/api` ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)) |
+| `services/` + `sql_rules/` | Production stack: central DataFusion SQL FDD, React SPA (`frontend/web` / `openfdd-web`), fieldbus, mqtt; Streamlit archived |
+| `frontend/` / React SPA | **Sole production UI** → central `/api` ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md); Phase 2 exit) |
 | `mcp/` | Optional read-first MCP → central |
 | `edge/`, `os/` | Future concepts — **never delete** |
 | `docs/rules/cookbook/` | Dual expression cookbooks (SQL + pandas) + parity matrix |
-| `docs/migration/react-rust/` | React/Rust Phase 1 ledgers |
+| `docs/migration/react-rust/` | React/Rust Phase 1–2 ledgers + Phase 3 readiness |
 | `tools/open-fdd-modernization/` | Modernization program kit |
 | `openfdd_agent_spec/` | Agent law, Milestone A, skills, session log |
 | Playground vibe19/20 | Educational/demo apps; consumers of PyPI; interim GHCR |
@@ -46,7 +46,7 @@ Do **not** rename `open_fdd.rules` → `open_fdd.oracle` without an explicit pro
 1. Production FDD = **DataFusion SQL** on GHCR (`sql_rules/`). Never silent pandas fallback in central.
 2. Pandas oracle stays forever — cookbooks + vibe19 + PyPI `rules`/`analytics`. Never delete the pandas cookbook because production uses SQL.
 3. Never delete the SQL cookbook because pandas remains the oracle.
-4. **Product UI:** Streamlit (`services/ui` → `openfdd-ui`) is the **default**. React SPA is authorized for Phase 1 behind a flag ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)); browser → central Rust `/api` only — **no FastAPI sidecar**. Vite/Caddy SPA is not the default until Phase 2 cutover.
+4. **Product UI:** React SPA (`frontend/web` → `openfdd-web`, `compose.react.yml`) is the **sole production UI** after Phase 2 exit ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)). Streamlit (`services/ui`) is **archived** (`ARCHIVED.md`, compose profile `streamlit-legacy`). Browser → central Rust `/api` only — **no FastAPI sidecar**.
 5. Test open-fdd containers on **`OPENFDD_IMAGE_TAG=nightly`** (master retargets `:nightly`).
 6. Playground images: `ghcr.io/bbartling/vibe19:develop`, `vibe20:develop`.
 7. `edge/` and `os/` are future concepts — never delete.
@@ -58,13 +58,13 @@ Do **not** rename `open_fdd.rules` → `open_fdd.oracle` without an explicit pro
 13. Prefer exact wheel install tests over editable-only validation for packaging PRs.
 14. Never trust a moving GHCR tag alone — resolve/pull immutable `sha-*`, recreate containers, then record the digest.
 15. Append [`SESSION_LOG.md`](SESSION_LOG.md) after non-trivial work.
-16. Update [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md) whenever Milestone A **or React/Rust Phase 1** status changes (not only after merge).
+16. Update [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md) whenever Milestone A **or React/Rust modernization** status changes (not only after merge).
 17. CodeRabbit: fix actionable defects; reject suggestions that violate architecture.
 18. Do not retire playground GHCR without an open-fdd capability parity matrix.
 19. vibe21 = separate plan — not Milestone A.
 20. When blocked (secrets, permissions, private data), finish non-blocked work and record the exact error.
 21. Bound each PR to its declared scope — docs-only PRs do not require cross-repo pin bumps or GHCR refreshes.
-22. React/Rust Phase 1: follow [`tools/open-fdd-modernization/`](../tools/open-fdd-modernization/README.md); keep [`docs/migration/react-rust/`](../docs/migration/react-rust/README.md) ledgers current in the same PR.
+22. React/Rust program: follow [`tools/open-fdd-modernization/`](../tools/open-fdd-modernization/README.md); keep [`docs/migration/react-rust/`](../docs/migration/react-rust/README.md) ledgers current in the same PR. Phase 1+2 exits approved; Phase 3 is outlook-only until explicitly authorized.
 23. For any Streamlit→React / `frontend/web` work: read and follow [`tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md`](../tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md) and the bridge [`AGENT_SKILL_BRIDGE.md`](../tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md) before editing UI.
 
 ---
@@ -109,7 +109,7 @@ Sibling-repo locations are **examples** — resolve via `git rev-parse --show-to
 | [`openfdd-cookbook-parity`](skills/openfdd-cookbook-parity/SKILL.md) | Cookbook CI, parity matrix, docs headings |
 | [`openfdd-stack-ghcr`](skills/openfdd-stack-ghcr/SKILL.md) | Nightly stack pull, labels, smoke |
 | [`openfdd-milestone-a-pr`](skills/openfdd-milestone-a-pr/SKILL.md) | Inventory → parity → cutover → delete loop |
-| [`openfdd-streamlit-to-react`](skills/openfdd-streamlit-to-react/SKILL.md) | Phase 1 React parity / Streamlit port (wraps modernization skill) |
+| [`openfdd-streamlit-to-react`](skills/openfdd-streamlit-to-react/SKILL.md) | React maintenance / residual parity (wraps modernization skill; P1+P2 done) |
 
 ---
 

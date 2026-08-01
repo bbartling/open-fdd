@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-08-01 — Phase 3 readiness + skill compliance
+
+- `PHASE_3_READINESS.md`: Phase 3 outlook-only; prerequisites MET/PARTIAL; skill matrix PASS.
+- `openfdd_agent_spec` refreshed for React default / Phase 2 exit (Milestone A phases unchanged).
+- Next: GHCR tip digest verify (same program).
+
 ## 2026-08-01 — P2 Prompt 8 final no-Python qualification
 
 - `PHASE_2_QUALIFICATION.md` **PASS** at `47ae7b5` + this pack.

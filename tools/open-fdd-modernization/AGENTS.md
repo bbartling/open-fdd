@@ -2,16 +2,19 @@
 
 ## Mission
 
-Preserve Streamlit (`services/ui`) as the behavioral and visual reference while
-building `frontend/web` so a user cannot tell them apart on graded workflows.
-Domain authority stays on **central Rust + DataFusion SQL**. Python is
-oracle/characterization only during Phase 1. **No FastAPI sidecar.**
+Maintain React (`frontend/web`) as the sole production UI with domain authority
+on **central Rust + DataFusion SQL**. Streamlit (`services/ui`) is **archived**
+(behavioral oracle / emergency recovery). Python is oracle/characterization
+only. **No FastAPI sidecar.**
+
+Phase 1+2 exits are approved. Phase 3 (edge/live streaming) is outlook-only —
+see `PHASE_3_READINESS.md`. Do not redesign BACnet/MQTT without explicit auth.
 
 This file is the modernization-kit `AGENTS.md`. It does **not** replace
 [`openfdd_agent_spec/AGENTS.md`](../../openfdd_agent_spec/AGENTS.md) or the repo
 root [`AGENTS.md`](../../AGENTS.md).
 
-## Mandatory skill + OS bootstrap (every Phase 1 PR)
+## Mandatory skill + OS bootstrap (every UI / residual-parity PR)
 
 Before editing React/Streamlit/parity code, **read and follow** in order:
 
