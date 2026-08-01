@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-08-01 — P2-M2-01/02 shadow + soak
+
+- Shadow harness `scripts/phase2_shadow_compare.py` + evidence under `evidence/shadow/`.
+- Refreshed `tests/react_parity/manifest.json` hashes with documented algorithm; soak matrix in `SHADOW_SOAK.md` **PASS**.
+- Next: P2-M3 canary promotion decisions.
+
 ## 2026-08-01 — P2-M1-01 computation closure ledger
 
 - Added `COMPUTATION_CLOSURE.md` + `scripts/phase2_computation_policy_check.py` (wired in security.yml).

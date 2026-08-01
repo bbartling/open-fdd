@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -26,6 +27,25 @@ REQUIRED = {
 }
 
 
+def _dir_content_hash(path: Path) -> str:
+    h = hashlib.sha256()
+    files = sorted(
+        (
+            p
+            for p in path.rglob("*")
+            if p.is_file() and "__pycache__" not in p.parts
+        ),
+        key=lambda p: str(p.relative_to(path)).replace("\\", "/"),
+    )
+    for f in files:
+        rel = str(f.relative_to(path)).replace("\\", "/")
+        h.update(rel.encode())
+        h.update(b"\0")
+        h.update(f.read_bytes())
+        h.update(b"\0")
+    return h.hexdigest()
+
+
 def test_manifest_covers_required_fixtures() -> None:
     data = json.loads(MANIFEST.read_text(encoding="utf-8"))
     ids = {f["id"] for f in data["fixtures"]}
@@ -34,6 +54,12 @@ def test_manifest_covers_required_fixtures() -> None:
         path = ROOT / item["path"]
         assert path.is_dir(), path
         assert len(item["content_hash"]) == 64
+        assert item["content_hash"] == _dir_content_hash(path), item["id"]
+
+
+def test_phase2_shadow_compare_passes() -> None:
+    script = ROOT / "scripts" / "phase2_shadow_compare.py"
+    subprocess.check_call([sys.executable, str(script)], cwd=ROOT)
 
 
 def test_reference_exporter_is_byte_stable(tmp_path: Path) -> None:

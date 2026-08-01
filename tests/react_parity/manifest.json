@@ -4,62 +4,63 @@
     {
       "id": "clean_single_equip",
       "path": "tests/react_parity/fixtures/clean_single_equip",
-      "content_hash": "cfd7552a73b486cac81f7ee2be6768cfc92af466c400c2843cbb2148736ff531"
+      "content_hash": "a3a6aa42eed891f672d259ba6832e553b0e6d6e0a1e1ca8ef934553601ec171c"
     },
     {
       "id": "dup_timestamps",
       "path": "tests/react_parity/fixtures/dup_timestamps",
-      "content_hash": "da4de837b88247afecdbcca608b87c09dd1917a25c89d6827246a43ad7115027"
+      "content_hash": "3d77abcfcfc857bf5508ce34b6fc3eec67faba2e0583afea94aa3e52ed8e827b"
     },
     {
       "id": "empty_interval",
       "path": "tests/react_parity/fixtures/empty_interval",
-      "content_hash": "bf6c62379d240792850ed388c15edf1ab3001824f57c708433994b3586fc571e"
+      "content_hash": "78a5d3da633eb7def87ebfa47bd7b96b638e3f39db41f4939e84bd191ed695ab"
     },
     {
       "id": "hostile_zip",
       "path": "tests/react_parity/fixtures/hostile_zip",
-      "content_hash": "f54ee955b3f2685cc9d1a327e43b7bbf33c99cc0b8e04d0a742191a355b49285"
+      "content_hash": "03c02148d29366edce80e31597920a6fef70760bf5685d978269a03c617ceb91"
     },
     {
       "id": "irregular_sampling",
       "path": "tests/react_parity/fixtures/irregular_sampling",
-      "content_hash": "d4e99f6075146f919293d34ad88ef16e06655da164d60f5cc764d17e746f3332"
+      "content_hash": "29c565740506ae051cf28c5776279e655b0fd7c618ed907b0f9941eb4c7bbd22"
     },
     {
       "id": "job_full",
       "path": "tests/react_parity/fixtures/job_full",
-      "content_hash": "6aa73f810667ef8ff90f13330a5fd18d9fd1f1d311d2c37a747eb0d813ad224e"
+      "content_hash": "d5d5b9a9b67e1a670fb2861351fbdb443e16acc44aee4b3115ed0ddf24a196bc"
     },
     {
       "id": "missing_role",
       "path": "tests/react_parity/fixtures/missing_role",
-      "content_hash": "d4526c6f2ce37568f799d38bf8f739e8b739910db0e944db701427c43a787936"
+      "content_hash": "9d56f98b9fbcff6e646454de8d37005658335aa778bf08d6e93bd3b629cb9a47"
     },
     {
       "id": "multi_equip_package",
       "path": "tests/react_parity/fixtures/multi_equip_package",
-      "content_hash": "de8d29666e752f2672d85cfbbe54ae876dc9641ae9a8d4cb97de98ddc3b13fa6"
+      "content_hash": "5424587f238d9dfc8013bf3926974f49bb0759032940fbb17307c843ff89695b"
     },
     {
       "id": "partial_weather",
       "path": "tests/react_parity/fixtures/partial_weather",
-      "content_hash": "d8cb652d8f114ba9894286afded5f8fc4fc0fc702fe525e63a943606d36ea60a"
+      "content_hash": "c8d6860cf5beac437b74095f624c39eb9ce33c09a56eb42b84b15a8ae9ab7e5b"
     },
     {
       "id": "rule_outcomes",
       "path": "tests/react_parity/fixtures/rule_outcomes",
-      "content_hash": "dcd22c587c2cc5745324fcf8b69b05e3ee4e551e38c68f8cf34140c03c08a0ed"
+      "content_hash": "8384144ca4473d45ed422567846f6d3db79c472a27f17851e4f2dec320b90213"
     },
     {
       "id": "unit_mismatch",
       "path": "tests/react_parity/fixtures/unit_mismatch",
-      "content_hash": "11d9fa3356f1b9fb4e5dc233aaafcfc97d346be6745fd9e694cd631d7c613a07"
+      "content_hash": "b82cf8da956bc5c75f77e159ec1af664b10696da3125da072a260b12b1d0394e"
     },
     {
       "id": "wattlab_v3",
       "path": "tests/react_parity/fixtures/wattlab_v3",
-      "content_hash": "635277d3598d091eac7268817bcf769b644c00472fd9e787051b3539e0939cb9"
+      "content_hash": "24d0e3dfff7e5778a7d1351cf4a0abc27d71f48033489835a37d6cfc32a0b590"
     }
-  ]
+  ],
+  "hash_algorithm": "sha256(relpath\\0bytes\\0) over sorted files excluding __pycache__"
 }

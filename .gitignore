@@ -58,3 +58,7 @@ services/central/.cache/
 *.egg-info/
 dist/
 build/
+.venv/
+
+workspace/.cache/
+workspace/jobs/

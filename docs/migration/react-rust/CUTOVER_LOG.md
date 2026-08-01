@@ -2,6 +2,12 @@
 
 Phase 2 operational record. Newest first.
 
+## 2026-08-01 — P2-M2 shadow/soak PASS
+
+- Shadow report: `evidence/shadow/latest_shadow_report.json` (no production findings write).
+- Soak: `SHADOW_SOAK.md` synthetic gate PASS; ops large/concurrent watch deferred to canary metrics.
+- Next canary prerequisite: P2-M3 promotion record.
+
 ## 2026-08-01 — P2-M1-01 computation closure
 
 - Ledger: `COMPUTATION_CLOSURE.md`. Policy: `scripts/phase2_computation_policy_check.py`.

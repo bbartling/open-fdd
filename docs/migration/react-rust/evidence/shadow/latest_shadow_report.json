@@ -1,0 +1,142 @@
+{
+  "schema": "openfdd.phase2.shadow_compare.v1",
+  "generated_at": "2026-08-01T13:24:26.716454+00:00",
+  "reference": "tests/react_parity Phase 1 oracle fixtures",
+  "candidate": "immutable fixture replay (Rust/DataFusion production path)",
+  "writes_production_findings": false,
+  "invokes_pandas_fallback": false,
+  "comparisons": [
+    {
+      "kind": "fixture_hash",
+      "denominator": 12,
+      "mismatches": 0,
+      "rows": [
+        {
+          "fixture_id": "clean_single_equip",
+          "path": "tests/react_parity/fixtures/clean_single_equip",
+          "expected_hash": "a3a6aa42eed891f672d259ba6832e553b0e6d6e0a1e1ca8ef934553601ec171c",
+          "actual_hash": "a3a6aa42eed891f672d259ba6832e553b0e6d6e0a1e1ca8ef934553601ec171c",
+          "class": "exact",
+          "ok": true
+        },
+        {
+          "fixture_id": "dup_timestamps",
+          "path": "tests/react_parity/fixtures/dup_timestamps",
+          "expected_hash": "3d77abcfcfc857bf5508ce34b6fc3eec67faba2e0583afea94aa3e52ed8e827b",
+          "actual_hash": "3d77abcfcfc857bf5508ce34b6fc3eec67faba2e0583afea94aa3e52ed8e827b",
+          "class": "exact",
+          "ok": true
+        },
+        {
+          "fixture_id": "empty_interval",
+          "path": "tests/react_parity/fixtures/empty_interval",
+          "expected_hash": "78a5d3da633eb7def87ebfa47bd7b96b638e3f39db41f4939e84bd191ed695ab",
+          "actual_hash": "78a5d3da633eb7def87ebfa47bd7b96b638e3f39db41f4939e84bd191ed695ab",
+          "class": "exact",
+          "ok": true
+        },
+        {
+          "fixture_id": "hostile_zip",
+          "path": "tests/react_parity/fixtures/hostile_zip",
+          "expected_hash": "03c02148d29366edce80e31597920a6fef70760bf5685d978269a03c617ceb91",
+          "actual_hash": "03c02148d29366edce80e31597920a6fef70760bf5685d978269a03c617ceb91",
+          "class": "exact",
+          "ok": true
+        },
+        {
+          "fixture_id": "irregular_sampling",
+          "path": "tests/react_parity/fixtures/irregular_sampling",
+          "expected_hash": "29c565740506ae051cf28c5776279e655b0fd7c618ed907b0f9941eb4c7bbd22",
+          "actual_hash": "29c565740506ae051cf28c5776279e655b0fd7c618ed907b0f9941eb4c7bbd22",
+          "class": "exact",
+          "ok": true
+        },
+        {
+          "fixture_id": "job_full",
+          "path": "tests/react_parity/fixtures/job_full",
+          "expected_hash": "d5d5b9a9b67e1a670fb2861351fbdb443e16acc44aee4b3115ed0ddf24a196bc",
+          "actual_hash": "d5d5b9a9b67e1a670fb2861351fbdb443e16acc44aee4b3115ed0ddf24a196bc",
+          "class": "exact",
+          "ok": true
+        },
+        {
+          "fixture_id": "missing_role",
+          "path": "tests/react_parity/fixtures/missing_role",
+          "expected_hash": "9d56f98b9fbcff6e646454de8d37005658335aa778bf08d6e93bd3b629cb9a47",
+          "actual_hash": "9d56f98b9fbcff6e646454de8d37005658335aa778bf08d6e93bd3b629cb9a47",
+          "class": "exact",
+          "ok": true
+        },
+        {
+          "fixture_id": "multi_equip_package",
+          "path": "tests/react_parity/fixtures/multi_equip_package",
+          "expected_hash": "5424587f238d9dfc8013bf3926974f49bb0759032940fbb17307c843ff89695b",
+          "actual_hash": "5424587f238d9dfc8013bf3926974f49bb0759032940fbb17307c843ff89695b",
+          "class": "exact",
+          "ok": true
+        },
+        {
+          "fixture_id": "partial_weather",
+          "path": "tests/react_parity/fixtures/partial_weather",
+          "expected_hash": "c8d6860cf5beac437b74095f624c39eb9ce33c09a56eb42b84b15a8ae9ab7e5b",
+          "actual_hash": "c8d6860cf5beac437b74095f624c39eb9ce33c09a56eb42b84b15a8ae9ab7e5b",
+          "class": "exact",
+          "ok": true
+        },
+        {
+          "fixture_id": "rule_outcomes",
+          "path": "tests/react_parity/fixtures/rule_outcomes",
+          "expected_hash": "8384144ca4473d45ed422567846f6d3db79c472a27f17851e4f2dec320b90213",
+          "actual_hash": "8384144ca4473d45ed422567846f6d3db79c472a27f17851e4f2dec320b90213",
+          "class": "exact",
+          "ok": true
+        },
+        {
+          "fixture_id": "unit_mismatch",
+          "path": "tests/react_parity/fixtures/unit_mismatch",
+          "expected_hash": "b82cf8da956bc5c75f77e159ec1af664b10696da3125da072a260b12b1d0394e",
+          "actual_hash": "b82cf8da956bc5c75f77e159ec1af664b10696da3125da072a260b12b1d0394e",
+          "class": "exact",
+          "ok": true
+        },
+        {
+          "fixture_id": "wattlab_v3",
+          "path": "tests/react_parity/fixtures/wattlab_v3",
+          "expected_hash": "24d0e3dfff7e5778a7d1351cf4a0abc27d71f48033489835a37d6cfc32a0b590",
+          "actual_hash": "24d0e3dfff7e5778a7d1351cf4a0abc27d71f48033489835a37d6cfc32a0b590",
+          "class": "exact",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "kind": "rule_outcomes_categorical",
+      "denominator": 3,
+      "mismatches": 0,
+      "rows": [
+        {
+          "rule_id": "ERROR",
+          "reference_status": "error",
+          "candidate_status": "error",
+          "class": "exact",
+          "ok": true
+        },
+        {
+          "rule_id": "MISSING",
+          "reference_status": "insufficient_data",
+          "candidate_status": "insufficient_data",
+          "class": "exact",
+          "ok": true
+        },
+        {
+          "rule_id": "SCHED-1",
+          "reference_status": "pass",
+          "candidate_status": "pass",
+          "class": "exact",
+          "ok": true
+        }
+      ]
+    }
+  ],
+  "pass": true
+}
