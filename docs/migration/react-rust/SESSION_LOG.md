@@ -2,6 +2,11 @@
 
 Newest first.
 
+## 2026-08-01 — GHCR tip verify @ 9ef0411
+
+- Stack + MCP GHCR publishes success for tip; digests recorded in PHASE_3_READINESS.
+- compose.react.yml config smoke OK.
+
 ## 2026-08-01 — Phase 3 readiness + skill compliance
 
 - `PHASE_3_READINESS.md`: Phase 3 outlook-only; prerequisites MET/PARTIAL; skill matrix PASS.

@@ -2,6 +2,12 @@
 
 Phase 2 operational record. Newest first.
 
+## 2026-08-01 — GHCR nightly refresh verified @ 9ef0411
+
+- Stack publish success: Actions run 30708116225 (`sha-9ef0411` + `:nightly` retarget).
+- MCP publish success: 30708116291.
+- See `PHASE_3_READINESS.md` Digests. compose.react config OK.
+
 ## 2026-08-01 — Phase 3 readiness (outlook only)
 
 - Evidence: `PHASE_3_READINESS.md`. No P3-M0+ implementation; no BACnet/MQTT changes.
