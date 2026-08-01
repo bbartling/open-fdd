@@ -269,7 +269,8 @@ pub async fn capabilities() -> Json<Value> {
             "fdd_schema": true,
             "analytics": true,
             "jobs": true,
-            "react_ui": std::env::var("OPENFDD_REACT_UI").ok().as_deref() == Some("1")
+            "react_ui": std::env::var("OPENFDD_REACT_UI").ok().as_deref() == Some("1"),
+            "ui_generation_routing": true
         }
     }))
 }
