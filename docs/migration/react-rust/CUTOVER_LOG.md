@@ -2,6 +2,12 @@
 
 Phase 2 operational record. Newest first.
 
+## 2026-08-01 — Phase 2 exit APPROVED
+
+- Qualification: `PHASE_2_QUALIFICATION.md` **PASS**.
+- React is sole production UI; no product Python runtime on `compose.react.yml`.
+- Streamlit recovery: `ARCHIVED.md` + `streamlit-legacy` profile / GHCR digests.
+
 ## 2026-08-01 — P2-M6 Streamlit product removal
 
 - Product path no longer starts Streamlit by default.

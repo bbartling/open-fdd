@@ -1,6 +1,6 @@
 {
   "schema": "openfdd.phase2.shadow_compare.v1",
-  "generated_at": "2026-08-01T13:24:26.716454+00:00",
+  "generated_at": "2026-08-01T14:53:05.783720+00:00",
   "reference": "tests/react_parity Phase 1 oracle fixtures",
   "candidate": "immutable fixture replay (Rust/DataFusion production path)",
   "writes_production_findings": false,
