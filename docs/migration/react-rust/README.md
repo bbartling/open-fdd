@@ -16,9 +16,9 @@ nav_order: 20
 | Item | State |
 |------|-------|
 | Architecture decision | Accepted (ADR-001) |
-| Streamlit product UI | Default / fallback |
-| React SPA | Phase 1 — behind feature flag (not yet shipped) |
-| Production Python exit | Phase 2 |
+| Streamlit product UI | Default / fallback (`compose.central.yml`) |
+| React SPA | Phase 1 exit approved — behind `OPENFDD_REACT_UI`; `compose.react.yml` |
+| Production Python exit | Phase 2 (not started; see CUTOVER_LOG) |
 
 ## Durable ledgers (this directory)
 
@@ -30,7 +30,10 @@ nav_order: 20
 | [API_CONTRACT_MATRIX.md](API_CONTRACT_MATRIX.md) | Versioned contracts |
 | [PARITY_EVIDENCE.md](PARITY_EVIDENCE.md) | Fixture hashes / parity results |
 | [SESSION_LOG.md](SESSION_LOG.md) | Agent session append-only log |
-| [CUTOVER_LOG.md](CUTOVER_LOG.md) | Phase 2 cutover records (later) |
+| [PHASE_1_QUALIFICATION.md](PHASE_1_QUALIFICATION.md) | Phase 1 exit evidence pack |
+| [NO_PYTHON_STACK.md](NO_PYTHON_STACK.md) | React compose topology |
+| [PHASE_2_DELETION_CANDIDATES.md](PHASE_2_DELETION_CANDIDATES.md) | Enumerated deletes (not executed) |
+| [CUTOVER_LOG.md](CUTOVER_LOG.md) | Phase 2 cutover records |
 
 Ledgers are seeded in **P1-M0-02**. Update them in the same PR as implementation.
 

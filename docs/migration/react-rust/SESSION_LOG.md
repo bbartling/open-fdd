@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M6-03
+
+- Qualification pack: `PHASE_1_QUALIFICATION.md`
+- Seeded `CUTOVER_LOG.md`: Phase 1 exit approved; Phase 2 not started.
+- **Phase 1 exit gate closed** → next Phase 2 Prompt 0 / P2-M0-01.
+
 ## 2026-07-31 — P1-M6-02
 
 - Added `docker/compose.react.yml`: mqtt + central + web (nginx SPA), **no** Streamlit `ui` service.
