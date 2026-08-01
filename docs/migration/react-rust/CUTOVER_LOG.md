@@ -2,6 +2,11 @@
 
 Phase 2 operational record. Newest first.
 
+## 2026-08-01 — P2-M3 canary PROMOTE
+
+- Decision record: `CANARY_DECISIONS.md` — PROMOTE to 100% with Streamlit fallback.
+- Production default **not** flipped here. Next: P2-M4.
+
 ## 2026-08-01 — P2-M2 shadow/soak PASS
 
 - Shadow report: `evidence/shadow/latest_shadow_report.json` (no production findings write).
