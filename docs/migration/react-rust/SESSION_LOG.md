@@ -2,6 +2,11 @@
 
 Newest first.
 
+## 2026-08-01 — P2 Prompt 8 final no-Python qualification
+
+- `PHASE_2_QUALIFICATION.md` **PASS** at `47ae7b5` + this pack.
+- React sole product UI; Streamlit archived; accepted risks listed. Phase 2 exit approved.
+
 ## 2026-08-01 — P2-M6 Streamlit product removal
 
 - `STREAMLIT_PRODUCT_REMOVAL.md` + `services/ui/ARCHIVED.md`.

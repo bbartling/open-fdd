@@ -16,9 +16,9 @@ nav_order: 20
 | Item | State |
 |------|-------|
 | Architecture decision | Accepted (ADR-001) |
-| Streamlit product UI | Default / fallback (`compose.central.yml`) |
-| React SPA | Phase 1 exit approved — behind `OPENFDD_REACT_UI`; `compose.react.yml` |
-| Production Python exit | Phase 2 (not started; see CUTOVER_LOG) |
+| Streamlit product UI | **Archived** (`ARCHIVED.md`; `--profile streamlit-legacy`) |
+| React SPA | **Sole production UI** (`compose.react.yml`; default generation React) |
+| Production Python exit | **Phase 2 exit APPROVED** (`PHASE_2_QUALIFICATION.md`) |
 
 ## Durable ledgers (this directory)
 
