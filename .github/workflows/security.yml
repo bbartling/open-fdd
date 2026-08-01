@@ -67,3 +67,4 @@ jobs:
           test -f docs/architecture/adr-001-react-rust-modernization.md
           python3 scripts/architecture_react_policy_check.py
           python3 scripts/phase2_computation_policy_check.py
+          python3 scripts/phase2_shadow_compare.py

@@ -2,6 +2,7 @@
 
 | date | capability_id | fixture hash | source commit | engine versions | result | mismatch class | PR |
 |------|---------------|--------------|---------------|-----------------|--------|----------------|-----|
+| 2026-08-01 | catalog shadow | `manifest.json` + `evidence/shadow/latest_shadow_report.json` | branch `feat/p2-m2-01-shadow-soak` | phase2_shadow_compare | Fixture hash + rule_outcomes exact; no findings write | EXACT | P2-M2 |
 | 2026-07-31 | CAP-AUTH | authApi + AuthPage vitest | branch `feat/p1-m5-f-auth-thin` | Vitest | status/me/login; Bearer in sessionStorage | EXACT+INTERACTION | P1-M5-F |
 | 2026-07-31 | CAP-REPORTS / CAP-WATTLAB | reportsApi + WattLabPage vitest | branch `feat/p1-m5-e-reports-wattlab` | Vitest | Reports list/draft; WattLab handoff POST | ARTIFACT+INTERACTION | P1-M5-E |
 | 2026-07-31 | CAP-FINDINGS | findingsApi upsert + FindingsPage vitest | branch `feat/p1-m5-d-findings-dispositions` | Vitest | Job findings load; disposition PUT by correlation_key | EXACT+INTERACTION | P1-M5-D |
