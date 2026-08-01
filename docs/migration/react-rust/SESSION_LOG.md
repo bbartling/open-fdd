@@ -2,6 +2,11 @@
 
 Newest first.
 
+## 2026-08-01 — P2-M3 canary decisions
+
+- `CANARY_DECISIONS.md`: **PROMOTE** through 100% with Streamlit fallback.
+- No routing change in this PR. Next: P2-M4 React default flip (turnkey auth).
+
 ## 2026-08-01 — P2-M2-01/02 shadow + soak
 
 - Shadow harness `scripts/phase2_shadow_compare.py` + evidence under `evidence/shadow/`.
