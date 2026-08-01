@@ -2,11 +2,18 @@
 
 Phase 2 operational record. Newest first.
 
+## 2026-08-01 — GHCR nightly refresh verified @ 61fee63
+
+- Stack publish success: Actions run 30710271297 (`sha-61fee63` + `:nightly` retarget).
+- MCP publish success: 30710271292.
+- Local pull: nightly↔sha digests match for central/ui/fieldbus/mqtt/mcp (see `PHASE_3_READINESS.md` Digests).
+- `compose.react.yml` config OK; `openfdd-web` not in GHCR yet.
+
 ## 2026-08-01 — GHCR nightly refresh verified @ 9ef0411
 
 - Stack publish success: Actions run 30708116225 (`sha-9ef0411` + `:nightly` retarget).
 - MCP publish success: 30708116291.
-- See `PHASE_3_READINESS.md` Digests. compose.react config OK.
+- Superseded by tip `61fee63` digest record.
 
 ## 2026-08-01 — Phase 3 readiness (outlook only)
 
