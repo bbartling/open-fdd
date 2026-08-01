@@ -2,6 +2,11 @@
 
 Phase 2 operational record. Newest first.
 
+## 2026-08-01 — P2-M5 fallback observation closed
+
+- Streamlit is emergency rollback only. Leaf twin deletion deferred to Prompt 7 vehicle.
+- See `FALLBACK_CLOSEOUT.md`.
+
 ## 2026-08-01 — P2-M4 React default flip
 
 - Time: 2026-08-01 (turnkey auth). Config: `OPENFDD_UI_GENERATION_DEFAULT` default → `react`.

@@ -2,6 +2,11 @@
 
 Newest first.
 
+## 2026-08-01 — P2-M5 fallback closeout
+
+- `FALLBACK_CLOSEOUT.md`: fallback window closed; leaf deletes bundled into Prompt 7.
+- Next: P2-M6 Streamlit product removal.
+
 ## 2026-08-01 — P2-M4-01 React production default flip
 
 - `default_generation()` → React; `production_default_flipped=true`.
