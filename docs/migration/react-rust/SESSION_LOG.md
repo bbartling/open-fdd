@@ -2,6 +2,13 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M6-02
+
+- Added `docker/compose.react.yml`: mqtt + central + web (nginx SPA), **no** Streamlit `ui` service.
+- SPA nginx proxies `/api` → central; `OPENFDD_REACT_UI=1` on central.
+- Documented in `NO_PYTHON_STACK.md`; CI compose config loop includes compose.react.yml.
+- Next: P1-M6-03 qualification pack + CUTOVER_LOG.
+
 ## 2026-07-31 — P1-M6-01
 
 - Closed `PYTHON_EXIT_MATRIX.md`: zero UNKNOWN / zero BLOCKED dispositions.
