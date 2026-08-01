@@ -74,5 +74,5 @@ ORACLE-ONLY / ARCHIVE-DECISION / KEEP-AS-LIB / REPLACE. Deletion is Phase 2 only
 | services/ui/app/weather_resolver.py | Weather series resolve | services/ui | MAYBE | Rust/DataFusion or React presentation | ORACLE-ONLY | characterization; no silent prod fallback | oracle tooling retained |
 | open_fdd/ecm_engineering | ECM workbooks (PyPI) | ui_ecm_job, Jobs/MCP docs | YES (engineering) | keep PyPI; React consumes API/export | KEEP-AS-LIB | packaging tests | customer ECM path |
 | open_fdd/rules | Pandas oracle | UI cookbook / emergency FDD / PyPI | YES | ORACLE-ONLY in prod images | ORACLE-ONLY | characterization; no silent prod fallback | oracle tooling retained |
-| open_fdd/analytics | Pandas analytics libs | UI analytics shims / PyPI | YES | DataFusion analytics API | REPLACE | DataFusion analytics + MeteringPage | none after P2 caller cutover |
+| open_fdd/analytics | Pandas analytics libs | UI analytics shims / PyPI | YES | DataFusion analytics API | REPLACE | DataFusion analytics + MeteringPage (P2-M1-01 CLOSED on React path; twin delete after canary) | observation window + P2-DEL-01 |
 | open_fdd/reporting | Findings reporting libs | eng findings / PyPI | YES | Rust reports or ORACLE | ORACLE-ONLY | characterization; no silent prod fallback | oracle tooling retained |

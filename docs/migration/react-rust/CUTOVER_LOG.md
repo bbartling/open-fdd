@@ -2,6 +2,12 @@
 
 Phase 2 operational record. Newest first.
 
+## 2026-08-01 — P2-M1-01 computation closure
+
+- Ledger: `COMPUTATION_CLOSURE.md`. Policy: `scripts/phase2_computation_policy_check.py`.
+- Production React path: no Python computation. Turnkey auth to continue Prompts 2–8.
+- Next: P2-M2 shadow/soak → M3 canary → M4 default flip → twin deletion.
+
 ## 2026-07-31 — P2-M0-02 / P2-M0-03 telemetry + rollback
 
 - Migration metrics: `GET /api/ui/migration-metrics` + `POST /api/ui/migration-event` (fallback_click / ui_error / datafusion_skip).
