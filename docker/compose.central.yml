@@ -33,6 +33,8 @@ services:
       OPENFDD_PARQUET_ROOT: /workspace/.cache/parquet
       OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}
       OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
+      # Rollback / Streamlit stack: keep generation default on Streamlit.
+      OPENFDD_UI_GENERATION_DEFAULT: ${OPENFDD_UI_GENERATION_DEFAULT:-streamlit}
     ports:
       - "${OPENFDD_CENTRAL_BIND:-0.0.0.0}:8080:8080"
     volumes:

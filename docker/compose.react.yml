@@ -37,6 +37,8 @@ services:
       OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}
       OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
       OPENFDD_REACT_UI: "1"
+      # P2-M4: React is the production default UI generation.
+      OPENFDD_UI_GENERATION_DEFAULT: react
     ports:
       - "${OPENFDD_CENTRAL_BIND:-0.0.0.0}:8080:8080"
     volumes:

@@ -12,32 +12,32 @@ describe("cutoverApi", () => {
     vi.mocked(apiFetch).mockReset();
   });
 
-  it("gets generation status", async () => {
-    vi.mocked(apiFetch).mockResolvedValue({
-      ok: true,
-      generation: "streamlit",
-      source: "default",
-      default_generation: "streamlit",
-      production_default_flipped: false,
-      sticky_cookie: "openfdd_ui_generation",
-    });
-    const st = await getUiGeneration();
-    expect(st.production_default_flipped).toBe(false);
-    expect(st.generation).toBe("streamlit");
-  });
-
-  it("puts generation without flipping production default", async () => {
+  it("gets generation status after P2-M4 React default", async () => {
     vi.mocked(apiFetch).mockResolvedValue({
       ok: true,
       generation: "react",
-      production_default_flipped: false,
+      source: "default",
+      default_generation: "react",
+      production_default_flipped: true,
+      sticky_cookie: "openfdd_ui_generation",
     });
-    const out = await setUiGeneration("react", "canary cohort");
+    const st = await getUiGeneration();
+    expect(st.production_default_flipped).toBe(true);
+    expect(st.generation).toBe("react");
+  });
+
+  it("puts generation while production default remains flipped", async () => {
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: true,
+      generation: "streamlit",
+      production_default_flipped: true,
+    });
+    const out = await setUiGeneration("streamlit", "rollback cohort");
     expect(apiFetch).toHaveBeenCalledWith(
       "/api/ui/generation",
       expect.objectContaining({ method: "PUT" }),
     );
-    expect(out.production_default_flipped).toBe(false);
+    expect(out.production_default_flipped).toBe(true);
   });
 
   it("posts migration events", async () => {

@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-08-01 — P2-M4-01 React production default flip
+
+- `default_generation()` → React; `production_default_flipped=true`.
+- `compose.react.yml` sets `OPENFDD_UI_GENERATION_DEFAULT=react`; `compose.central.yml` keeps streamlit for rollback.
+- Routing/config only. Streamlit frozen for fallback until Prompt 7. Next: twin deletion (P2-M5).
+
 ## 2026-08-01 — P2-M3 canary decisions
 
 - `CANARY_DECISIONS.md`: **PROMOTE** through 100% with Streamlit fallback.
