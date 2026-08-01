@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-07-31 — P1-M6-01
+
+- Closed `PYTHON_EXIT_MATRIX.md`: zero UNKNOWN / zero BLOCKED dispositions.
+- Enumerated Phase 2 deletion candidates in `PHASE_2_DELETION_CANDIDATES.md` (not executed).
+- Next: P1-M6-02 no-Python compose profile.
+
 ## 2026-07-31 — P1-M5-F
 
 - Thin `AuthPage` + `authApi` for `/api/auth/status|me|login`; Bearer token in sessionStorage; `apiFetch` attaches Authorization.
