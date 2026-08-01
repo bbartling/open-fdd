@@ -70,7 +70,9 @@ pub fn resolve_generation(headers: &HeaderMap) -> (UiGeneration, &'static str) {
 
 fn audit_path() -> PathBuf {
     let root = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
-    PathBuf::from(root).join(".cache").join("cutover_audit.jsonl")
+    PathBuf::from(root)
+        .join(".cache")
+        .join("cutover_audit.jsonl")
 }
 
 pub fn append_audit(entry: &Value) -> Result<(), String> {
@@ -184,10 +186,7 @@ mod tests {
     #[test]
     fn header_beats_cookie() {
         let mut headers = HeaderMap::new();
-        headers.insert(
-            HEADER_NAME,
-            HeaderValue::from_static("react"),
-        );
+        headers.insert(HEADER_NAME, HeaderValue::from_static("react"));
         headers.insert(
             header::COOKIE,
             HeaderValue::from_static("openfdd_ui_generation=streamlit"),
