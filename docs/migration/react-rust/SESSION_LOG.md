@@ -2,6 +2,13 @@
 
 Newest first.
 
+## 2026-08-01 — P2-M1-01 computation closure ledger
+
+- Added `COMPUTATION_CLOSURE.md` + `scripts/phase2_computation_policy_check.py` (wired in security.yml).
+- React/central FDD + analytics callers CLOSED; metering historian rate→kWh PROVISIONAL; weather/ECM/site DEFER/ORACLE.
+- Registry honesty: 24 PROVEN / 38 PROVISIONAL / 1 DISABLED. Human auth granted to continue Prompts 2–8 turnkey.
+- Next: P2-M2 shadow/soak.
+
 ## 2026-07-31 — P2-M0-02 / P2-M0-03
 
 - Migration telemetry counters + event ingest; rollback drill + schema expand-only note.

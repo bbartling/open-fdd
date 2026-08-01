@@ -4,6 +4,8 @@ Newest first. Record product/architecture calls only.
 
 | Date | Decision | Status |
 |------|----------|--------|
+| 2026-08-01 | Production rule statuses: proven_building_100→PROVEN; ported_from_cookbook→PROVISIONAL; skipped_missing_roles→DISABLED. Ported ≠ PROVEN | Accepted |
+| 2026-08-01 | React/no-Python product path has no production Python computation; Streamlit twins + gated pandas remain until deletion window | Accepted |
 | 2026-07-31 | P2-M0 schema policy is expand-only during rollback window; Streamlit/React share Rust job store | Accepted |
 | 2026-07-31 | P1-M6-02 no-Python topology is `docker/compose.react.yml` (web+central+mqtt); Streamlit remains in compose.central for rollback | Accepted |
 | 2026-07-31 | P1-M6-01 closes Python exit matrix with DELETE-P2 / ORACLE-ONLY / KEEP-AS-LIB / REPLACE only; Phase 2 deletions enumerated but not executed | Accepted |
