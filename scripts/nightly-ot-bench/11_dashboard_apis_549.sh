@@ -60,11 +60,14 @@ PATHS=(
   /api/dashboard/summary
 )
 for path in "${PATHS[@]}"; do
-  code="$(curl -sS -o "$ART/http$(echo "$path" | tr '/' '_').body" -w '%{http_code}' --max-time 20 \
-    "${CENTRAL_AUTH_HDR[@]+"${CENTRAL_AUTH_HDR[@]}"}" "$CENTRAL_BASE$path" || echo 000)"
-  if [[ "$code" == "404" ]]; then
+  body="$ART/http$(echo "$path" | tr '/' '_').body"
+  code="$(http_code_to "$body" --max-time 20 \
+    "${CENTRAL_AUTH_HDR[@]+"${CENTRAL_AUTH_HDR[@]}"}" "$CENTRAL_BASE$path")"
+  if [[ "$code" == "000" ]]; then
+    bad "GET $path unreachable (HTTP 000)"
+  elif [[ "$code" == "404" ]]; then
     bad "GET $path → 404"
-  elif [[ "$code" =~ ^[02345] ]]; then
+  elif [[ "$code" =~ ^[2345][0-9][0-9]$ ]]; then
     ok "GET $path → HTTP $code (≠404)"
   else
     bad "GET $path → HTTP $code"
@@ -73,12 +76,14 @@ done
 
 # Explicit draft endpoint exists (POST) — React must not invent drafts via quiet GETs
 hdr "Reports — draft POST exists; list GET is quiet"
-DRAFT_CODE="$(curl -sS -o "$ART/reports_draft_post.json" -w '%{http_code}' --max-time 20 \
+DRAFT_CODE="$(http_code_to "$ART/reports_draft_post.json" --max-time 20 \
   -X POST "${CENTRAL_AUTH_HDR[@]+"${CENTRAL_AUTH_HDR[@]}"}" \
   -H 'Content-Type: application/json' \
   -d '{"title":"bench-smoke-draft","template_id":"blank"}' \
-  "$CENTRAL_BASE/api/reports/draft" || echo 000)"
-if [[ "$DRAFT_CODE" == "404" ]]; then
+  "$CENTRAL_BASE/api/reports/draft")"
+if [[ "$DRAFT_CODE" == "000" ]]; then
+  bad "POST /api/reports/draft unreachable (HTTP 000)"
+elif [[ "$DRAFT_CODE" == "404" ]]; then
   bad "POST /api/reports/draft → 404"
 else
   ok "POST /api/reports/draft reachable (HTTP $DRAFT_CODE) for explicit create"

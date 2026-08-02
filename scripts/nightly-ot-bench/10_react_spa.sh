@@ -48,17 +48,21 @@ fi
 # --- Product routes (SPA may return index.html for all; HTTP 200 is enough) ---
 ROUTES=(/ /auth /jobs /upload /mapping /rules /findings /reports /metering /wattlab)
 for path in "${ROUTES[@]}"; do
-  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$UI_BASE$path" || echo 000)"
+  code="$(http_code --max-time 10 "$UI_BASE$path")"
   if [[ "$code" == "200" || "$code" == "301" || "$code" == "302" ]]; then
     ok "SPA $path → HTTP $code"
+  elif [[ "$code" == "000" ]]; then
+    bad "SPA $path unreachable (HTTP 000)"
   else
     bad "SPA $path → HTTP $code"
   fi
 done
 
 # Streamlit Lab path must not be the product surface
-lab_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$UI_BASE/lab" || echo 000)"
-if [[ "$lab_code" == "200" ]]; then
+lab_code="$(http_code --max-time 10 "$UI_BASE/lab")"
+if [[ "$lab_code" == "000" ]]; then
+  bad "SPA host unreachable (HTTP 000) — cannot assess /lab"
+elif [[ "$lab_code" == "200" ]]; then
   # React may still serve index for unknown routes — ensure no LabShell in assets
   skip "HTTP 200 on /lab (SPA fallback) — checking assets for LabShell absence"
 else

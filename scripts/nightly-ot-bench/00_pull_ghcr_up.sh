@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Pull immutable GHCR tip images, assert nightly↔sha digests, bring up react-ot.
-# Builds openfdd-web locally when GHCR does not publish it yet.
+# Pull immutable GHCR tip images (wait for publish), assert nightly↔sha digests,
+# bring up react-ot. Builds openfdd-web locally when GHCR does not publish it yet.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -14,18 +14,25 @@ export ARTIFACT_DIR="$ART"
 
 hdr "GHCR pull + pin + react-ot up"
 
-PIN="$(resolve_tip_sha_tag)"
-export OPENFDD_IMAGE_TAG="$PIN"
-# Re-export image refs against the pin (ignore stale nightly overrides from env).
+# Resolve a *published* pin (wait/retry tip, else nightly OCI revision fallback).
+if ! resolve_published_image_tag; then
+  bad "could not resolve a published GHCR image pin"
+  summary
+  exit 1
+fi
+
+# Re-export image refs against the pin (ignore stale overrides from env).
 unset OPENFDD_CENTRAL_IMAGE OPENFDD_FIELDBUS_IMAGE OPENFDD_MQTT_IMAGE OPENFDD_MCP_IMAGE OPENFDD_WEB_IMAGE
-# Keep OPENFDD_UI_IMAGE unset for product path — Streamlit is archive-only.
 unset OPENFDD_UI_IMAGE || true
 openfdd_stack_export_image_env
 
-echo "${DIM}pin=$OPENFDD_IMAGE_TAG site/edge=${OPENFDD_SITE_ID}/${OPENFDD_EDGE_ID}${RST}"
-echo "$OPENFDD_IMAGE_TAG" >"$ART/image_tag.txt"
+echo "${DIM}pin=$OPENFDD_IMAGE_TAG source=${PIN_SOURCE:-?} site/edge=${OPENFDD_SITE_ID}/${OPENFDD_EDGE_ID}${RST}"
+{
+  echo "$OPENFDD_IMAGE_TAG"
+  echo "pin_source=${PIN_SOURCE:-unknown}"
+} >"$ART/image_tag.txt"
 
-# Pull sha tags for published stack images + MCP
+# Images already pulled by resolve_published_image_tag; refresh refs for digest assert.
 PULL_IMGS=(
   "$OPENFDD_CENTRAL_IMAGE"
   "$OPENFDD_FIELDBUS_IMAGE"
@@ -33,14 +40,15 @@ PULL_IMGS=(
   "$OPENFDD_MCP_IMAGE"
 )
 for img in "${PULL_IMGS[@]}"; do
-  echo "${DIM}pull $img${RST}"
-  docker pull "$img"
+  echo "${DIM}ensure $img${RST}"
+  docker pull "$img" >/dev/null
 done
 
 # Assert nightly currently points at the same digests (CHANNEL check)
 hdr "nightly ↔ sha digest equality"
 DIGESTS_FILE="$ART/digests.txt"
 : >"$DIGESTS_FILE"
+DIGEST_FAIL=0
 for name in openfdd-central openfdd-fieldbus openfdd-mqtt openfdd-mcp; do
   sha_ref="ghcr.io/bbartling/${name}:${OPENFDD_IMAGE_TAG}"
   night_ref="ghcr.io/bbartling/${name}:nightly"
@@ -52,13 +60,18 @@ for name in openfdd-central openfdd-fieldbus openfdd-mqtt openfdd-mcp; do
     ok "$name nightly matches $OPENFDD_IMAGE_TAG"
   else
     bad "$name nightly≠sha (sha=$d_sha nightly=$d_night)"
+    DIGEST_FAIL=1
   fi
 done
+if [[ "$DIGEST_FAIL" -ne 0 ]]; then
+  summary
+  exit 1
+fi
 
 # openfdd-web: pull if published, else mark for local build
 if docker pull "$OPENFDD_WEB_IMAGE" 2>/dev/null; then
   ok "pulled $OPENFDD_WEB_IMAGE"
-  echo "web=pulled" >>"$ART/web_source.txt"
+  echo "web=pulled" >"$ART/web_source.txt"
 else
   skip "openfdd-web not in GHCR — will compose-build from frontend/web"
   echo "web=build-local" >"$ART/web_source.txt"
@@ -79,6 +92,7 @@ mkdir -p "$ROOT/workspace" "$ROOT/deploy/mqtt/certs" "$ROOT/deploy/mqtt/kits"
 export OPENFDD_SITE_ID OPENFDD_EDGE_ID
 export OPENFDD_REACT_UI=1
 export OPENFDD_UI_GENERATION_DEFAULT=react
+export OPENFDD_IMAGE_TAG
 
 # Bring up via stack helper (builds web when missing)
 "$ROOT/scripts/openfdd_stack_up.sh" react-ot --no-pull

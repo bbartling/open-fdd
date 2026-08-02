@@ -2,6 +2,13 @@
 
 Newest first.
 
+## 2026-08-01 — Nightly OT bench GHCR tip-race recovery
+
+- FAIL root cause (`reports/nightly-ot-bench_20260801T205013Z`): phase 00 pinned
+  git tip `sha-37b8b43` before GHCR publish finished → cascade.
+- Fix: wait/retry tip pull + nightly OCI revision fallback; abort suite on 00
+  FAIL; fail-closed HTTP status helper (no `000000` false PASS).
+
 ## 2026-08-01 — Nightly OT bench modernized (react-ot)
 
 - Committed `scripts/nightly-ot-bench/` for post–Phase-2: pull `sha-*`, assert
