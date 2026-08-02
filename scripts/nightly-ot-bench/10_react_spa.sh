@@ -31,7 +31,7 @@ else
 fi
 
 # --- SPA HTML shell ----------------------------------------------------------
-HTML="$(curl -fsS --max-time 15 "$UI_BASE/" || true)"
+HTML="$(curl_body_retry --max-time 15 "$UI_BASE/" || true)"
 echo "$HTML" | head -c 500 >"$ART/spa_index_snip.html"
 if grep -qiE '<div id="root"|/assets/.*\.js' <<<"$HTML"; then
   ok "SPA index has #root / asset script"
@@ -48,7 +48,7 @@ fi
 # --- Product routes (SPA may return index.html for all; HTTP 200 is enough) ---
 ROUTES=(/ /auth /jobs /upload /mapping /rules /findings /reports /metering /wattlab)
 for path in "${ROUTES[@]}"; do
-  code="$(http_code --max-time 10 "$UI_BASE$path")"
+  code="$(http_code_retry --max-time 10 "$UI_BASE$path")"
   if [[ "$code" == "200" || "$code" == "301" || "$code" == "302" ]]; then
     ok "SPA $path → HTTP $code"
   elif [[ "$code" == "000" ]]; then
@@ -59,7 +59,7 @@ for path in "${ROUTES[@]}"; do
 done
 
 # Streamlit Lab path must not be the product surface
-lab_code="$(http_code --max-time 10 "$UI_BASE/lab")"
+lab_code="$(http_code_retry --max-time 10 "$UI_BASE/lab")"
 if [[ "$lab_code" == "000" ]]; then
   bad "SPA host unreachable (HTTP 000) — cannot assess /lab"
 elif [[ "$lab_code" == "200" ]]; then

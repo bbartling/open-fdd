@@ -279,7 +279,7 @@ export function JobsPage() {
       title="Jobs"
       caption="Create, select, and manage engineering jobs. Selection is URL-backed (?job=)."
     >
-      <div className="page-placeholder">
+      <div className="page-placeholder" data-testid="jobs-page">
         <h2>Jobs</h2>
         <p>Presentation-only UI — durable job state lives in central Rust.</p>
 

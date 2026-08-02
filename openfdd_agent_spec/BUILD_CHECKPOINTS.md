@@ -191,6 +191,7 @@ tracks the recovery program evidence gates.
 - [x] P1-M2-A — ESLint (real) + Playwright real-stack smoke harness (self-skip if SPA down)
 - [ ] P1-M2-B — unified error/loading/recovery matrix
 - [ ] P1-M2-C — accessibility/responsive shell (axe/keyboard)
-- [ ] P1-M3-* — PlotlyHost replacement; remove demo/stub product controls; browser-qualify workflows
+- [x] P1-M3 partial — Playwright product markers (Overview/Auth/Jobs/…/WattLab) + nightly gate 16; PlotlyHost/demo strip still open
+- [ ] P1-M3-* — PlotlyHost replacement; remove demo/stub product controls; full browser-qualify workflows
 - [ ] P1-M4-* — SQL oracle closure by family; RCx/metering real algorithms; report no-Python
 - [ ] P1-M5-* — independent qualification pack + Streamlit retirement guard
