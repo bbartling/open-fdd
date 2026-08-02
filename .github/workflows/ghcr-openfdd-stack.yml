@@ -1,4 +1,6 @@
-# Publish Open-FDD MQTT stack images to GHCR (central, ui, fieldbus, mqtt).
+# Publish Open-FDD stack images to GHCR (central, web, fieldbus, mqtt).
+# openfdd-ui (Streamlit) is published as an ARCHIVE/oracle image only — not the
+# supported product topology (compose.react / react-ot use openfdd-web).
 # Nightly on master; semver + sha tags on every push to master or version tags.
 name: Publish Open-FDD stack to GHCR
 
@@ -21,6 +23,7 @@ permissions:
 env:
   REGISTRY: ghcr.io/bbartling
   CENTRAL_IMAGE: ghcr.io/bbartling/openfdd-central
+  WEB_IMAGE: ghcr.io/bbartling/openfdd-web
   UI_IMAGE: ghcr.io/bbartling/openfdd-ui
   FIELDBUS_IMAGE: ghcr.io/bbartling/openfdd-fieldbus
   MQTT_IMAGE: ghcr.io/bbartling/openfdd-mqtt
@@ -52,7 +55,20 @@ jobs:
         run: |
           test -f services/ui/ARCHIVED.md
           test -f frontend/web/package.json
+          test -f frontend/web/package-lock.json
           test -f docker/compose.react.yml
+          grep -q '3000:8080' docker/compose.react.yml
+
+      - name: Build openfdd-web image (no push)
+        run: |
+          docker build \
+            --build-arg OPENFDD_GIT_SHA=ci-test \
+            --build-arg OPENFDD_WEB_VERSION=0.0.0-ci \
+            -t openfdd-web:ci \
+            -f frontend/web/Dockerfile \
+            frontend/web
+          docker run --rm --entrypoint cat openfdd-web:ci /usr/share/nginx/html/version.json | grep openfdd-web
+          ! docker run --rm --entrypoint sh openfdd-web:ci -c 'command -v python3 || command -v python' 2>/dev/null
 
       - name: Compose config check (all recipes)
         env:
@@ -134,7 +150,34 @@ jobs:
         if: steps.vars.outputs.nightly == 'true'
         run: docker buildx imagetools create -t "${{ env.CENTRAL_IMAGE }}:nightly" "${{ env.CENTRAL_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}"
 
-      - name: Build and push openfdd-ui
+      - name: Build and push openfdd-web (React product UI)
+        uses: docker/build-push-action@v6
+        timeout-minutes: 30
+        with:
+          context: frontend/web
+          file: frontend/web/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.WEB_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
+            ${{ env.WEB_IMAGE }}:${{ steps.vars.outputs.version }}
+          build-args: |
+            OPENFDD_GIT_SHA=${{ github.sha }}
+            OPENFDD_WEB_VERSION=${{ steps.vars.outputs.version }}
+          labels: |
+            org.opencontainers.image.title=Open-FDD Web (React SPA)
+            org.opencontainers.image.source=https://github.com/bbartling/open-fdd
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.vars.outputs.version }}
+            org.opencontainers.image.description=Supported product UI — nginx SPA proxying /api to central
+          cache-from: type=gha,scope=openfdd-web
+          cache-to: type=gha,mode=max,scope=openfdd-web
+
+      - name: Tag openfdd-web nightly
+        if: steps.vars.outputs.nightly == 'true'
+        run: docker buildx imagetools create -t "${{ env.WEB_IMAGE }}:nightly" "${{ env.WEB_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}"
+
+      - name: Build and push openfdd-ui (ARCHIVED Streamlit oracle)
         uses: docker/build-push-action@v6
         timeout-minutes: 30
         with:
@@ -145,19 +188,21 @@ jobs:
           tags: |
             ${{ env.UI_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}
             ${{ env.UI_IMAGE }}:${{ steps.vars.outputs.version }}
+            ${{ env.UI_IMAGE }}:archive-oracle
           build-args: |
             OPENFDD_GIT_SHA=${{ github.sha }}
             OPENFDD_IMAGE_TAG=sha-${{ steps.vars.outputs.short_sha }}
             WATTLAB_PIP_SPEC=git+https://github.com/bbartling/py-bacnet-stacks-playground.git@develop#subdirectory=vibe_code_apps_20
           labels: |
-            org.opencontainers.image.title=Open-FDD UI (Streamlit + WattLab)
+            org.opencontainers.image.title=Open-FDD UI (ARCHIVED Streamlit oracle)
             org.opencontainers.image.source=https://github.com/bbartling/open-fdd
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.vars.outputs.version }}
+            org.opencontainers.image.description=Unsupported archive/oracle image — use openfdd-web for product
           cache-from: type=gha,scope=openfdd-ui
           cache-to: type=gha,mode=max,scope=openfdd-ui
 
-      - name: Tag openfdd-ui nightly
+      - name: Tag openfdd-ui nightly (archive pointer only)
         if: steps.vars.outputs.nightly == 'true'
         run: docker buildx imagetools create -t "${{ env.UI_IMAGE }}:nightly" "${{ env.UI_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}"
 
@@ -210,9 +255,10 @@ jobs:
       - name: Published tags
         run: |
           set -euo pipefail
-          for img in central ui fieldbus mqtt; do
+          for img in central web ui fieldbus mqtt; do
             case "$img" in
               central) ref="${{ env.CENTRAL_IMAGE }}" ;;
+              web) ref="${{ env.WEB_IMAGE }}" ;;
               ui) ref="${{ env.UI_IMAGE }}" ;;
               fieldbus) ref="${{ env.FIELDBUS_IMAGE }}" ;;
               mqtt) ref="${{ env.MQTT_IMAGE }}" ;;
