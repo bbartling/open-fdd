@@ -117,4 +117,7 @@ run_phase 13_mcp_accuracy.sh "13 MCP accuracy vs central" || OVERALL=1
 run_phase 14_capability_ledger.sh "14 capability ledger (P1-M0)" || OVERALL=1
 run_phase 15_product_truth_honesty.sh "15 product-truth honesty (P1)" || OVERALL=1
 
+# P1-M3 real-stack Playwright — requires live SPA (hard fail if up-but-broken).
+run_phase 16_playwright_web.sh "16 Playwright product workflows" || OVERALL=1
+
 finish_report

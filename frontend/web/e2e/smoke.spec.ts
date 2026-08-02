@@ -29,10 +29,7 @@ test.describe("react product smoke (real stack)", () => {
 
     await page.goto("/");
     await expect(page.locator("#root")).toBeVisible({ timeout: 15_000 });
-    // Product overview marker when HomePage mounts
-    await expect(
-      page.getByTestId("overview-page").or(page.locator("#root")),
-    ).toBeVisible();
+    await expect(page.getByTestId("overview-page")).toBeVisible({ timeout: 15_000 });
 
     expect(errors, `console/page errors: ${errors.join(" | ")}`).toEqual([]);
   });

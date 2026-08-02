@@ -15,7 +15,18 @@ npm run dev
 Vite defaults to `:5173`. Proxy `/api` to central via `vite.config.ts` or set
 `VITE_API_BASE`.
 
-## Production image (P1-M1)
+## Real-stack Playwright (P1-M3)
+
+```bash
+# SPA must be up on :3000 (react-ot). Hard-fail mode:
+OPENFDD_PLAYWRIGHT_REQUIRE_STACK=1 npm run test:e2e -- e2e/product.spec.ts
+# Nightly:
+./scripts/nightly-ot-bench/16_playwright_web.sh
+```
+
+`e2e/smoke.spec.ts` soft-skips when SPA is down (CI without stack).
+`e2e/product.spec.ts` covers Overview / Auth / Jobs / Upload→WattLab markers.
+
 
 ```bash
 docker build \

@@ -67,7 +67,7 @@ export function UploadPage() {
       title="Upload"
       caption="Package ZIP → central Rust ingest (hostile paths rejected)."
     >
-      <div className="page-placeholder">
+      <div className="page-placeholder" data-testid="upload-page">
         <h2>Upload</h2>
         <p>
           Posts to <code>POST /api/csv/import/package</code>. Selection via{" "}

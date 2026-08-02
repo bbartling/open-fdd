@@ -149,6 +149,38 @@ http_code() {
   echo "${code:0:3}"
 }
 
+# Retry transient SPA/proxy failures (HTTP 000 / connection reset) a few times.
+http_code_retry() {
+  local attempts="${HTTP_CODE_RETRIES:-5}"
+  local sleep_s="${HTTP_CODE_RETRY_SLEEP:-2}"
+  local code="000" i
+  for ((i = 1; i <= attempts; i++)); do
+    code="$(http_code "$@")"
+    if [[ "$code" != "000" ]]; then
+      echo "$code"
+      return 0
+    fi
+    sleep "$sleep_s"
+  done
+  echo "000"
+}
+
+curl_body_retry() {
+  # curl_body_retry [curl args…] — print body; retry on empty/fail.
+  local attempts="${HTTP_CODE_RETRIES:-5}"
+  local sleep_s="${HTTP_CODE_RETRY_SLEEP:-2}"
+  local body="" i
+  for ((i = 1; i <= attempts; i++)); do
+    body="$(curl -fsS --max-time "${CURL_TIMEOUT:-20}" "$@" 2>/dev/null || true)"
+    if [[ -n "$body" ]]; then
+      printf '%s' "$body"
+      return 0
+    fi
+    sleep "$sleep_s"
+  done
+  return 1
+}
+
 http_code_to() {
   # http_code_to OUTFILE [curl args…] — body to OUTFILE, print status code.
   local out="$1"
