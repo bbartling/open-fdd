@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -b --noEmit",
-    "lint": "echo 'lint: no eslint config yet (pass)'"
+    "lint": "eslint .",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install chromium"
   },
   "dependencies": {
     "react": "^19.2.8",
@@ -17,12 +19,20 @@
     "react-router": "^8.3.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@playwright/test": "^1.62.1",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.8.0",
     "jsdom": "^25.0.0",
     "typescript": "~5.7.0",
+    "typescript-eslint": "^8.65.0",
     "vite": "^6.0.0",
     "vitest": "^3.0.0"
   }

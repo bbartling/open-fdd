@@ -48,4 +48,5 @@ stack workflow.
 | `npm run build` | `tsc -b && vite build` |
 | `npm run test` | Vitest |
 | `npm run typecheck` | `tsc -b --noEmit` |
-| `npm run lint` | Placeholder until P1-M2-A ESLint |
+| `npm run lint` | ESLint (P1-M2-A) — fails CI on errors |
+| `npm run test:e2e` | Playwright real-stack smoke (`e2e/`); skips if SPA down |
