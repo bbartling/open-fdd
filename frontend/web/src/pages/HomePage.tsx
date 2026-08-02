@@ -16,6 +16,7 @@ import {
   listFddEquipment,
   type FddEquipmentItem,
 } from "../api/analyticsApi";
+import { getUiGeneration } from "../api/cutoverApi";
 
 type EqRow = {
   equipment_id: string;
@@ -32,6 +33,7 @@ export function HomePage() {
 
   const [contractVersion, setContractVersion] = useState<string | null>(null);
   const [reactUi, setReactUi] = useState<boolean | null>(null);
+  const [uiGeneration, setUiGeneration] = useState<string | null>(null);
   const [buildings, setBuildings] = useState<string[]>([]);
   const [equipment, setEquipment] = useState<FddEquipmentItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +44,9 @@ export function HomePage() {
     setLoading(true);
     setError(null);
     try {
-      const [caps, blds, eq] = await Promise.all([
+      const [caps, gen, blds, eq] = await Promise.all([
         apiFetch<CapabilitiesResponse>("/api/capabilities"),
+        getUiGeneration().catch(() => null),
         listPackageBuildings().catch(() => [] as string[]),
         listFddEquipment(buildingId || undefined).catch(
           () => [] as FddEquipmentItem[],
@@ -51,6 +54,7 @@ export function HomePage() {
       ]);
       setContractVersion(caps.contract.contract_version);
       setReactUi(Boolean(caps.capabilities?.react_ui));
+      setUiGeneration(gen?.generation ?? null);
       setBuildings(blds);
       setEquipment(eq);
     } catch (err) {
@@ -119,6 +123,12 @@ export function HomePage() {
             label="react_ui"
             value={reactUi == null ? "—" : reactUi ? "on" : "off"}
             testId="overview-react-ui"
+          />
+          <Metric
+            id="overview-ui-generation"
+            label="UI generation"
+            value={uiGeneration ?? "—"}
+            testId="overview-ui-generation"
           />
           <Metric
             id="overview-eq-count"

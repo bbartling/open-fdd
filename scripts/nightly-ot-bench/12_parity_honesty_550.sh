@@ -61,15 +61,16 @@ PORTED="$(jq '[.rules[]? | select(.parity_status=="ported_from_cookbook")] | len
 SKIPPED="$(jq '[.rules[]? | select(.parity_status=="skipped_missing_roles")] | length' <<<"$RULES")"
 TOTAL="$(jq '[.rules[]?] | length' <<<"$RULES")"
 echo "${DIM}  registry proven=$PROVEN ported=$PORTED skipped=$SKIPPED total=$TOTAL${RST}"
-if [[ "$PROVEN" -ge 16 && "$PROVEN" -le 20 ]]; then
-  ok "proven_building_100 ≈18 (actual $PROVEN)"
+# SoT: sql_rules/registry.yaml live counts (tip ≈ proven 24 / ported 38).
+if [[ "$PROVEN" -ge 22 && "$PROVEN" -le 26 ]]; then
+  ok "proven_building_100 ≈24 (actual $PROVEN)"
 else
-  bad "proven_building_100 count=$PROVEN (expected ~18)"
+  bad "proven_building_100 count=$PROVEN (expected ~24)"
 fi
-if [[ "$PORTED" -ge 40 && "$PORTED" -le 50 ]]; then
-  ok "ported_from_cookbook ≈44 (actual $PORTED)"
+if [[ "$PORTED" -ge 36 && "$PORTED" -le 40 ]]; then
+  ok "ported_from_cookbook ≈38 (actual $PORTED)"
 else
-  bad "ported_from_cookbook count=$PORTED (expected ~44)"
+  bad "ported_from_cookbook count=$PORTED (expected ~38)"
 fi
 
 # SCHED-1 string occ_mode ingest spot-check

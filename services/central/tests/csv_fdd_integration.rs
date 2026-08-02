@@ -215,9 +215,9 @@ fn csv_upload_execute_then_fc1_registry_run() {
     );
 
     let fdd_body = json!({
+        "mode": "registry",
+        "rule_ids": ["FC1"],
         "params": {
-            "mode": "registry",
-            "rule_ids": ["FC1"],
             "FC1": { "confirm_seconds": 60 }
         }
     })

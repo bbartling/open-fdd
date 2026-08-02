@@ -131,6 +131,8 @@ pub struct EdgePayloadResponse {
 pub struct FddRunRequest {
     #[serde(default = "default_registry_mode")]
     pub mode: String,
+    /// Prefer top-level. Nested `params.rule_ids` / `params.mode` are also
+    /// accepted (hunt / nightly-ot-bench curl shape) and hoisted in `fdd_run`.
     #[serde(default)]
     pub rule_ids: Option<Vec<String>>,
     #[serde(default)]
