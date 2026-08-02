@@ -193,6 +193,29 @@ async fn v1_health() -> Json<Value> {
     }))
 }
 
+/// Redact offline oracle paths (joblib / Windows absolute) from online model cards.
+fn redact_offline_model_card(mut card: Value) -> Value {
+    let Some(obj) = card.as_object_mut() else {
+        return card;
+    };
+    if let Some(art) = obj.get("artifact").and_then(|v| v.as_str()) {
+        let lower = art.to_ascii_lowercase();
+        if lower.contains("joblib")
+            || lower.ends_with(".pkl")
+            || lower.ends_with(".pickle")
+            || art.contains(":\\")
+            || art.contains(":/")
+        {
+            obj.insert(
+                "artifact".into(),
+                json!("[redacted offline oracle path — use model_release.zip]"),
+            );
+            obj.insert("artifact_offline_redacted".into(), json!(true));
+        }
+    }
+    card
+}
+
 async fn v1_models() -> Json<Value> {
     let Some(bundle) = load_bundle() else {
         return Json(json!({"ok": false, "error": "no runtime_bundle"}));
@@ -212,6 +235,7 @@ async fn v1_models() -> Json<Value> {
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or(json!({}));
+    let card = redact_offline_model_card(card);
     Json(json!({
         "ok": true,
         "champion": release.get("champion").or_else(|| card.get("champion")),
@@ -222,6 +246,8 @@ async fn v1_models() -> Json<Value> {
         ],
         "model_release": release,
         "card": card,
+        "inference": "portable_or_conformance",
+        "note": "Online runtime never loads joblib; knobs require portable feature compiler",
     }))
 }
 
