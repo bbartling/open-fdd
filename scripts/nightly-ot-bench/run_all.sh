@@ -51,7 +51,7 @@ finish_report() {
     echo
     echo "## Verdict"
     if [[ "$OVERALL" -eq 0 ]]; then
-      echo "**PASS** — tip GHCR + React SPA + fieldbus OT through gates 00–13."
+      echo "**PASS** — tip GHCR + React SPA + fieldbus OT through gates 00–15."
     else
       echo "**FAIL** — see phase logs in this directory."
     fi
@@ -74,6 +74,9 @@ if [[ "$SKIP_PULL" != "1" ]]; then
     OVERALL=1
     if [[ "$ABORT_ON_PULL_FAIL" != "0" ]]; then
       echo "- **ABORTED:** pull/up failed (set ABORT_ON_PULL_FAIL=0 to continue cascade)" >>"$REPORT"
+      # Still run Phase-1 honesty gates (no stack required for ledger; live API may skip)
+      run_phase 14_capability_ledger.sh "14 capability ledger (P1-M0)" || OVERALL=1
+      run_phase 15_product_truth_honesty.sh "15 product-truth honesty (P1)" || OVERALL=1
       finish_report
     fi
   fi
@@ -109,5 +112,9 @@ run_phase 10_react_spa.sh "10 React SPA product surface" || OVERALL=1
 run_phase 11_dashboard_apis_549.sh "11 dashboard APIs (#549)" || OVERALL=1
 run_phase 12_parity_honesty_550.sh "12 parity honesty (#550 KEEP OPEN)" || OVERALL=1
 run_phase 13_mcp_accuracy.sh "13 MCP accuracy vs central" || OVERALL=1
+
+# P1-M0 recovery honesty — runs even when OT LAN is red (ledger is tree-local).
+run_phase 14_capability_ledger.sh "14 capability ledger (P1-M0)" || OVERALL=1
+run_phase 15_product_truth_honesty.sh "15 product-truth honesty (P1)" || OVERALL=1
 
 finish_report

@@ -19,7 +19,9 @@ host — connect via **JWT REST** and optional **`openfdd-mcp` stdio**.
 
 **Software-engineering agent OS:** [`openfdd_agent_spec/`](openfdd_agent_spec/) — architecture locks, skills, Milestone A ([`openfdd_agent_spec/MILESTONE_A.md`](openfdd_agent_spec/MILESTONE_A.md)). Ops/edge soak prompts stay under [`docs/agent/`](docs/agent/).
 
-**React/Rust modernization (Phase 1+2 exit approved; Phase 3 outlook):** [`tools/open-fdd-modernization/`](tools/open-fdd-modernization/README.md) · skill bridge [`AGENT_SKILL_BRIDGE.md`](tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md) · required UI skill [`streamlit-to-react`](tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md).
+**Active recovery / Vibe 21 twin program (execute Master Loop):** [`tools/open-fdd-vibe21-production/`](tools/open-fdd-vibe21-production/README.md) · paste prompt [`prompts/MASTER_PRODUCTION_LOOP.md`](tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md) · capability ledger [`docs/migration/react-rust/capabilities.yaml`](docs/migration/react-rust/capabilities.yaml). Prior modernization Phase 1+2 “exit” is **architecture direction**, not P1-G0 qualification of this recovery program.
+
+**Historical React/Rust modernization kit (Phase 1+2 exit ledgers; Phase 3 outlook):** [`tools/open-fdd-modernization/`](tools/open-fdd-modernization/README.md) · skill bridge [`AGENT_SKILL_BRIDGE.md`](tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md) · UI skill [`streamlit-to-react`](tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md).
 
 **PyPI (`open-fdd` 4.1+):** ECM engineering + pandas oracle (`open_fdd.rules` / `analytics` / `reporting`) via extras. Production FDD is DataFusion/GHCR, not this wheel.
 

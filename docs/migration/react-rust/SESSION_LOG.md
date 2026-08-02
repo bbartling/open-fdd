@@ -1,5 +1,11 @@
 # Session log — React / Rust modernization
 
+## 2026-08-02 — P1-M0 Vibe 21 recovery foundation
+
+- Landed `tools/open-fdd-vibe21-production/` + `capabilities.yaml` + validator CI.
+- Nightly gates 14–15 (ledger + product-truth). STOP for human soak after merge.
+- No container refresh; OT LAN flakes remain out of scope.
+
 Newest first.
 
 ## 2026-08-01 — Nightly OT bench GHCR tip-race recovery

@@ -9,9 +9,11 @@ Distinguish these axes — do not collapse them into one “Open-FDD version” 
 | SQL rule registry | `sql_rules/registry.yaml` (+ file tree) | Prefer content hash in future manifest |
 | Pandas cookbook / oracle | Docs + `open_fdd.rules` | Tied to package version when shipped |
 | WattLab dump schema | vibe19 package / export code | v2/v3 compatibility matrix |
+| Capability ledger | `docs/migration/react-rust/capabilities.yaml` | Vibe 21 recovery P1-M0 evidence SoT |
 | Shared contracts schema | **Not shipped** | Phase 2 `open_fdd.contracts` |
 | Container git SHA | GHCR `sha-<7>` + `:nightly` on master | Immutable verify uses `sha-*` |
 | EnergyPlus version | vibe20 image / runtime | When applicable |
+| Unity WebGL artifact | Phase 4 (not shipped) | External ZIP + manifest; never Unity Editor in prod |
 
 ## Agent rules
 

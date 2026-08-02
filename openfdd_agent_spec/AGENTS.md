@@ -24,7 +24,9 @@ bench, nightly retest, WSL sleep. Do not confuse those with this engineering OS.
 | `edge/`, `os/` | Future concepts — **never delete** |
 | `docs/rules/cookbook/` | Dual expression cookbooks (SQL + pandas) + parity matrix |
 | `docs/migration/react-rust/` | React/Rust Phase 1–2 ledgers + Phase 3 readiness |
-| `tools/open-fdd-modernization/` | Modernization program kit |
+| `tools/open-fdd-modernization/` | Historical modernization kit (Phase 1+2 exit ledgers) |
+| `tools/open-fdd-vibe21-production/` | **Active** recovery + Vibe 21 twin program (Master Loop) |
+| `docs/migration/react-rust/capabilities.yaml` | Machine-readable capability ledger (P1-M0) |
 | `openfdd_agent_spec/` | Agent law, Milestone A, skills, session log |
 | Playground vibe19/20 | Educational/demo apps; consumers of PyPI; interim GHCR |
 
@@ -64,10 +66,21 @@ Do **not** rename `open_fdd.rules` → `open_fdd.oracle` without an explicit pro
 19. vibe21 = separate plan — not Milestone A.
 20. When blocked (secrets, permissions, private data), finish non-blocked work and record the exact error.
 21. Bound each PR to its declared scope — docs-only PRs do not require cross-repo pin bumps or GHCR refreshes.
-22. React/Rust program: follow [`tools/open-fdd-modernization/`](../tools/open-fdd-modernization/README.md); keep [`docs/migration/react-rust/`](../docs/migration/react-rust/README.md) ledgers current in the same PR. Phase 1+2 exits approved; Phase 3 is outlook-only until explicitly authorized.
-23. For any Streamlit→React / `frontend/web` work: read and follow [`tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md`](../tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md) and the bridge [`AGENT_SKILL_BRIDGE.md`](../tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md) before editing UI.
+22. **Active program:** [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/README.md) Master Loop. Modernization Phase 1+2 “exit” is architecture direction only — not P1-G0 of the recovery program. Keep [`capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml) honest; never claim QUALIFIED without evidence.
+23. For Streamlit→React / `frontend/web` work: follow modernization streamlit-to-react skill **and** vibe21 Master Loop / ledger. Forbid unqualified “Phase complete” claims.
 
 ---
+
+## Authority order (recovery program)
+
+1. Root [`AGENTS.md`](../AGENTS.md) — non-negotiable architecture/safety
+2. Machine manifests: [`ownership.yaml`](ownership.yaml), [`capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml)
+3. Current phase docs under [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/)
+4. Generated OpenAPI / MCP / rule catalogs
+5. Workflow guides and examples
+6. Archived history / modernization closeout prose
+
+Nested instructions may specialize but never contradict a higher authority.
 
 ## Bootstrap reading order
 
@@ -75,12 +88,12 @@ Do **not** rename `open_fdd.rules` → `open_fdd.oracle` without an explicit pro
 2. This file
 3. [`ARCHITECTURE.md`](ARCHITECTURE.md) + [`ownership.yaml`](ownership.yaml)
 4. [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md) — what is already done
-5. [`MILESTONE_A.md`](MILESTONE_A.md) — full mission if executing Milestone A
-6. [`PR_PROTOCOL.md`](PR_PROTOCOL.md) before opening a PR
-7. Skill matching the work (below)
-8. Code truth: `docs/migration/`, `docs/migration/react-rust/`, `docs/rules/cookbook/`, `docs/architecture/`
-9. React/Rust program: [`../tools/open-fdd-modernization/README.md`](../tools/open-fdd-modernization/README.md)
-10. Phase 1 skill bridge: [`../tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md`](../tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md)
+5. [`tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md`](../tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md) — active recovery loop
+6. [`MILESTONE_A.md`](MILESTONE_A.md) — full mission if executing Milestone A
+7. [`PR_PROTOCOL.md`](PR_PROTOCOL.md) before opening a PR
+8. Skill matching the work (below)
+9. Code truth: `docs/migration/`, `docs/migration/react-rust/capabilities.yaml`, cookbooks
+10. Historical kit: [`../tools/open-fdd-modernization/README.md`](../tools/open-fdd-modernization/README.md)
 
 ---
 

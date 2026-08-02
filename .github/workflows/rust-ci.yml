@@ -107,8 +107,11 @@ jobs:
           npm run typecheck
           npm run test
           npm run build
-      - name: architecture policy
-        run: python3 scripts/architecture_react_policy_check.py
+      - name: architecture policy + capability ledger
+        run: |
+          python3 -m pip install --user PyYAML
+          python3 scripts/architecture_react_policy_check.py
+          python3 scripts/validate_capabilities_ledger.py
 
   docker:
     name: Stack compose config and Dockerfiles

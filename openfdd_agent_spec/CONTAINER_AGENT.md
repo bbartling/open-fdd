@@ -21,6 +21,10 @@ OT LAN benches need fieldbus too — use recipe **`react-ot`**
 (`compose.react.yml` + `compose.react.fieldbus.yml`). Full stress suite:
 [`scripts/nightly-ot-bench/`](../scripts/nightly-ot-bench/README.md).
 
+Gates **14–15** (capability ledger + product-truth honesty) run after OT/API
+phases and do **not** require a container recreate — they validate the recovery
+ledger and SPA honesty against the tip tree / live APIs when the stack is up.
+
 Post-merge soak: **wait for** `Publish Open-FDD stack to GHCR` (+ MCP) **success**
 on the tip SHA before pulling `sha-<7>`. Tip git SHA can exist minutes before
 GHCR tags. Prefer the harness wait/fallback:

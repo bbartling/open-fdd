@@ -1,10 +1,11 @@
 ---
 name: openfdd-streamlit-to-react
 description: >-
-  Open-FDD Streamlit→React maintenance and residual parity. Use when editing
-  frontend/web, diagnosing React vs archived Streamlit mismatches, or residual
-  CAP-* work. Pair with tools/open-fdd-modernization/skills/streamlit-to-react
-  and Rust/central contracts. Phase 1+2 complete; Phase 3 edge/live is outlook-only.
+  Open-FDD React product UI work under the Vibe 21 recovery Master Loop. Use when
+  editing frontend/web, diagnosing React vs archived Streamlit mismatches, or
+  CAP-* ledger updates. Pair with tools/open-fdd-vibe21-production and
+  capabilities.yaml. Modernization Phase 1+2 exit is architecture direction only —
+  do not claim P1-G0 / QUALIFIED without evidence.
 ---
 
 # Open-FDD Streamlit → React
@@ -17,58 +18,50 @@ DataFusion**. Python is oracle-only. No FastAPI sidecar. Streamlit is archived
 
 ## Program status
 
-| Phase | Status |
+| Program | Status |
 | --- | --- |
-| Modernization Phase 1 | Exit approved (`PHASE_1_QUALIFICATION.md`) |
-| Modernization Phase 2 | Exit approved (`PHASE_2_QUALIFICATION.md`) |
-| Modernization Phase 3 | Outlook only (`PHASE_3_READINESS.md`) — no live BACnet/MQTT redesign without auth |
-| Skill compliance | See `docs/migration/react-rust/PHASE_3_READINESS.md` |
+| Modernization Phase 1+2 | Architecture direction / exit docs — **not** Vibe 21 P1-G0 |
+| Vibe 21 recovery | Active — [`tools/open-fdd-vibe21-production/`](../../../tools/open-fdd-vibe21-production/README.md) |
+| Capability ledger | [`capabilities.yaml`](../../../docs/migration/react-rust/capabilities.yaml) |
+| Modernization Phase 3 | Outlook only — no live BACnet/MQTT redesign without auth |
 
 **Do not confuse** Milestone A “Phase 2/3” (shared contracts / vibe19) with
-modernization Phase 2/3.
+modernization Phase 2/3 or Vibe 21 Phase 1 recovery.
 
 ## Read first (required)
 
 1. [`../../AGENTS.md`](../../AGENTS.md) (openfdd_agent_spec)
-2. [`../../../tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md`](../../../tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md)
-3. **Canonical skill:**
+2. [`../../../tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md`](../../../tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md)
+3. [`../../../docs/migration/react-rust/capabilities.yaml`](../../../docs/migration/react-rust/capabilities.yaml)
+4. Canonical UI skill:
    [`../../../tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md`](../../../tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md)
-4. Open-FDD overlay:
-   [`../../../tools/open-fdd-modernization/AGENTS.md`](../../../tools/open-fdd-modernization/AGENTS.md)
-
-Then selectively:
-
-- [component-mapping.md](../../../tools/open-fdd-modernization/skills/streamlit-to-react/references/component-mapping.md)
-- [parity-verification.md](../../../tools/open-fdd-modernization/skills/streamlit-to-react/references/parity-verification.md)
-- [sidecar-architecture.md](../../../tools/open-fdd-modernization/skills/streamlit-to-react/references/sidecar-architecture.md)
-  — **map FastAPI → central Rust** for this repo
+5. Bridge:
+   [`../../../tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md`](../../../tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md)
 
 ## Open-FDD hard rules
 
 - Browser → React → `/api` on central only.
 - Do not move FDD/analytics math into TypeScript.
 - Do not add a Python API service for the React app.
-- Update `docs/migration/react-rust/` ledgers in the same PR.
-- One bounded milestone ID per PR; follow
-  [`../openfdd-milestone-a-pr/SKILL.md`](../openfdd-milestone-a-pr/SKILL.md) spirit
-  (inventory → characterize → contract → implement → parity → docs).
+- Update `capabilities.yaml` statuses honestly in the same PR; never mark
+  `QUALIFIED` without evidence paths.
+- Forbid “Phase complete” claims without a qualification manifest / ledger proof.
+- One bounded milestone ID per PR (Master Loop / PR matrix).
 - Update [`../../BUILD_CHECKPOINTS.md`](../../BUILD_CHECKPOINTS.md) when
-  modernization status changes.
+  recovery or modernization status changes.
+- Unity WebGL arrives later as an **external ZIP** (Phase 4) — do not embed Unity Editor.
 
 ## Workflow
 
-Follow the numbered workflow in the canonical streamlit-to-react `SKILL.md`
-exactly, with Open-FDD paths:
+Follow the Master Loop selected PR, then the numbered workflow in the canonical
+streamlit-to-react `SKILL.md`. Validate:
 
-| Generic skill concept | Open-FDD path |
-| --- | --- |
-| Streamlit app (archive) | `services/ui/streamlit_app.py`, `services/ui/app/` |
-| React app | `frontend/web/` |
-| API | `services/central/` `/api/*` |
-| Oracle | `open_fdd.*`, `tools/react_parity/`, cookbooks |
-| Evidence | `docs/migration/react-rust/` |
+```bash
+python3 scripts/validate_capabilities_ledger.py
+```
 
-## Done when
+## Stop / escalate
 
-Parity classes for the slice are recorded (not UNKNOWN when claiming DONE),
-tests/CI green, and ledgers + BUILD_CHECKPOINTS reflect the merge.
+- Missing Vibe 21 oracle path for Phase 2+ work.
+- BAS write or publish authority not granted.
+- Request to skip P1-G0 / claim QUALIFIED without evidence.

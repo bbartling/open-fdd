@@ -1,0 +1,287 @@
+# P1-M0 capability ledger (machine-readable).
+# Status vocabulary: NOT_STARTED | SCAFFOLD | IMPLEMENTED | VERIFIED | QUALIFIED | WAIVED
+# QUALIFIED requires evidence paths; do not mark QUALIFIED without browser/soak proof.
+# Seeded from CAPABILITY_MATRIX.md + frontend/web/src/App.tsx + central routes (2026-08-02).
+schema_version: 1
+program: vibe21-p1-recovery
+base_commit: 89fee52
+notes: >
+  Modernization Phase 1+2 exit is architecture direction only. This ledger is the
+  Vibe 21 recovery program evidence SoT (P1-M0). No capability is QUALIFIED yet.
+
+capabilities:
+  - id: CAP-AUTH
+    user_story: Login / JWT session
+    react_route: /auth
+    react_owner: AuthPage
+    central_apis:
+      - /api/auth/login
+      - /api/auth/me
+      - /api/auth/status
+    computation_owner: central.auth
+    status: IMPLEMENTED
+    evidence:
+      unit:
+        - frontend/web/src/pages/AuthPage.test.tsx
+      docs:
+        - docs/migration/react-rust/CAPABILITY_MATRIX.md
+    limitations:
+      - No dedicated real-stack Playwright auth suite yet (P1-M2).
+
+  - id: CAP-UPLOAD
+    user_story: Upload CSV/ZIP package + hostile validation
+    react_route: /upload
+    react_owner: UploadPage
+    central_apis:
+      - /api/csv/import/preview
+      - /api/csv/import/package
+      - /api/csv/import/plan
+      - /api/csv/import/preflight
+      - /api/csv/import/execute
+    computation_owner: central.csv_import
+    status: IMPLEMENTED
+    evidence:
+      unit:
+        - frontend/web/src/api/uploadApi.test.ts
+      docs:
+        - docs/migration/react-rust/CAPABILITY_MATRIX.md
+    limitations:
+      - Real-stack browser/large-file qualification deferred (P1-M3-E).
+
+  - id: CAP-SITE
+    user_story: Building/site selection + delete site data
+    react_route: null
+    react_owner: null
+    central_apis:
+      - /api/datasets
+    computation_owner: unknown
+    status: NOT_STARTED
+    evidence: {}
+    limitations:
+      - No SitesPage route in App.tsx.
+
+  - id: CAP-JOBS
+    user_story: Jobs CRUD archive/restore/duplicate
+    react_route: /jobs
+    react_owner: JobsPage
+    central_apis:
+      - /api/jobs
+    computation_owner: central.jobs
+    status: IMPLEMENTED
+    evidence:
+      unit:
+        - frontend/web/src/api/jobsApi.test.ts
+      docs:
+        - docs/migration/react-rust/CAPABILITY_MATRIX.md
+    limitations:
+      - Deep-link/concurrency browser suite deferred (P1-M3-D).
+
+  - id: CAP-MAP
+    user_story: Role mapping + VAV/AHU relationships
+    react_route: /mapping
+    react_owner: MappingPage
+    central_apis:
+      - /api/csv/import/package/mapping
+      - /api/csv/import/package/roles
+      - /api/fdd/session-config
+    computation_owner: central.csv_import
+    status: IMPLEMENTED
+    evidence:
+      unit:
+        - frontend/web/src/api/mappingApi.test.ts
+      docs:
+        - docs/migration/react-rust/CAPABILITY_MATRIX.md
+    limitations: []
+
+  - id: CAP-RULES
+    user_story: Rule catalog, tuning, run selected
+    react_route: /rules
+    react_owner: RulesPage
+    central_apis:
+      - /api/fdd/rules
+      - /api/fdd/run
+      - /api/fdd/results
+      - /api/fdd/session-config
+    computation_owner: datafusion.sql_rules
+    status: IMPLEMENTED
+    evidence:
+      unit:
+        - frontend/web/src/api/fddApi.test.ts
+      docs:
+        - docs/migration/react-rust/CAPABILITY_MATRIX.md
+        - docs/rules/cookbook/parity-matrix.md
+    limitations:
+      - Only subset of registry rules are proven_building_100; others screening.
+
+  - id: CAP-OVERVIEW
+    user_story: Overview metrics + equipment inventory
+    react_route: /
+    react_owner: HomePage
+    central_apis:
+      - /api/capabilities
+      - /api/fdd/equipment
+      - /api/ui/generation
+    computation_owner: central
+    status: IMPLEMENTED
+    evidence:
+      unit:
+        - frontend/web/src/pages/HomePage.test.tsx
+      docs:
+        - docs/migration/react-rust/CAPABILITY_MATRIX.md
+    limitations:
+      - Thin Overview caption remains; not full dashboard parity.
+
+  - id: CAP-PLOTS
+    user_story: FDD plots + fault overlays
+    react_route: /reports
+    react_owner: ReportsPage.PlotlyHost
+    central_apis:
+      - /api/fdd/series
+      - /api/fdd/results
+    computation_owner: central.fdd
+    status: SCAFFOLD
+    evidence:
+      unit:
+        - frontend/web/src/api/plotDataset.test.ts
+      docs:
+        - docs/migration/react-rust/CAPABILITY_MATRIX.md
+    limitations:
+      - PlotlyHost is SVG line path, not Plotly npm (P1-M3-B).
+    demo_only: false
+
+  - id: CAP-RCX
+    user_story: RCx presets and rollups
+    react_route: /metering
+    react_owner: MeteringPage
+    central_apis:
+      - /api/analytics/rcx
+    computation_owner: central.analytics
+    status: SCAFFOLD
+    evidence:
+      unit:
+        - frontend/web/src/pages/MeteringPage.test.tsx
+      docs:
+        - docs/migration/react-rust/CAPABILITY_MATRIX.md
+    limitations:
+      - Product control is labeled RCx AHU stub; coverage stubs only.
+    demo_only: true
+
+  - id: CAP-WEATHER
+    user_story: Weather provenance + BAS vs reference
+    react_route: null
+    react_owner: null
+    central_apis: []
+    computation_owner: unknown
+    status: NOT_STARTED
+    evidence: {}
+    limitations:
+      - No WeatherPanel route.
+
+  - id: CAP-METER
+    user_story: Metering totals/periods
+    react_route: /metering
+    react_owner: MeteringPage
+    central_apis:
+      - /api/analytics/metering
+    computation_owner: central.analytics
+    status: IMPLEMENTED
+    evidence:
+      unit:
+        - frontend/web/src/api/analyticsApi.ts
+      docs:
+        - docs/migration/react-rust/CAPABILITY_MATRIX.md
+    limitations:
+      - Sample JSON textarea remains in product surface (classify honestly).
+
+  - id: CAP-FINDINGS
+    user_story: Engineering findings + dispositions
+    react_route: /findings
+    react_owner: FindingsPage
+    central_apis:
+      - /api/jobs
+      - /api/reports/engineering-findings
+    computation_owner: central.jobs
+    status: SCAFFOLD
+    evidence:
+      unit:
+        - frontend/web/src/pages/FindingsPage.tsx
+      docs:
+        - docs/migration/react-rust/CAPABILITY_MATRIX.md
+    limitations:
+      - Product control seeds rule:DEMO findings.
+    demo_only: true
+
+  - id: CAP-REPORTS
+    user_story: Report/artifact generation + downloads
+    react_route: /reports
+    react_owner: ReportsPage
+    central_apis:
+      - /api/reports
+      - /api/reports/draft
+      - /api/reports/templates
+    computation_owner: central.reports
+    status: IMPLEMENTED
+    evidence:
+      unit:
+        - frontend/web/src/api/reportsApi.ts
+      docs:
+        - docs/migration/react-rust/CAPABILITY_MATRIX.md
+    limitations:
+      - PDF/DOCX may remain oracle-backed.
+
+  - id: CAP-WATTLAB
+    user_story: WattLab dump + job-native handoff
+    react_route: /wattlab
+    react_owner: WattLabPage
+    central_apis:
+      - /api/jobs
+    computation_owner: central.jobs
+    status: SCAFFOLD
+    evidence:
+      unit:
+        - frontend/web/src/pages/WattLabPage.tsx
+      docs:
+        - docs/migration/react-rust/CAPABILITY_MATRIX.md
+    limitations:
+      - Defaults to workspace://exports/demo.zip handoff shell.
+    demo_only: true
+
+  - id: CAP-ECM
+    user_story: ECM honesty / open-fdd package job UI
+    react_route: null
+    react_owner: null
+    central_apis: []
+    computation_owner: open_fdd.ecm_engineering
+    status: NOT_STARTED
+    evidence: {}
+    limitations:
+      - No EcmPage route; PyPI wheel not Rust runtime.
+
+  - id: CAP-ERRORS
+    user_story: Auth errors, empty states, long-running work
+    react_route: null
+    react_owner: AppShell
+    central_apis: []
+    computation_owner: central
+    status: NOT_STARTED
+    evidence: {}
+    limitations:
+      - Unified error/loading matrix deferred (P1-M2-B).
+
+  - id: CAP-DASHBOARD-SUMMARY
+    user_story: Building dashboard summary API for shell
+    react_route: /
+    react_owner: HomePage
+    central_apis:
+      - /api/dashboard/summary
+      - /api/building/snapshot
+      - /api/health/stack
+    computation_owner: central.dashboard
+    status: IMPLEMENTED
+    evidence:
+      docs:
+        - docs/api/routes.md
+      contract:
+        - services/central/src/routes.rs
+    limitations:
+      - React does not yet consume dashboard/summary in Overview UI.

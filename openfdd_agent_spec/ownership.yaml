@@ -56,14 +56,20 @@ components:
   product_streamlit_ui:
     canonical_owner: services/ui
     image: ghcr.io/bbartling/openfdd-ui
-    note: Default Streamlit surface; React SPA Phase 1 behind flag (ADR-001) — not default Vite/Caddy SPA
+    note: Archived oracle/recovery only (ARCHIVED.md, streamlit-legacy). Not the product UI.
 
   product_react_spa:
-    canonical_owner: frontend
-    status: phase1_flagged
+    canonical_owner: frontend/web
+    image: openfdd-web
+    status: sole_production_ui
     backend: services/central
-    note: Browser → central /api only; no FastAPI sidecar
+    note: Browser → central /api only; no FastAPI sidecar. Recovery evidence in capabilities.yaml.
     adr: docs/architecture/adr-001-react-rust-modernization.md
+
+  vibe21_recovery_program:
+    canonical_owner: tools/open-fdd-vibe21-production
+    ledger: docs/migration/react-rust/capabilities.yaml
+    note: Active Master Loop; modernization Phase 1+2 exit ≠ P1-G0 qualification
 
   vibe19_demo:
     canonical_owner: vibe_code_apps_19

@@ -4,6 +4,15 @@ Newest first. Append after non-trivial agent work.
 
 ---
 
+## 2026-08-02 — P1-M0 Vibe 21 recovery foundation
+
+- Landed `tools/open-fdd-vibe21-production/` as active Master Loop program kit.
+- Added `docs/migration/react-rust/capabilities.yaml` + validator CI.
+- Reconciled openfdd_agent_spec authority: modernization Phase 1+2 exit ≠ P1-G0.
+- Nightly OT bench gates 14 (ledger) + 15 (product-truth honesty).
+- **STOP** for human soak: `WEATHER_SOAK_SECS=120 WEATHER_SAMPLE_SECS=60 ./scripts/nightly-ot-bench/run_all.sh`
+- Non-goals this PR: Unity ZIP picker, twin inference, container refresh, OT LAN 5007.
+
 ## 2026-08-01 — Phase 2 exit + Phase 3 readiness (agent_spec)
 
 - Modernization Phase 1+2 exits approved; React sole product UI; Streamlit archived.

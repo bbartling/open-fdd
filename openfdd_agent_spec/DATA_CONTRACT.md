@@ -6,6 +6,12 @@ silently reinterpret old fields when meaning changes.
 When `open_fdd.contracts` ships (Milestone A Phase 2), this doc points at those
 models. Until then, code truth lives in the paths below.
 
+**Capability ledger:** product capability status for the Vibe 21 recovery
+program is machine-readable at
+[`docs/migration/react-rust/capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml)
+(validated by `scripts/validate_capabilities_ledger.py`). Do not invent
+QUALIFIED status without evidence paths.
+
 ---
 
 ## WattLab dump

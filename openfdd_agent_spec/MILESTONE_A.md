@@ -11,6 +11,11 @@ Progress snapshot: [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md).
 PR loop: [`PR_PROTOCOL.md`](PR_PROTOCOL.md).
 Containers: [`CONTAINER_AGENT.md`](CONTAINER_AGENT.md).
 
+**Active product recovery / twin program:** follow
+[`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/README.md)
+Master Loop. Milestone A below remains the library unification mission; it is
+**not** a substitute for Vibe 21 P1-G0 (capability ledger + honest qualification).
+
 Do not stop after plans or scaffolding. For each **bounded PR**, implement,
 test, push, review, correct, and merge what that PR declared — then refresh
 GHCR/dependents **only when the PR’s packaging or image scope requires it**.
