@@ -137,7 +137,9 @@ fn mime_for(path: &Path) -> &'static str {
     }
 }
 
-async fn unity_asset(AxumPath((twin_id, build_id, rest)): AxumPath<(String, String, String)>) -> Response {
+async fn unity_asset(
+    AxumPath((twin_id, build_id, rest)): AxumPath<(String, String, String)>,
+) -> Response {
     let Some(bundle) = load_bundle() else {
         return (StatusCode::NOT_FOUND, "runtime_bundle missing").into_response();
     };
@@ -290,7 +292,10 @@ fn sha256_hex(bytes: &[u8]) -> String {
 fn predict_from_conformance(model_dir: &Path, body: &PredictBody) -> Option<Value> {
     let path = model_dir.join("conformance.jsonl");
     let text = std::fs::read_to_string(path).ok()?;
-    let want = body.strategy_id.clone().unwrap_or_else(|| "baseline".into());
+    let want = body
+        .strategy_id
+        .clone()
+        .unwrap_or_else(|| "baseline".into());
     for line in text.lines() {
         let Ok(row) = serde_json::from_str::<Value>(line) else {
             continue;
@@ -317,7 +322,9 @@ fn predict_from_portable_forest(model_dir: &Path, body: &PredictBody) -> Option<
     None
 }
 
-async fn v1_predict(Json(body): Json<PredictBody>) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+async fn v1_predict(
+    Json(body): Json<PredictBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let Some(bundle) = load_bundle() else {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
@@ -395,7 +402,10 @@ fn reject_joblib_filename(name: &str) -> Option<&'static str> {
 }
 
 fn looks_like_zip(bytes: &[u8]) -> bool {
-    bytes.len() >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4b && (bytes[2] == 0x03 || bytes[2] == 0x05 || bytes[2] == 0x07)
+    bytes.len() >= 4
+        && bytes[0] == 0x50
+        && bytes[1] == 0x4b
+        && (bytes[2] == 0x03 || bytes[2] == 0x05 || bytes[2] == 0x07)
 }
 
 fn zip_member_names(bytes: &[u8]) -> Result<Vec<String>, String> {
@@ -417,7 +427,9 @@ fn validate_unity_zip(bytes: &[u8]) -> Result<(), String> {
     if names.iter().any(|n| n.contains("..")) {
         return Err("zip-slip rejected".into());
     }
-    let has_index = names.iter().any(|n| n == "index.html" || n.ends_with("/index.html"));
+    let has_index = names
+        .iter()
+        .any(|n| n == "index.html" || n.ends_with("/index.html"));
     let has_build = names.iter().any(|n| n.contains("Build/"));
     if !has_index || !has_build {
         return Err("unity zip must contain index.html and Build/*".into());
@@ -434,7 +446,10 @@ fn validate_model_release_zip(bytes: &[u8]) -> Result<(), String> {
         return Err("zip-slip rejected".into());
     }
     let lower: Vec<String> = names.iter().map(|n| n.to_ascii_lowercase()).collect();
-    if lower.iter().any(|n| n.ends_with(".joblib") || n.ends_with(".pkl") || n.ends_with(".pickle")) {
+    if lower
+        .iter()
+        .any(|n| n.ends_with(".joblib") || n.ends_with(".pkl") || n.ends_with(".pickle"))
+    {
         return Err("model_release.zip must not contain joblib/pickle".into());
     }
     let required = [
@@ -611,10 +626,7 @@ async fn training_export() -> Response {
             .into_response();
     };
     let job = job_dir(&bundle);
-    let tmp = std::env::temp_dir().join(format!(
-        "openfdd-training-export-{}.zip",
-        bundle.job_id
-    ));
+    let tmp = std::env::temp_dir().join(format!("openfdd-training-export-{}.zip", bundle.job_id));
     let result = (|| -> Result<Vec<u8>, String> {
         use std::io::Write;
         let file = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
@@ -642,7 +654,8 @@ async fn training_export() -> Response {
                         .unwrap_or(&entry)
                         .to_string_lossy()
                         .replace('\\', "/");
-                    zipw.start_file(&rel_path, opts).map_err(|e| e.to_string())?;
+                    zipw.start_file(&rel_path, opts)
+                        .map_err(|e| e.to_string())?;
                     let bytes = std::fs::read(&entry).map_err(|e| e.to_string())?;
                     zipw.write_all(&bytes).map_err(|e| e.to_string())?;
                 }
@@ -711,10 +724,7 @@ pub fn router() -> Router {
         .route("/api/v1/training/export", get(training_export))
         .route("/api/unity/builds/active", get(import_unity_status))
         .route("/api/unity/builds/import", post(import_unity_zip))
-        .route(
-            "/twins/{twin_id}/builds/{build_id}/",
-            get(unity_index),
-        )
+        .route("/twins/{twin_id}/builds/{build_id}/", get(unity_index))
         .route(
             "/twins/{twin_id}/builds/{build_id}/{*rest}",
             get(unity_asset),
