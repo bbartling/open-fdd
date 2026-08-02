@@ -171,3 +171,19 @@ Agents **must** follow `openfdd_agent_spec` + streamlit-to-react skills for UI P
 ### Phase 3 (modernization edge/live) — outlook only
 
 - [ ] P3-M0+ — **Not started** (see `PHASE_3_READINESS.md`). Distinct from Milestone A Phase 3 (vibe19 oracle) above.
+---
+
+# Vibe 21 production recovery — P1-M0 (2026-08-02)
+
+Program: [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/README.md) ·
+Master Loop: [`prompts/MASTER_PRODUCTION_LOOP.md`](../tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md) ·
+Ledger: [`capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml)
+
+Modernization Phase 1+2 “exit” above is **architecture direction**. This section
+tracks the recovery program evidence gates.
+
+- [x] P1-M0-A — `capabilities.yaml` + `scripts/validate_capabilities_ledger.py` + CI
+- [x] P1-M0-B — openfdd_agent_spec / AGENTS authority reconciliation
+- [x] Nightly honesty gates 14–15 (ledger + product-truth greps)
+- [ ] P1-G0 soak — human/agent nightly retest after merge (STOP before P1-M1)
+- [ ] P1-M1+ — React image topology / GHCR `openfdd-web` publish (not started)

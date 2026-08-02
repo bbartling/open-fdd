@@ -11,9 +11,10 @@ Update this file when code truth changes.
 
 | Surface | Role | Must not |
 | --- | --- | --- |
-| **Open-FDD production** (GHCR stack) | Rust central, Arrow/Feather, DataFusion SQL FDD, JWT REST, React SPA (`openfdd-web`) sole product UI | Silent pandas FDD fallback; claim Streamlit is still the shipping default after Phase 2 exit |
-| **React SPA** | Sole production UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md); Phase 2 exit) | FastAPI/Python sidecar; FDD math in TypeScript; BACnet wire ownership |
+| **Open-FDD production** (GHCR stack) | Rust central, Arrow/Feather, DataFusion SQL FDD, JWT REST, React SPA (`openfdd-web`) sole product UI | Silent pandas FDD fallback; claim Streamlit is still the shipping default; claim Vibe 21 recovery Phase 1 complete without `capabilities.yaml` evidence |
+| **React SPA** | Sole production UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)) | FastAPI/Python sidecar; FDD math in TypeScript; BACnet wire ownership |
 | **Streamlit UI (archived)** | `services/ui` oracle/recovery (`ARCHIVED.md`, `streamlit-legacy` profile) | Be reintroduced as product default without a new ADR |
+| **Vibe 21 program kit** | [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/) — recovery → twin → Unity ZIP import | Skip Master Loop gates; Unity Editor in production; BAS writes without authority |
 | **Open-FDD PyPI** (`open-fdd`) | Reusable libs: `ecm_engineering`, `rules`, `analytics`, `reporting` | Be the production FDD runtime |
 | **Vibe 19** (playground) | Educational pandas oracle + Streamlit demo + GHCR demo image | Remain canonical home of duplicated rule/analytics/reporting once migrated |
 | **Vibe 20** (playground) | EnergyPlus twin, calibration, ECM cross-check, Studio | Retain duplicate **generic** ECM formulas after Open-FDD parity |
@@ -35,6 +36,7 @@ Never delete one cookbook because the other engine “won.”
 
 **Execution SoT:** SQL registry (`sql_rules/registry.yaml`).
 **Identity/metadata SoT (Phase 2 target):** shared rule manifest under `open_fdd.contracts` (not shipped yet).
+**Recovery evidence SoT:** [`docs/migration/react-rust/capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml) — modernization Phase 1+2 exit ≠ Vibe 21 P1-G0.
 **Oracle SoT:** pandas cookbook + `open_fdd.rules`.
 
 ---

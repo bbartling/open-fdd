@@ -1,14 +1,15 @@
 # Nightly OT LAN bench harness (post–Phase-2)
 
 Expert-tester scripts for **immutable GHCR tip** images on the BACnet OT LAN,
-with the **React** product UI (`compose.react.yml` + fieldbus overlay).
+with the **React** product UI (`compose.react.yml` + fieldbus overlay), plus
+**P1-M0 recovery honesty** gates (capability ledger + product-truth).
 
 Source tree is for compose/config/analysis only — **do not build Rust runtime
 images from local src**. Phase `00` **waits** for tip `sha-<7>` on GHCR
 (merge→publish race), falls back to the OCI revision on `:nightly` if needed,
 asserts digests match `:nightly`, and compose-builds `openfdd-web` only when
-GHCR has no web image. If pull/up fails, `run_all.sh` **aborts** (no cascade)
-unless `ABORT_ON_PULL_FAIL=0`.
+GHCR has no web image. If pull/up fails, `run_all.sh` **aborts** OT cascade
+unless `ABORT_ON_PULL_FAIL=0`, but still runs gates **14–15** (ledger/honesty).
 
 ## Topology
 
@@ -94,14 +95,20 @@ GHCR_WAIT_SECS=900 GHCR_POLL_SECS=30 ./scripts/nightly-ot-bench/00_pull_ghcr_up.
 4. Device **5007** read/poll of AI:1173 succeeds
 5. Central ingest/Feather shows **new** telemetry when MQTT path is live
 6. React SPA routes + honesty/MCP gates pass
+7. Gates **14–15** PASS (capability ledger validator + product-truth honesty)
 
-**FAIL with evidence** if any gate fails — do not weaken asserts.
+**FAIL with evidence** if any gate fails — do not weaken asserts. OT LAN
+failures (5007 missing, MQTT silent, weather freeze) remain honest FAILs —
+recovery gates 14–15 still report product truth.
 
 Default write policy is **read/poll/discover**. Active REST write clamps require
 `BENCH_ALLOW_WRITES=1`.
 
 ## Related
 
+- `docs/migration/react-rust/capabilities.yaml` — P1-M0 ledger
+- `scripts/validate_capabilities_ledger.py`
+- `tools/open-fdd-vibe21-production/` — active recovery Master Loop
 - `scripts/openfdd_stack_up.sh react-ot` / `openfdd_stack_pull.sh`
 - `openfdd_agent_spec/CONTAINER_AGENT.md` — nightly → immutable pin protocol
 - `scripts/fieldbus/smoke_test.sh` — deep BACnet matrix
