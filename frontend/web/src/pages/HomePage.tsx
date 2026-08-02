@@ -27,6 +27,15 @@ function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Avoid unauthenticated calls to JWT-gated routes (browser logs them as console errors). */
+function hasAuthToken(): boolean {
+  try {
+    return Boolean(sessionStorage.getItem("openfdd.auth.token"));
+  } catch {
+    return false;
+  }
+}
+
 export function HomePage() {
   const { query, setQuery } = useSessionQuery();
   const buildingId = query.siteId ?? "";
@@ -44,13 +53,18 @@ export function HomePage() {
     setLoading(true);
     setError(null);
     try {
+      const authed = hasAuthToken();
       const [caps, gen, blds, eq] = await Promise.all([
         apiFetch<CapabilitiesResponse>("/api/capabilities"),
         getUiGeneration().catch(() => null),
-        listPackageBuildings().catch(() => [] as string[]),
-        listFddEquipment(buildingId || undefined).catch(
-          () => [] as FddEquipmentItem[],
-        ),
+        authed
+          ? listPackageBuildings().catch(() => [] as string[])
+          : Promise.resolve([] as string[]),
+        authed
+          ? listFddEquipment(buildingId || undefined).catch(
+              () => [] as FddEquipmentItem[],
+            )
+          : Promise.resolve([] as FddEquipmentItem[]),
       ]);
       setContractVersion(caps.contract.contract_version);
       setReactUi(Boolean(caps.capabilities?.react_ui));
