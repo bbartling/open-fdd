@@ -67,3 +67,6 @@ build/
 
 workspace/.cache/
 workspace/jobs/
+workspace/vibe21_artifacts/
+workspace/vibe21_venv/
+workspace/vibe21_jobs/
