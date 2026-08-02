@@ -21,6 +21,20 @@ OT LAN benches need fieldbus too — use recipe **`react-ot`**
 (`compose.react.yml` + `compose.react.fieldbus.yml`). Full stress suite:
 [`scripts/nightly-ot-bench/`](../scripts/nightly-ot-bench/README.md).
 
+Post-merge soak: **wait for** `Publish Open-FDD stack to GHCR` (+ MCP) **success**
+on the tip SHA before pulling `sha-<7>`. Tip git SHA can exist minutes before
+GHCR tags. Prefer the harness wait/fallback:
+
+```bash
+# Turnkey (waits for tip publish, falls back to nightly OCI revision if needed)
+cd ~/open-fdd
+./scripts/nightly-ot-bench/00_pull_ghcr_up.sh
+# or full suite:
+# WEATHER_SOAK_SECS=120 ./scripts/nightly-ot-bench/run_all.sh
+```
+
+Manual pin path (only after GHCR Actions are green for that SHA):
+
 ```bash
 # 1) Discover tip SHA after merge (or use known short SHA)
 SHORT=$(git -C ~/open-fdd rev-parse --short=7 origin/master)

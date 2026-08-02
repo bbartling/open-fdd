@@ -4,8 +4,11 @@ Expert-tester scripts for **immutable GHCR tip** images on the BACnet OT LAN,
 with the **React** product UI (`compose.react.yml` + fieldbus overlay).
 
 Source tree is for compose/config/analysis only — **do not build Rust runtime
-images from local src**. Phase `00` pulls `sha-<7>`, asserts digests match
-`:nightly`, and compose-builds `openfdd-web` only when GHCR has no web image.
+images from local src**. Phase `00` **waits** for tip `sha-<7>` on GHCR
+(merge→publish race), falls back to the OCI revision on `:nightly` if needed,
+asserts digests match `:nightly`, and compose-builds `openfdd-web` only when
+GHCR has no web image. If pull/up fails, `run_all.sh` **aborts** (no cascade)
+unless `ABORT_ON_PULL_FAIL=0`.
 
 ## Topology
 
@@ -68,7 +71,18 @@ Optional:
 BENCH_ALLOW_WRITES=1 ./scripts/nightly-ot-bench/09_rest_ot.sh   # REST write clamp
 RUN_CLOUD_SIM=1 ./scripts/nightly-ot-bench/run_all.sh
 SKIP_PULL=1 ./scripts/nightly-ot-bench/run_all.sh               # reuse running stack
+ABORT_ON_PULL_FAIL=0 ./scripts/nightly-ot-bench/run_all.sh      # forensic cascade after 00 FAIL
+GHCR_WAIT_SECS=900 GHCR_POLL_SECS=30 ./scripts/nightly-ot-bench/00_pull_ghcr_up.sh
 ```
+
+### GHCR pin knobs
+
+| Env | Default | Meaning |
+|-----|---------|---------|
+| `GHCR_WAIT_SECS` | 900 | Max wait for tip `sha-*` images after merge |
+| `GHCR_POLL_SECS` | 30 | Poll interval while waiting |
+| `ABORT_ON_PULL_FAIL` | 1 | Abort suite after phase 00 FAIL |
+| `OPENFDD_IMAGE_TAG` | tip `sha-<7>` | Explicit pin skips git tip resolution |
 
 ## Success definition
 

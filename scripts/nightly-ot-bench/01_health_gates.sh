@@ -68,9 +68,11 @@ else
 fi
 
 # React SPA (nginx on :3000)
-code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$UI_BASE/" || true)"
+code="$(http_code --max-time 10 "$UI_BASE/")"
 if [[ "$code" == "200" || "$code" == "301" || "$code" == "302" ]]; then
   ok "SPA $UI_BASE → HTTP $code"
+elif [[ "$code" == "000" ]]; then
+  bad "SPA $UI_BASE unreachable (HTTP 000)"
 else
   bad "SPA $UI_BASE → HTTP $code (expect React web, not Streamlit)"
 fi

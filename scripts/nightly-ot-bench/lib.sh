@@ -136,6 +136,121 @@ resolve_tip_sha_tag() {
   echo "$tag"
 }
 
+# HTTP status from curl -w; never concatenates with || echo 000 → 000000.
+# Prints a 3-digit code (or 000 on total failure). Does not exit non-zero.
+http_code() {
+  local code
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time "${CURL_TIMEOUT:-20}" "$@" 2>/dev/null || true)"
+  if [[ -z "$code" || "$code" == "000" ]]; then
+    echo "000"
+    return 0
+  fi
+  # Collapse accidental double-write (legacy callers) to first 3 digits.
+  echo "${code:0:3}"
+}
+
+http_code_to() {
+  # http_code_to OUTFILE [curl args…] — body to OUTFILE, print status code.
+  local out="$1"
+  shift
+  local code
+  code="$(curl -sS -o "$out" -w '%{http_code}' --max-time "${CURL_TIMEOUT:-20}" "$@" 2>/dev/null || true)"
+  if [[ -z "$code" || "$code" == "000" ]]; then
+    echo "000"
+    return 0
+  fi
+  echo "${code:0:3}"
+}
+
+ghcr_image_pullable() {
+  # True if docker pull succeeds for $1 (quiet).
+  docker pull "$1" >/dev/null 2>&1
+}
+
+nightly_revision_sha_tag() {
+  # Pull openfdd-central:nightly and return sha-<7> from OCI revision label.
+  local night_ref="ghcr.io/bbartling/openfdd-central:nightly"
+  docker pull "$night_ref" >/dev/null
+  local rev short
+  rev="$(docker image inspect "$night_ref" \
+    --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' 2>/dev/null || true)"
+  if [[ -z "$rev" || "$rev" == "<no value>" ]]; then
+    return 1
+  fi
+  short="$(printf '%s' "$rev" | cut -c1-7)"
+  echo "sha-${short}"
+}
+
+# Wait for candidate sha tag on GHCR; fallback to nightly revision label.
+# Sets globals: OPENFDD_IMAGE_TAG, PIN_SOURCE (tip|nightly-label|explicit).
+# Writes pin metadata lines to stdout for logging.
+resolve_published_image_tag() {
+  local wait_secs="${GHCR_WAIT_SECS:-900}"
+  local poll_secs="${GHCR_POLL_SECS:-30}"
+  local candidate pin_source
+  local explicit="${OPENFDD_IMAGE_TAG:-}"
+
+  if [[ "$explicit" == sha-* ]]; then
+    candidate="$explicit"
+    pin_source="explicit"
+  else
+    candidate="$(resolve_tip_sha_tag)"
+    if [[ "$explicit" == "nightly" || -z "$explicit" ]]; then
+      pin_source="tip"
+    else
+      pin_source="explicit"
+    fi
+  fi
+
+  local central="ghcr.io/bbartling/openfdd-central:${candidate}"
+  local deadline=$((SECONDS + wait_secs))
+  local attempt=0
+  echo "${DIM}GHCR wait: candidate=${candidate} wait=${wait_secs}s poll=${poll_secs}s${RST}" >&2
+
+  while ((SECONDS < deadline)); do
+    attempt=$((attempt + 1))
+    echo "${DIM}GHCR pull attempt ${attempt}: ${central}${RST}" >&2
+    if ghcr_image_pullable "$central"; then
+      # Also require fieldbus/mqtt/mcp for the same pin before declaring ready.
+      local ok_all=1 name
+      for name in openfdd-fieldbus openfdd-mqtt openfdd-mcp; do
+        if ! ghcr_image_pullable "ghcr.io/bbartling/${name}:${candidate}"; then
+          ok_all=0
+          echo "${DIM}  missing ${name}:${candidate}${RST}" >&2
+          break
+        fi
+      done
+      if [[ "$ok_all" -eq 1 ]]; then
+        OPENFDD_IMAGE_TAG="$candidate"
+        PIN_SOURCE="$pin_source"
+        export OPENFDD_IMAGE_TAG PIN_SOURCE
+        echo "${DIM}GHCR pin ready: ${OPENFDD_IMAGE_TAG} (source=${PIN_SOURCE})${RST}" >&2
+        return 0
+      fi
+    fi
+    sleep "$poll_secs"
+  done
+
+  echo "${YELLOW}WARN${RST} tip pin ${candidate} not fully published after ${wait_secs}s — trying nightly revision fallback" >&2
+  local fallback
+  if ! fallback="$(nightly_revision_sha_tag)"; then
+    echo "${RED}ERROR${RST} could not read org.opencontainers.image.revision from openfdd-central:nightly" >&2
+    return 1
+  fi
+  echo "${DIM}fallback candidate=${fallback}${RST}" >&2
+  for name in openfdd-central openfdd-fieldbus openfdd-mqtt openfdd-mcp; do
+    if ! ghcr_image_pullable "ghcr.io/bbartling/${name}:${fallback}"; then
+      echo "${RED}ERROR${RST} fallback image missing: ${name}:${fallback}" >&2
+      return 1
+    fi
+  done
+  OPENFDD_IMAGE_TAG="$fallback"
+  PIN_SOURCE="nightly-label"
+  export OPENFDD_IMAGE_TAG PIN_SOURCE
+  echo "${DIM}GHCR pin ready: ${OPENFDD_IMAGE_TAG} (source=${PIN_SOURCE})${RST}" >&2
+  return 0
+}
+
 summary() {
   echo
   echo "${BOLD}Summary: ${GREEN}${PASS} passed${RST}, ${RED}${FAIL} failed${RST}, ${YELLOW}${SKIP} skipped${RST}"

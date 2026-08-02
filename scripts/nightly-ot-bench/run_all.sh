@@ -44,8 +44,39 @@ run_phase() {
 }
 
 OVERALL=0
+ABORT_ON_PULL_FAIL="${ABORT_ON_PULL_FAIL:-1}"
+
+finish_report() {
+  {
+    echo
+    echo "## Verdict"
+    if [[ "$OVERALL" -eq 0 ]]; then
+      echo "**PASS** — tip GHCR + React SPA + fieldbus OT through gates 00–13."
+    else
+      echo "**FAIL** — see phase logs in this directory."
+    fi
+    echo
+    echo "## Recreate"
+    echo '```bash'
+    echo "cd $ROOT"
+    echo "./scripts/nightly-ot-bench/run_all.sh"
+    echo "# optional: RUN_CLOUD_SIM=1 BENCH_ALLOW_WRITES=1 SKIP_PULL=1 ABORT_ON_PULL_FAIL=0"
+    echo '```'
+  } >>"$REPORT"
+  echo
+  echo "${BOLD}Report: $REPORT${RST}"
+  cat "$REPORT"
+  exit "$OVERALL"
+}
+
 if [[ "$SKIP_PULL" != "1" ]]; then
-  run_phase 00_pull_ghcr_up.sh "00 pull GHCR + up" || OVERALL=1
+  if ! run_phase 00_pull_ghcr_up.sh "00 pull GHCR + up"; then
+    OVERALL=1
+    if [[ "$ABORT_ON_PULL_FAIL" != "0" ]]; then
+      echo "- **ABORTED:** pull/up failed (set ABORT_ON_PULL_FAIL=0 to continue cascade)" >>"$REPORT"
+      finish_report
+    fi
+  fi
 else
   echo "- **00 pull:** SKIPPED (SKIP_PULL=1)" >>"$REPORT"
   skip "pull/up skipped (SKIP_PULL=1)"
@@ -79,24 +110,4 @@ run_phase 11_dashboard_apis_549.sh "11 dashboard APIs (#549)" || OVERALL=1
 run_phase 12_parity_honesty_550.sh "12 parity honesty (#550 KEEP OPEN)" || OVERALL=1
 run_phase 13_mcp_accuracy.sh "13 MCP accuracy vs central" || OVERALL=1
 
-{
-  echo
-  echo "## Verdict"
-  if [[ "$OVERALL" -eq 0 ]]; then
-    echo "**PASS** — tip GHCR + React SPA + fieldbus OT through gates 00–13."
-  else
-    echo "**FAIL** — see phase logs in this directory."
-  fi
-  echo
-  echo "## Recreate"
-  echo '```bash'
-  echo "cd $ROOT"
-  echo "./scripts/nightly-ot-bench/run_all.sh"
-  echo "# optional: RUN_CLOUD_SIM=1 BENCH_ALLOW_WRITES=1 SKIP_PULL=1"
-  echo '```'
-} >>"$REPORT"
-
-echo
-echo "${BOLD}Report: $REPORT${RST}"
-cat "$REPORT"
-exit "$OVERALL"
+finish_report
