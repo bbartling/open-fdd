@@ -1,5 +1,12 @@
 # Session log
 
+## 2026-08-02 — P1-M2-A ESLint + Playwright
+
+- Real ESLint config (hooks/a11y/TS); CI fails on lint.
+- Playwright e2e smoke suite (no network mocks); skips when SPA unreachable.
+- Remaining Phase 1: M2-B/C, M3–M5 (see BUILD_CHECKPOINTS).
+- Phase 2+ blocked: see `tools/open-fdd-vibe21-production/BLOCKERS.md` (oracle absent).
+
 ## 2026-08-02 — P1-G0 soak + P1-M1 openfdd-web GHCR
 
 - P1-G0 soak: `reports/nightly-ot-bench_20260802T141626Z/` — gates **14/15 PASS**; suite FAIL on OT/SPA/MCP (honest).

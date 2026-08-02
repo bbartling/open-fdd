@@ -100,13 +100,22 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/web/package-lock.json
-      - name: typecheck, test, build
+      - name: typecheck, lint, test, build
         working-directory: frontend/web
         run: |
           npm ci
           npm run typecheck
+          npm run lint
           npm run test
           npm run build
+      - name: Playwright real-stack smoke (skip if SPA down)
+        working-directory: frontend/web
+        env:
+          OPENFDD_PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+        run: |
+          npx playwright install --with-deps chromium
+          # No stack in this job — suite self-skips when SPA unreachable.
+          npm run test:e2e
       - name: architecture policy + capability ledger
         run: |
           python3 -m pip install --user PyYAML

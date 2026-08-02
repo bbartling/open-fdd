@@ -348,9 +348,8 @@ export function MappingPage() {
                 data-testid="mapping-role-editors"
               >
                 {(selectedEq.columns ?? []).map((c) => (
-                  <label
+                  <div
                     key={c.column}
-                    htmlFor={`role-${c.column}`}
                     style={{
                       display: "grid",
                       gridTemplateColumns: "1fr 1fr",
@@ -358,17 +357,18 @@ export function MappingPage() {
                       alignItems: "center",
                     }}
                   >
-                    <span>
+                    <span id={`role-label-${c.column}`}>
                       <code>{c.column}</code>
                     </span>
                     <input
                       id={`role-${c.column}`}
                       data-testid={`map-role-input-${c.column}`}
+                      aria-labelledby={`role-label-${c.column}`}
                       value={draftRoles[c.column] ?? ""}
                       placeholder="(unmapped)"
                       onChange={(e) => onRoleChange(c.column, e.target.value)}
                     />
-                  </label>
+                  </div>
                 ))}
               </div>
             </div>

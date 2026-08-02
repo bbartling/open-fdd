@@ -35,7 +35,6 @@ export function Button({
         disabled={isDisabled}
         aria-busy={loading || undefined}
         aria-describedby={description ? `${id}-desc` : undefined}
-        aria-invalid={Boolean(error)}
         onClick={onClick}
       >
         {loading ? <span className="widget-btn__spinner" aria-hidden /> : null}

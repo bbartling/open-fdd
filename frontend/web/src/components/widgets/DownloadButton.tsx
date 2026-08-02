@@ -28,6 +28,8 @@ export function DownloadButton({
       className={`widget widget--download widget--${density}`}
       data-testid={widgetTestId(`download-${id}`, testId)}
     >
+      {/* Download affordance keeps native <a download> (not SPA navigation). */}
+      {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
       <a
         id={id}
         href={isDisabled ? undefined : href}

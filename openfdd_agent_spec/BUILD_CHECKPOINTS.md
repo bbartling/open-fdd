@@ -188,4 +188,9 @@ tracks the recovery program evidence gates.
 - [x] P1-G0 soak — `reports/nightly-ot-bench_20260802T141626Z/` (14/15 PASS; OT LAN honest FAIL)
 - [x] P1-M1-A/B — hardened `openfdd-web` Dockerfile + GHCR publish in stack workflow
 - [x] P1-M1-C — `scripts/release/smoke_react_web_image.sh` (no-Python inspect)
-- [ ] P1-M2+ — ESLint/Playwright and product slices (not started)
+- [x] P1-M2-A — ESLint (real) + Playwright real-stack smoke harness (self-skip if SPA down)
+- [ ] P1-M2-B — unified error/loading/recovery matrix
+- [ ] P1-M2-C — accessibility/responsive shell (axe/keyboard)
+- [ ] P1-M3-* — PlotlyHost replacement; remove demo/stub product controls; browser-qualify workflows
+- [ ] P1-M4-* — SQL oracle closure by family; RCx/metering real algorithms; report no-Python
+- [ ] P1-M5-* — independent qualification pack + Streamlit retirement guard
