@@ -46,7 +46,7 @@ else
 fi
 
 # --- Product routes (SPA may return index.html for all; HTTP 200 is enough) ---
-ROUTES=(/ /auth /jobs /upload /mapping /rules /findings /reports /metering /wattlab)
+ROUTES=(/ /auth /jobs /upload /mapping /rules /findings /reports /metering /wattlab /twin)
 for path in "${ROUTES[@]}"; do
   code="$(http_code_retry --max-time 10 "$UI_BASE$path")"
   if [[ "$code" == "200" || "$code" == "301" || "$code" == "302" ]]; then

@@ -1,0 +1,595 @@
+{
+  "schema_version": "openfdd.mcp_role_tool_catalog.v1",
+  "generated_for": "docs/mcp-agents/roles/",
+  "status_note": "All tools SCAFFOLD until wired in the mcp/ crate and VERIFIED against the agent eval suite.",
+  "roles": ["package-mapping", "surrogate-train", "unity-webgl-build", "operator-activate"],
+  "tool_classes": ["read", "plan", "write"],
+  "tools": [
+    {
+      "name": "package_preflight",
+      "role": "package-mapping",
+      "class": "read",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "input_schema": {
+        "type": "object",
+        "required": ["package_ref", "site_id"],
+        "properties": {
+          "package_ref": { "type": "string", "description": "Upload ID or workspace path of building package ZIP" },
+          "site_id": { "type": "string" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["preflight_id", "members", "errors"],
+        "properties": {
+          "preflight_id": { "type": "string" },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "rows": { "type": "integer" },
+                "columns": { "type": "array", "items": { "type": "string" } },
+                "time_range": { "type": "array", "items": { "type": "string", "format": "date-time" } }
+              }
+            }
+          },
+          "errors": { "type": "array", "items": { "type": "string" } },
+          "unit_anomalies": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    {
+      "name": "mapping_suggest",
+      "role": "package-mapping",
+      "class": "read",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "input_schema": {
+        "type": "object",
+        "required": ["preflight_id"],
+        "properties": {
+          "preflight_id": { "type": "string" },
+          "existing_mapping": { "type": "object", "description": "Optional prior column->role mapping JSON" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["suggestions", "unmapped_columns"],
+        "properties": {
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["column", "role", "unit", "equip_ref", "confidence", "evidence"],
+              "properties": {
+                "column": { "type": "string" },
+                "role": { "type": "string" },
+                "unit": { "type": "string" },
+                "equip_ref": { "type": "string" },
+                "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+                "evidence": { "type": "string" },
+                "mapping_status": { "type": "string", "enum": ["PROVISIONAL", "PROVEN"] }
+              }
+            }
+          },
+          "unmapped_columns": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    {
+      "name": "package_import_plan",
+      "role": "package-mapping",
+      "class": "plan",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "input_schema": {
+        "type": "object",
+        "required": ["package_ref", "mapping", "site_id"],
+        "properties": {
+          "package_ref": { "type": "string" },
+          "mapping": { "type": "object", "description": "column->role mapping JSON per package-mapping.md field table" },
+          "site_id": { "type": "string" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["plan_token", "expires_at", "impact", "warnings"],
+        "properties": {
+          "plan_token": { "type": "string" },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "impact": {
+            "type": "object",
+            "properties": {
+              "points_created": { "type": "integer" },
+              "points_updated": { "type": "integer" },
+              "rows": { "type": "integer" }
+            }
+          },
+          "warnings": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    {
+      "name": "package_import_execute",
+      "role": "package-mapping",
+      "class": "write",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "rest_alignment": "POST /api/csv/import/package",
+      "input_schema": {
+        "type": "object",
+        "required": ["plan_token", "confirm", "idempotency_key"],
+        "properties": {
+          "plan_token": { "type": "string" },
+          "confirm": { "type": "boolean", "const": true },
+          "idempotency_key": { "type": "string" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["import_job_id", "mapping_revision_id", "member_results"],
+        "properties": {
+          "import_job_id": { "type": "string" },
+          "mapping_revision_id": { "type": "string" },
+          "member_results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "member": { "type": "string" },
+                "rows_imported": { "type": "integer" },
+                "status": { "type": "string", "enum": ["ok", "failed", "skipped"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "training_slice_export",
+      "role": "surrogate-train",
+      "class": "write",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "input_schema": {
+        "type": "object",
+        "required": ["job_id", "twin_version_id"],
+        "properties": {
+          "job_id": { "type": "string" },
+          "twin_version_id": { "type": "string" },
+          "date_range": {
+            "type": "array",
+            "items": { "type": "string", "format": "date" },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "targets": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["export_ref", "sha256", "members"],
+        "properties": {
+          "export_ref": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "members": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    {
+      "name": "farm_qc_inspect",
+      "role": "surrogate-train",
+      "class": "read",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "input_schema": {
+        "type": "object",
+        "required": ["parquet_ref"],
+        "properties": {
+          "parquet_ref": { "type": "string", "description": "simulations/{farm_run_id}/dm_hourly_rows.parquet" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["schema_ok", "row_count", "day_groups", "non_null_rates"],
+        "properties": {
+          "schema_ok": { "type": "boolean" },
+          "expected_schema": { "type": "string", "const": "vibe21.dm_hourly_row.v2" },
+          "row_count": { "type": "integer" },
+          "day_groups": { "type": "integer" },
+          "non_null_rates": { "type": "object", "additionalProperties": { "type": "number" } },
+          "failures": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    {
+      "name": "master_build_advise",
+      "role": "surrogate-train",
+      "class": "read",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "input_schema": {
+        "type": "object",
+        "required": ["job_root"],
+        "properties": {
+          "job_root": { "type": "string" },
+          "stage": {
+            "type": "string",
+            "enum": ["calibrate", "farm", "qc", "features", "train", "map", "unity", "bundle"]
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["stages"],
+        "properties": {
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "stage": { "type": "string" },
+                "ready": { "type": "boolean" },
+                "missing_artifacts": { "type": "array", "items": { "type": "string" } },
+                "offline_command": { "type": "string", "description": "Exact scripts/vibe21_master_build.sh invocation to run offline" }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "model_release_validate",
+      "role": "surrogate-train",
+      "class": "read",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "input_schema": {
+        "type": "object",
+        "required": ["release_ref"],
+        "properties": {
+          "release_ref": { "type": "string", "description": "model_release.zip upload ID or path" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["valid", "members", "hashes_match", "leaderboard_present", "card_status", "conformance"],
+        "properties": {
+          "valid": { "type": "boolean" },
+          "members": { "type": "array", "items": { "type": "string" } },
+          "required_members": {
+            "type": "array",
+            "items": { "type": "string" },
+            "const": ["model.(onnx|trees.json)", "model-release.json", "feature_spec.json", "target_spec.json", "conformance.jsonl"]
+          },
+          "hashes_match": { "type": "boolean" },
+          "leaderboard_present": { "type": "boolean" },
+          "card_status": { "type": "string", "enum": ["CANDIDATE", "VALIDATED"] },
+          "forbidden_content": { "type": "array", "items": { "type": "string" }, "description": "e.g. joblib/pickle members — must be empty" },
+          "conformance": {
+            "type": "object",
+            "properties": {
+              "cases": { "type": "integer" },
+              "within_tolerance": { "type": "integer" }
+            }
+          },
+          "failures": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    {
+      "name": "unity_zip_validate",
+      "role": "unity-webgl-build",
+      "class": "read",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "input_schema": {
+        "type": "object",
+        "required": ["zip_ref"],
+        "properties": {
+          "zip_ref": { "type": "string" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["valid", "members", "threat_checks"],
+        "properties": {
+          "valid": { "type": "boolean" },
+          "members": { "type": "array", "items": { "type": "string" } },
+          "required_present": {
+            "type": "object",
+            "properties": {
+              "index_html": { "type": "boolean" },
+              "build_dir": { "type": "boolean" },
+              "manifest": { "type": "boolean" }
+            }
+          },
+          "threat_checks": {
+            "type": "object",
+            "properties": {
+              "zip_slip": { "type": "string", "enum": ["pass", "fail"] },
+              "zip_bomb": { "type": "string", "enum": ["pass", "fail"] },
+              "size_cap": { "type": "string", "enum": ["pass", "fail"] },
+              "secret_scan": { "type": "string", "enum": ["pass", "fail"] }
+            }
+          },
+          "compression_mode": { "type": "string", "enum": ["none", "gzip", "brotli"] },
+          "failures": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    {
+      "name": "unity_zip_hashes",
+      "role": "unity-webgl-build",
+      "class": "read",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "input_schema": {
+        "type": "object",
+        "required": ["zip_ref"],
+        "properties": {
+          "zip_ref": { "type": "string" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["member_hashes", "manifest_diff"],
+        "properties": {
+          "member_hashes": {
+            "type": "object",
+            "additionalProperties": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          },
+          "total_uncompressed_bytes": { "type": "integer" },
+          "manifest_diff": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "member": { "type": "string" },
+                "manifest_sha256": { "type": "string" },
+                "computed_sha256": { "type": "string" }
+              }
+            },
+            "description": "Empty array means all hashes match"
+          }
+        }
+      }
+    },
+    {
+      "name": "unity_build_import_execute",
+      "role": "unity-webgl-build",
+      "class": "write",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "rest_alignment": "planned /twins/{twin}/builds/{build}/",
+      "input_schema": {
+        "type": "object",
+        "required": ["plan_token", "confirm", "idempotency_key"],
+        "properties": {
+          "plan_token": { "type": "string" },
+          "confirm": { "type": "boolean", "const": true },
+          "idempotency_key": { "type": "string" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["unity_build_id", "served_base_path"],
+        "properties": {
+          "unity_build_id": { "type": "string" },
+          "served_base_path": { "type": "string", "examples": ["/twins/b100/builds/ub-01/"] },
+          "active": { "type": "boolean", "const": false, "description": "Import never activates" }
+        }
+      }
+    },
+    {
+      "name": "unity_index_smoke",
+      "role": "unity-webgl-build",
+      "class": "read",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "input_schema": {
+        "type": "object",
+        "required": ["twin_id", "build_id"],
+        "properties": {
+          "twin_id": { "type": "string" },
+          "build_id": { "type": "string" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["index_status", "loader_files"],
+        "properties": {
+          "index_status": { "type": "integer" },
+          "loader_files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string" },
+                "status": { "type": "integer" },
+                "content_type": { "type": "string" },
+                "mime_ok": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "runtime_bundle_activate_plan",
+      "role": "operator-activate",
+      "class": "plan",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "input_schema": {
+        "type": "object",
+        "required": ["job_id", "bundle_ref"],
+        "properties": {
+          "job_id": { "type": "string" },
+          "bundle_ref": { "type": "string", "description": "runtime_bundle.json artifact reference" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["plan_token", "expires_at", "digest_diff", "warnings"],
+        "properties": {
+          "plan_token": { "type": "string" },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "digest_diff": {
+            "type": "object",
+            "properties": {
+              "twin_version": { "type": "object", "properties": { "current": { "type": "string" }, "proposed": { "type": "string" } } },
+              "model_release": { "type": "object", "properties": { "current": { "type": "string" }, "proposed": { "type": "string" } } },
+              "unity_build": { "type": "object", "properties": { "current": { "type": "string" }, "proposed": { "type": "string" } } },
+              "mapping_revision": { "type": "object", "properties": { "current": { "type": "string" }, "proposed": { "type": "string" } } }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Includes model card status honesty, e.g. 'model_release card status=CANDIDATE'"
+          }
+        }
+      }
+    },
+    {
+      "name": "runtime_bundle_activate_execute",
+      "role": "operator-activate",
+      "class": "write",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "input_schema": {
+        "type": "object",
+        "required": ["plan_token", "confirm", "idempotency_key"],
+        "properties": {
+          "plan_token": { "type": "string" },
+          "confirm": { "type": "boolean", "const": true },
+          "idempotency_key": { "type": "string" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["active_bundle_id", "pinned_digests"],
+        "properties": {
+          "active_bundle_id": { "type": "string" },
+          "pinned_digests": {
+            "type": "object",
+            "properties": {
+              "twin_version": { "type": "string" },
+              "model_release": { "type": "string" },
+              "unity_build": { "type": "string" },
+              "mapping_revision": { "type": "string" }
+            }
+          },
+          "previous_bundle_id": { "type": "string", "description": "Known-good revoke target" }
+        }
+      }
+    },
+    {
+      "name": "runtime_health_get",
+      "role": "operator-activate",
+      "class": "read",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "rest_alignment": "GET /api/v1/health",
+      "input_schema": { "type": "object", "properties": {} },
+      "output_schema": {
+        "type": "object",
+        "required": ["status", "active_bundle"],
+        "properties": {
+          "status": { "type": "string", "enum": ["ok", "degraded", "down"] },
+          "active_bundle": {
+            "type": "object",
+            "properties": {
+              "bundle_id": { "type": "string" },
+              "model_release": { "type": "string" },
+              "unity_build": { "type": "string" }
+            }
+          },
+          "capabilities": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    {
+      "name": "predict_golden_smoke",
+      "role": "operator-activate",
+      "class": "read",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "rest_alignment": "POST /api/v1/predict/demand_hourly",
+      "input_schema": {
+        "type": "object",
+        "required": ["fixture_set_id"],
+        "properties": {
+          "fixture_set_id": { "type": "string", "description": "Golden cases sourced from active release conformance.jsonl" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["cases", "passed", "failed"],
+        "properties": {
+          "cases": { "type": "integer" },
+          "passed": { "type": "integer" },
+          "failed": { "type": "integer" },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "case_id": { "type": "string" },
+                "max_abs_error": { "type": "number" },
+                "tolerance": { "type": "number" },
+                "verdict": { "type": "string", "enum": ["pass", "fail"] }
+              }
+            }
+          },
+          "model_release": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "spa_twin_check",
+      "role": "operator-activate",
+      "class": "read",
+      "version": "0.1.0",
+      "status": "SCAFFOLD",
+      "bas_write": false,
+      "input_schema": {
+        "type": "object",
+        "required": ["twin_id"],
+        "properties": {
+          "twin_id": { "type": "string" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["spa_reachable", "unity_served", "active_unity_build_id"],
+        "properties": {
+          "spa_reachable": { "type": "boolean" },
+          "unity_served": { "type": "boolean" },
+          "active_unity_build_id": { "type": "string" },
+          "loader_statuses": { "type": "object", "additionalProperties": { "type": "integer" } }
+        }
+      }
+    }
+  ]
+}
