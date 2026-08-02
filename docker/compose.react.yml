@@ -53,8 +53,12 @@ services:
     build:
       context: ../frontend/web
       dockerfile: Dockerfile
+      args:
+        OPENFDD_GIT_SHA: ${OPENFDD_GIT_SHA:-unknown}
+        OPENFDD_WEB_VERSION: ${OPENFDD_WEB_VERSION:-0.1.0}
     ports:
-      - "${OPENFDD_WEB_BIND:-0.0.0.0}:3000:80"
+      # nginx-unprivileged listens on 8080 inside the image (P1-M1-A).
+      - "${OPENFDD_WEB_BIND:-0.0.0.0}:3000:8080"
     depends_on:
       - central
     restart: unless-stopped

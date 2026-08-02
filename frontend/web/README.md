@@ -1,75 +1,51 @@
-# Open-FDD React Web UI
+# Open-FDD React Web UI (`openfdd-web`)
 
-Minimal Vite + React + TypeScript SPA for the Open-FDD Phase 1 React parity program (P1-M2-02).
+Supported **product** UI after Phase 2 exit / Vibe 21 P1 recovery. Built as a
+non-root Nginx image that proxies same-origin `/api` to central.
+
+Streamlit (`openfdd-ui`) is **archived oracle only** — not this image.
 
 ## Development
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-Vite dev server runs on port 5173 by default. Proxy `/api` to central in `vite.config.ts` when needed, or run central on the same origin.
+Vite defaults to `:5173`. Proxy `/api` to central via `vite.config.ts` or set
+`VITE_API_BASE`.
+
+## Production image (P1-M1)
+
+```bash
+docker build \
+  --build-arg OPENFDD_GIT_SHA="$(git rev-parse HEAD)" \
+  --build-arg OPENFDD_WEB_VERSION=0.1.0 \
+  -t openfdd-web:local \
+  -f frontend/web/Dockerfile \
+  frontend/web
+
+OPENFDD_WEB_IMAGE=openfdd-web:local ./scripts/release/smoke_react_web_image.sh
+```
+
+Compose recipe `react` / `react-ot` maps host `:3000` → container `:8080`
+(nginx-unprivileged). Exposes `/version.json` (no-cache) and immutable `/assets/*`.
+
+GHCR publishes `ghcr.io/bbartling/openfdd-web:sha-<7>` and `:nightly` from the
+stack workflow.
 
 ## Environment
 
 | Variable | Purpose |
 | --- | --- |
-| `VITE_API_BASE` | Optional API origin prefix. Default `''` (same-origin). Set to e.g. `http://localhost:8080` when the API runs on a different host during local dev. |
-| `OPENFDD_REACT_UI` | **Server-side** (central). Set to `1` to advertise `capabilities.react_ui: true` on `GET /api/capabilities`. Default off — Streamlit remains the default Phase 1 UI. |
-
-### Same-origin `/api`
-
-In production, central (or compose) serves the built static assets and routes `/api/*` to the Rust backend on the same host. The React client uses relative paths (`/api/capabilities`, `/api/jobs`, …) so no CORS configuration is required when `VITE_API_BASE` is unset.
-
-When developing with Vite on `:5173` and central on `:8080`, either:
-
-- set `VITE_API_BASE=http://localhost:8080`, or
-- add a Vite dev proxy for `/api`.
+| `VITE_API_BASE` | Optional API origin for Vite-only dev. Default same-origin. |
+| `OPENFDD_REACT_UI` | Central capability flag (compose sets `1` for react recipes). |
 
 ## Scripts
 
-| Script | Description |
+| Script | Purpose |
 | --- | --- |
-| `npm run dev` | Vite dev server |
-| `npm run build` | Typecheck + production bundle → `dist/` |
-| `npm run preview` | Serve production build locally |
-| `npm run test` | Vitest unit tests |
+| `npm run build` | `tsc -b && vite build` |
+| `npm run test` | Vitest |
 | `npm run typecheck` | `tsc -b --noEmit` |
-| `npm run lint` | Placeholder (no ESLint config yet) |
-
-## Docker
-
-Build a static nginx image:
-
-```bash
-docker build -t openfdd-web .
-docker run --rm -p 8081:80 openfdd-web
-```
-
-The container serves SPA assets only. Wire `/api` through central or a reverse proxy in compose.
-
-## Contract
-
-API types in `src/api/contract.ts` mirror `openfdd.api.contract.v1` (see `services/central/src/contract.rs`). Error responses use the envelope:
-
-```json
-{
-  "error": {
-    "code": "...",
-    "message": "...",
-    "retryable": false,
-    "request_id": "..."
-  }
-}
-```
-
-The fetch client in `src/api/client.ts` sends `x-request-id` on every request and parses this envelope on failure.
-
-## Copy into open-fdd
-
-This scaffold is intended to land at `frontend/web/` in the open-fdd repository:
-
-```bash
-rsync -av --exclude node_modules /tmp/openfdd-web/ ~/open-fdd/frontend/web/
-```
+| `npm run lint` | Placeholder until P1-M2-A ESLint |

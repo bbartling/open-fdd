@@ -68,10 +68,12 @@ openfdd_stack_compose_args() {
 openfdd_stack_images() {
   local tag="${OPENFDD_IMAGE_TAG:-nightly}"
   echo "ghcr.io/bbartling/openfdd-central:${tag}"
-  echo "ghcr.io/bbartling/openfdd-ui:${tag}"
+  echo "ghcr.io/bbartling/openfdd-web:${tag}"
   echo "ghcr.io/bbartling/openfdd-fieldbus:${tag}"
   echo "ghcr.io/bbartling/openfdd-mqtt:${tag}"
   echo "ghcr.io/bbartling/openfdd-mcp:${tag}"
+  # Archive/oracle only — not required for react / react-ot product topology.
+  echo "ghcr.io/bbartling/openfdd-ui:${tag}"
 }
 
 openfdd_stack_export_image_env() {

@@ -185,5 +185,7 @@ tracks the recovery program evidence gates.
 - [x] P1-M0-A — `capabilities.yaml` + `scripts/validate_capabilities_ledger.py` + CI
 - [x] P1-M0-B — openfdd_agent_spec / AGENTS authority reconciliation
 - [x] Nightly honesty gates 14–15 (ledger + product-truth greps)
-- [ ] P1-G0 soak — human/agent nightly retest after merge (STOP before P1-M1)
-- [ ] P1-M1+ — React image topology / GHCR `openfdd-web` publish (not started)
+- [x] P1-G0 soak — `reports/nightly-ot-bench_20260802T141626Z/` (14/15 PASS; OT LAN honest FAIL)
+- [x] P1-M1-A/B — hardened `openfdd-web` Dockerfile + GHCR publish in stack workflow
+- [x] P1-M1-C — `scripts/release/smoke_react_web_image.sh` (no-Python inspect)
+- [ ] P1-M2+ — ESLint/Playwright and product slices (not started)

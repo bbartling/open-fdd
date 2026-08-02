@@ -1,5 +1,11 @@
 # Session log — React / Rust modernization
 
+## 2026-08-02 — P1-G0 soak + P1-M1 openfdd-web GHCR
+
+- P1-G0 soak: `reports/nightly-ot-bench_20260802T141626Z/` — gates **14/15 PASS**; suite FAIL on OT/SPA/MCP (honest).
+- P1-M1: hardened `frontend/web` (npm ci, nginx-unprivileged :8080, CSP/cache headers, version.json); GHCR publishes `openfdd-web`; Streamlit UI tagged archive-oracle.
+- Smoke: `scripts/release/smoke_react_web_image.sh`.
+
 ## 2026-08-02 — P1-M0 Vibe 21 recovery foundation
 
 - Landed `tools/open-fdd-vibe21-production/` + `capabilities.yaml` + validator CI.
