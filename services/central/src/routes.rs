@@ -36,7 +36,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/auth/login", post(auth_login))
         // Shell strip + building summary are intentionally public (UI before login).
         .route("/api/health/stack", get(health_stack))
-        .route("/api/building/snapshot", get(building_snapshot));
+        .route("/api/building/snapshot", get(building_snapshot))
+        .route("/api/dashboard/summary", get(dashboard_summary));
 
     let csv = Router::new()
         .route("/api/csv/import/preview", post(csv_preview))
@@ -795,11 +796,31 @@ pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string);
+    // Hunt / nightly bench may nest rule_ids under params; hoist so
+    // run_registry's top-level filter applies (else all rules → timeout → {}).
+    let rule_ids = body.rule_ids.clone().or_else(|| {
+        body.params.get("rule_ids").and_then(|v| {
+            v.as_array().map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect::<Vec<_>>()
+            })
+        })
+    });
+    let mode = body
+        .params
+        .get("mode")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .filter(|_| body.rule_ids.is_none())
+        .map(str::to_string)
+        .unwrap_or_else(|| body.mode.clone());
     let payload = json!({
         "confirmation_seconds": body.confirmation_seconds,
         "params": body.params,
-        "mode": body.mode,
-        "rule_ids": body.rule_ids,
+        "mode": mode,
+        "rule_ids": rule_ids,
         "equipment_id": body.equipment_id,
         "building_id": building_id,
     });
@@ -1128,6 +1149,10 @@ pub async fn health_stack() -> Json<Value> {
 
 pub async fn building_snapshot() -> Json<Value> {
     Json(open_fdd_edge_prototype::dashboard::building_snapshot())
+}
+
+pub async fn dashboard_summary() -> Json<Value> {
+    Json(open_fdd_edge_prototype::dashboard::summary())
 }
 
 pub async fn faults_status() -> Json<Value> {

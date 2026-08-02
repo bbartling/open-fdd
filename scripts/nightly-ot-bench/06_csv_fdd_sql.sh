@@ -140,7 +140,7 @@ echo "$CACHE" >"$ART/fdd_cache_status.json"
 jq_ok "parquet cache exists with files" "$CACHE" '.parquet_exists==true and (.parquet_file_count|tonumber) > 0'
 
 RUN="$(capi -X POST "$CENTRAL_BASE/api/fdd/run" \
-  -d '{"params":{"mode":"registry","rule_ids":["FC1"]}}' || echo '{}')"
+  -d '{"mode":"registry","rule_ids":["FC1"],"params":{}}' || echo '{}')"
 echo "$RUN" >"$ART/fdd_run_fc1.json"
 jq_ok "fdd/run FC1 ok" "$RUN" '.ok==true'
 # Contract: FC1 itself executed with rows (fan_cmd survived parquet ingest — #525).
@@ -199,7 +199,7 @@ fi
 
 # #531/#532: FC13 alias must resolve to FC13-SAT-HIGH
 RUN13="$(capi -X POST "$CENTRAL_BASE/api/fdd/run" \
-  -d '{"params":{"mode":"registry","rule_ids":["FC13"]}}' || echo '{}')"
+  -d '{"mode":"registry","rule_ids":["FC13"],"params":{}}' || echo '{}')"
 echo "$RUN13" >"$ART/fdd_run_fc13.json"
 if jq -e '(.rules_run // 0) >= 1 and (.error // "" | test("no matching rules") | not)' <<<"$RUN13" >/dev/null 2>&1; then
   ok "FC13 alias resolves and runs (#532 alias verified)"

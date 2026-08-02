@@ -207,12 +207,19 @@ MCP_RESULTS="$(mcp_text 6)"
 if [[ -z "$MCP_RULES" || -z "$MCP_EQUIP" || -z "$MCP_RESULTS" ]]; then
   bad "MCP FDD payloads empty (auth?). rules=$([[ -n $MCP_RULES ]] && echo ok || echo missing) equip=$([[ -n $MCP_EQUIP ]] && echo ok || echo missing) results=$([[ -n $MCP_RESULTS ]] && echo ok || echo missing)"
 else
-  eq_rules="$(jq -ne --argjson d "$DIRECT_RULES" --argjson m "$(jq -c . <<<"$MCP_RULES")" \
-    '($d.count==$m.count) and (($d.rules|map(.rule_id))==($m.rules|map(.rule_id)))')"
-  eq_equip="$(jq -ne --argjson d "$DIRECT_EQUIP" --argjson m "$(jq -c . <<<"$MCP_EQUIP")" \
-    '($d.equipment==$m.equipment) or (($d.count==$m.count) and ($d.equipment|length)==($m.equipment|length))')"
-  eq_res="$(jq -ne --argjson d "$DIRECT_RESULTS" --argjson m "$(jq -c . <<<"$MCP_RESULTS")" \
-    '$d.results==$m.results')"
+  # Compare via files — large FDD payloads exceed jq --argjson ARG_MAX.
+  printf '%s' "$DIRECT_RULES" >"$ART/direct_rules.json"
+  printf '%s' "$MCP_RULES" >"$ART/mcp_rules.json"
+  printf '%s' "$DIRECT_EQUIP" >"$ART/direct_equip.json"
+  printf '%s' "$MCP_EQUIP" >"$ART/mcp_equip.json"
+  printf '%s' "$DIRECT_RESULTS" >"$ART/direct_results.json"
+  printf '%s' "$MCP_RESULTS" >"$ART/mcp_results.json"
+  eq_rules="$(jq -ne --slurpfile d "$ART/direct_rules.json" --slurpfile m "$ART/mcp_rules.json" \
+    '($d[0].count==$m[0].count) and (($d[0].rules|map(.rule_id))==($m[0].rules|map(.rule_id)))')"
+  eq_equip="$(jq -ne --slurpfile d "$ART/direct_equip.json" --slurpfile m "$ART/mcp_equip.json" \
+    '($d[0].equipment==$m[0].equipment) or (($d[0].count==$m[0].count) and ($d[0].equipment|length)==($m[0].equipment|length))')"
+  eq_res="$(jq -ne --slurpfile d "$ART/direct_results.json" --slurpfile m "$ART/mcp_results.json" \
+    '$d[0].results==$m[0].results')"
   [[ "$eq_rules" == "true" ]] && ok "MCP registry == central /api/fdd/rules" || bad "MCP registry ≠ central"
   [[ "$eq_equip" == "true" ]] && ok "MCP equipment == central /api/fdd/equipment" || bad "MCP equipment ≠ central"
   [[ "$eq_res" == "true" ]] && ok "MCP results == central /api/fdd/results" || bad "MCP results ≠ central"
