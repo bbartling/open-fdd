@@ -12,6 +12,19 @@ Wire **EnergyPlus-MCP** (or `wattlab energyplus-ensure` / `mcp-exec`) separately
 
 **MCP tools:** `openfdd_agent_context_pointers` — companion doc paths + dual-site checklist (read-only).
 
+## Vibe21 / DM twin — role packs (not Jupyter-in-SPA)
+
+Community glue is **four MCP role contexts** mapped to portable ZIP lanes — never stuff notebooks into the SPA or load joblib online:
+
+| Role | Spec | Lane |
+|------|------|------|
+| Package / mapping | [`docs/mcp-agents/roles/package-mapping.md`](../docs/mcp-agents/roles/package-mapping.md) | Building package ZIP |
+| Surrogate train | [`docs/mcp-agents/roles/surrogate-train.md`](../docs/mcp-agents/roles/surrogate-train.md) | Training export → offline master_build → `model_release.zip` |
+| Unity WebGL | [`docs/mcp-agents/roles/unity-webgl-build.md`](../docs/mcp-agents/roles/unity-webgl-build.md) | `unity_webgl_build.zip` |
+| Operator | [`docs/mcp-agents/roles/operator-activate.md`](../docs/mcp-agents/roles/operator-activate.md) | Activate bundle + predict smoke; **no BAS writes** |
+
+Index: [`docs/mcp-agents/roles/README.md`](../docs/mcp-agents/roles/README.md). Catalog: [`tool-catalog.v1.json`](../docs/mcp-agents/roles/tool-catalog.v1.json) (SCAFFOLD until wired in `mcp/`). ZIP SoT: [`docs/migration/vibe21/ROLE_IMPORT_LANES.md`](../docs/migration/vibe21/ROLE_IMPORT_LANES.md).
+
 ## Login / credentials (agents)
 
 MCP runs on the **host** and resolves passwords locally — never from bcrypt hashes in `auth.env.local`.

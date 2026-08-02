@@ -9,6 +9,7 @@ import { ReportsPage } from "./pages/ReportsPage";
 import { MeteringPage } from "./pages/MeteringPage";
 import { WattLabPage } from "./pages/WattLabPage";
 import { AuthPage } from "./pages/AuthPage";
+import { TwinPage } from "./pages/TwinPage";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/metering" element={<MeteringPage />} />
         <Route path="/wattlab" element={<WattLabPage />} />
+        <Route path="/twin" element={<TwinPage />} />
       </Routes>
     </BrowserRouter>
   );

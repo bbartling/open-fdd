@@ -124,3 +124,21 @@ The public agent docs are generated from or verified against:
 Stale examples fail CI. Each workflow has a copy-paste read-only quickstart and
 a separate mutation/approval example.
 
+## Role packs (Vibe21 community glue)
+
+Do **not** embed Jupyter in the SPA. Parties use portable ZIP lanes plus
+role-scoped MCP contexts:
+
+| Role | Spec |
+|------|------|
+| package-mapping | `docs/mcp-agents/roles/package-mapping.md` |
+| surrogate-train | `docs/mcp-agents/roles/surrogate-train.md` |
+| unity-webgl-build | `docs/mcp-agents/roles/unity-webgl-build.md` |
+| operator-activate | `docs/mcp-agents/roles/operator-activate.md` |
+
+ZIP SoT: `docs/migration/vibe21/ROLE_IMPORT_LANES.md`. Tool catalog:
+`docs/mcp-agents/roles/tool-catalog.v1.json`. Model supply is
+`model_release.zip` only — never online `joblib.load`. All role tools declare
+`bas_write: false` while `BAS_WRITE_AUTHORITY=no`.
+
+

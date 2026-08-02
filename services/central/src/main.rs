@@ -11,6 +11,7 @@ mod models;
 mod openapi;
 mod routes;
 mod state;
+mod vibe21;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -42,6 +43,7 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .merge(routes::router(Arc::clone(&state)))
         .merge(cutover::router())
+        .merge(vibe21::router())
         .merge(openapi::router())
         .layer(middleware::from_fn(contract::request_id_middleware))
         .layer(TraceLayer::new_for_http());

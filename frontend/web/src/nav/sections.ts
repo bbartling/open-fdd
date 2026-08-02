@@ -22,4 +22,5 @@ export const SIDEBAR_NAV = [
   { to: "/reports", label: "Reports", short: "P", testId: "nav-reports" },
   { to: "/metering", label: "Metering", short: "E", testId: "nav-metering" },
   { to: "/wattlab", label: "WattLab", short: "W", testId: "nav-wattlab" },
+  { to: "/twin", label: "Twin", short: "T", testId: "nav-twin" },
 ] as const;

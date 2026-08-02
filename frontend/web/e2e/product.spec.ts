@@ -73,6 +73,7 @@ test.describe("react product workflows (real stack)", () => {
       { path: "/reports", testId: "reports-page" },
       { path: "/metering", testId: "metering-page" },
       { path: "/wattlab", testId: "wattlab-page" },
+      { path: "/twin", testId: "twin-page" },
     ];
     for (const { path, testId } of routes) {
       await page.goto(path);
