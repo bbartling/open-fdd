@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { HomePage } from "./pages/HomePage";
 import { JobsPage } from "./pages/JobsPage";
 import { UploadPage } from "./pages/UploadPage";
@@ -17,6 +17,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/auth" element={<AuthPage />} />
+        {/* Canonical auth is /auth; /login is the common remote bookmark (was blank). */}
+        <Route path="/login" element={<Navigate to="/auth" replace />} />
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/upload" element={<UploadPage />} />
         <Route path="/mapping" element={<MappingPage />} />

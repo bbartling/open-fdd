@@ -35,4 +35,24 @@ PY
   fi
 fi
 
+# /login must not be a blank SPA — follow redirects to /auth.
+login_hdr="$tmp_dir/login.hdr"
+login_body="$tmp_dir/login.body"
+code_login="$(curl -sS -D "$login_hdr" -o "$login_body" -w '%{http_code}' --max-time 15 "$BASE/login" || echo 000)"
+if [[ "$code_login" == "301" || "$code_login" == "302" ]]; then
+  loc="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {print $2}' "$login_hdr" | tr -d '\r' | tail -1)"
+  echo "OK GET /login → $code_login Location=$loc"
+  if [[ "$loc" != *"/auth"* ]]; then
+    echo "FAIL /login redirect target not /auth: $loc" >&2
+    fail=1
+  fi
+elif [[ "$code_login" == "200" ]]; then
+  # SPA Navigate path: HTML ok but must not be an empty product tree when followed in browser.
+  # Curl-level: ensure we did not get a soft 404; Playwright gate covers DOM.
+  echo "OK GET /login → 200 (SPA; Playwright asserts /auth markers)"
+else
+  echo "FAIL GET /login → HTTP $code_login (expected 302→/auth or 200)" >&2
+  fail=1
+fi
+
 exit "$fail"

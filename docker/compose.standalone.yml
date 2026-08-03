@@ -33,7 +33,8 @@ services:
       OPENFDD_WORKSPACE: /workspace
       OPENFDD_PARQUET_ROOT: /workspace/.cache/parquet
       # Remote UI login (optional). When JWT secret is set, also set OPENFDD_ADMIN_PASSWORD
-      # and sign in as admin/operator/viewer with that password from http://<host>:3000/login
+      # and sign in as admin/operator/viewer with that password from http://<host>/auth
+# (Caddy :80) or http://<host>:3000/auth — /login redirects to /auth.
       OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}
       OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
     ports:

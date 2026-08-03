@@ -57,6 +57,19 @@ test.describe("react product workflows (real stack)", () => {
     await expect(page.getByTestId("auth-notice")).toContainText(/Logged in/i);
   });
 
+  test("/login bookmark is not a blank page (redirects to /auth)", async ({ page }) => {
+    // Regression: SPA had no /login route → empty #root for remote bookmarks.
+    const response = await page.goto("/login", { waitUntil: "networkidle" });
+    // nginx may 302 before SPA Navigate; either path must land on auth UI.
+    const status = response?.status() ?? 0;
+    expect([200, 302, 301]).toContain(status);
+    await expect(page).toHaveURL(/\/auth\/?$/);
+    await expect(page.getByTestId("auth-page")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("auth-username")).toBeVisible();
+    await expect(page.getByTestId("auth-login")).toBeVisible();
+    const rootHtml = await page.locator("#root").innerHTML();
+    expect(rootHtml.length, "blank #root after /login").toBeGreaterThan(0);
+  });
   test("jobs page shell and create section", async ({ page }) => {
     await page.goto("/jobs");
     await expect(page.getByTestId("jobs-page")).toBeVisible({ timeout: 15_000 });

@@ -33,11 +33,12 @@ Recipes:
   react-ot    mqtt + central + React web + fieldbus (OT bench)
 
 Options:
-  --caddy     Also start Caddy on :80 → UI (/api* → central)
+  --caddy     Start Caddy on :80 → UI (/api* → central). Default ON for react/react-ot;
+              use OPENFDD_CADDY=0 to disable. Opt-in for Streamlit recipes.
   --wattlab   Mount WattLab /data + vibe20 PYTHONPATH (compose.wattlab.yml)
 
 Env: OPENFDD_IMAGE_TAG, OPENFDD_*_IMAGE, OPENFDD_JWT_SECRET, OPENFDD_ADMIN_PASSWORD
-     OPENFDD_CADDY=1 (same as --caddy), OPENFDD_CENTRAL_BIND=127.0.0.1 (LAN via Caddy)
+     OPENFDD_CADDY=1|0, OPENFDD_CENTRAL_BIND=127.0.0.1 (LAN via Caddy)
      OPENFDD_WATTLAB=1 (same as --wattlab), OPENFDD_WATTLAB_HOST_WORKSPACE, OPENFDD_WATTLAB_HOST_SRC
 EOF
       exit 0
@@ -47,6 +48,13 @@ EOF
     *) EXTRA+=("$1"); shift ;;
   esac
 done
+
+# React product recipes: Caddy :80 is the default LAN ingress (blank-/login class bugs).
+if [[ "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
+  if [[ -z "${OPENFDD_CADDY+x}" ]]; then
+    export OPENFDD_CADDY=1
+  fi
+fi
 
 mapfile -t ARGS < <(openfdd_stack_compose_args "$RECIPE")
 [[ ${#ARGS[@]} -ge 2 ]] || { echo "ERROR: no compose files for recipe=$RECIPE" >&2; exit 1; }
@@ -60,6 +68,8 @@ fi
 if [[ "${OPENFDD_CADDY:-0}" == "1" || "${OPENFDD_CADDY:-}" == "true" ]]; then
   if [[ "$RECIPE" == "edge" ]]; then
     echo "WARN: --caddy ignored for edge recipe (no UI)" >&2
+  elif [[ "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
+    ARGS+=(-f "$ROOT/docker/compose.caddy.react.yml")
   else
     ARGS+=(-f "$ROOT/docker/compose.caddy.yml")
   fi
@@ -94,7 +104,7 @@ if [[ "$RECIPE" != "edge" ]]; then
     echo "Fieldbus: http://127.0.0.1:8081"
   fi
   if [[ "${OPENFDD_CADDY:-0}" == "1" || "${OPENFDD_CADDY:-}" == "true" ]]; then
-    echo "Caddy: http://<host>/  (UI)  http://<host>/api/health  (central)"
+    echo "Caddy: http://<host>/  (UI)  http://<host>/auth  (login)  http://<host>/api/health"
   fi
   if [[ "${OPENFDD_WATTLAB:-0}" == "1" || "${OPENFDD_WATTLAB:-}" == "true" ]]; then
     echo "WattLab: WATTLAB_STUDIO_WORKSPACE=/data (host ${OPENFDD_WATTLAB_HOST_WORKSPACE:-~/wattlab_workspace})"
