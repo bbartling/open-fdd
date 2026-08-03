@@ -157,6 +157,8 @@ jobs:
           bash scripts/test_openfdd_stack_image_tag.sh
           test -f docker/compose.wattlab.yml
           test -f docker/compose.caddy.yml
+          test -f docker/compose.caddy.react.yml
+          test -f docker/caddy/Caddyfile.react.http
           test -f docs/mcp-agents/companion-wattlab-energyplus.md
           test -f docs/mcp-agents/dual-site-mcp-it.md
 

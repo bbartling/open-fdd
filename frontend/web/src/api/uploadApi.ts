@@ -1,10 +1,7 @@
 import { ApiClientError, parseErrorEnvelope } from "./client";
+import { newRequestId } from "./requestId";
 
 const REQUEST_ID_HEADER = "x-request-id";
-
-function newRequestId(): string {
-  return crypto.randomUUID();
-}
 
 function apiBase(): string {
   const base = import.meta.env.VITE_API_BASE ?? "";

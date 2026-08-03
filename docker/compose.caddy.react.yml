@@ -1,0 +1,30 @@
+# Caddy edge for React recipes (web SPA, not Streamlit ui).
+#
+#   OPENFDD_CADDY=1 ./scripts/openfdd_stack_up.sh react-ot
+#   (enabled by default for react / react-ot unless OPENFDD_CADDY=0)
+
+services:
+  caddy:
+    image: ${OPENFDD_CADDY_IMAGE:-caddy:2.8-alpine}
+    restart: unless-stopped
+    ports:
+      - "${OPENFDD_CADDY_HTTP_BIND:-0.0.0.0}:80:80"
+    volumes:
+      - ${OPENFDD_CADDYFILE:-./caddy/Caddyfile.react.http}:/etc/caddy/Caddyfile:ro
+    environment:
+      OPENFDD_CADDY_UI_UPSTREAM: ${OPENFDD_CADDY_UI_UPSTREAM:-web:8080}
+      OPENFDD_CADDY_API_UPSTREAM: ${OPENFDD_CADDY_API_UPSTREAM:-central:8080}
+    depends_on:
+      - web
+      - central
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /config
+      - /data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE

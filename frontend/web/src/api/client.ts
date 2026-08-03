@@ -1,10 +1,7 @@
 import type { ApiErrorEnvelope } from "./contract";
+import { newRequestId } from "./requestId";
 
 const REQUEST_ID_HEADER = "x-request-id";
-
-function newRequestId(): string {
-  return crypto.randomUUID();
-}
 
 export class ApiClientError extends Error {
   readonly code: string;

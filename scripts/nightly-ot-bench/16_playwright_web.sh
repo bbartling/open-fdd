@@ -29,6 +29,26 @@ if [[ "$spa_code" != "200" && "$spa_code" != "301" && "$spa_code" != "302" ]]; t
 fi
 ok "SPA $UI_BASE → HTTP $spa_code"
 
+# Prefer Caddy :80 when live — matches remote LAN bookmarks (still loopback
+# secure-context; product.spec also stubs missing randomUUID for the LAN case).
+if [[ -z "${OPENFDD_PLAYWRIGHT_BASE_URL:-}" ]]; then
+  caddy_code="$(http_code_retry --max-time 5 "http://127.0.0.1/" || true)"
+  if [[ "$caddy_code" == "200" || "$caddy_code" == "301" || "$caddy_code" == "302" ]]; then
+    export OPENFDD_PLAYWRIGHT_BASE_URL="http://127.0.0.1"
+    ok "Playwright base → Caddy $OPENFDD_PLAYWRIGHT_BASE_URL"
+  fi
+fi
+# Optional real LAN IP (non-secure context) when bench publishes one.
+if [[ -n "${OPENFDD_LAN_BASE:-}" ]]; then
+  lan_code="$(http_code_retry --max-time 5 "$OPENFDD_LAN_BASE/" || true)"
+  if [[ "$lan_code" == "200" || "$lan_code" == "301" || "$lan_code" == "302" ]]; then
+    export OPENFDD_PLAYWRIGHT_BASE_URL="$OPENFDD_LAN_BASE"
+    ok "Playwright base → LAN $OPENFDD_PLAYWRIGHT_BASE_URL (non-secure context)"
+  else
+    skip "OPENFDD_LAN_BASE=$OPENFDD_LAN_BASE unreachable (HTTP $lan_code) — keeping ${OPENFDD_PLAYWRIGHT_BASE_URL:-$UI_BASE}"
+  fi
+fi
+
 WEB="$ROOT/frontend/web"
 if [[ ! -f "$WEB/package.json" ]]; then
   bad "missing $WEB/package.json"
@@ -43,6 +63,24 @@ if [[ -z "${OPENFDD_ADMIN_PASSWORD:-}" && -f "$ROOT/.env" ]]; then
   # shellcheck source=/dev/null
   source "$ROOT/.env"
   set +a
+fi
+if [[ -z "${OPENFDD_ADMIN_PASSWORD:-}" && -f "$ROOT/workspace/bootstrap_credentials.once.txt" ]]; then
+  OPENFDD_ADMIN_PASSWORD="$(
+    awk -F': *' '/^admin:/{print $2; exit}' "$ROOT/workspace/bootstrap_credentials.once.txt" | tr -d '\r'
+  )"
+  export OPENFDD_ADMIN_PASSWORD
+fi
+
+# Curl-level /login redirect when Playwright targets Caddy (:80), not :3000/:8080.
+_pw_base="${OPENFDD_PLAYWRIGHT_BASE_URL%/}"
+if [[ "$_pw_base" != *":3000" && "$_pw_base" != *":8080" ]]; then
+  if OPENFDD_CADDY_BASE="$_pw_base" "$ROOT/scripts/openfdd_caddy_smoke.sh"; then
+    ok "Caddy smoke (incl. /login redirect) via $_pw_base"
+  else
+    bad "Caddy smoke failed (/, /api/health, /login→/auth) via $_pw_base"
+    summary
+    exit 1
+  fi
 fi
 
 # Pin Playwright image to package.json version when possible.
