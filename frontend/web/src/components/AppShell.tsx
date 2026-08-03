@@ -25,7 +25,7 @@ export function AppShell({
       data-testid="app-shell"
       data-sidebar-collapsed={collapsed ? "true" : "false"}
     >
-      <aside className="app-sidebar" aria-label="Primary">
+      <aside className="app-sidebar" aria-label="Sites and controls">
         <div className="app-sidebar__brand-row">
           <div className="app-sidebar__brand">Open-FDD</div>
           <button
@@ -40,27 +40,38 @@ export function AppShell({
             {collapsed ? "»" : "«"}
           </button>
         </div>
-        <div className="app-sidebar__section-label">Workspace</div>
-        <nav
-          id="app-sidebar-nav"
-          className="app-sidebar__nav"
-          aria-label="Main"
-        >
-          {SIDEBAR_NAV.map(({ to, label, short, testId }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === "/"}
-              className={({ isActive }) =>
-                `app-sidebar__link${isActive ? " app-sidebar__link--active" : ""}`
-              }
-              data-testid={testId}
-              title={label}
-            >
-              {collapsed ? short : label}
-            </NavLink>
-          ))}
-        </nav>
+
+        <div className="app-sidebar__sites" data-testid="sidebar-sites">
+          <h2 className="app-sidebar__sites-title">Sites</h2>
+          <p className="app-sidebar__sites-hint">
+            Building data · Cloud-capable · same openfdd_package_v1 zip
+            everywhere.
+          </p>
+        </div>
+
+        <details className="app-sidebar__pages" open={false}>
+          <summary>App pages</summary>
+          <nav
+            id="app-sidebar-nav"
+            className="app-sidebar__nav"
+            aria-label="App pages"
+          >
+            {SIDEBAR_NAV.map(({ to, label, short, testId }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === "/"}
+                className={({ isActive }) =>
+                  `app-sidebar__link${isActive ? " app-sidebar__link--active" : ""}`
+                }
+                data-testid={testId}
+                title={label}
+              >
+                {collapsed ? short : label}
+              </NavLink>
+            ))}
+          </nav>
+        </details>
       </aside>
       <div className="app-main">
         <header className="app-header">

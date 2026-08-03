@@ -15,6 +15,8 @@ describe("AppShell layout parity", () => {
     );
 
     expect(screen.getByText("Open-FDD")).toBeTruthy();
+    expect(screen.getByTestId("sidebar-sites")).toBeTruthy();
+    expect(screen.getByText("Sites")).toBeTruthy();
     expect(screen.getByTestId("page-caption").textContent).toBe("Parity shell");
 
     const tabs = screen.getByTestId("section-tabs");
