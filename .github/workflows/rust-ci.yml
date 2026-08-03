@@ -153,6 +153,8 @@ jobs:
           bash -n scripts/openfdd_stack_up.sh
           bash -n scripts/openfdd_caddy_smoke.sh
           bash -n scripts/release/smoke_standalone_mqtts.sh
+          bash -n scripts/test_openfdd_stack_image_tag.sh
+          bash scripts/test_openfdd_stack_image_tag.sh
           test -f docker/compose.wattlab.yml
           test -f docker/compose.caddy.yml
           test -f docs/mcp-agents/companion-wattlab-energyplus.md
@@ -171,5 +173,7 @@ jobs:
           bash -n scripts/openfdd_caddy_smoke.sh
           bash -n scripts/openfdd_csv_import_sidecar.sh
           bash -n scripts/openfdd_csv_export_sidecar.sh
+          bash -n scripts/test_openfdd_stack_image_tag.sh
+          bash scripts/test_openfdd_stack_image_tag.sh
           test -f docker/compose.wattlab.yml
           test -f docs/mcp-agents/companion-wattlab-energyplus.md

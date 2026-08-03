@@ -8,6 +8,11 @@ export VIBE21_ORACLE="${VIBE21_ORACLE:-/home/ben/py-bacnet-stacks-playground/vib
 export OPENFDD_JOB_ROOT="${OPENFDD_JOB_ROOT:-$ROOT/workspace/vibe21_jobs}"
 JOB_ID="${JOB_ID:-b100-ops11}"
 
+HANDOFF="$ROOT/workspace/bootstrap_credentials.once.txt"
+if [[ -f "$HANDOFF" ]]; then
+  echo "WARN: $HANDOFF still present — delete after saving the admin password (BUG-002 lab hygiene)" >&2
+fi
+
 echo "==> master_build (reuse-champion unless MASTER_BUILD_FORCE=1)"
 if [[ "${MASTER_BUILD_FORCE:-0}" == "1" ]]; then
   ./scripts/vibe21_master_build.sh --job-id "$JOB_ID" --profile pilot
@@ -20,6 +25,9 @@ python3 ./scripts/vibe21_export_champion_portable.py \
 if [[ "${SKIP_PULL:-0}" != "1" ]]; then
   TIP="$(git rev-parse --short=7 HEAD)"
   export OPENFDD_IMAGE_TAG="${OPENFDD_IMAGE_TAG:-sha-$TIP}"
+  # Drop sticky per-image overrides so IMAGE_TAG tip pin wins (see openfdd_stack_lib).
+  unset OPENFDD_CENTRAL_IMAGE OPENFDD_UI_IMAGE OPENFDD_WEB_IMAGE \
+    OPENFDD_FIELDBUS_IMAGE OPENFDD_MQTT_IMAGE OPENFDD_MCP_IMAGE
   echo "==> pull/up react-ot pin=$OPENFDD_IMAGE_TAG"
   ./scripts/openfdd_stack_pull.sh react-ot || true
   OPENFDD_REACT_UI=1 OPENFDD_UI_GENERATION_DEFAULT=react \
