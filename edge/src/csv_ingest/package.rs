@@ -1516,7 +1516,20 @@ mod tests {
         );
 
         // Role update rewrites columns.csv and re-ingests.
-        set_ws(&tmp);
+        // Bind workspace to the import's package_root parents — parallel tests that
+        // mutate OPENFDD_WORKSPACE without the lock can desync `tmp` from where
+        // import actually wrote (package_root remains authoritative).
+        let ws_from_pkg = pkg_root
+            .parent() // …/csv_buildings
+            .and_then(|p| p.parent()) // …/data
+            .and_then(|p| p.parent()) // workspace root
+            .unwrap_or(tmp.as_path());
+        set_ws(ws_from_pkg);
+        assert!(
+            pkg_root.join("AHU_1/history_wide.csv").is_file(),
+            "history_wide missing under package_root={}; out={out}",
+            pkg_root.display()
+        );
         let upd = update_package_roles_handler(&json!({
             "building_id": "BUILDING_9",
             "equipment_id": "AHU_1",
@@ -1527,7 +1540,7 @@ mod tests {
         let cols = std::fs::read_to_string(&cols_path).unwrap();
         assert!(cols.contains("SF_SPD,fan_status"), "{cols}");
 
-        set_ws(&tmp);
+        set_ws(ws_from_pkg);
         let inv = get_package_mapping_handler("BUILDING_9", Some("AHU_1"));
         assert_eq!(inv["ok"], json!(true), "{inv}");
         assert_eq!(inv["building_id"], json!("BUILDING_9"));
@@ -1538,6 +1551,7 @@ mod tests {
         assert_eq!(eq0["roles"]["SF_SPD"], json!("fan_status"));
         assert!(eq0["sampling"]["row_count"].as_u64().unwrap_or(0) >= 1);
 
+        set_ws(ws_from_pkg);
         let buildings = list_package_buildings_handler();
         assert_eq!(buildings["ok"], json!(true), "{buildings}");
         assert!(
