@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { collectPageErrors, simulateLanHttpCrypto } from "./lanHttp";
 
 /**
  * P1-M3 real-stack product markers — no route/network mocks.
@@ -57,8 +58,36 @@ test.describe("react product workflows (real stack)", () => {
     await expect(page.getByTestId("auth-notice")).toContainText(/Logged in/i);
   });
 
+  test("auth login works without crypto.randomUUID (LAN HTTP)", async ({ page }) => {
+    // Loopback Playwright is a secure context — strip randomUUID so we catch
+    // the http://192.168.x.x failure mode that blanked remote login.
+    await simulateLanHttpCrypto(page);
+    const errors = collectPageErrors(page);
+
+    await page.goto("/auth");
+    await expect(page.getByTestId("auth-page")).toBeVisible({ timeout: 15_000 });
+
+    const hasUuid = await page.evaluate(
+      () => typeof globalThis.crypto?.randomUUID === "function",
+    );
+    expect(hasUuid, "simulateLanHttpCrypto must remove randomUUID").toBe(false);
+
+    const password = process.env.OPENFDD_ADMIN_PASSWORD ?? "";
+    await page.getByTestId("auth-username").fill("admin");
+    if (password) {
+      await page.getByTestId("auth-password").fill(password);
+    }
+    await page.getByTestId("auth-login").click();
+    await expect(page.getByTestId("auth-notice")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("auth-notice")).toContainText(/Logged in/i);
+
+    const uuidErrors = errors.filter((e) => /randomUUID/i.test(e));
+    expect(uuidErrors, `LAN crypto errors: ${uuidErrors.join(" | ")}`).toEqual([]);
+  });
+
   test("/login bookmark is not a blank page (redirects to /auth)", async ({ page }) => {
     // Regression: SPA had no /login route → empty #root for remote bookmarks.
+    const errors = collectPageErrors(page);
     const response = await page.goto("/login", { waitUntil: "networkidle" });
     // nginx may 302 before SPA Navigate; either path must land on auth UI.
     const status = response?.status() ?? 0;
@@ -69,7 +98,12 @@ test.describe("react product workflows (real stack)", () => {
     await expect(page.getByTestId("auth-login")).toBeVisible();
     const rootHtml = await page.locator("#root").innerHTML();
     expect(rootHtml.length, "blank #root after /login").toBeGreaterThan(0);
+    expect(
+      errors.filter((e) => /randomUUID/i.test(e)),
+      `page errors: ${errors.join(" | ")}`,
+    ).toEqual([]);
   });
+
   test("jobs page shell and create section", async ({ page }) => {
     await page.goto("/jobs");
     await expect(page.getByTestId("jobs-page")).toBeVisible({ timeout: 15_000 });
