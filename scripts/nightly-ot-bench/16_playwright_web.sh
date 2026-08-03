@@ -71,14 +71,16 @@ if [[ -z "${OPENFDD_ADMIN_PASSWORD:-}" && -f "$ROOT/workspace/bootstrap_credenti
   export OPENFDD_ADMIN_PASSWORD
 fi
 
-# Curl-level Caddy /login redirect when Caddy is the Playwright base.
-if [[ "$OPENFDD_PLAYWRIGHT_BASE_URL" == "http://127.0.0.1" || "$OPENFDD_PLAYWRIGHT_BASE_URL" == "http://127.0.0.1/" ]]; then
-  if ! OPENFDD_CADDY_BASE=http://127.0.0.1 "$ROOT/scripts/openfdd_caddy_smoke.sh"; then
-    bad "Caddy smoke failed (/, /api/health, /login→/auth)"
+# Curl-level /login redirect when Playwright targets Caddy (:80), not :3000/:8080.
+_pw_base="${OPENFDD_PLAYWRIGHT_BASE_URL%/}"
+if [[ "$_pw_base" != *":3000" && "$_pw_base" != *":8080" ]]; then
+  if OPENFDD_CADDY_BASE="$_pw_base" "$ROOT/scripts/openfdd_caddy_smoke.sh"; then
+    ok "Caddy smoke (incl. /login redirect) via $_pw_base"
+  else
+    bad "Caddy smoke failed (/, /api/health, /login→/auth) via $_pw_base"
     summary
     exit 1
   fi
-  ok "Caddy smoke (incl. /login redirect)"
 fi
 
 # Pin Playwright image to package.json version when possible.
