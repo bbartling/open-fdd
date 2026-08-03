@@ -37,7 +37,6 @@ export function SectionTabs({ activeSectionId }: SectionTabsProps) {
     <nav
       className="app-section-tabs"
       aria-label="Main sections"
-      role="radiogroup"
       data-testid="section-tabs"
     >
       {MAIN_SECTIONS.map((section) => {
