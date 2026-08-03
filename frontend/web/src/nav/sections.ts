@@ -5,8 +5,8 @@ export const MAIN_SECTIONS = [
   { id: "run-rules", label: "Run Rules", path: "/rules" },
   { id: "results", label: "Results by Category", path: "/findings" },
   { id: "fdd-plots", label: "FDD Plots", path: "/reports?section=fdd-plots" },
-  { id: "rcx-plots", label: "RCx Plots", path: "/reports?section=rcx-plots" },
-  { id: "metering", label: "Metering", path: "/reports?section=metering" },
+  { id: "rcx-plots", label: "RCx Plots", path: "/rcx" },
+  { id: "metering", label: "Metering", path: "/metering" },
   { id: "wattlab", label: "WattLab", path: "/wattlab" },
 ] as const;
 

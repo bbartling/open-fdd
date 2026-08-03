@@ -5,6 +5,7 @@ import {
   type FddRuleParamDef,
   type FddRuleSummary,
 } from "../api/fddApi";
+import { getSessionConfig, putSessionConfig } from "../api/mappingApi";
 
 const PARAMS_KEY = "openfdd.ui.rule_params";
 
@@ -158,6 +159,22 @@ export function RuleTuningPanel() {
     return rules.filter((r) => familyOf(r.rule_id) === family);
   }, [rules, family]);
 
+  const persistSession = useCallback(
+    async (nextParams: Record<string, Record<string, number>>) => {
+      try {
+        const prev = await getSessionConfig();
+        await putSessionConfig({
+          ...(prev.config ?? {}),
+          schema_version: prev.config?.schema_version ?? "openfdd.session.v1",
+          params: nextParams,
+        });
+      } catch {
+        /* localStorage still holds values when central unavailable */
+      }
+    },
+    [],
+  );
+
   const onParam = useCallback(
     (ruleId: string, key: string, value: number) => {
       setParams((prev) => {
@@ -166,18 +183,25 @@ export function RuleTuningPanel() {
           [ruleId]: { ...(prev[ruleId] ?? {}), [key]: value },
         };
         saveStoredParams(next);
+        void persistSession(next);
         return next;
       });
     },
-    [],
+    [persistSession],
   );
+
+  const reset = () => {
+    setParams({});
+    saveStoredParams({});
+    void persistSession({});
+  };
 
   return (
     <section className="oracle-sidebar__block" data-testid="sidebar-rule-tuning">
       <h3 className="oracle-sidebar__h3">Rule tuning</h3>
       <p className="oracle-sidebar__caption">
-        Sliders only change thresholds. Rules update when you click{" "}
-        <strong>Run</strong> (Run Rules tab) or <strong>Rerun cat.</strong>
+        Sliders write <code>PUT /api/fdd/session-config</code>. Rules update when
+        you click <strong>Run</strong> (Run Rules tab).
       </p>
       <label className="oracle-sidebar__check">
         <input
@@ -206,6 +230,16 @@ export function RuleTuningPanel() {
           ))}
         </select>
       </label>
+      <div className="oracle-sidebar__btn-row">
+        <button
+          type="button"
+          className="oracle-sidebar__btn"
+          onClick={reset}
+          data-testid="sidebar-tune-reset"
+        >
+          Reset
+        </button>
+      </div>
       {loadErr ? (
         <p className="oracle-sidebar__err" data-testid="sidebar-tune-error">
           {loadErr}

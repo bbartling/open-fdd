@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { FindingsPage } from "./FindingsPage";
 
@@ -16,6 +16,22 @@ vi.mock("../api/jobsApi", () => ({
       tags: [],
       meta_revision: "rev-1",
       revisions: {},
+    },
+  ]),
+}));
+
+vi.mock("../api/mappingApi", () => ({
+  listPackageBuildings: vi.fn(async () => ["BUILDING_100"]),
+}));
+
+vi.mock("../api/fddApi", () => ({
+  getFddResults: vi.fn(async () => [
+    {
+      rule_id: "AHU-SATDEV",
+      equipment_id: "AHU_1",
+      status: "FAULT",
+      fault_hours: 12,
+      fault_pct: 5,
     },
   ]),
 }));
@@ -43,13 +59,26 @@ vi.mock("../api/findingsApi", async () => {
       ],
     })),
     putJobDispositions: vi.fn(async () => undefined),
-    putJobFindings: vi.fn(async () => undefined),
   };
 });
 
-import { putJobDispositions } from "../api/findingsApi";
+vi.mock("../api/fddApi", () => ({
+  getFddResults: vi.fn(async () => [
+    {
+      rule_id: "AHU-SATDEV",
+      equipment_id: "AHU_1",
+      status: "FAULT",
+      fault_hours: 12,
+      fault_pct: 5,
+    },
+  ]),
+  listFddRules: vi.fn(async () => []),
+  getFddRuleParams: vi.fn(async () => ({ ok: true, params: {} })),
+}));
 
-function renderPage(entry = "/findings?job=job-1") {
+vi.mock("../api/uploadApi", () => ({ uploadPackage: vi.fn() }));
+
+function renderPage(entry = "/findings?site=BUILDING_100&job=job-1") {
   return render(
     <MemoryRouter initialEntries={[entry]}>
       <FindingsPage />
@@ -57,45 +86,16 @@ function renderPage(entry = "/findings?job=job-1") {
   );
 }
 
-describe("FindingsPage dispositions", () => {
+describe("FindingsPage Results by Category", () => {
   beforeEach(() => {
-    vi.mocked(putJobDispositions).mockClear();
+    vi.clearAllMocks();
   });
 
-  it("loads findings for ?job= and shows count", async () => {
+  it("shows FDD results grouped by category", async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByTestId("findings-count").textContent).toMatch(
-        /1 finding/,
-      );
-      expect(screen.getByTestId("findings-table")).toBeTruthy();
-    });
-  });
-
-  it("saves disposition for selected correlation_key", async () => {
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByTestId("findings-count").textContent).toMatch(
-        /1 finding/,
-      );
-    });
-    fireEvent.click(
-      screen
-        .getByTestId("findings-pick-rule:VAV-1:equip:AHU-1")
-        .querySelector("button")!,
-    );
-    const status = screen
-      .getByTestId("findings-status")
-      .querySelector("select") as HTMLSelectElement;
-    fireEvent.change(status, { target: { value: "confirmed" } });
-    fireEvent.click(
-      screen.getByTestId("findings-save-disp").querySelector("button")!,
-    );
-    await waitFor(() => {
-      expect(putJobDispositions).toHaveBeenCalled();
-      expect(screen.getByTestId("findings-notice").textContent).toMatch(
-        /Saved disposition/,
-      );
+      expect(screen.getByTestId("results-table")).toBeTruthy();
+      expect(screen.getByText("AHU-SATDEV")).toBeTruthy();
     });
   });
 });

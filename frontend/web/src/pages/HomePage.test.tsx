@@ -9,6 +9,24 @@ vi.mock("../api/client", () => ({
 
 vi.mock("../api/mappingApi", () => ({
   listPackageBuildings: vi.fn(async () => ["B1"]),
+  getPackageMapping: vi.fn(async () => ({
+    ok: true,
+    equipment: [
+      {
+        equipment_id: "AHU_1",
+        equipment_type: "AHU",
+        ok: true,
+        sampling: {
+          row_count: 100,
+          first_timestamp: "2026-01-01T00:00:00Z",
+          last_timestamp: "2026-02-01T00:00:00Z",
+        },
+        columns: [{ column: "sat", role: "sat", status: "mapped" }],
+      },
+    ],
+  })),
+  getSessionConfig: vi.fn(async () => ({ ok: true, config: {} })),
+  putSessionConfig: vi.fn(async () => ({ ok: true })),
 }));
 
 vi.mock("../api/analyticsApi", () => ({
@@ -16,15 +34,56 @@ vi.mock("../api/analyticsApi", () => ({
     { equipment_id: "AHU_1", equipment_type: "AHU" },
     { equipment_id: "VAV_1", equipment_type: "VAV" },
   ]),
+  postRuntime: vi.fn(async () => ({
+    schema_version: "1",
+    query_version: "runtime-v1",
+    generated_at: "",
+    engine: "central-analytics-v1",
+    warnings: [],
+    rows: [{ week: "2026-W01", fan_hours: 40 }],
+    equipment: [],
+    points: [],
+    skipped: [],
+  })),
+  postMechanicalCooling: vi.fn(async () => ({
+    schema_version: "1",
+    query_version: "mechanical-cooling-v1",
+    generated_at: "",
+    engine: "central-analytics-v1",
+    warnings: [],
+    rows: [],
+    equipment: [],
+    points: [],
+    skipped: [],
+  })),
+  postEconomizer: vi.fn(async () => ({
+    schema_version: "1",
+    query_version: "economizer-v1",
+    generated_at: "",
+    engine: "central-analytics-v1",
+    warnings: [],
+    rows: [],
+    equipment: [],
+    points: [],
+    skipped: [],
+  })),
+}));
+
+vi.mock("../api/fddApi", () => ({
+  getFddStatus: vi.fn(async () => ({ rule_count: 59, rules_dir: "x", rules_dir_exists: true })),
+  listFddRules: vi.fn(async () => []),
+  getFddResults: vi.fn(async () => []),
+  getFddRuleParams: vi.fn(async () => ({ ok: true, params: {} })),
+}));
+
+vi.mock("../api/reportsApi", () => ({
+  listReports: vi.fn(async () => []),
+  createReportDraft: vi.fn(async () => ({ ok: true })),
+  getEngineeringFindingsReport: vi.fn(async () => ({})),
 }));
 
 vi.mock("../api/cutoverApi", () => ({
   getUiGeneration: vi.fn(async () => ({ generation: "react" })),
-}));
-
-vi.mock("../api/fddApi", () => ({
-  listFddRules: vi.fn(async () => []),
-  getFddRuleParams: vi.fn(async () => ({ ok: true, params: {} })),
 }));
 
 vi.mock("../api/uploadApi", () => ({
@@ -51,7 +110,7 @@ describe("HomePage overview", () => {
     sessionStorage.clear();
   });
 
-  it("shows equipment inventory metrics when authenticated", async () => {
+  it("shows populated Overview analytics when authenticated with equipment", async () => {
     sessionStorage.setItem("openfdd.auth.token", "test-token");
     render(
       <MemoryRouter>
@@ -59,11 +118,10 @@ describe("HomePage overview", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
+      expect(screen.getByTestId("overview-populated")).toBeTruthy();
       expect(screen.getByTestId("overview-eq-count").textContent).toContain("2");
-      expect(screen.getByTestId("overview-equipment")).toBeTruthy();
-      expect(screen.getByTestId("contract-version").textContent).toContain(
-        "1.0.0-test",
-      );
+      expect(screen.getByTestId("overview-motor-runtime")).toBeTruthy();
+      expect(screen.getByTestId("overview-schedule")).toBeTruthy();
     });
     expect(listPackageBuildings).toHaveBeenCalled();
     expect(listFddEquipment).toHaveBeenCalled();

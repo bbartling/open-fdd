@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router";
 import { AppShell } from "../components/AppShell";
 import { apiFetch } from "../api/client";
 import type { CapabilitiesResponse } from "../api/contract";
 import {
-  DataTable,
   Expander,
   InlineAlert,
   Metric,
-  Select,
 } from "../components/widgets";
+import { OverviewPopulated } from "../components/OverviewPopulated";
 import { useSessionQuery } from "../session";
 import { listPackageBuildings } from "../api/mappingApi";
 import {
@@ -23,10 +21,7 @@ const REPO_URL = "https://github.com/bbartling/open-fdd";
 const AGENTS_URL =
   "https://github.com/bbartling/py-bacnet-stacks-playground/blob/develop/vibe_code_apps_19/AGENTS.md";
 
-type EqRow = {
-  equipment_id: string;
-  equipment_type: string;
-};
+const PACKAGE_LOADED = "openfdd:package-loaded";
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -40,10 +35,21 @@ function hasAuthToken(): boolean {
   }
 }
 
-/** Streamlit-oracle Overview: brand hero + how-it-works + inventory. */
+function readUnits(): "imperial" | "metric" {
+  try {
+    return localStorage.getItem("openfdd.ui.unit_system") === "metric"
+      ? "metric"
+      : "imperial";
+  } catch {
+    return "imperial";
+  }
+}
+
+/** Streamlit-oracle Overview: empty hero OR populated analytics dashboard. */
 export function HomePage() {
   const { query, setQuery } = useSessionQuery();
   const buildingId = query.siteId ?? "";
+  const equipmentId = query.equipment ?? "";
 
   const [contractVersion, setContractVersion] = useState<string | null>(null);
   const [reactUi, setReactUi] = useState<boolean | null>(null);
@@ -54,6 +60,7 @@ export function HomePage() {
   const [loading, setLoading] = useState(true);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [devOpen, setDevOpen] = useState(false);
+  const [unitSystem, setUnitSystem] = useState(readUnits);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -77,72 +84,96 @@ export function HomePage() {
       setUiGeneration(gen?.generation ?? null);
       setBuildings(blds);
       setEquipment(eq);
+      if (!buildingId && blds[0]) {
+        setQuery({ siteId: blds[0] }, true);
+      }
+      if (buildingId && !equipmentId && eq[0]) {
+        setQuery({ equipment: String(eq[0].equipment_id) }, true);
+      }
     } catch (err) {
       setError(formatErr(err));
     } finally {
       setLoading(false);
     }
-  }, [buildingId]);
+  }, [buildingId, equipmentId, setQuery]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  const eqRows: EqRow[] = equipment.map((e) => ({
-    equipment_id: String(e.equipment_id),
-    equipment_type: String(e.equipment_type ?? ""),
-  }));
+  useEffect(() => {
+    const onLoaded = () => {
+      void refresh();
+    };
+    window.addEventListener(PACKAGE_LOADED, onLoaded);
+    return () => window.removeEventListener(PACKAGE_LOADED, onLoaded);
+  }, [refresh]);
 
-  const populated = eqRows.length > 0;
+  useEffect(() => {
+    const onStorage = () => setUnitSystem(readUnits());
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  const populated = equipment.length > 0;
 
   return (
-    <AppShell
-      title="Open FDD"
-      activeSectionId="overview"
-      hideHeader
-    >
+    <AppShell title="Open FDD" activeSectionId="overview" hideHeader>
       <div className="page-stack oracle-overview" data-testid="overview-page">
-        <header className="oracle-hero" data-testid="oracle-hero">
-          <h1 className="oracle-hero__title">Open FDD</h1>
-          <p className="oracle-hero__tagline">
-            Fault detection + WattLab energy twin — sites, FDD, and calibrated
-            models.
-          </p>
-          <div className="oracle-hero__logo-wrap">
-            <img
-              className="oracle-hero__logo"
-              src="/image_new_chiller.png"
-              alt="open-fdd — Rust-native HVAC fault detection at the edge"
-              width={720}
-              height={405}
-            />
-          </div>
-          <div className="oracle-hero__how">
-            <h2>How it works</h2>
-            <ol>
-              <li>
-                <strong>Sites</strong> — Load a package zip; pick the active
-                building from the Site list
-              </li>
-              <li>
-                <strong>Data model</strong> — Column→role map for the active site
-              </li>
-              <li>
-                <strong>FDD / WattLab</strong> — Run Rules, then WattLab (Fuel /
-                Twin / ECMs) scoped to the site
-              </li>
-            </ol>
-            <p>
-              <a href={DOCS_URL} target="_blank" rel="noreferrer">
-                Open-FDD docs
-              </a>
-              {" · "}
-              <a href={REPO_URL} target="_blank" rel="noreferrer">
-                Open-FDD repo
-              </a>
+        {!populated ? (
+          <header className="oracle-hero" data-testid="oracle-hero">
+            <h1 className="oracle-hero__title">Open FDD</h1>
+            <p className="oracle-hero__tagline">
+              Fault detection + WattLab energy twin — sites, FDD, and calibrated
+              models.
             </p>
-          </div>
-        </header>
+            <div className="oracle-hero__logo-wrap">
+              <img
+                className="oracle-hero__logo"
+                src="/image_new_chiller.png"
+                alt="open-fdd — Rust-native HVAC fault detection at the edge"
+                width={720}
+                height={405}
+              />
+            </div>
+            <div className="oracle-hero__how">
+              <h2>How it works</h2>
+              <ol>
+                <li>
+                  <strong>Sites</strong> — Load a package zip; pick the active
+                  building from the Site list
+                </li>
+                <li>
+                  <strong>Data model</strong> — Column→role map for the active
+                  site
+                </li>
+                <li>
+                  <strong>FDD / WattLab</strong> — Run Rules, then WattLab (Fuel
+                  / Twin / ECMs) scoped to the site
+                </li>
+              </ol>
+              <p>
+                <a href={DOCS_URL} target="_blank" rel="noreferrer">
+                  Open-FDD docs
+                </a>
+                {" · "}
+                <a href={REPO_URL} target="_blank" rel="noreferrer">
+                  Open-FDD repo
+                </a>
+              </p>
+            </div>
+          </header>
+        ) : (
+          <header className="oracle-hero oracle-hero--compact">
+            <h1 className="oracle-hero__title">Overview</h1>
+            <p className="oracle-hero__tagline">
+              Active site <code>{buildingId || "—"}</code>
+              {buildings.length > 1
+                ? ` · ${buildings.length} buildings loaded`
+                : ""}
+            </p>
+          </header>
+        )}
 
         {!populated ? (
           <>
@@ -185,65 +216,15 @@ export function HomePage() {
         )}
 
         {populated ? (
-          <>
-            <div className="form-row">
-              <Select
-                id="overview-building"
-                label="Building"
-                value={buildingId}
-                options={[
-                  { value: "", label: "— all / none —" },
-                  ...buildings.map((b) => ({ value: b, label: b })),
-                ]}
-                onChange={(v) => setQuery({ siteId: v || undefined }, true)}
-                testId="overview-building"
-              />
-            </div>
-            <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
-              <Metric
-                id="overview-contract"
-                label="Contract"
-                value={contractVersion ?? "—"}
-                testId="contract-version"
-              />
-              <Metric
-                id="overview-react-ui"
-                label="react_ui"
-                value={reactUi == null ? "—" : reactUi ? "on" : "off"}
-                testId="overview-react-ui"
-              />
-              <Metric
-                id="overview-ui-generation"
-                label="UI generation"
-                value={uiGeneration ?? "—"}
-                testId="overview-ui-generation"
-              />
-              <Metric
-                id="overview-eq-count"
-                label="Equipment"
-                value={String(eqRows.length)}
-                testId="overview-eq-count"
-              />
-            </div>
-            <p>
-              <Link to="/metering">Open Metering</Link>
-              {" · "}
-              <Link to="/jobs">Jobs</Link>
-              {" · "}
-              <Link to="/rules">Run Rules</Link>
-            </p>
-            <DataTable
-              id="overview-equipment"
-              label="Equipment inventory"
-              columns={[
-                { key: "equipment_id", header: "equipment_id" },
-                { key: "equipment_type", header: "type" },
-              ]}
-              rows={eqRows}
-              loading={loading}
-              testId="overview-equipment"
-            />
-          </>
+          <OverviewPopulated
+            buildingId={buildingId}
+            equipment={equipment}
+            equipmentId={equipmentId}
+            onEquipmentChange={(id) =>
+              setQuery({ equipment: id || undefined }, true)
+            }
+            unitSystem={unitSystem}
+          />
         ) : (
           <Expander
             id="overview-dev-metrics"
@@ -274,7 +255,7 @@ export function HomePage() {
               <Metric
                 id="overview-eq-count"
                 label="Equipment"
-                value={String(eqRows.length)}
+                value={String(equipment.length)}
                 testId="overview-eq-count"
               />
             </div>

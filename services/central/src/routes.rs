@@ -25,6 +25,7 @@ use crate::models::{
     IssueCommandResponse, OkHealthResponse,
 };
 use crate::state::{AppState, PendingCommand};
+use crate::wattlab_dump;
 
 pub fn router(state: Arc<AppState>) -> Router {
     let public = Router::new()
@@ -153,6 +154,14 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/api/jobs/{job_id}/wattlab/handoffs",
             post(jobs_create_wattlab_handoff),
+        )
+        .route(
+            "/api/jobs/{job_id}/wattlab/dumps",
+            post(jobs_create_wattlab_dump),
+        )
+        .route(
+            "/api/jobs/{job_id}/wattlab/dumps/{dump_id}/download",
+            get(jobs_download_wattlab_dump),
         )
         .route("/api/jobs/{job_id}/eplus/runs", post(jobs_queue_eplus_run))
         .route(
@@ -1606,6 +1615,44 @@ async fn jobs_create_wattlab_handoff(
         StatusCode::CREATED,
         Json(json!({"ok": true, "handoff": handoff})),
     ))
+}
+
+async fn jobs_create_wattlab_dump(
+    Path(job_id): Path<String>,
+    Json(body): Json<wattlab_dump::CreateDumpRequest>,
+) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
+    let dump = wattlab_dump::create_dump(&job_id, body)
+        .await
+        .map_err(job_err)?;
+    Ok((StatusCode::CREATED, Json(json!({"ok": true, "dump": dump}))))
+}
+
+async fn jobs_download_wattlab_dump(
+    Path((job_id, dump_id)): Path<(String, String)>,
+) -> Result<(StatusCode, HeaderMap, Vec<u8>), (StatusCode, Json<Value>)> {
+    let loaded = tokio::task::spawn_blocking(move || wattlab_dump::load_dump(&job_id, &dump_id))
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": format!("WattLab download task: {e}")})),
+            )
+        })?
+        .map_err(job_err)?;
+    let (artifact, bytes) = loaded;
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONTENT_TYPE, "application/zip".parse().unwrap());
+    let disposition = format!("attachment; filename=\"{}\"", artifact.filename);
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        disposition.parse().map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": "invalid WattLab dump filename"})),
+            )
+        })?,
+    );
+    Ok((StatusCode::OK, headers, bytes))
 }
 
 /// Queue an external EnergyPlus run (Milestone D4).

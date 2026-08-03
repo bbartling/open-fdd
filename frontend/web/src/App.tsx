@@ -7,6 +7,7 @@ import { RulesPage } from "./pages/RulesPage";
 import { FindingsPage } from "./pages/FindingsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { MeteringPage } from "./pages/MeteringPage";
+import { RcxPage } from "./pages/RcxPage";
 import { WattLabPage } from "./pages/WattLabPage";
 import { AuthPage } from "./pages/AuthPage";
 import { TwinPage } from "./pages/TwinPage";
@@ -17,7 +18,6 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/auth" element={<AuthPage />} />
-        {/* Canonical auth is /auth; /login is the common remote bookmark (was blank). */}
         <Route path="/login" element={<Navigate to="/auth" replace />} />
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/upload" element={<UploadPage />} />
@@ -25,6 +25,7 @@ export default function App() {
         <Route path="/rules" element={<RulesPage />} />
         <Route path="/findings" element={<FindingsPage />} />
         <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/rcx" element={<RcxPage />} />
         <Route path="/metering" element={<MeteringPage />} />
         <Route path="/wattlab" element={<WattLabPage />} />
         <Route path="/twin" element={<TwinPage />} />

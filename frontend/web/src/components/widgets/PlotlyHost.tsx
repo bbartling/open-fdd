@@ -1,48 +1,39 @@
+import { useEffect, useRef } from "react";
 import type { WidgetBaseProps } from "./types";
 import { widgetTestId } from "./types";
 import type { PlotlyFigure } from "../../api/plotDataset";
 
 export interface PlotlyHostProps extends Omit<WidgetBaseProps, "label"> {
   label?: string;
-  /** Figure JSON from plotDataset / future Plotly.react */
+  /** Figure JSON compatible with Plotly.newPlot */
   figure?: PlotlyFigure | null;
   figureId?: string;
   height?: number;
 }
 
-function buildSvgPath(
-  xs: number[],
-  ys: Array<number | null>,
-  width: number,
-  height: number,
-  pad: number,
-): string {
-  const finite = ys
-    .map((y, i) => (y == null || !Number.isFinite(y) ? null : { i, y }))
-    .filter((p): p is { i: number; y: number } => p != null);
-  if (!finite.length || xs.length < 2) return "";
-  const yMin = Math.min(...finite.map((p) => p.y));
-  const yMax = Math.max(...finite.map((p) => p.y));
-  const ySpan = yMax - yMin || 1;
-  const xSpan = xs.length - 1 || 1;
-  let d = "";
-  let penUp = true;
-  for (let i = 0; i < ys.length; i++) {
-    const y = ys[i];
-    if (y == null || !Number.isFinite(y)) {
-      penUp = true;
-      continue;
-    }
-    const px = pad + (i / xSpan) * (width - 2 * pad);
-    const py = height - pad - ((y - yMin) / ySpan) * (height - 2 * pad);
-    d += penUp ? `M ${px} ${py}` : ` L ${px} ${py}`;
-    penUp = false;
+type PlotlyStatic = {
+  newPlot: (
+    el: HTMLElement,
+    data: unknown,
+    layout?: unknown,
+    config?: unknown,
+  ) => Promise<unknown>;
+  purge: (el: HTMLElement) => void;
+  react?: (
+    el: HTMLElement,
+    data: unknown,
+    layout?: unknown,
+    config?: unknown,
+  ) => Promise<unknown>;
+};
+
+declare global {
+  interface Window {
+    Plotly?: PlotlyStatic;
   }
-  return d;
 }
 
-const TRACE_COLORS = ["#0f766e", "#b45309", "#1d4ed8", "#be123c", "#7c3aed"];
-
+/** Real Plotly.js host (vendored `/plotly.min.js`). Falls back to a caption if Plotly missing. */
 export function PlotlyHost({
   id,
   label = "Chart",
@@ -53,12 +44,42 @@ export function PlotlyHost({
   testId,
   figure,
   figureId,
-  height = 220,
+  height = 320,
 }: PlotlyHostProps) {
-  const width = 640;
-  const pad = 24;
-  const traces = figure?.data ?? [];
-  const xs = traces[0]?.x?.map((_, i) => i) ?? [];
+  const hostRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = hostRef.current;
+    const Plotly = window.Plotly;
+    if (!el || !Plotly || !figure?.data?.length) return;
+    let cancelled = false;
+    const layout = {
+      margin: { t: 40, r: 20, b: 40, l: 50 },
+      height,
+      showlegend: figure.layout?.showlegend ?? true,
+      title: figure.layout?.title,
+      xaxis: figure.layout?.xaxis ?? {},
+      yaxis: figure.layout?.yaxis ?? {},
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "Source Sans 3, Source Sans, sans-serif", size: 12 },
+      ...(figure.layout as object),
+    };
+    const config = { responsive: true, displayModeBar: true, displaylogo: false };
+    void (Plotly.react ?? Plotly.newPlot)(el, figure.data, layout, config).then(
+      () => {
+        if (cancelled) Plotly.purge(el);
+      },
+    );
+    return () => {
+      cancelled = true;
+      try {
+        Plotly.purge(el);
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [figure, height]);
 
   return (
     <div
@@ -75,41 +96,18 @@ export function PlotlyHost({
         className="widget-plotly-host"
         data-figure-id={figureId ?? figure?.meta?.rule_id}
         aria-label={label}
+        style={{ minHeight: height }}
       >
         {loading ? (
           "Loading chart…"
-        ) : !figure || !traces.length ? (
+        ) : !figure || !figure.data.length ? (
           "No series loaded"
+        ) : !window.Plotly ? (
+          <p className="widget__error" role="alert">
+            Plotly.js failed to load — check /plotly.min.js
+          </p>
         ) : (
-          <svg
-            viewBox={`0 0 ${width} ${height}`}
-            width="100%"
-            height={height}
-            role="img"
-            data-testid={`plotly-svg-${id}`}
-          >
-            <title>{figure.layout?.title ?? label}</title>
-            {traces.map((t, idx) => {
-              const d = buildSvgPath(
-                xs.length ? xs : t.x.map((_, i) => i),
-                t.y,
-                width,
-                height,
-                pad,
-              );
-              if (!d) return null;
-              return (
-                <path
-                  key={t.name}
-                  d={d}
-                  fill="none"
-                  stroke={TRACE_COLORS[idx % TRACE_COLORS.length]}
-                  strokeWidth={2}
-                  data-trace={t.name}
-                />
-              );
-            })}
-          </svg>
+          <div ref={hostRef} data-testid={`plotly-div-${id}`} />
         )}
       </div>
       {figure?.meta ? (

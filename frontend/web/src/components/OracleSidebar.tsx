@@ -166,6 +166,15 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
       const n = body.equipment_written ?? body.equipment?.length ?? 0;
       setStatus(`Loaded ${n} equip · \`${bid || "—"}\``);
       await refreshSites();
+      try {
+        window.dispatchEvent(
+          new CustomEvent("openfdd:package-loaded", {
+            detail: { buildingId: bid },
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         setError(`${err.code}: ${err.message}`);
@@ -446,10 +455,6 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
 
       <hr className="oracle-sidebar__divider" />
 
-      <RuleTuningPanel />
-
-      <hr className="oracle-sidebar__divider" />
-
       <section className="oracle-sidebar__block" data-testid="sidebar-display">
         <h3 className="oracle-sidebar__h3">Display &amp; site</h3>
         <fieldset className="oracle-sidebar__fieldset">
@@ -511,6 +516,10 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
           valve).
         </p>
       </section>
+
+      <hr className="oracle-sidebar__divider" />
+
+      <RuleTuningPanel />
     </div>
   );
 }

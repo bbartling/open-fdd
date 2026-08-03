@@ -110,14 +110,14 @@ def main(argv: list[str] | None = None) -> int:
         nonempty = int((run.rcx_coverage["row_count"] > 0).sum()) if not run.rcx_coverage.empty else 0
         print(f"RCx coverage: {nonempty}/{len(run.rcx_coverage)} presets with data")
 
-    written = export_agent_bundle(dataset, run, args.out, profile=args.export_profile)
+    written = export_agent_bundle(
+        dataset,
+        run,
+        args.out,
+        profile=args.export_profile,
+        include_bootstrap=not args.no_bootstrap,
+    )
     if args.no_bootstrap:
-        # Remove default bootstrap if export wrote it
-        from app.bootstrap import default_bootstrap_path
-
-        bp = default_bootstrap_path()
-        if bp.is_file():
-            bp.unlink(missing_ok=True)
         written = {k: v for k, v in written.items() if not str(k).startswith("bootstrap")}
     else:
         # Ensure bootstrap points at the original CLI source path (zip preferred)

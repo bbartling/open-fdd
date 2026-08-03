@@ -1,6 +1,5 @@
 /**
- * Plot dataset helpers — assemble React chart figures from Rust series contracts.
- * No Plotly npm yet: PlotlyHost renders an SVG line chart from this shape.
+ * Plot dataset helpers — assemble React chart figures for Plotly.js.
  */
 
 export type PlotlyTrace = {
@@ -9,14 +8,21 @@ export type PlotlyTrace = {
   name: string;
   mode?: string;
   type?: string;
+  marker?: Record<string, unknown>;
+  line?: Record<string, unknown>;
+  fill?: string;
+  fillcolor?: string;
+  opacity?: number;
+  yaxis?: string;
+  [key: string]: unknown;
 };
 
 export type PlotlyFigure = {
   data: PlotlyTrace[];
-  layout?: {
+  layout?: Record<string, unknown> & {
     title?: string;
-    xaxis?: { title?: string };
-    yaxis?: { title?: string };
+    xaxis?: { title?: string; [key: string]: unknown };
+    yaxis?: { title?: string; [key: string]: unknown };
     showlegend?: boolean;
   };
   meta?: {
@@ -69,6 +75,42 @@ export function seriesRowsToFigure(
       max_points: opts.maxPoints,
       point_count: rows.length,
       provenance: "GET /api/fdd/series (DataFusion parquet)",
+    },
+  };
+}
+
+/** Bar chart from analytics envelope rows (generic). */
+export function rowsToBarFigure(
+  rows: Array<Record<string, unknown>>,
+  opts: {
+    xKey: string;
+    yKeys: string[];
+    title: string;
+    provenance?: string;
+  },
+): PlotlyFigure {
+  const x = rows.map((r) => String(r[opts.xKey] ?? ""));
+  const traces: PlotlyTrace[] = opts.yKeys.map((key) => ({
+    name: key,
+    type: "bar",
+    x,
+    y: rows.map((r) => {
+      const n = Number(r[key]);
+      return Number.isFinite(n) ? n : null;
+    }),
+  }));
+  return {
+    data: traces,
+    layout: {
+      title: opts.title,
+      barmode: "stack",
+      showlegend: true,
+      xaxis: { title: opts.xKey },
+      yaxis: { title: "hours" },
+    },
+    meta: {
+      point_count: rows.length,
+      provenance: opts.provenance,
     },
   };
 }

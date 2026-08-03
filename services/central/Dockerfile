@@ -16,7 +16,7 @@ COPY sql_rules ./sql_rules
 COPY rule_tuning ./rule_tuning
 RUN cargo build --release -p openfdd-central -p openfdd_mqtt
 
-FROM debian:bookworm-slim
+FROM python:3.12-slim-bookworm
 ARG OPENFDD_GIT_SHA=""
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl libssl3 \
   && rm -rf /var/lib/apt/lists/*
@@ -25,9 +25,13 @@ COPY --from=builder /src/target/release/openfdd-central /usr/local/bin/openfdd-c
 COPY --from=builder /src/target/release/openfdd-provision /usr/local/bin/openfdd-provision
 COPY sql_rules /app/sql_rules
 COPY rule_tuning /app/rule_tuning
+COPY services/ui/requirements.txt /app/services/ui/requirements.txt
+RUN pip install --no-cache-dir -r /app/services/ui/requirements.txt
+COPY services/ui /app/services/ui
 ENV OPENFDD_CENTRAL_HOST=0.0.0.0
 ENV OPENFDD_IMAGE_NAME=ghcr.io/bbartling/openfdd-central
 ENV OPENFDD_SQL_RULES_DIR=/app/sql_rules
+ENV OPENFDD_AGENT_AFDD_SCRIPT=/app/services/ui/scripts/agent_afdd.py
 ENV OPENFDD_CENTRAL_PORT=8080
 # OFDD-071: stamp tip SHA so /api/health → {version}+{sha} (runtime env preferred by resolve_build_version).
 ENV OPENFDD_GIT_SHA=$OPENFDD_GIT_SHA

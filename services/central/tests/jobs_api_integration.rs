@@ -332,4 +332,12 @@ fn jobs_require_jwt_when_secret_set() {
     ]);
     let (st, body) = http("GET", server.port, "/api/jobs", None, None);
     assert_eq!(st, 401, "{body}");
+    let (st, body) = http(
+        "POST",
+        server.port,
+        "/api/jobs/job-00000000-0000-0000-0000-000000000000/wattlab/dumps",
+        Some(r#"{"building_id":"BUILDING_100","profile":"summary"}"#),
+        None,
+    );
+    assert_eq!(st, 401, "{body}");
 }

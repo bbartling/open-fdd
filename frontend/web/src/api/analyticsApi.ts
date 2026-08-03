@@ -97,6 +97,42 @@ export async function postRuntime(
   return postAnalytics("/api/analytics/runtime", body);
 }
 
+export async function postMechanicalCooling(
+  body: AnalyticsRequest,
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/mechanical-cooling", body);
+}
+
+export async function postEconomizer(
+  body: AnalyticsRequest,
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/economizer", body);
+}
+
+export async function postSchedule(
+  body: AnalyticsRequest,
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/schedule", body);
+}
+
+export async function postSensorHealth(
+  body: AnalyticsRequest,
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/sensor-health", body);
+}
+
+export async function postRcxChiller(
+  body: AnalyticsRequest,
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/rcx/chiller", body);
+}
+
+export async function postRcxBoiler(
+  body: AnalyticsRequest,
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/rcx/boiler", body);
+}
+
 export async function listFddEquipment(
   buildingId?: string,
 ): Promise<FddEquipmentItem[]> {
