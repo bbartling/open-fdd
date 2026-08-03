@@ -22,6 +22,15 @@ vi.mock("../api/cutoverApi", () => ({
   getUiGeneration: vi.fn(async () => ({ generation: "react" })),
 }));
 
+vi.mock("../api/fddApi", () => ({
+  listFddRules: vi.fn(async () => []),
+  getFddRuleParams: vi.fn(async () => ({ ok: true, params: {} })),
+}));
+
+vi.mock("../api/uploadApi", () => ({
+  uploadPackage: vi.fn(),
+}));
+
 import { apiFetch } from "../api/client";
 import { listPackageBuildings } from "../api/mappingApi";
 import { listFddEquipment } from "../api/analyticsApi";
@@ -60,19 +69,19 @@ describe("HomePage overview", () => {
     expect(listFddEquipment).toHaveBeenCalled();
   });
 
-  it("skips JWT-gated inventory fetches when anonymous", async () => {
+  it("shows Streamlit-oracle empty Overview and skips JWT inventory when anonymous", async () => {
     render(
       <MemoryRouter>
         <HomePage />
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByTestId("contract-version").textContent).toContain(
-        "1.0.0-test",
-      );
+      expect(screen.getByTestId("oracle-hero")).toBeTruthy();
+      expect(screen.getByTestId("overview-start-here")).toBeTruthy();
     });
     expect(listPackageBuildings).not.toHaveBeenCalled();
     expect(listFddEquipment).not.toHaveBeenCalled();
-    expect(screen.getByTestId("overview-eq-count").textContent).toContain("0");
+    expect(screen.getByText("How it works")).toBeTruthy();
+    expect(screen.getByTestId("sidebar-rule-tuning")).toBeTruthy();
   });
 });

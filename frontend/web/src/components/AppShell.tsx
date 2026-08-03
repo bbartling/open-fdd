@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink } from "react-router";
 import { SectionTabs } from "./SectionTabs";
+import { OracleSidebar } from "./OracleSidebar";
 import { SIDEBAR_NAV } from "../nav/sections";
 
 interface AppShellProps {
@@ -9,6 +10,8 @@ interface AppShellProps {
   children: React.ReactNode;
   /** Streamlit section id for top tab highlight */
   activeSectionId?: string;
+  /** When true, omit page H1 (hero supplies brand on Overview empty state). */
+  hideHeader?: boolean;
 }
 
 export function AppShell({
@@ -16,6 +19,7 @@ export function AppShell({
   caption,
   children,
   activeSectionId,
+  hideHeader = false,
 }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -32,7 +36,7 @@ export function AppShell({
             type="button"
             className="app-sidebar__collapse"
             aria-expanded={!collapsed}
-            aria-controls="app-sidebar-nav"
+            aria-controls="app-sidebar-oracle"
             data-testid="sidebar-collapse"
             onClick={() => setCollapsed((v) => !v)}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -41,12 +45,8 @@ export function AppShell({
           </button>
         </div>
 
-        <div className="app-sidebar__sites" data-testid="sidebar-sites">
-          <h2 className="app-sidebar__sites-title">Sites</h2>
-          <p className="app-sidebar__sites-hint">
-            Building data · Cloud-capable · same openfdd_package_v1 zip
-            everywhere.
-          </p>
+        <div id="app-sidebar-oracle" className="app-sidebar__scroll">
+          <OracleSidebar collapsed={collapsed} />
         </div>
 
         <details className="app-sidebar__pages" open={false}>
@@ -74,14 +74,16 @@ export function AppShell({
         </details>
       </aside>
       <div className="app-main">
-        <header className="app-header">
-          <h1 className="app-header__title">{title}</h1>
-          {caption ? (
-            <p className="app-header__caption" data-testid="page-caption">
-              {caption}
-            </p>
-          ) : null}
-        </header>
+        {!hideHeader ? (
+          <header className="app-header">
+            <h1 className="app-header__title">{title}</h1>
+            {caption ? (
+              <p className="app-header__caption" data-testid="page-caption">
+                {caption}
+              </p>
+            ) : null}
+          </header>
+        ) : null}
         <SectionTabs activeSectionId={activeSectionId} />
         <main className="app-content">{children}</main>
       </div>

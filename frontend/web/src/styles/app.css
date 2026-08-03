@@ -17,9 +17,13 @@ body,
 body {
   font-family: var(--font-sans);
   font-size: var(--font-size-md);
+  font-weight: var(--font-weight-normal);
   line-height: var(--line-height-body);
   color: var(--color-text);
   background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 :focus-visible {
@@ -43,6 +47,14 @@ body {
   flex-direction: column;
   border-right: 1px solid var(--color-border);
   transition: width var(--transition-fast);
+  overflow: hidden;
+}
+
+.app-sidebar__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .app-shell--sidebar-collapsed .app-sidebar {
@@ -245,12 +257,14 @@ body {
   color: var(--color-text);
   font: inherit;
   font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
   padding: 0.15rem 0;
   border-radius: 0;
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
   position: relative;
+  letter-spacing: 0.01em;
 }
 
 .app-section-tabs__tab:hover {
@@ -262,7 +276,7 @@ body {
   color: var(--color-primary);
   background: transparent;
   border-color: transparent;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .app-section-tabs__tab--active::after {
@@ -412,6 +426,286 @@ body {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* —— Streamlit oracle sidebar / Overview hero (dev parity) —— */
+.oracle-sidebar {
+  padding: 0.25rem var(--space-md) var(--space-xl);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text);
+  letter-spacing: 0.01em;
+}
+
+.oracle-sidebar__block {
+  margin-bottom: 0.75rem;
+}
+
+.oracle-sidebar__h {
+  margin: 0 0 var(--space-sm);
+  font-size: 1.05rem;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.01em;
+}
+
+.oracle-sidebar__h3 {
+  margin: 1.1rem 0 0.45rem;
+  font-size: 1rem;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.01em;
+}
+
+.oracle-sidebar__caption {
+  margin: 0 0 0.55rem;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.oracle-sidebar__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.65rem;
+}
+
+.oracle-sidebar__label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text);
+}
+
+.oracle-sidebar__control,
+.oracle-sidebar__file {
+  font: inherit;
+  font-size: var(--font-size-sm);
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--color-widget-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-widget-bg);
+  color: var(--color-text);
+  max-width: 100%;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Streamlit file_uploader feel: soft dashed drop zone */
+.oracle-sidebar__file-wrap {
+  border: 1px dashed rgba(49, 51, 63, 0.35);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.55);
+  padding: 0.65rem 0.75rem;
+  margin-bottom: var(--space-sm);
+}
+
+.oracle-sidebar__file-wrap .oracle-sidebar__file {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+}
+
+.oracle-sidebar__fieldset {
+  border: none;
+  margin: 0 0 var(--space-sm);
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+
+.oracle-sidebar__radio,
+.oracle-sidebar__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  margin-bottom: 0.4rem;
+  color: var(--color-text);
+  line-height: 1.45;
+}
+
+.oracle-sidebar__btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: var(--space-sm);
+}
+
+.oracle-sidebar__btn {
+  appearance: none;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--color-widget-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-widget-bg);
+  color: var(--color-text);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.oracle-sidebar__btn:hover:not(:disabled) {
+  border-color: rgba(49, 51, 63, 0.4);
+}
+
+.oracle-sidebar__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.oracle-sidebar__btn--primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+  font-weight: var(--font-weight-semibold);
+}
+
+.oracle-sidebar__btn--primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.oracle-sidebar__ok {
+  color: var(--color-success);
+  font-size: var(--font-size-xs);
+}
+
+.oracle-sidebar__err {
+  color: var(--color-danger);
+  font-size: var(--font-size-xs);
+}
+
+.oracle-sidebar__expander {
+  margin: 0.35rem 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0.2rem 0.15rem;
+  background: transparent;
+}
+
+.oracle-sidebar__expander[open] {
+  border-color: var(--color-widget-border);
+  background: rgba(255, 255, 255, 0.45);
+  padding: 0.35rem 0.5rem 0.5rem;
+}
+
+.oracle-sidebar__expander summary {
+  cursor: pointer;
+  font-weight: var(--font-weight-normal);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  list-style: none;
+}
+
+.oracle-sidebar__expander summary::-webkit-details-marker {
+  display: none;
+}
+
+.oracle-sidebar__expander summary::before {
+  content: "▸ ";
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+}
+
+.oracle-sidebar__expander[open] summary::before {
+  content: "▾ ";
+}
+
+.oracle-sidebar__expander-body {
+  padding-top: 0.45rem;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.oracle-sidebar__rules {
+  max-height: 22rem;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+  margin-top: 0.25rem;
+}
+
+.oracle-sidebar__divider {
+  border: none;
+  border-top: 1px solid rgba(49, 51, 63, 0.12);
+  margin: 0.85rem 0;
+}
+
+.oracle-sidebar__slider {
+  width: 100%;
+  accent-color: var(--color-primary);
+  height: 0.35rem;
+}
+
+.oracle-sidebar--collapsed {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-sm);
+}
+
+.oracle-hero {
+  margin-bottom: var(--space-lg);
+}
+
+.oracle-hero__title {
+  margin: 0 0 0.35rem;
+  font-size: 2.15rem;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+  line-height: var(--line-height-tight);
+}
+
+.oracle-hero__tagline {
+  margin: 0 0 var(--space-md);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text);
+  line-height: var(--line-height-body);
+}
+
+.oracle-hero__logo-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 0 auto var(--space-lg);
+  max-width: 42rem;
+}
+
+.oracle-hero__logo {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.oracle-hero__how h2 {
+  margin: 0 0 var(--space-sm);
+  font-size: 1.2rem;
+  font-weight: var(--font-weight-semibold);
+}
+
+.oracle-hero__how ol {
+  margin: 0 0 var(--space-md);
+  padding-left: 1.25rem;
+  line-height: 1.6;
+  font-weight: var(--font-weight-normal);
+}
+
+.oracle-overview__footer-links {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.oracle-overview__start {
+  background: var(--color-info-bg);
+  border: 1px solid var(--color-info-border);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+  color: var(--color-info);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  margin: var(--space-md) 0;
 }
 
 @media (max-width: 768px) {

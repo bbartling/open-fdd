@@ -5,14 +5,17 @@
    * Primary accent = Streamlit default red (not invented teal/navy SaaS).
    */
   --color-text: #31333f;
-  --color-text-muted: #808495;
+  /* Streamlit soft secondary text (~60% of body) */
+  --color-text-muted: rgba(49, 51, 63, 0.6);
   --color-bg: #ffffff;
   --color-sidebar-bg: #f0f2f6;
   --color-secondary-bg: #f0f2f6;
-  --color-border: #d6d6d8;
+  --color-border: rgba(49, 51, 63, 0.2);
   --color-primary: #ff4b4b;
   --color-primary-hover: #ff2b2b;
   --color-primary-bg: #fff0f0;
+  --color-widget-bg: #ffffff;
+  --color-widget-border: rgba(49, 51, 63, 0.2);
 
   /* Keep legacy token names mapped so widgets/pages keep compiling */
   --color-navy-900: #31333f;
@@ -61,22 +64,26 @@
   --content-gutter: 5rem;
   --page-caption-gap: 0.35rem;
 
-  --radius-sm: 0.25rem;
+  /* Streamlit widgets use soft ~0.5rem corners */
+  --radius-sm: 0.5rem;
   --radius-md: 0.5rem;
-  --radius-lg: 0.5rem;
+  --radius-lg: 0.75rem;
 
-  --shadow-sm: none;
-  --shadow-md: none;
+  --shadow-sm: 0 1px 2px rgba(49, 51, 63, 0.04);
+  --shadow-md: 0 2px 8px rgba(49, 51, 63, 0.06);
 
-  --font-sans: "Source Sans 3", "Source Sans", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Source Sans 3", "Source Sans Pro", "Source Sans", "Segoe UI",
+    system-ui, sans-serif;
   --font-mono: ui-monospace, "Source Code Pro", monospace;
-  --font-size-xs: 0.75rem;
+  --font-size-xs: 0.8rem;
   --font-size-sm: 0.875rem;
   --font-size-md: 1rem;
   --font-size-lg: 1.25rem;
   --font-size-xl: 1.75rem;
-  --line-height-tight: 1.25;
-  --line-height-body: 1.5;
+  --line-height-tight: 1.3;
+  --line-height-body: 1.6;
+  --font-weight-normal: 400;
+  --font-weight-semibold: 600;
 
   --focus-ring: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-primary);
   --transition-fast: 120ms ease;

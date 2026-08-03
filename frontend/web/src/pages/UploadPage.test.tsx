@@ -12,6 +12,15 @@ vi.mock("../api/uploadApi", () => ({
   packageDatasetId: (r: { building_id?: string }) => r.building_id,
 }));
 
+vi.mock("../api/mappingApi", () => ({
+  listPackageBuildings: vi.fn(async () => []),
+}));
+
+vi.mock("../api/fddApi", () => ({
+  listFddRules: vi.fn(async () => []),
+  getFddRuleParams: vi.fn(async () => ({ ok: true, params: {} })),
+}));
+
 import { getJob } from "../api/jobsApi";
 import { uploadPackage } from "../api/uploadApi";
 
@@ -65,7 +74,8 @@ describe("UploadPage", () => {
     });
 
     renderUpload();
-    const input = document.querySelector(
+    const uploadRoot = screen.getByTestId("upload-page");
+    const input = uploadRoot.querySelector(
       'input[type="file"]',
     ) as HTMLInputElement;
     const file = new File(["zip"], "demo.zip", { type: "application/zip" });
