@@ -315,26 +315,63 @@ fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(h.finalize())
 }
 
-fn predict_from_conformance(model_dir: &Path, body: &PredictBody) -> Option<Value> {
+fn f64_from_body(body: &PredictBody, key: &str, default: f64) -> f64 {
+    body.rest
+        .get(key)
+        .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)))
+        .unwrap_or(default)
+}
+
+fn f64_from_req(req: &Value, key: &str, default: f64) -> f64 {
+    req.get(key)
+        .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)))
+        .unwrap_or(default)
+}
+
+/// Match conformance vectors by strategy + nearest (oat, rh, hour) knobs.
+/// Returns (prediction, exact_match).
+fn predict_from_conformance(model_dir: &Path, body: &PredictBody) -> Option<(Value, bool)> {
     let path = model_dir.join("conformance.jsonl");
     let text = std::fs::read_to_string(path).ok()?;
     let want = body
         .strategy_id
         .clone()
         .unwrap_or_else(|| "baseline".into());
+    let oat = f64_from_body(body, "oat_c", 32.0);
+    let rh = f64_from_body(body, "rh_pct", 55.0);
+    let hour = f64_from_body(body, "hour_ending", 15.0);
+
+    let mut best: Option<(f64, bool, Value)> = None;
     for line in text.lines() {
         let Ok(row) = serde_json::from_str::<Value>(line) else {
             continue;
         };
-        let sid = row
-            .pointer("/request/strategy_id")
+        let Some(req) = row.get("request") else {
+            continue;
+        };
+        let sid = req
+            .get("strategy_id")
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        if sid == want {
-            return row.get("response").cloned();
+        if sid != want {
+            continue;
+        }
+        let roat = f64_from_req(req, "oat_c", 32.0);
+        let rrh = f64_from_req(req, "rh_pct", 55.0);
+        let rhour = f64_from_req(req, "hour_ending", 15.0);
+        // Weighted distance so hour (±1) and oat (±1°C) matter similarly to rh (±5%).
+        let dist = (roat - oat).abs() / 1.0 + (rrh - rh).abs() / 5.0 + (rhour - hour).abs() / 1.0;
+        let exact = dist < 1e-9;
+        let Some(resp) = row.get("response").cloned() else {
+            continue;
+        };
+        match &best {
+            None => best = Some((dist, exact, resp)),
+            Some((bd, _, _)) if dist < *bd => best = Some((dist, exact, resp)),
+            _ => {}
         }
     }
-    None
+    best.map(|(_, exact, resp)| (resp, exact))
 }
 
 fn predict_from_portable_forest(model_dir: &Path, body: &PredictBody) -> Option<Value> {
@@ -364,13 +401,25 @@ async fn v1_predict(
             .cloned()
             .unwrap_or_else(|| format!("models/{}", bundle.model_release_id)),
     );
-    if let Some(pred) = predict_from_portable_forest(&model_dir, &body)
-        .or_else(|| predict_from_conformance(&model_dir, &body))
-    {
+    if let Some(pred) = predict_from_portable_forest(&model_dir, &body) {
         return Ok(Json(json!({
             "ok": true,
             "runtime": "rust",
-            "source": "conformance_or_portable",
+            "source": "portable_forest",
+            "strategy_id": body.strategy_id,
+            "prediction": pred,
+            "request_echo": body.rest,
+        })));
+    }
+    if let Some((pred, exact)) = predict_from_conformance(&model_dir, &body) {
+        return Ok(Json(json!({
+            "ok": true,
+            "runtime": "rust",
+            "source": if exact {
+                "conformance_exact"
+            } else {
+                "conformance_nearest"
+            },
             "strategy_id": body.strategy_id,
             "prediction": pred,
             "request_echo": body.rest,
@@ -780,5 +829,37 @@ mod tests {
     fn model_release_requires_portable_members() {
         // empty / non-zip
         assert!(validate_model_release_zip(b"notzip").is_err());
+    }
+
+    #[test]
+    fn conformance_prefers_nearest_oat_knob() {
+        let dir = tempfile::tempdir().unwrap();
+        let md = dir.path();
+        // Two baseline vectors at different oat — nearest should win.
+        let lines = [
+            r#"{"request":{"strategy_id":"baseline","oat_c":0.0,"rh_pct":55.0,"hour_ending":15},"response":{"facility_kw":100.0}}"#,
+            r#"{"request":{"strategy_id":"baseline","oat_c":40.0,"rh_pct":55.0,"hour_ending":15},"response":{"facility_kw":400.0}}"#,
+        ];
+        std::fs::write(md.join("conformance.jsonl"), lines.join("\n")).unwrap();
+        let cold = PredictBody {
+            strategy_id: Some("baseline".into()),
+            rest: HashMap::from([
+                ("oat_c".into(), json!(2.0)),
+                ("rh_pct".into(), json!(55.0)),
+                ("hour_ending".into(), json!(15)),
+            ]),
+        };
+        let hot = PredictBody {
+            strategy_id: Some("baseline".into()),
+            rest: HashMap::from([
+                ("oat_c".into(), json!(38.0)),
+                ("rh_pct".into(), json!(55.0)),
+                ("hour_ending".into(), json!(15)),
+            ]),
+        };
+        let (pc, _) = predict_from_conformance(md, &cold).unwrap();
+        let (ph, _) = predict_from_conformance(md, &hot).unwrap();
+        assert_eq!(pc.get("facility_kw").and_then(|v| v.as_f64()), Some(100.0));
+        assert_eq!(ph.get("facility_kw").and_then(|v| v.as_f64()), Some(400.0));
     }
 }

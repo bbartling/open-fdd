@@ -38,4 +38,24 @@ curl -fsS -o /dev/null -w 'unity_index=%{http_code}\n' \
   "http://127.0.0.1:8080/twins/twin_ops11/builds/unitybuild_liberty100/"
 curl -fsS -o /dev/null -w 'spa_twin=%{http_code}\n' "http://127.0.0.1:3000/twin" || true
 
+echo "==> predict knob sensitivity (cold vs hot oat)"
+COLD=$(curl -fsS -X POST "http://127.0.0.1:8080/api/v1/predict/demand_hourly" \
+  -H 'content-type: application/json' \
+  -d '{"strategy_id":"baseline","oat_c":0,"rh_pct":55,"hour_ending":15}')
+HOT=$(curl -fsS -X POST "http://127.0.0.1:8080/api/v1/predict/demand_hourly" \
+  -H 'content-type: application/json' \
+  -d '{"strategy_id":"baseline","oat_c":40,"rh_pct":55,"hour_ending":15}')
+python3 -c "
+import json, sys
+c = json.loads('''$COLD''')
+h = json.loads('''$HOT''')
+cw = (c.get('prediction') or {}).get('facility_kw')
+hw = (h.get('prediction') or {}).get('facility_kw')
+print(f'facility_kw cold={cw} hot={hw} source_cold={c.get(\"source\")} source_hot={h.get(\"source\")}')
+if cw is None or hw is None or abs(float(cw) - float(hw)) < 0.5:
+    print('ERROR: predict knobs not sensitive (BUG-001 regression)', file=sys.stderr)
+    sys.exit(1)
+print('OK knob sensitivity')
+"
+
 echo "OK turnkey smoke complete"
