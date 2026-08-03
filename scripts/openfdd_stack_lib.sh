@@ -76,14 +76,35 @@ openfdd_stack_images() {
   echo "ghcr.io/bbartling/openfdd-ui:${tag}"
 }
 
+# Apply OPENFDD_IMAGE_TAG to default GHCR image vars.
+# Explicit custom registries (non-bbartling openfdd-*) are left alone.
+# When IMAGE_TAG is set, sticky OPENFDD_*_IMAGE from a prior shell that still
+# point at ghcr.io/bbartling/openfdd-* are rewritten so the tip pin wins.
+openfdd_stack_apply_image_tag() {
+  local var="$1"
+  local name="$2"
+  local tag="$3"
+  local desired="ghcr.io/bbartling/openfdd-${name}:${tag}"
+  local cur="${!var:-}"
+  if [[ -z "$cur" ]]; then
+    export "$var=$desired"
+    return 0
+  fi
+  if [[ -n "${OPENFDD_IMAGE_TAG:-}" && "$cur" == ghcr.io/bbartling/openfdd-"${name}":* ]]; then
+    export "$var=$desired"
+    return 0
+  fi
+  # Keep caller override (custom registry / digest pin / archive image).
+}
+
 openfdd_stack_export_image_env() {
   local tag="${OPENFDD_IMAGE_TAG:-nightly}"
-  export OPENFDD_CENTRAL_IMAGE="${OPENFDD_CENTRAL_IMAGE:-ghcr.io/bbartling/openfdd-central:${tag}}"
-  export OPENFDD_UI_IMAGE="${OPENFDD_UI_IMAGE:-ghcr.io/bbartling/openfdd-ui:${tag}}"
-  export OPENFDD_WEB_IMAGE="${OPENFDD_WEB_IMAGE:-ghcr.io/bbartling/openfdd-web:${tag}}"
-  export OPENFDD_FIELDBUS_IMAGE="${OPENFDD_FIELDBUS_IMAGE:-ghcr.io/bbartling/openfdd-fieldbus:${tag}}"
-  export OPENFDD_MQTT_IMAGE="${OPENFDD_MQTT_IMAGE:-ghcr.io/bbartling/openfdd-mqtt:${tag}}"
-  export OPENFDD_MCP_IMAGE="${OPENFDD_MCP_IMAGE:-ghcr.io/bbartling/openfdd-mcp:${tag}}"
+  openfdd_stack_apply_image_tag OPENFDD_CENTRAL_IMAGE central "$tag"
+  openfdd_stack_apply_image_tag OPENFDD_UI_IMAGE ui "$tag"
+  openfdd_stack_apply_image_tag OPENFDD_WEB_IMAGE web "$tag"
+  openfdd_stack_apply_image_tag OPENFDD_FIELDBUS_IMAGE fieldbus "$tag"
+  openfdd_stack_apply_image_tag OPENFDD_MQTT_IMAGE mqtt "$tag"
+  openfdd_stack_apply_image_tag OPENFDD_MCP_IMAGE mcp "$tag"
 }
 
 openfdd_stack_wait_health() {
