@@ -6,7 +6,16 @@ import jsxA11y from "eslint-plugin-jsx-a11y";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist/**", "node_modules/**", "playwright-report/**", "test-results/**"] },
+  {
+    ignores: [
+      "dist/**",
+      "node_modules/**",
+      "playwright-report/**",
+      "test-results/**",
+      // Vendored browser assets (e.g. plotly.min.js) — not app source.
+      "public/**",
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
