@@ -61,7 +61,7 @@ mod live_routes {
         params(("job_id" = String, Path, description = "Job id")),
         request_body = serde_json::Value,
         responses(
-            (status = 201, description = "Build a pandas WattLab dump zip", body = serde_json::Value),
+            (status = 201, description = "Build a WattLab dump zip (cookbook exporter)", body = serde_json::Value),
             (status = 404, description = "Job or imported building package not found")
         )
     )]

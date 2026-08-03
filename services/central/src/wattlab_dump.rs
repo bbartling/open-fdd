@@ -1,4 +1,4 @@
-//! Job-native WattLab dump generation via the vendored pandas exporter.
+//! Job-native WattLab dump generation via the vendored agent_afdd / cookbook exporter.
 
 use std::fs;
 use std::io::Write;
@@ -137,7 +137,7 @@ fn zip_directory(source: &Path, destination: &Path) -> Result<u64, JobError> {
     collect_files(source, source, &mut files)?;
     files.sort();
     if files.is_empty() {
-        return Err(JobError::Io("pandas exporter wrote no artifacts".into()));
+        return Err(JobError::Io("cookbook exporter wrote no artifacts".into()));
     }
     for path in files {
         let rel = path
@@ -213,14 +213,14 @@ pub async fn create_dump(
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| JobError::Io(format!("failed to start pandas exporter ({python}): {e}")))?;
+        .map_err(|e| JobError::Io(format!("failed to start cookbook exporter ({python}): {e}")))?;
 
     if !output.status.success() {
         let _ = fs::remove_dir_all(&root);
         let detail = String::from_utf8_lossy(&output.stderr);
         let detail = detail.chars().take(4000).collect::<String>();
         return Err(JobError::Io(format!(
-            "pandas exporter failed ({}): {}",
+            "cookbook exporter failed ({}): {}",
             output.status,
             detail.trim()
         )));
