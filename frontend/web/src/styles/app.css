@@ -1004,8 +1004,19 @@ body {
 .overview-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-sm);
-  align-items: center;
+  gap: var(--space-md);
+  align-items: flex-start;
+}
+
+.overview-toolbar__action {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 12rem;
+}
+
+.overview-toolbar__action .oracle-sidebar__caption {
+  margin: 0;
 }
 
 .overview-metrics {

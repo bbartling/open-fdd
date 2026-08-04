@@ -314,7 +314,7 @@ export function RuleTuningPanel() {
       <p className="oracle-sidebar__caption">
         Sliders write session config. After tuning, click{" "}
         <strong>Update this rule</strong> next to the slider (or{" "}
-        <strong>Update all rules</strong> on Overview).
+        <strong>Run all rules</strong> on Overview).
       </p>
       <label className="oracle-sidebar__check">
         <input

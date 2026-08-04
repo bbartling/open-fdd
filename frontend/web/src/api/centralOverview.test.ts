@@ -1,0 +1,91 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { fetchCentralOverview } from "./centralOverview";
+
+vi.mock("./analyticsApi", () => ({
+  postRuntime: vi.fn(async () => ({
+    schema_version: "1",
+    query_version: "runtime-v1",
+    generated_at: "",
+    engine: "datafusion",
+    warnings: ["from historian"],
+    rows: [
+      { equipment_id: "AHU_1", run_hours: 12.5, coverage_pct: 40 },
+      { equipment_id: "VAV_1", run_hours: 3, coverage_pct: 10 },
+    ],
+    equipment: [],
+    points: [],
+    skipped: [],
+  })),
+  postMechanicalCooling: vi.fn(async () => ({
+    schema_version: "1",
+    query_version: "mechanical-cooling-v1",
+    generated_at: "",
+    engine: "datafusion",
+    warnings: [],
+    rows: [{ equipment_id: "CHILLER_1", history_rows: 500 }],
+    equipment: [],
+    points: [],
+    skipped: [],
+  })),
+  postEconomizer: vi.fn(async () => ({
+    schema_version: "1",
+    query_version: "economizer-diagnostics-v1",
+    generated_at: "",
+    engine: "datafusion",
+    warnings: [],
+    rows: [
+      {
+        equipment_id: "AHU_1",
+        n_fan_on_samples: 100,
+        n_identifiable: 50,
+      },
+    ],
+    equipment: [],
+    points: [],
+    skipped: [],
+  })),
+  postSchedule: vi.fn(async () => ({
+    schema_version: "1",
+    query_version: "schedule-v1",
+    generated_at: "",
+    engine: "datafusion",
+    warnings: [],
+    rows: [
+      {
+        equipment_id: "AHU_1",
+        occupied_hours: 40,
+        unoccupied_hours: 8,
+      },
+    ],
+    equipment: [],
+    points: [],
+    skipped: [],
+  })),
+}));
+
+describe("fetchCentralOverview", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("builds Overview payload from central DataFusion envelopes", async () => {
+    const out = await fetchCentralOverview({
+      building_id: "BUILDING_100",
+      equipment: [
+        { equipment_id: "AHU_1", equipment_type: "AHU" },
+        { equipment_id: "VAV_1", equipment_type: "VAV" },
+      ],
+    });
+    expect(out.ok).toBe(true);
+    expect(out.source).toBe("central-datafusion");
+    expect(out.motor_weekly.plants[0]?.figure?.data?.length).toBeGreaterThan(0);
+    expect(out.mech_cooling.figure?.data?.length).toBeGreaterThan(0);
+    expect(out.economizer_free_cooling.delta_scatter?.meta?.provenance).toMatch(
+      /DataFusion/,
+    );
+    expect(out.devices_by_type).toEqual([
+      { type: "AHU", count: 1 },
+      { type: "VAV", count: 1 },
+    ]);
+  });
+});

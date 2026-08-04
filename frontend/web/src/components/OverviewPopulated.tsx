@@ -11,21 +11,24 @@ import {
   Checkbox,
 } from "./widgets";
 import { PlotlyHost } from "./widgets/PlotlyHost";
-import { getFddStatus, listFddRules, getFddResults, runFdd } from "../api/fddApi";
+import {
+  getFddStatus,
+  listFddRules,
+  getFddResults,
+  getFddSeries,
+  runFdd,
+} from "../api/fddApi";
 import {
   getPackageMapping,
   getSessionConfig,
   putSessionConfig,
   type SessionConfig,
 } from "../api/mappingApi";
-import {
-  downloadRowsCsv,
-  fetchOverviewInspect,
-  fetchOverviewVibe19,
-  type OverviewVibe19Response,
-} from "../api/overviewOracleApi";
+import { downloadRowsCsv } from "../api/overviewOracleApi";
+import type { OverviewVibe19Response } from "../api/overviewOracleApi";
+import { fetchCentralOverview } from "../api/centralOverview";
 import type { FddEquipmentItem } from "../api/analyticsApi";
-import type { PlotlyFigure } from "../api/plotDataset";
+import { seriesRowsToFigure, type PlotlyFigure } from "../api/plotDataset";
 import { RULES_UPDATED_EVENT } from "./RuleTuningPanel";
 
 const DAYS = [
@@ -144,7 +147,7 @@ export interface OverviewPopulatedProps {
   unitSystem: "imperial" | "metric";
 }
 
-/** Vibe 19 Overview parity — metrics through data inspection. */
+/** Vibe Overview — metrics through data inspection (central DataFusion). */
 export function OverviewPopulated({
   buildingId,
   equipment,
@@ -248,24 +251,17 @@ export function OverviewPopulated({
     setLoadingOverview(true);
     setOverviewErr(null);
     try {
-      const body = await fetchOverviewVibe19({
+      const body = await fetchCentralOverview({
         building_id: buildingId,
-        bare_min_occ_hours_week: hoursPerWeek(week),
-        prefer_web_oat: true,
-        oat_err: 5,
-        econ_overlay_equipment_id: econOverlayEq || undefined,
+        equipment,
       });
       if (!body.ok) {
-        throw new Error(body.error || "Overview oracle failed");
+        throw new Error(body.error || "Central analytics failed");
       }
       setOverview(body);
       if (body.span?.start) setFirstTs(body.span.start);
       if (body.span?.end) setLastTs(body.span.end);
-      setInspectOptions(
-        body.has_weather
-          ? [...body.equipment_ids, "(weather)"]
-          : body.equipment_ids,
-      );
+      setInspectOptions(body.equipment_ids);
       if (!inspectPick && body.equipment_ids[0]) {
         setInspectPick(body.equipment_ids[0]);
       }
@@ -277,32 +273,62 @@ export function OverviewPopulated({
     } finally {
       setLoadingOverview(false);
     }
-    // week / bareMin applied on explicit refresh + save-schedule, not every keystroke
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buildingId, econOverlayEq]);
+  }, [buildingId, equipment]);
 
   const refreshInspect = useCallback(async () => {
-    if (!buildingId || !inspectPick) return;
+    if (!buildingId || !inspectPick || inspectPick === "(weather)") return;
     setInspectBusy(true);
     setInspectErr(null);
     try {
-      const body = await fetchOverviewInspect({
-        building_id: buildingId,
-        equipment_id: inspectPick,
-        columns:
-          inspectSelectedCols.length > 0 ? inspectSelectedCols : undefined,
-      });
-      setInspectCols(body.plottable_columns);
-      setInspectSelectedCols((prev) =>
-        prev.length ? prev : body.plottable_columns,
+      const map = await getPackageMapping(buildingId, inspectPick).catch(
+        () => null,
       );
-      setInspectFig(body.figure);
-      setInspectMeta({ row_count: body.row_count, span: body.span });
-      if (inspectPick !== "(weather)") {
-        setRowCount(body.row_count);
-        if (body.first_timestamp) setFirstTs(body.first_timestamp);
-        if (body.last_timestamp) setLastTs(body.last_timestamp);
+      const eq =
+        map?.equipment?.find((e) => e.equipment_id === inspectPick) ??
+        map?.equipment?.[0];
+      const cols =
+        eq?.columns
+          ?.map((c) => String(c.column || c.role || ""))
+          .filter(Boolean) ?? [];
+      setInspectCols(cols);
+      setInspectSelectedCols((prev) => (prev.length ? prev : cols.slice(0, 6)));
+      if (eq?.sampling?.row_count != null) setRowCount(eq.sampling.row_count);
+      if (eq?.sampling?.first_timestamp) setFirstTs(eq.sampling.first_timestamp);
+      if (eq?.sampling?.last_timestamp) setLastTs(eq.sampling.last_timestamp);
+      setInspectMeta({
+        row_count: eq?.sampling?.row_count ?? 0,
+        span:
+          eq?.sampling?.first_timestamp && eq?.sampling?.last_timestamp
+            ? `${eq.sampling.first_timestamp} → ${eq.sampling.last_timestamp}`
+            : "—",
+      });
+
+      const results = await getFddResults(buildingId).catch(() => []);
+      const hit = results.find(
+        (r) => String(r.equipment_id) === inspectPick && r.rule_id,
+      );
+      if (!hit?.rule_id) {
+        setInspectFig(null);
+        setInspectErr(
+          "No FDD result series for this equipment yet — Run all rules first, then re-open inspection.",
+        );
+        return;
       }
+      const series = await getFddSeries(inspectPick, String(hit.rule_id));
+      const roles =
+        inspectSelectedCols.length > 0
+          ? inspectSelectedCols
+          : (series.roles ?? cols).slice(0, 6);
+      const fig = seriesRowsToFigure(series.rows ?? [], {
+        equipmentId: inspectPick,
+        ruleId: String(hit.rule_id),
+        roles,
+        downsampled: series.downsampled,
+        maxPoints: series.max_points,
+      });
+      setInspectFig(fig);
+      setInspectErr(null);
     } catch (err) {
       setInspectErr(formatErr(err));
       setInspectFig(null);
@@ -402,7 +428,7 @@ export function OverviewPopulated({
     }
     setRulesBusy(true);
     setRulesErr(null);
-    setRulesNote("Updating all rules with tuned params…");
+    setRulesNote("Running all rules with tuned params…");
     try {
       const params = loadStoredParams();
       const prev = await getSessionConfig().catch(() => null);
@@ -419,7 +445,7 @@ export function OverviewPopulated({
       const n = result.results?.length ?? 0;
       setLastRuleResultCount(n);
       setRulesNote(
-        `Updated all rules · ${n} result row(s) · ${String(result.total_ms ?? "—")} ms`,
+        `Ran all rules · ${n} result row(s) · ${String(result.total_ms ?? "—")} ms`,
       );
       try {
         window.dispatchEvent(
@@ -487,9 +513,9 @@ export function OverviewPopulated({
       aria-busy={busy || undefined}
     >
       <p className="oracle-sidebar__caption">
-        Plot traces capped at 5,000 points — full data still used for
-        rules/exports. Overview charts = Vibe 19 pandas oracle (
-        <code>open_fdd.analytics</code>).
+        Overview analytics = central DataFusion (
+        <code>/api/analytics/*</code>). Charts are drawn in the browser from
+        typed envelopes — no Python path.
       </p>
 
       {busy ? (
@@ -502,12 +528,11 @@ export function OverviewPopulated({
           <span className="spinner" aria-hidden />
           <div>
             <strong>
-              Computing Overview analytics for <code>{buildingId}</code>
+              Updating analytics for <code>{buildingId}</code>
             </strong>
             <p>
-              Motor weekly · mech-cooling OAT bins · economizer · BAS vs web.
-              First load often takes 20–40s. Elapsed:{" "}
-              <strong>{overviewElapsedSec}s</strong>
+              Runtime · mechanical cooling · economizer · schedule via
+              DataFusion. Elapsed: <strong>{overviewElapsedSec}s</strong>
             </p>
           </div>
         </div>
@@ -521,26 +546,47 @@ export function OverviewPopulated({
         >
           Charts ready: <strong>{chartCount}</strong> Plotly figure
           {chartCount === 1 ? "" : "s"} for <code>{buildingId}</code> (
-          {overview.elapsed_s}s). Each plot shows “rendered” when Plotly finishes
-          drawing.
+          {overview.elapsed_s}s · {overview.source}). Each plot shows “rendered”
+          when Plotly finishes drawing.
         </InlineAlert>
       ) : null}
 
-      <div className="overview-toolbar">
-        <Button
-          id="overview-refresh"
-          label={busy ? `Refreshing… ${overviewElapsedSec}s` : "Refresh Overview"}
-          loading={busy}
-          onClick={() => {
-            void refreshMeta();
-            void refreshOverview();
-            void refreshInspect();
-          }}
-          testId="overview-refresh"
-        />
+      <div className="overview-toolbar" data-testid="overview-actions">
+        <div className="overview-toolbar__action">
+          <Button
+            id="overview-update-analytics"
+            label={
+              busy
+                ? `Updating analytics… ${overviewElapsedSec}s`
+                : "Update analytics"
+            }
+            loading={busy}
+            onClick={() => {
+              void refreshMeta();
+              void refreshOverview();
+              void refreshInspect();
+            }}
+            testId="overview-refresh"
+          />
+          <p className="oracle-sidebar__caption">
+            Central DataFusion analytics → Overview charts
+          </p>
+        </div>
+        <div className="overview-toolbar__action">
+          <Button
+            id="overview-run-all-rules"
+            label={rulesBusy ? "Running all rules…" : "Run all rules"}
+            loading={rulesBusy}
+            onClick={() => void onUpdateAllRules()}
+            testId="overview-update-all-rules"
+          />
+          <p className="oracle-sidebar__caption">
+            DataFusion FDD registry → Results / FDD Plots
+          </p>
+        </div>
         {overview ? (
           <span className="oracle-sidebar__caption">
-            oracle {overview.elapsed_s}s · {overview.equipment_count} equip ·{" "}
+            {overview.elapsed_s}s · {overview.equipment_count} equip ·{" "}
             {overview.source}
           </span>
         ) : null}
@@ -548,17 +594,17 @@ export function OverviewPopulated({
 
       {overviewErr ? (
         <InlineAlert id="overview-oracle-err" variant="danger" testId="overview-oracle-err">
-          Overview charts unavailable: {overviewErr}. Confirm overview-oracle is
-          running on <code>:8099</code> and the package for{" "}
-          <code>{buildingId}</code> is loaded.
+          Central analytics unavailable: {overviewErr}. Confirm the package for{" "}
+          <code>{buildingId}</code> is loaded and central is healthy.
         </InlineAlert>
       ) : null}
 
-      <InlineAlert id="overview-dual-catalog" variant="info" testId="overview-dual-catalog">
-        Dual catalog: production FDD math is DataFusion SQL (
-        <code>sql_rules/registry.yaml</code>). Overview plots below use the
-        pandas cookbook (Vibe 19 parity) — same charts as Streamlit Overview.
-      </InlineAlert>
+      <p className="oracle-sidebar__caption" data-testid="overview-dual-catalog">
+        Two actions, one engine family: <strong>Update analytics</strong>{" "}
+        refreshes Overview charts; <strong>Run all rules</strong> runs the FDD
+        SQL registry. Sidebar <strong>Update this rule</strong> re-runs one
+        rule.
+      </p>
 
       <div className="form-row">
         <Select
@@ -607,21 +653,13 @@ export function OverviewPopulated({
         className="overview-section overview-rule-run"
         data-testid="overview-update-rules"
       >
-        <h3>Update rules</h3>
+        <h3>Rule run status</h3>
         <p className="oracle-sidebar__caption">
           Tune thresholds with the left-rail sliders. Use{" "}
-          <strong>Update this rule</strong> next to a modified slider for a
-          single rule, or <strong>Update all rules</strong> here to re-run the
-          full registry with current tuned params.
+          <strong>Update this rule</strong> next to a modified slider, or{" "}
+          <strong>Run all rules</strong> above for the full registry.
         </p>
         <div className="overview-rule-run__row">
-          <Button
-            id="overview-update-all-rules"
-            label={rulesBusy ? "Updating all rules…" : "Update all rules"}
-            loading={rulesBusy}
-            onClick={() => void onUpdateAllRules()}
-            testId="overview-update-all-rules"
-          />
           <Link to="/rules">Open Run Rules tab</Link>
         </div>
         {rulesNote ? (
@@ -755,10 +793,10 @@ export function OverviewPopulated({
       </section>
 
       <section className="overview-section" data-testid="overview-motor-runtime">
-        <h3>Motor run hours by week</h3>
+        <h3>Motor / equipment run hours</h3>
         <p className="oracle-sidebar__caption">
           {overview?.motor_weekly.caption ??
-            "Bars = run hours by week (Mon start). Dotted line = avg OAT °F while on."}
+            "Bars = run hours by equipment (DataFusion historian)."}
         </p>
         {(overview?.motor_weekly.plants ?? []).map((plant) => (
           <div key={plant.plant_group} data-testid={`overview-motor-${plant.plant_group}`}>
@@ -781,7 +819,7 @@ export function OverviewPopulated({
           </div>
         ))}
         {!overview && !loadingOverview ? (
-          <p className="oracle-sidebar__caption">No motor weekly charts yet.</p>
+          <p className="oracle-sidebar__caption">No motor charts yet.</p>
         ) : null}
         <Expander
           id="weekly-motor-table"
@@ -806,7 +844,7 @@ export function OverviewPopulated({
               testId="overview-motor-table"
             />
           ) : (
-            <p className="oracle-sidebar__caption">No weekly rows.</p>
+            <p className="oracle-sidebar__caption">No runtime rows.</p>
           )}
         </Expander>
       </section>
@@ -1094,8 +1132,8 @@ export function OverviewPopulated({
 
       <p className="oracle-sidebar__caption">
         Tune thresholds in the left sidebar → <strong>Update this rule</strong>{" "}
-        / Overview <strong>Update all rules</strong> → browse FDD Plots by
-        device type.
+        / Overview <strong>Run all rules</strong> → browse FDD Plots by device
+        type.
       </p>
 
       <section className="overview-section" data-testid="overview-devices-by-type">
@@ -1186,24 +1224,18 @@ export function OverviewPopulated({
         />
         <Button
           id="dl-inspect"
-          label={`Download \`${inspectPick || "csv"}\` CSV`}
+          label={`Download \`${inspectPick || "csv"}\` JSON sample`}
           variant="secondary"
+          disabled={!inspectFig?.data?.length}
           onClick={() => {
-            void (async () => {
-              const body = await fetchOverviewInspect({
-                building_id: buildingId,
-                equipment_id: inspectPick,
-                columns: inspectSelectedCols.length
-                  ? inspectSelectedCols
-                  : undefined,
-              });
-              if (body.csv_preview?.length) {
-                downloadRowsCsv(
-                  `${inspectPick || "equipment"}_raw.csv`,
-                  body.csv_preview,
-                );
-              }
-            })();
+            const rows =
+              (inspectFig?.data?.[0] as { x?: unknown[]; y?: unknown[] } | undefined);
+            if (!rows?.x?.length) return;
+            const preview = rows.x.map((x, i) => ({
+              timestamp: x,
+              value: rows.y?.[i] ?? null,
+            }));
+            downloadRowsCsv(`${inspectPick || "equipment"}_series.csv`, preview);
           }}
           testId="overview-dl-inspect"
         />
