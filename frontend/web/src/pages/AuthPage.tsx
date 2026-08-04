@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { AppShell } from "../components/AppShell";
 import { Button, InlineAlert, Metric } from "../components/widgets";
 import {
@@ -14,7 +15,15 @@ function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+function safeReturnPath(raw: string | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
+  if (raw.startsWith("/auth") || raw.startsWith("/login")) return "/";
+  return raw;
+}
+
 export function AuthPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<AuthStatus | null>(null);
   const [me, setMe] = useState<AuthMe | null>(null);
   const [username, setUsername] = useState("admin");
@@ -50,6 +59,7 @@ export function AuthPage() {
       const res = await login(username, password);
       setNotice(`Logged in as ${res.subject} (${res.role})`);
       await refresh();
+      navigate(safeReturnPath(searchParams.get("from")), { replace: true });
     } catch (err) {
       setError(formatErr(err));
     } finally {
@@ -66,13 +76,13 @@ export function AuthPage() {
   return (
     <AppShell
       title="Auth"
-      caption="Thin login against /api/auth/* (P1-M5-F)"
+      caption="Sign in required before package import and API calls"
       activeSectionId="overview"
     >
       <div className="page-stack" data-testid="auth-page">
         <InlineAlert id="auth-hint" variant="info">
-          When auth is not required, login mints a placeholder Bearer token for
-          local session storage.
+          Central has authentication enabled. Log in here first — otherwise
+          Load zip and other API calls return 401.
         </InlineAlert>
 
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>

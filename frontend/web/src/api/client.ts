@@ -81,6 +81,24 @@ export async function apiFetch<T>(
 
   if (!res.ok) {
     const text = await res.text();
+    if (
+      res.status === 401 &&
+      typeof window !== "undefined" &&
+      !path.includes("/auth/login") &&
+      !path.includes("/auth/status")
+    ) {
+      try {
+        sessionStorage.removeItem("openfdd.auth.token");
+      } catch {
+        // ignore
+      }
+      const here = `${window.location.pathname}${window.location.search}`;
+      if (!here.startsWith("/auth") && !here.startsWith("/login")) {
+        window.location.assign(
+          `/auth?from=${encodeURIComponent(here)}`,
+        );
+      }
+    }
     const envelope = parseErrorEnvelope(text);
     if (envelope) {
       throw new ApiClientError(envelope.error.message, {

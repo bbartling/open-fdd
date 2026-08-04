@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { AuthGate } from "./components/AuthGate";
 import { HomePage } from "./pages/HomePage";
 import { JobsPage } from "./pages/JobsPage";
 import { UploadPage } from "./pages/UploadPage";
@@ -12,23 +13,27 @@ import { WattLabPage } from "./pages/WattLabPage";
 import { AuthPage } from "./pages/AuthPage";
 import { TwinPage } from "./pages/TwinPage";
 
+function gated(element: React.ReactNode) {
+  return <AuthGate>{element}</AuthGate>;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<HomePage />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/login" element={<Navigate to="/auth" replace />} />
-        <Route path="/jobs" element={<JobsPage />} />
-        <Route path="/upload" element={<UploadPage />} />
-        <Route path="/mapping" element={<MappingPage />} />
-        <Route path="/rules" element={<RulesPage />} />
-        <Route path="/findings" element={<FindingsPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/rcx" element={<RcxPage />} />
-        <Route path="/metering" element={<MeteringPage />} />
-        <Route path="/wattlab" element={<WattLabPage />} />
-        <Route path="/twin" element={<TwinPage />} />
+        <Route path="/" element={gated(<HomePage />)} />
+        <Route path="/jobs" element={gated(<JobsPage />)} />
+        <Route path="/upload" element={gated(<UploadPage />)} />
+        <Route path="/mapping" element={gated(<MappingPage />)} />
+        <Route path="/rules" element={gated(<RulesPage />)} />
+        <Route path="/findings" element={gated(<FindingsPage />)} />
+        <Route path="/reports" element={gated(<ReportsPage />)} />
+        <Route path="/rcx" element={gated(<RcxPage />)} />
+        <Route path="/metering" element={gated(<MeteringPage />)} />
+        <Route path="/wattlab" element={gated(<WattLabPage />)} />
+        <Route path="/twin" element={gated(<TwinPage />)} />
       </Routes>
     </BrowserRouter>
   );

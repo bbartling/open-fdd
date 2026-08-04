@@ -58,6 +58,16 @@ export function buildPackageUploadFormData(file: File, fieldName = "file"): Form
 export async function uploadPackage(file: File): Promise<PackageImportResponse> {
   const requestId = newRequestId();
   const token = getStoredToken();
+  if (!token && typeof window !== "undefined") {
+    const here = `${window.location.pathname}${window.location.search}`;
+    window.location.assign(`/auth?from=${encodeURIComponent(here)}`);
+    throw new ApiClientError("Login required before package upload", {
+      code: "auth.required",
+      retryable: false,
+      requestId,
+      status: 401,
+    });
+  }
   const headers: Record<string, string> = {
     Accept: "application/json",
     [REQUEST_ID_HEADER]: requestId,
