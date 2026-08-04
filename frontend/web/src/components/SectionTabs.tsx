@@ -1,4 +1,4 @@
-import { NavLink, useLocation, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { MAIN_SECTIONS } from "../nav/sections";
 
 interface SectionTabsProps {
@@ -11,10 +11,14 @@ function resolveActiveId(
   override?: string,
 ): string | null {
   if (override) return override;
-  if (pathname.startsWith("/wattlab")) return "wattlab";
+  if (pathname.startsWith("/wattlab") || pathname.startsWith("/twin")) {
+    return "wattlab";
+  }
   if (pathname.startsWith("/mapping")) return "data-model";
   if (pathname.startsWith("/rules")) return "run-rules";
   if (pathname.startsWith("/findings")) return "results";
+  if (pathname.startsWith("/rcx")) return "rcx-plots";
+  if (pathname.startsWith("/metering")) return "metering";
   if (pathname === "/" || pathname === "") return "overview";
   if (pathname.startsWith("/reports")) {
     if (searchSection === "rcx-plots") return "rcx-plots";
@@ -24,8 +28,23 @@ function resolveActiveId(
   return null;
 }
 
+function sectionPath(id: string, fallback: string): string {
+  switch (id) {
+    case "fdd-plots":
+      return "/reports?section=fdd-plots";
+    case "rcx-plots":
+      return "/rcx";
+    case "metering":
+      return "/metering";
+    default:
+      return fallback;
+  }
+}
+
+/** Streamlit-style horizontal radio section selector. */
 export function SectionTabs({ activeSectionId }: SectionTabsProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const active = resolveActiveId(
     location.pathname,
@@ -34,37 +53,33 @@ export function SectionTabs({ activeSectionId }: SectionTabsProps) {
   );
 
   return (
-    <nav
+    <fieldset
       className="app-section-tabs"
       aria-label="Main sections"
       data-testid="section-tabs"
     >
+      <legend className="app-section-tabs__legend">Section</legend>
       {MAIN_SECTIONS.map((section) => {
-        const to =
-          section.id === "fdd-plots"
-            ? "/reports?section=fdd-plots"
-            : section.id === "rcx-plots"
-              ? "/reports?section=rcx-plots"
-              : section.id === "metering"
-                ? "/reports?section=metering"
-                : section.path;
         const isActive = active === section.id;
-
+        const to = sectionPath(section.id, section.path);
         return (
-          <NavLink
+          <label
             key={section.id}
-            to={to}
-            className={() =>
-              `app-section-tabs__tab${isActive ? " app-section-tabs__tab--active" : ""}`
-            }
+            className={`app-section-tabs__radio${isActive ? " app-section-tabs__radio--active" : ""}`}
             data-testid={`section-${section.id}`}
             data-section={section.id}
-            aria-current={isActive ? "page" : undefined}
           >
-            {section.label}
-          </NavLink>
+            <input
+              type="radio"
+              name="main-section"
+              value={section.id}
+              checked={isActive}
+              onChange={() => navigate(to)}
+            />
+            <span>{section.label}</span>
+          </label>
         );
       })}
-    </nav>
+    </fieldset>
   );
 }

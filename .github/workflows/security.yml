@@ -46,7 +46,7 @@ jobs:
           test -f services/central/Dockerfile
           test -f frontend/web/package.json
           test -f frontend/web/Dockerfile
-          test -f services/ui/ARCHIVED.md
+          ! test -d services/ui
           test -f Dockerfile.mcp
           test -f .env.example
           test -d edge
@@ -57,12 +57,11 @@ jobs:
           test ! -f docker/compose.edge.rust.yml
           test ! -d workspace/dashboard/src
 
-      - name: React is sole production UI (Streamlit archived)
+      - name: React is sole production UI (Streamlit removed)
         run: |
           ! test -f workspace/dashboard/package.json
-          test -f services/ui/ARCHIVED.md
-          grep -q "ARCHIVED" services/ui/ARCHIVED.md
-          grep -q "streamlit-legacy" docker/compose.central.yml
+          ! test -d services/ui
+          ! grep -q "streamlit-legacy" docker/compose.central.yml docker/compose.csv.yml docker/compose.standalone.yml
           test -f docs/architecture/adr-001-react-rust-modernization.md
           python3 scripts/architecture_react_policy_check.py
           python3 -m pip install --user PyYAML

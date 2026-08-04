@@ -1,5 +1,20 @@
 # Session log
 
+## 2026-08-04 — Streamlit delete + WattLab relocate (cutover)
+
+- Relocated cookbook WattLab exporter → `tools/wattlab_export/`; central shells it (no `services/ui`).
+- Deleted `services/ui` + `services/overview_oracle`; compose/CI assert React-only + ui absent.
+- Stopped `openfdd-ui` GHCR publish in stack + release workflows.
+- Overview A/B: weekly plant bins, mech OAT bins, `/api/analytics/bas-vs-web-oat`.
+
+## 2026-08-04 — Turnkey Rust cutover + agent_spec sync
+
+- Locked product path: React + central DataFusion only; Overview via `/api/analytics/*` + client Plotly (no overview-oracle / Streamlit product).
+- In progress on #663 tip: runtime weekly plant bins, mech OAT bins, BAS-vs-web route; React `centralOverview.ts` wiring.
+- Updated `openfdd_agent_spec` (AGENTS/ARCHITECTURE/CONTAINER_AGENT/ownership/skills) so Streamlit is **cutover-delete**, not archived product UI.
+- Plan: keep `openfdd_agent_spec/` current on every cutover PR (see turnkey plan `agent-spec` todo).
+- Still pending: WattLab relocate → delete `services/ui` + overview_oracle; stop `openfdd-ui` GHCR; bensbench tip pull.
+
 ## 2026-08-02 — P1-M2-A ESLint + Playwright
 
 - Real ESLint config (hooks/a11y/TS); CI fails on lint.

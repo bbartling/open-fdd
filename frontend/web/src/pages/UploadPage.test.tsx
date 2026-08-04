@@ -12,6 +12,15 @@ vi.mock("../api/uploadApi", () => ({
   packageDatasetId: (r: { building_id?: string }) => r.building_id,
 }));
 
+vi.mock("../api/mappingApi", () => ({
+  listPackageBuildings: vi.fn(async () => []),
+}));
+
+vi.mock("../api/fddApi", () => ({
+  listFddRules: vi.fn(async () => []),
+  getFddRuleParams: vi.fn(async () => ({ ok: true, params: {} })),
+}));
+
 import { getJob } from "../api/jobsApi";
 import { uploadPackage } from "../api/uploadApi";
 
@@ -31,7 +40,9 @@ describe("UploadPage", () => {
 
   it("renders file upload and import button", () => {
     renderUpload();
-    expect(screen.getByText("Building package zip")).toBeTruthy();
+    expect(screen.getByTestId("upload-file").textContent).toMatch(
+      /Building package zip/,
+    );
     const btn = screen.getByTestId("upload-submit").querySelector("button");
     expect(btn?.disabled).toBe(true);
   });
@@ -53,7 +64,9 @@ describe("UploadPage", () => {
     await waitFor(() => {
       expect(screen.getByTestId("upload-job-context").textContent).toMatch(/Alpha/);
     });
-    expect(document.body.textContent).toMatch(/does not yet associate/);
+    expect(screen.getByTestId("upload-page").textContent).toMatch(
+      /same active-site handoff/,
+    );
   });
 
   it("shows success after upload", async () => {
@@ -65,7 +78,8 @@ describe("UploadPage", () => {
     });
 
     renderUpload();
-    const input = document.querySelector(
+    const uploadRoot = screen.getByTestId("upload-page");
+    const input = uploadRoot.querySelector(
       'input[type="file"]',
     ) as HTMLInputElement;
     const file = new File(["zip"], "demo.zip", { type: "application/zip" });
@@ -79,6 +93,9 @@ describe("UploadPage", () => {
         /BUILDING_9/,
       );
     });
+    expect(screen.getByTestId("upload-goto-overview").getAttribute("href")).toBe(
+      "/?site=BUILDING_9",
+    );
     const link = screen.getByRole("link", { name: /continue to mapping/i });
     expect(link.getAttribute("href")).toBe("/mapping?site=BUILDING_9");
   });

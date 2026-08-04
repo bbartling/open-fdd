@@ -1,11 +1,51 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { AppShell } from "./AppShell";
 import { MAIN_SECTIONS } from "../nav/sections";
 
+vi.mock("../api/mappingApi", () => ({
+  listPackageBuildings: vi.fn(async () => []),
+}));
+
+vi.mock("../api/uploadApi", () => ({
+  uploadPackage: vi.fn(),
+}));
+
+vi.mock("../api/fddApi", () => ({
+  listFddRules: vi.fn(async () => [
+    {
+      rule_id: "AHU-SATDEV",
+      description: "SAT deviation",
+      parameter_count: 2,
+      required_roles: [],
+    },
+  ]),
+  getFddRuleParams: vi.fn(async () => ({
+    ok: true,
+    rule_id: "AHU-SATDEV",
+    params: {
+      confirm_min: {
+        key: "confirm_min",
+        label: "Fault confirm delay",
+        default: 10,
+        min: 0,
+        max: 60,
+        step: 1,
+        unit: "min",
+        control: "slider",
+        sql_placeholder: "",
+      },
+    },
+  })),
+}));
+
 describe("AppShell layout parity", () => {
-  it("renders Streamlit section order and brand", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders Streamlit section order, brand, and Rule tuning", async () => {
     render(
       <MemoryRouter>
         <AppShell title="Home" caption="Parity shell">
@@ -15,6 +55,12 @@ describe("AppShell layout parity", () => {
     );
 
     expect(screen.getByText("Open-FDD")).toBeTruthy();
+    expect(screen.getByTestId("sidebar-sites")).toBeTruthy();
+    expect(screen.getByText("Sites")).toBeTruthy();
+    expect(screen.getByTestId("sidebar-building-data")).toBeTruthy();
+    expect(screen.getByText("Building data")).toBeTruthy();
+    expect(screen.getByTestId("sidebar-rule-tuning")).toBeTruthy();
+    expect(screen.getByText("Rule tuning")).toBeTruthy();
     expect(screen.getByTestId("page-caption").textContent).toBe("Parity shell");
 
     const tabs = screen.getByTestId("section-tabs");
@@ -22,6 +68,20 @@ describe("AppShell layout parity", () => {
       (el) => el.getAttribute("data-section"),
     );
     expect(labels).toEqual(MAIN_SECTIONS.map((s) => s.id));
+
+    const tabText = [...tabs.querySelectorAll("[data-section]")].map(
+      (el) => el.textContent?.trim(),
+    );
+    expect(tabText).toEqual([
+      "Overview",
+      "Data Model",
+      "Run Rules",
+      "Results by Category",
+      "FDD Plots",
+      "RCx Plots",
+      "Metering",
+      "WattLab",
+    ]);
   });
 
   it("collapses the sidebar when toggle is pressed", () => {

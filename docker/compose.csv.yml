@@ -1,4 +1,4 @@
-# Open-FDD CSV-only recipe: central + UI (no MQTT, no fieldbus).
+# Open-FDD CSV-only recipe: central + React web (no MQTT, no fieldbus).
 # Use when starting jobs from bulk CSV upload without live OT drivers.
 
 name: openfdd-csv
@@ -15,26 +15,25 @@ services:
       OPENFDD_PARQUET_ROOT: /workspace/.cache/parquet
       OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}
       OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
+      OPENFDD_REACT_UI: "1"
+      OPENFDD_UI_GENERATION_DEFAULT: react
     ports:
       - "${OPENFDD_CENTRAL_BIND:-0.0.0.0}:8080:8080"
     volumes:
       - ../workspace:/workspace
     restart: unless-stopped
 
-  ui:
-    profiles: ["streamlit-legacy"]
-    image: ${OPENFDD_UI_IMAGE:-ghcr.io/bbartling/openfdd-ui:nightly}
+  web:
+    image: ${OPENFDD_WEB_IMAGE:-ghcr.io/bbartling/openfdd-web:nightly}
     build:
-      context: ../services/ui
+      context: ../frontend/web
       dockerfile: Dockerfile
-    environment:
-      OPENFDD_API_BASE: http://central:8080
-      OPENFDD_API_TOKEN: ${OPENFDD_API_TOKEN:-}
-      OPENFDD_UI_USERNAME: ${OPENFDD_UI_USERNAME:-admin}
-      OPENFDD_UI_PASSWORD: ${OPENFDD_UI_PASSWORD:-}
-      OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
+      args:
+        OPENFDD_GIT_SHA: ${OPENFDD_GIT_SHA:-unknown}
+        OPENFDD_WEB_VERSION: ${OPENFDD_WEB_VERSION:-0.1.0}
     ports:
-      - "${OPENFDD_UI_BIND:-0.0.0.0}:3000:8501"
+      # nginx-unprivileged listens on 8080 inside the image.
+      - "${OPENFDD_WEB_BIND:-0.0.0.0}:3000:8080"
     depends_on:
       - central
     restart: unless-stopped

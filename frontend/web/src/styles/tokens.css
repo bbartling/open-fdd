@@ -1,36 +1,53 @@
 :root {
-  /* Navy / teal palette — Streamlit-ish frame (no purple AI defaults) */
-  --color-navy-900: #0b1f33;
-  --color-navy-800: #122a42;
-  --color-navy-700: #1a3550;
-  --color-navy-600: #234466;
-  --color-teal-600: #0f766e;
-  --color-teal-500: #0d9488;
-  --color-teal-400: #14b8a6;
-  --color-teal-100: #ccfbf1;
-  --color-slate-50: #f8fafc;
-  --color-slate-100: #f1f5f9;
-  --color-slate-200: #e2e8f0;
-  --color-slate-300: #cbd5e1;
-  --color-slate-400: #94a3b8;
-  --color-slate-500: #64748b;
-  --color-slate-700: #334155;
-  --color-slate-800: #1e293b;
-  --color-white: #ffffff;
-  --color-danger: #dc2626;
-  --color-danger-bg: #fef2f2;
-  --color-danger-border: #fecaca;
-  --color-success: #059669;
-  --color-success-bg: #ecfdf5;
-  --color-success-border: #a7f3d0;
-  --color-warning: #d97706;
-  --color-warning-bg: #fffbeb;
-  --color-warning-border: #fde68a;
-  --color-info: #0284c7;
-  --color-info-bg: #f0f9ff;
-  --color-info-border: #bae6fd;
+  /*
+   * Streamlit openfdd-ui oracle palette (measured 2026-08-03 on :8501 @ 1440×900)
+   * body bg #fff · text #31333F · sidebar #F0F2F6 · width 300px · font "Source Sans"
+   * Primary accent = Streamlit default red (not invented teal/navy SaaS).
+   */
+  --color-text: #31333f;
+  /* Streamlit soft secondary text (~60% of body) */
+  --color-text-muted: rgba(49, 51, 63, 0.6);
+  --color-bg: #ffffff;
+  --color-sidebar-bg: #f0f2f6;
+  --color-secondary-bg: #f0f2f6;
+  --color-border: rgba(49, 51, 63, 0.2);
+  --color-primary: #ff4b4b;
+  --color-primary-hover: #ff2b2b;
+  --color-primary-bg: #fff0f0;
+  --color-widget-bg: #ffffff;
+  --color-widget-border: rgba(49, 51, 63, 0.2);
 
-  /* Layout geometry (Streamlit-like; see LAYOUT_GEOMETRY.md) */
+  /* Keep legacy token names mapped so widgets/pages keep compiling */
+  --color-navy-900: #31333f;
+  --color-navy-800: #31333f;
+  --color-navy-700: #555867;
+  --color-navy-600: #808495;
+  --color-teal-600: #ff4b4b;
+  --color-teal-500: #ff4b4b;
+  --color-teal-400: #ff6c6c;
+  --color-teal-100: #fff0f0;
+  --color-slate-50: #ffffff;
+  --color-slate-100: #f0f2f6;
+  --color-slate-200: #e6eaf1;
+  --color-slate-300: #d6d6d8;
+  --color-slate-400: #a3a8b8;
+  --color-slate-500: #808495;
+  --color-slate-700: #31333f;
+  --color-slate-800: #31333f;
+  --color-white: #ffffff;
+  --color-danger: #ff4b4b;
+  --color-danger-bg: #fff0f0;
+  --color-danger-border: #ffc7c7;
+  --color-success: #09ab3b;
+  --color-success-bg: #dffde9;
+  --color-success-border: #9ef0b4;
+  --color-warning: #ffbd45;
+  --color-warning-bg: #fff8e1;
+  --color-warning-border: #ffe6a8;
+  --color-info: #0068c9;
+  --color-info-bg: #e8f4ff;
+  --color-info-border: #b5d8f7;
+
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;
   --space-md: 1rem;
@@ -38,51 +55,45 @@
   --space-xl: 2rem;
   --space-2xl: 3rem;
 
-  --sidebar-width: 21rem;
+  /* Oracle measured sidebar ≈ 300px @ 1440 */
+  --sidebar-width: 300px;
   --sidebar-width-collapsed: 3.25rem;
-  --header-height: 3.5rem;
-  --section-tabs-height: 2.75rem;
-  --content-max-width: 1200px;
-  --content-gutter: 1.5rem;
+  --header-height: 3.75rem;
+  --section-tabs-height: 2.5rem;
+  --content-max-width: none;
+  --content-gutter: 5rem;
   --page-caption-gap: 0.35rem;
 
-  --radius-sm: 0.25rem;
+  /* Streamlit widgets use soft ~0.5rem corners */
+  --radius-sm: 0.5rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
 
-  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.06);
-  --shadow-md: 0 4px 12px rgb(15 23 42 / 0.08);
+  --shadow-sm: 0 1px 2px rgba(49, 51, 63, 0.04);
+  --shadow-md: 0 2px 8px rgba(49, 51, 63, 0.06);
 
-  --font-sans: "Source Sans 3", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --font-mono: ui-monospace, "Cascadia Code", "Source Code Pro", monospace;
-  --font-size-xs: 0.75rem;
+  --font-sans: "Source Sans 3", "Source Sans Pro", "Source Sans", "Segoe UI",
+    system-ui, sans-serif;
+  --font-mono: ui-monospace, "Source Code Pro", monospace;
+  --font-size-xs: 0.8rem;
   --font-size-sm: 0.875rem;
   --font-size-md: 1rem;
   --font-size-lg: 1.25rem;
-  --font-size-xl: 1.5rem;
-  --line-height-tight: 1.25;
-  --line-height-body: 1.5;
+  --font-size-xl: 1.75rem;
+  --line-height-tight: 1.3;
+  --line-height-body: 1.6;
+  --font-weight-normal: 400;
+  --font-weight-semibold: 600;
 
-  --focus-ring: 0 0 0 2px var(--color-white), 0 0 0 4px var(--color-teal-500);
+  --focus-ring: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-primary);
   --transition-fast: 120ms ease;
 
   color-scheme: light;
 }
 
+/* Force light Streamlit chrome — do not invent dark SaaS theme */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-slate-50: #0f172a;
-    --color-slate-100: #1e293b;
-    --color-slate-200: #334155;
-    --color-slate-300: #475569;
-    --color-slate-400: #64748b;
-    --color-slate-500: #94a3b8;
-    --color-slate-700: #e2e8f0;
-    --color-slate-800: #f1f5f9;
-    --color-white: #0b1220;
-    --color-navy-900: #020617;
-    --color-navy-800: #0f172a;
-    --color-navy-700: #1e293b;
-    color-scheme: dark;
+    color-scheme: light;
   }
 }

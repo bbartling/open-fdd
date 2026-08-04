@@ -5,12 +5,20 @@ import { ReportsPage } from "./ReportsPage";
 
 vi.mock("../api/mappingApi", () => ({
   listPackageBuildings: vi.fn(async () => ["B1"]),
+  getSessionConfig: vi.fn(async () => ({ ok: true, config: {} })),
+  putSessionConfig: vi.fn(async () => ({ ok: true })),
 }));
 
 vi.mock("../api/fddApi", () => ({
   listFddRules: vi.fn(async () => [
-    { rule_id: "VAV-1", description: "Comfort", required_roles: ["zone_t"] },
+    {
+      rule_id: "VAV-1",
+      description: "Comfort",
+      required_roles: ["zone_t"],
+      parameter_count: 0,
+    },
   ]),
+  getFddRuleParams: vi.fn(async () => ({ ok: true, params: {} })),
   getFddResults: vi.fn(async () => [
     { rule_id: "VAV-1", equipment_id: "VAV_1", status: "FAULT" },
   ]),
@@ -27,6 +35,14 @@ vi.mock("../api/fddApi", () => ({
     max_points: 5000,
   })),
 }));
+
+vi.mock("../api/analyticsApi", () => ({
+  listFddEquipment: vi.fn(async () => [
+    { equipment_id: "VAV_1", equipment_type: "VAV" },
+  ]),
+}));
+
+vi.mock("../api/uploadApi", () => ({ uploadPackage: vi.fn() }));
 
 vi.mock("../api/reportsApi", () => ({
   listReports: vi.fn(async () => []),
@@ -52,11 +68,14 @@ describe("ReportsPage plots", () => {
 
   it("loads series and renders chart + preview", async () => {
     renderPlots();
-    await waitFor(() => screen.getByTestId("plots-load"));
+    await waitFor(() => {
+      const btn = screen.getByTestId("plots-load").querySelector("button");
+      expect(btn?.disabled).toBe(false);
+    });
     fireEvent.click(screen.getByTestId("plots-load").querySelector("button")!);
     await waitFor(() => {
       expect(getFddSeries).toHaveBeenCalledWith("VAV_1", "VAV-1");
-      expect(screen.getByTestId("plotly-svg-fdd-series")).toBeTruthy();
+      expect(screen.getByTestId("plots-chart")).toBeTruthy();
       expect(screen.getByTestId("plots-preview-table")).toBeTruthy();
     });
   });

@@ -1,48 +1,85 @@
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { WidgetBaseProps } from "./types";
 import { widgetTestId } from "./types";
 import type { PlotlyFigure } from "../../api/plotDataset";
+import { sanitizePlotlyFigure } from "../../api/plotlySanitize";
 
 export interface PlotlyHostProps extends Omit<WidgetBaseProps, "label"> {
   label?: string;
-  /** Figure JSON from plotDataset / future Plotly.react */
+  /** Figure JSON compatible with Plotly.newPlot */
   figure?: PlotlyFigure | null;
   figureId?: string;
   height?: number;
 }
 
-function buildSvgPath(
-  xs: number[],
-  ys: Array<number | null>,
-  width: number,
-  height: number,
-  pad: number,
-): string {
-  const finite = ys
-    .map((y, i) => (y == null || !Number.isFinite(y) ? null : { i, y }))
-    .filter((p): p is { i: number; y: number } => p != null);
-  if (!finite.length || xs.length < 2) return "";
-  const yMin = Math.min(...finite.map((p) => p.y));
-  const yMax = Math.max(...finite.map((p) => p.y));
-  const ySpan = yMax - yMin || 1;
-  const xSpan = xs.length - 1 || 1;
-  let d = "";
-  let penUp = true;
-  for (let i = 0; i < ys.length; i++) {
-    const y = ys[i];
-    if (y == null || !Number.isFinite(y)) {
-      penUp = true;
-      continue;
-    }
-    const px = pad + (i / xSpan) * (width - 2 * pad);
-    const py = height - pad - ((y - yMin) / ySpan) * (height - 2 * pad);
-    d += penUp ? `M ${px} ${py}` : ` L ${px} ${py}`;
-    penUp = false;
+type PlotlyStatic = {
+  newPlot: (
+    el: HTMLElement,
+    data: unknown,
+    layout?: unknown,
+    config?: unknown,
+  ) => Promise<unknown>;
+  purge: (el: HTMLElement) => void;
+  react?: (
+    el: HTMLElement,
+    data: unknown,
+    layout?: unknown,
+    config?: unknown,
+  ) => Promise<unknown>;
+  Plots?: { resize: (el: HTMLElement) => void };
+};
+
+declare global {
+  interface Window {
+    Plotly?: PlotlyStatic;
   }
-  return d;
 }
 
-const TRACE_COLORS = ["#0f766e", "#b45309", "#1d4ed8", "#be123c", "#7c3aed"];
+function waitForPlotly(timeoutMs = 8000): {
+  promise: Promise<PlotlyStatic | null>;
+  cancel: () => void;
+} {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let cancelled = false;
+  const cancel = () => {
+    cancelled = true;
+    if (timer !== undefined) clearTimeout(timer);
+  };
+  const promise = new Promise<PlotlyStatic | null>((resolve) => {
+    if (typeof window === "undefined") {
+      resolve(null);
+      return;
+    }
+    if (window.Plotly) {
+      resolve(window.Plotly);
+      return;
+    }
+    const start = Date.now();
+    const tick = () => {
+      if (cancelled) {
+        resolve(null);
+        return;
+      }
+      if (typeof window === "undefined") {
+        resolve(null);
+        return;
+      }
+      if (window.Plotly) {
+        resolve(window.Plotly);
+        return;
+      }
+      if (Date.now() - start > timeoutMs) {
+        resolve(null);
+        return;
+      }
+      timer = setTimeout(tick, 50);
+    };
+    tick();
+  });
+  return { promise, cancel };
+}
 
+/** Real Plotly.js host (vendored `/plotly.min.js`). */
 export function PlotlyHost({
   id,
   label = "Chart",
@@ -53,19 +90,119 @@ export function PlotlyHost({
   testId,
   figure,
   figureId,
-  height = 220,
+  height = 320,
 }: PlotlyHostProps) {
-  const width = 640;
-  const pad = 24;
-  const traces = figure?.data ?? [];
-  const xs = traces[0]?.x?.map((_, i) => i) ?? [];
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [renderErr, setRenderErr] = useState<string | null>(null);
+  const [plotlyReady, setPlotlyReady] = useState(
+    () => typeof window !== "undefined" && Boolean(window.Plotly),
+  );
+  const [drawn, setDrawn] = useState(false);
+  const clean = useMemo(() => sanitizePlotlyFigure(figure), [figure]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const wait = waitForPlotly();
+    void wait.promise.then((P) => {
+      if (!cancelled) setPlotlyReady(Boolean(P));
+    });
+    return () => {
+      cancelled = true;
+      wait.cancel();
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el) return;
+    let cancelled = false;
+    const wait = waitForPlotly();
+
+    const draw = async () => {
+      setRenderErr(null);
+      setDrawn(false);
+      if (!clean?.data?.length) {
+        try {
+          if (typeof window !== "undefined") window.Plotly?.purge(el);
+        } catch {
+          /* ignore */
+        }
+        el.replaceChildren();
+        return;
+      }
+      const Plotly =
+        (await wait.promise) ??
+        (typeof window !== "undefined" ? window.Plotly : undefined);
+      if (cancelled || !Plotly) {
+        if (!cancelled && !Plotly) {
+          setRenderErr("Plotly.js failed to load — check /plotly.min.js");
+        }
+        return;
+      }
+      const layout: Record<string, unknown> = {
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        font: { family: "Source Sans 3, Source Sans, sans-serif", size: 12 },
+        ...(clean.layout as object),
+        height: (clean.layout as { height?: number } | undefined)?.height ?? height,
+        autosize: true,
+      };
+      delete layout.template;
+      const config = {
+        responsive: true,
+        displayModeBar: true,
+        displaylogo: false,
+      };
+      try {
+        await (Plotly.react ?? Plotly.newPlot)(el, clean.data, layout, config);
+        if (cancelled) {
+          Plotly.purge(el);
+          return;
+        }
+        setDrawn(true);
+        try {
+          Plotly.Plots?.resize(el);
+        } catch {
+          /* ignore */
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setRenderErr(err instanceof Error ? err.message : String(err));
+          setDrawn(false);
+        }
+      }
+    };
+
+    void draw();
+    return () => {
+      cancelled = true;
+      wait.cancel();
+      try {
+        if (typeof window !== "undefined") window.Plotly?.purge(el);
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [clean, height]);
+
+  const statusMsg = loading
+    ? "Loading chart…"
+    : renderErr
+      ? null
+      : !clean
+        ? "No series loaded"
+        : !plotlyReady
+          ? "Waiting for Plotly.js…"
+          : drawn
+            ? null
+            : "Rendering chart…";
 
   return (
     <div
-      className={`widget widget--plotly${error ? " widget--error" : ""}`}
+      className={`widget widget--plotly${error || renderErr ? " widget--error" : ""}`}
       data-testid={widgetTestId(`plotly-host-${id}`, testId)}
       aria-disabled={disabled || undefined}
-      aria-busy={loading || undefined}
+      aria-busy={loading || (!drawn && Boolean(clean)) || undefined}
     >
       <span className="widget__label">{label}</span>
       {description ? (
@@ -75,53 +212,42 @@ export function PlotlyHost({
         className="widget-plotly-host"
         data-figure-id={figureId ?? figure?.meta?.rule_id}
         aria-label={label}
+        style={{
+          position: "relative",
+          minHeight: height,
+          width: "100%",
+        }}
       >
-        {loading ? (
-          "Loading chart…"
-        ) : !figure || !traces.length ? (
-          "No series loaded"
-        ) : (
-          <svg
-            viewBox={`0 0 ${width} ${height}`}
-            width="100%"
-            height={height}
-            role="img"
-            data-testid={`plotly-svg-${id}`}
+        {/* Always mounted so Plotly can draw; overlays communicate status */}
+        <div
+          ref={hostRef}
+          data-testid={`plotly-div-${id}`}
+          style={{ width: "100%", minHeight: height }}
+        />
+        {statusMsg ? (
+          <p
+            className="widget-plotly-host__status"
+            data-testid={`plotly-status-${id}`}
+            role="status"
           >
-            <title>{figure.layout?.title ?? label}</title>
-            {traces.map((t, idx) => {
-              const d = buildSvgPath(
-                xs.length ? xs : t.x.map((_, i) => i),
-                t.y,
-                width,
-                height,
-                pad,
-              );
-              if (!d) return null;
-              return (
-                <path
-                  key={t.name}
-                  d={d}
-                  fill="none"
-                  stroke={TRACE_COLORS[idx % TRACE_COLORS.length]}
-                  strokeWidth={2}
-                  data-trace={t.name}
-                />
-              );
-            })}
-          </svg>
-        )}
+            {statusMsg}
+          </p>
+        ) : null}
       </div>
-      {figure?.meta ? (
+      {drawn && clean ? (
         <p className="widget__description" data-testid={`plotly-meta-${id}`}>
-          {figure.meta.point_count ?? 0} pts
-          {figure.meta.downsampled ? " · downsampled" : ""}
-          {figure.meta.provenance ? ` · ${figure.meta.provenance}` : ""}
+          {clean.data.length} trace{clean.data.length === 1 ? "" : "s"}
+          {clean.meta?.point_count != null
+            ? ` · ${clean.meta.point_count} pts`
+            : ""}
+          {clean.meta?.downsampled ? " · downsampled" : ""}
+          {clean.meta?.provenance ? ` · ${clean.meta.provenance}` : ""}
+          {" · rendered"}
         </p>
       ) : null}
-      {error ? (
+      {renderErr || error ? (
         <p className="widget__error" role="alert">
-          {error}
+          {renderErr || error}
         </p>
       ) : null}
     </div>

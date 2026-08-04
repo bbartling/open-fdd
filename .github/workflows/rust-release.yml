@@ -25,7 +25,7 @@ permissions:
 env:
   MCP_IMAGE: ghcr.io/bbartling/openfdd-mcp
   CENTRAL_IMAGE: ghcr.io/bbartling/openfdd-central
-  UI_IMAGE: ghcr.io/bbartling/openfdd-ui
+  WEB_IMAGE: ghcr.io/bbartling/openfdd-web
   FIELDBUS_IMAGE: ghcr.io/bbartling/openfdd-fieldbus
   MQTT_IMAGE: ghcr.io/bbartling/openfdd-mqtt
 
@@ -82,10 +82,11 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --all-targets
       - run: |
-          test -f services/ui/ARCHIVED.md
           test -f frontend/web/package.json
           test -f frontend/web/Dockerfile
           test -f docker/compose.react.yml
+          ! test -d services/ui
+          ! grep -q "streamlit-legacy" docker/compose.central.yml docker/compose.csv.yml docker/compose.standalone.yml
       - run: |
           export OPENFDD_SITE_ID=local
           export OPENFDD_EDGE_ID=fieldbus-1
@@ -134,7 +135,7 @@ jobs:
           }
 
           build_one openfdd-central services/central/Dockerfile .
-          build_one openfdd-ui services/ui/Dockerfile services/ui
+          build_one openfdd-web frontend/web/Dockerfile frontend/web
           build_one openfdd-fieldbus services/fieldbus/Dockerfile .
           build_one openfdd-mqtt services/mqtt/Dockerfile services/mqtt
 
@@ -223,16 +224,16 @@ jobs:
             **Images:**
             ```bash
             ghcr.io/bbartling/openfdd-central:${{ needs.validate.outputs.version }}
-            ghcr.io/bbartling/openfdd-ui:${{ needs.validate.outputs.version }}
+            ghcr.io/bbartling/openfdd-web:${{ needs.validate.outputs.version }}
             ghcr.io/bbartling/openfdd-fieldbus:${{ needs.validate.outputs.version }}
             ghcr.io/bbartling/openfdd-mqtt:${{ needs.validate.outputs.version }}
             ghcr.io/bbartling/openfdd-mcp:${{ needs.validate.outputs.version }}
             ```
 
-            ### Deploy (standalone recipe)
+            ### Deploy (react recipe)
             ```bash
             export OPENFDD_IMAGE_TAG=${{ needs.validate.outputs.version }}
-            ./scripts/openfdd_stack_up.sh standalone
+            ./scripts/openfdd_stack_up.sh react
             ```
 
             See [Build recipes](https://bbartling.github.io/open-fdd/operations/build-recipes.html) for csv / central / edge recipes.

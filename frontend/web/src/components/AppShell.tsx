@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink } from "react-router";
 import { SectionTabs } from "./SectionTabs";
+import { OracleSidebar } from "./OracleSidebar";
 import { SIDEBAR_NAV } from "../nav/sections";
 
 interface AppShellProps {
@@ -9,6 +10,8 @@ interface AppShellProps {
   children: React.ReactNode;
   /** Streamlit section id for top tab highlight */
   activeSectionId?: string;
+  /** When true, omit page H1 (hero supplies brand on Overview empty state). */
+  hideHeader?: boolean;
 }
 
 export function AppShell({
@@ -16,6 +19,7 @@ export function AppShell({
   caption,
   children,
   activeSectionId,
+  hideHeader = false,
 }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -25,14 +29,14 @@ export function AppShell({
       data-testid="app-shell"
       data-sidebar-collapsed={collapsed ? "true" : "false"}
     >
-      <aside className="app-sidebar" aria-label="Primary">
+      <aside className="app-sidebar" aria-label="Sites and controls">
         <div className="app-sidebar__brand-row">
           <div className="app-sidebar__brand">Open-FDD</div>
           <button
             type="button"
             className="app-sidebar__collapse"
             aria-expanded={!collapsed}
-            aria-controls="app-sidebar-nav"
+            aria-controls="app-sidebar-oracle"
             data-testid="sidebar-collapse"
             onClick={() => setCollapsed((v) => !v)}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -40,37 +44,46 @@ export function AppShell({
             {collapsed ? "»" : "«"}
           </button>
         </div>
-        <div className="app-sidebar__section-label">Workspace</div>
-        <nav
-          id="app-sidebar-nav"
-          className="app-sidebar__nav"
-          aria-label="Main"
-        >
-          {SIDEBAR_NAV.map(({ to, label, short, testId }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === "/"}
-              className={({ isActive }) =>
-                `app-sidebar__link${isActive ? " app-sidebar__link--active" : ""}`
-              }
-              data-testid={testId}
-              title={label}
-            >
-              {collapsed ? short : label}
-            </NavLink>
-          ))}
-        </nav>
+
+        <div id="app-sidebar-oracle" className="app-sidebar__scroll">
+          <OracleSidebar collapsed={collapsed} />
+        </div>
+
+        <details className="app-sidebar__pages" open={false}>
+          <summary>App pages</summary>
+          <nav
+            id="app-sidebar-nav"
+            className="app-sidebar__nav"
+            aria-label="App pages"
+          >
+            {SIDEBAR_NAV.map(({ to, label, short, testId }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === "/"}
+                className={({ isActive }) =>
+                  `app-sidebar__link${isActive ? " app-sidebar__link--active" : ""}`
+                }
+                data-testid={testId}
+                title={label}
+              >
+                {collapsed ? short : label}
+              </NavLink>
+            ))}
+          </nav>
+        </details>
       </aside>
       <div className="app-main">
-        <header className="app-header">
-          <h1 className="app-header__title">{title}</h1>
-          {caption ? (
-            <p className="app-header__caption" data-testid="page-caption">
-              {caption}
-            </p>
-          ) : null}
-        </header>
+        {!hideHeader ? (
+          <header className="app-header">
+            <h1 className="app-header__title">{title}</h1>
+            {caption ? (
+              <p className="app-header__caption" data-testid="page-caption">
+                {caption}
+              </p>
+            ) : null}
+          </header>
+        ) : null}
         <SectionTabs activeSectionId={activeSectionId} />
         <main className="app-content">{children}</main>
       </div>

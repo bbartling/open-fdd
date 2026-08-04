@@ -57,6 +57,30 @@ mod live_routes {
     pub fn jobs_create_wattlab_handoff() {}
 
     #[utoipa::path(
+        post, path = "/api/jobs/{job_id}/wattlab/dumps", tag = "jobs",
+        params(("job_id" = String, Path, description = "Job id")),
+        request_body = serde_json::Value,
+        responses(
+            (status = 201, description = "Build a WattLab dump zip (cookbook exporter)", body = serde_json::Value),
+            (status = 404, description = "Job or imported building package not found")
+        )
+    )]
+    pub fn jobs_create_wattlab_dump() {}
+
+    #[utoipa::path(
+        get, path = "/api/jobs/{job_id}/wattlab/dumps/{dump_id}/download", tag = "jobs",
+        params(
+            ("job_id" = String, Path, description = "Job id"),
+            ("dump_id" = String, Path, description = "Dump id")
+        ),
+        responses(
+            (status = 200, description = "Download WattLab dump zip", content_type = "application/zip"),
+            (status = 404, description = "Dump not found")
+        )
+    )]
+    pub fn jobs_download_wattlab_dump() {}
+
+    #[utoipa::path(
         post, path = "/api/jobs/{job_id}/eplus/runs", tag = "jobs",
         params(("job_id" = String, Path, description = "Job id")),
         request_body = serde_json::Value,
@@ -184,6 +208,8 @@ mod live_routes {
         live_routes::jobs_create,
         live_routes::jobs_get,
         live_routes::jobs_create_wattlab_handoff,
+        live_routes::jobs_create_wattlab_dump,
+        live_routes::jobs_download_wattlab_dump,
         live_routes::jobs_queue_eplus_run,
         live_routes::datasets_list,
         live_routes::datasets_delete,

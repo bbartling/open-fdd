@@ -173,11 +173,20 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     env
 }
 
-/// Async handler: when no inline evidence is provided, register historian
-/// Parquet and return descriptive per-equipment row counts via DataFusion
-/// (no fabricated tons / kW). Otherwise the inline evidence-hierarchy gate.
+/// Async handler: prefer historian OAT bins, else descriptive counts, else
+/// inline evidence-hierarchy gate.
 pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     if req.series.is_none() {
+        let max_gap = req.max_gap_seconds.unwrap_or(900.0);
+        match historian::mech_oat_bins_from_history(req.query.equipment_ids.as_deref(), max_gap)
+            .await
+        {
+            Ok(Some(env)) => return finalize_historian(req, env, QV_MECHANICAL_COOLING),
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(error = %e, "historian mechanical_cooling OAT bins failed");
+            }
+        }
         match historian::descriptive_counts_from_history(
             QV_MECHANICAL_COOLING,
             req.query.equipment_ids.as_deref(),

@@ -11,9 +11,9 @@ Update this file when code truth changes.
 
 | Surface | Role | Must not |
 | --- | --- | --- |
-| **Open-FDD production** (GHCR stack) | Rust central, Arrow/Feather, DataFusion SQL FDD, JWT REST, React SPA (`openfdd-web`) sole product UI | Silent pandas FDD fallback; claim Streamlit is still the shipping default; claim Vibe 21 recovery Phase 1 complete without `capabilities.yaml` evidence |
-| **React SPA** | Sole production UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)) | FastAPI/Python sidecar; FDD math in TypeScript; BACnet wire ownership |
-| **Streamlit UI (archived)** | `services/ui` oracle/recovery (`ARCHIVED.md`, `streamlit-legacy` profile) | Be reintroduced as product default without a new ADR |
+| **Open-FDD production** (GHCR stack) | Rust central, Arrow/Feather, DataFusion SQL FDD, JWT REST, React SPA (`openfdd-web`) sole product UI; Overview via `/api/analytics/*` | Silent pandas FDD fallback; reintroduce Streamlit/`openfdd-ui`/overview-oracle as product; claim Vibe 21 Phase 1 complete without `capabilities.yaml` evidence |
+| **React SPA** | Sole production UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)) | FastAPI/Python product sidecar; FDD math in TypeScript; BACnet wire ownership |
+| **Streamlit product UI** | **Removed / cutover in progress** — not a shipping surface; WattLab exporter relocates before tree delete | Be reintroduced as product default without a new ADR |
 | **Vibe 21 program kit** | [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/) — recovery → twin → Unity ZIP import | Skip Master Loop gates; Unity Editor in production; BAS writes without authority |
 | **Open-FDD PyPI** (`open-fdd`) | Reusable libs: `ecm_engineering`, `rules`, `analytics`, `reporting` | Be the production FDD runtime |
 | **Vibe 19** (playground) | Educational pandas oracle + Streamlit demo + GHCR demo image | Remain canonical home of duplicated rule/analytics/reporting once migrated |
@@ -64,7 +64,8 @@ Never delete one cookbook because the other engine “won.”
 | Kind | Owner |
 | --- | --- |
 | Portable report builders / schemas | `open_fdd.reporting` |
-| Streamlit download UX / session wiring | vibe19 and/or `services/ui` |
+| Product download UX | React SPA (`frontend/web`) |
+| External demo download UX | vibe19 (companion only) |
 | Engineering Findings product rules | vibe19 agent skills + reporting lib |
 
 ---
@@ -73,7 +74,7 @@ Never delete one cookbook because the other engine “won.”
 
 | Image | Channel for test | Notes |
 | --- | --- | --- |
-| `openfdd-central`, `openfdd-ui`, `openfdd-fieldbus`, `openfdd-mqtt` | `:nightly` on master | Also `sha-<short>` immutable |
+| `openfdd-central`, `openfdd-web`, `openfdd-fieldbus`, `openfdd-mqtt` | `:nightly` on master | Also `sha-<short>` immutable; **do not** publish `openfdd-ui` after cutover |
 | `openfdd-mcp` | `:nightly` | Separate workflow |
 | `vibe19`, `vibe20` | `:develop` | Interim; retire only after parity matrix |
 

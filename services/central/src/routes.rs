@@ -25,6 +25,7 @@ use crate::models::{
     IssueCommandResponse, OkHealthResponse,
 };
 use crate::state::{AppState, PendingCommand};
+use crate::wattlab_dump;
 
 pub fn router(state: Arc<AppState>) -> Router {
     let public = Router::new()
@@ -154,6 +155,14 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/jobs/{job_id}/wattlab/handoffs",
             post(jobs_create_wattlab_handoff),
         )
+        .route(
+            "/api/jobs/{job_id}/wattlab/dumps",
+            post(jobs_create_wattlab_dump),
+        )
+        .route(
+            "/api/jobs/{job_id}/wattlab/dumps/{dump_id}/download",
+            get(jobs_download_wattlab_dump),
+        )
         .route("/api/jobs/{job_id}/eplus/runs", post(jobs_queue_eplus_run))
         .route(
             "/api/jobs/{job_id}/eplus/runs/{eplus_run_id}/artifacts",
@@ -168,6 +177,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/api/analytics/mechanical-cooling",
             post(analytics_mechanical_cooling),
+        )
+        .route(
+            "/api/analytics/bas-vs-web-oat",
+            post(analytics_bas_vs_web_oat),
         )
         .route("/api/analytics/economizer", post(analytics_economizer))
         .route("/api/analytics/rcx/ahu", post(analytics_rcx_ahu))
@@ -1608,6 +1621,44 @@ async fn jobs_create_wattlab_handoff(
     ))
 }
 
+async fn jobs_create_wattlab_dump(
+    Path(job_id): Path<String>,
+    Json(body): Json<wattlab_dump::CreateDumpRequest>,
+) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
+    let dump = wattlab_dump::create_dump(&job_id, body)
+        .await
+        .map_err(job_err)?;
+    Ok((StatusCode::CREATED, Json(json!({"ok": true, "dump": dump}))))
+}
+
+async fn jobs_download_wattlab_dump(
+    Path((job_id, dump_id)): Path<(String, String)>,
+) -> Result<(StatusCode, HeaderMap, Vec<u8>), (StatusCode, Json<Value>)> {
+    let loaded = tokio::task::spawn_blocking(move || wattlab_dump::load_dump(&job_id, &dump_id))
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": format!("WattLab download task: {e}")})),
+            )
+        })?
+        .map_err(job_err)?;
+    let (artifact, bytes) = loaded;
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONTENT_TYPE, "application/zip".parse().unwrap());
+    let disposition = format!("attachment; filename=\"{}\"", artifact.filename);
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        disposition.parse().map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": "invalid WattLab dump filename"})),
+            )
+        })?,
+    );
+    Ok((StatusCode::OK, headers, bytes))
+}
+
 /// Queue an external EnergyPlus run (Milestone D4).
 ///
 /// Central **persists** `QUEUED` metadata under `wattlab/runs/*.json` only.
@@ -1660,6 +1711,40 @@ async fn analytics_mechanical_cooling(Json(req): Json<AnalyticsRequest>) -> Json
     Json(json!({
         "ok": true,
         "analytics": analytics::mechanical_cooling::handle_async(&req).await.to_json(),
+    }))
+}
+
+async fn analytics_bas_vs_web_oat(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    let max_points = req.query.max_points.unwrap_or(2000);
+    let env = match analytics::historian::bas_vs_web_from_history(
+        req.query.equipment_ids.as_deref(),
+        max_points,
+    )
+    .await
+    {
+        Ok(Some(env)) => env,
+        Ok(None) => analytics::envelope_with_engine(
+            "bas-vs-web-oat-v1",
+            &req.query,
+            vec![
+                "BAS vs web OAT unavailable — need distinct oa_t and web OAT \
+                 columns on historian Parquet"
+                    .into(),
+            ],
+            analytics::DF_ENGINE,
+        ),
+        Err(e) => {
+            tracing::warn!(error = %e, "bas-vs-web-oat historian path failed");
+            analytics::envelope(
+                "bas-vs-web-oat-v1",
+                &req.query,
+                vec![format!("bas-vs-web-oat failed: {e}")],
+            )
+        }
+    };
+    Json(json!({
+        "ok": true,
+        "analytics": env.to_json(),
     }))
 }
 

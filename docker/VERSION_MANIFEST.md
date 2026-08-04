@@ -7,10 +7,12 @@ All container images in the MQTT / CSV stack share a **coordinated release** tie
 | Image | Dockerfile | Role |
 |-------|------------|------|
 | `ghcr.io/bbartling/openfdd-central` | `services/central/Dockerfile` | MQTTS ingest, Feather, FDD, REST + OpenAPI |
-| `ghcr.io/bbartling/openfdd-ui` | `services/ui/Dockerfile` | Streamlit vibe19 lab (Feather + SQL FDD) |
+| `ghcr.io/bbartling/openfdd-web` | `frontend/web/Dockerfile` | React SPA product UI (nginx → central `/api`) |
 | `ghcr.io/bbartling/openfdd-fieldbus` | `services/fieldbus/Dockerfile` | BACnet/Modbus/Haystack edge + local Swagger |
 | `ghcr.io/bbartling/openfdd-mqtt` | `services/mqtt/Dockerfile` | Mosquitto MQTTS broker |
 | `ghcr.io/bbartling/openfdd-mcp` | `Dockerfile.mcp` | Optional MCP stdio sidecar → central |
+
+`openfdd-ui` (Streamlit) is **no longer published**.
 
 ## Tags
 
@@ -30,7 +32,7 @@ Only advance `nightly` after recipe file smoke (`scripts/release/smoke_standalon
 
 ```bash
 export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-abc1234
-export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-abc1234
+export OPENFDD_WEB_IMAGE=ghcr.io/bbartling/openfdd-web:sha-abc1234
 export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-abc1234
 export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-abc1234
 export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-abc1234
@@ -55,15 +57,16 @@ Published successfully from tip **`8850b0bf`** (merge #572 — Jobs contract; #5
 
 ```bash
 export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-8850b0b
-export OPENFDD_UI_IMAGE=ghcr.io/bbartling/openfdd-ui:sha-8850b0b
+export OPENFDD_WEB_IMAGE=ghcr.io/bbartling/openfdd-web:sha-8850b0b
 export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-8850b0b
 export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-8850b0b
 export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-8850b0b
 # or OPENFDD_IMAGE_TAG=sha-8850b0b / :nightly
 ```
 
-UI is **one Streamlit app** (`services/ui`): vibe19 FDD/RCx/Jobs + WattLab export.  
-Production FDD = DataFusion SQL (`sql_rules/`, 63). Pandas cookbook (59) stays online + in-tree as oracle.
+Product UI is **React** (`frontend/web` / `openfdd-web`). Streamlit `openfdd-ui` is deleted.  
+Production FDD = DataFusion SQL (`sql_rules/`). Pandas cookbook stays as oracle (PyPI / vibe19).
+WattLab dumps use `tools/wattlab_export/` from central.
 
 Superset audit: `docs/migration/VIBE19_VIBE20_OPENFDD_AUDIT.md`.
 

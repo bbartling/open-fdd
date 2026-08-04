@@ -261,11 +261,16 @@ fn desktop_mode_stack_shows_disabled_protocols() {
 #[test]
 fn json_api_request_endpoint_exists() {
     let srv = Server::start();
-    let payload = r#"{"url":"https://jsonplaceholder.typicode.com/todos/1","method":"GET","json_path":"title"}"#;
+    // Hit the same local edge health endpoint — do not depend on public internet
+    // (jsonplaceholder is flaky / blocked on some CI runners).
+    let payload = format!(
+        r#"{{"url":"http://127.0.0.1:{}/api/health","method":"GET"}}"#,
+        srv.port
+    );
     let (status, body) = http_raw(
         "POST",
         &format!("http://127.0.0.1:{}/api/json-api/request", srv.port),
-        Some(payload),
+        Some(&payload),
         Some(&srv.token),
     );
     assert_eq!(status, 200);

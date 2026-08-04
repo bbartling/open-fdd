@@ -12,6 +12,7 @@ mod openapi;
 mod routes;
 mod state;
 mod vibe21;
+mod wattlab_dump;
 
 use std::net::SocketAddr;
 use std::sync::Arc;

@@ -3,6 +3,7 @@ import { buildPackageUploadFormData, uploadPackage } from "./uploadApi";
 
 describe("uploadApi", () => {
   beforeEach(() => {
+    sessionStorage.setItem("openfdd.auth.token", "jwt-test");
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {
@@ -15,6 +16,7 @@ describe("uploadApi", () => {
   });
 
   afterEach(() => {
+    sessionStorage.clear();
     vi.unstubAllGlobals();
   });
 
@@ -24,7 +26,7 @@ describe("uploadApi", () => {
     expect(form.get("file")).toBeTruthy();
   });
 
-  it("posts multipart zip and returns body", async () => {
+  it("posts multipart zip with Bearer token and returns body", async () => {
     const file = new File(["PK"], "pkg.zip", { type: "application/zip" });
     const result = await uploadPackage(file);
     expect(result.ok).toBe(true);
@@ -33,6 +35,21 @@ describe("uploadApi", () => {
     const [, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(init.method).toBe("POST");
     expect(init.body).toBeInstanceOf(FormData);
+    expect(init.headers.Authorization).toBe("Bearer jwt-test");
+  });
+
+  it("rejects upload when session has no token", async () => {
+    sessionStorage.removeItem("openfdd.auth.token");
+    const assign = vi.fn();
+    vi.stubGlobal("location", {
+      pathname: "/upload",
+      search: "",
+      assign,
+    });
+    const file = new File(["PK"], "pkg.zip", { type: "application/zip" });
+    await expect(uploadPackage(file)).rejects.toThrow(/Login required/);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(assign).toHaveBeenCalled();
   });
 
   it("throws ApiClientError when package import is rejected", async () => {

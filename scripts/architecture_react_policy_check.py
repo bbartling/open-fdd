@@ -169,18 +169,12 @@ def check_react_clients(errors: list[str]) -> None:
 
 
 def check_instruction_alignment(errors: list[str]) -> None:
-    """Ensure key instruction files no longer hard-ban Phase 1 React work."""
-    ui_agents = ROOT / "services" / "ui" / "AGENTS.md"
-    if ui_agents.is_file():
-        text = ui_agents.read_text(encoding="utf-8")
-        if re.search(r"Do \*\*not\*\* recreate React", text) and "Phase 1" not in text:
-            errors.append(
-                "services/ui/AGENTS.md still hard-bans React without Phase 1 exception"
-            )
-        if "ADR-001" not in text and "react-rust" not in text.lower():
-            errors.append(
-                "services/ui/AGENTS.md must point at ADR-001 / react-rust modernization"
-            )
+    """Ensure key instruction files authorize React; Streamlit product tree gone."""
+    ui_root = ROOT / "services" / "ui"
+    if ui_root.exists():
+        errors.append(
+            "services/ui must not exist (Streamlit product removed; use frontend/web)"
+        )
     frontend_readme = ROOT / "frontend" / "README.md"
     if frontend_readme.is_file():
         text = frontend_readme.read_text(encoding="utf-8")
