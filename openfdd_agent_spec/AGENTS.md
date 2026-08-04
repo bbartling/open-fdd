@@ -18,8 +18,8 @@ bench, nightly retest, WSL sleep. Do not confuse those with this engineering OS.
 | Layer | Owns |
 | --- | --- |
 | `open_fdd/` | PyPI libraries: ECM + pandas oracle (`rules` / `analytics` / `reporting`) |
-| `services/` + `sql_rules/` | Production stack: central DataFusion SQL FDD, React SPA (`frontend/web` / `openfdd-web`), fieldbus, mqtt; Streamlit archived |
-| `frontend/` / React SPA | **Sole production UI** → central `/api` ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md); Phase 2 exit) |
+| `services/` + `sql_rules/` | Production stack: central DataFusion SQL FDD, React SPA (`frontend/web` / `openfdd-web`), fieldbus, mqtt — **no Streamlit product** |
+| `frontend/` / React SPA | **Sole production UI** → central `/api` ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md); turnkey Rust cutover) |
 | `mcp/` | Optional read-first MCP → central |
 | `edge/`, `os/` | Future concepts — **never delete** |
 | `docs/rules/cookbook/` | Dual expression cookbooks (SQL + pandas) + parity matrix |
@@ -48,14 +48,14 @@ Do **not** rename `open_fdd.rules` → `open_fdd.oracle` without an explicit pro
 1. Production FDD = **DataFusion SQL** on GHCR (`sql_rules/`). Never silent pandas fallback in central.
 2. Pandas oracle stays forever — cookbooks + vibe19 + PyPI `rules`/`analytics`. Never delete the pandas cookbook because production uses SQL.
 3. Never delete the SQL cookbook because pandas remains the oracle.
-4. **Product UI:** React SPA (`frontend/web` → `openfdd-web`, `compose.react.yml`) is the **sole production UI** after Phase 2 exit ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)). Streamlit (`services/ui`) is **archived** (`ARCHIVED.md`, compose profile `streamlit-legacy`). Browser → central Rust `/api` only — **no FastAPI sidecar**.
+4. **Product UI:** React SPA (`frontend/web` → `openfdd-web`, `compose.react.yml`) is the **sole production UI** ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md); turnkey cutover). **Do not** reintroduce Streamlit / `openfdd-ui` / overview-oracle as product surfaces. Overview analytics = central `/api/analytics/*` (DataFusion) + client Plotly. Browser → central Rust `/api` only — **no FastAPI / Python product runtime**.
 5. Test open-fdd containers on **`OPENFDD_IMAGE_TAG=nightly`** (master retargets `:nightly`), but **pin/run `sha-*`** per [`CONTAINER_AGENT.md`](CONTAINER_AGENT.md). OT stress: [`scripts/nightly-ot-bench/`](../scripts/nightly-ot-bench/README.md) (`react-ot`).
 6. Playground images: `ghcr.io/bbartling/vibe19:develop`, `vibe20:develop`.
 7. `edge/` and `os/` are future concepts — never delete.
 8. Bounded PRs only — see [`PR_PROTOCOL.md`](PR_PROTOCOL.md).
 9. Migration pattern: inventory → characterization → shared impl → parity → cutover → **delete twin** → regression → docs.
 10. Do not copy code into Open-FDD and leave both implementations active.
-11. Vibe 19 may keep Streamlit UX, custom `CUSTOM-*` rules, demos — not canonical rule/analytics twins.
+11. Vibe 19 may keep Streamlit UX, custom `CUSTOM-*` rules, demos as **external** companions — not Open-FDD product UI and not canonical rule/analytics twins.
 12. Vibe 20 owns EnergyPlus — keep IDF/sim/orchestration; delete only **generic** ECM twins after parity.
 13. Prefer exact wheel install tests over editable-only validation for packaging PRs.
 14. Never trust a moving GHCR tag alone — resolve/pull immutable `sha-*`, recreate containers, then record the digest.
@@ -67,7 +67,7 @@ Do **not** rename `open_fdd.rules` → `open_fdd.oracle` without an explicit pro
 20. When blocked (secrets, permissions, private data), finish non-blocked work and record the exact error.
 21. Bound each PR to its declared scope — docs-only PRs do not require cross-repo pin bumps or GHCR refreshes.
 22. **Active program:** [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/README.md) Master Loop. Modernization Phase 1+2 “exit” is architecture direction only — not P1-G0 of the recovery program. Keep [`capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml) honest; never claim QUALIFIED without evidence.
-23. For Streamlit→React / `frontend/web` work: follow modernization streamlit-to-react skill **and** vibe21 Master Loop / ledger. Forbid unqualified “Phase complete” claims.
+23. For `frontend/web` work: follow [`openfdd-streamlit-to-react`](skills/openfdd-streamlit-to-react/SKILL.md) (React-only product maintenance) **and** vibe21 Master Loop / ledger. Forbid unqualified “Phase complete” claims. Keep this `openfdd_agent_spec/` tree honest whenever product truth changes.
 
 ---
 
@@ -122,7 +122,7 @@ Sibling-repo locations are **examples** — resolve via `git rev-parse --show-to
 | [`openfdd-cookbook-parity`](skills/openfdd-cookbook-parity/SKILL.md) | Cookbook CI, parity matrix, docs headings |
 | [`openfdd-stack-ghcr`](skills/openfdd-stack-ghcr/SKILL.md) | Nightly stack pull, labels, smoke |
 | [`openfdd-milestone-a-pr`](skills/openfdd-milestone-a-pr/SKILL.md) | Inventory → parity → cutover → delete loop |
-| [`openfdd-streamlit-to-react`](skills/openfdd-streamlit-to-react/SKILL.md) | React maintenance / residual parity (wraps modernization skill; P1+P2 done) |
+| [`openfdd-streamlit-to-react`](skills/openfdd-streamlit-to-react/SKILL.md) | React product UI maintenance (central DataFusion; no Streamlit product) |
 
 ---
 
@@ -135,8 +135,9 @@ Sibling-repo locations are **examples** — resolve via `git rev-parse --show-to
 | `open_fdd/analytics/` | Oracle analytics helpers |
 | `open_fdd/reporting/` | Findings / DOCX / xlsx reporting |
 | `sql_rules/` | Production SQL registry + rule files |
-| `services/ui/` | Product Streamlit (SQL FDD + WattLab export) |
-| `services/central/` | Rust API + DataFusion |
+| `services/central/` | Rust API + DataFusion analytics + FDD |
+| `frontend/web/` | React SPA (`openfdd-web`) — sole product UI |
+| `services/ui/` | **Cutover:** delete after WattLab exporter relocate (not product UI) |
 | `docs/rules/cookbook/` | Human-readable SQL + pandas cookbooks |
 | `docs/migration/` | Historical audit + matrices |
 | `.github/workflows/` | See [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md) |

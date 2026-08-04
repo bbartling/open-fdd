@@ -1,16 +1,16 @@
 //! Historian Parquet bridge for DataFusion analytics (Milestone D1).
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
 use datafusion::prelude::SessionContext;
 use fdd_sql::{register_parquet_tree, run_sql};
-use serde_json::json;
+use serde_json::{json, Value};
 
 use super::{
-    envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, DF_ENGINE, QV_ECONOMIZER, QV_RUNTIME,
-    QV_SCHEDULE, QV_SENSOR_HEALTH,
+    envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, DF_ENGINE, QV_ECONOMIZER,
+    QV_MECHANICAL_COOLING, QV_RUNTIME, QV_SCHEDULE, QV_SENSOR_HEALTH,
 };
 
 /// Canonical numeric role columns that may appear as `history` columns after
@@ -172,6 +172,55 @@ fn round2(x: f64) -> f64 {
     (x * 100.0).round() / 100.0
 }
 
+/// Map equipment_id → Overview plant chart group (air / boiler / chiller).
+/// VAVs and unknown meters return `None` (excluded from plant weekly charts).
+pub fn plant_group_for(equipment_id: &str) -> Option<&'static str> {
+    let eq = equipment_id.to_ascii_uppercase().replace('\\', "/");
+    if eq.contains("/VAV") || eq.starts_with("VAV") || eq.contains("VAVFC") || eq.contains("VAVH")
+    {
+        return None;
+    }
+    if eq.starts_with("AHU") || eq.contains("/AHU") || eq.contains("RTU") {
+        return Some("air");
+    }
+    if eq.contains("TOWER")
+        || eq.starts_with("CT_")
+        || eq.contains("CHILLER")
+        || eq.starts_with("CHW")
+        || eq.contains("CWP")
+        || (eq.contains("PUMP") && (eq.contains("CHW") || eq.contains("CW")))
+    {
+        return Some("chiller");
+    }
+    if eq.contains("BOILER")
+        || eq.contains("HWP")
+        || (eq.contains("PUMP") && !eq.contains("HEAT") && !eq.contains("CHW"))
+        || eq.contains("BOILERS")
+    {
+        return Some("boiler");
+    }
+    if eq.contains("FAN") || eq.contains("SUPPLY") {
+        return Some("air");
+    }
+    None
+}
+
+fn oat_col(cols: &HashSet<String>) -> Option<&'static str> {
+    if cols.contains("oa_t") {
+        Some("oa_t")
+    } else if cols.contains("web_oa_t") {
+        Some("web_oa_t")
+    } else {
+        None
+    }
+}
+
+fn web_oat_col(cols: &HashSet<String>) -> Option<&'static str> {
+    ["web_oa_t", "oa_t_web", "oat_meteo", "oa_t_meteo"]
+        .into_iter()
+        .find(|&c| cols.contains(c))
+}
+
 fn equipment_filter_sql(equipment_filter: Option<&[String]>) -> String {
     match equipment_filter {
         Some(ids) if !ids.is_empty() => {
@@ -283,7 +332,7 @@ ORDER BY i.equipment_id
 
             match run_sql(&ctx, &sql).await {
                 Ok(result) => {
-                    let warnings = vec![
+                    let mut warnings = vec![
                         "runtime hours from historian Parquet via DataFusion Δt integration".into(),
                     ];
                     let mut equipment = Vec::new();
@@ -313,16 +362,43 @@ ORDER BY i.equipment_id
                             "coverage_pct": round2(coverage_pct),
                             "samples": samples,
                             "on_samples": on_samples,
+                            "plant_group": plant_group_for(
+                                row.get("equipment_id").and_then(|v| v.as_str()).unwrap_or("")
+                            ),
                         }));
                     }
+                    let weekly_rows = runtime_weekly_plant_rows(
+                        &ctx,
+                        ts_col,
+                        &on_sql,
+                        oat_col(&cols),
+                        max_gap,
+                        &eq_filter,
+                    )
+                    .await
+                    .unwrap_or_else(|e| {
+                        warnings.push(format!("weekly plant bins skipped: {e}"));
+                        Vec::new()
+                    });
+                    if !weekly_rows.is_empty() {
+                        warnings.push(
+                            "rows include weekly plant_group bins (runtime-weekly-v1)".into(),
+                        );
+                    }
                     let mut env = envelope_with_engine(QV_RUNTIME, &query, warnings, DF_ENGINE);
-                    env.equipment = equipment.clone();
-                    env.rows = equipment;
+                    env.equipment = equipment;
+                    env.rows = if weekly_rows.is_empty() {
+                        env.equipment.clone()
+                    } else {
+                        weekly_rows
+                    };
                     env.coverage = Some(json!({
                         "equipment_count": env.equipment.len(),
+                        "weekly_row_count": env.rows.len(),
                         "history_rows": n,
                         "max_gap_seconds": max_gap,
                         "source": "historian_parquet",
+                        "query_versions": ["runtime-v1", "runtime-weekly-v1"],
                     }));
                     return Ok(Some(env));
                 }
@@ -346,6 +422,117 @@ ORDER BY i.equipment_id
         "source": "historian_parquet",
     }));
     Ok(Some(env))
+}
+
+/// Weekly plant-group run hours (Mon-start week labels) for Overview motor charts.
+async fn runtime_weekly_plant_rows(
+    ctx: &SessionContext,
+    ts_col: &str,
+    on_sql: &str,
+    oat: Option<&str>,
+    max_gap: f64,
+    eq_filter: &str,
+) -> Result<Vec<Value>> {
+    let oat_sel = oat
+        .map(|c| format!("{c} AS oat_f,"))
+        .unwrap_or_else(|| "CAST(NULL AS FLOAT) AS oat_f,".into());
+    let sql = format!(
+        r#"
+WITH ordered AS (
+  SELECT
+    equipment_id,
+    {ts_col} AS ts,
+    {on_sql} AS is_on,
+    {oat_sel}
+    LEAD({ts_col}) OVER (PARTITION BY equipment_id ORDER BY {ts_col}) AS next_ts
+  FROM history
+  WHERE equipment_id IS NOT NULL{eq_filter}
+),
+raw_intervals AS (
+  SELECT
+    equipment_id,
+    is_on,
+    oat_f,
+    date_trunc('week', CAST(ts AS TIMESTAMP)) AS week_start,
+    (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0 AS dt_raw
+  FROM ordered
+  WHERE next_ts IS NOT NULL
+),
+intervals AS (
+  SELECT
+    equipment_id,
+    is_on,
+    oat_f,
+    week_start,
+    CASE
+      WHEN dt_raw < 0.0 THEN 0.0
+      WHEN dt_raw > {max_gap} THEN {max_gap}
+      ELSE dt_raw
+    END AS dt_sec
+  FROM raw_intervals
+)
+SELECT
+  equipment_id,
+  CAST(week_start AS VARCHAR) AS week_label,
+  SUM(CASE WHEN is_on THEN dt_sec ELSE 0.0 END) / 3600.0 AS run_hours,
+  AVG(CASE WHEN is_on AND oat_f IS NOT NULL THEN oat_f ELSE NULL END) AS avg_oat_f
+FROM intervals
+GROUP BY equipment_id, week_start
+ORDER BY week_start, equipment_id
+"#
+    );
+    let result = run_sql(ctx, &sql).await?;
+    // Aggregate equipment → plant_group per week.
+    let mut agg: BTreeMap<(String, String), (f64, f64, u64)> = BTreeMap::new();
+    for row in &result.rows {
+        let eq = row
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let Some(plant) = plant_group_for(eq) else {
+            continue;
+        };
+        let week = row
+            .get("week_label")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .chars()
+            .take(10)
+            .collect::<String>();
+        if week.is_empty() {
+            continue;
+        }
+        let hours = row.get("run_hours").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let oat_v = row.get("avg_oat_f").and_then(|v| v.as_f64());
+        let key = (plant.to_string(), week);
+        let e = agg.entry(key).or_insert((0.0, 0.0, 0));
+        e.0 += hours;
+        if let Some(o) = oat_v {
+            e.1 += o;
+            e.2 += 1;
+        }
+    }
+    let mut out = Vec::new();
+    for ((plant, week), (hours, oat_sum, oat_n)) in agg {
+        out.push(json!({
+            "kind": "weekly_plant",
+            "query_version": "runtime-weekly-v1",
+            "plant_group": plant,
+            "week_label": week,
+            "run_hours": round2(hours),
+            "avg_oat_f": if oat_n > 0 { Some(round2(oat_sum / oat_n as f64)) } else { None::<f64> },
+        }));
+    }
+    out.sort_by(|a, b| {
+        let wa = a.get("week_label").and_then(|v| v.as_str()).unwrap_or("");
+        let wb = b.get("week_label").and_then(|v| v.as_str()).unwrap_or("");
+        wa.cmp(wb).then_with(|| {
+            let pa = a.get("plant_group").and_then(|v| v.as_str()).unwrap_or("");
+            let pb = b.get("plant_group").and_then(|v| v.as_str()).unwrap_or("");
+            pa.cmp(pb)
+        })
+    });
+    Ok(out)
 }
 
 /// Register `history` and return `(ctx, columns, row_count)` when the parquet
@@ -709,6 +896,183 @@ ORDER BY equipment_id
     Ok(Some(env))
 }
 
+/// Mechanical-cooling OAT bin hours (5°F bins) from historian when OAT + on-proof exist.
+pub async fn mech_oat_bins_from_history(
+    equipment_filter: Option<&[String]>,
+    max_gap_seconds: f64,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n)) = open_history().await? else {
+        return Ok(None);
+    };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    let Some(oat) = oat_col(&cols) else {
+        return Ok(None);
+    };
+    let Some(on_sql) = on_expr(&cols) else {
+        return Ok(None);
+    };
+    let max_gap = max_gap_seconds.max(0.0);
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    // Restrict to chiller/tower-like equipment via SQL filter on id patterns when possible.
+    let sql = format!(
+        r#"
+WITH ordered AS (
+  SELECT
+    equipment_id,
+    {ts_col} AS ts,
+    {on_sql} AS is_on,
+    {oat} AS oat_f,
+    LEAD({ts_col}) OVER (PARTITION BY equipment_id ORDER BY {ts_col}) AS next_ts
+  FROM history
+  WHERE equipment_id IS NOT NULL AND {oat} IS NOT NULL{eq_filter}
+),
+intervals AS (
+  SELECT
+    equipment_id,
+    is_on,
+    oat_f,
+    CASE
+      WHEN (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0 < 0.0 THEN 0.0
+      WHEN (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0 > {max_gap} THEN {max_gap}
+      ELSE (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0
+    END AS dt_sec
+  FROM ordered
+  WHERE next_ts IS NOT NULL AND is_on
+)
+SELECT
+  FLOOR(oat_f / 5.0) * 5.0 AS bin_lo,
+  SUM(dt_sec) / 3600.0 AS hours
+FROM intervals
+GROUP BY FLOOR(oat_f / 5.0) * 5.0
+ORDER BY bin_lo
+"#
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    let mut rows = Vec::new();
+    for r in &result.rows {
+        let lo = as_f64(r.get("bin_lo")).unwrap_or(0.0);
+        let hours = as_f64(r.get("hours")).unwrap_or(0.0);
+        rows.push(json!({
+            "kind": "oat_bin",
+            "query_version": "mechanical-cooling-oat-bins-v1",
+            "bin_lo_f": round2(lo),
+            "bin_hi_f": round2(lo + 5.0),
+            "bin_label": format!("{:.0}-{:.0}", lo, lo + 5.0),
+            "hours": round2(hours),
+        }));
+    }
+    if rows.is_empty() {
+        return Ok(None);
+    }
+    let warnings = vec![
+        "mechanical cooling OAT bins from historian DataFusion (fan/status on × oa_t; \
+         compressor-specific evidence still inline-only)"
+            .into(),
+    ];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine(QV_MECHANICAL_COOLING, &query, warnings, DF_ENGINE);
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({
+        "bin_count": env.rows.len(),
+        "history_rows": n,
+        "source": "historian_parquet",
+        "oat_column": oat,
+    }));
+    Ok(Some(env))
+}
+
+/// BAS oa_t vs web OAT overlay samples + deviation histogram rows.
+pub async fn bas_vs_web_from_history(
+    equipment_filter: Option<&[String]>,
+    max_points: usize,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n)) = open_history().await? else {
+        return Ok(None);
+    };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    let Some(bas) = (if cols.contains("oa_t") {
+        Some("oa_t")
+    } else {
+        None
+    }) else {
+        return Ok(None);
+    };
+    let Some(web) = web_oat_col(&cols) else {
+        return Ok(None);
+    };
+    if bas == web {
+        // Only one OAT column — cannot compare BAS vs web.
+        return Ok(None);
+    }
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let limit = max_points.max(100).min(5000);
+    let sql = format!(
+        r#"
+SELECT
+  CAST({ts_col} AS VARCHAR) AS timestamp_utc,
+  equipment_id,
+  {bas} AS bas_oat_f,
+  {web} AS web_oat_f,
+  ({bas} - {web}) AS delta_f
+FROM history
+WHERE equipment_id IS NOT NULL
+  AND {bas} IS NOT NULL AND {web} IS NOT NULL{eq_filter}
+ORDER BY {ts_col}
+LIMIT {limit}
+"#
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    if result.rows.is_empty() {
+        return Ok(None);
+    }
+    let mut points = Vec::new();
+    let mut hist: BTreeMap<i64, f64> = BTreeMap::new();
+    for r in &result.rows {
+        let delta = as_f64(r.get("delta_f")).unwrap_or(0.0);
+        points.push(json!({
+            "timestamp_utc": r.get("timestamp_utc").cloned().unwrap_or(json!("")),
+            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+            "bas_oat_f": as_f64(r.get("bas_oat_f")),
+            "web_oat_f": as_f64(r.get("web_oat_f")),
+            "delta_f": round2(delta),
+        }));
+        let bin = (delta / 1.0).floor() as i64;
+        *hist.entry(bin).or_insert(0.0) += 1.0;
+    }
+    let rows: Vec<Value> = hist
+        .into_iter()
+        .map(|(bin, count)| {
+            json!({
+                "kind": "delta_hist",
+                "bin_lo_f": bin as f64,
+                "bin_hi_f": (bin + 1) as f64,
+                "count": count,
+            })
+        })
+        .collect();
+    let warnings = vec![
+        "BAS vs web OAT from historian DataFusion (oa_t vs web OAT column)".into(),
+    ];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine("bas-vs-web-oat-v1", &query, warnings, DF_ENGINE);
+    env.points = points;
+    env.rows = rows;
+    env.coverage = Some(json!({
+        "point_count": env.points.len(),
+        "hist_bins": env.rows.len(),
+        "history_rows": n,
+        "bas_column": bas,
+        "web_column": web,
+        "source": "historian_parquet",
+    }));
+    Ok(Some(env))
+}
+
 /// Generic descriptive per-equipment row-count evidence from historian Parquet
 /// via DataFusion. Used by families (mechanical_cooling, metering, rcx/*, plant)
 /// that do not yet have a family-specific DF metric. Honest: sets
@@ -1048,6 +1412,16 @@ mod tests {
             .unwrap();
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
         assert!(out.is_none());
+    }
+
+    #[test]
+    fn plant_group_for_maps_common_ids() {
+        assert_eq!(plant_group_for("AHU_1"), Some("air"));
+        assert_eq!(plant_group_for("RTU_WEST"), Some("air"));
+        assert_eq!(plant_group_for("CHILLER_1"), Some("chiller"));
+        assert_eq!(plant_group_for("BOILER_1"), Some("boiler"));
+        assert_eq!(plant_group_for("VAV_101"), None);
+        assert_eq!(plant_group_for("BUILDING/VAVFC_2"), None);
     }
 
     #[test]

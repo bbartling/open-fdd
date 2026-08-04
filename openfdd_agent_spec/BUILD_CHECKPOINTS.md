@@ -195,3 +195,18 @@ tracks the recovery program evidence gates.
 - [ ] P1-M3-* — PlotlyHost replacement; remove demo/stub product controls; full browser-qualify workflows
 - [ ] P1-M4-* — SQL oracle closure by family; RCx/metering real algorithms; report no-Python
 - [ ] P1-M5-* — independent qualification pack + Streamlit retirement guard
+
+---
+
+# Turnkey Rust cutover (2026-08-04)
+
+Product voice = React + DataFusion only. Track deletion / GHCR / agent_spec honesty.
+
+- [x] Overview analytics path = central `/api/analytics/*` + client Plotly (no overview-oracle product call)
+- [ ] Runtime weekly plant bins (`runtime-weekly-v1`) + React plant charts
+- [ ] Mech OAT bins on `/api/analytics/mechanical-cooling` + React
+- [ ] BAS vs web OAT (`/api/analytics/bas-vs-web-oat`) + React
+- [ ] Relocate WattLab exporter off `services/ui`
+- [ ] Delete `services/ui` + `services/overview_oracle`; scrub CI/docs/compose
+- [ ] Stop publishing `openfdd-ui` to GHCR; bensbench tip `sha-*` pull
+- [x] `openfdd_agent_spec/` updated for cutover direction (keep in sync every PR)

@@ -158,6 +158,12 @@ export async function postMechanicalCooling(
   return postAnalytics("/api/analytics/mechanical-cooling", body);
 }
 
+export async function postBasVsWebOat(
+  body: AnalyticsRequest,
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/bas-vs-web-oat", body);
+}
+
 export async function postEconomizer(
   body: AnalyticsRequest,
 ): Promise<AnalyticsEnvelope> {

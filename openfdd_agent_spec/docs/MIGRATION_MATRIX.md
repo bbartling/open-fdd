@@ -27,7 +27,8 @@ open-fdd tip: `f9047154dab631f0fecf81094bcc177c23c69712` / GHCR `sha-f904715` (P
 | `app/rules/runner.py` | SHIM | Done (#59 / UI #580) |
 | `app/analytics.py` | SHIM → `open_fdd.analytics.core` | Done |
 | `app/rules/custom_registry.py` / `custom_rules.py` | KEEP | Intentional |
-| Streamlit / session / demos | KEEP | Intentional |
+| Streamlit / session / demos (vibe19 playground) | KEEP (external companion) | Intentional |
+| Open-FDD Streamlit product (`services/ui` / `openfdd-ui`) | DELETE (cutover) | In progress — not product UI |
 | Remaining analytics helpers still local under `app/` | Inventory | Phase 3 matrix |
 | Reporting twins | Inventory → SHIM/MOVE | Phase 3 |
 

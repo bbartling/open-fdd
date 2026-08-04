@@ -14,8 +14,8 @@ updated itself.
 
 ## Open-FDD stack (nightly → immutable)
 
-Product UI after Phase 2 exit: **React** (`compose.react.yml` → host `:3000`).
-Streamlit (`openfdd-ui`) is archive-only (`streamlit-legacy` profile).
+Product UI: **React** (`compose.react.yml` → host `:3000`). Do **not** run
+Streamlit / `openfdd-ui` / overview-oracle as product surfaces.
 
 OT LAN benches need fieldbus too — use recipe **`react-ot`**
 (`compose.react.yml` + `compose.react.fieldbus.yml`). Full stress suite:
@@ -81,8 +81,7 @@ Recipes:
 | Recipe | Compose | UI |
 |--------|---------|-----|
 | `react` | `compose.react.yml` | React SPA |
-| `react-ot` | react + `compose.react.fieldbus.yml` | React + fieldbus OT |
-| `standalone` | `compose.standalone.yml` | Streamlit only with `--profile streamlit-legacy` |
+| `react-ot` | react + `compose.react.fieldbus.yml` | React + fieldbus OT (preferred product bench) |
 
 ---
 

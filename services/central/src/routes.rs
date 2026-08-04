@@ -178,6 +178,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/analytics/mechanical-cooling",
             post(analytics_mechanical_cooling),
         )
+        .route(
+            "/api/analytics/bas-vs-web-oat",
+            post(analytics_bas_vs_web_oat),
+        )
         .route("/api/analytics/economizer", post(analytics_economizer))
         .route("/api/analytics/rcx/ahu", post(analytics_rcx_ahu))
         .route("/api/analytics/rcx/vav", post(analytics_rcx_vav))
@@ -1707,6 +1711,40 @@ async fn analytics_mechanical_cooling(Json(req): Json<AnalyticsRequest>) -> Json
     Json(json!({
         "ok": true,
         "analytics": analytics::mechanical_cooling::handle_async(&req).await.to_json(),
+    }))
+}
+
+async fn analytics_bas_vs_web_oat(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    let max_points = req.query.max_points.unwrap_or(2000);
+    let env = match analytics::historian::bas_vs_web_from_history(
+        req.query.equipment_ids.as_deref(),
+        max_points,
+    )
+    .await
+    {
+        Ok(Some(env)) => env,
+        Ok(None) => analytics::envelope_with_engine(
+            "bas-vs-web-oat-v1",
+            &req.query,
+            vec![
+                "BAS vs web OAT unavailable — need distinct oa_t and web OAT \
+                 columns on historian Parquet"
+                    .into(),
+            ],
+            analytics::DF_ENGINE,
+        ),
+        Err(e) => {
+            tracing::warn!(error = %e, "bas-vs-web-oat historian path failed");
+            analytics::envelope(
+                "bas-vs-web-oat-v1",
+                &req.query,
+                vec![format!("bas-vs-web-oat failed: {e}")],
+            )
+        }
+    };
+    Json(json!({
+        "ok": true,
+        "analytics": env.to_json(),
     }))
 }
 
