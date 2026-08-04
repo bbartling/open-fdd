@@ -35,12 +35,35 @@ declare global {
   }
 }
 
-function waitForPlotly(timeoutMs = 8000): Promise<PlotlyStatic | null> {
-  if (typeof window === "undefined") return Promise.resolve(null);
-  if (window.Plotly) return Promise.resolve(window.Plotly);
-  return new Promise((resolve) => {
+function waitForPlotly(timeoutMs = 8000): {
+  promise: Promise<PlotlyStatic | null>;
+  cancel: () => void;
+} {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let cancelled = false;
+  const cancel = () => {
+    cancelled = true;
+    if (timer !== undefined) clearTimeout(timer);
+  };
+  const promise = new Promise<PlotlyStatic | null>((resolve) => {
+    if (typeof window === "undefined") {
+      resolve(null);
+      return;
+    }
+    if (window.Plotly) {
+      resolve(window.Plotly);
+      return;
+    }
     const start = Date.now();
     const tick = () => {
+      if (cancelled) {
+        resolve(null);
+        return;
+      }
+      if (typeof window === "undefined") {
+        resolve(null);
+        return;
+      }
       if (window.Plotly) {
         resolve(window.Plotly);
         return;
@@ -49,10 +72,11 @@ function waitForPlotly(timeoutMs = 8000): Promise<PlotlyStatic | null> {
         resolve(null);
         return;
       }
-      window.setTimeout(tick, 50);
+      timer = setTimeout(tick, 50);
     };
     tick();
   });
+  return { promise, cancel };
 }
 
 /** Real Plotly.js host (vendored `/plotly.min.js`). */
@@ -70,17 +94,21 @@ export function PlotlyHost({
 }: PlotlyHostProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [renderErr, setRenderErr] = useState<string | null>(null);
-  const [plotlyReady, setPlotlyReady] = useState(() => Boolean(window.Plotly));
+  const [plotlyReady, setPlotlyReady] = useState(
+    () => typeof window !== "undefined" && Boolean(window.Plotly),
+  );
   const [drawn, setDrawn] = useState(false);
   const clean = useMemo(() => sanitizePlotlyFigure(figure), [figure]);
 
   useEffect(() => {
     let cancelled = false;
-    void waitForPlotly().then((P) => {
+    const wait = waitForPlotly();
+    void wait.promise.then((P) => {
       if (!cancelled) setPlotlyReady(Boolean(P));
     });
     return () => {
       cancelled = true;
+      wait.cancel();
     };
   }, []);
 
@@ -88,20 +116,23 @@ export function PlotlyHost({
     const el = hostRef.current;
     if (!el) return;
     let cancelled = false;
+    const wait = waitForPlotly();
 
     const draw = async () => {
       setRenderErr(null);
       setDrawn(false);
       if (!clean?.data?.length) {
         try {
-          window.Plotly?.purge(el);
+          if (typeof window !== "undefined") window.Plotly?.purge(el);
         } catch {
           /* ignore */
         }
         el.replaceChildren();
         return;
       }
-      const Plotly = (await waitForPlotly()) ?? window.Plotly;
+      const Plotly =
+        (await wait.promise) ??
+        (typeof window !== "undefined" ? window.Plotly : undefined);
       if (cancelled || !Plotly) {
         if (!cancelled && !Plotly) {
           setRenderErr("Plotly.js failed to load — check /plotly.min.js");
@@ -145,8 +176,9 @@ export function PlotlyHost({
     void draw();
     return () => {
       cancelled = true;
+      wait.cancel();
       try {
-        window.Plotly?.purge(el);
+        if (typeof window !== "undefined") window.Plotly?.purge(el);
       } catch {
         /* ignore */
       }

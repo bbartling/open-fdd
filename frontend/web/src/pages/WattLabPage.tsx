@@ -4,7 +4,6 @@ import { AppShell } from "../components/AppShell";
 import { useSessionQuery } from "../session";
 import {
   Button,
-  FileUpload,
   InlineAlert,
   RadioGroup,
   Select,
@@ -52,7 +51,6 @@ export function WattLabPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [dumpFiles, setDumpFiles] = useState<File[]>([]);
 
   useEffect(() => {
     void listJobs()
@@ -210,14 +208,6 @@ export function WattLabPage() {
                 testId="wattlab-dl-dump"
               />
             </div>
-            <FileUpload
-              id="wattlab-energy-zip"
-              label="Energy-use zip (optional)"
-              accept=".zip,application/zip"
-              files={dumpFiles}
-              onChange={setDumpFiles}
-              testId="wattlab-energy-zip"
-            />
             {dump ? (
               <pre data-testid="wattlab-dump-meta">
                 {JSON.stringify(dump, null, 2)}

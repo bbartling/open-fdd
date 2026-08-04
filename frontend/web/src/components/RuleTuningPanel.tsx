@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getFddRuleParams,
   listFddRules,
@@ -170,6 +170,9 @@ export function RuleTuningPanel() {
   const [runMsg, setRunMsg] = useState<string | null>(null);
   const [runErr, setRunErr] = useState<string | null>(null);
   const [updatingRuleId, setUpdatingRuleId] = useState<string | null>(null);
+  const [persistErr, setPersistErr] = useState<string | null>(null);
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistGen = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -184,6 +187,7 @@ export function RuleTuningPanel() {
       });
     return () => {
       cancelled = true;
+      if (persistTimer.current) clearTimeout(persistTimer.current);
     };
   }, []);
 
@@ -199,8 +203,10 @@ export function RuleTuningPanel() {
 
   const persistSession = useCallback(
     async (nextParams: Record<string, Record<string, number>>) => {
+      const gen = ++persistGen.current;
       try {
         const prev = await getSessionConfig();
+        if (gen !== persistGen.current) return;
         await putSessionConfig({
           ...(prev.config ?? {}),
           schema_version: prev.config?.schema_version ?? "openfdd.session.v1",
@@ -212,11 +218,27 @@ export function RuleTuningPanel() {
             },
           },
         });
-      } catch {
-        /* localStorage still holds values when central unavailable */
+        if (gen === persistGen.current) setPersistErr(null);
+      } catch (err) {
+        if (gen === persistGen.current) {
+          setPersistErr(
+            `Session save failed (local sliders kept): ${formatErr(err)}`,
+          );
+        }
       }
     },
     [opsGate],
+  );
+
+  const schedulePersist = useCallback(
+    (nextParams: Record<string, Record<string, number>>) => {
+      if (persistTimer.current) clearTimeout(persistTimer.current);
+      persistTimer.current = setTimeout(() => {
+        persistTimer.current = null;
+        void persistSession(nextParams);
+      }, 350);
+    },
+    [persistSession],
   );
 
   const onParam = useCallback(
@@ -227,11 +249,11 @@ export function RuleTuningPanel() {
           [ruleId]: { ...(prev[ruleId] ?? {}), [key]: value },
         };
         saveStoredParams(next);
-        void persistSession(next);
+        schedulePersist(next);
         return next;
       });
     },
-    [persistSession],
+    [schedulePersist],
   );
 
   const emitUpdated = (detail: Record<string, unknown>) => {
@@ -282,6 +304,7 @@ export function RuleTuningPanel() {
   const reset = () => {
     setParams({});
     saveStoredParams({});
+    if (persistTimer.current) clearTimeout(persistTimer.current);
     void persistSession({});
   };
 
@@ -335,9 +358,9 @@ export function RuleTuningPanel() {
           {runMsg}
         </p>
       ) : null}
-      {runErr || loadErr ? (
+      {runErr || loadErr || persistErr ? (
         <p className="oracle-sidebar__err" data-testid="sidebar-tune-error">
-          {runErr || loadErr}
+          {runErr || loadErr || persistErr}
         </p>
       ) : null}
       <div className="oracle-sidebar__rules" data-testid="sidebar-tune-rules">

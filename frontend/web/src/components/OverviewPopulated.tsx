@@ -51,6 +51,7 @@ const DEFAULT_WEEK: Record<(typeof DAYS)[number], DaySched> = {
 };
 
 const PARAMS_KEY = "openfdd.ui.rule_params";
+const SCHEDULE_KEY = "openfdd.ui.occupancy_schedule";
 
 function loadStoredParams(): Record<string, Record<string, number>> {
   try {
@@ -60,6 +61,53 @@ function loadStoredParams(): Record<string, Record<string, number>> {
     return parsed && typeof parsed === "object" ? parsed : {};
   } catch {
     return {};
+  }
+}
+
+function loadStoredSchedule(): {
+  week: Record<(typeof DAYS)[number], DaySched>;
+  tz: string;
+} {
+  try {
+    const raw = localStorage.getItem(SCHEDULE_KEY);
+    if (!raw) return { week: DEFAULT_WEEK, tz: "America/Chicago" };
+    const parsed = JSON.parse(raw) as {
+      week?: Record<string, DaySched>;
+      tz?: string;
+    };
+    const week = { ...DEFAULT_WEEK };
+    if (parsed.week && typeof parsed.week === "object") {
+      for (const d of DAYS) {
+        const s = parsed.week[d];
+        if (s && typeof s.start === "string" && typeof s.end === "string") {
+          week[d] = {
+            occupied: Boolean(s.occupied),
+            start: s.start,
+            end: s.end,
+          };
+        }
+      }
+    }
+    return {
+      week,
+      tz:
+        typeof parsed.tz === "string" && parsed.tz.trim()
+          ? parsed.tz
+          : "America/Chicago",
+    };
+  } catch {
+    return { week: DEFAULT_WEEK, tz: "America/Chicago" };
+  }
+}
+
+function saveStoredSchedule(
+  week: Record<string, DaySched>,
+  tz: string,
+): void {
+  try {
+    localStorage.setItem(SCHEDULE_KEY, JSON.stringify({ week, tz }));
+  } catch {
+    /* ignore */
   }
 }
 
@@ -113,8 +161,8 @@ export function OverviewPopulated({
   const [loadingOverview, setLoadingOverview] = useState(false);
   const [zoneLow, setZoneLow] = useState(70);
   const [zoneHigh, setZoneHigh] = useState(75);
-  const [week, setWeek] = useState(DEFAULT_WEEK);
-  const [tz, setTz] = useState("America/Chicago");
+  const [week, setWeek] = useState(() => loadStoredSchedule().week);
+  const [tz, setTz] = useState(() => loadStoredSchedule().tz);
   const [schedOpen, setSchedOpen] = useState(true);
   const [motorTableOpen, setMotorTableOpen] = useState(false);
   const [basHistOpen, setBasHistOpen] = useState(false);
@@ -313,6 +361,7 @@ export function OverviewPopulated({
     setScheduleBusy(true);
     setScheduleNote(null);
     try {
+      saveStoredSchedule(week, tz);
       const prev = await getSessionConfig().catch(() => null);
       const config: SessionConfig = {
         ...(prev?.config ?? {}),
@@ -332,7 +381,9 @@ export function OverviewPopulated({
         },
       };
       await putSessionConfig(config);
-      setScheduleNote("Schedule saved to session config.");
+      setScheduleNote(
+        `Schedule saved (tz ${tz}, ${bareMin} occ h/wk). Weekly pickers kept in browser storage.`,
+      );
       void refreshOverview();
     } catch (err) {
       setScheduleNote(formatErr(err));

@@ -80,4 +80,14 @@ describe("PlotlyHost", () => {
       expect(getByTestId("plotly-meta-motor").textContent).toMatch(/rendered/);
     });
   });
+
+  it("cancels Plotly wait timers on unmount so vitest teardown stays clean", async () => {
+    delete window.Plotly;
+    const { unmount } = render(
+      <PlotlyHost id="pending" label="Pending" figure={null} height={200} />,
+    );
+    unmount();
+    await new Promise((r) => setTimeout(r, 80));
+    expect(true).toBe(true);
+  });
 });

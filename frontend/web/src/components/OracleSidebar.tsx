@@ -111,6 +111,9 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
   useEffect(() => {
     try {
       localStorage.setItem(UNITS_KEY, unitSystem);
+      window.dispatchEvent(
+        new CustomEvent("openfdd:unit-system-changed", { detail: unitSystem }),
+      );
     } catch {
       /* ignore */
     }

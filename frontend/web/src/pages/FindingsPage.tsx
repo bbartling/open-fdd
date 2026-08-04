@@ -89,13 +89,29 @@ export function FindingsPage() {
   }, [refreshResults]);
 
   useEffect(() => {
-    if (!jobId) return;
+    if (!jobId) {
+      setFindingsDoc({ schema_version: "1", findings: [] });
+      setDispDoc({ schema_version: "1", dispositions: [] });
+      return;
+    }
+    let cancelled = false;
     void Promise.all([getJobFindings(jobId), getJobDispositions(jobId)])
       .then(([f, d]) => {
-        setFindingsDoc(f);
-        setDispDoc(d);
+        if (!cancelled) {
+          setFindingsDoc(f);
+          setDispDoc(d);
+        }
       })
-      .catch(() => undefined);
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(formatErr(err));
+          setFindingsDoc({ schema_version: "1", findings: [] });
+          setDispDoc({ schema_version: "1", dispositions: [] });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [jobId]);
 
   const categories = useMemo(() => {
@@ -236,7 +252,9 @@ export function FindingsPage() {
                 status: "open",
                 notes: "react results tab",
               });
-              void putJobDispositions(jobId, next).then(() => setDispDoc(next));
+              void putJobDispositions(jobId, next)
+                .then(() => setDispDoc(next))
+                .catch((err: unknown) => setError(formatErr(err)));
             }}
             testId="hitl-save"
           />

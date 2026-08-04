@@ -110,9 +110,21 @@ export function HomePage() {
   }, [refresh]);
 
   useEffect(() => {
-    const onStorage = () => setUnitSystem(readUnits());
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    const sync = () => setUnitSystem(readUnits());
+    const onCustom = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail;
+      if (detail === "metric" || detail === "imperial") {
+        setUnitSystem(detail);
+        return;
+      }
+      sync();
+    };
+    window.addEventListener("storage", sync);
+    window.addEventListener("openfdd:unit-system-changed", onCustom);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("openfdd:unit-system-changed", onCustom);
+    };
   }, []);
 
   const populated = equipment.length > 0;
