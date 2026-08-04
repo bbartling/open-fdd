@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { WidgetBaseProps } from "./types";
 import { widgetTestId } from "./types";
 import type { PlotlyFigure } from "../../api/plotDataset";
+import { sanitizePlotlyFigure } from "../../api/plotlySanitize";
 
 export interface PlotlyHostProps extends Omit<WidgetBaseProps, "label"> {
   label?: string;
@@ -32,18 +33,6 @@ declare global {
   interface Window {
     Plotly?: PlotlyStatic;
   }
-}
-
-/** Drop Plotly.py template blobs — they bloat JSON and can break newPlot. */
-export function sanitizePlotlyFigure(
-  figure: PlotlyFigure | null | undefined,
-): PlotlyFigure | null {
-  if (!figure || !Array.isArray(figure.data) || figure.data.length === 0) {
-    return null;
-  }
-  const layout = { ...(figure.layout ?? {}) } as Record<string, unknown>;
-  delete layout.template;
-  return { ...figure, data: figure.data, layout };
 }
 
 function waitForPlotly(timeoutMs = 8000): Promise<PlotlyStatic | null> {

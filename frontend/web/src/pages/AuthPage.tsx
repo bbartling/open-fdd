@@ -166,7 +166,6 @@ export function AuthPage() {
                 name="password"
                 type="password"
                 autoComplete="current-password"
-                autoFocus
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />

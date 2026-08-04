@@ -71,7 +71,7 @@ function RuleExpander({
       .catch((e: unknown) => {
         if (!cancelled) {
           setErr(e instanceof Error ? e.message : String(e));
-          setDefs({});
+          setDefs(null);
         }
       })
       .finally(() => {
@@ -106,7 +106,7 @@ function RuleExpander({
       <div className="oracle-sidebar__expander-body">
         {loading ? <p className="oracle-sidebar__caption">Loading params…</p> : null}
         {err ? <p className="oracle-sidebar__err">{err}</p> : null}
-        {!loading && entries.length === 0 ? (
+        {!loading && defs && entries.length === 0 ? (
           <p className="oracle-sidebar__caption">No tunable params.</p>
         ) : null}
         {entries.map(([key, def]) => {
@@ -204,13 +204,19 @@ export function RuleTuningPanel() {
         await putSessionConfig({
           ...(prev.config ?? {}),
           schema_version: prev.config?.schema_version ?? "openfdd.session.v1",
-          params: nextParams,
+          params: {
+            ...nextParams,
+            _ui: {
+              ...(nextParams._ui ?? {}),
+              require_operational_proof: opsGate ? 1 : 0,
+            },
+          },
         });
       } catch {
         /* localStorage still holds values when central unavailable */
       }
     },
-    [],
+    [opsGate],
   );
 
   const onParam = useCallback(
@@ -335,7 +341,7 @@ export function RuleTuningPanel() {
         </p>
       ) : null}
       <div className="oracle-sidebar__rules" data-testid="sidebar-tune-rules">
-        {visible.slice(0, 80).map((rule) => (
+        {visible.map((rule) => (
           <RuleExpander
             key={rule.rule_id}
             rule={rule}

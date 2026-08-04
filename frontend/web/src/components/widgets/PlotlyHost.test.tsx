@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, waitFor } from "@testing-library/react";
-import { PlotlyHost, sanitizePlotlyFigure } from "./PlotlyHost";
+import { PlotlyHost } from "./PlotlyHost";
+import { sanitizePlotlyFigure } from "../../api/plotlySanitize";
 
 describe("sanitizePlotlyFigure", () => {
   it("strips template and rejects empty data", () => {

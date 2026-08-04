@@ -115,7 +115,9 @@ export function rowsToBarFigure(
     type: "bar",
     x,
     y: sorted.map((r) => {
-      const n = Number(r[key]);
+      const v = r[key];
+      if (v == null || v === "") return null;
+      const n = Number(v);
       return Number.isFinite(n) ? n : null;
     }),
   }));
