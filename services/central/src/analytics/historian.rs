@@ -1009,7 +1009,7 @@ pub async fn bas_vs_web_from_history(
         return Ok(None);
     }
     let eq_filter = equipment_filter_sql(equipment_filter);
-    let limit = max_points.max(100).min(5000);
+    let limit = max_points.clamp(100, 5000);
     let sql = format!(
         r#"
 SELECT
