@@ -1,3 +1,4 @@
+import { getStoredToken } from "./authApi";
 import { ApiClientError, parseErrorEnvelope } from "./client";
 import { newRequestId } from "./requestId";
 
@@ -56,12 +57,16 @@ export function buildPackageUploadFormData(file: File, fieldName = "file"): Form
  */
 export async function uploadPackage(file: File): Promise<PackageImportResponse> {
   const requestId = newRequestId();
+  const token = getStoredToken();
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    [REQUEST_ID_HEADER]: requestId,
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   const res = await fetch(buildUrl(PACKAGE_IMPORT_PATH), {
     method: "POST",
-    headers: {
-      Accept: "application/json",
-      [REQUEST_ID_HEADER]: requestId,
-    },
+    headers,
     body: buildPackageUploadFormData(file),
   });
 
