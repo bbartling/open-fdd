@@ -195,10 +195,10 @@ export function HomePage() {
               testId="overview-start-here"
             >
               <strong>Start here:</strong> sidebar →{" "}
-              <strong>Building package zip(s)</strong> (or Folder locally). Each
-              equipment CSV needs a sibling Haystack map JSON. Then{" "}
-              <strong>Run Rules</strong> → <strong>FDD Plots</strong> /{" "}
-              <strong>RCx</strong>.
+              <strong>Building package zip</strong> →{" "}
+              <strong>Load package</strong>. Each equipment CSV needs a sibling
+              Haystack map JSON. Then <strong>Run Rules</strong> →{" "}
+              <strong>FDD Plots</strong> / <strong>RCx</strong>.
             </InlineAlert>
             <p className="oracle-overview__footer-links">
               Agent brief:{" "}

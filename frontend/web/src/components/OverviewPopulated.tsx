@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import {
   DataTable,
@@ -189,6 +189,8 @@ export function OverviewPopulated({
   const [lastRuleResultCount, setLastRuleResultCount] = useState<number | null>(
     null,
   );
+  const [overviewElapsedSec, setOverviewElapsedSec] = useState(0);
+  const overviewLoadStarted = useRef<number | null>(null);
 
   const selected = equipment.find((e) => e.equipment_id === equipmentId);
   const tempUnit = unitSystem === "metric" ? "°C" : "°F";
@@ -439,6 +441,28 @@ export function OverviewPopulated({
   const datasetStart = overview?.span?.start ?? firstTs ?? "—";
   const datasetEnd = overview?.span?.end ?? lastTs ?? "—";
 
+  useEffect(() => {
+    if (!busy) {
+      overviewLoadStarted.current = null;
+      return;
+    }
+    if (overviewLoadStarted.current == null) {
+      overviewLoadStarted.current = Date.now();
+      setOverviewElapsedSec(0);
+    }
+    const id = window.setInterval(() => {
+      if (overviewLoadStarted.current != null) {
+        setOverviewElapsedSec(
+          Math.max(
+            0,
+            Math.round((Date.now() - overviewLoadStarted.current) / 1000),
+          ),
+        );
+      }
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [busy]);
+
   const chartCount = (() => {
     if (!overview) return 0;
     let n = 0;
@@ -456,7 +480,11 @@ export function OverviewPopulated({
   })();
 
   return (
-    <div className="overview-populated" data-testid="overview-populated">
+    <div
+      className={`overview-populated${busy ? " overview-populated--busy" : ""}`}
+      data-testid="overview-populated"
+      aria-busy={busy || undefined}
+    >
       <p className="oracle-sidebar__caption">
         Plot traces capped at 5,000 points — full data still used for
         rules/exports. Overview charts = Vibe 19 pandas oracle (
@@ -464,11 +492,24 @@ export function OverviewPopulated({
       </p>
 
       {busy ? (
-        <InlineAlert id="overview-busy" variant="info" testId="overview-busy">
-          Computing Overview analytics for <code>{buildingId}</code>… motor
-          weekly, mech-cooling OAT bins, economizer, BAS vs web. First load can
-          take ~20–40s — charts appear below when ready.
-        </InlineAlert>
+        <div
+          className="overview-busy-panel"
+          data-testid="overview-busy"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="spinner" aria-hidden />
+          <div>
+            <strong>
+              Computing Overview analytics for <code>{buildingId}</code>
+            </strong>
+            <p>
+              Motor weekly · mech-cooling OAT bins · economizer · BAS vs web.
+              First load often takes 20–40s. Elapsed:{" "}
+              <strong>{overviewElapsedSec}s</strong>
+            </p>
+          </div>
+        </div>
       ) : null}
 
       {!busy && overview ? (
@@ -478,16 +519,16 @@ export function OverviewPopulated({
           testId="overview-charts-ready"
         >
           Charts ready: <strong>{chartCount}</strong> Plotly figure
-          {chartCount === 1 ? "" : "s"} loaded for <code>{buildingId}</code> (
-          {overview.elapsed_s}s). Each chart shows “rendered” under the plot
-          when Plotly finishes drawing.
+          {chartCount === 1 ? "" : "s"} for <code>{buildingId}</code> (
+          {overview.elapsed_s}s). Each plot shows “rendered” when Plotly finishes
+          drawing.
         </InlineAlert>
       ) : null}
 
       <div className="overview-toolbar">
         <Button
           id="overview-refresh"
-          label={busy ? "Refreshing…" : "Refresh Overview"}
+          label={busy ? `Refreshing… ${overviewElapsedSec}s` : "Refresh Overview"}
           loading={busy}
           onClick={() => {
             void refreshMeta();
@@ -506,8 +547,9 @@ export function OverviewPopulated({
 
       {overviewErr ? (
         <InlineAlert id="overview-oracle-err" variant="danger" testId="overview-oracle-err">
-          Overview oracle: {overviewErr}. Ensure the overview-oracle service is
-          running on :8099 and the Building 100 zip is available.
+          Overview charts unavailable: {overviewErr}. Confirm overview-oracle is
+          running on <code>:8099</code> and the package for{" "}
+          <code>{buildingId}</code> is loaded.
         </InlineAlert>
       ) : null}
 

@@ -64,6 +64,8 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadElapsedSec, setLoadElapsedSec] = useState(0);
+  const loadStartedAt = useRef<number | null>(null);
   const [unitSystem, setUnitSystem] = useState<"imperial" | "metric">(() => {
     try {
       const v = localStorage.getItem(UNITS_KEY);
@@ -148,17 +150,43 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
     ) / 100;
   }, [zipFiles]);
 
+  useEffect(() => {
+    if (!loading) {
+      loadStartedAt.current = null;
+      return;
+    }
+    loadStartedAt.current = Date.now();
+    setLoadElapsedSec(0);
+    const id = window.setInterval(() => {
+      if (loadStartedAt.current != null) {
+        setLoadElapsedSec(
+          Math.max(0, Math.round((Date.now() - loadStartedAt.current) / 1000)),
+        );
+      }
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [loading]);
+
   const onLoadZips = async () => {
     const file = zipFiles[0];
     if (!file) {
       setError("Choose a building package zip first");
       return;
     }
+    if (zipFiles.length > 1) {
+      setError(
+        "Select one openfdd_package_v1 zip (multi-part assemble is not wired yet).",
+      );
+      return;
+    }
     setLoading(true);
     setError(null);
     setStatus("");
     try {
-      setStatus("Importing package… this can take 30–90s for Building 100.");
+      const sizeMb = Math.round((file.size / (1024 * 1024)) * 10) / 10;
+      setStatus(
+        `Uploading ${file.name} (${sizeMb} MB) → central historian… large sites often take 10–90s.`,
+      );
       const body = await uploadPackage(file);
       const bid = body.building_id || "";
       if (bid) {
@@ -168,8 +196,23 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
         );
       }
       const n = body.equipment_written ?? body.equipment?.length ?? 0;
+      const rows = body.total_rows;
+      const ms = body.total_ms;
+      const elapsed =
+        loadStartedAt.current != null
+          ? Math.round((Date.now() - loadStartedAt.current) / 1000)
+          : null;
       setStatus(
-        `Loaded ${n} equip · \`${bid || "—"}\` — Overview will refresh automatically.`,
+        [
+          `Ready: ${n} equipment`,
+          bid ? `\`${bid}\`` : null,
+          rows != null ? `${rows.toLocaleString()} rows` : null,
+          ms != null ? `${ms} ms server` : null,
+          elapsed != null ? `${elapsed}s wall` : null,
+          "Overview charts are refreshing now.",
+        ]
+          .filter(Boolean)
+          .join(" · "),
       );
       await refreshSites();
       try {
@@ -253,28 +296,33 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
         </fieldset>
 
         <label className="oracle-sidebar__field">
-          <span className="oracle-sidebar__label">Building package zip(s)</span>
+          <span className="oracle-sidebar__label">Building package zip</span>
           <div className="oracle-sidebar__file-wrap">
             <input
               ref={zipInputRef}
               type="file"
               accept=".zip,application/zip"
-              multiple
               className="oracle-sidebar__file"
               data-testid="sidebar-zip-input"
-              onChange={(e) => setZipFiles([...(e.target.files ?? [])])}
+              onChange={(e) => {
+                const list = [...(e.target.files ?? [])];
+                setZipFiles(list.slice(0, 1));
+              }}
             />
             <p className="oracle-sidebar__caption" style={{ marginBottom: 0 }}>
-              Limit 200MB per file · ZIP
+              One <code>openfdd_package_v1</code> zip · ≤200 MB typical
             </p>
           </div>
         </label>
         <p className="oracle-sidebar__caption">
-          <strong>{zipFiles.length}</strong> file(s) · <strong>{partsMb}</strong>{" "}
-          MB selected · per-file ≤500 MB · assembled job ≤2048 MB
-        </p>
-        <p className="oracle-sidebar__caption">
-          Build check: zip-item limit 2000 · equip ≤100.
+          {zipFiles[0] ? (
+            <>
+              Selected <strong>{zipFiles[0].name}</strong> ·{" "}
+              <strong>{partsMb}</strong> MB
+            </>
+          ) : (
+            <>No file selected yet</>
+          )}
         </p>
 
         <div className="oracle-sidebar__btn-row">
@@ -284,8 +332,9 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
             disabled={!zipFiles.length || loading}
             onClick={() => void onLoadZips()}
             data-testid="sidebar-load-zips"
+            aria-busy={loading || undefined}
           >
-            {loading ? "Importing…" : "Load zip(s)"}
+            {loading ? `Importing… ${loadElapsedSec}s` : "Load package"}
           </button>
           <button
             type="button"
@@ -316,7 +365,8 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
 
         {loading ? (
           <p className="oracle-sidebar__busy" data-testid="sidebar-load-busy" role="status">
-            Working — importing package into central historian…
+            Importing into central… <strong>{loadElapsedSec}s</strong> elapsed.
+            Stay on this page; Overview will flip to charts when ready.
           </p>
         ) : null}
         {status ? (
@@ -441,7 +491,7 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
                 <code>openfdd_package_v1</code> part zips.
               </li>
               <li>
-                Human uploads all part zips here → <strong>Load zip(s)</strong>.
+                Human uploads one package zip here → <strong>Load package</strong>.
               </li>
               <li>
                 Map + prerun faults (Run Rules) so Plots/RCx are ready.

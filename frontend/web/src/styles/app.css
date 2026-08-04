@@ -1072,6 +1072,31 @@ body {
   animation: overview-pulse 1.2s ease-in-out infinite;
 }
 
+.overview-busy-panel {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin: var(--space-sm) 0;
+  padding: 0.85rem 1rem;
+  background: var(--color-info-bg);
+  border: 1px solid var(--color-info-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  animation: overview-pulse 1.2s ease-in-out infinite;
+}
+
+.overview-busy-panel p {
+  margin: 0.25rem 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+.overview-populated--busy .overview-section {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
 @keyframes overview-pulse {
   0%,
   100% {
