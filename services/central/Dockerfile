@@ -25,13 +25,13 @@ COPY --from=builder /src/target/release/openfdd-central /usr/local/bin/openfdd-c
 COPY --from=builder /src/target/release/openfdd-provision /usr/local/bin/openfdd-provision
 COPY sql_rules /app/sql_rules
 COPY rule_tuning /app/rule_tuning
-COPY services/ui/requirements.txt /app/services/ui/requirements.txt
-RUN pip install --no-cache-dir -r /app/services/ui/requirements.txt
-COPY services/ui /app/services/ui
+COPY tools/wattlab_export/requirements.txt /app/tools/wattlab_export/requirements.txt
+RUN pip install --no-cache-dir -r /app/tools/wattlab_export/requirements.txt
+COPY tools/wattlab_export /app/tools/wattlab_export
 ENV OPENFDD_CENTRAL_HOST=0.0.0.0
 ENV OPENFDD_IMAGE_NAME=ghcr.io/bbartling/openfdd-central
 ENV OPENFDD_SQL_RULES_DIR=/app/sql_rules
-ENV OPENFDD_AGENT_AFDD_SCRIPT=/app/services/ui/scripts/agent_afdd.py
+ENV OPENFDD_AGENT_AFDD_SCRIPT=/app/tools/wattlab_export/agent_afdd.py
 ENV OPENFDD_CENTRAL_PORT=8080
 # OFDD-071: stamp tip SHA so /api/health → {version}+{sha} (runtime env preferred by resolve_build_version).
 ENV OPENFDD_GIT_SHA=$OPENFDD_GIT_SHA

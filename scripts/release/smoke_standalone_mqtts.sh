@@ -26,7 +26,7 @@ done
 
 DOCKERFILES=(
   services/central/Dockerfile
-  services/ui/Dockerfile
+  frontend/web/Dockerfile
   services/fieldbus/Dockerfile
   services/mqtt/Dockerfile
 )
@@ -39,17 +39,23 @@ for f in "${DOCKERFILES[@]}"; do
   echo "OK dockerfile: $f"
 done
 
-if [[ ! -f services/ui/streamlit_app.py ]]; then
-  echo "FAIL: services/ui/streamlit_app.py missing" >&2
+if [[ -d services/ui ]]; then
+  echo "FAIL: services/ui must be deleted (Streamlit product removed)" >&2
   exit 1
 fi
-echo "OK Streamlit UI entrypoint"
+echo "OK Streamlit product tree absent"
 
-if [[ ! -f services/ui/requirements.txt ]]; then
-  echo "FAIL: services/ui/requirements.txt missing" >&2
+if [[ ! -f frontend/web/package.json ]]; then
+  echo "FAIL: frontend/web/package.json missing" >&2
   exit 1
 fi
-echo "OK Streamlit requirements"
+echo "OK React product UI"
+
+if [[ ! -f tools/wattlab_export/agent_afdd.py ]]; then
+  echo "FAIL: tools/wattlab_export/agent_afdd.py missing" >&2
+  exit 1
+fi
+echo "OK WattLab exporter"
 
 if [[ ! -f docker/VERSION_MANIFEST.md ]]; then
   echo "FAIL: docker/VERSION_MANIFEST.md missing" >&2

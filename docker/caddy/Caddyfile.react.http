@@ -26,18 +26,6 @@
 	# Bookmark alias (belt-and-suspenders with SPA Navigate + web nginx 302).
 	redir /login /auth 302
 
-	# Vibe 19 Overview pandas oracle (host uvicorn :8099)
-	handle /api/overview-oracle* {
-		reverse_proxy {$OPENFDD_OVERVIEW_ORACLE_UPSTREAM:172.17.0.1:8099} {
-			header_up X-Forwarded-Proto {scheme}
-			header_up X-Real-IP {remote_host}
-			transport http {
-				response_header_timeout 300s
-				read_timeout 300s
-			}
-		}
-	}
-
 	handle /api* {
 		reverse_proxy {$OPENFDD_CADDY_API_UPSTREAM:central:8080} {
 			header_up X-Forwarded-Proto {scheme}

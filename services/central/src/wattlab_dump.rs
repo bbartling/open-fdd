@@ -95,13 +95,15 @@ fn agent_script() -> Result<PathBuf, JobError> {
 
     let mut candidates = Vec::new();
     if let Ok(root) = std::env::var("OPENFDD_REPO_ROOT") {
-        candidates.push(PathBuf::from(root).join("services/ui/scripts/agent_afdd.py"));
+        candidates.push(PathBuf::from(root).join("tools/wattlab_export/agent_afdd.py"));
     }
     if let Ok(cwd) = std::env::current_dir() {
-        candidates.push(cwd.join("services/ui/scripts/agent_afdd.py"));
-        candidates.push(cwd.join("../ui/scripts/agent_afdd.py"));
+        candidates.push(cwd.join("tools/wattlab_export/agent_afdd.py"));
+        candidates.push(cwd.join("../tools/wattlab_export/agent_afdd.py"));
     }
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ui/scripts/agent_afdd.py"));
+    candidates.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tools/wattlab_export/agent_afdd.py"),
+    );
 
     candidates.into_iter().find(|p| p.is_file()).ok_or_else(|| {
         JobError::Io(
@@ -202,12 +204,7 @@ pub async fn create_dump(
         .arg("--export-profile")
         .arg(&profile)
         .arg("--no-bootstrap")
-        .current_dir(
-            script
-                .parent()
-                .and_then(Path::parent)
-                .unwrap_or_else(|| Path::new(".")),
-        )
+        .current_dir(script.parent().unwrap_or_else(|| Path::new(".")))
         .env("PYTHONUNBUFFERED", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

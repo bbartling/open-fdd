@@ -1,4 +1,5 @@
-# Open-FDD standalone: central + UI + MQTT + fieldbus (MQTTS locally).
+# Open-FDD standalone: central + MQTT + fieldbus (MQTTS locally).
+# Product UI is React (`compose.react.yml` / `openfdd-web`).
 # remote edge: omit fieldbus here and run compose.edge.yml on the OT host.
 
 name: openfdd-standalone
@@ -32,9 +33,8 @@ services:
       OPENFDD_MQTT_KEY_PEM: /mqtt/central.key.pem
       OPENFDD_WORKSPACE: /workspace
       OPENFDD_PARQUET_ROOT: /workspace/.cache/parquet
-      # Remote UI login (optional). When JWT secret is set, also set OPENFDD_ADMIN_PASSWORD
-      # and sign in as admin/operator/viewer with that password from http://<host>/auth
-# (Caddy :80) or http://<host>:3000/auth — /login redirects to /auth.
+      # Remote login (optional). When JWT secret is set, also set OPENFDD_ADMIN_PASSWORD
+      # and sign in as admin/operator/viewer from React (compose.react / Caddy :80).
       OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}
       OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
     ports:
@@ -45,26 +45,6 @@ services:
       - ../deploy/mqtt/kits/${OPENFDD_SITE_ID:-local}__central:/mqtt:ro
     depends_on:
       - mqtt
-    restart: unless-stopped
-
-  ui:
-    profiles: ["streamlit-legacy"]
-    image: ${OPENFDD_UI_IMAGE:-ghcr.io/bbartling/openfdd-ui:nightly}
-    build:
-      context: ../services/ui
-      dockerfile: Dockerfile
-    environment:
-      OPENFDD_API_BASE: http://central:8080
-      # JWT-secured central: set OPENFDD_API_TOKEN or OPENFDD_ADMIN_PASSWORD (UI logs in as admin).
-      OPENFDD_API_TOKEN: ${OPENFDD_API_TOKEN:-}
-      OPENFDD_UI_USERNAME: ${OPENFDD_UI_USERNAME:-admin}
-      OPENFDD_UI_PASSWORD: ${OPENFDD_UI_PASSWORD:-}
-      OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
-    ports:
-      # Bind all interfaces so LAN clients can reach http://<bench-ip>:3000
-      - "${OPENFDD_UI_BIND:-0.0.0.0}:3000:8501"
-    depends_on:
-      - central
     restart: unless-stopped
 
   fieldbus:

@@ -1,5 +1,12 @@
 # Session log
 
+## 2026-08-04 — Streamlit delete + WattLab relocate (cutover)
+
+- Relocated cookbook WattLab exporter → `tools/wattlab_export/`; central shells it (no `services/ui`).
+- Deleted `services/ui` + `services/overview_oracle`; compose/CI assert React-only + ui absent.
+- Stopped `openfdd-ui` GHCR publish in stack + release workflows.
+- Overview A/B: weekly plant bins, mech OAT bins, `/api/analytics/bas-vs-web-oat`.
+
 ## 2026-08-04 — Turnkey Rust cutover + agent_spec sync
 
 - Locked product path: React + central DataFusion only; Overview via `/api/analytics/*` + client Plotly (no overview-oracle / Streamlit product).

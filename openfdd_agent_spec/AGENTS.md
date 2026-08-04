@@ -137,7 +137,7 @@ Sibling-repo locations are **examples** — resolve via `git rev-parse --show-to
 | `sql_rules/` | Production SQL registry + rule files |
 | `services/central/` | Rust API + DataFusion analytics + FDD |
 | `frontend/web/` | React SPA (`openfdd-web`) — sole product UI |
-| `services/ui/` | **Cutover:** delete after WattLab exporter relocate (not product UI) |
+| `tools/wattlab_export/` | WattLab / agent AFDD exporter (central job dumps) |
 | `docs/rules/cookbook/` | Human-readable SQL + pandas cookbooks |
 | `docs/migration/` | Historical audit + matrices |
 | `.github/workflows/` | See [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md) |

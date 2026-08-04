@@ -176,8 +176,7 @@ fn round2(x: f64) -> f64 {
 /// VAVs and unknown meters return `None` (excluded from plant weekly charts).
 pub fn plant_group_for(equipment_id: &str) -> Option<&'static str> {
     let eq = equipment_id.to_ascii_uppercase().replace('\\', "/");
-    if eq.contains("/VAV") || eq.starts_with("VAV") || eq.contains("VAVFC") || eq.contains("VAVH")
-    {
+    if eq.contains("/VAV") || eq.starts_with("VAV") || eq.contains("VAVFC") || eq.contains("VAVH") {
         return None;
     }
     if eq.starts_with("AHU") || eq.contains("/AHU") || eq.contains("RTU") {
@@ -1055,9 +1054,7 @@ LIMIT {limit}
             })
         })
         .collect();
-    let warnings = vec![
-        "BAS vs web OAT from historian DataFusion (oa_t vs web OAT column)".into(),
-    ];
+    let warnings = vec!["BAS vs web OAT from historian DataFusion (oa_t vs web OAT column)".into()];
     let query = AnalyticsQuery::default();
     let mut env = envelope_with_engine("bas-vs-web-oat-v1", &query, warnings, DF_ENGINE);
     env.points = points;

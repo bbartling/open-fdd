@@ -1,4 +1,5 @@
-# Open-FDD Central only (broker + API + UI). Edges connect over MQTTS.
+# Open-FDD Central only (broker + API). Edges connect over MQTTS.
+# Product UI is React (`compose.react.yml` / `openfdd-web`).
 
 name: openfdd-central
 
@@ -43,25 +44,6 @@ services:
       - ../deploy/mqtt/kits/${OPENFDD_SITE_ID:-local}__central:/mqtt:ro
     depends_on:
       - mqtt
-    restart: unless-stopped
-
-  # P2-M6: Streamlit is not the product UI. Enable only for emergency recovery.
-  ui:
-    profiles: ["streamlit-legacy"]
-    image: ${OPENFDD_UI_IMAGE:-ghcr.io/bbartling/openfdd-ui:nightly}
-    build:
-      context: ../services/ui
-      dockerfile: Dockerfile
-    environment:
-      OPENFDD_API_BASE: http://central:8080
-      OPENFDD_API_TOKEN: ${OPENFDD_API_TOKEN:-}
-      OPENFDD_UI_USERNAME: ${OPENFDD_UI_USERNAME:-admin}
-      OPENFDD_UI_PASSWORD: ${OPENFDD_UI_PASSWORD:-}
-      OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
-    ports:
-      - "${OPENFDD_UI_BIND:-0.0.0.0}:3000:8501"
-    depends_on:
-      - central
     restart: unless-stopped
 
   mcp:

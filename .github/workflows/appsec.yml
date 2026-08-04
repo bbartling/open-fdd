@@ -47,14 +47,17 @@ jobs:
         run: trivy fs --exit-code 1 --severity HIGH,CRITICAL .
 
   dashboard-audit:
-    name: React product UI present (Streamlit archived)
+    name: React product UI present (Streamlit removed)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Guard product UI path
         run: |
           test -f frontend/web/package.json
-          test -f services/ui/ARCHIVED.md
+          test -f frontend/web/Dockerfile
+          test -f docker/compose.react.yml
+          ! test -d services/ui
+          ! grep -q "streamlit-legacy" docker/compose.central.yml docker/compose.csv.yml docker/compose.standalone.yml
           ! test -f workspace/dashboard/package.json
 
   dockerfile-lint:
@@ -66,12 +69,6 @@ jobs:
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: services/central/Dockerfile
-          failure-threshold: error
-          ignore: DL3008
-      - name: Hadolint UI (archived Streamlit)
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: services/ui/Dockerfile
           failure-threshold: error
           ignore: DL3008
       - name: Hadolint web (React)

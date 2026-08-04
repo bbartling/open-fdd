@@ -203,10 +203,11 @@ tracks the recovery program evidence gates.
 Product voice = React + DataFusion only. Track deletion / GHCR / agent_spec honesty.
 
 - [x] Overview analytics path = central `/api/analytics/*` + client Plotly (no overview-oracle product call)
-- [ ] Runtime weekly plant bins (`runtime-weekly-v1`) + React plant charts
-- [ ] Mech OAT bins on `/api/analytics/mechanical-cooling` + React
-- [ ] BAS vs web OAT (`/api/analytics/bas-vs-web-oat`) + React
-- [ ] Relocate WattLab exporter off `services/ui`
-- [ ] Delete `services/ui` + `services/overview_oracle`; scrub CI/docs/compose
-- [ ] Stop publishing `openfdd-ui` to GHCR; bensbench tip `sha-*` pull
+- [x] Runtime weekly plant bins (`runtime-weekly-v1`) + React plant charts
+- [x] Mech OAT bins on `/api/analytics/mechanical-cooling` + React
+- [x] BAS vs web OAT (`/api/analytics/bas-vs-web-oat`) + React
+- [x] Relocate WattLab exporter off `services/ui` → `tools/wattlab_export/`
+- [x] Delete `services/ui` + `services/overview_oracle`; scrub CI/docs/compose
+- [x] Stop publishing `openfdd-ui` to GHCR (workflow scrub; tip images after master merge)
 - [x] `openfdd_agent_spec/` updated for cutover direction (keep in sync every PR)
+- [ ] bensbench tip `sha-*` pull after master GHCR publish
