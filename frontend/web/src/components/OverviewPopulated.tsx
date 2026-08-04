@@ -41,17 +41,18 @@ const DAYS = [
 type DaySched = { occupied: boolean; start: string; end: string };
 
 const DEFAULT_WEEK: Record<(typeof DAYS)[number], DaySched> = {
-  Monday: { occupied: true, start: "06:00", end: "18:00" },
-  Tuesday: { occupied: true, start: "06:00", end: "18:00" },
-  Wednesday: { occupied: true, start: "06:00", end: "18:00" },
-  Thursday: { occupied: true, start: "06:00", end: "18:00" },
-  Friday: { occupied: true, start: "06:00", end: "18:00" },
-  Saturday: { occupied: true, start: "06:00", end: "18:00" },
-  Sunday: { occupied: true, start: "06:00", end: "18:00" },
+  Monday: { occupied: true, start: "07:00", end: "17:00" },
+  Tuesday: { occupied: true, start: "07:00", end: "17:00" },
+  Wednesday: { occupied: true, start: "07:00", end: "17:00" },
+  Thursday: { occupied: true, start: "07:00", end: "17:00" },
+  Friday: { occupied: true, start: "07:00", end: "17:00" },
+  Saturday: { occupied: false, start: "07:00", end: "17:00" },
+  Sunday: { occupied: false, start: "07:00", end: "17:00" },
 };
 
 const PARAMS_KEY = "openfdd.ui.rule_params";
-const SCHEDULE_KEY = "openfdd.ui.occupancy_schedule";
+/** v2 defaults: M–F 07:00–17:00 occupied; weekends unoccupied. */
+const SCHEDULE_KEY = "openfdd.ui.occupancy_schedule.v2";
 
 function loadStoredParams(): Record<string, Record<string, number>> {
   try {
