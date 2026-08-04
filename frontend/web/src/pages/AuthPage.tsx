@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
-import { AppShell } from "../components/AppShell";
-import { Button, InlineAlert, Metric } from "../components/widgets";
+import { useCallback, useEffect, useId, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import {
   getAuthMe,
   getAuthStatus,
@@ -21,9 +19,16 @@ function safeReturnPath(raw: string | null): string {
   return raw;
 }
 
+/**
+ * Dedicated sign-in surface (Streamlit-oracle chrome) — not the app shell.
+ * AuthGate sends unauthenticated users here when central requires JWT.
+ */
 export function AuthPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const returnTo = safeReturnPath(searchParams.get("from"));
+  const formId = useId();
+
   const [status, setStatus] = useState<AuthStatus | null>(null);
   const [me, setMe] = useState<AuthMe | null>(null);
   const [username, setUsername] = useState("admin");
@@ -31,6 +36,7 @@ export function AuthPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -44,6 +50,8 @@ export function AuthPage() {
       }
     } catch (err) {
       setError(formatErr(err));
+    } finally {
+      setReady(true);
     }
   }, []);
 
@@ -51,15 +59,16 @@ export function AuthPage() {
     void refresh();
   }, [refresh]);
 
-  const onLogin = async () => {
+  const onLogin = async (event?: React.FormEvent) => {
+    event?.preventDefault();
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
       const res = await login(username, password);
-      setNotice(`Logged in as ${res.subject} (${res.role})`);
+      setNotice(`Signed in as ${res.subject}`);
       await refresh();
-      navigate(safeReturnPath(searchParams.get("from")), { replace: true });
+      navigate(returnTo, { replace: true });
     } catch (err) {
       setError(formatErr(err));
     } finally {
@@ -70,99 +79,137 @@ export function AuthPage() {
   const onLogout = () => {
     logout();
     setMe(null);
-    setNotice("Cleared session token");
+    setNotice("Signed out");
+    setPassword("");
   };
 
+  const signedIn = Boolean(me?.username);
+
   return (
-    <AppShell
-      title="Auth"
-      caption="Sign in required before package import and API calls"
-      activeSectionId="overview"
-    >
-      <div className="page-stack" data-testid="auth-page">
-        <InlineAlert id="auth-hint" variant="info">
-          Central has authentication enabled. Log in here first — otherwise
-          Load zip and other API calls return 401.
-        </InlineAlert>
+    <div className="auth-screen" data-testid="auth-page">
+      <div className="auth-screen__atmosphere" aria-hidden />
+      <main className="auth-screen__panel">
+        <p className="auth-screen__brand">Open-FDD</p>
+        <h1 className="auth-screen__title">
+          {signedIn ? "Session" : "Sign in"}
+        </h1>
+        <p className="auth-screen__lede">
+          {signedIn
+            ? "You already have an active central session on this browser."
+            : status?.auth_required
+              ? "Central requires a password before package import and analytics."
+              : "Optional local session token for API calls on this browser."}
+        </p>
 
-        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
-          <Metric
-            id="auth-required"
-            label="auth_required"
-            value={
-              status == null ? "—" : status.auth_required ? "true" : "false"
-            }
-            testId="auth-required"
-          />
-          <Metric
-            id="auth-user"
-            label="username"
-            value={me?.username ?? "—"}
-            testId="auth-user"
-          />
-          <Metric
-            id="auth-role"
-            label="role"
-            value={me?.role ?? "—"}
-            testId="auth-role"
-          />
-        </div>
+        <dl className="auth-screen__meta" aria-live="polite">
+          <div>
+            <dt>Auth required</dt>
+            <dd data-testid="auth-required">
+              {!ready || status == null
+                ? "…"
+                : status.auth_required
+                  ? "true"
+                  : "false"}
+            </dd>
+          </div>
+          <div>
+            <dt>User</dt>
+            <dd data-testid="auth-user">{me?.username ?? "—"}</dd>
+          </div>
+          <div>
+            <dt>Role</dt>
+            <dd data-testid="auth-role">{me?.role ?? "—"}</dd>
+          </div>
+        </dl>
 
-        <label htmlFor="auth-username">
-          username
-          <input
-            id="auth-username"
-            data-testid="auth-username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-          />
-        </label>
-        <label htmlFor="auth-password">
-          password
-          <input
-            id="auth-password"
-            data-testid="auth-password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
-
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <Button
-            id="auth-login"
-            label={busy ? "…" : "Login"}
-            onClick={() => void onLogin()}
-            disabled={busy}
-            testId="auth-login"
-          />
-          <Button
-            id="auth-logout"
-            label="Logout"
-            variant="secondary"
-            onClick={onLogout}
-            testId="auth-logout"
-          />
-          <Button
-            id="auth-refresh"
-            label="Refresh"
-            variant="secondary"
-            onClick={() => void refresh()}
-            testId="auth-refresh"
-          />
-        </div>
+        {signedIn ? (
+          <div className="auth-screen__actions">
+            <button
+              type="button"
+              className="auth-screen__btn auth-screen__btn--primary"
+              data-testid="auth-continue"
+              onClick={() => navigate(returnTo, { replace: true })}
+            >
+              Continue to app
+            </button>
+            <button
+              type="button"
+              className="auth-screen__btn auth-screen__btn--ghost"
+              data-testid="auth-logout"
+              onClick={onLogout}
+            >
+              Sign out
+            </button>
+          </div>
+        ) : (
+          <form
+            className="auth-screen__form"
+            onSubmit={(e) => void onLogin(e)}
+            noValidate
+          >
+            <label className="auth-screen__field" htmlFor={`${formId}-user`}>
+              <span>Username</span>
+              <input
+                id={`${formId}-user`}
+                data-testid="auth-username"
+                name="username"
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
+            </label>
+            <label className="auth-screen__field" htmlFor={`${formId}-pass`}>
+              <span>Password</span>
+              <input
+                id={`${formId}-pass`}
+                data-testid="auth-password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                autoFocus
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </label>
+            <div className="auth-screen__actions">
+              <button
+                type="submit"
+                className="auth-screen__btn auth-screen__btn--primary"
+                data-testid="auth-login"
+                disabled={busy || !password}
+              >
+                {busy ? "Signing in…" : "Sign in"}
+              </button>
+              <button
+                type="button"
+                className="auth-screen__btn auth-screen__btn--ghost"
+                data-testid="auth-refresh"
+                onClick={() => void refresh()}
+              >
+                Refresh status
+              </button>
+            </div>
+          </form>
+        )}
 
         {error ? (
-          <InlineAlert id="auth-error" variant="danger" testId="auth-error">
+          <p className="auth-screen__alert auth-screen__alert--danger" role="alert" data-testid="auth-error">
             {error}
-          </InlineAlert>
+          </p>
         ) : null}
         {notice ? (
-          <InlineAlert id="auth-notice" variant="success" testId="auth-notice">
+          <p className="auth-screen__alert auth-screen__alert--ok" data-testid="auth-notice">
             {notice}
-          </InlineAlert>
+          </p>
         ) : null}
-      </div>
-    </AppShell>
+
+        <p className="auth-screen__footnote">
+          Bench password handoff:{" "}
+          <code>workspace/bootstrap_credentials.once.txt</code>
+          {" · "}
+          <Link to="/">Overview</Link>
+        </p>
+      </main>
+    </div>
   );
 }
