@@ -992,3 +992,133 @@ body {
 .auth-screen__footnote a {
   color: var(--color-info);
 }
+
+/* —— Populated Overview (Streamlit oracle order / density) —— */
+.overview-populated {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  max-width: 72rem;
+}
+
+.overview-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.overview-metrics {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.overview-metrics--span {
+  margin-top: 0.25rem;
+}
+
+.overview-section {
+  padding: var(--space-md) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.overview-section h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.overview-section > p {
+  margin: 0 0 0.75rem;
+  line-height: 1.5;
+}
+
+.overview-plant-plots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--space-md);
+  margin: var(--space-sm) 0;
+}
+
+.overview-day {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.35rem 0;
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.overview-col-list {
+  columns: 2;
+  column-gap: 1.5rem;
+  margin: 0.5rem 0 1rem;
+  padding-left: 1.25rem;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.oracle-sidebar__busy {
+  margin: var(--space-sm) 0 0;
+  padding: 0.55rem 0.75rem;
+  background: var(--color-info-bg);
+  border: 1px solid var(--color-info-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-info);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  animation: overview-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes overview-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+
+.widget-plotly-host {
+  position: relative;
+  width: 100%;
+  background: transparent;
+}
+
+.widget-plotly-host__status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0.75rem;
+  background: rgba(240, 242, 246, 0.82);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.overview-rule-run {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.overview-rule-run__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.oracle-sidebar__rule-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}

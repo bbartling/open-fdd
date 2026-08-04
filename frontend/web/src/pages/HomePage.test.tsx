@@ -34,39 +34,95 @@ vi.mock("../api/analyticsApi", () => ({
     { equipment_id: "AHU_1", equipment_type: "AHU" },
     { equipment_id: "VAV_1", equipment_type: "VAV" },
   ]),
-  postRuntime: vi.fn(async () => ({
-    schema_version: "1",
-    query_version: "runtime-v1",
-    generated_at: "",
-    engine: "central-analytics-v1",
-    warnings: [],
-    rows: [{ week: "2026-W01", fan_hours: 40 }],
-    equipment: [],
-    points: [],
-    skipped: [],
+}));
+
+vi.mock("../api/overviewOracleApi", () => ({
+  fetchOverviewVibe19: vi.fn(async () => ({
+    ok: true,
+    building_id: "B1",
+    source: "vibe19-pandas-oracle",
+    elapsed_s: 0.1,
+    equipment_count: 2,
+    equipment_ids: ["AHU_1", "VAV_1"],
+    has_weather: false,
+    span: {
+      start: "2026-01-01T00:00:00Z",
+      end: "2026-02-01T00:00:00Z",
+      span_hours: 744,
+    },
+    motor_weekly: {
+      caption: "test",
+      plants: [
+        {
+          plant_group: "air",
+          title: "Air side — supply fans",
+          caption: "c",
+          figure: {
+            data: [{ type: "bar", x: ["2026-01-06"], y: [10], name: "AHU_1" }],
+            layout: { title: "Air" },
+          },
+          empty: false,
+        },
+      ],
+      table: [{ week_label: "2026-01-06", hours: 10, plant_group: "air" }],
+    },
+    mech_cooling: {
+      caption: "c",
+      figure: {
+        data: [{ type: "bar", x: ["30-35"], y: [2], name: "CHILLER_1" }],
+        layout: {},
+      },
+      bins: [{ bin_label: "30-35", hours: 2 }],
+      coverage: [{ Equipment: "CHILLER_1", Included: true }],
+      n_included: 1,
+      n_excluded: 0,
+    },
+    economizer_weather: {
+      caption: "c",
+      table: [{ equipment_id: "AHU_1", opportunity_hours: 12 }],
+    },
+    economizer_free_cooling: {
+      caption: "c",
+      metrics: [{ equipment_id: "AHU_1", fan_on_hours: 100 }],
+      delta_scatter: {
+        data: [{ type: "scatter", x: [10], y: [1], mode: "markers" }],
+        layout: {},
+      },
+      mat_residual: null,
+      temps_overlay: null,
+      overlay_equipment_id: "AHU_1",
+      skipped: [],
+    },
+    bas_vs_web_oat: {
+      caption: "c",
+      overlay: {
+        data: [{ type: "scatter", x: ["t"], y: [50], name: "BAS OAT" }],
+        layout: {},
+      },
+      histogram: null,
+      oat_err: 5,
+    },
+    devices_by_type: [
+      { type: "AHU", count: 1 },
+      { type: "VAV", count: 1 },
+    ],
   })),
-  postMechanicalCooling: vi.fn(async () => ({
-    schema_version: "1",
-    query_version: "mechanical-cooling-v1",
-    generated_at: "",
-    engine: "central-analytics-v1",
-    warnings: [],
-    rows: [],
-    equipment: [],
-    points: [],
-    skipped: [],
+  fetchOverviewInspect: vi.fn(async () => ({
+    ok: true,
+    equipment_id: "AHU_1",
+    row_count: 100,
+    plottable_columns: ["sat"],
+    columns_plotted: ["sat"],
+    first_timestamp: "2026-01-01T00:00:00Z",
+    last_timestamp: "2026-02-01T00:00:00Z",
+    span: "2026-01-01 → 2026-02-01",
+    figure: {
+      data: [{ type: "scatter", x: ["t"], y: [1], name: "sat" }],
+      layout: {},
+    },
+    csv_preview: [{ sat: 1 }],
   })),
-  postEconomizer: vi.fn(async () => ({
-    schema_version: "1",
-    query_version: "economizer-v1",
-    generated_at: "",
-    engine: "central-analytics-v1",
-    warnings: [],
-    rows: [],
-    equipment: [],
-    points: [],
-    skipped: [],
-  })),
+  downloadRowsCsv: vi.fn(),
 }));
 
 vi.mock("../api/fddApi", () => ({
@@ -74,6 +130,12 @@ vi.mock("../api/fddApi", () => ({
   listFddRules: vi.fn(async () => []),
   getFddResults: vi.fn(async () => []),
   getFddRuleParams: vi.fn(async () => ({ ok: true, params: {} })),
+  runFdd: vi.fn(async () => ({
+    ok: true,
+    results: [],
+    total_ms: 12,
+    rules_run: 0,
+  })),
 }));
 
 vi.mock("../api/reportsApi", () => ({

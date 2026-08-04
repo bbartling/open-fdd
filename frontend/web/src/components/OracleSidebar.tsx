@@ -155,6 +155,7 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
     setError(null);
     setStatus("");
     try {
+      setStatus("Importing package… this can take 30–90s for Building 100.");
       const body = await uploadPackage(file);
       const bid = body.building_id || "";
       if (bid) {
@@ -164,7 +165,9 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
         );
       }
       const n = body.equipment_written ?? body.equipment?.length ?? 0;
-      setStatus(`Loaded ${n} equip · \`${bid || "—"}\``);
+      setStatus(
+        `Loaded ${n} equip · \`${bid || "—"}\` — Overview will refresh automatically.`,
+      );
       await refreshSites();
       try {
         window.dispatchEvent(
@@ -176,6 +179,7 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
         /* ignore */
       }
     } catch (err: unknown) {
+      setStatus("");
       if (err instanceof ApiClientError) {
         setError(`${err.code}: ${err.message}`);
       } else {
@@ -278,7 +282,7 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
             onClick={() => void onLoadZips()}
             data-testid="sidebar-load-zips"
           >
-            {loading ? "Loading…" : "Load zip(s)"}
+            {loading ? "Importing…" : "Load zip(s)"}
           </button>
           <button
             type="button"
@@ -307,6 +311,11 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
           Confirm delete Active site
         </label>
 
+        {loading ? (
+          <p className="oracle-sidebar__busy" data-testid="sidebar-load-busy" role="status">
+            Working — importing package into central historian…
+          </p>
+        ) : null}
         {status ? (
           <p className="oracle-sidebar__ok" data-testid="sidebar-load-status">
             {status}

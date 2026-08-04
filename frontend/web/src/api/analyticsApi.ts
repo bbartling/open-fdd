@@ -35,6 +35,50 @@ export interface AnalyticsEnvelope {
   skipped: Record<string, unknown>[];
 }
 
+/** Wire shape from central: `{ ok, analytics: <envelope> }` (see routes.rs). */
+export interface AnalyticsApiResponse {
+  ok?: boolean;
+  analytics?: AnalyticsEnvelope;
+  error?: string;
+}
+
+/** Normalize flat envelope or `{ok,analytics}` wrapper into a usable envelope. */
+export function unwrapAnalyticsEnvelope(
+  body: AnalyticsApiResponse | AnalyticsEnvelope | null | undefined,
+): AnalyticsEnvelope {
+  const empty: AnalyticsEnvelope = {
+    schema_version: "",
+    query_version: "",
+    generated_at: "",
+    engine: "",
+    warnings: [],
+    rows: [],
+    equipment: [],
+    points: [],
+    skipped: [],
+  };
+  if (!body || typeof body !== "object") return empty;
+  const nested =
+    "analytics" in body && body.analytics && typeof body.analytics === "object"
+      ? body.analytics
+      : (body as AnalyticsEnvelope);
+  return {
+    schema_version: String(nested.schema_version ?? ""),
+    query_version: String(nested.query_version ?? ""),
+    job_id: nested.job_id ?? null,
+    run_id: nested.run_id ?? null,
+    input_fingerprint: nested.input_fingerprint ?? null,
+    generated_at: String(nested.generated_at ?? ""),
+    engine: String(nested.engine ?? ""),
+    coverage: nested.coverage ?? null,
+    warnings: Array.isArray(nested.warnings) ? nested.warnings : [],
+    rows: Array.isArray(nested.rows) ? nested.rows : [],
+    equipment: Array.isArray(nested.equipment) ? nested.equipment : [],
+    points: Array.isArray(nested.points) ? nested.points : [],
+    skipped: Array.isArray(nested.skipped) ? nested.skipped : [],
+  };
+}
+
 export interface MeterRow {
   period: string;
   kwh: number;
@@ -66,11 +110,22 @@ export async function postAnalytics(
   path: string,
   body: AnalyticsRequest,
 ): Promise<AnalyticsEnvelope> {
-  return apiFetch<AnalyticsEnvelope>(path, {
+  const raw = await apiFetch<AnalyticsApiResponse | AnalyticsEnvelope>(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  if (
+    raw &&
+    typeof raw === "object" &&
+    "ok" in raw &&
+    (raw as AnalyticsApiResponse).ok === false
+  ) {
+    throw new Error(
+      (raw as AnalyticsApiResponse).error || `Analytics failed: ${path}`,
+    );
+  }
+  return unwrapAnalyticsEnvelope(raw);
 }
 
 export async function postMetering(

@@ -11,14 +11,7 @@ import {
   Checkbox,
 } from "./widgets";
 import { PlotlyHost } from "./widgets/PlotlyHost";
-import {
-  postRuntime,
-  postMechanicalCooling,
-  postEconomizer,
-  type AnalyticsEnvelope,
-  type FddEquipmentItem,
-} from "../api/analyticsApi";
-import { getFddStatus, listFddRules, getFddResults } from "../api/fddApi";
+import { getFddStatus, listFddRules, getFddResults, runFdd } from "../api/fddApi";
 import {
   getPackageMapping,
   getSessionConfig,
@@ -26,11 +19,14 @@ import {
   type SessionConfig,
 } from "../api/mappingApi";
 import {
-  listReports,
-  createReportDraft,
-  getEngineeringFindingsReport,
-} from "../api/reportsApi";
-import { rowsToBarFigure, type PlotlyFigure } from "../api/plotDataset";
+  downloadRowsCsv,
+  fetchOverviewInspect,
+  fetchOverviewVibe19,
+  type OverviewVibe19Response,
+} from "../api/overviewOracleApi";
+import type { FddEquipmentItem } from "../api/analyticsApi";
+import type { PlotlyFigure } from "../api/plotDataset";
+import { RULES_UPDATED_EVENT } from "./RuleTuningPanel";
 
 const DAYS = [
   "Monday",
@@ -53,6 +49,19 @@ const DEFAULT_WEEK: Record<(typeof DAYS)[number], DaySched> = {
   Saturday: { occupied: true, start: "06:00", end: "18:00" },
   Sunday: { occupied: true, start: "06:00", end: "18:00" },
 };
+
+const PARAMS_KEY = "openfdd.ui.rule_params";
+
+function loadStoredParams(): Record<string, Record<string, number>> {
+  try {
+    const raw = localStorage.getItem(PARAMS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, Record<string, number>>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -86,7 +95,7 @@ export interface OverviewPopulatedProps {
   unitSystem: "imperial" | "metric";
 }
 
-/** Streamlit populated Overview body — metrics through data inspection. */
+/** Vibe 19 Overview parity — metrics through data inspection. */
 export function OverviewPopulated({
   buildingId,
   equipment,
@@ -99,32 +108,55 @@ export function OverviewPopulated({
   const [firstTs, setFirstTs] = useState<string | null>(null);
   const [lastTs, setLastTs] = useState<string | null>(null);
   const [eqKind, setEqKind] = useState("—");
-  const [runtime, setRuntime] = useState<AnalyticsEnvelope | null>(null);
-  const [mech, setMech] = useState<AnalyticsEnvelope | null>(null);
-  const [econ, setEcon] = useState<AnalyticsEnvelope | null>(null);
-  const [runtimeFig, setRuntimeFig] = useState<PlotlyFigure | null>(null);
-  const [mechFig, setMechFig] = useState<PlotlyFigure | null>(null);
-  const [analyticsErr, setAnalyticsErr] = useState<string | null>(null);
-  const [findingsNote, setFindingsNote] = useState(
-    "Run Rules first — Engineering Findings reviews the active site's rule results.",
-  );
-  const [findingsJson, setFindingsJson] = useState("");
+  const [overview, setOverview] = useState<OverviewVibe19Response | null>(null);
+  const [overviewErr, setOverviewErr] = useState<string | null>(null);
+  const [loadingOverview, setLoadingOverview] = useState(false);
   const [zoneLow, setZoneLow] = useState(70);
   const [zoneHigh, setZoneHigh] = useState(75);
   const [week, setWeek] = useState(DEFAULT_WEEK);
   const [tz, setTz] = useState("America/Chicago");
   const [schedOpen, setSchedOpen] = useState(true);
-  const [rcxDocxOpen, setRcxDocxOpen] = useState(false);
+  const [motorTableOpen, setMotorTableOpen] = useState(false);
+  const [basHistOpen, setBasHistOpen] = useState(false);
+  const [econOverlayOpen, setEconOverlayOpen] = useState(false);
+  const [econSkippedOpen, setEconSkippedOpen] = useState(false);
+  const [econOverlayEq, setEconOverlayEq] = useState("");
+  const [scheduleBusy, setScheduleBusy] = useState(false);
+  const [scheduleNote, setScheduleNote] = useState<string | null>(null);
+  const [inspectOptions, setInspectOptions] = useState<string[]>([]);
+  const [inspectPick, setInspectPick] = useState(equipmentId);
   const [inspectCols, setInspectCols] = useState<string[]>([]);
+  const [inspectSelectedCols, setInspectSelectedCols] = useState<string[]>([]);
   const [inspectFig, setInspectFig] = useState<PlotlyFigure | null>(null);
-  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [inspectMeta, setInspectMeta] = useState<{
+    row_count: number;
+    span: string;
+  } | null>(null);
+  const [inspectBusy, setInspectBusy] = useState(false);
+  const [inspectErr, setInspectErr] = useState<string | null>(null);
+  const [loadingMeta, setLoadingMeta] = useState(false);
+  const [rulesBusy, setRulesBusy] = useState(false);
+  const [rulesNote, setRulesNote] = useState<string | null>(null);
+  const [rulesErr, setRulesErr] = useState<string | null>(null);
+  const [lastRuleResultCount, setLastRuleResultCount] = useState<number | null>(
+    null,
+  );
 
   const selected = equipment.find((e) => e.equipment_id === equipmentId);
   const tempUnit = unitSystem === "metric" ? "°C" : "°F";
   const bareMin = hoursPerWeek(week);
-  const spanH = spanHours(firstTs, lastTs);
+  const spanH =
+    overview?.span?.span_hours != null
+      ? Math.round(Number(overview.span.span_hours) * 10) / 10
+      : spanHours(firstTs, lastTs);
 
   const devicesByType = useMemo(() => {
+    if (overview?.devices_by_type?.length) {
+      return overview.devices_by_type.map((r) => ({
+        equipment_type: r.type,
+        count: r.count,
+      }));
+    }
     const map = new Map<string, number>();
     for (const e of equipment) {
       const t = String(e.equipment_type || "unknown");
@@ -133,137 +165,116 @@ export function OverviewPopulated({
     return [...map.entries()]
       .map(([equipment_type, count]) => ({ equipment_type, count }))
       .sort((a, b) => a.equipment_type.localeCompare(b.equipment_type));
-  }, [equipment]);
+  }, [equipment, overview?.devices_by_type]);
 
   const refreshMeta = useCallback(async () => {
-    const [status, rules] = await Promise.all([
-      getFddStatus().catch(() => null),
-      listFddRules().catch(() => []),
-    ]);
-    setRuleCount(status?.rule_count ?? rules.length);
-    if (!buildingId) return;
-    const map = await getPackageMapping(
-      buildingId,
-      equipmentId || undefined,
-    ).catch(() => null);
-    const eq =
-      map?.equipment?.find((e) => e.equipment_id === equipmentId) ??
-      map?.equipment?.[0];
-    setRowCount(eq?.sampling?.row_count ?? 0);
-    setFirstTs(eq?.sampling?.first_timestamp ?? null);
-    setLastTs(eq?.sampling?.last_timestamp ?? null);
-    setEqKind(String(eq?.equipment_type || selected?.equipment_type || "—"));
-    const cols = (eq?.columns ?? [])
-      .map((c: { column: string }) => c.column)
-      .filter(Boolean)
-      .slice(0, 80);
-    setInspectCols(cols);
+    setLoadingMeta(true);
+    try {
+      const [status, rules] = await Promise.all([
+        getFddStatus().catch(() => null),
+        listFddRules().catch(() => []),
+      ]);
+      setRuleCount(status?.rule_count ?? rules.length);
+      if (!buildingId) return;
+      const map = await getPackageMapping(
+        buildingId,
+        equipmentId || undefined,
+      ).catch(() => null);
+      const eq =
+        map?.equipment?.find((e) => e.equipment_id === equipmentId) ??
+        map?.equipment?.[0];
+      setRowCount(eq?.sampling?.row_count ?? 0);
+      setFirstTs(eq?.sampling?.first_timestamp ?? null);
+      setLastTs(eq?.sampling?.last_timestamp ?? null);
+      setEqKind(String(eq?.equipment_type || selected?.equipment_type || "—"));
+    } finally {
+      setLoadingMeta(false);
+    }
   }, [buildingId, equipmentId, selected?.equipment_type]);
 
-  const refreshAnalytics = useCallback(async () => {
+  const refreshOverview = useCallback(async () => {
     if (!buildingId) return;
-    setLoadingAnalytics(true);
-    setAnalyticsErr(null);
+    setLoadingOverview(true);
+    setOverviewErr(null);
     try {
-      const base = {
+      const body = await fetchOverviewVibe19({
         building_id: buildingId,
-        equipment_ids: equipmentId ? [equipmentId] : undefined,
-        max_points: 5000,
-      };
-      const [rt, mc, ec] = await Promise.all([
-        postRuntime(base).catch((e) => {
-          throw e;
-        }),
-        postMechanicalCooling(base).catch(() => null),
-        postEconomizer(base).catch(() => null),
-      ]);
-      setRuntime(rt);
-      setMech(mc);
-      setEcon(ec);
-      if (rt.rows?.length) {
-        const yKeys = Object.keys(rt.rows[0] ?? {}).filter(
-          (k) => k !== "period" && k !== "week" && k !== "equipment_id",
-        );
-        const xKey = rt.rows[0]?.week != null ? "week" : "period";
-        setRuntimeFig(
-          rowsToBarFigure(rt.rows, {
-            xKey: String(xKey),
-            yKeys: yKeys.slice(0, 8),
-            title: "Motor run hours (central analytics)",
-            provenance: `engine=${rt.engine} · query_version=${rt.query_version}`,
-          }),
-        );
-      } else {
-        setRuntimeFig(null);
+        bare_min_occ_hours_week: hoursPerWeek(week),
+        prefer_web_oat: true,
+        oat_err: 5,
+        econ_overlay_equipment_id: econOverlayEq || undefined,
+      });
+      if (!body.ok) {
+        throw new Error(body.error || "Overview oracle failed");
       }
-      if (mc?.rows?.length) {
-        const yKeys = Object.keys(mc.rows[0] ?? {}).filter(
-          (k) => !["oat_bin", "bin", "label"].includes(k),
-        );
-        const xKey =
-          mc.rows[0]?.oat_bin != null
-            ? "oat_bin"
-            : mc.rows[0]?.bin != null
-              ? "bin"
-              : "label";
-        setMechFig(
-          rowsToBarFigure(mc.rows, {
-            xKey: String(xKey),
-            yKeys: yKeys.slice(0, 10),
-            title:
-              "Mechanical cooling run hours by outdoor-air temperature (5°F bins)",
-            provenance: `engine=${mc.engine} · query_version=${mc.query_version}`,
-          }),
-        );
-      } else {
-        setMechFig(null);
+      setOverview(body);
+      if (body.span?.start) setFirstTs(body.span.start);
+      if (body.span?.end) setLastTs(body.span.end);
+      setInspectOptions(
+        body.has_weather
+          ? [...body.equipment_ids, "(weather)"]
+          : body.equipment_ids,
+      );
+      if (!inspectPick && body.equipment_ids[0]) {
+        setInspectPick(body.equipment_ids[0]);
       }
-
-      // Data inspection placeholder chart from sampling timestamps if present
-      if (firstTs && lastTs && inspectCols.length) {
-        setInspectFig({
-          data: [
-            {
-              name: inspectCols[0] ?? "series",
-              type: "scatter",
-              mode: "lines",
-              x: [firstTs, lastTs],
-              y: [0, 0],
-            },
-          ],
-          layout: {
-            title: `${equipmentId || "equipment"} · raw CSV inspection`,
-            showlegend: true,
-          },
-          meta: {
-            equipment_id: equipmentId,
-            point_count: rowCount,
-            provenance:
-              "Data inspection — full column Plotly stack uses historian series when available",
-          },
-        });
-      }
-
       const results = await getFddResults(buildingId).catch(() => null);
-      if (results && results.length) {
-        setFindingsNote(
-          "FAULT candidates available — generate Engineering Findings below or open Results by Category.",
-        );
+      if (results) setLastRuleResultCount(results.length);
+    } catch (err) {
+      setOverviewErr(formatErr(err));
+      setOverview(null);
+    } finally {
+      setLoadingOverview(false);
+    }
+    // week / bareMin applied on explicit refresh + save-schedule, not every keystroke
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildingId, econOverlayEq]);
+
+  const refreshInspect = useCallback(async () => {
+    if (!buildingId || !inspectPick) return;
+    setInspectBusy(true);
+    setInspectErr(null);
+    try {
+      const body = await fetchOverviewInspect({
+        building_id: buildingId,
+        equipment_id: inspectPick,
+        columns:
+          inspectSelectedCols.length > 0 ? inspectSelectedCols : undefined,
+      });
+      setInspectCols(body.plottable_columns);
+      setInspectSelectedCols((prev) =>
+        prev.length ? prev : body.plottable_columns,
+      );
+      setInspectFig(body.figure);
+      setInspectMeta({ row_count: body.row_count, span: body.span });
+      if (inspectPick !== "(weather)") {
+        setRowCount(body.row_count);
+        if (body.first_timestamp) setFirstTs(body.first_timestamp);
+        if (body.last_timestamp) setLastTs(body.last_timestamp);
       }
     } catch (err) {
-      setAnalyticsErr(formatErr(err));
+      setInspectErr(formatErr(err));
+      setInspectFig(null);
     } finally {
-      setLoadingAnalytics(false);
+      setInspectBusy(false);
     }
-  }, [buildingId, equipmentId, firstTs, lastTs, inspectCols, rowCount]);
+  }, [buildingId, inspectPick, inspectSelectedCols]);
 
   useEffect(() => {
     void refreshMeta();
   }, [refreshMeta]);
 
   useEffect(() => {
-    void refreshAnalytics();
-  }, [refreshAnalytics]);
+    void refreshOverview();
+  }, [refreshOverview]);
+
+  useEffect(() => {
+    if (equipmentId && !inspectPick) setInspectPick(equipmentId);
+  }, [equipmentId, inspectPick]);
+
+  useEffect(() => {
+    void refreshInspect();
+  }, [refreshInspect]);
 
   useEffect(() => {
     void getSessionConfig()
@@ -276,60 +287,183 @@ export function OverviewPopulated({
       .catch(() => undefined);
   }, [buildingId]);
 
-  const saveSchedule = async () => {
-    const prev = await getSessionConfig().catch(() => null);
-    const config: SessionConfig = {
-      ...(prev?.config ?? {}),
-      schema_version: prev?.config?.schema_version ?? "openfdd.session.v1",
-      unit_system: unitSystem,
-      params: {
-        ...(prev?.config?.params ?? {}),
-        "VAV-1": {
-          ...(prev?.config?.params?.["VAV-1"] ?? {}),
-          zone_low: zoneLow,
-          zone_high: zoneHigh,
-        },
-        "SCHED-1": {
-          ...(prev?.config?.params?.["SCHED-1"] ?? {}),
-          bare_min_occ_hours_week: bareMin,
-        },
-      },
+  useEffect(() => {
+    const onRules = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail as {
+        mode?: string;
+        rule_id?: string;
+        count?: number;
+      };
+      const n = detail?.count;
+      if (typeof n === "number") setLastRuleResultCount(n);
+      setRulesNote(
+        detail?.mode === "single"
+          ? `Rule ${detail.rule_id} updated · ${n ?? "—"} result row(s)`
+          : `Rules updated · ${n ?? "—"} result row(s)`,
+      );
+      void getFddResults(buildingId)
+        .then((rows) => setLastRuleResultCount(rows.length))
+        .catch(() => undefined);
     };
-    await putSessionConfig(config);
-  };
+    window.addEventListener(RULES_UPDATED_EVENT, onRules);
+    return () => window.removeEventListener(RULES_UPDATED_EVENT, onRules);
+  }, [buildingId]);
 
-  const onGenerateFindings = async () => {
+  const saveSchedule = async () => {
+    setScheduleBusy(true);
+    setScheduleNote(null);
     try {
-      await createReportDraft({
-        building_id: buildingId,
-        kind: "engineering_findings",
-        title: `Engineering Findings · ${buildingId}`,
-      });
-      const rep = await getEngineeringFindingsReport().catch(() => null);
-      if (rep) {
-        setFindingsJson(JSON.stringify(rep, null, 2));
-        setFindingsNote("Engineering Findings draft created.");
-      } else {
-        const listed = await listReports().catch(() => []);
-        setFindingsJson(JSON.stringify(listed.slice(0, 3), null, 2));
-        setFindingsNote("Report draft requested — see reports list.");
-      }
+      const prev = await getSessionConfig().catch(() => null);
+      const config: SessionConfig = {
+        ...(prev?.config ?? {}),
+        schema_version: prev?.config?.schema_version ?? "openfdd.session.v1",
+        unit_system: unitSystem,
+        params: {
+          ...(prev?.config?.params ?? {}),
+          "VAV-1": {
+            ...(prev?.config?.params?.["VAV-1"] ?? {}),
+            zone_low: zoneLow,
+            zone_high: zoneHigh,
+          },
+          "SCHED-1": {
+            ...(prev?.config?.params?.["SCHED-1"] ?? {}),
+            bare_min_occ_hours_week: bareMin,
+          },
+        },
+      };
+      await putSessionConfig(config);
+      setScheduleNote("Schedule saved to session config.");
+      void refreshOverview();
     } catch (err) {
-      setFindingsNote(formatErr(err));
+      setScheduleNote(formatErr(err));
+    } finally {
+      setScheduleBusy(false);
     }
   };
+
+  const onUpdateAllRules = async () => {
+    if (!buildingId) {
+      setRulesErr("Select an active site first");
+      return;
+    }
+    setRulesBusy(true);
+    setRulesErr(null);
+    setRulesNote("Updating all rules with tuned params…");
+    try {
+      const params = loadStoredParams();
+      const prev = await getSessionConfig().catch(() => null);
+      await putSessionConfig({
+        ...(prev?.config ?? {}),
+        schema_version: prev?.config?.schema_version ?? "openfdd.session.v1",
+        params: { ...(prev?.config?.params ?? {}), ...params },
+      });
+      const result = await runFdd({
+        mode: "registry",
+        building_id: buildingId,
+        params,
+      });
+      const n = result.results?.length ?? 0;
+      setLastRuleResultCount(n);
+      setRulesNote(
+        `Updated all rules · ${n} result row(s) · ${String(result.total_ms ?? "—")} ms`,
+      );
+      try {
+        window.dispatchEvent(
+          new CustomEvent(RULES_UPDATED_EVENT, {
+            detail: { mode: "all", building_id: buildingId, count: n },
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
+    } catch (err) {
+      setRulesErr(formatErr(err));
+      setRulesNote(null);
+    } finally {
+      setRulesBusy(false);
+    }
+  };
+
+  const busy = loadingOverview || loadingMeta;
+  const datasetStart = overview?.span?.start ?? firstTs ?? "—";
+  const datasetEnd = overview?.span?.end ?? lastTs ?? "—";
+
+  const chartCount = (() => {
+    if (!overview) return 0;
+    let n = 0;
+    for (const p of overview.motor_weekly.plants) {
+      if (p.figure?.data?.length) n += 1;
+    }
+    if (overview.mech_cooling.figure?.data?.length) n += 1;
+    if (overview.economizer_free_cooling.delta_scatter?.data?.length) n += 1;
+    if (overview.economizer_free_cooling.mat_residual?.data?.length) n += 1;
+    if (overview.economizer_free_cooling.temps_overlay?.data?.length) n += 1;
+    if (overview.bas_vs_web_oat.overlay?.data?.length) n += 1;
+    if (overview.bas_vs_web_oat.histogram?.data?.length) n += 1;
+    if (inspectFig?.data?.length) n += 1;
+    return n;
+  })();
 
   return (
     <div className="overview-populated" data-testid="overview-populated">
       <p className="oracle-sidebar__caption">
         Plot traces capped at 5,000 points — full data still used for
-        rules/exports.
+        rules/exports. Overview charts = Vibe 19 pandas oracle (
+        <code>open_fdd.analytics</code>).
       </p>
+
+      {busy ? (
+        <InlineAlert id="overview-busy" variant="info" testId="overview-busy">
+          Computing Overview analytics for <code>{buildingId}</code>… motor
+          weekly, mech-cooling OAT bins, economizer, BAS vs web. First load can
+          take ~20–40s — charts appear below when ready.
+        </InlineAlert>
+      ) : null}
+
+      {!busy && overview ? (
+        <InlineAlert
+          id="overview-charts-ready"
+          variant="info"
+          testId="overview-charts-ready"
+        >
+          Charts ready: <strong>{chartCount}</strong> Plotly figure
+          {chartCount === 1 ? "" : "s"} loaded for <code>{buildingId}</code> (
+          {overview.elapsed_s}s). Each chart shows “rendered” under the plot
+          when Plotly finishes drawing.
+        </InlineAlert>
+      ) : null}
+
+      <div className="overview-toolbar">
+        <Button
+          id="overview-refresh"
+          label={busy ? "Refreshing…" : "Refresh Overview"}
+          loading={busy}
+          onClick={() => {
+            void refreshMeta();
+            void refreshOverview();
+            void refreshInspect();
+          }}
+          testId="overview-refresh"
+        />
+        {overview ? (
+          <span className="oracle-sidebar__caption">
+            oracle {overview.elapsed_s}s · {overview.equipment_count} equip ·{" "}
+            {overview.source}
+          </span>
+        ) : null}
+      </div>
+
+      {overviewErr ? (
+        <InlineAlert id="overview-oracle-err" variant="danger" testId="overview-oracle-err">
+          Overview oracle: {overviewErr}. Ensure the overview-oracle service is
+          running on :8099 and the Building 100 zip is available.
+        </InlineAlert>
+      ) : null}
 
       <InlineAlert id="overview-dual-catalog" variant="info" testId="overview-dual-catalog">
         Dual catalog: production FDD math is DataFusion SQL (
-        <code>sql_rules/registry.yaml</code>). The pandas cookbook remains for
-        docs, plots, and parity — not the default production path.
+        <code>sql_rules/registry.yaml</code>). Overview plots below use the
+        pandas cookbook (Vibe 19 parity) — same charts as Streamlit Overview.
       </InlineAlert>
 
       <div className="form-row">
@@ -349,12 +483,13 @@ export function OverviewPopulated({
         />
       </div>
 
-      <div
-        className="overview-metrics"
-        style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}
-        data-testid="overview-metrics"
-      >
-        <Metric id="ov-eq" label="Equipment" value={String(equipment.length)} testId="overview-eq-count" />
+      <div className="overview-metrics" data-testid="overview-metrics">
+        <Metric
+          id="ov-eq"
+          label="Equipment"
+          value={String(overview?.equipment_count ?? equipment.length)}
+          testId="overview-eq-count"
+        />
         <Metric id="ov-rules" label="Rules" value={String(ruleCount)} testId="overview-rule-count" />
         <Metric id="ov-rows" label="Rows (selected)" value={String(rowCount)} testId="overview-row-count" />
         <Metric id="ov-poll" label="Poll (s)" value="300" testId="overview-poll" />
@@ -363,9 +498,9 @@ export function OverviewPopulated({
       <p className="oracle-sidebar__caption" data-testid="overview-source-caption">
         zip:{buildingId}
       </p>
-      <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
-        <Metric id="ov-start" label="Dataset start" value={firstTs ?? "—"} testId="overview-start" />
-        <Metric id="ov-end" label="Dataset end" value={lastTs ?? "—"} testId="overview-end" />
+      <div className="overview-metrics overview-metrics--span">
+        <Metric id="ov-start" label="Dataset start" value={datasetStart} testId="overview-start" />
+        <Metric id="ov-end" label="Dataset end" value={datasetEnd} testId="overview-end" />
         <Metric
           id="ov-span"
           label="Span (h)"
@@ -374,43 +509,57 @@ export function OverviewPopulated({
         />
       </div>
 
-      <section data-testid="overview-eng-findings">
-        <h3>Engineering Findings</h3>
-        <p>
-          Detection ≠ finding: rule hits are candidates until deterministic
-          evidence review → prioritized findings + DOCX/XLSX/JSON.
+      <section
+        className="overview-section overview-rule-run"
+        data-testid="overview-update-rules"
+      >
+        <h3>Update rules</h3>
+        <p className="oracle-sidebar__caption">
+          Tune thresholds with the left-rail sliders. Use{" "}
+          <strong>Update this rule</strong> next to a modified slider for a
+          single rule, or <strong>Update all rules</strong> here to re-run the
+          full registry with current tuned params.
         </p>
-        <p data-testid="overview-findings-note">{findingsNote}</p>
-        <Button
-          id="overview-gen-findings"
-          label="Generate Engineering Findings"
-          onClick={() => void onGenerateFindings()}
-          testId="overview-gen-findings"
-        />
-        {findingsJson ? (
-          <pre data-testid="overview-findings-json">{findingsJson.slice(0, 4000)}</pre>
+        <div className="overview-rule-run__row">
+          <Button
+            id="overview-update-all-rules"
+            label={rulesBusy ? "Updating all rules…" : "Update all rules"}
+            loading={rulesBusy}
+            onClick={() => void onUpdateAllRules()}
+            testId="overview-update-all-rules"
+          />
+          <Link to="/rules">Open Run Rules tab</Link>
+        </div>
+        {rulesNote ? (
+          <p className="oracle-sidebar__ok" data-testid="overview-rules-note">
+            {rulesNote}
+          </p>
+        ) : null}
+        {rulesErr ? (
+          <InlineAlert
+            id="overview-rules-err"
+            variant="danger"
+            testId="overview-rules-err"
+          >
+            {rulesErr}
+          </InlineAlert>
+        ) : null}
+        {lastRuleResultCount != null ? (
+          <Metric
+            id="ov-rule-results"
+            label="Latest FDD result rows"
+            value={String(lastRuleResultCount)}
+            testId="overview-rule-result-count"
+          />
         ) : null}
       </section>
 
-      <Expander
-        id="overview-rcx-docx"
-        label="RCx report template (static DOCX)"
-        expanded={rcxDocxOpen}
-        onChange={setRcxDocxOpen}
-        testId="overview-rcx-docx"
-      >
-        <p>
-          Download Generic RCx Report from the reports service when available.
-        </p>
-        <Link to="/reports">Open reports / templates</Link>
-      </Expander>
-
-      <section data-testid="overview-schedule">
+      <section className="overview-section" data-testid="overview-schedule">
         <h3>Building schedule &amp; zone comfort (FDD starting point)</h3>
         <p className="oracle-sidebar__caption">
           Occupancy calendar always drives SCHED-1 (<code>occ_mode</code>) —
           edit times below; do not remove this UI. Zone low/high seed VAV-1
-          comfort band.
+          comfort band. Bare-min hours draw on the air-side motor chart.
         </p>
         <Slider
           id="zone-low"
@@ -499,133 +648,363 @@ export function OverviewPopulated({
           <Button
             id="save-schedule"
             label="Save schedule to session config"
+            loading={scheduleBusy}
             onClick={() => void saveSchedule()}
             testId="overview-save-schedule"
+          />
+          {scheduleNote ? (
+            <p className="oracle-sidebar__ok" data-testid="overview-schedule-note">
+              {scheduleNote}
+            </p>
+          ) : null}
+        </Expander>
+      </section>
+
+      <section className="overview-section" data-testid="overview-motor-runtime">
+        <h3>Motor run hours by week</h3>
+        <p className="oracle-sidebar__caption">
+          {overview?.motor_weekly.caption ??
+            "Bars = run hours by week (Mon start). Dotted line = avg OAT °F while on."}
+        </p>
+        {(overview?.motor_weekly.plants ?? []).map((plant) => (
+          <div key={plant.plant_group} data-testid={`overview-motor-${plant.plant_group}`}>
+            <h4>{plant.title}</h4>
+            <p className="oracle-sidebar__caption">{plant.caption}</p>
+            {plant.empty || !plant.figure ? (
+              <p className="oracle-sidebar__caption">
+                No series for {plant.title.split("—")[0]?.trim().toLowerCase()}.
+              </p>
+            ) : (
+              <PlotlyHost
+                id={`motor-weekly-${plant.plant_group}`}
+                label={plant.title}
+                figure={plant.figure}
+                loading={loadingOverview}
+                height={340}
+                testId={`overview-motor-${plant.plant_group}-plot`}
+              />
+            )}
+          </div>
+        ))}
+        {!overview && !loadingOverview ? (
+          <p className="oracle-sidebar__caption">No motor weekly charts yet.</p>
+        ) : null}
+        <Expander
+          id="weekly-motor-table"
+          label="Weekly motor hours table"
+          expanded={motorTableOpen}
+          onChange={setMotorTableOpen}
+          testId="overview-motor-table-exp"
+        >
+          {overview?.motor_weekly.table?.length ? (
+            <DataTable
+              id="motor-weekly-table"
+              label="Weekly motor hours"
+              columns={Object.keys(overview.motor_weekly.table[0] ?? {}).map((k) => ({
+                key: k,
+                header: k,
+              }))}
+              rows={
+                overview.motor_weekly.table.slice(0, 200) as Array<
+                  Record<string, string | number>
+                >
+              }
+              testId="overview-motor-table"
+            />
+          ) : (
+            <p className="oracle-sidebar__caption">No weekly rows.</p>
+          )}
+        </Expander>
+      </section>
+
+      <section className="overview-section" data-testid="overview-mech-cooling">
+        <h3>Mechanical cooling hours by OAT bin</h3>
+        <p className="oracle-sidebar__caption">
+          {overview?.mech_cooling.caption ??
+            "Chillers / DX / VRF compressor-proof; never CHW valves."}
+        </p>
+        <PlotlyHost
+          id="mech-cooling"
+          label="Mechanical cooling by OAT"
+          figure={overview?.mech_cooling.figure ?? null}
+          loading={loadingOverview}
+          height={360}
+          testId="overview-mech-plot"
+        />
+        {overview?.mech_cooling.bins?.length ? (
+          <>
+            <DataTable
+              id="mech-bins"
+              label="Mech cooling OAT bins"
+              columns={Object.keys(overview.mech_cooling.bins[0] ?? {}).map((k) => ({
+                key: k,
+                header: k,
+              }))}
+              rows={
+                overview.mech_cooling.bins.slice(0, 80) as Array<
+                  Record<string, string | number>
+                >
+              }
+              testId="overview-mech-bins"
+            />
+            <Button
+              id="dl-mech-bins"
+              label="Download mech cooling OAT bins CSV"
+              variant="secondary"
+              onClick={() =>
+                downloadRowsCsv(
+                  "mech_cooling_oat_bins.csv",
+                  overview.mech_cooling.bins,
+                )
+              }
+              testId="overview-dl-mech-bins"
+            />
+          </>
+        ) : null}
+        {overview?.mech_cooling.coverage?.length ? (
+          <>
+            <h4>
+              Mechanical cooling devices
+              {overview.mech_cooling.n_included != null
+                ? ` — ${overview.mech_cooling.n_included} included, ${overview.mech_cooling.n_excluded ?? 0} excluded`
+                : ""}
+            </h4>
+            <DataTable
+              id="mech-coverage"
+              label="Cooling coverage"
+              columns={Object.keys(overview.mech_cooling.coverage[0] ?? {}).map(
+                (k) => ({ key: k, header: k }),
+              )}
+              rows={
+                overview.mech_cooling.coverage.slice(0, 80) as Array<
+                  Record<string, string | number>
+                >
+              }
+              testId="overview-mech-coverage"
+            />
+            <Button
+              id="dl-mech-cov"
+              label="Download cooling coverage CSV"
+              variant="secondary"
+              onClick={() =>
+                downloadRowsCsv(
+                  "mech_cooling_coverage.csv",
+                  overview.mech_cooling.coverage,
+                )
+              }
+              testId="overview-dl-mech-cov"
+            />
+          </>
+        ) : null}
+      </section>
+
+      <section className="overview-section" data-testid="overview-economizer">
+        <h3>Economizer weather opportunity / compliance</h3>
+        <p className="oracle-sidebar__caption">
+          {overview?.economizer_weather.caption ??
+            "Strict web dry-bulb + dewpoint opportunity hours."}
+        </p>
+        {overview?.economizer_weather.table?.length ? (
+          <>
+            <DataTable
+              id="econ-table"
+              label="Economizer weather summary"
+              columns={Object.keys(overview.economizer_weather.table[0] ?? {}).map(
+                (k) => ({ key: k, header: k }),
+              )}
+              rows={
+                overview.economizer_weather.table as Array<
+                  Record<string, string | number>
+                >
+              }
+              testId="overview-econ-table"
+            />
+            <Button
+              id="dl-econ-weather"
+              label="Download economizer weather CSV"
+              variant="secondary"
+              onClick={() =>
+                downloadRowsCsv(
+                  "economizer_weather.csv",
+                  overview.economizer_weather.table,
+                )
+              }
+              testId="overview-dl-econ-weather"
+            />
+          </>
+        ) : (
+          <p className="oracle-sidebar__caption">
+            {loadingOverview
+              ? "Loading economizer…"
+              : "No AHU/chiller/heat-pump rows with web weather or applicable signals."}
+          </p>
+        )}
+      </section>
+
+      <section className="overview-section" data-testid="overview-econ-free-cooling">
+        <h3>Economizer free-cooling diagnostics (fan on)</h3>
+        <p className="oracle-sidebar__caption">
+          {overview?.economizer_free_cooling.caption ??
+            "G36 mixing plots while supply fan is running."}
+        </p>
+        {overview?.economizer_free_cooling.metrics?.length ? (
+          <>
+            <DataTable
+              id="econ-metrics"
+              label="Economizer diagnostic metrics"
+              columns={Object.keys(
+                overview.economizer_free_cooling.metrics[0] ?? {},
+              ).map((k) => ({ key: k, header: k }))}
+              rows={
+                overview.economizer_free_cooling.metrics as Array<
+                  Record<string, string | number>
+                >
+              }
+              testId="overview-econ-metrics"
+            />
+            <Button
+              id="dl-econ-metrics"
+              label="Download economizer diagnostic metrics CSV"
+              variant="secondary"
+              onClick={() =>
+                downloadRowsCsv(
+                  "economizer_free_cooling_metrics.csv",
+                  overview.economizer_free_cooling.metrics,
+                )
+              }
+              testId="overview-dl-econ-metrics"
+            />
+          </>
+        ) : null}
+        <PlotlyHost
+          id="econ-delta"
+          label="Economizer free-cooling delta scatter"
+          figure={overview?.economizer_free_cooling.delta_scatter ?? null}
+          loading={loadingOverview}
+          height={380}
+          testId="overview-econ-delta-plot"
+        />
+        {!overview?.economizer_free_cooling.delta_scatter && !loadingOverview ? (
+          <p className="oracle-sidebar__caption">
+            Need AHU/RTU with fan-status (or fan-cmd) on, plus OAT, RAT, and MAT
+            with enough |OAT−RAT|≥10°F samples for the delta scatter.
+          </p>
+        ) : null}
+        <PlotlyHost
+          id="econ-mat-resid"
+          label="MAT residual"
+          figure={overview?.economizer_free_cooling.mat_residual ?? null}
+          loading={loadingOverview}
+          height={320}
+          testId="overview-econ-mat-resid-plot"
+        />
+        <Expander
+          id="econ-temps-overlay"
+          label="Free-cooling temps + OA damper overlay"
+          expanded={econOverlayOpen}
+          onChange={setEconOverlayOpen}
+          testId="overview-econ-overlay-exp"
+        >
+          {overview?.economizer_free_cooling.metrics?.length ? (
+            <Select
+              id="econ-overlay-eq"
+              label="AHU for overlay"
+              value={
+                econOverlayEq ||
+                overview.economizer_free_cooling.overlay_equipment_id ||
+                ""
+              }
+              options={overview.economizer_free_cooling.metrics.map((m) => ({
+                value: String(m.equipment_id),
+                label: String(m.equipment_id),
+              }))}
+              onChange={(v) => {
+                setEconOverlayEq(v);
+              }}
+              testId="overview-econ-overlay-eq"
+            />
+          ) : null}
+          <PlotlyHost
+            id="econ-temps"
+            label="Free-cooling temps + OA damper"
+            figure={overview?.economizer_free_cooling.temps_overlay ?? null}
+            loading={loadingOverview}
+            height={360}
+            testId="overview-econ-temps-plot"
+          />
+        </Expander>
+        {(overview?.economizer_free_cooling.skipped?.length ?? 0) > 0 ? (
+          <Expander
+            id="econ-skipped"
+            label={`Skipped units (${overview!.economizer_free_cooling.skipped.length})`}
+            expanded={econSkippedOpen}
+            onChange={setEconSkippedOpen}
+            testId="overview-econ-skipped-exp"
+          >
+            <DataTable
+              id="econ-skipped"
+              label="Skipped units"
+              columns={[
+                { key: "equipment_id", header: "equipment_id" },
+                { key: "reason", header: "reason" },
+              ]}
+              rows={
+                overview!.economizer_free_cooling.skipped as Array<
+                  Record<string, string | number>
+                >
+              }
+              testId="overview-econ-skipped"
+            />
+          </Expander>
+        ) : null}
+      </section>
+
+      <section className="overview-section" data-testid="overview-bas-web-oat">
+        <h3>BAS vs web outdoor-air temperature</h3>
+        <p className="oracle-sidebar__caption">
+          {overview?.bas_vs_web_oat.caption ??
+            "Overlay of BAS OAT and web dry-bulb with ±oat_err band."}
+        </p>
+        {!overview?.bas_vs_web_oat.overlay && !loadingOverview ? (
+          <InlineAlert id="bas-web-need" variant="info">
+            Need both BAS outdoor-air temp and web weather OAT for the overlay
+            chart.
+          </InlineAlert>
+        ) : (
+          <PlotlyHost
+            id="bas-web-overlay"
+            label="BAS vs web OAT"
+            figure={overview?.bas_vs_web_oat.overlay ?? null}
+            loading={loadingOverview}
+            height={360}
+            testId="overview-bas-overlay-plot"
+          />
+        )}
+        <Expander
+          id="bas-web-hist"
+          label="BAS − web OAT deviation histogram"
+          expanded={basHistOpen}
+          onChange={setBasHistOpen}
+          testId="overview-bas-hist-exp"
+        >
+          <PlotlyHost
+            id="bas-web-hist"
+            label="BAS − web deviation"
+            figure={overview?.bas_vs_web_oat.histogram ?? null}
+            loading={loadingOverview}
+            height={300}
+            testId="overview-bas-hist-plot"
           />
         </Expander>
       </section>
 
-      <section data-testid="overview-motor-runtime">
-        <h3>Motor run hours (central analytics)</h3>
-        {runtime ? (
-          <p className="oracle-sidebar__caption">
-            analytics provenance · engine={runtime.engine} · query_version=
-            {runtime.query_version} · run_id={String(runtime.run_id ?? "—")}
-          </p>
-        ) : null}
-        {analyticsErr ? (
-          <InlineAlert id="ov-analytics-err" variant="danger">
-            {analyticsErr}
-          </InlineAlert>
-        ) : null}
-        <PlotlyHost
-          id="motor-runtime"
-          label="Motor run hours"
-          figure={runtimeFig}
-          loading={loadingAnalytics}
-          height={280}
-          testId="overview-motor-plot"
-        />
-        {runtime?.rows?.length ? (
-          <DataTable
-            id="motor-runtime-table"
-            label="Runtime rows"
-            columns={Object.keys(runtime.rows[0] ?? {}).map((k) => ({
-              key: k,
-              header: k,
-            }))}
-            rows={runtime.rows.slice(0, 50) as Array<Record<string, string | number>>}
-            testId="overview-motor-table"
-          />
-        ) : (
-          <p className="oracle-sidebar__caption">
-            {loadingAnalytics
-              ? "Loading runtime…"
-              : "No central runtime rows yet — ensure package is imported and fan roles mapped."}
-          </p>
-        )}
-      </section>
+      <p className="oracle-sidebar__caption">
+        Tune thresholds in the left sidebar → <strong>Update this rule</strong>{" "}
+        / Overview <strong>Update all rules</strong> → browse FDD Plots by
+        device type.
+      </p>
 
-      <section data-testid="overview-mech-cooling">
-        <h3>Mechanical cooling hours by OAT bin</h3>
-        <p className="oracle-sidebar__caption">
-          Chillers / DX / VRF use the sidebar compressor-proof mode. Never CHW
-          cooling valves. Bins sorted cold→hot; OAT from web weather by
-          default.
-        </p>
-        {mech ? (
-          <p className="oracle-sidebar__caption">
-            analytics provenance · engine={mech.engine} · query_version=
-            {mech.query_version}
-          </p>
-        ) : (
-          <InlineAlert id="mech-warn" variant="warning" testId="overview-mech-warn">
-            mechanical_cooling: evidence-hierarchy gate only (OAT bins / DF port
-            next) — showing central envelope when available.
-          </InlineAlert>
-        )}
-        <PlotlyHost
-          id="mech-cooling"
-          label="Mechanical cooling by OAT"
-          figure={mechFig}
-          loading={loadingAnalytics}
-          height={300}
-          testId="overview-mech-plot"
-        />
-        {mech?.equipment?.length ? (
-          <DataTable
-            id="mech-coverage"
-            label="Cooling coverage"
-            columns={Object.keys(mech.equipment[0] ?? {}).map((k) => ({
-              key: k,
-              header: k,
-            }))}
-            rows={mech.equipment as Array<Record<string, string | number>>}
-            testId="overview-mech-coverage"
-          />
-        ) : null}
-      </section>
-
-      <section data-testid="overview-economizer">
-        <h3>Economizer weather opportunity / compliance</h3>
-        <p className="oracle-sidebar__caption">
-          Strict web dry-bulb + dewpoint. Opportunity = 60≤DB&lt;72°F and
-          DP&lt;60°F. Detailed free-cooling diagnostics live under RCx Plots →
-          AHU → Economizer diagnostics.
-        </p>
-        {econ?.rows?.length ? (
-          <DataTable
-            id="econ-table"
-            label="Economizer weather summary"
-            columns={Object.keys(econ.rows[0] ?? {}).map((k) => ({
-              key: k,
-              header: k,
-            }))}
-            rows={econ.rows as Array<Record<string, string | number>>}
-            testId="overview-econ-table"
-          />
-        ) : (
-          <p className="oracle-sidebar__caption">
-            No economizer summary rows from central yet.
-          </p>
-        )}
-      </section>
-
-      <section data-testid="overview-bas-web-oat">
-        <h3>BAS vs web outdoor-air temperature</h3>
-        <p className="oracle-sidebar__caption">
-          Overlay of BAS OAT and web dry-bulb with ±oat_err tolerance band
-          (OAT-METEO slider; default 5°F). Histogram of BAS − web deviation
-          follows when series are available from FDD Plots / weather roles.
-        </p>
-        <InlineAlert id="bas-web-note" variant="info">
-          Tune thresholds in the left sidebar → Run Rules (all or by category)
-          or sidebar Rerun cat. → browse FDD Plots by device type (AHU / VAV /
-          plant…).
-        </InlineAlert>
-      </section>
-
-      <section data-testid="overview-devices-by-type">
+      <section className="overview-section" data-testid="overview-devices-by-type">
         <h3>Devices by type</h3>
         <DataTable
           id="devices-by-type"
@@ -639,41 +1018,100 @@ export function OverviewPopulated({
         />
       </section>
 
-      <section data-testid="overview-data-inspection">
+      <section className="overview-section" data-testid="overview-data-inspection">
         <h3>Data inspection — raw CSV</h3>
         <p className="oracle-sidebar__caption">
-          Pick any uploaded equipment (or weather) CSV and plot numeric /
-          status columns as stacked Plotly line charts.
+          Pick any uploaded equipment (or weather) CSV and plot numeric / status
+          columns as stacked Plotly line charts.
         </p>
         <Select
           id="inspect-eq"
           label="CSV / equipment"
-          value={equipmentId}
-          options={equipment.map((e) => ({
-            value: String(e.equipment_id),
-            label: String(e.equipment_id),
-          }))}
-          onChange={onEquipmentChange}
+          value={inspectPick}
+          options={(inspectOptions.length
+            ? inspectOptions
+            : equipment.map((e) => String(e.equipment_id))
+          ).map((id) => ({ value: id, label: id }))}
+          onChange={(v) => {
+            setInspectPick(v);
+            setInspectSelectedCols([]);
+            if (v !== "(weather)") onEquipmentChange(v);
+          }}
           testId="overview-inspect-eq"
         />
-        <p className="oracle-sidebar__caption" data-testid="overview-inspect-meta">
-          {equipmentId || "—"} · {rowCount} rows · {inspectCols.length} /{" "}
-          {inspectCols.length} plottable columns
-          {firstTs && lastTs ? ` · ${firstTs} → ${lastTs}` : ""}
-        </p>
         {inspectCols.length ? (
-          <ul className="overview-col-list" data-testid="overview-inspect-cols">
-            {inspectCols.map((c) => (
-              <li key={c}>{c}</li>
-            ))}
-          </ul>
+          <label className="oracle-sidebar__field">
+            <span className="oracle-sidebar__label">
+              Columns to plot (default: all) — click to toggle
+            </span>
+            <select
+              className="oracle-sidebar__control"
+              multiple
+              size={Math.min(8, inspectCols.length)}
+              value={inspectSelectedCols}
+              onChange={(e) => {
+                const opts = [...e.target.selectedOptions].map((o) => o.value);
+                setInspectSelectedCols(opts);
+              }}
+              data-testid="overview-inspect-cols-select"
+            >
+              {inspectCols.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <p className="oracle-sidebar__caption" data-testid="overview-inspect-meta">
+          {inspectPick || "—"} · {inspectMeta?.row_count ?? rowCount} rows ·{" "}
+          {inspectSelectedCols.length || inspectCols.length} /{" "}
+          {inspectCols.length} plottable columns
+          {inspectMeta?.span ? ` · ${inspectMeta.span}` : ""}
+        </p>
+        {inspectErr ? (
+          <InlineAlert id="inspect-err" variant="danger">
+            {inspectErr}
+          </InlineAlert>
+        ) : null}
+        {!inspectSelectedCols.length && inspectCols.length ? (
+          <InlineAlert id="inspect-pick-cols" variant="info">
+            Select at least one column to plot.
+          </InlineAlert>
         ) : null}
         <PlotlyHost
           id="data-inspect"
           label="Inspection chart"
           figure={inspectFig}
-          height={260}
+          loading={inspectBusy}
+          height={Math.min(
+            4000,
+            Math.max(280, (inspectSelectedCols.length || 1) * 160),
+          )}
           testId="overview-inspect-plot"
+        />
+        <Button
+          id="dl-inspect"
+          label={`Download \`${inspectPick || "csv"}\` CSV`}
+          variant="secondary"
+          onClick={() => {
+            void (async () => {
+              const body = await fetchOverviewInspect({
+                building_id: buildingId,
+                equipment_id: inspectPick,
+                columns: inspectSelectedCols.length
+                  ? inspectSelectedCols
+                  : undefined,
+              });
+              if (body.csv_preview?.length) {
+                downloadRowsCsv(
+                  `${inspectPick || "equipment"}_raw.csv`,
+                  body.csv_preview,
+                );
+              }
+            })();
+          }}
+          testId="overview-dl-inspect"
         />
       </section>
     </div>

@@ -2,12 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   getFddRuleParams,
   listFddRules,
+  runFdd,
   type FddRuleParamDef,
   type FddRuleSummary,
 } from "../api/fddApi";
 import { getSessionConfig, putSessionConfig } from "../api/mappingApi";
+import { useSessionQuery } from "../session";
 
 const PARAMS_KEY = "openfdd.ui.rule_params";
+export const RULES_UPDATED_EVENT = "openfdd:rules-updated";
 
 function loadStoredParams(): Record<string, Record<string, number>> {
   try {
@@ -33,14 +36,24 @@ function familyOf(ruleId: string): string {
   return i > 0 ? ruleId.slice(0, i) : ruleId;
 }
 
+function formatErr(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 function RuleExpander({
   rule,
   values,
   onChange,
+  onUpdateRule,
+  updating,
+  buildingId,
 }: {
   rule: FddRuleSummary;
   values: Record<string, number>;
   onChange: (ruleId: string, key: string, value: number) => void;
+  onUpdateRule: (ruleId: string) => void;
+  updating: boolean;
+  buildingId: string;
 }) {
   const [open, setOpen] = useState(false);
   const [defs, setDefs] = useState<Record<string, FddRuleParamDef> | null>(null);
@@ -120,6 +133,26 @@ function RuleExpander({
             </label>
           );
         })}
+        {entries.length > 0 ? (
+          <div className="oracle-sidebar__rule-actions">
+            <button
+              type="button"
+              className="oracle-sidebar__btn oracle-sidebar__btn--primary"
+              disabled={!buildingId || updating || !modified}
+              title={
+                !buildingId
+                  ? "Select an active site first"
+                  : !modified
+                    ? "Move a slider to enable Update this rule"
+                    : `Re-run ${rule.rule_id} with tuned params`
+              }
+              onClick={() => onUpdateRule(rule.rule_id)}
+              data-testid={`sidebar-update-rule-${rule.rule_id}`}
+            >
+              {updating ? "Updating…" : "Update this rule"}
+            </button>
+          </div>
+        ) : null}
       </div>
     </details>
   );
@@ -127,11 +160,16 @@ function RuleExpander({
 
 /** Streamlit-oracle left-rail Rule tuning (expanders + sliders). */
 export function RuleTuningPanel() {
+  const { query } = useSessionQuery();
+  const buildingId = query.siteId ?? "";
   const [rules, setRules] = useState<FddRuleSummary[]>([]);
   const [family, setFamily] = useState<string>("(all)");
   const [opsGate, setOpsGate] = useState(true);
   const [params, setParams] = useState(loadStoredParams);
   const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [runMsg, setRunMsg] = useState<string | null>(null);
+  const [runErr, setRunErr] = useState<string | null>(null);
+  const [updatingRuleId, setUpdatingRuleId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -190,6 +228,51 @@ export function RuleTuningPanel() {
     [persistSession],
   );
 
+  const emitUpdated = (detail: Record<string, unknown>) => {
+    try {
+      window.dispatchEvent(new CustomEvent(RULES_UPDATED_EVENT, { detail }));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const onUpdateRule = useCallback(
+    async (ruleId: string) => {
+      if (!buildingId) {
+        setRunErr("Select an active site first");
+        return;
+      }
+      setUpdatingRuleId(ruleId);
+      setRunErr(null);
+      setRunMsg(`Updating ${ruleId}…`);
+      try {
+        await persistSession(params);
+        const result = await runFdd({
+          mode: "registry",
+          building_id: buildingId,
+          rule_ids: [ruleId],
+          params,
+        });
+        const n = result.results?.length ?? 0;
+        setRunMsg(
+          `Updated ${ruleId} · ${n} result row(s) · ${result.total_ms ?? "—"} ms`,
+        );
+        emitUpdated({
+          mode: "single",
+          rule_id: ruleId,
+          building_id: buildingId,
+          count: n,
+        });
+      } catch (err) {
+        setRunErr(formatErr(err));
+        setRunMsg(null);
+      } finally {
+        setUpdatingRuleId(null);
+      }
+    },
+    [buildingId, params, persistSession],
+  );
+
   const reset = () => {
     setParams({});
     saveStoredParams({});
@@ -200,8 +283,9 @@ export function RuleTuningPanel() {
     <section className="oracle-sidebar__block" data-testid="sidebar-rule-tuning">
       <h3 className="oracle-sidebar__h3">Rule tuning</h3>
       <p className="oracle-sidebar__caption">
-        Sliders write <code>PUT /api/fdd/session-config</code>. Rules update when
-        you click <strong>Run</strong> (Run Rules tab).
+        Sliders write session config. After tuning, click{" "}
+        <strong>Update this rule</strong> next to the slider (or{" "}
+        <strong>Update all rules</strong> on Overview).
       </p>
       <label className="oracle-sidebar__check">
         <input
@@ -212,8 +296,8 @@ export function RuleTuningPanel() {
         Require operational proof (fan/pump status)
       </label>
       <p className="oracle-sidebar__caption">
-        FDD math: central DataFusion SQL. Pandas frames still load for
-        plots/analytics only.
+        FDD math: central DataFusion SQL. Active site:{" "}
+        <code>{buildingId || "—"}</code>
       </p>
       <label className="oracle-sidebar__field">
         <span className="oracle-sidebar__label">Category</span>
@@ -240,9 +324,14 @@ export function RuleTuningPanel() {
           Reset
         </button>
       </div>
-      {loadErr ? (
+      {runMsg ? (
+        <p className="oracle-sidebar__ok" data-testid="sidebar-tune-run-msg">
+          {runMsg}
+        </p>
+      ) : null}
+      {runErr || loadErr ? (
         <p className="oracle-sidebar__err" data-testid="sidebar-tune-error">
-          {loadErr}
+          {runErr || loadErr}
         </p>
       ) : null}
       <div className="oracle-sidebar__rules" data-testid="sidebar-tune-rules">
@@ -252,6 +341,9 @@ export function RuleTuningPanel() {
             rule={rule}
             values={params[rule.rule_id] ?? {}}
             onChange={onParam}
+            onUpdateRule={(id) => void onUpdateRule(id)}
+            updating={updatingRuleId === rule.rule_id}
+            buildingId={buildingId}
           />
         ))}
       </div>
