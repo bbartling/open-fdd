@@ -403,6 +403,7 @@ export function sensorHealthHeatmap(
     data: [
       {
         type: "heatmap",
+        name: "coverage",
         x: roles,
         y: eqs,
         z,
@@ -423,6 +424,164 @@ export function sensorHealthHeatmap(
     meta: {
       point_count: rows.length,
       provenance: "POST /api/analytics/sensor-health",
+    },
+  };
+}
+
+const FAULT_LANE_COLORS: Record<string, { line: string; fill: string }> = {
+  "SV-FLATLINE": { line: "#2563eb", fill: "rgba(59,130,246,0.25)" },
+  "SV-SPIKE": { line: "#ca8a04", fill: "rgba(234,179,8,0.25)" },
+  "SV-RANGE": { line: "#dc2626", fill: "rgba(220,38,38,0.25)" },
+  "SV-STALE": { line: "#a855f7", fill: "rgba(168,85,247,0.25)" },
+  "SV-RATE": { line: "#059669", fill: "rgba(16,185,129,0.25)" },
+};
+
+function finiteNums(ys: Array<number | null>): number[] {
+  return ys.filter((v): v is number => v != null && Number.isFinite(v));
+}
+
+/** Derive vibe19-style sensor fault masks from a raw numeric series. */
+export function deriveSensorFaultMasks(
+  values: Array<number | null>,
+  opts?: { flatlineWindow?: number; spikeZ?: number; rangeZ?: number },
+): Record<string, Array<0 | 1>> {
+  const win = opts?.flatlineWindow ?? 12;
+  const spikeZ = opts?.spikeZ ?? 4;
+  const rangeZ = opts?.rangeZ ?? 3;
+  const finite = finiteNums(values);
+  const mean =
+    finite.length > 0
+      ? finite.reduce((a, b) => a + b, 0) / finite.length
+      : 0;
+  const variance =
+    finite.length > 1
+      ? finite.reduce((a, v) => a + (v - mean) ** 2, 0) / finite.length
+      : 0;
+  const std = Math.sqrt(variance);
+  const flatline: Array<0 | 1> = values.map(() => 0);
+  const spike: Array<0 | 1> = values.map(() => 0);
+  const range: Array<0 | 1> = values.map(() => 0);
+
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    if (v == null || !Number.isFinite(v)) continue;
+    if (std > 0 && Math.abs(v - mean) > rangeZ * std) range[i] = 1;
+    if (std > 0 && Math.abs(v - mean) > spikeZ * std) spike[i] = 1;
+    if (i + 1 >= win) {
+      const slice = values.slice(i + 1 - win, i + 1);
+      const nums = finiteNums(slice);
+      if (nums.length >= Math.max(5, Math.floor(win * 0.6))) {
+        const m = nums.reduce((a, b) => a + b, 0) / nums.length;
+        const s = Math.sqrt(
+          nums.reduce((a, x) => a + (x - m) ** 2, 0) / nums.length,
+        );
+        if (s <= 1e-9) {
+          for (let j = i + 1 - win; j <= i; j++) flatline[j] = 1;
+        }
+      }
+    }
+  }
+  return {
+    "SV-FLATLINE": flatline,
+    "SV-SPIKE": spike,
+    "SV-RANGE": range,
+  };
+}
+
+/**
+ * vibe19 `sensor_fault_chart` — sensor timeseries + optional fault swim lanes.
+ */
+export function sensorFaultChart(
+  points: Array<Record<string, unknown>>,
+  opts: {
+    sensorName: string;
+    valueKey?: string;
+    ruleMasks?: Record<string, Array<boolean | number | null>>;
+    yTitle?: string;
+  },
+): PlotlyFigure | null {
+  if (!points.length) return null;
+  const key = opts.valueKey ?? "value_f";
+  const x = points.map((p) => String(p.timestamp_utc ?? p.timestamp ?? ""));
+  const y = points.map((p) => {
+    const v = p[key] ?? p.value ?? p.value_f;
+    if (v == null || v === "") return null;
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? n : null;
+  });
+  if (!y.some((v) => v != null)) return null;
+
+  const masks =
+    opts.ruleMasks && Object.keys(opts.ruleMasks).length
+      ? opts.ruleMasks
+      : deriveSensorFaultMasks(y);
+
+  const data: PlotlyTrace[] = [
+    {
+      type: "scatter",
+      mode: "lines",
+      name: opts.sensorName,
+      x,
+      y,
+      line: { width: 1.4, color: rainbowColor(0) },
+      yaxis: "y",
+    },
+  ];
+
+  let laneCount = 0;
+  for (const [rid, mask] of Object.entries(masks)) {
+    if (!mask || mask.length !== y.length) continue;
+    const flags = mask.map((v) => (v === true || v === 1 ? 1 : 0));
+    if (!flags.some((f) => f === 1)) continue;
+    const colors = FAULT_LANE_COLORS[rid] ?? {
+      line: "#ef4444",
+      fill: "rgba(239,68,68,0.3)",
+    };
+    data.push({
+      type: "scatter",
+      mode: "lines",
+      name: `${rid} fault`,
+      x,
+      y: flags,
+      yaxis: "y2",
+      line: { width: 0.8, color: colors.line, shape: "hv" },
+      fill: "tozeroy",
+      fillcolor: colors.fill,
+    });
+    laneCount += 1;
+  }
+
+  return {
+    data,
+    layout: {
+      title: `Sensor health — ${opts.sensorName}`,
+      xaxis: { title: "timestamp_utc", autorange: true },
+      yaxis: {
+        title: opts.yTitle ?? opts.sensorName,
+        autorange: true,
+        domain: laneCount ? [0.28, 1] : [0, 1],
+      },
+      ...(laneCount
+        ? {
+            yaxis2: {
+              title: "fault",
+              domain: [0, 0.22],
+              range: [-0.05, 1.05],
+              showgrid: false,
+              tickvals: [0, 1],
+              ticktext: ["ok", "fault"],
+            },
+          }
+        : {}),
+      legend: { orientation: "h" },
+      height: 420,
+      paper_bgcolor: "white",
+      plot_bgcolor: "white",
+      uirevision: `sensor-fault:${opts.sensorName}`,
+    },
+    meta: {
+      point_count: points.length,
+      provenance: "POST /api/analytics/inspect + sensor_fault_chart",
     },
   };
 }
