@@ -912,14 +912,6 @@ pub async fn economizer_from_history(
     equipment_filter: Option<&[String]>,
     dt_min_f: f64,
     building_id: Option<&str>,
-) -> Result<Option<AnalyticsEnvelope>> {
-    economizer_from_history_with_limit(equipment_filter, dt_min_f, building_id, 4000).await
-}
-
-pub async fn economizer_from_history_with_limit(
-    equipment_filter: Option<&[String]>,
-    dt_min_f: f64,
-    building_id: Option<&str>,
     max_points: usize,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
@@ -1531,7 +1523,7 @@ mod tests {
         }
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let b50 = economizer_from_history(None, 10.0, Some("BUILDING_50"))
+        let b50 = economizer_from_history(None, 10.0, Some("BUILDING_50"), 4000)
             .await
             .unwrap()
             .expect("B50 economizer envelope");

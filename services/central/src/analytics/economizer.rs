@@ -270,7 +270,7 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         let dt_min = req.dt_min_f.unwrap_or(DEFAULT_DT_MIN_F);
         // OFDD-070: scope the historian read to the site when building_id is set
         // so an Overview economizer for one building never mixes in another's parquet.
-        match historian::economizer_from_history_with_limit(
+        match historian::economizer_from_history(
             req.query.equipment_ids.as_deref(),
             dt_min,
             req.query.building_id.as_deref(),
