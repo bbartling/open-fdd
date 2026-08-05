@@ -1527,7 +1527,7 @@ mod tests {
             .await
             .unwrap()
             .expect("B50 economizer envelope");
-        let b100 = economizer_from_history(None, 10.0, Some("BUILDING_100"))
+        let b100 = economizer_from_history(None, 10.0, Some("BUILDING_100"), 4000)
             .await
             .unwrap()
             .expect("B100 economizer envelope");
@@ -1575,7 +1575,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_50", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = economizer_from_history(None, 10.0, Some("BUILDING_50"))
+        let env = economizer_from_history(None, 10.0, Some("BUILDING_50"), 4000)
             .await
             .unwrap()
             .expect("economizer with damper");
@@ -1613,7 +1613,7 @@ mod tests {
 
         // Requesting a site that was never ingested must not fall back to the
         // whole tree (that would leak BUILDING_50 into a BUILDING_999 scope).
-        let out = economizer_from_history(None, 10.0, Some("BUILDING_999"))
+        let out = economizer_from_history(None, 10.0, Some("BUILDING_999"), 4000)
             .await
             .unwrap();
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
