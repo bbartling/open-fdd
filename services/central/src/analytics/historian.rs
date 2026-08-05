@@ -1372,10 +1372,8 @@ pub async fn bas_vs_web_from_history(
     };
     let web_col = web_oat_col(&cols);
     let weather_split = web_col.is_none();
-    if !weather_split {
-        if web_col == Some(bas) {
-            return Ok(None);
-        }
+    if !weather_split && web_col == Some(bas) {
+        return Ok(None);
     }
     let _eq_filter = equipment_filter_sql(equipment_filter);
     let limit = max_points.clamp(100, 5000);
