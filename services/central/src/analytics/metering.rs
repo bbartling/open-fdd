@@ -92,6 +92,7 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
             QV_METERING,
             req.query.equipment_ids.as_deref(),
             "metering: monthly kWh aggregation requires inline {period,kwh} rows",
+            req.query.building_id.as_deref(),
         )
         .await
         {

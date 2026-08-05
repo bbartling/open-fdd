@@ -195,6 +195,7 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
             QV_MECHANICAL_COOLING,
             req.query.equipment_ids.as_deref(),
             "mechanical_cooling: compressor/chiller evidence gate requires inline series",
+            req.query.building_id.as_deref(),
         )
         .await
         {
