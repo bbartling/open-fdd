@@ -150,32 +150,24 @@ vi.mock("./analyticsApi", () => ({
     })),
     skipped: [],
   })),
-  postSchedule: vi.fn(async () => ({
+  postBasVsWebOat: vi.fn(async () => ({
     schema_version: "1",
-    query_version: "schedule-v1",
+    query_version: "bas-vs-web-oat-v2",
     generated_at: "",
     engine: "datafusion",
     warnings: [],
     rows: [
-      {
-        equipment_id: "AHU_1",
-        occupied_hours: 40,
-        unoccupied_hours: 8,
-      },
+      { kind: "delta_hist", bin_lo_f: -1, bin_hi_f: 0, count: 10 },
+      { kind: "delta_hist", bin_lo_f: 0, bin_hi_f: 1, count: 20 },
     ],
     equipment: [],
-    points: [],
-    skipped: [],
-  })),
-  postBasVsWebOat: vi.fn(async () => ({
-    schema_version: "1",
-    query_version: "bas-vs-web-oat-v1",
-    generated_at: "",
-    engine: "datafusion",
-    warnings: ["BAS vs web OAT unavailable"],
-    rows: [],
-    equipment: [],
-    points: [],
+    points: Array.from({ length: 12 }, (_, i) => ({
+      timestamp_utc: `2026-07-01T0${i}:00:00Z`,
+      equipment_id: "site",
+      bas_oat_f: 70 + i * 0.2,
+      web_oat_f: 68 + i * 0.2,
+      delta_f: 2,
+    })),
     skipped: [],
   })),
 }));
@@ -209,10 +201,35 @@ describe("fetchCentralOverview", () => {
     expect(out.economizer_free_cooling.temps_overlay?.layout?.title).toMatch(
       /Free-cooling temps/i,
     );
+    expect(out.bas_vs_web_oat.overlay?.data?.length).toBeGreaterThan(0);
     expect(out.devices_by_type).toEqual([
       { type: "AHU", count: 1 },
       { type: "VAV", count: 1 },
     ]);
+  });
+
+  it("does not substitute count bars when econ scatter is empty", async () => {
+    const { postEconomizer } = await import("./analyticsApi");
+    vi.mocked(postEconomizer).mockResolvedValueOnce({
+      schema_version: "1",
+      query_version: "economizer-diagnostics-v1",
+      generated_at: "",
+      engine: "datafusion",
+      warnings: [],
+      rows: [{ equipment_id: "AHU_1", n_fan_on_samples: 100, n_identifiable: 2 }],
+      equipment: [],
+      points: [
+        {
+          equipment_id: "AHU_1",
+          identifiable: false,
+          delta_or_f: -1,
+          delta_mr_f: -2,
+        },
+      ],
+      skipped: [],
+    } as never);
+    const out = await fetchCentralOverview({ building_id: "BUILDING_100" });
+    expect(out.economizer_free_cooling.delta_scatter).toBeNull();
   });
 
   it("renders per-AHU weekly bars + OAT y2 + bare-min line (vibe19 parity)", async () => {

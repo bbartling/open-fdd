@@ -164,6 +164,12 @@ export async function postBasVsWebOat(
   return postAnalytics("/api/analytics/bas-vs-web-oat", body);
 }
 
+export async function postInspect(
+  body: AnalyticsRequest & { series?: { columns?: string[] } },
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/inspect", body);
+}
+
 export async function postEconomizer(
   body: AnalyticsRequest,
 ): Promise<AnalyticsEnvelope> {

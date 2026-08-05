@@ -1086,7 +1086,12 @@ SELECT
 FROM base
 WHERE fan_on
   AND oat_f IS NOT NULL AND rat_f IS NOT NULL AND mat_f IS NOT NULL
-ORDER BY timestamp_utc
+ORDER BY
+  CASE
+    WHEN oat_f IS NOT NULL AND rat_f IS NOT NULL AND ABS(oat_f - rat_f) >= {dt_min}
+    THEN 0 ELSE 1
+  END,
+  timestamp_utc
 LIMIT {limit}
 "#
     );
@@ -1331,6 +1336,8 @@ ORDER BY series_kind, equipment_id, bin_lo
 }
 
 /// BAS oa_t vs web OAT overlay samples + deviation histogram rows.
+/// Site-broadcasts BAS and web OAT by timestamp so Liberty works when `oa_t`
+/// lives on AHU rows and `web_oa_t` on weather (not co-located on one row).
 pub async fn bas_vs_web_from_history(
     equipment_filter: Option<&[String]>,
     max_points: usize,
@@ -1356,20 +1363,31 @@ pub async fn bas_vs_web_from_history(
         // Only one OAT column — cannot compare BAS vs web.
         return Ok(None);
     }
-    let eq_filter = equipment_filter_sql(equipment_filter);
+    let _eq_filter = equipment_filter_sql(equipment_filter);
     let limit = max_points.clamp(100, 5000);
     let sql = format!(
         r#"
+WITH bas_by_ts AS (
+  SELECT {ts_col} AS ts, AVG({bas}) AS bas_oat_f
+  FROM history
+  WHERE {bas} IS NOT NULL
+  GROUP BY {ts_col}
+),
+web_by_ts AS (
+  SELECT {ts_col} AS ts, AVG({web}) AS web_oat_f
+  FROM history
+  WHERE {web} IS NOT NULL
+  GROUP BY {ts_col}
+)
 SELECT
-  CAST({ts_col} AS VARCHAR) AS timestamp_utc,
-  equipment_id,
-  {bas} AS bas_oat_f,
-  {web} AS web_oat_f,
-  ({bas} - {web}) AS delta_f
-FROM history
-WHERE equipment_id IS NOT NULL
-  AND {bas} IS NOT NULL AND {web} IS NOT NULL{eq_filter}
-ORDER BY {ts_col}
+  CAST(b.ts AS VARCHAR) AS timestamp_utc,
+  'site' AS equipment_id,
+  b.bas_oat_f,
+  w.web_oat_f,
+  (b.bas_oat_f - w.web_oat_f) AS delta_f
+FROM bas_by_ts b
+INNER JOIN web_by_ts w ON b.ts = w.ts
+ORDER BY b.ts
 LIMIT {limit}
 "#
     );
@@ -1402,9 +1420,12 @@ LIMIT {limit}
             })
         })
         .collect();
-    let warnings = vec!["BAS vs web OAT from historian DataFusion (oa_t vs web OAT column)".into()];
+    let warnings = vec![
+        "BAS vs web OAT from historian DataFusion (site-broadcast oa_t × web OAT by timestamp)"
+            .into(),
+    ];
     let query = AnalyticsQuery::default();
-    let mut env = envelope_with_engine("bas-vs-web-oat-v1", &query, warnings, DF_ENGINE);
+    let mut env = envelope_with_engine("bas-vs-web-oat-v2", &query, warnings, DF_ENGINE);
     env.points = points;
     env.rows = rows;
     env.coverage = Some(json!({
@@ -1413,6 +1434,119 @@ LIMIT {limit}
         "history_rows": n,
         "bas_column": bas,
         "web_column": web,
+        "oat_join": "site_broadcast_by_ts",
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+    }));
+    Ok(Some(env))
+}
+
+/// Raw equipment history for Overview data inspection (vibe19 equipment_inspection_chart).
+/// Returns plottable numeric columns + downsampled wide points — no FDD rule required.
+pub async fn inspect_from_history(
+    building_id: Option<&str>,
+    equipment_id: &str,
+    columns: Option<&[String]>,
+    max_points: usize,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let eq = equipment_id.trim();
+    if eq.is_empty() {
+        return Ok(None);
+    }
+    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    let skip = HashSet::from([
+        "equipment_id".to_string(),
+        "building".to_string(),
+        "building_id".to_string(),
+        ts_col.to_string(),
+        "timestamp_utc".to_string(),
+        "timestamp".to_string(),
+        "ts".to_string(),
+    ]);
+    let mut plottable: Vec<String> = cols
+        .iter()
+        .filter(|c| !skip.contains(c.as_str()))
+        .cloned()
+        .collect();
+    plottable.sort();
+    if plottable.is_empty() {
+        return Ok(None);
+    }
+    let selected: Vec<String> = match columns {
+        Some(want) if !want.is_empty() => want
+            .iter()
+            .filter(|c| plottable.iter().any(|p| p == *c))
+            .cloned()
+            .collect(),
+        _ => plottable.iter().take(8).cloned().collect(),
+    };
+    if selected.is_empty() {
+        return Ok(None);
+    }
+    let limit = max_points.clamp(50, 8000);
+    let proj = selected
+        .iter()
+        .map(|c| format!("{c}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let eq_lit = eq.replace('\'', "''");
+    let sql = format!(
+        r#"
+SELECT
+  CAST({ts_col} AS VARCHAR) AS timestamp_utc,
+  {proj}
+FROM history
+WHERE equipment_id = '{eq_lit}'
+ORDER BY {ts_col}
+LIMIT {limit}
+"#
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    let mut points = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        let mut row = json!({
+            "timestamp_utc": r.get("timestamp_utc").cloned().unwrap_or(json!("")),
+            "equipment_id": eq,
+        });
+        if let Some(obj) = row.as_object_mut() {
+            for c in &selected {
+                obj.insert(c.clone(), r.get(c).cloned().unwrap_or(Value::Null));
+            }
+        }
+        points.push(row);
+    }
+    let first = points
+        .first()
+        .and_then(|p| p.get("timestamp_utc").and_then(|v| v.as_str()))
+        .map(str::to_string);
+    let last = points
+        .last()
+        .and_then(|p| p.get("timestamp_utc").and_then(|v| v.as_str()))
+        .map(str::to_string);
+    let warnings = vec![
+        "equipment inspection points from historian DataFusion (raw columns; no FDD rule)"
+            .into(),
+    ];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine("equipment-inspect-v1", &query, warnings, DF_ENGINE);
+    env.points = points;
+    env.rows = selected
+        .iter()
+        .map(|c| json!({ "column": c }))
+        .collect();
+    env.coverage = Some(json!({
+        "equipment_id": eq,
+        "row_count": n,
+        "point_count": env.points.len(),
+        "plottable_columns": plottable,
+        "columns_plotted": selected,
+        "first_timestamp": first,
+        "last_timestamp": last,
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
     }));
@@ -1994,6 +2128,92 @@ mod tests {
         assert!(weekly.iter().all(|r| r.get("label").is_some()));
         // Must not emit folded plant totals as the product rows.
         assert!(env.rows.iter().all(|r| r["kind"] != "weekly_plant"));
+    }
+
+    #[tokio::test]
+    async fn bas_vs_web_joins_site_oat_across_equipment() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_BAS");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+
+        let ahu = building.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\noa_t,oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,oa_t").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,70").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,71").unwrap();
+        writeln!(f, "2026-07-01T00:10:00Z,72").unwrap();
+
+        let wx = building.join("weather");
+        std::fs::create_dir_all(&wx).unwrap();
+        std::fs::write(
+            wx.join("columns.csv"),
+            "col,point_role\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut wf = std::fs::File::create(wx.join("history_wide.csv")).unwrap();
+        writeln!(wf, "timestamp_utc,web_oa_t").unwrap();
+        writeln!(wf, "2026-07-01T00:00:00Z,68").unwrap();
+        writeln!(wf, "2026-07-01T00:05:00Z,69").unwrap();
+        writeln!(wf, "2026-07-01T00:10:00Z,70").unwrap();
+
+        let parquet = tmp.path().join("parquet_bas");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_BAS", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = bas_vs_web_from_history(None, 500, Some("BUILDING_BAS"))
+            .await
+            .unwrap()
+            .expect("site BAS×web join should produce overlay points");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert!(!env.points.is_empty());
+        assert_eq!(env.coverage.as_ref().unwrap()["oat_join"], "site_broadcast_by_ts");
+        assert!(env.rows.iter().any(|r| r["kind"] == "delta_hist"));
+    }
+
+    #[tokio::test]
+    async fn inspect_from_history_returns_raw_columns() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_INSP");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nfan_status,fan_status\noa_t,oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,fan_status,oa_t").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,1,55").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,1,56").unwrap();
+
+        let parquet = tmp.path().join("parquet_insp");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_INSP", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = inspect_from_history(Some("BUILDING_INSP"), "AHU_1", None, 500)
+            .await
+            .unwrap()
+            .expect("inspect envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert!(!env.points.is_empty());
+        let plotted = env.coverage.as_ref().unwrap()["columns_plotted"]
+            .as_array()
+            .unwrap();
+        assert!(!plotted.is_empty());
+        assert!(env.points[0].get("timestamp_utc").is_some());
     }
 
     #[test]

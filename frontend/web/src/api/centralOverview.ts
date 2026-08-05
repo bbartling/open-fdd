@@ -8,7 +8,6 @@ import {
   postEconomizer,
   postMechanicalCooling,
   postRuntime,
-  postSchedule,
   type AnalyticsEnvelope,
 } from "./analyticsApi";
 import {
@@ -403,13 +402,23 @@ function econDeltaScatter(
     byEq.set(eq, list);
   }
   for (const [eq, rows] of byEq) {
+    const hasDamper = rows.some((r) => num(r.damper_fb_pct) != null);
     data.push({
       type: "scatter",
       mode: "markers",
       name: eq,
       x: rows.map((r) => num(r.delta_or_f) as number),
       y: rows.map((r) => num(r.delta_mr_f)),
-      marker: { size: 6, opacity: 0.7 },
+      marker: hasDamper
+        ? {
+            size: 7,
+            opacity: 0.75,
+            color: rows.map((r) => num(r.damper_fb_pct)),
+            colorscale: "Viridis",
+            showscale: true,
+            colorbar: { title: "OA damper %", thickness: 12 },
+          }
+        : { size: 6, opacity: 0.7 },
     });
   }
 
@@ -541,42 +550,6 @@ function econTempsOverlay(
   };
 }
 
-/** Fallback bars when historian has counts but not yet plot points (old central). */
-function econCountsFigure(rows: Array<Record<string, unknown>>): PlotlyFigure | null {
-  const usable = rows.filter(
-    (r) => num(r.n_fan_on_samples) != null || num(r.n_identifiable) != null,
-  );
-  if (!usable.length) return null;
-  return rowsToBarFigure(usable, {
-    xKey: "equipment_id",
-    yKeys: ["n_fan_on_samples", "n_identifiable"],
-    title: "Economizer — fan-on / identifiable samples",
-    yAxisTitle: "samples",
-    sortBy: "n_fan_on_samples",
-    sortDesc: true,
-    maxBars: 40,
-    provenance: "POST /api/analytics/economizer (DataFusion)",
-  });
-}
-
-function scheduleFigure(rows: Array<Record<string, unknown>>): PlotlyFigure | null {
-  const usable = rows.filter(
-    (r) => num(r.occupied_hours) != null || num(r.unoccupied_hours) != null,
-  );
-  if (!usable.length) return null;
-  return rowsToBarFigure(usable, {
-    xKey: "equipment_id",
-    yKeys: ["occupied_hours", "unoccupied_hours"],
-    title: "Schedule — occupied / unoccupied hours",
-    yAxisTitle: "hours",
-    sortBy: "occupied_hours",
-    sortDesc: true,
-    maxBars: 40,
-    barmode: "stack",
-    provenance: "POST /api/analytics/schedule (DataFusion)",
-  });
-}
-
 /** vibe19 bas_vs_web_oat_overlay with ±oat_err band. */
 function basOverlay(
   points: Array<Record<string, unknown>>,
@@ -682,11 +655,10 @@ export async function fetchCentralOverview(opts: {
   const dtMin = opts.dt_min_f ?? 10;
   const body = { building_id, max_points: 4000, dt_min_f: dtMin };
 
-  const [runtime, mech, econ, schedule, bas] = await Promise.all([
+  const [runtime, mech, econ, bas] = await Promise.all([
     postRuntime(body),
     postMechanicalCooling(body),
     postEconomizer(body),
-    postSchedule(body),
     postBasVsWebOat(body),
   ]);
 
@@ -695,7 +667,6 @@ export async function fetchCentralOverview(opts: {
     runtime.equipment?.length ? runtime.equipment : runtimeRows;
   const mechRows = mech.rows?.length ? mech.rows : mech.equipment;
   const econRows = econ.rows?.length ? econ.rows : econ.equipment;
-  const scheduleRows = schedule.rows?.length ? schedule.rows : schedule.equipment;
   const econPoints = econ.points ?? [];
 
   const equipmentIds = [
@@ -749,7 +720,6 @@ export async function fetchCentralOverview(opts: {
     econPoints,
     opts.econ_overlay_equipment_id ?? null,
   );
-  const schedFig = scheduleFigure(scheduleRows);
   const basPoints = bas.points ?? [];
   const basOverlayFig = basOverlay(basPoints, oatErr);
   const basHistFig = basHist(bas.rows ?? []);
@@ -812,14 +782,17 @@ export async function fetchCentralOverview(opts: {
     economizer_free_cooling: {
       caption: warnCaption(
         econ,
-        econPoints.length
+        deltaScatter
           ? "Economizer free-cooling plots from DataFusion historian points"
-          : "Economizer sample counts from DataFusion (plot points unavailable)",
+          : econPoints.length
+            ? "Economizer points present but fewer than 5 identifiable |OAT−RAT| samples for scatter"
+            : "Economizer plot points unavailable (need fan-on + OAT/RAT/MAT)",
       ),
       metrics: econRows.slice(0, 200),
-      delta_scatter: deltaScatter ?? econCountsFigure(econRows),
+      // Never substitute count bars or schedule bars for missing econ figures.
+      delta_scatter: deltaScatter,
       mat_residual: matResidual,
-      temps_overlay: tempsOverlay ?? schedFig,
+      temps_overlay: tempsOverlay,
       overlay_equipment_id: overlayEq,
       skipped: [],
       dt_min_f: dtMin,
@@ -828,7 +801,7 @@ export async function fetchCentralOverview(opts: {
       caption: warnCaption(
         bas,
         basOverlayFig
-          ? "BAS vs web OAT from DataFusion historian"
+          ? "BAS vs web OAT from DataFusion historian (site-broadcast join)"
           : "BAS vs web OAT unavailable (need both oa_t and web OAT columns)",
       ),
       overlay: basOverlayFig,
