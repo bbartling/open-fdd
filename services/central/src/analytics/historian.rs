@@ -170,9 +170,7 @@ fn on_expr(cols: &HashSet<String>) -> Option<String> {
 
 /// Threshold on-expression for a single numeric status/amp column.
 fn col_on_gt(col: &str, threshold: f64) -> String {
-    format!(
-        "CASE WHEN {col} IS NOT NULL AND {col} > {threshold} THEN true ELSE false END"
-    )
+    format!("CASE WHEN {col} IS NOT NULL AND {col} > {threshold} THEN true ELSE false END")
 }
 
 /// Mechanical-cooling proof (never fan). Prefers chiller/compressor status, then amps.
@@ -227,7 +225,13 @@ fn plant_runtime_on_expr(cols: &HashSet<String>) -> Option<String> {
     if let Some(cool) = cooling_on_expr(cols) {
         parts.push(format!("({cool})"));
     }
-    for name in ["boiler_status", "boiler_cmd", "hwp_status", "hw_pump_status", "cwp_status"] {
+    for name in [
+        "boiler_status",
+        "boiler_cmd",
+        "hwp_status",
+        "hw_pump_status",
+        "cwp_status",
+    ] {
         if cols.contains(name) {
             parts.push(format!("({})", col_on_gt(name, 0.05)));
         }
@@ -265,7 +269,11 @@ pub fn plant_group_for(equipment_id: &str) -> Option<&'static str> {
     if eq.contains("/VAV") || eq.starts_with("VAV") || eq.contains("VAVFC") || eq.contains("VAVH") {
         return None;
     }
-    if eq.starts_with("AHU") || eq.contains("/AHU") || eq.contains("RTU") || eq.contains("MAU") || eq.contains("DOAS")
+    if eq.starts_with("AHU")
+        || eq.contains("/AHU")
+        || eq.contains("RTU")
+        || eq.contains("MAU")
+        || eq.contains("DOAS")
     {
         return Some("air");
     }
@@ -1091,11 +1099,9 @@ ORDER BY bin_lo
     if rows.is_empty() {
         return Ok(None);
     }
-    let warnings = vec![
-        "mechanical cooling OAT bins from historian DataFusion \
+    let warnings = vec!["mechanical cooling OAT bins from historian DataFusion \
          (compressor/chiller proof × preferred web OAT; chiller-like equipment only)"
-            .into(),
-    ];
+        .into()];
     let query = AnalyticsQuery::default();
     let mut env = envelope_with_engine(QV_MECHANICAL_COOLING, &query, warnings, DF_ENGINE);
     env.rows = rows.clone();
@@ -1604,7 +1610,10 @@ mod tests {
             .await
             .unwrap();
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
-        assert!(out.is_none(), "fan-only history must not produce mech oat bins");
+        assert!(
+            out.is_none(),
+            "fan-only history must not produce mech oat bins"
+        );
     }
 
     #[tokio::test]
