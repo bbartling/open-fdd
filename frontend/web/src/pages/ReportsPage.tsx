@@ -240,13 +240,16 @@ export function ReportsPage() {
 
   const previewRows = useMemo(() => {
     if (!figure?.data[0]) return [];
-    const n = Math.min(8, figure.data[0].x.length);
+    const x0 = figure.data[0].x ?? [];
+    const n = Math.min(8, x0.length);
     return Array.from({ length: n }, (_, i) => {
       const row: Record<string, string> = {
-        timestamp: String(figure.data[0].x[i] ?? ""),
+        timestamp: String(x0[i] ?? ""),
       };
       for (const t of figure.data) {
-        row[t.name] = t.y[i] == null ? "" : String(t.y[i]);
+        const name = t.name ?? "series";
+        const y = t.y ?? [];
+        row[name] = y[i] == null ? "" : String(y[i]);
       }
       return row;
     });
