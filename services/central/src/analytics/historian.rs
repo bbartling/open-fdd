@@ -1638,10 +1638,7 @@ mod tests {
         assert!(!env.rows.is_empty());
         assert_eq!(env.rows[0]["history_rows"].as_u64().unwrap(), 2);
         assert!(env.warnings.iter().any(|w| w.contains("not fabricated")));
-        assert_eq!(
-            env.coverage.as_ref().unwrap()["building_id"],
-            "BUILDING_DC"
-        );
+        assert_eq!(env.coverage.as_ref().unwrap()["building_id"], "BUILDING_DC");
     }
 
     #[tokio::test]
@@ -1886,10 +1883,7 @@ mod tests {
             .rows
             .iter()
             .any(|r| r["series_kind"] == "aggregate_device_hours"));
-        assert!(env
-            .rows
-            .iter()
-            .any(|r| r["equipment_id"] == "CHILLER_1"));
+        assert!(env.rows.iter().any(|r| r["equipment_id"] == "CHILLER_1"));
     }
 
     #[tokio::test]
@@ -1957,10 +1951,7 @@ mod tests {
         std::fs::create_dir_all(&building).unwrap();
         std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
 
-        for (eq, fan_vals) in [
-            ("AHU_1", [1, 1, 1]),
-            ("AHU_2", [1, 0, 1]),
-        ] {
+        for (eq, fan_vals) in [("AHU_1", [1, 1, 1]), ("AHU_2", [1, 0, 1])] {
             let dir = building.join(eq);
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(
