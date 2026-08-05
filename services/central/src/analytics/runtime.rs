@@ -168,7 +168,9 @@ pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     if !has_inline {
         let max_gap = req.max_gap_seconds.unwrap_or(900.0);
         let filter = req.query.equipment_ids.as_deref();
-        match historian::runtime_from_history(filter, max_gap).await {
+        match historian::runtime_from_history(filter, max_gap, req.query.building_id.as_deref())
+            .await
+        {
             Ok(Some(mut env)) => {
                 let (qv, mut warnings) = resolve_query_version(req, QV_RUNTIME);
                 env.query_version = qv;

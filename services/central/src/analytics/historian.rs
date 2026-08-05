@@ -61,12 +61,6 @@ pub fn parquet_root() -> PathBuf {
     PathBuf::from(".cache/parquet")
 }
 
-/// Register `history` from parquet_root when the tree exists and has data.
-/// Returns `Ok(true)` on success, `Ok(false)` when missing/empty/unusable.
-pub async fn try_register_history(ctx: &SessionContext) -> Result<bool> {
-    try_register_history_scoped(ctx, None).await
-}
-
 /// Sanitize a `building_id` for use as a Hive path segment. Rejects any value
 /// with path separators or `..` so a query field can never escape the parquet
 /// root; returns `None` for empty/unsafe ids (caller falls back to whole tree).
@@ -168,6 +162,96 @@ fn on_expr(cols: &HashSet<String>) -> Option<String> {
     }
 }
 
+/// Threshold on-expression for a single numeric status/amp column.
+fn col_on_gt(col: &str, threshold: f64) -> String {
+    format!("CASE WHEN {col} IS NOT NULL AND {col} > {threshold} THEN true ELSE false END")
+}
+
+/// Mechanical-cooling proof (never fan). Prefers chiller/compressor status, then amps.
+fn cooling_on_expr(cols: &HashSet<String>) -> Option<String> {
+    let status_names = [
+        "chiller_status",
+        "compressor_status",
+        "comp_status",
+        "comp_1_status",
+        "comp_2_status",
+        "dx_status",
+    ];
+    let mut parts: Vec<String> = Vec::new();
+    for name in status_names {
+        if cols.contains(name) {
+            parts.push(col_on_gt(name, 0.05));
+        }
+    }
+    // Any remaining column name that clearly looks like chiller/compressor status.
+    for c in cols {
+        let u = c.to_ascii_lowercase();
+        if parts.iter().any(|p| p.contains(c.as_str())) {
+            continue;
+        }
+        if (u.contains("chiller") && u.contains("status"))
+            || (u.contains("comp") && u.contains("status") && !u.contains("occup"))
+            || (u.contains("dx") && u.contains("status"))
+        {
+            parts.push(col_on_gt(c, 0.05));
+        }
+    }
+    for name in ["chiller_amps", "comp_amps", "compressor_amps", "amps"] {
+        if cols.contains(name) {
+            parts.push(col_on_gt(name, 2.0));
+        }
+    }
+    if parts.is_empty() {
+        return None;
+    }
+    if parts.len() == 1 {
+        return Some(parts.remove(0));
+    }
+    Some(format!("({})", parts.join(" OR ")))
+}
+
+/// Plant weekly / equipment runtime on-proof: fan OR chiller/boiler/pump status.
+fn plant_runtime_on_expr(cols: &HashSet<String>) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(fan) = on_expr(cols) {
+        parts.push(format!("({fan})"));
+    }
+    if let Some(cool) = cooling_on_expr(cols) {
+        parts.push(format!("({cool})"));
+    }
+    for name in [
+        "boiler_status",
+        "boiler_cmd",
+        "hwp_status",
+        "hw_pump_status",
+        "cwp_status",
+    ] {
+        if cols.contains(name) {
+            parts.push(format!("({})", col_on_gt(name, 0.05)));
+        }
+    }
+    for c in cols {
+        let u = c.to_ascii_lowercase();
+        if (u.contains("boiler") && u.contains("status"))
+            || (u.contains("hwp") && (u.contains("status") || u.contains("_s")))
+            || (u.contains("cwp") && u.contains("status"))
+            || (u.contains("pump") && u.contains("status"))
+        {
+            let expr = col_on_gt(c, 0.05);
+            if !parts.iter().any(|p| p.contains(c.as_str())) {
+                parts.push(format!("({expr})"));
+            }
+        }
+    }
+    if parts.is_empty() {
+        return None;
+    }
+    if parts.len() == 1 {
+        return Some(parts.remove(0));
+    }
+    Some(parts.join(" OR "))
+}
+
 fn round2(x: f64) -> f64 {
     (x * 100.0).round() / 100.0
 }
@@ -179,29 +263,48 @@ pub fn plant_group_for(equipment_id: &str) -> Option<&'static str> {
     if eq.contains("/VAV") || eq.starts_with("VAV") || eq.contains("VAVFC") || eq.contains("VAVH") {
         return None;
     }
-    if eq.starts_with("AHU") || eq.contains("/AHU") || eq.contains("RTU") {
+    if eq.starts_with("AHU")
+        || eq.contains("/AHU")
+        || eq.contains("RTU")
+        || eq.contains("MAU")
+        || eq.contains("DOAS")
+    {
         return Some("air");
     }
     if eq.contains("TOWER")
         || eq.starts_with("CT_")
+        || eq.contains("/CT")
+        || (eq.starts_with("CT") && eq.chars().nth(2).is_some_and(|c| c.is_ascii_digit()))
         || eq.contains("CHILLER")
         || eq.starts_with("CHW")
         || eq.contains("CWP")
+        || eq.contains("_DX")
+        || eq.starts_with("DX")
+        || eq.starts_with("HP_")
         || (eq.contains("PUMP") && (eq.contains("CHW") || eq.contains("CW")))
     {
         return Some("chiller");
     }
     if eq.contains("BOILER")
         || eq.contains("HWP")
-        || (eq.contains("PUMP") && !eq.contains("HEAT") && !eq.contains("CHW"))
+        || (eq.contains("PUMP") && eq.contains("HW") && !eq.contains("CHW"))
         || eq.contains("BOILERS")
     {
         return Some("boiler");
     }
-    if eq.contains("FAN") || eq.contains("SUPPLY") {
-        return Some("air");
-    }
+    // Do not catch bare FAN/SUPPLY — too broad (exhaust/return/etc.).
     None
+}
+
+/// OAT for mech-cooling bins: prefer web/meteo OAT (pandas Overview default).
+fn mech_oat_col(cols: &HashSet<String>) -> Option<&'static str> {
+    web_oat_col(cols).or_else(|| {
+        if cols.contains("oa_t") {
+            Some("oa_t")
+        } else {
+            None
+        }
+    })
 }
 
 fn oat_col(cols: &HashSet<String>) -> Option<&'static str> {
@@ -234,18 +337,37 @@ fn equipment_filter_sql(equipment_filter: Option<&[String]>) -> String {
     }
 }
 
+/// SQL fragment restricting to chiller/DX/tower-like equipment ids.
+/// Kept aligned with [`plant_group_for`] (no bare `CT%` — that matches CTRL_*).
+fn chiller_like_equipment_sql() -> &'static str {
+    " AND (\
+        UPPER(equipment_id) LIKE '%CHILLER%' \
+        OR UPPER(equipment_id) LIKE '%TOWER%' \
+        OR UPPER(equipment_id) LIKE 'CT_%' \
+        OR UPPER(equipment_id) LIKE '%/CT_%' \
+        OR UPPER(equipment_id) LIKE '%_DX%' \
+        OR UPPER(equipment_id) LIKE 'DX%' \
+        OR UPPER(equipment_id) LIKE 'HP_%' \
+        OR UPPER(equipment_id) LIKE '%CWP%' \
+        OR UPPER(equipment_id) LIKE 'CHW%' \
+     )"
+}
+
 /// Load runtime hours from historian Parquet via DataFusion.
 ///
 /// Returns `Ok(None)` when parquet is missing/empty. When columns support Δt
-/// integration (`equipment_id`, timestamp, fan_status/fan_cmd), computes real
+/// integration (`equipment_id`, timestamp, fan/status/pump proofs), computes real
 /// forward-interval run hours with gap clipping. Otherwise returns a count-based
 /// envelope with `engine=datafusion` and a warning that column-mapped runtime is next.
+///
+/// When `building_id` is set, scopes the Parquet read like economizer (OFDD-070).
 pub async fn runtime_from_history(
     equipment_filter: Option<&[String]>,
     max_gap_seconds: f64,
+    building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let ctx = SessionContext::new();
-    if !try_register_history(&ctx).await? {
+    if !try_register_history_scoped(&ctx, building_id).await? {
         return Ok(None);
     }
 
@@ -266,7 +388,8 @@ pub async fn runtime_from_history(
     let eq_filter = equipment_filter_sql(equipment_filter);
 
     if cols.contains("equipment_id") {
-        if let (Some(ts_col), Some(on_sql)) = (pick_ts_col(&cols), on_expr(&cols)) {
+        // Fan for air handlers; chiller/boiler/pump status for plant motors.
+        if let (Some(ts_col), Some(on_sql)) = (pick_ts_col(&cols), plant_runtime_on_expr(&cols)) {
             let sql = format!(
                 r#"
 WITH ordered AS (
@@ -397,6 +520,7 @@ ORDER BY i.equipment_id
                         "history_rows": n,
                         "max_gap_seconds": max_gap,
                         "source": "historian_parquet",
+                        "building_id": safe_building_segment(building_id),
                         "query_versions": ["runtime-v1", "runtime-weekly-v1"],
                     }));
                     return Ok(Some(env));
@@ -411,7 +535,7 @@ ORDER BY i.equipment_id
     // Minimum bridge: registered history with rows, engine honesty for DataFusion.
     let warnings = vec![
         "historian Parquet registered via DataFusion; column-mapped runtime Δt SQL is next \
-         (need equipment_id + timestamp_utc + fan_status/fan_cmd)"
+         (need equipment_id + timestamp_utc + fan/chiller/boiler/pump on-proof)"
             .into(),
     ];
     let mut env = envelope_with_engine(QV_RUNTIME, &query, warnings, DF_ENGINE);
@@ -419,6 +543,7 @@ ORDER BY i.equipment_id
         "history_rows": n,
         "max_gap_seconds": max_gap,
         "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
     }));
     Ok(Some(env))
 }
@@ -777,16 +902,17 @@ ORDER BY equipment_id
     Ok(Some(env))
 }
 
-/// Economizer descriptive diagnostics from historian Parquet via DataFusion.
+/// Economizer diagnostics from historian Parquet via DataFusion.
 ///
 /// Requires an OAT column (`oa_t` or Liberty `web_oa_t`), plus `rat` and `mat`,
-/// and a fan on-expression. Computes per-equipment fan-on and identifiable
-/// (`|OAT−RAT| >= dt_min`) sample counts. Never invents MAT residuals; those
-/// remain the inline central path only.
+/// and a fan on-expression. Returns per-equipment fan-on / identifiable counts
+/// plus downsampled fan-on points for Overview Plotly (delta scatter, MAT
+/// residual, temps+damper overlay) — vibe19 chart parity without pandas.
 pub async fn economizer_from_history(
     equipment_filter: Option<&[String]>,
     dt_min_f: f64,
     building_id: Option<&str>,
+    max_points: usize,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
         return Ok(None);
@@ -820,14 +946,20 @@ pub async fn economizer_from_history(
     let Some(on_sql) = on_expr(&cols) else {
         return Ok(None);
     };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
     let dt_min = dt_min_f.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
-    // OFDD-070b: project damper into the CTE — COUNT(oa_damper_pct) from `base`
-    // fails when the column exists on `history` but was never selected into `base`.
     let damper_proj = if cols.contains("oa_damper_pct") {
         "oa_damper_pct"
     } else {
         "CAST(NULL AS DOUBLE) AS oa_damper_pct"
+    };
+    let sat_proj = if cols.contains("sat") {
+        "sat"
+    } else {
+        "CAST(NULL AS DOUBLE) AS sat"
     };
 
     let sql = format!(
@@ -839,7 +971,8 @@ WITH base AS (
     {rat_col} AS rat,
     {mat_col} AS mat,
     {on_sql} AS fan_on,
-    {damper_proj}
+    {damper_proj},
+    {sat_proj}
   FROM history
   WHERE equipment_id IS NOT NULL{eq_filter}
 )
@@ -872,20 +1005,92 @@ ORDER BY equipment_id
         }));
     }
 
-    let warnings = vec![
-        "economizer fan-on / identifiable sample counts from historian Parquet via \
-         DataFusion; MAT residual (median/MAE) requires the inline central path and \
-         is not fabricated here"
+    let limit = max_points.clamp(100, 8000);
+    let points_sql = format!(
+        r#"
+WITH base AS (
+  SELECT
+    equipment_id,
+    CAST({ts_col} AS VARCHAR) AS timestamp_utc,
+    {oat_col} AS oat_f,
+    {rat_col} AS rat_f,
+    {mat_col} AS mat_f,
+    {sat_proj},
+    {damper_proj},
+    {on_sql} AS fan_on
+  FROM history
+  WHERE equipment_id IS NOT NULL{eq_filter}
+)
+SELECT
+  equipment_id,
+  timestamp_utc,
+  oat_f,
+  rat_f,
+  mat_f,
+  sat AS sat_f,
+  oa_damper_pct AS damper_fb_pct,
+  (oat_f - rat_f) AS delta_or_f,
+  (mat_f - rat_f) AS delta_mr_f,
+  CASE
+    WHEN oa_damper_pct IS NOT NULL AND oat_f IS NOT NULL AND rat_f IS NOT NULL THEN
+      mat_f - (rat_f + (oa_damper_pct / 100.0) * (oat_f - rat_f))
+    ELSE NULL
+  END AS mat_resid_f,
+  CASE
+    WHEN oat_f IS NOT NULL AND rat_f IS NOT NULL AND ABS(oat_f - rat_f) >= {dt_min}
+    THEN true ELSE false
+  END AS identifiable
+FROM base
+WHERE fan_on
+  AND oat_f IS NOT NULL AND rat_f IS NOT NULL AND mat_f IS NOT NULL
+ORDER BY timestamp_utc
+LIMIT {limit}
+"#
+    );
+    let mut points = Vec::new();
+    match run_sql(&ctx, &points_sql).await {
+        Ok(pres) => {
+            for r in &pres.rows {
+                points.push(json!({
+                    "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+                    "timestamp_utc": r.get("timestamp_utc").cloned().unwrap_or(json!("")),
+                    "oat_f": as_f64(r.get("oat_f")),
+                    "rat_f": as_f64(r.get("rat_f")),
+                    "mat_f": as_f64(r.get("mat_f")),
+                    "sat_f": as_f64(r.get("sat_f")),
+                    "damper_fb_pct": as_f64(r.get("damper_fb_pct")),
+                    "delta_or_f": as_f64(r.get("delta_or_f")),
+                    "delta_mr_f": as_f64(r.get("delta_mr_f")),
+                    "mat_resid_f": as_f64(r.get("mat_resid_f")),
+                    "identifiable": r.get("identifiable").and_then(|v| v.as_bool()).unwrap_or(false),
+                    "fan_on": true,
+                }));
+            }
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "economizer plot points SQL failed; counts only");
+        }
+    }
+
+    let mut warnings = vec![
+        "economizer fan-on counts + free-cooling plot points from historian DataFusion \
+         (vibe19 Overview chart parity)"
             .into(),
     ];
+    if points.is_empty() {
+        warnings.push("no fan-on economizer points available for scatter/MAT/temps plots".into());
+    }
     let query = AnalyticsQuery::default();
     let mut env = envelope_with_engine(QV_ECONOMIZER, &query, warnings, DF_ENGINE);
     env.equipment = equipment.clone();
     env.rows = equipment;
+    env.points = points;
     env.coverage = Some(json!({
         "equipment_count": env.equipment.len(),
+        "point_count": env.points.len(),
         "history_rows": n,
         "dt_min_f": dt_min,
+        "max_points": limit,
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
         "oat_column": oat_col,
@@ -895,26 +1100,29 @@ ORDER BY equipment_id
     Ok(Some(env))
 }
 
-/// Mechanical-cooling OAT bin hours (5°F bins) from historian when OAT + on-proof exist.
+/// Mechanical-cooling OAT bin hours (5°F bins) from historian when OAT + cooling
+/// proof exist. Never uses AHU fan as mechanical cooling.
 pub async fn mech_oat_bins_from_history(
     equipment_filter: Option<&[String]>,
     max_gap_seconds: f64,
+    building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history().await? else {
+    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
         return Ok(None);
     };
-    let Some(oat) = oat_col(&cols) else {
+    let Some(oat) = mech_oat_col(&cols) else {
         return Ok(None);
     };
-    let Some(on_sql) = on_expr(&cols) else {
+    // Require compressor/chiller proof — never fan_status/fan_cmd.
+    let Some(on_sql) = cooling_on_expr(&cols) else {
         return Ok(None);
     };
     let max_gap = max_gap_seconds.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
-    // Restrict to chiller/tower-like equipment via SQL filter on id patterns when possible.
+    let chiller_filter = chiller_like_equipment_sql();
     let sql = format!(
         r#"
 WITH ordered AS (
@@ -925,7 +1133,7 @@ WITH ordered AS (
     {oat} AS oat_f,
     LEAD({ts_col}) OVER (PARTITION BY equipment_id ORDER BY {ts_col}) AS next_ts
   FROM history
-  WHERE equipment_id IS NOT NULL AND {oat} IS NOT NULL{eq_filter}
+  WHERE equipment_id IS NOT NULL AND {oat} IS NOT NULL{eq_filter}{chiller_filter}
 ),
 intervals AS (
   SELECT
@@ -965,11 +1173,9 @@ ORDER BY bin_lo
     if rows.is_empty() {
         return Ok(None);
     }
-    let warnings = vec![
-        "mechanical cooling OAT bins from historian DataFusion (fan/status on × oa_t; \
-         compressor-specific evidence still inline-only)"
-            .into(),
-    ];
+    let warnings = vec!["mechanical cooling OAT bins from historian DataFusion \
+         (compressor/chiller proof × preferred web OAT; chiller-like equipment only)"
+        .into()];
     let query = AnalyticsQuery::default();
     let mut env = envelope_with_engine(QV_MECHANICAL_COOLING, &query, warnings, DF_ENGINE);
     env.rows = rows.clone();
@@ -978,6 +1184,7 @@ ORDER BY bin_lo
         "bin_count": env.rows.len(),
         "history_rows": n,
         "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
         "oat_column": oat,
     }));
     Ok(Some(env))
@@ -987,8 +1194,9 @@ ORDER BY bin_lo
 pub async fn bas_vs_web_from_history(
     equipment_filter: Option<&[String]>,
     max_points: usize,
+    building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history().await? else {
+    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     let Some(ts_col) = pick_ts_col(&cols) else {
@@ -1066,6 +1274,7 @@ LIMIT {limit}
         "bas_column": bas,
         "web_column": web,
         "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
     }));
     Ok(Some(env))
 }
@@ -1139,7 +1348,7 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let missing = tmp.path().join("no_such_parquet");
         std::env::set_var("OPENFDD_PARQUET_ROOT", &missing);
-        let out = runtime_from_history(None, 900.0).await.unwrap();
+        let out = runtime_from_history(None, 900.0, None).await.unwrap();
         assert!(out.is_none());
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
     }
@@ -1168,7 +1377,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_TEST", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = runtime_from_history(None, 900.0)
+        let env = runtime_from_history(None, 900.0, None)
             .await
             .unwrap()
             .expect("expected historian envelope");
@@ -1314,11 +1523,11 @@ mod tests {
         }
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let b50 = economizer_from_history(None, 10.0, Some("BUILDING_50"))
+        let b50 = economizer_from_history(None, 10.0, Some("BUILDING_50"), 4000)
             .await
             .unwrap()
             .expect("B50 economizer envelope");
-        let b100 = economizer_from_history(None, 10.0, Some("BUILDING_100"))
+        let b100 = economizer_from_history(None, 10.0, Some("BUILDING_100"), 4000)
             .await
             .unwrap()
             .expect("B100 economizer envelope");
@@ -1366,7 +1575,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_50", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = economizer_from_history(None, 10.0, Some("BUILDING_50"))
+        let env = economizer_from_history(None, 10.0, Some("BUILDING_50"), 4000)
             .await
             .unwrap()
             .expect("economizer with damper");
@@ -1404,7 +1613,7 @@ mod tests {
 
         // Requesting a site that was never ingested must not fall back to the
         // whole tree (that would leak BUILDING_50 into a BUILDING_999 scope).
-        let out = economizer_from_history(None, 10.0, Some("BUILDING_999"))
+        let out = economizer_from_history(None, 10.0, Some("BUILDING_999"), 4000)
             .await
             .unwrap();
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
@@ -1415,10 +1624,113 @@ mod tests {
     fn plant_group_for_maps_common_ids() {
         assert_eq!(plant_group_for("AHU_1"), Some("air"));
         assert_eq!(plant_group_for("RTU_WEST"), Some("air"));
+        assert_eq!(plant_group_for("MAU_1"), Some("air"));
         assert_eq!(plant_group_for("CHILLER_1"), Some("chiller"));
+        assert_eq!(plant_group_for("CT_1"), Some("chiller"));
+        assert_eq!(plant_group_for("HP_3"), Some("chiller"));
         assert_eq!(plant_group_for("BOILER_1"), Some("boiler"));
         assert_eq!(plant_group_for("VAV_101"), None);
         assert_eq!(plant_group_for("BUILDING/VAVFC_2"), None);
+        // Bare FAN/SUPPLY must not swallow unrelated motors.
+        assert_eq!(plant_group_for("EXHAUST_FAN_1"), None);
+        assert_eq!(plant_group_for("SUPPLY_METER"), None);
+    }
+
+    #[test]
+    fn cooling_on_expr_ignores_fan_only() {
+        let mut cols = HashSet::new();
+        cols.insert("fan_status".into());
+        cols.insert("fan_cmd".into());
+        cols.insert("oa_t".into());
+        assert!(cooling_on_expr(&cols).is_none());
+        assert!(on_expr(&cols).is_some());
+    }
+
+    #[test]
+    fn cooling_on_expr_uses_chiller_status() {
+        let mut cols = HashSet::new();
+        cols.insert("chiller_status".into());
+        cols.insert("web_oa_t".into());
+        let expr = cooling_on_expr(&cols).expect("cooling proof");
+        assert!(expr.contains("chiller_status"));
+        assert!(!expr.contains("fan_"));
+    }
+
+    #[tokio::test]
+    async fn mech_oat_bins_none_for_fan_only_fixture() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_FAN");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nfan_speed_pct,fan_cmd\noa_temp_f,oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,fan_speed_pct,oa_temp_f").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,100,85").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,100,86").unwrap();
+        writeln!(f, "2026-07-01T00:10:00Z,100,87").unwrap();
+
+        let parquet = tmp.path().join("parquet_fan");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_FAN", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let out = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_FAN"))
+            .await
+            .unwrap();
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        assert!(
+            out.is_none(),
+            "fan-only history must not produce mech oat bins"
+        );
+    }
+
+    #[tokio::test]
+    async fn mech_oat_bins_from_chiller_status_fixture() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_CH");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ch = building.join("CHILLER_1");
+        std::fs::create_dir_all(&ch).unwrap();
+        std::fs::write(
+            ch.join("columns.csv"),
+            "col,point_role\nchiller_status,chiller_status\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ch.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,chiller_status,web_oa_t").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,1,82").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,1,83").unwrap();
+        writeln!(f, "2026-07-01T00:10:00Z,0,84").unwrap();
+
+        let parquet = tmp.path().join("parquet_ch");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_CH", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_CH"))
+            .await
+            .unwrap()
+            .expect("chiller_status fixture should produce oat bins");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert_eq!(env.engine, DF_ENGINE);
+        assert!(!env.rows.is_empty());
+        assert_eq!(env.rows[0]["kind"], "oat_bin");
+        assert!(env.coverage.as_ref().unwrap()["oat_column"] == "web_oa_t");
+        let hours: f64 = env
+            .rows
+            .iter()
+            .map(|r| r["hours"].as_f64().unwrap_or(0.0))
+            .sum();
+        // Two on intervals of 300s (t0→t1 and t1→t2 while status stays 1) → 600s
+        assert!((hours - (600.0 / 3600.0)).abs() < 0.02, "hours={hours}");
     }
 
     #[test]

@@ -1,6 +1,7 @@
 /**
  * Assemble Overview dashboard payload from central Rust `/api/analytics/*`
- * (DataFusion) + client-side Plotly figures — no Python overview-oracle.
+ * (DataFusion) + client-side Plotly figures — vibe19 Overview chart parity,
+ * no Python/pandas.
  */
 import {
   postBasVsWebOat,
@@ -10,7 +11,12 @@ import {
   postSchedule,
   type AnalyticsEnvelope,
 } from "./analyticsApi";
-import { rowsToBarFigure, type PlotlyFigure } from "./plotDataset";
+import {
+  fingerprintJson,
+  rowsToBarFigure,
+  type PlotlyFigure,
+  type PlotlyTrace,
+} from "./plotDataset";
 import type {
   OverviewPlantFig,
   OverviewVibe19Response,
@@ -50,6 +56,7 @@ function motorFigure(rows: Array<Record<string, unknown>>): PlotlyFigure | null 
   });
 }
 
+/** Weekly plant bars + optional avg OAT on y2 (vibe19 motor_weekly_runtime_chart). */
 function weeklyPlantFigures(
   rows: Array<Record<string, unknown>>,
 ): OverviewPlantFig[] {
@@ -63,9 +70,9 @@ function weeklyPlantFigures(
     byPlant.set(g, list);
   }
   const titles: Record<string, string> = {
-    air: "Air handlers / RTUs",
-    boiler: "Boiler plant",
-    chiller: "Chiller / tower plant",
+    air: "Air side — supply fans",
+    boiler: "Boiler plant — HW pumps",
+    chiller: "Chiller plant — chillers, CHW/CW pumps, towers",
   };
   return [...byPlant.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -73,20 +80,61 @@ function weeklyPlantFigures(
       const sorted = [...plantRows].sort((a, b) =>
         String(a.week_label).localeCompare(String(b.week_label)),
       );
-      const figure = rowsToBarFigure(sorted, {
-        xKey: "week_label",
-        yKeys: ["run_hours"],
-        title: `${titles[plant_group] ?? plant_group} — weekly run hours`,
-        yAxisTitle: "run hours",
-        maxBars: 52,
-        provenance: "POST /api/analytics/runtime (runtime-weekly-v1)",
-      });
+      const x = sorted.map((r) => String(r.week_label ?? ""));
+      const hours = sorted.map((r) => num(r.run_hours));
+      const oat = sorted.map((r) => num(r.avg_oat_f));
+      const hasOat = oat.some((v) => v != null);
+      const data: PlotlyTrace[] = [
+        {
+          type: "bar",
+          name: "run hours",
+          x,
+          y: hours,
+        },
+      ];
+      if (hasOat) {
+        data.push({
+          type: "scatter",
+          mode: "lines+markers",
+          name: "avg OAT",
+          x,
+          y: oat,
+          yaxis: "y2",
+          line: { width: 2 },
+        });
+      }
+      const figure: PlotlyFigure = {
+        data,
+        layout: {
+          title: `${titles[plant_group] ?? plant_group} — weekly run hours`,
+          barmode: "group",
+          showlegend: true,
+          xaxis: { title: "week", tickangle: -35, autorange: true },
+          yaxis: { title: "run hours", autorange: true },
+          ...(hasOat
+            ? {
+                yaxis2: {
+                  title: "avg OAT °F",
+                  overlaying: "y",
+                  side: "right",
+                  autorange: true,
+                },
+              }
+            : {}),
+          margin: { t: 48, r: hasOat ? 56 : 24, b: 96, l: 56 },
+          uirevision: `weekly:${plant_group}:${fingerprintJson(sorted)}`,
+        },
+        meta: {
+          point_count: sorted.length,
+          provenance: "POST /api/analytics/runtime (runtime-weekly-v1)",
+        },
+      };
       return {
         plant_group,
         title: titles[plant_group] ?? plant_group,
         caption: "Central weekly plant bins (DataFusion)",
         figure,
-        empty: !figure,
+        empty: !sorted.length,
       };
     });
 }
@@ -104,7 +152,7 @@ function mechFigure(rows: Array<Record<string, unknown>>): {
       figure: rowsToBarFigure(sorted, {
         xKey: "bin_label",
         yKeys: ["hours"],
-        title: "Mechanical cooling — hours by OAT bin",
+        title: "Mechanical cooling run hours by outdoor-air temperature (5°F bins)",
         yAxisTitle: "hours",
         maxBars: 40,
         provenance: "POST /api/analytics/mechanical-cooling (OAT bins)",
@@ -129,7 +177,197 @@ function mechFigure(rows: Array<Record<string, unknown>>): {
   };
 }
 
-function econFigure(rows: Array<Record<string, unknown>>): PlotlyFigure | null {
+/** vibe19 economizer_delta_scatter: (MAT−RAT) vs (OAT−RAT) + OA-fraction refs. */
+function econDeltaScatter(
+  points: Array<Record<string, unknown>>,
+  dtMinF: number,
+): PlotlyFigure | null {
+  const usable = points.filter(
+    (p) =>
+      (p.identifiable === true || p.identifiable === "true") &&
+      num(p.delta_or_f) != null &&
+      num(p.delta_mr_f) != null,
+  );
+  if (usable.length < 5) return null;
+
+  const xs = usable.map((p) => num(p.delta_or_f) as number);
+  const xLo = Math.min(...xs);
+  const xHi = Math.max(...xs);
+  const lo = Number.isFinite(xLo) ? xLo : -20;
+  const hi = Number.isFinite(xHi) ? xHi : 20;
+  const span = hi === lo ? 20 : hi - lo;
+  const refX: number[] = [];
+  for (let i = 0; i <= 40; i++) {
+    refX.push(lo + (span * i) / 40);
+  }
+  const data: PlotlyTrace[] = [];
+  for (const [frac, label] of [
+    [0, "0% OA"],
+    [0.25, "25%"],
+    [0.5, "50%"],
+    [0.75, "75%"],
+    [1, "100% OA"],
+  ] as const) {
+    data.push({
+      type: "scatter",
+      mode: "lines",
+      name: label,
+      x: refX,
+      y: refX.map((x) => frac * x),
+      line: { width: 1, dash: "dot", color: "#94a3b8" },
+      hoverinfo: "skip",
+      showlegend: true,
+    });
+  }
+
+  const byEq = new Map<string, Array<Record<string, unknown>>>();
+  for (const p of usable) {
+    const eq = String(p.equipment_id || "AHU");
+    const list = byEq.get(eq) ?? [];
+    list.push(p);
+    byEq.set(eq, list);
+  }
+  for (const [eq, rows] of byEq) {
+    data.push({
+      type: "scatter",
+      mode: "markers",
+      name: eq,
+      x: rows.map((r) => num(r.delta_or_f) as number),
+      y: rows.map((r) => num(r.delta_mr_f)),
+      marker: { size: 6, opacity: 0.7 },
+    });
+  }
+
+  return {
+    data,
+    layout: {
+      title: `Economizer free-cooling delta scatter (fan on, |OAT−RAT|≥${dtMinF.toFixed(0)}°F)`,
+      xaxis: { title: "OAT − RAT (°F)", autorange: true },
+      yaxis: { title: "MAT − RAT (°F)", autorange: true },
+      legend: { orientation: "h" },
+      height: 420,
+      uirevision: `econ-delta:${fingerprintJson(usable.slice(0, 200))}`,
+    },
+    meta: {
+      point_count: usable.length,
+      provenance: "POST /api/analytics/economizer (DataFusion points)",
+    },
+  };
+}
+
+/** vibe19 economizer_mat_residual_chart. */
+function econMatResidual(
+  points: Array<Record<string, unknown>>,
+): PlotlyFigure | null {
+  const usable = points.filter(
+    (p) =>
+      (p.identifiable === true || p.identifiable === "true") &&
+      num(p.mat_resid_f) != null,
+  );
+  if (usable.length < 5) return null;
+  const byEq = new Map<string, Array<Record<string, unknown>>>();
+  for (const p of usable) {
+    const eq = String(p.equipment_id || "AHU");
+    const list = byEq.get(eq) ?? [];
+    list.push(p);
+    byEq.set(eq, list);
+  }
+  const data: PlotlyTrace[] = [];
+  for (const [eq, rows] of byEq) {
+    data.push({
+      type: "scatter",
+      mode: "lines",
+      name: eq,
+      x: rows.map((r) => String(r.timestamp_utc ?? "")),
+      y: rows.map((r) => num(r.mat_resid_f)),
+    });
+  }
+  return {
+    data,
+    layout: {
+      title: "MAT residual (meas − mixing model from OA damper) — fan on, identifiable",
+      xaxis: { title: "time", autorange: true },
+      yaxis: { title: "MAT residual °F", autorange: true },
+      legend: { orientation: "h" },
+      height: 320,
+      uirevision: `econ-mat:${fingerprintJson(usable.slice(0, 200))}`,
+    },
+    meta: {
+      point_count: usable.length,
+      provenance: "POST /api/analytics/economizer (DataFusion points)",
+    },
+  };
+}
+
+/** vibe19 economizer_temps_overlay for one AHU. */
+function econTempsOverlay(
+  points: Array<Record<string, unknown>>,
+  equipmentId: string | null,
+): { figure: PlotlyFigure | null; equipmentId: string | null } {
+  if (!points.length) return { figure: null, equipmentId: null };
+  const eq =
+    equipmentId &&
+    points.some((p) => String(p.equipment_id) === equipmentId)
+      ? equipmentId
+      : String(points[0].equipment_id ?? "");
+  if (!eq) return { figure: null, equipmentId: null };
+  const rows = points.filter((p) => String(p.equipment_id) === eq);
+  if (rows.length < 3) return { figure: null, equipmentId: eq };
+  const x = rows.map((r) => String(r.timestamp_utc ?? ""));
+  const data: PlotlyTrace[] = [
+    { type: "scatter", mode: "lines", name: "OAT", x, y: rows.map((r) => num(r.oat_f)) },
+    { type: "scatter", mode: "lines", name: "RAT", x, y: rows.map((r) => num(r.rat_f)) },
+    { type: "scatter", mode: "lines", name: "MAT", x, y: rows.map((r) => num(r.mat_f)) },
+  ];
+  if (rows.some((r) => num(r.sat_f) != null)) {
+    data.push({
+      type: "scatter",
+      mode: "lines",
+      name: "SAT",
+      x,
+      y: rows.map((r) => num(r.sat_f)),
+    });
+  }
+  if (rows.some((r) => num(r.damper_fb_pct) != null)) {
+    data.push({
+      type: "scatter",
+      mode: "lines",
+      name: "OA damper %",
+      x,
+      y: rows.map((r) => num(r.damper_fb_pct)),
+      yaxis: "y2",
+    });
+  }
+  return {
+    equipmentId: eq,
+    figure: {
+      data,
+      layout: {
+        title: `Free-cooling temps + OA damper (fan on) — ${eq}`,
+        xaxis: { title: "time", autorange: true },
+        yaxis: { title: "°F", autorange: true },
+        yaxis2: {
+          title: "damper %",
+          overlaying: "y",
+          side: "right",
+          range: [0, 100],
+          autorange: false,
+        },
+        legend: { orientation: "h" },
+        height: 360,
+        uirevision: `econ-temps:${eq}:${fingerprintJson(rows.slice(0, 100))}`,
+      },
+      meta: {
+        equipment_id: eq,
+        point_count: rows.length,
+        provenance: "POST /api/analytics/economizer (DataFusion points)",
+      },
+    },
+  };
+}
+
+/** Fallback bars when historian has counts but not yet plot points (old central). */
+function econCountsFigure(rows: Array<Record<string, unknown>>): PlotlyFigure | null {
   const usable = rows.filter(
     (r) => num(r.n_fan_on_samples) != null || num(r.n_identifiable) != null,
   );
@@ -164,35 +402,67 @@ function scheduleFigure(rows: Array<Record<string, unknown>>): PlotlyFigure | nu
   });
 }
 
-function basOverlay(points: Array<Record<string, unknown>>): PlotlyFigure | null {
+/** vibe19 bas_vs_web_oat_overlay with ±oat_err band. */
+function basOverlay(
+  points: Array<Record<string, unknown>>,
+  oatErr: number,
+): PlotlyFigure | null {
   if (!points.length) return null;
   const x = points.map((p) => String(p.timestamp_utc ?? ""));
   const bas = points.map((p) => num(p.bas_oat_f));
   const web = points.map((p) => num(p.web_oat_f));
-  return {
-    data: [
-      {
-        type: "scatter",
-        mode: "lines",
-        name: "BAS oa_t",
-        x,
-        y: bas,
-      },
-      {
-        type: "scatter",
-        mode: "lines",
-        name: "Web OAT",
-        x,
-        y: web,
-      },
-    ],
-    layout: {
-      title: "BAS vs web OAT",
-      xaxis: { title: "time" },
-      yaxis: { title: "°F" },
-      legend: { orientation: "h" },
+  const hi = web.map((v) => (v == null ? null : v + oatErr));
+  const lo = web.map((v) => (v == null ? null : v - oatErr));
+  const data: PlotlyTrace[] = [
+    {
+      type: "scatter",
+      mode: "lines",
+      name: `web +${oatErr}°F`,
+      x,
+      y: hi,
+      line: { width: 0 },
+      showlegend: false,
     },
-    meta: { provenance: "POST /api/analytics/bas-vs-web-oat" },
+    {
+      type: "scatter",
+      mode: "lines",
+      name: `±${oatErr}°F band`,
+      x,
+      y: lo,
+      fill: "tonexty",
+      fillcolor: "rgba(148, 163, 184, 0.25)",
+      line: { width: 0 },
+    },
+    {
+      type: "scatter",
+      mode: "lines",
+      name: "Web OAT",
+      x,
+      y: web,
+      line: { width: 2 },
+    },
+    {
+      type: "scatter",
+      mode: "lines",
+      name: "BAS oa_t",
+      x,
+      y: bas,
+      line: { width: 2 },
+    },
+  ];
+  return {
+    data,
+    layout: {
+      title: `BAS vs web outdoor-air temperature (±${oatErr}°F band)`,
+      xaxis: { title: "time", autorange: true },
+      yaxis: { title: "°F", autorange: true },
+      legend: { orientation: "h" },
+      uirevision: `bas-overlay:${fingerprintJson(points.slice(0, 100))}`,
+    },
+    meta: {
+      point_count: points.length,
+      provenance: "POST /api/analytics/bas-vs-web-oat",
+    },
   };
 }
 
@@ -210,7 +480,7 @@ function basHist(rows: Array<Record<string, unknown>>): PlotlyFigure | null {
     {
       xKey: "bin_label",
       yKeys: ["count"],
-      title: "BAS − web OAT (°F) histogram",
+      title: "BAS vs web outdoor-air temperature deviation (°F)",
       yAxisTitle: "count",
       maxBars: 60,
       provenance: "POST /api/analytics/bas-vs-web-oat",
@@ -227,10 +497,15 @@ function warnCaption(env: AnalyticsEnvelope, fallback: string): string {
 export async function fetchCentralOverview(opts: {
   building_id: string;
   equipment?: Array<{ equipment_id: string; equipment_type?: string }>;
+  econ_overlay_equipment_id?: string | null;
+  oat_err?: number;
+  dt_min_f?: number;
 }): Promise<OverviewVibe19Response> {
   const t0 = performance.now();
   const building_id = opts.building_id;
-  const body = { building_id };
+  const oatErr = opts.oat_err ?? 5;
+  const dtMin = opts.dt_min_f ?? 10;
+  const body = { building_id, max_points: 4000, dt_min_f: dtMin };
 
   const [runtime, mech, econ, schedule, bas] = await Promise.all([
     postRuntime(body),
@@ -246,6 +521,7 @@ export async function fetchCentralOverview(opts: {
   const mechRows = mech.rows?.length ? mech.rows : mech.equipment;
   const econRows = econ.rows?.length ? econ.rows : econ.equipment;
   const scheduleRows = schedule.rows?.length ? schedule.rows : schedule.equipment;
+  const econPoints = econ.points ?? [];
 
   const equipmentIds = [
     ...new Set(
@@ -286,10 +562,15 @@ export async function fetchCentralOverview(opts: {
         : [];
 
   const { figure: mechFig, bins: mechBins } = mechFigure(mechRows);
-  const econFig = econFigure(econRows);
+  const deltaScatter = econDeltaScatter(econPoints, dtMin);
+  const matResidual = econMatResidual(econPoints);
+  const { figure: tempsOverlay, equipmentId: overlayEq } = econTempsOverlay(
+    econPoints,
+    opts.econ_overlay_equipment_id ?? null,
+  );
   const schedFig = scheduleFigure(scheduleRows);
   const basPoints = bas.points ?? [];
-  const basOverlayFig = basOverlay(basPoints);
+  const basOverlayFig = basOverlay(basPoints, oatErr);
   const basHistFig = basHist(bas.rows ?? []);
 
   const elapsed_s = Math.round(((performance.now() - t0) / 1000) * 10) / 10;
@@ -332,20 +613,23 @@ export async function fetchCentralOverview(opts: {
     },
     economizer_weather: {
       caption:
-        "Economizer weather-opportunity table is not in central yet — free-cooling sample counts below.",
+        "Economizer weather-opportunity (dewpoint hours) needs web dewpoint on historian — not yet wired in central DataFusion.",
       table: [],
     },
     economizer_free_cooling: {
       caption: warnCaption(
         econ,
-        "Economizer diagnostics from DataFusion (MAT residual / scatter need richer series)",
+        econPoints.length
+          ? "Economizer free-cooling plots from DataFusion historian points"
+          : "Economizer sample counts from DataFusion (plot points unavailable)",
       ),
       metrics: econRows.slice(0, 200),
-      delta_scatter: econFig,
-      mat_residual: null,
-      temps_overlay: schedFig,
-      overlay_equipment_id: null,
+      delta_scatter: deltaScatter ?? econCountsFigure(econRows),
+      mat_residual: matResidual,
+      temps_overlay: tempsOverlay ?? schedFig,
+      overlay_equipment_id: overlayEq,
       skipped: [],
+      dt_min_f: dtMin,
     },
     bas_vs_web_oat: {
       caption: warnCaption(
@@ -356,7 +640,7 @@ export async function fetchCentralOverview(opts: {
       ),
       overlay: basOverlayFig,
       histogram: basHistFig,
-      oat_err: 5,
+      oat_err: oatErr,
     },
     devices_by_type: devices,
   };

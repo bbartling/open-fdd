@@ -21,10 +21,10 @@ import {
 import { rowsToBarFigure, type PlotlyFigure } from "../api/plotDataset";
 
 const PRESETS = [
-  { value: "ahu", label: "AHU" },
-  { value: "vav", label: "VAV" },
-  { value: "chiller", label: "Chiller" },
-  { value: "boiler", label: "Boiler" },
+  { value: "ahu", label: "AHU — SAT reset / DAT / MAT / RAT / dampers / fans" },
+  { value: "vav", label: "Zones — comfort / space temps / VAV airflow" },
+  { value: "chiller", label: "Chiller / tower — leave temp vs OAT, CHW/CW temps" },
+  { value: "boiler", label: "Boiler / HW — leave temp vs OAT" },
 ] as const;
 
 function formatErr(err: unknown): string {
@@ -111,7 +111,7 @@ export function RcxPage() {
   return (
     <AppShell
       title="RCx Plots"
-      caption="Retro-commissioning analytics — AHU / VAV / chiller / boiler presets"
+      caption="Retro-commissioning analytics — vibe19 RCx family presets via central DataFusion (rcx/ahu|vav|chiller|boiler). Full timeseries/scatter/box presets land as historian points grow."
       activeSectionId="rcx-plots"
     >
       <div className="page-stack" data-testid="rcx-page">

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { WidgetBaseProps } from "./types";
 import { widgetTestId } from "./types";
 import type { PlotlyFigure } from "../../api/plotDataset";
+import { fingerprintJson } from "../../api/plotDataset";
 import { sanitizePlotlyFigure } from "../../api/plotlySanitize";
 
 export interface PlotlyHostProps extends Omit<WidgetBaseProps, "label"> {
@@ -139,12 +140,27 @@ export function PlotlyHost({
         }
         return;
       }
+      const baseLayout = (clean.layout as Record<string, unknown> | undefined) ?? {};
+      const axisPatch = (key: string) => {
+        const prev = (baseLayout[key] as Record<string, unknown> | undefined) ?? {};
+        return { ...prev, autorange: true };
+      };
+      // Fingerprint figure so Plotly.react resets sticky zoom after Update analytics.
+      const uirevision =
+        (baseLayout.uirevision as string | undefined) ??
+        `${figureId ?? id}:${fingerprintJson(clean.data)}:${clean.meta?.provenance ?? ""}`;
       const layout: Record<string, unknown> = {
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
         font: { family: "Source Sans 3, Source Sans, sans-serif", size: 12 },
-        ...(clean.layout as object),
-        height: (clean.layout as { height?: number } | undefined)?.height ?? height,
+        ...baseLayout,
+        xaxis: axisPatch("xaxis"),
+        yaxis: axisPatch("yaxis"),
+        ...(baseLayout.yaxis2 != null || clean.data.some((t) => t.yaxis === "y2")
+          ? { yaxis2: axisPatch("yaxis2") }
+          : {}),
+        uirevision,
+        height: (baseLayout.height as number | undefined) ?? height,
         autosize: true,
       };
       delete layout.template;

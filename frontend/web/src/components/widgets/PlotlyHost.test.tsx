@@ -75,10 +75,46 @@ describe("PlotlyHost", () => {
     });
     const call = (react.mock.calls[0] ?? newPlot.mock.calls[0]) as unknown[];
     expect(call[1]).toEqual(figure.data);
-    expect((call[2] as { template?: unknown }).template).toBeUndefined();
+    const layout = call[2] as {
+      template?: unknown;
+      uirevision?: string;
+      xaxis?: { autorange?: boolean };
+      yaxis?: { autorange?: boolean };
+    };
+    expect(layout.template).toBeUndefined();
+    expect(layout.xaxis?.autorange).toBe(true);
+    expect(layout.yaxis?.autorange).toBe(true);
+    expect(layout.uirevision).toBeTruthy();
     await waitFor(() => {
       expect(getByTestId("plotly-meta-motor").textContent).toMatch(/rendered/);
     });
+
+    // Same cardinality / provenance, different values — must bump uirevision.
+    react.mockClear();
+    newPlot.mockClear();
+    rerender(
+      <PlotlyHost
+        id="motor"
+        label="Motor"
+        figure={{
+          ...figure,
+          data: [{ x: ["2026-01-01"], y: [99], type: "bar", name: "AHU" }],
+          meta: { provenance: "runtime-v1", point_count: 1 },
+        }}
+        loading={false}
+        height={300}
+        testId="overview-motor-air-plot"
+      />,
+    );
+    await waitFor(() => {
+      expect(react.mock.calls.length + newPlot.mock.calls.length).toBeGreaterThan(
+        0,
+      );
+    });
+    const call2 = (react.mock.calls[0] ?? newPlot.mock.calls[0]) as unknown[];
+    const layout2 = call2[2] as { uirevision?: string };
+    expect(layout2.uirevision).toBeTruthy();
+    expect(layout2.uirevision).not.toEqual(layout.uirevision);
   });
 
   it("cancels Plotly wait timers on unmount so vitest teardown stays clean", async () => {

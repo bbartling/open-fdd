@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import {
-  getAuthMe,
-  getAuthStatus,
-  login,
-  logout,
-  type AuthMe,
-  type AuthStatus,
-} from "../api/authApi";
+import { getAuthMe, login, logout, type AuthMe } from "../api/authApi";
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -20,8 +13,11 @@ function safeReturnPath(raw: string | null): string {
 }
 
 /**
- * Dedicated sign-in surface (Streamlit-oracle chrome) — not the app shell.
+ * Dedicated sign-in surface — not the app shell.
  * AuthGate sends unauthenticated users here when central requires JWT.
+ *
+ * Internet-facing rule: no bench credential paths, no auth-config dumps,
+ * no operator handoff hints on this page.
  */
 export function AuthPage() {
   const navigate = useNavigate();
@@ -29,29 +25,19 @@ export function AuthPage() {
   const returnTo = safeReturnPath(searchParams.get("from"));
   const formId = useId();
 
-  const [status, setStatus] = useState<AuthStatus | null>(null);
   const [me, setMe] = useState<AuthMe | null>(null);
-  const [username, setUsername] = useState("admin");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const st = await getAuthStatus();
-      setStatus(st);
-      try {
-        setMe(await getAuthMe());
-      } catch {
-        setMe(null);
-      }
-    } catch (err) {
-      setError(formatErr(err));
-    } finally {
-      setReady(true);
+      setMe(await getAuthMe());
+    } catch {
+      setMe(null);
     }
   }, []);
 
@@ -95,52 +81,41 @@ export function AuthPage() {
         </h1>
         <p className="auth-screen__lede">
           {signedIn
-            ? "You already have an active central session on this browser."
-            : status?.auth_required
-              ? "Central requires a password before package import and analytics."
-              : "Optional local session token for API calls on this browser."}
+            ? "You have an active session on this browser."
+            : "Enter your username and password to continue."}
         </p>
 
-        <dl className="auth-screen__meta" aria-live="polite">
-          <div>
-            <dt>Auth required</dt>
-            <dd data-testid="auth-required">
-              {!ready || status == null
-                ? "…"
-                : status.auth_required
-                  ? "true"
-                  : "false"}
-            </dd>
-          </div>
-          <div>
-            <dt>User</dt>
-            <dd data-testid="auth-user">{me?.username ?? "—"}</dd>
-          </div>
-          <div>
-            <dt>Role</dt>
-            <dd data-testid="auth-role">{me?.role ?? "—"}</dd>
-          </div>
-        </dl>
-
         {signedIn ? (
-          <div className="auth-screen__actions">
-            <button
-              type="button"
-              className="auth-screen__btn auth-screen__btn--primary"
-              data-testid="auth-continue"
-              onClick={() => navigate(returnTo, { replace: true })}
-            >
-              Continue to app
-            </button>
-            <button
-              type="button"
-              className="auth-screen__btn auth-screen__btn--ghost"
-              data-testid="auth-logout"
-              onClick={onLogout}
-            >
-              Sign out
-            </button>
-          </div>
+          <>
+            <dl className="auth-screen__meta" aria-live="polite">
+              <div>
+                <dt>User</dt>
+                <dd data-testid="auth-user">{me?.username ?? "—"}</dd>
+              </div>
+              <div>
+                <dt>Role</dt>
+                <dd data-testid="auth-role">{me?.role ?? "—"}</dd>
+              </div>
+            </dl>
+            <div className="auth-screen__actions">
+              <button
+                type="button"
+                className="auth-screen__btn auth-screen__btn--primary"
+                data-testid="auth-continue"
+                onClick={() => navigate(returnTo, { replace: true })}
+              >
+                Continue to app
+              </button>
+              <button
+                type="button"
+                className="auth-screen__btn auth-screen__btn--ghost"
+                data-testid="auth-logout"
+                onClick={onLogout}
+              >
+                Sign out
+              </button>
+            </div>
+          </>
         ) : (
           <form
             className="auth-screen__form"
@@ -175,38 +150,34 @@ export function AuthPage() {
                 type="submit"
                 className="auth-screen__btn auth-screen__btn--primary"
                 data-testid="auth-login"
-                disabled={busy || !password}
+                disabled={busy || !username.trim() || !password}
               >
                 {busy ? "Signing in…" : "Sign in"}
-              </button>
-              <button
-                type="button"
-                className="auth-screen__btn auth-screen__btn--ghost"
-                data-testid="auth-refresh"
-                onClick={() => void refresh()}
-              >
-                Refresh status
               </button>
             </div>
           </form>
         )}
 
         {error ? (
-          <p className="auth-screen__alert auth-screen__alert--danger" role="alert" data-testid="auth-error">
+          <p
+            className="auth-screen__alert auth-screen__alert--danger"
+            role="alert"
+            data-testid="auth-error"
+          >
             {error}
           </p>
         ) : null}
         {notice ? (
-          <p className="auth-screen__alert auth-screen__alert--ok" data-testid="auth-notice">
+          <p
+            className="auth-screen__alert auth-screen__alert--ok"
+            data-testid="auth-notice"
+          >
             {notice}
           </p>
         ) : null}
 
         <p className="auth-screen__footnote">
-          Bench password handoff:{" "}
-          <code>workspace/bootstrap_credentials.once.txt</code>
-          {" · "}
-          <Link to="/">Overview</Link>
+          <Link to="/">Back to Overview</Link>
         </p>
       </main>
     </div>

@@ -49,25 +49,26 @@ Do **not** rename `open_fdd.rules` → `open_fdd.oracle` without an explicit pro
 2. Pandas oracle stays forever — cookbooks + vibe19 + PyPI `rules`/`analytics`. Never delete the pandas cookbook because production uses SQL.
 3. Never delete the SQL cookbook because pandas remains the oracle.
 4. **Product UI:** React SPA (`frontend/web` → `openfdd-web`, `compose.react.yml`) is the **sole production UI** ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md); turnkey cutover). **Do not** reintroduce Streamlit / `openfdd-ui` / overview-oracle as product surfaces. Overview analytics = central `/api/analytics/*` (DataFusion) + client Plotly. Browser → central Rust `/api` only — **no FastAPI / Python product runtime**.
-5. Test open-fdd containers on **`OPENFDD_IMAGE_TAG=nightly`** (master retargets `:nightly`), but **pin/run `sha-*`** per [`CONTAINER_AGENT.md`](CONTAINER_AGENT.md). OT stress: [`scripts/nightly-ot-bench/`](../scripts/nightly-ot-bench/README.md) (`react-ot`).
-6. Playground images: `ghcr.io/bbartling/vibe19:develop`, `vibe20:develop`.
-7. `edge/` and `os/` are future concepts — never delete.
-8. Bounded PRs only — see [`PR_PROTOCOL.md`](PR_PROTOCOL.md).
-9. Migration pattern: inventory → characterization → shared impl → parity → cutover → **delete twin** → regression → docs.
-10. Do not copy code into Open-FDD and leave both implementations active.
-11. Vibe 19 may keep Streamlit UX, custom `CUSTOM-*` rules, demos as **external** companions — not Open-FDD product UI and not canonical rule/analytics twins.
-12. Vibe 20 owns EnergyPlus — keep IDF/sim/orchestration; delete only **generic** ECM twins after parity.
-13. Prefer exact wheel install tests over editable-only validation for packaging PRs.
-14. Never trust a moving GHCR tag alone — resolve/pull immutable `sha-*`, recreate containers, then record the digest.
-15. Append [`SESSION_LOG.md`](SESSION_LOG.md) after non-trivial work.
-16. Update [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md) whenever Milestone A **or React/Rust modernization** status changes (not only after merge).
-17. CodeRabbit: fix actionable defects; reject suggestions that violate architecture.
-18. Do not retire playground GHCR without an open-fdd capability parity matrix.
-19. vibe21 = separate plan — not Milestone A.
-20. When blocked (secrets, permissions, private data), finish non-blocked work and record the exact error.
-21. Bound each PR to its declared scope — docs-only PRs do not require cross-repo pin bumps or GHCR refreshes.
-22. **Active program:** [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/README.md) Master Loop. Modernization Phase 1+2 “exit” is architecture direction only — not P1-G0 of the recovery program. Keep [`capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml) honest; never claim QUALIFIED without evidence.
-23. For `frontend/web` work: follow [`openfdd-streamlit-to-react`](skills/openfdd-streamlit-to-react/SKILL.md) (React-only product maintenance) **and** vibe21 Master Loop / ledger. Forbid unqualified “Phase complete” claims. Keep this `openfdd_agent_spec/` tree honest whenever product truth changes.
+5. **Internet-facing auth/UI hygiene:** Treat `frontend/web` as a product that will be on the public internet. Never put bench/dev secrets, credential file paths (`workspace/bootstrap_credentials.once.txt`), default passwords, JWT/auth-config dumps, or “auth_required=true” operator diagnostics on login or other product surfaces. Ops handoff lives in docs/scripts only — not in the SPA. Generic login errors only (no username enumeration). Do not pre-fill privileged usernames in shipping UI.
+6. Test open-fdd containers on **`OPENFDD_IMAGE_TAG=nightly`** (master retargets `:nightly`), but **pin/run `sha-*`** per [`CONTAINER_AGENT.md`](CONTAINER_AGENT.md). OT stress: [`scripts/nightly-ot-bench/`](../scripts/nightly-ot-bench/README.md) (`react-ot`).
+7. Playground images: `ghcr.io/bbartling/vibe19:develop`, `vibe20:develop`.
+8. `edge/` and `os/` are future concepts — never delete.
+9. Bounded PRs only — see [`PR_PROTOCOL.md`](PR_PROTOCOL.md).
+10. Migration pattern: inventory → characterization → shared impl → parity → cutover → **delete twin** → regression → docs.
+11. Do not copy code into Open-FDD and leave both implementations active.
+12. Vibe 19 may keep Streamlit UX, custom `CUSTOM-*` rules, demos as **external** companions — not Open-FDD product UI and not canonical rule/analytics twins.
+13. Vibe 20 owns EnergyPlus — keep IDF/sim/orchestration; delete only **generic** ECM twins after parity.
+14. Prefer exact wheel install tests over editable-only validation for packaging PRs.
+15. Never trust a moving GHCR tag alone — resolve/pull immutable `sha-*`, recreate containers, then record the digest.
+16. Append [`SESSION_LOG.md`](SESSION_LOG.md) after non-trivial work.
+17. Update [`BUILD_CHECKPOINTS.md`](BUILD_CHECKPOINTS.md) whenever Milestone A **or React/Rust modernization** status changes (not only after merge).
+18. CodeRabbit: fix actionable defects; reject suggestions that violate architecture.
+19. Do not retire playground GHCR without an open-fdd capability parity matrix.
+20. vibe21 = separate plan — not Milestone A.
+21. When blocked (secrets, permissions, private data), finish non-blocked work and record the exact error.
+22. Bound each PR to its declared scope — docs-only PRs do not require cross-repo pin bumps or GHCR refreshes.
+23. **Active program:** [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/README.md) Master Loop. Modernization Phase 1+2 “exit” is architecture direction only — not P1-G0 of the recovery program. Keep [`capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml) honest; never claim QUALIFIED without evidence.
+24. For `frontend/web` work: follow [`openfdd-streamlit-to-react`](skills/openfdd-streamlit-to-react/SKILL.md) (React-only product maintenance) **and** vibe21 Master Loop / ledger. Forbid unqualified “Phase complete” claims. Keep this `openfdd_agent_spec/` tree honest whenever product truth changes.
 
 ---
 

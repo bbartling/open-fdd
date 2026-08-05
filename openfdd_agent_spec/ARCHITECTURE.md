@@ -12,7 +12,7 @@ Update this file when code truth changes.
 | Surface | Role | Must not |
 | --- | --- | --- |
 | **Open-FDD production** (GHCR stack) | Rust central, Arrow/Feather, DataFusion SQL FDD, JWT REST, React SPA (`openfdd-web`) sole product UI; Overview via `/api/analytics/*` | Silent pandas FDD fallback; reintroduce Streamlit/`openfdd-ui`/overview-oracle as product; claim Vibe 21 Phase 1 complete without `capabilities.yaml` evidence |
-| **React SPA** | Sole production UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)) | FastAPI/Python product sidecar; FDD math in TypeScript; BACnet wire ownership |
+| **React SPA** | Sole production UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)); internet-facing hygiene (no bench credential hints on login) | FastAPI/Python product sidecar; FDD math in TypeScript; BACnet wire ownership; secret/path handoffs in product UI |
 | **Streamlit product UI** | **Removed / cutover in progress** — not a shipping surface; WattLab exporter relocates before tree delete | Be reintroduced as product default without a new ADR |
 | **Vibe 21 program kit** | [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/) — recovery → twin → Unity ZIP import | Skip Master Loop gates; Unity Editor in production; BAS writes without authority |
 | **Open-FDD PyPI** (`open-fdd`) | Reusable libs: `ecm_engineering`, `rules`, `analytics`, `reporting` | Be the production FDD runtime |
