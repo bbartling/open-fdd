@@ -1,0 +1,428 @@
+/**
+ * vibe19-style multi-equipment Plotly builders for RCx / Overview / FDD.
+ */
+import {
+  fingerprintJson,
+  type PlotlyFigure,
+  type PlotlyTrace,
+} from "./plotDataset";
+import { overviewChartLayout, rainbowColor } from "./plotlyTheme";
+
+export function multiEquipmentTimeseries(
+  points: Array<Record<string, unknown>>,
+  opts: { title: string; yTitle?: string },
+): PlotlyFigure | null {
+  if (!points.length) return null;
+  const byKey = new Map<string, Array<Record<string, unknown>>>();
+  for (const p of points) {
+    const eq = String(p.equipment_id ?? "eq");
+    const series = String(p.series ?? "primary");
+    const name =
+      series === "primary"
+        ? eq
+        : series === "overlay"
+          ? `${eq} · setpoint`
+          : series === "return"
+            ? `${eq} · return`
+            : series === "delta_t"
+              ? `${eq} · ΔT`
+              : `${eq} · ${series}`;
+    const list = byKey.get(name) ?? [];
+    list.push(p);
+    byKey.set(name, list);
+  }
+  const data: PlotlyTrace[] = [];
+  let i = 0;
+  for (const [name, rows] of [...byKey.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
+    data.push({
+      type: "scatter",
+      mode: "lines",
+      name,
+      x: rows.map((r) => String(r.timestamp_utc ?? "")),
+      y: rows.map((r) => {
+        const v = r.value_f;
+        if (v == null || v === "") return null;
+        const n = typeof v === "number" ? v : Number(v);
+        return Number.isFinite(n) ? n : null;
+      }),
+      line: { width: 1.4, color: rainbowColor(i) },
+    });
+    i += 1;
+  }
+  return {
+    data,
+    layout: overviewChartLayout({
+      xTitle: "time",
+      yTitle: opts.yTitle ?? "value",
+      height: Math.max(380, 40 + 14 * Math.min(byKey.size, 16)),
+      tickangle: -30,
+      uirevision: `rcx-ts:${fingerprintJson(points.slice(0, 50))}`,
+      extra: { title: opts.title },
+    }),
+    meta: {
+      point_count: points.length,
+      provenance: "POST /api/analytics/rcx/preset",
+    },
+  };
+}
+
+export function oatScatter(
+  points: Array<Record<string, unknown>>,
+  opts: { title: string; yTitle: string },
+): PlotlyFigure | null {
+  if (!points.length) return null;
+  const byEq = new Map<string, Array<Record<string, unknown>>>();
+  for (const p of points) {
+    const eq = String(p.equipment_id ?? "eq");
+    const list = byEq.get(eq) ?? [];
+    list.push(p);
+    byEq.set(eq, list);
+  }
+  const data: PlotlyTrace[] = [];
+  let i = 0;
+  for (const [eq, rows] of [...byEq.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
+    data.push({
+      type: "scatter",
+      mode: "markers",
+      name: eq,
+      x: rows.map((r) => {
+        const v = r.oat_f;
+        const n = typeof v === "number" ? v : Number(v);
+        return Number.isFinite(n) ? n : null;
+      }),
+      y: rows.map((r) => {
+        const v = r.y_f;
+        const n = typeof v === "number" ? v : Number(v);
+        return Number.isFinite(n) ? n : null;
+      }),
+      marker: { size: 6, opacity: 0.65, color: rainbowColor(i) },
+    });
+    i += 1;
+  }
+  const hasDry = points.some((p) => p.dry_bulb_f != null);
+  if (hasDry) {
+    data.push({
+      type: "scatter",
+      mode: "markers",
+      name: "dry-bulb ref (x)",
+      x: points.map((r) => {
+        const v = r.dry_bulb_f;
+        const n = typeof v === "number" ? v : Number(v);
+        return Number.isFinite(n) ? n : null;
+      }),
+      y: points.map((r) => {
+        const v = r.y_f;
+        const n = typeof v === "number" ? v : Number(v);
+        return Number.isFinite(n) ? n : null;
+      }),
+      marker: { size: 5, opacity: 0.35, symbol: "x", color: "#64748b" },
+    });
+  }
+  return {
+    data,
+    layout: overviewChartLayout({
+      xTitle: "OAT °F",
+      yTitle: opts.yTitle,
+      height: 420,
+      tickangle: 0,
+      uirevision: `rcx-oat:${fingerprintJson(points.slice(0, 50))}`,
+      extra: { title: opts.title },
+    }),
+    meta: {
+      point_count: points.length,
+      provenance: "POST /api/analytics/rcx/preset",
+    },
+  };
+}
+
+export function multiEquipmentBox(
+  points: Array<Record<string, unknown>>,
+  opts: { title: string; yTitle?: string },
+): PlotlyFigure | null {
+  if (!points.length) return null;
+  const byEq = new Map<string, number[]>();
+  for (const p of points) {
+    const eq = String(p.equipment_id ?? "eq");
+    const v = p.value_f;
+    const n = typeof v === "number" ? v : Number(v);
+    if (!Number.isFinite(n)) continue;
+    const list = byEq.get(eq) ?? [];
+    list.push(n);
+    byEq.set(eq, list);
+  }
+  if (!byEq.size) return null;
+  const data: PlotlyTrace[] = [];
+  let i = 0;
+  for (const [eq, ys] of [...byEq.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
+    data.push({
+      type: "box",
+      name: eq,
+      y: ys,
+      marker: { color: rainbowColor(i) },
+      boxpoints: false,
+    } as PlotlyTrace);
+    i += 1;
+  }
+  return {
+    data,
+    layout: overviewChartLayout({
+      xTitle: "equipment",
+      yTitle: opts.yTitle ?? "value",
+      height: 420,
+      tickangle: -20,
+      uirevision: `rcx-box:${fingerprintJson([...byEq.keys()])}`,
+      extra: { title: opts.title, boxmode: "group" },
+    }),
+    meta: {
+      point_count: points.length,
+      provenance: "POST /api/analytics/rcx/preset",
+    },
+  };
+}
+
+export function rankingBars(
+  points: Array<Record<string, unknown>>,
+  opts: { title: string; yTitle?: string },
+): PlotlyFigure | null {
+  if (!points.length) return null;
+  const sorted = [...points].sort((a, b) => {
+    const av = Number(a.value_f ?? a.fail_pct ?? 0);
+    const bv = Number(b.value_f ?? b.fail_pct ?? 0);
+    return bv - av;
+  });
+  return {
+    data: [
+      {
+        type: "bar",
+        name: "fail %",
+        x: sorted.map((r) => String(r.equipment_id ?? "")),
+        y: sorted.map((r) => {
+          const v = r.value_f ?? r.fail_pct;
+          const n = typeof v === "number" ? v : Number(v);
+          return Number.isFinite(n) ? n : null;
+        }),
+        marker: { color: sorted.map((_, i) => rainbowColor(i)) },
+      },
+    ],
+    layout: overviewChartLayout({
+      xTitle: "equipment",
+      yTitle: opts.yTitle ?? "comfort fail %",
+      height: Math.max(360, 28 * Math.min(sorted.length, 24)),
+      tickangle: -35,
+      uirevision: `rcx-rank:${fingerprintJson(sorted.slice(0, 20))}`,
+      extra: { title: opts.title },
+    }),
+    meta: {
+      point_count: points.length,
+      provenance: "POST /api/analytics/rcx/preset",
+    },
+  };
+}
+
+export function meteringCharts(
+  points: Array<Record<string, unknown>>,
+  opts: { title: string; ddLabel?: string },
+): PlotlyFigure | null {
+  if (!points.length) return null;
+  const byEq = new Map<string, Array<Record<string, unknown>>>();
+  for (const p of points) {
+    const eq = String(p.equipment_id ?? "eq");
+    const list = byEq.get(eq) ?? [];
+    list.push(p);
+    byEq.set(eq, list);
+  }
+  const barData: PlotlyTrace[] = [];
+  const scatterData: PlotlyTrace[] = [];
+  let i = 0;
+  for (const [eq, rows] of [...byEq.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
+    const color = rainbowColor(i);
+    barData.push({
+      type: "bar",
+      name: `${eq} · energy`,
+      x: rows.map((r) => String(r.month ?? "")),
+      y: rows.map((r) => {
+        const v = r.energy ?? r.value_f;
+        const n = typeof v === "number" ? v : Number(v);
+        return Number.isFinite(n) ? n : null;
+      }),
+      marker: { color },
+      xaxis: "x",
+      yaxis: "y",
+    });
+    scatterData.push({
+      type: "scatter",
+      mode: "markers",
+      name: `${eq} · vs DD`,
+      x: rows.map((r) => {
+        const v = r.degree_days ?? r.oat_f;
+        const n = typeof v === "number" ? v : Number(v);
+        return Number.isFinite(n) ? n : null;
+      }),
+      y: rows.map((r) => {
+        const v = r.energy ?? r.y_f;
+        const n = typeof v === "number" ? v : Number(v);
+        return Number.isFinite(n) ? n : null;
+      }),
+      marker: { size: 8, color, opacity: 0.75 },
+      xaxis: "x2",
+      yaxis: "y2",
+    });
+    i += 1;
+  }
+  return {
+    data: [...barData, ...scatterData],
+    layout: {
+      title: opts.title,
+      grid: { rows: 1, columns: 2, pattern: "independent" },
+      xaxis: { title: "month", domain: [0, 0.45] },
+      yaxis: { title: "energy" },
+      xaxis2: { title: opts.ddLabel ?? "degree-days", domain: [0.55, 1] },
+      yaxis2: { title: "energy", anchor: "x2" },
+      height: 420,
+      legend: { orientation: "h" },
+      paper_bgcolor: "white",
+      plot_bgcolor: "white",
+      uirevision: `rcx-meter:${fingerprintJson(points.slice(0, 30))}`,
+    },
+    meta: {
+      point_count: points.length,
+      provenance: "POST /api/analytics/rcx/preset",
+    },
+  };
+}
+
+/** FDD rule_result_chart with optional confirmed_fault swim lane. */
+export function ruleResultChart(
+  rows: Array<Record<string, unknown>>,
+  opts: {
+    equipmentId: string;
+    ruleId: string;
+    roles: string[];
+    confirmedFault?: Array<boolean | number | null>;
+  },
+): PlotlyFigure | null {
+  if (!rows.length || !opts.roles.length) return null;
+  const x = rows.map((r) => String(r.timestamp_utc ?? r.timestamp ?? ""));
+  const data: PlotlyTrace[] = opts.roles.map((role, i) => ({
+    type: "scatter",
+    mode: "lines",
+    name: role,
+    x,
+    y: rows.map((r) => {
+      const v = r[role];
+      if (v == null || v === "") return null;
+      const n = typeof v === "number" ? v : Number(v);
+      return Number.isFinite(n) ? n : null;
+    }),
+    yaxis: "y",
+    line: { width: 1.5, color: rainbowColor(i) },
+  }));
+
+  const fault = opts.confirmedFault;
+  if (fault && fault.length === rows.length) {
+    data.push({
+      type: "scatter",
+      mode: "lines",
+      name: "confirmed_fault",
+      x,
+      y: fault.map((v) => (v === true || v === 1 ? 1 : 0)),
+      yaxis: "y2",
+      line: { width: 1.2, color: "#dc2626" },
+      fill: "tozeroy",
+      fillcolor: "rgba(220,38,38,0.25)",
+    });
+  }
+
+  return {
+    data,
+    layout: {
+      title: `${opts.ruleId} · ${opts.equipmentId}`,
+      xaxis: { title: "timestamp_utc", autorange: true },
+      yaxis: {
+        title: "value",
+        autorange: true,
+        domain: fault ? [0.22, 1] : [0, 1],
+      },
+      ...(fault
+        ? {
+            yaxis2: {
+              title: "fault",
+              domain: [0, 0.18],
+              range: [-0.05, 1.05],
+              showgrid: false,
+              tickvals: [0, 1],
+              ticktext: ["ok", "fault"],
+            },
+          }
+        : {}),
+      legend: { orientation: "h" },
+      height: fault ? 480 : 380,
+      paper_bgcolor: "white",
+      plot_bgcolor: "white",
+      uirevision: `fdd:${opts.ruleId}:${opts.equipmentId}`,
+    },
+    meta: {
+      equipment_id: opts.equipmentId,
+      rule_id: opts.ruleId,
+      roles: opts.roles,
+      point_count: rows.length,
+      provenance: "GET /api/fdd/series",
+    },
+  };
+}
+
+/** Sensor health coverage matrix as a Plotly heatmap (equipment × role). */
+export function sensorHealthHeatmap(
+  rows: Array<Record<string, unknown>>,
+  opts?: { title?: string },
+): PlotlyFigure | null {
+  if (!rows.length) return null;
+  const eqs = [...new Set(rows.map((r) => String(r.equipment_id ?? "")))].sort();
+  const roles = [...new Set(rows.map((r) => String(r.role ?? "")))].sort();
+  if (!eqs.length || !roles.length) return null;
+  const z = eqs.map((eq) =>
+    roles.map((role) => {
+      const hit = rows.find(
+        (r) =>
+          String(r.equipment_id ?? "") === eq && String(r.role ?? "") === role,
+      );
+      if (!hit) return null;
+      const cov = Number(hit.coverage_pct);
+      return Number.isFinite(cov) ? cov : null;
+    }),
+  );
+  return {
+    data: [
+      {
+        type: "heatmap",
+        x: roles,
+        y: eqs,
+        z,
+        colorscale: "YlGnBu",
+        colorbar: { title: "coverage %" },
+        hoverongaps: false,
+      } as PlotlyTrace,
+    ],
+    layout: {
+      title: opts?.title ?? "Sensor health — coverage %",
+      xaxis: { title: "role", tickangle: -30 },
+      yaxis: { title: "equipment", autorange: "reversed" },
+      height: Math.max(360, 18 * Math.min(eqs.length, 40)),
+      paper_bgcolor: "white",
+      plot_bgcolor: "white",
+      uirevision: `sensor-health:${fingerprintJson(eqs.slice(0, 20))}`,
+    },
+    meta: {
+      point_count: rows.length,
+      provenance: "POST /api/analytics/sensor-health",
+    },
+  };
+}

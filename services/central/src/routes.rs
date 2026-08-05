@@ -182,11 +182,17 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/analytics/bas-vs-web-oat",
             post(analytics_bas_vs_web_oat),
         )
+        .route("/api/analytics/inspect", post(analytics_inspect))
         .route("/api/analytics/economizer", post(analytics_economizer))
         .route("/api/analytics/rcx/ahu", post(analytics_rcx_ahu))
         .route("/api/analytics/rcx/vav", post(analytics_rcx_vav))
         .route("/api/analytics/rcx/chiller", post(analytics_rcx_chiller))
         .route("/api/analytics/rcx/boiler", post(analytics_rcx_boiler))
+        .route("/api/analytics/rcx/preset", post(analytics_rcx_preset))
+        .route(
+            "/api/analytics/rcx/presets",
+            get(analytics_rcx_presets_list),
+        )
         .route("/api/analytics/metering", post(analytics_metering))
         .merge(csv)
         // OFDD-075: analytics/FDD posts (building-scoped Overview samples) can
@@ -1725,11 +1731,11 @@ async fn analytics_bas_vs_web_oat(Json(req): Json<AnalyticsRequest>) -> Json<Val
     {
         Ok(Some(env)) => env,
         Ok(None) => analytics::envelope_with_engine(
-            "bas-vs-web-oat-v1",
+            "bas-vs-web-oat-v2",
             &req.query,
             vec![
                 "BAS vs web OAT unavailable — need distinct oa_t and web OAT \
-                 columns on historian Parquet"
+                 columns on historian Parquet (site-broadcast join)"
                     .into(),
             ],
             analytics::DF_ENGINE,
@@ -1737,9 +1743,55 @@ async fn analytics_bas_vs_web_oat(Json(req): Json<AnalyticsRequest>) -> Json<Val
         Err(e) => {
             tracing::warn!(error = %e, "bas-vs-web-oat historian path failed");
             analytics::envelope(
-                "bas-vs-web-oat-v1",
+                "bas-vs-web-oat-v2",
                 &req.query,
                 vec![format!("bas-vs-web-oat failed: {e}")],
+            )
+        }
+    };
+    Json(json!({
+        "ok": true,
+        "analytics": env.to_json(),
+    }))
+}
+
+async fn analytics_inspect(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    let eq = req
+        .query
+        .equipment_ids
+        .as_ref()
+        .and_then(|ids| ids.first())
+        .map(|s| s.as_str())
+        .unwrap_or("");
+    let columns: Option<Vec<String>> = req.series.as_ref().and_then(|s| {
+        s.get("columns").and_then(|c| c.as_array()).map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+    });
+    let max_points = req.query.max_points.unwrap_or(2000);
+    let env = match analytics::historian::inspect_from_history(
+        req.query.building_id.as_deref(),
+        eq,
+        columns.as_deref(),
+        max_points,
+    )
+    .await
+    {
+        Ok(Some(env)) => env,
+        Ok(None) => analytics::envelope_with_engine(
+            "equipment-inspect-v1",
+            &req.query,
+            vec!["equipment inspection unavailable — need historian parquet for equipment".into()],
+            analytics::DF_ENGINE,
+        ),
+        Err(e) => {
+            tracing::warn!(error = %e, "equipment inspect historian path failed");
+            analytics::envelope(
+                "equipment-inspect-v1",
+                &req.query,
+                vec![format!("inspect failed: {e}")],
             )
         }
     };
@@ -1781,6 +1833,57 @@ async fn analytics_rcx_boiler(Json(req): Json<AnalyticsRequest>) -> Json<Value> 
     Json(json!({
         "ok": true,
         "analytics": analytics::plant::handle_boiler_async(&req).await.to_json(),
+    }))
+}
+
+async fn analytics_rcx_presets_list() -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "presets": analytics::rcx_presets::presets_json(),
+    }))
+}
+
+async fn analytics_rcx_preset(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    let preset_id = req
+        .query
+        .query_version
+        .as_deref()
+        .or_else(|| {
+            req.series
+                .as_ref()
+                .and_then(|s| s.get("preset_id"))
+                .and_then(|v| v.as_str())
+        })
+        .unwrap_or("");
+    let max_points = req.query.max_points.unwrap_or(8000);
+    let env = match analytics::rcx_presets::run_preset(
+        req.query.building_id.as_deref(),
+        preset_id,
+        max_points,
+    )
+    .await
+    {
+        Ok(Some(env)) => env,
+        Ok(None) => analytics::envelope_with_engine(
+            "rcx-preset-v1",
+            &req.query,
+            vec![format!(
+                "RCx preset '{preset_id}' unavailable — unknown id or missing historian columns"
+            )],
+            analytics::DF_ENGINE,
+        ),
+        Err(e) => {
+            tracing::warn!(error = %e, preset = %preset_id, "rcx preset failed");
+            analytics::envelope(
+                "rcx-preset-v1",
+                &req.query,
+                vec![format!("rcx preset failed: {e}")],
+            )
+        }
+    };
+    Json(json!({
+        "ok": true,
+        "analytics": env.to_json(),
     }))
 }
 

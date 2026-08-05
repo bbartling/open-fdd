@@ -3,9 +3,10 @@
  */
 
 export type PlotlyTrace = {
-  x: Array<string | number>;
-  y: Array<number | null>;
-  name: string;
+  x?: Array<string | number | null>;
+  y?: Array<number | null | string>;
+  z?: Array<Array<number | null>>;
+  name?: string;
   mode?: string;
   type?: string;
   marker?: Record<string, unknown>;
@@ -182,8 +183,9 @@ export function plantFamily(equipmentId: string): "air" | "heating" | "cooling" 
 export function missingSegmentCount(trace: PlotlyTrace): number {
   let segments = 0;
   let inGap = false;
-  for (const y of trace.y) {
-    const missing = y == null || !Number.isFinite(y);
+  for (const y of trace.y ?? []) {
+    const missing =
+      y == null || (typeof y === "number" && !Number.isFinite(y));
     if (missing && !inGap) {
       segments += 1;
       inGap = true;

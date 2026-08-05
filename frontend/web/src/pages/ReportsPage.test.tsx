@@ -40,6 +40,27 @@ vi.mock("../api/analyticsApi", () => ({
   listFddEquipment: vi.fn(async () => [
     { equipment_id: "VAV_1", equipment_type: "VAV" },
   ]),
+  postSensorHealth: vi.fn(async () => ({
+    schema_version: "analytics-envelope-v1",
+    query_version: "sensor-health-v1",
+    generated_at: "",
+    engine: "datafusion",
+    warnings: [],
+    rows: [
+      {
+        equipment_id: "VAV_1",
+        role: "zone_t",
+        coverage_pct: 100,
+        missingness: 0,
+        flatline_flag: false,
+        n: 10,
+        n_finite: 10,
+      },
+    ],
+    equipment: [],
+    points: [],
+    skipped: [],
+  })),
 }));
 
 vi.mock("../api/uploadApi", () => ({ uploadPackage: vi.fn() }));

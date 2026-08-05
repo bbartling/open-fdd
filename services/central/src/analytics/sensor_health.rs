@@ -166,7 +166,12 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 /// series is provided; otherwise inline central-analytics-v1 compute.
 pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     if req.series.is_none() {
-        match historian::sensor_health_from_history(req.query.equipment_ids.as_deref()).await {
+        match historian::sensor_health_from_history(
+            req.query.equipment_ids.as_deref(),
+            req.query.building_id.as_deref(),
+        )
+        .await
+        {
             Ok(Some(env)) => return finalize_historian(req, env, QV_SENSOR_HEALTH),
             Ok(None) => {}
             Err(e) => {

@@ -15,7 +15,6 @@ import {
   getFddStatus,
   listFddRules,
   getFddResults,
-  getFddSeries,
   runFdd,
 } from "../api/fddApi";
 import {
@@ -27,8 +26,9 @@ import {
 import { downloadRowsCsv } from "../api/overviewOracleApi";
 import type { OverviewVibe19Response } from "../api/overviewOracleApi";
 import { fetchCentralOverview } from "../api/centralOverview";
-import type { FddEquipmentItem } from "../api/analyticsApi";
-import { seriesRowsToFigure, type PlotlyFigure } from "../api/plotDataset";
+import { postInspect, type FddEquipmentItem } from "../api/analyticsApi";
+import { equipmentInspectionChart } from "../api/inspectChart";
+import type { PlotlyFigure } from "../api/plotDataset";
 import { RULES_UPDATED_EVENT } from "./RuleTuningPanel";
 
 const DAYS = [
@@ -169,6 +169,9 @@ export function OverviewPopulated({
   const [tz, setTz] = useState(() => loadStoredSchedule().tz);
   const [schedOpen, setSchedOpen] = useState(true);
   const [motorTableOpen, setMotorTableOpen] = useState(false);
+  const [mechBinsOpen, setMechBinsOpen] = useState(false);
+  const [mechCoverageOpen, setMechCoverageOpen] = useState(false);
+  const [econMetricsOpen, setEconMetricsOpen] = useState(false);
   const [basHistOpen, setBasHistOpen] = useState(false);
   const [econOverlayOpen, setEconOverlayOpen] = useState(false);
   const [econSkippedOpen, setEconSkippedOpen] = useState(false);
@@ -282,54 +285,55 @@ export function OverviewPopulated({
     setInspectBusy(true);
     setInspectErr(null);
     try {
-      const map = await getPackageMapping(buildingId, inspectPick).catch(
-        () => null,
-      );
-      const eq =
-        map?.equipment?.find((e) => e.equipment_id === inspectPick) ??
-        map?.equipment?.[0];
-      const cols =
-        eq?.columns
-          ?.map((c) => String(c.column || c.role || ""))
-          .filter(Boolean) ?? [];
-      setInspectCols(cols);
-      setInspectSelectedCols((prev) => (prev.length ? prev : cols.slice(0, 6)));
-      if (eq?.sampling?.row_count != null) setRowCount(eq.sampling.row_count);
-      if (eq?.sampling?.first_timestamp) setFirstTs(eq.sampling.first_timestamp);
-      if (eq?.sampling?.last_timestamp) setLastTs(eq.sampling.last_timestamp);
-      setInspectMeta({
-        row_count: eq?.sampling?.row_count ?? 0,
-        span:
-          eq?.sampling?.first_timestamp && eq?.sampling?.last_timestamp
-            ? `${eq.sampling.first_timestamp} → ${eq.sampling.last_timestamp}`
-            : "—",
+      const env = await postInspect({
+        building_id: buildingId,
+        equipment_ids: [inspectPick],
+        max_points: 2000,
+        series: {
+          columns:
+            inspectSelectedCols.length > 0 ? inspectSelectedCols : undefined,
+        },
       });
-
-      const results = await getFddResults(buildingId).catch(() => []);
-      const hit = results.find(
-        (r) => String(r.equipment_id) === inspectPick && r.rule_id,
+      const cov = (env.coverage ?? {}) as Record<string, unknown>;
+      const plottable = Array.isArray(cov.plottable_columns)
+        ? (cov.plottable_columns as string[])
+        : [];
+      const plotted = Array.isArray(cov.columns_plotted)
+        ? (cov.columns_plotted as string[])
+        : [];
+      setInspectCols(plottable.length ? plottable : plotted);
+      setInspectSelectedCols((prev) =>
+        prev.length ? prev.filter((c) => plottable.includes(c) || plotted.includes(c)) : plotted.slice(0, 6),
       );
-      if (!hit?.rule_id) {
+      const rowCountN = Number(cov.row_count ?? env.points?.length ?? 0);
+      if (Number.isFinite(rowCountN)) setRowCount(rowCountN);
+      const first = cov.first_timestamp != null ? String(cov.first_timestamp) : null;
+      const last = cov.last_timestamp != null ? String(cov.last_timestamp) : null;
+      if (first) setFirstTs(first);
+      if (last) setLastTs(last);
+      setInspectMeta({
+        row_count: rowCountN,
+        span: first && last ? `${first} → ${last}` : "—",
+      });
+      if (env.warnings?.length && !env.points?.length) {
         setInspectFig(null);
-        setInspectErr(
-          "No FDD result series for this equipment yet — Run all rules first, then re-open inspection.",
-        );
+        setInspectErr(env.warnings[0] ?? "Inspection unavailable");
         return;
       }
-      const series = await getFddSeries(inspectPick, String(hit.rule_id));
-      const roles =
-        inspectSelectedCols.length > 0
-          ? inspectSelectedCols
-          : (series.roles ?? cols).slice(0, 6);
-      const fig = seriesRowsToFigure(series.rows ?? [], {
+      const cols =
+        (inspectSelectedCols.length ? inspectSelectedCols : plotted).filter(
+          (c) => plottable.includes(c) || plotted.includes(c) || !plottable.length,
+        );
+      const fig = equipmentInspectionChart(env.points ?? [], {
         equipmentId: inspectPick,
-        ruleId: String(hit.rule_id),
-        roles,
-        downsampled: series.downsampled,
-        maxPoints: series.max_points,
+        columns: cols.length ? cols : plotted,
       });
       setInspectFig(fig);
-      setInspectErr(null);
+      setInspectErr(
+        fig
+          ? null
+          : "No plottable numeric columns for this equipment in historian Parquet.",
+      );
     } catch (err) {
       setInspectErr(formatErr(err));
       setInspectFig(null);
@@ -877,7 +881,13 @@ export function OverviewPopulated({
           testId="overview-mech-plot"
         />
         {overview?.mech_cooling.bins?.length ? (
-          <>
+          <Expander
+            id="mech-bins-exp"
+            label="Mech cooling OAT bins table"
+            expanded={mechBinsOpen}
+            onChange={setMechBinsOpen}
+            testId="overview-mech-bins-exp"
+          >
             <DataTable
               id="mech-bins"
               label="Mech cooling OAT bins"
@@ -904,16 +914,20 @@ export function OverviewPopulated({
               }
               testId="overview-dl-mech-bins"
             />
-          </>
+          </Expander>
         ) : null}
         {overview?.mech_cooling.coverage?.length ? (
-          <>
-            <h4>
-              Mechanical cooling devices
-              {overview.mech_cooling.n_included != null
+          <Expander
+            id="mech-coverage-exp"
+            label={`Mechanical cooling devices${
+              overview.mech_cooling.n_included != null
                 ? ` — ${overview.mech_cooling.n_included} included, ${overview.mech_cooling.n_excluded ?? 0} excluded`
-                : ""}
-            </h4>
+                : ""
+            }`}
+            expanded={mechCoverageOpen}
+            onChange={setMechCoverageOpen}
+            testId="overview-mech-coverage-exp"
+          >
             <DataTable
               id="mech-coverage"
               label="Cooling coverage"
@@ -939,7 +953,7 @@ export function OverviewPopulated({
               }
               testId="overview-dl-mech-cov"
             />
-          </>
+          </Expander>
         ) : null}
       </section>
 
@@ -993,7 +1007,13 @@ export function OverviewPopulated({
             "G36 mixing plots while supply fan is running."}
         </p>
         {overview?.economizer_free_cooling.metrics?.length ? (
-          <>
+          <Expander
+            id="econ-metrics-exp"
+            label="Economizer free-cooling diagnostics table"
+            expanded={econMetricsOpen}
+            onChange={setEconMetricsOpen}
+            testId="overview-econ-metrics-exp"
+          >
             <DataTable
               id="econ-metrics"
               label="Economizer diagnostic metrics"
@@ -1019,7 +1039,7 @@ export function OverviewPopulated({
               }
               testId="overview-dl-econ-metrics"
             />
-          </>
+          </Expander>
         ) : null}
         <PlotlyHost
           id="econ-delta"
