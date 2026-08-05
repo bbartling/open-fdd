@@ -10,6 +10,7 @@ pub mod mechanical_cooling;
 pub mod metering;
 pub mod plant;
 pub mod rcx;
+pub mod rcx_presets;
 pub mod runtime;
 pub mod schedule;
 pub mod sensor_health;

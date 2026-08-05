@@ -200,6 +200,35 @@ export async function postRcxBoiler(
   return postAnalytics("/api/analytics/rcx/boiler", body);
 }
 
+export async function postRcxPreset(
+  body: AnalyticsRequest & { series?: { preset_id?: string } },
+): Promise<AnalyticsEnvelope> {
+  return postAnalytics("/api/analytics/rcx/preset", body);
+}
+
+export async function listRcxPresets(): Promise<
+  Array<{
+    id: string;
+    title: string;
+    family: string;
+    chart: string;
+    role_col?: string;
+  }>
+> {
+  const body = await apiFetch<{
+    ok?: boolean;
+    presets?: Array<Record<string, unknown>>;
+  }>("/api/analytics/rcx/presets");
+  const raw = Array.isArray(body.presets) ? body.presets : [];
+  return raw.map((p) => ({
+    id: String(p.id ?? ""),
+    title: String(p.title ?? p.id ?? ""),
+    family: String(p.family ?? ""),
+    chart: String(p.chart ?? "timeseries"),
+    role_col: p.role_col != null ? String(p.role_col) : undefined,
+  }));
+}
+
 export async function listFddEquipment(
   buildingId?: string,
 ): Promise<FddEquipmentItem[]> {

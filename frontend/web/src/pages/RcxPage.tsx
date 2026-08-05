@@ -1,43 +1,42 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import {
   InlineAlert,
   Select,
   Button,
   DataTable,
-  RadioGroup,
 } from "../components/widgets";
 import { PlotlyHost } from "../components/widgets/PlotlyHost";
 import { useSessionQuery } from "../session";
 import { listPackageBuildings } from "../api/mappingApi";
 import {
-  listFddEquipment,
-  postRcxAhu,
-  postRcxVav,
-  postRcxChiller,
-  postRcxBoiler,
+  listRcxPresets,
+  postRcxPreset,
   type AnalyticsEnvelope,
 } from "../api/analyticsApi";
-import { rowsToBarFigure, type PlotlyFigure } from "../api/plotDataset";
-
-const PRESETS = [
-  { value: "ahu", label: "AHU — SAT reset / DAT / MAT / RAT / dampers / fans" },
-  { value: "vav", label: "Zones — comfort / space temps / VAV airflow" },
-  { value: "chiller", label: "Chiller / tower — leave temp vs OAT, CHW/CW temps" },
-  { value: "boiler", label: "Boiler / HW — leave temp vs OAT" },
-] as const;
+import {
+  meteringCharts,
+  multiEquipmentBox,
+  multiEquipmentTimeseries,
+  oatScatter,
+  rankingBars,
+} from "../api/vibeCharts";
+import type { PlotlyFigure } from "../api/plotDataset";
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/** Streamlit RCx Plots tab — central rcx/{ahu,vav,chiller,boiler}. */
+/** vibe19 RCx Plots — preset picker + DataFusion historian series. */
 export function RcxPage() {
   const { query, setQuery } = useSessionQuery();
   const buildingId = query.siteId ?? "";
   const [buildings, setBuildings] = useState<string[]>([]);
-  const [equipment, setEquipment] = useState<string[]>([]);
-  const [preset, setPreset] = useState<string>("ahu");
+  const [presets, setPresets] = useState<
+    Array<{ id: string; title: string; family: string; chart: string }>
+  >([]);
+  const [family, setFamily] = useState("");
+  const [presetId, setPresetId] = useState("");
   const [env, setEnv] = useState<AnalyticsEnvelope | null>(null);
   const [figure, setFigure] = useState<PlotlyFigure | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,62 +46,80 @@ export function RcxPage() {
     void listPackageBuildings()
       .then(setBuildings)
       .catch(() => setBuildings([]));
+    void listRcxPresets()
+      .then((p) => {
+        const ok = p.filter((x) => x.id);
+        setPresets(ok);
+        setFamily((prev) => prev || ok[0]?.family || "");
+        setPresetId((prev) => prev || ok[0]?.id || "");
+      })
+      .catch(() => setPresets([]));
   }, []);
 
-  useEffect(() => {
-    if (!buildingId) {
-      setEquipment([]);
-      return;
-    }
-    void listFddEquipment(buildingId)
-      .then((eq) => setEquipment(eq.map((e) => String(e.equipment_id))))
-      .catch(() => setEquipment([]));
-  }, [buildingId]);
+  const families = useMemo(
+    () => [...new Set(presets.map((p) => p.family))].sort(),
+    [presets],
+  );
+  const familyPresets = useMemo(
+    () => presets.filter((p) => !family || p.family === family),
+    [presets, family],
+  );
 
   const run = async () => {
-    if (!buildingId) return;
+    if (!buildingId || !presetId) return;
     setLoading(true);
     setError(null);
     try {
-      const body = {
+      const res = await postRcxPreset({
         building_id: buildingId,
-        equipment_ids: equipment.slice(0, 20),
-        max_points: 5000,
-      };
-      let res: AnalyticsEnvelope;
-      switch (preset) {
-        case "vav":
-          res = await postRcxVav(body);
-          break;
-        case "chiller":
-          res = await postRcxChiller(body);
-          break;
-        case "boiler":
-          res = await postRcxBoiler(body);
-          break;
-        default:
-          res = await postRcxAhu(body);
-      }
+        max_points: 8000,
+        series: { preset_id: presetId },
+      });
       setEnv(res);
-      if (res.rows?.length) {
-        const keys = Object.keys(res.rows[0] ?? {}).filter(
-          (k) => k !== "equipment_id" && k !== "timestamp",
-        );
-        const xKey =
-          res.rows[0]?.equipment_id != null ? "equipment_id" : keys[0] ?? "x";
-        setFigure(
-          rowsToBarFigure(res.rows, {
-            xKey,
-            yKeys: keys.filter((k) => k !== xKey).slice(0, 6),
-            title: `RCx · ${preset}`,
-            provenance: `engine=${res.engine} · ${res.query_version}`,
-          }),
-        );
-      } else {
+      const title =
+        String(res.coverage?.title ?? presetId) ||
+        familyPresets.find((p) => p.id === presetId)?.title ||
+        presetId;
+      const kind = String(
+        res.coverage?.chart_kind ??
+          familyPresets.find((p) => p.id === presetId)?.chart ??
+          "",
+      );
+      const points = res.points ?? [];
+      if (!points.length) {
         setFigure(null);
+        if (res.warnings?.length) setError(res.warnings[0] ?? "No points");
+        return;
       }
+      let fig: PlotlyFigure | null = null;
+      if (kind === "scatter_oat") {
+        fig = oatScatter(points, {
+          title,
+          yTitle: String(res.coverage?.y_col ?? "value"),
+        });
+      } else if (kind === "box") {
+        fig = multiEquipmentBox(points, {
+          title,
+          yTitle: String(res.coverage?.role_col ?? "value"),
+        });
+      } else if (kind === "ranking") {
+        fig = rankingBars(points, { title });
+      } else if (kind === "metering") {
+        fig = meteringCharts(points, {
+          title,
+          ddLabel:
+            String(res.coverage?.meter_kind ?? "") === "gas" ? "HDD" : "CDD",
+        });
+      } else {
+        fig = multiEquipmentTimeseries(points, {
+          title,
+          yTitle: String(res.coverage?.role_col ?? "value"),
+        });
+      }
+      setFigure(fig);
     } catch (err) {
       setError(formatErr(err));
+      setFigure(null);
     } finally {
       setLoading(false);
     }
@@ -111,7 +128,7 @@ export function RcxPage() {
   return (
     <AppShell
       title="RCx Plots"
-      caption="Retro-commissioning analytics — vibe19 RCx family presets via central DataFusion (rcx/ahu|vav|chiller|boiler). Full timeseries/scatter/box presets land as historian points grow."
+      caption="Retro-commissioning presets via central DataFusion historian (vibe19 chart kinds)."
       activeSectionId="rcx-plots"
     >
       <div className="page-stack" data-testid="rcx-page">
@@ -126,19 +143,37 @@ export function RcxPage() {
           onChange={(v) => setQuery({ siteId: v || undefined }, true)}
           testId="rcx-building"
         />
-        <RadioGroup
+        <Select
+          id="rcx-family"
+          label="Family"
+          value={family}
+          options={[
+            { value: "", label: "— all —" },
+            ...families.map((f) => ({ value: f, label: f })),
+          ]}
+          onChange={(v) => {
+            setFamily(v);
+            const next = presets.find((p) => !v || p.family === v);
+            if (next) setPresetId(next.id);
+          }}
+          testId="rcx-family"
+        />
+        <Select
           id="rcx-preset"
-          label="Equipment family"
-          value={preset}
-          options={[...PRESETS]}
-          onChange={setPreset}
+          label="Preset"
+          value={presetId}
+          options={familyPresets.map((p) => ({
+            value: p.id,
+            label: `${p.title} [${p.chart}]`,
+          }))}
+          onChange={setPresetId}
           testId="rcx-preset"
         />
         <Button
           id="rcx-run"
-          label={loading ? "Running…" : "Run RCx analytics"}
+          label={loading ? "Running…" : "Run RCx preset"}
           onClick={() => void run()}
-          disabled={!buildingId || loading}
+          disabled={!buildingId || !presetId || loading}
           testId="rcx-run"
         />
         {error ? (
@@ -148,8 +183,9 @@ export function RcxPage() {
         ) : null}
         {env ? (
           <p className="oracle-sidebar__caption" data-testid="rcx-provenance">
-            analytics provenance · engine={env.engine} · query_version=
-            {env.query_version} · rows={env.rows?.length ?? 0}
+            engine={env.engine} · {env.query_version} · points=
+            {env.points?.length ?? 0}
+            {env.warnings?.[0] ? ` · ${env.warnings[0]}` : ""}
           </p>
         ) : null}
         <PlotlyHost
@@ -157,26 +193,36 @@ export function RcxPage() {
           label="RCx chart"
           figure={figure}
           loading={loading}
-          height={320}
+          height={420}
           testId="rcx-plot"
         />
         {env?.rows?.length ? (
           <DataTable
-            id="rcx-table"
-            label="RCx rows"
+            id="rcx-rows"
+            label="RCx stats"
             columns={Object.keys(env.rows[0] ?? {}).map((k) => ({
               key: k,
               header: k,
             }))}
-            rows={env.rows as Array<Record<string, string | number>>}
-            testId="rcx-table"
+            rows={
+              env.rows.slice(0, 80) as Array<Record<string, string | number>>
+            }
+            testId="rcx-rows-table"
+          />
+        ) : env?.points?.length ? (
+          <DataTable
+            id="rcx-points"
+            label="RCx points (sample)"
+            columns={Object.keys(env.points[0] ?? {}).map((k) => ({
+              key: k,
+              header: k,
+            }))}
+            rows={
+              env.points.slice(0, 80) as Array<Record<string, string | number>>
+            }
+            testId="rcx-points-table"
           />
         ) : null}
-        <p className="oracle-sidebar__caption">
-          Detailed free-cooling / mixing diagnostics: AHU economizer preset.
-          Fan-on / Fan-off tabs map to central coverage filters when present in
-          the envelope.
-        </p>
       </div>
     </AppShell>
   );

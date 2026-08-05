@@ -4,6 +4,7 @@ import { AppShell } from "../components/AppShell";
 import {
   Button,
   DataTable,
+  Expander,
   InlineAlert,
   PlotlyHost,
   RadioGroup,
@@ -12,11 +13,12 @@ import {
 import { useSessionQuery } from "../session";
 import { listPackageBuildings } from "../api/mappingApi";
 import { getFddResults, getFddSeries, listFddRules } from "../api/fddApi";
+import { postSensorHealth } from "../api/analyticsApi";
 import {
   missingSegmentCount,
-  seriesRowsToFigure,
   type PlotlyFigure,
 } from "../api/plotDataset";
+import { ruleResultChart, sensorHealthHeatmap } from "../api/vibeCharts";
 import {
   createReportDraft,
   getEngineeringFindingsReport,
@@ -55,6 +57,13 @@ export function ReportsPage() {
   const [figure, setFigure] = useState<PlotlyFigure | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sensorRows, setSensorRows] = useState<
+    Array<Record<string, string | number | boolean>>
+  >([]);
+  const [sensorFigure, setSensorFigure] = useState<PlotlyFigure | null>(null);
+  const [sensorLoading, setSensorLoading] = useState(false);
+  const [sensorError, setSensorError] = useState<string | null>(null);
+  const [sensorOpen, setSensorOpen] = useState(false);
 
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [artifactsNotice, setArtifactsNotice] = useState<string | null>(null);
@@ -126,13 +135,19 @@ export function ReportsPage() {
       const series = await getFddSeries(equipmentId, ruleId);
       const roles = series.roles ?? [];
       const rows = (series.rows ?? []) as Array<Record<string, unknown>>;
+      const fault = rows.map((r) => {
+        const v = r.confirmed_fault ?? r.fault;
+        if (v === true || v === 1 || v === "1" || v === "true") return 1;
+        if (v === false || v === 0 || v === "0" || v === "false") return 0;
+        return null;
+      });
+      const hasFault = fault.some((v) => v != null);
       setFigure(
-        seriesRowsToFigure(rows, {
+        ruleResultChart(rows, {
           equipmentId: series.equipment_id ?? equipmentId,
           ruleId: series.rule_id ?? ruleId,
           roles,
-          downsampled: series.downsampled,
-          maxPoints: series.max_points,
+          confirmedFault: hasFault ? fault : undefined,
         }),
       );
     } catch (err) {
@@ -142,6 +157,50 @@ export function ReportsPage() {
       setLoading(false);
     }
   }, [equipmentId, ruleId]);
+
+  const loadSensorHealth = useCallback(async () => {
+    if (!buildingId) {
+      setSensorError("Select a building");
+      return;
+    }
+    setSensorLoading(true);
+    setSensorError(null);
+    try {
+      const env = await postSensorHealth({
+        building_id: buildingId,
+        equipment_ids: equipmentId ? [equipmentId] : undefined,
+      });
+      const rows = (env.rows?.length ? env.rows : env.equipment) ?? [];
+      const normalized = rows.map((r) => ({
+        equipment_id: String(r.equipment_id ?? ""),
+        role: String(r.role ?? ""),
+        n: Number(r.n ?? 0),
+        n_finite: Number(r.n_finite ?? 0),
+        coverage_pct: Number(r.coverage_pct ?? 0),
+        missingness: Number(r.missingness ?? 0),
+        flatline_flag: Boolean(r.flatline_flag),
+        min: r.min != null ? Number(r.min) : "",
+        max: r.max != null ? Number(r.max) : "",
+        mean: r.mean != null ? Number(r.mean) : "",
+        std: r.std != null ? Number(r.std) : "",
+      }));
+      setSensorRows(normalized);
+      setSensorFigure(
+        sensorHealthHeatmap(normalized as Array<Record<string, unknown>>, {
+          title: `Sensor health — ${buildingId}`,
+        }),
+      );
+      if (!normalized.length && env.warnings?.[0]) {
+        setSensorError(env.warnings[0]);
+      }
+    } catch (err) {
+      setSensorRows([]);
+      setSensorFigure(null);
+      setSensorError(formatErr(err));
+    } finally {
+      setSensorLoading(false);
+    }
+  }, [buildingId, equipmentId]);
 
   const onCreateDraft = async () => {
     setArtifactsNotice(null);
@@ -311,6 +370,56 @@ export function ReportsPage() {
                 testId="plots-preview-table"
               />
             ) : null}
+
+            <Expander
+              id="sensor-health"
+              label="Sensor health — coverage / flatline (DataFusion)"
+              expanded={sensorOpen}
+              onChange={setSensorOpen}
+              testId="sensor-health-expander"
+            >
+              <p>
+                Loads <code>POST /api/analytics/sensor-health</code> for the
+                selected building (optionally scoped to equipment).
+              </p>
+              <Button
+                id="sensor-health-load"
+                label={sensorLoading ? "Loading…" : "Load sensor health"}
+                onClick={() => void loadSensorHealth()}
+                disabled={sensorLoading || !buildingId}
+                testId="sensor-health-load"
+              />
+              {sensorError ? (
+                <InlineAlert id="sensor-health-error" variant="danger">
+                  {sensorError}
+                </InlineAlert>
+              ) : null}
+              <PlotlyHost
+                id="sensor-health-chart"
+                label="Coverage heatmap"
+                figure={sensorFigure}
+                loading={sensorLoading}
+                testId="sensor-health-chart"
+              />
+              {sensorRows.length ? (
+                <DataTable
+                  id="sensor-health-table"
+                  label="Sensor health matrix"
+                  columns={[
+                    { key: "equipment_id", header: "equipment" },
+                    { key: "role", header: "role" },
+                    { key: "coverage_pct", header: "coverage %" },
+                    { key: "missingness", header: "missingness" },
+                    { key: "flatline_flag", header: "flatline" },
+                    { key: "n_finite", header: "n_finite" },
+                    { key: "mean", header: "mean" },
+                    { key: "std", header: "std" },
+                  ]}
+                  rows={sensorRows}
+                  testId="sensor-health-table"
+                />
+              ) : null}
+            </Expander>
           </div>
         ) : (
           <div data-testid="reports-artifacts">

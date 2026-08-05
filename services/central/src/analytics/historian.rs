@@ -18,22 +18,33 @@ use super::{
 /// handled separately by the schedule path.
 const NUMERIC_ROLE_COLS: &[&str] = &[
     "oa_t",
+    "web_oa_t",
+    "web_wb_t",
     "rat",
     "mat",
     "sat",
     "zone_t",
+    "zone_flow",
     "fan_cmd",
     "fan_status",
     "oa_damper_pct",
     "clg_valve_pct",
     "htg_valve_pct",
+    "damper_pct",
+    "reheat_valve_pct",
     "sat_sp",
     "duct_static",
     "duct_static_sp",
     "chw_supply_t",
     "chw_return_t",
+    "cw_supply_t",
+    "cw_return_t",
     "hw_supply_t",
     "hw_return_t",
+    "elec_power",
+    "gas_flow",
+    "chiller_power",
+    "chiller_amps",
     "oa_h",
     "return_fan",
 ];
@@ -746,8 +757,9 @@ fn as_u64(v: Option<&serde_json::Value>) -> u64 {
 /// `engine=datafusion` only when the aggregate SQL actually runs.
 pub async fn sensor_health_from_history(
     equipment_filter: Option<&[String]>,
+    building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history().await? else {
+    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
 
@@ -1553,6 +1565,532 @@ LIMIT {limit}
     Ok(Some(env))
 }
 
+fn rcx_eq_filter(kinds: &[&str]) -> String {
+    if kinds.is_empty() {
+        return String::new();
+    }
+    let mut parts = Vec::new();
+    for k in kinds {
+        let ku = k.to_ascii_uppercase();
+        if ku == "VAV" {
+            parts.push(
+                "(UPPER(equipment_id) LIKE 'VAV%' OR UPPER(equipment_id) LIKE '%/VAV%' \
+                 OR UPPER(equipment_id) LIKE '%VAVH%' OR UPPER(equipment_id) LIKE '%VAVFC%')"
+                    .to_string(),
+            );
+        } else if ku == "CHW" || ku == "CHW_PLANT" {
+            parts.push(
+                "(UPPER(equipment_id) LIKE '%CHILLER%' OR UPPER(equipment_id) LIKE 'CHW%' \
+                 OR UPPER(equipment_id) LIKE '%CHW_PLANT%')"
+                    .to_string(),
+            );
+        } else if ku == "BOILER" {
+            parts.push(
+                "(UPPER(equipment_id) LIKE 'BOILER%' OR UPPER(equipment_id) LIKE '%/BOILER%' \
+                 OR UPPER(equipment_id) LIKE '%BOILERS%')"
+                    .to_string(),
+            );
+        } else if ku == "TOWER" || ku == "CT" || ku == "COOLING_TOWER" {
+            parts.push(
+                "(UPPER(equipment_id) LIKE '%TOWER%' OR UPPER(equipment_id) LIKE 'CT%' \
+                 OR UPPER(equipment_id) LIKE '%COOLING_TOWER%')"
+                    .to_string(),
+            );
+        } else if ku == "METER" {
+            parts.push(
+                "(UPPER(equipment_id) LIKE 'METER%' OR UPPER(equipment_id) LIKE '%/METER%' \
+                 OR UPPER(equipment_id) LIKE '%_METER%')"
+                    .to_string(),
+            );
+        } else {
+            parts.push(format!(
+                "(UPPER(equipment_id) LIKE '{ku}%' OR UPPER(equipment_id) LIKE '%/{ku}%')"
+            ));
+        }
+    }
+    format!(" AND ({})", parts.join(" OR "))
+}
+
+/// Multi-equipment role timeseries for RCx presets (vibe19 multi_equipment_timeseries).
+pub async fn rcx_timeseries_from_history(
+    building_id: Option<&str>,
+    role_col: &str,
+    overlay_col: Option<&str>,
+    pair_return_col: Option<&str>,
+    eq_kinds: &[&str],
+    filter_fan_on: bool,
+    max_points: usize,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    if !cols.contains(role_col) {
+        return Ok(None);
+    }
+    let eq_filter = rcx_eq_filter(eq_kinds);
+    let fan_filter = if filter_fan_on {
+        match on_expr(&cols) {
+            Some(expr) => format!(" AND ({expr})"),
+            None => String::new(),
+        }
+    } else {
+        String::new()
+    };
+    let limit = max_points.clamp(200, 20000);
+    let overlay_sel = overlay_col
+        .filter(|c| cols.contains(*c))
+        .map(|c| format!(", {c} AS overlay_f"))
+        .unwrap_or_else(|| ", CAST(NULL AS FLOAT) AS overlay_f".into());
+    let return_sel = pair_return_col
+        .filter(|c| cols.contains(*c))
+        .map(|c| format!(", {c} AS return_f"))
+        .unwrap_or_else(|| ", CAST(NULL AS FLOAT) AS return_f".into());
+    let sql = format!(
+        r#"
+SELECT
+  CAST({ts_col} AS VARCHAR) AS timestamp_utc,
+  equipment_id,
+  {role_col} AS value_f
+  {overlay_sel}
+  {return_sel}
+FROM history
+WHERE equipment_id IS NOT NULL AND {role_col} IS NOT NULL{eq_filter}{fan_filter}
+ORDER BY {ts_col}, equipment_id
+LIMIT {limit}
+"#
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    if result.rows.is_empty() {
+        return Ok(None);
+    }
+    let mut points = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        let row = json!({
+            "timestamp_utc": r.get("timestamp_utc").cloned().unwrap_or(json!("")),
+            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+            "value_f": as_f64(r.get("value_f")),
+            "series": "primary",
+        });
+        points.push(row.clone());
+        if let Some(ov) = as_f64(r.get("overlay_f")) {
+            let mut o = row.clone();
+            if let Some(obj) = o.as_object_mut() {
+                obj.insert("value_f".into(), json!(ov));
+                obj.insert("series".into(), json!("overlay"));
+            }
+            points.push(o);
+        }
+        if let Some(ret) = as_f64(r.get("return_f")) {
+            let mut rr = row.clone();
+            if let Some(obj) = rr.as_object_mut() {
+                obj.insert("value_f".into(), json!(ret));
+                obj.insert("series".into(), json!("return"));
+            }
+            points.push(rr);
+            if let Some(sup) = as_f64(r.get("value_f")) {
+                let mut d = row;
+                if let Some(obj) = d.as_object_mut() {
+                    obj.insert("value_f".into(), json!(round2(ret - sup)));
+                    obj.insert("series".into(), json!("delta_t"));
+                }
+                points.push(d);
+            }
+        }
+    }
+    let warnings = vec!["RCx role timeseries from historian DataFusion".into()];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine("rcx-timeseries-v1", &query, warnings, DF_ENGINE);
+    env.points = points;
+    env.coverage = Some(json!({
+        "history_rows": n,
+        "point_count": env.points.len(),
+        "role_col": role_col,
+        "chart_kind": "timeseries",
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+    }));
+    Ok(Some(env))
+}
+
+/// OAT scatter for RCx reset charts (vibe19 oat_scatter) with site-broadcast OAT.
+pub async fn rcx_oat_scatter_from_history(
+    building_id: Option<&str>,
+    y_col: &str,
+    eq_kinds: &[&str],
+    prefer_wetbulb: bool,
+    max_points: usize,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    if !cols.contains(y_col) {
+        return Ok(None);
+    }
+    let oat = if prefer_wetbulb {
+        ["web_wb_t", "oa_wb_t", "wetbulb_t"]
+            .into_iter()
+            .find(|&c| cols.contains(c))
+            .or_else(|| mech_oat_col(&cols))
+    } else {
+        mech_oat_col(&cols)
+    };
+    let Some(oat) = oat else {
+        return Ok(None);
+    };
+    let dry_ref = if prefer_wetbulb {
+        mech_oat_col(&cols).filter(|c| *c != oat)
+    } else {
+        None
+    };
+    let eq_filter = rcx_eq_filter(eq_kinds);
+    // Prefixed for JOIN aliases (history AS h).
+    let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
+    let limit = max_points.clamp(200, 12000);
+    let dry_sel = if dry_ref.is_some() {
+        ", d.dry_f AS dry_bulb_f".to_string()
+    } else {
+        ", CAST(NULL AS FLOAT) AS dry_bulb_f".into()
+    };
+    let dry_cte = dry_ref
+        .map(|c| {
+            format!(
+                ", dry_by_ts AS (\n  SELECT {ts_col} AS ts, AVG({c}) AS dry_f\n  FROM history\n  WHERE {c} IS NOT NULL\n  GROUP BY {ts_col}\n)"
+            )
+        })
+        .unwrap_or_default();
+    let dry_join = if dry_ref.is_some() {
+        "LEFT JOIN dry_by_ts d ON h.{ts_col} = d.ts".replace("{ts_col}", ts_col)
+    } else {
+        String::new()
+    };
+    let sql = format!(
+        r#"
+WITH oat_by_ts AS (
+  SELECT {ts_col} AS ts, AVG({oat}) AS oat_f
+  FROM history
+  WHERE {oat} IS NOT NULL
+  GROUP BY {ts_col}
+){dry_cte}
+SELECT
+  CAST(h.{ts_col} AS VARCHAR) AS timestamp_utc,
+  h.equipment_id,
+  o.oat_f,
+  h.{y_col} AS y_f
+  {dry_sel}
+FROM history h
+LEFT JOIN oat_by_ts o ON h.{ts_col} = o.ts
+{dry_join}
+WHERE h.equipment_id IS NOT NULL
+  AND h.{y_col} IS NOT NULL
+  AND o.oat_f IS NOT NULL{eq_filter_h}
+ORDER BY h.{ts_col}, h.equipment_id
+LIMIT {limit}
+"#
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    if result.rows.is_empty() {
+        return Ok(None);
+    }
+    let mut points = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        let mut row = json!({
+            "timestamp_utc": r.get("timestamp_utc").cloned().unwrap_or(json!("")),
+            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+            "oat_f": as_f64(r.get("oat_f")),
+            "y_f": as_f64(r.get("y_f")),
+        });
+        if let Some(d) = as_f64(r.get("dry_bulb_f")) {
+            if let Some(obj) = row.as_object_mut() {
+                obj.insert("dry_bulb_f".into(), json!(d));
+            }
+        }
+        points.push(row);
+    }
+    let warnings = vec!["RCx OAT scatter from historian DataFusion (site-broadcast OAT)".into()];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine("rcx-oat-scatter-v1", &query, warnings, DF_ENGINE);
+    env.points = points;
+    env.coverage = Some(json!({
+        "history_rows": n,
+        "point_count": env.points.len(),
+        "y_col": y_col,
+        "oat_column": oat,
+        "prefer_wetbulb": prefer_wetbulb,
+        "chart_kind": "scatter_oat",
+        "oat_join": "site_broadcast_by_ts",
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+    }));
+    Ok(Some(env))
+}
+
+/// Multi-equipment box-plot samples (vibe19 multi_equipment_box).
+pub async fn rcx_box_from_history(
+    building_id: Option<&str>,
+    role_col: &str,
+    eq_kinds: &[&str],
+    filter_fan_on: bool,
+    max_points: usize,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    if !cols.contains(role_col) {
+        return Ok(None);
+    }
+    let eq_filter = rcx_eq_filter(eq_kinds);
+    let fan_filter = if filter_fan_on {
+        match on_expr(&cols) {
+            Some(expr) => format!(" AND ({expr})"),
+            None => String::new(),
+        }
+    } else {
+        String::new()
+    };
+    let limit = max_points.clamp(200, 20000);
+    let sql = format!(
+        r#"
+SELECT equipment_id, {role_col} AS value_f
+FROM history
+WHERE equipment_id IS NOT NULL AND {role_col} IS NOT NULL{eq_filter}{fan_filter}
+LIMIT {limit}
+"#
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    if result.rows.is_empty() {
+        return Ok(None);
+    }
+    let mut points = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        points.push(json!({
+            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+            "value_f": as_f64(r.get("value_f")),
+        }));
+    }
+    let warnings = vec!["RCx box samples from historian DataFusion".into()];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine("rcx-box-v1", &query, warnings, DF_ENGINE);
+    env.points = points;
+    env.coverage = Some(json!({
+        "history_rows": n,
+        "point_count": env.points.len(),
+        "role_col": role_col,
+        "chart_kind": "box",
+        "filter_fan_on": filter_fan_on,
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+    }));
+    Ok(Some(env))
+}
+
+/// Zone comfort fail ranking (vibe19 zone_comfort_fail_ranking) — % of samples
+/// outside [low, high] band per VAV. Uses occ_mode when present on the row.
+pub async fn rcx_zone_comfort_rank_from_history(
+    building_id: Option<&str>,
+    eq_kinds: &[&str],
+    comfort_low_f: f64,
+    comfort_high_f: f64,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    if !cols.contains("zone_t") {
+        return Ok(None);
+    }
+    let eq_filter = rcx_eq_filter(eq_kinds);
+    let occ_filter = if cols.contains("occ_mode") {
+        " AND (occ_mode IS NULL OR UPPER(CAST(occ_mode AS VARCHAR)) IN \
+          ('OCC','OCCUPIED','TRUE','YES','1','ON'))"
+            .to_string()
+    } else {
+        String::new()
+    };
+    let sql = format!(
+        r#"
+SELECT
+  equipment_id,
+  COUNT(*) AS n_samples,
+  SUM(CASE WHEN zone_t < {comfort_low_f} OR zone_t > {comfort_high_f} THEN 1 ELSE 0 END) AS n_fail
+FROM history
+WHERE equipment_id IS NOT NULL AND zone_t IS NOT NULL{eq_filter}{occ_filter}
+GROUP BY equipment_id
+ORDER BY (CAST(SUM(CASE WHEN zone_t < {comfort_low_f} OR zone_t > {comfort_high_f} THEN 1 ELSE 0 END) AS FLOAT)
+          / CAST(COUNT(*) AS FLOAT)) DESC
+"#
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    if result.rows.is_empty() {
+        return Ok(None);
+    }
+    let mut points = Vec::with_capacity(result.rows.len());
+    let mut rows = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        let n_samples = as_u64(r.get("n_samples")) as f64;
+        let n_fail = as_u64(r.get("n_fail")) as f64;
+        let fail_pct = if n_samples > 0.0 {
+            round2(100.0 * n_fail / n_samples)
+        } else {
+            0.0
+        };
+        let eq = r.get("equipment_id").cloned().unwrap_or(json!(""));
+        let row = json!({
+            "equipment_id": eq.clone(),
+            "n_samples": n_samples as u64,
+            "n_fail": n_fail as u64,
+            "fail_pct": fail_pct,
+            "comfort_low_f": comfort_low_f,
+            "comfort_high_f": comfort_high_f,
+        });
+        rows.push(row.clone());
+        points.push(json!({
+            "equipment_id": eq,
+            "value_f": fail_pct,
+            "series": "fail_pct",
+        }));
+    }
+    let warnings = vec![
+        "RCx zone comfort ranking from historian DataFusion (default band 70–75°F)".into(),
+    ];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine("rcx-ranking-v1", &query, warnings, DF_ENGINE);
+    env.points = points;
+    env.rows = rows;
+    env.coverage = Some(json!({
+        "history_rows": n,
+        "point_count": env.points.len(),
+        "chart_kind": "ranking",
+        "comfort_low_f": comfort_low_f,
+        "comfort_high_f": comfort_high_f,
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+    }));
+    Ok(Some(env))
+}
+
+/// Monthly metering vs degree-days (vibe19 metering presets) — average power ×
+/// hours as kWh proxy; CDD/HDD from site-broadcast monthly mean OAT (65°F base).
+pub async fn rcx_metering_from_history(
+    building_id: Option<&str>,
+    role_col: &str,
+    eq_kinds: &[&str],
+    kind: &str,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    if !cols.contains(role_col) {
+        return Ok(None);
+    }
+    let Some(oat) = mech_oat_col(&cols) else {
+        return Ok(None);
+    };
+    let eq_filter = rcx_eq_filter(eq_kinds);
+    let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
+    let cooling = kind != "gas";
+    let sql = format!(
+        r#"
+WITH oat_month AS (
+  SELECT
+    substr(CAST({ts_col} AS VARCHAR), 1, 7) AS month,
+    AVG({oat}) AS avg_oat_f,
+    COUNT(*) AS oat_n
+  FROM history
+  WHERE {oat} IS NOT NULL
+  GROUP BY substr(CAST({ts_col} AS VARCHAR), 1, 7)
+),
+meter_month AS (
+  SELECT
+    h.equipment_id,
+    substr(CAST(h.{ts_col} AS VARCHAR), 1, 7) AS month,
+    AVG(h.{role_col}) AS avg_rate,
+    COUNT(*) AS n_samples
+  FROM history h
+  WHERE h.equipment_id IS NOT NULL AND h.{role_col} IS NOT NULL{eq_filter_h}
+  GROUP BY h.equipment_id, substr(CAST(h.{ts_col} AS VARCHAR), 1, 7)
+)
+SELECT
+  m.equipment_id,
+  m.month,
+  m.avg_rate,
+  m.n_samples,
+  o.avg_oat_f
+FROM meter_month m
+LEFT JOIN oat_month o ON m.month = o.month
+ORDER BY m.equipment_id, m.month
+"#
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    if result.rows.is_empty() {
+        return Ok(None);
+    }
+    let mut points = Vec::new();
+    let mut rows = Vec::new();
+    for r in &result.rows {
+        let avg_rate = as_f64(r.get("avg_rate")).unwrap_or(0.0);
+        let n_samples = as_u64(r.get("n_samples")) as f64;
+        // Assume ~5-min samples → hours ≈ n * 5/60.
+        let hours = n_samples * (5.0 / 60.0);
+        let energy = round2(avg_rate * hours);
+        let avg_oat = as_f64(r.get("avg_oat_f")).unwrap_or(65.0);
+        let days = (n_samples * 5.0 / (60.0 * 24.0)).max(1.0);
+        let dd = if cooling {
+            round2((avg_oat - 65.0).max(0.0) * days)
+        } else {
+            round2((65.0 - avg_oat).max(0.0) * days)
+        };
+        let eq = r.get("equipment_id").cloned().unwrap_or(json!(""));
+        let month = r.get("month").cloned().unwrap_or(json!(""));
+        let row = json!({
+            "equipment_id": eq.clone(),
+            "month": month.clone(),
+            "energy": energy,
+            "avg_rate": round2(avg_rate),
+            "degree_days": dd,
+            "avg_oat_f": round2(avg_oat),
+            "n_samples": n_samples as u64,
+            "kind": kind,
+        });
+        rows.push(row.clone());
+        points.push(json!({
+            "equipment_id": eq,
+            "month": month,
+            "energy": energy,
+            "degree_days": dd,
+            "oat_f": dd,
+            "y_f": energy,
+            "value_f": energy,
+        }));
+    }
+    let warnings = vec![
+        format!(
+            "RCx metering from historian DataFusion ({kind}; energy ≈ avg_rate × sample-hours; DD base 65°F)"
+        ),
+    ];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine("rcx-metering-v1", &query, warnings, DF_ENGINE);
+    env.points = points;
+    env.rows = rows;
+    env.coverage = Some(json!({
+        "history_rows": n,
+        "point_count": env.points.len(),
+        "role_col": role_col,
+        "chart_kind": "metering",
+        "meter_kind": kind,
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+    }));
+    Ok(Some(env))
+}
+
 /// Generic descriptive per-equipment row-count evidence from historian Parquet
 /// via DataFusion. Used by families (mechanical_cooling, metering, rcx/*, plant)
 /// that do not yet have a family-specific DF metric. Honest: sets
@@ -1675,7 +2213,7 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let missing = tmp.path().join("no_such_parquet_sh");
         std::env::set_var("OPENFDD_PARQUET_ROOT", &missing);
-        let out = sensor_health_from_history(None).await.unwrap();
+        let out = sensor_health_from_history(None, None).await.unwrap();
         assert!(out.is_none());
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
     }
@@ -1704,7 +2242,7 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_SH", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = sensor_health_from_history(None)
+        let env = sensor_health_from_history(None, Some("BUILDING_SH"))
             .await
             .unwrap()
             .expect("expected sensor_health historian envelope");

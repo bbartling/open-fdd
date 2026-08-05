@@ -188,6 +188,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/analytics/rcx/vav", post(analytics_rcx_vav))
         .route("/api/analytics/rcx/chiller", post(analytics_rcx_chiller))
         .route("/api/analytics/rcx/boiler", post(analytics_rcx_boiler))
+        .route("/api/analytics/rcx/preset", post(analytics_rcx_preset))
+        .route("/api/analytics/rcx/presets", get(analytics_rcx_presets_list))
         .route("/api/analytics/metering", post(analytics_metering))
         .merge(csv)
         // OFDD-075: analytics/FDD posts (building-scoped Overview samples) can
@@ -1830,6 +1832,57 @@ async fn analytics_rcx_boiler(Json(req): Json<AnalyticsRequest>) -> Json<Value> 
     Json(json!({
         "ok": true,
         "analytics": analytics::plant::handle_boiler_async(&req).await.to_json(),
+    }))
+}
+
+async fn analytics_rcx_presets_list() -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "presets": analytics::rcx_presets::presets_json(),
+    }))
+}
+
+async fn analytics_rcx_preset(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
+    let preset_id = req
+        .query
+        .query_version
+        .as_deref()
+        .or_else(|| {
+            req.series
+                .as_ref()
+                .and_then(|s| s.get("preset_id"))
+                .and_then(|v| v.as_str())
+        })
+        .unwrap_or("");
+    let max_points = req.query.max_points.unwrap_or(8000);
+    let env = match analytics::rcx_presets::run_preset(
+        req.query.building_id.as_deref(),
+        preset_id,
+        max_points,
+    )
+    .await
+    {
+        Ok(Some(env)) => env,
+        Ok(None) => analytics::envelope_with_engine(
+            "rcx-preset-v1",
+            &req.query,
+            vec![format!(
+                "RCx preset '{preset_id}' unavailable — unknown id or missing historian columns"
+            )],
+            analytics::DF_ENGINE,
+        ),
+        Err(e) => {
+            tracing::warn!(error = %e, preset = %preset_id, "rcx preset failed");
+            analytics::envelope(
+                "rcx-preset-v1",
+                &req.query,
+                vec![format!("rcx preset failed: {e}")],
+            )
+        }
+    };
+    Json(json!({
+        "ok": true,
+        "analytics": env.to_json(),
     }))
 }
 
