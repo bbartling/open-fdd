@@ -1649,8 +1649,8 @@ mod tests {
             .iter()
             .map(|r| r["hours"].as_f64().unwrap_or(0.0))
             .sum();
-        // One on interval of 300s → 300/3600 h
-        assert!((hours - (300.0 / 3600.0)).abs() < 0.02, "hours={hours}");
+        // Two on intervals of 300s (t0→t1 and t1→t2 while status stays 1) → 600s
+        assert!((hours - (600.0 / 3600.0)).abs() < 0.02, "hours={hours}");
     }
 
     #[test]
