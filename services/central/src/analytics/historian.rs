@@ -1350,6 +1350,8 @@ ORDER BY series_kind, equipment_id, bin_lo
 /// BAS oa_t vs web OAT overlay samples + deviation histogram rows.
 /// Site-broadcasts BAS and web OAT by timestamp so Liberty works when `oa_t`
 /// lives on AHU rows and `web_oa_t` on weather (not co-located on one row).
+/// When only `oa_t` exists (Liberty), weather equipment rows supply web OAT and
+/// non-weather rows supply BAS OAT.
 pub async fn bas_vs_web_from_history(
     equipment_filter: Option<&[String]>,
     max_points: usize,
@@ -1368,17 +1370,20 @@ pub async fn bas_vs_web_from_history(
     }) else {
         return Ok(None);
     };
-    let Some(web) = web_oat_col(&cols) else {
-        return Ok(None);
-    };
-    if bas == web {
-        // Only one OAT column — cannot compare BAS vs web.
-        return Ok(None);
+    let web_col = web_oat_col(&cols);
+    let weather_split = web_col.is_none();
+    if !weather_split {
+        if web_col == Some(bas) {
+            return Ok(None);
+        }
     }
     let _eq_filter = equipment_filter_sql(equipment_filter);
     let limit = max_points.clamp(100, 5000);
-    let sql = format!(
-        r#"
+    let (web_label, sql) = if let Some(web) = web_col {
+        (
+            web.to_string(),
+            format!(
+                r#"
 WITH bas_by_ts AS (
   SELECT {ts_col} AS ts, AVG({bas}) AS bas_oat_f
   FROM history
@@ -1402,7 +1407,41 @@ INNER JOIN web_by_ts w ON b.ts = w.ts
 ORDER BY b.ts
 LIMIT {limit}
 "#
-    );
+            ),
+        )
+    } else {
+        (
+            "oa_t@weather".into(),
+            format!(
+                r#"
+WITH bas_by_ts AS (
+  SELECT {ts_col} AS ts, AVG({bas}) AS bas_oat_f
+  FROM history
+  WHERE {bas} IS NOT NULL
+    AND UPPER(CAST(equipment_id AS VARCHAR)) NOT LIKE '%WEATHER%'
+  GROUP BY {ts_col}
+),
+web_by_ts AS (
+  SELECT {ts_col} AS ts, AVG({bas}) AS web_oat_f
+  FROM history
+  WHERE {bas} IS NOT NULL
+    AND UPPER(CAST(equipment_id AS VARCHAR)) LIKE '%WEATHER%'
+  GROUP BY {ts_col}
+)
+SELECT
+  CAST(b.ts AS VARCHAR) AS timestamp_utc,
+  'site' AS equipment_id,
+  b.bas_oat_f,
+  w.web_oat_f,
+  (b.bas_oat_f - w.web_oat_f) AS delta_f
+FROM bas_by_ts b
+INNER JOIN web_by_ts w ON b.ts = w.ts
+ORDER BY b.ts
+LIMIT {limit}
+"#
+            ),
+        )
+    };
     let result = run_sql(&ctx, &sql).await?;
     if result.rows.is_empty() {
         return Ok(None);
@@ -1432,10 +1471,15 @@ LIMIT {limit}
             })
         })
         .collect();
-    let warnings = vec![
+    let mut warnings = vec![
         "BAS vs web OAT from historian DataFusion (site-broadcast oa_t × web OAT by timestamp)"
             .into(),
     ];
+    if weather_split {
+        warnings.push(
+            "web OAT sourced from equipment_id matching WEATHER (single oa_t column site)".into(),
+        );
+    }
     let query = AnalyticsQuery::default();
     let mut env = envelope_with_engine("bas-vs-web-oat-v2", &query, warnings, DF_ENGINE);
     env.points = points;
@@ -1445,7 +1489,8 @@ LIMIT {limit}
         "hist_bins": env.rows.len(),
         "history_rows": n,
         "bas_column": bas,
-        "web_column": web,
+        "web_column": web_label,
+        "weather_equipment_split": weather_split,
         "oat_join": "site_broadcast_by_ts",
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
