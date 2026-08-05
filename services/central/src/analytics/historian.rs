@@ -902,16 +902,25 @@ ORDER BY equipment_id
     Ok(Some(env))
 }
 
-/// Economizer descriptive diagnostics from historian Parquet via DataFusion.
+/// Economizer diagnostics from historian Parquet via DataFusion.
 ///
 /// Requires an OAT column (`oa_t` or Liberty `web_oa_t`), plus `rat` and `mat`,
-/// and a fan on-expression. Computes per-equipment fan-on and identifiable
-/// (`|OAT−RAT| >= dt_min`) sample counts. Never invents MAT residuals; those
-/// remain the inline central path only.
+/// and a fan on-expression. Returns per-equipment fan-on / identifiable counts
+/// plus downsampled fan-on points for Overview Plotly (delta scatter, MAT
+/// residual, temps+damper overlay) — vibe19 chart parity without pandas.
 pub async fn economizer_from_history(
     equipment_filter: Option<&[String]>,
     dt_min_f: f64,
     building_id: Option<&str>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    economizer_from_history_with_limit(equipment_filter, dt_min_f, building_id, 4000).await
+}
+
+pub async fn economizer_from_history_with_limit(
+    equipment_filter: Option<&[String]>,
+    dt_min_f: f64,
+    building_id: Option<&str>,
+    max_points: usize,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
         return Ok(None);
@@ -945,14 +954,20 @@ pub async fn economizer_from_history(
     let Some(on_sql) = on_expr(&cols) else {
         return Ok(None);
     };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
     let dt_min = dt_min_f.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
-    // OFDD-070b: project damper into the CTE — COUNT(oa_damper_pct) from `base`
-    // fails when the column exists on `history` but was never selected into `base`.
     let damper_proj = if cols.contains("oa_damper_pct") {
         "oa_damper_pct"
     } else {
         "CAST(NULL AS DOUBLE) AS oa_damper_pct"
+    };
+    let sat_proj = if cols.contains("sat") {
+        "sat"
+    } else {
+        "CAST(NULL AS DOUBLE) AS sat"
     };
 
     let sql = format!(
@@ -964,7 +979,8 @@ WITH base AS (
     {rat_col} AS rat,
     {mat_col} AS mat,
     {on_sql} AS fan_on,
-    {damper_proj}
+    {damper_proj},
+    {sat_proj}
   FROM history
   WHERE equipment_id IS NOT NULL{eq_filter}
 )
@@ -997,20 +1013,92 @@ ORDER BY equipment_id
         }));
     }
 
-    let warnings = vec![
-        "economizer fan-on / identifiable sample counts from historian Parquet via \
-         DataFusion; MAT residual (median/MAE) requires the inline central path and \
-         is not fabricated here"
+    let limit = max_points.clamp(100, 8000);
+    let points_sql = format!(
+        r#"
+WITH base AS (
+  SELECT
+    equipment_id,
+    CAST({ts_col} AS VARCHAR) AS timestamp_utc,
+    {oat_col} AS oat_f,
+    {rat_col} AS rat_f,
+    {mat_col} AS mat_f,
+    {sat_proj},
+    {damper_proj},
+    {on_sql} AS fan_on
+  FROM history
+  WHERE equipment_id IS NOT NULL{eq_filter}
+)
+SELECT
+  equipment_id,
+  timestamp_utc,
+  oat_f,
+  rat_f,
+  mat_f,
+  sat AS sat_f,
+  oa_damper_pct AS damper_fb_pct,
+  (oat_f - rat_f) AS delta_or_f,
+  (mat_f - rat_f) AS delta_mr_f,
+  CASE
+    WHEN oa_damper_pct IS NOT NULL AND oat_f IS NOT NULL AND rat_f IS NOT NULL THEN
+      mat_f - (rat_f + (oa_damper_pct / 100.0) * (oat_f - rat_f))
+    ELSE NULL
+  END AS mat_resid_f,
+  CASE
+    WHEN oat_f IS NOT NULL AND rat_f IS NOT NULL AND ABS(oat_f - rat_f) >= {dt_min}
+    THEN true ELSE false
+  END AS identifiable
+FROM base
+WHERE fan_on
+  AND oat_f IS NOT NULL AND rat_f IS NOT NULL AND mat_f IS NOT NULL
+ORDER BY timestamp_utc
+LIMIT {limit}
+"#
+    );
+    let mut points = Vec::new();
+    match run_sql(&ctx, &points_sql).await {
+        Ok(pres) => {
+            for r in &pres.rows {
+                points.push(json!({
+                    "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+                    "timestamp_utc": r.get("timestamp_utc").cloned().unwrap_or(json!("")),
+                    "oat_f": as_f64(r.get("oat_f")),
+                    "rat_f": as_f64(r.get("rat_f")),
+                    "mat_f": as_f64(r.get("mat_f")),
+                    "sat_f": as_f64(r.get("sat_f")),
+                    "damper_fb_pct": as_f64(r.get("damper_fb_pct")),
+                    "delta_or_f": as_f64(r.get("delta_or_f")),
+                    "delta_mr_f": as_f64(r.get("delta_mr_f")),
+                    "mat_resid_f": as_f64(r.get("mat_resid_f")),
+                    "identifiable": r.get("identifiable").and_then(|v| v.as_bool()).unwrap_or(false),
+                    "fan_on": true,
+                }));
+            }
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "economizer plot points SQL failed; counts only");
+        }
+    }
+
+    let mut warnings = vec![
+        "economizer fan-on counts + free-cooling plot points from historian DataFusion \
+         (vibe19 Overview chart parity)"
             .into(),
     ];
+    if points.is_empty() {
+        warnings.push("no fan-on economizer points available for scatter/MAT/temps plots".into());
+    }
     let query = AnalyticsQuery::default();
     let mut env = envelope_with_engine(QV_ECONOMIZER, &query, warnings, DF_ENGINE);
     env.equipment = equipment.clone();
     env.rows = equipment;
+    env.points = points;
     env.coverage = Some(json!({
         "equipment_count": env.equipment.len(),
+        "point_count": env.points.len(),
         "history_rows": n,
         "dt_min_f": dt_min,
+        "max_points": limit,
         "source": "historian_parquet",
         "building_id": safe_building_segment(building_id),
         "oat_column": oat_col,

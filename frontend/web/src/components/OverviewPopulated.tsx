@@ -254,6 +254,7 @@ export function OverviewPopulated({
       const body = await fetchCentralOverview({
         building_id: buildingId,
         equipment,
+        econ_overlay_equipment_id: econOverlayEq || null,
       });
       if (!body.ok) {
         throw new Error(body.error || "Central analytics failed");
@@ -274,7 +275,7 @@ export function OverviewPopulated({
       setLoadingOverview(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buildingId, equipment]);
+  }, [buildingId, equipment, econOverlayEq]);
 
   const refreshInspect = useCallback(async () => {
     if (!buildingId || !inspectPick || inspectPick === "(weather)") return;

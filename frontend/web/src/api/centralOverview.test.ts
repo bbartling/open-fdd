@@ -44,7 +44,19 @@ vi.mock("./analyticsApi", () => ({
       },
     ],
     equipment: [],
-    points: [],
+    points: Array.from({ length: 8 }, (_, i) => ({
+      equipment_id: "AHU_1",
+      timestamp_utc: `2026-07-01T0${i}:00:00Z`,
+      oat_f: 55 + i,
+      rat_f: 72,
+      mat_f: 65 + i * 0.5,
+      damper_fb_pct: 40,
+      delta_or_f: 55 + i - 72,
+      delta_mr_f: 65 + i * 0.5 - 72,
+      mat_resid_f: -1.5,
+      identifiable: true,
+      fan_on: true,
+    })),
     skipped: [],
   })),
   postSchedule: vi.fn(async () => ({
@@ -96,6 +108,15 @@ describe("fetchCentralOverview", () => {
     expect(out.mech_cooling.figure?.data?.length).toBeGreaterThan(0);
     expect(out.economizer_free_cooling.delta_scatter?.meta?.provenance).toMatch(
       /DataFusion/,
+    );
+    expect(out.economizer_free_cooling.delta_scatter?.layout?.title).toMatch(
+      /delta scatter/i,
+    );
+    expect(out.economizer_free_cooling.mat_residual?.data?.length).toBeGreaterThan(
+      0,
+    );
+    expect(out.economizer_free_cooling.temps_overlay?.layout?.title).toMatch(
+      /Free-cooling temps/i,
     );
     expect(out.devices_by_type).toEqual([
       { type: "AHU", count: 1 },
