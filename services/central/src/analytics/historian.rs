@@ -1503,7 +1503,7 @@ pub async fn inspect_from_history(
     let limit = max_points.clamp(50, 8000);
     let proj = selected
         .iter()
-        .map(|c| format!("{c}"))
+        .map(|c| c.to_string())
         .collect::<Vec<_>>()
         .join(", ");
     let eq_lit = eq.replace('\'', "''");
