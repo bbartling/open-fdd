@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-08-05 — Login page internet hygiene
+
+- Removed bench credential path / `auth_required` dumps from `AuthPage`.
+- Agent law: AGENTS.md + React skill — product UI treated as internet-facing;
+  ops handoff only in docs/scripts, never SPA.
+
 ## 2026-08-04 — Streamlit delete + WattLab relocate (cutover)
 
 - Relocated cookbook WattLab exporter → `tools/wattlab_export/`; central shells it (no `services/ui`).

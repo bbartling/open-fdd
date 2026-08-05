@@ -47,6 +47,9 @@ modernization Phase 2/3 or Vibe 21 Phase 1 recovery.
 - Do not move FDD/analytics math into TypeScript.
 - Do not add a Python API service for the React app.
 - Do not resurrect Streamlit/`openfdd-ui` as product UI.
+- **Internet-facing:** never render bench credential paths, default passwords,
+  JWT/auth dumps, or `auth_required` diagnostics on login/product surfaces.
+  Ops handoff stays in docs/scripts only.
 - Update `capabilities.yaml` statuses honestly in the same PR; never mark
   `QUALIFIED` without evidence paths.
 - Forbid “Phase complete” claims without a qualification manifest / ledger proof.
