@@ -4,7 +4,6 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthPage } from "./AuthPage";
 
 vi.mock("../api/authApi", () => ({
-  getAuthStatus: vi.fn(async () => ({ ok: true, auth_required: true })),
   getAuthMe: vi.fn(async () => {
     throw new Error("unauthorized");
   }),
@@ -27,7 +26,7 @@ describe("AuthPage", () => {
     vi.mocked(getAuthMe).mockRejectedValue(new Error("unauthorized"));
   });
 
-  it("renders oracle sign-in and navigates home after login", async () => {
+  it("renders a clean sign-in form and navigates home after login", async () => {
     render(
       <MemoryRouter initialEntries={["/auth"]}>
         <Routes>
@@ -37,11 +36,14 @@ describe("AuthPage", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => {
-      expect(screen.getByTestId("auth-required").textContent).toContain("true");
-      expect(screen.getByTestId("auth-user").textContent).toContain("—");
-    });
+    expect(screen.getByTestId("auth-page")).toBeTruthy();
+    expect(screen.queryByText(/bootstrap_credentials/i)).toBeNull();
+    expect(screen.queryByText(/Auth required/i)).toBeNull();
+    expect(screen.queryByText(/Bench password/i)).toBeNull();
 
+    fireEvent.change(screen.getByTestId("auth-username"), {
+      target: { value: "admin" },
+    });
     fireEvent.change(screen.getByTestId("auth-password"), {
       target: { value: "secret" },
     });
