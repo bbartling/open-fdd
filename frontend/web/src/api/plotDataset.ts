@@ -130,13 +130,24 @@ export function rowsToBarFigure(
       xaxis: { title: opts.xKey, tickangle: -35, autorange: true },
       yaxis: { title: opts.yAxisTitle ?? "hours", autorange: true },
       margin: { t: 48, r: 24, b: 96, l: 56 },
-      uirevision: `${opts.title}:${opts.xKey}:${sorted.length}`,
+      uirevision: `${opts.title}:${opts.xKey}:${fingerprintJson(sorted)}`,
     },
     meta: {
       point_count: sorted.length,
       provenance: opts.provenance,
     },
   };
+}
+
+/** Short FNV-1a of JSON so Plotly `uirevision` resets when values change. */
+export function fingerprintJson(value: unknown): string {
+  const s = JSON.stringify(value) ?? "";
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h.toString(36);
 }
 
 /** Filter runtime rows into plant families (vibe19 Air / Heating / Cooling). */

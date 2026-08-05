@@ -61,12 +61,6 @@ pub fn parquet_root() -> PathBuf {
     PathBuf::from(".cache/parquet")
 }
 
-/// Register `history` from parquet_root when the tree exists and has data.
-/// Returns `Ok(true)` on success, `Ok(false)` when missing/empty/unusable.
-pub async fn try_register_history(ctx: &SessionContext) -> Result<bool> {
-    try_register_history_scoped(ctx, None).await
-}
-
 /// Sanitize a `building_id` for use as a Hive path segment. Rejects any value
 /// with path separators or `..` so a query field can never escape the parquet
 /// root; returns `None` for empty/unsafe ids (caller falls back to whole tree).
@@ -344,13 +338,13 @@ fn equipment_filter_sql(equipment_filter: Option<&[String]>) -> String {
 }
 
 /// SQL fragment restricting to chiller/DX/tower-like equipment ids.
+/// Kept aligned with [`plant_group_for`] (no bare `CT%` — that matches CTRL_*).
 fn chiller_like_equipment_sql() -> &'static str {
     " AND (\
         UPPER(equipment_id) LIKE '%CHILLER%' \
         OR UPPER(equipment_id) LIKE '%TOWER%' \
         OR UPPER(equipment_id) LIKE 'CT_%' \
-        OR UPPER(equipment_id) LIKE '%/CT%' \
-        OR UPPER(equipment_id) LIKE 'CT%' \
+        OR UPPER(equipment_id) LIKE '%/CT_%' \
         OR UPPER(equipment_id) LIKE '%_DX%' \
         OR UPPER(equipment_id) LIKE 'DX%' \
         OR UPPER(equipment_id) LIKE 'HP_%' \

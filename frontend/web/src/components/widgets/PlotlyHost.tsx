@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { WidgetBaseProps } from "./types";
 import { widgetTestId } from "./types";
 import type { PlotlyFigure } from "../../api/plotDataset";
+import { fingerprintJson } from "../../api/plotDataset";
 import { sanitizePlotlyFigure } from "../../api/plotlySanitize";
 
 export interface PlotlyHostProps extends Omit<WidgetBaseProps, "label"> {
@@ -147,7 +148,7 @@ export function PlotlyHost({
       // Fingerprint figure so Plotly.react resets sticky zoom after Update analytics.
       const uirevision =
         (baseLayout.uirevision as string | undefined) ??
-        `${figureId ?? id}:${JSON.stringify(clean.data).length}:${clean.meta?.provenance ?? ""}:${clean.meta?.point_count ?? clean.data.length}`;
+        `${figureId ?? id}:${fingerprintJson(clean.data)}:${clean.meta?.provenance ?? ""}`;
       const layout: Record<string, unknown> = {
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",

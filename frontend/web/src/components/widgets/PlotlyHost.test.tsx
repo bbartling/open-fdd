@@ -89,7 +89,7 @@ describe("PlotlyHost", () => {
       expect(getByTestId("plotly-meta-motor").textContent).toMatch(/rendered/);
     });
 
-    // Second figure must bump uirevision so sticky zoom resets.
+    // Same cardinality / provenance, different values — must bump uirevision.
     react.mockClear();
     newPlot.mockClear();
     rerender(
@@ -98,8 +98,8 @@ describe("PlotlyHost", () => {
         label="Motor"
         figure={{
           ...figure,
-          data: [{ x: ["2026-01-08"], y: [42], type: "bar", name: "AHU" }],
-          meta: { provenance: "runtime-v2", point_count: 1 },
+          data: [{ x: ["2026-01-01"], y: [99], type: "bar", name: "AHU" }],
+          meta: { provenance: "runtime-v1", point_count: 1 },
         }}
         loading={false}
         height={300}
