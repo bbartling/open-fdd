@@ -139,12 +139,27 @@ export function PlotlyHost({
         }
         return;
       }
+      const baseLayout = (clean.layout as Record<string, unknown> | undefined) ?? {};
+      const axisPatch = (key: string) => {
+        const prev = (baseLayout[key] as Record<string, unknown> | undefined) ?? {};
+        return { ...prev, autorange: true };
+      };
+      // Fingerprint figure so Plotly.react resets sticky zoom after Update analytics.
+      const uirevision =
+        (baseLayout.uirevision as string | undefined) ??
+        `${figureId ?? id}:${JSON.stringify(clean.data).length}:${clean.meta?.provenance ?? ""}:${clean.meta?.point_count ?? clean.data.length}`;
       const layout: Record<string, unknown> = {
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
         font: { family: "Source Sans 3, Source Sans, sans-serif", size: 12 },
-        ...(clean.layout as object),
-        height: (clean.layout as { height?: number } | undefined)?.height ?? height,
+        ...baseLayout,
+        xaxis: axisPatch("xaxis"),
+        yaxis: axisPatch("yaxis"),
+        ...(baseLayout.yaxis2 != null || clean.data.some((t) => t.yaxis === "y2")
+          ? { yaxis2: axisPatch("yaxis2") }
+          : {}),
+        uirevision,
+        height: (baseLayout.height as number | undefined) ?? height,
         autosize: true,
       };
       delete layout.template;

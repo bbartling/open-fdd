@@ -1719,6 +1719,7 @@ async fn analytics_bas_vs_web_oat(Json(req): Json<AnalyticsRequest>) -> Json<Val
     let env = match analytics::historian::bas_vs_web_from_history(
         req.query.equipment_ids.as_deref(),
         max_points,
+        req.query.building_id.as_deref(),
     )
     .await
     {

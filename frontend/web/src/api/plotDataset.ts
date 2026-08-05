@@ -127,9 +127,10 @@ export function rowsToBarFigure(
       title: opts.title,
       barmode: opts.barmode ?? "group",
       showlegend: opts.yKeys.length > 1,
-      xaxis: { title: opts.xKey, tickangle: -35 },
-      yaxis: { title: opts.yAxisTitle ?? "hours" },
+      xaxis: { title: opts.xKey, tickangle: -35, autorange: true },
+      yaxis: { title: opts.yAxisTitle ?? "hours", autorange: true },
       margin: { t: 48, r: 24, b: 96, l: 56 },
+      uirevision: `${opts.title}:${opts.xKey}:${sorted.length}`,
     },
     meta: {
       point_count: sorted.length,
