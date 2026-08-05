@@ -802,7 +802,6 @@ export function OverviewPopulated({
         {(overview?.motor_weekly.plants ?? []).map((plant) => (
           <div key={plant.plant_group} data-testid={`overview-motor-${plant.plant_group}`}>
             <h4>{plant.title}</h4>
-            <p className="oracle-sidebar__caption">{plant.caption}</p>
             {plant.empty || !plant.figure ? (
               <p className="oracle-sidebar__caption">
                 No series for {plant.title.split("—")[0]?.trim().toLowerCase()}.
@@ -856,6 +855,19 @@ export function OverviewPopulated({
           {overview?.mech_cooling.caption ??
             "Chillers / DX / VRF compressor-proof; never CHW valves."}
         </p>
+        {overview?.mech_cooling.callout ? (
+          <p
+            className="oracle-sidebar__caption"
+            data-testid="overview-mech-callout"
+            style={{
+              background: "rgba(59, 130, 246, 0.12)",
+              borderRadius: 8,
+              padding: "10px 12px",
+            }}
+          >
+            {overview.mech_cooling.callout}
+          </p>
+        ) : null}
         <PlotlyHost
           id="mech-cooling"
           label="Mechanical cooling by OAT"

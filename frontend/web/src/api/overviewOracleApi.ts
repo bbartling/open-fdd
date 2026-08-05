@@ -34,6 +34,8 @@ export interface OverviewVibe19Response {
     coverage: Array<Record<string, unknown>>;
     n_included: number | null;
     n_excluded: number | null;
+    /** Single-device runtime note (vibe19 parity). */
+    callout?: string | null;
   };
   economizer_weather: {
     caption: string;

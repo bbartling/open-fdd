@@ -55,6 +55,7 @@ async fn plant_from_history(
         expected_qv,
         req.query.equipment_ids.as_deref(),
         &note,
+        req.query.building_id.as_deref(),
     )
     .await
     {

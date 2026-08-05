@@ -261,6 +261,7 @@ pub async fn handle_ahu_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
             QV_RCX_AHU,
             req.query.equipment_ids.as_deref(),
             "rcx/ahu: reset-evidence coverage requires inline series",
+            req.query.building_id.as_deref(),
         )
         .await
         {
@@ -282,6 +283,7 @@ pub async fn handle_vav_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
             QV_RCX_VAV,
             req.query.equipment_ids.as_deref(),
             "rcx/vav: zone-comfort ranking requires inline zone_temp/setpoint series",
+            req.query.building_id.as_deref(),
         )
         .await
         {

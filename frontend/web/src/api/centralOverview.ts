@@ -21,6 +21,11 @@ import type {
   OverviewPlantFig,
   OverviewVibe19Response,
 } from "./overviewOracleApi";
+import {
+  AIR_BARE_MIN_OCC_HOURS_WEEK,
+  overviewChartLayout,
+  rainbowColor,
+} from "./plotlyTheme";
 
 function num(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -60,7 +65,9 @@ function motorFigure(rows: Array<Record<string, unknown>>): PlotlyFigure | null 
 function weeklyPlantFigures(
   rows: Array<Record<string, unknown>>,
 ): OverviewPlantFig[] {
-  const weekly = rows.filter((r) => r.kind === "weekly_plant");
+  const weekly = rows.filter(
+    (r) => r.kind === "weekly_equipment" || r.kind === "weekly_plant",
+  );
   if (!weekly.length) return [];
   const byPlant = new Map<string, Array<Record<string, unknown>>>();
   for (const r of weekly) {
@@ -77,56 +84,121 @@ function weeklyPlantFigures(
   return [...byPlant.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([plant_group, plantRows]) => {
-      const sorted = [...plantRows].sort((a, b) =>
-        String(a.week_label).localeCompare(String(b.week_label)),
-      );
-      const x = sorted.map((r) => String(r.week_label ?? ""));
-      const hours = sorted.map((r) => num(r.run_hours));
-      const oat = sorted.map((r) => num(r.avg_oat_f));
-      const hasOat = oat.some((v) => v != null);
-      const data: PlotlyTrace[] = [
-        {
+      const sorted = [...plantRows].sort((a, b) => {
+        const w = String(a.week_label).localeCompare(String(b.week_label));
+        if (w !== 0) return w;
+        const la = String(a.label ?? a.equipment_id ?? "");
+        const lb = String(b.label ?? b.equipment_id ?? "");
+        return la.localeCompare(lb);
+      });
+      const weeks = [
+        ...new Set(sorted.map((r) => String(r.week_label ?? ""))),
+      ].sort((a, b) => a.localeCompare(b));
+
+      const perEq = new Map<string, Array<Record<string, unknown>>>();
+      for (const r of sorted) {
+        const lab = String(r.label ?? r.equipment_id ?? "run hours");
+        const list = perEq.get(lab) ?? [];
+        list.push(r);
+        perEq.set(lab, list);
+      }
+
+      const data: PlotlyTrace[] = [];
+      let colorIdx = 0;
+      // Prefer multi-series equipment labels; fall back to single plant total.
+      const labels = [...perEq.keys()].sort((a, b) => a.localeCompare(b));
+      for (const lab of labels) {
+        const eqRows = perEq.get(lab) ?? [];
+        const byWeek = new Map(
+          eqRows.map((r) => [String(r.week_label ?? ""), num(r.run_hours)]),
+        );
+        data.push({
           type: "bar",
-          name: "run hours",
-          x,
-          y: hours,
-        },
-      ];
+          name: lab,
+          x: weeks,
+          y: weeks.map((w) => byWeek.get(w) ?? null),
+          marker: { color: rainbowColor(colorIdx) },
+        });
+        colorIdx += 1;
+      }
+
+      // Avg OAT while on: mean across equipment that reported OAT that week.
+      const oatByWeek = new Map<string, { sum: number; n: number }>();
+      for (const r of sorted) {
+        const o = num(r.avg_oat_f);
+        if (o == null) continue;
+        const w = String(r.week_label ?? "");
+        const e = oatByWeek.get(w) ?? { sum: 0, n: 0 };
+        e.sum += o;
+        e.n += 1;
+        oatByWeek.set(w, e);
+      }
+      const oat = weeks.map((w) => {
+        const e = oatByWeek.get(w);
+        return e && e.n > 0 ? e.sum / e.n : null;
+      });
+      const hasOat = oat.some((v) => v != null);
       if (hasOat) {
         data.push({
           type: "scatter",
           mode: "lines+markers",
-          name: "avg OAT",
-          x,
+          name: "Avg OAT °F (while on)",
+          x: weeks,
           y: oat,
           yaxis: "y2",
-          line: { width: 2 },
+          line: { width: 2, color: "#333333", dash: "dot" },
+          marker: { size: 7, color: "#333333" },
         });
       }
+
+      const isAir = plant_group === "air";
+      const shapes = isAir
+        ? [
+            {
+              type: "line",
+              xref: "paper",
+              x0: 0,
+              x1: 1,
+              yref: "y",
+              y0: AIR_BARE_MIN_OCC_HOURS_WEEK,
+              y1: AIR_BARE_MIN_OCC_HOURS_WEEK,
+              line: { color: "#c45c26", width: 1.5, dash: "dash" },
+            },
+          ]
+        : undefined;
+      const annotations = isAir
+        ? [
+            {
+              xref: "paper",
+              x: 1,
+              y: AIR_BARE_MIN_OCC_HOURS_WEEK,
+              yref: "y",
+              text: `Bare-min occupied hours/week (${AIR_BARE_MIN_OCC_HOURS_WEEK}h)`,
+              showarrow: false,
+              xanchor: "right",
+              yanchor: "bottom",
+              font: { size: 10, color: "#c45c26" },
+            },
+          ]
+        : undefined;
+
       const figure: PlotlyFigure = {
         data,
-        layout: {
-          title: `${titles[plant_group] ?? plant_group} — weekly run hours`,
-          barmode: "group",
-          showlegend: true,
-          xaxis: { title: "week", tickangle: -35, autorange: true },
-          yaxis: { title: "run hours", autorange: true },
-          ...(hasOat
-            ? {
-                yaxis2: {
-                  title: "avg OAT °F",
-                  overlaying: "y",
-                  side: "right",
-                  autorange: true,
-                },
-              }
-            : {}),
-          margin: { t: 48, r: hasOat ? 56 : 24, b: 96, l: 56 },
+        layout: overviewChartLayout({
+          xTitle: "Week starting (Mon)",
+          yTitle: "Run hours",
+          rightAxis: hasOat,
+          height: Math.max(420, 60 + 18 * Math.min(labels.length, 12)),
           uirevision: `weekly:${plant_group}:${fingerprintJson(sorted)}`,
-        },
+          extra: {
+            barmode: "group",
+            ...(shapes ? { shapes } : {}),
+            ...(annotations ? { annotations } : {}),
+          },
+        }),
         meta: {
           point_count: sorted.length,
-          provenance: "POST /api/analytics/runtime (runtime-weekly-v1)",
+          provenance: "POST /api/analytics/runtime (runtime-weekly-v2)",
         },
       };
       return {
@@ -142,9 +214,96 @@ function weeklyPlantFigures(
 function mechFigure(rows: Array<Record<string, unknown>>): {
   figure: PlotlyFigure | null;
   bins: Array<Record<string, unknown>>;
+  callout: string | null;
 } {
   const oatBins = rows.filter((r) => r.kind === "oat_bin");
-  if (oatBins.length) {
+  if (!oatBins.length) {
+    // Never promote historian row-counts as the primary mech product chart.
+    return { figure: null, bins: [], callout: null };
+  }
+
+  const individuals = oatBins.filter(
+    (r) =>
+      !r.series_kind ||
+      r.series_kind === "individual_device" ||
+      (r.series_kind !== "aggregate_device_hours" &&
+        r.series_kind !== "aggregate_active_hours"),
+  );
+  const totals = oatBins.filter(
+    (r) => r.series_kind === "aggregate_device_hours",
+  );
+  const anyActive = oatBins.filter(
+    (r) => r.series_kind === "aggregate_active_hours",
+  );
+
+  const binOrder = [
+    ...new Set(
+      oatBins
+        .map((r) => ({
+          label: String(r.bin_label ?? ""),
+          lo: num(r.bin_lo_f) ?? 0,
+        }))
+        .sort((a, b) => a.lo - b.lo)
+        .map((b) => b.label),
+    ),
+  ];
+
+  const byEq = new Map<string, Array<Record<string, unknown>>>();
+  for (const r of individuals) {
+    const eq = String(r.equipment_id ?? "device");
+    if (eq === "ALL" || eq === "ANY") continue;
+    const list = byEq.get(eq) ?? [];
+    list.push(r);
+    byEq.set(eq, list);
+  }
+  const devices = [...byEq.keys()].sort((a, b) => a.localeCompare(b));
+
+  const data: PlotlyTrace[] = [];
+  devices.forEach((eq, i) => {
+    const eqRows = byEq.get(eq) ?? [];
+    const byBin = new Map(
+      eqRows.map((r) => [String(r.bin_label ?? ""), num(r.hours)]),
+    );
+    data.push({
+      type: "bar",
+      name: eq,
+      x: binOrder,
+      y: binOrder.map((b) => byBin.get(b) ?? null),
+      marker: { color: rainbowColor(i) },
+    });
+  });
+
+  if (totals.length) {
+    const byBin = new Map(
+      totals.map((r) => [String(r.bin_label ?? ""), num(r.hours)]),
+    );
+    data.push({
+      type: "scatter",
+      mode: "lines+markers",
+      name: "Total compressor device-hours",
+      x: binOrder,
+      y: binOrder.map((b) => byBin.get(b) ?? null),
+      line: { width: 2.2, color: "#111827" },
+      marker: { size: 7, color: "#111827" },
+    });
+  }
+  if (anyActive.length) {
+    const byBin = new Map(
+      anyActive.map((r) => [String(r.bin_label ?? ""), num(r.hours)]),
+    );
+    data.push({
+      type: "scatter",
+      mode: "lines+markers",
+      name: "Any compressor active",
+      x: binOrder,
+      y: binOrder.map((b) => byBin.get(b) ?? null),
+      line: { width: 2.2, color: "#6b7280", dash: "dash" },
+      marker: { size: 7, color: "#6b7280", symbol: "circle-open" },
+    });
+  }
+
+  // Fallback: legacy single-series oat_bin without series_kind / equipment_id.
+  if (!data.length) {
     const sorted = [...oatBins].sort(
       (a, b) => (num(a.bin_lo_f) ?? 0) - (num(b.bin_lo_f) ?? 0),
     );
@@ -153,28 +312,44 @@ function mechFigure(rows: Array<Record<string, unknown>>): {
         xKey: "bin_label",
         yKeys: ["hours"],
         title: "Mechanical cooling run hours by outdoor-air temperature (5°F bins)",
-        yAxisTitle: "hours",
+        yAxisTitle: "Run hours",
         maxBars: 40,
         provenance: "POST /api/analytics/mechanical-cooling (OAT bins)",
       }),
       bins: sorted,
+      callout: null,
     };
   }
-  const usable = rows.filter((r) => num(r.history_rows) != null);
-  if (!usable.length) return { figure: null, bins: [] };
-  return {
-    figure: rowsToBarFigure(usable, {
-      xKey: "equipment_id",
-      yKeys: ["history_rows"],
-      title: "Mechanical cooling — historian row counts",
-      yAxisTitle: "rows",
-      sortBy: "history_rows",
-      sortDesc: true,
-      maxBars: 40,
-      provenance: "POST /api/analytics/mechanical-cooling (DataFusion)",
+
+  let callout: string | null = null;
+  if (devices.length === 1) {
+    callout = `Only ${devices[0]} had observed compressor runtime during this period. Total compressor device-hours therefore equal ${devices[0]} runtime.`;
+  }
+
+  const figure: PlotlyFigure = {
+    data,
+    layout: overviewChartLayout({
+      xTitle: "OAT bin °F",
+      yTitle: "Run hours",
+      height: 420,
+      tickangle: 0,
+      uirevision: `mech-oat:${fingerprintJson(oatBins)}`,
+      extra: {
+        barmode: "stack",
+        xaxis: {
+          title: "OAT bin °F",
+          categoryorder: "array",
+          categoryarray: binOrder,
+          autorange: true,
+        },
+      },
     }),
-    bins: [],
+    meta: {
+      point_count: oatBins.length,
+      provenance: "POST /api/analytics/mechanical-cooling (OAT bins v2)",
+    },
   };
+  return { figure, bins: oatBins, callout };
 }
 
 /** vibe19 economizer_delta_scatter: (MAT−RAT) vs (OAT−RAT) + OA-fraction refs. */
@@ -544,7 +719,9 @@ export async function fetchCentralOverview(opts: {
 
   const weeklyPlants = weeklyPlantFigures(runtimeRows);
   const motorFig = motorFigure(
-    equipmentTotals.filter((r) => r.kind !== "weekly_plant"),
+    equipmentTotals.filter(
+      (r) => r.kind !== "weekly_plant" && r.kind !== "weekly_equipment",
+    ),
   );
   const plants: OverviewPlantFig[] =
     weeklyPlants.length > 0
@@ -561,7 +738,11 @@ export async function fetchCentralOverview(opts: {
           ]
         : [];
 
-  const { figure: mechFig, bins: mechBins } = mechFigure(mechRows);
+  const {
+    figure: mechFig,
+    bins: mechBins,
+    callout: mechCallout,
+  } = mechFigure(mechRows);
   const deltaScatter = econDeltaScatter(econPoints, dtMin);
   const matResidual = econMatResidual(econPoints);
   const { figure: tempsOverlay, equipmentId: overlayEq } = econTempsOverlay(
@@ -603,13 +784,25 @@ export async function fetchCentralOverview(opts: {
         mech,
         mechBins.length
           ? "Mechanical cooling OAT bin hours from DataFusion"
-          : "Mechanical cooling evidence from DataFusion",
+          : mechFig
+            ? "Mechanical cooling evidence from DataFusion"
+            : "No compressor×OAT intervals in historian (need chiller proof + site OAT)",
       ),
       figure: mechFig,
       bins: mechBins,
-      coverage: mechRows.filter((r) => r.kind !== "oat_bin").slice(0, 200),
-      n_included: mechBins.length || mechRows.length,
+      coverage: mechRows
+        .filter((r) => r.kind !== "oat_bin" && num(r.history_rows) != null)
+        .slice(0, 200),
+      n_included: mechBins.filter((r) => r.series_kind === "individual_device")
+        .length
+        ? new Set(
+            mechBins
+              .filter((r) => r.series_kind === "individual_device")
+              .map((r) => String(r.equipment_id)),
+          ).size
+        : mechBins.length || null,
       n_excluded: 0,
+      callout: mechCallout,
     },
     economizer_weather: {
       caption:
