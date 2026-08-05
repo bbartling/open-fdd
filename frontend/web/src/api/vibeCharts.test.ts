@@ -3,6 +3,7 @@ import {
   multiEquipmentBox,
   rankingBars,
   ruleResultChart,
+  sensorFaultChart,
   sensorHealthHeatmap,
 } from "./vibeCharts";
 
@@ -54,5 +55,19 @@ describe("vibeCharts", () => {
       { equipment_id: "AHU_1", role: "mat", coverage_pct: 80 },
     ]);
     expect(fig?.data[0]?.type).toBe("heatmap");
+  });
+
+  it("sensorFaultChart adds fault swim lanes", () => {
+    const points = Array.from({ length: 24 }, (_, i) => ({
+      timestamp_utc: `t${i}`,
+      value_f: 55,
+    }));
+    const fig = sensorFaultChart(points, { sensorName: "AHU_1 · sat" });
+    expect(fig?.data[0]?.name).toBe("AHU_1 · sat");
+    expect(
+      fig?.data.some((t: { name?: string }) =>
+        String(t.name).includes("FLATLINE"),
+      ),
+    ).toBe(true);
   });
 });

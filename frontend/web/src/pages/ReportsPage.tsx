@@ -13,12 +13,16 @@ import {
 import { useSessionQuery } from "../session";
 import { listPackageBuildings } from "../api/mappingApi";
 import { getFddResults, getFddSeries, listFddRules } from "../api/fddApi";
-import { postSensorHealth } from "../api/analyticsApi";
+import { postInspect, postSensorHealth } from "../api/analyticsApi";
 import {
   missingSegmentCount,
   type PlotlyFigure,
 } from "../api/plotDataset";
-import { ruleResultChart, sensorHealthHeatmap } from "../api/vibeCharts";
+import {
+  ruleResultChart,
+  sensorFaultChart,
+  sensorHealthHeatmap,
+} from "../api/vibeCharts";
 import {
   createReportDraft,
   getEngineeringFindingsReport,
@@ -61,7 +65,11 @@ export function ReportsPage() {
     Array<Record<string, string | number | boolean>>
   >([]);
   const [sensorFigure, setSensorFigure] = useState<PlotlyFigure | null>(null);
+  const [sensorFaultFigure, setSensorFaultFigure] =
+    useState<PlotlyFigure | null>(null);
+  const [sensorKey, setSensorKey] = useState("");
   const [sensorLoading, setSensorLoading] = useState(false);
+  const [sensorFaultLoading, setSensorFaultLoading] = useState(false);
   const [sensorError, setSensorError] = useState<string | null>(null);
   const [sensorOpen, setSensorOpen] = useState(false);
 
@@ -190,6 +198,10 @@ export function ReportsPage() {
           title: `Sensor health — ${buildingId}`,
         }),
       );
+      setSensorKey((prev) => {
+        if (prev || !normalized[0]) return prev;
+        return `${normalized[0].equipment_id}::${normalized[0].role}`;
+      });
       if (!normalized.length && env.warnings?.[0]) {
         setSensorError(env.warnings[0]);
       }
@@ -201,6 +213,55 @@ export function ReportsPage() {
       setSensorLoading(false);
     }
   }, [buildingId, equipmentId]);
+
+  const loadSensorFaultChart = useCallback(async () => {
+    if (!buildingId || !sensorKey.includes("::")) {
+      setSensorError("Load sensor health and pick a sensor first");
+      return;
+    }
+    const [eq, role] = sensorKey.split("::");
+    if (!eq || !role) return;
+    setSensorFaultLoading(true);
+    setSensorError(null);
+    try {
+      const env = await postInspect({
+        building_id: buildingId,
+        equipment_ids: [eq],
+        max_points: 4000,
+        series: { columns: [role] },
+      });
+      const points = (env.points ?? []).map((p) => ({
+        timestamp_utc: p.timestamp_utc,
+        value_f: p[role] ?? p.value_f,
+      }));
+      const fig = sensorFaultChart(points, {
+        sensorName: `${eq} · ${role}`,
+        valueKey: "value_f",
+        yTitle: role,
+      });
+      setSensorFaultFigure(fig);
+      if (!fig) {
+        setSensorError(
+          env.warnings?.[0] ?? `No inspect points for ${eq}/${role}`,
+        );
+      }
+    } catch (err) {
+      setSensorFaultFigure(null);
+      setSensorError(formatErr(err));
+    } finally {
+      setSensorFaultLoading(false);
+    }
+  }, [buildingId, sensorKey]);
+
+  const sensorKeyOptions = useMemo(() => {
+    const opts = sensorRows.map((r) => ({
+      value: `${r.equipment_id}::${r.role}`,
+      label: `${r.equipment_id} · ${r.role}${
+        r.flatline_flag ? " (flatline)" : ""
+      }`,
+    }));
+    return [{ value: "", label: "— sensor —" }, ...opts];
+  }, [sensorRows]);
 
   const onCreateDraft = async () => {
     setArtifactsNotice(null);
@@ -422,6 +483,33 @@ export function ReportsPage() {
                   testId="sensor-health-table"
                 />
               ) : null}
+
+              <Select
+                id="sensor-fault-pick"
+                label="Sensor for fault chart"
+                value={sensorKey}
+                options={sensorKeyOptions}
+                onChange={setSensorKey}
+                testId="sensor-fault-pick"
+              />
+              <Button
+                id="sensor-fault-load"
+                label={
+                  sensorFaultLoading ? "Loading…" : "Load sensor fault chart"
+                }
+                onClick={() => void loadSensorFaultChart()}
+                disabled={
+                  sensorFaultLoading || !buildingId || !sensorKey.includes("::")
+                }
+                testId="sensor-fault-load"
+              />
+              <PlotlyHost
+                id="sensor-fault-chart"
+                label="Sensor fault chart"
+                figure={sensorFaultFigure}
+                loading={sensorFaultLoading}
+                testId="sensor-fault-chart"
+              />
             </Expander>
           </div>
         ) : (
