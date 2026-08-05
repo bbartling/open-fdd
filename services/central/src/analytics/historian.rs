@@ -1541,16 +1541,12 @@ LIMIT {limit}
         .and_then(|p| p.get("timestamp_utc").and_then(|v| v.as_str()))
         .map(str::to_string);
     let warnings = vec![
-        "equipment inspection points from historian DataFusion (raw columns; no FDD rule)"
-            .into(),
+        "equipment inspection points from historian DataFusion (raw columns; no FDD rule)".into(),
     ];
     let query = AnalyticsQuery::default();
     let mut env = envelope_with_engine("equipment-inspect-v1", &query, warnings, DF_ENGINE);
     env.points = points;
-    env.rows = selected
-        .iter()
-        .map(|c| json!({ "column": c }))
-        .collect();
+    env.rows = selected.iter().map(|c| json!({ "column": c })).collect();
     env.coverage = Some(json!({
         "equipment_id": eq,
         "row_count": n,
@@ -1954,9 +1950,8 @@ ORDER BY (CAST(SUM(CASE WHEN zone_t < {comfort_low_f} OR zone_t > {comfort_high_
             "series": "fail_pct",
         }));
     }
-    let warnings = vec![
-        "RCx zone comfort ranking from historian DataFusion (default band 70–75°F)".into(),
-    ];
+    let warnings =
+        vec!["RCx zone comfort ranking from historian DataFusion (default band 70–75°F)".into()];
     let query = AnalyticsQuery::default();
     let mut env = envelope_with_engine("rcx-ranking-v1", &query, warnings, DF_ENGINE);
     env.points = points;
@@ -2678,11 +2673,7 @@ mod tests {
 
         let ahu = building.join("AHU_1");
         std::fs::create_dir_all(&ahu).unwrap();
-        std::fs::write(
-            ahu.join("columns.csv"),
-            "col,point_role\noa_t,oa_t\n",
-        )
-        .unwrap();
+        std::fs::write(ahu.join("columns.csv"), "col,point_role\noa_t,oa_t\n").unwrap();
         let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
         writeln!(f, "timestamp_utc,oa_t").unwrap();
         writeln!(f, "2026-07-01T00:00:00Z,70").unwrap();
@@ -2713,7 +2704,10 @@ mod tests {
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
 
         assert!(!env.points.is_empty());
-        assert_eq!(env.coverage.as_ref().unwrap()["oat_join"], "site_broadcast_by_ts");
+        assert_eq!(
+            env.coverage.as_ref().unwrap()["oat_join"],
+            "site_broadcast_by_ts"
+        );
         assert!(env.rows.iter().any(|r| r["kind"] == "delta_hist"));
     }
 

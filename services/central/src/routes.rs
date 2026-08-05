@@ -189,7 +189,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/analytics/rcx/chiller", post(analytics_rcx_chiller))
         .route("/api/analytics/rcx/boiler", post(analytics_rcx_boiler))
         .route("/api/analytics/rcx/preset", post(analytics_rcx_preset))
-        .route("/api/analytics/rcx/presets", get(analytics_rcx_presets_list))
+        .route(
+            "/api/analytics/rcx/presets",
+            get(analytics_rcx_presets_list),
+        )
         .route("/api/analytics/metering", post(analytics_metering))
         .merge(csv)
         // OFDD-075: analytics/FDD posts (building-scoped Overview samples) can
@@ -1761,13 +1764,11 @@ async fn analytics_inspect(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
         .map(|s| s.as_str())
         .unwrap_or("");
     let columns: Option<Vec<String>> = req.series.as_ref().and_then(|s| {
-        s.get("columns")
-            .and_then(|c| c.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(str::to_string))
-                    .collect()
-            })
+        s.get("columns").and_then(|c| c.as_array()).map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
     });
     let max_points = req.query.max_points.unwrap_or(2000);
     let env = match analytics::historian::inspect_from_history(

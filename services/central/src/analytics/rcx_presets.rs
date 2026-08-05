@@ -409,13 +409,8 @@ pub async fn run_preset(
             .await?
         }
         "ranking" => {
-            historian::rcx_zone_comfort_rank_from_history(
-                building_id,
-                meta.eq_kinds,
-                70.0,
-                75.0,
-            )
-            .await?
+            historian::rcx_zone_comfort_rank_from_history(building_id, meta.eq_kinds, 70.0, 75.0)
+                .await?
         }
         "metering" => {
             historian::rcx_metering_from_history(
@@ -429,7 +424,10 @@ pub async fn run_preset(
         other => {
             return Ok(Some(empty_stub(
                 meta,
-                &format!("RCx preset '{}' chart kind '{other}' not yet wired in DataFusion", meta.id),
+                &format!(
+                    "RCx preset '{}' chart kind '{other}' not yet wired in DataFusion",
+                    meta.id
+                ),
             )));
         }
     };
