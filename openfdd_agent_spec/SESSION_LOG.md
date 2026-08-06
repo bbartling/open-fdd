@@ -1,12 +1,11 @@
 # Session log
 
-## 2026-08-06 — DF parity, no-Python central image, docs refresh
+## 2026-08-06 — DF parity, no-Python central image, docs refresh (#671)
 
-- Overview: economizer points SQL + inspect flash fix (prior local); MAT/temps/BAS Plotly colors match vibe19 rainbow.
-- RCx OAT scatter: alias `ts_utc` to avoid DataFusion timestamp ambiguity.
-- Central Dockerfile: debian-slim + Rust only (removed Python/pip/wattlab from product image); WattLab dump gated on `OPENFDD_WATTLAB_PYTHON_EXPORT=1`.
-- Removed SPA overview-oracle client; Overview types in `overviewTypes.ts`.
-- Agent/product docs rewritten present-tense React+DataFusion + PyPI/cookbooks; `openfdd-react-spa` skill replaces streamlit skill.
+- Merged `77cf8d7` — Overview economizer SQL + inspect flash; MAT/temps/BAS Plotly colors; RCx OAT scatter `ts_utc` alias; Liberty `web_*` inspect prefs.
+- Central Dockerfile: debian-slim + Rust only; WattLab dump gated `OPENFDD_WATTLAB_PYTHON_EXPORT=1`.
+- SPA overview-oracle client removed; ownership/README/docs present-tense React+DataFusion; CI checkers require React operator UI.
+- GHCR: dispatched Publish stack (+ MCP) on tip during Actions major outage; bensbench pin `sha-77cf8d7` after publish green.
 
 ## 2026-08-05 — Login page internet hygiene
 
