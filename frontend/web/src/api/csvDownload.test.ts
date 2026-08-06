@@ -11,6 +11,7 @@ describe("escapeCsvCell", () => {
 
   it("quotes commas and preserves normal values", () => {
     expect(escapeCsvCell("x,y")).toBe('"x,y"');
+    expect(escapeCsvCell("a\rb")).toBe('"a\rb"');
     expect(escapeCsvCell(1)).toBe("1");
   });
 });
@@ -40,8 +41,11 @@ describe("downloadRowsCsv", () => {
         }
         return document.createElement(tag);
       });
-    downloadRowsCsv("x.csv", [{ a: 1, b: "x,y" }]);
+    downloadRowsCsv("x.csv", [{ a: 1, "b,c": "x,y" }]);
     expect(URL.createObjectURL).toHaveBeenCalled();
+    const blob = (URL.createObjectURL as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as Blob;
+    expect(blob).toBeInstanceOf(Blob);
     expect(click).toHaveBeenCalled();
     createEl.mockRestore();
   });

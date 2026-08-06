@@ -1535,8 +1535,12 @@ pub async fn inspect_from_history(
     const PREFERRED_INSPECT: &[&str] = &[
         "sat",
         "mat",
+        "web_mat",
+        "web_ma_t",
         "rat",
+        "web_ra_t",
         "oa_t",
+        "web_oa_t",
         "oa_damper_pct",
         "fan_status",
         "fan_cmd",
