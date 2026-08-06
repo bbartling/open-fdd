@@ -6,6 +6,7 @@ Lightweight Milestone A/C0 CI smoke — does not replace cookbook_parity_check.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -65,8 +66,14 @@ def _check_readme(errors: list[str]) -> None:
         errors.append(
             "README.md must state both public cookbook 59 and SQL registry 63 (count contract)"
         )
-    if "Streamlit" not in text:
-        errors.append("README.md must identify Streamlit as the operator UI")
+    if "React" not in text and "openfdd-web" not in text:
+        errors.append("README.md must identify React (openfdd-web) as the operator UI")
+    if "Streamlit" in text and "not Streamlit" not in text and "Streamlit product removed" not in text:
+        # Allow explicit negation / archive notes only.
+        if re.search(r"(?i)production operator UI is \*\*Streamlit\*\*", text) or re.search(
+            r"(?i)Streamlit UI for CSV", text
+        ):
+            errors.append("README.md must not claim Streamlit as the production operator UI")
     if "GHCR" not in text and "ghcr.io" not in text:
         errors.append("README.md must mention GHCR stack for production DataFusion FDD")
 

@@ -17,10 +17,10 @@ Open-FDD is open-source building analytics software for operators, integrators, 
 - Stores telemetry in an **Apache Arrow / Feather** historian at the edge
 - Models sites, equipment, and points with **Project Haystack** semantics
 - Runs **DataFusion SQL** rules for supervisory fault detection (`sql_rules/` registry)
-- Serves a **Streamlit** engineering UI (`openfdd-ui`) — vibe19 FDD/RCx workflows plus vibe20 WattLab export handoff in **one** app
+- Serves a **React** SPA (`openfdd-web`) — Overview, FDD, RCx, and findings against central `/api` only
 - Exposes a **JWT-protected REST API** and **MCP** tools for AI-assisted engineering workflows
 
-Pandas rule recipes remain published in the [Pandas cookbook](rules/cookbook/pandas-cookbook.html) as the analyst/oracle mirror (tested in the vibe19 playground). Production Open-FDD FDD math is DataFusion SQL only.
+Pandas rule recipes remain published in the [Pandas cookbook](rules/cookbook/pandas-cookbook.html) for notebooks and PyPI/oracle tooling. Production Open-FDD FDD and Overview analytics are DataFusion SQL only.
 
 ## Who it is for
 
@@ -58,7 +58,7 @@ Open-FDD is intended for **LAN, VPN, or OT-network deployment**. Do not expose t
 
 ```text
 ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:-nightly}
-ghcr.io/bbartling/openfdd-ui:${OPENFDD_IMAGE_TAG:-nightly}
+ghcr.io/bbartling/openfdd-web:${OPENFDD_IMAGE_TAG:-nightly}
 ghcr.io/bbartling/openfdd-fieldbus:${OPENFDD_IMAGE_TAG:-nightly}
 ghcr.io/bbartling/openfdd-mqtt:${OPENFDD_IMAGE_TAG:-nightly}
 ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}

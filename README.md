@@ -39,34 +39,30 @@
 
 > **Open-source semantic building analytics and HVAC supervisory fault detection. Local-first. On-premises. Vendor-neutral. Free to run at the edge or offline.**
 
-**Cutover (2026-07-30):** **open-fdd is the product.** vibe19 / vibe20 app images are **frozen** — no further tip features. Fuel / Twin / ECM / FDD ship via **GHCR open-fdd** + **PyPI `open-fdd`**. EnergyPlus stays a stack companion (MCP/DinD), not a separate vibe Studio product.
-
 Open-FDD is an open-source analytics platform for building automation that combines **Haystack-style semantic point roles** (JSON site/equipment maps), **live or historical OT/CSV data**, and **high-performance columnar analytics**.
+
+The product stack is **Rust central + React SPA + fieldbus/MQTT**. Browser traffic goes to central `/api` only. Production FDD and Overview analytics run on **Apache DataFusion** SQL over the Arrow historian; the SPA renders Plotly in the browser. **PyPI `open-fdd`** (pandas cookbooks, ECM helpers) is a library for notebooks and third-party tooling — not the product request path.
 
 The platform includes:
 
 - Haystack-style point roles in JSON (`column_map`) — not RDF-first
-- Streamlit UI for CSV / zip FDD, RCx, findings, and **WattLab** (Fuel / Twin / ECM)
-- Arrow historian + DataFusion SQL fault detection (59 cookbook rules)
-- ECM / industry 2nd-eyes on **PyPI**; EnergyPlus runner is an open-fdd stack companion
-- Docker compose images on GHCR; OT fieldbus / MQTTS still roadmap
+- React SPA (`openfdd-web`) for CSV / zip FDD, RCx, Overview, and findings
+- Arrow historian + DataFusion SQL fault detection (59 cookbook rules; **63** SQL registry ids)
+- ECM / industry helpers on **PyPI**; EnergyPlus remains a stack companion (MCP/DinD)
+- Docker compose images on GHCR (`central`, `web`, `fieldbus`, `mqtt`, `mcp`)
 
-Open-FDD ships compose recipes for lab and production-shaped stacks.
+### CSV / lab (ready today)
 
-### CSV-only (ready today)
-
-`central` + `ui` — bulk CSV / zip packages, historian, DataFusion FDD, Streamlit.
+`central` + `web` — bulk CSV / zip packages, historian, DataFusion FDD, React SPA.
 No MQTT or fieldbus required. Prefer this for lab soaks and agent workflows.
 
-`central` (+ optional `mqtt` + `ui`) also covers JWT API hub soaks without OT drivers.
+`./scripts/openfdd_stack_up.sh react` (or `react-ot` with fieldbus) is the supported product recipe.
 
-### Roadmap — OT edge / MQTTS (not ready in any build yet)
+### OT edge / MQTTS
 
-Soon: remote IoT edges speaking **JSON API**, **BACnet**, **Modbus**, and
-**Haystack**, publishing to a Mosquitto **MQTTS** broker (`openfdd-mqtt`); central
-consumes from the broker (no public REST to the edge). Standalone
-(`mqtt`+`central`+`ui`+`fieldbus`) and `stack_up.sh edge` are placeholders until
-that path ships — do not treat them as supported product recipes today.
+Remote edges speak **JSON API**, **BACnet**, **Modbus**, and **Haystack**, publishing to
+Mosquitto **MQTTS** (`openfdd-mqtt`); central consumes from the broker. Use
+`react-ot` when exercising the fieldbus path on a bench.
 
 ---
 
@@ -85,9 +81,9 @@ The **[HVAC FDD Rule Cookbook](https://bbartling.github.io/open-fdd/rules/cookbo
 
 | Image | Role |
 |-------|------|
-| [`ghcr.io/bbartling/openfdd-central`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-central) | MQTTS ingest, Feather historian, FDD registry, REST API |
-| [`ghcr.io/bbartling/openfdd-ui`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-ui) | Streamlit operator UI (vibe19 + WattLab export → central) |
-| [`ghcr.io/bbartling/openfdd-fieldbus`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-fieldbus) | BACnet / Modbus / Haystack / JSON edge (**not ready** — image may publish; product path soon) |
+| [`ghcr.io/bbartling/openfdd-central`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-central) | MQTTS ingest, Feather historian, DataFusion FDD, REST `/api` |
+| [`ghcr.io/bbartling/openfdd-web`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-web) | React operator SPA (browser → central `/api` only) |
+| [`ghcr.io/bbartling/openfdd-fieldbus`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-fieldbus) | BACnet / Modbus / Haystack / JSON edge |
 | [`ghcr.io/bbartling/openfdd-mqtt`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mqtt) | Mosquitto MQTTS broker |
 | [`ghcr.io/bbartling/openfdd-mcp`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp) | Optional slim MCP stdio sidecar → central API |
 
@@ -100,16 +96,16 @@ git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
 export OPENFDD_IMAGE_TAG=nightly
 export OPENFDD_JWT_SECRET='change-me'
 export OPENFDD_ADMIN_PASSWORD='change-me'
-./scripts/openfdd_stack_up.sh standalone
-# UI http://127.0.0.1:3000  API http://127.0.0.1:8080
+./scripts/openfdd_stack_up.sh react
+# SPA http://127.0.0.1:3000  API http://127.0.0.1:8080
 ```
 
 ### Other recipes
 
 ```bash
-./scripts/openfdd_stack_up.sh csv          # central + ui only (recommended today)
-./scripts/openfdd_stack_up.sh central      # hub + mqtt broker (no fieldbus)
-./scripts/openfdd_stack_up.sh edge         # fieldbus-only — not a supported path yet
+./scripts/openfdd_stack_up.sh react        # mqtt + central + React web
+./scripts/openfdd_stack_up.sh react-ot     # react + fieldbus (OT bench)
+./scripts/openfdd_stack_up.sh csv          # central + web (CSV lab)
 ```
 
 See [Build recipes](docs/operations/build-recipes.md) and [docker/VERSION_MANIFEST.md](docker/VERSION_MANIFEST.md).
@@ -138,7 +134,7 @@ The [PyPI package](https://pypi.org/project/open-fdd/) is a **library** surface 
 | `pip install "open-fdd[reporting]"` | Engineering findings / report writers |
 | `pip install "open-fdd[vibe19]"` | vibe19-aligned pandas rule helpers |
 
-**FDD (DataFusion SQL)** — historian, registry, Streamlit UI, BACnet/Modbus — ships in the **GHCR container stack** (`openfdd-central` / `openfdd-ui` / …), not as the default PyPI runtime. Use `./scripts/openfdd_stack_up.sh` (above) for that path.
+**FDD (DataFusion SQL)** — historian, registry, React SPA, BACnet/Modbus — ships in the **GHCR container stack** (`openfdd-central` / `openfdd-web` / …), not as the default PyPI runtime. Use `./scripts/openfdd_stack_up.sh react` (above) for that path.
 
 Docs: [ECM](docs/ecm/README.md) · [pandas cookbook](docs/rules/cookbook/pandas-cookbook.md) · [DataFusion SQL cookbook](docs/rules/cookbook/datafusion-sql-cookbook.md)
 
@@ -148,11 +144,11 @@ Docs: [ECM](docs/ecm/README.md) · [pandas cookbook](docs/rules/cookbook/pandas-
 
 ```bash
 git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
-./scripts/openfdd_stack_up.sh csv --build   # or: cargo run -p openfdd-central
-./scripts/openfdd_ui_dev.sh                 # Streamlit UI → central API :8080
+./scripts/openfdd_stack_up.sh react --build   # or: cargo run -p openfdd-central
+cd frontend/web && npm ci && npm run dev      # React SPA → central API :8080
 ```
 
-The production operator UI is **Streamlit** (`services/ui` / `ghcr.io/bbartling/openfdd-ui`), not a Vite/Caddy SPA.
+The production operator UI is **React** (`frontend/web` / `ghcr.io/bbartling/openfdd-web`).
 
 Native Rust: `cargo test --workspace`
 

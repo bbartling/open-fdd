@@ -141,15 +141,15 @@ def run_docs_integrity() -> None:
             raise AssertionError(f"README.md missing required docs link: {required_link}")
     print("PASS README cookbook + docs links present")
 
-    # Published product UI must not claim React; SQL registry size must stay honest.
+    # Published product UI is React SPA; SQL registry size must stay honest.
     home = (ROOT / "docs" / "index.md").read_text(encoding="utf-8")
-    if re.search(r"Serves a \*\*React\*\*", home) or re.search(
-        r"\*\*React\*\* dashboard", home
+    if "React" not in home and "openfdd-web" not in home:
+        raise AssertionError("docs/index.md must identify React (openfdd-web) product UI")
+    if re.search(r"(?i)Serves a \*\*Streamlit\*\*", home) or re.search(
+        r"(?i)Streamlit\*\* engineering UI", home
     ):
-        raise AssertionError("docs/index.md still claims React product dashboard")
-    if "Streamlit" not in home:
-        raise AssertionError("docs/index.md must mention Streamlit product UI")
-    print("PASS docs/index.md Streamlit (no React product claim)")
+        raise AssertionError("docs/index.md must not claim Streamlit as product UI")
+    print("PASS docs/index.md React product UI")
 
     registry = (ROOT / "sql_rules" / "registry.yaml").read_text(encoding="utf-8")
     # Count top-level rule id entries of form `- id:` or `id:` under rules list.

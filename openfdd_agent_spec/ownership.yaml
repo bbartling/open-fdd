@@ -91,15 +91,43 @@ components:
     image: ghcr.io/bbartling/vibe20
     role: energyplus_studio
 
-  mcp_bridge:
-    canonical_owner: mcp
-    image: openfdd-mcp
-    backend: services/central
+  cookbooks:
+    sql:
+      path: docs/rules/cookbook/datafusion-sql-cookbook.md
+      role: production
+      protected: true
+    pandas:
+      path: docs/rules/cookbook/pandas-cookbook.md
+      role: pypi_oracle_vibe19
+      protected: true
+    parity_matrix:
+      path: docs/rules/cookbook/parity-matrix.md
+      protected: true
 
-  edge_future:
-    canonical_owner: edge
-    status: future_concept
+  future_concepts:
+    paths:
+      - edge/
+      - os/
+    policy: never_delete
 
-  os_future:
-    canonical_owner: os
-    status: future_concept
+  mcp:
+    canonical_owner: openfdd-mcp
+    role: read_first_central_tools
+
+# Milestone C0 — documentation sections that must not be vibe-coded away.
+protected_docs:
+  root_readme_navigation:
+    path: README.md
+    required_markers:
+      - "FDD Rule Cookbook"
+      - "pypi.org/project/open-fdd"
+      - "Apache DataFusion"
+      - "Apache Arrow"
+      - "datafusion-sql-cookbook"
+      - "pandas-cookbook"
+  pandas_cookbook:
+    path: docs/rules/cookbook/pandas-cookbook.md
+  sql_cookbook:
+    path: docs/rules/cookbook/datafusion-sql-cookbook.md
+  parity_matrix:
+    path: docs/rules/cookbook/parity-matrix.md
