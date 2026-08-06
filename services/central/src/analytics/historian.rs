@@ -2773,7 +2773,11 @@ mod tests {
 
         let wx = building.join("weather");
         std::fs::create_dir_all(&wx).unwrap();
-        std::fs::write(wx.join("columns.csv"), "col,point_role\nweb_oa_t,web_oa_t\n").unwrap();
+        std::fs::write(
+            wx.join("columns.csv"),
+            "col,point_role\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
         let mut wf = std::fs::File::create(wx.join("history_wide.csv")).unwrap();
         writeln!(wf, "timestamp_utc,web_oa_t").unwrap();
         writeln!(wf, "2026-07-01T00:00:00Z,60").unwrap();
@@ -2784,16 +2788,10 @@ mod tests {
         fdd_store::ingest_building(tmp.path(), "BUILDING_OATSC", &parquet).unwrap();
         std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
 
-        let env = rcx_oat_scatter_from_history(
-            Some("BUILDING_OATSC"),
-            "sat",
-            &["AHU"],
-            false,
-            500,
-        )
-        .await
-        .unwrap()
-        .expect("oat scatter envelope");
+        let env = rcx_oat_scatter_from_history(Some("BUILDING_OATSC"), "sat", &["AHU"], false, 500)
+            .await
+            .unwrap()
+            .expect("oat scatter envelope");
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
 
         assert!(!env.points.is_empty());
