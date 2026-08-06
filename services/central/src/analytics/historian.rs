@@ -1007,14 +1007,14 @@ pub async fn economizer_from_history(
     let dt_min = dt_min_f.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
     let damper_proj = if cols.contains("oa_damper_pct") {
-        "oa_damper_pct"
+        "oa_damper_pct AS damper_fb_pct"
     } else {
-        "CAST(NULL AS DOUBLE) AS oa_damper_pct"
+        "CAST(NULL AS DOUBLE) AS damper_fb_pct"
     };
     let sat_proj = if cols.contains("sat") {
-        "sat"
+        "sat AS sat_f"
     } else {
-        "CAST(NULL AS DOUBLE) AS sat"
+        "CAST(NULL AS DOUBLE) AS sat_f"
     };
 
     let sql = format!(
@@ -1036,7 +1036,7 @@ SELECT
   SUM(CASE WHEN fan_on THEN 1 ELSE 0 END) AS n_fan_on,
   SUM(CASE WHEN fan_on AND oa_t IS NOT NULL AND rat IS NOT NULL
              AND ABS(oa_t - rat) >= {dt_min} THEN 1 ELSE 0 END) AS n_identifiable,
-  COUNT(oa_damper_pct) AS n_damper
+  COUNT(damper_fb_pct) AS n_damper
 FROM base
 GROUP BY equipment_id
 ORDER BY equipment_id
@@ -1061,6 +1061,9 @@ ORDER BY equipment_id
     }
 
     let limit = max_points.clamp(100, 8000);
+    // Keep aliases consistent in the CTE (sat_f / damper_fb_pct). Avoid bare
+    // `WHERE fan_on` + `THEN true/false` outer columns — those hit DataFusion
+    // SanityCheckPlan on some historian schemas (Liberty BUILDING_100).
     let points_sql = format!(
         r#"
 WITH base AS (
@@ -1072,7 +1075,7 @@ WITH base AS (
     {mat_col} AS mat_f,
     {sat_proj},
     {damper_proj},
-    {on_sql} AS fan_on
+    CASE WHEN ({on_sql}) THEN 1 ELSE 0 END AS fan_on_i
   FROM history
   WHERE equipment_id IS NOT NULL{eq_filter}
 )
@@ -1082,28 +1085,23 @@ SELECT
   oat_f,
   rat_f,
   mat_f,
-  sat AS sat_f,
-  oa_damper_pct AS damper_fb_pct,
+  sat_f,
+  damper_fb_pct,
   (oat_f - rat_f) AS delta_or_f,
   (mat_f - rat_f) AS delta_mr_f,
   CASE
-    WHEN oa_damper_pct IS NOT NULL AND oat_f IS NOT NULL AND rat_f IS NOT NULL THEN
-      mat_f - (rat_f + (oa_damper_pct / 100.0) * (oat_f - rat_f))
+    WHEN damper_fb_pct IS NOT NULL AND oat_f IS NOT NULL AND rat_f IS NOT NULL THEN
+      mat_f - (rat_f + (damper_fb_pct / 100.0) * (oat_f - rat_f))
     ELSE NULL
   END AS mat_resid_f,
   CASE
     WHEN oat_f IS NOT NULL AND rat_f IS NOT NULL AND ABS(oat_f - rat_f) >= {dt_min}
-    THEN true ELSE false
-  END AS identifiable
+    THEN 1 ELSE 0
+  END AS identifiable_i
 FROM base
-WHERE fan_on
+WHERE fan_on_i = 1
   AND oat_f IS NOT NULL AND rat_f IS NOT NULL AND mat_f IS NOT NULL
-ORDER BY
-  CASE
-    WHEN oat_f IS NOT NULL AND rat_f IS NOT NULL AND ABS(oat_f - rat_f) >= {dt_min}
-    THEN 0 ELSE 1
-  END,
-  timestamp_utc
+ORDER BY identifiable_i DESC, timestamp_utc
 LIMIT {limit}
 "#
     );
@@ -1122,7 +1120,7 @@ LIMIT {limit}
                     "delta_or_f": as_f64(r.get("delta_or_f")),
                     "delta_mr_f": as_f64(r.get("delta_mr_f")),
                     "mat_resid_f": as_f64(r.get("mat_resid_f")),
-                    "identifiable": r.get("identifiable").and_then(|v| v.as_bool()).unwrap_or(false),
+                    "identifiable": as_u64(r.get("identifiable_i")) > 0,
                     "fan_on": true,
                 }));
             }
@@ -1532,13 +1530,54 @@ pub async fn inspect_from_history(
     if plottable.is_empty() {
         return Ok(None);
     }
+    // Prefer AHU/zone roles so default inspect is useful on Liberty (not alphabetical
+    // boiler_/chiller_ columns from the Hive union schema).
+    const PREFERRED_INSPECT: &[&str] = &[
+        "sat",
+        "mat",
+        "rat",
+        "oa_t",
+        "oa_damper_pct",
+        "fan_status",
+        "fan_cmd",
+        "duct_static",
+        "duct_static_sp",
+        "sat_sp",
+        "clg_valve_pct",
+        "htg_valve_pct",
+        "zone_t",
+        "zone_flow",
+        "chw_supply_t",
+        "chw_return_t",
+        "hw_supply_t",
+        "hw_return_t",
+    ];
     let selected: Vec<String> = match columns {
         Some(want) if !want.is_empty() => want
             .iter()
             .filter(|c| plottable.iter().any(|p| p == *c))
             .cloned()
             .collect(),
-        _ => plottable.iter().take(8).cloned().collect(),
+        _ => {
+            let mut picked: Vec<String> = PREFERRED_INSPECT
+                .iter()
+                .filter(|c| plottable.iter().any(|p| p == *c))
+                .map(|c| (*c).to_string())
+                .collect();
+            if picked.is_empty() {
+                picked = plottable.iter().take(8).cloned().collect();
+            } else if picked.len() < 6 {
+                for c in &plottable {
+                    if picked.len() >= 8 {
+                        break;
+                    }
+                    if !picked.iter().any(|p| p == c) {
+                        picked.push(c.clone());
+                    }
+                }
+            }
+            picked
+        }
     };
     if selected.is_empty() {
         return Ok(None);

@@ -302,9 +302,23 @@ export function OverviewPopulated({
         ? (cov.columns_plotted as string[])
         : [];
       setInspectCols(plottable.length ? plottable : plotted);
-      setInspectSelectedCols((prev) =>
-        prev.length ? prev.filter((c) => plottable.includes(c) || plotted.includes(c)) : plotted.slice(0, 6),
-      );
+      // Only update selection when contents change — a fresh array every time
+      // re-triggers this callback (inspectSelectedCols dep) and flashes Plotly.
+      setInspectSelectedCols((prev) => {
+        if (prev.length) {
+          const next = prev.filter(
+            (c) => plottable.includes(c) || plotted.includes(c),
+          );
+          if (
+            next.length === prev.length &&
+            next.every((c, i) => c === prev[i])
+          ) {
+            return prev;
+          }
+          return next.length ? next : plotted.slice(0, 6);
+        }
+        return plotted.slice(0, 8);
+      });
       const rowCountN = Number(cov.row_count ?? env.points?.length ?? 0);
       if (Number.isFinite(rowCountN)) setRowCount(rowCountN);
       const first = cov.first_timestamp != null ? String(cov.first_timestamp) : null;
@@ -1063,6 +1077,12 @@ export function OverviewPopulated({
           height={320}
           testId="overview-econ-mat-resid-plot"
         />
+        <p className="oracle-sidebar__caption">
+          MAT residual is measured mixed-air temp minus the ideal mixing-box
+          prediction from RAT, OAT, and OA damper % (fan on, identifiable
+          samples) — near zero means the mixing model matches; large bias
+          suggests sensor, damper, or leakage issues.
+        </p>
         <Expander
           id="econ-temps-overlay"
           label="Free-cooling temps + OA damper overlay"
