@@ -2,8 +2,7 @@
 
 Human-readable ownership. Machine-readable twin: [`ownership.yaml`](ownership.yaml).
 
-Trust **tested current code** over historical `docs/migration/vibe19/*` stage notes.
-Update this file when code truth changes.
+Trust **tested current code**. Update this file when code truth changes.
 
 ---
 
@@ -11,15 +10,15 @@ Update this file when code truth changes.
 
 | Surface | Role | Must not |
 | --- | --- | --- |
-| **Open-FDD production** (GHCR stack) | Rust central, Arrow/Feather, DataFusion SQL FDD, JWT REST, React SPA (`openfdd-web`) sole product UI; Overview via `/api/analytics/*` | Silent pandas FDD fallback; reintroduce Streamlit/`openfdd-ui`/overview-oracle as product; claim Vibe 21 Phase 1 complete without `capabilities.yaml` evidence |
-| **React SPA** | Sole production UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)); internet-facing hygiene (no bench credential hints on login) | FastAPI/Python product sidecar; FDD math in TypeScript; BACnet wire ownership; secret/path handoffs in product UI |
-| **Streamlit product UI** | **Removed / cutover in progress** — not a shipping surface; WattLab exporter relocates before tree delete | Be reintroduced as product default without a new ADR |
-| **Vibe 21 program kit** | [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/) — recovery → twin → Unity ZIP import | Skip Master Loop gates; Unity Editor in production; BAS writes without authority |
-| **Open-FDD PyPI** (`open-fdd`) | Reusable libs: `ecm_engineering`, `rules`, `analytics`, `reporting` | Be the production FDD runtime |
-| **Vibe 19** (playground) | Educational pandas oracle + Streamlit demo + GHCR demo image | Remain canonical home of duplicated rule/analytics/reporting once migrated |
-| **Vibe 20** (playground) | EnergyPlus twin, calibration, ECM cross-check, Studio | Retain duplicate **generic** ECM formulas after Open-FDD parity |
-| **MCP** (`openfdd-mcp`) | Read-first stdio tools → central | Embed EnergyPlus / WattLab dial tools without an explicit product decision |
+| **Open-FDD product** (GHCR stack) | Rust central (DataFusion SQL FDD + `/api/analytics/*`), React SPA (`openfdd-web`), fieldbus, mqtt | Python/pandas in the product request path; FDD math in TypeScript |
+| **React SPA** | Sole product UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)); internet-facing hygiene (no bench credential hints on login) | Secret/path handoffs in product UI; BACnet wire ownership in the browser |
+| **Open-FDD PyPI** (`open-fdd`) | Third-party libraries: `ecm_engineering`, `rules`, `analytics`, `reporting` — runs **outside** the product app | Be mistaken for the product FDD runtime |
+| **Vibe 21 program kit** | [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/) — recovery → twin → Unity ZIP import | Skip Master Loop gates; Unity Editor in production |
+| **Vibe 19** (playground) | External pandas oracle demo + GHCR demo image | Own production FDD or product UI |
+| **Vibe 20** (playground) | EnergyPlus twin, calibration, ECM cross-check | Retain duplicate **generic** ECM formulas after Open-FDD parity |
+| **MCP** (`openfdd-mcp`) | Read-first stdio tools → central | Embed EnergyPlus dial tools without an explicit product decision |
 | **`edge/`, `os/`** | Future OS / edge concepts | Be deleted “for cleanup” |
+| **WattLab export tooling** | `tools/wattlab_export` (optional offline Python) | Ship inside the product central image or block health/analytics |
 
 ---
 
@@ -27,25 +26,24 @@ Update this file when code truth changes.
 
 | Cookbook | Location | Role |
 | --- | --- | --- |
-| DataFusion SQL expression cookbook | `docs/rules/cookbook/datafusion-sql-cookbook.md` + `sql_rules/` | Production execution SoT |
-| Pandas expression cookbook | `docs/rules/cookbook/pandas-cookbook.md` + `open_fdd.rules` | Oracle / engineering explanation |
+| DataFusion SQL expression cookbook | `docs/rules/cookbook/datafusion-sql-cookbook.md` + `sql_rules/` | Production execution |
+| Pandas expression cookbook | `docs/rules/cookbook/pandas-cookbook.md` + `open_fdd.rules` | PyPI oracle / engineering explanation |
 | Parity matrix | `docs/rules/cookbook/parity-matrix.md` | Honesty about gaps |
 
 Never replace cookbooks with generated API docs alone.
 Never delete one cookbook because the other engine “won.”
 
-**Execution SoT:** SQL registry (`sql_rules/registry.yaml`).
-**Identity/metadata SoT (Phase 2 target):** shared rule manifest under `open_fdd.contracts` (not shipped yet).
-**Recovery evidence SoT:** [`docs/migration/react-rust/capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml) — modernization Phase 1+2 exit ≠ Vibe 21 P1-G0.
-**Oracle SoT:** pandas cookbook + `open_fdd.rules`.
+**Execution:** SQL registry (`sql_rules/registry.yaml`) on central DataFusion.
+**Oracle / PyPI:** pandas cookbook + `open_fdd.rules`.
+**Recovery evidence:** [`docs/migration/react-rust/capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml).
 
 ---
 
 ## Pandas allowed-use boundaries
 
-**Allowed:** vibe19; PyPI oracle extras; notebooks; characterization/parity tests; UI plotting/display helpers that do not replace `/api/fdd/run`.
+**Allowed:** vibe19 playground; PyPI oracle extras; notebooks; characterization/parity tests against cookbooks.
 
-**Forbidden:** production central computing FDD via pandas; silent fallback from SQL to pandas when a rule fails; documentation claiming production FDD is pandas.
+**Forbidden:** production central computing FDD or Overview analytics via pandas; silent SQL→pandas fallback; claiming product FDD is pandas.
 
 ---
 
@@ -53,8 +51,8 @@ Never delete one cookbook because the other engine “won.”
 
 | Kind | Owner |
 | --- | --- |
-| Generic HVAC / finance formulas | `open_fdd.ecm_engineering` |
-| EnergyPlus IDF, sim orchestration, APIHelper, calibration tied to E+ | vibe20 |
+| Generic HVAC / finance formulas | `open_fdd.ecm_engineering` (PyPI) |
+| EnergyPlus IDF, sim orchestration, APIHelper, calibration | vibe20 |
 | Adapters / field-name translation | vibe20 (no recomputation of canonical formulas) |
 
 ---
@@ -63,23 +61,21 @@ Never delete one cookbook because the other engine “won.”
 
 | Kind | Owner |
 | --- | --- |
-| Portable report builders / schemas | `open_fdd.reporting` |
+| Portable report builders / schemas | `open_fdd.reporting` (PyPI) |
 | Product download UX | React SPA (`frontend/web`) |
-| External demo download UX | vibe19 (companion only) |
-| Engineering Findings product rules | vibe19 agent skills + reporting lib |
 
 ---
 
 ## Container ownership
 
-| Image | Channel for test | Notes |
+| Image | Channel | Notes |
 | --- | --- | --- |
-| `openfdd-central`, `openfdd-web`, `openfdd-fieldbus`, `openfdd-mqtt` | `:nightly` on master | Also `sha-<short>` immutable; **do not** publish `openfdd-ui` after cutover |
+| `openfdd-central`, `openfdd-web`, `openfdd-fieldbus`, `openfdd-mqtt` | `:nightly` → pin `sha-<short>` | Central image is **Rust/debian only** (no Python) |
 | `openfdd-mcp` | `:nightly` | Separate workflow |
-| `vibe19`, `vibe20` | `:develop` | Interim; retire only after parity matrix |
+| `vibe19`, `vibe20` | `:develop` | External playgrounds |
 
 ---
 
 ## Versioning ownership
 
-See [`docs/VERSIONING.md`](docs/VERSIONING.md). Do not leave contradictory root README version claims.
+See [`docs/VERSIONING.md`](docs/VERSIONING.md).

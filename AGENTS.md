@@ -1,35 +1,34 @@
 # Agent Guide (container stack + external agents)
 
 Open-FDD ships as a **container stack**: `openfdd-central`, `openfdd-web` (React),
-`openfdd-fieldbus`, `openfdd-mqtt`, plus optional `openfdd-mcp` (legacy
-`openfdd-ui` Streamlit archived). It does **not** ship an embedded AI chatbot.
-External orchestrators — Codex CLI, Cursor, OpenClaw, Claude Desktop, or any MCP
-host — connect via **JWT REST** and optional **`openfdd-mcp` stdio**.
+`openfdd-fieldbus`, `openfdd-mqtt`, plus optional `openfdd-mcp`. It does **not**
+ship an embedded AI chatbot. External orchestrators — Codex CLI, Cursor,
+OpenClaw, Claude Desktop, or any MCP host — connect via **JWT REST** and optional
+**`openfdd-mcp` stdio**.
 
 | Layer | Responsibility |
 | --- | --- |
-| **central** | MQTTS ingest, Feather, FDD registry SQL, REST + JWT |
-| **web** | React product UI (`frontend/web`) — sole production UI after Phase 2 ([ADR-001](docs/architecture/adr-001-react-rust-modernization.md)) |
-| **ui (archived)** | Streamlit (`services/ui`) — recovery via `ARCHIVED.md` / `streamlit-legacy` |
+| **central** | MQTTS ingest, Feather/Parquet historian, DataFusion SQL FDD + `/api/analytics/*`, REST + JWT (Rust image — no Python) |
+| **web** | React product UI (`frontend/web`) — sole product UI ([ADR-001](docs/architecture/adr-001-react-rust-modernization.md)) |
 | **fieldbus** | BACnet / Modbus / Haystack OT drivers |
 | **mqtt** | Mosquitto MQTTS broker |
 | **mcp** | Optional read-first stdio tools → central (`OPENFDD_API_BASE`) |
 
-**Docs:** [Build recipes](docs/operations/build-recipes.md) · [External agents](docs/examples/external-agents.md) · [MCP README](mcp/README.md) · [ECM engineering (PyPI)](docs/ecm/README.md) · [React/Rust modernization](docs/migration/react-rust/README.md)
+**Docs:** [Build recipes](docs/operations/build-recipes.md) · [External agents](docs/examples/external-agents.md) · [MCP README](mcp/README.md) · [ECM engineering (PyPI)](docs/ecm/README.md)
 
-**Software-engineering agent OS:** [`openfdd_agent_spec/`](openfdd_agent_spec/) — architecture locks, skills, Milestone A ([`openfdd_agent_spec/MILESTONE_A.md`](openfdd_agent_spec/MILESTONE_A.md)). Ops/edge soak prompts stay under [`docs/agent/`](docs/agent/).
+**Software-engineering agent OS:** [`openfdd_agent_spec/`](openfdd_agent_spec/) — architecture locks, skills, Milestone A.
 
-**Active recovery / Vibe 21 twin program (execute Master Loop):** [`tools/open-fdd-vibe21-production/`](tools/open-fdd-vibe21-production/README.md) · paste prompt [`prompts/MASTER_PRODUCTION_LOOP.md`](tools/open-fdd-vibe21-production/prompts/MASTER_PRODUCTION_LOOP.md) · capability ledger [`docs/migration/react-rust/capabilities.yaml`](docs/migration/react-rust/capabilities.yaml). Prior modernization Phase 1+2 “exit” is **architecture direction**, not P1-G0 qualification of this recovery program.
+**Active recovery / Vibe 21 twin program:** [`tools/open-fdd-vibe21-production/`](tools/open-fdd-vibe21-production/README.md) · capability ledger [`docs/migration/react-rust/capabilities.yaml`](docs/migration/react-rust/capabilities.yaml).
 
-**Historical React/Rust modernization kit (Phase 1+2 exit ledgers; Phase 3 outlook):** [`tools/open-fdd-modernization/`](tools/open-fdd-modernization/README.md) · skill bridge [`AGENT_SKILL_BRIDGE.md`](tools/open-fdd-modernization/AGENT_SKILL_BRIDGE.md) · UI skill [`streamlit-to-react`](tools/open-fdd-modernization/skills/streamlit-to-react/SKILL.md).
+**PyPI (`open-fdd`):** ECM engineering + pandas oracle (`open_fdd.rules` / `analytics` / `reporting`) for **third-party tooling** outside the product app. Product FDD is DataFusion on GHCR.
 
-**PyPI (`open-fdd` 4.1+):** ECM engineering + pandas oracle (`open_fdd.rules` / `analytics` / `reporting`) via extras. Production FDD is DataFusion/GHCR, not this wheel.
+Dual expression cookbooks (permanent): `docs/rules/cookbook/` (SQL + pandas).
 
 ## Start session
 
 ```bash
 ./scripts/openfdd_stack_up.sh react-ot     # React SPA + mqtt + central + fieldbus
-# or: react (no fieldbus) / csv / standalone (Streamlit only with profile)
+# or: react (no fieldbus) / csv
 TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"'"$OPENFDD_ADMIN_PASSWORD"'"}' \
@@ -43,7 +42,7 @@ Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:808
 ```bash
 ./scripts/openfdd_stack_pull.sh react-ot
 ./scripts/openfdd_stack_up.sh react-ot
-./scripts/nightly-ot-bench/run_all.sh      # pull sha-* + aggressive OT/API gates
+./scripts/nightly-ot-bench/run_all.sh      # pull sha-* + OT/API gates
 ./scripts/openfdd_stack_up.sh csv
 ```
 
@@ -64,7 +63,8 @@ Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:808
 - expose API on public internet
 - write BACnet without explicit human approval
 - embed vendor chat relays or model API keys in the stack
+- add Python to the product central/web request path
 
-See [docs/agent/index.md](docs/agent/index.md) for external-agent architecture and API context.
+See [docs/agent/index.md](docs/agent/index.md) for external-agent architecture.
 
 For library/migration/PR missions (Milestone A), start at [openfdd_agent_spec/AGENTS.md](openfdd_agent_spec/AGENTS.md).

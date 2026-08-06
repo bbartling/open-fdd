@@ -92,7 +92,7 @@ vi.mock("../api/analyticsApi", () => ({
   })),
 }));
 
-vi.mock("../api/overviewOracleApi", () => ({
+vi.mock("../api/csvDownload", () => ({
   downloadRowsCsv: vi.fn(),
 }));
 

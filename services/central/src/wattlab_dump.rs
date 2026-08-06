@@ -177,6 +177,20 @@ pub async fn create_dump(
     job_id: &str,
     request: CreateDumpRequest,
 ) -> Result<DumpArtifact, JobError> {
+    // Product central image is Rust-only (no Python). WattLab AFDD zip export is
+    // optional offline tooling via tools/wattlab_export — never a product dependency.
+    let export_enabled = std::env::var("OPENFDD_WATTLAB_PYTHON_EXPORT")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if !export_enabled {
+        return Err(JobError::Invalid(
+            "WattLab package dump export is offline PyPI tooling (tools/wattlab_export), \
+             not part of the product central image. Set OPENFDD_WATTLAB_PYTHON_EXPORT=1 \
+             and provide OPENFDD_AGENT_AFDD_SCRIPT + OPENFDD_PYTHON only for bench tooling."
+                .into(),
+        ));
+    }
+
     let job = jobs::load_job(job_id)?;
     let building_id = validate_segment(&request.building_id, "building_id")?;
     if let Some(site_id) = job.site_id.as_deref().filter(|s| !s.trim().is_empty()) {
@@ -210,7 +224,11 @@ pub async fn create_dump(
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| JobError::Io(format!("failed to start cookbook exporter ({python}): {e}")))?;
+        .map_err(|e| {
+            JobError::Io(format!(
+                "failed to start offline WattLab exporter ({python}): {e}"
+            ))
+        })?;
 
     if !output.status.success() {
         let _ = fs::remove_dir_all(&root);

@@ -17,7 +17,7 @@ Read [`ARCHITECTURE.md`](../../ARCHITECTURE.md) and [`ownership.yaml`](../../own
 - Pandas oracle = `open_fdd.rules` + `analytics` — permanent.
 - Both cookbooks permanent — see [`docs/COOKBOOK_OWNERSHIP.md`](../../docs/COOKBOOK_OWNERSHIP.md).
 - Sole product UI = React SPA (`frontend/web` → `openfdd-web`) → central `/api` only.
-- Never reintroduce Streamlit / `openfdd-ui` / overview-oracle as product surfaces.
+- Product central image = Rust/debian only — no Python runtime; WattLab export is offline opt-in.
 - Never delete `edge/` or `os/`.
 - Do not rename `open_fdd.rules` → `open_fdd.oracle` without product decision.
 - Keep [`../../AGENTS.md`](../../AGENTS.md) / [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) / this skill honest when product truth changes.

@@ -202,6 +202,16 @@ describe("fetchCentralOverview", () => {
       /Free-cooling temps/i,
     );
     expect(out.bas_vs_web_oat.overlay?.data?.length).toBeGreaterThan(0);
+    const basTrace = out.bas_vs_web_oat.overlay?.data?.find((t) => t.name === "BAS oa_t");
+    const webTrace = out.bas_vs_web_oat.overlay?.data?.find((t) => t.name === "Web OAT");
+    expect(basTrace?.line).toMatchObject({ color: RAINBOW_PALETTE[0] });
+    expect(webTrace?.line).toMatchObject({ color: RAINBOW_PALETTE[3] });
+    const mat = out.economizer_free_cooling.mat_residual?.data?.[0];
+    expect(mat?.line).toMatchObject({ color: RAINBOW_PALETTE[0] });
+    const oatLine = out.economizer_free_cooling.temps_overlay?.data?.find(
+      (t) => t.name === "OAT",
+    );
+    expect(oatLine?.line).toMatchObject({ color: RAINBOW_PALETTE[0] });
     expect(out.devices_by_type).toEqual([
       { type: "AHU", count: 1 },
       { type: "VAV", count: 1 },

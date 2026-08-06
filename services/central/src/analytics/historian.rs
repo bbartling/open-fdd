@@ -1007,14 +1007,14 @@ pub async fn economizer_from_history(
     let dt_min = dt_min_f.max(0.0);
     let eq_filter = equipment_filter_sql(equipment_filter);
     let damper_proj = if cols.contains("oa_damper_pct") {
-        "oa_damper_pct"
+        "oa_damper_pct AS damper_fb_pct"
     } else {
-        "CAST(NULL AS DOUBLE) AS oa_damper_pct"
+        "CAST(NULL AS DOUBLE) AS damper_fb_pct"
     };
     let sat_proj = if cols.contains("sat") {
-        "sat"
+        "sat AS sat_f"
     } else {
-        "CAST(NULL AS DOUBLE) AS sat"
+        "CAST(NULL AS DOUBLE) AS sat_f"
     };
 
     let sql = format!(
@@ -1036,7 +1036,7 @@ SELECT
   SUM(CASE WHEN fan_on THEN 1 ELSE 0 END) AS n_fan_on,
   SUM(CASE WHEN fan_on AND oa_t IS NOT NULL AND rat IS NOT NULL
              AND ABS(oa_t - rat) >= {dt_min} THEN 1 ELSE 0 END) AS n_identifiable,
-  COUNT(oa_damper_pct) AS n_damper
+  COUNT(damper_fb_pct) AS n_damper
 FROM base
 GROUP BY equipment_id
 ORDER BY equipment_id
@@ -1061,6 +1061,9 @@ ORDER BY equipment_id
     }
 
     let limit = max_points.clamp(100, 8000);
+    // Keep aliases consistent in the CTE (sat_f / damper_fb_pct). Avoid bare
+    // `WHERE fan_on` + `THEN true/false` outer columns — those hit DataFusion
+    // SanityCheckPlan on some historian schemas (Liberty BUILDING_100).
     let points_sql = format!(
         r#"
 WITH base AS (
@@ -1072,7 +1075,7 @@ WITH base AS (
     {mat_col} AS mat_f,
     {sat_proj},
     {damper_proj},
-    {on_sql} AS fan_on
+    CASE WHEN ({on_sql}) THEN 1 ELSE 0 END AS fan_on_i
   FROM history
   WHERE equipment_id IS NOT NULL{eq_filter}
 )
@@ -1082,28 +1085,23 @@ SELECT
   oat_f,
   rat_f,
   mat_f,
-  sat AS sat_f,
-  oa_damper_pct AS damper_fb_pct,
+  sat_f,
+  damper_fb_pct,
   (oat_f - rat_f) AS delta_or_f,
   (mat_f - rat_f) AS delta_mr_f,
   CASE
-    WHEN oa_damper_pct IS NOT NULL AND oat_f IS NOT NULL AND rat_f IS NOT NULL THEN
-      mat_f - (rat_f + (oa_damper_pct / 100.0) * (oat_f - rat_f))
+    WHEN damper_fb_pct IS NOT NULL AND oat_f IS NOT NULL AND rat_f IS NOT NULL THEN
+      mat_f - (rat_f + (damper_fb_pct / 100.0) * (oat_f - rat_f))
     ELSE NULL
   END AS mat_resid_f,
   CASE
     WHEN oat_f IS NOT NULL AND rat_f IS NOT NULL AND ABS(oat_f - rat_f) >= {dt_min}
-    THEN true ELSE false
-  END AS identifiable
+    THEN 1 ELSE 0
+  END AS identifiable_i
 FROM base
-WHERE fan_on
+WHERE fan_on_i = 1
   AND oat_f IS NOT NULL AND rat_f IS NOT NULL AND mat_f IS NOT NULL
-ORDER BY
-  CASE
-    WHEN oat_f IS NOT NULL AND rat_f IS NOT NULL AND ABS(oat_f - rat_f) >= {dt_min}
-    THEN 0 ELSE 1
-  END,
-  timestamp_utc
+ORDER BY identifiable_i DESC, timestamp_utc
 LIMIT {limit}
 "#
     );
@@ -1122,7 +1120,7 @@ LIMIT {limit}
                     "delta_or_f": as_f64(r.get("delta_or_f")),
                     "delta_mr_f": as_f64(r.get("delta_mr_f")),
                     "mat_resid_f": as_f64(r.get("mat_resid_f")),
-                    "identifiable": r.get("identifiable").and_then(|v| v.as_bool()).unwrap_or(false),
+                    "identifiable": as_u64(r.get("identifiable_i")) > 0,
                     "fan_on": true,
                 }));
             }
@@ -1532,13 +1530,58 @@ pub async fn inspect_from_history(
     if plottable.is_empty() {
         return Ok(None);
     }
+    // Prefer AHU/zone roles so default inspect is useful on Liberty (not alphabetical
+    // boiler_/chiller_ columns from the Hive union schema).
+    const PREFERRED_INSPECT: &[&str] = &[
+        "sat",
+        "mat",
+        "web_mat",
+        "web_ma_t",
+        "rat",
+        "web_ra_t",
+        "oa_t",
+        "web_oa_t",
+        "oa_damper_pct",
+        "fan_status",
+        "fan_cmd",
+        "duct_static",
+        "duct_static_sp",
+        "sat_sp",
+        "clg_valve_pct",
+        "htg_valve_pct",
+        "zone_t",
+        "zone_flow",
+        "chw_supply_t",
+        "chw_return_t",
+        "hw_supply_t",
+        "hw_return_t",
+    ];
     let selected: Vec<String> = match columns {
         Some(want) if !want.is_empty() => want
             .iter()
             .filter(|c| plottable.iter().any(|p| p == *c))
             .cloned()
             .collect(),
-        _ => plottable.iter().take(8).cloned().collect(),
+        _ => {
+            let mut picked: Vec<String> = PREFERRED_INSPECT
+                .iter()
+                .filter(|c| plottable.iter().any(|p| p == *c))
+                .map(|c| (*c).to_string())
+                .collect();
+            if picked.is_empty() {
+                picked = plottable.iter().take(8).cloned().collect();
+            } else if picked.len() < 6 {
+                for c in &plottable {
+                    if picked.len() >= 8 {
+                        break;
+                    }
+                    if !picked.iter().any(|p| p == c) {
+                        picked.push(c.clone());
+                    }
+                }
+            }
+            picked
+        }
     };
     if selected.is_empty() {
         return Ok(None);
@@ -1817,7 +1860,7 @@ WITH oat_by_ts AS (
   GROUP BY {ts_col}
 ){dry_cte}
 SELECT
-  CAST(h.{ts_col} AS VARCHAR) AS timestamp_utc,
+  CAST(h.{ts_col} AS VARCHAR) AS ts_utc,
   h.equipment_id,
   o.oat_f,
   h.{y_col} AS y_f
@@ -1839,7 +1882,8 @@ LIMIT {limit}
     let mut points = Vec::with_capacity(result.rows.len());
     for r in &result.rows {
         let mut row = json!({
-            "timestamp_utc": r.get("timestamp_utc").cloned().unwrap_or(json!("")),
+            // Alias ts_utc avoids DataFusion ambiguity when ts_col is timestamp_utc.
+            "timestamp_utc": r.get("ts_utc").cloned().unwrap_or(json!("")),
             "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
             "oat_f": as_f64(r.get("oat_f")),
             "y_f": as_f64(r.get("y_f")),
@@ -2704,6 +2748,59 @@ mod tests {
         assert!(weekly.iter().all(|r| r.get("label").is_some()));
         // Must not emit folded plant totals as the product rows.
         assert!(env.rows.iter().all(|r| r["kind"] != "weekly_plant"));
+    }
+
+    #[tokio::test]
+    async fn rcx_oat_scatter_aliases_timestamp_without_schema_clash() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_OATSC");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+
+        let ahu = building.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nsat,sat\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,sat,web_oa_t").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,55,60").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,56,61").unwrap();
+        writeln!(f, "2026-07-01T00:10:00Z,57,62").unwrap();
+
+        let wx = building.join("weather");
+        std::fs::create_dir_all(&wx).unwrap();
+        std::fs::write(wx.join("columns.csv"), "col,point_role\nweb_oa_t,web_oa_t\n").unwrap();
+        let mut wf = std::fs::File::create(wx.join("history_wide.csv")).unwrap();
+        writeln!(wf, "timestamp_utc,web_oa_t").unwrap();
+        writeln!(wf, "2026-07-01T00:00:00Z,60").unwrap();
+        writeln!(wf, "2026-07-01T00:05:00Z,61").unwrap();
+        writeln!(wf, "2026-07-01T00:10:00Z,62").unwrap();
+
+        let parquet = tmp.path().join("parquet_oatsc");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_OATSC", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = rcx_oat_scatter_from_history(
+            Some("BUILDING_OATSC"),
+            "sat",
+            &["AHU"],
+            false,
+            500,
+        )
+        .await
+        .unwrap()
+        .expect("oat scatter envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert!(!env.points.is_empty());
+        assert!(env.points[0].get("timestamp_utc").is_some());
+        assert!(env.points[0].get("oat_f").is_some());
+        assert!(env.points[0].get("y_f").is_some());
+        assert_eq!(env.engine, DF_ENGINE);
     }
 
     #[tokio::test]
