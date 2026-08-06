@@ -1,5 +1,19 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { downloadRowsCsv } from "./csvDownload";
+import { downloadRowsCsv, escapeCsvCell } from "./csvDownload";
+
+describe("escapeCsvCell", () => {
+  it("prefixes formula-like cells to avoid spreadsheet injection", () => {
+    expect(escapeCsvCell("=1+2")).toBe("'=1+2");
+    expect(escapeCsvCell("@cmd")).toBe("'@cmd");
+    expect(escapeCsvCell("+1")).toBe("'+1");
+    expect(escapeCsvCell("-1")).toBe("'-1");
+  });
+
+  it("quotes commas and preserves normal values", () => {
+    expect(escapeCsvCell("x,y")).toBe('"x,y"');
+    expect(escapeCsvCell(1)).toBe("1");
+  });
+});
 
 describe("downloadRowsCsv", () => {
   const origCreate = URL.createObjectURL;

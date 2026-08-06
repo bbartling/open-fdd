@@ -1,3 +1,10 @@
+/** Escape one CSV cell; neutralize spreadsheet formula injection. */
+export function escapeCsvCell(v: unknown): string {
+  let s = v == null ? "" : String(v);
+  if (/^[=+\-@]/.test(s)) s = `'${s}`;
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
 /** Client-side CSV download helper for Overview table exports. */
 export function downloadRowsCsv(
   filename: string,
@@ -5,13 +12,9 @@ export function downloadRowsCsv(
 ): void {
   if (!rows.length) return;
   const keys = Object.keys(rows[0] ?? {});
-  const esc = (v: unknown) => {
-    const s = v == null ? "" : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
   const lines = [
     keys.join(","),
-    ...rows.map((r) => keys.map((k) => esc(r[k])).join(",")),
+    ...rows.map((r) => keys.map((k) => escapeCsvCell(r[k])).join(",")),
   ];
   const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
