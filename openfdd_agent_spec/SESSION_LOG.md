@@ -5,7 +5,9 @@
 - Merged `77cf8d7` — Overview economizer SQL + inspect flash; MAT/temps/BAS Plotly colors; RCx OAT scatter `ts_utc` alias; Liberty `web_*` inspect prefs.
 - Central Dockerfile: debian-slim + Rust only; WattLab dump gated `OPENFDD_WATTLAB_PYTHON_EXPORT=1`.
 - SPA overview-oracle client removed; ownership/README/docs present-tense React+DataFusion; CI checkers require React operator UI.
-- GHCR: dispatched Publish stack (+ MCP) on tip during Actions major outage; bensbench pin `sha-77cf8d7` after publish green.
+- #672 rustfmt fix for GHCR format check (`130b1f0`).
+- GHCR Publish stack success on `130b1f0` (after #672 rustfmt); MCP dispatch also queued/published.
+- bensbench: `OPENFDD_IMAGE_TAG=sha-130b1f0` react-ot recreate; `/api/health` `3.3.0+130b1f0`; generation=react; central has **no** python; economizer 4000 points; RCx OAT scatters (ahu/hw/chw) 2000 pts each.
 
 ## 2026-08-05 — Login page internet hygiene
 

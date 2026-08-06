@@ -215,4 +215,5 @@ Product voice = React + DataFusion only. Track deletion / GHCR / agent_spec hone
 - [x] Delete `services/ui` + `services/overview_oracle`; scrub CI/docs/compose
 - [x] Stop publishing `openfdd-ui` to GHCR (workflow scrub; tip images after master merge)
 - [x] `openfdd_agent_spec/` updated for cutover direction (keep in sync every PR)
-- [ ] bensbench tip `sha-*` pull after master GHCR publish
+- [x] #671 DF Overview/RCx color+OAT parity; Rust-only central; present-tense docs (+ #672 rustfmt)
+- [x] bensbench tip `sha-130b1f0` pull + react-ot smoke (BUILDING_100 economizer + RCx OAT scatters; no Python in central)
