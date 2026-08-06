@@ -1,11 +1,10 @@
 # Container agent — GHCR refresh and verify
 
-Test **channel** for Open-FDD stack: **`nightly`** (master publishes retarget
-`:nightly` to tip `sha-*`). Treat `nightly` as a pointer only — always verify
-and run against the resolved immutable `sha-<7>` digest.
+Test **channel** for Open-FDD stack: **`nightly`** (master retargets `:nightly`
+to tip `sha-*`). Treat `nightly` as a pointer only — always verify and run
+against the resolved immutable `sha-<7>` digest.
 
-Playground demos: **`develop`** tags for `vibe19` / `vibe20` (same rule:
-resolve to digest / `sha-*` when verifying a merge).
+Playground demos: **`develop`** tags for `vibe19` / `vibe20` (external).
 
 Never trust the GHCR web “Latest” alone. Never assume a running container
 updated itself.
@@ -14,23 +13,18 @@ updated itself.
 
 ## Open-FDD stack (nightly → immutable)
 
-Product UI: **React** (`compose.react.yml` → host `:3000`). Do **not** run
-Streamlit / `openfdd-ui` / overview-oracle as product surfaces.
+Product UI: **React** (`compose.react.yml` → host `:3000`). Central image is
+**Rust on debian-slim** (no Python). Analytics and FDD are DataFusion SQL.
 
-OT LAN benches need fieldbus too — use recipe **`react-ot`**
+OT LAN benches need fieldbus — recipe **`react-ot`**
 (`compose.react.yml` + `compose.react.fieldbus.yml`). Full stress suite:
 [`scripts/nightly-ot-bench/`](../scripts/nightly-ot-bench/README.md).
 
-Gates **14–15** (capability ledger + product-truth honesty) run after OT/API
-phases and do **not** require a container recreate — they validate the recovery
-ledger and SPA honesty against the tip tree / live APIs when the stack is up.
-
 Post-merge soak: **wait for** `Publish Open-FDD stack to GHCR` (+ MCP) **success**
 on the tip SHA before pulling `sha-<7>`. Tip git SHA can exist minutes before
-GHCR tags. Prefer the harness wait/fallback:
+GHCR tags. Prefer:
 
 ```bash
-# Turnkey (waits for tip publish, falls back to nightly OCI revision if needed)
 cd ~/open-fdd
 ./scripts/nightly-ot-bench/00_pull_ghcr_up.sh
 # or full suite:
@@ -40,26 +34,12 @@ cd ~/open-fdd
 Manual pin path (only after GHCR Actions are green for that SHA):
 
 ```bash
-# 1) Discover tip SHA after merge (or use known short SHA)
 SHORT=$(git -C ~/open-fdd rev-parse --short=7 origin/master)
 
-# 2) Pull immutable tags for published stack images
-for img in openfdd-central openfdd-fieldbus openfdd-mqtt; do
+for img in openfdd-central openfdd-web openfdd-fieldbus openfdd-mqtt; do
   docker pull "ghcr.io/bbartling/${img}:sha-${SHORT}"
 done
-# Archive Streamlit (optional recovery only):
-# docker pull "ghcr.io/bbartling/openfdd-ui:sha-${SHORT}"
 
-# 3) Prove nightly currently points at the same digests
-for img in openfdd-central openfdd-fieldbus openfdd-mqtt; do
-  docker pull "ghcr.io/bbartling/${img}:nightly"
-  n=$(docker image inspect "ghcr.io/bbartling/${img}:nightly" --format '{{index .RepoDigests 0}}')
-  s=$(docker image inspect "ghcr.io/bbartling/${img}:sha-${SHORT}" --format '{{index .RepoDigests 0}}')
-  test "$n" = "$s" || { echo "MISMATCH $img nightly=$n sha=$s"; exit 1; }
-done
-
-# 4) Bring stack up pinned to that SHA
-#    openfdd-web is often not on GHCR yet — stack_up builds web from frontend/web only
 export OPENFDD_IMAGE_TAG="sha-${SHORT}"
 cd ~/open-fdd
 ./scripts/openfdd_stack_pull.sh react-ot
@@ -67,54 +47,14 @@ cd ~/open-fdd
 curl -fsS http://127.0.0.1:8080/api/health
 curl -fsS http://127.0.0.1:8080/api/ui/generation   # expect generation=react
 curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
-curl -fsS http://127.0.0.1:8081/health               # fieldbus (react-ot)
-
-# 5) Full OT stress (optional — needs OT LAN + bench.env.local)
-# ./scripts/nightly-ot-bench/run_all.sh
 ```
 
-Day-to-day convenience may set `OPENFDD_IMAGE_TAG=nightly`, but Milestone
-qualification and post-merge verification must use `sha-*` as above.
+Day-to-day convenience may set `OPENFDD_IMAGE_TAG=nightly`, but qualification
+and post-merge verification must use `sha-*`.
 
-Recipes:
+### Offline WattLab export (not product)
 
-| Recipe | Compose | UI |
-|--------|---------|-----|
-| `react` | `compose.react.yml` | React SPA |
-| `react-ot` | react + `compose.react.fieldbus.yml` | React + fieldbus OT (preferred product bench) |
-
----
-
-## Playground vibe19 / vibe20
-
-```bash
-# After develop merge — pull and recreate (do not expect in-place update)
-docker pull ghcr.io/bbartling/vibe19:develop
-docker pull ghcr.io/bbartling/vibe20:develop
-# Prefer recording digests:
-docker image inspect ghcr.io/bbartling/vibe20:latest --format '{{index .RepoDigests 0}}'
-```
-
-After PyPI API changes: update playground pins → PR → merge → wait for
-`vibe19-ghcr` / `vibe20-ghcr` on `develop` → pull → **recreate** containers.
-
----
-
-## MCP
-
-```bash
-SHORT=$(git -C ~/open-fdd rev-parse --short=7 origin/master)
-docker pull "ghcr.io/bbartling/openfdd-mcp:sha-${SHORT}" 2>/dev/null \
-  || docker pull ghcr.io/bbartling/openfdd-mcp:nightly
-```
-
-Separate workflow from the stack. Hub/network flakes: diagnose, one documented
-rerun, then fix — do not infinite-rerun.
-
----
-
-## Safety
-
-- Never commit OT LAN addresses, API keys, or MQTT kit PEMs.
-- Live BACnet **writes** need explicit operator approval (`BENCH_ALLOW_WRITES=1`
-  on the nightly OT harness). Default gates are read/poll/discover.
+`tools/wattlab_export` is optional PyPI/offline tooling. Product central does
+**not** ship Python. To run dumps on a bench, set
+`OPENFDD_WATTLAB_PYTHON_EXPORT=1` and mount script + interpreter — never
+required for health, FDD, or Overview analytics.

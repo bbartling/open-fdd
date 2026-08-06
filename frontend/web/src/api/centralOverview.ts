@@ -19,7 +19,7 @@ import {
 import type {
   OverviewPlantFig,
   OverviewVibe19Response,
-} from "./overviewOracleApi";
+} from "./overviewTypes";
 import {
   AIR_BARE_MIN_OCC_HOURS_WEEK,
   overviewChartLayout,
@@ -401,6 +401,7 @@ function econDeltaScatter(
     list.push(p);
     byEq.set(eq, list);
   }
+  let eqIdx = 0;
   for (const [eq, rows] of byEq) {
     const hasDamper = rows.some((r) => num(r.damper_fb_pct) != null);
     data.push({
@@ -418,8 +419,13 @@ function econDeltaScatter(
             showscale: true,
             colorbar: { title: "OA damper %", thickness: 12 },
           }
-        : { size: 6, opacity: 0.7 },
+        : {
+            size: 6,
+            opacity: 0.7,
+            color: rainbowColor(eqIdx),
+          },
     });
+    eqIdx += 1;
   }
 
   return {
@@ -457,6 +463,7 @@ function econMatResidual(
     byEq.set(eq, list);
   }
   const data: PlotlyTrace[] = [];
+  let colorIdx = 0;
   for (const [eq, rows] of byEq) {
     data.push({
       type: "scatter",
@@ -464,7 +471,9 @@ function econMatResidual(
       name: eq,
       x: rows.map((r) => String(r.timestamp_utc ?? "")),
       y: rows.map((r) => num(r.mat_resid_f)),
+      line: { width: 1.4, color: rainbowColor(colorIdx) },
     });
+    colorIdx += 1;
   }
   return {
     data,
@@ -498,10 +507,32 @@ function econTempsOverlay(
   const rows = points.filter((p) => String(p.equipment_id) === eq);
   if (rows.length < 3) return { figure: null, equipmentId: eq };
   const x = rows.map((r) => String(r.timestamp_utc ?? ""));
+  // vibe19 fixed palette indices: OAT[0], RAT[5], MAT[3], SAT[6], damper[1] dash.
   const data: PlotlyTrace[] = [
-    { type: "scatter", mode: "lines", name: "OAT", x, y: rows.map((r) => num(r.oat_f)) },
-    { type: "scatter", mode: "lines", name: "RAT", x, y: rows.map((r) => num(r.rat_f)) },
-    { type: "scatter", mode: "lines", name: "MAT", x, y: rows.map((r) => num(r.mat_f)) },
+    {
+      type: "scatter",
+      mode: "lines",
+      name: "OAT",
+      x,
+      y: rows.map((r) => num(r.oat_f)),
+      line: { width: 1.5, color: rainbowColor(0) },
+    },
+    {
+      type: "scatter",
+      mode: "lines",
+      name: "RAT",
+      x,
+      y: rows.map((r) => num(r.rat_f)),
+      line: { width: 1.5, color: rainbowColor(5) },
+    },
+    {
+      type: "scatter",
+      mode: "lines",
+      name: "MAT",
+      x,
+      y: rows.map((r) => num(r.mat_f)),
+      line: { width: 1.5, color: rainbowColor(3) },
+    },
   ];
   if (rows.some((r) => num(r.sat_f) != null)) {
     data.push({
@@ -510,6 +541,7 @@ function econTempsOverlay(
       name: "SAT",
       x,
       y: rows.map((r) => num(r.sat_f)),
+      line: { width: 1.5, color: rainbowColor(6) },
     });
   }
   if (rows.some((r) => num(r.damper_fb_pct) != null)) {
@@ -520,6 +552,7 @@ function econTempsOverlay(
       x,
       y: rows.map((r) => num(r.damper_fb_pct)),
       yaxis: "y2",
+      line: { width: 1.5, color: rainbowColor(1), dash: "dot" },
     });
   }
   return {
@@ -578,7 +611,7 @@ function basOverlay(
       x,
       y: lo,
       fill: "tonexty",
-      fillcolor: "rgba(148, 163, 184, 0.25)",
+      fillcolor: "rgba(234,179,8,0.18)",
       line: { width: 0 },
     },
     {
@@ -587,7 +620,7 @@ function basOverlay(
       name: "Web OAT",
       x,
       y: web,
-      line: { width: 2 },
+      line: { width: 1.4, color: rainbowColor(3) },
     },
     {
       type: "scatter",
@@ -595,7 +628,7 @@ function basOverlay(
       name: "BAS oa_t",
       x,
       y: bas,
-      line: { width: 2 },
+      line: { width: 1.4, color: rainbowColor(0) },
     },
   ];
   return {

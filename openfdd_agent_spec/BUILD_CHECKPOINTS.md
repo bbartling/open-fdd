@@ -8,6 +8,11 @@ blocker, or intentional exception). Detail:
 
 Legend: `[x]` done · `[~]` partial / residual · `[ ]` remaining
 
+**Product truth (2026-08-06):** React SPA + DataFusion central (no Python in
+product image/request path). Overview/RCx/FDD analytics via `/api/analytics/*` +
+`/api/fdd/*`. PyPI `open_fdd` + dual cookbooks remain for third-party/oracle use.
+SPA skill: [`skills/openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md).
+
 **Closeout status (2026-07-28):** Milestone A **closed with intentional residuals**
 (see closeout doc). Milestone B Jobs may proceed.
 

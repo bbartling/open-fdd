@@ -1,7 +1,8 @@
-# Open-FDD React + central without Python Streamlit UI (P1-M6-02).
+# Open-FDD React SPA + central (DataFusion) + mqtt.
 #
 # Topology: mqtt + central (+ optional mcp) + web (nginx SPA).
-# No openfdd-ui / Streamlit image. OPENFDD_REACT_UI=1 enables capability flag.
+# Product path is Rust/React only — no Python in request runtime.
+# OPENFDD_REACT_UI=1 enables the React capability flag.
 
 name: openfdd-react
 

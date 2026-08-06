@@ -1,5 +1,13 @@
 # Session log
 
+## 2026-08-06 — DF parity, no-Python central image, docs refresh
+
+- Overview: economizer points SQL + inspect flash fix (prior local); MAT/temps/BAS Plotly colors match vibe19 rainbow.
+- RCx OAT scatter: alias `ts_utc` to avoid DataFusion timestamp ambiguity.
+- Central Dockerfile: debian-slim + Rust only (removed Python/pip/wattlab from product image); WattLab dump gated on `OPENFDD_WATTLAB_PYTHON_EXPORT=1`.
+- Removed SPA overview-oracle client; Overview types in `overviewTypes.ts`.
+- Agent/product docs rewritten present-tense React+DataFusion + PyPI/cookbooks; `openfdd-react-spa` skill replaces streamlit skill.
+
 ## 2026-08-05 — Login page internet hygiene
 
 - Removed bench credential path / `auth_required` dumps from `AuthPage`.

@@ -1,5 +1,4 @@
-# ownership.yaml — Phase 0 seed (schema_version 1)
-# CI validation of this file is a Milestone A Phase 0 deliverable; this PR only seeds it.
+# ownership.yaml — product + library ownership
 schema_version: 1
 
 components:
@@ -19,9 +18,10 @@ components:
       - vibe19
     allowed_consumers:
       - vibe19
-      - services/ui  # display / lab paths only — production FDD via central SQL
       - tests
       - notebooks
+      - third_party_pypi
+    note: PyPI / external tooling only — not the Open-FDD product runtime
 
   production_rule_execution:
     canonical_owner: openfdd-central
@@ -29,14 +29,24 @@ components:
     registry: sql_rules/registry.yaml
     forbidden:
       - silent_pandas_fallback
+      - python_request_path
+
+  production_analytics:
+    canonical_owner: openfdd-central
+    engine: datafusion_sql
+    routes: /api/analytics/*
+    presentation: frontend/web client Plotly
+    forbidden:
+      - pandas_overview_oracle
+      - python_in_central_image
 
   generic_ecm_math:
     canonical_owner: open_fdd.ecm_engineering
     allowed_consumers:
       - vibe20
-      - services/ui
       - notebooks
       - tests
+      - third_party_pypi
 
   energyplus_modeling:
     canonical_owner: vibe20
@@ -50,73 +60,46 @@ components:
     canonical_owner: open_fdd.reporting
     allowed_consumers:
       - vibe19
-      - services/ui
       - tests
-
-  product_streamlit_ui:
-    canonical_owner: null
-    image: ghcr.io/bbartling/openfdd-ui
-    status: cutover_delete
-    note: Not product UI. Delete after WattLab exporter relocate; stop GHCR publish (turnkey cutover).
+      - third_party_pypi
 
   product_react_spa:
     canonical_owner: frontend/web
     image: openfdd-web
     status: sole_production_ui
     backend: services/central
-    note: Browser → central /api only; Overview analytics via /api/analytics/* (DataFusion) + client Plotly. No FastAPI/Python product runtime.
+    note: Browser → central /api only; Overview via /api/analytics/* (DataFusion) + client Plotly. No Python product runtime.
     adr: docs/architecture/adr-001-react-rust-modernization.md
+
+  wattlab_offline_export:
+    canonical_owner: tools/wattlab_export
+    status: optional_offline_tooling
+    note: Requires OPENFDD_WATTLAB_PYTHON_EXPORT=1; not shipped in product central image
 
   vibe21_recovery_program:
     canonical_owner: tools/open-fdd-vibe21-production
     ledger: docs/migration/react-rust/capabilities.yaml
-    note: Active Master Loop; modernization Phase 1+2 exit ≠ P1-G0 qualification
+    note: Active Master Loop
 
   vibe19_demo:
     canonical_owner: vibe_code_apps_19
     image: ghcr.io/bbartling/vibe19
-    role: educational_pandas_oracle_demo
+    role: external_pandas_oracle_demo
 
   vibe20_studio:
     canonical_owner: vibe_code_apps_20
     image: ghcr.io/bbartling/vibe20
-    role: energyplus_twin_and_ecm_crosscheck
+    role: energyplus_studio
 
-  cookbooks:
-    sql:
-      path: docs/rules/cookbook/datafusion-sql-cookbook.md
-      protected: true
-    pandas:
-      path: docs/rules/cookbook/pandas-cookbook.md
-      protected: true
-    parity_matrix:
-      path: docs/rules/cookbook/parity-matrix.md
-      protected: true
+  mcp_bridge:
+    canonical_owner: mcp
+    image: openfdd-mcp
+    backend: services/central
 
-  future_concepts:
-    paths:
-      - edge/
-      - os/
-    policy: never_delete
+  edge_future:
+    canonical_owner: edge
+    status: future_concept
 
-  mcp:
-    canonical_owner: openfdd-mcp
-    role: read_first_central_tools
-
-# Milestone C0 — documentation sections that must not be vibe-coded away.
-protected_docs:
-  root_readme_navigation:
-    path: README.md
-    required_markers:
-      - "FDD Rule Cookbook"
-      - "pypi.org/project/open-fdd"
-      - "Apache DataFusion"
-      - "Apache Arrow"
-      - "datafusion-sql-cookbook"
-      - "pandas-cookbook"
-  pandas_cookbook:
-    path: docs/rules/cookbook/pandas-cookbook.md
-  sql_cookbook:
-    path: docs/rules/cookbook/datafusion-sql-cookbook.md
-  parity_matrix:
-    path: docs/rules/cookbook/parity-matrix.md
+  os_future:
+    canonical_owner: os
+    status: future_concept

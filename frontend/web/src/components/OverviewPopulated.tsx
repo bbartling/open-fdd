@@ -23,8 +23,8 @@ import {
   putSessionConfig,
   type SessionConfig,
 } from "../api/mappingApi";
-import { downloadRowsCsv } from "../api/overviewOracleApi";
-import type { OverviewVibe19Response } from "../api/overviewOracleApi";
+import { downloadRowsCsv } from "../api/csvDownload";
+import type { OverviewVibe19Response } from "../api/overviewTypes";
 import { fetchCentralOverview } from "../api/centralOverview";
 import { postInspect, type FddEquipmentItem } from "../api/analyticsApi";
 import { equipmentInspectionChart } from "../api/inspectChart";
@@ -612,7 +612,7 @@ export function OverviewPopulated({
       </div>
 
       {overviewErr ? (
-        <InlineAlert id="overview-oracle-err" variant="danger" testId="overview-oracle-err">
+        <InlineAlert id="overview-err" variant="danger" testId="overview-err">
           Central analytics unavailable: {overviewErr}. Confirm the package for{" "}
           <code>{buildingId}</code> is loaded and central is healthy.
         </InlineAlert>

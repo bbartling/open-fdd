@@ -1856,7 +1856,7 @@ WITH oat_by_ts AS (
   GROUP BY {ts_col}
 ){dry_cte}
 SELECT
-  CAST(h.{ts_col} AS VARCHAR) AS timestamp_utc,
+  CAST(h.{ts_col} AS VARCHAR) AS ts_utc,
   h.equipment_id,
   o.oat_f,
   h.{y_col} AS y_f
@@ -1878,7 +1878,8 @@ LIMIT {limit}
     let mut points = Vec::with_capacity(result.rows.len());
     for r in &result.rows {
         let mut row = json!({
-            "timestamp_utc": r.get("timestamp_utc").cloned().unwrap_or(json!("")),
+            // Alias ts_utc avoids DataFusion ambiguity when ts_col is timestamp_utc.
+            "timestamp_utc": r.get("ts_utc").cloned().unwrap_or(json!("")),
             "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
             "oat_f": as_f64(r.get("oat_f")),
             "y_f": as_f64(r.get("y_f")),
@@ -2743,6 +2744,59 @@ mod tests {
         assert!(weekly.iter().all(|r| r.get("label").is_some()));
         // Must not emit folded plant totals as the product rows.
         assert!(env.rows.iter().all(|r| r["kind"] != "weekly_plant"));
+    }
+
+    #[tokio::test]
+    async fn rcx_oat_scatter_aliases_timestamp_without_schema_clash() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_OATSC");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+
+        let ahu = building.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nsat,sat\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,sat,web_oa_t").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,55,60").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,56,61").unwrap();
+        writeln!(f, "2026-07-01T00:10:00Z,57,62").unwrap();
+
+        let wx = building.join("weather");
+        std::fs::create_dir_all(&wx).unwrap();
+        std::fs::write(wx.join("columns.csv"), "col,point_role\nweb_oa_t,web_oa_t\n").unwrap();
+        let mut wf = std::fs::File::create(wx.join("history_wide.csv")).unwrap();
+        writeln!(wf, "timestamp_utc,web_oa_t").unwrap();
+        writeln!(wf, "2026-07-01T00:00:00Z,60").unwrap();
+        writeln!(wf, "2026-07-01T00:05:00Z,61").unwrap();
+        writeln!(wf, "2026-07-01T00:10:00Z,62").unwrap();
+
+        let parquet = tmp.path().join("parquet_oatsc");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_OATSC", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = rcx_oat_scatter_from_history(
+            Some("BUILDING_OATSC"),
+            "sat",
+            &["AHU"],
+            false,
+            500,
+        )
+        .await
+        .unwrap()
+        .expect("oat scatter envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert!(!env.points.is_empty());
+        assert!(env.points[0].get("timestamp_utc").is_some());
+        assert!(env.points[0].get("oat_f").is_some());
+        assert!(env.points[0].get("y_f").is_some());
+        assert_eq!(env.engine, DF_ENGINE);
     }
 
     #[tokio::test]
