@@ -11,8 +11,8 @@ import {
   Select,
 } from "../components/widgets";
 import { useSessionQuery } from "../session";
-import { listPackageBuildings } from "../api/mappingApi";
-import { getFddResults, getFddSeries, listFddRules } from "../api/fddApi";
+import { listPackageBuildings, getPackageMapping } from "../api/mappingApi";
+import { getFddResults, getFddSeries, listFddRules, type FddRuleSummary } from "../api/fddApi";
 import { postInspect, postSensorHealth } from "../api/analyticsApi";
 import {
   missingSegmentCount,
@@ -51,8 +51,10 @@ export function ReportsPage() {
 
   const [buildings, setBuildings] = useState<string[]>([]);
   const [ruleId, setRuleId] = useState("");
+  const [rules, setRules] = useState<FddRuleSummary[]>([]);
+  const [mappedRoles, setMappedRoles] = useState<Set<string>>(new Set());
   const [ruleOptions, setRuleOptions] = useState<
-    Array<{ value: string; label: string }>
+    Array<{ value: string; label: string; disabled?: boolean }>
   >([{ value: "", label: "— rule —" }]);
   const [equipmentOptions, setEquipmentOptions] = useState<
     Array<{ value: string; label: string }>
@@ -82,18 +84,55 @@ export function ReportsPage() {
       .then(setBuildings)
       .catch(() => setBuildings([]));
     void listFddRules()
-      .then((rules) => {
-        setRuleOptions([
-          { value: "", label: "— rule —" },
-          ...rules.map((r) => ({
-            value: r.rule_id,
-            label: `${r.rule_id} — ${r.description ?? ""}`,
-          })),
-        ]);
-        if (!ruleId && rules[0]) setRuleId(rules[0].rule_id);
+      .then((list) => {
+        setRules(list);
+        if (!ruleId && list[0]) setRuleId(list[0].rule_id);
       })
       .catch(() => undefined);
   }, [ruleId]);
+
+  useEffect(() => {
+    if (!buildingId || !equipmentId) {
+      setMappedRoles(new Set());
+      return;
+    }
+    void getPackageMapping(buildingId, equipmentId)
+      .then((inv) => {
+        const roles = new Set<string>();
+        const eq =
+          inv.equipment?.find((e) => e.equipment_id === equipmentId) ??
+          inv.equipment?.[0];
+        for (const role of Object.values(eq?.roles ?? {})) {
+          if (role) roles.add(String(role));
+        }
+        for (const col of eq?.columns ?? []) {
+          if (col.role) roles.add(String(col.role));
+        }
+        setMappedRoles(roles);
+      })
+      .catch(() => setMappedRoles(new Set()));
+  }, [buildingId, equipmentId]);
+
+  useEffect(() => {
+    setRuleOptions([
+      { value: "", label: "— rule —" },
+      ...rules.map((r) => {
+        const required = (r.required_roles ?? []).filter(Boolean);
+        const missing =
+          mappedRoles.size > 0
+            ? required.filter((role) => !mappedRoles.has(role))
+            : [];
+        const blocked = missing.length > 0;
+        return {
+          value: r.rule_id,
+          label: blocked
+            ? `${r.rule_id} — unavailable (missing ${missing.join(", ")})`
+            : `${r.rule_id} — ${r.description ?? ""}`,
+          disabled: blocked,
+        };
+      }),
+    ]);
+  }, [rules, mappedRoles]);
 
   useEffect(() => {
     if (!buildingId) {

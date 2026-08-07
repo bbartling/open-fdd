@@ -96,6 +96,8 @@ export interface FddSeriesResponse {
   rows?: Array<Record<string, unknown>>;
   downsampled?: boolean;
   max_points?: number;
+  has_confirmed_fault?: boolean;
+  missing_roles?: string[];
   error?: string;
 }
 
@@ -171,7 +173,14 @@ export async function getFddSeries(
     buildFddSeriesPath(equipmentId, ruleId),
   );
   if (!body.ok) {
-    throw new Error(body.error || "Failed to load FDD series");
+    const missing = Array.isArray(body.missing_roles)
+      ? body.missing_roles.filter(Boolean).join(", ")
+      : "";
+    throw new Error(
+      missing
+        ? `Rule unavailable — unmapped roles: ${missing}`
+        : body.error || "Failed to load FDD series",
+    );
   }
   return body;
 }

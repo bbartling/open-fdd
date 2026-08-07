@@ -60,7 +60,15 @@ export function multiEquipmentTimeseries(
       height: Math.max(380, 40 + 14 * Math.min(byKey.size, 16)),
       tickangle: -30,
       uirevision: `rcx-ts:${fingerprintJson(points.slice(0, 50))}`,
-      extra: { title: opts.title },
+      extra: {
+        title: opts.title,
+        xaxis: {
+          title: "time",
+          type: "date",
+          autorange: true,
+          tickangle: -30,
+        },
+      },
     }),
     meta: {
       point_count: points.length,

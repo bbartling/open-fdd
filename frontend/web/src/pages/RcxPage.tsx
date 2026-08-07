@@ -9,7 +9,7 @@ import {
 } from "../components/widgets";
 import { PlotlyHost } from "../components/widgets/PlotlyHost";
 import { useSessionQuery } from "../session";
-import { listPackageBuildings } from "../api/mappingApi";
+import { getPackageMapping, listPackageBuildings } from "../api/mappingApi";
 import {
   listRcxPresets,
   postRcxPreset,
@@ -33,12 +33,14 @@ export function RcxPage() {
   const { query, setQuery } = useSessionQuery();
   const buildingId = query.siteId ?? "";
   const [buildings, setBuildings] = useState<string[]>([]);
+  const [mappedRoles, setMappedRoles] = useState<Set<string>>(new Set());
   const [presets, setPresets] = useState<
     Array<{
       id: string;
       title: string;
       family: string;
       chart: string;
+      role_col?: string;
       frozen?: boolean;
     }>
   >([]);
@@ -64,6 +66,27 @@ export function RcxPage() {
       .catch(() => setPresets([]));
   }, []);
 
+  useEffect(() => {
+    if (!buildingId) {
+      setMappedRoles(new Set());
+      return;
+    }
+    void getPackageMapping(buildingId)
+      .then((inv) => {
+        const roles = new Set<string>();
+        for (const eq of inv.equipment ?? []) {
+          for (const role of Object.values(eq.roles ?? {})) {
+            if (role) roles.add(String(role));
+          }
+          for (const col of eq.columns ?? []) {
+            if (col.role) roles.add(String(col.role));
+          }
+        }
+        setMappedRoles(roles);
+      })
+      .catch(() => setMappedRoles(new Set()));
+  }, [buildingId]);
+
   const families = useMemo(
     () => [...new Set(presets.map((p) => p.family))].sort(),
     [presets],
@@ -71,6 +94,26 @@ export function RcxPage() {
   const familyPresets = useMemo(
     () => presets.filter((p) => !family || p.family === family),
     [presets, family],
+  );
+
+  const presetOptions = useMemo(
+    () =>
+      familyPresets.map((p) => {
+        const role = p.role_col?.trim();
+        const missing =
+          Boolean(buildingId) &&
+          Boolean(role) &&
+          mappedRoles.size > 0 &&
+          !mappedRoles.has(role!);
+        return {
+          value: p.id,
+          label: missing
+            ? `${p.title} [${p.chart}] — unavailable (unmapped ${role})`
+            : `${p.title} [${p.chart}]`,
+          disabled: missing,
+        };
+      }),
+    [familyPresets, buildingId, mappedRoles],
   );
 
   const coverageRows = useMemo(() => {
@@ -231,10 +274,7 @@ export function RcxPage() {
           id="rcx-preset"
           label="Preset"
           value={presetId}
-          options={familyPresets.map((p) => ({
-            value: p.id,
-            label: `${p.title} [${p.chart}]`,
-          }))}
+          options={presetOptions}
           onChange={setPresetId}
           testId="rcx-preset"
         />

@@ -1730,17 +1730,27 @@ pub async fn rcx_timeseries_from_history(
         .filter(|c| cols.contains(*c))
         .map(|c| format!(", {c} AS return_f"))
         .unwrap_or_else(|| ", CAST(NULL AS FLOAT) AS return_f".into());
+    // Span-preserving downsample (vibe19): keep first/last + evenly spaced rows
+    // across the full historian range instead of LIMIT taking only the earliest.
     let sql = format!(
         r#"
-SELECT
-  CAST({ts_col} AS VARCHAR) AS timestamp_utc,
-  equipment_id,
-  {role_col} AS value_f
-  {overlay_sel}
-  {return_sel}
-FROM history
-WHERE equipment_id IS NOT NULL AND {role_col} IS NOT NULL{eq_filter}{fan_filter}
-ORDER BY {ts_col}, equipment_id
+SELECT timestamp_utc, equipment_id, value_f, overlay_f, return_f
+FROM (
+  SELECT
+    CAST({ts_col} AS VARCHAR) AS timestamp_utc,
+    equipment_id,
+    {role_col} AS value_f
+    {overlay_sel}
+    {return_sel},
+    ROW_NUMBER() OVER (ORDER BY {ts_col}, equipment_id) AS _rn,
+    COUNT(*) OVER () AS _cnt
+  FROM history
+  WHERE equipment_id IS NOT NULL AND {role_col} IS NOT NULL{eq_filter}{fan_filter}
+)
+WHERE _rn = 1
+   OR _rn = _cnt
+   OR MOD(_rn, GREATEST(CAST((_cnt + {limit} - 1) / {limit} AS BIGINT), 1)) = 0
+ORDER BY timestamp_utc, equipment_id
 LIMIT {limit}
 "#
     );
