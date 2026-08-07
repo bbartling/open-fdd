@@ -19,7 +19,10 @@ describe("deleteDataset", () => {
     const body = await deleteDataset("BUILDING_100");
     expect(body).toEqual({ ok: true, action_id: "act-1" });
     expect(fetchMock).toHaveBeenCalledOnce();
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const call = fetchMock.mock.calls[0];
+    expect(call).toBeDefined();
+    const url = String(call?.[0] ?? "");
+    const init = (call?.[1] ?? {}) as RequestInit;
     expect(url).toContain("/api/datasets?id=BUILDING_100");
     expect(init.method).toBe("DELETE");
   });
