@@ -90,6 +90,15 @@ export function StatusBadge({
   density = "comfortable",
   variant = "neutral",
 }: StatusBadgeProps) {
+  const resolvedVariant =
+    variant !== "neutral"
+      ? variant
+      : /fault/i.test(label)
+        ? "danger"
+        : /ok|pass|success/i.test(label)
+          ? "success"
+          : variant;
+
   return (
     <div
       className={`widget widget--badge widget--${density}`}
@@ -97,7 +106,10 @@ export function StatusBadge({
     >
       <span
         id={id}
-        className={`widget-badge widget-badge--${variant}`}
+        className={`widget-badge widget-badge--${resolvedVariant}${
+          /fault/i.test(label) ? " status-badge--fault" : ""
+        }`}
+        data-status={label}
         aria-disabled={disabled || undefined}
         aria-busy={loading || undefined}
         aria-describedby={description ? `${id}-desc` : undefined}

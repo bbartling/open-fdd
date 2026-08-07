@@ -216,4 +216,5 @@ Product voice = React + DataFusion only. Track deletion / GHCR / agent_spec hone
 - [x] Stop publishing `openfdd-ui` to GHCR (workflow scrub; tip images after master merge)
 - [x] `openfdd_agent_spec/` updated for cutover direction (keep in sync every PR)
 - [x] #671 DF Overview/RCx color+OAT parity; Rust-only central; present-tense docs (+ #672 rustfmt)
-- [x] bensbench tip `sha-130b1f0` pull + react-ot smoke (BUILDING_100 economizer + RCx OAT scatters; no Python in central)
+- [x] bensbench tip `sha-130b1f0` pull + react-ot smoke (BUILDING_100 economizer + RCx OAT scatters; no Python in central)- [x] #674 vibe20 Fuel Phase A (Rust campus/bills analytics + React FuelDashboard) merged `cc63574`
+- [x] vibe19/vibe20 Plotly/UX parity: FDD stacked axes + timestamps, Actions log, Data Model role Select, RCx coverage, Metering Plotly, theme soften, Fuel chart 1:1 gaps

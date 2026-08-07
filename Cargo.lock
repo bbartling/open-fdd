@@ -1721,6 +1721,7 @@ name = "fdd_sql"
 version = "3.3.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "datafusion",
  "fdd_core",
  "fdd_store",
@@ -2860,6 +2861,7 @@ dependencies = [
  "csv",
  "dashmap",
  "datafusion",
+ "fdd_core",
  "fdd_rules",
  "fdd_sql",
  "fdd_store",
