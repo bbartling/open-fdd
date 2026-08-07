@@ -9,10 +9,16 @@ import {
 } from "../api/fuelApi";
 import {
   demandHeatmap,
-  intensityHeatmap,
+  demandPeakDualAxis,
+  intensityHeatmapForFuel,
   monthlyLines,
+  peakVsCoolSeason,
+  rankedSiteEui,
+  rolling12Eui,
   stackedFuel,
   summaryPeerBars,
+  summaryPeerBullet,
+  weatherResidualBars,
   weatherScatter,
 } from "../api/fuelCharts";
 import {
@@ -41,6 +47,30 @@ type FuelBundle = Partial<Record<FuelQueryVersion, FuelAnalyticsEnvelope>>;
 function campusLabel(c: FuelCampusMeta): string {
   const id = c.campus_id || "unknown";
   return c.label && c.label !== id ? `${c.label} (${id})` : id;
+}
+
+/** Derive cool-season (May–Sep) mean OAT by year from weather points when present. */
+function coolSeasonFromWeather(
+  points: Array<Record<string, unknown>>,
+): Record<string, number> {
+  const buckets = new Map<string, number[]>();
+  for (const p of points) {
+    const month = String(p.month ?? "");
+    const mon = Number(month.slice(5, 7));
+    const year = month.slice(0, 4);
+    if (!/^\d{4}$/.test(year) || !(mon >= 5 && mon <= 9)) continue;
+    const oat = Number(p.oat ?? p.mean_oat_f ?? p.x);
+    if (!Number.isFinite(oat)) continue;
+    const list = buckets.get(year) ?? [];
+    list.push(oat);
+    buckets.set(year, list);
+  }
+  const out: Record<string, number> = {};
+  for (const [y, vals] of buckets) {
+    if (!vals.length) continue;
+    out[y] = vals.reduce((a, b) => a + b, 0) / vals.length;
+  }
+  return out;
 }
 
 export function FuelDashboard() {
@@ -133,9 +163,40 @@ export function FuelDashboard() {
   const quality = bundle["fuel-quality-v1"];
   const weather = bundle["fuel-weather-v1"];
 
+  const campusSummary = summary?.summary?.campus as
+    | Record<string, unknown>
+    | undefined;
+  const floorArea =
+    Number(campusSummary?.floor_area_ft2 ?? campusSummary?.area_ft2) ||
+    Number(
+      campuses.find((c) => c.campus_id === campusId)?.total_area_ft2,
+    ) ||
+    null;
+
+  const coolSeason = useMemo(
+    () => coolSeasonFromWeather(weather?.points ?? weather?.rows ?? []),
+    [weather],
+  );
+
+  const bulletFig = useMemo(
+    () => summaryPeerBullet(summary?.rows ?? []),
+    [summary],
+  );
   const summaryFig = useMemo(
     () => summaryPeerBars(summary?.rows ?? []),
     [summary],
+  );
+  const rankedFig = useMemo(
+    () => rankedSiteEui(summary?.rows ?? []),
+    [summary],
+  );
+  const elecHeatFig = useMemo(
+    () => intensityHeatmapForFuel(intensity?.rows ?? [], "electric"),
+    [intensity],
+  );
+  const gasHeatFig = useMemo(
+    () => intensityHeatmapForFuel(intensity?.rows ?? [], "gas"),
+    [intensity],
   );
   const stackedFig = useMemo(
     () => stackedFuel(stacked?.rows ?? []),
@@ -145,22 +206,41 @@ export function FuelDashboard() {
     () => monthlyLines(monthly?.rows ?? []),
     [monthly],
   );
-  const intensityFig = useMemo(
-    () => intensityHeatmap(intensity?.rows ?? []),
-    [intensity],
+  const roll12Fig = useMemo(
+    () =>
+      rolling12Eui(
+        stacked?.rows?.length ? stacked.rows : (monthly?.rows ?? []),
+        floorArea,
+      ),
+    [stacked, monthly, floorArea],
   );
   const demandFig = useMemo(
     () => demandHeatmap(demand?.rows ?? []),
     [demand],
   );
+  const demandPeakFig = useMemo(
+    () => demandPeakDualAxis(demand?.rows ?? [], coolSeason),
+    [demand, coolSeason],
+  );
+  const peakCoolFig = useMemo(
+    () => peakVsCoolSeason(demand?.rows ?? [], coolSeason),
+    [demand, coolSeason],
+  );
   const weatherFig = useMemo(
-    () => weatherScatter(weather?.points ?? weather?.rows ?? []),
+    () =>
+      weatherScatter(weather?.points ?? weather?.rows ?? [], weather?.fits),
     [weather],
   );
+  const residualFigs = useMemo(() => {
+    const points = weather?.points ?? weather?.rows ?? [];
+    return (weather?.fits ?? [])
+      .map((fit) => ({
+        fuel: String(fit.fuel ?? ""),
+        fig: weatherResidualBars(points, fit),
+      }))
+      .filter((x) => x.fig);
+  }, [weather]);
 
-  const campusSummary = summary?.summary?.campus as
-    | Record<string, unknown>
-    | undefined;
   const qualityRows = useMemo(
     () =>
       (quality?.rows ?? []).map((r) => ({
@@ -292,12 +372,45 @@ export function FuelDashboard() {
                   />
                 </div>
                 <PlotlyHost
-                  id="fuel-summary-bars"
-                  label="Site EUI vs peer p50"
-                  figure={summaryFig}
+                  id="fuel-summary-bullet"
+                  label="Site EUI vs peer band (p20–p80)"
+                  figure={bulletFig ?? summaryFig}
                   loading={loadingAnalytics}
-                  height={400}
+                  height={420}
                   testId="fuel-chart-summary"
+                />
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "1rem",
+                  }}
+                  data-testid="fuel-intensity-pair"
+                >
+                  <PlotlyHost
+                    id="fuel-intensity-elec"
+                    label="Elec intensity"
+                    figure={elecHeatFig}
+                    loading={loadingAnalytics}
+                    height={360}
+                    testId="fuel-chart-intensity-elec"
+                  />
+                  <PlotlyHost
+                    id="fuel-intensity-gas"
+                    label="Gas intensity"
+                    figure={gasHeatFig}
+                    loading={loadingAnalytics}
+                    height={360}
+                    testId="fuel-chart-intensity-gas"
+                  />
+                </div>
+                <PlotlyHost
+                  id="fuel-ranked-eui"
+                  label="Ranked site EUI"
+                  figure={rankedFig}
+                  loading={loadingAnalytics}
+                  height={360}
+                  testId="fuel-chart-ranked"
                 />
                 {summary?.rows?.length ? (
                   <DataTable
@@ -351,12 +464,12 @@ export function FuelDashboard() {
                   testId="fuel-chart-monthly"
                 />
                 <PlotlyHost
-                  id="fuel-intensity"
-                  label="Energy intensity"
-                  figure={intensityFig}
+                  id="fuel-roll12"
+                  label="Rolling 12-month site EUI"
+                  figure={roll12Fig}
                   loading={loadingAnalytics}
-                  height={400}
-                  testId="fuel-chart-intensity"
+                  height={320}
+                  testId="fuel-chart-roll12"
                 />
               </div>
             ),
@@ -374,6 +487,17 @@ export function FuelDashboard() {
                   height={420}
                   testId="fuel-chart-weather"
                 />
+                {residualFigs.map(({ fuel, fig }) => (
+                  <PlotlyHost
+                    key={fuel}
+                    id={`fuel-resid-${fuel}`}
+                    label={`${fuel} residuals`}
+                    figure={fig}
+                    loading={loadingAnalytics}
+                    height={280}
+                    testId={`fuel-chart-resid-${fuel}`}
+                  />
+                ))}
                 {fitRows.length > 0 ? (
                   <DataTable
                     id="fuel-fits"
@@ -404,11 +528,27 @@ export function FuelDashboard() {
               <div data-testid="fuel-tab-demand-peak" className="page-stack">
                 <PlotlyHost
                   id="fuel-demand"
-                  label="Peak demand"
+                  label="Peak demand heatmap"
                   figure={demandFig}
                   loading={loadingAnalytics}
                   height={400}
                   testId="fuel-chart-demand"
+                />
+                <PlotlyHost
+                  id="fuel-demand-peak"
+                  label="Peak by year"
+                  figure={demandPeakFig}
+                  loading={loadingAnalytics}
+                  height={380}
+                  testId="fuel-chart-demand-peak"
+                />
+                <PlotlyHost
+                  id="fuel-peak-cool"
+                  label="Peak vs cool-season"
+                  figure={peakCoolFig}
+                  loading={loadingAnalytics}
+                  height={360}
+                  testId="fuel-chart-peak-cool"
                 />
               </div>
             ),

@@ -5,6 +5,7 @@ import { JobsPage } from "./pages/JobsPage";
 import { UploadPage } from "./pages/UploadPage";
 import { MappingPage } from "./pages/MappingPage";
 import { RulesPage } from "./pages/RulesPage";
+import { ActionsPage } from "./pages/ActionsPage";
 import { FindingsPage } from "./pages/FindingsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { MeteringPage } from "./pages/MeteringPage";
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/upload" element={gated(<UploadPage />)} />
         <Route path="/mapping" element={gated(<MappingPage />)} />
         <Route path="/rules" element={gated(<RulesPage />)} />
+        <Route path="/actions" element={gated(<ActionsPage />)} />
         <Route path="/findings" element={gated(<FindingsPage />)} />
         <Route path="/reports" element={gated(<ReportsPage />)} />
         <Route path="/rcx" element={gated(<RcxPage />)} />

@@ -7,6 +7,7 @@ import {
   type PlotlyTrace,
 } from "./plotDataset";
 import { overviewChartLayout, rainbowColor } from "./plotlyTheme";
+import { familyOrderKeys, resolveRoleUnit, unitFamily } from "./roleUnits";
 
 export function multiEquipmentTimeseries(
   points: Array<Record<string, unknown>>,
@@ -299,7 +300,7 @@ export function meteringCharts(
   };
 }
 
-/** FDD rule_result_chart with optional confirmed_fault swim lane. */
+/** FDD rule_result_chart — vibe19 stacked unit-family axes + fault swim lane at bottom. */
 export function ruleResultChart(
   rows: Array<Record<string, unknown>>,
   opts: {
@@ -310,65 +311,143 @@ export function ruleResultChart(
   },
 ): PlotlyFigure | null {
   if (!rows.length || !opts.roles.length) return null;
-  const x = rows.map((r) => String(r.timestamp_utc ?? r.timestamp ?? ""));
-  const data: PlotlyTrace[] = opts.roles.map((role, i) => ({
-    type: "scatter",
-    mode: "lines",
-    name: role,
-    x,
-    y: rows.map((r) => {
+
+  const x = rows.map((r) => {
+    const raw = r.timestamp_utc ?? r.timestamp ?? "";
+    const s = String(raw);
+    // Reject Arrow Debug dumps that used to leak into JSON.
+    if (s.includes("PrimitiveArray")) return null;
+    return s || null;
+  });
+
+  type SeriesItem = { role: string; unit: string; y: Array<number | null> };
+  const groups = new Map<string, SeriesItem[]>();
+  for (const role of opts.roles) {
+    if (role === "confirmed_fault" || role === "fault") continue;
+    const unit = resolveRoleUnit(role);
+    let fam = unit ? unitFamily(unit) : `other:${role}`;
+    if (unit === "bool" || unit === "0/1") fam = "bool";
+    const y = rows.map((r) => {
       const v = r[role];
       if (v == null || v === "") return null;
       const n = typeof v === "number" ? v : Number(v);
       return Number.isFinite(n) ? n : null;
-    }),
-    yaxis: "y",
-    line: { width: 1.5, color: rainbowColor(i) },
-  }));
+    });
+    if (!y.some((v) => v != null)) continue;
+    const list = groups.get(fam) ?? [];
+    list.push({ role, unit, y });
+    groups.set(fam, list);
+  }
 
+  const famKeys = familyOrderKeys([...groups.keys()]);
   const fault = opts.confirmedFault;
-  if (fault && fault.length === rows.length) {
+  const hasFault = Boolean(fault && fault.length === rows.length);
+  const nSig = famKeys.length;
+  if (nSig === 0 && !hasFault) return null;
+
+  const faultW = hasFault ? 0.55 : 0;
+  const sigW = Math.max(nSig, 1);
+  const totalW = sigW + faultW;
+  const usable = 0.88;
+  const gap = 0.02;
+  const domains: Array<[number, number]> = [];
+  let top = 1.0;
+  for (let i = 0; i < nSig; i++) {
+    const h = usable * (1.0 / totalW);
+    domains.push([Math.max(0, top - h), top]);
+    top = top - h - gap;
+  }
+  let faultDomain: [number, number] | null = null;
+  if (hasFault) {
+    const h = usable * (faultW / totalW);
+    faultDomain = [Math.max(0, top - h), top];
+  }
+
+  const data: PlotlyTrace[] = [];
+  const layout: Record<string, unknown> = {
+    title: `${opts.ruleId} · ${opts.equipmentId}`,
+    legend: { orientation: "h", yanchor: "bottom", y: 1.02, x: 0, font: { size: 10 } },
+    hovermode: "x unified",
+    height: Math.max(320, 90 * nSig + (hasFault ? 90 : 0) + 80),
+    margin: { l: 64, r: 24, t: 28, b: 64 },
+    paper_bgcolor: "white",
+    plot_bgcolor: "white",
+    uirevision: `fdd:${opts.ruleId}:${opts.equipmentId}`,
+  };
+
+  let colorI = 0;
+  let lastY = "y";
+  for (let i = 0; i < famKeys.length; i++) {
+    const fam = famKeys[i];
+    const axisI = i + 1;
+    const yname = axisI === 1 ? "y" : `y${axisI}`;
+    lastY = yname;
+    const items = groups.get(fam) ?? [];
+    const unitsIn = [...new Set(items.map((it) => it.unit).filter(Boolean))].sort();
+    const title = unitsIn.length ? unitsIn.join(", ") : fam;
+    const axKey = axisI === 1 ? "yaxis" : `yaxis${axisI}`;
+    layout[axKey] = {
+      domain: domains[i],
+      title: { text: title, font: { size: 11 } },
+      showgrid: true,
+      zeroline: false,
+      autorange: true,
+      anchor: "x",
+    };
+    for (const item of items) {
+      const label = item.unit ? `${item.role} (${item.unit})` : item.role;
+      data.push({
+        type: "scatter",
+        mode: "lines",
+        name: label,
+        x,
+        y: item.y,
+        yaxis: yname,
+        line: { width: 1.6, color: rainbowColor(colorI) },
+        connectgaps: false,
+      });
+      colorI += 1;
+    }
+  }
+
+  if (hasFault && faultDomain && fault) {
+    const axisI = nSig + 1;
+    const yname = axisI === 1 ? "y" : `y${axisI}`;
+    lastY = yname;
+    const axKey = axisI === 1 ? "yaxis" : `yaxis${axisI}`;
+    layout[axKey] = {
+      domain: faultDomain,
+      title: { text: "fault", font: { size: 11 } },
+      range: [-0.05, 1.15],
+      tickvals: [0, 1],
+      ticktext: ["ok", "fault"],
+      showgrid: true,
+      anchor: "x",
+    };
     data.push({
       type: "scatter",
       mode: "lines",
       name: "confirmed_fault",
       x,
       y: fault.map((v) => (v === true || v === 1 ? 1 : 0)),
-      yaxis: "y2",
-      line: { width: 1.2, color: "#dc2626" },
+      yaxis: yname,
+      line: { width: 0.8, color: "rgba(220,38,38,0.9)", shape: "hv" },
       fill: "tozeroy",
-      fillcolor: "rgba(220,38,38,0.25)",
+      fillcolor: "rgba(239,68,68,0.35)",
     });
   }
 
+  layout.xaxis = {
+    title: "timestamp",
+    type: "date",
+    showgrid: true,
+    autorange: true,
+    anchor: lastY,
+  };
+
   return {
     data,
-    layout: {
-      title: `${opts.ruleId} · ${opts.equipmentId}`,
-      xaxis: { title: "timestamp_utc", autorange: true },
-      yaxis: {
-        title: "value",
-        autorange: true,
-        domain: fault ? [0.22, 1] : [0, 1],
-      },
-      ...(fault
-        ? {
-            yaxis2: {
-              title: "fault",
-              domain: [0, 0.18],
-              range: [-0.05, 1.05],
-              showgrid: false,
-              tickvals: [0, 1],
-              ticktext: ["ok", "fault"],
-            },
-          }
-        : {}),
-      legend: { orientation: "h" },
-      height: fault ? 480 : 380,
-      paper_bgcolor: "white",
-      plot_bgcolor: "white",
-      uirevision: `fdd:${opts.ruleId}:${opts.equipmentId}`,
-    },
+    layout,
     meta: {
       equipment_id: opts.equipmentId,
       rule_id: opts.ruleId,

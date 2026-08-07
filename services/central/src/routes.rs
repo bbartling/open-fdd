@@ -14,6 +14,7 @@ use openfdd_mqtt::publish_json;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use crate::actions;
 use crate::analytics::{self, AnalyticsRequest};
 use crate::auth;
 use crate::eplus_runner;
@@ -98,12 +99,14 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/fdd/results", get(fdd_results))
         .route("/api/fdd/series", get(fdd_series))
         .route("/api/fdd/roles", get(fdd_roles))
+        .route("/api/fdd/cookbook-roles", get(fdd_cookbook_roles))
         .route(
             "/api/fdd/session-config",
             get(fdd_session_config_get).put(fdd_session_config_put),
         )
         .route("/api/fdd/run", post(fdd_run))
         .route("/api/fdd/status", get(fdd_status))
+        .route("/api/actions", get(list_actions))
         .route("/api/faults/status", get(faults_status))
         .route("/api/faults/summary", get(faults_summary))
         .route("/api/export/meta", get(export_meta))
@@ -848,6 +851,41 @@ pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
         "building_id": building_id,
     });
     let echo_building_id = building_id.clone();
+
+    let run_all = rule_ids.as_ref().map(|r| r.is_empty()).unwrap_or(true);
+    let (kind, label) = if run_all {
+        (
+            "fdd_run_all",
+            format!(
+                "FDD run all · {}",
+                building_id.as_deref().unwrap_or("(no building)")
+            ),
+        )
+    } else {
+        let ids = rule_ids.as_ref().map(|r| r.join(",")).unwrap_or_default();
+        (
+            "fdd_run_rule",
+            format!(
+                "FDD run · {} · {}",
+                building_id.as_deref().unwrap_or("(no building)"),
+                if ids.len() > 48 {
+                    format!("{}…", &ids[..48])
+                } else {
+                    ids
+                }
+            ),
+        )
+    };
+    let action_id = actions::start_action(
+        kind,
+        &label,
+        Some(json!({
+            "building_id": building_id,
+            "rule_ids": rule_ids,
+        })),
+    )
+    .ok();
+
     let mut result = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::fdd::registry_api::run_registry(&payload)
     })
@@ -861,6 +899,27 @@ pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
             obj.insert("building_id".into(), json!(bid));
         }
     }
+
+    if let Some(aid) = action_id {
+        let ok = result
+            .get("ok")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let status = if ok { "ok" } else { "fail" };
+        let detail = json!({
+            "ok": ok,
+            "rules_succeeded": result.get("rules_succeeded"),
+            "rules_failed": result.get("rules_failed"),
+            "rules_skipped": result.get("rules_skipped"),
+            "total_ms": result.get("total_ms"),
+            "error": result.get("error"),
+        });
+        let _ = actions::finish_action(&aid, status, Some(detail));
+        if let Some(obj) = result.as_object_mut() {
+            obj.insert("action_id".into(), json!(aid));
+        }
+    }
+
     Json(result)
 }
 
@@ -918,6 +977,26 @@ pub async fn fdd_series(Query(query): Query<FddSeriesQuery>) -> Json<Value> {
 
 pub async fn fdd_roles() -> Json<Value> {
     Json(open_fdd_edge_prototype::fdd::registry_api::roles_response())
+}
+
+/// Canonical snake_case cookbook roles for Data Model Select.
+pub async fn fdd_cookbook_roles() -> Json<Value> {
+    let roles = fdd_core::cookbook_role_catalog();
+    Json(json!({
+        "ok": true,
+        "roles": roles,
+        "count": roles.len(),
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ActionsQuery {
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+pub async fn list_actions(Query(q): Query<ActionsQuery>) -> Json<Value> {
+    Json(actions::list_actions(q.limit.unwrap_or(100)))
 }
 
 /// `openfdd_session_v1` session/fault settings (#515) — persisted per workspace.
@@ -1912,9 +1991,33 @@ async fn analytics_fuel(Json(req): Json<FuelRequest>) -> Json<Value> {
 /// Fuel campus ZIP import (campus.json + bill CSVs, or Liberty_* CSV layout).
 pub async fn fuel_campus_import(headers: HeaderMap, body: Bytes) -> Json<Value> {
     let ct = content_type(&headers);
+    let action_id = actions::start_action(
+        "fuel_import",
+        "Fuel campus import",
+        Some(json!({ "content_type": ct.clone() })),
+    )
+    .ok();
     let result = tokio::task::spawn_blocking(move || fuel::import::import_fuel_handler(&ct, &body))
         .await
         .unwrap_or_else(|e| json!({"ok": false, "error": format!("fuel import task: {e}")}));
+    if let Some(aid) = action_id {
+        let ok = result
+            .get("ok")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let status = if ok { "ok" } else { "fail" };
+        let detail = json!({
+            "ok": ok,
+            "campus_id": result.get("campus_id"),
+            "error": result.get("error"),
+        });
+        let _ = actions::finish_action(&aid, status, Some(detail));
+        let mut out = result;
+        if let Some(obj) = out.as_object_mut() {
+            obj.insert("action_id".into(), json!(aid));
+        }
+        return Json(out);
+    }
     Json(result)
 }
 

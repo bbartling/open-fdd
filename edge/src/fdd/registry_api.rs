@@ -406,19 +406,105 @@ pub fn series_response(equipment_id: &str, rule_id: &str) -> Value {
             return json!({"ok": false, "error": e.to_string()});
         }
         match run_sql(&ctx, &sql).await {
-            Ok(result) => json!({
-                "ok": true,
-                "equipment_id": equipment_id,
-                "equipment_type": infer_equipment_type(equipment_id),
-                "rule_id": rule.rule_id,
-                "roles": columns,
-                "rows": result.rows,
-                "downsampled": result.row_count >= 5000,
-                "max_points": 5000,
-            }),
+            Ok(mut result) => {
+                // Overlay confirmed_fault from last registry run when present so
+                // FDD Plots can draw the bottom fault swim lane (vibe19 parity).
+                let fault_by_ts = load_confirmed_fault_index(equipment_id, &rule.rule_id);
+                if !fault_by_ts.is_empty() {
+                    for row in &mut result.rows {
+                        if let Some(obj) = row.as_object_mut() {
+                            let ts = obj
+                                .get("timestamp_utc")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            if let Some(flag) = fault_by_ts.get(&ts) {
+                                obj.insert("confirmed_fault".into(), json!(*flag));
+                            }
+                        }
+                    }
+                }
+                json!({
+                    "ok": true,
+                    "equipment_id": equipment_id,
+                    "equipment_type": infer_equipment_type(equipment_id),
+                    "rule_id": rule.rule_id,
+                    "roles": columns,
+                    "rows": result.rows,
+                    "downsampled": result.row_count >= 5000,
+                    "max_points": 5000,
+                    "has_confirmed_fault": !fault_by_ts.is_empty(),
+                })
+            }
             Err(e) => json!({"ok": false, "error": e.to_string()}),
         }
     })
+}
+
+/// Map RFC3339 (or raw) timestamp → confirmed_fault bool from last rule result JSON.
+fn load_confirmed_fault_index(equipment_id: &str, rule_id: &str) -> HashMap<String, bool> {
+    let mut out = HashMap::new();
+    let candidates = [
+        results_dir(None).join(format!("{rule_id}.json")),
+        // Site-scoped dirs: scan one level if present.
+    ];
+    let mut paths = candidates.to_vec();
+    if let Ok(rd) = std::fs::read_dir(results_dir(None).parent().unwrap_or(Path::new("."))) {
+        for ent in rd.flatten() {
+            let p = ent.path();
+            if p.is_dir() {
+                let f = p.join(format!("{rule_id}.json"));
+                if f.is_file() {
+                    paths.push(f);
+                }
+            }
+        }
+    }
+    for path in paths {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(body) = serde_json::from_str::<Value>(&text) else {
+            continue;
+        };
+        for row in body
+            .get("rows")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let eq = row
+                .get("equipment_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if eq != equipment_id {
+                continue;
+            }
+            let ts = row
+                .get("timestamp_utc")
+                .or_else(|| row.get("timestamp"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if ts.is_empty() {
+                continue;
+            }
+            let flag = row
+                .get("confirmed_fault")
+                .and_then(|v| v.as_bool())
+                .or_else(|| {
+                    row.get("confirmed_fault")
+                        .and_then(|v| v.as_i64())
+                        .map(|n| n != 0)
+                });
+            if let Some(f) = flag {
+                out.insert(ts.to_string(), f);
+            }
+        }
+        if !out.is_empty() {
+            break;
+        }
+    }
+    out
 }
 
 /// `GET /api/fdd/roles` — role map file if present.

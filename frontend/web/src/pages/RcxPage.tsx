@@ -5,6 +5,7 @@ import {
   Select,
   Button,
   DataTable,
+  Checkbox,
 } from "../components/widgets";
 import { PlotlyHost } from "../components/widgets/PlotlyHost";
 import { useSessionQuery } from "../session";
@@ -33,7 +34,13 @@ export function RcxPage() {
   const buildingId = query.siteId ?? "";
   const [buildings, setBuildings] = useState<string[]>([]);
   const [presets, setPresets] = useState<
-    Array<{ id: string; title: string; family: string; chart: string }>
+    Array<{
+      id: string;
+      title: string;
+      family: string;
+      chart: string;
+      frozen?: boolean;
+    }>
   >([]);
   const [family, setFamily] = useState("");
   const [presetId, setPresetId] = useState("");
@@ -41,6 +48,7 @@ export function RcxPage() {
   const [figure, setFigure] = useState<PlotlyFigure | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showCoverage, setShowCoverage] = useState(false);
 
   useEffect(() => {
     void listPackageBuildings()
@@ -64,6 +72,67 @@ export function RcxPage() {
     () => presets.filter((p) => !family || p.family === family),
     [presets, family],
   );
+
+  const coverageRows = useMemo(() => {
+    const cov = env?.coverage;
+    if (!cov || typeof cov !== "object") {
+      return presets.map((p) => ({
+        preset_id: p.id,
+        title: p.title,
+        family: p.family,
+        chart: p.chart,
+        frozen: p.frozen ? "yes" : "no",
+        status: "listed",
+        points: "—",
+        note: "",
+      }));
+    }
+    const runId = String(cov.preset_id ?? presetId);
+    return [
+      {
+        preset_id: runId,
+        title: String(cov.title ?? ""),
+        family: String(cov.family ?? ""),
+        chart: String(cov.chart_kind ?? cov.chart ?? ""),
+        frozen: presets.find((p) => p.id === runId)?.frozen ? "yes" : "no",
+        status: cov.empty ? "empty" : "ok",
+        points: String(env?.points?.length ?? 0),
+        note: [
+          cov.role_col != null ? `role=${cov.role_col}` : "",
+          cov.y_col != null ? `y=${cov.y_col}` : "",
+          cov.meter_kind != null ? `meter=${cov.meter_kind}` : "",
+          ...(env?.warnings ?? []),
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      },
+      ...Object.entries(cov)
+        .filter(
+          ([k]) =>
+            ![
+              "preset_id",
+              "title",
+              "family",
+              "chart_kind",
+              "chart",
+              "role_col",
+              "y_col",
+              "meter_kind",
+              "empty",
+            ].includes(k),
+        )
+        .map(([k, v]) => ({
+          preset_id: runId,
+          title: k,
+          family: "",
+          chart: "",
+          frozen: "",
+          status: "field",
+          points: typeof v === "object" ? JSON.stringify(v) : String(v ?? ""),
+          note: "",
+        })),
+    ];
+  }, [env, presets, presetId]);
 
   const run = async () => {
     if (!buildingId || !presetId) return;
@@ -169,6 +238,13 @@ export function RcxPage() {
           onChange={setPresetId}
           testId="rcx-preset"
         />
+        <Checkbox
+          id="rcx-coverage"
+          label="Show preset coverage diagnostics"
+          checked={showCoverage}
+          onChange={setShowCoverage}
+          testId="rcx-coverage-toggle"
+        />
         <Button
           id="rcx-run"
           label={loading ? "Running…" : "Run RCx preset"}
@@ -187,6 +263,24 @@ export function RcxPage() {
             {env.points?.length ?? 0}
             {env.warnings?.[0] ? ` · ${env.warnings[0]}` : ""}
           </p>
+        ) : null}
+        {showCoverage ? (
+          <DataTable
+            id="rcx-coverage"
+            label="Preset coverage diagnostics"
+            columns={[
+              { key: "preset_id", header: "Preset" },
+              { key: "title", header: "Title / field" },
+              { key: "family", header: "Family" },
+              { key: "chart", header: "Chart" },
+              { key: "frozen", header: "Frozen" },
+              { key: "status", header: "Status" },
+              { key: "points", header: "Points / value" },
+              { key: "note", header: "Note" },
+            ]}
+            rows={coverageRows}
+            testId="rcx-coverage-table"
+          />
         ) : null}
         <PlotlyHost
           id="rcx-plot"

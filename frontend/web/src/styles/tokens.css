@@ -1,52 +1,50 @@
 :root {
   /*
-   * Streamlit openfdd-ui oracle palette (measured 2026-08-03 on :8501 @ 1440×900)
-   * body bg #fff · text #31333F · sidebar #F0F2F6 · width 300px · font "Source Sans"
-   * Primary accent = Streamlit default red (not invented teal/navy SaaS).
+   * Softened professional palette (vibe19 parity) — deeper coral primary,
+   * calmer sidebar surfaces; fault/danger stays clearly red (never green).
    */
-  --color-text: #31333f;
-  /* Streamlit soft secondary text (~60% of body) */
-  --color-text-muted: rgba(49, 51, 63, 0.6);
-  --color-bg: #ffffff;
-  --color-sidebar-bg: #f0f2f6;
-  --color-secondary-bg: #f0f2f6;
-  --color-border: rgba(49, 51, 63, 0.2);
-  --color-primary: #ff4b4b;
-  --color-primary-hover: #ff2b2b;
-  --color-primary-bg: #fff0f0;
+  --color-text: #2f3340;
+  --color-text-muted: rgba(47, 51, 64, 0.58);
+  --color-bg: #fbfbfc;
+  --color-sidebar-bg: #eef1f5;
+  --color-secondary-bg: #eef1f5;
+  --color-border: rgba(47, 51, 64, 0.16);
+  --color-primary: #c23b3b;
+  --color-primary-hover: #a83232;
+  --color-primary-bg: #f8ecec;
   --color-widget-bg: #ffffff;
-  --color-widget-border: rgba(49, 51, 63, 0.2);
+  --color-widget-border: rgba(47, 51, 64, 0.18);
 
   /* Keep legacy token names mapped so widgets/pages keep compiling */
-  --color-navy-900: #31333f;
-  --color-navy-800: #31333f;
+  --color-navy-900: #2f3340;
+  --color-navy-800: #2f3340;
   --color-navy-700: #555867;
   --color-navy-600: #808495;
-  --color-teal-600: #ff4b4b;
-  --color-teal-500: #ff4b4b;
-  --color-teal-400: #ff6c6c;
-  --color-teal-100: #fff0f0;
-  --color-slate-50: #ffffff;
-  --color-slate-100: #f0f2f6;
-  --color-slate-200: #e6eaf1;
-  --color-slate-300: #d6d6d8;
+  --color-teal-600: #c23b3b;
+  --color-teal-500: #c23b3b;
+  --color-teal-400: #d45a5a;
+  --color-teal-100: #f8ecec;
+  --color-slate-50: #fbfbfc;
+  --color-slate-100: #eef1f5;
+  --color-slate-200: #e4e8ef;
+  --color-slate-300: #d0d4dc;
   --color-slate-400: #a3a8b8;
   --color-slate-500: #808495;
-  --color-slate-700: #31333f;
-  --color-slate-800: #31333f;
+  --color-slate-700: #2f3340;
+  --color-slate-800: #2f3340;
   --color-white: #ffffff;
-  --color-danger: #ff4b4b;
-  --color-danger-bg: #fff0f0;
-  --color-danger-border: #ffc7c7;
-  --color-success: #09ab3b;
-  --color-success-bg: #dffde9;
-  --color-success-border: #9ef0b4;
-  --color-warning: #ffbd45;
-  --color-warning-bg: #fff8e1;
-  --color-warning-border: #ffe6a8;
-  --color-info: #0068c9;
-  --color-info-bg: #e8f4ff;
-  --color-info-border: #b5d8f7;
+  --color-danger: #c62828;
+  --color-danger-bg: #fdecea;
+  --color-danger-border: #ef9a9a;
+  --color-success: #2e7d32;
+  --color-success-bg: #e8f5e9;
+  --color-success-border: #a5d6a7;
+  --color-warning: #ed6c02;
+  --color-warning-bg: #fff4e5;
+  --color-warning-border: #ffcc80;
+  --color-info: #1565c0;
+  --color-info-bg: #e3f2fd;
+  --color-info-border: #90caf9;
 
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;
@@ -55,7 +53,6 @@
   --space-xl: 2rem;
   --space-2xl: 3rem;
 
-  /* Oracle measured sidebar ≈ 300px @ 1440 */
   --sidebar-width: 300px;
   --sidebar-width-collapsed: 3.25rem;
   --header-height: 3.75rem;
@@ -64,13 +61,12 @@
   --content-gutter: 5rem;
   --page-caption-gap: 0.35rem;
 
-  /* Streamlit widgets use soft ~0.5rem corners */
   --radius-sm: 0.5rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
 
-  --shadow-sm: 0 1px 2px rgba(49, 51, 63, 0.04);
-  --shadow-md: 0 2px 8px rgba(49, 51, 63, 0.06);
+  --shadow-sm: 0 1px 2px rgba(47, 51, 64, 0.04);
+  --shadow-md: 0 2px 8px rgba(47, 51, 64, 0.06);
 
   --font-sans: "Source Sans 3", "Source Sans Pro", "Source Sans", "Segoe UI",
     system-ui, sans-serif;
@@ -91,9 +87,19 @@
   color-scheme: light;
 }
 
-/* Force light Streamlit chrome — do not invent dark SaaS theme */
+/* Force light chrome — do not invent dark SaaS theme */
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: light;
   }
+}
+
+/* FAULT / danger status must read as red, never success-green */
+.widget-badge--danger,
+.status-badge--fault,
+[data-status="FAULT"],
+[data-status="fault"] {
+  color: var(--color-danger) !important;
+  background: var(--color-danger-bg) !important;
+  border-color: var(--color-danger-border) !important;
 }

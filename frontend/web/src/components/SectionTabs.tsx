@@ -16,6 +16,7 @@ function resolveActiveId(
   }
   if (pathname.startsWith("/mapping")) return "data-model";
   if (pathname.startsWith("/rules")) return "run-rules";
+  if (pathname.startsWith("/actions")) return "actions";
   if (pathname.startsWith("/findings")) return "results";
   if (pathname.startsWith("/rcx")) return "rcx-plots";
   if (pathname.startsWith("/metering")) return "metering";
@@ -36,6 +37,8 @@ function sectionPath(id: string, fallback: string): string {
       return "/rcx";
     case "metering":
       return "/metering";
+    case "actions":
+      return "/actions";
     default:
       return fallback;
   }

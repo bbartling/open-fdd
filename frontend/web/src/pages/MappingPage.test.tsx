@@ -14,6 +14,12 @@ vi.mock("../api/mappingApi", async () => {
     getSessionConfig: vi.fn(),
     updatePackageRoles: vi.fn(),
     putSessionConfig: vi.fn(),
+    listCookbookRoles: vi.fn(async () => [
+      "fan_cmd",
+      "fan_status",
+      "sat",
+      "duct_static",
+    ]),
   };
 });
 
@@ -106,7 +112,10 @@ describe("MappingPage", () => {
   it("saves role edits via package roles + session-config", async () => {
     renderMapping();
     await waitFor(() => screen.getByTestId("map-role-input-SF_SPD"));
-    fireEvent.change(screen.getByTestId("map-role-input-SF_SPD"), {
+    const roleSelect = screen
+      .getByTestId("map-role-input-SF_SPD")
+      .querySelector("select");
+    fireEvent.change(roleSelect!, {
       target: { value: "fan_status" },
     });
     expect(screen.getByTestId("map-dirty-banner")).toBeTruthy();

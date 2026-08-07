@@ -214,3 +214,11 @@ export function buildMappingManifest(
     2,
   );
 }
+
+/** Canonical SQL cookbook roles for Data Model Select. */
+export async function listCookbookRoles(): Promise<string[]> {
+  const body = await apiFetch<{ ok?: boolean; roles?: string[] }>(
+    "/api/fdd/cookbook-roles",
+  );
+  return Array.isArray(body.roles) ? body.roles.map(String) : [];
+}
