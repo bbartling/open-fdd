@@ -2857,6 +2857,7 @@ dependencies = [
  "base64",
  "bytes",
  "chrono",
+ "csv",
  "dashmap",
  "datafusion",
  "fdd_rules",

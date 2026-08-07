@@ -165,19 +165,17 @@ describe("HomePage overview", () => {
     expect(listFddEquipment).toHaveBeenCalled();
   });
 
-  it("shows Streamlit-oracle empty Overview and skips JWT inventory when anonymous", async () => {
+  it("loads site inventory without a browser token (open mode)", async () => {
     render(
       <MemoryRouter>
         <HomePage />
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByTestId("oracle-hero")).toBeTruthy();
-      expect(screen.getByTestId("overview-start-here")).toBeTruthy();
+      expect(screen.getByTestId("overview-populated")).toBeTruthy();
+      expect(screen.getByTestId("overview-eq-count").textContent).toContain("2");
     });
-    expect(listPackageBuildings).not.toHaveBeenCalled();
-    expect(listFddEquipment).not.toHaveBeenCalled();
-    expect(screen.getByText("How it works")).toBeTruthy();
-    expect(screen.getByTestId("sidebar-rule-tuning")).toBeTruthy();
+    expect(listPackageBuildings).toHaveBeenCalled();
+    expect(listFddEquipment).toHaveBeenCalled();
   });
 });

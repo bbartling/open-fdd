@@ -27,14 +27,6 @@ function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-function hasAuthToken(): boolean {
-  try {
-    return Boolean(sessionStorage.getItem("openfdd.auth.token"));
-  } catch {
-    return false;
-  }
-}
-
 function readUnits(): "imperial" | "metric" {
   try {
     return localStorage.getItem("openfdd.ui.unit_system") === "metric"
@@ -66,18 +58,15 @@ export function HomePage() {
     setLoading(true);
     setError(null);
     try {
-      const authed = hasAuthToken();
       const [caps, gen, blds, eq] = await Promise.all([
         apiFetch<CapabilitiesResponse>("/api/capabilities"),
         getUiGeneration().catch(() => null),
-        authed
-          ? listPackageBuildings().catch(() => [] as string[])
-          : Promise.resolve([] as string[]),
-        authed
-          ? listFddEquipment(buildingId || undefined).catch(
-              () => [] as FddEquipmentItem[],
-            )
-          : Promise.resolve([] as FddEquipmentItem[]),
+        // Open mode allows these without a browser token; AuthGate blocks when
+        // auth_required and there is no session.
+        listPackageBuildings().catch(() => [] as string[]),
+        listFddEquipment(buildingId || undefined).catch(
+          () => [] as FddEquipmentItem[],
+        ),
       ]);
       setContractVersion(caps.contract.contract_version);
       setReactUi(Boolean(caps.capabilities?.react_ui));

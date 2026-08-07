@@ -1,0 +1,55 @@
+{
+  "campus_id": "liberty_practice_bensbench",
+  "label": "Liberty Buildings 50 + 100 (Troy MI) \u2014 practice from Excel export",
+  "notes": "Exported from Buidling_100_50_fuel_use.xlsx Summary sheets. Electric meter is shared (labeled 50 Elec in workbook); allocation is a scenario.",
+  "siteRef": "liberty_troy",
+  "lat": 42.5626,
+  "lon": -83.1227,
+  "buildings": [
+    {
+      "building_id": "liberty_50",
+      "label": "Liberty Building 50",
+      "floor_area_ft2": 140000,
+      "property_type": "office"
+    },
+    {
+      "building_id": "liberty_100",
+      "label": "Liberty Building 100",
+      "floor_area_ft2": 140000,
+      "property_type": "office"
+    }
+  ],
+  "meters": [
+    {
+      "meter_id": "elec_shared",
+      "fuel": "electricity",
+      "unit": "kwh",
+      "file": "Liberty_50_100_Electric_Summary.csv",
+      "serves": [
+        "liberty_50",
+        "liberty_100"
+      ],
+      "allocation": {
+        "method": "area_weighted"
+      }
+    },
+    {
+      "meter_id": "gas_50",
+      "fuel": "gas",
+      "unit": "mcf",
+      "file": "Liberty_50_Gas_Summary.csv",
+      "serves": [
+        "liberty_50"
+      ]
+    },
+    {
+      "meter_id": "gas_100",
+      "fuel": "gas",
+      "unit": "mcf",
+      "file": "Liberty_100_Gas_Summary.csv",
+      "serves": [
+        "liberty_100"
+      ]
+    }
+  ]
+}

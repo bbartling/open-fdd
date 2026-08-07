@@ -29,14 +29,6 @@ function writeFlag(key: string, value: boolean): void {
   }
 }
 
-function hasAuthToken(): boolean {
-  try {
-    return Boolean(sessionStorage.getItem("openfdd.auth.token"));
-  } catch {
-    return false;
-  }
-}
-
 function downloadJson(filename: string, data: unknown): void {
   const blob = new Blob([JSON.stringify(data, null, 2)], {
     type: "application/json",
@@ -94,10 +86,6 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
   const faultInputRef = useRef<HTMLInputElement>(null);
 
   const refreshSites = useCallback(async () => {
-    if (!hasAuthToken()) {
-      setSites(activeSite ? [activeSite] : []);
-      return;
-    }
     try {
       const list = await listPackageBuildings();
       setSites(list);

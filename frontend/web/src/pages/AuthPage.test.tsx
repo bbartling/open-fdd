@@ -7,6 +7,8 @@ vi.mock("../api/authApi", () => ({
   getAuthMe: vi.fn(async () => {
     throw new Error("unauthorized");
   }),
+  getStoredToken: vi.fn(() => null),
+  setStoredToken: vi.fn(),
   login: vi.fn(async () => ({
     ok: true,
     token: "jwt",
@@ -18,15 +20,35 @@ vi.mock("../api/authApi", () => ({
   logout: vi.fn(),
 }));
 
-import { getAuthMe, login } from "../api/authApi";
+import { getAuthMe, getStoredToken, login, setStoredToken } from "../api/authApi";
 
 describe("AuthPage", () => {
   beforeEach(() => {
     vi.mocked(login).mockClear();
+    vi.mocked(setStoredToken).mockClear();
+    vi.mocked(getStoredToken).mockReturnValue(null);
     vi.mocked(getAuthMe).mockRejectedValue(new Error("unauthorized"));
   });
 
   it("renders a clean sign-in form and navigates home after login", async () => {
+    vi.mocked(login).mockImplementation(async () => {
+      vi.mocked(getStoredToken).mockReturnValue("jwt");
+      return {
+        ok: true,
+        token: "jwt",
+        access_token: "jwt",
+        token_type: "Bearer",
+        role: "admin",
+        subject: "admin",
+      };
+    });
+    vi.mocked(getAuthMe).mockResolvedValue({
+      ok: true,
+      username: "admin",
+      role: "admin",
+      auth_required: true,
+    });
+
     render(
       <MemoryRouter initialEntries={["/auth"]}>
         <Routes>
@@ -53,5 +75,29 @@ describe("AuthPage", () => {
       expect(login).toHaveBeenCalledWith("admin", "secret");
       expect(screen.getByTestId("home")).toBeTruthy();
     });
+  });
+
+  it("does not claim an open-mode session without a browser token", async () => {
+    vi.mocked(getAuthMe).mockResolvedValue({
+      ok: true,
+      username: "dev",
+      role: "admin",
+      auth_required: false,
+    });
+    vi.mocked(getStoredToken).mockReturnValue(null);
+
+    render(
+      <MemoryRouter initialEntries={["/auth"]}>
+        <Routes>
+          <Route path="/auth" element={<AuthPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-login")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("auth-continue")).toBeNull();
+    expect(screen.queryByText(/active session/i)).toBeNull();
   });
 });
