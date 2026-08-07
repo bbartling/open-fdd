@@ -7,7 +7,8 @@
 - Data Model role editors → Select from cookbook role catalog (`GET /api/fdd/cookbook-roles`).
 - RCx preset coverage diagnostics UI; Metering Plotly (not JSON stub).
 - Overview/tokens softened; Fuel Plotly 1:1 gaps (peer bullet, roll-12 EUI, ranked EUI, OLS fit/residuals, demand peaks).
-- #674 Fuel Phase A merged `cc63574` → GHCR `sha-cc63574` (bensbench pull when publish green).
+- #674 Fuel Phase A merged `cc63574`; #675 Plotly/UX parity merged `d38d09b`.
+- bensbench: `OPENFDD_IMAGE_TAG=sha-d38d09b` react-ot recreate; health `3.3.0+d38d09b`; Fuel EUI ~66.9 (7 query versions); BUILDING_100 economizer 4000 pts + RCx; Actions/cookbook-roles APIs live; fuel sidecar removed.
 
 ## 2026-08-07 — Vibe20 Fuel Phase A into Open-FDD (Rust + React)
 
