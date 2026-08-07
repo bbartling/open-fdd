@@ -7,6 +7,7 @@ vi.mock("../api/mappingApi", () => ({
   listPackageBuildings: vi.fn(async () => ["B1"]),
   getPackageMapping: vi.fn(async () => ({
     ok: true,
+<<<<<<< HEAD
     building_id: "B1",
     equipment: [
       {
@@ -15,6 +16,13 @@ vi.mock("../api/mappingApi", () => ({
         ok: true,
         roles: { zone_t: "zone_t" },
         columns: [{ column: "zone_air_temp", role: "zone_t", status: "mapped" }],
+=======
+    equipment: [
+      {
+        equipment_id: "VAV_1",
+        roles: { zone_t: "zone_t" },
+        columns: [{ column: "zone_t", role: "zone_t" }],
+>>>>>>> 897f08e (Remove Reports artifacts/PDF surface; keep FDD Plots.)
       },
     ],
   })),
@@ -74,16 +82,13 @@ vi.mock("../api/analyticsApi", () => ({
     points: [],
     skipped: [],
   })),
+  postInspect: vi.fn(async () => ({
+    points: [],
+    warnings: [],
+  })),
 }));
 
 vi.mock("../api/uploadApi", () => ({ uploadPackage: vi.fn() }));
-
-vi.mock("../api/reportsApi", () => ({
-  listReports: vi.fn(async () => []),
-  createReportDraft: vi.fn(async () => ({ report_id: "d1" })),
-  getEngineeringFindingsReport: vi.fn(async () => ({ ok: false })),
-  createWattlabHandoff: vi.fn(),
-}));
 
 import { getFddSeries } from "../api/fddApi";
 
@@ -95,9 +100,19 @@ function renderPlots(entry = "/reports?site=B1&eq=VAV_1") {
   );
 }
 
-describe("ReportsPage plots", () => {
+describe("ReportsPage FDD Plots", () => {
   beforeEach(() => {
     vi.mocked(getFddSeries).mockClear();
+  });
+
+  it("shows FDD Plots title without artifacts mode", async () => {
+    renderPlots();
+    await waitFor(() => {
+      expect(screen.getByTestId("plots-page")).toBeTruthy();
+    });
+    expect(screen.getByRole("heading", { level: 1, name: "FDD Plots" })).toBeTruthy();
+    expect(screen.queryByTestId("reports-mode")).toBeNull();
+    expect(screen.queryByTestId("reports-artifacts")).toBeNull();
   });
 
   it("loads series and renders chart + preview", async () => {

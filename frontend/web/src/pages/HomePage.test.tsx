@@ -114,12 +114,6 @@ vi.mock("../api/fddApi", () => ({
   })),
 }));
 
-vi.mock("../api/reportsApi", () => ({
-  listReports: vi.fn(async () => []),
-  createReportDraft: vi.fn(async () => ({ ok: true })),
-  getEngineeringFindingsReport: vi.fn(async () => ({})),
-}));
-
 vi.mock("../api/cutoverApi", () => ({
   getUiGeneration: vi.fn(async () => ({ generation: "react" })),
 }));

@@ -7,7 +7,6 @@ import {
   Expander,
   InlineAlert,
   PlotlyHost,
-  RadioGroup,
   Select,
 } from "../components/widgets";
 import { useSessionQuery } from "../session";
@@ -23,31 +22,15 @@ import {
   sensorFaultChart,
   sensorHealthHeatmap,
 } from "../api/vibeCharts";
-import {
-  createReportDraft,
-  getEngineeringFindingsReport,
-  listReports,
-  type ReportRecord,
-} from "../api/reportsApi";
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-type ReportRow = {
-  report_id: string;
-  report_type: string;
-  title: string;
-};
-
 export function ReportsPage() {
   const { query, setQuery } = useSessionQuery();
   const buildingId = query.siteId ?? "";
   const equipmentId = query.equipment ?? "";
-  const mode =
-    query.section === "artifacts" || query.section === "metering"
-      ? "artifacts"
-      : "plots";
 
   const [buildings, setBuildings] = useState<string[]>([]);
   const [ruleId, setRuleId] = useState("");
@@ -74,10 +57,6 @@ export function ReportsPage() {
   const [sensorFaultLoading, setSensorFaultLoading] = useState(false);
   const [sensorError, setSensorError] = useState<string | null>(null);
   const [sensorOpen, setSensorOpen] = useState(false);
-
-  const [reports, setReports] = useState<ReportRecord[]>([]);
-  const [artifactsNotice, setArtifactsNotice] = useState<string | null>(null);
-  const [engFindings, setEngFindings] = useState("");
 
   useEffect(() => {
     void listPackageBuildings()
@@ -154,22 +133,6 @@ export function ReportsPage() {
         setEquipmentOptions([{ value: "", label: "— equipment —" }]);
       });
   }, [buildingId, equipmentId, setQuery]);
-
-  const refreshReports = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setReports(await listReports());
-    } catch (err) {
-      setError(formatErr(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (mode === "artifacts") void refreshReports();
-  }, [mode, refreshReports]);
 
   const loadSeries = useCallback(async () => {
     if (!equipmentId || !ruleId) {
@@ -302,35 +265,6 @@ export function ReportsPage() {
     return [{ value: "", label: "— sensor —" }, ...opts];
   }, [sensorRows]);
 
-  const onCreateDraft = async () => {
-    setArtifactsNotice(null);
-    setError(null);
-    try {
-      const out = await createReportDraft({
-        template_id: "summary",
-        title: "React draft (P1-M5-E)",
-        note: "DOCX/PDF render may remain ORACLE until Rust owns them",
-      });
-      setArtifactsNotice(
-        `Draft created: ${String(out.report_id ?? JSON.stringify(out))}`,
-      );
-      await refreshReports();
-    } catch (err) {
-      setError(formatErr(err));
-    }
-  };
-
-  const onLoadEngFindings = async () => {
-    setError(null);
-    try {
-      const body = await getEngineeringFindingsReport();
-      setEngFindings(JSON.stringify(body, null, 2));
-    } catch (err) {
-      setEngFindings("");
-      setError(formatErr(err));
-    }
-  };
-
   const gapSummary = useMemo(() => {
     if (!figure) return "";
     return figure.data
@@ -367,245 +301,166 @@ export function ReportsPage() {
     return Object.keys(previewRows[0]).map((k) => ({ key: k, header: k }));
   }, [previewRows]);
 
-  const reportRows: ReportRow[] = reports.map((r) => ({
-    report_id: String(r.report_id ?? ""),
-    report_type: String(r.report_type ?? r.template_id ?? r.kind ?? ""),
-    title: String(r.title ?? ""),
-  }));
-
   return (
     <AppShell
-      title="Reports"
-      caption="FDD plots + /api/reports artifacts (P1-M5-E). PDF/DOCX may be ORACLE."
-      activeSectionId={mode === "artifacts" ? "metering" : "fdd-plots"}
+      title="FDD Plots"
+      caption="FDD series plots and sensor health."
+      activeSectionId="fdd-plots"
     >
       <div className="page-stack" data-testid="reports-page">
-        <RadioGroup
-          id="reports-mode"
-          label="Reports view"
-          value={mode}
-          options={[
-            { value: "plots", label: "FDD plots" },
-            { value: "artifacts", label: "Artifacts (/api/reports)" },
-          ]}
-          onChange={(v) =>
-            setQuery(
-              { section: v === "artifacts" ? "artifacts" : "fdd-plots" },
-              true,
-            )
-          }
-          testId="reports-mode"
-        />
-
         {error ? (
           <InlineAlert id="reports-error" variant="danger" testId="plots-error">
             {error}
           </InlineAlert>
         ) : null}
 
-        {mode === "plots" ? (
-          <div data-testid="plots-page">
-            <h2>FDD plot datasets</h2>
-            <p>
-              Loads <code>GET /api/fdd/series</code>. Run FDD via{" "}
-              <Link to="/rules">Rules</Link> first.
-            </p>
+        <div data-testid="plots-page">
+          <h2>FDD plot datasets</h2>
+          <p>
+            Loads <code>GET /api/fdd/series</code>. Run FDD via{" "}
+            <Link to="/rules">Rules</Link> first.
+          </p>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-              <Select
-                id="plots-building"
-                label="Building"
-                value={buildingId}
-                options={buildingOptions}
-                onChange={(value) => setQuery({ siteId: value }, true)}
-                testId="plots-building-select"
-              />
-              <Select
-                id="plots-equipment"
-                label="Equipment"
-                value={equipmentId}
-                options={equipmentOptions}
-                onChange={(value) => setQuery({ equipment: value }, true)}
-                testId="plots-equipment-select"
-              />
-              <Select
-                id="plots-rule"
-                label="Rule"
-                value={ruleId}
-                options={ruleOptions}
-                onChange={setRuleId}
-                testId="plots-rule-select"
-              />
-            </div>
-
-            <div style={{ margin: "0.75rem 0" }}>
-              <Button
-                id="plots-load"
-                label={loading ? "Loading…" : "Load series"}
-                onClick={() => void loadSeries()}
-                disabled={loading || !equipmentId || !ruleId}
-                testId="plots-load"
-              />
-            </div>
-
-            <PlotlyHost
-              id="fdd-series"
-              label={figure?.layout?.title ?? "FDD series"}
-              figure={figure}
-              loading={loading}
-              testId="plots-chart"
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+            <Select
+              id="plots-building"
+              label="Building"
+              value={buildingId}
+              options={buildingOptions}
+              onChange={(value) => setQuery({ siteId: value }, true)}
+              testId="plots-building-select"
             />
-
-            {figure ? (
-              <p data-testid="plots-gap-summary">
-                Missing segments by role: {gapSummary || "none"}
-              </p>
-            ) : null}
-
-            {previewRows.length ? (
-              <DataTable
-                id="plots-preview"
-                label="Series preview (first rows)"
-                columns={
-                  previewColumns as Array<{ key: string; header: string }>
-                }
-                rows={previewRows}
-                testId="plots-preview-table"
-              />
-            ) : null}
-
-            <Expander
-              id="sensor-health"
-              label="Sensor health — coverage / flatline (DataFusion)"
-              expanded={sensorOpen}
-              onChange={setSensorOpen}
-              testId="sensor-health-expander"
-            >
-              <p>
-                Loads <code>POST /api/analytics/sensor-health</code> for the
-                selected building (optionally scoped to equipment).
-              </p>
-              <Button
-                id="sensor-health-load"
-                label={sensorLoading ? "Loading…" : "Load sensor health"}
-                onClick={() => void loadSensorHealth()}
-                disabled={sensorLoading || !buildingId}
-                testId="sensor-health-load"
-              />
-              {sensorError ? (
-                <InlineAlert id="sensor-health-error" variant="danger">
-                  {sensorError}
-                </InlineAlert>
-              ) : null}
-              <PlotlyHost
-                id="sensor-health-chart"
-                label="Coverage heatmap"
-                figure={sensorFigure}
-                loading={sensorLoading}
-                testId="sensor-health-chart"
-              />
-              {sensorRows.length ? (
-                <DataTable
-                  id="sensor-health-table"
-                  label="Sensor health matrix"
-                  columns={[
-                    { key: "equipment_id", header: "equipment" },
-                    { key: "role", header: "role" },
-                    { key: "coverage_pct", header: "coverage %" },
-                    { key: "missingness", header: "missingness" },
-                    { key: "flatline_flag", header: "flatline" },
-                    { key: "n_finite", header: "n_finite" },
-                    { key: "mean", header: "mean" },
-                    { key: "std", header: "std" },
-                  ]}
-                  rows={sensorRows}
-                  testId="sensor-health-table"
-                />
-              ) : null}
-
-              <Select
-                id="sensor-fault-pick"
-                label="Sensor for fault chart"
-                value={sensorKey}
-                options={sensorKeyOptions}
-                onChange={setSensorKey}
-                testId="sensor-fault-pick"
-              />
-              <Button
-                id="sensor-fault-load"
-                label={
-                  sensorFaultLoading ? "Loading…" : "Load sensor fault chart"
-                }
-                onClick={() => void loadSensorFaultChart()}
-                disabled={
-                  sensorFaultLoading || !buildingId || !sensorKey.includes("::")
-                }
-                testId="sensor-fault-load"
-              />
-              <PlotlyHost
-                id="sensor-fault-chart"
-                label="Sensor fault chart"
-                figure={sensorFaultFigure}
-                loading={sensorFaultLoading}
-                testId="sensor-fault-chart"
-              />
-            </Expander>
+            <Select
+              id="plots-equipment"
+              label="Equipment"
+              value={equipmentId}
+              options={equipmentOptions}
+              onChange={(value) => setQuery({ equipment: value }, true)}
+              testId="plots-equipment-select"
+            />
+            <Select
+              id="plots-rule"
+              label="Rule"
+              value={ruleId}
+              options={ruleOptions}
+              onChange={setRuleId}
+              testId="plots-rule-select"
+            />
           </div>
-        ) : (
-          <div data-testid="reports-artifacts">
-            <h2>Report artifacts</h2>
-            <InlineAlert id="reports-oracle" variant="info">
-              List/draft/engineering-findings via Rust. PDF/DOCX render may stay
-              ORACLE-ONLY until deletion gates (see PYTHON_EXIT_MATRIX).
-            </InlineAlert>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              <Button
-                id="reports-refresh"
-                label="Refresh list"
-                onClick={() => void refreshReports()}
-                testId="reports-refresh"
-              />
-              <Button
-                id="reports-draft"
-                label="Create draft"
-                variant="secondary"
-                onClick={() => void onCreateDraft()}
-                testId="reports-draft"
-              />
-              <Button
-                id="reports-eng"
-                label="Load engineering-findings"
-                variant="secondary"
-                onClick={() => void onLoadEngFindings()}
-                testId="reports-eng"
-              />
-            </div>
-            {artifactsNotice ? (
-              <InlineAlert
-                id="reports-notice"
-                variant="success"
-                testId="reports-notice"
-              >
-                {artifactsNotice}
+
+          <div style={{ margin: "0.75rem 0" }}>
+            <Button
+              id="plots-load"
+              label={loading ? "Loading…" : "Load series"}
+              onClick={() => void loadSeries()}
+              disabled={loading || !equipmentId || !ruleId}
+              testId="plots-load"
+            />
+          </div>
+
+          <PlotlyHost
+            id="fdd-series"
+            label={figure?.layout?.title ?? "FDD series"}
+            figure={figure}
+            loading={loading}
+            testId="plots-chart"
+          />
+
+          {figure ? (
+            <p data-testid="plots-gap-summary">
+              Missing segments by role: {gapSummary || "none"}
+            </p>
+          ) : null}
+
+          {previewRows.length ? (
+            <DataTable
+              id="plots-preview"
+              label="Series preview (first rows)"
+              columns={
+                previewColumns as Array<{ key: string; header: string }>
+              }
+              rows={previewRows}
+              testId="plots-preview-table"
+            />
+          ) : null}
+
+          <Expander
+            id="sensor-health"
+            label="Sensor health — coverage / flatline (DataFusion)"
+            expanded={sensorOpen}
+            onChange={setSensorOpen}
+            testId="sensor-health-expander"
+          >
+            <p>
+              Loads <code>POST /api/analytics/sensor-health</code> for the
+              selected building (optionally scoped to equipment).
+            </p>
+            <Button
+              id="sensor-health-load"
+              label={sensorLoading ? "Loading…" : "Load sensor health"}
+              onClick={() => void loadSensorHealth()}
+              disabled={sensorLoading || !buildingId}
+              testId="sensor-health-load"
+            />
+            {sensorError ? (
+              <InlineAlert id="sensor-health-error" variant="danger">
+                {sensorError}
               </InlineAlert>
             ) : null}
-            <DataTable
-              id="reports-table"
-              label="Reports"
-              columns={[
-                { key: "report_id", header: "report_id" },
-                { key: "report_type", header: "type" },
-                { key: "title", header: "title" },
-              ]}
-              rows={reportRows}
-              loading={loading}
-              testId="reports-table"
+            <PlotlyHost
+              id="sensor-health-chart"
+              label="Coverage heatmap"
+              figure={sensorFigure}
+              loading={sensorLoading}
+              testId="sensor-health-chart"
             />
-            {engFindings ? (
-              <pre data-testid="reports-eng-json">{engFindings}</pre>
+            {sensorRows.length ? (
+              <DataTable
+                id="sensor-health-table"
+                label="Sensor health matrix"
+                columns={[
+                  { key: "equipment_id", header: "equipment" },
+                  { key: "role", header: "role" },
+                  { key: "coverage_pct", header: "coverage %" },
+                  { key: "missingness", header: "missingness" },
+                  { key: "flatline_flag", header: "flatline" },
+                  { key: "n_finite", header: "n_finite" },
+                  { key: "mean", header: "mean" },
+                  { key: "std", header: "std" },
+                ]}
+                rows={sensorRows}
+                testId="sensor-health-table"
+              />
             ) : null}
-          </div>
-        )}
+
+            <Select
+              id="sensor-fault-pick"
+              label="Sensor for fault chart"
+              value={sensorKey}
+              options={sensorKeyOptions}
+              onChange={setSensorKey}
+              testId="sensor-fault-pick"
+            />
+            <Button
+              id="sensor-fault-load"
+              label={
+                sensorFaultLoading ? "Loading…" : "Load sensor fault chart"
+              }
+              onClick={() => void loadSensorFaultChart()}
+              disabled={
+                sensorFaultLoading || !buildingId || !sensorKey.includes("::")
+              }
+              testId="sensor-fault-load"
+            />
+            <PlotlyHost
+              id="sensor-fault-chart"
+              label="Sensor fault chart"
+              figure={sensorFaultFigure}
+              loading={sensorFaultLoading}
+              testId="sensor-fault-chart"
+            />
+          </Expander>
+        </div>
       </div>
     </AppShell>
   );
