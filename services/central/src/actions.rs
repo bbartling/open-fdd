@@ -38,7 +38,10 @@ fn workspace_root() -> PathBuf {
 }
 
 fn log_path() -> PathBuf {
-    workspace_root().join("data").join("actions").join("log.jsonl")
+    workspace_root()
+        .join("data")
+        .join("actions")
+        .join("log.jsonl")
 }
 
 fn utc_now() -> String {
@@ -123,15 +126,13 @@ pub fn start_action(kind: &str, label: &str, detail: Option<Value>) -> Result<St
 }
 
 /// Finish an action with `ok` or `fail` and optional detail merge.
-pub fn finish_action(
-    id: &str,
-    status: &str,
-    detail: Option<Value>,
-) -> Result<ActionEntry, String> {
+pub fn finish_action(id: &str, status: &str, detail: Option<Value>) -> Result<ActionEntry, String> {
     let status = match status {
         "ok" | "fail" => status,
         other => {
-            return Err(format!("invalid finish status '{other}' (expected ok|fail)"));
+            return Err(format!(
+                "invalid finish status '{other}' (expected ok|fail)"
+            ));
         }
     };
     let finished_at = utc_now();
@@ -208,8 +209,8 @@ mod tests {
         let _ = fs::create_dir_all(&dir);
         std::env::set_var("OPENFDD_WORKSPACE", &dir);
 
-        let id = start_action("fdd_run_all", "Run all", Some(json!({"building": "B1"})))
-            .expect("start");
+        let id =
+            start_action("fdd_run_all", "Run all", Some(json!({"building": "B1"}))).expect("start");
         let listed = list_actions(10);
         assert_eq!(listed["ok"], true);
         assert_eq!(listed["actions"][0]["id"], id);

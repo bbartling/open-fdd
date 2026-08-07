@@ -901,10 +901,7 @@ pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
     }
 
     if let Some(aid) = action_id {
-        let ok = result
-            .get("ok")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+        let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
         let status = if ok { "ok" } else { "fail" };
         let detail = json!({
             "ok": ok,
@@ -2001,10 +1998,7 @@ pub async fn fuel_campus_import(headers: HeaderMap, body: Bytes) -> Json<Value> 
         .await
         .unwrap_or_else(|e| json!({"ok": false, "error": format!("fuel import task: {e}")}));
     if let Some(aid) = action_id {
-        let ok = result
-            .get("ok")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+        let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
         let status = if ok { "ok" } else { "fail" };
         let detail = json!({
             "ok": ok,
