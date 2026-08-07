@@ -12,11 +12,19 @@ on:
       - "openfdd_agent_spec/ownership.yaml"
       - "scripts/cookbook_parity_check.py"
       - "scripts/rule_parity_mutation_check.py"
+      - "scripts/generate_parity_inventory.py"
+      - "scripts/parity_inventory_check.py"
+      - "scripts/sql_pandas_oracle_check.py"
       - "scripts/architecture_ownership_check.py"
       - "scripts/architecture_react_policy_check.py"
       - "scripts/validate_capabilities_ledger.py"
       - "docs/architecture/adr-001-react-rust-modernization.md"
+      - "docs/COOKBOOK_OWNERSHIP.md"
       - "sql_rules/registry.yaml"
+      - "sql_rules/generated/**"
+      - "crates/fdd_rules/fixtures/oracle/**"
+      - "tools/python_oracle/**"
+      - "open_fdd/rules/**"
       - "docs/migration/MILESTONE_D_RULE_PARITY.md"
       - ".github/workflows/cookbook-parity.yml"
       - "README.md"
@@ -29,11 +37,19 @@ on:
       - "openfdd_agent_spec/ownership.yaml"
       - "scripts/cookbook_parity_check.py"
       - "scripts/rule_parity_mutation_check.py"
+      - "scripts/generate_parity_inventory.py"
+      - "scripts/parity_inventory_check.py"
+      - "scripts/sql_pandas_oracle_check.py"
       - "scripts/architecture_ownership_check.py"
       - "scripts/architecture_react_policy_check.py"
       - "scripts/validate_capabilities_ledger.py"
       - "docs/architecture/adr-001-react-rust-modernization.md"
+      - "docs/COOKBOOK_OWNERSHIP.md"
       - "sql_rules/registry.yaml"
+      - "sql_rules/generated/**"
+      - "crates/fdd_rules/fixtures/oracle/**"
+      - "tools/python_oracle/**"
+      - "open_fdd/rules/**"
       - "docs/migration/MILESTONE_D_RULE_PARITY.md"
       - ".github/workflows/cookbook-parity.yml"
       - "README.md"
@@ -48,14 +64,25 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pandas + PyYAML
-        run: pip install pandas pyyaml
+      - name: Install oracle package + PyYAML
+        run: |
+          python -m pip install -U pip
+          pip install pyyaml
+          pip install -e ".[oracle]"
 
       - name: Architecture ownership + React policy + capability ledger
         run: |
           python3 scripts/architecture_ownership_check.py
           python3 scripts/architecture_react_policy_check.py
           python3 scripts/validate_capabilities_ledger.py
+
+      - name: Wave 0 parity inventory (generate --check + contract)
+        run: |
+          python3 scripts/generate_parity_inventory.py --check
+          python3 scripts/parity_inventory_check.py
+
+      - name: Wave 0 pandas oracle seeds (real open_fdd.rules)
+        run: python3 scripts/sql_pandas_oracle_check.py
 
       - name: Rule parity mutation path checks (D2)
         run: python3 scripts/rule_parity_mutation_check.py

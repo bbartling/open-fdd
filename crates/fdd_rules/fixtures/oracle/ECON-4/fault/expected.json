@@ -1,0 +1,11 @@
+{
+  "pandas_rule_id": "ECON-4",
+  "equipment_id": "AHU_1",
+  "poll_seconds": 300,
+  "params": {},
+  "fault_hours": 0.25,
+  "fault_hours_tol": 0.05,
+  "any_fault": true,
+  "datafusion_compare": "crates/fdd_rules/src/econ4_confirm_test.rs",
+  "notes": "Wave 0 seed \u2014 DF compared in Rust econ4_confirm_test"
+}

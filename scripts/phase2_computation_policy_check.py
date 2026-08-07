@@ -67,7 +67,7 @@ def check_closure_ledger(errors: list[str]) -> None:
         errors.append(f"missing {CLOSURE.relative_to(ROOT)}")
         return
     text = CLOSURE.read_text(encoding="utf-8")
-    for needle in ("CLOSED", "ORACLE", "PROVISIONAL", "ported_from_cookbook"):
+    for needle in ("CLOSED", "ORACLE", "PROVISIONAL", "sql_screening"):
         if needle not in text:
             errors.append(f"COMPUTATION_CLOSURE.md missing required marker {needle!r}")
 

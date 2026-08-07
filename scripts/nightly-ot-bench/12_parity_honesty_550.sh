@@ -32,10 +32,15 @@ if [[ -f "$PARITY_DOC" ]]; then
   else
     ok "parity-matrix.md has no rogue 54-full-parity claim"
   fi
-  if grep -qiE 'proven_building_100|ported_from_cookbook|ported ≠ oracle' "$PARITY_DOC"; then
-    ok "parity-matrix.md states proven vs ported honesty"
+  if grep -qiE 'sql_screening|parity_level|Wave 0' "$PARITY_DOC"; then
+    ok "parity-matrix.md states Wave 0 parity_level honesty"
   else
-    bad "parity-matrix.md missing proven/ported honesty language"
+    bad "parity-matrix.md missing Wave 0 / sql_screening honesty language"
+  fi
+  if grep -qiE 'proven_building_100|ported_from_cookbook' "$PARITY_DOC"; then
+    bad "parity-matrix.md still uses legacy proven_building_100/ported_from_cookbook labels"
+  else
+    ok "parity-matrix.md has no legacy proven/ported labels"
   fi
 else
   bad "missing $PARITY_DOC"
@@ -53,24 +58,28 @@ else
   bad "could not extract web assets for parity claim check"
 fi
 
-# Registry counts via live API
+# Registry counts via live API (Wave 0 ladder)
 RULES="$(capi "$CENTRAL_BASE/api/fdd/rules" || echo '{}')"
 echo "$RULES" >"$ART/fdd_rules_parity.json"
-PROVEN="$(jq '[.rules[]? | select(.parity_status=="proven_building_100")] | length' <<<"$RULES")"
-PORTED="$(jq '[.rules[]? | select(.parity_status=="ported_from_cookbook")] | length' <<<"$RULES")"
-SKIPPED="$(jq '[.rules[]? | select(.parity_status=="skipped_missing_roles")] | length' <<<"$RULES")"
+SCREEN="$(jq '[.rules[]? | select(.parity_status=="sql_screening")] | length' <<<"$RULES")"
+CONCEPT="$(jq '[.rules[]? | select(.parity_status=="concept_only")] | length' <<<"$RULES")"
+LEGACY="$(jq '[.rules[]? | select(.parity_status=="proven_building_100" or .parity_status=="ported_from_cookbook" or .parity_status=="skipped_missing_roles")] | length' <<<"$RULES")"
 TOTAL="$(jq '[.rules[]?] | length' <<<"$RULES")"
-echo "${DIM}  registry proven=$PROVEN ported=$PORTED skipped=$SKIPPED total=$TOTAL${RST}"
-# SoT: sql_rules/registry.yaml live counts (tip ≈ proven 24 / ported 38).
-if [[ "$PROVEN" -ge 22 && "$PROVEN" -le 26 ]]; then
-  ok "proven_building_100 ≈24 (actual $PROVEN)"
+echo "${DIM}  registry sql_screening=$SCREEN concept_only=$CONCEPT legacy=$LEGACY total=$TOTAL${RST}"
+if [[ "$TOTAL" -eq 63 ]]; then
+  ok "registry total=63"
 else
-  bad "proven_building_100 count=$PROVEN (expected ~24)"
+  bad "registry total=$TOTAL (expected 63)"
 fi
-if [[ "$PORTED" -ge 36 && "$PORTED" -le 40 ]]; then
-  ok "ported_from_cookbook ≈38 (actual $PORTED)"
+if [[ "$LEGACY" -eq 0 ]]; then
+  ok "no legacy parity_status labels on tip"
 else
-  bad "ported_from_cookbook count=$PORTED (expected ~38)"
+  bad "legacy parity_status still present count=$LEGACY"
+fi
+if [[ "$SCREEN" -ge 50 ]]; then
+  ok "sql_screening dominant (actual $SCREEN)"
+else
+  bad "sql_screening count=$SCREEN (expected majority after Wave 0)"
 fi
 
 # SCHED-1 string occ_mode ingest spot-check
@@ -90,10 +99,10 @@ else
 fi
 
 cat >"$ART/issue_550_backlog.txt" <<EOF
-#550 KEEP OPEN — honesty/oracle phase incomplete.
-- proven_building_100=$PROVEN ported_from_cookbook=$PORTED (ported ≠ oracle-proven)
+#550 KEEP OPEN — Wave 0 honesty ladder; higher parity levels still backlog.
+- sql_screening=$SCREEN concept_only=$CONCEPT total=$TOTAL
 - Do not claim 54 full parity.
-- Phase-1 oracle harness lands masks/fault-hours; full cookbook parity remains backlog.
+- Promote levels only via pandas↔DataFusion fixtures (scripts/sql_pandas_oracle_check.py + fdd_rules).
 - SCHED-1 string occ_mode ingest spot-check: PASS (role + SQL).
 EOF
 ok "wrote #550 KEEP OPEN backlog note → issue_550_backlog.txt"
