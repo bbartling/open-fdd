@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-08-07 — #683 RCx MOD fix + FDD parity Wave 0
+
+- **#683** merged (`102049a`): DataFusion RCx timeseries downsample uses `%` instead of SQL `MOD()` (DF 43). GHCR pull-only on bensbench (no local docker build).
+- **#684** Wave 0: generated `parity_inventory`, downgrade legacy `proven_building_100`/`ported_from_cookbook` → `sql_screening`/`concept_only`, fixture scaffold + seed oracle (`open_fdd.rules`), `docs/COOKBOOK_OWNERSHIP.md`, CI gates. Hard stop before Wave 1.
+
+
 ## 2026-08-07 — UX hard fixes wave (#677–#681)
 
 - **#677** Dataset delete: sidebar + Data Model → `DELETE /api/datasets`; Actions kinds `dataset_delete` / `package_import`.

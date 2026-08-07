@@ -33,15 +33,15 @@ Status values: `CLOSED` | `CUTOVER-NEEDED` | `ORACLE` | `DEFER` | `PROVISIONAL`
 
 ## Registry production status honesty
 
-`sql_rules/registry.yaml` (63 rules):
+`sql_rules/registry.yaml` (63 rules) — Wave 0 ladder:
 
 | raw `parity_status` | count | production meaning |
 |---|---|---|
-| `proven_building_100` | 24 | **PROVEN** |
-| `ported_from_cookbook` | 38 | **PROVISIONAL** (visible limitation; not silently “done”) |
-| `skipped_missing_roles` | 1 | **DISABLED** until roles exist |
+| `sql_screening` | 62 | SQL present; **not** mask/duration-proven vs pandas |
+| `concept_only` | 1 | Incomplete roles (`FC7`) |
+| `predicate_parity` / `mask_parity` / `duration_parity` / `site_soak` | 0 | Require executable oracle fixtures before promotion |
 
-“Ported ≠ PROVEN.” Canary/default flip may ship PROVISIONAL rules with documented limits.
+Legacy labels `proven_building_100` / `ported_from_cookbook` are retired. Screening ≠ proven.
 
 ## Policy proof (this PR)
 
