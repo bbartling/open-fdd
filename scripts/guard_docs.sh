@@ -42,7 +42,10 @@ if [[ ${#hits[@]} -eq 0 ]]; then
 fi
 
 TIP_MSG="$(git log -1 --pretty=%B)"
-if grep -Fq '[docs-guard-bypass]' <<<"$TIP_MSG"; then
+# pull_request checkouts often use a merge commit whose subject is not the tip
+# message — accept bypass on any commit in the PR range vs base.
+RANGE_MSG="$(git log "${BASE_REF}...HEAD" --pretty=%B 2>/dev/null || true)"
+if grep -Fq '[docs-guard-bypass]' <<<"$TIP_MSG"$'\n'"$RANGE_MSG"; then
   echo "docs-guard: bypass trailer present; allowing protected-doc edits:"
   printf '  - %s\n' "${hits[@]}"
   exit 0
