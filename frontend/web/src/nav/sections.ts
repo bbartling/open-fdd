@@ -21,7 +21,7 @@ export const SIDEBAR_NAV = [
   { to: "/rules", label: "Rules", short: "R", testId: "nav-rules" },
   { to: "/actions", label: "Actions", short: "X", testId: "nav-actions" },
   { to: "/findings", label: "Findings", short: "F", testId: "nav-findings" },
-  { to: "/reports", label: "Reports", short: "P", testId: "nav-reports" },
+  { to: "/reports", label: "FDD Plots", short: "P", testId: "nav-reports" },
   { to: "/metering", label: "Metering", short: "E", testId: "nav-metering" },
   { to: "/wattlab", label: "WattLab", short: "W", testId: "nav-wattlab" },
   { to: "/twin", label: "Twin", short: "T", testId: "nav-twin" },

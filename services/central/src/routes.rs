@@ -1346,143 +1346,53 @@ pub async fn fdd_rules_list() -> Json<Value> {
     }
 }
 
-pub async fn reports_list() -> Json<Value> {
-    Json(open_fdd_edge_prototype::reports::list_reports())
-}
+const REPORTS_ARTIFACTS_GONE: &str = "reports artifacts removed; use FDD Plots and WattLab dumps";
 
-/// OFDD-069: dedicated Eng Findings lookup used by Liberty soak / HITL clients.
-///
-/// Returns the most recent report whose `report_type` / `template_id` / `kind`
-/// matches `engineering_findings`, or `{ok:false, error:"report not found"}`.
-pub async fn reports_engineering_findings() -> (StatusCode, Json<Value>) {
-    let listed = open_fdd_edge_prototype::reports::list_reports();
-    let records = listed
-        .get("records")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
-    let match_type = |v: &Value| -> bool {
-        let t = v
-            .get("report_type")
-            .or_else(|| v.get("template_id"))
-            .or_else(|| v.get("kind"))
-            .and_then(|x| x.as_str())
-            .unwrap_or("")
-            .to_ascii_lowercase();
-        t == "engineering_findings"
-            || t == "engineering-findings"
-            || t.contains("engineering_finding")
-    };
-    if let Some(best) = records.into_iter().find(|r| match_type(r)) {
-        let report_id = best.get("report_id").and_then(|v| v.as_str()).unwrap_or("");
-        if !report_id.is_empty() {
-            let full = open_fdd_edge_prototype::reports::get_report(report_id);
-            if full.get("ok") == Some(&json!(true)) || full.get("report_id").is_some() {
-                return (StatusCode::OK, Json(full));
-            }
-        }
-        return (StatusCode::OK, Json(json!({"ok": true, "report": best})));
-    }
+fn reports_artifacts_gone() -> (StatusCode, Json<Value>) {
     (
-        StatusCode::NOT_FOUND,
-        Json(json!({"ok": false, "error": "report not found"})),
+        StatusCode::GONE,
+        Json(json!({"ok": false, "error": REPORTS_ARTIFACTS_GONE})),
     )
 }
 
-pub async fn reports_templates() -> Json<Value> {
-    Json(open_fdd_edge_prototype::reports::templates())
+/// Reports list/draft/PDF surface removed; keep route so clients get 410 not 404.
+pub async fn reports_list() -> (StatusCode, Json<Value>) {
+    reports_artifacts_gone()
 }
 
-pub async fn reports_draft(Json(body): Json<Value>) -> Json<Value> {
-    let result =
-        tokio::task::spawn_blocking(move || open_fdd_edge_prototype::reports::create_draft(&body))
-            .await
-            .unwrap_or_else(|e| json!({"ok": false, "error": format!("reports draft task: {e}")}));
-    Json(result)
+pub async fn reports_engineering_findings() -> (StatusCode, Json<Value>) {
+    reports_artifacts_gone()
 }
 
-pub async fn reports_get(Path(report_id): Path<String>) -> Json<Value> {
-    Json(open_fdd_edge_prototype::reports::get_report(&report_id))
+pub async fn reports_templates() -> (StatusCode, Json<Value>) {
+    reports_artifacts_gone()
 }
 
-pub async fn reports_patch(Path(report_id): Path<String>, Json(body): Json<Value>) -> Json<Value> {
-    let result = tokio::task::spawn_blocking(move || {
-        open_fdd_edge_prototype::reports::patch_report(&report_id, &body)
-    })
-    .await
-    .unwrap_or_else(|e| json!({"ok": false, "error": format!("reports patch task: {e}")}));
-    Json(result)
+pub async fn reports_draft(Json(_body): Json<Value>) -> (StatusCode, Json<Value>) {
+    reports_artifacts_gone()
 }
 
-pub async fn reports_delete(Path(report_id): Path<String>) -> Json<Value> {
-    let result = tokio::task::spawn_blocking(move || {
-        open_fdd_edge_prototype::reports::delete_report(&report_id)
-    })
-    .await
-    .unwrap_or_else(|e| json!({"ok": false, "error": format!("reports delete task: {e}")}));
-    Json(result)
+pub async fn reports_get(Path(_report_id): Path<String>) -> (StatusCode, Json<Value>) {
+    reports_artifacts_gone()
 }
 
-pub async fn reports_render_pdf(Path(report_id): Path<String>) -> Json<Value> {
-    let result = tokio::task::spawn_blocking(move || {
-        open_fdd_edge_prototype::reports::render_pdf_bundle(&report_id)
-    })
-    .await
-    .unwrap_or_else(|e| json!({"ok": false, "error": format!("reports render task: {e}")}));
-    Json(result)
+pub async fn reports_patch(
+    Path(_report_id): Path<String>,
+    Json(_body): Json<Value>,
+) -> (StatusCode, Json<Value>) {
+    reports_artifacts_gone()
 }
 
-pub async fn reports_download_pdf(
-    Path(report_id): Path<String>,
-) -> Result<(StatusCode, HeaderMap, Vec<u8>), (StatusCode, Json<Value>)> {
-    let safe_id: String = report_id
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    if safe_id.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "invalid report_id"})),
-        ));
-    }
-    let report_id_for_io = report_id.clone();
-    let bytes = tokio::task::spawn_blocking(move || {
-        let path = open_fdd_edge_prototype::reports::download_path(&report_id_for_io, "pdf")
-            .ok_or_else(|| "pdf not found — render first".to_string())?;
-        std::fs::read(path).map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": format!("reports download task: {e}")})),
-        )
-    })?
-    .map_err(|e| {
-        let status = if e.contains("not found") {
-            StatusCode::NOT_FOUND
-        } else {
-            StatusCode::INTERNAL_SERVER_ERROR
-        };
-        (status, Json(json!({"ok": false, "error": e})))
-    })?;
-    let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "application/pdf".parse().unwrap());
-    let disposition = format!("attachment; filename=\"report-{safe_id}.pdf\"");
-    let disposition_value = disposition.parse().map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "invalid report_id for Content-Disposition"})),
-        )
-    })?;
-    headers.insert(header::CONTENT_DISPOSITION, disposition_value);
-    Ok((StatusCode::OK, headers, bytes))
+pub async fn reports_delete(Path(_report_id): Path<String>) -> (StatusCode, Json<Value>) {
+    reports_artifacts_gone()
+}
+
+pub async fn reports_render_pdf(Path(_report_id): Path<String>) -> (StatusCode, Json<Value>) {
+    reports_artifacts_gone()
+}
+
+pub async fn reports_download_pdf(Path(_report_id): Path<String>) -> (StatusCode, Json<Value>) {
+    reports_artifacts_gone()
 }
 
 #[derive(Debug, Deserialize)]
