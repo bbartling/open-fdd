@@ -405,6 +405,37 @@ pub fn series_response(equipment_id: &str, rule_id: &str) -> Value {
         if let Err(e) = register_parquet_tree(&ctx, &root).await {
             return json!({"ok": false, "error": e.to_string()});
         }
+        // Preflight required roles against history schema (no SchemaError banners).
+        let history_columns: std::collections::HashSet<String> = match ctx.table("history").await {
+            Ok(df) => df
+                .schema()
+                .fields()
+                .iter()
+                .map(|f| f.name().to_ascii_lowercase())
+                .collect(),
+            Err(_) => std::collections::HashSet::new(),
+        };
+        if !history_columns.is_empty() {
+            let missing: Vec<String> = columns
+                .iter()
+                .map(|c| (*c).to_string())
+                .filter(|role| !history_columns.contains(&role.to_ascii_lowercase()))
+                .collect();
+            if !missing.is_empty() {
+                return json!({
+                    "ok": false,
+                    "error": format!(
+                        "missing roles for rule {}: {}",
+                        rule.rule_id,
+                        missing.join(", ")
+                    ),
+                    "missing_roles": missing,
+                    "equipment_id": equipment_id,
+                    "rule_id": rule.rule_id,
+                    "rows": [],
+                });
+            }
+        }
         match run_sql(&ctx, &sql).await {
             Ok(mut result) => {
                 // Overlay confirmed_fault from last registry run when present so
@@ -436,7 +467,22 @@ pub fn series_response(equipment_id: &str, rule_id: &str) -> Value {
                     "has_confirmed_fault": !fault_by_ts.is_empty(),
                 })
             }
-            Err(e) => json!({"ok": false, "error": e.to_string()}),
+            Err(e) => {
+                let msg = e.to_string();
+                let lower = msg.to_ascii_lowercase();
+                if lower.contains("no field named") || lower.contains("schema error") {
+                    json!({
+                        "ok": false,
+                        "error": format!("missing roles for rule {}: {msg}", rule.rule_id),
+                        "missing_roles": rule.required_roles,
+                        "equipment_id": equipment_id,
+                        "rule_id": rule.rule_id,
+                        "rows": [],
+                    })
+                } else {
+                    json!({"ok": false, "error": msg})
+                }
+            }
         }
     })
 }
