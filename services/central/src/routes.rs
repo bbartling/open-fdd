@@ -2054,7 +2054,7 @@ async fn analytics_rcx_preset(Json(req): Json<AnalyticsRequest>) -> Json<Value> 
             "ok"
         };
         let _ = actions::finish_action(
-            &aid,
+            aid,
             status,
             Some(json!({
                 "ok": status == "ok",
@@ -2103,7 +2103,7 @@ async fn analytics_fuel(Json(req): Json<FuelRequest>) -> Json<Value> {
         let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(true);
         let status = if ok { "ok" } else { "fail" };
         let _ = actions::finish_action(
-            &aid,
+            aid,
             status,
             Some(json!({
                 "ok": ok,
