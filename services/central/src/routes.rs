@@ -900,7 +900,7 @@ pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
         }
     }
 
-    if let Some(aid) = action_id {
+    if let Some(ref aid) = action_id {
         let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
         let status = if ok { "ok" } else { "fail" };
         let detail = json!({
@@ -911,7 +911,7 @@ pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
             "total_ms": result.get("total_ms"),
             "error": result.get("error"),
         });
-        let _ = actions::finish_action(&aid, status, Some(detail));
+        let _ = actions::finish_action(aid, status, Some(detail));
         if let Some(obj) = result.as_object_mut() {
             obj.insert("action_id".into(), json!(aid));
         }
@@ -1088,7 +1088,7 @@ pub async fn csv_import_package(headers: HeaderMap, body: Bytes) -> Json<Value> 
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package import task: {e}")}));
-    if let Some(aid) = action_id {
+    if let Some(ref aid) = action_id {
         let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
         let status = if ok { "ok" } else { "fail" };
         let building_id = result.get("building_id").cloned().unwrap_or(Value::Null);
@@ -1100,7 +1100,7 @@ pub async fn csv_import_package(headers: HeaderMap, body: Bytes) -> Json<Value> 
             "total_ms": result.get("total_ms"),
             "error": result.get("error"),
         });
-        let _ = actions::finish_action(&aid, status, Some(detail));
+        let _ = actions::finish_action(aid, status, Some(detail));
         if let Some(obj) = result.as_object_mut() {
             obj.insert("action_id".into(), json!(aid));
         }
@@ -1992,36 +1992,82 @@ async fn analytics_rcx_preset(Json(req): Json<AnalyticsRequest>) -> Json<Value> 
                 .and_then(|s| s.get("preset_id"))
                 .and_then(|v| v.as_str())
         })
-        .unwrap_or("");
+        .unwrap_or("")
+        .to_string();
+    let building_id = req.query.building_id.clone();
     let max_points = req.query.max_points.unwrap_or(8000);
-    let env = match analytics::rcx_presets::run_preset(
-        req.query.building_id.as_deref(),
-        preset_id,
-        max_points,
-    )
-    .await
-    {
-        Ok(Some(env)) => env,
-        Ok(None) => analytics::envelope_with_engine(
-            "rcx-preset-v1",
-            &req.query,
-            vec![format!(
-                "RCx preset '{preset_id}' unavailable — unknown id or missing historian columns"
-            )],
-            analytics::DF_ENGINE,
+    let action_id = actions::start_action(
+        "analytics_rcx",
+        &format!(
+            "RCx preset · {} · {}",
+            building_id.as_deref().unwrap_or("(no building)"),
+            if preset_id.is_empty() {
+                "(none)"
+            } else {
+                &preset_id
+            }
         ),
-        Err(e) => {
-            tracing::warn!(error = %e, preset = %preset_id, "rcx preset failed");
-            analytics::envelope(
+        Some(json!({
+            "building_id": building_id.clone(),
+            "preset_id": preset_id.clone(),
+        })),
+    )
+    .ok();
+    let env =
+        match analytics::rcx_presets::run_preset(building_id.as_deref(), &preset_id, max_points)
+            .await
+        {
+            Ok(Some(env)) => env,
+            Ok(None) => analytics::envelope_with_engine(
                 "rcx-preset-v1",
                 &req.query,
-                vec![format!("rcx preset failed: {e}")],
-            )
-        }
-    };
+                vec![format!(
+                "RCx preset '{preset_id}' unavailable — unknown id or missing historian columns"
+            )],
+                analytics::DF_ENGINE,
+            ),
+            Err(e) => {
+                tracing::warn!(error = %e, preset = %preset_id, "rcx preset failed");
+                analytics::envelope(
+                    "rcx-preset-v1",
+                    &req.query,
+                    vec![format!("rcx preset failed: {e}")],
+                )
+            }
+        };
+    let analytics_json = env.to_json();
+    if let Some(ref aid) = action_id {
+        let warnings = analytics_json
+            .get("warnings")
+            .and_then(|v| v.as_array())
+            .map(|a| a.len())
+            .unwrap_or(0);
+        let status = if warnings > 0
+            && analytics_json
+                .get("rows")
+                .and_then(|r| r.as_array())
+                .map(|a| a.is_empty())
+                .unwrap_or(true)
+        {
+            "fail"
+        } else {
+            "ok"
+        };
+        let _ = actions::finish_action(
+            aid,
+            status,
+            Some(json!({
+                "ok": status == "ok",
+                "building_id": building_id,
+                "preset_id": preset_id,
+                "warning_count": warnings,
+            })),
+        );
+    }
     Json(json!({
         "ok": true,
-        "analytics": env.to_json(),
+        "analytics": analytics_json,
+        "action_id": action_id,
     }))
 }
 
@@ -2033,10 +2079,42 @@ async fn analytics_metering(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
 }
 
 async fn analytics_fuel(Json(req): Json<FuelRequest>) -> Json<Value> {
+    let qv = req.query_version.clone().unwrap_or_else(|| "fuel".into());
+    let campus = req.campus_id.clone();
+    let action_id = actions::start_action(
+        "analytics_fuel",
+        &format!(
+            "Fuel analytics · {} · {}",
+            campus.as_deref().unwrap_or("(campus)"),
+            qv
+        ),
+        Some(json!({
+            "campus_id": campus,
+            "query_version": qv,
+            "building_id": req.building_id,
+        })),
+    )
+    .ok();
     let body = req;
-    let result = tokio::task::spawn_blocking(move || fuel::handle_fuel(&body))
+    let mut result = tokio::task::spawn_blocking(move || fuel::handle_fuel(&body))
         .await
         .unwrap_or_else(|e| json!({"ok": false, "error": format!("fuel analytics task: {e}")}));
+    if let Some(ref aid) = action_id {
+        let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(true);
+        let status = if ok { "ok" } else { "fail" };
+        let _ = actions::finish_action(
+            aid,
+            status,
+            Some(json!({
+                "ok": ok,
+                "error": result.get("error"),
+                "query_version": result.get("query_version"),
+            })),
+        );
+        if let Some(obj) = result.as_object_mut() {
+            obj.insert("action_id".into(), json!(aid));
+        }
+    }
     Json(json!({
         "ok": result.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
         "analytics": result,
@@ -2055,7 +2133,7 @@ pub async fn fuel_campus_import(headers: HeaderMap, body: Bytes) -> Json<Value> 
     let result = tokio::task::spawn_blocking(move || fuel::import::import_fuel_handler(&ct, &body))
         .await
         .unwrap_or_else(|e| json!({"ok": false, "error": format!("fuel import task: {e}")}));
-    if let Some(aid) = action_id {
+    if let Some(ref aid) = action_id {
         let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
         let status = if ok { "ok" } else { "fail" };
         let detail = json!({
@@ -2063,7 +2141,7 @@ pub async fn fuel_campus_import(headers: HeaderMap, body: Bytes) -> Json<Value> 
             "campus_id": result.get("campus_id"),
             "error": result.get("error"),
         });
-        let _ = actions::finish_action(&aid, status, Some(detail));
+        let _ = actions::finish_action(aid, status, Some(detail));
         let mut out = result;
         if let Some(obj) = out.as_object_mut() {
             obj.insert("action_id".into(), json!(aid));
