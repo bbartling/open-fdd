@@ -1346,8 +1346,7 @@ pub async fn fdd_rules_list() -> Json<Value> {
     }
 }
 
-const REPORTS_ARTIFACTS_GONE: &str =
-    "reports artifacts removed; use FDD Plots and WattLab dumps";
+const REPORTS_ARTIFACTS_GONE: &str = "reports artifacts removed; use FDD Plots and WattLab dumps";
 
 fn reports_artifacts_gone() -> (StatusCode, Json<Value>) {
     (
@@ -1392,9 +1391,7 @@ pub async fn reports_render_pdf(Path(_report_id): Path<String>) -> (StatusCode, 
     reports_artifacts_gone()
 }
 
-pub async fn reports_download_pdf(
-    Path(_report_id): Path<String>,
-) -> (StatusCode, Json<Value>) {
+pub async fn reports_download_pdf(Path(_report_id): Path<String>) -> (StatusCode, Json<Value>) {
     reports_artifacts_gone()
 }
 
