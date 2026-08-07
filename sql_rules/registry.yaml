@@ -9,7 +9,7 @@ rules:
     required_roles: [fan_cmd]
     output_columns: [equipment_id, fan_runtime_hours, total_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
@@ -21,7 +21,7 @@ rules:
     required_roles: [zone_t]
     output_columns: [equipment_id, fault_hours, fault_pct]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 900
@@ -61,7 +61,7 @@ rules:
     required_roles: [zone_t]
     output_columns: [equipment_id, avg_zone_temp, min_zone_temp, max_zone_temp]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
@@ -92,7 +92,7 @@ rules:
     required_roles: [zone_t]
     output_columns: [equipment_id, comfort_pct]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
@@ -123,7 +123,7 @@ rules:
     required_roles: [zone_t]
     output_columns: [equipment_id, fault_samples, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
@@ -154,7 +154,7 @@ rules:
     required_roles: [oa_t]
     output_columns: [equipment_id, fault_hours, fault_pct]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 900
@@ -186,7 +186,7 @@ rules:
     required_roles: [sat, sat_sp, clg_valve_pct, oa_damper_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
@@ -244,7 +244,7 @@ rules:
     required_roles: [oa_t, oa_damper_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 300
@@ -284,7 +284,7 @@ rules:
     required_roles: [duct_static, duct_static_sp, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 300
@@ -324,7 +324,7 @@ rules:
     required_roles: [mat, oa_t, rat, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
@@ -336,7 +336,7 @@ rules:
     required_roles: [mat, oa_t, rat, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
@@ -348,7 +348,7 @@ rules:
     required_roles: [sat, sat_sp, htg_valve_pct, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: skipped_missing_roles
+    parity_status: concept_only
     dashboard_wired: true
     delete_python_candidate: false
     blocker: "htg_valve_pct missing on some AHUs — Python and SQL both skip"
@@ -389,7 +389,7 @@ rules:
     required_roles: [sat, mat, oa_damper_pct, clg_valve_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
@@ -401,7 +401,7 @@ rules:
     required_roles: [oa_t, sat_sp, oa_damper_pct, clg_valve_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
@@ -413,7 +413,7 @@ rules:
     required_roles: [mat, oa_t, oa_damper_pct, clg_valve_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
@@ -425,7 +425,7 @@ rules:
     required_roles: [oa_t, sat_sp, oa_damper_pct, clg_valve_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
@@ -437,7 +437,7 @@ rules:
     required_roles: [sat, mat, oa_damper_pct, clg_valve_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
@@ -449,7 +449,7 @@ rules:
     required_roles: [fan_cmd, oa_damper_pct, oa_t]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
@@ -471,7 +471,7 @@ rules:
     required_roles: [mat, rat, oa_t, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
@@ -504,7 +504,7 @@ rules:
     required_roles: [oa_t]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
@@ -535,7 +535,7 @@ rules:
     required_roles: [oa_t]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
@@ -566,7 +566,7 @@ rules:
     required_roles: [oa_t]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
@@ -598,7 +598,7 @@ rules:
     required_roles: [fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
@@ -630,7 +630,7 @@ rules:
     required_roles: [oa_t]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
@@ -661,7 +661,7 @@ rules:
     required_roles: [clg_valve_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
@@ -701,7 +701,7 @@ rules:
     required_roles: [oa_damper_pct, clg_valve_pct, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 3600
@@ -723,7 +723,7 @@ rules:
     required_roles: [sat, mat, htg_valve_pct, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
@@ -763,7 +763,7 @@ rules:
     required_roles: [mat, rat, oa_t, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
@@ -803,7 +803,7 @@ rules:
     required_roles: [mat, sat, clg_valve_pct, oa_damper_pct, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
@@ -834,7 +834,7 @@ rules:
     required_roles: [mat, sat, htg_valve_pct, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
@@ -865,7 +865,7 @@ rules:
     required_roles: [sat, sat_sp]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
@@ -896,7 +896,7 @@ rules:
     required_roles: [duct_static, duct_static_sp, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
@@ -936,7 +936,7 @@ rules:
     required_roles: [htg_valve_pct, clg_valve_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
@@ -967,7 +967,7 @@ rules:
     required_roles: [web_oa_t, web_oa_dp, oa_damper_pct, clg_valve_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
@@ -1025,7 +1025,7 @@ rules:
     required_roles: [preheat_leave_t, sat_sp, oa_t, htg_valve_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
@@ -1056,7 +1056,7 @@ rules:
     required_roles: [web_oa_t, oa_damper_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
@@ -1096,7 +1096,7 @@ rules:
     required_roles: [web_oa_t, web_oa_dp, oa_damper_pct, clg_valve_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
@@ -1154,7 +1154,7 @@ rules:
     required_roles: [web_oa_t, clg_valve_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
@@ -1185,7 +1185,7 @@ rules:
     required_roles: [fan_cmd, fan_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
@@ -1207,7 +1207,7 @@ rules:
     required_roles: [mat, rat, oa_t, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
@@ -1247,7 +1247,7 @@ rules:
     required_roles: [oa_damper_pct, oa_t, mat]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
@@ -1278,7 +1278,7 @@ rules:
     required_roles: [clg_valve_pct, sat, sat_sp, mat]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
@@ -1318,7 +1318,7 @@ rules:
     required_roles: [oa_t, reheat_valve_pct, zone_flow]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
@@ -1367,7 +1367,7 @@ rules:
     required_roles: [damper_pct, zone_flow]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
@@ -1407,7 +1407,7 @@ rules:
     required_roles: [zone_flow, damper_pct]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
@@ -1429,7 +1429,7 @@ rules:
     required_roles: [reheat_valve_pct, vav_discharge_t, vav_inlet_t, zone_flow]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
@@ -1478,7 +1478,7 @@ rules:
     required_roles: [vav_discharge_t, ahu_sat, zone_flow]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
@@ -1518,7 +1518,7 @@ rules:
     required_roles: [zone_flow, min_flow_sp]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
@@ -1549,7 +1549,7 @@ rules:
     required_roles: [chw_supply_t, chw_supply_sp, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 1800
@@ -1580,7 +1580,7 @@ rules:
     required_roles: [chw_supply_t, chw_return_t, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
@@ -1611,7 +1611,7 @@ rules:
     required_roles: [chw_dp, chw_dp_sp, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
@@ -1651,7 +1651,7 @@ rules:
     required_roles: [chw_supply_t, chw_supply_sp, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
@@ -1682,7 +1682,7 @@ rules:
     required_roles: [chw_flow, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
@@ -1722,7 +1722,7 @@ rules:
     required_roles: [cw_supply_t, web_wb_t]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
@@ -1762,7 +1762,7 @@ rules:
     required_roles: [cw_supply_t, web_wb_t, tower_fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
@@ -1802,7 +1802,7 @@ rules:
     required_roles: [cw_supply_t, web_wb_t, tower_fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
@@ -1851,7 +1851,7 @@ rules:
     required_roles: [sat, zone_t, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
@@ -1891,7 +1891,7 @@ rules:
     required_roles: [oa_t]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
@@ -1922,7 +1922,7 @@ rules:
     required_roles: [duct_static_sp]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 1800
@@ -1962,7 +1962,7 @@ rules:
     required_roles: [hw_supply_t]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 1800
@@ -2002,7 +2002,7 @@ rules:
     required_roles: [chw_supply_t]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 1800
@@ -2047,7 +2047,7 @@ rules:
     optional_roles: [zone_t]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: proven_building_100
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 1800
@@ -2087,7 +2087,7 @@ rules:
     required_roles: [fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
-    parity_status: ported_from_cookbook
+    parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 3600

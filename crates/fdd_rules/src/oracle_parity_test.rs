@@ -409,7 +409,7 @@ timestamp_utc,web_oat,web_dp,oa_d,clg_col
     #[tokio::test]
     async fn sched247_fan_cmd_screening_confirm_streak() {
         // Screening: SQL confirms fan_cmd>=0.05 streaks — not vibe19 window always_on_pct.
-        // Keep parity_status ported_from_cookbook until SQL matches _sched247.
+        // Keep parity_level sql_screening until SQL matches _sched247.
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_SCHED247");
         std::fs::create_dir_all(&building).unwrap();

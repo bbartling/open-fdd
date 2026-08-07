@@ -1,0 +1,5618 @@
+schema_version: parity-inventory-v1
+generated_by: scripts/generate_parity_inventory.py
+counts:
+  pandas_diagnostics: 59
+  sql_analytics: 4
+  sql_registry: 63
+  concepts: 63
+parity_levels:
+- concept_only
+- duration_parity
+- mask_parity
+- predicate_parity
+- site_soak
+- sql_screening
+aliases_index:
+  FC13: FC13-SAT-HIGH
+  SV-SLEW: SV-RATE
+  excess_runtime: SCHED-1
+concepts:
+- canonical_id: SV-RANGE
+  pandas_id: SV-RANGE
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: sv_range
+  sql_file: sv_range.sql
+  equipment_kinds: null
+  required_roles:
+  - oa_t
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 300
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 300.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    range_scale_temperature:
+      label: Temp range scale
+      default: 1.0
+      min: 0.5
+      max: 2.0
+      step: 0.1
+      unit: x
+      frontend_control: slider
+      sql_placeholder: RANGE_SCALE_TEMPERATURE
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/SV-RANGE/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/SV-RANGE/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/SV-RANGE/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/SV-RANGE/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/SV-RANGE/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/SV-RANGE/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/SV-RANGE/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/SV-RANGE/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/SV-RANGE/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/SV-RANGE/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: SV-FLATLINE
+  pandas_id: SV-FLATLINE
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: sv_flatline
+  sql_file: sv_flatline.sql
+  equipment_kinds: null
+  required_roles:
+  - oa_t
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 300
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 300.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    flatline_tol:
+      label: Flatline tolerance
+      default: 0.1
+      min: 0.02
+      max: 1.0
+      step: 0.02
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: FLATLINE_TOL
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/SV-FLATLINE/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/SV-FLATLINE/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/SV-FLATLINE/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/SV-FLATLINE/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/SV-FLATLINE/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/SV-FLATLINE/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/SV-FLATLINE/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/SV-FLATLINE/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/SV-FLATLINE/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/SV-FLATLINE/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: SV-SPIKE
+  pandas_id: SV-SPIKE
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: sv_spike
+  sql_file: sv_spike.sql
+  equipment_kinds: null
+  required_roles:
+  - oa_t
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 300
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 300.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    spike_scale:
+      label: Spike limit scale (global)
+      default: 1.0
+      min: 0.25
+      max: 3.0
+      step: 0.25
+      unit: x
+      frontend_control: slider
+      sql_placeholder: SPIKE_SCALE
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/SV-SPIKE/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/SV-SPIKE/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/SV-SPIKE/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/SV-SPIKE/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/SV-SPIKE/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/SV-SPIKE/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/SV-SPIKE/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/SV-SPIKE/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/SV-SPIKE/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/SV-SPIKE/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: SV-STALE
+  pandas_id: SV-STALE
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: sv_stale
+  sql_file: sv_stale.sql
+  equipment_kinds: null
+  required_roles:
+  - fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 300
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 300.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    stale_hours:
+      label: Stale window
+      default: 2.0
+      min: 0.5
+      max: 12.0
+      step: 0.5
+      unit: h
+      frontend_control: slider
+      sql_placeholder: STALE_HOURS
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/SV-STALE/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/SV-STALE/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/SV-STALE/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/SV-STALE/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/SV-STALE/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/SV-STALE/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/SV-STALE/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/SV-STALE/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/SV-STALE/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/SV-STALE/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: SV-RATE
+  pandas_id: SV-RATE
+  aliases:
+  - SV-SLEW
+  kind: diagnostic
+  pandas_implementation: sv_rate
+  sql_file: sv_rate.sql
+  equipment_kinds: null
+  required_roles:
+  - oa_t
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 600.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    persistence_min:
+      label: Fault persistence
+      default: 10.0
+      min: 5.0
+      max: 60.0
+      step: 1.0
+      unit: min
+      frontend_control: slider
+      sql_placeholder: PERSISTENCE_MIN
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/SV-RATE/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/SV-RATE/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/SV-RATE/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/SV-RATE/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/SV-RATE/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/SV-RATE/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/SV-RATE/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/SV-RATE/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/SV-RATE/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/SV-RATE/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: PID-HUNT-1
+  pandas_id: PID-HUNT-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: pid_hunt_1
+  sql_file: pid_hunt_1.sql
+  equipment_kinds: null
+  required_roles:
+  - clg_valve_pct
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 0
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 0.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    change_deadband_pct:
+      label: Ignore changes below
+      default: 1.0
+      min: 0.0
+      max: 10.0
+      step: 0.5
+      unit: pct
+      frontend_control: slider
+      sql_placeholder: CHANGE_DEADBAND_PCT
+    minimum_span_pct:
+      label: Minimum observed span
+      default: 20.0
+      min: 5.0
+      max: 100.0
+      step: 5.0
+      unit: pct
+      frontend_control: slider
+      sql_placeholder: MINIMUM_SPAN_PCT
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/PID-HUNT-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/PID-HUNT-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/PID-HUNT-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/PID-HUNT-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/PID-HUNT-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/PID-HUNT-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/PID-HUNT-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/PID-HUNT-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/PID-HUNT-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/PID-HUNT-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: FC1
+  pandas_id: FC1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: fc1
+  sql_file: fc1_duct_static_low.sql
+  equipment_kinds: null
+  required_roles:
+  - duct_static
+  - duct_static_sp
+  - fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 300
+  parameters:
+    eps_dsp:
+      label: Duct-static error epsDSP (GL36 default 0.1 in.w.c.)
+      default: 0.12
+      min: 0.0
+      max: 0.5
+      step: 0.01
+      unit: inwc
+      frontend_control: slider
+      sql_placeholder: EPS_DSP
+    eps_vfd_spd:
+      label: VFD speed error epsVFDSPD (GL36 default 5%)
+      default: 0.13
+      min: 0.0
+      max: 0.5
+      step: 0.01
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: EPS_VFD_SPD
+    confirm_seconds:
+      label: Confirm time
+      default: 300
+      min: 0
+      max: 3600
+      step: 300
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/FC1/normal
+    required: true
+    present: true
+    oracle_seed: true
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/FC1/fault
+    required: true
+    present: true
+    oracle_seed: true
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/FC1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/FC1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/FC1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/FC1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/FC1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/FC1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/FC1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/FC1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: FC2
+  pandas_id: FC2
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: fc2
+  sql_file: fc2_mat_low.sql
+  equipment_kinds: null
+  required_roles:
+  - mat
+  - oa_t
+  - rat
+  - fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters: {}
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/FC2/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/FC2/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/FC2/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/FC2/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/FC2/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/FC2/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/FC2/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/FC2/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/FC2/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/FC2/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: FC3
+  pandas_id: FC3
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: fc3
+  sql_file: fc3_mat_high.sql
+  equipment_kinds: null
+  required_roles:
+  - mat
+  - oa_t
+  - rat
+  - fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters: {}
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/FC3/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/FC3/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/FC3/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/FC3/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/FC3/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/FC3/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/FC3/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/FC3/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/FC3/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/FC3/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: FC4
+  pandas_id: FC4
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: fc4
+  sql_file: fc4_os_hunting.sql
+  equipment_kinds: null
+  required_roles:
+  - oa_damper_pct
+  - clg_valve_pct
+  - fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 3600
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 3600.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/FC4/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/FC4/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/FC4/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/FC4/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/FC4/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/FC4/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/FC4/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/FC4/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/FC4/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/FC4/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: FC5
+  pandas_id: FC5
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: fc5
+  sql_file: fc5_sat_cold_heating.sql
+  equipment_kinds: null
+  required_roles:
+  - sat
+  - mat
+  - htg_valve_pct
+  - fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 600.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    mix_tol:
+      label: Legacy master sensor tolerance (sets all eps values)
+      default: 1.15
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: MIX_TOL
+    htg_on_min:
+      label: Heating-command ON threshold
+      default: 0.01
+      min: 0.0
+      max: 0.25
+      step: 0.01
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: HTG_ON_MIN
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/FC5/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/FC5/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/FC5/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/FC5/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/FC5/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/FC5/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/FC5/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/FC5/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/FC5/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/FC5/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: FC6
+  pandas_id: FC6
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: fc6
+  sql_file: fc6_oa_frac_mismatch.sql
+  equipment_kinds: null
+  required_roles:
+  - mat
+  - rat
+  - oa_t
+  - fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 600.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    airflow_err:
+      label: Airflow error epsF (GL36 default 30%)
+      default: 0.15
+      min: 0.05
+      max: 1.0
+      step: 0.01
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: AIRFLOW_ERR
+    delta_t_min:
+      label: Minimum |OAT-RAT| deltaTmin (GL36 default 10degF)
+      default: 5.0
+      min: 0.0
+      max: 30.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: DELTA_T_MIN
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/FC6/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/FC6/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/FC6/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/FC6/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/FC6/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/FC6/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/FC6/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/FC6/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/FC6/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/FC6/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: FC7
+  pandas_id: FC7
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: fc7
+  sql_file: fc7_sat_low_heating.sql
+  equipment_kinds: null
+  required_roles:
+  - sat
+  - sat_sp
+  - htg_valve_pct
+  - fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    sat_err:
+      label: Legacy SAT error (sets epsSAT)
+      default: 1.0
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: SAT_ERR
+    htg_full_min:
+      label: Full-heating threshold (GL36 99%)
+      default: 0.9
+      min: 0.5
+      max: 1.0
+      step: 0.01
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: HTG_FULL_MIN
+    confirm_seconds:
+      label: Confirm time
+      default: 600
+      min: 0
+      max: 3600
+      step: 300
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: concept_only
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/FC7/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/FC7/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/FC7/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/FC7/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/FC7/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/FC7/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/FC7/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/FC7/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/FC7/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/FC7/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: FC8
+  pandas_id: FC8
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: fc8
+  sql_file: fc8_sat_mat_econ.sql
+  equipment_kinds: null
+  required_roles:
+  - sat
+  - mat
+  - oa_damper_pct
+  - clg_valve_pct
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters: {}
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/FC8/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/FC8/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/FC8/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/FC8/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/FC8/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/FC8/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/FC8/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/FC8/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/FC8/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/FC8/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: FC9
+  pandas_id: FC9
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: fc9
+  sql_file: fc9_oa_sat_sp_econ.sql
+  equipment_kinds: null
+  required_roles:
+  - oa_t
+  - sat_sp
+  - oa_damper_pct
+  - clg_valve_pct
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters: {}
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/FC9/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/FC9/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/FC9/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/FC9/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/FC9/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/FC9/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/FC9/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/FC9/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/FC9/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/FC9/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: FC10
+  pandas_id: FC10
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: fc10
+  sql_file: fc10_mat_oa_clg.sql
+  equipment_kinds: null
+  required_roles:
+  - mat
+  - oa_t
+  - oa_damper_pct
+  - clg_valve_pct
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters: {}
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/FC10/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/FC10/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/FC10/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/FC10/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/FC10/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/FC10/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/FC10/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/FC10/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/FC10/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/FC10/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: FC11
+  pandas_id: FC11
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: fc11
+  sql_file: fc11_oa_sat_sp_clg.sql
+  equipment_kinds: null
+  required_roles:
+  - oa_t
+  - sat_sp
+  - oa_damper_pct
+  - clg_valve_pct
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters: {}
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/FC11/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/FC11/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/FC11/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/FC11/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/FC11/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/FC11/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/FC11/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/FC11/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/FC11/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/FC11/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: FC12
+  pandas_id: FC12
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: fc12
+  sql_file: fc12_sat_mat_clg.sql
+  equipment_kinds: null
+  required_roles:
+  - sat
+  - mat
+  - oa_damper_pct
+  - clg_valve_pct
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters: {}
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/FC12/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/FC12/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/FC12/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/FC12/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/FC12/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/FC12/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/FC12/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/FC12/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/FC12/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/FC12/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: FC13-SAT-HIGH
+  pandas_id: FC13
+  aliases:
+  - FC13
+  kind: diagnostic
+  pandas_implementation: fc13
+  sql_file: sat_high_fault.sql
+  equipment_kinds: null
+  required_roles:
+  - sat
+  - sat_sp
+  - clg_valve_pct
+  - oa_damper_pct
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    sat_err:
+      label: SAT high error band
+      default: 1.0
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: SAT_ERR
+    clg_valve_min:
+      label: Cooling valve open threshold
+      default: 0.01
+      min: 0.0
+      max: 0.5
+      step: 0.01
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: CLG_VALVE_MIN
+    oa_damper_econ_low:
+      label: OA damper economizer low
+      default: 0.05
+      min: 0.0
+      max: 0.5
+      step: 0.01
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: OA_DAMPER_ECON_LOW
+    oa_damper_econ_high:
+      label: OA damper economizer high
+      default: 0.9
+      min: 0.5
+      max: 1.0
+      step: 0.01
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: OA_DAMPER_ECON_HIGH
+    confirm_seconds:
+      label: Confirm time
+      default: 600
+      min: 0
+      max: 3600
+      step: 300
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/FC13-SAT-HIGH/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/FC13-SAT-HIGH/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/FC13-SAT-HIGH/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/FC13-SAT-HIGH/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/FC13-SAT-HIGH/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/FC13-SAT-HIGH/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/FC13-SAT-HIGH/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/FC13-SAT-HIGH/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/FC13-SAT-HIGH/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/FC13-SAT-HIGH/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: FC14
+  pandas_id: FC14
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: fc14
+  sql_file: fc14_chw_coil_dt_inactive.sql
+  equipment_kinds: null
+  required_roles:
+  - mat
+  - sat
+  - clg_valve_pct
+  - oa_damper_pct
+  - fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 600.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    mix_tol:
+      label: Legacy master sensor tolerance (sets all eps values)
+      default: 1.15
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: MIX_TOL
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/FC14/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/FC14/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/FC14/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/FC14/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/FC14/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/FC14/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/FC14/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/FC14/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/FC14/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/FC14/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: FC15
+  pandas_id: FC15
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: fc15
+  sql_file: fc15_hw_coil_dt_inactive.sql
+  equipment_kinds: null
+  required_roles:
+  - mat
+  - sat
+  - htg_valve_pct
+  - fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 600.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    mix_tol:
+      label: Legacy master sensor tolerance (sets all eps values)
+      default: 1.15
+      min: 0.0
+      max: 10.0
+      step: 0.25
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: MIX_TOL
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/FC15/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/FC15/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/FC15/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/FC15/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/FC15/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/FC15/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/FC15/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/FC15/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/FC15/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/FC15/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: AHU-SATDEV
+  pandas_id: AHU-SATDEV
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: ahu_satdev
+  sql_file: ahu_satdev.sql
+  equipment_kinds: null
+  required_roles:
+  - sat
+  - sat_sp
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 600.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    sat_dev_err:
+      label: SAT deviation
+      default: 5.0
+      min: 1.0
+      max: 15.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: SAT_DEV_ERR
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/AHU-SATDEV/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/AHU-SATDEV/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/AHU-SATDEV/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/AHU-SATDEV/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/AHU-SATDEV/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/AHU-SATDEV/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/AHU-SATDEV/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/AHU-SATDEV/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/AHU-SATDEV/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/AHU-SATDEV/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: AHU-DUCTHI
+  pandas_id: AHU-DUCTHI
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: ahu_ducthi
+  sql_file: ahu_ducthi.sql
+  equipment_kinds: null
+  required_roles:
+  - duct_static
+  - duct_static_sp
+  - fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 300
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 300.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    duct_high_margin:
+      label: High margin
+      default: 0.25
+      min: 0.05
+      max: 1.0
+      step: 0.05
+      unit: in_wc
+      frontend_control: slider
+      sql_placeholder: DUCT_HIGH_MARGIN
+    pressure_on_min:
+      label: Pressure-on evidence
+      default: 0.2
+      min: 0.05
+      max: 1.0
+      step: 0.05
+      unit: in_wc
+      frontend_control: slider
+      sql_placeholder: PRESSURE_ON_MIN
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/AHU-DUCTHI/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/AHU-DUCTHI/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/AHU-DUCTHI/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/AHU-DUCTHI/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/AHU-DUCTHI/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/AHU-DUCTHI/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/AHU-DUCTHI/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/AHU-DUCTHI/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/AHU-DUCTHI/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/AHU-DUCTHI/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: AHU-SIMUL
+  pandas_id: AHU-SIMUL
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: ahu_simul
+  sql_file: ahu_simul.sql
+  equipment_kinds: null
+  required_roles:
+  - htg_valve_pct
+  - clg_valve_pct
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 300
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 300.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    valve_open_pct:
+      label: Valve open threshold
+      default: 0.1
+      min: 0.05
+      max: 0.5
+      step: 0.01
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: VALVE_OPEN_PCT
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/AHU-SIMUL/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/AHU-SIMUL/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/AHU-SIMUL/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/AHU-SIMUL/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/AHU-SIMUL/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/AHU-SIMUL/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/AHU-SIMUL/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/AHU-SIMUL/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/AHU-SIMUL/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/AHU-SIMUL/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: OAT-METEO
+  pandas_id: OAT-METEO
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: oat_vs_meteo
+  sql_file: oat_meteo_fault.sql
+  equipment_kinds: null
+  required_roles:
+  - oa_t
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 900
+  parameters:
+    oat_err:
+      label: OAT vs meteo tolerance
+      default: 5.0
+      min: 2.0
+      max: 20.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: OAT_ERR
+    confirm_seconds:
+      label: Confirm time
+      default: 900
+      min: 0
+      max: 3600
+      step: 300
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  - fault_pct
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/OAT-METEO/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/OAT-METEO/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/OAT-METEO/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/OAT-METEO/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/OAT-METEO/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/OAT-METEO/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/OAT-METEO/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/OAT-METEO/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/OAT-METEO/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/OAT-METEO/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: ECON-1
+  pandas_id: ECON-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: econ1
+  sql_file: econ1_stuck_closed.sql
+  equipment_kinds: null
+  required_roles:
+  - fan_cmd
+  - oa_damper_pct
+  - oa_t
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    econ1_oat_min:
+      label: Favorable OAT
+      default: 55.0
+      min: 45.0
+      max: 70.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ECON1_OAT_MIN
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/ECON-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/ECON-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/ECON-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/ECON-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/ECON-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/ECON-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/ECON-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/ECON-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/ECON-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/ECON-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: ECON-2
+  pandas_id: ECON-2
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: econ2
+  sql_file: economizer_fault.sql
+  equipment_kinds: null
+  required_roles:
+  - oa_t
+  - oa_damper_pct
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 300
+  parameters:
+    econ2_oat_hi:
+      label: OAT high cutoff
+      default: 63.0
+      min: 55.0
+      max: 80.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ECON2_OAT_HI
+    econ2_damper:
+      label: Damper open frac
+      default: 0.42
+      min: 0.2
+      max: 0.9
+      step: 0.02
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: ECON2_DAMPER
+    confirm_seconds:
+      label: Confirm time
+      default: 300
+      min: 0
+      max: 3600
+      step: 300
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/ECON-2/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/ECON-2/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/ECON-2/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/ECON-2/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/ECON-2/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/ECON-2/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/ECON-2/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/ECON-2/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/ECON-2/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/ECON-2/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: ECON-3
+  pandas_id: ECON-3
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: econ_3
+  sql_file: econ3_mech_without_econ.sql
+  equipment_kinds: null
+  required_roles:
+  - web_oa_t
+  - web_oa_dp
+  - oa_damper_pct
+  - clg_valve_pct
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 300
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 300.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    econ3_db_min:
+      label: Free-cool OA dry-bulb min
+      default: 60.0
+      min: 50.0
+      max: 68.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ECON3_DB_MIN
+    econ3_db_max:
+      label: Free-cool OA dry-bulb max
+      default: 72.0
+      min: 65.0
+      max: 80.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ECON3_DB_MAX
+    econ3_dp_max:
+      label: Free-cool OA dew point max
+      default: 60.0
+      min: 45.0
+      max: 68.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ECON3_DP_MAX
+    econ3_damper_hi:
+      label: Integrated economizer damper
+      default: 0.9
+      min: 0.5
+      max: 1.0
+      step: 0.02
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: ECON3_DAMPER_HI
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/ECON-3/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/ECON-3/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/ECON-3/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/ECON-3/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/ECON-3/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/ECON-3/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/ECON-3/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/ECON-3/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/ECON-3/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/ECON-3/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: ECON-4
+  pandas_id: ECON-4
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: econ4
+  sql_file: econ4_low_oa_frac.sql
+  equipment_kinds: null
+  required_roles:
+  - mat
+  - rat
+  - oa_t
+  - fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    oa_min_pct:
+      label: Min OA fraction
+      default: 21.0
+      min: 5.0
+      max: 40.0
+      step: 1.0
+      unit: pct
+      frontend_control: slider
+      sql_placeholder: OA_MIN_PCT
+    confirm_seconds:
+      label: Confirm time
+      default: 600
+      min: 0
+      max: 3600
+      step: 300
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/ECON-4/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/ECON-4/fault
+    required: true
+    present: true
+    oracle_seed: true
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/ECON-4/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/ECON-4/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/ECON-4/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/ECON-4/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/ECON-4/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/ECON-4/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/ECON-4/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/ECON-4/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: ECON-5
+  pandas_id: ECON-5
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: econ_5
+  sql_file: econ5_preheat_over.sql
+  equipment_kinds: null
+  required_roles:
+  - preheat_leave_t
+  - sat_sp
+  - oa_t
+  - htg_valve_pct
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 600.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    preheat_over_f:
+      label: Preheat over ΔT
+      default: 2.2
+      min: 0.5
+      max: 8.0
+      step: 0.1
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: PREHEAT_OVER_F
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/ECON-5/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/ECON-5/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/ECON-5/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/ECON-5/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/ECON-5/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/ECON-5/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/ECON-5/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/ECON-5/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/ECON-5/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/ECON-5/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: ECON-6
+  pandas_id: ECON-6
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: econ_6
+  sql_file: econ6_econ_freezing.sql
+  equipment_kinds: null
+  required_roles:
+  - web_oa_t
+  - oa_damper_pct
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 600.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    econ6_oat_max_f:
+      label: Winter OAT ceiling
+      default: 25.0
+      min: 15.0
+      max: 40.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ECON6_OAT_MAX_F
+    econ6_damper_max:
+      label: Winter min-OA damper
+      default: 0.25
+      min: 0.05
+      max: 0.5
+      step: 0.01
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: ECON6_DAMPER_MAX
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/ECON-6/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/ECON-6/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/ECON-6/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/ECON-6/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/ECON-6/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/ECON-6/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/ECON-6/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/ECON-6/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/ECON-6/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/ECON-6/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: ECON-7
+  pandas_id: ECON-7
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: econ_7
+  sql_file: econ7_ok_not_economizing.sql
+  equipment_kinds: null
+  required_roles:
+  - web_oa_t
+  - web_oa_dp
+  - oa_damper_pct
+  - clg_valve_pct
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 600.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    econ7_db_min:
+      label: Econ-OK dry-bulb floor (freeze guard)
+      default: 35.0
+      min: 20.0
+      max: 50.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ECON7_DB_MIN
+    econ7_db_max:
+      label: Econ-OK dry-bulb max
+      default: 72.0
+      min: 65.0
+      max: 80.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ECON7_DB_MAX
+    econ7_dp_max:
+      label: Econ-OK dew point max
+      default: 60.0
+      min: 45.0
+      max: 68.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ECON7_DP_MAX
+    econ7_damper_min:
+      label: Economizing damper threshold
+      default: 0.5
+      min: 0.2
+      max: 0.9
+      step: 0.02
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: ECON7_DAMPER_MIN
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/ECON-7/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/ECON-7/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/ECON-7/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/ECON-7/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/ECON-7/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/ECON-7/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/ECON-7/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/ECON-7/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/ECON-7/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/ECON-7/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: MECH-OAT-1
+  pandas_id: MECH-OAT-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: mech_oat_1
+  sql_file: mech_oat_1.sql
+  equipment_kinds: null
+  required_roles:
+  - web_oa_t
+  - clg_valve_pct
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 600.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    mech_oat_max_f:
+      label: Mech-cool OAT ceiling
+      default: 60.0
+      min: 45.0
+      max: 65.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: MECH_OAT_MAX_F
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/MECH-OAT-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/MECH-OAT-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/MECH-OAT-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/MECH-OAT-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/MECH-OAT-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/MECH-OAT-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/MECH-OAT-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/MECH-OAT-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/MECH-OAT-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/MECH-OAT-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: CHW-NOLOAD-1
+  pandas_id: CHW-NOLOAD-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: chw_noload_1
+  sql_file: chw_noload_1.sql
+  equipment_kinds: null
+  required_roles:
+  - chw_supply_t
+  - chw_supply_sp
+  - chw_pump_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 1800
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 1800.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    sat_band_f:
+      label: AHU SAT≈SP band
+      default: 2.0
+      min: 0.5
+      max: 6.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: SAT_BAND_F
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/CHW-NOLOAD-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/CHW-NOLOAD-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/CHW-NOLOAD-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/CHW-NOLOAD-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/CHW-NOLOAD-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/CHW-NOLOAD-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/CHW-NOLOAD-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/CHW-NOLOAD-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/CHW-NOLOAD-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/CHW-NOLOAD-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: VAV-1
+  pandas_id: VAV-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: vav1
+  sql_file: vav1_comfort_fault.sql
+  equipment_kinds: null
+  required_roles:
+  - zone_t
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 900
+  parameters:
+    zone_t_lo:
+      label: Zone low
+      default: 70.0
+      min: 55.0
+      max: 72.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ZONE_T_LO
+    zone_t_hi:
+      label: Zone high
+      default: 75.0
+      min: 72.0
+      max: 85.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ZONE_T_HI
+    confirm_seconds:
+      label: Confirm time
+      default: 900
+      min: 0
+      max: 3600
+      step: 300
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  - fault_pct
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/VAV-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/VAV-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/VAV-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/VAV-1/missing_required_role
+    required: true
+    present: true
+    oracle_seed: true
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/VAV-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/VAV-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/VAV-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/VAV-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/VAV-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/VAV-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: VAV-3
+  pandas_id: VAV-3
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: vav_3
+  sql_file: vav3_excessive_reheat.sql
+  equipment_kinds: null
+  required_roles:
+  - oa_t
+  - reheat_valve_pct
+  - zone_flow
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 300
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 300.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    reheat_oat:
+      label: Warm OAT
+      default: 78.0
+      min: 65.0
+      max: 90.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: REHEAT_OAT
+    reheat_pct:
+      label: Reheat frac
+      default: 0.52
+      min: 0.1
+      max: 1.0
+      step: 0.02
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: REHEAT_PCT
+    flow_on_min:
+      label: Airflow-on min
+      default: 25.0
+      min: 0.0
+      max: 200.0
+      step: 5.0
+      unit: cfm
+      frontend_control: slider
+      sql_placeholder: FLOW_ON_MIN
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/VAV-3/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/VAV-3/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/VAV-3/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/VAV-3/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/VAV-3/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/VAV-3/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/VAV-3/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/VAV-3/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/VAV-3/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/VAV-3/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: VAV-4
+  pandas_id: VAV-4
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: vav_4
+  sql_file: vav4_damper_full_open.sql
+  equipment_kinds: null
+  required_roles:
+  - damper_pct
+  - zone_flow
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 900
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 900.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    full_open_pct:
+      label: Full open frac
+      default: 0.975
+      min: 0.8
+      max: 1.0
+      step: 0.005
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: FULL_OPEN_PCT
+    flow_on_min:
+      label: Airflow-on min
+      default: 25.0
+      min: 0.0
+      max: 200.0
+      step: 5.0
+      unit: cfm
+      frontend_control: slider
+      sql_placeholder: FLOW_ON_MIN
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/VAV-4/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/VAV-4/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/VAV-4/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/VAV-4/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/VAV-4/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/VAV-4/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/VAV-4/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/VAV-4/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/VAV-4/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/VAV-4/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: VAV-5
+  pandas_id: VAV-5
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: vav_5
+  sql_file: vav5_airflow_bias.sql
+  equipment_kinds: null
+  required_roles:
+  - zone_flow
+  - damper_pct
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 900
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 900.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/VAV-5/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/VAV-5/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/VAV-5/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/VAV-5/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/VAV-5/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/VAV-5/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/VAV-5/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/VAV-5/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/VAV-5/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/VAV-5/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: VAV-REHEAT
+  pandas_id: VAV-REHEAT
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: vav_reheat
+  sql_file: vav_reheat.sql
+  equipment_kinds: null
+  required_roles:
+  - reheat_valve_pct
+  - vav_discharge_t
+  - vav_inlet_t
+  - zone_flow
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 900
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 900.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    reheat_cmd:
+      label: Reheat open frac
+      default: 0.3
+      min: 0.1
+      max: 1.0
+      step: 0.05
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: REHEAT_CMD
+    min_rise:
+      label: Min temp rise
+      default: 3.0
+      min: 0.5
+      max: 15.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: MIN_RISE
+    flow_on_min:
+      label: Airflow-on min
+      default: 25.0
+      min: 0.0
+      max: 200.0
+      step: 5.0
+      unit: cfm
+      frontend_control: slider
+      sql_placeholder: FLOW_ON_MIN
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/VAV-REHEAT/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/VAV-REHEAT/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/VAV-REHEAT/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/VAV-REHEAT/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/VAV-REHEAT/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/VAV-REHEAT/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/VAV-REHEAT/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/VAV-REHEAT/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/VAV-REHEAT/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/VAV-REHEAT/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: VAV-AHU-LEAVE
+  pandas_id: VAV-AHU-LEAVE
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: vav_ahu_leave
+  sql_file: vav_ahu_leave.sql
+  equipment_kinds: null
+  required_roles:
+  - vav_discharge_t
+  - ahu_sat
+  - zone_flow
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 900
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 900.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    delta_f:
+      label: Leave Δ vs AHU SAT
+      default: 8.0
+      min: 2.0
+      max: 25.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: DELTA_F
+    flow_on_min:
+      label: Airflow-on min
+      default: 25.0
+      min: 0.0
+      max: 200.0
+      step: 5.0
+      unit: cfm
+      frontend_control: slider
+      sql_placeholder: FLOW_ON_MIN
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/VAV-AHU-LEAVE/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/VAV-AHU-LEAVE/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/VAV-AHU-LEAVE/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/VAV-AHU-LEAVE/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/VAV-AHU-LEAVE/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/VAV-AHU-LEAVE/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/VAV-AHU-LEAVE/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/VAV-AHU-LEAVE/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/VAV-AHU-LEAVE/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/VAV-AHU-LEAVE/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: VAV-7
+  pandas_id: VAV-7
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: vav_7
+  sql_file: vav7_min_airflow.sql
+  equipment_kinds: null
+  required_roles:
+  - zone_flow
+  - min_flow_sp
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 900
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 900.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    high_min_flow_sp:
+      label: High min-flow SP
+      default: 250.0
+      min: 50.0
+      max: 2000.0
+      step: 10.0
+      unit: cfm
+      frontend_control: slider
+      sql_placeholder: HIGH_MIN_FLOW_SP
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/VAV-7/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/VAV-7/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/VAV-7/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/VAV-7/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/VAV-7/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/VAV-7/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/VAV-7/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/VAV-7/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/VAV-7/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/VAV-7/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: CHW-1
+  pandas_id: CHW-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: chw_1
+  sql_file: chw1_low_dt.sql
+  equipment_kinds: null
+  required_roles:
+  - chw_supply_t
+  - chw_return_t
+  - chw_pump_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 900
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 900.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    min_dt:
+      label: Minimum delta-T
+      default: 4.0
+      min: 1.0
+      max: 12.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: MIN_DT
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/CHW-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/CHW-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/CHW-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/CHW-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/CHW-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/CHW-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/CHW-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/CHW-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/CHW-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/CHW-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: CHW-2
+  pandas_id: CHW-2
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: chw_2
+  sql_file: chw2_dp_low.sql
+  equipment_kinds: null
+  required_roles:
+  - chw_dp
+  - chw_dp_sp
+  - chw_pump_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 300
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 300.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    dp_margin:
+      label: DP margin
+      default: 2.2
+      min: 0.5
+      max: 6.0
+      step: 0.1
+      unit: psi
+      frontend_control: slider
+      sql_placeholder: DP_MARGIN
+    pump_hi:
+      label: Pump high-speed threshold
+      default: 0.87
+      min: 0.5
+      max: 1.0
+      step: 0.01
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: PUMP_HI
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/CHW-2/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/CHW-2/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/CHW-2/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/CHW-2/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/CHW-2/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/CHW-2/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/CHW-2/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/CHW-2/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/CHW-2/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/CHW-2/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: CHW-3
+  pandas_id: CHW-3
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: chw_3
+  sql_file: chw3_supply_band.sql
+  equipment_kinds: null
+  required_roles:
+  - chw_supply_t
+  - chw_supply_sp
+  - chw_pump_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 300
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 300.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    sp_band:
+      label: SP band
+      default: 2.2
+      min: 0.5
+      max: 6.0
+      step: 0.1
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: SP_BAND
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/CHW-3/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/CHW-3/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/CHW-3/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/CHW-3/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/CHW-3/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/CHW-3/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/CHW-3/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/CHW-3/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/CHW-3/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/CHW-3/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: CHW-4
+  pandas_id: CHW-4
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: chw_4
+  sql_file: chw4_flow_high.sql
+  equipment_kinds: null
+  required_roles:
+  - chw_flow
+  - chw_pump_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 300
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 300.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    flow_hi:
+      label: Flow high
+      default: 1100.0
+      min: 200.0
+      max: 3000.0
+      step: 50.0
+      unit: gpm
+      frontend_control: slider
+      sql_placeholder: FLOW_HI
+    pump_hi:
+      label: Pump high-speed threshold
+      default: 0.87
+      min: 0.5
+      max: 1.0
+      step: 0.01
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: PUMP_HI
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/CHW-4/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/CHW-4/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/CHW-4/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/CHW-4/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/CHW-4/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/CHW-4/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/CHW-4/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/CHW-4/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/CHW-4/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/CHW-4/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: HP-1
+  pandas_id: HP-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: hp_1
+  sql_file: hp1_discharge_cold.sql
+  equipment_kinds: null
+  required_roles:
+  - sat
+  - zone_t
+  - fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 600.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    min_sat:
+      label: Min discharge SAT
+      default: 85.0
+      min: 70.0
+      max: 110.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: MIN_SAT
+    zone_cold:
+      label: Zone cold threshold
+      default: 69.0
+      min: 60.0
+      max: 72.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ZONE_COLD
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/HP-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/HP-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/HP-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/HP-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/HP-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/HP-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/HP-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/HP-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/HP-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/HP-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: WX-1
+  pandas_id: WX-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: wx_1
+  sql_file: wx1_oa_spike.sql
+  equipment_kinds: null
+  required_roles:
+  - oa_t
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 300
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 300.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    spike_limit:
+      label: Spike limit
+      default: 16.0
+      min: 4.0
+      max: 40.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: SPIKE_LIMIT
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/WX-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/WX-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/WX-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/WX-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/WX-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/WX-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/WX-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/WX-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/WX-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/WX-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: CW-OPT-1
+  pandas_id: CW-OPT-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: cw_opt_1
+  sql_file: cw_opt_1.sql
+  equipment_kinds: null
+  required_roles:
+  - cw_supply_t
+  - web_wb_t
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 900
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 900.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    cw_approach:
+      label: Design approach
+      default: 7.0
+      min: 3.0
+      max: 15.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: CW_APPROACH
+    cw_slack:
+      label: Slack below target
+      default: 2.0
+      min: 0.5
+      max: 6.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: CW_SLACK
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/CW-OPT-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/CW-OPT-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/CW-OPT-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/CW-OPT-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/CW-OPT-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/CW-OPT-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/CW-OPT-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/CW-OPT-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/CW-OPT-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/CW-OPT-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: CW-APR-1
+  pandas_id: CW-APR-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: cw_apr_1
+  sql_file: cw_apr_1.sql
+  equipment_kinds: null
+  required_roles:
+  - cw_supply_t
+  - web_wb_t
+  - tower_fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 900
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 900.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    approach_max_f:
+      label: Max approach at full fan
+      default: 8.0
+      min: 5.0
+      max: 15.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: APPROACH_MAX_F
+    tower_fan_hi:
+      label: Tower fan full-speed threshold
+      default: 0.95
+      min: 0.8
+      max: 1.0
+      step: 0.01
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: TOWER_FAN_HI
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/CW-APR-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/CW-APR-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/CW-APR-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/CW-APR-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/CW-APR-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/CW-APR-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/CW-APR-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/CW-APR-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/CW-APR-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/CW-APR-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: CW-FAN-1
+  pandas_id: CW-FAN-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: cw_fan_1
+  sql_file: cw_fan_1.sql
+  equipment_kinds: null
+  required_roles:
+  - cw_supply_t
+  - web_wb_t
+  - tower_fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 900
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 900.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    cw_approach:
+      label: Design approach
+      default: 7.0
+      min: 3.0
+      max: 15.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: CW_APPROACH
+    excess_beyond_approach_f:
+      label: Excess beyond approach
+      default: 5.0
+      min: 2.0
+      max: 20.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: EXCESS_BEYOND_APPROACH_F
+    tower_fan_hi:
+      label: Tower fan full-speed threshold
+      default: 0.95
+      min: 0.8
+      max: 1.0
+      step: 0.01
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: TOWER_FAN_HI
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/CW-FAN-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/CW-FAN-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/CW-FAN-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/CW-FAN-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/CW-FAN-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/CW-FAN-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/CW-FAN-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/CW-FAN-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/CW-FAN-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/CW-FAN-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: TRIM-1
+  pandas_id: TRIM-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: trim_1
+  sql_file: trim1_duct_static.sql
+  equipment_kinds: null
+  required_roles:
+  - duct_static_sp
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 1800
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 1800.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    duct_hi:
+      label: Duct static high
+      default: 1.35
+      min: 0.5
+      max: 3.0
+      step: 0.05
+      unit: in_wc
+      frontend_control: slider
+      sql_placeholder: DUCT_HI
+    request_lo:
+      label: Request sum low
+      default: 1.0
+      min: 0.0
+      max: 10.0
+      step: 0.5
+      unit: count
+      frontend_control: slider
+      sql_placeholder: REQUEST_LO
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/TRIM-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/TRIM-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/TRIM-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/TRIM-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/TRIM-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/TRIM-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/TRIM-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/TRIM-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/TRIM-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/TRIM-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: TRIM-3
+  pandas_id: TRIM-3
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: trim_3
+  sql_file: trim3_hwst.sql
+  equipment_kinds: null
+  required_roles:
+  - hw_supply_t
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 1800
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 1800.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    hwst_hi:
+      label: HWST high
+      default: 160.0
+      min: 120.0
+      max: 200.0
+      step: 1.0
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: HWST_HI
+    request_lo:
+      label: Request sum low
+      default: 1.0
+      min: 0.0
+      max: 10.0
+      step: 0.5
+      unit: count
+      frontend_control: slider
+      sql_placeholder: REQUEST_LO
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/TRIM-3/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/TRIM-3/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/TRIM-3/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/TRIM-3/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/TRIM-3/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/TRIM-3/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/TRIM-3/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/TRIM-3/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/TRIM-3/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/TRIM-3/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: TRIM-4
+  pandas_id: TRIM-4
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: trim_4
+  sql_file: trim4_chw_reset.sql
+  equipment_kinds: null
+  required_roles:
+  - chw_supply_t
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 1800
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 1800.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    chw_lo:
+      label: CHWS low
+      default: 45.0
+      min: 35.0
+      max: 55.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: CHW_LO
+    request_lo:
+      label: Request sum low
+      default: 1.0
+      min: 0.0
+      max: 10.0
+      step: 0.5
+      unit: count
+      frontend_control: slider
+      sql_placeholder: REQUEST_LO
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/TRIM-4/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/TRIM-4/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/TRIM-4/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/TRIM-4/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/TRIM-4/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/TRIM-4/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/TRIM-4/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/TRIM-4/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/TRIM-4/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/TRIM-4/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: SCHED-1
+  pandas_id: SCHED-1
+  aliases:
+  - excess_runtime
+  kind: diagnostic
+  pandas_implementation: sched1
+  sql_file: sched1_unoccupied_runtime.sql
+  equipment_kinds: null
+  required_roles:
+  - occ_mode
+  - fan_status
+  optional_roles:
+  - zone_t
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 1800
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 1800.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    comfort_low_f:
+      label: Zone comfort low
+      default: 70.0
+      min: 50.0
+      max: 80.0
+      step: 0.5
+      unit: °F
+      frontend_control: slider
+      sql_placeholder: ZONE_T_LO
+    comfort_high_f:
+      label: Zone comfort high
+      default: 75.0
+      min: 55.0
+      max: 90.0
+      step: 0.5
+      unit: °F
+      frontend_control: slider
+      sql_placeholder: ZONE_T_HI
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/SCHED-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/SCHED-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/SCHED-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/SCHED-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/SCHED-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/SCHED-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/SCHED-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/SCHED-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/SCHED-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/SCHED-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: SCHED-247
+  pandas_id: SCHED-247
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: sched_247
+  sql_file: sched247_always_on.sql
+  equipment_kinds: null
+  required_roles:
+  - fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 3600
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 3600.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/SCHED-247/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/SCHED-247/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/SCHED-247/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/SCHED-247/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/SCHED-247/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/SCHED-247/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/SCHED-247/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/SCHED-247/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/SCHED-247/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/SCHED-247/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: CMD-1
+  pandas_id: CMD-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: cmd_1
+  sql_file: cmd1_fan_mismatch.sql
+  equipment_kinds: null
+  required_roles:
+  - fan_cmd
+  - fan_status
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 600
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 600.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/CMD-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/CMD-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/CMD-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/CMD-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/CMD-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/CMD-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/CMD-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/CMD-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/CMD-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/CMD-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: OA-1
+  pandas_id: OA-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: oa_1
+  sql_file: oa1_low_oa_frac.sql
+  equipment_kinds: null
+  required_roles:
+  - mat
+  - rat
+  - oa_t
+  - fan_cmd
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 900
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 900.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    min_oa_frac:
+      label: Min OA fraction
+      default: 0.15
+      min: 0.05
+      max: 0.4
+      step: 0.01
+      unit: frac
+      frontend_control: slider
+      sql_placeholder: MIN_OA_FRAC
+    oat_rat_guard:
+      label: OAT/RAT guard
+      default: 2.2
+      min: 0.5
+      max: 6.0
+      step: 0.1
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: OAT_RAT_GUARD
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/OA-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/OA-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/OA-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/OA-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/OA-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/OA-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/OA-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/OA-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/OA-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/OA-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: DMP-1
+  pandas_id: DMP-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: dmp_1
+  sql_file: dmp1_oa_damper_leak.sql
+  equipment_kinds: null
+  required_roles:
+  - oa_damper_pct
+  - oa_t
+  - mat
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 900
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 900.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    leak_delta:
+      label: Leak ΔT
+      default: 2.0
+      min: 0.5
+      max: 6.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: LEAK_DELTA
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/DMP-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/DMP-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/DMP-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/DMP-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/DMP-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/DMP-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/DMP-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/DMP-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/DMP-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/DMP-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: VLV-1
+  pandas_id: VLV-1
+  aliases: []
+  kind: diagnostic
+  pandas_implementation: vlv_1
+  sql_file: vlv1_clg_valve_leak.sql
+  equipment_kinds: null
+  required_roles:
+  - clg_valve_pct
+  - sat
+  - sat_sp
+  - mat
+  optional_roles: []
+  operational_gate: fan_or_occupied_when_declared
+  startup_delay_seconds: null
+  confirm_seconds: 900
+  parameters:
+    confirm_seconds:
+      label: Confirm time
+      default: 900.0
+      min: 0.0
+      max: 3600.0
+      step: 300.0
+      unit: sec
+      frontend_control: slider
+      sql_placeholder: CONFIRM_SECONDS
+    sat_err:
+      label: SAT vs SP leak ΔT
+      default: 2.0
+      min: 0.5
+      max: 8.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: SAT_ERR
+    mat_leak_delta:
+      label: SAT vs MAT leak ΔT
+      default: 2.0
+      min: 0.5
+      max: 12.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: MAT_LEAK_DELTA
+  time_semantics: row_or_interval_per_sql_file
+  output_schema:
+  - equipment_id
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures:
+  - case: normal
+    path: crates/fdd_rules/fixtures/oracle/VLV-1/normal
+    required: true
+    present: false
+    oracle_seed: false
+  - case: fault
+    path: crates/fdd_rules/fixtures/oracle/VLV-1/fault
+    required: true
+    present: false
+    oracle_seed: false
+  - case: threshold_boundary
+    path: crates/fdd_rules/fixtures/oracle/VLV-1/threshold_boundary
+    required: true
+    present: false
+    oracle_seed: false
+  - case: missing_required_role
+    path: crates/fdd_rules/fixtures/oracle/VLV-1/missing_required_role
+    required: true
+    present: false
+    oracle_seed: false
+  - case: equipment_off
+    path: crates/fdd_rules/fixtures/oracle/VLV-1/equipment_off
+    required: true
+    present: false
+    oracle_seed: false
+  - case: startup_delay
+    path: crates/fdd_rules/fixtures/oracle/VLV-1/startup_delay
+    required: true
+    present: false
+    oracle_seed: false
+  - case: irregular_sampling
+    path: crates/fdd_rules/fixtures/oracle/VLV-1/irregular_sampling
+    required: true
+    present: false
+    oracle_seed: false
+  - case: data_gap
+    path: crates/fdd_rules/fixtures/oracle/VLV-1/data_gap
+    required: true
+    present: false
+    oracle_seed: false
+  - case: duplicate_timestamp
+    path: crates/fdd_rules/fixtures/oracle/VLV-1/duplicate_timestamp
+    required: true
+    present: false
+    oracle_seed: false
+  - case: out_of_order
+    path: crates/fdd_rules/fixtures/oracle/VLV-1/out_of_order
+    required: true
+    present: false
+    oracle_seed: false
+- canonical_id: AVG-ZONE-TEMP
+  pandas_id: null
+  aliases: []
+  kind: sql_analytics
+  pandas_implementation: null
+  sql_file: avg_zone_temp.sql
+  equipment_kinds: null
+  required_roles:
+  - zone_t
+  optional_roles: []
+  operational_gate: null
+  startup_delay_seconds: null
+  confirm_seconds: 0
+  parameters:
+    zone_t_lo:
+      label: Zone comfort low (reference)
+      default: 68.0
+      min: 60.0
+      max: 72.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ZONE_T_LO
+    zone_t_hi:
+      label: Zone comfort high (reference)
+      default: 76.0
+      min: 72.0
+      max: 85.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ZONE_T_HI
+  time_semantics: analytics_rollup
+  output_schema:
+  - equipment_id
+  - avg_zone_temp
+  - min_zone_temp
+  - max_zone_temp
+  parity_level: sql_screening
+  proof_fixtures: []
+- canonical_id: FAN-RUNTIME-HOURS
+  pandas_id: null
+  aliases: []
+  kind: sql_analytics
+  pandas_implementation: null
+  sql_file: fan_runtime_hours.sql
+  equipment_kinds: null
+  required_roles:
+  - fan_cmd
+  optional_roles: []
+  operational_gate: null
+  startup_delay_seconds: null
+  confirm_seconds: 0
+  parameters: {}
+  time_semantics: analytics_rollup
+  output_schema:
+  - equipment_id
+  - fan_runtime_hours
+  - total_hours
+  parity_level: sql_screening
+  proof_fixtures: []
+- canonical_id: FAULT-ELAPSED-HOURS
+  pandas_id: null
+  aliases: []
+  kind: sql_analytics
+  pandas_implementation: null
+  sql_file: fault_elapsed_hours.sql
+  equipment_kinds: null
+  required_roles:
+  - zone_t
+  optional_roles: []
+  operational_gate: null
+  startup_delay_seconds: null
+  confirm_seconds: 0
+  parameters:
+    zone_t_lo:
+      label: Zone comfort low
+      default: 68.0
+      min: 60.0
+      max: 72.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ZONE_T_LO
+    zone_t_hi:
+      label: Zone comfort high
+      default: 76.0
+      min: 72.0
+      max: 85.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ZONE_T_HI
+  time_semantics: analytics_rollup
+  output_schema:
+  - equipment_id
+  - fault_samples
+  - fault_hours
+  parity_level: sql_screening
+  proof_fixtures: []
+- canonical_id: ZONE-COMFORT-PCT
+  pandas_id: null
+  aliases: []
+  kind: sql_analytics
+  pandas_implementation: null
+  sql_file: zone_comfort_pct.sql
+  equipment_kinds: null
+  required_roles:
+  - zone_t
+  optional_roles: []
+  operational_gate: null
+  startup_delay_seconds: null
+  confirm_seconds: 0
+  parameters:
+    zone_t_lo:
+      label: Zone comfort low
+      default: 68.0
+      min: 60.0
+      max: 72.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ZONE_T_LO
+    zone_t_hi:
+      label: Zone comfort high
+      default: 76.0
+      min: 72.0
+      max: 85.0
+      step: 0.5
+      unit: degF
+      frontend_control: slider
+      sql_placeholder: ZONE_T_HI
+  time_semantics: analytics_rollup
+  output_schema:
+  - equipment_id
+  - comfort_pct
+  parity_level: sql_screening
+  proof_fixtures: []

@@ -1,0 +1,5 @@
+col,point_role
+mat_col,mixed-air-temp
+rat_col,return-air-temp
+oat_col,outside-air-temp
+fan_col,fan-cmd

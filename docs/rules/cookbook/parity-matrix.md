@@ -6,53 +6,57 @@ nav_order: 6
 
 # SQL ↔ Pandas parity matrix
 
-**Audit date:** 2026-07-19 · **Tip cross-check:** turnkey SQL port (2026-07-26) — counts match `sql_rules/registry.yaml` · **Target:** zero silent drift
+**Wave 0 contract:** machine-readable inventory at [`sql_rules/generated/parity_inventory.yaml`](../../../sql_rules/generated/parity_inventory.yaml).  
+**Audit:** 2026-08-07 — legacy `proven_building_100` / `ported_from_cookbook` labels removed.
 
 ## Product split (read this first)
 
 | Surface | Count | Role |
 |---------|------:|------|
-| DataFusion SQL registry | **63** | Production Open-FDD FDD |
-| Pandas vibe19 catalog | **59** | Online docs + PyPI `open_fdd.rules` (kept) |
+| DataFusion SQL registry | **63** | Production Open-FDD FDD (Rust/DataFusion) |
+| Pandas catalog | **59** | PyPI `open_fdd.rules` oracle (+ docs) |
+| SQL analytics (no pandas twin) | **4** | `FAN-RUNTIME-HOURS`, `AVG-ZONE-TEMP`, `ZONE-COMFORT-PCT`, `FAULT-ELAPSED-HOURS` |
 
-Open-FDD UI is **one Streamlit app** (vibe19 + WattLab export). Do not delete pandas because SQL exists.
+Product UI is **React** (`frontend/web`). Do not delete pandas because SQL exists. Do not put pandas on the product request path.
 
-## Honesty first
+Aliases: `FC13` → SQL `FC13-SAT-HIGH`; `SV-SLEW` → `SV-RATE`.
 
-`parity_status` in the registry is the only machine-readable claim. Cookbook prose must not outrun it.
+## Honesty first — parity levels
 
-| `parity_status` | Count (registry) | Meaning |
-|-----------------|-----------------:|---------|
-| `proven_building_100` | 24 | Exercised against BUILDING_100-style fixtures / production soak with matching fault-hour intent |
-| `ported_from_cookbook` | 38 | SQL exists and compiles; **ported ≠ oracle-proven**. Mask / confirm / rolling behavior may still diverge from Pandas |
-| `skipped_missing_roles` | 1 | `FC7` — skipped until required roles are modeled |
+`parity_status` / inventory `parity_level` is the only machine-readable claim. Cookbook prose must not outrun it.
+
+| Level | Meaning |
+|-------|---------|
+| `concept_only` | Identity exists; SQL and/or roles incomplete |
+| `sql_screening` | SQL compiles and may run; **not** proven mask/duration vs pandas |
+| `predicate_parity` | Raw fault predicate matches oracle on fixtures |
+| `mask_parity` | Gate + confirmed mask matches oracle |
+| `duration_parity` | Fault hours / intervals match within tolerance |
+| `site_soak` | Reproducible multi-building soak evidence |
+
+**Wave 0 default:** all former `proven_building_100` / `ported_from_cookbook` claims were **downgraded** to `sql_screening` (or `concept_only` for `FC7`) until executable oracle fixtures justify a higher level.
 
 **Do not claim “54 full parity.”** That figure was aspirational catalog coverage, not mask-level SQL↔Pandas agreement.
 
-Oracle harness (phase 1, #550): `crates/fdd_rules` mask/fault-hour fixtures patterned on `econ4_confirm_test.rs`. A rule may only move to `proven_building_100` after a passing oracle (or documented BUILDING_100 soak) — never by docs alone.
+Oracle harness: `crates/fdd_rules` fixtures under `crates/fdd_rules/fixtures/oracle/` + Rust tests (`econ4_confirm_test.rs`, `oracle_parity_test.rs`). CI pandas seeds: `scripts/sql_pandas_oracle_check.py`.
 
 ---
 
-## Proven vs ported (high level)
+## Current registry snapshot (Wave 0)
 
-### `proven_building_100` (24)
+See generated inventory for exact per-rule rows. Typical tip after Wave 0:
 
-`AVG-ZONE-TEMP`, `ECON-1`, `ECON-2`, `ECON-3`, `ECON-4`, `ECON-5`, `ECON-6`, `ECON-7`, `FAN-RUNTIME-HOURS`, `FAULT-ELAPSED-HOURS`, `FC1`, `FC2`, `FC3`, `FC8`, `FC9`, `FC10`, `FC11`, `FC12`, `FC13-SAT-HIGH`, `MECH-OAT-1`, `OAT-METEO`, `SCHED-1`, `VAV-1`, `ZONE-COMFORT-PCT`
+| Level | Approx count |
+|-------|-------------:|
+| `sql_screening` | 62 |
+| `concept_only` | 1 (`FC7`) |
+| `predicate_parity`+ | 0 until Wave 1+ proofs land |
 
-Oracle fixtures (2026-07-26): `SCHED-1`, `MECH-OAT-1`, `ECON-3`, `ECON-5` (OAT-relative preheat), `ECON-6`/`ECON-7` (web weather + damper) in `crates/fdd_rules/src/oracle_parity_test.rs`. `SCHED-247` remains **ported** (screening streak ≠ window `always_on_pct`).
+### Screening honesty (SV / FC4 / PID / P0 backlog)
 
-### Representative `ported_from_cookbook` risk set (phase-1 oracle focus)
+Rust screening fixtures may exist for `SV-*`, `FC4`, `PID-HUNT-1`, etc., but they prove **SQL screening semantics only**. Keep `sql_screening` until pandas↔DF fixtures pass at `predicate_parity` / `mask_parity` / `duration_parity`.
 
-These are the mismatch classes called out in #550 — SQL is present; treat results as screening until fixtures pass:
-
-| Family | Rule IDs | Typical drift |
-|--------|----------|---------------|
-| sensor | `SV-RANGE`, `SV-FLATLINE`, `SV-SPIKE`, `SV-STALE`, `SV-RATE` | Rolling / multi-sensor / rate context simplified in SQL |
-| control | `PID-HUNT-1`, `FC4` | Hunting metrics screening vs full TV/reversal |
-| ahu | `FC6`, `FC14`, `FC15`, … | Mix / coil gates |
-| vav | `VAV-4`, `VAV-7`, … | Rolling “fixed high” / high-min SP incomplete in SQL |
-| plant | `CHW-NOLOAD-1`, … | Load proxies simplified |
-| trim / schedule | `TRIM-*`, `SCHED-247` | Long confirm / always-on window fraction |
+P0 correctness backlog (Wave 1): `SV-STALE`, `FC2`, `FC4`, `FC6`, `FC14`/`FC15`, `MECH-OAT-1`, `TRIM-1`, `SCHED-247`, `CHW-NOLOAD-1`, `ECON-1`.
 
 ---
 
@@ -60,19 +64,13 @@ These are the mismatch classes called out in #550 — SQL is present; treat resu
 
 | Family | IDs in registry | SQL file | Pandas cookbook | Oracle-proven? |
 |--------|-----------------|:--------:|:---------------:|:--------------:|
-| sensor | SV-* | ✅ | ✅ | **screening** fixtures (RANGE/FLATLINE/SPIKE/STALE/RATE); keep ported |
-| control | PID-HUNT-1, FC4 | ✅* | ✅ | **screening** fixtures; keep ported until full TV/OS parity |
-| ahu | FC*, AHU-*, ECON-*, OAT-METEO, MECH-OAT-1, … | ✅ | ✅ | mixed (`ECON-1..7`, `MECH-OAT-1` proven) |
-| vav | VAV-1, VAV-3–5, VAV-7, VAV-REHEAT, VAV-AHU-LEAVE | ✅ | ✅ | mixed (`VAV-1` proven) |
-| plant | CHW-*, CW-*, … | ✅ | ✅ | **ported** |
-| trim | TRIM-1/3/4 | ✅ | ✅ | **ported** |
-| schedule | SCHED-1, SCHED-247 | ✅ | ✅ | mixed (`SCHED-1` proven; `SCHED-247` screening) |
-
-\* SQL often ships a **screening** variant; see per-rule caveats in the SQL cookbook.
-
-### Screening honesty (SV / FC4 / PID)
-
-Oracle fixtures exist for `SV-RANGE`, `SV-FLATLINE`, `SV-SPIKE`, `SV-STALE`, `SV-RATE`, `FC4`, and `PID-HUNT-1`, but they prove **SQL screening semantics only**. Do **not** flip these to `proven_building_100` until SQL matches vibe19 pandas (`sensor_rate.py` profiles, multi-sensor sweeps, full TV/reversal / OS hunting). `parity_status` remains `ported_from_cookbook`.
+| sensor | SV-* | ✅ | ✅ | screening |
+| control | PID-HUNT-1, FC4 | ✅ | ✅ | screening |
+| ahu | FC*, AHU-*, ECON-*, … | ✅ | ✅ | screening (Wave 0) |
+| vav | VAV-* | ✅ | ✅ | screening |
+| plant | CHW-*, CW-*, … | ✅ | ✅ | screening |
+| trim | TRIM-* | ✅ | ✅ | screening |
+| schedule | SCHED-1, SCHED-247 | ✅ | ✅ | screening |
 
 ---
 
@@ -81,18 +79,19 @@ Oracle fixtures exist for `SV-RANGE`, `SV-FLATLINE`, `SV-SPIKE`, `SV-STALE`, `SV
 | Topic | DataFusion SQL | Pandas |
 |-------|----------------|--------|
 | Window / rolling | `LAG()`, limited `OVER` | `.shift()`, `.rolling()`, multi-sensor sweeps |
-| Confirmation | `CONFIRM_ROWS` streak (pandas-equivalent grouping) | `confirm_fault()` |
-| Sensor sweeps | Per-column CASE examples | Catalog `sensor_sweep=True` across roles |
-| Control hunting | Screening thresholds | Full TV / reversal / cycle metrics (`PID-HUNT-1`) |
+| Confirmation | streak / interval (Wave 2 target) | `confirm_fault()` |
+| Sensor sweeps | Per-column CASE examples | Catalog `sensor_sweep=True` |
+| Control hunting | Screening thresholds | Full TV / reversal / cycle metrics |
 
 ---
 
 ## Parity test procedure
 
-1. Prefer Rust oracle fixtures in `crates/fdd_rules` (mask / `fault_hours` vs pandas-equivalent reference).
-2. Export `telemetry_pivot` window from edge historian when debugging site data.
-3. Run SQL via registry runner / `POST /api/fdd/run` (typed params only).
-4. Run Pandas mask offline from vibe19 / cookbook compute.
-5. Optional docs integrity: `scripts/cookbook_parity_check.py --all` (pandas “any fault” smoke — **not** a full SQL oracle).
+1. Regenerate inventory: `python3 scripts/generate_parity_inventory.py`
+2. Contract gate: `python3 scripts/parity_inventory_check.py`
+3. Pandas seed oracle: `pip install -e '.[oracle]' && python3 scripts/sql_pandas_oracle_check.py`
+4. Docs smoke: `python3 scripts/cookbook_parity_check.py --all`
+5. Rust DF fixtures: `cargo test -p fdd_rules`
+6. Promote `parity_level` only when fixtures pass — never by docs alone
 
-See [benchmark strategy](benchmark-strategy.html).
+Ownership: [`docs/COOKBOOK_OWNERSHIP.md`](../../COOKBOOK_OWNERSHIP.md).

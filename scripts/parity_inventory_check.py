@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""CI gate for Wave 0 parity inventory, statuses, aliases, fixtures, and SQL orphans."""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+from collections import Counter
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover
+    print("FAIL: PyYAML required", file=sys.stderr)
+    raise SystemExit(2)
+
+ROOT = Path(__file__).resolve().parents[1]
+REGISTRY = ROOT / "sql_rules" / "registry.yaml"
+INVENTORY = ROOT / "sql_rules" / "generated" / "parity_inventory.yaml"
+CATALOG = ROOT / "open_fdd" / "rules" / "cookbook_catalog.py"
+SQL_DIR = ROOT / "sql_rules"
+
+SQL_ANALYTICS = frozenset(
+    {
+        "FAN-RUNTIME-HOURS",
+        "AVG-ZONE-TEMP",
+        "ZONE-COMFORT-PCT",
+        "FAULT-ELAPSED-HOURS",
+    }
+)
+ALLOWED_LEVELS = frozenset(
+    {
+        "concept_only",
+        "sql_screening",
+        "predicate_parity",
+        "mask_parity",
+        "duration_parity",
+        "site_soak",
+    }
+)
+FORBIDDEN_LEGACY = frozenset(
+    {"proven_building_100", "ported_from_cookbook", "skipped_missing_roles"}
+)
+
+
+def fail(msg: str) -> None:
+    print(f"FAIL: {msg}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def main() -> int:
+    if not INVENTORY.is_file():
+        fail("missing sql_rules/generated/parity_inventory.yaml — run generate_parity_inventory.py")
+
+    inv = yaml.safe_load(INVENTORY.read_text(encoding="utf-8"))
+    concepts = inv.get("concepts") or []
+    counts = inv.get("counts") or {}
+
+    if counts.get("pandas_diagnostics") != 59:
+        fail(f"inventory pandas_diagnostics={counts.get('pandas_diagnostics')} want 59")
+    if counts.get("sql_analytics") != 4:
+        fail(f"inventory sql_analytics={counts.get('sql_analytics')} want 4")
+    if counts.get("sql_registry") != 63:
+        fail(f"inventory sql_registry={counts.get('sql_registry')} want 63")
+    if len(concepts) != 63:
+        fail(f"inventory concepts={len(concepts)} want 63")
+
+    diag = [c for c in concepts if c.get("kind") == "diagnostic"]
+    analytics = [c for c in concepts if c.get("kind") == "sql_analytics"]
+    if len(diag) != 59 or len(analytics) != 4:
+        fail(f"kind split diagnostic={len(diag)} analytics={len(analytics)}")
+
+    analytics_ids = {c["canonical_id"] for c in analytics}
+    if analytics_ids != SQL_ANALYTICS:
+        fail(f"analytics ids {sorted(analytics_ids)} != {sorted(SQL_ANALYTICS)}")
+
+    # Registry live check
+    reg = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
+    rules = reg.get("rules") or []
+    if len(rules) != 63:
+        fail(f"registry rules={len(rules)} want 63")
+
+    levels = Counter()
+    for r in rules:
+        st = r.get("parity_status")
+        if st in FORBIDDEN_LEGACY:
+            fail(f"{r.get('rule_id')} still uses legacy parity_status={st}")
+        if st not in ALLOWED_LEVELS:
+            fail(f"{r.get('rule_id')} invalid parity_status={st}")
+        levels[st] += 1
+
+    # Aliases
+    fc13 = next(r for r in rules if r["rule_id"] == "FC13-SAT-HIGH")
+    if "FC13" not in (fc13.get("aliases") or []):
+        fail("FC13-SAT-HIGH must retain alias FC13")
+    sv = next(r for r in rules if r["rule_id"] == "SV-RATE")
+    if "SV-SLEW" not in (sv.get("aliases") or []):
+        fail("SV-RATE must retain alias SV-SLEW")
+
+    # Catalog count
+    cat = CATALOG.read_text(encoding="utf-8")
+    pandas_ids = re.findall(r'CookbookRule\(\s*\n?\s*"([A-Z][A-Z0-9-]*)"', cat)
+    pandas_ids = list(dict.fromkeys(pandas_ids))
+    if len(pandas_ids) != 59:
+        fail(f"cookbook_catalog CookbookRule count={len(pandas_ids)} want 59")
+    if "SV-SLEW" not in cat:
+        fail("cookbook_catalog must document SV-SLEW alias")
+
+    # SQL file orphans / missing
+    sql_files = {p.name for p in SQL_DIR.glob("*.sql")}
+    for r in rules:
+        sf = r.get("sql_file")
+        if not sf or sf not in sql_files:
+            fail(f"{r.get('rule_id')} sql_file missing: {sf}")
+    referenced = {r.get("sql_file") for r in rules}
+    orphan_sql = sorted(sql_files - referenced)
+    if orphan_sql:
+        fail(f"orphan SQL files not in registry: {orphan_sql}")
+
+    # Fixture matrix: every diagnostic required case must exist on disk
+    missing: list[str] = []
+    for c in diag:
+        for fx in c.get("proof_fixtures") or []:
+            if not fx.get("required"):
+                continue
+            path = ROOT / fx["path"]
+            marker = path / "README.md"
+            hist = path / "history_wide.csv"
+            expected = path / "expected.json"
+            if not (marker.is_file() or hist.is_file() or expected.is_file()):
+                missing.append(fx["path"])
+    if missing:
+        fail(
+            f"{len(missing)} required fixture scaffold paths missing "
+            f"(first 8: {missing[:8]})"
+        )
+
+    # Seed fixtures must be real (history + expected)
+    seeds_ok = 0
+    for c in diag:
+        for fx in c.get("proof_fixtures") or []:
+            if not fx.get("oracle_seed"):
+                continue
+            path = ROOT / fx["path"]
+            if not (path / "history_wide.csv").is_file():
+                fail(f"oracle seed missing history_wide.csv: {fx['path']}")
+            if not (path / "expected.json").is_file():
+                fail(f"oracle seed missing expected.json: {fx['path']}")
+            seeds_ok += 1
+    if seeds_ok < 3:
+        fail(f"need >=3 oracle_seed fixtures present, found {seeds_ok}")
+
+    print("OK: parity inventory contract")
+    print("parity_level counts:", dict(levels))
+    print(f"oracle_seed fixtures: {seeds_ok}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,8 @@
+{
+  "pandas_rule_id": "FC1",
+  "equipment_id": "AHU_1",
+  "poll_seconds": 300,
+  "fault_hours": 0.0,
+  "any_fault": false,
+  "datafusion_compare": "pending_wave1"
+}

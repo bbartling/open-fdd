@@ -1,0 +1,7 @@
+{
+  "pandas_rule_id": "VAV-1",
+  "equipment_id": "VAV_1",
+  "poll_seconds": 300,
+  "expect_missing_roles": true,
+  "allow_empty_result": true
+}
