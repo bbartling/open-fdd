@@ -13,6 +13,7 @@ path = "src/main.rs"
 openfdd_contracts = { path = "../../crates/openfdd_contracts", features = ["openapi"] }
 openfdd_mqtt = { path = "../../crates/openfdd_mqtt" }
 open_fdd_edge_prototype = { path = "../../edge" }
+fdd_core = { path = "../../crates/fdd_core" }
 fdd_rules = { path = "../../crates/fdd_rules" }
 fdd_sql = { path = "../../crates/fdd_sql" }
 datafusion.workspace = true

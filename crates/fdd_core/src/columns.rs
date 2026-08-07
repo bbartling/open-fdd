@@ -117,8 +117,35 @@ pub fn normalize_role(role: &str) -> String {
     }
 }
 
+/// Canonical SQL cookbook roles (identity mapping + Data Model Select catalog).
+pub const COOKBOOK_ROLES: &[&str] = &[
+    "fan_cmd",
+    "fan_status",
+    "sat",
+    "sat_sp",
+    "oa_t",
+    "rat",
+    "mat",
+    "web_oa_t",
+    "web_oa_dp",
+    "duct_static",
+    "duct_static_sp",
+    "oa_damper_pct",
+    "clg_valve_pct",
+    "htg_valve_pct",
+    "zone_t",
+    "zone_flow",
+    "chw_supply_t",
+    "chw_return_t",
+    "hw_supply_t",
+    "hw_return_t",
+    "oa_h",
+    "occ_mode",
+    "return_fan",
+];
+
 /// Cookbook roles that may appear as literal CSV column names (identity mapping).
-fn is_known_cookbook_role(role: &str) -> bool {
+pub fn is_known_cookbook_role(role: &str) -> bool {
     matches!(
         role,
         "fan_cmd"
@@ -144,6 +171,14 @@ fn is_known_cookbook_role(role: &str) -> bool {
             | "occ_mode"
             | "return_fan"
     )
+}
+
+/// Full catalog for Data Model role Select (known roles + common extras).
+pub fn cookbook_role_catalog() -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = COOKBOOK_ROLES.to_vec();
+    out.sort_unstable();
+    out.dedup();
+    out
 }
 
 fn infer_role_from_column_name(column: &str) -> Option<String> {

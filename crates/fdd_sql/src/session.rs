@@ -120,35 +120,88 @@ pub async fn run_sql_file(ctx: &SessionContext, path: &Path) -> Result<QueryResu
 }
 
 fn format_cell(col: &datafusion::arrow::array::ArrayRef, idx: usize) -> serde_json::Value {
+    use chrono::{TimeZone, Utc};
     use datafusion::arrow::array::*;
+    use datafusion::arrow::datatypes::{DataType, TimeUnit};
     if col.is_null(idx) {
         return serde_json::Value::Null;
     }
     match col.data_type() {
-        datafusion::arrow::datatypes::DataType::Utf8 => {
+        DataType::Utf8 => {
             let a = col.as_any().downcast_ref::<StringArray>().unwrap();
             serde_json::Value::String(a.value(idx).to_string())
         }
-        datafusion::arrow::datatypes::DataType::Utf8View => {
+        DataType::Utf8View => {
             let a = col.as_any().downcast_ref::<StringViewArray>().unwrap();
             serde_json::Value::String(a.value(idx).to_string())
         }
-        datafusion::arrow::datatypes::DataType::LargeUtf8 => {
+        DataType::LargeUtf8 => {
             let a = col.as_any().downcast_ref::<LargeStringArray>().unwrap();
             serde_json::Value::String(a.value(idx).to_string())
         }
-        datafusion::arrow::datatypes::DataType::Float64 => {
+        DataType::Float64 => {
             let a = col.as_any().downcast_ref::<Float64Array>().unwrap();
             serde_json::json!(a.value(idx))
         }
-        datafusion::arrow::datatypes::DataType::Int64 => {
+        DataType::Float32 => {
+            let a = col.as_any().downcast_ref::<Float32Array>().unwrap();
+            serde_json::json!(a.value(idx) as f64)
+        }
+        DataType::Int64 => {
             let a = col.as_any().downcast_ref::<Int64Array>().unwrap();
             serde_json::json!(a.value(idx))
         }
-        datafusion::arrow::datatypes::DataType::Boolean => {
+        DataType::Int32 => {
+            let a = col.as_any().downcast_ref::<Int32Array>().unwrap();
+            serde_json::json!(a.value(idx))
+        }
+        DataType::Boolean => {
             let a = col.as_any().downcast_ref::<BooleanArray>().unwrap();
             serde_json::json!(a.value(idx))
         }
-        _ => serde_json::Value::String(format!("{:?}", col.slice(idx, 1))),
+        DataType::Timestamp(unit, _) => {
+            let nanos: i64 = match unit {
+                TimeUnit::Second => col
+                    .as_any()
+                    .downcast_ref::<TimestampSecondArray>()
+                    .map(|a| a.value(idx).saturating_mul(1_000_000_000))
+                    .unwrap_or(0),
+                TimeUnit::Millisecond => col
+                    .as_any()
+                    .downcast_ref::<TimestampMillisecondArray>()
+                    .map(|a| a.value(idx).saturating_mul(1_000_000))
+                    .unwrap_or(0),
+                TimeUnit::Microsecond => col
+                    .as_any()
+                    .downcast_ref::<TimestampMicrosecondArray>()
+                    .map(|a| a.value(idx).saturating_mul(1_000))
+                    .unwrap_or(0),
+                TimeUnit::Nanosecond => col
+                    .as_any()
+                    .downcast_ref::<TimestampNanosecondArray>()
+                    .map(|a| a.value(idx))
+                    .unwrap_or(0),
+            };
+            let secs = nanos.div_euclid(1_000_000_000);
+            let nsec = nanos.rem_euclid(1_000_000_000) as u32;
+            let dt = Utc
+                .timestamp_opt(secs, nsec)
+                .single()
+                .unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap());
+            serde_json::Value::String(dt.to_rfc3339())
+        }
+        DataType::Date32 => {
+            let a = col.as_any().downcast_ref::<Date32Array>().unwrap();
+            let days = i64::from(a.value(idx));
+            let dt = Utc
+                .timestamp_opt(days.saturating_mul(86_400), 0)
+                .single()
+                .unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap());
+            serde_json::Value::String(dt.date_naive().to_string())
+        }
+        _ => {
+            // Last resort: avoid Arrow Debug dumps (e.g. PrimitiveArray<…>) in JSON.
+            serde_json::Value::Null
+        }
     }
 }

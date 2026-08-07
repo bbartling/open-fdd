@@ -76,6 +76,7 @@ describe("AppShell layout parity", () => {
       "Overview",
       "Data Model",
       "Run Rules",
+      "Actions",
       "Results by Category",
       "FDD Plots",
       "RCx Plots",

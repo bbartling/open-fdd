@@ -29,6 +29,11 @@ import {
   type FddRunResponse,
   type FddStatus,
 } from "../api/fddApi";
+import {
+  formatDurationMs,
+  latestRunningAction,
+  listActions,
+} from "../api/actionsApi";
 
 type RuleRow = {
   rule_id: string;
@@ -66,6 +71,8 @@ export function RulesPage() {
 
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
+  const [runElapsedMs, setRunElapsedMs] = useState(0);
   const [savingParams, setSavingParams] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -137,6 +144,42 @@ export function RulesPage() {
     };
   }, [tuneRuleId, sessionParams]);
 
+  // Poll Actions while an FDD run is in flight (elapsed + live backend status).
+  useEffect(() => {
+    if (!running) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const actions = await listActions(40);
+        if (cancelled) return;
+        const active = latestRunningAction(actions, [
+          "fdd_run_all",
+          "fdd_run_rule",
+        ]);
+        if (active?.started_at) {
+          const t = Date.parse(active.started_at);
+          if (Number.isFinite(t)) {
+            setRunElapsedMs(Math.max(0, Date.now() - t));
+            return;
+          }
+        }
+        if (runStartedAt != null) {
+          setRunElapsedMs(Math.max(0, Date.now() - runStartedAt));
+        }
+      } catch {
+        if (!cancelled && runStartedAt != null) {
+          setRunElapsedMs(Math.max(0, Date.now() - runStartedAt));
+        }
+      }
+    };
+    void tick();
+    const id = window.setInterval(() => void tick(), 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [running, runStartedAt]);
+
   const selectedIds = useMemo(
     () => Object.entries(selected).filter(([, v]) => v).map(([id]) => id),
     [selected],
@@ -188,6 +231,8 @@ export function RulesPage() {
     const ac = new AbortController();
     abortRef.current = ac;
     setRunning(true);
+    setRunStartedAt(Date.now());
+    setRunElapsedMs(0);
     setError(null);
     setRunResult(null);
     try {
@@ -214,6 +259,7 @@ export function RulesPage() {
       }
     } finally {
       setRunning(false);
+      setRunStartedAt(null);
     }
   };
 
@@ -252,6 +298,11 @@ export function RulesPage() {
 
   const tuneRule = rules.find((r) => r.rule_id === tuneRuleId);
 
+  // Soft progress while blocking: grows with elapsed, caps below 100%.
+  const progressValue = running
+    ? Math.min(95, 8 + Math.floor(runElapsedMs / 1000) * 3)
+    : 0;
+
   return (
     <AppShell
       title="Run Rules"
@@ -274,7 +325,7 @@ export function RulesPage() {
           >
             Findings
           </Link>
-          .
+          . Live runs also appear on <Link to="/actions">Actions</Link>.
         </p>
 
         {status ? (
@@ -388,9 +439,14 @@ export function RulesPage() {
           <div data-testid="fdd-run-progress">
             <Progress
               id="fdd-run"
-              label="Running FDD (blocking until DataFusion returns)…"
-              value={0}
+              label={`Running FDD… elapsed ${formatDurationMs(runElapsedMs)}`}
+              description="Polled from GET /api/actions while DataFusion runs"
+              value={progressValue}
+              testId="fdd-run-progress-bar"
             />
+            <p data-testid="fdd-run-elapsed">
+              Elapsed {formatDurationMs(runElapsedMs)}
+            </p>
             <Button
               id="fdd-cancel"
               label="Cancel"

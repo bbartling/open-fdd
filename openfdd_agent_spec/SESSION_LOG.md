@@ -1,5 +1,14 @@
 # Session log
 
+## 2026-08-07 — vibe19/vibe20 Plotly + UX parity (#675 wave)
+
+- FDD Plots: `format_cell` RFC3339 timestamps (no PrimitiveArray dumps); stacked unit-family axes + fault bottom lane (vibe19 `rule_result_chart`); series overlays `confirmed_fault` from last rule results.
+- Actions tab + durable `workspace/data/actions/log.jsonl`; Rules progress polls Actions (no fake 0%).
+- Data Model role editors → Select from cookbook role catalog (`GET /api/fdd/cookbook-roles`).
+- RCx preset coverage diagnostics UI; Metering Plotly (not JSON stub).
+- Overview/tokens softened; Fuel Plotly 1:1 gaps (peer bullet, roll-12 EUI, ranked EUI, OLS fit/residuals, demand peaks).
+- #674 Fuel Phase A merged `cc63574` → GHCR `sha-cc63574` (bensbench pull when publish green).
+
 ## 2026-08-07 — Vibe20 Fuel Phase A into Open-FDD (Rust + React)
 
 - Added `services/central/src/fuel/` — campus.json + bill CSV ingest, Liberty Excel ZIP → embedded campus, analytics query_versions (summary/monthly/stacked/intensity/demand/quality/weather).

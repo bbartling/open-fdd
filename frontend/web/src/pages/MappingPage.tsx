@@ -14,6 +14,7 @@ import {
   getPackageMapping,
   getSessionConfig,
   invertRolesToSessionMap,
+  listCookbookRoles,
   listPackageBuildings,
   putSessionConfig,
   updatePackageRoles,
@@ -50,6 +51,7 @@ export function MappingPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showUnmappedOnly, setShowUnmappedOnly] = useState(false);
+  const [cookbookRoles, setCookbookRoles] = useState<string[]>([]);
 
   const selectedEq: MappingEquipment | null = useMemo(() => {
     const list = inventory?.equipment ?? [];
@@ -103,6 +105,12 @@ export function MappingPage() {
   useEffect(() => {
     void refreshBuildings();
   }, [refreshBuildings]);
+
+  useEffect(() => {
+    void listCookbookRoles()
+      .then(setCookbookRoles)
+      .catch(() => setCookbookRoles([]));
+  }, []);
 
   useEffect(() => {
     void refreshInventory();
@@ -194,6 +202,17 @@ export function MappingPage() {
     { value: "", label: "— select equipment —" },
     ...(inventory?.equipment_ids ?? []).map((id) => ({ value: id, label: id })),
   ];
+  const roleOptions = useMemo(() => {
+    const catalog = new Set(cookbookRoles);
+    for (const role of Object.values(draftRoles)) {
+      if (role) catalog.add(role);
+    }
+    const sorted = [...catalog].sort();
+    return [
+      { value: "", label: "(unmapped)" },
+      ...sorted.map((r) => ({ value: r, label: r })),
+    ];
+  }, [cookbookRoles, draftRoles]);
 
   const validation = inventory?.validation;
 
@@ -360,13 +379,14 @@ export function MappingPage() {
                     <span id={`role-label-${c.column}`}>
                       <code>{c.column}</code>
                     </span>
-                    <input
+                    <Select
                       id={`role-${c.column}`}
-                      data-testid={`map-role-input-${c.column}`}
-                      aria-labelledby={`role-label-${c.column}`}
+                      label={`Role for ${c.column}`}
                       value={draftRoles[c.column] ?? ""}
-                      placeholder="(unmapped)"
-                      onChange={(e) => onRoleChange(c.column, e.target.value)}
+                      options={roleOptions}
+                      onChange={(value) => onRoleChange(c.column, value)}
+                      testId={`map-role-input-${c.column}`}
+                      density="compact"
                     />
                   </div>
                 ))}

@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { MAIN_SECTIONS } from "./sections";
 
-/** Frozen Streamlit contract — keep in sync with services/ui/app/dashboard_contract.py. */
+/** Product main sections — Streamlit oracle set plus Actions (backend run log). */
 const ORACLE_MAIN_SECTIONS = [
   "Overview",
   "Data Model",
   "Run Rules",
+  "Actions",
   "Results by Category",
   "FDD Plots",
   "RCx Plots",

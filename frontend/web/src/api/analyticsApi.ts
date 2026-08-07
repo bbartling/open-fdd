@@ -213,6 +213,7 @@ export async function listRcxPresets(): Promise<
     family: string;
     chart: string;
     role_col?: string;
+    frozen?: boolean;
   }>
 > {
   const body = await apiFetch<{
@@ -226,6 +227,7 @@ export async function listRcxPresets(): Promise<
     family: String(p.family ?? ""),
     chart: String(p.chart ?? "timeseries"),
     role_col: p.role_col != null ? String(p.role_col) : undefined,
+    frozen: Boolean(p.frozen),
   }));
 }
 
