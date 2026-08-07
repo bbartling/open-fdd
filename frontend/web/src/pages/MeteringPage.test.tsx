@@ -3,81 +3,24 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { MeteringPage } from "./MeteringPage";
 
-vi.mock("../api/mappingApi", () => ({
-  listPackageBuildings: vi.fn(async () => ["B1"]),
+vi.mock("../api/fuelApi", () => ({
+  importFuelCampus: vi.fn(async () => ({
+    ok: true,
+    campus_id: "campus-100-50",
+  })),
 }));
 
-vi.mock("../api/analyticsApi", async () => {
-  const actual = await vi.importActual<typeof import("../api/analyticsApi")>(
-    "../api/analyticsApi",
-  );
-  return {
-    ...actual,
-    postMetering: vi.fn(async () => ({
-      schema_version: "analytics-envelope-v1",
-      query_version: "metering-v1",
-      generated_at: "2024-01-01T00:00:00Z",
-      engine: "central-analytics-v1",
-      warnings: ["metering: monthly kWh sum only"],
-      rows: [
-        { period: "2024-01", kwh: 150.5, n_rows: 2 },
-        { period: "2024-02", kwh: 200, n_rows: 1 },
-        { period: "2024-03", kwh: 175.25, n_rows: 1 },
-      ],
-      equipment: [],
-      points: [],
-      skipped: [],
-      coverage: { total_kwh: 525.75, period_count: 3 },
-    })),
-    postRcxPreset: vi.fn(async () => ({
-      schema_version: "analytics-envelope-v1",
-      query_version: "rcx-preset-meter_elec_cdd-v1",
-      generated_at: "2024-01-01T00:00:00Z",
-      engine: "central-analytics-v1",
-      warnings: [],
-      rows: [],
-      equipment: [],
-      points: [
-        {
-          equipment_id: "M_ELEC",
-          month: "2024-01",
-          energy: 100,
-          degree_days: 12,
-        },
-        {
-          equipment_id: "M_ELEC",
-          month: "2024-02",
-          energy: 120,
-          degree_days: 18,
-        },
-      ],
-      skipped: [],
-      coverage: {
-        title: "Electric × CDD",
-        chart_kind: "metering",
-        meter_kind: "electric",
-      },
-    })),
-  };
-});
+vi.mock("../components/FuelDashboard", () => ({
+  FuelDashboard: ({ reloadToken }: { reloadToken?: number }) => (
+    <div data-testid="fuel-dashboard" data-reload-token={String(reloadToken ?? 0)}>
+      FuelDashboard stub
+    </div>
+  ),
+}));
 
-vi.mock("../api/vibeCharts", async () => {
-  const actual = await vi.importActual<typeof import("../api/vibeCharts")>(
-    "../api/vibeCharts",
-  );
-  return {
-    ...actual,
-    meteringCharts: vi.fn(() => ({
-      data: [{ type: "bar", name: "stub", x: ["2024-01"], y: [1] }],
-      layout: {},
-      meta: { point_count: 1, provenance: "test" },
-    })),
-  };
-});
+import { importFuelCampus } from "../api/fuelApi";
 
-import { postMetering, postRcxPreset } from "../api/analyticsApi";
-
-function renderPage(entry = "/metering?site=B1") {
+function renderPage(entry = "/metering") {
   return render(
     <MemoryRouter initialEntries={[entry]}>
       <MeteringPage />
@@ -87,31 +30,57 @@ function renderPage(entry = "/metering?site=B1") {
 
 describe("MeteringPage", () => {
   beforeEach(() => {
-    vi.mocked(postMetering).mockClear();
-    vi.mocked(postRcxPreset).mockClear();
+    vi.mocked(importFuelCampus).mockClear();
   });
 
-  it("runs metering and shows parity PASS", async () => {
+  it("renders Fuel dashboard shell and import control", async () => {
     renderPage();
-    await waitFor(() => screen.getByTestId("metering-run"));
-    fireEvent.click(screen.getByTestId("metering-run").querySelector("button")!);
+    await waitFor(() => screen.getByTestId("metering-page"));
+    expect(screen.getByTestId("metering-fuel-upload")).toBeTruthy();
+    expect(screen.getByTestId("fuel-dashboard")).toBeTruthy();
+    expect(screen.queryByTestId("metering-preset-run")).toBeNull();
+    expect(screen.queryByTestId("metering-series")).toBeNull();
+  });
+
+  it("imports fuel campus zip and shows campus_id", async () => {
+    renderPage();
+    await waitFor(() => screen.getByTestId("metering-fuel-zip-input"));
+
+    const file = new File(["zip-bytes"], "Buidling_100_50_fuel_use.zip", {
+      type: "application/zip",
+    });
+    fireEvent.change(screen.getByTestId("metering-fuel-zip-input"), {
+      target: { files: [file] },
+    });
+
     await waitFor(() => {
-      expect(postMetering).toHaveBeenCalled();
-      expect(screen.getByTestId("metering-parity").textContent).toContain("PASS");
-      expect(screen.getByTestId("metering-table")).toBeTruthy();
-      expect(screen.getByTestId("metering-plot")).toBeTruthy();
+      expect(importFuelCampus).toHaveBeenCalledWith(file);
+      expect(screen.getByTestId("metering-fuel-campus-id").textContent).toContain(
+        "campus-100-50",
+      );
+      expect(screen.getByTestId("fuel-dashboard").getAttribute("data-reload-token")).toBe(
+        "1",
+      );
     });
   });
 
-  it("runs RCx metering preset", async () => {
-    renderPage();
-    await waitFor(() => screen.getByTestId("metering-preset-run"));
-    fireEvent.click(
-      screen.getByTestId("metering-preset-run").querySelector("button")!,
+  it("shows import errors", async () => {
+    vi.mocked(importFuelCampus).mockRejectedValueOnce(
+      new Error("Fuel campus import failed"),
     );
+    renderPage();
+    await waitFor(() => screen.getByTestId("metering-fuel-zip-input"));
+
+    const file = new File(["bad"], "bad.zip", { type: "application/zip" });
+    fireEvent.change(screen.getByTestId("metering-fuel-zip-input"), {
+      target: { files: [file] },
+    });
+
     await waitFor(() => {
-      expect(postRcxPreset).toHaveBeenCalled();
-      expect(screen.getByTestId("metering-plot")).toBeTruthy();
+      expect(screen.getByTestId("metering-error").textContent).toContain(
+        "Fuel campus import failed",
+      );
+      expect(screen.queryByTestId("metering-fuel-campus-id")).toBeNull();
     });
   });
 });

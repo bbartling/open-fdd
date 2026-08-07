@@ -73,7 +73,12 @@ function coolSeasonFromWeather(
   return out;
 }
 
-export function FuelDashboard() {
+export type FuelDashboardProps = {
+  /** When this value changes, re-fetch the campus list (e.g. after import). */
+  reloadToken?: number;
+};
+
+export function FuelDashboard({ reloadToken }: FuelDashboardProps = {}) {
   const [campuses, setCampuses] = useState<FuelCampusMeta[]>([]);
   const [campusId, setCampusId] = useState("");
   const [tab, setTab] = useState<string>(TAB_IDS.overview);
@@ -107,7 +112,7 @@ export function FuelDashboard() {
 
   useEffect(() => {
     void refreshCampuses();
-  }, [refreshCampuses]);
+  }, [refreshCampuses, reloadToken]);
 
   useEffect(() => {
     if (!campusId) {
