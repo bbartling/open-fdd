@@ -65,7 +65,7 @@ fn read_all_unlocked() -> Vec<ActionEntry> {
     };
     let reader = BufReader::new(file);
     let mut out = Vec::new();
-    for line in reader.lines().flatten() {
+    for line in reader.lines().map_while(Result::ok) {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
