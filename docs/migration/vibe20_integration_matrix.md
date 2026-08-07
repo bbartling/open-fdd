@@ -27,7 +27,7 @@ hashes — never a Docker socket.
 | 24h / weekday profiles | seed | `diurnal_profiles` (pandas) | DF | PARTIAL |
 | FDD results | seed findings | registry results + `fdd_findings.csv` | `job/runs/` + `job/findings/` | DONE |
 | Mech cooling evidence | honesty rules | analytics / dump | Documented hierarchy; DF later | PARTIAL |
-| Utility bills | `import_bills.py` | optional upload | `job/wattlab/utility_bills.*` | MISSING |
+| Utility bills / Fuel campus | vibe20 Fuel Excel+campus | `POST /api/fuel/campus/import` + `/api/analytics/fuel` (Rust) | `workspace/data/fuel/<campus_id>/` | PARTIAL (Phase A Fuel) |
 | Model assumptions | studio | gaps in dump README | `assumptions.json` + NEEDS_INPUT | MISSING |
 | WattLab handoff | seed / bundle | zip + job-native JSON | `job/wattlab/handoffs/` (SoT) | DONE |
 | EnergyPlus IDF / sim | `wattlab/energyplus/` | queue metadata only | Out of process; hashes/status on job | PARTIAL (D4 stub) |

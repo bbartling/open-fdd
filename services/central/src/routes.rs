@@ -17,6 +17,7 @@ use serde_json::{json, Value};
 use crate::analytics::{self, AnalyticsRequest};
 use crate::auth;
 use crate::eplus_runner;
+use crate::fuel::{self, FuelRequest};
 use crate::jobs;
 use crate::models::{
     AgentTool, AgentToolsResponse, AuthLoginRequest, AuthLoginResponse, AuthMeResponse,
@@ -194,6 +195,9 @@ pub fn router(state: Arc<AppState>) -> Router {
             get(analytics_rcx_presets_list),
         )
         .route("/api/analytics/metering", post(analytics_metering))
+        .route("/api/analytics/fuel", post(analytics_fuel))
+        .route("/api/fuel/campus/import", post(fuel_campus_import))
+        .route("/api/fuel/campus", get(fuel_campus_list))
         .merge(csv)
         // OFDD-075: analytics/FDD posts (building-scoped Overview samples) can
         // exceed Axum's ~2 MiB default and 413 before reaching the handler.
@@ -1892,6 +1896,45 @@ async fn analytics_metering(Json(req): Json<AnalyticsRequest>) -> Json<Value> {
         "ok": true,
         "analytics": analytics::metering::handle_async(&req).await.to_json(),
     }))
+}
+
+async fn analytics_fuel(Json(req): Json<FuelRequest>) -> Json<Value> {
+    let body = req;
+    let result = tokio::task::spawn_blocking(move || fuel::handle_fuel(&body))
+        .await
+        .unwrap_or_else(|e| json!({"ok": false, "error": format!("fuel analytics task: {e}")}));
+    Json(json!({
+        "ok": result.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
+        "analytics": result,
+    }))
+}
+
+/// Fuel campus ZIP import (campus.json + bill CSVs, or Liberty_* CSV layout).
+pub async fn fuel_campus_import(headers: HeaderMap, body: Bytes) -> Json<Value> {
+    let ct = content_type(&headers);
+    let result = tokio::task::spawn_blocking(move || {
+        fuel::import::import_fuel_handler(&ct, &body)
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("fuel import task: {e}")}));
+    Json(result)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FuelCampusQuery {
+    #[serde(default)]
+    pub campus_id: Option<String>,
+}
+
+pub async fn fuel_campus_list(Query(q): Query<FuelCampusQuery>) -> Json<Value> {
+    let id = q.campus_id.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        fuel::import::get_campus_meta(id.as_deref())
+            .unwrap_or_else(|e| json!({"ok": false, "error": e.to_string()}))
+    })
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("fuel campus list task: {e}")}));
+    Json(result)
 }
 
 #[cfg(test)]

@@ -1,5 +1,11 @@
 # Session log
 
+## 2026-08-07 — Vibe20 Fuel Phase A into Open-FDD (Rust + React)
+
+- Added `services/central/src/fuel/` — campus.json + bill CSV ingest, Liberty Excel ZIP → embedded campus, analytics query_versions (summary/monthly/stacked/intensity/demand/quality/weather).
+- React WattLab: Fuel ZIP upload + FuelDashboard Plotly tabs (Portfolio / Monthly / Weather / Demand / DQ).
+- Twin/ECM remain Phase B/C stubs (E+ companion). Datasets: `liberty_campus_fuel.zip`, `Buidling_100_50_fuel_use.zip`.
+
 ## 2026-08-06 — DF parity, no-Python central image, docs refresh (#671)
 
 - Merged `77cf8d7` — Overview economizer SQL + inspect flash; MAT/temps/BAS Plotly colors; RCx OAT scatter `ts_utc` alias; Liberty `web_*` inspect prefs.

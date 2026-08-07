@@ -5,6 +5,7 @@ mod auth;
 mod contract;
 mod cutover;
 mod eplus_runner;
+mod fuel;
 mod ingest;
 mod jobs;
 mod models;

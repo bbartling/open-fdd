@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { AppShell } from "../components/AppShell";
+import { FuelDashboard } from "../components/FuelDashboard";
 import { useSessionQuery } from "../session";
 import {
   Button,
@@ -17,6 +18,7 @@ import {
   type WattlabDumpProfile,
 } from "../api/wattlabApi";
 import { listPackageBuildings } from "../api/mappingApi";
+import { importFuelCampus } from "../api/fuelApi";
 
 const WATTLab_PAGES = [
   { value: "Uploads", label: "Uploads" },
@@ -51,6 +53,9 @@ export function WattLabPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [fuelCampusId, setFuelCampusId] = useState<string | null>(null);
+  const [fuelUploading, setFuelUploading] = useState(false);
+  const fuelFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void listJobs()
@@ -126,6 +131,29 @@ export function WattLabPage() {
       setError(formatErr(err));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const onFuelZipSelected = async (file: File | undefined) => {
+    if (!file) return;
+    setFuelUploading(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await importFuelCampus(file);
+      const id = res.campus_id ?? res.campus?.campus_id ?? null;
+      setFuelCampusId(id);
+      setNotice(
+        id
+          ? `Imported fuel campus ${id}`
+          : "Fuel campus import succeeded",
+      );
+    } catch (err) {
+      setFuelCampusId(null);
+      setError(formatErr(err));
+    } finally {
+      setFuelUploading(false);
+      if (fuelFileRef.current) fuelFileRef.current.value = "";
     }
   };
 
@@ -213,18 +241,44 @@ export function WattLabPage() {
                 {JSON.stringify(dump, null, 2)}
               </pre>
             ) : null}
+
+            <h4>Fuel campus ZIP</h4>
+            <p>
+              Import campus.json + monthly bill CSVs via{" "}
+              <code>POST /api/fuel/campus/import</code> (multipart .zip).
+            </p>
+            <input
+              ref={fuelFileRef}
+              id="wattlab-fuel-zip"
+              type="file"
+              accept=".zip,application/zip"
+              hidden
+              data-testid="wattlab-fuel-zip-input"
+              onChange={(e) =>
+                void onFuelZipSelected(e.target.files?.[0] ?? undefined)
+              }
+            />
+            <Button
+              id="wattlab-fuel-upload"
+              label={
+                fuelUploading ? "Importing fuel…" : "Upload fuel campus ZIP"
+              }
+              onClick={() => fuelFileRef.current?.click()}
+              disabled={fuelUploading || saving}
+              testId="wattlab-fuel-upload"
+            />
+            {fuelCampusId ? (
+              <p data-testid="wattlab-fuel-campus-id">
+                Imported campus_id: <strong>{fuelCampusId}</strong>
+              </p>
+            ) : null}
           </section>
         ) : null}
 
         {page === "Fuel dashboard" ? (
           <section data-testid="wattlab-fuel">
             <h3>Fuel dashboard</h3>
-            <p>
-              Portfolio Overview · Monthly Utility Analytics · Weather &amp;
-              Baseline · Demand &amp; Peak · Data Quality — load a WattLab dump
-              first, then open metering / reports for utility overlays.
-            </p>
-            <Link to="/metering">Open Metering analytics</Link>
+            <FuelDashboard />
           </section>
         ) : null}
 
@@ -232,8 +286,10 @@ export function WattLabPage() {
           <section data-testid="wattlab-twin">
             <h3>Twin / calibrate</h3>
             <p>
-              EnergyPlus visualizer, G14 crosscheck, and Unity WebGL live on the
-              Twin page. Create a handoff then open Twin.
+              Stub only — EnergyPlus visualizer, G14 crosscheck, and Unity WebGL
+              wiring are Phase B follow-up. The Twin page exists for handoff /
+              WebGL experiments; this WattLab tab is not a finished calibrate
+              workflow.
             </p>
             <Link to="/twin">Open Twin / Unity WebGL</Link>
           </section>
@@ -243,8 +299,9 @@ export function WattLabPage() {
           <section data-testid="wattlab-ecms">
             <h3>ECMs</h3>
             <p>
-              Spreadsheet vs EnergyPlus calc, energy · cost · ROI — use handoff
-              artifacts after dump + twin run.
+              Stub only — spreadsheet vs EnergyPlus energy · cost · ROI is Phase
+              C follow-up. Dump + handoff artifacts are prerequisites; no ECM
+              calc UI is shipped here yet.
             </p>
           </section>
         ) : null}
