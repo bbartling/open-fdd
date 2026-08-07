@@ -1236,7 +1236,11 @@ pub struct DatasetIdQuery {
 pub async fn csv_delete_dataset(
     Query(q): Query<DatasetIdQuery>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let Some(id) = q.id.as_deref().filter(|s| !s.is_empty()).map(str::to_string) else {
+    let Some(id) =
+        q.id.as_deref()
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    else {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(json!({"ok": false, "error": "id query required"})),
@@ -1273,7 +1277,9 @@ pub async fn csv_delete_dataset(
     }
     match outcome {
         Ok(()) => Ok(Json(json!({ "ok": true, "action_id": action_id }))),
-        Err(e) => Ok(Json(json!({ "ok": false, "error": e, "action_id": action_id }))),
+        Err(e) => Ok(Json(
+            json!({ "ok": false, "error": e, "action_id": action_id }),
+        )),
     }
 }
 
