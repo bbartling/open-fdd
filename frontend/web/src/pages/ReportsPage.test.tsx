@@ -5,6 +5,19 @@ import { ReportsPage } from "./ReportsPage";
 
 vi.mock("../api/mappingApi", () => ({
   listPackageBuildings: vi.fn(async () => ["B1"]),
+  getPackageMapping: vi.fn(async () => ({
+    ok: true,
+    building_id: "B1",
+    equipment: [
+      {
+        equipment_id: "VAV_1",
+        equipment_type: "VAV",
+        ok: true,
+        roles: { zone_t: "zone_t" },
+        columns: [{ column: "zone_air_temp", role: "zone_t", status: "mapped" }],
+      },
+    ],
+  })),
   getSessionConfig: vi.fn(async () => ({ ok: true, config: {} })),
   putSessionConfig: vi.fn(async () => ({ ok: true })),
 }));
