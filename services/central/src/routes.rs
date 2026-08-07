@@ -1077,11 +1077,34 @@ pub async fn csv_preview(headers: HeaderMap, body: Bytes) -> Json<Value> {
 /// `openfdd_package_v1` zip upload (#514): multipart, JSON base64, or raw zip body.
 pub async fn csv_import_package(headers: HeaderMap, body: Bytes) -> Json<Value> {
     let ct = content_type(&headers);
-    let result = tokio::task::spawn_blocking(move || {
+    let action_id = actions::start_action(
+        "package_import",
+        "Package import",
+        Some(json!({ "content_type": ct.clone() })),
+    )
+    .ok();
+    let mut result = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::csv_ingest::package::import_package_handler(&ct, &body)
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package import task: {e}")}));
+    if let Some(aid) = action_id {
+        let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+        let status = if ok { "ok" } else { "fail" };
+        let building_id = result.get("building_id").cloned().unwrap_or(Value::Null);
+        let detail = json!({
+            "ok": ok,
+            "building_id": building_id,
+            "equipment_written": result.get("equipment_written"),
+            "total_rows": result.get("total_rows"),
+            "total_ms": result.get("total_ms"),
+            "error": result.get("error"),
+        });
+        let _ = actions::finish_action(&aid, status, Some(detail));
+        if let Some(obj) = result.as_object_mut() {
+            obj.insert("action_id".into(), json!(aid));
+        }
+    }
     Json(result)
 }
 
@@ -1213,15 +1236,44 @@ pub struct DatasetIdQuery {
 pub async fn csv_delete_dataset(
     Query(q): Query<DatasetIdQuery>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let Some(id) = q.id.as_deref().filter(|s| !s.is_empty()) else {
+    let Some(id) = q.id.as_deref().filter(|s| !s.is_empty()).map(str::to_string) else {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(json!({"ok": false, "error": "id query required"})),
         ));
     };
-    match open_fdd_edge_prototype::csv_ingest::delete_dataset(id) {
-        Ok(()) => Ok(Json(json!({"ok": true}))),
-        Err(e) => Ok(Json(json!({"ok": false, "error": e}))),
+    let action_id = actions::start_action(
+        "dataset_delete",
+        &format!("Delete dataset · {id}"),
+        Some(json!({ "building_id": id, "dataset_id": id })),
+    )
+    .ok();
+    let id_for_task = id.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        open_fdd_edge_prototype::csv_ingest::delete_dataset(&id_for_task)
+    })
+    .await
+    .unwrap_or_else(|e| Err(format!("dataset delete task failed: {e}")));
+    let (ok, error) = match &outcome {
+        Ok(()) => (true, None),
+        Err(e) => (false, Some(e.clone())),
+    };
+    if let Some(aid) = action_id {
+        let status = if ok { "ok" } else { "fail" };
+        let _ = actions::finish_action(
+            &aid,
+            status,
+            Some(json!({
+                "ok": ok,
+                "building_id": id,
+                "dataset_id": id,
+                "error": error,
+            })),
+        );
+    }
+    match outcome {
+        Ok(()) => Ok(Json(json!({ "ok": true, "action_id": action_id }))),
+        Err(e) => Ok(Json(json!({ "ok": false, "error": e, "action_id": action_id }))),
     }
 }
 

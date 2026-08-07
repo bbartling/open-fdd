@@ -22,6 +22,7 @@ import {
   type PackageMappingResponse,
   type SessionConfig,
 } from "../api/mappingApi";
+import { deleteDataset } from "../api/datasetsApi";
 
 type ColumnRow = {
   column: string;
@@ -52,6 +53,8 @@ export function MappingPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [showUnmappedOnly, setShowUnmappedOnly] = useState(false);
   const [cookbookRoles, setCookbookRoles] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDeleteBuilding, setConfirmDeleteBuilding] = useState(false);
 
   const selectedEq: MappingEquipment | null = useMemo(() => {
     const list = inventory?.equipment ?? [];
@@ -176,6 +179,39 @@ export function MappingPage() {
     URL.revokeObjectURL(url);
   };
 
+  const onDeleteBuilding = async () => {
+    if (!buildingId) {
+      setError("Select a building first");
+      return;
+    }
+    if (!confirmDeleteBuilding) {
+      setError("Confirm delete building before purging feather stores.");
+      return;
+    }
+    if (dirty && !window.confirm("Discard unsaved mapping edits and delete this building?")) {
+      return;
+    }
+    setDeleting(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const body = await deleteDataset(buildingId);
+      if (!body.ok) {
+        throw new Error(body.error || "Delete failed");
+      }
+      setConfirmDeleteBuilding(false);
+      setDirty(false);
+      setInventory(null);
+      setNotice(`Deleted dataset ${buildingId} (feather, parquet, rule results).`);
+      setQuery({ siteId: "", equipment: "" }, true);
+      await refreshBuildings();
+    } catch (err) {
+      setError(formatErr(err));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const tableRows: ColumnRow[] = useMemo(() => {
     const cols = selectedEq?.columns ?? [];
     return cols
@@ -262,6 +298,22 @@ export function MappingPage() {
             checked={showUnmappedOnly}
             onChange={setShowUnmappedOnly}
             testId="map-unmapped-only"
+          />
+          <Toggle
+            id="map-confirm-delete"
+            label="Confirm delete building"
+            checked={confirmDeleteBuilding}
+            onChange={setConfirmDeleteBuilding}
+            testId="map-confirm-delete"
+            disabled={!buildingId}
+          />
+          <Button
+            id="map-delete-building"
+            label={deleting ? "Deleting…" : "Delete building dataset"}
+            variant="danger"
+            onClick={() => void onDeleteBuilding()}
+            disabled={!buildingId || !confirmDeleteBuilding || deleting}
+            testId="map-delete-building"
           />
         </div>
 

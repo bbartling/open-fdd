@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useSessionQuery } from "../session";
 import { listPackageBuildings } from "../api/mappingApi";
+import { deleteDataset } from "../api/datasetsApi";
 import { uploadPackage } from "../api/uploadApi";
 import { ApiClientError } from "../api/client";
 import { RuleTuningPanel } from "./RuleTuningPanel";
@@ -224,6 +225,49 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
     }
   };
 
+  const onDeleteActiveSite = async () => {
+    if (!confirmDelete) {
+      setError("Check Confirm delete Active site first.");
+      return;
+    }
+    const id = activeSite.trim();
+    if (!id) {
+      setError("Select an Active site before deleting.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setStatus(`Deleting ${id} (feather + parquet + rule results)…`);
+    try {
+      const body = await deleteDataset(id);
+      if (!body.ok) {
+        throw new Error(body.error || "Delete failed");
+      }
+      setConfirmDelete(false);
+      setQuery({ siteId: "" }, true);
+      await refreshSites();
+      setStatus(`Deleted dataset \`${id}\`. Re-import a package to restore.`);
+      try {
+        window.dispatchEvent(
+          new CustomEvent("openfdd:package-deleted", {
+            detail: { buildingId: id },
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
+    } catch (err: unknown) {
+      setStatus("");
+      if (err instanceof ApiClientError) {
+        setError(`${err.code}: ${err.message}`);
+      } else {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (collapsed) {
     return (
       <div className="oracle-sidebar oracle-sidebar--collapsed" data-testid="oracle-sidebar">
@@ -327,15 +371,9 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
           <button
             type="button"
             className="oracle-sidebar__btn"
-            disabled={!confirmDelete}
+            disabled={!confirmDelete || !activeSite || loading}
             title="Purge Feathers + FDD results for the Active site (requires confirm)."
-            onClick={() =>
-              setError(
-                confirmDelete
-                  ? "Delete via central Hive is available from Jobs/API — confirm wired in next pass."
-                  : "Check Confirm delete Active site first.",
-              )
-            }
+            onClick={() => void onDeleteActiveSite()}
             data-testid="sidebar-delete-site"
           >
             Delete…
