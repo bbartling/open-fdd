@@ -1,5 +1,14 @@
 # Session log
 
+## 2026-08-07 — UX hard fixes wave (#677–#681)
+
+- **#677** Dataset delete: sidebar + Data Model → `DELETE /api/datasets`; Actions kinds `dataset_delete` / `package_import`.
+- **#678** Actions polish: structured detail (running pulse + metrics); selection-stable auto-refresh; log `analytics_rcx` / `analytics_fuel`.
+- **#679** RCx span-preserving downsample + Plotly date axes; grey unmapped RCx/FDD Selects; FDD series `missing_roles` preflight.
+- **#680** Reports artifacts/PDF removed (410 on `/api/reports*`); nav **FDD Plots** only.
+- **#681** Metering = shared `FuelDashboard` + campus ZIP import (vibe20 Fuel via DF); smoke with `Buidling_100_50_fuel_use.zip`.
+- GH hygiene: all five PRs merged to `master`, feature branches deleted, open PR list empty for this wave.
+
 ## 2026-08-07 — vibe19/vibe20 Plotly + UX parity (#675 wave)
 
 - FDD Plots: `format_cell` RFC3339 timestamps (no PrimitiveArray dumps); stacked unit-family axes + fault bottom lane (vibe19 `rule_result_chart`); series overlays `confirmed_fault` from last rule results.
