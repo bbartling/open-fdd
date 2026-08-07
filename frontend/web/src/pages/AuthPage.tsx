@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { getAuthMe, login, logout, type AuthMe } from "../api/authApi";
+import {
+  getAuthMe,
+  getStoredToken,
+  login,
+  logout,
+  setStoredToken,
+  type AuthMe,
+} from "../api/authApi";
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -35,7 +42,14 @@ export function AuthPage() {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      setMe(await getAuthMe());
+      const next = await getAuthMe();
+      // Open mode returns username=dev without a browser token. Only treat a
+      // stored session as signed-in so Continue mints/uses a real token path.
+      if (!getStoredToken() && !next.auth_required) {
+        setMe(null);
+        return;
+      }
+      setMe(next);
     } catch {
       setMe(null);
     }
@@ -62,6 +76,12 @@ export function AuthPage() {
     }
   };
 
+  const onContinue = () => {
+    // Belt-and-suspenders for open mode / stale Session screens.
+    if (!getStoredToken()) setStoredToken("open");
+    navigate(returnTo, { replace: true });
+  };
+
   const onLogout = () => {
     logout();
     setMe(null);
@@ -69,7 +89,7 @@ export function AuthPage() {
     setPassword("");
   };
 
-  const signedIn = Boolean(me?.username);
+  const signedIn = Boolean(me?.username && getStoredToken());
 
   return (
     <div className="auth-screen" data-testid="auth-page">
@@ -102,7 +122,7 @@ export function AuthPage() {
                 type="button"
                 className="auth-screen__btn auth-screen__btn--primary"
                 data-testid="auth-continue"
-                onClick={() => navigate(returnTo, { replace: true })}
+                onClick={onContinue}
               >
                 Continue to app
               </button>
