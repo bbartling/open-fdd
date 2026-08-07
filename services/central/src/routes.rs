@@ -1262,10 +1262,10 @@ pub async fn csv_delete_dataset(
         Ok(()) => (true, None),
         Err(e) => (false, Some(e.clone())),
     };
-    if let Some(aid) = action_id {
+    if let Some(ref aid) = action_id {
         let status = if ok { "ok" } else { "fail" };
         let _ = actions::finish_action(
-            &aid,
+            aid,
             status,
             Some(json!({
                 "ok": ok,
