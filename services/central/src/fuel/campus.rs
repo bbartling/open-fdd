@@ -186,16 +186,13 @@ pub fn load_campus(dir_or_json: &Path) -> Result<Campus> {
                 m.file
             );
         }
-        let unit = m
-            .unit
-            .clone()
-            .unwrap_or_else(|| {
-                if m.fuel.eq_ignore_ascii_case("electricity") {
-                    "kwh".into()
-                } else {
-                    "mcf".into()
-                }
-            });
+        let unit = m.unit.clone().unwrap_or_else(|| {
+            if m.fuel.eq_ignore_ascii_case("electricity") {
+                "kwh".into()
+            } else {
+                "mcf".into()
+            }
+        });
         let mut allocation = HashMap::new();
         if let Some(a) = &m.allocation {
             if let Some(method) = &a.method {
@@ -214,9 +211,7 @@ pub fn load_campus(dir_or_json: &Path) -> Result<Campus> {
 
     Ok(Campus {
         campus_id: doc.campus_id.clone(),
-        label: doc
-            .label
-            .unwrap_or_else(|| doc.campus_id.clone()),
+        label: doc.label.unwrap_or_else(|| doc.campus_id.clone()),
         buildings: doc.buildings,
         meters,
         notes: doc.notes.unwrap_or_default(),
@@ -295,10 +290,7 @@ fn building_shares(
             if total <= 0.0 {
                 bail!("area_weighted allocation needs positive floor area");
             }
-            Ok(areas
-                .into_iter()
-                .map(|(b, a)| (b, a / total))
-                .collect())
+            Ok(areas.into_iter().map(|(b, a)| (b, a / total)).collect())
         }
         "gas_share" => {
             let mut gas_use: HashMap<String, f64> =
@@ -316,10 +308,7 @@ fn building_shares(
             if total <= 0.0 {
                 return building_shares(campus, meter, ALLOCATION_AREA_WEIGHTED, window);
             }
-            Ok(gas_use
-                .into_iter()
-                .map(|(b, u)| (b, u / total))
-                .collect())
+            Ok(gas_use.into_iter().map(|(b, u)| (b, u / total)).collect())
         }
         other => bail!("unknown allocation method: {other}"),
     }
@@ -335,9 +324,8 @@ pub fn annual_summary(
         Some(w) => w,
         None => {
             let sets: Vec<_> = campus.meters.iter().map(|m| m.months()).collect();
-            latest_complete_window(&sets, 12).context(
-                "no common complete 12-month window across all meters",
-            )?
+            latest_complete_window(&sets, 12)
+                .context("no common complete 12-month window across all meters")?
         }
     };
 
@@ -470,8 +458,8 @@ mod tests {
             months.iter().map(|s| (*s).to_string()).collect()
         };
         let a = mk(&[
-            "2020-01", "2020-02", "2020-03", "2020-04", "2020-05", "2020-06", "2020-07",
-            "2020-08", "2020-09", "2020-10", "2020-11", "2020-12", "2021-01",
+            "2020-01", "2020-02", "2020-03", "2020-04", "2020-05", "2020-06", "2020-07", "2020-08",
+            "2020-09", "2020-10", "2020-11", "2020-12", "2021-01",
         ]);
         let w = latest_complete_window(&[a.clone(), a], 12).unwrap();
         assert_eq!(w.len(), 12);

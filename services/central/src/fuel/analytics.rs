@@ -6,9 +6,7 @@ use chrono::{Datelike, NaiveDate, Utc};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use super::campus::{
-    annual_summary, load_campus, usage_to_kbtu, Campus, ALLOCATION_AREA_WEIGHTED,
-};
+use super::campus::{annual_summary, load_campus, usage_to_kbtu, Campus, ALLOCATION_AREA_WEIGHTED};
 use super::eui::compare_eui;
 use super::import::fuel_root;
 
@@ -62,9 +60,7 @@ fn resolve_campus(req: &FuelRequest) -> Result<Campus, String> {
             let list = super::import::list_campuses().map_err(|e| e.to_string())?;
             let campuses = list["campuses"].as_array().cloned().unwrap_or_default();
             if campuses.is_empty() {
-                return Err(
-                    "no fuel campus imported; POST /api/fuel/campus/import first".into(),
-                );
+                return Err("no fuel campus imported; POST /api/fuel/campus/import first".into());
             }
             campuses[0]["campus_id"]
                 .as_str()
@@ -293,11 +289,7 @@ fn fuel_stacked(campus: &Campus, _warnings: &mut Vec<String>) -> Value {
     env
 }
 
-fn fuel_intensity(
-    campus: &Campus,
-    building_id: Option<&str>,
-    warnings: &mut Vec<String>,
-) -> Value {
+fn fuel_intensity(campus: &Campus, building_id: Option<&str>, warnings: &mut Vec<String>) -> Value {
     let mut env = envelope(QV_INTENSITY, vec![]);
     let area = if let Some(bid) = building_id {
         match campus.building(bid) {
@@ -444,8 +436,8 @@ fn synthetic_monthly_degree_days(
         return out;
     };
 
-    let start_date =
-        NaiveDate::from_ymd_opt(sy, sm, 1).unwrap_or_else(|| NaiveDate::from_ymd_opt(2000, 1, 1).unwrap());
+    let start_date = NaiveDate::from_ymd_opt(sy, sm, 1)
+        .unwrap_or_else(|| NaiveDate::from_ymd_opt(2000, 1, 1).unwrap());
     let end_exclusive = if em == 12 {
         NaiveDate::from_ymd_opt(ey + 1, 1, 1)
     } else {
@@ -538,7 +530,11 @@ fn fuel_weather(campus: &Campus, warnings: &mut Vec<String>) -> Value {
     let totals = campus_fuel_totals(campus);
     let months: Vec<String> = totals
         .iter()
-        .filter_map(|t| t.get("month").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .filter_map(|t| {
+            t.get("month")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
@@ -550,8 +546,7 @@ fn fuel_weather(campus: &Campus, warnings: &mut Vec<String>) -> Value {
 
     let dd = synthetic_monthly_degree_days(&months, campus.lat);
     warnings.push(
-        "fuel-weather-v1: synthetic sine OA (vibe20 _synthetic_hourly); no Open-Meteo in v1"
-            .into(),
+        "fuel-weather-v1: synthetic sine OA (vibe20 _synthetic_hourly); no Open-Meteo in v1".into(),
     );
 
     let mut gas_x = Vec::new();
@@ -686,8 +681,11 @@ mod tests {
 
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fuel");
         if !fixture.join("campus.json").is_file() {
-            if let Some(v) = prev { std::env::set_var("OPENFDD_WORKSPACE", v); }
-            else { std::env::remove_var("OPENFDD_WORKSPACE"); }
+            if let Some(v) = prev {
+                std::env::set_var("OPENFDD_WORKSPACE", v);
+            } else {
+                std::env::remove_var("OPENFDD_WORKSPACE");
+            }
             return;
         }
         // Import via copy
@@ -724,8 +722,11 @@ mod tests {
         assert!(!w["points"].as_array().unwrap().is_empty());
         assert!(!w["fits"].as_array().unwrap().is_empty());
 
-        if let Some(v) = prev { std::env::set_var("OPENFDD_WORKSPACE", v); }
-        else { std::env::remove_var("OPENFDD_WORKSPACE"); }
+        if let Some(v) = prev {
+            std::env::set_var("OPENFDD_WORKSPACE", v);
+        } else {
+            std::env::remove_var("OPENFDD_WORKSPACE");
+        }
     }
 
     #[test]

@@ -117,7 +117,9 @@ pub fn import_fuel_zip(bytes: &[u8]) -> Result<Value> {
         .any(|(n, _)| n.to_ascii_lowercase().ends_with(".csv"));
 
     // Extract to a temp staging dir under fuel_root/.staging
-    let staging = fuel_root().join(".staging").join(uuid::Uuid::new_v4().to_string());
+    let staging = fuel_root()
+        .join(".staging")
+        .join(uuid::Uuid::new_v4().to_string());
     fs::create_dir_all(&staging).context("create staging")?;
 
     let result = (|| -> Result<Value> {
@@ -157,8 +159,8 @@ pub fn import_fuel_zip(bytes: &[u8]) -> Result<Value> {
                 if let Some(parent) = out.parent() {
                     fs::create_dir_all(parent)?;
                 }
-                let mut f = fs::File::create(&out)
-                    .with_context(|| format!("create {}", out.display()))?;
+                let mut f =
+                    fs::File::create(&out).with_context(|| format!("create {}", out.display()))?;
                 f.write_all(data)?;
             }
 
@@ -169,8 +171,7 @@ pub fn import_fuel_zip(bytes: &[u8]) -> Result<Value> {
         // Locate campus.json (possibly after flatten)
         let campus_json = find_named(&staging, "campus.json");
         let campus_id = if let Some(ref cj) = campus_json {
-            let doc: Value = serde_json::from_slice(&fs::read(cj)?)
-                .context("parse campus.json")?;
+            let doc: Value = serde_json::from_slice(&fs::read(cj)?).context("parse campus.json")?;
             doc.get("campus_id")
                 .and_then(|v| v.as_str())
                 .unwrap_or("imported_campus")
@@ -504,12 +505,8 @@ fn base64_decode(s: &str) -> Result<Vec<u8>> {
 }
 
 fn decode_base64_std(input: &str) -> Result<Vec<u8>> {
-    const TABLE: &[u8] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let clean: Vec<u8> = input
-        .bytes()
-        .filter(|b| !b.is_ascii_whitespace())
-        .collect();
+    const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let clean: Vec<u8> = input.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
     let mut out = Vec::with_capacity(clean.len() * 3 / 4);
     let mut buf = [0u8; 4];
     let mut n = 0;
@@ -561,12 +558,7 @@ mod tests {
             let mut zipw = zip::ZipWriter::new(file);
             let opts = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Deflated);
-            for name in [
-                "campus.json",
-                LIBERTY_ELEC,
-                LIBERTY_GAS_50,
-                LIBERTY_GAS_100,
-            ] {
+            for name in ["campus.json", LIBERTY_ELEC, LIBERTY_GAS_50, LIBERTY_GAS_100] {
                 let data = fs::read(fixture.join(name)).unwrap();
                 zipw.start_file(name, opts).unwrap();
                 zipw.write_all(&data).unwrap();
@@ -577,7 +569,10 @@ mod tests {
         let out = import_fuel_zip(&bytes).expect("import");
         assert_eq!(out["ok"], true);
         assert_eq!(out["campus_id"], LIBERTY_CAMPUS_ID);
-        assert!(fuel_root().join(LIBERTY_CAMPUS_ID).join("campus.json").is_file());
+        assert!(fuel_root()
+            .join(LIBERTY_CAMPUS_ID)
+            .join("campus.json")
+            .is_file());
     }
 
     #[test]
@@ -606,7 +601,10 @@ mod tests {
         assert_eq!(out["campus_id"], LIBERTY_CAMPUS_ID);
         let warns = out["warnings"].as_array().expect("warnings");
         assert!(!warns.is_empty());
-        assert!(fuel_root().join(LIBERTY_CAMPUS_ID).join("campus.json").is_file());
+        assert!(fuel_root()
+            .join(LIBERTY_CAMPUS_ID)
+            .join("campus.json")
+            .is_file());
     }
 
     #[test]

@@ -1912,11 +1912,9 @@ async fn analytics_fuel(Json(req): Json<FuelRequest>) -> Json<Value> {
 /// Fuel campus ZIP import (campus.json + bill CSVs, or Liberty_* CSV layout).
 pub async fn fuel_campus_import(headers: HeaderMap, body: Bytes) -> Json<Value> {
     let ct = content_type(&headers);
-    let result = tokio::task::spawn_blocking(move || {
-        fuel::import::import_fuel_handler(&ct, &body)
-    })
-    .await
-    .unwrap_or_else(|e| json!({"ok": false, "error": format!("fuel import task: {e}")}));
+    let result = tokio::task::spawn_blocking(move || fuel::import::import_fuel_handler(&ct, &body))
+        .await
+        .unwrap_or_else(|e| json!({"ok": false, "error": format!("fuel import task: {e}")}));
     Json(result)
 }
 
