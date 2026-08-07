@@ -1732,7 +1732,7 @@ pub async fn rcx_timeseries_from_history(
         .unwrap_or_else(|| ", CAST(NULL AS FLOAT) AS return_f".into());
     // Span-preserving downsample (vibe19): keep first/last + evenly spaced rows
     // across the full historian range instead of LIMIT taking only the earliest.
-    // DataFusion 43 has no SQL `MOD()` UDF — use the `%` remainder operator.
+    // DataFusion 43 has no SQL `MOD()` / `GREATEST()` — use `%` and CASE.
     let sql = format!(
         r#"
 SELECT timestamp_utc, equipment_id, value_f, overlay_f, return_f
@@ -1750,7 +1750,11 @@ FROM (
 )
 WHERE _rn = 1
    OR _rn = _cnt
-   OR (_rn % GREATEST(CAST((_cnt + {limit} - 1) / {limit} AS BIGINT), 1)) = 0
+   OR (_rn % (CASE
+        WHEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT) > 1
+        THEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT)
+        ELSE 1
+      END)) = 0
 ORDER BY timestamp_utc, equipment_id
 LIMIT {limit}
 "#
