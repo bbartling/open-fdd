@@ -900,7 +900,7 @@ pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
         }
     }
 
-    if let Some(aid) = action_id {
+    if let Some(ref aid) = action_id {
         let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
         let status = if ok { "ok" } else { "fail" };
         let detail = json!({
@@ -911,7 +911,7 @@ pub async fn fdd_run(Json(body): Json<FddRunRequest>) -> Json<Value> {
             "total_ms": result.get("total_ms"),
             "error": result.get("error"),
         });
-        let _ = actions::finish_action(&aid, status, Some(detail));
+        let _ = actions::finish_action(aid, status, Some(detail));
         if let Some(obj) = result.as_object_mut() {
             obj.insert("action_id".into(), json!(aid));
         }
@@ -1088,7 +1088,7 @@ pub async fn csv_import_package(headers: HeaderMap, body: Bytes) -> Json<Value> 
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package import task: {e}")}));
-    if let Some(aid) = action_id {
+    if let Some(ref aid) = action_id {
         let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
         let status = if ok { "ok" } else { "fail" };
         let building_id = result.get("building_id").cloned().unwrap_or(Value::Null);
@@ -1100,7 +1100,7 @@ pub async fn csv_import_package(headers: HeaderMap, body: Bytes) -> Json<Value> 
             "total_ms": result.get("total_ms"),
             "error": result.get("error"),
         });
-        let _ = actions::finish_action(&aid, status, Some(detail));
+        let _ = actions::finish_action(aid, status, Some(detail));
         if let Some(obj) = result.as_object_mut() {
             obj.insert("action_id".into(), json!(aid));
         }
@@ -2036,7 +2036,7 @@ async fn analytics_rcx_preset(Json(req): Json<AnalyticsRequest>) -> Json<Value> 
             }
         };
     let analytics_json = env.to_json();
-    if let Some(aid) = action_id {
+    if let Some(ref aid) = action_id {
         let warnings = analytics_json
             .get("warnings")
             .and_then(|v| v.as_array())
@@ -2099,7 +2099,7 @@ async fn analytics_fuel(Json(req): Json<FuelRequest>) -> Json<Value> {
     let mut result = tokio::task::spawn_blocking(move || fuel::handle_fuel(&body))
         .await
         .unwrap_or_else(|e| json!({"ok": false, "error": format!("fuel analytics task: {e}")}));
-    if let Some(aid) = action_id {
+    if let Some(ref aid) = action_id {
         let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(true);
         let status = if ok { "ok" } else { "fail" };
         let _ = actions::finish_action(
@@ -2133,7 +2133,7 @@ pub async fn fuel_campus_import(headers: HeaderMap, body: Bytes) -> Json<Value> 
     let result = tokio::task::spawn_blocking(move || fuel::import::import_fuel_handler(&ct, &body))
         .await
         .unwrap_or_else(|e| json!({"ok": false, "error": format!("fuel import task: {e}")}));
-    if let Some(aid) = action_id {
+    if let Some(ref aid) = action_id {
         let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
         let status = if ok { "ok" } else { "fail" };
         let detail = json!({
@@ -2141,7 +2141,7 @@ pub async fn fuel_campus_import(headers: HeaderMap, body: Bytes) -> Json<Value> 
             "campus_id": result.get("campus_id"),
             "error": result.get("error"),
         });
-        let _ = actions::finish_action(&aid, status, Some(detail));
+        let _ = actions::finish_action(aid, status, Some(detail));
         let mut out = result;
         if let Some(obj) = out.as_object_mut() {
             obj.insert("action_id".into(), json!(aid));
