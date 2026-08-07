@@ -249,9 +249,12 @@ fn fuel_monthly(campus: &Campus, gap_fill: bool, warnings: &mut Vec<String>) -> 
     env
 }
 
+type FuelMonthKey = (String, String);
+type FuelMonthAgg = (f64, f64, Option<f64>, String);
+
 fn campus_fuel_totals(campus: &Campus) -> Vec<Value> {
     // month → fuel → (usage, kbtu, demand max, unit)
-    let mut map: BTreeMap<(String, String), (f64, f64, Option<f64>, String)> = BTreeMap::new();
+    let mut map: BTreeMap<FuelMonthKey, FuelMonthAgg> = BTreeMap::new();
     for m in &campus.meters {
         for b in &m.bills {
             let kbtu = usage_to_kbtu(b.usage, &m.fuel, &m.unit);

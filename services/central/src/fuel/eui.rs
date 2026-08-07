@@ -85,8 +85,7 @@ pub fn normalize_property_type(property_type: &str) -> String {
     let key = property_type
         .trim()
         .to_ascii_lowercase()
-        .replace(' ', "_")
-        .replace('-', "_");
+        .replace([' ', '-'], "_");
     match key.as_str() {
         "office" | "offices" | "office_building" => "office".into(),
         "school" | "k_12" | "k12" | "k12_school" | "primary_school" | "secondary_school" => {

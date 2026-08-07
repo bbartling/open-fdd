@@ -32,7 +32,7 @@ fn parse_f64(raw: &str) -> Option<f64> {
     if t.is_empty() {
         return None;
     }
-    let cleaned = t.replace(',', "").replace('$', "");
+    let cleaned = t.replace([',', '$'], "");
     cleaned.parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
@@ -76,7 +76,7 @@ pub fn load_bill_csv(path: &Path) -> Result<Vec<BillRow>> {
     let month_i = find_col(&headers, &["month"]).unwrap_or(0);
     let usage_i = find_col(&headers, &["kwh"])
         .or_else(|| find_col(&headers, &["usage"]))
-        .or_else(|| if headers.len() > 1 { Some(1) } else { Some(0) })
+        .or(if headers.len() > 1 { Some(1) } else { Some(0) })
         .unwrap();
     let cost_i = find_col(&headers, &["charges"]).or_else(|| find_col(&headers, &["cost"]));
     let demand_i =
