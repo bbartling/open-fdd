@@ -7,7 +7,6 @@ vi.mock("../api/mappingApi", () => ({
   listPackageBuildings: vi.fn(async () => ["B1"]),
   getPackageMapping: vi.fn(async () => ({
     ok: true,
-<<<<<<< HEAD
     building_id: "B1",
     equipment: [
       {
@@ -16,13 +15,6 @@ vi.mock("../api/mappingApi", () => ({
         ok: true,
         roles: { zone_t: "zone_t" },
         columns: [{ column: "zone_air_temp", role: "zone_t", status: "mapped" }],
-=======
-    equipment: [
-      {
-        equipment_id: "VAV_1",
-        roles: { zone_t: "zone_t" },
-        columns: [{ column: "zone_t", role: "zone_t" }],
->>>>>>> 897f08e (Remove Reports artifacts/PDF surface; keep FDD Plots.)
       },
     ],
   })),
