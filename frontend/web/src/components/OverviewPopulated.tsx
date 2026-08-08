@@ -360,17 +360,18 @@ export function OverviewPopulated({
     void refreshMeta();
   }, [refreshMeta]);
 
+  // Clear analytics when site/equipment context changes — do not auto-fire
+  // DataFusion POSTs (button-only; vibe19 Streamlit auto-recompute felt wonky).
   useEffect(() => {
-    void refreshOverview();
-  }, [refreshOverview]);
+    setOverview(null);
+    setOverviewErr(null);
+    setInspectFig(null);
+    setInspectErr(null);
+  }, [buildingId, econOverlayEq]);
 
   useEffect(() => {
     if (equipmentId && !inspectPick) setInspectPick(equipmentId);
   }, [equipmentId, inspectPick]);
-
-  useEffect(() => {
-    void refreshInspect();
-  }, [refreshInspect]);
 
   useEffect(() => {
     void getSessionConfig()
@@ -588,7 +589,7 @@ export function OverviewPopulated({
             testId="overview-refresh"
           />
           <p className="oracle-sidebar__caption">
-            Central DataFusion analytics → Overview charts
+            Click to run Central DataFusion analytics (not auto on load)
           </p>
         </div>
         <div className="overview-toolbar__action">
@@ -608,7 +609,11 @@ export function OverviewPopulated({
             {overview.elapsed_s}s · {overview.equipment_count} equip ·{" "}
             {overview.source}
           </span>
-        ) : null}
+        ) : (
+          <span className="oracle-sidebar__caption" data-testid="overview-idle-hint">
+            Charts idle — press Update analytics to load.
+          </span>
+        )}
       </div>
 
       {overviewErr ? (
@@ -620,9 +625,9 @@ export function OverviewPopulated({
 
       <p className="oracle-sidebar__caption" data-testid="overview-dual-catalog">
         Two actions, one engine family: <strong>Update analytics</strong>{" "}
-        refreshes Overview charts; <strong>Run all rules</strong> runs the FDD
-        SQL registry. Sidebar <strong>Update this rule</strong> re-runs one
-        rule.
+        runs Overview charts on demand (no auto-fetch);{" "}
+        <strong>Run all rules</strong> runs the FDD SQL registry. Sidebar{" "}
+        <strong>Update this rule</strong> re-runs one rule.
       </p>
 
       <div className="form-row">

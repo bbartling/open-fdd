@@ -204,6 +204,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/analytics/fuel", post(analytics_fuel))
         .route("/api/fuel/campus/import", post(fuel_campus_import))
         .route("/api/fuel/campus", get(fuel_campus_list))
+        .route(
+            "/api/fuel/campus/weather/fetch",
+            post(fuel_campus_weather_fetch),
+        )
         .merge(csv)
         // OFDD-075: analytics/FDD posts (building-scoped Overview samples) can
         // exceed Axum's ~2 MiB default and 413 before reaching the handler.
@@ -2083,6 +2087,47 @@ pub async fn fuel_campus_list(Query(q): Query<FuelCampusQuery>) -> Json<Value> {
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("fuel campus list task: {e}")}));
+    Json(result)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FuelWeatherFetchBody {
+    pub campus_id: String,
+}
+
+/// Fetch Open-Meteo archive weather and cache monthly HDD/CDD (vibe20 Fuel dashboard parity).
+pub async fn fuel_campus_weather_fetch(Json(body): Json<FuelWeatherFetchBody>) -> Json<Value> {
+    let campus_id = body.campus_id.trim().to_string();
+    if campus_id.is_empty() {
+        return Json(json!({"ok": false, "error": "campus_id required"}));
+    }
+    let action_id = actions::start_action(
+        "fuel_open_meteo",
+        &format!("Open-Meteo fetch · {campus_id}"),
+        Some(json!({ "campus_id": campus_id.clone() })),
+    )
+    .ok();
+    let result = tokio::task::spawn_blocking(move || fuel::fetch_open_meteo_handler(&campus_id))
+        .await
+        .unwrap_or_else(|e| json!({"ok": false, "error": format!("open-meteo task: {e}")}));
+    if let Some(ref aid) = action_id {
+        let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+        let status = if ok { "ok" } else { "fail" };
+        let _ = actions::finish_action(
+            aid,
+            status,
+            Some(json!({
+                "ok": ok,
+                "error": result.get("error"),
+                "months": result.get("months"),
+            })),
+        );
+        let mut out = result;
+        if let Some(obj) = out.as_object_mut() {
+            obj.insert("action_id".into(), json!(aid));
+        }
+        return Json(out);
+    }
     Json(result)
 }
 

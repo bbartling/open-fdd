@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FUEL_QUERY_VERSIONS,
+  fetchFuelOpenMeteo,
   listFuelCampuses,
   postFuelAnalytics,
   type FuelAnalyticsEnvelope,
@@ -22,6 +23,7 @@ import {
   weatherScatter,
 } from "../api/fuelCharts";
 import {
+  Button,
   DataTable,
   InlineAlert,
   Metric,
@@ -85,8 +87,10 @@ export function FuelDashboard({ reloadToken }: FuelDashboardProps = {}) {
   const [bundle, setBundle] = useState<FuelBundle>({});
   const [loadingCampuses, setLoadingCampuses] = useState(true);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [fetchingWeather, setFetchingWeather] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [weatherNotice, setWeatherNotice] = useState<string | null>(null);
 
   const refreshCampuses = useCallback(async () => {
     setLoadingCampuses(true);
@@ -159,6 +163,41 @@ export function FuelDashboard({ reloadToken }: FuelDashboardProps = {}) {
       cancelled = true;
     };
   }, [campusId]);
+
+  const reloadWeatherAnalytics = useCallback(async () => {
+    if (!campusId) return;
+    const env = await postFuelAnalytics({
+      query_version: "fuel-weather-v1",
+      campus_id: campusId,
+      allocation: "area_weighted",
+    });
+    setBundle((prev) => ({ ...prev, "fuel-weather-v1": env }));
+    setWarnings((prev) => {
+      const rest = prev.filter((w) => !w.startsWith("fuel-weather-v1:"));
+      return [...rest, ...(env.warnings ?? []).map((w) => `fuel-weather-v1: ${w}`)];
+    });
+  }, [campusId]);
+
+  const onFetchOpenMeteo = async () => {
+    if (!campusId) return;
+    setFetchingWeather(true);
+    setError(null);
+    setWeatherNotice(null);
+    try {
+      const res = await fetchFuelOpenMeteo(campusId);
+      if (!res.ok) {
+        throw new Error(res.error || "Open-Meteo fetch failed");
+      }
+      setWeatherNotice(
+        `Open-Meteo cached ${res.months ?? "?"} months (${res.start_date} → ${res.end_date}). Reloading weather analytics…`,
+      );
+      await reloadWeatherAnalytics();
+    } catch (err) {
+      setError(formatErr(err));
+    } finally {
+      setFetchingWeather(false);
+    }
+  };
 
   const summary = bundle["fuel-summary-v1"];
   const monthly = bundle["fuel-monthly-v1"];
@@ -484,11 +523,39 @@ export function FuelDashboard({ reloadToken }: FuelDashboardProps = {}) {
             label: "Weather & Baseline",
             content: (
               <div data-testid="fuel-tab-weather-baseline" className="page-stack">
+                <div className="form-row">
+                  <Button
+                    id="fuel-fetch-open-meteo"
+                    label={
+                      fetchingWeather
+                        ? "Fetching Open-Meteo…"
+                        : "Fetch Open-Meteo"
+                    }
+                    loading={fetchingWeather}
+                    disabled={!campusId || fetchingWeather}
+                    onClick={() => void onFetchOpenMeteo()}
+                    testId="fuel-fetch-open-meteo"
+                  />
+                  <p className="oracle-sidebar__caption">
+                    vibe20 parity: archive dry-bulb → monthly HDD/CDD (base 65°F).
+                    Requires campus lat/lon. Falls back to synthetic sine OA until
+                    fetched.
+                  </p>
+                </div>
+                {weatherNotice ? (
+                  <InlineAlert
+                    id="fuel-weather-notice"
+                    variant="success"
+                    testId="fuel-weather-notice"
+                  >
+                    {weatherNotice}
+                  </InlineAlert>
+                ) : null}
                 <PlotlyHost
                   id="fuel-weather"
                   label="Weather vs usage"
                   figure={weatherFig}
-                  loading={loadingAnalytics}
+                  loading={loadingAnalytics || fetchingWeather}
                   height={420}
                   testId="fuel-chart-weather"
                 />
