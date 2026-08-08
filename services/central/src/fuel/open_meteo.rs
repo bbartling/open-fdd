@@ -219,8 +219,10 @@ pub fn fetch_and_cache_degree_days(
     }
     let (start, end) = month_span_to_dates(months)?;
     let url = build_archive_url(lat, lon, &start, &end);
-    let open = opener.unwrap_or_else(|| Box::new(|u| default_opener(u)));
-    let bytes = open(&url)?;
+    let bytes = match opener {
+        Some(open) => open(&url)?,
+        None => default_opener(&url)?,
+    };
     let (times, temps) = parse_archive_payload(&bytes)?;
     let months_dd = monthly_degree_days_from_hourly(&times, &temps);
     let cache = OpenMeteoDdCache {
