@@ -1,5 +1,13 @@
 # Session log — React / Rust modernization
 
+## 2026-08-08 — Plotly RCx/FDD vibe19 parity + delete UX (#686)
+
+- Merged tip `0c2a5fa` / health `3.3.0+0c2a5faa46f7`.
+- PlotlyHost preserves fixed fault ranges + stacked `yaxisN`; FDD Plots grey SQL analytics rollups and require `confirmed_fault`; RCx axes/colors/motor-on y2 with no fault lane; sidebar **Delete dataset…**; `DELETE /api/jobs/{id}` + Jobs UI.
+- GHCR pull **central+web** (`sha-0c2a5fa`); fieldbus left on `sha-d38d09b`. Smoke: RCx `ahu_dats` → 1600 pts (`primary`+`motor`); web bundle has delete/analytics/motor strings; hard stop — no Wave 1 FDD SQL parity.
+
+Newest first.
+
 ## 2026-08-02 — P1-G0 soak + P1-M1 openfdd-web GHCR
 
 - P1-G0 soak: `reports/nightly-ot-bench_20260802T141626Z/` — gates **14/15 PASS**; suite FAIL on OT/SPA/MCP (honest).
