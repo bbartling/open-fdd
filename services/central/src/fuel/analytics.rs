@@ -557,7 +557,10 @@ fn fuel_weather(campus: &Campus, warnings: &mut Vec<String>) -> Value {
                     "fuel-weather-v1: Open-Meteo cache present but no months overlap bills; using synthetic sine OA"
                         .into(),
                 );
-                (synthetic_monthly_degree_days(&months, campus.lat), "synthetic_sine_oa")
+                (
+                    synthetic_monthly_degree_days(&months, campus.lat),
+                    "synthetic_sine_oa",
+                )
             } else {
                 if covered < months.len() {
                     warnings.push(format!(
@@ -577,7 +580,10 @@ fn fuel_weather(campus: &Campus, warnings: &mut Vec<String>) -> Value {
                 "fuel-weather-v1: synthetic sine OA — click Fetch Open-Meteo on Weather tab for live HDD/CDD (vibe20 parity)"
                     .into(),
             );
-            (synthetic_monthly_degree_days(&months, campus.lat), "synthetic_sine_oa")
+            (
+                synthetic_monthly_degree_days(&months, campus.lat),
+                "synthetic_sine_oa",
+            )
         }
     };
 

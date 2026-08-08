@@ -174,9 +174,7 @@ fn parse_archive_payload(bytes: &[u8]) -> Result<(Vec<String>, Vec<Option<f64>>)
 
 /// Bill month span → archive start/end (first day of first month → last day of last month).
 pub fn month_span_to_dates(months: &[String]) -> Result<(String, String)> {
-    let start = months
-        .first()
-        .ok_or_else(|| anyhow!("no months"))?;
+    let start = months.first().ok_or_else(|| anyhow!("no months"))?;
     let end = months.last().ok_or_else(|| anyhow!("no months"))?;
     let sy: i32 = start[..4].parse()?;
     let sm: u32 = start[5..7].parse()?;
