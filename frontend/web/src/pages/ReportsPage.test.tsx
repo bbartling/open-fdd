@@ -41,8 +41,8 @@ vi.mock("../api/fddApi", () => ({
     rule_id: "VAV-1",
     roles: ["zone_t"],
     rows: [
-      { timestamp_utc: "2024-01-01T00:00:00Z", zone_t: 70 },
-      { timestamp_utc: "2024-01-01T00:05:00Z", zone_t: 71 },
+      { timestamp_utc: "2024-01-01T00:00:00Z", zone_t: 70, confirmed_fault: 0 },
+      { timestamp_utc: "2024-01-01T00:05:00Z", zone_t: 71, confirmed_fault: 1 },
     ],
     downsampled: false,
     max_points: 5000,

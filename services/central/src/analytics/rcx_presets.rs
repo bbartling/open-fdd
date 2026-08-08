@@ -345,6 +345,10 @@ fn annotate(mut env: AnalyticsEnvelope, meta: &RcxPresetMeta) -> AnalyticsEnvelo
         if let Some(mk) = meta.meter_kind {
             obj.insert("meter_kind".into(), json!(mk));
         }
+    }
+    env.coverage = Some(cov);
+    env
+}
 
 fn empty_stub(meta: &RcxPresetMeta, reason: &str) -> AnalyticsEnvelope {
     let query = AnalyticsQuery::default();
