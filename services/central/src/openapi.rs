@@ -287,6 +287,7 @@ mod live_routes {
         (name = "jobs", description = "Persistent analysis Jobs + WattLab / EnergyPlus handoff"),
         (name = "analytics", description = "Typed analytics envelopes (historian DataFusion / inline)"),
         (name = "datasets", description = "Ingested site datasets (Delete site)"),
+        (name = "fuel", description = "Campus fuel ZIP analytics + Open-Meteo weather"),
         (name = "fdd", description = "Site-scoped FDD rule results / equipment"),
         (name = "reports", description = "Report artifacts, templates, and drafts")
     )
