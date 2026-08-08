@@ -1,5 +1,11 @@
 # Session log — React / Rust modernization
 
+## 2026-08-08 — Overview button-only + Open-Meteo fuel weather (#688)
+
+- Tip `4577b23`. Overview no longer auto-fires analytics/inspect on mount — **Update analytics** only.
+- Fuel: `POST /api/fuel/campus/weather/fetch` + Weather tab **Fetch Open-Meteo** (vibe20 archive HDD/CDD); synthetic sine OA remains fallback until fetch.
+- GH tidy: 0 open PRs; remote branches = `master` only. Plotly RCx/FDD wave (#686) previously closed.
+
 ## 2026-08-08 — Plotly RCx/FDD vibe19 parity + delete UX (#686)
 
 - Merged tip `0c2a5fa` / health `3.3.0+0c2a5faa46f7`.
