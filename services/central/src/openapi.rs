@@ -217,6 +217,7 @@ mod live_routes {
         live_routes::jobs_list,
         live_routes::jobs_create,
         live_routes::jobs_get,
+        live_routes::jobs_delete,
         live_routes::jobs_create_wattlab_handoff,
         live_routes::jobs_create_wattlab_dump,
         live_routes::jobs_download_wattlab_dump,
