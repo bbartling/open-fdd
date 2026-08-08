@@ -4,6 +4,7 @@ import { ApiClientError } from "../api/client";
 import {
   archiveJob,
   createJob,
+  deleteJob,
   duplicateJob,
   getJob,
   isJobRevisionConflict,
@@ -78,6 +79,7 @@ export function JobsPage() {
   const [editDescription, setEditDescription] = useState("");
 
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
   const [duplicateName, setDuplicateName] = useState("");
 
@@ -220,6 +222,27 @@ export function JobsPage() {
       await refreshList();
       setArchiveModalOpen(false);
       setActionNotice(`Archived ${updated.job_name}.`);
+    } catch (err) {
+      setActionError(formatApiError(err));
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleDeleteConfirm() {
+    if (!selectedJob) return;
+    const id = selectedJob.job_id;
+    const name = selectedJob.job_name;
+    setActionLoading(true);
+    setActionError(null);
+    setActionNotice(null);
+    try {
+      await deleteJob(id);
+      setSelectedJob(null);
+      setQuery({ jobId: undefined }, true);
+      await refreshList();
+      setDeleteModalOpen(false);
+      setActionNotice(`Permanently deleted ${name}.`);
     } catch (err) {
       setActionError(formatApiError(err));
     } finally {
@@ -496,6 +519,14 @@ export function JobsPage() {
                     }}
                     testId="jobs-duplicate"
                   />
+                  <Button
+                    id="jobs-delete"
+                    label="Delete"
+                    variant="danger"
+                    loading={actionLoading}
+                    onClick={() => setDeleteModalOpen(true)}
+                    testId="jobs-delete"
+                  />
                 </div>
               </>
             ) : null}
@@ -516,6 +547,22 @@ export function JobsPage() {
           onConfirm={() => void handleArchiveConfirm()}
           onCancel={() => setArchiveModalOpen(false)}
           testId="jobs-archive-modal"
+        />
+
+        <ConfirmModal
+          id="jobs-delete-modal"
+          open={deleteModalOpen}
+          title="Delete job permanently"
+          message={
+            selectedJob
+              ? `Permanently delete "${selectedJob.job_name}" and its workspace files? This cannot be undone. Prefer Archive if you may need it later.`
+              : "Permanently delete this job?"
+          }
+          confirmLabel="Delete permanently"
+          loading={actionLoading}
+          onConfirm={() => void handleDeleteConfirm()}
+          onCancel={() => setDeleteModalOpen(false)}
+          testId="jobs-delete-modal"
         />
 
         <ConfirmModal

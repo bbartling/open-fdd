@@ -9,11 +9,69 @@ import {
 import { overviewChartLayout, rainbowColor } from "./plotlyTheme";
 import { familyOrderKeys, resolveRoleUnit, unitFamily } from "./roleUnits";
 
+/** Outlier red — vibe19 charts.py stroke for z-score outliers. */
+export const OUTLIER_RED = "#dc2626";
+
+/** Equipment ids whose primary-series mean is ≥ outlierZ σ from cohort mean. */
+export function outlierEquipmentIds(
+  points: Array<Record<string, unknown>>,
+  opts?: { outlierZ?: number; valueKey?: string; primaryOnly?: boolean },
+): Set<string> {
+  const zCut = opts?.outlierZ ?? 2.5;
+  const valueKey = opts?.valueKey ?? "value_f";
+  const primaryOnly = opts?.primaryOnly ?? true;
+  const means = new Map<string, { sum: number; n: number }>();
+  for (const p of points) {
+    if (primaryOnly) {
+      const series = String(p.series ?? "primary");
+      if (series !== "primary") continue;
+    }
+    const eq = String(p.equipment_id ?? "");
+    if (!eq) continue;
+    const raw = p[valueKey] ?? p.fail_pct;
+    const n = typeof raw === "number" ? raw : Number(raw);
+    if (!Number.isFinite(n)) continue;
+    const cur = means.get(eq) ?? { sum: 0, n: 0 };
+    cur.sum += n;
+    cur.n += 1;
+    means.set(eq, cur);
+  }
+  const vals = [...means.entries()].map(([eq, { sum, n }]) => ({
+    eq,
+    mean: sum / n,
+  }));
+  if (vals.length < 3) return new Set();
+  const mu = vals.reduce((a, v) => a + v.mean, 0) / vals.length;
+  const sd = Math.sqrt(
+    vals.reduce((a, v) => a + (v.mean - mu) ** 2, 0) / vals.length,
+  );
+  if (!(sd > 0)) return new Set();
+  const out = new Set<string>();
+  for (const v of vals) {
+    if (Math.abs(v.mean - mu) / sd >= zCut) out.add(v.eq);
+  }
+  return out;
+}
+
+/** True when an RCx figure accidentally grew an FDD fault lane. */
+export function rcxFigureHasFaultLane(fig: PlotlyFigure | null): boolean {
+  if (!fig) return false;
+  if (fig.data.some((t) => String(t.name) === "confirmed_fault")) return true;
+  for (const [k, v] of Object.entries(fig.layout ?? {})) {
+    if (!/^yaxis\d*$/.test(k) || !v || typeof v !== "object") continue;
+    const title = (v as { title?: string | { text?: string } }).title;
+    const text = typeof title === "string" ? title : title?.text;
+    if (text === "fault") return true;
+  }
+  return false;
+}
+
 export function multiEquipmentTimeseries(
   points: Array<Record<string, unknown>>,
   opts: { title: string; yTitle?: string },
 ): PlotlyFigure | null {
   if (!points.length) return null;
+  const outliers = outlierEquipmentIds(points);
   const byKey = new Map<string, Array<Record<string, unknown>>>();
   for (const p of points) {
     const eq = String(p.equipment_id ?? "eq");
@@ -27,16 +85,52 @@ export function multiEquipmentTimeseries(
             ? `${eq} · return`
             : series === "delta_t"
               ? `${eq} · ΔT`
-              : `${eq} · ${series}`;
+              : series === "motor"
+                ? `${eq} · motor on`
+                : `${eq} · ${series}`;
     const list = byKey.get(name) ?? [];
     list.push(p);
     byKey.set(name, list);
   }
   const data: PlotlyTrace[] = [];
-  let i = 0;
+  let colorI = 0;
+  const colorsByEq = new Map<string, string>();
+  const primaryNames = [...byKey.keys()]
+    .filter((n) => !n.includes(" · "))
+    .sort((a, b) => a.localeCompare(b));
+  for (const name of primaryNames) {
+    const eq = name;
+    const isOut = outliers.has(eq);
+    const color = isOut ? OUTLIER_RED : rainbowColor(colorI);
+    if (!isOut) colorI += 1;
+    colorsByEq.set(eq, color);
+    const rows = byKey.get(name) ?? [];
+    data.push({
+      type: "scatter",
+      mode: "lines",
+      name: isOut ? `${name} ★` : name,
+      x: rows.map((r) => String(r.timestamp_utc ?? "")),
+      y: rows.map((r) => {
+        const v = r.value_f;
+        if (v == null || v === "") return null;
+        const n = typeof v === "number" ? v : Number(v);
+        return Number.isFinite(n) ? n : null;
+      }),
+      line: {
+        width: isOut ? 2.4 : 1.4,
+        color,
+        dash: isOut ? "dash" : "solid",
+      },
+      connectgaps: false,
+    });
+  }
+  // Non-primary overlays (setpoint / return / ΔT) stay on primary y.
   for (const [name, rows] of [...byKey.entries()].sort((a, b) =>
     a[0].localeCompare(b[0]),
   )) {
+    if (!name.includes(" · ") || name.endsWith(" · motor on")) continue;
+    const eq = name.split(" · ")[0] ?? name;
+    const color = colorsByEq.get(eq) ?? rainbowColor(colorI++);
     data.push({
       type: "scatter",
       mode: "lines",
@@ -48,27 +142,66 @@ export function multiEquipmentTimeseries(
         const n = typeof v === "number" ? v : Number(v);
         return Number.isFinite(n) ? n : null;
       }),
-      line: { width: 1.4, color: rainbowColor(i) },
+      line: { width: 1.2, color, dash: "dot" },
+      connectgaps: false,
     });
-    i += 1;
+  }
+  let hasMotor = false;
+  for (const [name, rows] of [...byKey.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
+    if (!name.endsWith(" · motor on")) continue;
+    const eq = name.split(" · ")[0] ?? name;
+    const color = colorsByEq.get(eq);
+    if (!color) continue;
+    hasMotor = true;
+    data.push({
+      type: "scatter",
+      mode: "lines",
+      name,
+      x: rows.map((r) => String(r.timestamp_utc ?? "")),
+      y: rows.map((r) => {
+        const v = r.value_f;
+        if (v == null || v === "") return null;
+        const n = typeof v === "number" ? v : Number(v);
+        return Number.isFinite(n) ? n : null;
+      }),
+      yaxis: "y2",
+      line: { width: 1.0, color, dash: "dot", shape: "hv" },
+      opacity: 0.7,
+      connectgaps: false,
+    } as PlotlyTrace);
+  }
+  const extra: Record<string, unknown> = {
+    title: opts.title,
+    xaxis: {
+      title: "timestamp",
+      type: "date",
+      autorange: true,
+      tickangle: -30,
+    },
+  };
+  if (hasMotor) {
+    extra.yaxis2 = {
+      overlaying: "y",
+      side: "right",
+      range: [-0.08, 1.4],
+      tickvals: [0, 1],
+      ticktext: ["off", "on"],
+      title: { text: "motor on", font: { size: 10 } },
+      showgrid: false,
+      autorange: false,
+    };
   }
   return {
     data,
     layout: overviewChartLayout({
-      xTitle: "time",
+      xTitle: "timestamp",
       yTitle: opts.yTitle ?? "value",
       height: Math.max(380, 40 + 14 * Math.min(byKey.size, 16)),
       tickangle: -30,
       uirevision: `rcx-ts:${fingerprintJson(points.slice(0, 50))}`,
-      extra: {
-        title: opts.title,
-        xaxis: {
-          title: "time",
-          type: "date",
-          autorange: true,
-          tickangle: -30,
-        },
-      },
+      extra,
     }),
     meta: {
       point_count: points.length,
@@ -79,7 +212,7 @@ export function multiEquipmentTimeseries(
 
 export function oatScatter(
   points: Array<Record<string, unknown>>,
-  opts: { title: string; yTitle: string },
+  opts: { title: string; yTitle: string; xTitle?: string },
 ): PlotlyFigure | null {
   if (!points.length) return null;
   const byEq = new Map<string, Array<Record<string, unknown>>>();
@@ -89,15 +222,22 @@ export function oatScatter(
     list.push(p);
     byEq.set(eq, list);
   }
+  const outliers = outlierEquipmentIds(points, {
+    valueKey: "y_f",
+    primaryOnly: false,
+  });
   const data: PlotlyTrace[] = [];
   let i = 0;
   for (const [eq, rows] of [...byEq.entries()].sort((a, b) =>
     a[0].localeCompare(b[0]),
   )) {
+    const isOut = outliers.has(eq);
+    const color = isOut ? OUTLIER_RED : rainbowColor(i);
+    if (!isOut) i += 1;
     data.push({
       type: "scatter",
       mode: "markers",
-      name: eq,
+      name: isOut ? `${eq} ★` : eq,
       x: rows.map((r) => {
         const v = r.oat_f;
         const n = typeof v === "number" ? v : Number(v);
@@ -108,9 +248,8 @@ export function oatScatter(
         const n = typeof v === "number" ? v : Number(v);
         return Number.isFinite(n) ? n : null;
       }),
-      marker: { size: 6, opacity: 0.65, color: rainbowColor(i) },
+      marker: { size: isOut ? 7 : 6, opacity: 0.65, color },
     });
-    i += 1;
   }
   const hasDry = points.some((p) => p.dry_bulb_f != null);
   if (hasDry) {
@@ -134,7 +273,7 @@ export function oatScatter(
   return {
     data,
     layout: overviewChartLayout({
-      xTitle: "OAT °F",
+      xTitle: opts.xTitle ?? "Web dry-bulb °F",
       yTitle: opts.yTitle,
       height: 420,
       tickangle: 0,
@@ -164,19 +303,22 @@ export function multiEquipmentBox(
     byEq.set(eq, list);
   }
   if (!byEq.size) return null;
+  const outliers = outlierEquipmentIds(points);
   const data: PlotlyTrace[] = [];
   let i = 0;
   for (const [eq, ys] of [...byEq.entries()].sort((a, b) =>
     a[0].localeCompare(b[0]),
   )) {
+    const isOut = outliers.has(eq);
+    const color = isOut ? OUTLIER_RED : rainbowColor(i);
+    if (!isOut) i += 1;
     data.push({
       type: "box",
-      name: eq,
+      name: isOut ? `${eq} ★` : eq,
       y: ys,
-      marker: { color: rainbowColor(i) },
-      boxpoints: false,
+      marker: { color },
+      boxpoints: "outliers",
     } as PlotlyTrace);
-    i += 1;
   }
   return {
     data,
@@ -205,6 +347,7 @@ export function rankingBars(
     const bv = Number(b.value_f ?? b.fail_pct ?? 0);
     return bv - av;
   });
+  const outliers = outlierEquipmentIds(sorted, { primaryOnly: false });
   return {
     data: [
       {
@@ -216,7 +359,13 @@ export function rankingBars(
           const n = typeof v === "number" ? v : Number(v);
           return Number.isFinite(n) ? n : null;
         }),
-        marker: { color: sorted.map((_, i) => rainbowColor(i)) },
+        marker: {
+          color: sorted.map((r, i) =>
+            outliers.has(String(r.equipment_id ?? ""))
+              ? OUTLIER_RED
+              : rainbowColor(i),
+          ),
+        },
       },
     ],
     layout: overviewChartLayout({
@@ -236,7 +385,7 @@ export function rankingBars(
 
 export function meteringCharts(
   points: Array<Record<string, unknown>>,
-  opts: { title: string; ddLabel?: string },
+  opts: { title: string; ddLabel?: string; energyYTitle?: string },
 ): PlotlyFigure | null {
   if (!points.length) return null;
   const byEq = new Map<string, Array<Record<string, unknown>>>();
@@ -286,15 +435,16 @@ export function meteringCharts(
     });
     i += 1;
   }
+  const energyTitle = opts.energyYTitle ?? "energy";
   return {
     data: [...barData, ...scatterData],
     layout: {
       title: opts.title,
       grid: { rows: 1, columns: 2, pattern: "independent" },
       xaxis: { title: "month", domain: [0, 0.45] },
-      yaxis: { title: "energy" },
+      yaxis: { title: energyTitle },
       xaxis2: { title: opts.ddLabel ?? "degree-days", domain: [0.55, 1] },
-      yaxis2: { title: "energy", anchor: "x2" },
+      yaxis2: { title: energyTitle, anchor: "x2" },
       height: 420,
       legend: { orientation: "h" },
       paper_bgcolor: "white",
@@ -413,6 +563,7 @@ export function ruleResultChart(
         yaxis: yname,
         line: { width: 1.6, color: rainbowColor(colorI) },
         connectgaps: false,
+        // Signal traces: lines only — fill reserved for confirmed_fault lane.
       });
       colorI += 1;
     }

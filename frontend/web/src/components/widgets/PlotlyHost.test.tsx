@@ -1,7 +1,50 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, waitFor } from "@testing-library/react";
-import { PlotlyHost } from "./PlotlyHost";
+import { mergePlotlyHostLayout, PlotlyHost } from "./PlotlyHost";
 import { sanitizePlotlyFigure } from "../../api/plotlySanitize";
+
+describe("mergePlotlyHostLayout", () => {
+  it("keeps fixed range on fault y2 and does not force autorange", () => {
+    const layout = mergePlotlyHostLayout(
+      {
+        yaxis: { domain: [0.35, 1], title: { text: "°F" } },
+        yaxis2: {
+          domain: [0, 0.28],
+          title: { text: "fault" },
+          range: [-0.05, 1.15],
+          tickvals: [0, 1],
+          ticktext: ["ok", "fault"],
+        },
+      },
+      {
+        height: 400,
+        id: "fdd",
+        figureId: "fc1",
+        data: [{ yaxis: "y" }, { yaxis: "y2" }],
+      },
+    );
+    const y2 = layout.yaxis2 as { range?: number[]; autorange?: boolean };
+    expect(y2.range).toEqual([-0.05, 1.15]);
+    expect(y2.autorange).toBe(false);
+    const y1 = layout.yaxis as { autorange?: boolean };
+    expect(y1.autorange).toBe(true);
+  });
+
+  it("patches yaxis3+ from stacked ruleResultChart domains", () => {
+    const layout = mergePlotlyHostLayout(
+      {
+        yaxis: { domain: [0.7, 1] },
+        yaxis2: { domain: [0.4, 0.65] },
+        yaxis3: { domain: [0, 0.3], range: [-0.05, 1.15] },
+      },
+      { height: 480, id: "stack", data: [{ yaxis: "y3" }] },
+    );
+    const y3 = layout.yaxis3 as { range?: number[]; autorange?: boolean };
+    expect(y3.range).toEqual([-0.05, 1.15]);
+    expect(y3.autorange).toBe(false);
+  });
+});
+
 
 describe("sanitizePlotlyFigure", () => {
   it("strips template and rejects empty data", () => {

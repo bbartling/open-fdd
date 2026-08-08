@@ -200,6 +200,13 @@ export async function restoreJob(jobId: string): Promise<JobMeta> {
   return body.job;
 }
 
+export async function deleteJob(jobId: string): Promise<{ ok: boolean; job_id: string }> {
+  return apiFetch<{ ok: boolean; deleted?: boolean; job_id: string }>(
+    `/api/jobs/${encodeURIComponent(jobId)}`,
+    { method: "DELETE" },
+  );
+}
+
 export async function duplicateJob(jobId: string, newName?: string): Promise<JobMeta> {
   const body = await apiFetch<JobResponse>(
     `/api/jobs/${encodeURIComponent(jobId)}/duplicate`,

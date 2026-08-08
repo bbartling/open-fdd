@@ -96,6 +96,7 @@ import { apiFetch } from "./client";
 import {
   archiveJob,
   createJob,
+  deleteJob,
   duplicateJob,
   getJob,
   listJobs,
@@ -182,6 +183,19 @@ describe("jobsApi client calls", () => {
     expect(apiFetch).toHaveBeenCalledWith(
       `/api/jobs/${encodeURIComponent(sampleJob.job_id)}/archive`,
       { method: "POST" },
+    );
+  });
+
+  it("deleteJob DELETEs job id", async () => {
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: true,
+      deleted: true,
+      job_id: sampleJob.job_id,
+    });
+    await deleteJob(sampleJob.job_id);
+    expect(apiFetch).toHaveBeenCalledWith(
+      `/api/jobs/${encodeURIComponent(sampleJob.job_id)}`,
+      { method: "DELETE" },
     );
   });
 

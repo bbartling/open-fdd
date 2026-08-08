@@ -5,7 +5,7 @@ use std::sync::Arc;
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use bytes::Bytes;
 use chrono::Utc;
@@ -134,7 +134,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             get(reports_download_pdf),
         )
         .route("/api/jobs", get(jobs_list).post(jobs_create))
-        .route("/api/jobs/{job_id}", get(jobs_get).patch(jobs_patch))
+        .route(
+            "/api/jobs/{job_id}",
+            get(jobs_get).patch(jobs_patch).delete(jobs_delete),
+        )
         .route("/api/jobs/{job_id}/duplicate", post(jobs_duplicate))
         .route("/api/jobs/{job_id}/archive", post(jobs_archive))
         .route("/api/jobs/{job_id}/restore", post(jobs_restore))
@@ -1573,6 +1576,13 @@ async fn jobs_restore(
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let meta = jobs::restore_job(&job_id).map_err(job_err)?;
     Ok(Json(json!({"ok": true, "job": meta})))
+}
+
+async fn jobs_delete(
+    Path(job_id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    jobs::delete_job(&job_id).map_err(job_err)?;
+    Ok(Json(json!({"ok": true, "deleted": true, "job_id": job_id})))
 }
 
 async fn jobs_create_run(
