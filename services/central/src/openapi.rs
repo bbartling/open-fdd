@@ -99,6 +99,15 @@ mod live_routes {
     pub fn jobs_queue_eplus_run() {}
 
     #[utoipa::path(
+        post, path = "/api/fuel/campus/weather/fetch", tag = "fuel",
+        request_body = serde_json::Value,
+        responses(
+            (status = 200, description = "Fetch Open-Meteo archive HDD/CDD for a fuel campus", body = serde_json::Value)
+        )
+    )]
+    pub fn fuel_weather_fetch() {}
+
+    #[utoipa::path(
         get, path = "/api/datasets", tag = "datasets",
         responses((status = 200, description = "List ingested datasets / sites", body = serde_json::Value))
     )]
@@ -224,6 +233,7 @@ mod live_routes {
         live_routes::jobs_queue_eplus_run,
         live_routes::datasets_list,
         live_routes::datasets_delete,
+        live_routes::fuel_weather_fetch,
         live_routes::fdd_results,
         live_routes::fdd_equipment,
         live_routes::analytics_runtime,

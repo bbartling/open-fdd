@@ -21,7 +21,7 @@ pub const QV_DEMAND: &str = "fuel-demand-v1";
 pub const QV_QUALITY: &str = "fuel-quality-v1";
 pub const QV_WEATHER: &str = "fuel-weather-v1";
 
-const DD_BASE_F: f64 = 65.0;
+pub(crate) const DD_BASE_F: f64 = 65.0;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct FuelRequest {
@@ -547,10 +547,39 @@ fn fuel_weather(campus: &Campus, warnings: &mut Vec<String>) -> Value {
         return env;
     }
 
-    let dd = synthetic_monthly_degree_days(&months, campus.lat);
-    warnings.push(
-        "fuel-weather-v1: synthetic sine OA (vibe20 _synthetic_hourly); no Open-Meteo in v1".into(),
-    );
+    let (dd, dd_source) = match crate::fuel::open_meteo::load_cached_degree_days(&campus.campus_id)
+    {
+        Some(cache) => {
+            let map = crate::fuel::open_meteo::cache_to_dd_map(&cache);
+            let covered = months.iter().filter(|m| map.contains_key(*m)).count();
+            if covered == 0 {
+                warnings.push(
+                    "fuel-weather-v1: Open-Meteo cache present but no months overlap bills; using synthetic sine OA"
+                        .into(),
+                );
+                (synthetic_monthly_degree_days(&months, campus.lat), "synthetic_sine_oa")
+            } else {
+                if covered < months.len() {
+                    warnings.push(format!(
+                        "fuel-weather-v1: Open-Meteo covers {covered}/{} bill months (partial)",
+                        months.len()
+                    ));
+                }
+                warnings.push(format!(
+                    "fuel-weather-v1: Open-Meteo archive HDD/CDD (downloaded {})",
+                    cache.downloaded_at_utc
+                ));
+                (map, "open-meteo-archive")
+            }
+        }
+        None => {
+            warnings.push(
+                "fuel-weather-v1: synthetic sine OA — click Fetch Open-Meteo on Weather tab for live HDD/CDD (vibe20 parity)"
+                    .into(),
+            );
+            (synthetic_monthly_degree_days(&months, campus.lat), "synthetic_sine_oa")
+        }
+    };
 
     let mut gas_x = Vec::new();
     let mut gas_y = Vec::new();
@@ -653,7 +682,7 @@ fn fuel_weather(campus: &Campus, warnings: &mut Vec<String>) -> Value {
         "n_fits": fits.len(),
         "degree_days": {
             "base_f": DD_BASE_F,
-            "source": "synthetic_sine_oa",
+            "source": dd_source,
             "method": "daily_mean_oat_then_monthly_sum",
             "convention": "vibe19_metering_DD_BASE_F",
         },

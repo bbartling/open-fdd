@@ -17,6 +17,7 @@ function buildUrl(path: string): string {
 
 export const FUEL_CAMPUS_IMPORT_PATH = "/api/fuel/campus/import";
 export const FUEL_CAMPUS_LIST_PATH = "/api/fuel/campus";
+export const FUEL_WEATHER_FETCH_PATH = "/api/fuel/campus/weather/fetch";
 export const FUEL_ANALYTICS_PATH = "/api/analytics/fuel";
 
 export const FUEL_QUERY_VERSIONS = [
@@ -231,4 +232,31 @@ export async function postFuelAnalytics(
     }
   }
   return env;
+}
+
+export interface FuelOpenMeteoFetchResponse {
+  ok: boolean;
+  campus_id?: string;
+  source?: string;
+  path?: string;
+  months?: number;
+  start_date?: string;
+  end_date?: string;
+  downloaded_at_utc?: string;
+  lat?: number;
+  lon?: number;
+  hint?: string;
+  error?: string;
+  action_id?: string;
+}
+
+/** vibe20 “Fetch Open-Meteo” — archive HDD/CDD for fuel weather baseline. */
+export async function fetchFuelOpenMeteo(
+  campusId: string,
+): Promise<FuelOpenMeteoFetchResponse> {
+  return apiFetch<FuelOpenMeteoFetchResponse>(FUEL_WEATHER_FETCH_PATH, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ campus_id: campusId }),
+  });
 }
