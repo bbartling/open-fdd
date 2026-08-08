@@ -1730,19 +1730,28 @@ pub async fn rcx_timeseries_from_history(
         .filter(|c| cols.contains(*c))
         .map(|c| format!(", {c} AS return_f"))
         .unwrap_or_else(|| ", CAST(NULL AS FLOAT) AS return_f".into());
+    // Optional motor/fan proof for vibe19 right-hand "motor on" y2 overlay.
+    let motor_sel = if cols.contains("fan_status") {
+        ", fan_status AS motor_f".to_string()
+    } else if cols.contains("fan_cmd") {
+        ", CASE WHEN fan_cmd > 0.05 THEN 1.0 ELSE 0.0 END AS motor_f".to_string()
+    } else {
+        ", CAST(NULL AS FLOAT) AS motor_f".into()
+    };
     // Span-preserving downsample (vibe19): keep first/last + evenly spaced rows
     // across the full historian range instead of LIMIT taking only the earliest.
     // DataFusion 43 has no SQL `MOD()` / `GREATEST()` — use `%` and CASE.
     let sql = format!(
         r#"
-SELECT timestamp_utc, equipment_id, value_f, overlay_f, return_f
+SELECT timestamp_utc, equipment_id, value_f, overlay_f, return_f, motor_f
 FROM (
   SELECT
     CAST({ts_col} AS VARCHAR) AS timestamp_utc,
     equipment_id,
     {role_col} AS value_f
     {overlay_sel}
-    {return_sel},
+    {return_sel}
+    {motor_sel},
     ROW_NUMBER() OVER (ORDER BY {ts_col}, equipment_id) AS _rn,
     COUNT(*) OVER () AS _cnt
   FROM history
@@ -1788,13 +1797,22 @@ LIMIT {limit}
             }
             points.push(rr);
             if let Some(sup) = as_f64(r.get("value_f")) {
-                let mut d = row;
+                let mut d = row.clone();
                 if let Some(obj) = d.as_object_mut() {
                     obj.insert("value_f".into(), json!(round2(ret - sup)));
                     obj.insert("series".into(), json!("delta_t"));
                 }
                 points.push(d);
             }
+        }
+        if let Some(m) = as_f64(r.get("motor_f")) {
+            let mut mo = row;
+            if let Some(obj) = mo.as_object_mut() {
+                let on = if m > 0.05 { 1.0 } else { 0.0 };
+                obj.insert("value_f".into(), json!(on));
+                obj.insert("series".into(), json!("motor"));
+            }
+            points.push(mo);
         }
     }
     let warnings = vec!["RCx role timeseries from historian DataFusion".into()];

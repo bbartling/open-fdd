@@ -363,6 +363,17 @@ pub fn restore_job(job_id: &str) -> Result<JobMeta, JobError> {
     save_job(meta, Some(&expected))
 }
 
+/// Permanently remove a job workspace directory (hard delete — not archive).
+pub fn delete_job(job_id: &str) -> Result<(), JobError> {
+    validate_job_id(job_id)?;
+    let dir = job_dir(job_id)?;
+    if !dir.is_dir() {
+        return Err(JobError::NotFound(format!("job not found: {job_id}")));
+    }
+    fs::remove_dir_all(&dir).map_err(|e| JobError::Io(e.to_string()))?;
+    Ok(())
+}
+
 pub fn duplicate_job(job_id: &str, new_name: Option<&str>) -> Result<JobMeta, JobError> {
     let src = load_job(job_id)?;
     let src_dir = job_dir(job_id)?;
@@ -870,6 +881,19 @@ mod tests {
             assert_eq!(list_jobs(false, None, None, None).len(), 0);
             restore_job(&meta.job_id).unwrap();
             assert_eq!(list_jobs(false, None, None, None).len(), 1);
+        });
+    }
+
+    #[test]
+    fn hard_delete_removes_job_dir() {
+        with_tmp_ws(|_dir| {
+            let meta = create_job("Del", None, None, None, None, vec![], None).unwrap();
+            let id = meta.job_id.clone();
+            assert!(job_dir(&id).unwrap().is_dir());
+            delete_job(&id).unwrap();
+            assert!(!job_dir(&id).unwrap().exists());
+            assert!(matches!(load_job(&id), Err(JobError::NotFound(_))));
+            assert!(matches!(delete_job(&id), Err(JobError::NotFound(_))));
         });
     }
 

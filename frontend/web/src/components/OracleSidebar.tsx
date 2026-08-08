@@ -302,6 +302,10 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
                 </option>
               ))}
             </select>
+            <p className="oracle-sidebar__caption" style={{ marginTop: "0.35rem" }}>
+              To remove this site’s feathers + FDD results, check confirm below and use{" "}
+              <strong>Delete dataset…</strong>
+            </p>
           </label>
         )}
       </section>
@@ -376,7 +380,7 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
             onClick={() => void onDeleteActiveSite()}
             data-testid="sidebar-delete-site"
           >
-            Delete…
+            Delete dataset…
           </button>
         </div>
         <label className="oracle-sidebar__check">
@@ -386,7 +390,7 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
             onChange={(e) => setConfirmDelete(e.target.checked)}
             data-testid="sidebar-confirm-delete"
           />
-          Confirm delete Active site
+          Confirm delete Active site dataset
         </label>
 
         {loading ? (

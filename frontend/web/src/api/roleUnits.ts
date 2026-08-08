@@ -9,8 +9,10 @@ export const DEFAULT_ROLE_UNITS: Record<string, string> = {
   web_oa_t: "°F",
   web_oa_dp: "°F",
   zone_t: "°F",
+  zone_flow: "cfm",
   chw_supply_t: "°F",
   chw_return_t: "°F",
+  cw_supply_t: "°F",
   hw_supply_t: "°F",
   hw_return_t: "°F",
   oa_damper_pct: "%",
@@ -23,6 +25,8 @@ export const DEFAULT_ROLE_UNITS: Record<string, string> = {
   occ_mode: "bool",
   duct_static: "in. w.c.",
   duct_static_sp: "in. w.c.",
+  elec_power: "kWh",
+  gas_flow: "therm",
 };
 
 const UNIT_FAMILY: Record<string, string> = {

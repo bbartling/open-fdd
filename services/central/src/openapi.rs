@@ -49,6 +49,16 @@ mod live_routes {
     pub fn jobs_get() {}
 
     #[utoipa::path(
+        delete, path = "/api/jobs/{job_id}", tag = "jobs",
+        params(("job_id" = String, Path, description = "Job id")),
+        responses(
+            (status = 200, description = "Permanently delete an analysis job workspace", body = serde_json::Value),
+            (status = 404, description = "Job not found")
+        )
+    )]
+    pub fn jobs_delete() {}
+
+    #[utoipa::path(
         post, path = "/api/jobs/{job_id}/wattlab/handoffs", tag = "jobs",
         params(("job_id" = String, Path, description = "Job id")),
         request_body = serde_json::Value,
@@ -207,6 +217,7 @@ mod live_routes {
         live_routes::jobs_list,
         live_routes::jobs_create,
         live_routes::jobs_get,
+        live_routes::jobs_delete,
         live_routes::jobs_create_wattlab_handoff,
         live_routes::jobs_create_wattlab_dump,
         live_routes::jobs_download_wattlab_dump,

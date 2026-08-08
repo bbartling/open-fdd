@@ -12,6 +12,7 @@ vi.mock("../api/jobsApi", () => ({
   archiveJob: vi.fn(),
   restoreJob: vi.fn(),
   duplicateJob: vi.fn(),
+  deleteJob: vi.fn(),
   isJobRevisionConflict: (err: unknown) =>
     err instanceof Error && err.name === "JobRevisionConflictError",
   JobRevisionConflictError: class JobRevisionConflictError extends Error {

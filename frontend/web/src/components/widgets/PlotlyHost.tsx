@@ -36,6 +36,58 @@ declare global {
   }
 }
 
+/**
+ * Merge figure layout with host defaults without clobbering fixed fault ranges
+ * or stacked yaxis3+ domains from vibe19-style ruleResultChart.
+ */
+export function mergePlotlyHostLayout(
+  baseLayout: Record<string, unknown>,
+  opts: { height: number; figureId?: string; id: string; data: Array<{ yaxis?: string }> },
+): Record<string, unknown> {
+  const axisPatch = (key: string) => {
+    const prev = (baseLayout[key] as Record<string, unknown> | undefined) ?? {};
+    // Preserve fixed ranges (fault lane [-0.05, 1.15]); only autorange when unset.
+    if (prev.range != null) {
+      return { ...prev, autorange: false };
+    }
+    return { ...prev, autorange: true };
+  };
+
+  const layout: Record<string, unknown> = {
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "Source Sans 3, Source Sans, sans-serif", size: 12 },
+    ...baseLayout,
+  };
+
+  // Always patch primary x / y.
+  layout.xaxis = axisPatch("xaxis");
+  layout.yaxis = axisPatch("yaxis");
+
+  // Preserve every yaxisN from the figure (stacked unit families + fault).
+  for (const key of Object.keys(baseLayout)) {
+    if (/^yaxis\d+$/.test(key)) {
+      layout[key] = axisPatch(key);
+    }
+  }
+  // Ensure yaxis2 exists when traces reference it even if layout omitted it.
+  if (
+    layout.yaxis2 == null &&
+    opts.data.some((t) => t.yaxis === "y2")
+  ) {
+    layout.yaxis2 = axisPatch("yaxis2");
+  }
+
+  const uirevision =
+    (baseLayout.uirevision as string | undefined) ??
+    `${opts.figureId ?? opts.id}`;
+  layout.uirevision = uirevision;
+  layout.height = (baseLayout.height as number | undefined) ?? opts.height;
+  layout.autosize = true;
+  delete layout.template;
+  return layout;
+}
+
 function waitForPlotly(timeoutMs = 8000): {
   promise: Promise<PlotlyStatic | null>;
   cancel: () => void;
@@ -141,29 +193,19 @@ export function PlotlyHost({
         return;
       }
       const baseLayout = (clean.layout as Record<string, unknown> | undefined) ?? {};
-      const axisPatch = (key: string) => {
-        const prev = (baseLayout[key] as Record<string, unknown> | undefined) ?? {};
-        return { ...prev, autorange: true };
-      };
       // Fingerprint figure so Plotly.react resets sticky zoom after Update analytics.
       const uirevision =
         (baseLayout.uirevision as string | undefined) ??
         `${figureId ?? id}:${fingerprintJson(clean.data)}:${clean.meta?.provenance ?? ""}`;
-      const layout: Record<string, unknown> = {
-        paper_bgcolor: "rgba(0,0,0,0)",
-        plot_bgcolor: "rgba(0,0,0,0)",
-        font: { family: "Source Sans 3, Source Sans, sans-serif", size: 12 },
-        ...baseLayout,
-        xaxis: axisPatch("xaxis"),
-        yaxis: axisPatch("yaxis"),
-        ...(baseLayout.yaxis2 != null || clean.data.some((t) => t.yaxis === "y2")
-          ? { yaxis2: axisPatch("yaxis2") }
-          : {}),
-        uirevision,
-        height: (baseLayout.height as number | undefined) ?? height,
-        autosize: true,
-      };
-      delete layout.template;
+      const layout = mergePlotlyHostLayout(
+        { ...baseLayout, uirevision },
+        {
+          height,
+          figureId,
+          id,
+          data: clean.data as Array<{ yaxis?: string }>,
+        },
+      );
       const config = {
         responsive: true,
         displayModeBar: true,
@@ -199,7 +241,7 @@ export function PlotlyHost({
         /* ignore */
       }
     };
-  }, [clean, height]);
+  }, [clean, height, figureId, id]);
 
   const statusMsg = loading
     ? "Loading chart…"

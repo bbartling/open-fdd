@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   multiEquipmentBox,
+  multiEquipmentTimeseries,
   rankingBars,
+  rcxFigureHasFaultLane,
   ruleResultChart,
   sensorFaultChart,
   sensorHealthHeatmap,
@@ -62,6 +64,16 @@ describe("vibeCharts", () => {
     expect(
       fig?.data.every((t) => !String(t.name).includes("undefined")),
     ).toBe(true);
+    const signal = (fig?.data ?? []).filter((t) => t.name !== "confirmed_fault");
+    expect(signal.every((t) => t.fill == null && t.fillcolor == null)).toBe(
+      true,
+    );
+    const fault = fig?.data.find((t) => t.name === "confirmed_fault");
+    expect(fault?.fill).toBe("tozeroy");
+    expect(fault?.mode).toBe("lines");
+    expect(
+      (last as { range?: number[] } | undefined)?.range,
+    ).toEqual([-0.05, 1.15]);
   });
 
   it("ruleResultChart rejects PrimitiveArray timestamp dumps", () => {
@@ -99,6 +111,39 @@ describe("vibeCharts", () => {
     );
     expect(fig?.data).toHaveLength(2);
     expect(fig?.data[0]?.type).toBe("box");
+  });
+
+  it("RCx timeseries never includes a confirmed_fault lane", () => {
+    const fig = multiEquipmentTimeseries(
+      [
+        {
+          equipment_id: "AHU_1",
+          timestamp_utc: "2026-01-01T00:00:00Z",
+          value_f: 55,
+          series: "primary",
+        },
+        {
+          equipment_id: "AHU_1",
+          timestamp_utc: "2026-01-01T00:00:00Z",
+          value_f: 1,
+          series: "motor",
+        },
+        {
+          equipment_id: "AHU_2",
+          timestamp_utc: "2026-01-01T00:00:00Z",
+          value_f: 58,
+          series: "primary",
+        },
+      ],
+      { title: "ahu_dats", yTitle: "°F" },
+    );
+    expect(rcxFigureHasFaultLane(fig)).toBe(false);
+    expect(fig?.data.some((t) => t.yaxis === "y2")).toBe(true);
+    expect(fig?.layout?.yaxis2).toBeTruthy();
+    const y2 = fig?.layout?.yaxis2 as { title?: { text?: string } };
+    expect(y2?.title?.text).toBe("motor on");
+    expect(fig?.layout?.yaxis?.title).toBe("°F");
+    expect(fig?.layout?.xaxis?.title).toBe("timestamp");
   });
 
   it("sensorHealthHeatmap builds coverage grid", () => {

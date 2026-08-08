@@ -23,6 +23,13 @@ import {
   sensorHealthHeatmap,
 } from "../api/vibeCharts";
 
+export const SQL_ANALYTICS_RULE_IDS = new Set([
+  "FAN-RUNTIME-HOURS",
+  "AVG-ZONE-TEMP",
+  "ZONE-COMFORT-PCT",
+  "FAULT-ELAPSED-HOURS",
+]);
+
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -96,6 +103,13 @@ export function ReportsPage() {
     setRuleOptions([
       { value: "", label: "— rule —" },
       ...rules.map((r) => {
+        if (SQL_ANALYTICS_RULE_IDS.has(r.rule_id)) {
+          return {
+            value: r.rule_id,
+            label: `${r.rule_id} — analytics rollup (no fault series)`,
+            disabled: true,
+          };
+        }
         const required = (r.required_roles ?? []).filter(Boolean);
         const missing =
           mappedRoles.size > 0
@@ -112,6 +126,13 @@ export function ReportsPage() {
       }),
     ]);
   }, [rules, mappedRoles]);
+
+  useEffect(() => {
+    if (ruleId && SQL_ANALYTICS_RULE_IDS.has(ruleId)) {
+      const next = rules.find((r) => !SQL_ANALYTICS_RULE_IDS.has(r.rule_id));
+      setRuleId(next?.rule_id ?? "");
+    }
+  }, [rules, ruleId]);
 
   useEffect(() => {
     if (!buildingId) {
@@ -139,6 +160,13 @@ export function ReportsPage() {
       setError("Select equipment and rule");
       return;
     }
+    if (SQL_ANALYTICS_RULE_IDS.has(ruleId)) {
+      setFigure(null);
+      setError(
+        "Analytics rollups have no per-sample fault series — pick a diagnostic rule (FC*, VAV*, ECON*, …) and Run FDD first.",
+      );
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -152,12 +180,19 @@ export function ReportsPage() {
         return null;
       });
       const hasFault = fault.some((v) => v != null);
+      if (!hasFault) {
+        setFigure(null);
+        setError(
+          "No confirmed_fault overlay on this series — Run FDD on Rules for this equipment/rule, then Load series again.",
+        );
+        return;
+      }
       setFigure(
         ruleResultChart(rows, {
           equipmentId: series.equipment_id ?? equipmentId,
           ruleId: series.rule_id ?? ruleId,
           roles,
-          confirmedFault: hasFault ? fault : undefined,
+          confirmedFault: fault,
         }),
       );
     } catch (err) {
@@ -317,8 +352,10 @@ export function ReportsPage() {
         <div data-testid="plots-page">
           <h2>FDD plot datasets</h2>
           <p>
-            Loads <code>GET /api/fdd/series</code>. Run FDD via{" "}
-            <Link to="/rules">Rules</Link> first.
+            Diagnostic rule series via <code>GET /api/fdd/series</code> with a
+            bottom <strong>confirmed_fault</strong> lane (vibe19{" "}
+            <code>rule_result_chart</code>). Analytics rollups are disabled here.
+            Run FDD on <Link to="/rules">Rules</Link> first.
           </p>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>

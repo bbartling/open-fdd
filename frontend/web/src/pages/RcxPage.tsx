@@ -21,11 +21,27 @@ import {
   multiEquipmentTimeseries,
   oatScatter,
   rankingBars,
+  rcxFigureHasFaultLane,
 } from "../api/vibeCharts";
+import { resolveRoleUnit } from "../api/roleUnits";
 import type { PlotlyFigure } from "../api/plotDataset";
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function rcxYTitle(roleCol: string | undefined, fallback: string): string {
+  const role = (roleCol ?? "").trim();
+  if (!role) return fallback;
+  const unit = resolveRoleUnit(role);
+  return unit || role || fallback;
+}
+
+function rcxScatterXTitle(coverage: Record<string, unknown> | undefined): string {
+  if (coverage?.prefer_wetbulb === true) return "Web wet-bulb °F";
+  const oat = String(coverage?.oat_column ?? "");
+  if (oat.includes("wb") || oat.includes("wet")) return "Web wet-bulb °F";
+  return "Web dry-bulb °F";
 }
 
 /** vibe19 RCx Plots — preset picker + DataFusion historian series. */
@@ -204,29 +220,41 @@ export function RcxPage() {
         return;
       }
       let fig: PlotlyFigure | null = null;
+      const roleCol = String(res.coverage?.role_col ?? res.coverage?.y_col ?? "");
+      const unitTitle = rcxYTitle(roleCol, "value");
       if (kind === "scatter_oat") {
         fig = oatScatter(points, {
           title,
-          yTitle: String(res.coverage?.y_col ?? "value"),
+          yTitle: unitTitle,
+          xTitle: rcxScatterXTitle(res.coverage as Record<string, unknown>),
         });
       } else if (kind === "box") {
         fig = multiEquipmentBox(points, {
           title,
-          yTitle: String(res.coverage?.role_col ?? "value"),
+          yTitle: unitTitle,
         });
       } else if (kind === "ranking") {
-        fig = rankingBars(points, { title });
+        fig = rankingBars(points, {
+          title,
+          yTitle: "comfort fail %",
+        });
       } else if (kind === "metering") {
+        const gas = String(res.coverage?.meter_kind ?? "") === "gas";
         fig = meteringCharts(points, {
           title,
-          ddLabel:
-            String(res.coverage?.meter_kind ?? "") === "gas" ? "HDD" : "CDD",
+          ddLabel: gas ? "HDD" : "CDD",
+          energyYTitle: gas ? "gas" : "kWh",
         });
       } else {
         fig = multiEquipmentTimeseries(points, {
           title,
-          yTitle: String(res.coverage?.role_col ?? "value"),
+          yTitle: unitTitle,
         });
+      }
+      if (rcxFigureHasFaultLane(fig)) {
+        setFigure(null);
+        setError("Internal: RCx figure must not include a fault lane");
+        return;
       }
       setFigure(fig);
     } catch (err) {
