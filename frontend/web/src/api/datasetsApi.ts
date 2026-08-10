@@ -6,13 +6,13 @@ export interface DeleteDatasetResponse {
   action_id?: string;
 }
 
-/** Purge registry + csv_buildings + feather package/csv + parquet + rule_results. */
+/** Purge site ≡ dataset: registry + csv_buildings + feathers + parquet + rule_results (+ jobs via central). */
 export async function deleteDataset(
   datasetId: string,
 ): Promise<DeleteDatasetResponse> {
   const id = datasetId.trim();
   if (!id) {
-    throw new Error("dataset id required");
+    throw new Error("site id required");
   }
   return apiFetch<DeleteDatasetResponse>(
     `/api/datasets?id=${encodeURIComponent(id)}`,

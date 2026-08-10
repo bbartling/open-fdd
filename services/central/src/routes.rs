@@ -1255,7 +1255,7 @@ pub async fn csv_delete_dataset(
     };
     let action_id = actions::start_action(
         "dataset_delete",
-        &format!("Delete dataset · {id}"),
+        &format!("Delete site · {id}"),
         Some(json!({ "building_id": id, "dataset_id": id })),
     )
     .ok();
@@ -1265,6 +1265,10 @@ pub async fn csv_delete_dataset(
     })
     .await
     .unwrap_or_else(|e| Err(format!("dataset delete task failed: {e}")));
+    let mut jobs_deleted = 0usize;
+    if outcome.is_ok() {
+        jobs_deleted = crate::jobs::delete_jobs_for_site(&id);
+    }
     let (ok, error) = match &outcome {
         Ok(()) => (true, None),
         Err(e) => (false, Some(e.clone())),
@@ -1278,12 +1282,17 @@ pub async fn csv_delete_dataset(
                 "ok": ok,
                 "building_id": id,
                 "dataset_id": id,
+                "jobs_deleted": jobs_deleted,
                 "error": error,
             })),
         );
     }
     match outcome {
-        Ok(()) => Ok(Json(json!({ "ok": true, "action_id": action_id }))),
+        Ok(()) => Ok(Json(json!({
+            "ok": true,
+            "action_id": action_id,
+            "jobs_deleted": jobs_deleted,
+        }))),
         Err(e) => Ok(Json(
             json!({ "ok": false, "error": e, "action_id": action_id }),
         )),

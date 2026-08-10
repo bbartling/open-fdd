@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useSessionQuery } from "../session";
 import { listPackageBuildings } from "../api/mappingApi";
-import { deleteDataset } from "../api/datasetsApi";
 import { uploadPackage } from "../api/uploadApi";
 import { ApiClientError } from "../api/client";
 import { RuleTuningPanel } from "./RuleTuningPanel";
@@ -53,7 +52,6 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
   const [sites, setSites] = useState<string[]>([]);
   const [dataSource, setDataSource] = useState<"Zip package">("Zip package");
   const [zipFiles, setZipFiles] = useState<File[]>([]);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -225,49 +223,6 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
     }
   };
 
-  const onDeleteActiveSite = async () => {
-    if (!confirmDelete) {
-      setError("Check Confirm delete Active site first.");
-      return;
-    }
-    const id = activeSite.trim();
-    if (!id) {
-      setError("Select an Active site before deleting.");
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    setStatus(`Deleting ${id} (feather + parquet + rule results)…`);
-    try {
-      const body = await deleteDataset(id);
-      if (!body.ok) {
-        throw new Error(body.error || "Delete failed");
-      }
-      setConfirmDelete(false);
-      setQuery({ siteId: "" }, true);
-      await refreshSites();
-      setStatus(`Deleted dataset \`${id}\`. Re-import a package to restore.`);
-      try {
-        window.dispatchEvent(
-          new CustomEvent("openfdd:package-deleted", {
-            detail: { buildingId: id },
-          }),
-        );
-      } catch {
-        /* ignore */
-      }
-    } catch (err: unknown) {
-      setStatus("");
-      if (err instanceof ApiClientError) {
-        setError(`${err.code}: ${err.message}`);
-      } else {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
   if (collapsed) {
     return (
       <div className="oracle-sidebar oracle-sidebar--collapsed" data-testid="oracle-sidebar">
@@ -283,7 +238,12 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
       <section className="oracle-sidebar__block" data-testid="sidebar-sites">
         <h2 className="oracle-sidebar__h">Sites</h2>
         {siteOptions.length === 0 ? (
-          <p className="oracle-sidebar__caption">No sites — load a package.</p>
+          <p className="oracle-sidebar__caption">
+            No sites — load a package.{" "}
+            <Link to="/sites" data-testid="sidebar-manage-sites">
+              Manage sites…
+            </Link>
+          </p>
         ) : (
           <label className="oracle-sidebar__field">
             <span className="oracle-sidebar__label">Active site</span>
@@ -303,8 +263,11 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
               ))}
             </select>
             <p className="oracle-sidebar__caption" style={{ marginTop: "0.35rem" }}>
-              To remove this site’s feathers + FDD results, check confirm below and use{" "}
-              <strong>Delete dataset…</strong>
+              Switch anytime among loaded packages. To purge a site’s feathers + FDD +
+              analytics, open{" "}
+              <Link to="/sites" data-testid="sidebar-manage-sites">
+                Manage sites…
+              </Link>
             </p>
           </label>
         )}
@@ -372,26 +335,7 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
           >
             {loading ? `Importing… ${loadElapsedSec}s` : "Load package"}
           </button>
-          <button
-            type="button"
-            className="oracle-sidebar__btn"
-            disabled={!confirmDelete || !activeSite || loading}
-            title="Purge Feathers + FDD results for the Active site (requires confirm)."
-            onClick={() => void onDeleteActiveSite()}
-            data-testid="sidebar-delete-site"
-          >
-            Delete dataset…
-          </button>
         </div>
-        <label className="oracle-sidebar__check">
-          <input
-            type="checkbox"
-            checked={confirmDelete}
-            onChange={(e) => setConfirmDelete(e.target.checked)}
-            data-testid="sidebar-confirm-delete"
-          />
-          Confirm delete Active site dataset
-        </label>
 
         {loading ? (
           <p className="oracle-sidebar__busy" data-testid="sidebar-load-busy" role="status">

@@ -374,6 +374,21 @@ pub fn delete_job(job_id: &str) -> Result<(), JobError> {
     Ok(())
 }
 
+/// Hard-delete every job whose `site_id` matches (used by Delete site).
+pub fn delete_jobs_for_site(site_id: &str) -> usize {
+    let sid = site_id.trim();
+    if sid.is_empty() {
+        return 0;
+    }
+    let mut n = 0usize;
+    for meta in list_jobs(true, None, Some(sid), None) {
+        if delete_job(&meta.job_id).is_ok() {
+            n += 1;
+        }
+    }
+    n
+}
+
 pub fn duplicate_job(job_id: &str, new_name: Option<&str>) -> Result<JobMeta, JobError> {
     let src = load_job(job_id)?;
     let src_dir = job_dir(job_id)?;
@@ -868,6 +883,53 @@ mod tests {
             assert_eq!(meta.building_name.as_deref(), Some("BUILDING_100"));
             let loaded = load_job(&meta.job_id).unwrap();
             assert_eq!(loaded.site_id.as_deref(), Some("BUILDING_100"));
+        });
+    }
+
+    #[test]
+    fn delete_jobs_for_site_removes_matching_only() {
+        with_tmp_ws(|_dir| {
+            let keep = create_job(
+                "Keep",
+                Some("BUILDING_100".into()),
+                None,
+                None,
+                None,
+                vec![],
+                None,
+            )
+            .unwrap();
+            let drop_a = create_job(
+                "Drop A",
+                Some("BUILDING_50".into()),
+                None,
+                None,
+                None,
+                vec![],
+                None,
+            )
+            .unwrap();
+            let drop_b = create_job(
+                "Drop B",
+                Some("BUILDING_50".into()),
+                None,
+                None,
+                None,
+                vec![],
+                None,
+            )
+            .unwrap();
+            let n = delete_jobs_for_site("BUILDING_50");
+            assert_eq!(n, 2);
+            assert!(load_job(&keep.job_id).is_ok());
+            assert!(matches!(
+                load_job(&drop_a.job_id),
+                Err(JobError::NotFound(_))
+            ));
+            assert!(matches!(
+                load_job(&drop_b.job_id),
+                Err(JobError::NotFound(_))
+            ));
         });
     }
 

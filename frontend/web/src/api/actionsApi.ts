@@ -62,3 +62,17 @@ export function statusIndicator(status: ActionStatus): string {
       return "•";
   }
 }
+
+/** Operator-facing status label (ok → Passed, fail → Failed). */
+export function statusLabel(status: ActionStatus): string {
+  switch (status) {
+    case "running":
+      return "Running";
+    case "ok":
+      return "Passed";
+    case "fail":
+      return "Failed";
+    default:
+      return String(status);
+  }
+}

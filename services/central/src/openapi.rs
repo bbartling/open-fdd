@@ -116,7 +116,7 @@ mod live_routes {
     #[utoipa::path(
         delete, path = "/api/datasets", tag = "datasets",
         params(("id" = String, Query, description = "Building / dataset id to delete (Delete site)")),
-        responses((status = 200, description = "Delete a site's history / results", body = serde_json::Value))
+        responses((status = 200, description = "Delete site: feathers, FDD, parquet, session role_map keys, and jobs with matching site_id", body = serde_json::Value))
     )]
     pub fn datasets_delete() {}
 
