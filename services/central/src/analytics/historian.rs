@@ -715,11 +715,7 @@ ORDER BY week_start, equipment_id
 
 /// Register `history` and return `(ctx, columns, row_count)` when the parquet
 /// tree exists and has rows; `Ok(None)` when missing/empty (caller falls back).
-async fn open_history() -> Result<Option<(SessionContext, HashSet<String>, i64)>> {
-    open_history_scoped(None).await
-}
-
-/// Like [`open_history`] but scoped to an optional `building_id` (OFDD-070).
+/// Optional `building_id` scopes the hive path (OFDD-070).
 async fn open_history_scoped(
     building_id: Option<&str>,
 ) -> Result<Option<(SessionContext, HashSet<String>, i64)>> {
@@ -859,13 +855,19 @@ pub async fn sensor_health_from_history(
     Ok(Some(env))
 }
 
-/// Boolean occupied-expression from `occ_mode` (Utf8). Unoccupied labels map to
-/// false; any other non-null value is treated as occupied.
+/// Boolean occupied-expression from `occ_mode` (Utf8).
+///
+/// Packages commonly store binary occupancy as Utf8 `"0.0"` / `"1.0"` (float
+/// stringified), not `"0"` / `"1"`. Prefer numeric `try_cast` so `"0.0"` is
+/// unoccupied; fall back to common label tokens. Any other non-null non-numeric
+/// value is treated as occupied.
 fn occupied_expr() -> &'static str {
     "CASE \
        WHEN occ_mode IS NULL THEN NULL \
-       WHEN LOWER(CAST(occ_mode AS VARCHAR)) IN \
-         ('unoccupied','unocc','off','0','false','night','standby','setback') THEN false \
+       WHEN try_cast(trim(CAST(occ_mode AS VARCHAR)) AS DOUBLE) IS NOT NULL THEN \
+         (try_cast(trim(CAST(occ_mode AS VARCHAR)) AS DOUBLE) > 0.05) \
+       WHEN LOWER(trim(CAST(occ_mode AS VARCHAR))) IN \
+         ('unoccupied','unocc','off','false','night','standby','setback','no') THEN false \
        ELSE true \
      END"
 }
@@ -876,8 +878,9 @@ fn occupied_expr() -> &'static str {
 pub async fn schedule_from_history(
     equipment_filter: Option<&[String]>,
     max_gap_seconds: f64,
+    building_id: Option<&str>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let Some((ctx, cols, n)) = open_history().await? else {
+    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
         return Ok(None);
     };
     if !cols.contains("occ_mode") {
@@ -2020,9 +2023,15 @@ pub async fn rcx_zone_comfort_rank_from_history(
         return Ok(None);
     }
     let eq_filter = rcx_eq_filter(eq_kinds);
+    // Match schedule `occupied_expr`: Utf8 "1.0" / "0.0" from packages, not only "1".
     let occ_filter = if cols.contains("occ_mode") {
-        " AND (occ_mode IS NULL OR UPPER(CAST(occ_mode AS VARCHAR)) IN \
-          ('OCC','OCCUPIED','TRUE','YES','1','ON'))"
+        " AND (occ_mode IS NULL OR \
+          CASE \
+            WHEN try_cast(trim(CAST(occ_mode AS VARCHAR)) AS DOUBLE) IS NOT NULL THEN \
+              try_cast(trim(CAST(occ_mode AS VARCHAR)) AS DOUBLE) > 0.05 \
+            ELSE UPPER(trim(CAST(occ_mode AS VARCHAR))) IN \
+              ('OCC','OCCUPIED','TRUE','YES','1','1.0','ON') \
+          END)"
             .to_string()
     } else {
         String::new()
@@ -2320,6 +2329,55 @@ mod tests {
         assert!((cov - 100.0).abs() < 1.0, "coverage={cov}");
 
         std::env::remove_var("OPENFDD_PARQUET_ROOT");
+    }
+
+    /// Regression: package Utf8 occ_mode is often `"0.0"`/`"1.0"`, not `"0"`/`"1"`.
+    /// Older label lists treated `"0.0"` as occupied → unoccupied_hours always 0.
+    #[tokio::test]
+    async fn schedule_from_history_treats_float_string_zero_as_unoccupied() {
+        let _guard = ENV_LOCK.lock().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_OCC");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_OCC1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nocc_cmd,occupied\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,occ_cmd").unwrap();
+        writeln!(f, "2026-01-01T00:00:00Z,1.0").unwrap();
+        writeln!(f, "2026-01-01T00:05:00Z,1.0").unwrap();
+        writeln!(f, "2026-01-01T00:10:00Z,0.0").unwrap();
+        writeln!(f, "2026-01-01T00:15:00Z,0.0").unwrap();
+
+        let parquet = tmp.path().join("parquet_occ");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_OCC", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = schedule_from_history(None, 900.0, Some("BUILDING_OCC"))
+            .await
+            .unwrap()
+            .expect("expected schedule historian envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert_eq!(env.engine, DF_ENGINE);
+        assert_eq!(env.query_version, QV_SCHEDULE);
+        let row = &env.equipment[0];
+        let occ = row["occupied_hours"].as_f64().unwrap();
+        let unocc = row["unoccupied_hours"].as_f64().unwrap();
+        // Three 300s intervals: occ, occ, unocc → 600s occ / 300s unocc
+        assert!(
+            (occ - (600.0 / 3600.0)).abs() < 0.02,
+            "occupied_hours={occ} row={row}"
+        );
+        assert!(
+            (unocc - (300.0 / 3600.0)).abs() < 0.02,
+            "unoccupied_hours={unocc} row={row}"
+        );
     }
 
     #[tokio::test]

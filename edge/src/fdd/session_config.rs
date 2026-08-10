@@ -154,6 +154,16 @@ pub fn normalize_session_config(raw: &Value) -> Result<(Value, Vec<String>), Str
     }
     out.insert("params".into(), Value::Object(params));
 
+    // Weekly occupancy calendar (Overview / WattLab parity). Exact shape:
+    // { timezone, days: { mon..sun: { occupied, start, end } } }
+    if let Some(sched) = obj.get("occupancy_schedule") {
+        if sched.is_object() {
+            out.insert("occupancy_schedule".into(), sched.clone());
+        } else {
+            warnings.push("occupancy_schedule: not an object — skipped".into());
+        }
+    }
+
     let known = [
         "schema_version",
         "unit_system",
@@ -162,6 +172,8 @@ pub fn normalize_session_config(raw: &Value) -> Result<(Value, Vec<String>), Str
         "include_ahu_chw_valve",
         "role_map",
         "params",
+        "occupancy_schedule",
+        "use_mech_cooling_status_proof",
     ];
     for key in obj.keys() {
         if !known.contains(&key.as_str()) {
@@ -318,6 +330,31 @@ mod tests {
         assert!(cfg.get("include_ahu_chw_valve").is_none());
         assert!(warnings.iter().any(|w| w.contains("include_ahu_chw_valve")));
         assert!(warnings.iter().any(|w| w.contains("mystery_key")));
+    }
+
+    #[test]
+    fn keeps_occupancy_schedule_calendar() {
+        let (cfg, warnings) = normalize_session_config(&json!({
+            "schema_version": SESSION_SCHEMA,
+            "unit_system": "imperial",
+            "occupancy_schedule": {
+                "timezone": "America/Chicago",
+                "days": {
+                    "mon": {"occupied": true, "start": "07:00", "end": "17:00"},
+                    "sat": {"occupied": false, "start": "07:00", "end": "17:00"}
+                }
+            }
+        }))
+        .unwrap();
+        assert_eq!(
+            cfg["occupancy_schedule"]["timezone"],
+            json!("America/Chicago")
+        );
+        assert_eq!(
+            cfg["occupancy_schedule"]["days"]["mon"]["start"],
+            json!("07:00")
+        );
+        assert!(!warnings.iter().any(|w| w.contains("occupancy_schedule")));
     }
 
     #[test]

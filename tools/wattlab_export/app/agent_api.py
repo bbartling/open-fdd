@@ -102,6 +102,7 @@ def make_session_config(
     chw_leave_max_f: float | None = None,
     use_mech_cooling_status_proof: bool = True,
     include_ahu_chw_valve: bool | None = None,
+    occupancy_schedule: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build an ``openfdd_session_v1`` dict suitable for JSON export.
 
@@ -120,6 +121,8 @@ def make_session_config(
     }
     if chw_leave_max_f is not None:
         out["chw_leave_max_f"] = float(chw_leave_max_f)
+    if occupancy_schedule is not None:
+        out["occupancy_schedule"] = occupancy_schedule
     return out
 
 
@@ -553,18 +556,25 @@ def export_agent_bundle(
     include_bootstrap: bool = True,
     profile: str = "summary",
     selected_evidence: set[tuple[str, str]] | None = None,
+    occupancy_schedule: dict[str, Any] | None = None,
 ) -> dict[str, Path]:
     """Write run_report + CSVs + model-seed artifacts under ``out_dir``.
 
     ``profile`` controls FDD evidence volume (``summary`` / ``diagnostic`` /
     ``forensic``). Default ``summary`` keeps sensor/setpoint/model-seed/analytic
     artifacts and shared telemetry without a Cartesian per-rule timeseries dump.
+
+    ``occupancy_schedule`` pins the weekly calendar used for occupied/unoccupied
+    setpoints, sensor-stats occupancy slices, and zone comfort ranking.
     """
     from app.wattlab_dump import EXPORT_PROFILES, ExportProfile
+    from app.occupancy import OccupancySchedule
 
     if profile not in EXPORT_PROFILES:
         raise ValueError(f"Unknown export profile: {profile!r}; expected one of {EXPORT_PROFILES}")
     export_profile: ExportProfile = profile  # type: ignore[assignment]
+    sched = OccupancySchedule.from_dict(occupancy_schedule)
+    sched_dict = sched.to_dict()
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -707,10 +717,15 @@ def export_agent_bundle(
         fault_settings,
         unit_system=dataset.unit_system,
         prefer_web_oat=dataset.prefer_web_oat,
+        occupancy_schedule=sched_dict,
     )
     sc = out / "session_config.json"
     sc.write_text(json.dumps(session, indent=2), encoding="utf-8")
     written["session_config"] = sc
+
+    parity_sched = out / "parity_schedule.json"
+    parity_sched.write_text(json.dumps(sched_dict, indent=2), encoding="utf-8")
+    written["parity_schedule"] = parity_sched
 
     rm = out / "role_map.yaml"
     rm.write_text(yaml.safe_dump(dataset.role_map, sort_keys=True), encoding="utf-8")
@@ -753,14 +768,16 @@ def export_agent_bundle(
             written["mech_cooling_coverage"] = path
 
     # WattLab big dump: sensor stats sliced by operating proof + setpoint medians
-    stats_tables = sensor_stats_tables(dataset.frames, dataset.role_map)
+    stats_tables = sensor_stats_tables(
+        dataset.frames, dataset.role_map, schedule=sched
+    )
     for slice_key, df in stats_tables.items():
         if isinstance(df, pd.DataFrame) and not df.empty:
             path = out / f"sensor_stats_{slice_key}.csv"
             df.to_csv(path, index=False)
             written[f"sensor_stats_{slice_key}"] = path
 
-    sp = setpoints_table(dataset.frames, dataset.role_map)
+    sp = setpoints_table(dataset.frames, dataset.role_map, schedule=sched)
     if isinstance(sp, pd.DataFrame) and not sp.empty:
         path = out / "setpoints.csv"
         sp.to_csv(path, index=False)
@@ -823,13 +840,12 @@ def export_agent_bundle(
         pass
 
     try:
-        from app.occupancy import OccupancySchedule
         from app.rcx_plots import zone_comfort_fail_ranking
 
         ranking = zone_comfort_fail_ranking(
             dataset.frames,
             dataset.role_map,
-            schedule=OccupancySchedule(),
+            schedule=sched,
             comfort_low_f=70.0,
             comfort_high_f=75.0,
         )

@@ -68,7 +68,22 @@ def main(argv: list[str] | None = None) -> int:
         default="summary",
         help="WattLab dump evidence profile (default: summary)",
     )
+    parser.add_argument(
+        "--schedule",
+        type=str,
+        default=None,
+        help="JSON occupancy calendar (timezone + days mon..sun). Pins occupied/unoccupied slices.",
+    )
     args = parser.parse_args(argv)
+
+    occupancy_schedule = None
+    if args.schedule:
+        sp = Path(args.schedule)
+        if not sp.is_file():
+            raise SystemExit(f"--schedule file not found: {sp}")
+        occupancy_schedule = json.loads(sp.read_text(encoding="utf-8"))
+        if not isinstance(occupancy_schedule, dict):
+            raise SystemExit("--schedule must be a JSON object")
 
     if args.run_all:
         args.run_rules = args.run_analytics = args.run_rcx = True
@@ -116,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         args.out,
         profile=args.export_profile,
         include_bootstrap=not args.no_bootstrap,
+        occupancy_schedule=occupancy_schedule,
     )
     if args.no_bootstrap:
         written = {k: v for k, v in written.items() if not str(k).startswith("bootstrap")}

@@ -438,10 +438,29 @@ export function OverviewPopulated({
     try {
       saveStoredSchedule(week, tz);
       const prev = await getSessionConfig().catch(() => null);
+      const dayKey: Record<string, string> = {
+        Monday: "mon",
+        Tuesday: "tue",
+        Wednesday: "wed",
+        Thursday: "thu",
+        Friday: "fri",
+        Saturday: "sat",
+        Sunday: "sun",
+      };
+      const days: Record<string, DaySched> = {};
+      for (const d of DAYS) {
+        days[dayKey[d] ?? d.toLowerCase().slice(0, 3)] = week[d];
+      }
+      const occupancy_schedule = {
+        timezone: tz,
+        nominal_occ_hours_week: bareMin,
+        days,
+      };
       const config: SessionConfig = {
         ...(prev?.config ?? {}),
         schema_version: prev?.config?.schema_version ?? "openfdd.session.v1",
         unit_system: unitSystem,
+        occupancy_schedule,
         params: {
           ...(prev?.config?.params ?? {}),
           "VAV-1": {
@@ -457,7 +476,7 @@ export function OverviewPopulated({
       };
       await putSessionConfig(config);
       setScheduleNote(
-        `Schedule saved (tz ${tz}, ${bareMin} occ h/wk). Weekly pickers kept in browser storage.`,
+        `Schedule saved (tz ${tz}, ${bareMin} occ h/wk). Calendar persisted to session config.`,
       );
       void refreshOverview();
     } catch (err) {
