@@ -195,15 +195,12 @@ pub fn strip_site_from_session_config(
     if !path.is_file() {
         return Ok(0);
     }
-    let text = std::fs::read_to_string(&path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
+    let text =
+        std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let mut config: Value =
         serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))?;
     let mut removed = 0usize;
-    if let Some(rm) = config
-        .get_mut("role_map")
-        .and_then(|v| v.as_object_mut())
-    {
+    if let Some(rm) = config.get_mut("role_map").and_then(|v| v.as_object_mut()) {
         for equip in equipment_ids {
             if rm.remove(equip).is_some() {
                 removed += 1;
@@ -399,11 +396,7 @@ mod tests {
         }))
         .unwrap();
 
-        let n = strip_site_from_session_config(
-            "BUILDING_50",
-            &["AHU_1".to_string()],
-        )
-        .unwrap();
+        let n = strip_site_from_session_config("BUILDING_50", &["AHU_1".to_string()]).unwrap();
         assert!(n >= 2, "expected role_map + params strip, got {n}");
 
         let after = get_session_config();
