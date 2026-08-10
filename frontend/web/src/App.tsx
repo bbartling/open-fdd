@@ -4,7 +4,6 @@ import { HomePage } from "./pages/HomePage";
 import { JobsPage } from "./pages/JobsPage";
 import { UploadPage } from "./pages/UploadPage";
 import { MappingPage } from "./pages/MappingPage";
-import { RulesPage } from "./pages/RulesPage";
 import { ActionsPage } from "./pages/ActionsPage";
 import { FindingsPage } from "./pages/FindingsPage";
 import { ReportsPage } from "./pages/ReportsPage";
@@ -30,7 +29,7 @@ export default function App() {
         <Route path="/jobs" element={gated(<JobsPage />)} />
         <Route path="/upload" element={gated(<UploadPage />)} />
         <Route path="/mapping" element={gated(<MappingPage />)} />
-        <Route path="/rules" element={gated(<RulesPage />)} />
+        <Route path="/rules" element={<Navigate to="/" replace />} />
         <Route path="/actions" element={gated(<ActionsPage />)} />
         <Route path="/findings" element={gated(<FindingsPage />)} />
         <Route path="/reports" element={gated(<ReportsPage />)} />

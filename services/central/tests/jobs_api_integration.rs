@@ -341,3 +341,23 @@ fn jobs_require_jwt_when_secret_set() {
     );
     assert_eq!(st, 401, "{body}");
 }
+
+#[test]
+fn delete_datasets_requires_jwt_when_secret_set() {
+    let server = Server::start_with_env(&[
+        ("OPENFDD_JWT_SECRET", "c0-test-secret-at-least-32-bytes!!"),
+        ("OPENFDD_ADMIN_PASSWORD", "admin-test-pass"),
+    ]);
+    let (st, body) = http(
+        "DELETE",
+        server.port,
+        "/api/datasets?id=BUILDING_100",
+        None,
+        None,
+    );
+    assert_eq!(st, 401, "{body}");
+    assert!(
+        body.contains("Bearer") || body.contains("Authorization") || body.contains("\"ok\":false"),
+        "{body}"
+    );
+}

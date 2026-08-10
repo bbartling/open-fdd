@@ -149,8 +149,8 @@ export function HomePage() {
                   site
                 </li>
                 <li>
-                  <strong>FDD / WattLab</strong> — Run Rules, then WattLab (Fuel
-                  / Twin / ECMs) scoped to the site
+                  <strong>FDD / WattLab</strong> — Run FDD from Overview or the
+                  left rail, then WattLab (Fuel / Twin / ECMs) scoped to the site
                 </li>
               </ol>
               <p>
@@ -186,7 +186,7 @@ export function HomePage() {
               <strong>Start here:</strong> sidebar →{" "}
               <strong>Building package zip</strong> →{" "}
               <strong>Load package</strong>. Each equipment CSV needs a sibling
-              Haystack map JSON. Then <strong>Run Rules</strong> →{" "}
+              Haystack map JSON. Then <strong>Run all rules</strong> (Overview) →{" "}
               <strong>FDD Plots</strong> / <strong>RCx</strong>.
             </InlineAlert>
             <p className="oracle-overview__footer-links">

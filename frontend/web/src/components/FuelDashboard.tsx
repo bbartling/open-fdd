@@ -343,7 +343,7 @@ export function FuelDashboard({ reloadToken }: FuelDashboardProps = {}) {
       <Select
         id="fuel-campus"
         label="Fuel campus"
-        description="Imported via POST /api/fuel/campus/import"
+        description="Imported fuel campus packages"
         value={campusId}
         options={[
           { value: "", label: "— select campus —" },

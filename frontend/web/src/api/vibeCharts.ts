@@ -499,7 +499,11 @@ export function ruleResultChart(
 
   const famKeys = familyOrderKeys([...groups.keys()]);
   const fault = opts.confirmedFault;
-  const hasFault = Boolean(fault && fault.length === rows.length);
+  const hasFault = Boolean(
+    fault &&
+      fault.length === rows.length &&
+      fault.some((v) => v != null),
+  );
   const nSig = famKeys.length;
   if (nSig === 0 && !hasFault) return null;
 

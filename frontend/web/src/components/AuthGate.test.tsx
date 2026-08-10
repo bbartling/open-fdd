@@ -77,4 +77,30 @@ describe("AuthGate", () => {
       expect(screen.getByTestId("secret")).toBeTruthy();
     });
   });
+
+  it("redirects to /auth for /sites when status probe fails and no token", async () => {
+    vi.mocked(getAuthStatus).mockRejectedValue(new Error("central down"));
+    vi.mocked(getStoredToken).mockReturnValue(null);
+
+    render(
+      <MemoryRouter initialEntries={["/sites"]}>
+        <Routes>
+          <Route
+            path="/sites"
+            element={
+              <AuthGate>
+                <div data-testid="secret">secret</div>
+              </AuthGate>
+            }
+          />
+          <Route path="/auth" element={<div data-testid="login">login</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("login")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("secret")).toBeNull();
+  });
 });

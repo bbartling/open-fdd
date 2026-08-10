@@ -365,7 +365,7 @@ pub fn results_response(building_id: Option<&str>) -> Value {
 
 /// Downsampled history series for one equipment/rule. Rule math continues to
 /// use full-resolution parquet; only this display response is capped.
-pub fn series_response(equipment_id: &str, rule_id: &str) -> Value {
+pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&str>) -> Value {
     let reg = match load_reg() {
         Ok(r) => r,
         Err(e) => return json!({"ok": false, "error": e}),
@@ -440,17 +440,18 @@ pub fn series_response(equipment_id: &str, rule_id: &str) -> Value {
             Ok(mut result) => {
                 // Overlay confirmed_fault from last registry run when present so
                 // FDD Plots can draw the bottom fault swim lane (vibe19 parity).
-                let fault_by_ts = load_confirmed_fault_index(equipment_id, &rule.rule_id);
+                let fault_by_ts =
+                    load_confirmed_fault_index(equipment_id, &rule.rule_id, building_id);
                 if !fault_by_ts.is_empty() {
                     for row in &mut result.rows {
                         if let Some(obj) = row.as_object_mut() {
                             let ts = obj
                                 .get("timestamp_utc")
+                                .or_else(|| obj.get("timestamp"))
                                 .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string();
-                            if let Some(flag) = fault_by_ts.get(&ts) {
-                                obj.insert("confirmed_fault".into(), json!(*flag));
+                                .unwrap_or("");
+                            if let Some(flag) = lookup_fault_flag(&fault_by_ts, ts) {
+                                obj.insert("confirmed_fault".into(), json!(flag));
                             }
                         }
                     }
@@ -465,6 +466,7 @@ pub fn series_response(equipment_id: &str, rule_id: &str) -> Value {
                     "downsampled": result.row_count >= 5000,
                     "max_points": 5000,
                     "has_confirmed_fault": !fault_by_ts.is_empty(),
+                    "building_id": building_id,
                 })
             }
             Err(e) => {
@@ -487,25 +489,67 @@ pub fn series_response(equipment_id: &str, rule_id: &str) -> Value {
     })
 }
 
+/// Normalize timestamp keys so series rows join fault overlays across slight
+/// format drift (trim; `timestamp` vs `timestamp_utc`; fractional seconds).
+fn normalize_ts_keys(raw: &str) -> Vec<String> {
+    let s = raw.trim();
+    if s.is_empty() {
+        return Vec::new();
+    }
+    let mut keys = vec![s.to_string()];
+    if let Some(dot) = s.find('.') {
+        let rest = &s[dot..];
+        if let Some(rel) = rest.find(|c| c == 'Z' || c == '+' || c == '-') {
+            let alt = format!("{}{}", &s[..dot], &rest[rel..]);
+            if alt != s {
+                keys.push(alt);
+            }
+        }
+    }
+    keys
+}
+
+fn lookup_fault_flag(map: &HashMap<String, bool>, ts: &str) -> Option<bool> {
+    for key in normalize_ts_keys(ts) {
+        if let Some(v) = map.get(&key) {
+            return Some(*v);
+        }
+    }
+    None
+}
+
 /// Map RFC3339 (or raw) timestamp → confirmed_fault bool from last rule result JSON.
-fn load_confirmed_fault_index(equipment_id: &str, rule_id: &str) -> HashMap<String, bool> {
+fn load_confirmed_fault_index(
+    equipment_id: &str,
+    rule_id: &str,
+    building_id: Option<&str>,
+) -> HashMap<String, bool> {
     let mut out = HashMap::new();
-    let candidates = [
-        results_dir(None).join(format!("{rule_id}.json")),
-        // Site-scoped dirs: scan one level if present.
-    ];
-    let mut paths = candidates.to_vec();
-    if let Ok(rd) = std::fs::read_dir(results_dir(None).parent().unwrap_or(Path::new("."))) {
+    let mut paths: Vec<PathBuf> = Vec::new();
+    // Prefer site-scoped results when building id is known.
+    if let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) {
+        paths.push(results_dir(Some(bid)).join(format!("{rule_id}.json")));
+    }
+    paths.push(results_dir(None).join(format!("{rule_id}.json")));
+    // Scan building=*/{rule_id}.json under the results root.
+    if let Ok(rd) = std::fs::read_dir(results_dir(None)) {
         for ent in rd.flatten() {
             let p = ent.path();
             if p.is_dir() {
-                let f = p.join(format!("{rule_id}.json"));
-                if f.is_file() {
-                    paths.push(f);
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if name.starts_with("building=") {
+                    let f = p.join(format!("{rule_id}.json"));
+                    if f.is_file() {
+                        paths.push(f);
+                    }
                 }
             }
         }
     }
+    // Dedup while preserving order.
+    let mut seen = std::collections::HashSet::new();
+    paths.retain(|p| seen.insert(p.clone()));
+
     for path in paths {
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue;
@@ -543,7 +587,9 @@ fn load_confirmed_fault_index(equipment_id: &str, rule_id: &str) -> HashMap<Stri
                         .map(|n| n != 0)
                 });
             if let Some(f) = flag {
-                out.insert(ts.to_string(), f);
+                for key in normalize_ts_keys(ts) {
+                    out.insert(key, f);
+                }
             }
         }
         if !out.is_empty() {
@@ -838,5 +884,53 @@ mod tests {
         let v = cache_status();
         assert_eq!(v["ok"], true);
         assert!(v.get("parquet_root").is_some());
+    }
+
+    #[test]
+    fn confirmed_fault_index_reads_building_scoped_results() {
+        let tmp = std::env::temp_dir().join(format!(
+            "openfdd-fault-idx-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let building_dir = tmp.join("building=BUILDING_100");
+        std::fs::create_dir_all(&building_dir).unwrap();
+        let payload = json!({
+            "rows": [{
+                "equipment_id": "AHU_1",
+                "timestamp": " 2024-01-01T00:00:00.000Z ",
+                "confirmed_fault": true
+            }]
+        });
+        std::fs::write(
+            building_dir.join("FC1.json"),
+            serde_json::to_string(&payload).unwrap(),
+        )
+        .unwrap();
+        // SAFETY: test-only env for isolated results dir; restored below.
+        let prev = std::env::var("OPENFDD_RULE_RESULTS_DIR").ok();
+        std::env::set_var("OPENFDD_RULE_RESULTS_DIR", &tmp);
+        let idx = load_confirmed_fault_index("AHU_1", "FC1", Some("BUILDING_100"));
+        match prev {
+            Some(v) => std::env::set_var("OPENFDD_RULE_RESULTS_DIR", v),
+            None => std::env::remove_var("OPENFDD_RULE_RESULTS_DIR"),
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+        assert_eq!(
+            lookup_fault_flag(&idx, "2024-01-01T00:00:00Z"),
+            Some(true),
+            "expected join after trim + fractional-second normalize: {idx:?}"
+        );
+    }
+
+    #[test]
+    fn normalize_ts_keys_strips_fractional_seconds() {
+        let keys = normalize_ts_keys("2024-01-01T00:00:00.123Z");
+        assert!(keys.contains(&"2024-01-01T00:00:00.123Z".to_string()));
+        assert!(keys.contains(&"2024-01-01T00:00:00Z".to_string()));
     }
 }

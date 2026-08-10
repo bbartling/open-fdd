@@ -115,9 +115,38 @@ describe("ReportsPage FDD Plots", () => {
     });
     fireEvent.click(screen.getByTestId("plots-load").querySelector("button")!);
     await waitFor(() => {
-      expect(getFddSeries).toHaveBeenCalledWith("VAV_1", "VAV-1");
+      expect(getFddSeries).toHaveBeenCalledWith("VAV_1", "VAV-1", "B1");
       expect(screen.getByTestId("plots-chart")).toBeTruthy();
       expect(screen.getByTestId("plots-preview-table")).toBeTruthy();
+      expect(screen.queryByTestId("plots-no-fault")).toBeNull();
+    });
+  });
+
+  it("soft-shows series chart when confirmed_fault overlay is absent", async () => {
+    vi.mocked(getFddSeries).mockResolvedValueOnce({
+      ok: true,
+      equipment_id: "VAV_1",
+      rule_id: "VAV-1",
+      roles: ["zone_t"],
+      rows: [
+        { timestamp_utc: "2024-01-01T00:00:00Z", zone_t: 70 },
+        { timestamp_utc: "2024-01-01T00:05:00Z", zone_t: 71 },
+      ],
+      downsampled: false,
+      max_points: 5000,
+      has_confirmed_fault: false,
+    });
+    renderPlots();
+    await waitFor(() => {
+      const btn = screen.getByTestId("plots-load").querySelector("button");
+      expect(btn?.disabled).toBe(false);
+    });
+    fireEvent.click(screen.getByTestId("plots-load").querySelector("button")!);
+    await waitFor(() => {
+      expect(screen.getByTestId("plots-chart")).toBeTruthy();
+      expect(screen.getByTestId("plots-no-fault").textContent).toMatch(
+        /No fault lane yet/,
+      );
     });
   });
 });

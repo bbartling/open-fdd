@@ -35,7 +35,9 @@ services:
       OPENFDD_MQTT_KEY_PEM: /mqtt/central.key.pem
       OPENFDD_WORKSPACE: /workspace
       OPENFDD_PARQUET_ROOT: /workspace/.cache/parquet
-      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}
+      # Product recipe: JWT on by default so Sites delete / protected APIs require login.
+      # Override via host .env; empty OPENFDD_JWT_SECRET still fail-opens for pure local hacks.
+      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-openfdd-react-local-dev-secret-change-me}
       OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
       OPENFDD_REACT_UI: "1"
       # P2-M4: React is the production default UI generation.

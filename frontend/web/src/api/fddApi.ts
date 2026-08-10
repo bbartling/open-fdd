@@ -113,11 +113,16 @@ export function buildFddResultsPath(buildingId?: string): string {
   return `${FDD_RESULTS_PATH}?${q.toString()}`;
 }
 
-export function buildFddSeriesPath(equipmentId: string, ruleId: string): string {
+export function buildFddSeriesPath(
+  equipmentId: string,
+  ruleId: string,
+  buildingId?: string,
+): string {
   const q = new URLSearchParams({
     equipment_id: equipmentId,
     rule_id: ruleId,
   });
+  if (buildingId) q.set("building_id", buildingId);
   return `${FDD_SERIES_PATH}?${q.toString()}`;
 }
 
@@ -168,9 +173,10 @@ export async function getFddResults(buildingId?: string): Promise<FddResultRow[]
 export async function getFddSeries(
   equipmentId: string,
   ruleId: string,
+  buildingId?: string,
 ): Promise<FddSeriesResponse> {
   const body = await apiFetch<FddSeriesResponse>(
-    buildFddSeriesPath(equipmentId, ruleId),
+    buildFddSeriesPath(equipmentId, ruleId, buildingId),
   );
   if (!body.ok) {
     const missing = Array.isArray(body.missing_roles)

@@ -1,5 +1,15 @@
 # Session log — React / Rust modernization
 
+## 2026-08-10 — Sites tab + Run Rules removal + FDD/inspect
+
+- **Sites** is a main section tab after WattLab; sidebar “Manage sites…” / Mapping link removed (use Sites tab).
+- **Run Rules** removed from `MAIN_SECTIONS`; `/rules` redirects to Overview. FDD ops: Overview **Run all rules** + left-rail **Update this rule**.
+- Operator captions: stripped visible `/api/...` path strings from day-to-day pages.
+- Overview Data inspection: changing CSV/equipment refetches `postInspect` (no stuck AHU chart); site change clears inspect state.
+- FDD Plots: soft-show diagnostic series without fault overlay + banner; backend `load_confirmed_fault_index` prefers `building={id}/` and normalizes timestamps.
+- Auth: `compose.react.yml` defaults a JWT secret; Sites delete returns **401** without Bearer when secret set; AuthGate redirects `/sites` when status probe fails and no token.
+- Sites delete requires login when JWT is configured.
+
 ## 2026-08-10 — Sites + Actions UX (multi-dataset)
 
 - CAP-SITE: `/sites` list/switch/**Delete site** (confirm modal); sidebar zip picker upload-only + **Manage sites…**; Mapping delete removed.
