@@ -1,5 +1,11 @@
 # Session log — React / Rust modernization
 
+## 2026-08-10 — Sites + Actions UX (multi-dataset)
+
+- CAP-SITE: `/sites` list/switch/**Delete site** (confirm modal); sidebar zip picker upload-only + **Manage sites…**; Mapping delete removed.
+- Delete site purge: mqtt/modbus feathers + session_config role_map equipment keys + jobs with matching `site_id` (still `DELETE /api/datasets?id=`).
+- Actions table: **Passed** / **Failed** / **Running** with color + Rules `n✓ / m✗` column.
+
 ## 2026-08-08 — Overview button-only + Open-Meteo fuel weather (#688)
 
 - Tip `4577b23`. Overview no longer auto-fires analytics/inspect on mount — **Update analytics** only.

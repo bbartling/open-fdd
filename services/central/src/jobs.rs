@@ -374,6 +374,24 @@ pub fn delete_job(job_id: &str) -> Result<(), JobError> {
     Ok(())
 }
 
+/// Hard-delete every job whose `site_id` matches (used by Delete site).
+/// Returns `(deleted, errors)` — callers should treat non-empty errors as a failed purge.
+pub fn delete_jobs_for_site(site_id: &str) -> (usize, Vec<String>) {
+    let sid = site_id.trim();
+    if sid.is_empty() {
+        return (0, Vec::new());
+    }
+    let mut n = 0usize;
+    let mut errors = Vec::new();
+    for meta in list_jobs(true, None, Some(sid), None) {
+        match delete_job(&meta.job_id) {
+            Ok(()) => n += 1,
+            Err(e) => errors.push(format!("{}: {:?}", meta.job_id, e)),
+        }
+    }
+    (n, errors)
+}
+
 pub fn duplicate_job(job_id: &str, new_name: Option<&str>) -> Result<JobMeta, JobError> {
     let src = load_job(job_id)?;
     let src_dir = job_dir(job_id)?;
@@ -868,6 +886,54 @@ mod tests {
             assert_eq!(meta.building_name.as_deref(), Some("BUILDING_100"));
             let loaded = load_job(&meta.job_id).unwrap();
             assert_eq!(loaded.site_id.as_deref(), Some("BUILDING_100"));
+        });
+    }
+
+    #[test]
+    fn delete_jobs_for_site_removes_matching_only() {
+        with_tmp_ws(|_dir| {
+            let keep = create_job(
+                "Keep",
+                Some("BUILDING_100".into()),
+                None,
+                None,
+                None,
+                vec![],
+                None,
+            )
+            .unwrap();
+            let drop_a = create_job(
+                "Drop A",
+                Some("BUILDING_50".into()),
+                None,
+                None,
+                None,
+                vec![],
+                None,
+            )
+            .unwrap();
+            let drop_b = create_job(
+                "Drop B",
+                Some("BUILDING_50".into()),
+                None,
+                None,
+                None,
+                vec![],
+                None,
+            )
+            .unwrap();
+            let n = delete_jobs_for_site("BUILDING_50");
+            assert_eq!(n.0, 2);
+            assert!(n.1.is_empty());
+            assert!(load_job(&keep.job_id).is_ok());
+            assert!(matches!(
+                load_job(&drop_a.job_id),
+                Err(JobError::NotFound(_))
+            ));
+            assert!(matches!(
+                load_job(&drop_b.job_id),
+                Err(JobError::NotFound(_))
+            ));
         });
     }
 

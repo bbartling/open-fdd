@@ -56,7 +56,8 @@ describe("AppShell layout parity", () => {
 
     expect(screen.getByText("Open-FDD")).toBeTruthy();
     expect(screen.getByTestId("sidebar-sites")).toBeTruthy();
-    expect(screen.getByText("Sites")).toBeTruthy();
+    expect(screen.getByTestId("nav-sites")).toBeTruthy();
+    expect(screen.getAllByText("Sites").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId("sidebar-building-data")).toBeTruthy();
     expect(screen.getByText("Building data")).toBeTruthy();
     expect(screen.getByTestId("sidebar-rule-tuning")).toBeTruthy();

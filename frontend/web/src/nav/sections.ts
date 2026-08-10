@@ -14,6 +14,7 @@ export const MAIN_SECTIONS = [
 /** Primary React routes (Jobs vertical slice ahead of Streamlit wiring). */
 export const SIDEBAR_NAV = [
   { to: "/", label: "Home", short: "H", testId: "nav-home" },
+  { to: "/sites", label: "Sites", short: "S", testId: "nav-sites" },
   { to: "/auth", label: "Auth", short: "A", testId: "nav-auth" },
   { to: "/jobs", label: "Jobs", short: "J", testId: "nav-jobs" },
   { to: "/upload", label: "Upload", short: "U", testId: "nav-upload" },

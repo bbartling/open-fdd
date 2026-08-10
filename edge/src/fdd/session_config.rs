@@ -185,6 +185,50 @@ pub fn save_session_config(config: &Value) -> Result<(), String> {
     .map_err(|e| format!("write {}: {e}", path.display()))
 }
 
+/// Remove equipment role_map entries for a deleted site; drop params keyed by building id.
+/// Does not wipe global unit_system / other sites' equipment.
+pub fn strip_site_from_session_config(
+    building_id: &str,
+    equipment_ids: &[String],
+) -> Result<usize, String> {
+    let path = session_config_path();
+    if !path.is_file() {
+        return Ok(0);
+    }
+    let text =
+        std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let mut config: Value =
+        serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))?;
+    let mut removed = 0usize;
+    if let Some(rm) = config.get_mut("role_map").and_then(|v| v.as_object_mut()) {
+        for equip in equipment_ids {
+            if rm.remove(equip).is_some() {
+                removed += 1;
+            }
+        }
+        // Also drop a role_map key that equals the building id (rare but safe).
+        if rm.remove(building_id).is_some() {
+            removed += 1;
+        }
+    }
+    if let Some(params) = config.get_mut("params").and_then(|v| v.as_object_mut()) {
+        let drop_keys: Vec<String> = params
+            .keys()
+            .filter(|k| *k == building_id || k.starts_with(&format!("{building_id}::")))
+            .cloned()
+            .collect();
+        for k in drop_keys {
+            if params.remove(&k).is_some() {
+                removed += 1;
+            }
+        }
+    }
+    if removed > 0 {
+        save_session_config(&config)?;
+    }
+    Ok(removed)
+}
+
 /// `PUT /api/fdd/session-config` — validate, persist, optionally apply the
 /// role_map to an ingested building (`{"building_id": "...", "config": {…}}`
 /// or the config object directly).
@@ -323,6 +367,43 @@ mod tests {
         assert_eq!(after["persisted"], json!(true));
         assert_eq!(after["config"]["unit_system"], json!("metric"));
         assert_eq!(after["config"]["params"]["FC1"]["eps_dsp"], json!(0.25));
+
+        std::env::remove_var("OPENFDD_WORKSPACE");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn strip_site_removes_equipment_role_map_only() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp =
+            std::env::temp_dir().join(format!("openfdd_session_strip_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("data")).unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", &tmp);
+
+        save_session_config(&json!({
+            "schema_version": SESSION_SCHEMA,
+            "unit_system": "imperial",
+            "prefer_web_oat": true,
+            "role_map": {
+                "AHU_1": {"fan_status": "fs"},
+                "AHU_KEEP": {"fan_status": "fs"},
+            },
+            "params": {
+                "FC1": {"eps_dsp": 0.2},
+                "BUILDING_50": {"x": 1},
+            },
+        }))
+        .unwrap();
+
+        let n = strip_site_from_session_config("BUILDING_50", &["AHU_1".to_string()]).unwrap();
+        assert!(n >= 2, "expected role_map + params strip, got {n}");
+
+        let after = get_session_config();
+        assert!(after["config"]["role_map"].get("AHU_1").is_none());
+        assert!(after["config"]["role_map"].get("AHU_KEEP").is_some());
+        assert!(after["config"]["params"].get("BUILDING_50").is_none());
+        assert_eq!(after["config"]["params"]["FC1"]["eps_dsp"], json!(0.2));
 
         std::env::remove_var("OPENFDD_WORKSPACE");
         let _ = std::fs::remove_dir_all(&tmp);

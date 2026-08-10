@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { isValidElement } from "react";
 import type { WidgetBaseProps } from "./types";
 import { widgetTestId } from "./types";
 
@@ -10,6 +12,19 @@ export interface DataTableProps<T extends Record<string, unknown>>
   extends WidgetBaseProps {
   columns: DataTableColumn<T>[];
   rows: T[];
+}
+
+function renderCell(value: unknown): ReactNode {
+  if (value == null) return "";
+  if (isValidElement(value)) return value;
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return String(value);
+  }
+  return String(value);
 }
 
 export function DataTable<T extends Record<string, unknown>>({
@@ -67,7 +82,7 @@ export function DataTable<T extends Record<string, unknown>>({
               rows.map((row, rowIdx) => (
                 <tr key={rowIdx}>
                   {columns.map((col) => (
-                    <td key={col.key}>{String(row[col.key] ?? "")}</td>
+                    <td key={col.key}>{renderCell(row[col.key])}</td>
                   ))}
                 </tr>
               ))

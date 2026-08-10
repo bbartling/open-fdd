@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppShell } from "../components/AppShell";
 import { DataTable, InlineAlert, Button } from "../components/widgets";
 import {
   formatDurationMs,
   listActions,
   statusIndicator,
+  statusLabel,
   type ActionEntry,
 } from "../api/actionsApi";
 
@@ -49,6 +50,22 @@ function statusClass(status: string): string {
   if (status === "ok") return "actions-status actions-status--ok";
   if (status === "fail") return "actions-status actions-status--fail";
   return "actions-status";
+}
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span className={statusClass(status)} data-testid="actions-status-badge">
+      {statusIndicator(status)} {statusLabel(status)}
+    </span>
+  );
+}
+
+function rulesSummary(detail: ActionEntry["detail"]): string {
+  const d = detailRecord(detail);
+  const ok = asNumber(d.rules_succeeded);
+  const fail = asNumber(d.rules_failed);
+  if (ok == null && fail == null) return "—";
+  return `${ok ?? 0}✓ / ${fail ?? 0}✗`;
 }
 
 function ActionDetailPanel({
@@ -100,7 +117,7 @@ function ActionDetailPanel({
           className={statusClass(action.status)}
           data-testid="actions-detail-status"
         >
-          {statusIndicator(action.status)} {action.status}
+          {statusIndicator(action.status)} {statusLabel(action.status)}
         </span>
         <strong data-testid="actions-detail-label">{action.label}</strong>
       </div>
@@ -204,13 +221,14 @@ export function ActionsPage() {
     actions[0] ||
     null;
 
-  const rows = actions.map((a) => ({
-    status: `${statusIndicator(a.status)} ${a.status}`,
+  const rows: Array<Record<string, unknown>> = actions.map((a) => ({
+    status: (<StatusBadge status={a.status} />) as ReactNode,
     started_at: a.started_at,
     finished_at: a.finished_at ?? "—",
     duration: formatDurationMs(elapsedMs(a, now)),
     kind: a.kind,
     label: a.label,
+    rules: rulesSummary(a.detail),
     id: a.id,
   }));
 
@@ -292,6 +310,7 @@ export function ActionsPage() {
               { key: "duration", header: "Duration" },
               { key: "kind", header: "Kind" },
               { key: "label", header: "Label" },
+              { key: "rules", header: "Rules" },
             ]}
             rows={rows}
             testId="actions-table"
@@ -308,7 +327,7 @@ export function ActionsPage() {
             >
               {actions.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {statusIndicator(a.status)} {a.label}
+                  {statusIndicator(a.status)} {statusLabel(a.status)} · {a.label}
                 </option>
               ))}
             </select>

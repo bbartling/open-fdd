@@ -9,7 +9,7 @@ use chrono::Utc;
 use datafusion::prelude::*;
 use serde_json::{json, Value};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub fn datasets_root() -> PathBuf {
@@ -451,11 +451,16 @@ pub fn delete_dataset(dataset_id: &str) -> Result<(), String> {
     // Package / Haystack building cleanup: csv_buildings, feather, parquet partition.
     let ws = crate::historian::store::workspace_dir();
     let csv_buildings = ws.join("data").join("csv_buildings").join(&id);
+    // Collect equipment ids before wiping the package tree so session_config can be trimmed.
+    let equipment_ids = list_equipment_dirs(&csv_buildings);
+    crate::fdd::session_config::strip_site_from_session_config(&id, &equipment_ids)?;
     if csv_buildings.exists() {
         let _ = fs::remove_dir_all(&csv_buildings);
     }
     let _ = crate::historian::feather_store::remove_site("package", &id);
     let _ = crate::historian::feather_store::remove_site("csv", &id);
+    let _ = crate::historian::feather_store::remove_site("mqtt", &id);
+    let _ = crate::historian::feather_store::remove_site("modbus", &id);
     let parquet_roots = [
         std::env::var("OPENFDD_PARQUET_ROOT")
             .ok()
@@ -486,7 +491,35 @@ pub fn delete_dataset(dataset_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Register a package building id in the dataset registry (for Delete dataset by Haystack name).
+/// Best-effort equipment folder names under a materialized package building root.
+fn list_equipment_dirs(building_root: &Path) -> Vec<String> {
+    let mut ids = Vec::new();
+    if !building_root.is_dir() {
+        return ids;
+    }
+    for e in walkdir::WalkDir::new(building_root)
+        .min_depth(1)
+        .max_depth(3)
+        .into_iter()
+        .flatten()
+    {
+        if e.file_type().is_dir()
+            && (e.path().join("history_wide.csv").is_file()
+                || e.path().join("columns.csv").is_file())
+        {
+            if let Some(name) = e.file_name().to_str() {
+                if name != "weather" {
+                    ids.push(name.to_string());
+                }
+            }
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+/// Register a package building id in the dataset registry (for Delete site by Haystack name).
 pub fn register_package_dataset(
     building_id: &str,
     row_count: u64,
@@ -568,6 +601,34 @@ mod tests {
         }
         if let Some(cwd) = prev_cwd {
             let _ = std::env::set_current_dir(cwd);
+        }
+    }
+
+    #[test]
+    fn delete_dataset_purges_mqtt_and_modbus_feathers() {
+        let tmp = TempDir::new().unwrap();
+        let prev_ws = std::env::var("OPENFDD_WORKSPACE").ok();
+        std::env::set_var("OPENFDD_WORKSPACE", tmp.path());
+
+        let id = "SITE_MQTT";
+        for source in ["mqtt", "modbus", "package"] {
+            let dir = crate::historian::feather_store::site_dir(source, id);
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("marker.feather"), b"x").unwrap();
+            assert!(dir.exists());
+        }
+
+        delete_dataset(id).expect("delete ok");
+
+        for source in ["mqtt", "modbus", "package"] {
+            let dir = crate::historian::feather_store::site_dir(source, id);
+            assert!(!dir.exists(), "{source} feather site dir must be purged");
+        }
+
+        if let Some(ws) = prev_ws {
+            std::env::set_var("OPENFDD_WORKSPACE", ws);
+        } else {
+            std::env::remove_var("OPENFDD_WORKSPACE");
         }
     }
 }

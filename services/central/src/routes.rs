@@ -1255,7 +1255,7 @@ pub async fn csv_delete_dataset(
     };
     let action_id = actions::start_action(
         "dataset_delete",
-        &format!("Delete dataset · {id}"),
+        &format!("Delete site · {id}"),
         Some(json!({ "building_id": id, "dataset_id": id })),
     )
     .ok();
@@ -1265,8 +1265,23 @@ pub async fn csv_delete_dataset(
     })
     .await
     .unwrap_or_else(|e| Err(format!("dataset delete task failed: {e}")));
+    let mut jobs_deleted = 0usize;
+    let mut job_errors: Vec<String> = Vec::new();
+    if outcome.is_ok() {
+        let (n, errs) = crate::jobs::delete_jobs_for_site(&id);
+        jobs_deleted = n;
+        job_errors = errs;
+    }
+    let jobs_ok = job_errors.is_empty();
     let (ok, error) = match &outcome {
-        Ok(()) => (true, None),
+        Ok(()) if jobs_ok => (true, None),
+        Ok(()) => (
+            false,
+            Some(format!(
+                "site data purged but job delete failed: {}",
+                job_errors.join("; ")
+            )),
+        ),
         Err(e) => (false, Some(e.clone())),
     };
     if let Some(ref aid) = action_id {
@@ -1278,15 +1293,26 @@ pub async fn csv_delete_dataset(
                 "ok": ok,
                 "building_id": id,
                 "dataset_id": id,
+                "jobs_deleted": jobs_deleted,
+                "job_errors": job_errors,
                 "error": error,
             })),
         );
     }
-    match outcome {
-        Ok(()) => Ok(Json(json!({ "ok": true, "action_id": action_id }))),
-        Err(e) => Ok(Json(
-            json!({ "ok": false, "error": e, "action_id": action_id }),
-        )),
+    if ok {
+        Ok(Json(json!({
+            "ok": true,
+            "action_id": action_id,
+            "jobs_deleted": jobs_deleted,
+        })))
+    } else {
+        Ok(Json(json!({
+            "ok": false,
+            "error": error,
+            "action_id": action_id,
+            "jobs_deleted": jobs_deleted,
+            "job_errors": job_errors,
+        })))
     }
 }
 
