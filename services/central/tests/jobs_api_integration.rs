@@ -357,7 +357,7 @@ fn delete_datasets_requires_jwt_when_secret_set() {
     );
     assert_eq!(st, 401, "{body}");
     assert!(
-        body.contains("Bearer") || body.contains("Authorization") || body.contains("\"ok\":false"),
+        body.contains("Bearer") || body.contains("Authorization"),
         "{body}"
     );
 }

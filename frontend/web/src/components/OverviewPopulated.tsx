@@ -197,6 +197,7 @@ export function OverviewPopulated({
   );
   const [overviewElapsedSec, setOverviewElapsedSec] = useState(0);
   const overviewLoadStarted = useRef<number | null>(null);
+  const inspectReqSeq = useRef(0);
 
   const selected = equipment.find((e) => e.equipment_id === equipmentId);
   const tempUnit = unitSystem === "metric" ? "°C" : "°F";
@@ -280,10 +281,14 @@ export function OverviewPopulated({
   }, [buildingId, equipment, econOverlayEq]);
 
   const refreshInspect = useCallback(
-    async (opts?: { pick?: string; cols?: string[] }) => {
+    async (opts?: { pick?: string; cols?: string[]; resetCols?: boolean }) => {
       const pick = opts?.pick ?? inspectPick;
-      const selectedCols = opts?.cols ?? inspectSelectedCols;
+      const resetCols = Boolean(opts?.resetCols);
+      const selectedCols = resetCols
+        ? []
+        : (opts?.cols ?? inspectSelectedCols);
       if (!buildingId || !pick || pick === "(weather)") return;
+      const seq = ++inspectReqSeq.current;
       setInspectBusy(true);
       setInspectErr(null);
       try {
@@ -295,6 +300,7 @@ export function OverviewPopulated({
             columns: selectedCols.length > 0 ? selectedCols : undefined,
           },
         });
+        if (seq !== inspectReqSeq.current) return;
         const cov = (env.coverage ?? {}) as Record<string, unknown>;
         const plottable = Array.isArray(cov.plottable_columns)
           ? (cov.plottable_columns as string[])
@@ -306,7 +312,10 @@ export function OverviewPopulated({
         // Only update selection when contents change — a fresh array every time
         // re-triggers this callback (inspectSelectedCols dep) and flashes Plotly.
         setInspectSelectedCols((prev) => {
-          if (opts?.cols !== undefined) {
+          if (resetCols || opts?.cols !== undefined) {
+            if (resetCols || selectedCols.length === 0) {
+              return plotted.slice(0, 8);
+            }
             return selectedCols;
           }
           if (prev.length) {
@@ -340,15 +349,15 @@ export function OverviewPopulated({
           setInspectErr(env.warnings[0] ?? "Inspection unavailable");
           return;
         }
-        const cols = (
-          selectedCols.length ? selectedCols : plotted
+        const colsForChart = (
+          resetCols || selectedCols.length === 0 ? plotted : selectedCols
         ).filter(
           (c) =>
             plottable.includes(c) || plotted.includes(c) || !plottable.length,
         );
         const fig = equipmentInspectionChart(env.points ?? [], {
           equipmentId: pick,
-          columns: cols.length ? cols : plotted,
+          columns: colsForChart.length ? colsForChart : plotted,
         });
         setInspectFig(fig);
         setInspectErr(
@@ -357,10 +366,11 @@ export function OverviewPopulated({
             : "No plottable numeric columns for this equipment in historian Parquet.",
         );
       } catch (err) {
+        if (seq !== inspectReqSeq.current) return;
         setInspectErr(formatErr(err));
         setInspectFig(null);
       } finally {
-        setInspectBusy(false);
+        if (seq === inspectReqSeq.current) setInspectBusy(false);
       }
     },
     [buildingId, inspectPick, inspectSelectedCols],
@@ -373,6 +383,7 @@ export function OverviewPopulated({
   // Clear analytics when site context changes — do not auto-fire
   // DataFusion POSTs (button-only; vibe19 Streamlit auto-recompute felt wonky).
   useEffect(() => {
+    inspectReqSeq.current += 1;
     setOverview(null);
     setOverviewErr(null);
     setInspectFig(null);
@@ -381,6 +392,7 @@ export function OverviewPopulated({
     setInspectSelectedCols([]);
     setInspectMeta(null);
     setInspectPick("");
+    setInspectBusy(false);
   }, [buildingId, econOverlayEq]);
 
   useEffect(() => {
@@ -1240,7 +1252,7 @@ export function OverviewPopulated({
             setInspectErr(null);
             setInspectMeta(null);
             if (v !== "(weather)") onEquipmentChange(v);
-            void refreshInspect({ pick: v, cols: [] });
+            void refreshInspect({ pick: v, resetCols: true });
           }}
           testId="overview-inspect-eq"
         />

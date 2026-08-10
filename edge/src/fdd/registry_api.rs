@@ -881,6 +881,7 @@ mod tests {
 
     #[test]
     fn cache_status_ok_shape() {
+        let _env = crate::test_support::workspace_env_lock();
         let v = cache_status();
         assert_eq!(v["ok"], true);
         assert!(v.get("parquet_root").is_some());
@@ -888,6 +889,7 @@ mod tests {
 
     #[test]
     fn confirmed_fault_index_reads_building_scoped_results() {
+        let _env = crate::test_support::workspace_env_lock();
         let tmp = std::env::temp_dir().join(format!(
             "openfdd-fault-idx-{}-{}",
             std::process::id(),
@@ -911,7 +913,6 @@ mod tests {
             serde_json::to_string(&payload).unwrap(),
         )
         .unwrap();
-        // SAFETY: test-only env for isolated results dir; restored below.
         let prev = std::env::var("OPENFDD_RULE_RESULTS_DIR").ok();
         std::env::set_var("OPENFDD_RULE_RESULTS_DIR", &tmp);
         let idx = load_confirmed_fault_index("AHU_1", "FC1", Some("BUILDING_100"));

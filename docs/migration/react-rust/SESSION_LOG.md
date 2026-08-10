@@ -7,7 +7,7 @@
 - Operator captions: stripped visible `/api/...` path strings from day-to-day pages.
 - Overview Data inspection: changing CSV/equipment refetches `postInspect` (no stuck AHU chart); site change clears inspect state.
 - FDD Plots: soft-show diagnostic series without fault overlay + banner; backend `load_confirmed_fault_index` prefers `building={id}/` and normalizes timestamps.
-- Auth: `compose.react.yml` defaults a JWT secret; Sites delete returns **401** without Bearer when secret set; AuthGate redirects `/sites` when status probe fails and no token.
+- Auth: `compose.react.yml` **requires** `OPENFDD_JWT_SECRET` (no public default); central bind defaults to loopback. Sites delete returns **401** without Bearer when secret set; AuthGate redirects `/sites` when status probe fails and no token.
 - Sites delete requires login when JWT is configured.
 
 ## 2026-08-10 — Sites + Actions UX (multi-dataset)
