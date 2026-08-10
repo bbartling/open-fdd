@@ -225,11 +225,9 @@ export function MappingPage() {
       <div className="page-placeholder" data-testid="mapping-page">
         <h2>Role mapping</h2>
         <p>
-          Uses <code>GET /api/csv/import/package/mapping</code>,{" "}
-          <code>POST …/package/roles</code>, and{" "}
-          <code>PUT /api/fdd/session-config</code>. Blank roles stay blank — no
-          guessed fills. Session selection: <code>?site=</code> building,{" "}
-          <code>?eq=</code> equipment.
+          Map CSV columns to cookbook roles for the selected building and equipment.
+          Blank roles stay blank — no guessed fills. Use the Active site / equipment
+          selectors (or URL <code>?site=</code> / <code>?eq=</code>).
         </p>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
@@ -265,11 +263,8 @@ export function MappingPage() {
           />
         </div>
         <p className="oracle-sidebar__caption">
-          To remove a loaded site (feathers + FDD + analytics), use{" "}
-          <Link to="/sites" data-testid="map-manage-sites">
-            Sites
-          </Link>
-          .
+          To remove a loaded site (feathers + FDD + analytics), use the{" "}
+          <strong>Sites</strong> section tab.
         </p>
 
         {loading ? (

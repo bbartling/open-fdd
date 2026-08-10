@@ -10,6 +10,10 @@ import {
 /**
  * When central has auth_required, block the app until a session token exists.
  * /auth stays outside this gate so login remains reachable.
+ *
+ * Status probe failures fail-open for shell reachability when central is down,
+ * except when a token is absent and the path is Sites (delete UX) — then require
+ * login so operators are not left with a delete UI that 401s silently.
  */
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -38,7 +42,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           if (!cancelled) setState("need-login");
         }
       } catch {
-        // Status probe failed — do not hard-lock the shell.
+        // Status probe failed — do not hard-lock the shell, but Sites delete
+        // still requires a session when no token is present.
+        if (!getStoredToken() && location.pathname.startsWith("/sites")) {
+          if (!cancelled) setState("need-login");
+          return;
+        }
         if (!cancelled) setState("ok");
       }
     })();

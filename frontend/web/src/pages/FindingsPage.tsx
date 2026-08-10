@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
 import { AppShell } from "../components/AppShell";
 import {
   Button,
@@ -151,7 +150,7 @@ export function FindingsPage() {
   return (
     <AppShell
       title="Results by Category"
-      caption="FDD rule results grouped by family — Run Rules first"
+      caption="FDD rule results grouped by family — run FDD from Overview or the left rail first"
       activeSectionId="results"
     >
       <div className="page-stack" data-testid="findings-page">
@@ -188,8 +187,8 @@ export function FindingsPage() {
         ) : null}
         {!buildingId ? (
           <InlineAlert id="results-hint" variant="info">
-            Select a site (or load a package) then{" "}
-            <Link to="/rules">Run Rules</Link>.
+            Select a site (or load a package), then run FDD from Overview or{" "}
+            <strong>Update this rule</strong> in the left rail.
           </InlineAlert>
         ) : null}
         <DataTable

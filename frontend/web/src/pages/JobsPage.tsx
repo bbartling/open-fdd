@@ -401,7 +401,7 @@ export function JobsPage() {
         <DataTable
           id="jobs-list"
           label="Job list"
-          description="All jobs from GET /api/jobs"
+          description="All jobs for this workspace"
           columns={tableColumns}
           rows={jobs.map(toTableRow)}
           loading={listLoading}

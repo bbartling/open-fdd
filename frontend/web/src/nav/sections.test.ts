@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { MAIN_SECTIONS } from "./sections";
 
-/** Product main sections — Streamlit oracle set plus Actions (backend run log). */
+/** Product main sections — Sites after WattLab; Run Rules removed (Overview + left rail). */
 const ORACLE_MAIN_SECTIONS = [
   "Overview",
   "Data Model",
-  "Run Rules",
   "Actions",
   "Results by Category",
   "FDD Plots",
   "RCx Plots",
   "Metering",
   "WattLab",
+  "Sites",
 ] as const;
 
 describe("MAIN_SECTIONS Streamlit contract", () => {

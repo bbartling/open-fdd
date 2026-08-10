@@ -209,8 +209,7 @@ export function WattLabPage() {
             <h3>Uploads</h3>
             <p>
               Build a Vibe19-compatible WattLab dump (v3) from the imported
-              package via authenticated{" "}
-              <code>POST /api/jobs/&#123;id&#125;/wattlab/dumps</code>.
+              package (authenticated job dump).
             </p>
             <Select
               id="wattlab-profile"
@@ -244,8 +243,7 @@ export function WattLabPage() {
 
             <h4>Fuel campus ZIP</h4>
             <p>
-              Import campus.json + monthly bill CSVs via{" "}
-              <code>POST /api/fuel/campus/import</code> (multipart .zip).
+              Import campus.json + monthly bill CSVs (multipart .zip).
             </p>
             <input
               ref={fuelFileRef}

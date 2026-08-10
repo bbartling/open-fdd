@@ -56,7 +56,7 @@ describe("AppShell layout parity", () => {
 
     expect(screen.getByText("Open-FDD")).toBeTruthy();
     expect(screen.getByTestId("sidebar-sites")).toBeTruthy();
-    expect(screen.getByTestId("nav-sites")).toBeTruthy();
+    expect(screen.queryByTestId("nav-sites")).toBeNull();
     expect(screen.getAllByText("Sites").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId("sidebar-building-data")).toBeTruthy();
     expect(screen.getByText("Building data")).toBeTruthy();
@@ -76,13 +76,13 @@ describe("AppShell layout parity", () => {
     expect(tabText).toEqual([
       "Overview",
       "Data Model",
-      "Run Rules",
       "Actions",
       "Results by Category",
       "FDD Plots",
       "RCx Plots",
       "Metering",
       "WattLab",
+      "Sites",
     ]);
   });
 

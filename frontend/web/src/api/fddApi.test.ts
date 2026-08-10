@@ -105,6 +105,9 @@ describe("fddApi", () => {
     expect(buildFddSeriesPath("AHU_1", "FC1")).toBe(
       "/api/fdd/series?equipment_id=AHU_1&rule_id=FC1",
     );
+    expect(buildFddSeriesPath("AHU_1", "FC1", "B1")).toBe(
+      "/api/fdd/series?equipment_id=AHU_1&rule_id=FC1&building_id=B1",
+    );
   });
 
   it("lists rules and runs registry FDD", async () => {

@@ -15,7 +15,7 @@ function resolveActiveId(
     return "wattlab";
   }
   if (pathname.startsWith("/mapping")) return "data-model";
-  if (pathname.startsWith("/rules")) return "run-rules";
+  if (pathname.startsWith("/sites")) return "sites";
   if (pathname.startsWith("/actions")) return "actions";
   if (pathname.startsWith("/findings")) return "results";
   if (pathname.startsWith("/rcx")) return "rcx-plots";

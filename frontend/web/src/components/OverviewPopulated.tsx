@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router";
 import {
   DataTable,
   Expander,
@@ -198,6 +197,7 @@ export function OverviewPopulated({
   );
   const [overviewElapsedSec, setOverviewElapsedSec] = useState(0);
   const overviewLoadStarted = useRef<number | null>(null);
+  const inspectReqSeq = useRef(0);
 
   const selected = equipment.find((e) => e.equipment_id === equipmentId);
   const tempUnit = unitSystem === "metric" ? "°C" : "°F";
@@ -280,93 +280,119 @@ export function OverviewPopulated({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildingId, equipment, econOverlayEq]);
 
-  const refreshInspect = useCallback(async () => {
-    if (!buildingId || !inspectPick || inspectPick === "(weather)") return;
-    setInspectBusy(true);
-    setInspectErr(null);
-    try {
-      const env = await postInspect({
-        building_id: buildingId,
-        equipment_ids: [inspectPick],
-        max_points: 2000,
-        series: {
-          columns:
-            inspectSelectedCols.length > 0 ? inspectSelectedCols : undefined,
-        },
-      });
-      const cov = (env.coverage ?? {}) as Record<string, unknown>;
-      const plottable = Array.isArray(cov.plottable_columns)
-        ? (cov.plottable_columns as string[])
-        : [];
-      const plotted = Array.isArray(cov.columns_plotted)
-        ? (cov.columns_plotted as string[])
-        : [];
-      setInspectCols(plottable.length ? plottable : plotted);
-      // Only update selection when contents change — a fresh array every time
-      // re-triggers this callback (inspectSelectedCols dep) and flashes Plotly.
-      setInspectSelectedCols((prev) => {
-        if (prev.length) {
-          const next = prev.filter(
-            (c) => plottable.includes(c) || plotted.includes(c),
-          );
-          if (
-            next.length === prev.length &&
-            next.every((c, i) => c === prev[i])
-          ) {
-            return prev;
+  const refreshInspect = useCallback(
+    async (opts?: { pick?: string; cols?: string[]; resetCols?: boolean }) => {
+      const pick = opts?.pick ?? inspectPick;
+      const resetCols = Boolean(opts?.resetCols);
+      const selectedCols = resetCols
+        ? []
+        : (opts?.cols ?? inspectSelectedCols);
+      if (!buildingId || !pick || pick === "(weather)") return;
+      const seq = ++inspectReqSeq.current;
+      setInspectBusy(true);
+      setInspectErr(null);
+      try {
+        const env = await postInspect({
+          building_id: buildingId,
+          equipment_ids: [pick],
+          max_points: 2000,
+          series: {
+            columns: selectedCols.length > 0 ? selectedCols : undefined,
+          },
+        });
+        if (seq !== inspectReqSeq.current) return;
+        const cov = (env.coverage ?? {}) as Record<string, unknown>;
+        const plottable = Array.isArray(cov.plottable_columns)
+          ? (cov.plottable_columns as string[])
+          : [];
+        const plotted = Array.isArray(cov.columns_plotted)
+          ? (cov.columns_plotted as string[])
+          : [];
+        setInspectCols(plottable.length ? plottable : plotted);
+        // Only update selection when contents change — a fresh array every time
+        // re-triggers this callback (inspectSelectedCols dep) and flashes Plotly.
+        setInspectSelectedCols((prev) => {
+          if (resetCols || opts?.cols !== undefined) {
+            if (resetCols || selectedCols.length === 0) {
+              return plotted.slice(0, 8);
+            }
+            return selectedCols;
           }
-          return next.length ? next : plotted.slice(0, 6);
+          if (prev.length) {
+            const next = prev.filter(
+              (c) => plottable.includes(c) || plotted.includes(c),
+            );
+            if (
+              next.length === prev.length &&
+              next.every((c, i) => c === prev[i])
+            ) {
+              return prev;
+            }
+            return next.length ? next : plotted.slice(0, 6);
+          }
+          return plotted.slice(0, 8);
+        });
+        const rowCountN = Number(cov.row_count ?? env.points?.length ?? 0);
+        if (Number.isFinite(rowCountN)) setRowCount(rowCountN);
+        const first =
+          cov.first_timestamp != null ? String(cov.first_timestamp) : null;
+        const last =
+          cov.last_timestamp != null ? String(cov.last_timestamp) : null;
+        if (first) setFirstTs(first);
+        if (last) setLastTs(last);
+        setInspectMeta({
+          row_count: rowCountN,
+          span: first && last ? `${first} → ${last}` : "—",
+        });
+        if (env.warnings?.length && !env.points?.length) {
+          setInspectFig(null);
+          setInspectErr(env.warnings[0] ?? "Inspection unavailable");
+          return;
         }
-        return plotted.slice(0, 8);
-      });
-      const rowCountN = Number(cov.row_count ?? env.points?.length ?? 0);
-      if (Number.isFinite(rowCountN)) setRowCount(rowCountN);
-      const first = cov.first_timestamp != null ? String(cov.first_timestamp) : null;
-      const last = cov.last_timestamp != null ? String(cov.last_timestamp) : null;
-      if (first) setFirstTs(first);
-      if (last) setLastTs(last);
-      setInspectMeta({
-        row_count: rowCountN,
-        span: first && last ? `${first} → ${last}` : "—",
-      });
-      if (env.warnings?.length && !env.points?.length) {
-        setInspectFig(null);
-        setInspectErr(env.warnings[0] ?? "Inspection unavailable");
-        return;
-      }
-      const cols =
-        (inspectSelectedCols.length ? inspectSelectedCols : plotted).filter(
-          (c) => plottable.includes(c) || plotted.includes(c) || !plottable.length,
+        const colsForChart = (
+          resetCols || selectedCols.length === 0 ? plotted : selectedCols
+        ).filter(
+          (c) =>
+            plottable.includes(c) || plotted.includes(c) || !plottable.length,
         );
-      const fig = equipmentInspectionChart(env.points ?? [], {
-        equipmentId: inspectPick,
-        columns: cols.length ? cols : plotted,
-      });
-      setInspectFig(fig);
-      setInspectErr(
-        fig
-          ? null
-          : "No plottable numeric columns for this equipment in historian Parquet.",
-      );
-    } catch (err) {
-      setInspectErr(formatErr(err));
-      setInspectFig(null);
-    } finally {
-      setInspectBusy(false);
-    }
-  }, [buildingId, inspectPick, inspectSelectedCols]);
+        const fig = equipmentInspectionChart(env.points ?? [], {
+          equipmentId: pick,
+          columns: colsForChart.length ? colsForChart : plotted,
+        });
+        setInspectFig(fig);
+        setInspectErr(
+          fig
+            ? null
+            : "No plottable numeric columns for this equipment in historian Parquet.",
+        );
+      } catch (err) {
+        if (seq !== inspectReqSeq.current) return;
+        setInspectErr(formatErr(err));
+        setInspectFig(null);
+      } finally {
+        if (seq === inspectReqSeq.current) setInspectBusy(false);
+      }
+    },
+    [buildingId, inspectPick, inspectSelectedCols],
+  );
 
   useEffect(() => {
     void refreshMeta();
   }, [refreshMeta]);
 
-  // Clear analytics when site/equipment context changes — do not auto-fire
+  // Clear analytics when site context changes — do not auto-fire
   // DataFusion POSTs (button-only; vibe19 Streamlit auto-recompute felt wonky).
   useEffect(() => {
+    inspectReqSeq.current += 1;
     setOverview(null);
     setOverviewErr(null);
     setInspectFig(null);
     setInspectErr(null);
+    setInspectCols([]);
+    setInspectSelectedCols([]);
+    setInspectMeta(null);
+    setInspectPick("");
+    setInspectBusy(false);
   }, [buildingId, econOverlayEq]);
 
   useEffect(() => {
@@ -533,9 +559,8 @@ export function OverviewPopulated({
       aria-busy={busy || undefined}
     >
       <p className="oracle-sidebar__caption">
-        Overview analytics = central DataFusion (
-        <code>/api/analytics/*</code>). Charts are drawn in the browser from
-        typed envelopes — no Python path.
+        Overview analytics from central DataFusion. Charts are drawn in the browser
+        from typed envelopes.
       </p>
 
       {busy ? (
@@ -683,9 +708,6 @@ export function OverviewPopulated({
           <strong>Update this rule</strong> next to a modified slider, or{" "}
           <strong>Run all rules</strong> above for the full registry.
         </p>
-        <div className="overview-rule-run__row">
-          <Link to="/rules">Open Run Rules tab</Link>
-        </div>
         {rulesNote ? (
           <p className="oracle-sidebar__ok" data-testid="overview-rules-note">
             {rulesNote}
@@ -1225,7 +1247,12 @@ export function OverviewPopulated({
           onChange={(v) => {
             setInspectPick(v);
             setInspectSelectedCols([]);
+            setInspectCols([]);
+            setInspectFig(null);
+            setInspectErr(null);
+            setInspectMeta(null);
             if (v !== "(weather)") onEquipmentChange(v);
+            void refreshInspect({ pick: v, resetCols: true });
           }}
           testId="overview-inspect-eq"
         />
@@ -1242,6 +1269,7 @@ export function OverviewPopulated({
               onChange={(e) => {
                 const opts = [...e.target.selectedOptions].map((o) => o.value);
                 setInspectSelectedCols(opts);
+                void refreshInspect({ cols: opts });
               }}
               data-testid="overview-inspect-cols-select"
             >

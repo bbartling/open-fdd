@@ -65,7 +65,7 @@ describe("UploadPage", () => {
       expect(screen.getByTestId("upload-job-context").textContent).toMatch(/Alpha/);
     });
     expect(screen.getByTestId("upload-page").textContent).toMatch(
-      /same active-site handoff/,
+      /same ingest path and active-site handoff/,
     );
   });
 

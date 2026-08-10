@@ -965,6 +965,8 @@ pub async fn fdd_results(Query(q): Query<BuildingScopeQuery>) -> Json<Value> {
 pub struct FddSeriesQuery {
     equipment_id: String,
     rule_id: String,
+    #[serde(default)]
+    building_id: Option<String>,
 }
 
 pub async fn fdd_series(Query(query): Query<FddSeriesQuery>) -> Json<Value> {
@@ -972,6 +974,7 @@ pub async fn fdd_series(Query(query): Query<FddSeriesQuery>) -> Json<Value> {
         open_fdd_edge_prototype::fdd::registry_api::series_response(
             &query.equipment_id,
             &query.rule_id,
+            query.building_id.as_deref(),
         )
     })
     .await

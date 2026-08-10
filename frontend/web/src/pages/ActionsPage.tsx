@@ -291,7 +291,7 @@ export function ActionsPage() {
           <p className="oracle-sidebar__caption">
             Auto-refresh {hasRunning ? "every 1.5s while running" : "every 8s"}
             {" · "}
-            GET /api/actions
+            Recent backend runs
           </p>
         </div>
         {error ? (

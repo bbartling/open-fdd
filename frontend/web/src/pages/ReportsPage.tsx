@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
 import { AppShell } from "../components/AppShell";
 import {
   Button,
@@ -53,6 +52,7 @@ export function ReportsPage() {
   const [figure, setFigure] = useState<PlotlyFigure | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [noFaultBanner, setNoFaultBanner] = useState<string | null>(null);
   const [sensorRows, setSensorRows] = useState<
     Array<Record<string, string | number | boolean>>
   >([]);
@@ -162,15 +162,17 @@ export function ReportsPage() {
     }
     if (SQL_ANALYTICS_RULE_IDS.has(ruleId)) {
       setFigure(null);
+      setNoFaultBanner(null);
       setError(
-        "Analytics rollups have no per-sample fault series — pick a diagnostic rule (FC*, VAV*, ECON*, …) and Run FDD first.",
+        "Analytics rollups have no per-sample fault series — pick a diagnostic rule (FC*, VAV*, ECON*, …) and run FDD first.",
       );
       return;
     }
     setLoading(true);
     setError(null);
+    setNoFaultBanner(null);
     try {
-      const series = await getFddSeries(equipmentId, ruleId);
+      const series = await getFddSeries(equipmentId, ruleId, buildingId || undefined);
       const roles = series.roles ?? [];
       const rows = (series.rows ?? []) as Array<Record<string, unknown>>;
       const fault = rows.map((r) => {
@@ -179,29 +181,28 @@ export function ReportsPage() {
         if (v === false || v === 0 || v === "0" || v === "false") return 0;
         return null;
       });
-      const hasFault = fault.some((v) => v != null);
-      if (!hasFault) {
-        setFigure(null);
-        setError(
-          "No confirmed_fault overlay on this series — Run FDD on Rules for this equipment/rule, then Load series again.",
+      const hasFaultOverlay = fault.some((v) => v != null);
+      const fig = ruleResultChart(rows, {
+        equipmentId: series.equipment_id ?? equipmentId,
+        ruleId: series.rule_id ?? ruleId,
+        roles,
+        confirmedFault: hasFaultOverlay ? fault : undefined,
+      });
+      setFigure(fig);
+      if (!fig) {
+        setError("No plottable series for this equipment/rule.");
+      } else if (!hasFaultOverlay) {
+        setNoFaultBanner(
+          "No fault lane yet — run FDD from Overview or Update this rule in the sidebar, then Load series again.",
         );
-        return;
       }
-      setFigure(
-        ruleResultChart(rows, {
-          equipmentId: series.equipment_id ?? equipmentId,
-          ruleId: series.rule_id ?? ruleId,
-          roles,
-          confirmedFault: fault,
-        }),
-      );
     } catch (err) {
       setFigure(null);
       setError(formatErr(err));
     } finally {
       setLoading(false);
     }
-  }, [equipmentId, ruleId]);
+  }, [buildingId, equipmentId, ruleId]);
 
   const loadSensorHealth = useCallback(async () => {
     if (!buildingId) {
@@ -348,14 +349,23 @@ export function ReportsPage() {
             {error}
           </InlineAlert>
         ) : null}
+        {noFaultBanner ? (
+          <InlineAlert
+            id="reports-no-fault"
+            variant="info"
+            testId="plots-no-fault"
+          >
+            {noFaultBanner}
+          </InlineAlert>
+        ) : null}
 
         <div data-testid="plots-page">
           <h2>FDD plot datasets</h2>
           <p>
-            Diagnostic rule series via <code>GET /api/fdd/series</code> with a
-            bottom <strong>confirmed_fault</strong> lane (vibe19{" "}
-            <code>rule_result_chart</code>). Analytics rollups are disabled here.
-            Run FDD on <Link to="/rules">Rules</Link> first.
+            Diagnostic rule series with a bottom <strong>confirmed_fault</strong> lane when
+            FDD has been run for the selected equipment and rule. Analytics rollups are
+            disabled here. Run FDD from Overview or <strong>Update this rule</strong> in
+            the left rail first.
           </p>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
@@ -429,8 +439,8 @@ export function ReportsPage() {
             testId="sensor-health-expander"
           >
             <p>
-              Loads <code>POST /api/analytics/sensor-health</code> for the
-              selected building (optionally scoped to equipment).
+              Sensor coverage and flatline checks for the selected building
+              (optionally scoped to equipment).
             </p>
             <Button
               id="sensor-health-load"

@@ -101,7 +101,7 @@ export function TwinPage() {
     >
       <div className="page-stack" data-testid="twin-page">
         <InlineAlert id="twin-hint" variant="info" title="Portable digests only">
-          Inference uses Rust <code>/api/v1/predict/demand_hourly</code>. Parties
+          Inference uses Rust demand-hourly prediction. Parties
           collaborate via ZIP lanes +{" "}
           <Link to="/upload">package upload</Link> — not Jupyter in the SPA. See
           MCP role packs under <code>docs/mcp-agents/roles/</code>.

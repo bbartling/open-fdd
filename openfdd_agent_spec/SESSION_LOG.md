@@ -1,5 +1,10 @@
 # Session log
 
+## 2026-08-10 — Sites tab + Run Rules removal + FDD/inspect
+
+- Sites main tab after WattLab; Run Rules removed (`/rules` → Overview).
+- Inspect equipment refetch; FDD Plots soft-show + building-scoped fault overlay; JWT default on react compose.
+
 ## 2026-08-07 — #683 RCx MOD fix + FDD parity Wave 0
 
 - **#683** merged (`102049a`): DataFusion RCx timeseries downsample uses `%` instead of SQL `MOD()` (DF 43). GHCR pull-only on bensbench (no local docker build).

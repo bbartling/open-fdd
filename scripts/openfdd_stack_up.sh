@@ -54,6 +54,14 @@ if [[ "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
   if [[ -z "${OPENFDD_CADDY+x}" ]]; then
     export OPENFDD_CADDY=1
   fi
+  if [[ -z "${OPENFDD_JWT_SECRET:-}" && -f "$ROOT/.env" ]]; then
+    # shellcheck disable=SC1091
+    set -a && source "$ROOT/.env" && set +a
+  fi
+  if [[ -z "${OPENFDD_JWT_SECRET:-}" ]]; then
+    echo "ERROR: Set OPENFDD_JWT_SECRET in the environment or $ROOT/.env (unique per deployment)." >&2
+    exit 1
+  fi
 fi
 
 mapfile -t ARGS < <(openfdd_stack_compose_args "$RECIPE")

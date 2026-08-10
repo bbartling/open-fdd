@@ -251,10 +251,8 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
         <h2 className="oracle-sidebar__h">Sites</h2>
         {siteOptions.length === 0 ? (
           <p className="oracle-sidebar__caption">
-            No sites — load a package.{" "}
-            <Link to="/sites" data-testid="sidebar-manage-sites">
-              Manage sites…
-            </Link>
+            No sites — load a package below. Use the <strong>Sites</strong> tab to delete a
+            site.
           </p>
         ) : (
           <label className="oracle-sidebar__field">
@@ -275,11 +273,8 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
               ))}
             </select>
             <p className="oracle-sidebar__caption" style={{ marginTop: "0.35rem" }}>
-              Switch anytime among loaded packages. To purge a site’s feathers + FDD +
-              analytics, open{" "}
-              <Link to="/sites" data-testid="sidebar-manage-sites">
-                Manage sites…
-              </Link>
+              Switch anytime among loaded packages. Use the <strong>Sites</strong> tab to
+              delete a site (feathers + FDD + analytics).
             </p>
           </label>
         )}
@@ -480,7 +475,8 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
                 Human uploads one package zip here → <strong>Load package</strong>.
               </li>
               <li>
-                Map + prerun faults (Run Rules) so Plots/RCx are ready.
+                Map + prerun faults (Overview Run all / left-rail Update this rule)
+                so Plots/RCx are ready.
               </li>
               <li>
                 Download session config to restore later.

@@ -41,9 +41,8 @@ export function MeteringPage() {
     >
       <div className="page-stack" data-testid="metering-page">
         <InlineAlert id="metering-scope" variant="info">
-          Import a fuel campus ZIP (<code>campus.json</code> + bill CSVs) via{" "}
-          <code>POST /api/fuel/campus/import</code>, then use the shared Fuel
-          dashboard charts.
+          Import a fuel campus ZIP (<code>campus.json</code> + bill CSVs), then
+          use the shared Fuel dashboard charts.
         </InlineAlert>
 
         <div className="form-row" style={{ gap: "0.5rem", display: "flex" }}>

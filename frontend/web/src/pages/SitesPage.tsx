@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router";
 import { AppShell } from "../components/AppShell";
 import {
   Button,
@@ -92,12 +91,13 @@ export function SitesPage() {
     <AppShell
       title="Sites"
       caption="Loaded packages stay on disk — switch Active site anytime; Delete site purges model data."
+      activeSectionId="sites"
     >
       <div className="page-stack" data-testid="sites-page">
         <p className="oracle-sidebar__caption">
-          Each site is a package <code>building_id</code> (same as dataset id). Load more via
-          the sidebar zip picker or{" "}
-          <Link to="/upload">Upload</Link>. Manage delete here — not on the CSV/zip picker.
+          Each site is a package <code>building_id</code> (same as dataset id). Load more
+          via the sidebar zip picker (<strong>Load package</strong>). Manage delete here —
+          not on the CSV/zip picker.
         </p>
 
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -133,8 +133,8 @@ export function SitesPage() {
           <p data-testid="sites-loading">Loading sites…</p>
         ) : sites.length === 0 ? (
           <InlineAlert id="sites-empty" variant="info" testId="sites-empty">
-            No sites loaded. Import an <code>openfdd_package_v1</code> zip from the sidebar or{" "}
-            <Link to="/upload">Upload</Link>.
+            No sites loaded. Import an <code>openfdd_package_v1</code> zip from the sidebar
+            Load package control.
           </InlineAlert>
         ) : (
           <div className="widget-table-wrap" data-testid="sites-table">

@@ -107,9 +107,8 @@ export function UploadPage() {
       <div className="page-stack" data-testid="upload-page">
         <h2>Upload package</h2>
         <p>
-          Posts to <code>POST /api/csv/import/package</code>. Prefer the sidebar{" "}
-          <strong>Load package</strong> control on Overview — same API, same
-          active-site handoff.
+          Prefer the sidebar <strong>Load package</strong> control on Overview —
+          same ingest path and active-site handoff.
         </p>
         {query.jobId ? (
           <p data-testid="upload-job-context">
