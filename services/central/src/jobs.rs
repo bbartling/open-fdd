@@ -375,18 +375,21 @@ pub fn delete_job(job_id: &str) -> Result<(), JobError> {
 }
 
 /// Hard-delete every job whose `site_id` matches (used by Delete site).
-pub fn delete_jobs_for_site(site_id: &str) -> usize {
+/// Returns `(deleted, errors)` — callers should treat non-empty errors as a failed purge.
+pub fn delete_jobs_for_site(site_id: &str) -> (usize, Vec<String>) {
     let sid = site_id.trim();
     if sid.is_empty() {
-        return 0;
+        return (0, Vec::new());
     }
     let mut n = 0usize;
+    let mut errors = Vec::new();
     for meta in list_jobs(true, None, Some(sid), None) {
-        if delete_job(&meta.job_id).is_ok() {
-            n += 1;
+        match delete_job(&meta.job_id) {
+            Ok(()) => n += 1,
+            Err(e) => errors.push(format!("{}: {:?}", meta.job_id, e)),
         }
     }
-    n
+    (n, errors)
 }
 
 pub fn duplicate_job(job_id: &str, new_name: Option<&str>) -> Result<JobMeta, JobError> {
@@ -920,7 +923,8 @@ mod tests {
             )
             .unwrap();
             let n = delete_jobs_for_site("BUILDING_50");
-            assert_eq!(n, 2);
+            assert_eq!(n.0, 2);
+            assert!(n.1.is_empty());
             assert!(load_job(&keep.job_id).is_ok());
             assert!(matches!(
                 load_job(&drop_a.job_id),

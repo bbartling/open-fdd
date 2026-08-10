@@ -64,9 +64,22 @@ describe("SitesPage", () => {
         /BUILDING_50/,
       );
     });
+    await waitFor(() => {
+      expect(screen.getByTestId("sites-active-BUILDING_50").textContent).toMatch(
+        /yes/,
+      );
+      expect(screen.getByTestId("sites-active-ZIP_BUILDING_1").textContent).toMatch(
+        /—/,
+      );
+    });
   });
 
   it("deletes a site via confirm modal", async () => {
+    vi.mocked(deleteDataset).mockImplementation(async (id) => {
+      expect(id).toBe("ZIP_BUILDING_1");
+      vi.mocked(listPackageBuildings).mockResolvedValue(["BUILDING_50"]);
+      return { ok: true };
+    });
     renderSites();
     await waitFor(() => {
       expect(screen.getByTestId("sites-delete-ZIP_BUILDING_1")).toBeTruthy();
@@ -85,6 +98,13 @@ describe("SitesPage", () => {
     await waitFor(() => {
       expect(screen.getByTestId("sites-notice").textContent).toMatch(
         /Deleted site/,
+      );
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId("sites-row-ZIP_BUILDING_1")).toBeNull();
+      expect(screen.getByTestId("sites-row-BUILDING_50")).toBeTruthy();
+      expect(screen.getByTestId("sites-active-BUILDING_50").textContent).toMatch(
+        /yes/,
       );
     });
   });

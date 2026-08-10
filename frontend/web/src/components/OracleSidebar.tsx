@@ -98,6 +98,18 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
   }, [refreshSites]);
 
   useEffect(() => {
+    const onDeleted = () => {
+      void refreshSites();
+    };
+    window.addEventListener("openfdd:package-deleted", onDeleted);
+    window.addEventListener("openfdd:package-loaded", onDeleted);
+    return () => {
+      window.removeEventListener("openfdd:package-deleted", onDeleted);
+      window.removeEventListener("openfdd:package-loaded", onDeleted);
+    };
+  }, [refreshSites]);
+
+  useEffect(() => {
     try {
       localStorage.setItem(UNITS_KEY, unitSystem);
       window.dispatchEvent(

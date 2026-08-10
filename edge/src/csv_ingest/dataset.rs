@@ -453,7 +453,7 @@ pub fn delete_dataset(dataset_id: &str) -> Result<(), String> {
     let csv_buildings = ws.join("data").join("csv_buildings").join(&id);
     // Collect equipment ids before wiping the package tree so session_config can be trimmed.
     let equipment_ids = list_equipment_dirs(&csv_buildings);
-    let _ = crate::fdd::session_config::strip_site_from_session_config(&id, &equipment_ids);
+    crate::fdd::session_config::strip_site_from_session_config(&id, &equipment_ids)?;
     if csv_buildings.exists() {
         let _ = fs::remove_dir_all(&csv_buildings);
     }
