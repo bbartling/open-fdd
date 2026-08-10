@@ -499,7 +499,7 @@ fn normalize_ts_keys(raw: &str) -> Vec<String> {
     let mut keys = vec![s.to_string()];
     if let Some(dot) = s.find('.') {
         let rest = &s[dot..];
-        if let Some(rel) = rest.find(|c| c == 'Z' || c == '+' || c == '-') {
+        if let Some(rel) = rest.find(['Z', '+', '-']) {
             let alt = format!("{}{}", &s[..dot], &rest[rel..]);
             if alt != s {
                 keys.push(alt);
