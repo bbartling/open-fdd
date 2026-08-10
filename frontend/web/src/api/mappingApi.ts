@@ -82,6 +82,15 @@ export interface SessionConfig {
   chw_leave_max_f?: number;
   role_map?: Record<string, Record<string, string>>;
   params?: Record<string, Record<string, number>>;
+  /** Weekly occupancy calendar (Overview / WattLab parity Gate 0). */
+  occupancy_schedule?: {
+    timezone?: string;
+    nominal_occ_hours_week?: number;
+    days?: Record<
+      string,
+      { occupied?: boolean; start?: string; end?: string }
+    >;
+  };
 }
 
 export const PACKAGE_MAPPING_PATH = "/api/csv/import/package/mapping";

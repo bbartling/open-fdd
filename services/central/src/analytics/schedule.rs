@@ -167,7 +167,13 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     if req.series.is_none() {
         let max_gap = req.max_gap_seconds.unwrap_or(900.0);
-        match historian::schedule_from_history(req.query.equipment_ids.as_deref(), max_gap).await {
+        match historian::schedule_from_history(
+            req.query.equipment_ids.as_deref(),
+            max_gap,
+            req.query.building_id.as_deref(),
+        )
+        .await
+        {
             Ok(Some(env)) => return finalize_historian(req, env, QV_SCHEDULE),
             Ok(None) => {}
             Err(e) => {
