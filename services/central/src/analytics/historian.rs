@@ -715,11 +715,7 @@ ORDER BY week_start, equipment_id
 
 /// Register `history` and return `(ctx, columns, row_count)` when the parquet
 /// tree exists and has rows; `Ok(None)` when missing/empty (caller falls back).
-async fn open_history() -> Result<Option<(SessionContext, HashSet<String>, i64)>> {
-    open_history_scoped(None).await
-}
-
-/// Like [`open_history`] but scoped to an optional `building_id` (OFDD-070).
+/// Optional `building_id` scopes the hive path (OFDD-070).
 async fn open_history_scoped(
     building_id: Option<&str>,
 ) -> Result<Option<(SessionContext, HashSet<String>, i64)>> {
