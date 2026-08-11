@@ -3,7 +3,7 @@
 `open-fdd` (PyPI **4.1+**) ships:
 
 1. **ECM engineering** (`open_fdd.ecm_engineering`) — agent-drivable HVAC spreadsheet workbooks + Python benchmarks.
-2. **Pandas oracle** (`open_fdd.rules`, `open_fdd.analytics`, `open_fdd.reporting`) — vibe19 catalog, analytics helpers, Engineering Findings.
+2. **Pandas oracle** (`open_fdd.rules`, `open_fdd.analytics`, `open_fdd.reporting`) — cookbook catalog, analytics helpers, Engineering Findings.
 
 The ECM API fills the same workbook input cells a human engineer would fill.
 It does not replace the visible spreadsheet calculations.
@@ -17,10 +17,10 @@ It does not replace the visible spreadsheet calculations.
 ## Install
 
 ```bash
-pip install open-fdd                 # ECM only (stdlib)
-pip install "open-fdd[oracle]"       # + pandas rules / analytics
+pip install open-fdd                 # ECM only (openpyxl)
+pip install "open-fdd[oracle]"       # + pandas rules
+pip install "open-fdd[analytics]"    # + analytics helpers (same as oracle)
 pip install "open-fdd[reporting]"    # + Engineering Findings extras
-pip install "open-fdd[vibe19]"       # playground meta-extra
 ```
 
 For the FastAPI ECM example:

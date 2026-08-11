@@ -7,8 +7,7 @@ Location (copy / extend from here)
 | ``app/rules/custom_boilerplate.py`` | **This file** — templates, helpers, worked examples |
 | ``app/rules/custom_rules.py`` | **Agent workspace** — put finished ``CookbookRule`` objects in ``CUSTOM_RULES`` |
 | ``app/rules/custom_registry.py`` | Merges custom rules into the active catalog |
-| ``vibe19_agent_spec/docs/CUSTOM_RULES.md`` | Spec for agents |
-| ``vibe19_agent_spec/skills/vibe19-pandas-fdd-rules/SKILL.md`` | Pipeline reminder |
+| ``docs/rules/cookbook/`` | Dual expression cookbooks |
 
 Hard rules
 ----------

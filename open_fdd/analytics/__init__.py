@@ -1,4 +1,4 @@
-"""Open-FDD analytics helpers (oracle / vibe19 library surface)."""
+"""Open-FDD analytics helpers (oracle library surface)."""
 
 from open_fdd.analytics.poll import infer_poll_seconds
 from open_fdd.analytics.runtime_intervals import (

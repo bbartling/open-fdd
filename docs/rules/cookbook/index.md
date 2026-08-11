@@ -15,7 +15,7 @@ Open-source, **standards-first** fault detection for commercial HVAC. Rules use 
 | Catalog | Count | Role |
 |---------|------:|------|
 | **DataFusion SQL** — [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) | **63** | **Production** FDD in Open-FDD Rust / central (`POST /api/fdd/run`) |
-| **Pandas** — `open_fdd.rules` (`pip install "open-fdd[oracle]"`) | **59** | **Oracle / docs / notebooks** — packaged on PyPI; vibe19 playground + Open-FDD UI consume the package |
+| **Pandas** — `open_fdd.rules` (`pip install "open-fdd[oracle]"`) | **59** | **Oracle / docs / notebooks** — packaged on PyPI; consumers pin the wheel |
 
 Parity honesty ([parity matrix](parity-matrix.html)): see live `sql_rules/registry.yaml` counts. SQL presence ≠ oracle-proven. Do not claim “54 full parity.”
 
@@ -24,11 +24,11 @@ Parity honesty ([parity matrix](parity-matrix.html)): see live `sql_rules/regist
 | Cookbook | Runtime | Use when |
 |----------|---------|----------|
 | [**DataFusion SQL**](datafusion-sql-cookbook.html) | **Open-FDD central / edge** | Live historian, registry SQL FDD, confirmation engine |
-| [**Pandas**](pandas-cookbook.html) | **Docs + vibe19 playground (+ emergency `OPENFDD_ALLOW_PANDAS_FDD=1`)** | CSV exports, notebooks, RCx studies, parity oracles |
+| [**Pandas**](pandas-cookbook.html) | **Docs + PyPI oracle** | CSV exports, notebooks, RCx studies, parity oracles |
 
 SQL adds rollups (`FAN-RUNTIME-HOURS`, `AVG-ZONE-TEMP`, `ZONE-COMFORT-PCT`, `FAULT-ELAPSED-HOURS`) and aliases `FC13` → `FC13-SAT-HIGH`. Rolling / multi-sensor screens (e.g. `SV-RATE`, `PID-HUNT-1`) may ship a **simplified SQL** variant with an explicit caveat — full logic stays Pandas-validated until proven.
 
-Open-FDD ships **one Streamlit app** (`services/ui`) for vibe19 engineering + vibe20 WattLab **export** — not two Streamlit apps.
+Product UI is the React SPA. Pandas stays on PyPI for third-party tooling.
 
 ## Framework
 

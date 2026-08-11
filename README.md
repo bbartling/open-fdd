@@ -131,8 +131,10 @@ The [PyPI package](https://pypi.org/project/open-fdd/) is a **library** surface 
 |---------|----------------|
 | `pip install open-fdd` | ECM engineering helpers / workbook builders |
 | `pip install "open-fdd[oracle]"` | Optional pandas oracle for rule screening |
+| `pip install "open-fdd[analytics]"` | Analytics helpers (same deps as `oracle`) |
 | `pip install "open-fdd[reporting]"` | Engineering findings / report writers |
-| `pip install "open-fdd[vibe19]"` | vibe19-aligned pandas rule helpers |
+
+The extra `vibe19` remains a deprecated alias of `reporting` through the 4.3 series and is removed in 5.0.
 
 **FDD (DataFusion SQL)** — historian, registry, React SPA, BACnet/Modbus — ships in the **GHCR container stack** (`openfdd-central` / `openfdd-web` / …), not as the default PyPI runtime. Use `./scripts/openfdd_stack_up.sh react` (above) for that path.
 

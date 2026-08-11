@@ -46,6 +46,7 @@ Repository = "https://github.com/bbartling/open-fdd"
 [project.scripts]
 open-fdd-ecm = "open_fdd.ecm_engineering.cli:main"
 open-fdd-report = "open_fdd.reporting.cli:main"
+open-fdd-version = "open_fdd.version:main"
 
 [project.optional-dependencies]
 ecm-web = [
@@ -66,6 +67,10 @@ reporting = [
     "plotly>=5.22.0",
     "kaleido>=0.2.1",
 ]
+analytics = [
+    "open-fdd[oracle]",
+]
+# Deprecated alias of reporting; removed in open-fdd 5.0. Prefer reporting/analytics/oracle.
 vibe19 = [
     "open-fdd[reporting]",
 ]

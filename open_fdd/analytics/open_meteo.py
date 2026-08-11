@@ -1,6 +1,5 @@
-"""Open-Meteo historical weather fetch for vibe19 model-seed / FDD.
+"""Open-Meteo historical weather fetch for model-seed / FDD.
 
-Ports the TADCO sidecar historical-forecast fetch into a Streamlit-safe module.
 Network calls are optional — callers should catch exceptions; tests mock HTTP.
 """
 
