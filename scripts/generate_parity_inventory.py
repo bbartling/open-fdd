@@ -81,12 +81,10 @@ DIFFERENCE_CLASSES = (
 # Classified from executable pandas vs SQL, not from padded counts.
 KNOWN_DIFFERENCES: dict[str, dict] = {
     "CHW-1": {
-        "class": "semantic_gap",
+        "class": "none",
         "note": (
-            "pandas chw1() treats missing chw-pump-cmd as always-on; hydronic gate "
-            "returns ungated_no_proof_roles (all True) and does not use chiller "
-            "status/amps/power; SQL chw1_low_dt.sql only inspects chw_pump_cmd and "
-            "still scores ΔT when pump is NULL"
+            "Missing proof → pandas SKIPPED_MISSING_ROLES; SQL returns 0 fault hours "
+            "(optional proof roles). Proven-off zeros do not accumulate ΔT hours."
         ),
     },
     "SCHED-247": {

@@ -992,11 +992,11 @@ def vav_vs_ahu_leave(d, p, poll):
 def chw1(d, p, poll):
     min_dt = _f(p, "min_dt", 4.0)
     dt = d["chilled-water-return-temp"] - d["chilled-water-supply-temp"]
-    if "chw-pump-cmd" in d.columns:
-        pump = norm_cmd(d["chw-pump-cmd"]).fillna(0) > 0.05
-    else:
-        pump = pd.Series(True, index=d.index)
-    return d["chilled-water-supply-temp"].notna() & d["chilled-water-return-temp"].notna() & pump & (dt < min_dt)
+    return (
+        d["chilled-water-supply-temp"].notna()
+        & d["chilled-water-return-temp"].notna()
+        & (dt < min_dt)
+    )
 
 
 def chw2(d, p, poll):
