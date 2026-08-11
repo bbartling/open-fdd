@@ -1,4 +1,4 @@
-"""RCx multi-equipment plot collectors — prebuilt mechanical categories + generic picker."""
+"""RCx plot collectors. Prefer open_fdd.analytics.rcx_plots (this copy is deprecated)."""
 
 from __future__ import annotations
 

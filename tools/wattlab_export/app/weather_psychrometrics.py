@@ -1,4 +1,4 @@
-"""Psychrometric helpers for web weather (Open-Meteo style) — dew point + wet bulb.
+"""Psychrometric helpers. Prefer open_fdd.analytics.weather_psychrometrics (deprecated copy).
 
 Dew point uses the Magnus-Tetens approximation (simple, good enough for FDD).
 Wet bulb uses Stull (2011) empirical formula — accurate enough for RCx scatter/faults
