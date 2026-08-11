@@ -80,11 +80,12 @@ jobs:
           /tmp/ofdd-wheel-smoke/bin/pip install "$wheel[oracle]"
           /tmp/ofdd-wheel-smoke/bin/python - <<'PY'
           import tempfile
+          from importlib.metadata import version
           from pathlib import Path
           import open_fdd
           from open_fdd.ecm_engineering import ECMJob
           from open_fdd.rules import CANONICAL_RULE_COUNT, RULES_BY_ID
-          assert open_fdd.__version__ == "4.2.0"
+          assert open_fdd.__version__ == version("open-fdd") == "4.3.0"
           assert CANONICAL_RULE_COUNT == 59
           assert "SCHED-1" in RULES_BY_ID
           out = Path(tempfile.mkdtemp()) / "smoke.xlsx"
