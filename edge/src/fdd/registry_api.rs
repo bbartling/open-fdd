@@ -497,28 +497,28 @@ fn normalize_ts_keys(raw: &str) -> Vec<String> {
         return Vec::new();
     }
     let mut keys: Vec<String> = Vec::new();
-    let mut push = |k: String| {
+    fn push_unique(keys: &mut Vec<String>, k: String) {
         if !k.is_empty() && !keys.iter().any(|x| x == &k) {
             keys.push(k);
         }
-    };
-    push(s.clone());
+    }
+    push_unique(&mut keys, s.clone());
     // `T` vs space between date and time.
     if s.len() > 10 {
         let sep = s.as_bytes()[10];
         if sep == b'T' {
-            push(format!("{} {}", &s[..10], &s[11..]));
+            push_unique(&mut keys, format!("{} {}", &s[..10], &s[11..]));
         } else if sep == b' ' {
-            push(format!("{}T{}", &s[..10], &s[11..]));
+            push_unique(&mut keys, format!("{}T{}", &s[..10], &s[11..]));
         }
     }
     // Optional trailing Z.
     let snapshot = keys.clone();
     for k in snapshot {
         if k.ends_with('Z') {
-            push(k[..k.len() - 1].to_string());
+            push_unique(&mut keys, k[..k.len() - 1].to_string());
         } else if k.len() >= 19 && !k.contains('Z') && !k.contains('+') {
-            push(format!("{k}Z"));
+            push_unique(&mut keys, format!("{k}Z"));
         }
     }
     // Strip fractional seconds (keep timezone suffix).
@@ -527,9 +527,9 @@ fn normalize_ts_keys(raw: &str) -> Vec<String> {
         if let Some(dot) = k.find('.') {
             let rest = &k[dot..];
             if let Some(rel) = rest.find(['Z', '+', '-']) {
-                push(format!("{}{}", &k[..dot], &rest[rel..]));
+                push_unique(&mut keys, format!("{}{}", &k[..dot], &rest[rel..]));
             } else {
-                push(k[..dot].to_string());
+                push_unique(&mut keys, k[..dot].to_string());
             }
         }
     }

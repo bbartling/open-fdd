@@ -11,7 +11,7 @@ set -euo pipefail
 MODE=""
 MARKER=""
 WEB_NAME="${OPENFDD_WEB_CONTAINER:-openfdd-react-web-1}"
-URL="${OPENFDD_DEMO_AUTH_URL:-http://192.168.204.55/auth}"
+URL="${OPENFDD_DEMO_AUTH_URL:-http://127.0.0.1/auth}"
 LOCAL_INDEX="${OPENFDD_CADDY_INDEX_URL:-http://127.0.0.1/}"
 
 usage() {
