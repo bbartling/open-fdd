@@ -57,8 +57,12 @@ export function unitFamily(unit: string): string {
 }
 
 export function familyOrderKeys(keys: string[]): string[] {
-  return [
-    ...ORDER_PREF.filter((k) => keys.includes(k)),
-    ...keys.filter((k) => !ORDER_PREF.includes(k)).sort(),
-  ];
+  const others = keys
+    .filter((k) => !ORDER_PREF.includes(k))
+    .sort((a, b) => a.localeCompare(b));
+  // Signals first (temps… then other:* then bool). Fault lane is appended
+  // after this list — never let bool/other sort under confirmed_fault.
+  const pref = ORDER_PREF.filter((k) => k !== "bool" && keys.includes(k));
+  const bools = keys.includes("bool") ? ["bool"] : [];
+  return [...pref, ...others, ...bools];
 }

@@ -1,6 +1,7 @@
 export {
   parseSessionSearch,
   buildSessionSearch,
+  hrefWithSession,
   loadFormDraft,
   saveFormDraft,
   clearFormDraft,

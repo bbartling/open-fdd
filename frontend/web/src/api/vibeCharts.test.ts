@@ -5,6 +5,7 @@ import {
   rankingBars,
   rcxFigureHasFaultLane,
   ruleResultChart,
+  comfortDonut,
   sensorFaultChart,
   sensorHealthHeatmap,
 } from "./vibeCharts";
@@ -154,7 +155,7 @@ describe("vibeCharts", () => {
     expect(fig?.data[0]?.type).toBe("heatmap");
   });
 
-  it("sensorFaultChart adds fault swim lanes", () => {
+  it("sensorFaultChart adds fault swim lanes on a bottom domain", () => {
     const points = Array.from({ length: 24 }, (_, i) => ({
       timestamp_utc: `t${i}`,
       value_f: 55,
@@ -166,5 +167,18 @@ describe("vibeCharts", () => {
         String(t.name).includes("FLATLINE"),
       ),
     ).toBe(true);
+    const y2 = fig?.layout?.yaxis2 as { domain?: number[]; title?: string };
+    expect(y2?.title).toBe("fault");
+    expect(y2?.domain?.[0]).toBe(0);
+    expect(y2?.domain?.[1]).toBeLessThanOrEqual(0.22);
+    const y1 = fig?.layout?.yaxis as { domain?: number[] };
+    expect(y1?.domain?.[0] ?? 0).toBeGreaterThan(0.2);
+  });
+
+  it("comfortDonut uses ranking rows", () => {
+    const fig = comfortDonut([
+      { equipment_id: "VAV_1", n_samples: 10, n_fail: 4 },
+    ]);
+    expect(fig?.data[0]?.type).toBe("pie");
   });
 });

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/AppShell";
+import { LockedSiteCaption } from "../components/LockedSiteCaption";
 import {
   InlineAlert,
   Select,
@@ -9,13 +10,14 @@ import {
 } from "../components/widgets";
 import { PlotlyHost } from "../components/widgets/PlotlyHost";
 import { useSessionQuery } from "../session";
-import { getPackageMapping, listPackageBuildings } from "../api/mappingApi";
+import { getPackageMapping } from "../api/mappingApi";
 import {
   listRcxPresets,
   postRcxPreset,
   type AnalyticsEnvelope,
 } from "../api/analyticsApi";
 import {
+  comfortDonut,
   meteringCharts,
   multiEquipmentBox,
   multiEquipmentTimeseries,
@@ -25,6 +27,10 @@ import {
 } from "../api/vibeCharts";
 import { resolveRoleUnit } from "../api/roleUnits";
 import type { PlotlyFigure } from "../api/plotDataset";
+import {
+  familyPickerOptions,
+  REQUIRED_RCX_PRESET_IDS,
+} from "../nav/rcxCatalog";
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -44,11 +50,36 @@ function rcxScatterXTitle(coverage: Record<string, unknown> | undefined): string
   return "Web dry-bulb °F";
 }
 
+function pointsLookLikeTimeseries(
+  points: Array<Record<string, unknown>>,
+): boolean {
+  return points.some((p) => p.timestamp_utc != null || p.timestamp != null);
+}
+
+function fanSummaryTables(
+  env: AnalyticsEnvelope | null,
+): Array<{ title: string; rows: Array<Record<string, unknown>> }> {
+  if (!env) return [];
+  const cov = env.coverage;
+  const out: Array<{ title: string; rows: Array<Record<string, unknown>> }> = [];
+  if (cov && typeof cov === "object") {
+    for (const key of ["fan_on", "fan_off", "summary_on", "summary_off", "stats_on", "stats_off"]) {
+      const v = cov[key];
+      if (Array.isArray(v) && v.length) {
+        out.push({
+          title: key.replace(/_/g, " "),
+          rows: v as Array<Record<string, unknown>>,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 /** vibe19 RCx Plots — preset picker + DataFusion historian series. */
 export function RcxPage() {
-  const { query, setQuery } = useSessionQuery();
+  const { query } = useSessionQuery();
   const buildingId = query.siteId ?? "";
-  const [buildings, setBuildings] = useState<string[]>([]);
   const [mappedRoles, setMappedRoles] = useState<Set<string>>(new Set());
   const [presets, setPresets] = useState<
     Array<{
@@ -60,24 +91,35 @@ export function RcxPage() {
       frozen?: boolean;
     }>
   >([]);
-  const [family, setFamily] = useState("");
+  const [family, setFamily] = useState("Zones / VAV");
   const [presetId, setPresetId] = useState("");
   const [env, setEnv] = useState<AnalyticsEnvelope | null>(null);
   const [figure, setFigure] = useState<PlotlyFigure | null>(null);
+  const [companionFigure, setCompanionFigure] = useState<PlotlyFigure | null>(
+    null,
+  );
+  const [donutFigure, setDonutFigure] = useState<PlotlyFigure | null>(null);
+  const [companionNote, setCompanionNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showCoverage, setShowCoverage] = useState(false);
 
   useEffect(() => {
-    void listPackageBuildings()
-      .then(setBuildings)
-      .catch(() => setBuildings([]));
     void listRcxPresets()
       .then((p) => {
         const ok = p.filter((x) => x.id);
         setPresets(ok);
-        setFamily((prev) => prev || ok[0]?.family || "");
-        setPresetId((prev) => prev || ok[0]?.id || "");
+        setFamily((prev) => {
+          if (prev && (prev === "Heat pump" || prev === "Weather" || ok.some((x) => x.family === prev))) {
+            return prev;
+          }
+          return "Zones / VAV";
+        });
+        setPresetId((prev) => {
+          if (prev && ok.some((x) => x.id === prev)) return prev;
+          const first = ok.find((x) => x.family === "Zones / VAV") ?? ok[0];
+          return first?.id || "";
+        });
       })
       .catch(() => setPresets([]));
   }, []);
@@ -104,7 +146,7 @@ export function RcxPage() {
   }, [buildingId]);
 
   const families = useMemo(
-    () => [...new Set(presets.map((p) => p.family))].sort(),
+    () => familyPickerOptions(presets.map((p) => p.family)),
     [presets],
   );
   const familyPresets = useMemo(
@@ -193,10 +235,13 @@ export function RcxPage() {
     ];
   }, [env, presets, presetId]);
 
-  const run = async () => {
+  const run = useCallback(async () => {
     if (!buildingId || !presetId) return;
     setLoading(true);
     setError(null);
+    setCompanionFigure(null);
+    setDonutFigure(null);
+    setCompanionNote(null);
     try {
       const res = await postRcxPreset({
         building_id: buildingId,
@@ -216,7 +261,7 @@ export function RcxPage() {
       const points = res.points ?? [];
       if (!points.length) {
         setFigure(null);
-        if (res.warnings?.length) setError(res.warnings[0] ?? "No points");
+        setError(res.warnings?.[0] ?? "No points — preset returned empty.");
         return;
       }
       let fig: PlotlyFigure | null = null;
@@ -238,6 +283,22 @@ export function RcxPage() {
           title,
           yTitle: "comfort fail %",
         });
+        const rankRows = res.rows?.length ? res.rows : points;
+        setDonutFigure(
+          comfortDonut(rankRows, { title: "Zone comfort band" }),
+        );
+        if (pointsLookLikeTimeseries(points)) {
+          setCompanionFigure(
+            multiEquipmentTimeseries(points, {
+              title: "Worst zones — space temp",
+              yTitle: unitTitle || "zone_t",
+            }),
+          );
+        } else {
+          setCompanionNote(
+            "Worst-zones timeseries is not in this envelope (ranking points are fail %). Use the zone_temps preset for space-temp series.",
+          );
+        }
       } else if (kind === "metering") {
         const gas = String(res.coverage?.meter_kind ?? "") === "gas";
         fig = meteringCharts(points, {
@@ -257,13 +318,32 @@ export function RcxPage() {
         return;
       }
       setFigure(fig);
+      if (kind !== "ranking") {
+        const fan = fanSummaryTables(res);
+        if (fan.length) {
+          setCompanionNote(null);
+        } else if (kind === "timeseries" && /fan/i.test(presetId)) {
+          setCompanionNote(
+            "Fan on/off summary stats are not in this preset envelope.",
+          );
+        }
+      }
     } catch (err) {
       setError(formatErr(err));
       setFigure(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, [buildingId, presetId, familyPresets]);
+
+  useEffect(() => {
+    if (!buildingId || !presetId) return;
+    if (family === "Heat pump" || family === "Weather") return;
+    void run();
+  }, [buildingId, presetId, family, run]);
+
+  const emptyFamily = family === "Heat pump" || family === "Weather";
+  const fanTables = fanSummaryTables(env);
 
   return (
     <AppShell
@@ -272,40 +352,39 @@ export function RcxPage() {
       activeSectionId="rcx-plots"
     >
       <div className="page-stack" data-testid="rcx-page">
-        <Select
-          id="rcx-building"
-          label="Building"
-          value={buildingId}
-          options={[
-            { value: "", label: "— select —" },
-            ...buildings.map((b) => ({ value: b, label: b })),
-          ]}
-          onChange={(v) => setQuery({ siteId: v || undefined }, true)}
-          testId="rcx-building"
-        />
+        <LockedSiteCaption buildingId={buildingId} />
+        <p data-testid="rcx-required-ids" hidden>
+          {REQUIRED_RCX_PRESET_IDS.join(",")}
+        </p>
         <Select
           id="rcx-family"
           label="Family"
           value={family}
-          options={[
-            { value: "", label: "— all —" },
-            ...families.map((f) => ({ value: f, label: f })),
-          ]}
+          options={families.map((f) => ({ value: f, label: f }))}
           onChange={(v) => {
             setFamily(v);
-            const next = presets.find((p) => !v || p.family === v);
-            if (next) setPresetId(next.id);
+            const next = presets.find((p) => p.family === v);
+            setPresetId(next?.id ?? "");
+            setFigure(null);
+            setEnv(null);
           }}
           testId="rcx-family"
         />
-        <Select
-          id="rcx-preset"
-          label="Preset"
-          value={presetId}
-          options={presetOptions}
-          onChange={setPresetId}
-          testId="rcx-preset"
-        />
+        {emptyFamily ? (
+          <InlineAlert id="rcx-empty-family" variant="info" testId="rcx-empty-family">
+            No RCx chart presets in <strong>{family}</strong> yet — Heat pump /
+            Weather are placeholders until presets exist.
+          </InlineAlert>
+        ) : (
+          <Select
+            id="rcx-preset"
+            label="Preset"
+            value={presetId}
+            options={presetOptions}
+            onChange={setPresetId}
+            testId="rcx-preset"
+          />
+        )}
         <Checkbox
           id="rcx-coverage"
           label="Show preset coverage diagnostics"
@@ -315,13 +394,13 @@ export function RcxPage() {
         />
         <Button
           id="rcx-run"
-          label={loading ? "Running…" : "Run RCx preset"}
+          label={loading ? "Running…" : "Refresh RCx preset"}
           onClick={() => void run()}
-          disabled={!buildingId || !presetId || loading}
+          disabled={!buildingId || !presetId || loading || emptyFamily}
           testId="rcx-run"
         />
         {error ? (
-          <InlineAlert id="rcx-error" variant="danger">
+          <InlineAlert id="rcx-error" variant="danger" testId="rcx-error">
             {error}
           </InlineAlert>
         ) : null}
@@ -358,6 +437,42 @@ export function RcxPage() {
           height={420}
           testId="rcx-plot"
         />
+        {donutFigure ? (
+          <PlotlyHost
+            id="rcx-comfort-donut"
+            label="Comfort donut"
+            figure={donutFigure}
+            height={320}
+            testId="rcx-comfort-donut"
+          />
+        ) : null}
+        {companionFigure ? (
+          <PlotlyHost
+            id="rcx-worst-zones"
+            label="Worst zones timeseries"
+            figure={companionFigure}
+            height={360}
+            testId="rcx-worst-zones"
+          />
+        ) : null}
+        {companionNote ? (
+          <p className="oracle-sidebar__caption" data-testid="rcx-companion-note">
+            {companionNote}
+          </p>
+        ) : null}
+        {fanTables.map((t) => (
+          <DataTable
+            key={t.title}
+            id={`rcx-fan-${t.title}`}
+            label={`Fan / air ${t.title}`}
+            columns={Object.keys(t.rows[0] ?? {}).map((k) => ({
+              key: k,
+              header: k,
+            }))}
+            rows={t.rows.slice(0, 80) as Array<Record<string, string | number>>}
+            testId={`rcx-fan-${t.title.replace(/\s+/g, "-")}`}
+          />
+        ))}
         {env?.rows?.length ? (
           <DataTable
             id="rcx-rows"

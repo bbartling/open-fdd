@@ -59,6 +59,28 @@ export function buildSessionSearch(
   return s ? `?${s}` : "";
 }
 
+/**
+ * Navigate to a section path while keeping the locked site/equipment
+ * (and job / wattlab page). Destination query wins for `section`.
+ */
+export function hrefWithSession(
+  dest: string,
+  currentSearch: string,
+): string {
+  const qIdx = dest.indexOf("?");
+  const pathname = qIdx < 0 ? dest : dest.slice(0, qIdx);
+  const destSearch = qIdx < 0 ? "" : dest.slice(qIdx);
+  const cur = parseSessionSearch(currentSearch);
+  const next = parseSessionSearch(destSearch);
+  return `${pathname}${buildSessionSearch("", {
+    siteId: next.siteId ?? cur.siteId,
+    equipment: next.equipment ?? cur.equipment,
+    jobId: next.jobId ?? cur.jobId,
+    wattlabPage: next.wattlabPage ?? cur.wattlabPage,
+    section: next.section,
+  })}`;
+}
+
 /** Form draft only — never authoritative job/mapping state. */
 export type FormDraftStore = Record<string, unknown>;
 

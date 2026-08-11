@@ -1,0 +1,12 @@
+# Local Overview bundle for Caddy — not GHCR.
+# Used only with an explicit -f on recreate. Do not publish this image.
+#
+#   npm --prefix frontend/web run build
+#   docker compose -f compose.react.yml -f compose.caddy.react.yml \
+#     -f compose.web.local-overview.yml up -d --no-deps --force-recreate web caddy
+services:
+  web:
+    image: openfdd-web:overview-vibe19-oracle
+    pull_policy: never
+    volumes:
+      - ../frontend/web/dist:/usr/share/nginx/html:ro

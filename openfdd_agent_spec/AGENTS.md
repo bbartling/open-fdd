@@ -61,6 +61,11 @@ retest. Do not confuse those with this engineering OS.
 18. **Active program:** [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/README.md) Master Loop. Keep [`capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml) honest.
 19. For `frontend/web` work: follow [`openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md).
 20. Central product image is **debian + Rust binaries only** — no Python. WattLab AFDD zip export is optional offline tooling (`OPENFDD_WATTLAB_PYTHON_EXPORT=1`).
+21. **Site lock:** Overview + sidebar Active site are the only editors of `?site=`. `SectionTabs` (and sidebar App pages) must `navigate` with `hrefWithSession` so `site` + `eq` survive. FDD / RCx / Results / WattLab show a locked `zip:BUILDING_*` caption — no Building `<Select>`.
+22. **FDD Plots = vibe19 `rule_result_chart`:** auto-load series; last y-axis title is `fault`; `confirmed_fault` is the last trace on the bottom domain (`domain[0] < 0.4`). A successful rule run with an empty overlay is a bug (fail the test), not a soft banner.
+23. **RCx catalog freeze:** every `REQUIRED_RCX_PRESET_IDS` id must stay listed. Family picker order is `RCX_FAMILY_ORDER` (Zones first) plus empty Heat pump / Weather placeholders. Auto-run the selected preset when site+preset are set.
+24. **Actions housekeeping:** default `GET /api/actions?limit=10`; `DELETE /api/actions/:id` and `DELETE /api/actions`; JSONL prune cap 50.
+25. **Section radios:** left, horizontal, **after** hero + Equipment on Overview (never inside `.oracle-hero`, never centered in the logo column). Other pages: same left radio row at the top of the page body.
 
 ---
 

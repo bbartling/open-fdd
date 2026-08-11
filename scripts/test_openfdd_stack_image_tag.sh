@@ -40,3 +40,19 @@ openfdd_stack_export_image_env
 [[ "$OPENFDD_MQTT_IMAGE" == "ghcr.io/bbartling/openfdd-mqtt:nightly" ]]
 
 echo "PASS openfdd_stack_export_image_env tip pin + custom override"
+
+# Local / unmerged frontend must not silently pull GHCR web.
+export OPENFDD_WEB_IMAGE=ghcr.io/bbartling/openfdd-web:sha-deadbeef
+if openfdd_stack_frontend_unmerged "$ROOT"; then
+  if openfdd_stack_guard_ghcr_web; then
+    echo "FAIL: guard allowed GHCR web while frontend/web drifted" >&2
+    exit 1
+  fi
+  OPENFDD_ALLOW_STALE_GHCR_WEB=1 openfdd_stack_guard_ghcr_web
+else
+  echo "NOTE: frontend/web matches master — skip drift-guard fail path"
+fi
+export OPENFDD_WEB_IMAGE=openfdd-web:overview-vibe19-oracle
+unset OPENFDD_ALLOW_STALE_GHCR_WEB
+openfdd_stack_guard_ghcr_web
+echo "PASS openfdd_stack_guard_ghcr_web refuses stale GHCR web"

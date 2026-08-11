@@ -5,7 +5,7 @@ use std::sync::Arc;
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use bytes::Bytes;
 use chrono::Utc;
@@ -106,7 +106,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .route("/api/fdd/run", post(fdd_run))
         .route("/api/fdd/status", get(fdd_status))
-        .route("/api/actions", get(list_actions))
+        .route("/api/actions", get(list_actions).delete(clear_actions))
+        .route("/api/actions/{id}", delete(delete_one_action))
         .route("/api/faults/status", get(faults_status))
         .route("/api/faults/summary", get(faults_summary))
         .route("/api/export/meta", get(export_meta))
@@ -1003,7 +1004,27 @@ pub struct ActionsQuery {
 }
 
 pub async fn list_actions(Query(q): Query<ActionsQuery>) -> Json<Value> {
-    Json(actions::list_actions(q.limit.unwrap_or(100)))
+    Json(actions::list_actions(q.limit.unwrap_or(10)))
+}
+
+pub async fn delete_one_action(Path(id): Path<String>) -> (StatusCode, Json<Value>) {
+    match actions::delete_action(&id) {
+        Ok(v) => (StatusCode::OK, Json(v)),
+        Err(e) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "ok": false, "error": e })),
+        ),
+    }
+}
+
+pub async fn clear_actions() -> (StatusCode, Json<Value>) {
+    match actions::clear_actions() {
+        Ok(v) => (StatusCode::OK, Json(v)),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "ok": false, "error": e })),
+        ),
+    }
 }
 
 /// `openfdd_session_v1` session/fault settings (#515) — persisted per workspace.

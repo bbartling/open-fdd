@@ -8,7 +8,7 @@ import {
   Select,
 } from "../components/widgets";
 import { useSessionQuery } from "../session";
-import { listPackageBuildings } from "../api/mappingApi";
+import { LockedSiteCaption } from "../components/LockedSiteCaption";
 import {
   getFddResults,
   type FddResultRow,
@@ -40,7 +40,6 @@ export function FindingsPage() {
   const buildingId = query.siteId ?? "";
   const jobId = query.jobId ?? "";
 
-  const [buildings, setBuildings] = useState<string[]>([]);
   const [results, setResults] = useState<FddResultRow[]>([]);
   const [category, setCategory] = useState("(all)");
   const [loading, setLoading] = useState(false);
@@ -75,9 +74,6 @@ export function FindingsPage() {
   }, [buildingId]);
 
   useEffect(() => {
-    void listPackageBuildings()
-      .then(setBuildings)
-      .catch(() => setBuildings([]));
     void listJobs()
       .then(setJobs)
       .catch(() => setJobs([]));
@@ -154,17 +150,7 @@ export function FindingsPage() {
       activeSectionId="results"
     >
       <div className="page-stack" data-testid="findings-page">
-        <Select
-          id="results-building"
-          label="Building"
-          value={buildingId}
-          options={[
-            { value: "", label: "— select —" },
-            ...buildings.map((b) => ({ value: b, label: b })),
-          ]}
-          onChange={(v) => setQuery({ siteId: v || undefined }, true)}
-          testId="results-building"
-        />
+        <LockedSiteCaption buildingId={buildingId} testId="locked-site" />
         <Select
           id="results-category"
           label="Category"
@@ -187,7 +173,7 @@ export function FindingsPage() {
         ) : null}
         {!buildingId ? (
           <InlineAlert id="results-hint" variant="info">
-            Select a site (or load a package), then run FDD from Overview or{" "}
+            No site locked — pick a building on Overview, then run FDD or{" "}
             <strong>Update this rule</strong> in the left rail.
           </InlineAlert>
         ) : null}

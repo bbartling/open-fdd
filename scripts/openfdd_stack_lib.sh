@@ -107,6 +107,53 @@ openfdd_stack_export_image_env() {
   openfdd_stack_apply_image_tag OPENFDD_MCP_IMAGE mcp "$tag"
 }
 
+# True when frontend/web is dirty or has commits not in origin/master (or master).
+openfdd_stack_frontend_unmerged() {
+  local root="${1:-}"
+  [[ -n "$root" ]] || return 1
+  git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+  if ! git -C "$root" diff --quiet -- frontend/web; then
+    return 0
+  fi
+  if ! git -C "$root" diff --quiet --cached -- frontend/web; then
+    return 0
+  fi
+  local base=""
+  if git -C "$root" rev-parse --verify -q origin/master >/dev/null; then
+    base=origin/master
+  elif git -C "$root" rev-parse --verify -q master >/dev/null; then
+    base=master
+  else
+    return 1
+  fi
+  if [[ -n "$(git -C "$root" log --oneline "$base"..HEAD -- frontend/web 2>/dev/null || true)" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+# Refuse GHCR openfdd-web when this checkout's frontend is not in that image.
+openfdd_stack_guard_ghcr_web() {
+  if [[ "${OPENFDD_ALLOW_STALE_GHCR_WEB:-0}" == "1" ]]; then
+    echo "WARN: OPENFDD_ALLOW_STALE_GHCR_WEB=1 — allowing GHCR web with local frontend drift" >&2
+    return 0
+  fi
+  case "${OPENFDD_WEB_IMAGE:-}" in
+    ghcr.io/*) ;;
+    *) return 0 ;;
+  esac
+  local root
+  root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  if openfdd_stack_frontend_unmerged "$root"; then
+    echo "ERROR: frontend/web is dirty or not on master, but OPENFDD_WEB_IMAGE=${OPENFDD_WEB_IMAGE} is GHCR." >&2
+    echo "That published image does not contain this branch. Agents must not demo it." >&2
+    echo "Serve a local bundle (npm run build + compose.web.local-overview.yml)," >&2
+    echo "then ./scripts/openfdd_demo_gate.sh --local-web" >&2
+    echo "Override only if you truly want stale GHCR: OPENFDD_ALLOW_STALE_GHCR_WEB=1" >&2
+    return 1
+  fi
+}
+
 openfdd_stack_wait_health() {
   local base="${OPENFDD_API_BASE:-http://127.0.0.1:8080}"
   local timeout="${OPENFDD_HEALTH_TIMEOUT_SECS:-90}"

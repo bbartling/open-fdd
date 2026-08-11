@@ -1,5 +1,13 @@
 # Session log
 
+## 2026-08-11 — Site lock, FDD/RCx vibe19 plots, Actions housekeeping
+
+- SectionTabs + sidebar App pages keep `?site=` / `eq` (`hrefWithSession`). Overview + sidebar Active site are the only site editors; FDD / RCx / Results / WattLab show locked `zip:` caption (no Building select).
+- FDD Plots: device type + status radios; inventory equipment (not results-only); auto-load series; missing `confirmed_fault` after a rule run is a failure. Overlay join hardened for `T` vs space / fractional seconds.
+- RCx: `REQUIRED_RCX_PRESET_IDS` + `RCX_FAMILY_ORDER` (Zones first) + Heat pump/Weather placeholders; auto-run preset; companion donut/table/notes from envelope.
+- Actions: default last 10; `DELETE /api/actions/:id` + `DELETE /api/actions`; JSONL cap 50.
+- Overview radios after Equipment, left/horizontal, never inside `.oracle-hero`. Laws in `AGENTS.md` + `SITE_LOCK_FDD_RCX_CHECKLIST.md`. capabilities.yaml CAP-SITE / CAP-PLOTS / CAP-RCX match the matrix.
+
 ## 2026-08-10 — Sites tab + Run Rules removal + FDD/inspect
 
 - Sites main tab after WattLab; Run Rules removed (`/rules` → Overview).

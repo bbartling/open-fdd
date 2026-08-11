@@ -10,6 +10,7 @@ import {
   Checkbox,
 } from "./widgets";
 import { PlotlyHost } from "./widgets/PlotlyHost";
+import { SectionTabs } from "./SectionTabs";
 import {
   getFddStatus,
   listFddRules,
@@ -29,6 +30,15 @@ import { postInspect, type FddEquipmentItem } from "../api/analyticsApi";
 import { equipmentInspectionChart } from "../api/inspectChart";
 import type { PlotlyFigure } from "../api/plotDataset";
 import { RULES_UPDATED_EVENT } from "./RuleTuningPanel";
+import { naturalCompare } from "../lib/naturalSort";
+import {
+  cookbookKind,
+  cookbookRuleCount,
+  datasetTimeSpan,
+  formatOverviewTs,
+  isWeatherEquipmentId,
+  spanHoursBetween,
+} from "../lib/overviewMetrics";
 
 const DAYS = [
   "Monday",
@@ -130,14 +140,6 @@ function hoursPerWeek(week: Record<string, DaySched>): number {
   return Math.round(h * 10) / 10;
 }
 
-function spanHours(start?: string | null, end?: string | null): number | null {
-  if (!start || !end) return null;
-  const a = Date.parse(start);
-  const b = Date.parse(end);
-  if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return null;
-  return Math.round(((b - a) / 3_600_000) * 10) / 10;
-}
-
 export interface OverviewPopulatedProps {
   buildingId: string;
   equipment: FddEquipmentItem[];
@@ -188,7 +190,6 @@ export function OverviewPopulated({
   } | null>(null);
   const [inspectBusy, setInspectBusy] = useState(false);
   const [inspectErr, setInspectErr] = useState<string | null>(null);
-  const [loadingMeta, setLoadingMeta] = useState(false);
   const [rulesBusy, setRulesBusy] = useState(false);
   const [rulesNote, setRulesNote] = useState<string | null>(null);
   const [rulesErr, setRulesErr] = useState<string | null>(null);
@@ -198,14 +199,25 @@ export function OverviewPopulated({
   const [overviewElapsedSec, setOverviewElapsedSec] = useState(0);
   const overviewLoadStarted = useRef<number | null>(null);
   const inspectReqSeq = useRef(0);
+  const hasOverview = useRef(false);
+  const lastBuildingId = useRef(buildingId);
 
-  const selected = equipment.find((e) => e.equipment_id === equipmentId);
+  const sortedEquipment = useMemo(
+    () =>
+      [...equipment].sort((a, b) =>
+        naturalCompare(String(a.equipment_id), String(b.equipment_id)),
+      ),
+    [equipment],
+  );
+  const selected =
+    sortedEquipment.find((e) => e.equipment_id === equipmentId) ??
+    sortedEquipment[0];
   const tempUnit = unitSystem === "metric" ? "°C" : "°F";
   const bareMin = hoursPerWeek(week);
   const spanH =
     overview?.span?.span_hours != null
       ? Math.round(Number(overview.span.span_hours) * 10) / 10
-      : spanHours(firstTs, lastTs);
+      : spanHoursBetween(firstTs, lastTs);
 
   const devicesByType = useMemo(() => {
     if (overview?.devices_by_type?.length) {
@@ -225,79 +237,103 @@ export function OverviewPopulated({
   }, [equipment, overview?.devices_by_type]);
 
   const refreshMeta = useCallback(async () => {
-    setLoadingMeta(true);
     try {
       const [status, rules] = await Promise.all([
         getFddStatus().catch(() => null),
         listFddRules().catch(() => []),
       ]);
-      setRuleCount(status?.rule_count ?? rules.length);
+      setRuleCount(cookbookRuleCount(rules, status?.rule_count));
       if (!buildingId) return;
-      const map = await getPackageMapping(
-        buildingId,
-        equipmentId || undefined,
-      ).catch(() => null);
+      const map = await getPackageMapping(buildingId).catch(() => null);
+      const frames = map?.equipment ?? [];
+      const span = datasetTimeSpan(frames);
+      setFirstTs(span.start);
+      setLastTs(span.end);
       const eq =
-        map?.equipment?.find((e) => e.equipment_id === equipmentId) ??
-        map?.equipment?.[0];
+        frames.find(
+          (e) =>
+            e.equipment_id === equipmentId &&
+            !isWeatherEquipmentId(String(e.equipment_id)),
+        ) ??
+        frames.find((e) => !isWeatherEquipmentId(String(e.equipment_id ?? "")));
       setRowCount(eq?.sampling?.row_count ?? 0);
-      setFirstTs(eq?.sampling?.first_timestamp ?? null);
-      setLastTs(eq?.sampling?.last_timestamp ?? null);
-      setEqKind(String(eq?.equipment_type || selected?.equipment_type || "—"));
-    } finally {
-      setLoadingMeta(false);
+      setEqKind(
+        cookbookKind(eq?.equipment_type || selected?.equipment_type || "—"),
+      );
+      const inspectIds = [
+        ...new Set(
+          frames
+            .map((e) => String(e.equipment_id ?? ""))
+            .filter(Boolean)
+            .sort(naturalCompare),
+        ),
+      ];
+      if (inspectIds.length) setInspectOptions(inspectIds);
+    } catch {
+      /* mapping / registry optional for first paint */
     }
   }, [buildingId, equipmentId, selected?.equipment_type]);
 
-  const refreshOverview = useCallback(async () => {
-    if (!buildingId) return;
-    setLoadingOverview(true);
-    setOverviewErr(null);
-    try {
-      const body = await fetchCentralOverview({
-        building_id: buildingId,
-        equipment,
-        econ_overlay_equipment_id: econOverlayEq || null,
-      });
-      if (!body.ok) {
-        throw new Error(body.error || "Central analytics failed");
+  const refreshOverview = useCallback(
+    async (opts?: { overlayOnly?: boolean; overlayEq?: string }) => {
+      if (!buildingId) return;
+      const overlayOnly = Boolean(opts?.overlayOnly);
+      if (!overlayOnly) setLoadingOverview(true);
+      setOverviewErr(null);
+      try {
+        const body = await fetchCentralOverview({
+          building_id: buildingId,
+          equipment,
+            econ_overlay_equipment_id:
+              opts?.overlayEq ?? econOverlayEq ?? null,
+        });
+        if (!body.ok) {
+          throw new Error(body.error || "Central analytics failed");
+        }
+        setOverview(body);
+        hasOverview.current = true;
+        setInspectOptions((prev) => {
+          const next = [
+            ...new Set(
+              [...prev, ...body.equipment_ids].filter(Boolean).sort(
+                naturalCompare,
+              ),
+            ),
+          ];
+          return next.length ? next : prev;
+        });
+        if (!inspectPick && body.equipment_ids[0]) {
+          setInspectPick(body.equipment_ids[0]);
+        }
+        const results = await getFddResults(buildingId).catch(() => null);
+        if (results) setLastRuleResultCount(results.length);
+      } catch (err) {
+        setOverviewErr(formatErr(err));
+        if (!overlayOnly && !hasOverview.current) {
+          setOverview(null);
+        }
+      } finally {
+        if (!overlayOnly) setLoadingOverview(false);
       }
-      setOverview(body);
-      if (body.span?.start) setFirstTs(body.span.start);
-      if (body.span?.end) setLastTs(body.span.end);
-      setInspectOptions(body.equipment_ids);
-      if (!inspectPick && body.equipment_ids[0]) {
-        setInspectPick(body.equipment_ids[0]);
-      }
-      const results = await getFddResults(buildingId).catch(() => null);
-      if (results) setLastRuleResultCount(results.length);
-    } catch (err) {
-      setOverviewErr(formatErr(err));
-      setOverview(null);
-    } finally {
-      setLoadingOverview(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buildingId, equipment, econOverlayEq]);
+    },
+    [buildingId, equipment, econOverlayEq, inspectPick],
+  );
 
   const refreshInspect = useCallback(
-    async (opts?: { pick?: string; cols?: string[]; resetCols?: boolean }) => {
+    async (opts?: { pick?: string; cols?: string[] }) => {
       const pick = opts?.pick ?? inspectPick;
-      const resetCols = Boolean(opts?.resetCols);
-      const selectedCols = resetCols
-        ? []
-        : (opts?.cols ?? inspectSelectedCols);
       if (!buildingId || !pick || pick === "(weather)") return;
       const seq = ++inspectReqSeq.current;
       setInspectBusy(true);
       setInspectErr(null);
       try {
+        const requested = opts?.cols ?? [];
         const env = await postInspect({
           building_id: buildingId,
           equipment_ids: [pick],
-          max_points: 2000,
+          max_points: 8000,
           series: {
-            columns: selectedCols.length > 0 ? selectedCols : undefined,
+            columns: requested.length > 0 ? requested : undefined,
           },
         });
         if (seq !== inspectReqSeq.current) return;
@@ -308,52 +344,33 @@ export function OverviewPopulated({
         const plotted = Array.isArray(cov.columns_plotted)
           ? (cov.columns_plotted as string[])
           : [];
-        setInspectCols(plottable.length ? plottable : plotted);
-        // Only update selection when contents change — a fresh array every time
-        // re-triggers this callback (inspectSelectedCols dep) and flashes Plotly.
-        setInspectSelectedCols((prev) => {
-          if (resetCols || opts?.cols !== undefined) {
-            if (resetCols || selectedCols.length === 0) {
-              return plotted.slice(0, 8);
-            }
-            return selectedCols;
-          }
-          if (prev.length) {
-            const next = prev.filter(
-              (c) => plottable.includes(c) || plotted.includes(c),
-            );
-            if (
-              next.length === prev.length &&
-              next.every((c, i) => c === prev[i])
-            ) {
-              return prev;
-            }
-            return next.length ? next : plotted.slice(0, 6);
-          }
-          return plotted.slice(0, 8);
-        });
-        const rowCountN = Number(cov.row_count ?? env.points?.length ?? 0);
-        if (Number.isFinite(rowCountN)) setRowCount(rowCountN);
+        const allCols = plottable.length ? plottable : plotted;
+        setInspectCols(allCols);
+        // Chart-only: never write inspect coverage into the metric strip.
+        const sampleN = Number(env.points?.length ?? cov.point_count ?? 0);
         const first =
           cov.first_timestamp != null ? String(cov.first_timestamp) : null;
         const last =
           cov.last_timestamp != null ? String(cov.last_timestamp) : null;
-        if (first) setFirstTs(first);
-        if (last) setLastTs(last);
         setInspectMeta({
-          row_count: rowCountN,
+          row_count: Number.isFinite(sampleN) ? sampleN : 0,
           span: first && last ? `${first} → ${last}` : "—",
         });
+        if (!requested.length && plottable.length && plotted.length < plottable.length) {
+          void refreshInspect({ pick, cols: plottable });
+          return;
+        }
         if (env.warnings?.length && !env.points?.length) {
           setInspectFig(null);
           setInspectErr(env.warnings[0] ?? "Inspection unavailable");
           return;
         }
-        const colsForChart = (
-          resetCols || selectedCols.length === 0 ? plotted : selectedCols
-        ).filter(
+        const colsForChart = (requested.length ? requested : plotted).filter(
           (c) =>
             plottable.includes(c) || plotted.includes(c) || !plottable.length,
+        );
+        setInspectSelectedCols(
+          colsForChart.length ? colsForChart : plotted,
         );
         const fig = equipmentInspectionChart(env.points ?? [], {
           equipmentId: pick,
@@ -373,31 +390,52 @@ export function OverviewPopulated({
         if (seq === inspectReqSeq.current) setInspectBusy(false);
       }
     },
-    [buildingId, inspectPick, inspectSelectedCols],
+    [buildingId, inspectPick],
   );
 
   useEffect(() => {
     void refreshMeta();
   }, [refreshMeta]);
 
-  // Clear analytics when site context changes — do not auto-fire
-  // DataFusion POSTs (button-only; vibe19 Streamlit auto-recompute felt wonky).
+  // Site change only — overlay / inspect must not null building Plotly.
   useEffect(() => {
-    inspectReqSeq.current += 1;
-    setOverview(null);
-    setOverviewErr(null);
-    setInspectFig(null);
-    setInspectErr(null);
-    setInspectCols([]);
-    setInspectSelectedCols([]);
-    setInspectMeta(null);
-    setInspectPick("");
-    setInspectBusy(false);
-  }, [buildingId, econOverlayEq]);
+    if (lastBuildingId.current !== buildingId) {
+      lastBuildingId.current = buildingId;
+      inspectReqSeq.current += 1;
+      hasOverview.current = false;
+      setOverview(null);
+      setOverviewErr(null);
+      setInspectFig(null);
+      setInspectErr(null);
+      setInspectCols([]);
+      setInspectSelectedCols([]);
+      setInspectMeta(null);
+      setInspectPick("");
+      setInspectBusy(false);
+    }
+  }, [buildingId]);
 
   useEffect(() => {
-    if (equipmentId && !inspectPick) setInspectPick(equipmentId);
-  }, [equipmentId, inspectPick]);
+    if (!buildingId) return;
+    void refreshOverview();
+    const pick = inspectPick || equipmentId;
+    if (pick) void refreshInspect({ pick });
+    // Auto-run Update analytics once per building (button remains a refresh).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildingId]);
+
+  useEffect(() => {
+    if (!buildingId || !econOverlayEq || !hasOverview.current) return;
+    void refreshOverview({ overlayOnly: true, overlayEq: econOverlayEq });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [econOverlayEq]);
+
+  useEffect(() => {
+    if (!equipmentId) return;
+    setInspectPick(equipmentId);
+    void refreshInspect({ pick: equipmentId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [equipmentId]);
 
   useEffect(() => {
     void getSessionConfig()
@@ -529,9 +567,9 @@ export function OverviewPopulated({
     }
   };
 
-  const busy = loadingOverview || loadingMeta;
-  const datasetStart = overview?.span?.start ?? firstTs ?? "—";
-  const datasetEnd = overview?.span?.end ?? lastTs ?? "—";
+  const busy = loadingOverview && !overview;
+  const datasetStart = formatOverviewTs(overview?.span?.start ?? firstTs);
+  const datasetEnd = formatOverviewTs(overview?.span?.end ?? lastTs);
 
   useEffect(() => {
     if (!busy) {
@@ -602,6 +640,12 @@ export function OverviewPopulated({
         </div>
       ) : null}
 
+      {loadingOverview && overview ? (
+        <p className="oracle-sidebar__caption" data-testid="overview-refreshing">
+          Refreshing analytics…
+        </p>
+      ) : null}
+
       {!busy && overview ? (
         <InlineAlert
           id="overview-charts-ready"
@@ -633,7 +677,8 @@ export function OverviewPopulated({
             testId="overview-refresh"
           />
           <p className="oracle-sidebar__caption">
-            Click to run Central DataFusion analytics (not auto on load)
+            Auto-runs once when the site is set; click to refresh building
+            charts
           </p>
         </div>
         <div className="overview-toolbar__action">
@@ -655,7 +700,7 @@ export function OverviewPopulated({
           </span>
         ) : (
           <span className="oracle-sidebar__caption" data-testid="overview-idle-hint">
-            Charts idle — press Update analytics to load.
+            Loading building analytics…
           </span>
         )}
       </div>
@@ -669,7 +714,7 @@ export function OverviewPopulated({
 
       <p className="oracle-sidebar__caption" data-testid="overview-dual-catalog">
         Two actions, one engine family: <strong>Update analytics</strong>{" "}
-        runs Overview charts on demand (no auto-fetch);{" "}
+        builds Overview charts (auto once per site, then refresh);{" "}
         <strong>Run all rules</strong> runs the FDD SQL registry. Sidebar{" "}
         <strong>Update this rule</strong> re-runs one rule.
       </p>
@@ -678,24 +723,27 @@ export function OverviewPopulated({
         <Select
           id="overview-equipment-select"
           label="Equipment"
-          value={equipmentId}
-          options={[
-            { value: "", label: "— select equipment —" },
-            ...equipment.map((e) => ({
-              value: String(e.equipment_id),
-              label: String(e.equipment_id),
-            })),
-          ]}
+          value={equipmentId || String(selected?.equipment_id ?? "")}
+          options={sortedEquipment.map((e) => ({
+            value: String(e.equipment_id),
+            label: String(e.equipment_id),
+          }))}
           onChange={onEquipmentChange}
           testId="overview-equipment-select"
         />
       </div>
 
+      <SectionTabs activeSectionId="overview" embedded />
+
       <div className="overview-metrics" data-testid="overview-metrics">
         <Metric
           id="ov-eq"
           label="Equipment"
-          value={String(overview?.equipment_count ?? equipment.length)}
+          value={String(
+            overview?.equipment_count && overview.equipment_count > 0
+              ? overview.equipment_count
+              : equipment.length,
+          )}
           testId="overview-eq-count"
         />
         <Metric id="ov-rules" label="Rules" value={String(ruleCount)} testId="overview-rule-count" />
@@ -703,6 +751,9 @@ export function OverviewPopulated({
         <Metric id="ov-poll" label="Poll (s)" value="300" testId="overview-poll" />
         <Metric id="ov-kind" label="Kind" value={eqKind} testId="overview-kind" />
       </div>
+      <p className="oracle-sidebar__caption" data-testid="overview-rule-caption">
+        +4 SQL rollups
+      </p>
       <p className="oracle-sidebar__caption" data-testid="overview-source-caption">
         zip:{buildingId}
       </p>
@@ -861,7 +912,7 @@ export function OverviewPopulated({
         <h3>Motor / equipment run hours</h3>
         <p className="oracle-sidebar__caption">
           {overview?.motor_weekly.caption ??
-            "Bars = run hours by equipment (DataFusion historian)."}
+            "Air side — both AHUs as series (building-wide; not filtered by Equipment)."}
         </p>
         {(overview?.motor_weekly.plants ?? []).map((plant) => (
           <div key={plant.plant_group} data-testid={`overview-motor-${plant.plant_group}`}>
@@ -875,7 +926,7 @@ export function OverviewPopulated({
                 id={`motor-weekly-${plant.plant_group}`}
                 label={plant.title}
                 figure={plant.figure}
-                loading={loadingOverview}
+                loading={loadingOverview && !overview}
                 height={340}
                 testId={`overview-motor-${plant.plant_group}-plot`}
               />
@@ -936,7 +987,7 @@ export function OverviewPopulated({
           id="mech-cooling"
           label="Mechanical cooling by OAT"
           figure={overview?.mech_cooling.figure ?? null}
-          loading={loadingOverview}
+          loading={loadingOverview && !overview}
           height={360}
           testId="overview-mech-plot"
         />
@@ -1105,7 +1156,7 @@ export function OverviewPopulated({
           id="econ-delta"
           label="Economizer free-cooling delta scatter"
           figure={overview?.economizer_free_cooling.delta_scatter ?? null}
-          loading={loadingOverview}
+          loading={loadingOverview && !overview}
           height={380}
           testId="overview-econ-delta-plot"
         />
@@ -1119,7 +1170,7 @@ export function OverviewPopulated({
           id="econ-mat-resid"
           label="MAT residual"
           figure={overview?.economizer_free_cooling.mat_residual ?? null}
-          loading={loadingOverview}
+          loading={loadingOverview && !overview}
           height={320}
           testId="overview-econ-mat-resid-plot"
         />
@@ -1159,7 +1210,7 @@ export function OverviewPopulated({
             id="econ-temps"
             label="Free-cooling temps + OA damper"
             figure={overview?.economizer_free_cooling.temps_overlay ?? null}
-            loading={loadingOverview}
+            loading={loadingOverview && !overview}
             height={360}
             testId="overview-econ-temps-plot"
           />
@@ -1206,7 +1257,7 @@ export function OverviewPopulated({
             id="bas-web-overlay"
             label="BAS vs web OAT"
             figure={overview?.bas_vs_web_oat.overlay ?? null}
-            loading={loadingOverview}
+            loading={loadingOverview && !overview}
             height={360}
             testId="overview-bas-overlay-plot"
           />
@@ -1222,7 +1273,7 @@ export function OverviewPopulated({
             id="bas-web-hist"
             label="BAS − web deviation"
             figure={overview?.bas_vs_web_oat.histogram ?? null}
-            loading={loadingOverview}
+            loading={loadingOverview && !overview}
             height={300}
             testId="overview-bas-hist-plot"
           />
@@ -1261,59 +1312,22 @@ export function OverviewPopulated({
           value={inspectPick}
           options={(inspectOptions.length
             ? inspectOptions
-            : equipment.map((e) => String(e.equipment_id))
+            : sortedEquipment.map((e) => String(e.equipment_id))
           ).map((id) => ({ value: id, label: id }))}
           onChange={(v) => {
             setInspectPick(v);
-            setInspectSelectedCols([]);
-            setInspectCols([]);
-            setInspectFig(null);
-            setInspectErr(null);
-            setInspectMeta(null);
-            if (v !== "(weather)") onEquipmentChange(v);
-            void refreshInspect({ pick: v, resetCols: true });
+            void refreshInspect({ pick: v });
           }}
           testId="overview-inspect-eq"
         />
-        {inspectCols.length ? (
-          <label className="oracle-sidebar__field">
-            <span className="oracle-sidebar__label">
-              Columns to plot (default: all) — click to toggle
-            </span>
-            <select
-              className="oracle-sidebar__control"
-              multiple
-              size={Math.min(8, inspectCols.length)}
-              value={inspectSelectedCols}
-              onChange={(e) => {
-                const opts = [...e.target.selectedOptions].map((o) => o.value);
-                setInspectSelectedCols(opts);
-                void refreshInspect({ cols: opts });
-              }}
-              data-testid="overview-inspect-cols-select"
-            >
-              {inspectCols.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
         <p className="oracle-sidebar__caption" data-testid="overview-inspect-meta">
-          {inspectPick || "—"} · {inspectMeta?.row_count ?? rowCount} rows ·{" "}
-          {inspectSelectedCols.length || inspectCols.length} /{" "}
-          {inspectCols.length} plottable columns
+          {inspectPick || "—"} · chart sample {inspectMeta?.row_count ?? 0}{" "}
+          points · {inspectCols.length} plottable columns
           {inspectMeta?.span ? ` · ${inspectMeta.span}` : ""}
         </p>
         {inspectErr ? (
           <InlineAlert id="inspect-err" variant="danger">
             {inspectErr}
-          </InlineAlert>
-        ) : null}
-        {!inspectSelectedCols.length && inspectCols.length ? (
-          <InlineAlert id="inspect-pick-cols" variant="info">
-            Select at least one column to plot.
           </InlineAlert>
         ) : null}
         <PlotlyHost
@@ -1323,7 +1337,7 @@ export function OverviewPopulated({
           loading={inspectBusy}
           height={Math.min(
             4000,
-            Math.max(280, (inspectSelectedCols.length || 1) * 160),
+            Math.max(280, (inspectSelectedCols.length || inspectCols.length || 1) * 160),
           )}
           testId="overview-inspect-plot"
         />

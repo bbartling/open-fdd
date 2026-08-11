@@ -14,6 +14,13 @@ Full protocol: [`CONTAINER_AGENT.md`](../../CONTAINER_AGENT.md).
 central/web/fieldbus/mqtt, asserts digests match `:nightly`, then starts the
 stack with `OPENFDD_IMAGE_TAG=sha-<commit>`.
 
+**Newest means OCI `created`, not the word nightly.** Run
+`./scripts/ghcr_newest_by_created.py openfdd-central` before claiming tip.
+
+**Unmerged `frontend/web` → local web only.** `openfdd_stack_up.sh` refuses
+GHCR web when the tree drifted (override `OPENFDD_ALLOW_STALE_GHCR_WEB=1`).
+Never paste a Caddy login until `./scripts/openfdd_demo_gate.sh` exits 0.
+
 Product central image is Rust/debian only (no Python).
 
 Workflow: `ghcr-openfdd-stack.yml` (retargets nightly on master).

@@ -93,6 +93,20 @@ fn rewrite_all_unlocked(entries: &[ActionEntry]) -> Result<(), String> {
     Ok(())
 }
 
+const JSONL_CAP: usize = 50;
+const DEFAULT_LIST_LIMIT: usize = 10;
+const MAX_LIST_LIMIT: usize = 500;
+
+fn prune_unlocked(cap: usize) -> Result<(), String> {
+    let mut entries = read_all_unlocked();
+    if entries.len() <= cap {
+        return Ok(());
+    }
+    let drop_n = entries.len() - cap;
+    entries.drain(0..drop_n);
+    rewrite_all_unlocked(&entries)
+}
+
 fn append_unlocked(entry: &ActionEntry) -> Result<(), String> {
     let path = log_path();
     ensure_parent(&path).map_err(|e| e.to_string())?;
@@ -104,6 +118,7 @@ fn append_unlocked(entry: &ActionEntry) -> Result<(), String> {
     let line = serde_json::to_string(entry).map_err(|e| e.to_string())?;
     writeln!(f, "{line}").map_err(|e| e.to_string())?;
     f.flush().map_err(|e| e.to_string())?;
+    prune_unlocked(JSONL_CAP)?;
     Ok(())
 }
 
@@ -172,9 +187,33 @@ pub fn finish_action(id: &str, status: &str, detail: Option<Value>) -> Result<Ac
     Ok(out)
 }
 
+/// Delete one action by id.
+pub fn delete_action(id: &str) -> Result<Value, String> {
+    let _guard = LOG_LOCK.lock().map_err(|e| e.to_string())?;
+    let mut entries = read_all_unlocked();
+    let before = entries.len();
+    entries.retain(|e| e.id != id);
+    if entries.len() == before {
+        return Err(format!("action not found: {id}"));
+    }
+    rewrite_all_unlocked(&entries)?;
+    Ok(json!({ "ok": true, "deleted": id, "remaining": entries.len() }))
+}
+
+/// Clear the entire actions JSONL.
+pub fn clear_actions() -> Result<Value, String> {
+    let _guard = LOG_LOCK.lock().map_err(|e| e.to_string())?;
+    rewrite_all_unlocked(&[])?;
+    Ok(json!({ "ok": true, "cleared": true, "remaining": 0 }))
+}
+
 /// List recent actions, newest first.
 pub fn list_actions(limit: usize) -> Value {
-    let limit = if limit == 0 { 100 } else { limit.min(500) };
+    let limit = if limit == 0 {
+        DEFAULT_LIST_LIMIT
+    } else {
+        limit.min(MAX_LIST_LIMIT)
+    };
     let _guard = match LOG_LOCK.lock() {
         Ok(g) => g,
         Err(_) => {
@@ -224,6 +263,22 @@ mod tests {
 
         let listed2 = list_actions(10);
         assert_eq!(listed2["actions"][0]["status"], "ok");
+
+        delete_action(&id).expect("delete one");
+        let listed3 = list_actions(10);
+        assert_eq!(listed3["actions"].as_array().unwrap().len(), 0);
+
+        let id2 = start_action("fdd_run_all", "Run all 2", None).expect("start2");
+        assert!(!id2.is_empty());
+        clear_actions().expect("clear");
+        let listed4 = list_actions(10);
+        assert_eq!(listed4["actions"].as_array().unwrap().len(), 0);
+
+        for i in 0..55 {
+            start_action("prune", &format!("n{i}"), None).expect("prune start");
+        }
+        let all = read_all_unlocked();
+        assert!(all.len() <= JSONL_CAP, "jsonl cap {}", all.len());
 
         let _ = fs::remove_dir_all(&dir);
         std::env::remove_var("OPENFDD_WORKSPACE");

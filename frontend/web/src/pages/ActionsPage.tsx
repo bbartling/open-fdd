@@ -2,12 +2,15 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { AppShell } from "../components/AppShell";
 import { DataTable, InlineAlert, Button } from "../components/widgets";
 import {
+  clearActions,
+  deleteAction,
   formatDurationMs,
   listActions,
   statusIndicator,
   statusLabel,
   type ActionEntry,
 } from "../api/actionsApi";
+import { ApiClientError } from "../api/client";
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -177,10 +180,12 @@ export function ActionsPage() {
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [deleteSupported, setDeleteSupported] = useState(true);
+  const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const list = await listActions(150);
+      const list = await listActions(10);
       setActions(list);
       setError(null);
       setSelectedId((prev) => {
@@ -281,17 +286,55 @@ export function ActionsPage() {
             outline: 2px solid color-mix(in srgb, var(--color-primary, #c23b3b) 45%, transparent);
           }
         `}</style>
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
           <Button
             id="actions-refresh"
             label={loading ? "Loading…" : "Refresh"}
             onClick={() => void refresh()}
             testId="actions-refresh"
           />
+          {deleteSupported && selected ? (
+            <Button
+              id="actions-delete"
+              label={busy ? "Deleting…" : "Delete selected"}
+              onClick={() => {
+                if (!selected) return;
+                setBusy(true);
+                void deleteAction(selected.id)
+                  .then(() => refresh())
+                  .catch((err) => {
+                    if (err instanceof ApiClientError && (err.status === 404 || err.status === 405)) {
+                      setDeleteSupported(false);
+                    }
+                    setError(formatErr(err));
+                  })
+                  .finally(() => setBusy(false));
+              }}
+              testId="actions-delete"
+            />
+          ) : null}
+          {deleteSupported ? (
+            <Button
+              id="actions-clear"
+              label="Clear all"
+              onClick={() => {
+                if (!window.confirm("Clear the entire actions log?")) return;
+                setBusy(true);
+                void clearActions()
+                  .then(() => refresh())
+                  .catch((err) => {
+                    if (err instanceof ApiClientError && (err.status === 404 || err.status === 405)) {
+                      setDeleteSupported(false);
+                    }
+                    setError(formatErr(err));
+                  })
+                  .finally(() => setBusy(false));
+              }}
+              testId="actions-clear"
+            />
+          ) : null}
           <p className="oracle-sidebar__caption">
-            Auto-refresh {hasRunning ? "every 1.5s while running" : "every 8s"}
-            {" · "}
-            Recent backend runs
+            Last 10 · Auto-refresh {hasRunning ? "every 1.5s while running" : "every 8s"}
           </p>
         </div>
         {error ? (

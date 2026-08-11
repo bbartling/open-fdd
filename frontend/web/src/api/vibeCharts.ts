@@ -337,6 +337,50 @@ export function multiEquipmentBox(
   };
 }
 
+/** vibe19 comfort donut — in-band vs fail samples from ranking envelope rows. */
+export function comfortDonut(
+  rows: Array<Record<string, unknown>>,
+  opts?: { title?: string },
+): PlotlyFigure | null {
+  if (!rows.length) return null;
+  let nFail = 0;
+  let nOk = 0;
+  for (const r of rows) {
+    const fail = Number(r.n_fail);
+    const samples = Number(r.n_samples);
+    if (Number.isFinite(fail) && Number.isFinite(samples) && samples > 0) {
+      nFail += fail;
+      nOk += Math.max(0, samples - fail);
+      continue;
+    }
+    const pct = Number(r.fail_pct ?? r.value_f);
+    if (Number.isFinite(pct) && pct > 0) nFail += 1;
+    else nOk += 1;
+  }
+  if (nFail + nOk <= 0) return null;
+  return {
+    data: [
+      {
+        type: "pie",
+        name: "comfort",
+        labels: ["in band", "outside band"],
+        values: [nOk, nFail],
+        marker: { colors: ["#16a34a", "#dc2626"] },
+        hole: 0.45,
+      } as PlotlyTrace,
+    ],
+    layout: {
+      title: opts?.title ?? "Zone comfort (occupied hours)",
+      height: 320,
+      showlegend: true,
+      paper_bgcolor: "white",
+      plot_bgcolor: "white",
+      uirevision: `comfort-donut:${nOk}:${nFail}`,
+    },
+    meta: { point_count: rows.length, provenance: "RCx ranking rows" },
+  };
+}
+
 export function rankingBars(
   points: Array<Record<string, unknown>>,
   opts: { title: string; yTitle?: string },
@@ -797,11 +841,16 @@ export function sensorFaultChart(
     data,
     layout: {
       title: `Sensor health — ${opts.sensorName}`,
-      xaxis: { title: "timestamp_utc", autorange: true },
+      xaxis: {
+        title: "timestamp_utc",
+        autorange: true,
+        anchor: laneCount ? "y2" : "y",
+      },
       yaxis: {
         title: opts.yTitle ?? opts.sensorName,
         autorange: true,
         domain: laneCount ? [0.28, 1] : [0, 1],
+        anchor: "x",
       },
       ...(laneCount
         ? {
@@ -812,6 +861,10 @@ export function sensorFaultChart(
               showgrid: false,
               tickvals: [0, 1],
               ticktext: ["ok", "fault"],
+              side: "left",
+              anchor: "x",
+              // Do not overlay the sensor series — bottom swim lane only.
+              overlaying: undefined,
             },
           }
         : {}),

@@ -259,13 +259,16 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
             <span className="oracle-sidebar__label">Active site</span>
             <select
               className="oracle-sidebar__control"
-              value={activeSite || siteOptions[0]}
+              value={activeSite}
               onChange={(e) =>
                 setQuery({ siteId: e.target.value || undefined }, true)
               }
               data-testid="sidebar-active-site"
-              title="Active site = building_id from the package / Hive. Switch rebinds FDD data."
+              title="Active site writes ?site= — Overview and this picker are the only editors."
             >
+              {!activeSite ? (
+                <option value="">— select site —</option>
+              ) : null}
               {siteOptions.map((id) => (
                 <option key={id} value={id}>
                   {id}
