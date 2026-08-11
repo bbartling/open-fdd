@@ -1702,7 +1702,8 @@ matrix:
   pandas_implementation: ahu_duct_high
   datafusion_sql_implementation: ahu_ducthi.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-ducthi
-  test_coverage: &id138 []
+  test_coverage: &id138
+  - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -2263,6 +2264,7 @@ matrix:
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-1
   test_coverage: &id210
   - tests/rules/test_quality.py
+  - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
