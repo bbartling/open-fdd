@@ -33,7 +33,7 @@ retest. Do not confuse those with this engineering OS.
 | Concept | Module / extra |
 | --- | --- |
 | Pandas oracle (PyPI) | `open_fdd.rules` (+ `open_fdd.analytics`) |
-| Pip extras | `oracle`, `reporting`, `vibe19` |
+| Pip extras | `oracle`, `analytics`, `reporting` (`vibe19` deprecated alias through 4.3) |
 | ECM math | `open_fdd.ecm_engineering` |
 | Shared contracts | `open_fdd.contracts` — Phase 2 target (not shipped) |
 

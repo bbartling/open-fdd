@@ -16,7 +16,7 @@ def render_docx(artifacts: ReportArtifacts, path: Path | str) -> Path:
     except ImportError as exc:
         raise RuntimeError(
             "python-docx is required for Engineering Findings DOCX. "
-            "Install: pip install 'vibe19-fdd-demo[engineering-report]' or python-docx"
+            "Install: pip install 'open-fdd[reporting]' or python-docx"
         ) from exc
 
     path = Path(path)

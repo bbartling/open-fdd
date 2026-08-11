@@ -241,7 +241,7 @@ PRESETS: list[RcxPreset] = [
 
 
 # Full existing RCx catalog freeze — agents must not delete any of these without an
-# explicit product decision + vibe19_agent_spec/docs/DASHBOARD_CONTRACT.md update.
+# explicit product decision.
 # New presets may be added to PRESETS; promote them into this set when they become
 # part of the supported dashboard.
 REQUIRED_RCX_PRESET_IDS: frozenset[str] = frozenset(

@@ -60,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
     p.add_argument("--checklist-json", type=Path, help="controls_service_checklist JSON")
-    p.add_argument("--dump", type=Path, help="WattLab dump / vibe19 package zip or folder")
+    p.add_argument("--dump", type=Path, help="WattLab dump / site package zip or folder")
     p.add_argument("--package", type=Path, help="Alias for --dump (agent-friendly)")
     p.add_argument("--building", default="", help="Override building name")
     p.add_argument("--out-dir", type=Path, help="Output directory")
@@ -168,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
             from open_fdd.analytics.agent_bridge import load_package_path, run_rules
         except ImportError as exc:  # pragma: no cover - host app provides bridge
             raise SystemExit(
-                "Dump/run-rules requires a host bridge (vibe19 agent_api). "
+                "Dump/run-rules requires a host bridge (open_fdd.analytics.agent_bridge). "
                 f"Import failed: {exc}"
             ) from exc
 

@@ -637,7 +637,7 @@ def run_batch(
                 stamp_feed_attrs,
             )
         except ImportError:
-            # Host apps (vibe19 / services/ui) may still keep a local module.
+            # Host apps may still keep a local topology_enrich module.
             try:
                 from app.topology_enrich import (  # type: ignore
                     enrich_frames_with_ahu_feeds,
