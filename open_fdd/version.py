@@ -58,7 +58,10 @@ def rust_engine_version() -> str | None:
     root = _repo_root()
     if root is None:
         return None
-    text = (root / "Cargo.toml").read_text(encoding="utf-8")
+    try:
+        text = (root / "Cargo.toml").read_text(encoding="utf-8")
+    except OSError:
+        return None
     m = _CARGO_VERSION_RE.search(text)
     return m.group(1) if m else None
 
@@ -68,10 +71,7 @@ def _catalog_hashes() -> tuple[str | None, str | None]:
         from open_fdd.catalog import effective_config_hash, rule_catalog_hash
     except ImportError:
         return None, None
-    try:
-        return rule_catalog_hash(), effective_config_hash()
-    except Exception:
-        return None, None
+    return rule_catalog_hash(), effective_config_hash()
 
 
 def python_version() -> str:
