@@ -15,6 +15,7 @@ on:
       - "scripts/generate_parity_inventory.py"
       - "scripts/parity_inventory_check.py"
       - "scripts/sql_pandas_oracle_check.py"
+      - "scripts/golden_dual_compare.py"
       - "scripts/architecture_ownership_check.py"
       - "scripts/architecture_react_policy_check.py"
       - "scripts/validate_capabilities_ledger.py"
@@ -40,6 +41,7 @@ on:
       - "scripts/generate_parity_inventory.py"
       - "scripts/parity_inventory_check.py"
       - "scripts/sql_pandas_oracle_check.py"
+      - "scripts/golden_dual_compare.py"
       - "scripts/architecture_ownership_check.py"
       - "scripts/architecture_react_policy_check.py"
       - "scripts/validate_capabilities_ledger.py"
@@ -83,6 +85,9 @@ jobs:
 
       - name: Wave 0 pandas oracle seeds (real open_fdd.rules)
         run: python3 scripts/sql_pandas_oracle_check.py
+
+      - name: Golden dual-compare (pandas; DF pending unless marked)
+        run: python3 scripts/golden_dual_compare.py
 
       - name: Rule parity mutation path checks (D2)
         run: python3 scripts/rule_parity_mutation_check.py

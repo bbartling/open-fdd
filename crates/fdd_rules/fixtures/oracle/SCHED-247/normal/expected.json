@@ -1,0 +1,15 @@
+{
+  "pandas_rule_id": "SCHED-247",
+  "equipment_id": "AHU_1",
+  "equipment_type": "AHU",
+  "poll_seconds": 300,
+  "expect_status": "PASS",
+  "any_fault": false,
+  "require_operational_gates": false,
+  "datafusion_compare": "hours_zero",
+  "fault_hours": 0,
+  "params": {
+    "always_on_pct": 0.5,
+    "confirm_min": 0
+  }
+}

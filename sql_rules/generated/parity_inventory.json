@@ -1082,6 +1082,7 @@
       "datafusion_sql_implementation": "fc7_sat_low_heating.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc7",
       "test_coverage": [
+        "tests/rules/test_golden_parity.py",
         "tests/rules/test_parity_inventory.py"
       ],
       "parity_status": "concept_only",
@@ -6667,6 +6668,7 @@
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc7",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc7",
       "test_coverage": [
+        "tests/rules/test_golden_parity.py",
         "tests/rules/test_parity_inventory.py"
       ],
       "parity_status": "concept_only",
@@ -12085,29 +12087,29 @@
           "case": "fault",
           "path": "crates/fdd_rules/fixtures/oracle/CHW-1/fault",
           "required": true,
-          "present": false,
-          "oracle_seed": false
+          "present": true,
+          "oracle_seed": true
         },
         {
           "case": "threshold_boundary",
           "path": "crates/fdd_rules/fixtures/oracle/CHW-1/threshold_boundary",
           "required": true,
-          "present": false,
-          "oracle_seed": false
+          "present": true,
+          "oracle_seed": true
         },
         {
           "case": "missing_required_role",
           "path": "crates/fdd_rules/fixtures/oracle/CHW-1/missing_required_role",
           "required": true,
-          "present": false,
-          "oracle_seed": false
+          "present": true,
+          "oracle_seed": true
         },
         {
           "case": "equipment_off",
           "path": "crates/fdd_rules/fixtures/oracle/CHW-1/equipment_off",
           "required": true,
-          "present": false,
-          "oracle_seed": false
+          "present": true,
+          "oracle_seed": true
         },
         {
           "case": "startup_delay",
@@ -14444,15 +14446,15 @@
           "case": "normal",
           "path": "crates/fdd_rules/fixtures/oracle/SCHED-247/normal",
           "required": true,
-          "present": false,
-          "oracle_seed": false
+          "present": true,
+          "oracle_seed": true
         },
         {
           "case": "fault",
           "path": "crates/fdd_rules/fixtures/oracle/SCHED-247/fault",
           "required": true,
-          "present": false,
-          "oracle_seed": false
+          "present": true,
+          "oracle_seed": true
         },
         {
           "case": "threshold_boundary",

@@ -1,0 +1,6 @@
+col,point_role
+s,chilled-water-supply-temp
+r,chilled-water-return-temp
+st,chiller-status
+amp,chiller-current
+pwr,chiller-power

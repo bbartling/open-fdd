@@ -342,6 +342,8 @@ def build_inventory() -> dict:
         "ECON-4": {"fault"},
         "FC1": {"normal", "fault"},
         "VAV-1": {"missing_required_role"},
+        "CHW-1": {"missing_required_role", "equipment_off", "fault", "threshold_boundary"},
+        "SCHED-247": {"fault", "normal"},
     }
 
     concepts: list[dict] = []

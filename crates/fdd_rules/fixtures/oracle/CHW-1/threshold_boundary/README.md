@@ -1,4 +1,1 @@
-# Fixture scaffold — `CHW-1` / `threshold_boundary`
-
-Wave 0 placeholder. Replace with `history_wide.csv`, `columns.csv`, and `expected.json` before claiming predicate/mask/duration parity.
-Missing required fixtures fail `scripts/parity_inventory_check.py`.
+Five-minute boundary: ΔT == 4°F is not a fault; 3.9°F is.

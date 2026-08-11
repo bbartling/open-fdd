@@ -1,0 +1,14 @@
+{
+  "pandas_rule_id": "CHW-1",
+  "equipment_id": "CH_1",
+  "equipment_type": "CHILLER",
+  "poll_seconds": 300,
+  "expect_status": "SKIPPED_EQUIPMENT_OFF",
+  "any_fault": false,
+  "require_operational_gates": true,
+  "datafusion_compare": "hours_zero",
+  "fault_hours": 0,
+  "params": {
+    "confirm_min": 0
+  }
+}
