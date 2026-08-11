@@ -546,6 +546,8 @@ def run_cookbook_rule(
             )
             if d.attrs.get("econ7_proof"):
                 metrics["cooling_proof"] = d.attrs.get("econ7_proof")
+        if rule.id == "SCHED-247" and d.attrs.get("sched247_proof"):
+            metrics.update(d.attrs["sched247_proof"])
         if rule.id in {"SV-RATE", "SV-SLEW"}:
             from open_fdd.rules.sensor_rate import RATEABLE_ROLES
 

@@ -2083,9 +2083,10 @@ rules:
 
   - rule_id: SCHED-247
     sql_file: sched247_always_on.sql
-    pandas_function: null
+    pandas_function: _sched247
     description: Always-on fan or pump runtime
-    required_roles: [fan_cmd]
+    required_roles: []
+    optional_roles: [fan_status, pump_status, chiller_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening

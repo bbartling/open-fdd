@@ -2278,7 +2278,7 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 
 ### SCHED-247 — Always-on fan or pump runtime
 **Family:** `schedule` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `heatpump`  
-**Equation:** Fan or pump (or similar motor proof/command) is on for ≥ always_on_pct of the analysis window — highlights equipment that appears to run 24/7. Applies to all fans and pumps regardless of equipment family when a status/cmd role is mapped.  
+**Equation:** Ranked proof (status/current > command) is on for ≥ always_on_pct of the analysis window. Pressure is inferred runtime only and does **not** trip this rule ID (4.3 migration).  
 **Default confirmation:** 3600 s
 
 **Optional roles:** `fan-status`, `pump-status`, `chw-pump-status`, `hw-pump-status`, `chiller-status`, `compressor-status`, `tower-fan-cmd`, `cw-fan-cmd`, `fan-cmd`, `chw-pump-cmd`, `hw-pump-cmd`, `duct-static-pressure`, `chw-diff-pressure`

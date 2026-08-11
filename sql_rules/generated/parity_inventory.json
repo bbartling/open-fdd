@@ -28,10 +28,9 @@
     "semantic_gap"
   ],
   "difference_class_counts": {
-    "none": 54,
+    "none": 55,
     "alias": 3,
     "missing_implementation": 1,
-    "semantic_gap": 1,
     "intentional_non_applicability": 4
   },
   "aliases_index": {
@@ -3870,9 +3869,7 @@
         "boiler",
         "heatpump"
       ],
-      "required_roles": [
-        "fan_cmd"
-      ],
+      "required_roles": [],
       "optional_roles": [
         "fan-status",
         "pump-status",
@@ -3923,11 +3920,12 @@
       "datafusion_sql_implementation": "sched247_always_on.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#sched-247",
       "test_coverage": [
-        "tests/rules/test_parity_inventory.py"
+        "tests/rules/test_parity_inventory.py",
+        "tests/rules/test_sched247_proof.py"
       ],
       "parity_status": "sql_screening",
-      "known_semantic_differences": "pandas _sched247 ORs fan/pump/chiller status, commands, and duct pressure; SQL sched247_always_on.sql uses fan_cmd only",
-      "difference_class": "semantic_gap"
+      "known_semantic_differences": "4.3: ranked proof status/current > command; pressure is inferred runtime only and does not OR into the FAULT mask. SQL uses the same rank.",
+      "difference_class": "none"
     },
     {
       "rule_id": "CMD-1",
@@ -14357,9 +14355,7 @@
         "boiler",
         "heatpump"
       ],
-      "required_roles": [
-        "fan_cmd"
-      ],
+      "required_roles": [],
       "optional_roles": [
         "fan-status",
         "pump-status",
@@ -14412,12 +14408,13 @@
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#sched-247",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#sched-247",
       "test_coverage": [
-        "tests/rules/test_parity_inventory.py"
+        "tests/rules/test_parity_inventory.py",
+        "tests/rules/test_sched247_proof.py"
       ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
-      "difference_class": "semantic_gap",
-      "known_semantic_differences": "pandas _sched247 ORs fan/pump/chiller status, commands, and duct pressure; SQL sched247_always_on.sql uses fan_cmd only",
+      "difference_class": "none",
+      "known_semantic_differences": "4.3: ranked proof status/current > command; pressure is inferred runtime only and does not OR into the FAULT mask. SQL uses the same rank.",
       "operational_gate": "always",
       "startup_delay_seconds": 0.0,
       "confirm_seconds": 3600,

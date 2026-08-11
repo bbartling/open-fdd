@@ -60,46 +60,82 @@ def _pressure_on_mask(d: pd.DataFrame, p: dict) -> pd.Series | None:
     return None
 
 
-def _sched247(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """Equipment essentially always-on (fan/pump/compressor status) over the window.
-
-    When the always-on fraction is exceeded, return the actual on-mask so fault-hours
-    equal run hours (not the full analysis window). Pressure sensors (duct static /
-    differential) above ``pressure_on_min`` also count as on — catches VAV systems
-    where fan cmd/status mismatch but the duct is pressurized.
-    """
-    thr = _f(p, "always_on_pct", 0.95)
-    proofs: list[pd.Series] = []
-    for role in (
-        "fan-status",
-        "pump-status",
-        "chw-pump-status",
-        "hw-pump-status",
-        "chiller-status",
-        "compressor-status",
-        "tower-fan-cmd",
-        "cw-fan-cmd",
-        "fan-cmd",
-        "chw-pump-cmd",
-        "hw-pump-cmd",
-    ):
+def _sched247_role_mask(d: pd.DataFrame, roles: tuple[str, ...], *, command: bool) -> tuple[pd.Series | None, str | None]:
+    for role in roles:
         if role not in d.columns or not d[role].notna().any():
             continue
-        if role.endswith("-cmd"):
-            proofs.append(norm_cmd(d[role]).fillna(0) > SCHED247_CMD_ON_FRAC)
+        if command:
+            mask = norm_cmd(d[role]).fillna(0) > SCHED247_CMD_ON_FRAC
         else:
-            proofs.append(as_bool(d[role]))
-    press = _pressure_on_mask(d, p)
-    if press is not None:
-        proofs.append(press)
-    if not proofs:
-        return _false(d.index)
-    on = proofs[0].fillna(False).astype(bool)
-    for s in proofs[1:]:
-        on = on | s.fillna(False).astype(bool)
-    frac = float(on.mean()) if len(on) else 0.0
-    if frac >= thr:
-        return on.reindex(d.index).fillna(False)
+            mask = as_bool(d[role])
+        return mask.reindex(d.index).fillna(False).astype(bool), role
+    return None, None
+
+
+def _sched247(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    """Always-on runtime using ranked proof (status/current > command).
+
+    Pressure is inferred evidence only — it does not OR into the FAULT mask
+    (4.3 migration). Structured proof fields are stored on ``d.attrs``.
+    """
+    from open_fdd.rules.base import hours_true
+
+    thr = _f(p, "always_on_pct", 0.95)
+    status, status_role = _sched247_role_mask(
+        d,
+        (
+            "fan-status",
+            "pump-status",
+            "chw-pump-status",
+            "hw-pump-status",
+            "chiller-status",
+            "compressor-status",
+            "fan-current",
+            "pump-current",
+            "chiller-current",
+        ),
+        command=False,
+    )
+    command, command_role = _sched247_role_mask(
+        d,
+        ("tower-fan-cmd", "cw-fan-cmd", "fan-cmd", "chw-pump-cmd", "hw-pump-cmd"),
+        command=True,
+    )
+    inferred = _pressure_on_mask(d, p)
+    if inferred is not None:
+        inferred = inferred.reindex(d.index).fillna(False).astype(bool)
+
+    if status is not None:
+        proven = status
+        proof_source = status_role or "status"
+        proof_confidence = 0.7 if (status_role or "").endswith("-current") else 1.0
+    elif command is not None:
+        proven = command
+        proof_source = f"{command_role} (cmd)"
+        proof_confidence = 0.5
+    else:
+        proven = _false(d.index)
+        proof_source = "none"
+        proof_confidence = 0.0
+
+    conflict = _false(d.index)
+    if status is not None and command is not None:
+        conflict = status.astype(bool) != command.astype(bool)
+
+    proven_h = hours_true(proven, poll)
+    inferred_h = hours_true(inferred, poll) if inferred is not None else 0.0
+    conflict_h = hours_true(conflict, poll)
+    d.attrs["sched247_proof"] = {
+        "proof_source": proof_source,
+        "proof_confidence": proof_confidence,
+        "proven_runtime_hours": round(float(proven_h), 3),
+        "inferred_runtime_hours": round(float(inferred_h), 3),
+        "conflicting_signal_hours": round(float(conflict_h), 3),
+    }
+
+    frac = float(proven.mean()) if len(proven) else 0.0
+    if proof_source != "none" and frac >= thr:
+        return proven.reindex(d.index).fillna(False)
     return _false(d.index)
 
 
@@ -1789,9 +1825,8 @@ RULES: list[CookbookRule] = [
         "schedule",
         ["ahu", "vav", "chiller", "boiler", "heatpump"],
         [],
-        "Fan or pump (or similar motor proof/command) is on for ≥ always_on_pct of the analysis "
-        "window — highlights equipment that appears to run 24/7. Applies to all fans and pumps "
-        "regardless of equipment family when a status/cmd role is mapped.",
+        "Ranked proof (status/current > command) is on for ≥ always_on_pct of the window. "
+        "Pressure is inferred runtime only and does not trip this rule ID.",
         _sched247,
         params=[
             CookbookParam("always_on_pct", "Always-on fraction", "frac", 0.80, 1.0, 0.01, 0.95, direction="fewer"),
