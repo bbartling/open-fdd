@@ -477,7 +477,7 @@ def run_cookbook_rule(
             equipment_type=eq_type,
             params_fingerprint=fp,
         )
-    d = apply_normalized(d, quality)
+    d = apply_normalized(d, quality, attach_raw_and_flags=False)
 
     try:
         active, gate_meta = resolve_operational_mask(

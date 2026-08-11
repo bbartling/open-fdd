@@ -432,7 +432,7 @@ def hydronic_operating_mask(df: pd.DataFrame) -> tuple[pd.Series | None, str]:
     from open_fdd.rules.operational_gate import resolve_hydronic_running
 
     mask, src = resolve_hydronic_running(df, command_fallback=True)
-    if src.startswith("ungated"):
+    if src.startswith("ungated") or src.startswith("missing_proof"):
         return None, ""
     return mask, src
 

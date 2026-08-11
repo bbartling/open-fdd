@@ -185,9 +185,30 @@ def normalize_role_series(
     valid = valid & ~nulls
 
     if family in {"status", "command"} or family in STATUS_ROLES or family in COMMAND_ROLES:
-        # Status/command: 0/1 (and 0–100 cmd) are legitimate. Only sentinels/nulls fail.
+        # Status/command: 0/1 (and 0–100 cmd) are legitimate. Occupancy calendars
+        # use occupied/unoccupied strings — those are not NON_NUMERIC.
         num = pd.to_numeric(raw, errors="coerce")
-        non_num = (~nulls) & num.isna() & ~raw.map(lambda x: isinstance(x, (bool, np.bool_)))
+        occ_ok = raw.map(
+            lambda x: str(x).strip().lower()
+            in {
+                "occupied",
+                "unoccupied",
+                "occ",
+                "unocc",
+                "true",
+                "false",
+                "on",
+                "off",
+                "yes",
+                "no",
+            }
+        )
+        non_num = (
+            (~nulls)
+            & num.isna()
+            & ~raw.map(lambda x: isinstance(x, (bool, np.bool_)))
+            & ~occ_ok.fillna(False)
+        )
         reason = reason.mask(non_num, REASON_NON_NUMERIC)
         valid = valid & ~non_num
         if family in COMMAND_ROLES or str(role).endswith("-cmd"):
@@ -322,13 +343,26 @@ def assess_frame(
     return fq
 
 
-def apply_normalized(df: pd.DataFrame, quality: FrameQuality) -> pd.DataFrame:
-    """Replace analog columns with normalized values; keep raw in ``raw:<role>``."""
-    out = df.copy()
+def apply_normalized(
+    df: pd.DataFrame,
+    quality: FrameQuality,
+    *,
+    attach_raw_and_flags: bool = True,
+) -> pd.DataFrame:
+    """Replace analog columns with normalized values.
+
+    One ``assign`` (no per-column insert) so Building 100 frames do not
+    fragment and balloon RAM. Set ``attach_raw_and_flags=False`` for FDD
+    runs that only need gated values.
+    """
+    assigns: dict[str, pd.Series] = {}
     for role, rq in quality.roles.items():
-        raw_col = f"raw:{role}"
-        if raw_col not in out.columns:
-            out[raw_col] = rq.raw
-        out[role] = rq.normalized
-        out[f"quality:{role}"] = rq.valid.astype(int)
-    return out
+        assigns[role] = rq.normalized
+        if attach_raw_and_flags:
+            raw_col = f"raw:{role}"
+            if raw_col not in df.columns:
+                assigns[raw_col] = rq.raw
+            assigns[f"quality:{role}"] = rq.valid.astype("int8")
+    if not assigns:
+        return df
+    return df.assign(**assigns)

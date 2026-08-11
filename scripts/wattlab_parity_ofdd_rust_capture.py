@@ -184,6 +184,14 @@ def main() -> int:
         st, env = _req("POST", f"{args.base}{path}", token=token, body=body)
         _write_json(args.out / f"{name}.json", {"status": st, "body": env})
 
+    st, run_body = _req(
+        "POST",
+        f"{args.base}/api/fdd/run",
+        token=token,
+        body={"mode": "registry", "building_id": args.building_id},
+    )
+    _write_json(args.out / "fdd_run.json", {"status": st, "body": run_body})
+
     st, fdd = _req(
         "GET",
         f"{args.base}/api/fdd/results?building_id={args.building_id}",

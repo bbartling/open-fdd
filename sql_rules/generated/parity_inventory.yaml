@@ -97,7 +97,8 @@ matrix:
   pandas_implementation: _sweep_range
   datafusion_sql_implementation: sv_range.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-range
-  test_coverage: &id006 []
+  test_coverage: &id006
+  - tests/rules/test_equipment_energized_ungated.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -475,6 +476,7 @@ matrix:
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc1
   test_coverage: &id042
   - tests/rules/test_evidence_json.py
+  - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -1700,7 +1702,8 @@ matrix:
   pandas_implementation: ahu_duct_high
   datafusion_sql_implementation: ahu_ducthi.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-ducthi
-  test_coverage: &id138 []
+  test_coverage: &id138
+  - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -2261,6 +2264,7 @@ matrix:
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-1
   test_coverage: &id210
   - tests/rules/test_quality.py
+  - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -2621,6 +2625,7 @@ matrix:
   - tests/rules/test_chw1_gate.py
   - tests/rules/test_effective_catalog.py
   - tests/rules/test_parity_inventory.py
+  - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
   known_semantic_differences: Missing proof → pandas SKIPPED_MISSING_ROLES; SQL returns
     0 fault hours (optional proof roles). Proven-off zeros do not accumulate ΔT hours.
@@ -3234,6 +3239,7 @@ matrix:
   test_coverage: &id324
   - tests/reporting/test_findings_smoke.py
   - tests/rules/test_catalog_smoke.py
+  - tests/rules/test_quality.py
   parity_status: sql_screening
   known_semantic_differences: 'aliases: excess_runtime (not independent rules)'
   difference_class: alias
@@ -3292,6 +3298,7 @@ matrix:
   test_coverage: &id330
   - tests/rules/test_parity_inventory.py
   - tests/rules/test_sched247_proof.py
+  - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
   known_semantic_differences: '4.3: ranked proof status/current > command; pressure
     is inferred runtime only and does not OR into the FAULT mask. SQL uses the same
