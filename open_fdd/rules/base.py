@@ -81,8 +81,10 @@ def hours_true(mask: pd.Series, poll_seconds: float) -> float:
 
 def params_fingerprint(rule_id: str, params: dict[str, Any], *, gates_on: bool) -> str:
     """Stable short hash of the resolved param dict used for a run."""
-    payload = {"rule_id": rule_id, "params": params, "gates": bool(gates_on)}
-    blob = json.dumps(payload, sort_keys=True, default=str)
+    from open_fdd.rules.evidence import json_safe
+
+    payload = {"rule_id": rule_id, "params": json_safe(params), "gates": bool(gates_on)}
+    blob = json.dumps(payload, sort_keys=True)
     return hashlib.sha1(blob.encode("utf-8")).hexdigest()[:12]
 
 
@@ -109,6 +111,18 @@ class RuleResult:
     params_fingerprint: str = ""
 
     def to_dict(self) -> dict[str, Any]:
+        from open_fdd.rules.evidence import json_safe, series_summary, sparse_intervals
+
+        evidence = {
+            "gate_source": (self.metrics or {}).get("gate_source"),
+            "proof_quality": (self.metrics or {}).get("quality_confidence"),
+            "confirmed_fault": None,
+        }
+        if self.confirmed_fault is not None:
+            evidence["confirmed_fault"] = {
+                **series_summary(self.confirmed_fault.astype(float), role="confirmed_fault"),
+                "fault_intervals": sparse_intervals(self.confirmed_fault),
+            }
         return {
             "rule_id": self.rule_id,
             "equipment_id": self.equipment_id,
@@ -122,8 +136,8 @@ class RuleResult:
             "fault_pct": self.fault_pct,
             "sample_count": self.sample_count,
             "fault_sample_count": self.fault_sample_count,
-            "metrics": dict(self.metrics),
-            "debug": self.debug,
+            "metrics": json_safe(self.metrics),
+            "evidence": evidence,
             "notes": self.notes,
             "params_fingerprint": self.params_fingerprint,
         }
