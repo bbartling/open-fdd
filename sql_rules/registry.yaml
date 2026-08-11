@@ -1575,9 +1575,10 @@ rules:
 
   - rule_id: CHW-1
     sql_file: chw1_low_dt.sql
-    pandas_function: null
+    pandas_function: chw1
     description: Low chilled-water ΔT
-    required_roles: [chw_supply_t, chw_return_t, chw_pump_cmd]
+    required_roles: [chw_supply_t, chw_return_t]
+    optional_roles: [chw_pump_cmd, pump_status, chiller_status, chiller_current, chiller_amps, chiller_power, chw_flow]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening

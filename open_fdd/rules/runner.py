@@ -443,8 +443,21 @@ def run_cookbook_rule(
     spec = RULE_GATES.get(rule.id)
 
     from open_fdd.quality import assess_frame, apply_normalized
+    from open_fdd.rules.operational_gate import (
+        COMPRESSOR_ROLES,
+        FAN_CMD_FALLBACK,
+        FAN_PROOF_ROLES,
+        PUMP_CMD_FALLBACK,
+        PUMP_PROOF_ROLES,
+    )
 
     q_roles = list(dict.fromkeys(list(rule.required_roles) + list(rule.optional_roles)))
+    q_roles.extend(FAN_PROOF_ROLES)
+    q_roles.extend(FAN_CMD_FALLBACK)
+    q_roles.extend(PUMP_PROOF_ROLES)
+    q_roles.extend(PUMP_CMD_FALLBACK)
+    q_roles.extend(COMPRESSOR_ROLES)
+    q_roles = list(dict.fromkeys(q_roles))
     quality = assess_frame(d, [r for r in q_roles if r in d.columns])
     min_cov = float(params.get("min_valid_coverage", 0.5))
     req_cov = [
@@ -474,6 +487,20 @@ def run_cookbook_rule(
             params=params,
             gate_enabled=require_operational_gates,
         )
+        if gate_meta.get("missing_proof"):
+            return skipped(
+                rule.id,
+                equipment_id,
+                ["operational-proof"],
+                notes=(
+                    "SKIPPED_MISSING_ROLES — hydronic/plant rule has no pump, flow, "
+                    "chiller status, current, or power proof"
+                ),
+                site_id=sid,
+                building_id=bid,
+                equipment_type=eq_type,
+                params_fingerprint=fp,
+            )
         if should_skip_equipment_off(gate_meta, params, spec):
             return equipment_off(
                 rule.id,

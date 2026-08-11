@@ -114,9 +114,14 @@ PUMP_PROOF_ROLES = (
     "pump-status",
     "chw-pump-status",
     "hw-pump-status",
-    "chw-pump-cmd",  # often used as status-like cmd in this demo
+    "chiller-status",
+    "compressor-status",
     "pump-speed-feedback",
     "pump-current",
+    "chiller-current",
+    "chiller-amps",
+    "pump-power",
+    "chiller-power",
     "chw-flow",
     "water-flow",
 )
@@ -170,7 +175,7 @@ def resolve_hydronic_running(df: pd.DataFrame, *, command_fallback: bool = True)
         mask, role = _first_present_on(df, PUMP_CMD_FALLBACK)
         if mask is not None and role is not None:
             return mask.fillna(False), f"{role} (cmd fallback)"
-    return pd.Series(True, index=df.index), "ungated_no_proof_roles"
+    return pd.Series(False, index=df.index), "missing_proof_roles"
 
 
 def resolve_compressor_running(df: pd.DataFrame, *, command_fallback: bool = True) -> tuple[pd.Series, str]:
@@ -308,6 +313,12 @@ def resolve_operational_mask(
     if src.startswith("ungated"):
         meta["gate_source"] = src
         return pd.Series(True, index=df.index), meta
+    if src.startswith("missing_proof"):
+        meta["gate_source"] = src
+        meta["missing_proof"] = True
+        meta["active_sample_count"] = 0
+        meta["active_coverage_pct"] = 0.0
+        return pd.Series(False, index=df.index), meta
 
     delay = float(params.get("startup_delay_min", spec.startup_delay_seconds / 60.0)) * 60.0
     active = apply_startup_delay(active, poll_seconds, delay)

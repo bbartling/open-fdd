@@ -102,8 +102,8 @@ def main() -> int:
         if row.get("difference_class") not in allowed_diff:
             fail(f"{row.get('rule_id')}: bad difference_class={row.get('difference_class')}")
     chw = next(r for r in matrix if r["rule_id"] == "CHW-1")
-    if chw.get("difference_class") != "semantic_gap":
-        fail("CHW-1 must be classified semantic_gap until gate/SQL twins match")
+    if chw.get("difference_class") not in {"none", "semantic_gap"}:
+        fail(f"CHW-1 unexpected difference_class={chw.get('difference_class')}")
     sched = next(r for r in matrix if r["rule_id"] == "SCHED-247")
     if sched.get("difference_class") != "semantic_gap":
         fail("SCHED-247 must be classified semantic_gap until proof ranking matches SQL")

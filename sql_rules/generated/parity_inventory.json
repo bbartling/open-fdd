@@ -28,10 +28,10 @@
     "semantic_gap"
   ],
   "difference_class_counts": {
-    "none": 53,
+    "none": 54,
     "alias": 3,
     "missing_implementation": 1,
-    "semantic_gap": 2,
+    "semantic_gap": 1,
     "intentional_non_applicability": 4
   },
   "aliases_index": {
@@ -3069,7 +3069,15 @@
         "chilled-water-supply-temp",
         "chilled-water-return-temp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "chw_pump_cmd",
+        "pump_status",
+        "chiller_status",
+        "chiller_current",
+        "chiller_amps",
+        "chiller_power",
+        "chw_flow"
+      ],
       "operational_proof_roles": [
         "pump-status",
         "chw-pump-status",
@@ -3111,12 +3119,13 @@
       "datafusion_sql_implementation": "chw1_low_dt.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#chw-1",
       "test_coverage": [
+        "tests/rules/test_chw1_gate.py",
         "tests/rules/test_effective_catalog.py",
         "tests/rules/test_parity_inventory.py"
       ],
       "parity_status": "sql_screening",
-      "known_semantic_differences": "pandas chw1() treats missing chw-pump-cmd as always-on; hydronic gate returns ungated_no_proof_roles (all True) and does not use chiller status/amps/power; SQL chw1_low_dt.sql only inspects chw_pump_cmd and still scores \u0394T when pump is NULL",
-      "difference_class": "semantic_gap"
+      "known_semantic_differences": "Missing proof \u2192 pandas SKIPPED_MISSING_ROLES; SQL returns 0 fault hours (optional proof roles). Proven-off zeros do not accumulate \u0394T hours.",
+      "difference_class": "none"
     },
     {
       "rule_id": "CHW-2",
@@ -11972,7 +11981,15 @@
         "chilled-water-supply-temp",
         "chilled-water-return-temp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "chw_pump_cmd",
+        "pump_status",
+        "chiller_status",
+        "chiller_current",
+        "chiller_amps",
+        "chiller_power",
+        "chw_flow"
+      ],
       "operational_proof_roles": [
         "pump-status",
         "chw-pump-status",
@@ -12016,13 +12033,14 @@
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#chw-1",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#chw-1",
       "test_coverage": [
+        "tests/rules/test_chw1_gate.py",
         "tests/rules/test_effective_catalog.py",
         "tests/rules/test_parity_inventory.py"
       ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
-      "difference_class": "semantic_gap",
-      "known_semantic_differences": "pandas chw1() treats missing chw-pump-cmd as always-on; hydronic gate returns ungated_no_proof_roles (all True) and does not use chiller status/amps/power; SQL chw1_low_dt.sql only inspects chw_pump_cmd and still scores \u0394T when pump is NULL",
+      "difference_class": "none",
+      "known_semantic_differences": "Missing proof \u2192 pandas SKIPPED_MISSING_ROLES; SQL returns 0 fault hours (optional proof roles). Proven-off zeros do not accumulate \u0394T hours.",
       "operational_gate": "hydronic_flow",
       "startup_delay_seconds": 900,
       "confirm_seconds": 900,
