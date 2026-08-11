@@ -79,3 +79,17 @@ def test_frame_summary_and_rule_skips_all_sentinel_required():
     assert fq.roles["fan-status"].valid_coverage == 1
     result = run_rule("VAV-1", df, poll_seconds=300.0, require_operational_gates=False)
     assert result.status == "SKIPPED_MISSING_ROLES"
+
+
+def test_occupied_strings_are_valid_status():
+    idx = _idx()
+    occ = pd.Series(["occupied", "unoccupied", "occupied", "unoccupied", "occupied", "unoccupied"], index=idx)
+    q = normalize_role_series(occ, "occupied")
+    assert q.valid_sample_count == 6
+    assert REASON_NON_NUMERIC not in q.reason_counts
+    df = pd.DataFrame({"occupied": occ, "fan-status": [1.0] * 6}, index=idx)
+    df.attrs["equipment_id"] = "AHU_1"
+    df.attrs["equipment_type"] = "AHU"
+    result = run_rule("SCHED-1", df, params={"confirm_min": 0}, poll_seconds=300.0)
+    assert result.status in {"FAULT", "PASS"}
+    assert result.status != "SKIPPED_MISSING_ROLES"

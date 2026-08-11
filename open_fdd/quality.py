@@ -185,9 +185,30 @@ def normalize_role_series(
     valid = valid & ~nulls
 
     if family in {"status", "command"} or family in STATUS_ROLES or family in COMMAND_ROLES:
-        # Status/command: 0/1 (and 0–100 cmd) are legitimate. Only sentinels/nulls fail.
+        # Status/command: 0/1 (and 0–100 cmd) are legitimate. Occupancy calendars
+        # use occupied/unoccupied strings — those are not NON_NUMERIC.
         num = pd.to_numeric(raw, errors="coerce")
-        non_num = (~nulls) & num.isna() & ~raw.map(lambda x: isinstance(x, (bool, np.bool_)))
+        occ_ok = raw.map(
+            lambda x: str(x).strip().lower()
+            in {
+                "occupied",
+                "unoccupied",
+                "occ",
+                "unocc",
+                "true",
+                "false",
+                "on",
+                "off",
+                "yes",
+                "no",
+            }
+        )
+        non_num = (
+            (~nulls)
+            & num.isna()
+            & ~raw.map(lambda x: isinstance(x, (bool, np.bool_)))
+            & ~occ_ok.fillna(False)
+        )
         reason = reason.mask(non_num, REASON_NON_NUMERIC)
         valid = valid & ~non_num
         if family in COMMAND_ROLES or str(role).endswith("-cmd"):

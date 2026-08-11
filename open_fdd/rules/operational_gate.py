@@ -190,13 +190,13 @@ def resolve_compressor_running(df: pd.DataFrame, *, command_fallback: bool = Tru
 def resolve_equipment_energized(df: pd.DataFrame, *, command_fallback: bool = True) -> tuple[pd.Series, str]:
     """Prefer fan proof, else plant pump/hydronic, else compressor — for mixed-kind rules."""
     fan, src = resolve_fan_running(df, command_fallback=command_fallback)
-    if not src.startswith("ungated"):
+    if not src.startswith("ungated") and not src.startswith("missing_proof"):
         return fan, src
     pump, src = resolve_hydronic_running(df, command_fallback=command_fallback)
-    if not src.startswith("ungated"):
+    if not src.startswith("ungated") and not src.startswith("missing_proof"):
         return pump, src
     comp, src = resolve_compressor_running(df, command_fallback=command_fallback)
-    if not src.startswith("ungated"):
+    if not src.startswith("ungated") and not src.startswith("missing_proof"):
         return comp, src
     return pd.Series(True, index=df.index), "ungated_no_proof_roles"
 

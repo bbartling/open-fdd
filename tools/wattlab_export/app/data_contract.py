@@ -220,20 +220,29 @@ def load_vav_to_ahu_map(building_root: Path) -> dict[str, str]:
         topo = pd.read_csv(path)
     except Exception:
         return {}
-    cols = {c.lower(): c for c in topo.columns}
-    vav_col = cols.get("vav") or cols.get("vav_id") or cols.get("terminal") or cols.get("equipment_id")
-    ahu_col = cols.get("ahu") or cols.get("ahu_id") or cols.get("parent") or cols.get("serves")
+    cols = {str(c).lower(): c for c in topo.columns}
+    vav_aliases = ("vav", "vav_id", "terminal", "equipment_id", "vav_key")
+    ahu_aliases = ("parent_ahu", "ahu", "ahu_id", "parent", "serves")
+    never_ahu = {"tower", "floor", "history_column", "data_file", "vav_key"}
+    vav_col = next((cols[a] for a in vav_aliases if a in cols), None)
+    ahu_col = next((cols[a] for a in ahu_aliases if a in cols), None)
+    if not vav_col and not ahu_col and topo.shape[1] >= 2:
+        first, second = topo.columns[0], topo.columns[1]
+        if str(second).lower() not in never_ahu:
+            vav_col, ahu_col = first, second
     if not vav_col or not ahu_col:
-        if topo.shape[1] >= 2:
-            vav_col, ahu_col = topo.columns[0], topo.columns[1]
-        else:
-            return {}
+        return {}
+    if str(ahu_col).lower() in never_ahu:
+        return {}
     out: dict[str, str] = {}
     for _, row in topo.iterrows():
         v = str(row[vav_col]).strip()
         a = str(row[ahu_col]).strip()
-        if v and a and v.lower() not in {"vav", "vav_id", "nan"}:
-            out[v] = a
+        if not v or not a or v.lower() in {"vav", "vav_id", "nan", "vav_key"}:
+            continue
+        if a.isdigit() or a.lower() in {"ahu", "ahu_id", "parent_ahu", "nan", "tower", "floor"}:
+            continue
+        out[v] = a
     return out
 
 
