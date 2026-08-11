@@ -1,5 +1,13 @@
 # Session log
 
+## 2026-08-11 — open-fdd 4.3.0 library program
+
+- Independent version API (`open_fdd.version.manifest`), effective catalog hashes, capability extras (`oracle` / `analytics` / `reporting`). `vibe19` extra deprecated until 5.0.
+- Role-aware quality API; CHW-1 hydronic proof skip/off; SCHED-247 ranked proof (pressure inferred only).
+- Structured evidence JSON; analytics package exports; wattlab_export copies shimmed.
+- Parity inventory v2 (59/63) + golden fixtures for CHW-1 / SCHED-247. FC7 remains `concept_only`.
+- Handoff: `docs/migration/open-fdd-4.3.0.md`, `docs/migration/VIBE19_OPENFDD_4.3_HANDOFF.md`.
+
 ## 2026-08-11 — Site lock, FDD/RCx vibe19 plots, Actions housekeeping
 
 - SectionTabs + sidebar App pages keep `?site=` / `eq` (`hrefWithSession`). Overview + sidebar Active site are the only site editors; FDD / RCx / Results / WattLab show locked `zip:` caption (no Building select).
