@@ -17,7 +17,7 @@ Open-source, **standards-first** fault detection for commercial HVAC. Rules use 
 | **DataFusion SQL** — [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) | **63** | **Production** FDD in Open-FDD Rust / central (`POST /api/fdd/run`) |
 | **Pandas** — `open_fdd.rules` (`pip install "open-fdd[oracle]"`) | **59** | **Oracle / docs / notebooks** — packaged on PyPI; consumers pin the wheel |
 
-Parity honesty ([parity matrix](parity-matrix.html)): see live `sql_rules/registry.yaml` counts. SQL presence ≠ oracle-proven. Do not claim “54 full parity.”
+Parity honesty ([parity matrix](parity-matrix.html), [generated report](generated-parity-report.html)): see live `sql_rules/registry.yaml` counts. SQL presence ≠ oracle-proven. Do not claim “54 full parity.”
 
 ## Two cookbooks — complementary, not identical
 

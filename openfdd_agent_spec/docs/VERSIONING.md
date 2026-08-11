@@ -5,7 +5,7 @@ Distinguish these axes — do not collapse them into one “Open-FDD version” 
 | Axis | Where it lives today | Notes |
 | --- | --- | --- |
 | Platform / Rust workspace | Root `Cargo.toml` `version` | Stack image semver tags |
-| Python package | `open_fdd/__init__.py` / `pyproject.toml` | PyPI `open-fdd` (e.g. 4.2.0) — see `open_fdd.version.manifest()` |
+| Python package | `open_fdd/__init__.py` / `pyproject.toml` | PyPI `open-fdd` **4.3.0** — `open_fdd.version.manifest()` |
 | SQL rule registry | `sql_rules/registry.yaml` (+ file tree) | Prefer content hash in future manifest |
 | Pandas cookbook / oracle | Docs + `open_fdd.rules` | Tied to package version when shipped |
 | WattLab dump schema | vibe19 package / export code | v2/v3 compatibility matrix |
