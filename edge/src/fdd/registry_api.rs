@@ -492,17 +492,44 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
 /// Normalize timestamp keys so series rows join fault overlays across slight
 /// format drift (trim; `timestamp` vs `timestamp_utc`; fractional seconds).
 fn normalize_ts_keys(raw: &str) -> Vec<String> {
-    let s = raw.trim();
+    let s = raw.trim().to_string();
     if s.is_empty() {
         return Vec::new();
     }
-    let mut keys = vec![s.to_string()];
-    if let Some(dot) = s.find('.') {
-        let rest = &s[dot..];
-        if let Some(rel) = rest.find(['Z', '+', '-']) {
-            let alt = format!("{}{}", &s[..dot], &rest[rel..]);
-            if alt != s {
-                keys.push(alt);
+    let mut keys: Vec<String> = Vec::new();
+    let mut push = |k: String| {
+        if !k.is_empty() && !keys.iter().any(|x| x == &k) {
+            keys.push(k);
+        }
+    };
+    push(s.clone());
+    // `T` vs space between date and time.
+    if s.len() > 10 {
+        let sep = s.as_bytes()[10];
+        if sep == b'T' {
+            push(format!("{} {}", &s[..10], &s[11..]));
+        } else if sep == b' ' {
+            push(format!("{}T{}", &s[..10], &s[11..]));
+        }
+    }
+    // Optional trailing Z.
+    let snapshot = keys.clone();
+    for k in snapshot {
+        if k.ends_with('Z') {
+            push(k[..k.len() - 1].to_string());
+        } else if k.len() >= 19 && !k.contains('Z') && !k.contains('+') {
+            push(format!("{k}Z"));
+        }
+    }
+    // Strip fractional seconds (keep timezone suffix).
+    let snapshot = keys.clone();
+    for k in snapshot {
+        if let Some(dot) = k.find('.') {
+            let rest = &k[dot..];
+            if let Some(rel) = rest.find(['Z', '+', '-']) {
+                push(format!("{}{}", &k[..dot], &rest[rel..]));
+            } else {
+                push(k[..dot].to_string());
             }
         }
     }
@@ -933,5 +960,23 @@ mod tests {
         let keys = normalize_ts_keys("2024-01-01T00:00:00.123Z");
         assert!(keys.contains(&"2024-01-01T00:00:00.123Z".to_string()));
         assert!(keys.contains(&"2024-01-01T00:00:00Z".to_string()));
+    }
+
+    #[test]
+    fn normalize_ts_keys_joins_t_vs_space() {
+        let from_space = normalize_ts_keys("2024-01-01 00:00:00");
+        assert!(from_space.iter().any(|k| k.starts_with("2024-01-01T")));
+        let idx = {
+            let mut m = HashMap::new();
+            for k in normalize_ts_keys("2024-01-01T00:00:00.000Z") {
+                m.insert(k, true);
+            }
+            m
+        };
+        assert_eq!(
+            lookup_fault_flag(&idx, "2024-01-01 00:00:00"),
+            Some(true),
+            "T vs space + fractional seconds must join"
+        );
     }
 }

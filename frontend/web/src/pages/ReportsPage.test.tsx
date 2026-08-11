@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { ReportsPage } from "./ReportsPage";
 
@@ -46,6 +46,7 @@ vi.mock("../api/fddApi", () => ({
     ],
     downsampled: false,
     max_points: 5000,
+    has_confirmed_fault: true,
   })),
 }));
 
@@ -59,17 +60,7 @@ vi.mock("../api/analyticsApi", () => ({
     generated_at: "",
     engine: "datafusion",
     warnings: [],
-    rows: [
-      {
-        equipment_id: "VAV_1",
-        role: "zone_t",
-        coverage_pct: 100,
-        missingness: 0,
-        flatline_flag: false,
-        n: 10,
-        n_finite: 10,
-      },
-    ],
+    rows: [],
     equipment: [],
     points: [],
     skipped: [],
@@ -97,33 +88,36 @@ describe("ReportsPage FDD Plots", () => {
     vi.mocked(getFddSeries).mockClear();
   });
 
-  it("shows FDD Plots title without artifacts mode", async () => {
+  it("shows FDD Plots title without artifacts mode or building reselect", async () => {
     renderPlots();
     await waitFor(() => {
       expect(screen.getByTestId("plots-page")).toBeTruthy();
     });
     expect(screen.getByRole("heading", { level: 1, name: "FDD Plots" })).toBeTruthy();
     expect(screen.queryByTestId("reports-mode")).toBeNull();
-    expect(screen.queryByTestId("reports-artifacts")).toBeNull();
+    expect(screen.queryByTestId("plots-building-select")).toBeNull();
+    expect(screen.getByTestId("locked-site").textContent).toMatch(/zip:B1/);
+    expect(screen.getByTestId("plots-device-type")).toBeTruthy();
+    expect(screen.getByTestId("plots-status-filter")).toBeTruthy();
   });
 
-  it("loads series and renders chart + preview", async () => {
+  it("auto-loads series and puts confirmed_fault on the bottom lane", async () => {
     renderPlots();
-    await waitFor(() => {
-      const btn = screen.getByTestId("plots-load").querySelector("button");
-      expect(btn?.disabled).toBe(false);
-    });
-    fireEvent.click(screen.getByTestId("plots-load").querySelector("button")!);
     await waitFor(() => {
       expect(getFddSeries).toHaveBeenCalledWith("VAV_1", "VAV-1", "B1");
       expect(screen.getByTestId("plots-chart")).toBeTruthy();
       expect(screen.getByTestId("plots-preview-table")).toBeTruthy();
       expect(screen.queryByTestId("plots-no-fault")).toBeNull();
     });
+    const meta = screen.getByTestId("plots-fault-lane").textContent ?? "";
+    expect(meta).toMatch(/last_axis=fault/);
+    expect(meta).toMatch(/last_trace=confirmed_fault/);
+    const domain0 = Number(meta.match(/domain0=([0-9.]+)/)?.[1] ?? "1");
+    expect(domain0).toBeLessThan(0.4);
   });
 
-  it("soft-shows series chart when confirmed_fault overlay is absent", async () => {
-    vi.mocked(getFddSeries).mockResolvedValueOnce({
+  it("fails when results exist but confirmed_fault overlay is absent", async () => {
+    vi.mocked(getFddSeries).mockResolvedValue({
       ok: true,
       equipment_id: "VAV_1",
       rule_id: "VAV-1",
@@ -138,14 +132,8 @@ describe("ReportsPage FDD Plots", () => {
     });
     renderPlots();
     await waitFor(() => {
-      const btn = screen.getByTestId("plots-load").querySelector("button");
-      expect(btn?.disabled).toBe(false);
-    });
-    fireEvent.click(screen.getByTestId("plots-load").querySelector("button")!);
-    await waitFor(() => {
-      expect(screen.getByTestId("plots-chart")).toBeTruthy();
       expect(screen.getByTestId("plots-no-fault").textContent).toMatch(
-        /No fault lane yet/,
+        /timestamp join failed/,
       );
     });
   });

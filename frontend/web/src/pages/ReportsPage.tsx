@@ -1,17 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/AppShell";
+import { LockedSiteCaption } from "../components/LockedSiteCaption";
 import {
   Button,
   DataTable,
   Expander,
   InlineAlert,
   PlotlyHost,
+  RadioGroup,
   Select,
 } from "../components/widgets";
 import { useSessionQuery } from "../session";
-import { listPackageBuildings, getPackageMapping } from "../api/mappingApi";
-import { getFddResults, getFddSeries, listFddRules, type FddRuleSummary } from "../api/fddApi";
-import { postInspect, postSensorHealth } from "../api/analyticsApi";
+import { getPackageMapping } from "../api/mappingApi";
+import {
+  getFddResults,
+  getFddSeries,
+  listFddRules,
+  type FddResultRow,
+  type FddRuleSummary,
+} from "../api/fddApi";
+import { listFddEquipment, postInspect, postSensorHealth } from "../api/analyticsApi";
 import {
   missingSegmentCount,
   type PlotlyFigure,
@@ -21,6 +29,11 @@ import {
   sensorFaultChart,
   sensorHealthHeatmap,
 } from "../api/vibeCharts";
+import {
+  fddStatusBucket,
+  preferredPlotRuleId,
+  type FddStatusFilter,
+} from "../lib/fddPlotStatus";
 
 export const SQL_ANALYTICS_RULE_IDS = new Set([
   "FAN-RUNTIME-HOURS",
@@ -29,8 +42,45 @@ export const SQL_ANALYTICS_RULE_IDS = new Set([
   "FAULT-ELAPSED-HOURS",
 ]);
 
+const STATUS_FILTERS: FddStatusFilter[] = [
+  "All",
+  "FAULT",
+  "PASS",
+  "SKIPPED",
+  "Not run",
+];
+
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function lastYAxisTitle(fig: PlotlyFigure | null): string {
+  if (!fig?.layout) return "";
+  const yKeys = Object.keys(fig.layout).filter((k) => /^yaxis\d*$/.test(k));
+  yKeys.sort((a, b) => {
+    const na = a === "yaxis" ? 1 : Number(a.replace("yaxis", ""));
+    const nb = b === "yaxis" ? 1 : Number(b.replace("yaxis", ""));
+    return na - nb;
+  });
+  const last = fig.layout[yKeys[yKeys.length - 1] as "yaxis"] as
+    | { title?: string | { text?: string }; domain?: number[] }
+    | undefined;
+  const title = last?.title;
+  return typeof title === "string" ? title : String(title?.text ?? "");
+}
+
+function lastYAxisDomain0(fig: PlotlyFigure | null): number {
+  if (!fig?.layout) return 1;
+  const yKeys = Object.keys(fig.layout).filter((k) => /^yaxis\d*$/.test(k));
+  yKeys.sort((a, b) => {
+    const na = a === "yaxis" ? 1 : Number(a.replace("yaxis", ""));
+    const nb = b === "yaxis" ? 1 : Number(b.replace("yaxis", ""));
+    return na - nb;
+  });
+  const last = fig.layout[yKeys[yKeys.length - 1] as "yaxis"] as
+    | { domain?: number[] }
+    | undefined;
+  return last?.domain?.[0] ?? 1;
 }
 
 export function ReportsPage() {
@@ -38,21 +88,21 @@ export function ReportsPage() {
   const buildingId = query.siteId ?? "";
   const equipmentId = query.equipment ?? "";
 
-  const [buildings, setBuildings] = useState<string[]>([]);
   const [ruleId, setRuleId] = useState("");
   const [rules, setRules] = useState<FddRuleSummary[]>([]);
   const [mappedRoles, setMappedRoles] = useState<Set<string>>(new Set());
-  const [ruleOptions, setRuleOptions] = useState<
-    Array<{ value: string; label: string; disabled?: boolean }>
-  >([{ value: "", label: "— rule —" }]);
-  const [equipmentOptions, setEquipmentOptions] = useState<
-    Array<{ value: string; label: string }>
-  >([{ value: "", label: "— equipment —" }]);
+  const [inventory, setInventory] = useState<
+    Array<{ equipment_id: string; equipment_type: string }>
+  >([]);
+  const [deviceType, setDeviceType] = useState("All");
+  const [statusFilter, setStatusFilter] = useState<FddStatusFilter>("All");
+  const [results, setResults] = useState<FddResultRow[]>([]);
 
   const [figure, setFigure] = useState<PlotlyFigure | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noFaultBanner, setNoFaultBanner] = useState<string | null>(null);
+  const [noFaultIsError, setNoFaultIsError] = useState(false);
   const [sensorRows, setSensorRows] = useState<
     Array<Record<string, string | number | boolean>>
   >([]);
@@ -66,16 +116,48 @@ export function ReportsPage() {
   const [sensorOpen, setSensorOpen] = useState(false);
 
   useEffect(() => {
-    void listPackageBuildings()
-      .then(setBuildings)
-      .catch(() => setBuildings([]));
     void listFddRules()
       .then((list) => {
         setRules(list);
-        if (!ruleId && list[0]) setRuleId(list[0].rule_id);
       })
       .catch(() => undefined);
-  }, [ruleId]);
+  }, []);
+
+  useEffect(() => {
+    if (!buildingId) {
+      setInventory([]);
+      setResults([]);
+      return;
+    }
+    void Promise.all([
+      getPackageMapping(buildingId).catch(() => null),
+      listFddEquipment(buildingId).catch(() => []),
+      getFddResults(buildingId).catch(() => [] as FddResultRow[]),
+    ]).then(([inv, listed, rows]) => {
+      const fromMap = (inv?.equipment ?? []).map((e) => ({
+        equipment_id: String(e.equipment_id ?? ""),
+        equipment_type: String(e.equipment_type ?? "unknown"),
+      }));
+      const fromList = listed.map((e) => ({
+        equipment_id: String(e.equipment_id ?? ""),
+        equipment_type: String(e.equipment_type ?? "unknown"),
+      }));
+      const byId = new Map<string, { equipment_id: string; equipment_type: string }>();
+      for (const e of [...fromList, ...fromMap]) {
+        if (!e.equipment_id) continue;
+        const prev = byId.get(e.equipment_id);
+        if (!prev || prev.equipment_type === "unknown") byId.set(e.equipment_id, e);
+      }
+      const merged = [...byId.values()].sort((a, b) =>
+        a.equipment_id.localeCompare(b.equipment_id),
+      );
+      setInventory(merged);
+      setResults(rows);
+      if (!equipmentId && merged[0]) {
+        setQuery({ equipment: merged[0].equipment_id }, true);
+      }
+    });
+  }, [buildingId, equipmentId, setQuery]);
 
   useEffect(() => {
     if (!buildingId || !equipmentId) {
@@ -99,70 +181,76 @@ export function ReportsPage() {
       .catch(() => setMappedRoles(new Set()));
   }, [buildingId, equipmentId]);
 
-  useEffect(() => {
-    setRuleOptions([
+  const deviceTypes = useMemo(() => {
+    const types = [
+      ...new Set(inventory.map((e) => e.equipment_type).filter(Boolean)),
+    ].sort((a, b) => a.localeCompare(b));
+    return ["All", ...types];
+  }, [inventory]);
+
+  const filteredInventory = useMemo(() => {
+    if (deviceType === "All") return inventory;
+    return inventory.filter((e) => e.equipment_type === deviceType);
+  }, [inventory, deviceType]);
+
+  const statusByRule = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of results) {
+      if (String(r.equipment_id) !== equipmentId) continue;
+      m.set(String(r.rule_id), String(r.status ?? ""));
+    }
+    return m;
+  }, [results, equipmentId]);
+
+  const applicableRules = useMemo(() => {
+    return rules.filter((r) => {
+      if (SQL_ANALYTICS_RULE_IDS.has(r.rule_id)) return false;
+      const required = (r.required_roles ?? []).filter(Boolean);
+      if (mappedRoles.size > 0 && required.some((role) => !mappedRoles.has(role))) {
+        return false;
+      }
+      if (statusFilter === "All") return true;
+      return fddStatusBucket(statusByRule.get(r.rule_id)) === statusFilter;
+    });
+  }, [rules, mappedRoles, statusFilter, statusByRule]);
+
+  const ruleOptions = useMemo(
+    () => [
       { value: "", label: "— rule —" },
-      ...rules.map((r) => {
-        if (SQL_ANALYTICS_RULE_IDS.has(r.rule_id)) {
-          return {
-            value: r.rule_id,
-            label: `${r.rule_id} — analytics rollup (no fault series)`,
-            disabled: true,
-          };
-        }
-        const required = (r.required_roles ?? []).filter(Boolean);
-        const missing =
-          mappedRoles.size > 0
-            ? required.filter((role) => !mappedRoles.has(role))
-            : [];
-        const blocked = missing.length > 0;
-        return {
-          value: r.rule_id,
-          label: blocked
-            ? `${r.rule_id} — unavailable (missing ${missing.join(", ")})`
-            : `${r.rule_id} — ${r.description ?? ""}`,
-          disabled: blocked,
-        };
-      }),
-    ]);
-  }, [rules, mappedRoles]);
+      ...applicableRules.map((r) => ({
+        value: r.rule_id,
+        label: `${r.rule_id} — ${r.description ?? ""}`,
+      })),
+    ],
+    [applicableRules],
+  );
 
   useEffect(() => {
-    if (ruleId && SQL_ANALYTICS_RULE_IDS.has(ruleId)) {
-      const next = rules.find((r) => !SQL_ANALYTICS_RULE_IDS.has(r.rule_id));
-      setRuleId(next?.rule_id ?? "");
-    }
-  }, [rules, ruleId]);
+    const ids = applicableRules.map((r) => r.rule_id);
+    if (ruleId && ids.includes(ruleId)) return;
+    setRuleId(preferredPlotRuleId(ids, statusByRule));
+  }, [applicableRules, ruleId, statusByRule]);
 
-  useEffect(() => {
-    if (!buildingId) {
-      setEquipmentOptions([{ value: "", label: "— equipment —" }]);
-      return;
-    }
-    void getFddResults(buildingId)
-      .then((rows) => {
-        const ids = Array.from(new Set(rows.map((r) => r.equipment_id))).sort();
-        setEquipmentOptions([
-          { value: "", label: "— equipment —" },
-          ...ids.map((id) => ({ value: id, label: id })),
-        ]);
-        if (!equipmentId && ids[0]) {
-          setQuery({ equipment: ids[0] }, true);
-        }
-      })
-      .catch(() => {
-        setEquipmentOptions([{ value: "", label: "— equipment —" }]);
-      });
-  }, [buildingId, equipmentId, setQuery]);
+  const equipmentOptions = useMemo(
+    () => [
+      { value: "", label: "— equipment —" },
+      ...filteredInventory.map((e) => ({
+        value: e.equipment_id,
+        label: e.equipment_id,
+      })),
+    ],
+    [filteredInventory],
+  );
 
   const loadSeries = useCallback(async () => {
     if (!equipmentId || !ruleId) {
-      setError("Select equipment and rule");
+      setError(buildingId ? "Select equipment and rule" : "Lock a site on Overview first");
       return;
     }
     if (SQL_ANALYTICS_RULE_IDS.has(ruleId)) {
       setFigure(null);
       setNoFaultBanner(null);
+      setNoFaultIsError(false);
       setError(
         "Analytics rollups have no per-sample fault series — pick a diagnostic rule (FC*, VAV*, ECON*, …) and run FDD first.",
       );
@@ -171,6 +259,7 @@ export function ReportsPage() {
     setLoading(true);
     setError(null);
     setNoFaultBanner(null);
+    setNoFaultIsError(false);
     try {
       const series = await getFddSeries(equipmentId, ruleId, buildingId || undefined);
       const roles = series.roles ?? [];
@@ -189,11 +278,21 @@ export function ReportsPage() {
         confirmedFault: hasFaultOverlay ? fault : undefined,
       });
       setFigure(fig);
+      const resultExists = results.some(
+        (r) =>
+          String(r.equipment_id) === equipmentId && String(r.rule_id) === ruleId,
+      );
       if (!fig) {
         setError("No plottable series for this equipment/rule.");
-      } else if (!hasFaultOverlay) {
+      } else if (!hasFaultOverlay && resultExists) {
+        setNoFaultIsError(true);
         setNoFaultBanner(
-          "No fault lane yet — run FDD from Overview or Update this rule in the sidebar, then Load series again.",
+          "Fault overlay missing after a successful rule run — timestamp join failed. This is a bug, not “no fault lane yet.”",
+        );
+      } else if (!hasFaultOverlay) {
+        setNoFaultIsError(false);
+        setNoFaultBanner(
+          "No fault lane yet — run FDD from Overview or Update this rule in the sidebar, then refresh.",
         );
       }
     } catch (err) {
@@ -202,11 +301,16 @@ export function ReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [buildingId, equipmentId, ruleId]);
+  }, [buildingId, equipmentId, ruleId, results]);
+
+  useEffect(() => {
+    if (!buildingId || !equipmentId || !ruleId) return;
+    void loadSeries();
+  }, [buildingId, equipmentId, ruleId, loadSeries]);
 
   const loadSensorHealth = useCallback(async () => {
     if (!buildingId) {
-      setSensorError("Select a building");
+      setSensorError("Lock a site on Overview first");
       return;
     }
     setSensorLoading(true);
@@ -325,17 +429,16 @@ export function ReportsPage() {
     });
   }, [figure]);
 
-  const buildingOptions = [
-    { value: "", label: "— building —" },
-    ...buildings.map((b) => ({ value: b, label: b })),
-  ];
-
   const previewColumns = useMemo(() => {
     if (!previewRows[0]) {
       return [{ key: "timestamp", header: "timestamp" }];
     }
     return Object.keys(previewRows[0]).map((k) => ({ key: k, header: k }));
   }, [previewRows]);
+
+  const lastTrace = figure?.data[figure.data.length - 1]?.name ?? "";
+  const lastAxis = lastYAxisTitle(figure);
+  const lastDomain0 = lastYAxisDomain0(figure);
 
   return (
     <AppShell
@@ -352,7 +455,7 @@ export function ReportsPage() {
         {noFaultBanner ? (
           <InlineAlert
             id="reports-no-fault"
-            variant="info"
+            variant={noFaultIsError ? "danger" : "info"}
             testId="plots-no-fault"
           >
             {noFaultBanner}
@@ -361,21 +464,29 @@ export function ReportsPage() {
 
         <div data-testid="plots-page">
           <h2>FDD plot datasets</h2>
+          <LockedSiteCaption buildingId={buildingId} />
           <p>
-            Diagnostic rule series with a bottom <strong>confirmed_fault</strong> lane when
-            FDD has been run for the selected equipment and rule. Analytics rollups are
-            disabled here. Run FDD from Overview or <strong>Update this rule</strong> in
-            the left rail first.
+            Device type → device → applicable cookbook rules. Series auto-loads.
+            <strong> confirmed_fault</strong> is the bottom-most lane when FDD
+            has been run.
           </p>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
             <Select
-              id="plots-building"
-              label="Building"
-              value={buildingId}
-              options={buildingOptions}
-              onChange={(value) => setQuery({ siteId: value }, true)}
-              testId="plots-building-select"
+              id="plots-device-type"
+              label="Device type"
+              value={deviceType}
+              options={deviceTypes.map((t) => ({ value: t, label: t }))}
+              onChange={(v) => {
+                setDeviceType(v);
+                const next = inventory.find(
+                  (e) => v === "All" || e.equipment_type === v,
+                );
+                if (next && next.equipment_id !== equipmentId) {
+                  setQuery({ equipment: next.equipment_id }, true);
+                }
+              }}
+              testId="plots-device-type"
             />
             <Select
               id="plots-equipment"
@@ -395,15 +506,14 @@ export function ReportsPage() {
             />
           </div>
 
-          <div style={{ margin: "0.75rem 0" }}>
-            <Button
-              id="plots-load"
-              label={loading ? "Loading…" : "Load series"}
-              onClick={() => void loadSeries()}
-              disabled={loading || !equipmentId || !ruleId}
-              testId="plots-load"
-            />
-          </div>
+          <RadioGroup
+            id="plots-status"
+            label="Status"
+            value={statusFilter}
+            options={STATUS_FILTERS.map((s) => ({ value: s, label: s }))}
+            onChange={(v) => setStatusFilter(v as FddStatusFilter)}
+            testId="plots-status-filter"
+          />
 
           <PlotlyHost
             id="fdd-series"
@@ -412,6 +522,22 @@ export function ReportsPage() {
             loading={loading}
             testId="plots-chart"
           />
+
+          {figure ? (
+            <p data-testid="plots-fault-lane">
+              last_axis={lastAxis} last_trace={lastTrace} domain0={lastDomain0}
+            </p>
+          ) : null}
+
+          <div style={{ margin: "0.75rem 0" }}>
+            <Button
+              id="plots-load"
+              label={loading ? "Loading…" : "Refresh series"}
+              onClick={() => void loadSeries()}
+              disabled={loading || !equipmentId || !ruleId}
+              testId="plots-load"
+            />
+          </div>
 
           {figure ? (
             <p data-testid="plots-gap-summary">
@@ -439,7 +565,7 @@ export function ReportsPage() {
             testId="sensor-health-expander"
           >
             <p>
-              Sensor coverage and flatline checks for the selected building
+              Sensor coverage and flatline checks for the locked site
               (optionally scoped to equipment).
             </p>
             <Button

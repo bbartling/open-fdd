@@ -17,8 +17,8 @@ import {
   type WattlabDump,
   type WattlabDumpProfile,
 } from "../api/wattlabApi";
-import { listPackageBuildings } from "../api/mappingApi";
 import { importFuelCampus } from "../api/fuelApi";
+import { LockedSiteCaption } from "../components/LockedSiteCaption";
 
 const WATTLab_PAGES = [
   { value: "Uploads", label: "Uploads" },
@@ -45,7 +45,6 @@ export function WattLabPage() {
   const buildingId = query.siteId ?? "";
 
   const [jobs, setJobs] = useState<JobMeta[]>([]);
-  const [buildings, setBuildings] = useState<string[]>([]);
   const [uri, setUri] = useState("workspace://exports/demo.zip");
   const [profile, setProfile] = useState<WattlabDumpProfile>("summary");
   const [dump, setDump] = useState<WattlabDump | null>(null);
@@ -61,9 +60,6 @@ export function WattLabPage() {
     void listJobs()
       .then(setJobs)
       .catch(() => setJobs([]));
-    void listPackageBuildings()
-      .then(setBuildings)
-      .catch(() => setBuildings([]));
   }, []);
 
   const ensureJob = async (): Promise<string> => {
@@ -79,7 +75,7 @@ export function WattLabPage() {
 
   const onBuildDump = async () => {
     if (!buildingId) {
-      setError("Select an active site (import package first)");
+      setError("Lock a site on Overview first (import a package if needed)");
       return;
     }
     setSaving(true);
@@ -177,17 +173,7 @@ export function WattLabPage() {
           Active: <strong>{page}</strong>
         </p>
 
-        <Select
-          id="wattlab-building"
-          label="Building / site"
-          value={buildingId}
-          options={[
-            { value: "", label: "— select site —" },
-            ...buildings.map((b) => ({ value: b, label: b })),
-          ]}
-          onChange={(v) => setQuery({ siteId: v || undefined }, true)}
-          testId="wattlab-building"
-        />
+        <LockedSiteCaption buildingId={buildingId} testId="locked-site" />
 
         <Select
           id="wattlab-job"

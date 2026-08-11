@@ -20,11 +20,21 @@ export interface ActionsListResponse {
   error?: string;
 }
 
-export async function listActions(limit = 100): Promise<ActionEntry[]> {
+export async function listActions(limit = 10): Promise<ActionEntry[]> {
   const body = await apiFetch<ActionsListResponse>(
     `/api/actions?limit=${encodeURIComponent(String(limit))}`,
   );
   return Array.isArray(body.actions) ? body.actions : [];
+}
+
+export async function deleteAction(id: string): Promise<void> {
+  await apiFetch<{ ok?: boolean }>(`/api/actions/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function clearActions(): Promise<void> {
+  await apiFetch<{ ok?: boolean }>("/api/actions", { method: "DELETE" });
 }
 
 /** Prefer the newest running action; else null. */

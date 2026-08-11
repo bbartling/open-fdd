@@ -1,8 +1,11 @@
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { MAIN_SECTIONS } from "../nav/sections";
+import { hrefWithSession } from "../session/sessionQuery";
 
 interface SectionTabsProps {
   activeSectionId?: string;
+  /** In-page row (Overview after Equipment) — no extra chrome gutter. */
+  embedded?: boolean;
 }
 
 function resolveActiveId(
@@ -29,23 +32,11 @@ function resolveActiveId(
   return null;
 }
 
-function sectionPath(id: string, fallback: string): string {
-  switch (id) {
-    case "fdd-plots":
-      return "/reports?section=fdd-plots";
-    case "rcx-plots":
-      return "/rcx";
-    case "metering":
-      return "/metering";
-    case "actions":
-      return "/actions";
-    default:
-      return fallback;
-  }
-}
-
 /** Streamlit-style horizontal radio section selector. */
-export function SectionTabs({ activeSectionId }: SectionTabsProps) {
+export function SectionTabs({
+  activeSectionId,
+  embedded = false,
+}: SectionTabsProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -57,14 +48,14 @@ export function SectionTabs({ activeSectionId }: SectionTabsProps) {
 
   return (
     <fieldset
-      className="app-section-tabs"
+      className={`app-section-tabs${embedded ? " app-section-tabs--in-page" : ""}`}
       aria-label="Main sections"
       data-testid="section-tabs"
     >
       <legend className="app-section-tabs__legend">Section</legend>
       {MAIN_SECTIONS.map((section) => {
         const isActive = active === section.id;
-        const to = sectionPath(section.id, section.path);
+        const to = hrefWithSession(section.path, location.search);
         return (
           <label
             key={section.id}

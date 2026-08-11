@@ -50,15 +50,21 @@ capabilities:
 
   - id: CAP-SITE
     user_story: Building/site selection + delete site data
-    react_route: null
-    react_owner: null
+    react_route: /sites
+    react_owner: SitesPage
     central_apis:
       - /api/datasets
-    computation_owner: unknown
-    status: NOT_STARTED
-    evidence: {}
+    computation_owner: central.csv_ingest
+    status: IMPLEMENTED
+    evidence:
+      unit:
+        - frontend/web/src/pages/SitesPage.test.tsx
+        - frontend/web/src/components/SectionTabs.test.tsx
+      docs:
+        - docs/migration/react-rust/CAPABILITY_MATRIX.md
+        - openfdd_agent_spec/SITE_LOCK_FDD_RCX_CHECKLIST.md
     limitations:
-      - No SitesPage route in App.tsx.
+      - Site is locked from Overview + sidebar Active site; other tabs do not reselect.
 
   - id: CAP-JOBS
     user_story: Jobs CRUD archive/restore/duplicate
@@ -134,37 +140,42 @@ capabilities:
   - id: CAP-PLOTS
     user_story: FDD plots + fault overlays
     react_route: /reports
-    react_owner: ReportsPage.PlotlyHost
+    react_owner: ReportsPage
     central_apis:
       - /api/fdd/series
       - /api/fdd/results
     computation_owner: central.fdd
-    status: SCAFFOLD
+    status: IMPLEMENTED
     evidence:
       unit:
-        - frontend/web/src/api/plotDataset.test.ts
+        - frontend/web/src/pages/ReportsPage.test.tsx
+        - frontend/web/src/api/vibeCharts.test.ts
       docs:
         - docs/migration/react-rust/CAPABILITY_MATRIX.md
+        - openfdd_agent_spec/SITE_LOCK_FDD_RCX_CHECKLIST.md
     limitations:
-      - PlotlyHost is SVG line path, not Plotly npm (P1-M3-B).
+      - Overlay join must succeed after a rule run; missing confirmed_fault is a bug.
     demo_only: false
 
   - id: CAP-RCX
     user_story: RCx presets and rollups
-    react_route: /metering
-    react_owner: MeteringPage
+    react_route: /rcx
+    react_owner: RcxPage
     central_apis:
       - /api/analytics/rcx
+      - /api/analytics/rcx/presets
     computation_owner: central.analytics
-    status: SCAFFOLD
+    status: IMPLEMENTED
     evidence:
       unit:
-        - frontend/web/src/pages/MeteringPage.test.tsx
+        - frontend/web/src/pages/RcxPage.test.tsx
+        - services/central/src/analytics/rcx_presets.rs
       docs:
         - docs/migration/react-rust/CAPABILITY_MATRIX.md
+        - openfdd_agent_spec/SITE_LOCK_FDD_RCX_CHECKLIST.md
     limitations:
-      - Product control is labeled RCx AHU stub; coverage stubs only.
-    demo_only: true
+      - Heat pump / Weather families are empty placeholders (vibe19).
+    demo_only: false
 
   - id: CAP-WEATHER
     user_story: Weather provenance + BAS vs reference

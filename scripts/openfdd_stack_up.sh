@@ -67,6 +67,9 @@ fi
 mapfile -t ARGS < <(openfdd_stack_compose_args "$RECIPE")
 [[ ${#ARGS[@]} -ge 2 ]] || { echo "ERROR: no compose files for recipe=$RECIPE" >&2; exit 1; }
 openfdd_stack_export_image_env
+if [[ "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
+  openfdd_stack_guard_ghcr_web
+fi
 cd "$ROOT"
 
 if [[ "$DO_PULL" -eq 1 ]]; then

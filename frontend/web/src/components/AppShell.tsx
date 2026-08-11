@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { NavLink } from "react-router";
+import { NavLink, useLocation } from "react-router";
 import { SectionTabs } from "./SectionTabs";
 import { OracleSidebar } from "./OracleSidebar";
 import { SIDEBAR_NAV } from "../nav/sections";
+import { hrefWithSession } from "../session/sessionQuery";
 
 interface AppShellProps {
   title: string;
@@ -12,6 +13,8 @@ interface AppShellProps {
   activeSectionId?: string;
   /** When true, omit page H1 (hero supplies brand on Overview empty state). */
   hideHeader?: boolean;
+  /** Overview places radios after Equipment (vibe19); omit the chrome row. */
+  hideSectionTabs?: boolean;
 }
 
 export function AppShell({
@@ -20,8 +23,10 @@ export function AppShell({
   children,
   activeSectionId,
   hideHeader = false,
+  hideSectionTabs = false,
 }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const location = useLocation();
 
   return (
     <div
@@ -59,7 +64,7 @@ export function AppShell({
             {SIDEBAR_NAV.map(({ to, label, short, testId }) => (
               <NavLink
                 key={to}
-                to={to}
+                to={hrefWithSession(to, location.search)}
                 end={to === "/"}
                 className={({ isActive }) =>
                   `app-sidebar__link${isActive ? " app-sidebar__link--active" : ""}`
@@ -84,7 +89,9 @@ export function AppShell({
             ) : null}
           </header>
         ) : null}
-        <SectionTabs activeSectionId={activeSectionId} />
+        {hideSectionTabs ? null : (
+          <SectionTabs activeSectionId={activeSectionId} />
+        )}
         <main className="app-content">{children}</main>
       </div>
     </div>

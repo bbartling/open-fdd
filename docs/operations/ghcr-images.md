@@ -24,7 +24,18 @@ Which images a deployment pulls depends on the recipe — see
 
 | Tag | Type | Description |
 |-----|------|-------------|
-| `nightly` | Floating | Latest green `master` build |
+| `nightly` | Floating | Latest green `master` build (pointer — **not** proof of newest) |
+
+Resolve newest by OCI config `created` (not tag name):
+
+```bash
+./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web
+```
+
+Unmerged `frontend/web` is never inside `openfdd-web:sha-*`. Serve a local
+bundle and run `./scripts/openfdd_demo_gate.sh --local-web` before any login
+link. `openfdd_stack_up.sh` refuses GHCR web when `frontend/web` drifted
+(`OPENFDD_ALLOW_STALE_GHCR_WEB=1` to override).
 | `beta` | Floating | Last promoted beta pre-release |
 | `latest` | Floating | Last promoted **stable** release |
 | `3.3.0-beta.1` | Immutable | Pinned beta semver |

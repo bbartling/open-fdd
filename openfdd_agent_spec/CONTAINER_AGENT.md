@@ -9,6 +9,23 @@ Playground demos: **`develop`** tags for `vibe19` / `vibe20` (external).
 Never trust the GHCR web “Latest” alone. Never assume a running container
 updated itself.
 
+**Unmerged frontend is not in GHCR.** If `frontend/web` is dirty or not on
+`master`, `ghcr.io/bbartling/openfdd-web:sha-*` / `:nightly` is the **wrong
+demo**. Build a local bundle, bind-mount `dist`, run
+`./scripts/openfdd_demo_gate.sh --local-web`, and only then paste a Caddy URL.
+Say “local Overview bundle, not GHCR.”
+
+**Published tip ≠ tag name.** Pick newest-by-OCI-`created`:
+
+```bash
+./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web
+```
+
+Do not `docker pull …:nightly` and tell the user they are on tip. Pin
+`OPENFDD_IMAGE_TAG` to that `sha-*`, recreate, then
+`./scripts/openfdd_demo_gate.sh --ghcr-web`. If the gate fails, fix serve —
+do not hand out `http://192.168.204.55/auth` and blame the user.
+
 ---
 
 ## Open-FDD stack (nightly → immutable)

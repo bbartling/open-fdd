@@ -1,0 +1,6 @@
+# Local SPA image for Overview redo demos. Dist is bind-mounted at runtime
+# (frontend/web/dist is dockerignored). Not published to GHCR.
+FROM nginxinc/nginx-unprivileged:1.27-alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+USER 101
+EXPOSE 8080

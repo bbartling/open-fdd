@@ -26,6 +26,11 @@ Dual expression cookbooks (permanent): `docs/rules/cookbook/` (SQL + pandas).
 
 ## Start session
 
+Unmerged UI is **not** on GHCR. Resolve newest published images by OCI
+`created` (`./scripts/ghcr_newest_by_created.py`), and never paste a Caddy
+URL until `./scripts/openfdd_demo_gate.sh` exits 0. See
+[`CONTAINER_AGENT.md`](openfdd_agent_spec/CONTAINER_AGENT.md).
+
 ```bash
 ./scripts/openfdd_stack_up.sh react-ot     # React SPA + mqtt + central + fieldbus
 # or: react (no fieldbus) / csv

@@ -25,6 +25,13 @@ import {
   overviewChartLayout,
   rainbowColor,
 } from "./plotlyTheme";
+import { getPackageMapping } from "./mappingApi";
+import {
+  datasetTimeSpan,
+  isWeatherEquipment,
+  isWeatherEquipmentId,
+} from "../lib/overviewMetrics";
+import { naturalCompare } from "../lib/naturalSort";
 
 function num(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -688,11 +695,14 @@ export async function fetchCentralOverview(opts: {
   const dtMin = opts.dt_min_f ?? 10;
   const body = { building_id, max_points: 4000, dt_min_f: dtMin };
 
-  const [runtime, mech, econ, bas] = await Promise.all([
+  const [runtime, mech, econ, bas, mapping] = await Promise.all([
     postRuntime(body),
     postMechanicalCooling(body),
     postEconomizer(body),
     postBasVsWebOat(body),
+    building_id
+      ? getPackageMapping(building_id).catch(() => null)
+      : Promise.resolve(null),
   ]);
 
   const runtimeRows = runtime.rows?.length ? runtime.rows : runtime.equipment;
@@ -702,29 +712,38 @@ export async function fetchCentralOverview(opts: {
   const econRows = econ.rows?.length ? econ.rows : econ.equipment;
   const econPoints = econ.points ?? [];
 
+  const inventory = (opts.equipment ?? []).filter((e) => !isWeatherEquipment(e));
   const equipmentIds = [
     ...new Set(
       [
         ...equipmentTotals.map((r) => String(r.equipment_id ?? "")),
-        ...(opts.equipment ?? []).map((e) => String(e.equipment_id)),
-      ].filter(Boolean),
+        ...inventory.map((e) => String(e.equipment_id)),
+      ].filter((id) => id && !isWeatherEquipmentId(id)),
     ),
-  ].sort();
+  ].sort(naturalCompare);
 
-  const devices =
-    opts.equipment?.length
-      ? groupByType(
-          opts.equipment.map((e) => ({
-            equipment_type: e.equipment_type,
-            equipment_id: e.equipment_id,
-          })),
-        )
-      : groupByType(equipmentTotals);
+  const span = datasetTimeSpan(mapping?.equipment ?? []);
+
+  const devices = inventory.length
+    ? groupByType(
+        inventory.map((e) => ({
+          equipment_type: e.equipment_type,
+          equipment_id: e.equipment_id,
+        })),
+      )
+    : groupByType(
+        equipmentTotals.filter(
+          (r) => !isWeatherEquipmentId(String(r.equipment_id ?? "")),
+        ),
+      );
 
   const weeklyPlants = weeklyPlantFigures(runtimeRows);
   const motorFig = motorFigure(
     equipmentTotals.filter(
-      (r) => r.kind !== "weekly_plant" && r.kind !== "weekly_equipment",
+      (r) =>
+        r.kind !== "weekly_plant" &&
+        r.kind !== "weekly_equipment" &&
+        !isWeatherEquipmentId(String(r.equipment_id ?? "")),
     ),
   );
   const plants: OverviewPlantFig[] =
@@ -767,11 +786,7 @@ export async function fetchCentralOverview(opts: {
     equipment_count: equipmentIds.length,
     equipment_ids: equipmentIds,
     has_weather: Boolean(basOverlayFig),
-    span: {
-      start: null,
-      end: null,
-      span_hours: null,
-    },
+    span,
     motor_weekly: {
       caption: warnCaption(
         runtime,

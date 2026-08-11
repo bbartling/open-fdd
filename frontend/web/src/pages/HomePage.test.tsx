@@ -31,9 +31,19 @@ vi.mock("../api/mappingApi", () => ({
 
 vi.mock("../api/analyticsApi", () => ({
   listFddEquipment: vi.fn(async () => [
+    { equipment_id: "weather", equipment_type: "weather" },
     { equipment_id: "AHU_1", equipment_type: "AHU" },
     { equipment_id: "VAV_1", equipment_type: "VAV" },
   ]),
+  postInspect: vi.fn(async () => ({
+    coverage: {
+      plottable_columns: ["sat"],
+      columns_plotted: ["sat"],
+      row_count: 100,
+    },
+    points: [],
+    warnings: [],
+  })),
   postRuntime: vi.fn(async () => ({
     schema_version: "1",
     query_version: "runtime-v1",
@@ -69,6 +79,17 @@ vi.mock("../api/analyticsApi", () => ({
         n_identifiable: 5,
       },
     ],
+    equipment: [],
+    points: [],
+    skipped: [],
+  })),
+  postBasVsWebOat: vi.fn(async () => ({
+    schema_version: "1",
+    query_version: "bas-vs-web-oat-v2",
+    generated_at: "",
+    engine: "datafusion",
+    warnings: [],
+    rows: [],
     equipment: [],
     points: [],
     skipped: [],
@@ -155,8 +176,20 @@ describe("HomePage overview", () => {
       expect(screen.getByTestId("overview-motor-runtime")).toBeTruthy();
       expect(screen.getByTestId("overview-schedule")).toBeTruthy();
     });
+    expect(screen.getByTestId("oracle-hero-logo")).toBeTruthy();
+    expect(screen.getByTestId("oracle-hero-how").textContent).toMatch(
+      /2 pieces \+ run/,
+    );
+    expect(screen.queryByText(/FDD \/ WattLab/)).toBeNull();
     expect(listPackageBuildings).toHaveBeenCalled();
     expect(listFddEquipment).toHaveBeenCalled();
+    const hero = screen.getByTestId("oracle-hero");
+    expect(hero.querySelector('[data-testid="section-tabs"]')).toBeNull();
+    const eq = screen.getByTestId("overview-equipment-select");
+    const tabs = screen.getByTestId("section-tabs");
+    expect(
+      !!(eq.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
   });
 
   it("loads site inventory without a browser token (open mode)", async () => {

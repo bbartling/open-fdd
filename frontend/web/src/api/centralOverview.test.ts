@@ -2,6 +2,32 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fetchCentralOverview } from "./centralOverview";
 import { AIR_BARE_MIN_OCC_HOURS_WEEK, RAINBOW_PALETTE } from "./plotlyTheme";
 
+vi.mock("./mappingApi", () => ({
+  getPackageMapping: vi.fn(async () => ({
+    ok: true,
+    equipment: [
+      {
+        equipment_id: "AHU_1",
+        equipment_type: "AHU",
+        sampling: {
+          row_count: 35536,
+          first_timestamp: "2026-03-16T00:40:00",
+          last_timestamp: "2026-07-17T10:00:00",
+        },
+      },
+      {
+        equipment_id: "weather",
+        equipment_type: "weather",
+        sampling: {
+          row_count: 999999,
+          first_timestamp: "2020-01-01T00:00:00",
+          last_timestamp: "2029-12-31T23:00:00",
+        },
+      },
+    ],
+  })),
+}));
+
 vi.mock("./analyticsApi", () => ({
   postRuntime: vi.fn(async () => ({
     schema_version: "1",
@@ -274,6 +300,21 @@ describe("fetchCentralOverview", () => {
     expect(fig.data.some((t) => t.name === "Any compressor active")).toBe(true);
     expect(out.mech_cooling.callout).toMatch(/Only CHILLER_2/);
     expect(fig.layout?.barmode).toBe("stack");
+  });
+
+  it("excludes weather from equipment_count and uses mapping span not weather", async () => {
+    const out = await fetchCentralOverview({
+      building_id: "BUILDING_100",
+      equipment: [
+        { equipment_id: "AHU_1", equipment_type: "AHU" },
+        { equipment_id: "weather", equipment_type: "weather" },
+      ],
+    });
+    expect(out.equipment_ids).not.toContain("weather");
+    expect(out.equipment_count).toBeGreaterThanOrEqual(1);
+    expect(out.span.start).toBe("2026-03-16T00:40:00");
+    expect(out.span.end).toBe("2026-07-17T10:00:00");
+    expect(out.span.span_hours).toBe(2961.3);
   });
 });
 

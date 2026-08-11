@@ -241,6 +241,8 @@ body {
 .app-section-tabs {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-start;
+  text-align: left;
   gap: 0.35rem 1.15rem;
   align-items: center;
   min-height: var(--section-tabs-height);
@@ -248,7 +250,14 @@ body {
   background: var(--color-bg);
   border: none;
   margin: 0;
+  margin-inline: 0;
   overflow-x: auto;
+}
+
+.app-section-tabs--in-page {
+  padding-inline: 0;
+  padding-block: 0.65rem 0.85rem;
+  min-height: 0;
 }
 
 .app-section-tabs__legend {

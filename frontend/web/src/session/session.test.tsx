@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import {
   buildSessionSearch,
+  hrefWithSession,
   parseSessionSearch,
   clearFormDraft,
   saveFormDraft,
@@ -27,6 +28,12 @@ describe("sessionQuery", () => {
     expect(q.jobId).toBeUndefined();
     expect(q.equipment).toBe("VAV-2");
     expect(next).toContain("foo=bar");
+  });
+
+  it("hrefWithSession keeps site and equipment", () => {
+    expect(hrefWithSession("/rcx", "?site=BUILDING_100&eq=AHU_1")).toBe(
+      "/rcx?eq=AHU_1&site=BUILDING_100",
+    );
   });
 
   it("round-trips form drafts in sessionStorage", () => {
