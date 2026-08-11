@@ -343,13 +343,26 @@ def assess_frame(
     return fq
 
 
-def apply_normalized(df: pd.DataFrame, quality: FrameQuality) -> pd.DataFrame:
-    """Replace analog columns with normalized values; keep raw in ``raw:<role>``."""
-    out = df.copy()
+def apply_normalized(
+    df: pd.DataFrame,
+    quality: FrameQuality,
+    *,
+    attach_raw_and_flags: bool = True,
+) -> pd.DataFrame:
+    """Replace analog columns with normalized values.
+
+    One ``assign`` (no per-column insert) so Building 100 frames do not
+    fragment and balloon RAM. Set ``attach_raw_and_flags=False`` for FDD
+    runs that only need gated values.
+    """
+    assigns: dict[str, pd.Series] = {}
     for role, rq in quality.roles.items():
-        raw_col = f"raw:{role}"
-        if raw_col not in out.columns:
-            out[raw_col] = rq.raw
-        out[role] = rq.normalized
-        out[f"quality:{role}"] = rq.valid.astype(int)
-    return out
+        assigns[role] = rq.normalized
+        if attach_raw_and_flags:
+            raw_col = f"raw:{role}"
+            if raw_col not in df.columns:
+                assigns[raw_col] = rq.raw
+            assigns[f"quality:{role}"] = rq.valid.astype("int8")
+    if not assigns:
+        return df
+    return df.assign(**assigns)

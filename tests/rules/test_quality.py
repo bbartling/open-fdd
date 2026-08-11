@@ -8,6 +8,7 @@ from open_fdd.quality import (
     REASON_NON_NUMERIC,
     REASON_OUT_OF_RANGE,
     REASON_SENTINEL,
+    apply_normalized,
     assess_frame,
     normalize_role_series,
 )
@@ -79,6 +80,23 @@ def test_frame_summary_and_rule_skips_all_sentinel_required():
     assert fq.roles["fan-status"].valid_coverage == 1
     result = run_rule("VAV-1", df, poll_seconds=300.0, require_operational_gates=False)
     assert result.status == "SKIPPED_MISSING_ROLES"
+
+
+def test_apply_normalized_does_not_fragment():
+    idx = _idx()
+    df = pd.DataFrame(
+        {f"zone-air-temp": [72.0] * 6, "fan-status": [1.0] * 6},
+        index=idx,
+    )
+    for i in range(20):
+        df[f"extra_{i}"] = float(i)
+    fq = assess_frame(df)
+    out = apply_normalized(df, fq)
+    assert "raw:zone-air-temp" in out.columns
+    assert out["quality:fan-status"].dtype == "int8"
+    slim = apply_normalized(df, fq, attach_raw_and_flags=False)
+    assert "raw:zone-air-temp" not in slim.columns
+    assert list(slim.columns) == list(df.columns)
 
 
 def test_occupied_strings_are_valid_status():
