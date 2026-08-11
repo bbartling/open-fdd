@@ -415,22 +415,36 @@ timestamp_utc,web_oat,web_dp,oa_d,clg_col
         std::fs::create_dir_all(&building).unwrap();
 
         let rows = "\
-timestamp_utc,fan_col
-2026-01-01T00:00:00Z,0
-2026-01-01T00:05:00Z,0
-2026-01-01T00:10:00Z,50
-2026-01-01T00:15:00Z,50
-2026-01-01T00:20:00Z,50
-2026-01-01T00:25:00Z,0
+timestamp_utc,fan_col,fan_st,pump_st,ch_st
+2026-01-01T00:00:00Z,0,,,
+2026-01-01T00:05:00Z,0,,,
+2026-01-01T00:10:00Z,50,,,
+2026-01-01T00:15:00Z,50,,,
+2026-01-01T00:20:00Z,50,,,
+2026-01-01T00:25:00Z,0,,,
 ";
         write_equipment_fixture(
             &building,
             "AHU_1",
             5,
-            &[RoleCol {
-                csv_col: "fan_col",
-                role: "fan_cmd",
-            }],
+            &[
+                RoleCol {
+                    csv_col: "fan_col",
+                    role: "fan_cmd",
+                },
+                RoleCol {
+                    csv_col: "fan_st",
+                    role: "fan_status",
+                },
+                RoleCol {
+                    csv_col: "pump_st",
+                    role: "pump_status",
+                },
+                RoleCol {
+                    csv_col: "ch_st",
+                    role: "chiller_status",
+                },
+            ],
             rows,
         );
 
