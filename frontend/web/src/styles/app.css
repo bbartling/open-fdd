@@ -258,7 +258,6 @@ body {
   padding: 0;
   margin: 0 0.85rem 0 0;
   overflow: visible;
-  clip: auto;
   white-space: nowrap;
   border: 0;
   font-size: var(--font-size-sm);

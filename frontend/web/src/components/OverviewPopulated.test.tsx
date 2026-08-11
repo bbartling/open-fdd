@@ -222,7 +222,18 @@ describe("OverviewPopulated inspect equipment", () => {
   });
 
   it("refetches inspect when CSV/equipment select changes", async () => {
-    renderOverview();
+    const onEquipmentChange = vi.fn();
+    const { rerender } = render(
+      <MemoryRouter>
+        <OverviewPopulated
+          buildingId="B1"
+          equipmentId="AHU_1"
+          equipment={EQUIPMENT}
+          unitSystem="imperial"
+          onEquipmentChange={onEquipmentChange}
+        />
+      </MemoryRouter>,
+    );
 
     await waitFor(() => {
       expect(screen.getByTestId("overview-inspect-eq")).toBeTruthy();
@@ -235,6 +246,18 @@ describe("OverviewPopulated inspect equipment", () => {
       .querySelector("select");
     expect(select).toBeTruthy();
     fireEvent.change(select!, { target: { value: "BOILER_1" } });
+    expect(onEquipmentChange).toHaveBeenCalledWith("BOILER_1");
+    rerender(
+      <MemoryRouter>
+        <OverviewPopulated
+          buildingId="B1"
+          equipmentId="BOILER_1"
+          equipment={EQUIPMENT}
+          unitSystem="imperial"
+          onEquipmentChange={onEquipmentChange}
+        />
+      </MemoryRouter>,
+    );
 
     await waitFor(() => {
       expect(postInspect).toHaveBeenCalled();

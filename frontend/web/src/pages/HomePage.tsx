@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { apiFetch } from "../api/client";
 import type { CapabilitiesResponse } from "../api/contract";
@@ -54,8 +54,10 @@ export function HomePage() {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [devOpen, setDevOpen] = useState(false);
   const [unitSystem, setUnitSystem] = useState(readUnits);
+  const refreshSeq = useRef(0);
 
   const refresh = useCallback(async () => {
+    const seq = ++refreshSeq.current;
     setLoading(true);
     setError(null);
     try {
@@ -69,6 +71,7 @@ export function HomePage() {
           () => [] as FddEquipmentItem[],
         ),
       ]);
+      if (seq !== refreshSeq.current) return;
       setContractVersion(caps.contract.contract_version);
       setReactUi(Boolean(caps.capabilities?.react_ui));
       setUiGeneration(gen?.generation ?? null);
@@ -83,9 +86,10 @@ export function HomePage() {
         setQuery({ equipment: String(sortedEq[0].equipment_id) }, true);
       }
     } catch (err) {
+      if (seq !== refreshSeq.current) return;
       setError(formatErr(err));
     } finally {
-      setLoading(false);
+      if (seq === refreshSeq.current) setLoading(false);
     }
   }, [buildingId, equipmentId, setQuery]);
 

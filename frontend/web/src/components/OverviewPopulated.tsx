@@ -1278,8 +1278,11 @@ export function OverviewPopulated({
           ).map((id) => ({ value: id, label: id }))}
           onChange={(v) => {
             setInspectPick(v);
+            if (v !== "(weather)") {
+              onEquipmentChange(v);
+              return;
+            }
             setInspectBusy(true);
-            if (v !== "(weather)") onEquipmentChange(v);
             void refreshInspect({ pick: v, resetCols: true });
           }}
           testId="overview-inspect-eq"

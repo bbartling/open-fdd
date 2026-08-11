@@ -192,16 +192,25 @@ describe("PlotlyHost", () => {
         height={300}
       />,
     );
-    await waitFor(() => {
-      expect(react.mock.calls.length + newPlot.mock.calls.length).toBeGreaterThan(
-        0,
-      );
-    });
-    cbs[0]?.([], {} as ResizeObserver);
-    await waitFor(() => {
-      expect(resize).toHaveBeenCalled();
-    });
-    globalThis.ResizeObserver = prev;
+    try {
+      await waitFor(() => {
+        expect(
+          react.mock.calls.length + newPlot.mock.calls.length,
+        ).toBeGreaterThan(0);
+      });
+      await waitFor(() => {
+        expect(resize).toHaveBeenCalled();
+      });
+      resize.mockClear();
+      const ro = cbs.at(-1);
+      expect(ro).toBeTruthy();
+      ro?.([], {} as ResizeObserver);
+      await waitFor(() => {
+        expect(resize).toHaveBeenCalled();
+      });
+    } finally {
+      globalThis.ResizeObserver = prev;
+    }
   });
 
   it("cancels Plotly wait timers on unmount so vitest teardown stays clean", async () => {

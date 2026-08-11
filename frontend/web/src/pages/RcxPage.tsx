@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import {
   InlineAlert,
@@ -67,6 +67,7 @@ export function RcxPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showCoverage, setShowCoverage] = useState(false);
+  const runSeq = useRef(0);
 
   useEffect(() => {
     void listPackageBuildings()
@@ -195,6 +196,7 @@ export function RcxPage() {
 
   const run = useCallback(async () => {
     if (!buildingId || !presetId) return;
+    const seq = ++runSeq.current;
     setLoading(true);
     setError(null);
     try {
@@ -203,6 +205,7 @@ export function RcxPage() {
         max_points: 8000,
         series: { preset_id: presetId },
       });
+      if (seq !== runSeq.current) return;
       setEnv(res);
       const title =
         String(res.coverage?.title ?? presetId) ||
@@ -258,10 +261,11 @@ export function RcxPage() {
       }
       setFigure(fig);
     } catch (err) {
+      if (seq !== runSeq.current) return;
       setError(formatErr(err));
       setFigure(null);
     } finally {
-      setLoading(false);
+      if (seq === runSeq.current) setLoading(false);
     }
   }, [buildingId, familyPresets, presetId]);
 

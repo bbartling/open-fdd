@@ -107,6 +107,7 @@ export function ReportsPage() {
   const [statusFilter, setStatusFilter] = useState<FddStatusFilter>("All");
   const lastPrefEq = useRef("");
   const appliedResultPref = useRef(false);
+  const seriesSeq = useRef(0);
 
   const [figure, setFigure] = useState<PlotlyFigure | null>(null);
   const [loading, setLoading] = useState(false);
@@ -226,9 +227,8 @@ export function ReportsPage() {
       lastPrefEq.current = equipmentId;
       appliedResultPref.current = false;
     }
-    const forEq = results.some((r) => r.equipment_id === equipmentId);
     if (!eqChanged && appliedResultPref.current && ruleId) return;
-    if (forEq) appliedResultPref.current = true;
+    appliedResultPref.current = true;
     const pref = preferredPlotRuleId(rules, results, equipmentId);
     if (pref) setRuleId(pref);
   }, [equipmentId, rules, results, ruleId]);
@@ -246,11 +246,13 @@ export function ReportsPage() {
       );
       return;
     }
+    const seq = ++seriesSeq.current;
     setLoading(true);
     setError(null);
     setNoFaultBanner(null);
     try {
       const series = await getFddSeries(equipmentId, ruleId, buildingId || undefined);
+      if (seq !== seriesSeq.current) return;
       const roles = series.roles ?? [];
       const rows = (series.rows ?? []) as Array<Record<string, unknown>>;
       const fault = rows.map((r) => {
@@ -275,10 +277,11 @@ export function ReportsPage() {
         );
       }
     } catch (err) {
+      if (seq !== seriesSeq.current) return;
       setFigure(null);
       setError(formatErr(err));
     } finally {
-      setLoading(false);
+      if (seq === seriesSeq.current) setLoading(false);
     }
   }, [buildingId, equipmentId, ruleId]);
 
