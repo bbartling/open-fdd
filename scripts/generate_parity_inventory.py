@@ -88,10 +88,10 @@ KNOWN_DIFFERENCES: dict[str, dict] = {
         ),
     },
     "SCHED-247": {
-        "class": "semantic_gap",
+        "class": "none",
         "note": (
-            "pandas _sched247 ORs fan/pump/chiller status, commands, and duct "
-            "pressure; SQL sched247_always_on.sql uses fan_cmd only"
+            "4.3: ranked proof status/current > command; pressure is inferred "
+            "runtime only and does not OR into the FAULT mask. SQL uses the same rank."
         ),
     },
     "FC7": {

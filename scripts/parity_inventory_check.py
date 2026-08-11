@@ -105,8 +105,8 @@ def main() -> int:
     if chw.get("difference_class") not in {"none", "semantic_gap"}:
         fail(f"CHW-1 unexpected difference_class={chw.get('difference_class')}")
     sched = next(r for r in matrix if r["rule_id"] == "SCHED-247")
-    if sched.get("difference_class") != "semantic_gap":
-        fail("SCHED-247 must be classified semantic_gap until proof ranking matches SQL")
+    if sched.get("difference_class") not in {"none", "semantic_gap"}:
+        fail(f"SCHED-247 unexpected difference_class={sched.get('difference_class')}")
     if "count_explanation" not in inv:
         fail("missing count_explanation for 59-versus-63")
 
