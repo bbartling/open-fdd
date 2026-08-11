@@ -57,6 +57,8 @@ def main() -> int:
     concepts = inv.get("concepts") or []
     counts = inv.get("counts") or {}
 
+    if inv.get("schema_version") != "parity-inventory-v2":
+        fail(f"schema_version={inv.get('schema_version')!r} want parity-inventory-v2")
     if counts.get("pandas_diagnostics") != 59:
         fail(f"inventory pandas_diagnostics={counts.get('pandas_diagnostics')} want 59")
     if counts.get("sql_analytics") != 4:
@@ -65,6 +67,48 @@ def main() -> int:
         fail(f"inventory sql_registry={counts.get('sql_registry')} want 63")
     if len(concepts) != 63:
         fail(f"inventory concepts={len(concepts)} want 63")
+    matrix = inv.get("matrix") or []
+    if len(matrix) != 63:
+        fail(f"inventory matrix={len(matrix)} want 63")
+    required_matrix = {
+        "rule_id",
+        "title",
+        "equipment_types",
+        "required_roles",
+        "optional_roles",
+        "operational_proof_roles",
+        "default_thresholds",
+        "pandas_implementation",
+        "datafusion_sql_implementation",
+        "documentation_link",
+        "test_coverage",
+        "parity_status",
+        "known_semantic_differences",
+        "difference_class",
+    }
+    allowed_diff = {
+        "none",
+        "alias",
+        "missing_implementation",
+        "intentional_non_applicability",
+        "unsupported_datafusion_expression",
+        "documentation_error",
+        "semantic_gap",
+    }
+    for row in matrix:
+        missing_keys = sorted(required_matrix - set(row))
+        if missing_keys:
+            fail(f"{row.get('rule_id')}: matrix missing {missing_keys}")
+        if row.get("difference_class") not in allowed_diff:
+            fail(f"{row.get('rule_id')}: bad difference_class={row.get('difference_class')}")
+    chw = next(r for r in matrix if r["rule_id"] == "CHW-1")
+    if chw.get("difference_class") != "semantic_gap":
+        fail("CHW-1 must be classified semantic_gap until gate/SQL twins match")
+    sched = next(r for r in matrix if r["rule_id"] == "SCHED-247")
+    if sched.get("difference_class") != "semantic_gap":
+        fail("SCHED-247 must be classified semantic_gap until proof ranking matches SQL")
+    if "count_explanation" not in inv:
+        fail("missing count_explanation for 59-versus-63")
 
     diag = [c for c in concepts if c.get("kind") == "diagnostic"]
     analytics = [c for c in concepts if c.get("kind") == "sql_analytics"]

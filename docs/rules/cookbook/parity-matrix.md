@@ -6,20 +6,26 @@ nav_order: 6
 
 # SQL ↔ Pandas parity matrix
 
-**Wave 0 contract:** machine-readable inventory at [`sql_rules/generated/parity_inventory.yaml`](../../../sql_rules/generated/parity_inventory.yaml).  
-**Audit:** 2026-08-07 — legacy `proven_building_100` / `ported_from_cookbook` labels removed.
+**Contract:** machine-readable inventory at [`sql_rules/generated/parity_inventory.yaml`](../../../sql_rules/generated/parity_inventory.yaml) (`parity-inventory-v2`).  
+Regenerate with `python3 scripts/generate_parity_inventory.py`. Drift fails CI via `--check`.
 
-## Product split (read this first)
+**Audit:** 2026-08-07 — legacy `proven_building_100` / `ported_from_cookbook` labels removed.  
+**Audit:** 2026-08-11 — flat `matrix[]` columns (title, roles, proof, thresholds, docs, tests, difference class).
 
-| Surface | Count | Role |
+## Why 59 versus 63 (do not pad)
+
+| Surface | Count | Source |
 |---------|------:|------|
-| DataFusion SQL registry | **63** | Production Open-FDD FDD (Rust/DataFusion) |
-| Pandas catalog | **59** | PyPI `open_fdd.rules` oracle (+ docs) |
-| SQL analytics (no pandas twin) | **4** | `FAN-RUNTIME-HOURS`, `AVG-ZONE-TEMP`, `ZONE-COMFORT-PCT`, `FAULT-ELAPSED-HOURS` |
+| Pandas diagnostics | **59** | `CookbookRule(...)` in `open_fdd/rules/cookbook_catalog.py` (`CANONICAL_RULE_COUNT`) |
+| SQL twins of those 59 | 59 | `sql_rules/registry.yaml` |
+| SQL-only analytics | **4** | `FAN-RUNTIME-HOURS`, `AVG-ZONE-TEMP`, `ZONE-COMFORT-PCT`, `FAULT-ELAPSED-HOURS` |
+| SQL registry total | **63** | 59 diagnostics + 4 analytics |
+
+Aliases are **not** extra rules: `SV-SLEW` → `SV-RATE`, `FC13` → `FC13-SAT-HIGH`, `excess_runtime` → `SCHED-1`.
+
+Building 100 `48 × 59 = 2,832` is the pandas diagnostic cartesian product, not 63.
 
 Product UI is **React** (`frontend/web`). Do not delete pandas because SQL exists. Do not put pandas on the product request path.
-
-Aliases: `FC13` → SQL `FC13-SAT-HIGH`; `SV-SLEW` → `SV-RATE`.
 
 ## Honesty first — parity levels
 
