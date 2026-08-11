@@ -54,6 +54,8 @@ ROLE_BOUNDS: dict[str, tuple[float | None, float | None]] = {
     "fan-current": (0.0, 500.0),
     "chiller-current": (0.0, 2000.0),
     "pump-current": (0.0, 500.0),
+    "fan-speed-feedback": (0.0, 100.0),
+    "pump-speed-feedback": (0.0, 100.0),
 }
 
 STATUS_ROLES = {
@@ -186,7 +188,8 @@ def normalize_role_series(
         # Status/command: 0/1 (and 0–100 cmd) are legitimate. Only sentinels/nulls fail.
         num = pd.to_numeric(raw, errors="coerce")
         non_num = (~nulls) & num.isna() & ~raw.map(lambda x: isinstance(x, (bool, np.bool_)))
-        # string occ-mode etc. stay valid if not null
+        reason = reason.mask(non_num, REASON_NON_NUMERIC)
+        valid = valid & ~non_num
         if family in COMMAND_ROLES or str(role).endswith("-cmd"):
             sent = _is_sentinel(num, sentinels)
             reason = reason.mask(sent, REASON_SENTINEL)
@@ -288,6 +291,7 @@ def assess_frame(
     sentinels: Iterable[float] = DEFAULT_SENTINELS,
 ) -> FrameQuality:
     cols = list(roles) if roles is not None else [c for c in df.columns if c != "timestamp_utc"]
+    sentinels = tuple(sentinels)
     fq = FrameQuality()
     any_valid = pd.Series(False, index=df.index)
     totals = {"valid": 0, "invalid": 0}

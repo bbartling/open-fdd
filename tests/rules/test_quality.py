@@ -5,6 +5,8 @@ from __future__ import annotations
 import pandas as pd
 
 from open_fdd.quality import (
+    REASON_NON_NUMERIC,
+    REASON_OUT_OF_RANGE,
     REASON_SENTINEL,
     assess_frame,
     normalize_role_series,
@@ -35,6 +37,22 @@ def test_command_zero_and_one_are_valid():
     cmd = pd.Series([0.0, 1.0, 0.5, 100.0, 0.0, 25.0], index=idx)
     q = normalize_role_series(cmd, "fan-cmd")
     assert q.valid_sample_count == 6
+
+
+def test_non_numeric_command_is_invalid():
+    idx = _idx()
+    cmd = pd.Series([0.0, "invalid", 1.0, 0.0, 1.0, 0.0], index=idx)
+    q = normalize_role_series(cmd, "fan-cmd")
+    assert q.reason_counts[REASON_NON_NUMERIC] == 1
+    assert q.valid_sample_count == 5
+
+
+def test_speed_feedback_out_of_range():
+    idx = _idx()
+    spd = pd.Series([0.0, 50.0, -5.0, 101.0, 1.0, 80.0], index=idx)
+    q = normalize_role_series(spd, "fan-speed-feedback")
+    assert q.reason_counts[REASON_OUT_OF_RANGE] == 2
+    assert q.valid_sample_count == 4
 
 
 def test_negative_flow_impossible():

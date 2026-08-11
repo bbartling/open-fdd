@@ -2686,7 +2686,9 @@
       "pandas_implementation": "vav1",
       "datafusion_sql_implementation": "vav1_comfort_fault.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-1",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/rules/test_quality.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -3109,6 +3111,7 @@
       "datafusion_sql_implementation": "chw1_low_dt.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#chw-1",
       "test_coverage": [
+        "tests/rules/test_effective_catalog.py",
         "tests/rules/test_parity_inventory.py"
       ],
       "parity_status": "sql_screening",
@@ -10743,7 +10746,9 @@
       "sql_file": "vav1_comfort_fault.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-1",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-1",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/rules/test_quality.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -12011,6 +12016,7 @@
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#chw-1",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#chw-1",
       "test_coverage": [
+        "tests/rules/test_effective_catalog.py",
         "tests/rules/test_parity_inventory.py"
       ],
       "parity_status": "sql_screening",
