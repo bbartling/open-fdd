@@ -1,0 +1,13 @@
+{
+  "pandas_rule_id": "CHW-1",
+  "equipment_id": "CH_1",
+  "equipment_type": "CHILLER",
+  "poll_seconds": 300,
+  "require_operational_gates": true,
+  "datafusion_compare": "pending",
+  "params": {
+    "confirm_min": 0,
+    "min_dt": 4.0
+  },
+  "notes": "5-minute samples; dt==4 is not a fault (strict <)."
+}
