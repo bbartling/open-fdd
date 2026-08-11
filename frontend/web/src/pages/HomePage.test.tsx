@@ -31,6 +31,7 @@ vi.mock("../api/mappingApi", () => ({
 
 vi.mock("../api/analyticsApi", () => ({
   listFddEquipment: vi.fn(async () => [
+    { equipment_id: "AHU_10", equipment_type: "AHU" },
     { equipment_id: "AHU_1", equipment_type: "AHU" },
     { equipment_id: "VAV_1", equipment_type: "VAV" },
   ]),
@@ -89,6 +90,15 @@ vi.mock("../api/analyticsApi", () => ({
     equipment: [],
     points: [],
     skipped: [],
+  })),
+  postInspect: vi.fn(async () => ({
+    coverage: {
+      plottable_columns: ["sat"],
+      columns_plotted: ["sat"],
+      row_count: 1,
+    },
+    points: [{ timestamp_utc: "2024-01-01T00:00:00Z", sat: 55 }],
+    warnings: [],
   })),
 }));
 
@@ -151,9 +161,16 @@ describe("HomePage overview", () => {
     );
     await waitFor(() => {
       expect(screen.getByTestId("overview-populated")).toBeTruthy();
-      expect(screen.getByTestId("overview-eq-count").textContent).toContain("2");
+      expect(screen.getByTestId("oracle-hero")).toBeTruthy();
+      expect(screen.getByTestId("overview-eq-count").textContent).toContain("3");
       expect(screen.getByTestId("overview-motor-runtime")).toBeTruthy();
       expect(screen.getByTestId("overview-schedule")).toBeTruthy();
+    });
+    await waitFor(() => {
+      const eq = screen
+        .getByTestId("overview-equipment-select")
+        .querySelector("select");
+      expect(eq?.value).toBe("AHU_1");
     });
     expect(listPackageBuildings).toHaveBeenCalled();
     expect(listFddEquipment).toHaveBeenCalled();
@@ -167,7 +184,7 @@ describe("HomePage overview", () => {
     );
     await waitFor(() => {
       expect(screen.getByTestId("overview-populated")).toBeTruthy();
-      expect(screen.getByTestId("overview-eq-count").textContent).toContain("2");
+      expect(screen.getByTestId("overview-eq-count").textContent).toContain("3");
     });
     expect(listPackageBuildings).toHaveBeenCalled();
     expect(listFddEquipment).toHaveBeenCalled();

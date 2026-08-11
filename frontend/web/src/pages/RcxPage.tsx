@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import {
   InlineAlert,
@@ -193,7 +193,7 @@ export function RcxPage() {
     ];
   }, [env, presets, presetId]);
 
-  const run = async () => {
+  const run = useCallback(async () => {
     if (!buildingId || !presetId) return;
     setLoading(true);
     setError(null);
@@ -263,15 +263,21 @@ export function RcxPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [buildingId, familyPresets, presetId]);
+
+  useEffect(() => {
+    if (!buildingId || !presetId) return;
+    void run();
+  }, [buildingId, presetId, run]);
 
   return (
     <AppShell
-      title="RCx Plots"
-      caption="Retro-commissioning presets via central DataFusion historian (vibe19 chart kinds)."
+      title="RCx plots"
+      caption="Pick a mechanical family, then one plot. AHU timeseries keep every unit on one figure."
       activeSectionId="rcx-plots"
     >
       <div className="page-stack" data-testid="rcx-page">
+        <h2>RCx plots</h2>
         <Select
           id="rcx-building"
           label="Building"
@@ -285,22 +291,19 @@ export function RcxPage() {
         />
         <Select
           id="rcx-family"
-          label="Family"
+          label="Mechanical family"
           value={family}
-          options={[
-            { value: "", label: "— all —" },
-            ...families.map((f) => ({ value: f, label: f })),
-          ]}
+          options={families.map((f) => ({ value: f, label: f }))}
           onChange={(v) => {
             setFamily(v);
-            const next = presets.find((p) => !v || p.family === v);
+            const next = presets.find((p) => p.family === v);
             if (next) setPresetId(next.id);
           }}
           testId="rcx-family"
         />
         <Select
           id="rcx-preset"
-          label="Preset"
+          label="Plot"
           value={presetId}
           options={presetOptions}
           onChange={setPresetId}
@@ -351,7 +354,9 @@ export function RcxPage() {
           />
         ) : null}
         <PlotlyHost
+          key={`rcx-${presetId || "none"}`}
           id="rcx-plot"
+          figureId={`rcx-${presetId || "none"}`}
           label="RCx chart"
           figure={figure}
           loading={loading}

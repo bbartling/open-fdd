@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { ReportsPage } from "./ReportsPage";
 
@@ -51,6 +51,8 @@ vi.mock("../api/fddApi", () => ({
 
 vi.mock("../api/analyticsApi", () => ({
   listFddEquipment: vi.fn(async () => [
+    { equipment_id: "AHU_10", equipment_type: "AHU" },
+    { equipment_id: "AHU_1", equipment_type: "AHU" },
     { equipment_id: "VAV_1", equipment_type: "VAV" },
   ]),
   postSensorHealth: vi.fn(async () => ({
@@ -83,6 +85,7 @@ vi.mock("../api/analyticsApi", () => ({
 vi.mock("../api/uploadApi", () => ({ uploadPackage: vi.fn() }));
 
 import { getFddSeries } from "../api/fddApi";
+import { preferredPlotRuleId, matchesStatusFilter } from "./ReportsPage";
 
 function renderPlots(entry = "/reports?site=B1&eq=VAV_1") {
   return render(
@@ -110,15 +113,30 @@ describe("ReportsPage FDD Plots", () => {
   it("loads series and renders chart + preview", async () => {
     renderPlots();
     await waitFor(() => {
-      const btn = screen.getByTestId("plots-load").querySelector("button");
-      expect(btn?.disabled).toBe(false);
-    });
-    fireEvent.click(screen.getByTestId("plots-load").querySelector("button")!);
-    await waitFor(() => {
       expect(getFddSeries).toHaveBeenCalledWith("VAV_1", "VAV-1", "B1");
       expect(screen.getByTestId("plots-chart")).toBeTruthy();
       expect(screen.getByTestId("plots-preview-table")).toBeTruthy();
       expect(screen.queryByTestId("plots-no-fault")).toBeNull();
+    });
+  });
+
+  it("lists full inventory including equipment without results", async () => {
+    renderPlots("/reports?site=B1");
+    await waitFor(() => {
+      const select = screen
+        .getByTestId("plots-equipment-select")
+        .querySelector("select");
+      const values = [...(select?.options ?? [])].map((o) => o.value);
+      expect(values).toEqual(["AHU_1", "AHU_10", "VAV_1"]);
+      expect(values).not.toContain("");
+    });
+  });
+
+  it("shows status filter radios and result cards", async () => {
+    renderPlots();
+    await waitFor(() => {
+      expect(screen.getByTestId("plots-status-filter")).toBeTruthy();
+      expect(screen.getByTestId("plots-card-VAV-1")).toBeTruthy();
     });
   });
 
@@ -138,15 +156,34 @@ describe("ReportsPage FDD Plots", () => {
     });
     renderPlots();
     await waitFor(() => {
-      const btn = screen.getByTestId("plots-load").querySelector("button");
-      expect(btn?.disabled).toBe(false);
-    });
-    fireEvent.click(screen.getByTestId("plots-load").querySelector("button")!);
-    await waitFor(() => {
       expect(screen.getByTestId("plots-chart")).toBeTruthy();
       expect(screen.getByTestId("plots-no-fault").textContent).toMatch(
         /No fault lane yet/,
       );
     });
+  });
+});
+
+describe("preferredPlotRuleId", () => {
+  const rules = [
+    { rule_id: "VAV-1", description: "a" },
+    { rule_id: "VAV-2", description: "b" },
+  ];
+
+  it("prefers FAULT then first applicable", () => {
+    expect(
+      preferredPlotRuleId(
+        rules,
+        [{ rule_id: "VAV-2", equipment_id: "VAV_1", status: "FAULT" }],
+        "VAV_1",
+      ),
+    ).toBe("VAV-2");
+    expect(preferredPlotRuleId(rules, [], "VAV_1")).toBe("VAV-1");
+  });
+
+  it("matches SKIPPED* under SKIPPED filter", () => {
+    expect(matchesStatusFilter("SKIPPED_MISSING_ROLES", "SKIPPED")).toBe(true);
+    expect(matchesStatusFilter("PASS", "FAULT")).toBe(false);
+    expect(matchesStatusFilter("FAULT", "All")).toBe(true);
   });
 });

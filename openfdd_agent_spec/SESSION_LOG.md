@@ -1,5 +1,15 @@
 # Session log
 
+## 2026-08-11 — Overview / RCx / FDD Plots vibe19 UX match
+
+- Frontend-only: overlay AHU no longer wipes Overview (`buildingId`-only site clear).
+- Inspect auto-loads **all** plottable columns; remount `figureId=overview-inspect-{eq}`.
+- Equipment select: no empty placeholder; natural sort (`AHU_1` before `AHU_10`).
+- Populated Overview shows vibe19 hero (title / tagline / logo / how-it-works). Keep Update analytics + Run all rules.
+- PlotlyHost ResizeObserver stretch; RCx auto-run + Mechanical family / Plot; FDD full inventory + preferred rule + status filter radios.
+- Spec: `skills/openfdd-react-spa/SKILL.md` UX contract; BUILD_CHECKPOINTS + CAP-OVERVIEW/PLOTS/RCX honesty.
+- **No merge / no GHCR publish** this cycle.
+
 ## 2026-08-10 — Sites tab + Run Rules removal + FDD/inspect
 
 - Sites main tab after WattLab; Run Rules removed (`/rules` → Overview).

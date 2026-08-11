@@ -160,6 +160,50 @@ describe("PlotlyHost", () => {
     expect(layout2.uirevision).not.toEqual(layout.uirevision);
   });
 
+  it("resizes Plotly when the host box changes", async () => {
+    const cbs: ResizeObserverCallback[] = [];
+    class FakeRO {
+      cb: ResizeObserverCallback;
+      constructor(cb: ResizeObserverCallback) {
+        this.cb = cb;
+        cbs.push(cb);
+      }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    }
+    const prev = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = FakeRO as unknown as typeof ResizeObserver;
+    const resize = vi.fn();
+    window.Plotly = {
+      newPlot,
+      react,
+      purge,
+      Plots: { resize },
+    };
+    render(
+      <PlotlyHost
+        id="stretch"
+        label="Stretch"
+        figure={{
+          data: [{ x: [1], y: [2], type: "scatter", name: "a" }],
+          layout: {},
+        }}
+        height={300}
+      />,
+    );
+    await waitFor(() => {
+      expect(react.mock.calls.length + newPlot.mock.calls.length).toBeGreaterThan(
+        0,
+      );
+    });
+    cbs[0]?.([], {} as ResizeObserver);
+    await waitFor(() => {
+      expect(resize).toHaveBeenCalled();
+    });
+    globalThis.ResizeObserver = prev;
+  });
+
   it("cancels Plotly wait timers on unmount so vitest teardown stays clean", async () => {
     delete window.Plotly;
     const { unmount } = render(

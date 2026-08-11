@@ -50,15 +50,17 @@ capabilities:
 
   - id: CAP-SITE
     user_story: Building/site selection + delete site data
-    react_route: null
-    react_owner: null
+    react_route: /sites
+    react_owner: SitesPage
     central_apis:
       - /api/datasets
-    computation_owner: unknown
-    status: NOT_STARTED
-    evidence: {}
+    computation_owner: central.csv_ingest
+    status: IMPLEMENTED
+    evidence:
+      unit:
+        - frontend/web/src/pages/SitesPage.test.tsx
     limitations:
-      - No SitesPage route in App.tsx.
+      - Browser soak / QUALIFIED evidence not yet attached.
 
   - id: CAP-JOBS
     user_story: Jobs CRUD archive/restore/duplicate
@@ -126,10 +128,12 @@ capabilities:
     evidence:
       unit:
         - frontend/web/src/pages/HomePage.test.tsx
+        - frontend/web/src/components/OverviewPopulated.test.tsx
       docs:
         - docs/migration/react-rust/CAPABILITY_MATRIX.md
     limitations:
-      - Thin Overview caption remains; not full dashboard parity.
+      - Building charts still require explicit Update analytics (inspect auto-loads).
+      - Browser-qualified Plotly stretch / overlay soak not yet QUALIFIED.
 
   - id: CAP-PLOTS
     user_story: FDD plots + fault overlays
@@ -138,33 +142,39 @@ capabilities:
     central_apis:
       - /api/fdd/series
       - /api/fdd/results
+      - /api/fdd/equipment
     computation_owner: central.fdd
-    status: SCAFFOLD
+    status: IMPLEMENTED
     evidence:
       unit:
         - frontend/web/src/api/plotDataset.test.ts
+        - frontend/web/src/pages/ReportsPage.test.tsx
       docs:
         - docs/migration/react-rust/CAPABILITY_MATRIX.md
+        - openfdd_agent_spec/skills/openfdd-react-spa/SKILL.md
     limitations:
-      - PlotlyHost is SVG line path, not Plotly npm (P1-M3-B).
+      - Auto-load + inventory UX shipped; real-stack browser soak not QUALIFIED.
     demo_only: false
 
   - id: CAP-RCX
     user_story: RCx presets and rollups
-    react_route: /metering
-    react_owner: MeteringPage
+    react_route: /rcx
+    react_owner: RcxPage
     central_apis:
       - /api/analytics/rcx
+      - /api/analytics/rcx/presets
+      - /api/analytics/rcx/preset
     computation_owner: central.analytics
-    status: SCAFFOLD
+    status: IMPLEMENTED
     evidence:
       unit:
-        - frontend/web/src/pages/MeteringPage.test.tsx
+        - frontend/web/src/pages/RcxPage.test.tsx
       docs:
         - docs/migration/react-rust/CAPABILITY_MATRIX.md
+        - openfdd_agent_spec/skills/openfdd-react-spa/SKILL.md
     limitations:
-      - Product control is labeled RCx AHU stub; coverage stubs only.
-    demo_only: true
+      - Auto-run + stretch Plotly shipped; family coverage still DataFusion-preset limited.
+    demo_only: false
 
   - id: CAP-WEATHER
     user_story: Weather provenance + BAS vs reference

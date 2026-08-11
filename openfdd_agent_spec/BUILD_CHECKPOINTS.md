@@ -218,3 +218,4 @@ Product voice = React + DataFusion only. Track deletion / GHCR / agent_spec hone
 - [x] #671 DF Overview/RCx color+OAT parity; Rust-only central; present-tense docs (+ #672 rustfmt)
 - [x] bensbench tip `sha-130b1f0` pull + react-ot smoke (BUILDING_100 economizer + RCx OAT scatters; no Python in central)- [x] #674 vibe20 Fuel Phase A (Rust campus/bills analytics + React FuelDashboard) merged `cc63574`
 - [x] vibe19/vibe20 Plotly/UX parity: FDD stacked axes + timestamps, Actions log, Data Model role Select, RCx coverage, Metering Plotly, theme soften, Fuel chart 1:1 gaps
+- [x] Overview/RCx/FDD Plots vibe19 UX match (hero, inspect-all-cols, overlay no-wipe, RCx auto-run, FDD inventory + status radios). Presentation only — math still DataFusion. Not QUALIFIED.

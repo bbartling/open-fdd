@@ -29,6 +29,7 @@ import { postInspect, type FddEquipmentItem } from "../api/analyticsApi";
 import { equipmentInspectionChart } from "../api/inspectChart";
 import type { PlotlyFigure } from "../api/plotDataset";
 import { RULES_UPDATED_EVENT } from "./RuleTuningPanel";
+import { naturalCompare } from "../naturalSort";
 
 const DAYS = [
   "Monday",
@@ -314,7 +315,7 @@ export function OverviewPopulated({
         setInspectSelectedCols((prev) => {
           if (resetCols || opts?.cols !== undefined) {
             if (resetCols || selectedCols.length === 0) {
-              return plotted.slice(0, 8);
+              return plotted;
             }
             return selectedCols;
           }
@@ -328,9 +329,9 @@ export function OverviewPopulated({
             ) {
               return prev;
             }
-            return next.length ? next : plotted.slice(0, 6);
+            return next.length ? next : plotted;
           }
-          return plotted.slice(0, 8);
+          return plotted;
         });
         const rowCountN = Number(cov.row_count ?? env.points?.length ?? 0);
         if (Number.isFinite(rowCountN)) setRowCount(rowCountN);
@@ -380,8 +381,8 @@ export function OverviewPopulated({
     void refreshMeta();
   }, [refreshMeta]);
 
-  // Clear analytics when site context changes — do not auto-fire
-  // DataFusion POSTs (button-only; vibe19 Streamlit auto-recompute felt wonky).
+  // Clear building analytics only when the site changes. Overlay AHU must
+  // not wipe motor / cooling / inspect — it only swaps overlay traces.
   useEffect(() => {
     inspectReqSeq.current += 1;
     setOverview(null);
@@ -393,11 +394,24 @@ export function OverviewPopulated({
     setInspectMeta(null);
     setInspectPick("");
     setInspectBusy(false);
-  }, [buildingId, econOverlayEq]);
+  }, [buildingId]);
 
   useEffect(() => {
-    if (equipmentId && !inspectPick) setInspectPick(equipmentId);
-  }, [equipmentId, inspectPick]);
+    if (!econOverlayEq || !overview) return;
+    void refreshOverview();
+    // refreshOverview identity already tracks econOverlayEq.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [econOverlayEq]);
+
+  // Top equipment drives inspect: remount + all plottable columns.
+  useEffect(() => {
+    if (!buildingId || !equipmentId) return;
+    setInspectPick(equipmentId);
+    setInspectBusy(true);
+    void refreshInspect({ pick: equipmentId, resetCols: true });
+    // Intentionally omit refreshInspect — resetCols ignores selected cols.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildingId, equipmentId]);
 
   useEffect(() => {
     void getSessionConfig()
@@ -633,7 +647,7 @@ export function OverviewPopulated({
             testId="overview-refresh"
           />
           <p className="oracle-sidebar__caption">
-            Click to run Central DataFusion analytics (not auto on load)
+            Building charts (all AHUs) — run once after load
           </p>
         </div>
         <div className="overview-toolbar__action">
@@ -655,7 +669,8 @@ export function OverviewPopulated({
           </span>
         ) : (
           <span className="oracle-sidebar__caption" data-testid="overview-idle-hint">
-            Charts idle — press Update analytics to load.
+            Building charts need Update analytics once. Data inspection
+            auto-loads every column for the selected equipment.
           </span>
         )}
       </div>
@@ -668,8 +683,9 @@ export function OverviewPopulated({
       ) : null}
 
       <p className="oracle-sidebar__caption" data-testid="overview-dual-catalog">
-        Two actions, one engine family: <strong>Update analytics</strong>{" "}
-        runs Overview charts on demand (no auto-fetch);{" "}
+        <strong>Update analytics</strong> draws building-wide motor / economizer
+        / OAT charts (both AHUs). <strong>Data inspection</strong> auto-loads
+        every plottable column for the selected equipment.{" "}
         <strong>Run all rules</strong> runs the FDD SQL registry. Sidebar{" "}
         <strong>Update this rule</strong> re-runs one rule.
       </p>
@@ -679,13 +695,10 @@ export function OverviewPopulated({
           id="overview-equipment-select"
           label="Equipment"
           value={equipmentId}
-          options={[
-            { value: "", label: "— select equipment —" },
-            ...equipment.map((e) => ({
-              value: String(e.equipment_id),
-              label: String(e.equipment_id),
-            })),
-          ]}
+          options={[...equipment]
+            .map((e) => String(e.equipment_id))
+            .sort(naturalCompare)
+            .map((id) => ({ value: id, label: id }))}
           onChange={onEquipmentChange}
           testId="overview-equipment-select"
         />
@@ -1265,11 +1278,7 @@ export function OverviewPopulated({
           ).map((id) => ({ value: id, label: id }))}
           onChange={(v) => {
             setInspectPick(v);
-            setInspectSelectedCols([]);
-            setInspectCols([]);
-            setInspectFig(null);
-            setInspectErr(null);
-            setInspectMeta(null);
+            setInspectBusy(true);
             if (v !== "(weather)") onEquipmentChange(v);
             void refreshInspect({ pick: v, resetCols: true });
           }}
@@ -1317,7 +1326,9 @@ export function OverviewPopulated({
           </InlineAlert>
         ) : null}
         <PlotlyHost
+          key={`overview-inspect-${inspectPick || "none"}`}
           id="data-inspect"
+          figureId={`overview-inspect-${inspectPick || "none"}`}
           label="Inspection chart"
           figure={inspectFig}
           loading={inspectBusy}

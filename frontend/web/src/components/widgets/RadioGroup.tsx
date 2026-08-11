@@ -11,6 +11,7 @@ export interface RadioGroupProps extends WidgetBaseProps {
   value: string;
   options: RadioOption[];
   onChange: (value: string) => void;
+  orientation?: "vertical" | "horizontal";
 }
 
 export function RadioGroup({
@@ -25,12 +26,13 @@ export function RadioGroup({
   value,
   options,
   onChange,
+  orientation = "vertical",
 }: RadioGroupProps) {
   const isDisabled = disabled || loading;
 
   return (
     <fieldset
-      className={`widget widget--radio widget--${density}${error ? " widget--error" : ""}${isDisabled ? " widget--disabled" : ""}`}
+      className={`widget widget--radio widget--${density}${orientation === "horizontal" ? " widget--radio-horizontal" : ""}${error ? " widget--error" : ""}${isDisabled ? " widget--disabled" : ""}`}
       data-testid={widgetTestId(`radio-${id}`, testId)}
       disabled={isDisabled}
       aria-invalid={Boolean(error)}

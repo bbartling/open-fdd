@@ -243,6 +243,28 @@ export function PlotlyHost({
     };
   }, [clean, height, figureId, id]);
 
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        try {
+          window.Plotly?.Plots?.resize(el);
+        } catch {
+          /* ignore */
+        }
+      });
+    });
+    const wrap = el.parentElement ?? el;
+    ro.observe(wrap);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, [drawn, figureId, id]);
+
   const statusMsg = loading
     ? "Loading chart…"
     : renderErr

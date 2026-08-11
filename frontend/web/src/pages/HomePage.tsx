@@ -8,6 +8,7 @@ import {
   Metric,
 } from "../components/widgets";
 import { OverviewPopulated } from "../components/OverviewPopulated";
+import { OverviewHero } from "../components/OverviewHero";
 import { useSessionQuery } from "../session";
 import { listPackageBuildings } from "../api/mappingApi";
 import {
@@ -15,9 +16,9 @@ import {
   type FddEquipmentItem,
 } from "../api/analyticsApi";
 import { getUiGeneration } from "../api/cutoverApi";
+import { naturalSorted } from "../naturalSort";
 
 const DOCS_URL = "https://bbartling.github.io/open-fdd/";
-const REPO_URL = "https://github.com/bbartling/open-fdd";
 const AGENTS_URL =
   "https://github.com/bbartling/py-bacnet-stacks-playground/blob/develop/vibe_code_apps_19/AGENTS.md";
 
@@ -37,7 +38,7 @@ function readUnits(): "imperial" | "metric" {
   }
 }
 
-/** Streamlit-oracle Overview: empty hero OR populated analytics dashboard. */
+/** Streamlit-oracle Overview: always-on hero + populated analytics when a package is loaded. */
 export function HomePage() {
   const { query, setQuery } = useSessionQuery();
   const buildingId = query.siteId ?? "";
@@ -72,12 +73,14 @@ export function HomePage() {
       setReactUi(Boolean(caps.capabilities?.react_ui));
       setUiGeneration(gen?.generation ?? null);
       setBuildings(blds);
-      setEquipment(eq);
+      const sortedEq = naturalSorted(eq, (e) => String(e.equipment_id));
+      setEquipment(sortedEq);
       if (!buildingId && blds[0]) {
         setQuery({ siteId: blds[0] }, true);
       }
-      if (buildingId && !equipmentId && eq[0]) {
-        setQuery({ equipment: String(eq[0].equipment_id) }, true);
+      const ids = new Set(sortedEq.map((e) => String(e.equipment_id)));
+      if (buildingId && sortedEq[0] && (!equipmentId || !ids.has(equipmentId))) {
+        setQuery({ equipment: String(sortedEq[0].equipment_id) }, true);
       }
     } catch (err) {
       setError(formatErr(err));
@@ -121,60 +124,15 @@ export function HomePage() {
   return (
     <AppShell title="Open FDD" activeSectionId="overview" hideHeader>
       <div className="page-stack oracle-overview" data-testid="overview-page">
-        {!populated ? (
-          <header className="oracle-hero" data-testid="oracle-hero">
-            <h1 className="oracle-hero__title">Open FDD</h1>
-            <p className="oracle-hero__tagline">
-              Fault detection + WattLab energy twin — sites, FDD, and calibrated
-              models.
-            </p>
-            <div className="oracle-hero__logo-wrap">
-              <img
-                className="oracle-hero__logo"
-                src="/image_new_chiller.png"
-                alt="open-fdd — Rust-native HVAC fault detection at the edge"
-                width={720}
-                height={405}
-              />
-            </div>
-            <div className="oracle-hero__how">
-              <h2>How it works</h2>
-              <ol>
-                <li>
-                  <strong>Sites</strong> — Load a package zip; pick the active
-                  building from the Site list
-                </li>
-                <li>
-                  <strong>Data model</strong> — Column→role map for the active
-                  site
-                </li>
-                <li>
-                  <strong>FDD / WattLab</strong> — Run FDD from Overview or the
-                  left rail, then WattLab (Fuel / Twin / ECMs) scoped to the site
-                </li>
-              </ol>
-              <p>
-                <a href={DOCS_URL} target="_blank" rel="noreferrer">
-                  Open-FDD docs
-                </a>
-                {" · "}
-                <a href={REPO_URL} target="_blank" rel="noreferrer">
-                  Open-FDD repo
-                </a>
-              </p>
-            </div>
-          </header>
-        ) : (
-          <header className="oracle-hero oracle-hero--compact">
-            <h1 className="oracle-hero__title">Overview</h1>
-            <p className="oracle-hero__tagline">
-              Active site <code>{buildingId || "—"}</code>
-              {buildings.length > 1
-                ? ` · ${buildings.length} buildings loaded`
-                : ""}
-            </p>
-          </header>
-        )}
+        <OverviewHero />
+        {populated ? (
+          <p className="oracle-sidebar__caption" data-testid="overview-active-site">
+            Active site <code>{buildingId || "—"}</code>
+            {buildings.length > 1
+              ? ` · ${buildings.length} buildings loaded`
+              : ""}
+          </p>
+        ) : null}
 
         {!populated ? (
           <>
