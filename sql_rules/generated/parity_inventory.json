@@ -557,7 +557,9 @@
       "pandas_implementation": "fc1",
       "datafusion_sql_implementation": "fc1_duct_static_low.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc1",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/rules/test_evidence_json.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -5490,7 +5492,9 @@
       "sql_file": "fc1_duct_static_low.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc1",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc1",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/rules/test_evidence_json.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
