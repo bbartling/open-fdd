@@ -442,6 +442,30 @@ def run_cookbook_rule(
     wx_ok = weather_available(d)
     spec = RULE_GATES.get(rule.id)
 
+    from open_fdd.quality import assess_frame, apply_normalized
+
+    q_roles = list(dict.fromkeys(list(rule.required_roles) + list(rule.optional_roles)))
+    quality = assess_frame(d, [r for r in q_roles if r in d.columns])
+    min_cov = float(params.get("min_valid_coverage", 0.5))
+    req_cov = [
+        quality.roles[r].valid_coverage
+        for r in rule.required_roles
+        if r in quality.roles
+    ]
+    worst_req = min(req_cov) if req_cov else 1.0
+    if req_cov and worst_req <= 0.0:
+        return skipped(
+            rule.id,
+            equipment_id,
+            [r for r in rule.required_roles if r in quality.roles and quality.roles[r].valid_coverage <= 0],
+            notes="SKIPPED — no valid samples after quality normalization",
+            site_id=sid,
+            building_id=bid,
+            equipment_type=eq_type,
+            params_fingerprint=fp,
+        )
+    d = apply_normalized(d, quality)
+
     try:
         active, gate_meta = resolve_operational_mask(
             d,
@@ -477,6 +501,11 @@ def run_cookbook_rule(
             raw = rule.compute(d, params, poll_seconds)
         raw = raw.reindex(d.index).fillna(False).astype(bool)
         metrics: dict[str, Any] = {**dict(gate_meta), **weather_source_metrics(d)}
+        metrics["quality"] = quality.summary()
+        metrics["quality_confidence"] = quality.quality_confidence
+        if worst_req < min_cov:
+            metrics["quality_below_minimum"] = True
+            metrics["quality_confidence"] = min(quality.quality_confidence, worst_req)
         use_active = bool(gate_meta.get("gate_applied"))
         if rule.id == "ECON-3":
             metrics["weather_gate"] = d.attrs.get("econ3_weather_source", "")
