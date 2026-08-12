@@ -47,6 +47,8 @@ fn write_building(parquet_root: &Path, building_id: &str, zone_t: Option<f64>, r
         Some(z) => {
             fields.push(Field::new("zone_t", DataType::Float64, false));
             columns.push(Arc::new(Float64Array::from(vec![z; rows])) as ArrayRef);
+            fields.push(Field::new("occ_mode", DataType::Utf8, true));
+            columns.push(Arc::new(StringArray::from(vec!["occupied"; rows])) as ArrayRef);
         }
         None => {
             // A benign column so the parquet is non-empty but lacks zone_t.
