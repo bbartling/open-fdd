@@ -1,14 +1,30 @@
--- ahu_satdev.sql — SAT deviation from setpoint
-WITH base AS (
+-- ahu_satdev.sql — SAT deviation from setpoint (fan_running + confirm)
+WITH h AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    sat,
+    sat_sp,
+    fan_cmd,
+    fan_status,
+    CASE
+      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      ELSE 1
+    END AS fan_on
+  FROM history
+),
+base AS (
   SELECT
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN sat IS NULL OR sat_sp IS NULL THEN 0
       WHEN ABS(sat - sat_sp) > {{SAT_DEV_ERR}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
-  FROM history
+  FROM h
 ),
 lagged AS (
   SELECT

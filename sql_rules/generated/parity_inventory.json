@@ -54,7 +54,13 @@
       "required_roles": [
         "oa_t"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd",
+        "pump_status",
+        "chw_pump_cmd",
+        "chiller_status"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -133,7 +139,13 @@
       "required_roles": [
         "oa_t"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd",
+        "pump_status",
+        "chw_pump_cmd",
+        "chiller_status"
+      ],
       "operational_proof_roles": [],
       "default_thresholds": {
         "flatline_tol": {
@@ -188,7 +200,13 @@
       "required_roles": [
         "oa_t"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd",
+        "pump_status",
+        "chw_pump_cmd",
+        "chiller_status"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -270,9 +288,7 @@
         "zone",
         "heatpump"
       ],
-      "required_roles": [
-        "fan_cmd"
-      ],
+      "required_roles": [],
       "optional_roles": [],
       "operational_proof_roles": [],
       "default_thresholds": {
@@ -493,7 +509,10 @@
         "duct-static-pressure-sp",
         "fan-cmd"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -579,7 +598,10 @@
         "return-air-temp",
         "fan-cmd"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -670,7 +692,10 @@
         "return-air-temp",
         "fan-cmd"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -760,7 +785,9 @@
         "cooling-valve",
         "fan-cmd"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -820,7 +847,10 @@
         "fan-cmd",
         "heating-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -919,7 +949,10 @@
         "return-air-temp",
         "vav-total-airflow"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -1086,7 +1119,8 @@
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc7",
       "test_coverage": [
         "tests/rules/test_golden_parity.py",
-        "tests/rules/test_parity_inventory.py"
+        "tests/rules/test_parity_inventory.py",
+        "tests/test_wattlab_parity_diff.py"
       ],
       "parity_status": "concept_only",
       "known_semantic_differences": "concept_only \u2014 SQL file is a placeholder; do not claim twin parity",
@@ -1104,7 +1138,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -1211,7 +1248,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -1310,7 +1350,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -1401,7 +1444,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -1500,7 +1546,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -1615,7 +1664,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -1708,7 +1760,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -1815,7 +1870,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -1928,7 +1986,10 @@
         "discharge-air-temp",
         "discharge-air-temp-sp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -1962,7 +2023,9 @@
       "pandas_implementation": "ahu_sat_dev",
       "datafusion_sql_implementation": "ahu_satdev.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#ahu-satdev",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/test_wattlab_parity_diff.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -1977,7 +2040,10 @@
         "duct-static-pressure",
         "duct-static-pressure-sp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [],
       "default_thresholds": {
         "duct_high_margin": {
@@ -2029,7 +2095,10 @@
         "heating-valve",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -2121,7 +2190,10 @@
         "outside-air-damper",
         "outside-air-temp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -2170,7 +2242,10 @@
         "outside-air-temp",
         "outside-air-damper"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -2306,7 +2381,10 @@
         "outside-air-temp",
         "fan-cmd"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -2357,7 +2435,10 @@
         "outside-air-temp",
         "heating-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -2658,7 +2739,9 @@
       "required_roles": [
         "zone-air-temp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "occ_mode"
+      ],
       "operational_proof_roles": [],
       "default_thresholds": {
         "zone_lo": {
@@ -2711,7 +2794,10 @@
         "outside-air-temp",
         "reheat-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -2775,7 +2861,10 @@
       "required_roles": [
         "damper"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -2841,7 +2930,10 @@
         "zone-airflow",
         "damper"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -2883,7 +2975,10 @@
         "vav-discharge-air-temp",
         "vav-inlet-air-temp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -2948,7 +3043,10 @@
         "vav-discharge-air-temp",
         "ahu-discharge-air-temp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -3004,7 +3102,10 @@
       "required_roles": [
         "zone-airflow"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -3333,7 +3434,10 @@
         "zone-air-temp",
         "fan-cmd"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "compressor_status",
+        "fan_status"
+      ],
       "operational_proof_roles": [
         "compressor-status",
         "equipment-enable",
@@ -3429,7 +3533,12 @@
       "required_roles": [
         "condenser-water-supply-temp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "pump_status",
+        "chiller_status",
+        "chw_flow",
+        "chw_pump_cmd"
+      ],
       "operational_proof_roles": [
         "pump-status",
         "chw-pump-status",
@@ -3639,7 +3748,10 @@
         "duct-static-pressure",
         "vav-pressure-request-sum"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -3696,7 +3808,12 @@
         "hot-water-supply-temp",
         "hw-reset-request-sum"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "pump_status",
+        "chiller_status",
+        "chw_flow",
+        "chw_pump_cmd"
+      ],
       "operational_proof_roles": [
         "pump-status",
         "chw-pump-status",
@@ -3760,7 +3877,12 @@
         "chilled-water-supply-temp",
         "chw-reset-request-sum"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "pump_status",
+        "chiller_status",
+        "chw_flow",
+        "chw_pump_cmd"
+      ],
       "operational_proof_roles": [
         "pump-status",
         "chw-pump-status",
@@ -3985,7 +4107,10 @@
         "outside-air-temp",
         "fan-status"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -4043,7 +4168,10 @@
         "mixed-air-temp",
         "outside-air-damper"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [],
       "default_thresholds": {
         "leak_delta": {
@@ -4285,7 +4413,13 @@
       "required_roles": [
         "oa_t"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd",
+        "pump_status",
+        "chw_pump_cmd",
+        "chiller_status"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -4482,7 +4616,13 @@
       "required_roles": [
         "oa_t"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd",
+        "pump_status",
+        "chw_pump_cmd",
+        "chiller_status"
+      ],
       "operational_proof_roles": [],
       "default_thresholds": {
         "flatline_tol": {
@@ -4655,7 +4795,13 @@
       "required_roles": [
         "oa_t"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd",
+        "pump_status",
+        "chw_pump_cmd",
+        "chiller_status"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -4855,9 +5001,7 @@
         "zone",
         "heatpump"
       ],
-      "required_roles": [
-        "fan_cmd"
-      ],
+      "required_roles": [],
       "optional_roles": [],
       "operational_proof_roles": [],
       "default_thresholds": {
@@ -5436,7 +5580,10 @@
         "duct-static-pressure-sp",
         "fan-cmd"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -5644,7 +5791,10 @@
         "return-air-temp",
         "fan-cmd"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -5826,7 +5976,10 @@
         "return-air-temp",
         "fan-cmd"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -6007,7 +6160,9 @@
         "cooling-valve",
         "fan-cmd"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -6169,7 +6324,10 @@
         "fan-cmd",
         "heating-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -6390,7 +6548,10 @@
         "return-air-temp",
         "vav-total-airflow"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -6681,7 +6842,8 @@
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc7",
       "test_coverage": [
         "tests/rules/test_golden_parity.py",
-        "tests/rules/test_parity_inventory.py"
+        "tests/rules/test_parity_inventory.py",
+        "tests/test_wattlab_parity_diff.py"
       ],
       "parity_status": "concept_only",
       "parity_level": "concept_only",
@@ -6819,7 +6981,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -7017,7 +7182,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -7207,7 +7375,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -7389,7 +7560,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -7579,7 +7753,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -7787,7 +7964,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -8022,7 +8202,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -8241,7 +8424,10 @@
         "outside-air-damper",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -8466,7 +8652,10 @@
         "discharge-air-temp",
         "discharge-air-temp-sp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -8502,7 +8691,9 @@
       "sql_file": "ahu_satdev.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#ahu-satdev",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#ahu-satdev",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/test_wattlab_parity_diff.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -8627,7 +8818,10 @@
         "duct-static-pressure",
         "duct-static-pressure-sp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [],
       "default_thresholds": {
         "duct_high_margin": {
@@ -8801,7 +8995,10 @@
         "heating-valve",
         "cooling-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -9118,7 +9315,10 @@
         "outside-air-damper",
         "outside-air-temp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -9269,7 +9469,10 @@
         "outside-air-temp",
         "outside-air-damper"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -9669,7 +9872,10 @@
         "outside-air-temp",
         "fan-cmd"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -9832,7 +10038,10 @@
         "outside-air-temp",
         "heating-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -10736,7 +10945,9 @@
       "required_roles": [
         "zone-air-temp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "occ_mode"
+      ],
       "operational_proof_roles": [],
       "default_thresholds": {
         "zone_lo": {
@@ -10912,7 +11123,10 @@
         "outside-air-temp",
         "reheat-valve"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -11108,7 +11322,10 @@
       "required_roles": [
         "damper"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -11296,7 +11513,10 @@
         "zone-airflow",
         "damper"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -11440,7 +11660,10 @@
         "vav-discharge-air-temp",
         "vav-inlet-air-temp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -11637,7 +11860,10 @@
         "vav-discharge-air-temp",
         "ahu-discharge-air-temp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -11815,7 +12041,10 @@
       "required_roles": [
         "zone-airflow"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -12724,7 +12953,10 @@
         "zone-air-temp",
         "fan-cmd"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "compressor_status",
+        "fan_status"
+      ],
       "operational_proof_roles": [
         "compressor-status",
         "equipment-enable",
@@ -13055,7 +13287,12 @@
       "required_roles": [
         "condenser-water-supply-temp"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "pump_status",
+        "chiller_status",
+        "chw_flow",
+        "chw_pump_cmd"
+      ],
       "operational_proof_roles": [
         "pump-status",
         "chw-pump-status",
@@ -13643,7 +13880,10 @@
         "duct-static-pressure",
         "vav-pressure-request-sum"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -13822,7 +14062,12 @@
         "hot-water-supply-temp",
         "hw-reset-request-sum"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "pump_status",
+        "chiller_status",
+        "chw_flow",
+        "chw_pump_cmd"
+      ],
       "operational_proof_roles": [
         "pump-status",
         "chw-pump-status",
@@ -14008,7 +14253,12 @@
         "chilled-water-supply-temp",
         "chw-reset-request-sum"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "pump_status",
+        "chiller_status",
+        "chw_flow",
+        "chw_pump_cmd"
+      ],
       "operational_proof_roles": [
         "pump-status",
         "chw-pump-status",
@@ -14687,7 +14937,10 @@
         "outside-air-temp",
         "fan-status"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [
         "fan-status",
         "fan-speed-feedback",
@@ -14867,7 +15120,10 @@
         "mixed-air-temp",
         "outside-air-damper"
       ],
-      "optional_roles": [],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd"
+      ],
       "operational_proof_roles": [],
       "default_thresholds": {
         "leak_delta": {

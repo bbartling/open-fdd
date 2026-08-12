@@ -1,0 +1,14 @@
+# Allowlist false positives. Gitleaks scans the whole PR commit range,
+# so literal `missing_api:<table>.csv` provenance flags in an intermediate
+# commit must be allowed even after they are renamed.
+title = "Open-FDD"
+
+[allowlist]
+description = "Assembler provenance flags, not credentials"
+regexes = [
+  '''missing_api:[A-Za-z0-9_.-]+\.csv''',
+  '''missing_table:[A-Za-z0-9_.-]+\.csv''',
+]
+paths = [
+  '''scripts/wattlab_parity_ofdd_rust_bundle\.py''',
+]

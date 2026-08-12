@@ -3,16 +3,32 @@
 -- Pandas also faults on rolling "fixed high" flow and high min-flow SP while air is on
 -- (params flow_on_min / fixed_flow_* / high_min_flow_sp). Those windows are not ported yet;
 -- {{HIGH_MIN_FLOW_SP}} is accepted so registry substitution stays valid but is unused here.
-WITH base AS (
+WITH h AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    zone_flow,
+    min_flow_sp,
+    fan_cmd,
+    fan_status,
+    CASE
+      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      ELSE 1
+    END AS fan_on
+  FROM history
+),
+base AS (
   SELECT
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN COALESCE(fan_on, 0) = 0 THEN 0
       WHEN zone_flow IS NULL OR min_flow_sp IS NULL THEN 0
       WHEN zone_flow < min_flow_sp THEN 1
       ELSE 0
     END AS INT) AS raw_fault
-  FROM history
+  FROM h
 ),
 lagged AS (
   SELECT

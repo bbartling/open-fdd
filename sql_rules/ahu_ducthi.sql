@@ -4,7 +4,13 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     duct_static, duct_static_sp,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan
+    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan,
+    CASE
+      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      ELSE 1
+    END AS fan_on
+
   FROM history
 ),
 base AS (
@@ -13,7 +19,7 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN duct_static IS NULL OR duct_static_sp IS NULL THEN 0
-      WHEN (fan IS NOT NULL AND fan >= 0.05 OR duct_static > {{PRESSURE_ON_MIN}})
+      WHEN (COALESCE(fan_on, 0) = 1 OR duct_static > {{PRESSURE_ON_MIN}})
        AND duct_static > duct_static_sp + {{DUCT_HIGH_MARGIN}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault

@@ -1,15 +1,29 @@
 -- vav1_comfort_fault.sql — zone comfort band with confirm window (Open-FDD parity)
--- OFDD-065 note: do not reference fan_cmd here. Zone-only VAV parquet schemas
+-- Occupied-only when occ_mode is present; do not require fan_cmd (VAV-1 lesson).
+-- OFDD-065: do not reference fan_cmd here. Zone-only VAV parquet schemas
 -- often lack fan_cmd; DataFusion then schema-errors → SKIPPED_MISSING_ROLES.
--- SV-STALE owns the fan-on gate for AHU stale inflation; VAV-1 Liberty residual
--- remains a confirm-window / band tuning item for a follow-up soak.
-WITH base AS (
+WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    CAST(CASE WHEN zone_t < {{ZONE_T_LO}} OR zone_t > {{ZONE_T_HI}} THEN 1 ELSE 0 END AS INT) AS raw_fault
+    zone_t,
+    occ_mode,
+    CAST(CASE WHEN zone_t < {{ZONE_T_LO}} OR zone_t > {{ZONE_T_HI}} THEN 1 ELSE 0 END AS INT) AS band_fault
   FROM history
   WHERE zone_t IS NOT NULL
+),
+base AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    CAST(CASE
+      WHEN occ_mode IS NOT NULL
+       AND LOWER(trim(CAST(occ_mode AS VARCHAR))) IN
+         ('unoccupied','unocc','off','false','night','standby','setback','0','0.0','no')
+      THEN 0
+      ELSE band_fault
+    END AS INT) AS raw_fault
+  FROM h
 ),
 lagged AS (
   SELECT

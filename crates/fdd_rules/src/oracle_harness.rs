@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use anyhow::Result;
+use datafusion::prelude::SessionContext;
 use fdd_sql::{register_parquet_tree, run_sql};
 use fdd_store::ingest_building;
 
@@ -58,7 +60,7 @@ pub async fn run_rule_fault_hours(
         .into_owned();
     ingest_building(data_root, &building_id, &tmp_parquet).unwrap();
 
-    let ctx = datafusion::prelude::SessionContext::new();
+    let ctx = SessionContext::new();
     register_parquet_tree(&ctx, &tmp_parquet).await.unwrap();
 
     let sql_path = repo_sql_rules().join(sql_file);
@@ -69,6 +71,10 @@ pub async fn run_rule_fault_hours(
         params.insert((*k).into(), (*v).into());
     }
     let sql = substitute_sql(&raw_sql, &params);
+    // Match runner: inject NULL optional fan proof columns when fixtures omit them.
+    let sql = inject_optional_fan_cols(&ctx, sql_file, &sql)
+        .await
+        .unwrap();
     let result = run_sql(&ctx, &sql).await.unwrap();
     if result.row_count == 0 {
         return 0.0;
@@ -107,6 +113,66 @@ pub fn assert_hours_close(got: f64, expected: f64, label: &str) {
         (got - expected).abs() < 1e-6,
         "{label}: expected {expected}h, got {got}h"
     );
+}
+
+async fn inject_optional_fan_cols(
+    ctx: &SessionContext,
+    _sql_file: &str,
+    sql: &str,
+) -> Result<String> {
+    let df = ctx.table("history").await?;
+    let have: std::collections::HashSet<String> = df
+        .schema()
+        .fields()
+        .iter()
+        .map(|f| f.name().to_ascii_lowercase())
+        .collect();
+    let needed = [
+        "fan_cmd",
+        "fan_status",
+        "pump_status",
+        "chiller_status",
+        "chw_flow",
+        "chw_pump_cmd",
+        "compressor_status",
+        "occ_mode",
+        "hw_reset_request_sum",
+        "chw_reset_request_sum",
+    ];
+    let missing: Vec<&str> = needed.into_iter().filter(|c| !have.contains(*c)).collect();
+    if missing.is_empty() {
+        return Ok(sql.to_string());
+    }
+    let nulls = missing
+        .iter()
+        .map(|c| {
+            let ty = if *c == "occ_mode" {
+                "VARCHAR"
+            } else {
+                "DOUBLE"
+            };
+            format!("CAST(NULL AS {ty}) AS \"{c}\"")
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let cte = format!("history_opt AS (SELECT history.*, {nulls} FROM history)");
+    let rewritten = sql
+        .replace(" FROM history", " FROM history_opt")
+        .replace(" from history", " from history_opt")
+        .replace("\nFROM history", "\nFROM history_opt")
+        .replace("\nfrom history", "\nfrom history_opt");
+    let rewritten = if let Some(idx) = rewritten.find("WITH ") {
+        let (pre, rest) = rewritten.split_at(idx);
+        let rest = rest.trim_start_matches("WITH ");
+        format!("{pre}WITH {cte}, {rest}")
+    } else if let Some(idx) = rewritten.find("with ") {
+        let (pre, rest) = rewritten.split_at(idx);
+        let rest = rest.trim_start_matches("with ");
+        format!("{pre}WITH {cte}, {rest}")
+    } else {
+        format!("WITH {cte} {rewritten}")
+    };
+    Ok(rewritten)
 }
 
 fn repo_sql_rules() -> PathBuf {

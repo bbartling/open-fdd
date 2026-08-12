@@ -47,7 +47,12 @@ matrix:
   - heatpump
   required_roles: &id002
   - oa_t
-  optional_roles: &id003 []
+  optional_roles: &id003
+  - fan_status
+  - fan_cmd
+  - pump_status
+  - chw_pump_cmd
+  - chiller_status
   operational_proof_roles: &id004
   - fan-status
   - fan-speed-feedback
@@ -114,7 +119,12 @@ matrix:
   - heatpump
   required_roles: &id008
   - oa_t
-  optional_roles: &id009 []
+  optional_roles: &id009
+  - fan_status
+  - fan_cmd
+  - pump_status
+  - chw_pump_cmd
+  - chiller_status
   operational_proof_roles: &id010 []
   default_thresholds: &id011
     flatline_tol:
@@ -160,7 +170,12 @@ matrix:
   - heatpump
   required_roles: &id014
   - oa_t
-  optional_roles: &id015 []
+  optional_roles: &id015
+  - fan_status
+  - fan_cmd
+  - pump_status
+  - chw_pump_cmd
+  - chiller_status
   operational_proof_roles: &id016
   - fan-status
   - fan-speed-feedback
@@ -231,8 +246,7 @@ matrix:
   - weather
   - zone
   - heatpump
-  required_roles: &id020
-  - fan_cmd
+  required_roles: &id020 []
   optional_roles: &id021 []
   operational_proof_roles: &id022 []
   default_thresholds: &id023
@@ -417,7 +431,9 @@ matrix:
   - duct-static-pressure
   - duct-static-pressure-sp
   - fan-cmd
-  optional_roles: &id039 []
+  optional_roles: &id039
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id040
   - fan-status
   - fan-speed-feedback
@@ -489,7 +505,9 @@ matrix:
   - outside-air-temp
   - return-air-temp
   - fan-cmd
-  optional_roles: &id045 []
+  optional_roles: &id045
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id046
   - fan-status
   - fan-speed-feedback
@@ -566,7 +584,9 @@ matrix:
   - outside-air-temp
   - return-air-temp
   - fan-cmd
-  optional_roles: &id051 []
+  optional_roles: &id051
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id052
   - fan-status
   - fan-speed-feedback
@@ -642,7 +662,8 @@ matrix:
   - outside-air-damper
   - cooling-valve
   - fan-cmd
-  optional_roles: &id057 []
+  optional_roles: &id057
+  - fan_status
   operational_proof_roles: &id058
   - fan-status
   - fan-speed-feedback
@@ -692,7 +713,9 @@ matrix:
   - mixed-air-temp
   - fan-cmd
   - heating-valve
-  optional_roles: &id063 []
+  optional_roles: &id063
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id064
   - fan-status
   - fan-speed-feedback
@@ -776,7 +799,9 @@ matrix:
   - outside-air-temp
   - return-air-temp
   - vav-total-airflow
-  optional_roles: &id069 []
+  optional_roles: &id069
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id070
   - fan-status
   - fan-speed-feedback
@@ -920,6 +945,7 @@ matrix:
   test_coverage: &id078
   - tests/rules/test_golden_parity.py
   - tests/rules/test_parity_inventory.py
+  - tests/test_wattlab_parity_diff.py
   parity_status: concept_only
   known_semantic_differences: concept_only — SQL file is a placeholder; do not claim
     twin parity
@@ -933,7 +959,9 @@ matrix:
   - mixed-air-temp
   - outside-air-damper
   - cooling-valve
-  optional_roles: &id081 []
+  optional_roles: &id081
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id082
   - fan-status
   - fan-speed-feedback
@@ -1024,7 +1052,9 @@ matrix:
   - discharge-air-temp-sp
   - outside-air-damper
   - cooling-valve
-  optional_roles: &id087 []
+  optional_roles: &id087
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id088
   - fan-status
   - fan-speed-feedback
@@ -1108,7 +1138,9 @@ matrix:
   - outside-air-temp
   - outside-air-damper
   - cooling-valve
-  optional_roles: &id093 []
+  optional_roles: &id093
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id094
   - fan-status
   - fan-speed-feedback
@@ -1185,7 +1217,9 @@ matrix:
   - discharge-air-temp-sp
   - outside-air-damper
   - cooling-valve
-  optional_roles: &id099 []
+  optional_roles: &id099
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id100
   - fan-status
   - fan-speed-feedback
@@ -1269,7 +1303,9 @@ matrix:
   - mixed-air-temp
   - outside-air-damper
   - cooling-valve
-  optional_roles: &id105 []
+  optional_roles: &id105
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id106
   - fan-status
   - fan-speed-feedback
@@ -1367,7 +1403,9 @@ matrix:
   - discharge-air-temp-sp
   - outside-air-damper
   - cooling-valve
-  optional_roles: &id111 []
+  optional_roles: &id111
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id112
   - fan-status
   - fan-speed-feedback
@@ -1445,7 +1483,9 @@ matrix:
   - cooling-coil-leaving-temp
   - outside-air-damper
   - cooling-valve
-  optional_roles: &id117 []
+  optional_roles: &id117
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id118
   - fan-status
   - fan-speed-feedback
@@ -1536,7 +1576,9 @@ matrix:
   - heating-coil-leaving-temp
   - outside-air-damper
   - cooling-valve
-  optional_roles: &id123 []
+  optional_roles: &id123
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id124
   - fan-status
   - fan-speed-feedback
@@ -1632,7 +1674,9 @@ matrix:
   required_roles: &id128
   - discharge-air-temp
   - discharge-air-temp-sp
-  optional_roles: &id129 []
+  optional_roles: &id129
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id130
   - fan-status
   - fan-speed-feedback
@@ -1661,7 +1705,8 @@ matrix:
   pandas_implementation: ahu_sat_dev
   datafusion_sql_implementation: ahu_satdev.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-satdev
-  test_coverage: &id132 []
+  test_coverage: &id132
+  - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -1672,7 +1717,9 @@ matrix:
   required_roles: &id134
   - duct-static-pressure
   - duct-static-pressure-sp
-  optional_roles: &id135 []
+  optional_roles: &id135
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id136 []
   default_thresholds: &id137
     duct_high_margin:
@@ -1714,7 +1761,9 @@ matrix:
   required_roles: &id140
   - heating-valve
   - cooling-valve
-  optional_roles: &id141 []
+  optional_roles: &id141
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id142
   - fan-status
   - fan-speed-feedback
@@ -1789,7 +1838,9 @@ matrix:
   - fan-cmd
   - outside-air-damper
   - outside-air-temp
-  optional_roles: &id153 []
+  optional_roles: &id153
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id154
   - fan-status
   - fan-speed-feedback
@@ -1829,7 +1880,9 @@ matrix:
   required_roles: &id158
   - outside-air-temp
   - outside-air-damper
-  optional_roles: &id159 []
+  optional_roles: &id159
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id160
   - fan-status
   - fan-speed-feedback
@@ -1942,7 +1995,9 @@ matrix:
   - return-air-temp
   - outside-air-temp
   - fan-cmd
-  optional_roles: &id171 []
+  optional_roles: &id171
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id172
   - fan-status
   - fan-speed-feedback
@@ -1984,7 +2039,9 @@ matrix:
   - discharge-air-temp-sp
   - outside-air-temp
   - heating-valve
-  optional_roles: &id177 []
+  optional_roles: &id177
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id178
   - fan-status
   - fan-speed-feedback
@@ -2232,7 +2289,8 @@ matrix:
   - zone
   required_roles: &id206
   - zone-air-temp
-  optional_roles: &id207 []
+  optional_roles: &id207
+  - occ_mode
   operational_proof_roles: &id208 []
   default_thresholds: &id209
     zone_lo:
@@ -2275,7 +2333,9 @@ matrix:
   required_roles: &id212
   - outside-air-temp
   - reheat-valve
-  optional_roles: &id213 []
+  optional_roles: &id213
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id214
   - fan-status
   - fan-speed-feedback
@@ -2328,7 +2388,9 @@ matrix:
   - vav
   required_roles: &id218
   - damper
-  optional_roles: &id219 []
+  optional_roles: &id219
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id220
   - fan-status
   - fan-speed-feedback
@@ -2383,7 +2445,9 @@ matrix:
   required_roles: &id224
   - zone-airflow
   - damper
-  optional_roles: &id225 []
+  optional_roles: &id225
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id226
   - fan-status
   - fan-speed-feedback
@@ -2417,7 +2481,9 @@ matrix:
   - reheat-valve
   - vav-discharge-air-temp
   - vav-inlet-air-temp
-  optional_roles: &id231 []
+  optional_roles: &id231
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id232
   - fan-status
   - fan-speed-feedback
@@ -2471,7 +2537,9 @@ matrix:
   required_roles: &id236
   - vav-discharge-air-temp
   - ahu-discharge-air-temp
-  optional_roles: &id237 []
+  optional_roles: &id237
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id238
   - fan-status
   - fan-speed-feedback
@@ -2517,7 +2585,9 @@ matrix:
   - vav
   required_roles: &id242
   - zone-airflow
-  optional_roles: &id243 []
+  optional_roles: &id243
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id244
   - fan-status
   - fan-speed-feedback
@@ -2795,7 +2865,9 @@ matrix:
   - discharge-air-temp
   - zone-air-temp
   - fan-cmd
-  optional_roles: &id273 []
+  optional_roles: &id273
+  - compressor_status
+  - fan_status
   operational_proof_roles: &id274
   - compressor-status
   - equipment-enable
@@ -2873,7 +2945,11 @@ matrix:
   - cooling_tower
   required_roles: &id284
   - condenser-water-supply-temp
-  optional_roles: &id285 []
+  optional_roles: &id285
+  - pump_status
+  - chiller_status
+  - chw_flow
+  - chw_pump_cmd
   operational_proof_roles: &id286
   - pump-status
   - chw-pump-status
@@ -3050,7 +3126,9 @@ matrix:
   required_roles: &id302
   - duct-static-pressure
   - vav-pressure-request-sum
-  optional_roles: &id303 []
+  optional_roles: &id303
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id304
   - fan-status
   - fan-speed-feedback
@@ -3097,7 +3175,11 @@ matrix:
   required_roles: &id308
   - hot-water-supply-temp
   - hw-reset-request-sum
-  optional_roles: &id309 []
+  optional_roles: &id309
+  - pump_status
+  - chiller_status
+  - chw_flow
+  - chw_pump_cmd
   operational_proof_roles: &id310
   - pump-status
   - chw-pump-status
@@ -3151,7 +3233,11 @@ matrix:
   required_roles: &id314
   - chilled-water-supply-temp
   - chw-reset-request-sum
-  optional_roles: &id315 []
+  optional_roles: &id315
+  - pump_status
+  - chiller_status
+  - chw_flow
+  - chw_pump_cmd
   operational_proof_roles: &id316
   - pump-status
   - chw-pump-status
@@ -3340,7 +3426,9 @@ matrix:
   - return-air-temp
   - outside-air-temp
   - fan-status
-  optional_roles: &id339 []
+  optional_roles: &id339
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id340
   - fan-status
   - fan-speed-feedback
@@ -3388,7 +3476,9 @@ matrix:
   - outside-air-temp
   - mixed-air-temp
   - outside-air-damper
-  optional_roles: &id345 []
+  optional_roles: &id345
+  - fan_status
+  - fan_cmd
   operational_proof_roles: &id346 []
   default_thresholds: &id347
     leak_delta:

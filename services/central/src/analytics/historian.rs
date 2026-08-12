@@ -9,8 +9,9 @@ use fdd_sql::{register_parquet_tree, run_sql};
 use serde_json::{json, Value};
 
 use super::{
-    envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, DF_ENGINE, QV_ECONOMIZER,
-    QV_MECHANICAL_COOLING, QV_RUNTIME, QV_SCHEDULE, QV_SENSOR_HEALTH,
+    envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, DF_ENGINE, QV_DIURNAL, QV_ECONOMIZER,
+    QV_MECHANICAL_COOLING, QV_RUNTIME, QV_SCHEDULE, QV_SENSOR_HEALTH, QV_SENSOR_STATS,
+    QV_SETPOINTS, QV_TOPOLOGY,
 };
 
 /// Canonical numeric role columns that may appear as `history` columns after
@@ -47,6 +48,13 @@ const NUMERIC_ROLE_COLS: &[&str] = &[
     "chiller_amps",
     "oa_h",
     "return_fan",
+    "chw_supply_sp",
+    "chw_dp",
+    "chw_dp_sp",
+    "chw_flow",
+    "chw_pump_cmd",
+    "min_flow_sp",
+    "zone_t_sp",
 ];
 
 /// Resolve Parquet historian root — same env fallbacks as edge FDD registry.
@@ -853,6 +861,413 @@ pub async fn sensor_health_from_history(
         "source": "historian_parquet",
     }));
     Ok(Some(env))
+}
+
+/// Haystack-style role name used by Vibe19 analytics CSVs.
+fn role_to_haystack(role: &str) -> String {
+    match role {
+        "sat" => "discharge-air-temp".into(),
+        "sat_sp" => "discharge-air-temp-sp".into(),
+        "mat" => "mixed-air-temp".into(),
+        "rat" => "return-air-temp".into(),
+        "oa_t" => "outside-air-temp".into(),
+        "oa_h" => "outside-air-humidity".into(),
+        "oa_damper_pct" => "outside-air-damper".into(),
+        "clg_valve_pct" => "cooling-valve".into(),
+        "htg_valve_pct" => "heating-valve".into(),
+        "fan_cmd" => "fan-cmd".into(),
+        "fan_status" => "fan-status".into(),
+        "return_fan" => "return-fan-cmd".into(),
+        "duct_static" => "duct-static-pressure".into(),
+        "duct_static_sp" => "duct-static-pressure-sp".into(),
+        "zone_t" => "zone-air-temp".into(),
+        "zone_t_sp" => "zone-air-temp-sp".into(),
+        "zone_flow" => "zone-airflow".into(),
+        "min_flow_sp" => "min-flow-sp".into(),
+        "damper_pct" => "damper".into(),
+        "reheat_valve_pct" => "reheat-valve".into(),
+        "chw_supply_t" => "chilled-water-supply-temp".into(),
+        "chw_return_t" => "chilled-water-return-temp".into(),
+        "chw_supply_sp" => "chilled-water-supply-temp-sp".into(),
+        "hw_supply_t" => "hot-water-supply-temp".into(),
+        "hw_return_t" => "hot-water-return-temp".into(),
+        "chw_dp" => "chw-diff-pressure".into(),
+        "chw_dp_sp" => "chw-diff-pressure-sp".into(),
+        "chw_flow" => "chw-flow".into(),
+        "chw_pump_cmd" => "chw-pump-cmd".into(),
+        "web_oa_t" => "web-outside-air-temp".into(),
+        "web_wb_t" => "web-outside-air-wetbulb".into(),
+        other => other.to_string(),
+    }
+}
+
+fn infer_eq_type(equipment_id: &str) -> &'static str {
+    let id = equipment_id.to_ascii_uppercase();
+    if id.contains("VAV") || id.contains("ZONE") {
+        "VAV"
+    } else if id.contains("AHU") || id.contains("RTU") || id.contains("MAU") {
+        "AHU"
+    } else if id.contains("CHILL") {
+        "CHILLER"
+    } else if id.contains("BOILER") {
+        "BOILER"
+    } else if id.contains("TOWER") {
+        "COOLING_TOWER"
+    } else if id.contains("HP") || id.contains("HEAT") {
+        "HEAT_PUMP"
+    } else if id.contains("WEATHER") {
+        "WEATHER"
+    } else {
+        "GENERAL"
+    }
+}
+
+fn fan_on_sql(cols: &HashSet<String>) -> String {
+    on_expr(cols).unwrap_or_else(|| "true".into())
+}
+
+/// Sensor stats (mean/min/max/n) optionally filtered to fan-on or fan-off.
+pub async fn sensor_stats_from_history(
+    equipment_filter: Option<&[String]>,
+    building_id: Option<&str>,
+    fan_state: Option<&str>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let role_cols: Vec<&str> = NUMERIC_ROLE_COLS
+        .iter()
+        .copied()
+        .filter(|c| cols.contains(*c))
+        .collect();
+    if role_cols.is_empty() {
+        return Ok(None);
+    }
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let fan_sql = fan_on_sql(&cols);
+    let fan_where = match fan_state {
+        Some("on") => format!(" AND ({fan_sql})"),
+        Some("off") => format!(" AND NOT ({fan_sql})"),
+        _ => String::new(),
+    };
+    let selects: Vec<String> = role_cols
+        .iter()
+        .map(|role| {
+            format!(
+                "SELECT equipment_id, '{role}' AS role, \
+                   COUNT(*) AS n, COUNT({role}) AS n_finite, \
+                   AVG({role}) AS meanv, STDDEV_POP({role}) AS stdv, \
+                   MIN({role}) AS minv, MAX({role}) AS maxv \
+                 FROM history \
+                 WHERE equipment_id IS NOT NULL{eq_filter}{fan_where} \
+                 GROUP BY equipment_id"
+            )
+        })
+        .collect();
+    let sql = format!(
+        "{} ORDER BY equipment_id, role",
+        selects.join(" UNION ALL ")
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    let mut rows = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        let n_finite = as_u64(r.get("n_finite"));
+        if n_finite == 0 {
+            continue;
+        }
+        let eq = r
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let role = r.get("role").and_then(|v| v.as_str()).unwrap_or("");
+        rows.push(json!({
+            "equipment_id": eq,
+            "equipment_type": infer_eq_type(&eq),
+            "role": role_to_haystack(role),
+            "source": "historian",
+            "n": as_u64(r.get("n")),
+            "valid_count": n_finite,
+            "count": as_u64(r.get("n")),
+            "mean": as_f64(r.get("meanv")).map(round4),
+            "std": as_f64(r.get("stdv")).map(round6),
+            "min": as_f64(r.get("minv")).map(round4),
+            "max": as_f64(r.get("maxv")).map(round4),
+            "fan_state": fan_state.unwrap_or("all"),
+        }));
+    }
+    let mut env = envelope_with_engine(
+        QV_SENSOR_STATS,
+        &AnalyticsQuery::default(),
+        vec!["sensor_stats from historian Parquet".into()],
+        DF_ENGINE,
+    );
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({"history_rows": n, "fan_state": fan_state.unwrap_or("all")}));
+    Ok(Some(env))
+}
+
+const SP_ROLES: &[&str] = &[
+    "sat_sp",
+    "zone_t_sp",
+    "chw_supply_sp",
+    "duct_static_sp",
+    "min_flow_sp",
+];
+
+/// Occupied / unoccupied setpoint medians.
+pub async fn setpoints_from_history(
+    equipment_filter: Option<&[String]>,
+    building_id: Option<&str>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let present: Vec<&str> = SP_ROLES
+        .iter()
+        .copied()
+        .filter(|c| cols.contains(*c))
+        .collect();
+    if present.is_empty() {
+        return Ok(None);
+    }
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let occ = if cols.contains("occ_mode") {
+        occupied_expr().to_string()
+    } else {
+        "true".into()
+    };
+    let selects: Vec<String> = present
+        .iter()
+        .map(|role| {
+            format!(
+                "SELECT equipment_id, '{role}' AS role, \
+                   approx_percentile({role}, 0.5) FILTER (WHERE ({occ})) AS median_occupied, \
+                   approx_percentile({role}, 0.5) FILTER (WHERE NOT ({occ})) AS median_unoccupied, \
+                   approx_percentile({role}, 0.5) AS median_all, \
+                   COUNT({role}) FILTER (WHERE ({occ})) AS n_occupied, \
+                   COUNT({role}) FILTER (WHERE NOT ({occ})) AS n_unoccupied \
+                 FROM history \
+                 WHERE equipment_id IS NOT NULL{eq_filter} \
+                 GROUP BY equipment_id"
+            )
+        })
+        .collect();
+    let sql = selects.join(" UNION ALL ");
+    let result = match run_sql(&ctx, &sql).await {
+        Ok(r) => r,
+        Err(_) => {
+            // FILTER / approx_percentile may be unavailable — fall back to AVG.
+            let selects: Vec<String> = present
+                .iter()
+                .map(|role| {
+                    format!(
+                        "SELECT equipment_id, '{role}' AS role, \
+                           AVG({role}) AS median_all, \
+                           COUNT({role}) AS n_occupied, \
+                           CAST(0 AS BIGINT) AS n_unoccupied, \
+                           AVG({role}) AS median_occupied, \
+                           AVG({role}) AS median_unoccupied \
+                         FROM history \
+                         WHERE equipment_id IS NOT NULL{eq_filter} \
+                         GROUP BY equipment_id"
+                    )
+                })
+                .collect();
+            run_sql(&ctx, &selects.join(" UNION ALL ")).await?
+        }
+    };
+    let mut rows = Vec::new();
+    for r in &result.rows {
+        let eq = r
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let role = r.get("role").and_then(|v| v.as_str()).unwrap_or("");
+        rows.push(json!({
+            "equipment_id": eq,
+            "equipment_type": infer_eq_type(&eq),
+            "role": role_to_haystack(role),
+            "median_occupied": as_f64(r.get("median_occupied")).map(round4),
+            "median_unoccupied": as_f64(r.get("median_unoccupied")).map(round4),
+            "median_all": as_f64(r.get("median_all")).map(round4),
+            "n_occupied": as_u64(r.get("n_occupied")),
+            "n_unoccupied": as_u64(r.get("n_unoccupied")),
+        }));
+    }
+    let mut env = envelope_with_engine(
+        QV_SETPOINTS,
+        &AnalyticsQuery::default(),
+        vec!["setpoints from historian Parquet".into()],
+        DF_ENGINE,
+    );
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({"history_rows": n}));
+    Ok(Some(env))
+}
+
+/// 24h diurnal profiles by hour-of-day and fan state.
+pub async fn diurnal_from_history(
+    equipment_filter: Option<&[String]>,
+    building_id: Option<&str>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    let role_cols: Vec<&str> = NUMERIC_ROLE_COLS
+        .iter()
+        .copied()
+        .filter(|c| cols.contains(*c))
+        .take(12)
+        .collect();
+    if role_cols.is_empty() {
+        return Ok(None);
+    }
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let fan_sql = fan_on_sql(&cols);
+    let selects: Vec<String> = role_cols
+        .iter()
+        .map(|role| {
+            format!(
+                "SELECT equipment_id, '{role}' AS role, \
+                   date_part('hour', {ts_col}) AS hour, \
+                   CASE WHEN ({fan_sql}) THEN 'on' ELSE 'off' END AS fan_state, \
+                   COUNT({role}) AS n, AVG({role}) AS meanv, \
+                   MIN({role}) AS minv, MAX({role}) AS maxv \
+                 FROM history \
+                 WHERE equipment_id IS NOT NULL AND {role} IS NOT NULL{eq_filter} \
+                 GROUP BY equipment_id, date_part('hour', {ts_col}), \
+                   CASE WHEN ({fan_sql}) THEN 'on' ELSE 'off' END"
+            )
+        })
+        .collect();
+    let sql = format!(
+        "{} ORDER BY equipment_id, role, hour, fan_state",
+        selects.join(" UNION ALL ")
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    let mut rows = Vec::new();
+    for r in &result.rows {
+        let eq = r
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let role = r.get("role").and_then(|v| v.as_str()).unwrap_or("");
+        rows.push(json!({
+            "equipment_id": eq,
+            "equipment_type": infer_eq_type(&eq),
+            "role": role_to_haystack(role),
+            "source": "historian",
+            "day_type": "all",
+            "fan_state": r.get("fan_state").cloned().unwrap_or(json!("all")),
+            "hour": as_u64(r.get("hour")),
+            "n": as_u64(r.get("n")),
+            "mean": as_f64(r.get("meanv")).map(round4),
+            "min": as_f64(r.get("minv")).map(round4),
+            "max": as_f64(r.get("maxv")).map(round4),
+        }));
+    }
+    let mut env = envelope_with_engine(
+        QV_DIURNAL,
+        &AnalyticsQuery::default(),
+        vec!["sensor_diurnal_24h from historian Parquet".into()],
+        DF_ENGINE,
+    );
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({"history_rows": n}));
+    Ok(Some(env))
+}
+
+/// Equipment topology (feeds / fedBy) inferred from equipment ids.
+pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, _cols, n)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let result = run_sql(
+        &ctx,
+        "SELECT DISTINCT equipment_id FROM history WHERE equipment_id IS NOT NULL ORDER BY 1",
+    )
+    .await?;
+    let ids: Vec<String> = result
+        .rows
+        .iter()
+        .filter_map(|r| {
+            r.get("equipment_id")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        })
+        .collect();
+    let ahus: Vec<&str> = ids
+        .iter()
+        .filter(|id| infer_eq_type(id) == "AHU")
+        .map(|s| s.as_str())
+        .collect();
+    let mut rows = Vec::new();
+    let mut data_model = Vec::new();
+    for id in &ids {
+        let kind = infer_eq_type(id);
+        data_model.push(json!({
+            "equipment_id": id,
+            "equipment_type": kind,
+            "haystack_point": "",
+            "csv_column": "",
+            "present_in_history": true,
+            "required_by_rules": "",
+        }));
+        if kind == "VAV" {
+            let parent = infer_parent_ahu(id, &ahus);
+            if let Some(ahu) = parent {
+                rows.push(json!({
+                    "equipment_id": id,
+                    "relation": "fedBy",
+                    "related_ids": ahu,
+                    "related_count": 1,
+                    "parent_ahu": ahu,
+                    "vav_id": id,
+                }));
+                rows.push(json!({
+                    "equipment_id": ahu,
+                    "relation": "feeds",
+                    "related_ids": id,
+                    "related_count": 1,
+                    "parent_ahu": ahu,
+                    "vav_id": id,
+                }));
+            }
+        }
+    }
+    let mut env = envelope_with_engine(
+        QV_TOPOLOGY,
+        &AnalyticsQuery::default(),
+        vec!["topology inferred from historian equipment ids".into()],
+        DF_ENGINE,
+    );
+    env.rows = rows;
+    env.equipment = data_model;
+    env.coverage = Some(json!({"history_rows": n, "equipment_count": ids.len()}));
+    Ok(Some(env))
+}
+
+fn infer_parent_ahu(vav_id: &str, ahus: &[&str]) -> Option<String> {
+    let up = vav_id.to_ascii_uppercase();
+    for ahu in ahus {
+        let a = ahu.to_ascii_uppercase();
+        if up.contains(&a) {
+            return Some((*ahu).to_string());
+        }
+    }
+    if ahus.len() == 1 {
+        return Some(ahus[0].to_string());
+    }
+    None
 }
 
 /// Boolean occupied-expression from `occ_mode` (Utf8).

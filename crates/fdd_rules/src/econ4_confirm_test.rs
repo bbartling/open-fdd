@@ -31,7 +31,7 @@ mod tests {
         std::fs::create_dir_all(&ahu).unwrap();
         std::fs::write(
             ahu.join("columns.csv"),
-            "col,point_role\nmat_col,mat\nrat_col,rat\noat_col,oa_t\nfan_col,fan_cmd\n",
+            "col,point_role\nmat_col,mat\nrat_col,rat\noat_col,oa_t\nfan_col,fan_cmd\nfan_st,fan_status\n",
         )
         .unwrap();
 
@@ -44,10 +44,10 @@ mod tests {
         let mats = [50.0, 50.0, 65.0, 65.0, 65.0, 50.0, 65.0, 65.0, 50.0, 65.0];
 
         let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
-        writeln!(f, "timestamp_utc,mat_col,rat_col,oat_col,fan_col").unwrap();
+        writeln!(f, "timestamp_utc,mat_col,rat_col,oat_col,fan_col,fan_st").unwrap();
         for (i, mat) in mats.iter().enumerate() {
             let minute = i * 5;
-            writeln!(f, "2026-01-01T00:{minute:02}:00Z,{mat},70.0,30.0,50.0").unwrap();
+            writeln!(f, "2026-01-01T00:{minute:02}:00Z,{mat},70.0,30.0,50.0,1.0").unwrap();
         }
     }
 

@@ -4,20 +4,32 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     chw_supply_t, chw_supply_sp,
-    CASE WHEN chw_pump_cmd IS NULL THEN NULL WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END AS pump
+    CASE WHEN chw_pump_cmd IS NULL THEN NULL WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END AS pump,
+    pump_status, chiller_status, chw_flow
   FROM history
+),
+proof AS (
+  SELECT *,
+    CASE
+      WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
+      WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
+      WHEN chw_flow IS NOT NULL THEN CASE WHEN chw_flow > 1.0 THEN 1 ELSE 0 END
+      WHEN pump IS NOT NULL THEN CASE WHEN pump > 0.05 THEN 1 ELSE 0 END
+      ELSE NULL
+    END AS proof_on
+  FROM h
 ),
 base AS (
   SELECT
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN proof_on IS NULL OR proof_on = 0 THEN 0
       WHEN chw_supply_t IS NULL OR chw_supply_sp IS NULL THEN 0
-      WHEN pump IS NOT NULL AND pump <= 0.05 THEN 0
       WHEN ABS(chw_supply_t - chw_supply_sp) > {{SP_BAND}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
-  FROM h
+  FROM proof
 ),
 lagged AS (
   SELECT

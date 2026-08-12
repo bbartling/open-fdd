@@ -15,10 +15,12 @@ rules:
     confirm_seconds: 0
 
   - rule_id: VAV-1
+    equipment_kinds: [vav, zone]
     sql_file: vav1_comfort_fault.sql
     pandas_function: vav1
     description: Zone comfort band violation hours with confirm window
     required_roles: [zone_t]
+    optional_roles: [occ_mode]
     output_columns: [equipment_id, fault_hours, fault_pct]
     priority: P0
     parity_status: sql_screening
@@ -148,6 +150,7 @@ rules:
         sql_placeholder: ZONE_T_HI
 
   - rule_id: OAT-METEO
+    equipment_kinds: [ahu]
     sql_file: oat_meteo_fault.sql
     pandas_function: oat_vs_meteo
     description: Equipment OAT vs weather-staged wx OAT
@@ -179,11 +182,13 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: FC13-SAT-HIGH
+    equipment_kinds: [ahu]
     aliases: [FC13]
     sql_file: sat_high_fault.sql
     pandas_function: fc13
     description: SAT above setpoint at full cooling
     required_roles: [sat, sat_sp, clg_valve_pct, oa_damper_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -238,10 +243,12 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: ECON-2
+    equipment_kinds: [ahu]
     sql_file: economizer_fault.sql
     pandas_function: econ2
     description: Economizing when outdoor air unfavorable
     required_roles: [oa_t, oa_damper_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -278,10 +285,12 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: FC1
+    equipment_kinds: [ahu]
     sql_file: fc1_duct_static_low.sql
     pandas_function: fc1
     description: Duct static below SP at full fan
     required_roles: [duct_static, duct_static_sp, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -318,10 +327,12 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: FC2
+    equipment_kinds: [ahu]
     sql_file: fc2_mat_low.sql
     pandas_function: fc2
     description: Mixed air below envelope
     required_roles: [mat, oa_t, rat, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -330,10 +341,12 @@ rules:
     confirm_seconds: 600
 
   - rule_id: FC3
+    equipment_kinds: [ahu]
     sql_file: fc3_mat_high.sql
     pandas_function: fc3
     description: Mixed air above envelope
     required_roles: [mat, oa_t, rat, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -342,6 +355,7 @@ rules:
     confirm_seconds: 600
 
   - rule_id: FC7
+    equipment_kinds: [ahu]
     sql_file: fc7_sat_low_heating.sql
     pandas_function: fc7
     description: SAT low while heating at full
@@ -383,10 +397,12 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: FC8
+    equipment_kinds: [ahu]
     sql_file: fc8_sat_mat_econ.sql
     pandas_function: fc8
     description: SAT vs MAT while economizing
     required_roles: [sat, mat, oa_damper_pct, clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -395,10 +411,12 @@ rules:
     confirm_seconds: 600
 
   - rule_id: FC9
+    equipment_kinds: [ahu]
     sql_file: fc9_oa_sat_sp_econ.sql
     pandas_function: fc9
     description: OAT high vs SAT SP while economizing
     required_roles: [oa_t, sat_sp, oa_damper_pct, clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -407,10 +425,12 @@ rules:
     confirm_seconds: 600
 
   - rule_id: FC10
+    equipment_kinds: [ahu]
     sql_file: fc10_mat_oa_clg.sql
     pandas_function: fc10
     description: MAT-OAT delta while cooling and economizing
     required_roles: [mat, oa_t, oa_damper_pct, clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -419,10 +439,12 @@ rules:
     confirm_seconds: 600
 
   - rule_id: FC11
+    equipment_kinds: [ahu]
     sql_file: fc11_oa_sat_sp_clg.sql
     pandas_function: fc11
     description: OAT low vs SAT SP while cooling and economizing
     required_roles: [oa_t, sat_sp, oa_damper_pct, clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -431,10 +453,12 @@ rules:
     confirm_seconds: 600
 
   - rule_id: FC12
+    equipment_kinds: [ahu]
     sql_file: fc12_sat_mat_clg.sql
     pandas_function: fc12
     description: SAT above MAT while cooling
     required_roles: [sat, mat, oa_damper_pct, clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -443,10 +467,12 @@ rules:
     confirm_seconds: 600
 
   - rule_id: ECON-1
+    equipment_kinds: [ahu]
     sql_file: econ1_stuck_closed.sql
     pandas_function: econ1
     description: Economizer stuck closed when OAT favorable
     required_roles: [fan_cmd, oa_damper_pct, oa_t]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -465,10 +491,12 @@ rules:
         sql_placeholder: ECON1_OAT_MIN
 
   - rule_id: ECON-4
+    equipment_kinds: [ahu]
     sql_file: econ4_low_oa_frac.sql
     pandas_function: econ4
     description: Low estimated OA fraction
     required_roles: [mat, rat, oa_t, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -498,10 +526,12 @@ rules:
 # --- Ported from datafusion-sql-cookbook (feat/sql-rules-59) ---
 
   - rule_id: SV-RANGE
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump]
     sql_file: sv_range.sql
     pandas_function: null
     description: Sensor out of hard range
     required_roles: [oa_t]
+    optional_roles: [fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -529,10 +559,12 @@ rules:
         sql_placeholder: RANGE_SCALE_TEMPERATURE
 
   - rule_id: SV-FLATLINE
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump]
     sql_file: sv_flatline.sql
     pandas_function: null
     description: Sensor flatline (stuck)
     required_roles: [oa_t]
+    optional_roles: [fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -560,10 +592,12 @@ rules:
         sql_placeholder: FLATLINE_TOL
 
   - rule_id: SV-SPIKE
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump]
     sql_file: sv_spike.sql
     pandas_function: null
     description: Sensor rate-of-change spike
     required_roles: [oa_t]
+    optional_roles: [fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -591,11 +625,12 @@ rules:
         sql_placeholder: SPIKE_SCALE
 
   - rule_id: SV-STALE
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump]
     sql_file: sv_stale.sql
     pandas_function: null
     description: Stale data (no fresh samples)
-    # OFDD-065: require a fan signal so age-vs-max does not inflate off-period / weather rows
-    required_roles: [fan_cmd]
+    # Pandas gate is `always` (sensor sweep); do not require fan_cmd.
+    required_roles: []
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -623,6 +658,7 @@ rules:
         sql_placeholder: STALE_HOURS
 
   - rule_id: SV-RATE
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone, heatpump]
     aliases: [SV-SLEW]
     sql_file: sv_rate.sql
     pandas_function: null
@@ -655,10 +691,12 @@ rules:
         sql_placeholder: PERSISTENCE_MIN
 
   - rule_id: PID-HUNT-1
+    equipment_kinds: [ahu, vav, chiller, boiler, heatpump]
     sql_file: pid_hunt_1.sql
     pandas_function: null
     description: Suspected control-output hunting
     required_roles: [clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -695,10 +733,12 @@ rules:
         sql_placeholder: MINIMUM_SPAN_PCT
 
   - rule_id: FC4
+    equipment_kinds: [ahu]
     sql_file: fc4_os_hunting.sql
     pandas_function: null
     description: PID hunting (operating-state oscillation)
     required_roles: [oa_damper_pct, clg_valve_pct, fan_cmd]
+    optional_roles: [fan_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -717,10 +757,12 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: FC5
+    equipment_kinds: [ahu]
     sql_file: fc5_sat_cold_heating.sql
     pandas_function: null
     description: SAT cold when heating commanded (GL36 D)
     required_roles: [sat, mat, htg_valve_pct, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -757,10 +799,12 @@ rules:
         sql_placeholder: HTG_ON_MIN
 
   - rule_id: FC6
+    equipment_kinds: [ahu]
     sql_file: fc6_oa_frac_mismatch.sql
     pandas_function: null
     description: Estimated OA fraction mismatch
     required_roles: [mat, rat, oa_t, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -797,10 +841,12 @@ rules:
         sql_placeholder: DELTA_T_MIN
 
   - rule_id: FC14
+    equipment_kinds: [ahu]
     sql_file: fc14_chw_coil_dt_inactive.sql
     pandas_function: null
     description: CHW coil ΔT when inactive (GL36 L)
     required_roles: [mat, sat, clg_valve_pct, oa_damper_pct, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -828,10 +874,12 @@ rules:
         sql_placeholder: MIX_TOL
 
   - rule_id: FC15
+    equipment_kinds: [ahu]
     sql_file: fc15_hw_coil_dt_inactive.sql
     pandas_function: null
     description: HW coil ΔT when inactive (GL36 M)
     required_roles: [mat, sat, htg_valve_pct, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -859,10 +907,12 @@ rules:
         sql_placeholder: MIX_TOL
 
   - rule_id: AHU-SATDEV
+    equipment_kinds: [ahu]
     sql_file: ahu_satdev.sql
     pandas_function: null
     description: SAT deviation from setpoint
     required_roles: [sat, sat_sp]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -890,10 +940,12 @@ rules:
         sql_placeholder: SAT_DEV_ERR
 
   - rule_id: AHU-DUCTHI
+    equipment_kinds: [ahu]
     sql_file: ahu_ducthi.sql
     pandas_function: null
     description: Duct static pressure high
     required_roles: [duct_static, duct_static_sp, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -930,10 +982,12 @@ rules:
         sql_placeholder: PRESSURE_ON_MIN
 
   - rule_id: AHU-SIMUL
+    equipment_kinds: [ahu]
     sql_file: ahu_simul.sql
     pandas_function: null
     description: Heating and cooling simultaneous
     required_roles: [htg_valve_pct, clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -961,10 +1015,12 @@ rules:
         sql_placeholder: VALVE_OPEN_PCT
 
   - rule_id: ECON-3
+    equipment_kinds: [ahu]
     sql_file: econ3_mech_without_econ.sql
     pandas_function: null
     description: Mech cooling without integrated economizer
     required_roles: [web_oa_t, web_oa_dp, oa_damper_pct, clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1019,10 +1075,12 @@ rules:
         sql_placeholder: ECON3_DAMPER_HI
 
   - rule_id: ECON-5
+    equipment_kinds: [ahu]
     sql_file: econ5_preheat_over.sql
     pandas_function: null
     description: Preheat over-conditioning
     required_roles: [preheat_leave_t, sat_sp, oa_t, htg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1050,10 +1108,12 @@ rules:
         sql_placeholder: PREHEAT_OVER_F
 
   - rule_id: ECON-6
+    equipment_kinds: [ahu]
     sql_file: econ6_econ_freezing.sql
     pandas_function: null
     description: Economizing in freezing weather
     required_roles: [web_oa_t, oa_damper_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1090,10 +1150,12 @@ rules:
         sql_placeholder: ECON6_DAMPER_MAX
 
   - rule_id: ECON-7
+    equipment_kinds: [ahu]
     sql_file: econ7_ok_not_economizing.sql
     pandas_function: null
     description: Economizer OK but not economizing
     required_roles: [web_oa_t, web_oa_dp, oa_damper_pct, clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1148,6 +1210,7 @@ rules:
         sql_placeholder: ECON7_DAMPER_MIN
 
   - rule_id: MECH-OAT-1
+    equipment_kinds: [ahu, chiller, heatpump]
     sql_file: mech_oat_1.sql
     pandas_function: null
     description: Mechanical cooling below 60°F web OAT
@@ -1179,6 +1242,7 @@ rules:
         sql_placeholder: MECH_OAT_MAX_F
 
   - rule_id: CMD-1
+    equipment_kinds: [ahu]
     sql_file: cmd1_fan_mismatch.sql
     pandas_function: null
     description: Fan cmd/status mismatch
@@ -1201,10 +1265,12 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: OA-1
+    equipment_kinds: [ahu]
     sql_file: oa1_low_oa_frac.sql
     pandas_function: null
     description: Low OA fraction
     required_roles: [mat, rat, oa_t, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1241,10 +1307,12 @@ rules:
         sql_placeholder: OAT_RAT_GUARD
 
   - rule_id: DMP-1
+    equipment_kinds: [ahu]
     sql_file: dmp1_oa_damper_leak.sql
     pandas_function: null
     description: OA damper leakage
     required_roles: [oa_damper_pct, oa_t, mat]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1272,10 +1340,12 @@ rules:
         sql_placeholder: LEAK_DELTA
 
   - rule_id: VLV-1
+    equipment_kinds: [ahu]
     sql_file: vlv1_clg_valve_leak.sql
     pandas_function: null
     description: Cooling valve leakage
     required_roles: [clg_valve_pct, sat, sat_sp, mat]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1312,10 +1382,12 @@ rules:
         sql_placeholder: MAT_LEAK_DELTA
 
   - rule_id: VAV-3
+    equipment_kinds: [vav]
     sql_file: vav3_excessive_reheat.sql
     pandas_function: null
     description: Excessive reheat during warm weather
     required_roles: [oa_t, reheat_valve_pct, zone_flow]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1361,10 +1433,12 @@ rules:
         sql_placeholder: FLOW_ON_MIN
 
   - rule_id: VAV-4
+    equipment_kinds: [vav]
     sql_file: vav4_damper_full_open.sql
     pandas_function: null
     description: Damper stuck at full open
     required_roles: [damper_pct, zone_flow]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1401,10 +1475,12 @@ rules:
         sql_placeholder: FLOW_ON_MIN
 
   - rule_id: VAV-5
+    equipment_kinds: [vav]
     sql_file: vav5_airflow_bias.sql
     pandas_function: null
     description: Airflow sensor bias
     required_roles: [zone_flow, damper_pct]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1423,10 +1499,12 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: VAV-REHEAT
+    equipment_kinds: [vav]
     sql_file: vav_reheat.sql
     pandas_function: null
     description: Reheat valve stuck / no temp rise
     required_roles: [reheat_valve_pct, vav_discharge_t, vav_inlet_t, zone_flow]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1472,10 +1550,12 @@ rules:
         sql_placeholder: FLOW_ON_MIN
 
   - rule_id: VAV-AHU-LEAVE
+    equipment_kinds: [vav]
     sql_file: vav_ahu_leave.sql
     pandas_function: null
     description: VAV leave vs parent AHU SAT (fedBy)
     required_roles: [vav_discharge_t, ahu_sat, zone_flow]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1512,10 +1592,12 @@ rules:
         sql_placeholder: FLOW_ON_MIN
 
   - rule_id: VAV-7
+    equipment_kinds: [vav]
     sql_file: vav7_min_airflow.sql
     pandas_function: null
     description: Min airflow / fixed high flow
     required_roles: [zone_flow, min_flow_sp]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1543,6 +1625,7 @@ rules:
         sql_placeholder: HIGH_MIN_FLOW_SP
 
   - rule_id: CHW-NOLOAD-1
+    equipment_kinds: [chiller]
     sql_file: chw_noload_1.sql
     pandas_function: null
     description: Chiller running with no building load
@@ -1574,6 +1657,7 @@ rules:
         sql_placeholder: SAT_BAND_F
 
   - rule_id: CHW-1
+    equipment_kinds: [chiller]
     sql_file: chw1_low_dt.sql
     pandas_function: chw1
     description: Low chilled-water ΔT
@@ -1606,6 +1690,7 @@ rules:
         sql_placeholder: MIN_DT
 
   - rule_id: CHW-2
+    equipment_kinds: [chiller]
     sql_file: chw2_dp_low.sql
     pandas_function: null
     description: DP below SP at max pump speed
@@ -1646,6 +1731,7 @@ rules:
         sql_placeholder: PUMP_HI
 
   - rule_id: CHW-3
+    equipment_kinds: [chiller]
     sql_file: chw3_supply_band.sql
     pandas_function: null
     description: Plant supply temp outside deadband
@@ -1677,6 +1763,7 @@ rules:
         sql_placeholder: SP_BAND
 
   - rule_id: CHW-4
+    equipment_kinds: [chiller]
     sql_file: chw4_flow_high.sql
     pandas_function: null
     description: Flow high at max pump
@@ -1717,10 +1804,12 @@ rules:
         sql_placeholder: PUMP_HI
 
   - rule_id: CW-OPT-1
+    equipment_kinds: [chiller, cooling_tower]
     sql_file: cw_opt_1.sql
     pandas_function: null
     description: Condenser water not optimized vs wet-bulb
     required_roles: [cw_supply_t, web_wb_t]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1757,10 +1846,12 @@ rules:
         sql_placeholder: CW_SLACK
 
   - rule_id: CW-APR-1
+    equipment_kinds: [chiller, cooling_tower]
     sql_file: cw_apr_1.sql
     pandas_function: null
     description: High CW approach at full tower fan
     required_roles: [cw_supply_t, web_wb_t, tower_fan_cmd]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1797,10 +1888,12 @@ rules:
         sql_placeholder: TOWER_FAN_HI
 
   - rule_id: CW-FAN-1
+    equipment_kinds: [chiller, cooling_tower]
     sql_file: cw_fan_1.sql
     pandas_function: null
     description: Excess tower fan energy vs wet-bulb limit
     required_roles: [cw_supply_t, web_wb_t, tower_fan_cmd]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1846,10 +1939,12 @@ rules:
         sql_placeholder: TOWER_FAN_HI
 
   - rule_id: HP-1
+    equipment_kinds: [heatpump]
     sql_file: hp1_discharge_cold.sql
     pandas_function: null
     description: Discharge cold when heating
     required_roles: [sat, zone_t, fan_cmd]
+    optional_roles: [compressor_status, fan_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1886,6 +1981,7 @@ rules:
         sql_placeholder: ZONE_COLD
 
   - rule_id: WX-1
+    equipment_kinds: [weather]
     sql_file: wx1_oa_spike.sql
     pandas_function: null
     description: OA temperature spike
@@ -1917,10 +2013,12 @@ rules:
         sql_placeholder: SPIKE_LIMIT
 
   - rule_id: TRIM-1
+    equipment_kinds: [ahu]
     sql_file: trim1_duct_static.sql
     pandas_function: null
     description: Duct static trim advisory
     required_roles: [duct_static_sp]
+    optional_roles: [fan_status, fan_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1957,10 +2055,12 @@ rules:
         sql_placeholder: REQUEST_LO
 
   - rule_id: TRIM-3
+    equipment_kinds: [boiler]
     sql_file: trim3_hwst.sql
     pandas_function: null
     description: HWST trim advisory
     required_roles: [hw_supply_t]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1997,10 +2097,12 @@ rules:
         sql_placeholder: REQUEST_LO
 
   - rule_id: TRIM-4
+    equipment_kinds: [chiller]
     sql_file: trim4_chw_reset.sql
     pandas_function: null
     description: CHW plant reset advisory
     required_roles: [chw_supply_t]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -2037,6 +2139,7 @@ rules:
         sql_placeholder: REQUEST_LO
 
   - rule_id: SCHED-1
+    equipment_kinds: [ahu]
     sql_file: sched1_unoccupied_runtime.sql
     pandas_function: sched1
     aliases: [excess_runtime]
@@ -2082,6 +2185,7 @@ rules:
         sql_placeholder: ZONE_T_HI
 
   - rule_id: SCHED-247
+    equipment_kinds: [ahu, vav, chiller, boiler, heatpump]
     sql_file: sched247_always_on.sql
     pandas_function: _sched247
     description: Always-on fan or pump runtime

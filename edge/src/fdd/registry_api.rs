@@ -223,24 +223,42 @@ fn walkdir_count(root: &Path, ext: &str) -> usize {
 }
 
 fn infer_equipment_type(equipment_id: &str) -> &'static str {
-    let id = equipment_id.to_ascii_uppercase();
-    if id.contains("VAV") || id.contains("ZONE") {
-        "VAV"
-    } else if id.contains("AHU") || id.contains("RTU") || id.contains("MAU") {
-        "AHU"
-    } else if id.contains("CHILL")
-        || id.contains("BOILER")
-        || id.contains("PUMP")
-        || id.contains("TOWER")
-    {
-        "PLANT"
-    } else if id.contains("HP") || id.contains("HEAT_PUMP") {
-        "HEAT_PUMP"
-    } else if id.contains("METER") {
-        "METER"
-    } else {
-        "GENERAL"
+    match infer_equipment_kind(equipment_id) {
+        "vav" => "VAV",
+        "ahu" => "AHU",
+        "chiller" | "boiler" | "cooling_tower" => "PLANT",
+        "heatpump" => "HEAT_PUMP",
+        "weather" => "WEATHER",
+        _ => "GENERAL",
     }
+}
+
+fn infer_equipment_kind(equipment_id: &str) -> &'static str {
+    let id = equipment_id.to_ascii_uppercase();
+    if id.contains("WEATHER") {
+        "weather"
+    } else if id.contains("VAV") || id.contains("ZONE") {
+        "vav"
+    } else if id.contains("AHU") || id.contains("RTU") || id.contains("MAU") {
+        "ahu"
+    } else if id.contains("CHILL") {
+        "chiller"
+    } else if id.contains("BOILER") {
+        "boiler"
+    } else if id.contains("TOWER") {
+        "cooling_tower"
+    } else if id.contains("HP") || id.contains("HEAT_PUMP") || id.contains("HEATPUMP") {
+        "heatpump"
+    } else {
+        "unknown"
+    }
+}
+
+fn rule_applies_to_kind(kinds: &[String], kind: &str) -> bool {
+    if kinds.is_empty() || kind == "unknown" {
+        return true;
+    }
+    kinds.iter().any(|k| k.eq_ignore_ascii_case(kind))
 }
 
 /// `GET /api/fdd/equipment` — equipment present in the parquet cache.
@@ -294,9 +312,14 @@ pub fn results_response(building_id: Option<&str>) -> Value {
     let dir = results_dir(building_id);
     let reg = load_reg().ok();
     let mut metadata = HashMap::new();
+    let mut kinds_by_rule: HashMap<String, Vec<String>> = HashMap::new();
     if let Some(reg) = &reg {
         for rule in &reg.rules {
             metadata.insert(rule.rule_id.clone(), rule.description.clone());
+            kinds_by_rule.insert(rule.rule_id.clone(), rule.equipment_kinds.clone());
+            for alias in &rule.aliases {
+                kinds_by_rule.insert(alias.clone(), rule.equipment_kinds.clone());
+            }
         }
     }
     let mut rows = Vec::new();
@@ -335,13 +358,22 @@ pub fn results_response(building_id: Option<&str>) -> Value {
                     .unwrap_or(0.0);
                 // Emit status directly from the row when present (skip markers),
                 // otherwise derive FAULT/PASS from fault_hours (OFDD-066).
-                let status = row
-                    .get("status")
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-                    .unwrap_or_else(|| {
-                        if fault_hours > 0.0 { "FAULT" } else { "PASS" }.to_string()
-                    });
+                let kind = infer_equipment_kind(equipment_id);
+                let applies = kinds_by_rule
+                    .get(rule_id)
+                    .map(|k| rule_applies_to_kind(k, kind))
+                    .unwrap_or(true);
+                let status = if !applies {
+                    "NOT_APPLICABLE_EQUIPMENT_TYPE".to_string()
+                } else {
+                    row.get("status")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                        .unwrap_or_else(|| {
+                            if fault_hours > 0.0 { "FAULT" } else { "PASS" }.to_string()
+                        })
+                };
+                let fault_hours = if applies { fault_hours } else { 0.0 };
                 let missing_roles = row
                     .get("missing_roles")
                     .cloned()

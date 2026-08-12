@@ -629,8 +629,8 @@ timestamp_utc,oat_col,fan_col
     }
 
     #[tokio::test]
-    async fn sv_stale_fan_off_rows_excluded() {
-        // OFDD-065 regression: fan_cmd=0 rows must not accumulate FAULT hours.
+    async fn sv_stale_fan_off_rows_still_count() {
+        // Pandas SV-STALE gate is `always` — fan-off samples still accumulate hours.
         let tmp = tempfile::TempDir::new().unwrap();
         let building = tmp.path().join("BUILDING_SVSTALE_OFF");
         std::fs::create_dir_all(&building).unwrap();
@@ -669,7 +669,11 @@ timestamp_utc,oat_col,fan_col
             &[("STALE_HOURS", "0.1")],
         )
         .await;
-        assert_hours_close(got, 0.0, "SV-STALE fan-off excluded");
+        assert_hours_close(
+            got,
+            0.25,
+            "SV-STALE fan-off still counts (pandas always gate)",
+        );
     }
 
     #[tokio::test]
