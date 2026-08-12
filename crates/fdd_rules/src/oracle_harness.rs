@@ -72,7 +72,9 @@ pub async fn run_rule_fault_hours(
     }
     let sql = substitute_sql(&raw_sql, &params);
     // Match runner: inject NULL optional fan proof columns when fixtures omit them.
-    let sql = inject_optional_fan_cols(&ctx, sql_file, &sql).await.unwrap();
+    let sql = inject_optional_fan_cols(&ctx, sql_file, &sql)
+        .await
+        .unwrap();
     let result = run_sql(&ctx, &sql).await.unwrap();
     if result.row_count == 0 {
         return 0.0;
@@ -125,11 +127,14 @@ async fn inject_optional_fan_cols(
         .iter()
         .map(|f| f.name().to_ascii_lowercase())
         .collect();
-    let needed = ["fan_cmd", "fan_status", "pump_status", "chiller_status", "chw_flow"];
-    let missing: Vec<&str> = needed
-        .into_iter()
-        .filter(|c| !have.contains(*c))
-        .collect();
+    let needed = [
+        "fan_cmd",
+        "fan_status",
+        "pump_status",
+        "chiller_status",
+        "chw_flow",
+    ];
+    let missing: Vec<&str> = needed.into_iter().filter(|c| !have.contains(*c)).collect();
     if missing.is_empty() {
         return Ok(sql.to_string());
     }
@@ -138,9 +143,7 @@ async fn inject_optional_fan_cols(
         .map(|c| format!("CAST(NULL AS DOUBLE) AS \"{c}\""))
         .collect::<Vec<_>>()
         .join(", ");
-    let cte = format!(
-        "history_opt AS (SELECT history.*, {nulls} FROM history)"
-    );
+    let cte = format!("history_opt AS (SELECT history.*, {nulls} FROM history)");
     let rewritten = sql
         .replace(" FROM history", " FROM history_opt")
         .replace(" from history", " from history_opt")

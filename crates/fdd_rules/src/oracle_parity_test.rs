@@ -669,7 +669,11 @@ timestamp_utc,oat_col,fan_col
             &[("STALE_HOURS", "0.1")],
         )
         .await;
-        assert_hours_close(got, 0.25, "SV-STALE fan-off still counts (pandas always gate)");
+        assert_hours_close(
+            got,
+            0.25,
+            "SV-STALE fan-off still counts (pandas always gate)",
+        );
     }
 
     #[tokio::test]

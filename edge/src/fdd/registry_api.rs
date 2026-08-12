@@ -366,13 +366,12 @@ pub fn results_response(building_id: Option<&str>) -> Value {
                 let status = if !applies {
                     "NOT_APPLICABLE_EQUIPMENT_TYPE".to_string()
                 } else {
-                    row
-                    .get("status")
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-                    .unwrap_or_else(|| {
-                        if fault_hours > 0.0 { "FAULT" } else { "PASS" }.to_string()
-                    })
+                    row.get("status")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                        .unwrap_or_else(|| {
+                            if fault_hours > 0.0 { "FAULT" } else { "PASS" }.to_string()
+                        })
                 };
                 let fault_hours = if applies { fault_hours } else { 0.0 };
                 let missing_roles = row
