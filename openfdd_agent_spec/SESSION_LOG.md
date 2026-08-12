@@ -1,5 +1,12 @@
 # Session log
 
+## 2026-08-12 — Overview expanders, session confirm overlay, SCHED-1 occupancy
+
+- Overview plot Expanders default open (`OverviewPopulated`) so charts are not caret-hidden.
+- FDD series overlay applies `session_config` `confirm_min`/params (`sql_detail_session`); Reports listens for `RULES_UPDATED`.
+- SCHED-1 SQL + pandas `sched1`: portable occupancy (numeric 0/false + unoccupied tokens).
+- Agent docs: root `AGENTS.md`, `CONTAINER_AGENT.md`, react/sql/ghcr skills — low-RAM GHCR-only refresh; synthetic-59 soak scripts; dump-parity paused.
+
 ## 2026-08-11 — open-fdd 4.3.0 library program
 
 - Independent version API (`open_fdd.version.manifest`), effective catalog hashes, capability extras (`oracle` / `analytics` / `reporting`). `vibe19` extra deprecated until 5.0.

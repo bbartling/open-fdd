@@ -69,6 +69,26 @@ curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
 Day-to-day convenience may set `OPENFDD_IMAGE_TAG=nightly`, but qualification
 and post-merge verification must use `sha-*`.
 
+### Low-RAM hosts (bensbench)
+
+Do **not** `docker build` stack images or run full local Rust compiles for
+central/web — OOM risk. Ship code via PR → GH Actions →
+`Publish Open-FDD stack to GHCR`, then refresh the host:
+
+```bash
+# 1) free disk / drop unused digests before pull
+docker image prune -f
+docker images 'ghcr.io/bbartling/openfdd-*' --format '{{.Repository}}:{{.Tag}} {{.ID}}' | head
+
+# 2) pull + up (no rebuild)
+./scripts/openfdd_stack_pull.sh react   # or react-ot
+./scripts/openfdd_stack_up.sh react --no-pull
+curl -fsS http://127.0.0.1:8080/api/health
+```
+
+Confirm `/api/health` (or UI generation) reflects the new `+sha`, and that Lab
+params such as FC1 `confirm_min` match the merged tip.
+
 ### Offline WattLab export (not product)
 
 `tools/wattlab_export` is optional PyPI/offline tooling. Product central does

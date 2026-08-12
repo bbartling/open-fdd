@@ -59,6 +59,19 @@ Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:808
 4. Read-first; writes need `OPENFDD_MCP_ALLOW_WRITES=1` and `confirm:true`.
 5. Never print secrets. BACnet writes need explicit human approval.
 
+## Product UI / FDD agent notes
+
+- **Overview plots:** plot Expanders default **open** so charts are not hidden behind carets (`OverviewPopulated`).
+- **Lab → FDD Plots:** `session_config` `confirm_min` (and rule params) apply to the series overlay (`sql_detail_session`). After **Update this rule**, Reports/FDD Plots must refetch on `RULES_UPDATED`.
+- **SCHED-1 occupancy:** treat numeric `0` / `0.0` / `false` **and** string `unoccupied` (and related tokens) as unoccupied — SQL + pandas cookbook stay aligned.
+- **Synthetic-59:** soak via `scripts/synthetic_59_*.py` under `reports/wattlab-parity/fixtures/synthetic_59/`. Do not greenwash `expected_faults.csv`. B100 dump-parity remains **paused**.
+
+## Low-RAM hosts (bensbench)
+
+- **Never** local `docker build` / heavy Rust compile for stack images. Ship via PR → GH Actions → GHCR `nightly` / `sha-*`.
+- Before pulling new images: prune unused/old digests first, then `./scripts/openfdd_stack_pull.sh …` and `./scripts/openfdd_stack_up.sh … --no-pull`.
+- Details: [`openfdd_agent_spec/CONTAINER_AGENT.md`](openfdd_agent_spec/CONTAINER_AGENT.md).
+
 ## Never
 
 - delete `workspace/`
@@ -69,6 +82,7 @@ Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:808
 - write BACnet without explicit human approval
 - embed vendor chat relays or model API keys in the stack
 - add Python to the product central/web request path
+- local stack image builds on low-RAM hosts (use GHCR)
 
 See [docs/agent/index.md](docs/agent/index.md) for external-agent architecture.
 

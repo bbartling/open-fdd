@@ -40,6 +40,74 @@ fn alias_ui_param_key<'a>(rule_id: &str, key: &'a str) -> &'a str {
     }
 }
 
+/// Persisted Lab / package params bag for one rule (aliases included).
+fn session_rule_param_bag(rule: &RuleSpec) -> Option<serde_json::Map<String, Value>> {
+    let wrap = crate::fdd::session_config::get_session_config();
+    let params = wrap.get("config")?.get("params")?.as_object()?;
+    let bag = params
+        .get(&rule.rule_id)
+        .or_else(|| rule.aliases.iter().find_map(|a| params.get(a)))?
+        .as_object()?;
+    Some(bag.clone())
+}
+
+/// Effective confirm_seconds after session_config confirm_min / confirm_seconds.
+fn confirm_seconds_from_session_bag(rule: &RuleSpec, bag: &serde_json::Map<String, Value>) -> u32 {
+    let mut confirm = rule.confirm_seconds;
+    if let Some(cm) = bag.get("confirm_min").and_then(|v| v.as_f64()) {
+        confirm = (cm * 60.0).round() as u32;
+    }
+    if let Some(cs) = bag.get("confirm_seconds").and_then(|v| v.as_f64()) {
+        confirm = cs.round() as u32;
+    }
+    confirm
+}
+
+/// True when session bag carries confirm or other numeric overrides for this rule.
+fn session_bag_has_overrides(bag: &serde_json::Map<String, Value>) -> bool {
+    bag.iter().any(|(k, v)| {
+        if k == "_ui" {
+            return false;
+        }
+        v.as_f64().is_some()
+    })
+}
+
+/// Fold session bag numbers into SQL placeholder map (same mapping as /api/fdd/run).
+fn apply_session_bag_to_sql_params(
+    rule: &RuleSpec,
+    bag: &serde_json::Map<String, Value>,
+    params: &mut HashMap<String, String>,
+) {
+    for (key, value) in bag {
+        if key == "confirm_min" || key == "_ui" {
+            continue;
+        }
+        let Some(mut number) = value.as_f64() else {
+            continue;
+        };
+        let mut mapped = alias_ui_param_key(&rule.rule_id, key).to_string();
+        if rule.rule_id == "FC1" && key == "fan_hi" {
+            if bag.get("eps_vfd_spd").and_then(|v| v.as_f64()).is_some() {
+                continue;
+            }
+            mapped = "eps_vfd_spd".into();
+            number = (1.0 - number).clamp(0.0, 1.0);
+        }
+        if let Some(def) = rule.parameters.get(&mapped) {
+            params.insert(def.sql_placeholder.clone(), number.to_string());
+        } else if let Some(def) = rule.parameters.get(key) {
+            params.insert(def.sql_placeholder.clone(), number.to_string());
+        } else if let Some((_, def)) = rule
+            .parameters
+            .iter()
+            .find(|(_, def)| def.sql_placeholder == *key || def.sql_placeholder == mapped)
+        {
+            params.insert(def.sql_placeholder.clone(), number.to_string());
+        }
+    }
+}
+
 fn parquet_root() -> PathBuf {
     if let Ok(p) = std::env::var("OPENFDD_PARQUET_ROOT") {
         return PathBuf::from(p);
@@ -490,8 +558,18 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                 // Registry JSON is equipment-level fault_hours only — when that
                 // index is empty, re-run the rule SQL rewritten to a per-timestamp
                 // confirmed series and join onto history rows.
-                let mut fault_by_ts =
-                    load_confirmed_fault_index(equipment_id, &rule.rule_id, building_id);
+                // When Lab session_config has overrides (e.g. confirm_min), always
+                // recompute sql_detail with those params so Plots match Update rule.
+                let session_bag = session_rule_param_bag(rule);
+                let prefer_session_detail = session_bag
+                    .as_ref()
+                    .map(session_bag_has_overrides)
+                    .unwrap_or(false);
+                let mut fault_by_ts = if prefer_session_detail {
+                    HashMap::new()
+                } else {
+                    load_confirmed_fault_index(equipment_id, &rule.rule_id, building_id)
+                };
                 let mut overlay_source = if fault_by_ts.is_empty() {
                     "none"
                 } else {
@@ -505,12 +583,17 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                         equipment_id,
                         &root,
                         &history_columns,
+                        session_bag.as_ref(),
                     )
                     .await
                     {
                         fault_by_ts = detail;
                         if !fault_by_ts.is_empty() {
-                            overlay_source = "sql_detail";
+                            overlay_source = if prefer_session_detail {
+                                "sql_detail_session"
+                            } else {
+                                "sql_detail"
+                            };
                         }
                     }
                 }
@@ -731,12 +814,16 @@ async fn compute_confirmed_fault_series(
     equipment_id: &str,
     parquet_root: &Path,
     history_columns: &std::collections::HashSet<String>,
+    session_bag: Option<&serde_json::Map<String, Value>>,
 ) -> Option<HashMap<String, bool>> {
     let sql_path = Path::new(&reg.rules_dir).join(&rule.sql_file);
     let raw_sql = std::fs::read_to_string(&sql_path).ok()?;
     let detail = rewrite_rule_sql_to_fault_series(&raw_sql, equipment_id)?;
     let poll = read_poll_from_cache(parquet_root).unwrap_or(300.0);
-    let mut params = rule_params(poll, rule.confirm_seconds);
+    let confirm = session_bag
+        .map(|bag| confirm_seconds_from_session_bag(rule, bag))
+        .unwrap_or(rule.confirm_seconds);
+    let mut params = rule_params(poll, confirm);
     if let Ok(tuning) = load_tuning_profiles(Path::new(&reg.rules_dir)) {
         if let Ok(tuned) = effective_param_strings(rule, &tuning, None, None, None) {
             for (k, v) in tuned {
@@ -747,9 +834,18 @@ async fn compute_confirmed_fault_series(
             }
         }
     }
-    let confirm_params = rule_params(poll, rule.confirm_seconds);
+    // Catalog confirm defaults must not wipe session confirm_min.
+    let confirm_params = rule_params(poll, confirm);
     for (k, v) in confirm_params {
         params.insert(k, v);
+    }
+    if let Some(bag) = session_bag {
+        apply_session_bag_to_sql_params(rule, bag, &mut params);
+        // Re-assert confirm after bag fold (confirm_seconds key may also be present).
+        let confirm_params = rule_params(poll, confirm);
+        for (k, v) in confirm_params {
+            params.insert(k, v);
+        }
     }
     let mut sql = substitute_sql(&detail, &params);
     sql = sql_with_optional_null_roles_series(&sql, &rule.optional_roles, history_columns);

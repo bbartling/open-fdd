@@ -66,6 +66,10 @@ retest. Do not confuse those with this engineering OS.
 23. **RCx catalog freeze:** every `REQUIRED_RCX_PRESET_IDS` id must stay listed. Family picker order is `RCX_FAMILY_ORDER` (Zones first) plus empty Heat pump / Weather placeholders. Auto-run the selected preset when site+preset are set.
 24. **Actions housekeeping:** default `GET /api/actions?limit=10`; `DELETE /api/actions/:id` and `DELETE /api/actions`; JSONL prune cap 50.
 25. **Section radios:** left, horizontal, **after** hero + Equipment on Overview (never inside `.oracle-hero`, never centered in the logo column). Other pages: same left radio row at the top of the page body.
+26. **Overview plot Expanders** default **open** — do not hide motor / mech / econ / BAS plot sections behind carets (`Expander` unmounts children when closed).
+27. **FDD Plots series overlay** honors Lab/`session_config` `confirm_min` (and typed rule params); source may be `sql_detail_session`. After Update-this-rule, listen for `RULES_UPDATED` and refetch results + series.
+28. **SCHED-1 portable occupancy:** numeric/boolean falsey (`0`, `0.0`, `false`) **and** string `unoccupied` (plus related tokens) — keep SQL (`sched1_unoccupied_runtime.sql`) and pandas `sched1` aligned.
+29. **Low-RAM / bensbench:** never local stack `docker build`; prune old images before pull; wait for GHCR publish then pull `sha-*` / `nightly`. Synthetic-59 soaks use `scripts/synthetic_59_*.py`; B100 dump-parity stays paused; never edit goldens to hide misses.
 
 ---
 

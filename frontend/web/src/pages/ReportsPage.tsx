@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { LockedSiteCaption } from "../components/LockedSiteCaption";
+import { RULES_UPDATED_EVENT } from "../components/RuleTuningPanel";
 import {
   Button,
   DataTable,
@@ -306,6 +307,21 @@ export function ReportsPage() {
   useEffect(() => {
     if (!buildingId || !equipmentId || !ruleId) return;
     void loadSeries();
+  }, [buildingId, equipmentId, ruleId, loadSeries]);
+
+  // After Lab "Update this rule" / Overview run-all, refresh results + fault overlay.
+  useEffect(() => {
+    const onRules = () => {
+      if (!buildingId) return;
+      void getFddResults(buildingId)
+        .then((rows) => setResults(rows))
+        .catch(() => undefined);
+      if (equipmentId && ruleId) {
+        void loadSeries();
+      }
+    };
+    window.addEventListener(RULES_UPDATED_EVENT, onRules);
+    return () => window.removeEventListener(RULES_UPDATED_EVENT, onRules);
   }, [buildingId, equipmentId, ruleId, loadSeries]);
 
   const loadSensorHealth = useCallback(async () => {

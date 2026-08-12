@@ -162,13 +162,14 @@ export function OverviewPopulated({
   const [week, setWeek] = useState(() => loadStoredSchedule().week);
   const [tz, setTz] = useState(() => loadStoredSchedule().tz);
   const [schedOpen, setSchedOpen] = useState(true);
-  const [motorTableOpen, setMotorTableOpen] = useState(false);
-  const [mechBinsOpen, setMechBinsOpen] = useState(false);
-  const [mechCoverageOpen, setMechCoverageOpen] = useState(false);
-  const [econMetricsOpen, setEconMetricsOpen] = useState(false);
-  const [basHistOpen, setBasHistOpen] = useState(false);
-  const [econOverlayOpen, setEconOverlayOpen] = useState(false);
-  const [econSkippedOpen, setEconSkippedOpen] = useState(false);
+  // Plot sections default open so Overview does not hide charts behind carets.
+  const [motorTableOpen, setMotorTableOpen] = useState(true);
+  const [mechBinsOpen, setMechBinsOpen] = useState(true);
+  const [mechCoverageOpen, setMechCoverageOpen] = useState(true);
+  const [econMetricsOpen, setEconMetricsOpen] = useState(true);
+  const [basHistOpen, setBasHistOpen] = useState(true);
+  const [econOverlayOpen, setEconOverlayOpen] = useState(true);
+  const [econSkippedOpen, setEconSkippedOpen] = useState(true);
   const [econOverlayEq, setEconOverlayEq] = useState("");
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [scheduleNote, setScheduleNote] = useState<string | null>(null);
