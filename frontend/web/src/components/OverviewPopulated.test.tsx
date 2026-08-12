@@ -165,8 +165,21 @@ describe("OverviewPopulated metric isolation", () => {
     vi.mocked(postInspect).mockClear();
   });
 
-  it("auto-runs analytics and keeps mapping rows/span after inspect", async () => {
+  it("does not auto-run analytics; Update analytics loads charts and keeps mapping rows/span", async () => {
     renderOverview();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("overview-idle-hint")).toBeTruthy();
+    });
+    expect(fetchCentralOverview).not.toHaveBeenCalled();
+    expect(screen.getByTestId("overview-rule-count").textContent).toContain("59");
+    expect(screen.getByTestId("overview-rule-caption").textContent).toMatch(
+      /\+4 SQL rollups/,
+    );
+
+    fireEvent.click(
+      screen.getByTestId("overview-refresh").querySelector("button")!,
+    );
 
     await waitFor(() => {
       expect(fetchCentralOverview).toHaveBeenCalled();
@@ -174,10 +187,6 @@ describe("OverviewPopulated metric isolation", () => {
         "35536",
       );
     });
-    expect(screen.getByTestId("overview-rule-count").textContent).toContain("59");
-    expect(screen.getByTestId("overview-rule-caption").textContent).toMatch(
-      /\+4 SQL rollups/,
-    );
     expect(screen.getByTestId("overview-kind").textContent).toMatch(/ahu/i);
     expect(screen.getByTestId("overview-kind").textContent).not.toMatch(/AHU/);
     expect(screen.getByTestId("overview-start").textContent).toContain(
@@ -187,21 +196,13 @@ describe("OverviewPopulated metric isolation", () => {
       "2026-07-17 10:00",
     );
     expect(screen.getByTestId("overview-span").textContent).toContain("2961.3");
-
-    await waitFor(() => {
-      expect(postInspect).toHaveBeenCalled();
-    });
-    expect(screen.getByTestId("overview-row-count").textContent).toContain(
-      "35536",
-    );
-    expect(screen.getByTestId("overview-end").textContent).toContain(
-      "2026-07-17 10:00",
-    );
-    expect(screen.getByTestId("overview-span").textContent).toContain("2961.3");
   });
 
   it("does not offer a column toggle and plots inspect without clearing overview", async () => {
     renderOverview();
+    fireEvent.click(
+      screen.getByTestId("overview-refresh").querySelector("button")!,
+    );
     await waitFor(() => {
       expect(screen.getByTestId("overview-charts-ready")).toBeTruthy();
     });
@@ -230,6 +231,9 @@ describe("OverviewPopulated metric isolation", () => {
 
   it("overlay select does not null building overview", async () => {
     renderOverview();
+    fireEvent.click(
+      screen.getByTestId("overview-refresh").querySelector("button")!,
+    );
     await waitFor(() => {
       expect(screen.getByTestId("overview-charts-ready")).toBeTruthy();
     });
@@ -249,19 +253,11 @@ describe("OverviewPopulated metric isolation", () => {
     expect(screen.getByTestId("overview-econ-mat-resid-plot")).toBeTruthy();
   });
 
-  it("equipment select has no empty option", async () => {
+  it("does not render an Overview equipment picker", async () => {
     renderOverview();
     await waitFor(() => {
-      expect(screen.getByTestId("overview-equipment-select")).toBeTruthy();
+      expect(screen.getByTestId("overview-idle-hint")).toBeTruthy();
     });
-    const opts = [
-      ...screen
-        .getByTestId("overview-equipment-select")
-        .querySelectorAll("option"),
-    ];
-    expect(opts.map((o) => (o as HTMLOptionElement).value)).toEqual([
-      "AHU_1",
-      "BOILER_1",
-    ]);
+    expect(screen.queryByTestId("overview-equipment-select")).toBeNull();
   });
 });

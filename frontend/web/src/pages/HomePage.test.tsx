@@ -185,11 +185,9 @@ describe("HomePage overview", () => {
     expect(listFddEquipment).toHaveBeenCalled();
     const hero = screen.getByTestId("oracle-hero");
     expect(hero.querySelector('[data-testid="section-tabs"]')).toBeNull();
-    const eq = screen.getByTestId("overview-equipment-select");
-    const tabs = screen.getByTestId("section-tabs");
-    expect(
-      !!(eq.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING),
-    ).toBe(true);
+    expect(screen.queryByTestId("overview-equipment-select")).toBeNull();
+    expect(screen.getByTestId("section-tabs")).toBeTruthy();
+    expect(screen.getByTestId("overview-idle-hint")).toBeTruthy();
   });
 
   it("loads site inventory without a browser token (open mode)", async () => {

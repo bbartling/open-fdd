@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use fdd_rules::{
-    effective_param_strings, load_registry, load_tuning_profiles, rule_params,
+    effective_param_strings, load_registry, load_tuning_profiles, read_poll_from_cache, rule_params,
     run_all_rules_with_overrides, substitute_sql, RuleRegistry, RuleSpec,
 };
-use fdd_sql::{register_parquet_tree, run_sql};
+use fdd_sql::{register_parquet_tree, register_weather_if_present, run_sql};
 use serde_json::{json, Value};
 
 fn sql_rules_dir() -> PathBuf {
@@ -100,6 +100,11 @@ pub fn load_registry_rules_map() -> HashMap<String, RuleSpec> {
 fn param_to_json(rule: &RuleSpec) -> Value {
     let mut params = serde_json::Map::new();
     for (key, def) in &rule.parameters {
+        // confirm_seconds is exposed only as confirm_min (minutes) below so Lab /
+        // Overview sliders match Vibe19 session_config + fault_settings units.
+        if key == "confirm_seconds" {
+            continue;
+        }
         params.insert(
             key.clone(),
             json!({
@@ -116,16 +121,26 @@ fn param_to_json(rule: &RuleSpec) -> Value {
         );
     }
     // Always expose confirm as confirm_min (minutes) for vibe19 UI parity.
-    if !params.contains_key("confirm_min") && !params.contains_key("confirm_seconds") {
+    if !params.contains_key("confirm_min") {
+        let default_min = rule
+            .parameters
+            .get("confirm_seconds")
+            .map(|def| def.default / 60.0)
+            .unwrap_or((rule.confirm_seconds as f64) / 60.0);
+        let (min_m, max_m, step_m) = rule
+            .parameters
+            .get("confirm_seconds")
+            .map(|def| (def.min / 60.0, def.max / 60.0, (def.step / 60.0).max(0.05)))
+            .unwrap_or((0.0, 120.0, 1.0));
         params.insert(
             "confirm_min".into(),
             json!({
                 "key": "confirm_min",
                 "label": "Fault confirm delay",
-                "default": (rule.confirm_seconds as f64) / 60.0,
-                "min": 0.0,
-                "max": 120.0,
-                "step": 1.0,
+                "default": default_min,
+                "min": min_m,
+                "max": max_m,
+                "step": step_m,
                 "unit": "min",
                 "control": "slider",
                 "sql_placeholder": "CONFIRM_SECONDS",
@@ -437,6 +452,7 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
         if let Err(e) = register_parquet_tree(&ctx, &root).await {
             return json!({"ok": false, "error": e.to_string()});
         }
+        let _ = register_weather_if_present(&ctx, &root).await;
         // Preflight required roles against history schema (no SchemaError banners).
         let history_columns: std::collections::HashSet<String> = match ctx.table("history").await {
             Ok(df) => df
@@ -470,10 +486,35 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
         }
         match run_sql(&ctx, &sql).await {
             Ok(mut result) => {
-                // Overlay confirmed_fault from last registry run when present so
-                // FDD Plots can draw the bottom fault swim lane (vibe19 parity).
-                let fault_by_ts =
+                // Overlay confirmed_fault for the FDD Plots swim lane (vibe19).
+                // Registry JSON is equipment-level fault_hours only — when that
+                // index is empty, re-run the rule SQL rewritten to a per-timestamp
+                // confirmed series and join onto history rows.
+                let mut fault_by_ts =
                     load_confirmed_fault_index(equipment_id, &rule.rule_id, building_id);
+                let mut overlay_source = if fault_by_ts.is_empty() {
+                    "none"
+                } else {
+                    "results"
+                };
+                if fault_by_ts.is_empty() {
+                    if let Some(detail) = compute_confirmed_fault_series(
+                        &ctx,
+                        &reg,
+                        rule,
+                        equipment_id,
+                        &root,
+                        &history_columns,
+                    )
+                    .await
+                    {
+                        fault_by_ts = detail;
+                        if !fault_by_ts.is_empty() {
+                            overlay_source = "sql_detail";
+                        }
+                    }
+                }
+                let mut overlay_hits = 0usize;
                 if !fault_by_ts.is_empty() {
                     for row in &mut result.rows {
                         if let Some(obj) = row.as_object_mut() {
@@ -484,6 +525,7 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                                 .unwrap_or("");
                             if let Some(flag) = lookup_fault_flag(&fault_by_ts, ts) {
                                 obj.insert("confirmed_fault".into(), json!(flag));
+                                overlay_hits += 1;
                             }
                         }
                     }
@@ -497,7 +539,9 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
                     "rows": result.rows,
                     "downsampled": result.row_count >= 5000,
                     "max_points": 5000,
-                    "has_confirmed_fault": !fault_by_ts.is_empty(),
+                    "has_confirmed_fault": overlay_hits > 0,
+                    "fault_overlay_source": overlay_source,
+                    "fault_overlay_hits": overlay_hits,
                     "building_id": building_id,
                 })
             }
@@ -522,7 +566,8 @@ pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&s
 }
 
 /// Normalize timestamp keys so series rows join fault overlays across slight
-/// format drift (trim; `timestamp` vs `timestamp_utc`; fractional seconds).
+/// format drift (trim; `timestamp` vs `timestamp_utc`; fractional seconds;
+/// `Z` vs `+00:00`).
 fn normalize_ts_keys(raw: &str) -> Vec<String> {
     let s = raw.trim().to_string();
     if s.is_empty() {
@@ -544,12 +589,20 @@ fn normalize_ts_keys(raw: &str) -> Vec<String> {
             push_unique(&mut keys, format!("{}T{}", &s[..10], &s[11..]));
         }
     }
-    // Optional trailing Z.
+    // Optional trailing Z / +00:00 / -00:00.
     let snapshot = keys.clone();
     for k in snapshot {
         if k.ends_with('Z') {
             push_unique(&mut keys, k[..k.len() - 1].to_string());
+            push_unique(&mut keys, format!("{}+00:00", &k[..k.len() - 1]));
+        } else if let Some(stripped) = k
+            .strip_suffix("+00:00")
+            .or_else(|| k.strip_suffix("-00:00"))
+        {
+            push_unique(&mut keys, stripped.to_string());
+            push_unique(&mut keys, format!("{stripped}Z"));
         } else if k.len() >= 19 && !k.contains('Z') && !k.contains('+') {
+            // No zone suffix — add Z (date dashes are fine; `+` marks offsets).
             push_unique(&mut keys, format!("{k}Z"));
         }
     }
@@ -566,6 +619,175 @@ fn normalize_ts_keys(raw: &str) -> Vec<String> {
         }
     }
     keys
+}
+
+/// Rewrite aggregated cookbook SQL (`final` ← `ranked` → `fault_hours`) into a
+/// per-timestamp `confirmed_fault` series for one equipment (FDD Plots overlay).
+///
+/// Registry runs persist equipment-level `fault_hours` only; Plots need the
+/// swim-lane bool joined onto history timestamps. Returns `None` for analytics
+/// rollups / non-confirm SQL shapes.
+fn rewrite_rule_sql_to_fault_series(sql: &str, equipment_id: &str) -> Option<String> {
+    let sql = sql.trim().trim_end_matches(';');
+    let lower = sql.to_ascii_lowercase();
+    if !lower.contains("final as") || !lower.contains("from ranked") {
+        return None;
+    }
+    if !lower.contains("fault_hours") {
+        return None;
+    }
+    let final_at = lower.find("final as (")?;
+    let select_at = lower.rfind("select")?;
+    if select_at <= final_at {
+        return None;
+    }
+    // Outer aggregate SELECT must be the trailing one after `final`.
+    if !lower[select_at..].contains("fault_hours") {
+        return None;
+    }
+
+    let mut head = sql[..select_at].to_string();
+    // Inject timestamp_utc into the `final` CTE select list when missing.
+    let head_lower = head.to_ascii_lowercase();
+    if let Some(rel_final) = head_lower[final_at..].find("final as (") {
+        let body_start = final_at + rel_final + "final as (".len();
+        let body_slice = &head_lower[body_start..];
+        // Only the final CTE body (until FROM ranked).
+        let from_ranked = body_slice.find("from ranked")?;
+        let final_body = &head_lower[body_start..body_start + from_ranked];
+        if !final_body.contains("timestamp_utc") {
+            // Insert after first `equipment_id,` inside final.
+            if let Some(eq_rel) = final_body.find("equipment_id") {
+                let abs = body_start + eq_rel;
+                // Find comma after equipment_id (allow whitespace/newlines).
+                let after = &head[abs..];
+                if let Some(comma_rel) = after.find(',') {
+                    let insert_at = abs + comma_rel + 1;
+                    head.insert_str(insert_at, "\n    timestamp_utc,");
+                }
+            }
+        }
+    }
+
+    let escaped = equipment_id.replace('\'', "''");
+    Some(format!(
+        "{head}SELECT equipment_id, timestamp_utc, confirmed AS confirmed_fault\n\
+         FROM final\n\
+         WHERE equipment_id = '{escaped}'\n\
+         ORDER BY timestamp_utc"
+    ))
+}
+
+/// Inject NULL columns for optional roles missing from history (CTE form).
+fn sql_with_optional_null_roles_series(
+    sql: &str,
+    optional_roles: &[String],
+    history_columns: &std::collections::HashSet<String>,
+) -> String {
+    let missing: Vec<String> = optional_roles
+        .iter()
+        .filter(|role| !history_columns.contains(&role.to_ascii_lowercase()))
+        .cloned()
+        .collect();
+    if missing.is_empty() {
+        return sql.to_string();
+    }
+    let null_cols: String = missing
+        .iter()
+        .map(|r| {
+            let ty = if r.eq_ignore_ascii_case("occ_mode") {
+                "VARCHAR"
+            } else {
+                "DOUBLE"
+            };
+            format!("CAST(NULL AS {ty}) AS \"{r}\"")
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let cte = format!("history_opt AS (SELECT history.*, {null_cols} FROM history)");
+    let rewritten = sql
+        .replace(" FROM history", " FROM history_opt")
+        .replace(" from history", " from history_opt")
+        .replace("\nFROM history", "\nFROM history_opt")
+        .replace("\nfrom history", "\nfrom history_opt");
+    if let Some(idx) = rewritten.find("WITH ") {
+        let (pre, rest) = rewritten.split_at(idx);
+        let rest = rest.trim_start_matches("WITH ");
+        format!("{pre}WITH {cte}, {rest}")
+    } else if let Some(idx) = rewritten.find("with ") {
+        let (pre, rest) = rewritten.split_at(idx);
+        let rest = rest.trim_start_matches("with ");
+        format!("{pre}WITH {cte}, {rest}")
+    } else {
+        format!("WITH {cte} {rewritten}")
+    }
+}
+
+/// Compute per-timestamp confirmed_fault by rewriting + running cookbook SQL.
+async fn compute_confirmed_fault_series(
+    ctx: &datafusion::prelude::SessionContext,
+    reg: &RuleRegistry,
+    rule: &RuleSpec,
+    equipment_id: &str,
+    parquet_root: &Path,
+    history_columns: &std::collections::HashSet<String>,
+) -> Option<HashMap<String, bool>> {
+    let sql_path = Path::new(&reg.rules_dir).join(&rule.sql_file);
+    let raw_sql = std::fs::read_to_string(&sql_path).ok()?;
+    let detail = rewrite_rule_sql_to_fault_series(&raw_sql, equipment_id)?;
+    let poll = read_poll_from_cache(parquet_root).unwrap_or(300.0);
+    let mut params = rule_params(poll, rule.confirm_seconds);
+    if let Ok(tuning) = load_tuning_profiles(Path::new(&reg.rules_dir)) {
+        if let Ok(tuned) = effective_param_strings(rule, &tuning, None, None, None) {
+            for (k, v) in tuned {
+                if k == "CONFIRM_SECONDS" || k == "CONFIRM_ROWS" {
+                    continue;
+                }
+                params.insert(k, v);
+            }
+        }
+    }
+    let confirm_params = rule_params(poll, rule.confirm_seconds);
+    for (k, v) in confirm_params {
+        params.insert(k, v);
+    }
+    let mut sql = substitute_sql(&detail, &params);
+    sql = sql_with_optional_null_roles_series(&sql, &rule.optional_roles, history_columns);
+    let result = run_sql(ctx, &sql).await.ok()?;
+    let mut out = HashMap::new();
+    for row in result.rows {
+        let ts = row
+            .get("timestamp_utc")
+            .or_else(|| row.get("timestamp"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if ts.is_empty() {
+            continue;
+        }
+        let flag = row
+            .get("confirmed_fault")
+            .and_then(|v| v.as_bool())
+            .or_else(|| {
+                row.get("confirmed_fault")
+                    .and_then(|v| v.as_i64())
+                    .map(|n| n != 0)
+            })
+            .or_else(|| {
+                row.get("confirmed")
+                    .and_then(|v| v.as_i64())
+                    .map(|n| n != 0)
+            });
+        if let Some(f) = flag {
+            for key in normalize_ts_keys(ts) {
+                out.insert(key, f);
+            }
+        }
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
 }
 
 fn lookup_fault_flag(map: &HashMap<String, bool>, ts: &str) -> Option<bool> {
@@ -980,11 +1202,30 @@ mod tests {
             None => std::env::remove_var("OPENFDD_RULE_RESULTS_DIR"),
         }
         let _ = std::fs::remove_dir_all(&tmp);
-        assert_eq!(
-            lookup_fault_flag(&idx, "2024-01-01T00:00:00Z"),
-            Some(true),
-            "expected join after trim + fractional-second normalize: {idx:?}"
+        assert!(
+            idx.values().any(|v| *v),
+            "expected confirmed_fault true in index, got {idx:?}"
         );
+    }
+
+    #[test]
+    fn rewrite_fc1_sql_emits_confirmed_fault_series() {
+        let raw = std::fs::read_to_string("sql_rules/fc1_duct_static_low.sql")
+            .or_else(|_| std::fs::read_to_string("../sql_rules/fc1_duct_static_low.sql"))
+            .expect("fc1 sql");
+        let out = rewrite_rule_sql_to_fault_series(&raw, "AHU_1").expect("rewrite");
+        let lower = out.to_ascii_lowercase();
+        assert!(lower.contains("confirmed as confirmed_fault"), "{out}");
+        assert!(lower.contains("timestamp_utc"), "{out}");
+        assert!(lower.contains("where equipment_id = 'ahu_1'") || lower.contains("where equipment_id = 'AHU_1'"), "{out}");
+        assert!(!lower.contains("fault_hours"), "{out}");
+        assert!(lower.contains("from final"), "{out}");
+    }
+
+    #[test]
+    fn rewrite_skips_analytics_rollups() {
+        let raw = "SELECT equipment_id, AVG(zone_t) AS avg_zone_temp FROM history GROUP BY equipment_id";
+        assert!(rewrite_rule_sql_to_fault_series(raw, "VAV_1").is_none());
     }
 
     #[test]
@@ -1009,6 +1250,22 @@ mod tests {
             lookup_fault_flag(&idx, "2024-01-01 00:00:00"),
             Some(true),
             "T vs space + fractional seconds must join"
+        );
+    }
+
+    #[test]
+    fn normalize_ts_keys_joins_plus_zero_offset() {
+        let idx = {
+            let mut m = HashMap::new();
+            for k in normalize_ts_keys("2024-01-01T00:00:00+00:00") {
+                m.insert(k, true);
+            }
+            m
+        };
+        assert_eq!(
+            lookup_fault_flag(&idx, "2024-01-01T00:00:00Z"),
+            Some(true),
+            "+00:00 must join to Z"
         );
     }
 }
