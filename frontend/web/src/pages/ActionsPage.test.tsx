@@ -28,6 +28,11 @@ vi.mock("../api/actionsApi", async () => {
 
 vi.mock("../api/mappingApi", () => ({
   listPackageBuildings: vi.fn(async () => []),
+  getSessionConfig: vi.fn(async () => ({
+    ok: true,
+    config: { schema_version: "openfdd_session_v1", params: {} },
+  })),
+  putSessionConfig: vi.fn(async () => ({ ok: true })),
 }));
 
 vi.mock("../api/uploadApi", () => ({ uploadPackage: vi.fn() }));

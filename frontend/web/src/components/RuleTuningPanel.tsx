@@ -7,29 +7,16 @@ import {
   type FddRuleSummary,
 } from "../api/fddApi";
 import { getSessionConfig, putSessionConfig } from "../api/mappingApi";
+import {
+  effectiveRunParams,
+  loadLocalRuleParams,
+  saveLocalRuleParams,
+  SESSION_SCHEMA,
+  type RuleParamMap,
+} from "../lib/ruleParams";
 import { useSessionQuery } from "../session";
 
-const PARAMS_KEY = "openfdd.ui.rule_params";
 export const RULES_UPDATED_EVENT = "openfdd:rules-updated";
-
-function loadStoredParams(): Record<string, Record<string, number>> {
-  try {
-    const raw = localStorage.getItem(PARAMS_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, Record<string, number>>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveStoredParams(map: Record<string, Record<string, number>>): void {
-  try {
-    localStorage.setItem(PARAMS_KEY, JSON.stringify(map));
-  } catch {
-    /* ignore */
-  }
-}
 
 function familyOf(ruleId: string): string {
   const i = ruleId.indexOf("-");
@@ -165,7 +152,7 @@ export function RuleTuningPanel() {
   const [rules, setRules] = useState<FddRuleSummary[]>([]);
   const [family, setFamily] = useState<string>("(all)");
   const [opsGate, setOpsGate] = useState(true);
-  const [params, setParams] = useState(loadStoredParams);
+  const [params, setParams] = useState<RuleParamMap>(loadLocalRuleParams);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [runMsg, setRunMsg] = useState<string | null>(null);
   const [runErr, setRunErr] = useState<string | null>(null);
@@ -185,6 +172,20 @@ export function RuleTuningPanel() {
           setLoadErr(e instanceof Error ? e.message : String(e));
         }
       });
+    // Seed Lab sliders from persisted session_config (package / Vibe19 parity),
+    // then apply any local browser overrides on top.
+    void getSessionConfig()
+      .then((body) => {
+        if (cancelled) return;
+        const merged = effectiveRunParams(
+          body.config?.params as Record<string, unknown>,
+        );
+        setParams(merged);
+        saveLocalRuleParams(merged);
+      })
+      .catch(() => {
+        /* keep localStorage seed */
+      });
     return () => {
       cancelled = true;
       if (persistTimer.current) clearTimeout(persistTimer.current);
@@ -202,18 +203,17 @@ export function RuleTuningPanel() {
   }, [rules, family]);
 
   const persistSession = useCallback(
-    async (nextParams: Record<string, Record<string, number>>) => {
+    async (nextParams: RuleParamMap) => {
       const gen = ++persistGen.current;
       try {
         const prev = await getSessionConfig();
         if (gen !== persistGen.current) return;
         await putSessionConfig({
           ...(prev.config ?? {}),
-          schema_version: prev.config?.schema_version ?? "openfdd.session.v1",
+          schema_version: prev.config?.schema_version ?? SESSION_SCHEMA,
           params: {
             ...nextParams,
             _ui: {
-              ...(nextParams._ui ?? {}),
               require_operational_proof: opsGate ? 1 : 0,
             },
           },
@@ -248,7 +248,7 @@ export function RuleTuningPanel() {
           ...prev,
           [ruleId]: { ...(prev[ruleId] ?? {}), [key]: value },
         };
-        saveStoredParams(next);
+        saveLocalRuleParams(next);
         schedulePersist(next);
         return next;
       });
@@ -303,7 +303,7 @@ export function RuleTuningPanel() {
 
   const reset = () => {
     setParams({});
-    saveStoredParams({});
+    saveLocalRuleParams({});
     if (persistTimer.current) clearTimeout(persistTimer.current);
     void persistSession({});
   };

@@ -39,6 +39,11 @@ import {
   isWeatherEquipmentId,
   spanHoursBetween,
 } from "../lib/overviewMetrics";
+import {
+  effectiveRunParams,
+  loadLocalRuleParams,
+  SESSION_SCHEMA,
+} from "../lib/ruleParams";
 
 const DAYS = [
   "Monday",
@@ -62,20 +67,8 @@ const DEFAULT_WEEK: Record<(typeof DAYS)[number], DaySched> = {
   Sunday: { occupied: false, start: "07:00", end: "17:00" },
 };
 
-const PARAMS_KEY = "openfdd.ui.rule_params";
 /** v2 defaults: M–F 07:00–17:00 occupied; weekends unoccupied. */
 const SCHEDULE_KEY = "openfdd.ui.occupancy_schedule.v2";
-
-function loadStoredParams(): Record<string, Record<string, number>> {
-  try {
-    const raw = localStorage.getItem(PARAMS_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, Record<string, number>>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
 
 function loadStoredSchedule(): {
   week: Record<(typeof DAYS)[number], DaySched>;
@@ -153,7 +146,7 @@ export function OverviewPopulated({
   buildingId,
   equipment,
   equipmentId,
-  onEquipmentChange,
+  onEquipmentChange: _onEquipmentChange,
   unitSystem,
 }: OverviewPopulatedProps) {
   const [ruleCount, setRuleCount] = useState(0);
@@ -417,10 +410,8 @@ export function OverviewPopulated({
 
   useEffect(() => {
     if (!buildingId) return;
-    void refreshOverview();
-    const pick = inspectPick || equipmentId;
-    if (pick) void refreshInspect({ pick });
-    // Auto-run Update analytics once per building (button remains a refresh).
+    // Meta only — do not auto-run Update analytics / Run all rules.
+    void refreshMeta();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildingId]);
 
@@ -430,10 +421,10 @@ export function OverviewPopulated({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [econOverlayEq]);
 
+  // Seed inspect picker from session equipment once; do not auto-plot on change.
   useEffect(() => {
     if (!equipmentId) return;
-    setInspectPick(equipmentId);
-    void refreshInspect({ pick: equipmentId });
+    setInspectPick((prev) => prev || equipmentId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [equipmentId]);
 
@@ -533,11 +524,16 @@ export function OverviewPopulated({
     setRulesErr(null);
     setRulesNote("Running all rules with tuned params…");
     try {
-      const params = loadStoredParams();
+      // Same tuning source as Vibe19: package session_config.params (confirm_min=0
+      // etc.), then Lab localStorage overrides.
       const prev = await getSessionConfig().catch(() => null);
+      const params = effectiveRunParams(
+        prev?.config?.params as Record<string, unknown> | undefined,
+        loadLocalRuleParams(),
+      );
       await putSessionConfig({
         ...(prev?.config ?? {}),
-        schema_version: prev?.config?.schema_version ?? "openfdd.session.v1",
+        schema_version: prev?.config?.schema_version ?? SESSION_SCHEMA,
         params: { ...(prev?.config?.params ?? {}), ...params },
       });
       const result = await runFdd({
@@ -677,8 +673,7 @@ export function OverviewPopulated({
             testId="overview-refresh"
           />
           <p className="oracle-sidebar__caption">
-            Auto-runs once when the site is set; click to refresh building
-            charts
+            Manual — builds building charts when you click
           </p>
         </div>
         <div className="overview-toolbar__action">
@@ -690,7 +685,7 @@ export function OverviewPopulated({
             testId="overview-update-all-rules"
           />
           <p className="oracle-sidebar__caption">
-            DataFusion FDD registry → Results / FDD Plots
+            Manual — DataFusion FDD registry → Results / FDD Plots
           </p>
         </div>
         {overview ? (
@@ -700,7 +695,7 @@ export function OverviewPopulated({
           </span>
         ) : (
           <span className="oracle-sidebar__caption" data-testid="overview-idle-hint">
-            Loading building analytics…
+            Click <strong>Update analytics</strong> to load building charts
           </span>
         )}
       </div>
@@ -713,25 +708,11 @@ export function OverviewPopulated({
       ) : null}
 
       <p className="oracle-sidebar__caption" data-testid="overview-dual-catalog">
-        Two actions, one engine family: <strong>Update analytics</strong>{" "}
-        builds Overview charts (auto once per site, then refresh);{" "}
-        <strong>Run all rules</strong> runs the FDD SQL registry. Sidebar{" "}
-        <strong>Update this rule</strong> re-runs one rule.
+        Two manual actions: <strong>Update analytics</strong> builds Overview
+        charts; <strong>Run all rules</strong> runs the FDD SQL registry.
+        Sidebar <strong>Update this rule</strong> re-runs one rule. Equipment
+        for Data inspection / FDD Plots is chosen in those sections — not here.
       </p>
-
-      <div className="form-row">
-        <Select
-          id="overview-equipment-select"
-          label="Equipment"
-          value={equipmentId || String(selected?.equipment_id ?? "")}
-          options={sortedEquipment.map((e) => ({
-            value: String(e.equipment_id),
-            label: String(e.equipment_id),
-          }))}
-          onChange={onEquipmentChange}
-          testId="overview-equipment-select"
-        />
-      </div>
 
       <SectionTabs activeSectionId="overview" embedded />
 

@@ -1,5 +1,13 @@
 # WattLab / Vibe19 parity — Building 100 (OpenFDD 4.3.0)
 
+## Current cycle (synthetic 59)
+
+**Live working copy for this cycle:** [`reports/wattlab-parity/BUGREPORT_WATTLAB_VIBE19_PARITY.md`](../../reports/wattlab-parity/BUGREPORT_WATTLAB_VIBE19_PARITY.md) — primary fixture is the **synthetic 59-rule** golden soak (Vibe19 **58/59**, OpenFDD SQL **42/59**, shared `confirm_min=0` tuning). **B100 dump-parity soak remains paused**; see [`BUGREPORT_WATTLAB_DUMP_PARITY.md`](BUGREPORT_WATTLAB_DUMP_PARITY.md) for the historical dump matrix only.
+
+The narrative below is the earlier Building 100 / engineering-bundle context and is retained for reference.
+
+---
+
 Oracle is **playground Vibe19** (`py-bacnet-stacks-playground/vibe_code_apps_19`) + live `open-fdd` 4.3.x (PR `#707`), **not** `tools/wattlab_export` and **not** `--skip-rules`.
 
 A working copy also lives at `reports/wattlab-parity/BUGREPORT_WATTLAB_VIBE19_PARITY.md` (gitignored `/reports/`).
