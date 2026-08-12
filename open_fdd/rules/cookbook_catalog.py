@@ -1213,10 +1213,23 @@ def trim4(d, p, poll):
 
 
 def sched1(d, p, poll):
-    """Unoccupied fan runtime; optional zone comfort band when zone_t is mapped."""
+    """Unoccupied fan runtime; optional zone comfort band when zone_t is mapped.
+
+    Portable occupancy: literal ``unoccupied`` (case-insensitive) **or** numeric /
+    boolean falsey values (``0``, ``0.0``, ``False``). String ``"1"`` / occupied
+    labels are treated as occupied.
+    """
     if "occupied" not in d or "fan-status" not in d:
         return _false(d.index)
-    base = (d["occupied"].astype(str).str.lower() == "unoccupied") & as_bool(d["fan-status"])
+    occ_raw = d["occupied"]
+    occ_str = occ_raw.astype(str).str.strip().str.lower()
+    label_unocc = occ_str.isin(
+        {"unoccupied", "unocc", "off", "false", "night", "standby", "setback", "no"}
+    )
+    occ_num = pd.to_numeric(occ_raw, errors="coerce")
+    numeric_unocc = occ_num.notna() & (occ_num <= 0.05)
+    unoccupied = label_unocc | numeric_unocc
+    base = unoccupied & as_bool(d["fan-status"])
     if "zone-air-temp" not in d.columns or d["zone-air-temp"].notna().sum() == 0:
         return base
     lo = _f(p, "comfort_low_f", 70.0)

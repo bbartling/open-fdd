@@ -3,13 +3,22 @@
 -- (zone already satisfied → optimal-start / bad schedule signal).
 -- When zone_t is absent from history, the runner injects NULL zone_t (optional role)
 -- so behavior matches pandas “no zone → base only”.
+-- Portable occupancy: literal 'unoccupied' OR numeric/boolean falsey (0 / 0.0 / false).
 WITH base AS (
   SELECT
     equipment_id,
     timestamp_utc,
         CAST(CASE
           WHEN occ_mode IS NULL OR fan_status IS NULL THEN 0
-          WHEN LOWER(occ_mode) = 'unoccupied' AND fan_status > 0.5
+          WHEN fan_status > 0.5
+            AND (
+              LOWER(trim(CAST(occ_mode AS VARCHAR))) IN
+                ('unoccupied','unocc','off','false','night','standby','setback','no')
+              OR (
+                try_cast(trim(CAST(occ_mode AS VARCHAR)) AS DOUBLE) IS NOT NULL
+                AND try_cast(trim(CAST(occ_mode AS VARCHAR)) AS DOUBLE) <= 0.05
+              )
+            )
             AND (
               zone_t IS NULL
               OR (zone_t >= {{ZONE_T_LO}} AND zone_t <= {{ZONE_T_HI}})

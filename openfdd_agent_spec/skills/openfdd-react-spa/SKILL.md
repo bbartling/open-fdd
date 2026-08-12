@@ -23,6 +23,10 @@ description: >-
 4. No bench secrets, credential paths, or privileged username prefill on login.
 5. Prefer Vitest unit tests next to changed modules; Playwright for smoke when needed.
 6. Do not add Python to the product SPA or depend on `open_fdd` at runtime.
+7. Overview plot Expanders default **open** — `Expander` unmounts when closed;
+   do not ship plot sections collapsed behind a caret.
+8. After Lab **Update this rule** (`RULES_UPDATED`), FDD Plots / Reports must
+   refetch results + series so `confirm_min` session overlays show up.
 
 ## Key files
 

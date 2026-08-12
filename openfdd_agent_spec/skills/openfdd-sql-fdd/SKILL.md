@@ -19,3 +19,9 @@ description: >-
 2. New production rules need SQL file + registry + cookbook + parity row.
 3. Pandas oracle may differ — document in parity/gap matrices; do not paper over.
 4. UI production path calls central REST — not local pandas runner for “real” FDD.
+5. Series overlay (`/api/fdd/.../series`) must honor Lab/`session_config`
+   `confirm_min` and typed params the same way `/api/fdd/run` does (prefer
+   session-tuned detail over a stale empty results index when overrides exist).
+6. **SCHED-1:** portable occupancy — numeric/`false` unoccupied **and** string
+   `unoccupied` tokens; keep `sql_rules/sched1_unoccupied_runtime.sql` aligned
+   with pandas `sched1` in `open_fdd/rules/cookbook_catalog.py`.
