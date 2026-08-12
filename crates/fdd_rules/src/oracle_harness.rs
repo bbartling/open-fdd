@@ -146,7 +146,11 @@ async fn inject_optional_fan_cols(
     let nulls = missing
         .iter()
         .map(|c| {
-            let ty = if *c == "occ_mode" { "VARCHAR" } else { "DOUBLE" };
+            let ty = if *c == "occ_mode" {
+                "VARCHAR"
+            } else {
+                "DOUBLE"
+            };
             format!("CAST(NULL AS {ty}) AS \"{c}\"")
         })
         .collect::<Vec<_>>()
