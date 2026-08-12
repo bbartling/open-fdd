@@ -63,6 +63,8 @@ def rule_reset1(df):
 
 
 def rule_sched1(df):
+    import pandas as pd
+
     occ = df["occ_mode"]
     occ_str = occ.astype(str).str.strip().str.lower()
     label = occ_str.isin(

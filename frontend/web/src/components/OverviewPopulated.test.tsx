@@ -237,9 +237,12 @@ describe("OverviewPopulated metric isolation", () => {
     await waitFor(() => {
       expect(screen.getByTestId("overview-charts-ready")).toBeTruthy();
     });
-    fireEvent.click(
-      screen.getByTestId("overview-econ-overlay-exp").querySelector("button")!,
-    );
+    // Plot expanders default open; only toggle if still collapsed.
+    const overlayExp = screen.getByTestId("overview-econ-overlay-exp");
+    const trigger = overlayExp.querySelector("button");
+    if (trigger?.getAttribute("aria-expanded") !== "true") {
+      fireEvent.click(trigger!);
+    }
     const overlay = screen
       .getByTestId("overview-econ-overlay-eq")
       .querySelector("select");
